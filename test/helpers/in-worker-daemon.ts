@@ -94,10 +94,10 @@ export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
   // The env a case placed names where the daemon lives, read once here.
   const paths = overrides.paths ?? daemonPaths(HOST);
   fs.mkdirSync(paths.state, { recursive: true });
-  const daemonLog = overrides.daemonLog ?? new DaemonLog(paths.log);
+  const daemonLog = overrides.daemonLog ?? new DaemonLog(paths.log, systemTimekeeper);
   try {
     const daemon = createDaemon({
-      ...productionAdapters(paths, daemonLog),
+      ...productionAdapters(paths, daemonLog, systemTimekeeper),
       bundle: bundleAt(path.join(paths.state, "checkout")),
       host: HOST,
       memoryLimitBytes: memoryLimitBytes(process.env),
@@ -115,7 +115,7 @@ export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
       paths,
       daemonLog,
       storage: (log) => ({
-        ...fileStorage(paths, log),
+        ...fileStorage(paths, log, systemTimekeeper),
         ...overrides.storage?.(log),
       }),
     });

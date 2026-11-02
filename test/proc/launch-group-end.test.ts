@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 import { createLauncher, type Launcher } from "../../src/proc/launch";
 import { until } from "../helpers/until";
+import { systemTimekeeper } from "../../src/time";
 
 // What these cases launch leaves its process group with setsid, which only
 // python reaches portably: macOS has no setsid command.
@@ -18,7 +19,7 @@ let ending: AbortController;
 let launcher: Launcher;
 beforeEach(() => {
   ending = new AbortController();
-  launcher = createLauncher({ inherited: process.env,  signal: ending.signal });
+  launcher = createLauncher({ inherited: process.env,  signal: ending.signal }, systemTimekeeper);
 });
 afterEach(() => ending.abort());
 

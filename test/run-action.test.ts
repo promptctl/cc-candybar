@@ -55,6 +55,7 @@ import { textOf } from "../src/render/frame";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { daemonGates } from "../src/daemon/update-keys";
+import { systemTimekeeper } from "../src/time";
 
 const SOURCE = `{ scope: "session", refresh: { watch: true }, read: { file: { json: true } } }`;
 const STATUS = "plugins.p.status";
@@ -593,7 +594,7 @@ describe("a click on a run link", () => {
   });
 
   test("the program runs in its declaring file's directory and sees the session, never the daemon", async () => {
-    const r = rig(createLauncher({ inherited: daemonSessionEnv() }).launch);
+    const r = rig(createLauncher({ inherited: daemonSessionEnv() }, systemTimekeeper).launch);
     const { view, link } = await drawnLink(r);
 
     await clickUrl(link.url, clickContext(r, view));
@@ -720,7 +721,7 @@ describe("the session's process environment", () => {
     const childSees = async (
       facts: Parameters<typeof sessionEnv>[0],
     ): Promise<Record<string, string>> => {
-      const ran = await createLauncher({ inherited: daemon }).launch({
+      const ran = await createLauncher({ inherited: daemon }, systemTimekeeper).launch({
         bin: "/usr/bin/env",
         envOverlay: sessionEnv(facts),
         category: "click.run",

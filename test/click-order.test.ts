@@ -40,6 +40,7 @@ import { EMPTY_DEFAULT, parseAndValidate } from "./helpers/parse-and-validate";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { durableConfig } from "./helpers/durable-config";
+import { systemTimekeeper } from "../src/time";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const RULE = "─".repeat(60);
@@ -325,7 +326,7 @@ describe("a gather is a snapshot of one config", () => {
   });
 
   test("the re-gather asks the real rate limiter nothing twice", async () => {
-    const launcher = createLauncher({ inherited: process.env });
+    const launcher = createLauncher({ inherited: process.env }, systemTimekeeper);
     let load = LOAD;
     const real = productionEdge(launcher, () => load, HOST);
     const parked = gate();

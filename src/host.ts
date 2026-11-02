@@ -40,7 +40,7 @@ export function processWorld(): World {
   const clock = systemTimekeeper;
   return {
     host,
-    launcher: createOneShotLauncher({ inherited: process.env }),
+    launcher: createOneShotLauncher({ inherited: process.env }, clock),
     clock,
   };
 }

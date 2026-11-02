@@ -12,6 +12,7 @@ import type { LaunchStatsHandle } from "../src/proc/stats-handle";
 import type { TmuxHint } from "../src/tmux-hint";
 import { laneOutcome } from "../src/utils/reading";
 import { until } from "./helpers/until";
+import { systemTimekeeper } from "../src/time";
 
 // [LAW:behavior-not-structure] A stub `tmux` on PATH answers every invocation
 // with its own arguments, so the session name a lookup returns IS the server
@@ -70,7 +71,7 @@ beforeEach(() => {
     onEnd: () => {},
     onRefused: () => {},
   };
-  launcher = createLauncher({ inherited: INHERITED, stats: handle });
+  launcher = createLauncher({ inherited: INHERITED, stats: handle }, systemTimekeeper);
   svc = new TmuxService({ launcher });
   holds = new Holds();
 });

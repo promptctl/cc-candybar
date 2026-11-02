@@ -28,6 +28,7 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { makeBinaryWatch } from "../src/daemon/binary-watch";
 import { BadVerbArgs, DaemonClosing } from "../src/daemon/verb-error";
 import { until } from "./helpers/until";
+import { systemTimekeeper } from "../src/time";
 
 let scratch: string;
 beforeEach(() => {
@@ -181,7 +182,7 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
     if (!quick.ok) throw new Error(quick.error);
     quick.release();
     await until(() => readJobEnd(exited.status) !== null, "the job's verdict");
-    expect(endJob(quick.pid, exited.status, { kind: "timeout" }).stands).toBe(
+    expect(endJob(quick.pid, exited.status, { kind: "timeout" }, systemTimekeeper).stands).toBe(
       false,
     );
     expect(readJobEnd(exited.status)).toEqual({ kind: "exit", code: 0 });
@@ -196,7 +197,7 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
     );
     if (!slow.ok) throw new Error(slow.error);
     slow.release();
-    expect(endJob(slow.pid, ended.status, { kind: "timeout" }).stands).toBe(
+    expect(endJob(slow.pid, ended.status, { kind: "timeout" }, systemTimekeeper).stands).toBe(
       true,
     );
     await until(() => !groupAlive(slow.pid), "the ended job's group to go");
@@ -217,7 +218,7 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
     job.release();
     await until(() => readJobEnd(files.status) !== null, "the job's verdict");
     expect(groupAlive(job.pid)).toBe(true);
-    expect(endJob(job.pid, files.status, { kind: "timeout" }).stands).toBe(
+    expect(endJob(job.pid, files.status, { kind: "timeout" }, systemTimekeeper).stands).toBe(
       false,
     );
     await until(() => !groupAlive(job.pid), "the left-behind child to end");
@@ -231,7 +232,7 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
     });
     jest.useFakeTimers();
     try {
-      expect(endJob(424242, files.status, { kind: "timeout" })).toEqual({
+      expect(endJob(424242, files.status, { kind: "timeout" }, systemTimekeeper)).toEqual({
         stands: true,
         signalled: false,
       });
@@ -251,7 +252,7 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
     });
     jest.useFakeTimers();
     try {
-      expect(endJob(424242, files.status, { kind: "timeout" })).toEqual({
+      expect(endJob(424242, files.status, { kind: "timeout" }, systemTimekeeper)).toEqual({
         stands: true,
         signalled: true,
       });
@@ -265,7 +266,7 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
 
   test("ending a job whose files are gone is a no-op, not an error", async () => {
     const status = path.join(scratch, "gone", "status");
-    expect(endJob(process.pid, status, { kind: "timeout" })).toEqual({
+    expect(endJob(process.pid, status, { kind: "timeout" }, systemTimekeeper)).toEqual({
       stands: false,
       signalled: false,
     });
@@ -318,18 +319,18 @@ describe("claimAct: one act per bundle", () => {
       sameLeader,
     );
     expect(claim).toEqual({ ok: true, act: 1 });
-    const reader = makeActReader(dir, sameLeader);
+    const reader = makeActReader(dir, sameLeader, systemTimekeeper);
     const running = (await reader.read())!;
     ended.push(running.record.pid);
     expect(judgeAct(running)).toEqual({ kind: "running", act: 1 });
-    expect((await makeActReader(dir, sameLeader).read())!.record.identity).toBe(
+    expect((await makeActReader(dir, sameLeader, systemTimekeeper).read())!.record.identity).toBe(
       "id-1",
     );
 
     expect(
       endJob(running.record.pid, path.join(dir, "1", "status"), {
         kind: "timeout",
-      }),
+      }, systemTimekeeper),
     ).toMatchObject({ stands: true, signalled: true });
     await until(
       async () => judgeAct(await reader.read()).kind === "failed",
@@ -351,7 +352,7 @@ describe("claimAct: one act per bundle", () => {
       sameLeader,
     );
     expect(first.ok).toBe(true);
-    ended.push((await makeActReader(dir, sameLeader).read())!.record.pid);
+    ended.push((await makeActReader(dir, sameLeader, systemTimekeeper).read())!.record.pid);
     // A second daemon that judged the bundle idle from the same empty read.
     const second = await claimAct(
       processLauncher,
@@ -410,7 +411,7 @@ describe("claimAct: one act per bundle", () => {
         sameLeader,
       ),
     ).toEqual({ ok: true, act: 1 });
-    const reader = makeActReader(dir, sameLeader);
+    const reader = makeActReader(dir, sameLeader, systemTimekeeper);
     await until(
       async () => judgeAct(await reader.read()).kind === "succeeded",
       "the first act to succeed",
@@ -452,7 +453,7 @@ describe("claimAct: one act per bundle", () => {
         unreadable,
       ),
     ).toEqual({ ok: true, act: 1 });
-    const reader = makeActReader(dir, unreadable);
+    const reader = makeActReader(dir, unreadable, systemTimekeeper);
     expect((await reader.read())!.record.startTime).toBeNull();
     await until(
       async () => judgeAct(await reader.read()).kind === "succeeded",
@@ -473,10 +474,10 @@ describe("claimAct: one act per bundle", () => {
       Date.now(),
       sameLeader,
     );
-    const { record } = (await makeActReader(dir, sameLeader).read())!;
+    const { record } = (await makeActReader(dir, sameLeader, systemTimekeeper).read())!;
     ended.push(record.pid);
-    expect(await isRecordedJob(record, sameLeader)).toBe(true);
-    expect(await isRecordedJob({ ...record, started: 0 }, sameLeader)).toBe(
+    expect(await isRecordedJob(record, sameLeader, 0)).toBe(true);
+    expect(await isRecordedJob({ ...record, started: 0 }, sameLeader, 0)).toBe(
       false,
     );
   });
@@ -506,7 +507,7 @@ describe("claimAct: one act per bundle", () => {
       }
       return real(file, ...rest);
     }) as typeof fs.readFileSync);
-    const facts = (await makeActReader(dir, sameLeader).read())!;
+    const facts = (await makeActReader(dir, sameLeader, systemTimekeeper).read())!;
     expect(facts.act).toBe(2);
     expect(facts.record.identity).toBe("id-2");
   });
@@ -523,7 +524,7 @@ describe("claimAct: one act per bundle", () => {
       Date.now(),
       sameLeader,
     );
-    const reader = makeActReader(dir, sameLeader);
+    const reader = makeActReader(dir, sameLeader, systemTimekeeper);
     await until(
       async () => judgeAct(await reader.read()).kind === "succeeded",
       "the first act to succeed",
@@ -551,6 +552,7 @@ describe("claimAct: one act per bundle", () => {
     fs.writeFileSync(path.join(dir, "1", "record.json"), "{ torn");
     const logged: string[] = [];
     const watch = makeUpdateWatch({
+      clock: systemTimekeeper,
       launcher: processLauncher,
       digest: null,
       entryUrl: "file:///some/bundle/index.mjs",
@@ -580,6 +582,7 @@ describe("claimAct: one act per bundle", () => {
     let answer!: (latest: Response) => void;
     const gates = daemonGates();
     const watch = makeUpdateWatch({
+      clock: systemTimekeeper,
       launcher: processLauncher,
       digest: null,
       entryUrl: "file:///some/bundle/index.mjs",
@@ -680,6 +683,7 @@ describe("the update watch: one turn at a time on the act files", () => {
       },
     };
     const watch = makeUpdateWatch({
+      clock: systemTimekeeper,
       launcher,
       digest: null,
       entryUrl: "file:///some/bundle/index.mjs",
@@ -727,7 +731,7 @@ describe("the update watch: one turn at a time on the act files", () => {
       read,
     );
     expect(claim.ok).toBe(true);
-    const { pid } = (await makeActReader(dir, read).read())!.record;
+    const { pid } = (await makeActReader(dir, read, systemTimekeeper).read())!.record;
     jobs.push(pid);
     return pid;
   }
@@ -815,6 +819,7 @@ describe("the update watch: one turn at a time on the act files", () => {
       log: () => {},
     });
     const watch = makeUpdateWatch({
+      clock: systemTimekeeper,
       launcher: processLauncher,
       digest: null,
       entryUrl: "file:///some/bundle/index.mjs",
@@ -866,7 +871,7 @@ describe("the update watch: one turn at a time on the act files", () => {
     );
     expect(second.ok).toBe(true);
     await h.asked(2);
-    const { pid } = (await makeActReader(h.dir, sameLeader).read())!.record;
+    const { pid } = (await makeActReader(h.dir, sameLeader, systemTimekeeper).read())!.record;
     jobs.push(pid);
     fs.writeFileSync(stop2, "");
     await until(() => !jobGroupAlive(pid), "the second act to end");

@@ -27,6 +27,7 @@ import { readPending } from "../src/var-system/types";
 import { PENDING } from "../src/utils/outcome";
 import { drawingAt } from "./helpers/test-engine";
 import { buildScope } from "../src/template-engine/scope";
+import { systemTimekeeper } from "../src/time";
 
 // [LAW:one-source-of-truth] Tests pin to the production constant so a future
 // MIN_SHELL_TTL_MS bump doesn't silently desync test timings.
@@ -526,7 +527,7 @@ describe("SourceRegistry — shell: basic", () => {
     const closing = new AbortController();
     closing.abort(new Error("the daemon closed"));
     const registry = new SourceRegistry(
-      createLauncher({ inherited: process.env,  signal: closing.signal }),
+      createLauncher({ inherited: process.env,  signal: closing.signal }, systemTimekeeper),
       new VariableStore(),
     );
     live.add(registry);

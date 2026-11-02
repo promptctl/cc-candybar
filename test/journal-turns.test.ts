@@ -28,6 +28,7 @@ import { emptyStores, healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEA
 import { VERB_DOCTOR_RUN } from "../src/click/wire";
 import { recordRender, testVerbContext } from "./helpers/click";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
+import { systemTimekeeper } from "../src/time";
 
 const SID = "s1";
 const IDLE = { idleS: 30, timeoutS: 30, stillIdle: () => true, closed: () => {} };
@@ -471,7 +472,7 @@ describe("a doctor click", () => {
 describe("a click's real launch", () => {
   test("hung, it times out and gives the turn back", async () => {
     const { ctx, turns } = setup();
-    const launcher = createLauncher({ inherited: process.env });
+    const launcher = createLauncher({ inherited: process.env }, systemTimekeeper);
     const hung = {
       ...launcher,
       launch: (opts: Parameters<Launcher["launch"]>[0]) =>
@@ -485,7 +486,7 @@ describe("a click's real launch", () => {
 
   test("a setsid descendant holding stdout leaves the loop answering while it lives", async () => {
     const { ctx } = setup();
-    const launcher = createLauncher({ inherited: process.env });
+    const launcher = createLauncher({ inherited: process.env }, systemTimekeeper);
     const script = "import os,time\nif os.fork()==0:\n  os.setsid()\n  time.sleep(3)\n  os._exit(0)\nos._exit(0)\n";
     const holder = {
       ...launcher,

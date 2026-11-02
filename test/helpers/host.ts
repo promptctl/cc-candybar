@@ -27,7 +27,7 @@ export function hostOf(
 export function worldOf(host: Host): World {
   return {
     host,
-    launcher: createOneShotLauncher({ inherited: host.env }),
+    launcher: createOneShotLauncher({ inherited: host.env }, systemTimekeeper),
     clock: systemTimekeeper,
   };
 }

@@ -584,6 +584,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // clicks (src/daemon/update-notice.ts). The notice is a diagnostic channel of
   // its own, folded between the error and warning channels.
   const updateWatch = makeUpdateWatch({
+    clock,
     launcher,
     entryUrl: bundle.entryUrl,
     digest: bundle.digest,

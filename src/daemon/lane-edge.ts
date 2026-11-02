@@ -6,7 +6,7 @@
 // src/proc/tmux), under its own launch category.
 
 import fs from "node:fs";
-import { setTimeout as sleep } from "node:timers/promises";
+import { sleep, type Timekeeper } from "../time";
 import type { LaunchResult, Launcher } from "../proc/launch.js";
 import { runTmuxAsync } from "../proc/tmux.js";
 import type { TmuxHint } from "../tmux-hint.js";
@@ -260,9 +260,9 @@ export function productionLaneEdge(
   launcher: Launcher,
   following: (sessionId: string) => ReadonlySet<Lane>,
   closing: AbortSignal,
+  clock: Timekeeper,
 ): LaneEdge {
-  const wait = (ms: number): Promise<void> =>
-    sleep(ms, undefined, { signal: closing });
+  const wait = (ms: number): Promise<void> => sleep(clock, ms, closing);
   return {
     claudeInput: productionClaudeInputEdge(launcher),
     barPanes: async (hint) =>
@@ -324,7 +324,7 @@ export function productionLaneEdge(
     // — the shell that started Claude Code, which may itself be a job of the
     // pane's first shell (`nix develop`, a nested `bash`).
     paneDir: async (hint, shell) => {
-      const until = Date.now() + SHELL_PATIENCE_MS;
+      const until = clock.now() + SHELL_PATIENCE_MS;
       for (;;) {
         const pane = await paneForeground(launcher, hint);
         if (pane.foreground === shell) {
@@ -335,7 +335,7 @@ export function productionLaneEdge(
           }
           return pane.cwd;
         }
-        if (Date.now() > until) {
+        if (clock.now() > until) {
           throw new Error(
             `the shell in pane ${hint.pane} (pid ${shell}) did not take its terminal back within ${SHELL_PATIENCE_MS / 1000} s`,
           );
@@ -356,9 +356,9 @@ export function productionLaneEdge(
       return file === null ? null : fs.realpathSync(file);
     },
     followed: async (sessionId, lane, withinMs) => {
-      const until = Date.now() + withinMs;
+      const until = clock.now() + withinMs;
       while (!following(sessionId).has(lane)) {
-        if (Date.now() > until) return false;
+        if (clock.now() > until) return false;
         await wait(FOLLOW_POLL_MS);
       }
       return true;
@@ -393,9 +393,9 @@ export function productionLaneEdge(
       }
     },
     exited: async (pid, withinMs) => {
-      const until = Date.now() + withinMs;
+      const until = clock.now() + withinMs;
       while (pidAlive(pid)) {
-        if (Date.now() > until) return false;
+        if (clock.now() > until) return false;
         await wait(EXIT_POLL_MS);
       }
       return true;

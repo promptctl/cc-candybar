@@ -113,7 +113,7 @@ function runningBundle(): RunningBundle {
 
 export function runDaemon(world: World): void {
   const paths = daemonPaths(world.host);
-  thisProcess = { world, paths, log: new DaemonLog(paths.log) };
+  thisProcess = { world, paths, log: new DaemonLog(paths.log, world.clock) };
   // Catch-alls log + exit so the supervisor (the next client) can restart us.
   // [LAW:no-defensive-null-guards] These are *trust boundaries* — we are
   // catching all of unknown space, not skipping known optional values.
@@ -196,7 +196,7 @@ async function boot(): Promise<void> {
   // The daemon is built now that we know we are the daemon process: it loads
   // prior session state and becomes the sole writer of the state file.
   const daemon = createDaemon({
-    ...productionAdapters(paths, daemonLog),
+    ...productionAdapters(paths, daemonLog, world.clock),
     bundle: runningBundle(),
     host,
     paths,

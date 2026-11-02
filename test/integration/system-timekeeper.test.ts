@@ -19,7 +19,7 @@ describe("the system timekeeper", () => {
     set.mockRestore();
     clear();
     held();
-    expect(unref.hasRef()).toBe(false);
-    expect(ref.hasRef()).toBe(true);
+    expect(unref!.hasRef()).toBe(false);
+    expect(ref!.hasRef()).toBe(true);
   });
 });

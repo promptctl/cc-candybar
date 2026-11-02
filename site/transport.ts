@@ -74,7 +74,7 @@ const WORLD = processWorld();
 const HOST = WORLD.host;
 const paths = daemonPaths(HOST);
 const pageDaemon = createDaemon({
-  ...productionAdapters(paths, new DaemonLog(paths.log)),
+  ...productionAdapters(paths, new DaemonLog(paths.log, WORLD.clock), WORLD.clock),
   gates: daemonGates(),
   paths,
   host: HOST,

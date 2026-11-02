@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { quietLogger, type DaemonLogger } from "../utils/logger";
 import type { SessionSnapshot, SessionStorage } from "./session-state";
+import type { Timekeeper } from "../time";
 
 // [LAW:no-silent-failure] Corrupt/missing file → empty state is the *defined*
 // recovery, not a hidden fallback to different data: an empty store re-rolls
@@ -26,7 +27,8 @@ function isSnapshot(value: unknown): value is SessionSnapshot {
 // SessionState. The store calls save() on every mutation; this coalesces the
 // bursty 22-session × 1 Hz write load into at most one disk write per window.
 export class FileSessionStorage implements SessionStorage {
-  private timer: ReturnType<typeof setTimeout> | null = null;
+  // What clears the debounce timer while one is armed.
+  private clearTimer: (() => void) | null = null;
   private pending: SessionSnapshot | null = null;
   // Whether a debounced write is on its way to the disk.
   private writing = false;
@@ -39,6 +41,9 @@ export class FileSessionStorage implements SessionStorage {
 
   constructor(
     private readonly filePath: string,
+    // [LAW:effects-at-boundaries] The machine's clock: the debounce and the
+    // timings the write logs are real time, as the disk is.
+    private readonly clock: Pick<Timekeeper, "after" | "monotonic">,
     private readonly debounceMs: number = 500,
     // [LAW:locality-or-seam] Logging is injected, not hard-wired to
     // daemon.log: the daemon passes its log, every other caller stays quiet.
@@ -86,12 +91,15 @@ export class FileSessionStorage implements SessionStorage {
   // One debounced write at a time, so snapshots land in the order they were
   // taken; a save that arrives while one is being written waits for it.
   private schedule(): void {
-    if (this.timer !== null || this.writing) return;
-    this.timer = setTimeout(() => {
-      this.timer = null;
-      void this.write();
-    }, this.debounceMs);
-    this.timer.unref();
+    if (this.clearTimer !== null || this.writing) return;
+    this.clearTimer = this.clock.after(
+      this.debounceMs,
+      () => {
+        this.clearTimer = null;
+        void this.write();
+      },
+      { unref: true },
+    );
   }
 
   // [LAW:effects-at-boundaries] The debounced write takes all of its disk I/O
@@ -104,12 +112,12 @@ export class FileSessionStorage implements SessionStorage {
     const snapshot = this.pending;
     if (snapshot === null) return;
     const generation = this.generation;
-    const started = performance.now();
+    const started = this.clock.monotonic();
     const body = JSON.stringify(snapshot);
     const tmp = this.writingPath;
     this.writing = true;
     // The thread is held until the first await.
-    const heldMs = performance.now() - started;
+    const heldMs = this.clock.monotonic() - started;
     try {
       await fs.promises.mkdir(path.dirname(this.filePath), { recursive: true });
       const file = await fs.promises.open(tmp, "w", 0o600);
@@ -146,7 +154,7 @@ export class FileSessionStorage implements SessionStorage {
         if (!landed) await fs.promises.rm(tmp, { force: true });
         this.logger(
           "info",
-          `session-state write superseded by a flush landed=${landed} took=${Math.round(performance.now() - started)}ms held=${Math.round(heldMs)}ms`,
+          `session-state write superseded by a flush landed=${landed} took=${Math.round(this.clock.monotonic() - started)}ms held=${Math.round(heldMs)}ms`,
         );
         return;
       }
@@ -166,13 +174,11 @@ export class FileSessionStorage implements SessionStorage {
   // The synchronous write, for shutdown and for callers that read the file
   // back at once.
   flush(): void {
-    if (this.timer) {
-      clearTimeout(this.timer);
-      this.timer = null;
-    }
+    this.clearTimer?.();
+    this.clearTimer = null;
     if (this.pending === null) return;
     const snapshot = this.pending;
-    const started = performance.now();
+    const started = this.clock.monotonic();
     try {
       fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
       const tmp = `${this.filePath}.tmp`;
@@ -194,7 +200,7 @@ export class FileSessionStorage implements SessionStorage {
       fs.rmSync(this.writingPath, { force: true });
       fs.renameSync(tmp, this.filePath);
       this.generation++;
-      this.saved(body, snapshot, started, performance.now() - started);
+      this.saved(body, snapshot, started, this.clock.monotonic() - started);
       // [LAW:one-source-of-truth] `pending` is "state not yet durably written".
       // Clear it only once the rename lands, so a transient EIO/ENOSPC leaves
       // the snapshot for a later flush (e.g. shutdown) to retry rather than
@@ -215,7 +221,7 @@ export class FileSessionStorage implements SessionStorage {
   ): void {
     this.logger(
       "info",
-      `session-state saved bytes=${Buffer.byteLength(body)} sessions=${Object.keys(snapshot).length} took=${Math.round(performance.now() - started)}ms held=${Math.round(heldMs)}ms`,
+      `session-state saved bytes=${Buffer.byteLength(body)} sessions=${Object.keys(snapshot).length} took=${Math.round(this.clock.monotonic() - started)}ms held=${Math.round(heldMs)}ms`,
     );
   }
 }

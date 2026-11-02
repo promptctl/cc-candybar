@@ -31,6 +31,7 @@ import type { TmuxHint } from "../src/tmux-hint";
 import { AUTOCOMPACT_WINDOWS } from "../src/segments/autocompact";
 import { instantOf } from "../src/utils/instant";
 import { lastClickError } from "../src/daemon/click-error";
+import { systemTimekeeper } from "../src/time";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const OPTS = {
@@ -229,7 +230,7 @@ function runtime(tmux: TmuxHint | null) {
   const ctx = {
     ...testVerbContext(sessionState, undefined, config),
     log: (_level: string, msg: string) => logged.push(msg),
-    claudeInput: productionClaudeInputEdge(createLauncher({ inherited: process.env })),
+    claudeInput: productionClaudeInputEdge(createLauncher({ inherited: process.env }, systemTimekeeper)),
   };
   const urls = linkUrls(raw).filter((u) =>
     effectsOf(u).some((e) => e.verb === VERB_SLASH),
@@ -360,7 +361,7 @@ function tray(tmux: TmuxHint | null, drawnIn: TmuxHint | null = tmux) {
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   const ctx = {
     ...testVerbContext(sessionState, undefined, config),
-    claudeInput: productionClaudeInputEdge(createLauncher({ inherited: process.env })),
+    claudeInput: productionClaudeInputEdge(createLauncher({ inherited: process.env }, systemTimekeeper)),
   };
   // What the daemon's payload carries for that hint (RenderPayload.tmux).
   const payload = {

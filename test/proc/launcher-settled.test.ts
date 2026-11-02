@@ -8,6 +8,7 @@ import path from "node:path";
 import { pidAlive } from "../../src/daemon/parent-watchdog";
 import { createLauncher } from "../../src/proc/launch";
 import { until } from "../helpers/until";
+import { systemTimekeeper } from "../../src/time";
 
 const scope = () => {
   const closing = new AbortController();
@@ -16,7 +17,7 @@ const scope = () => {
     launcher: createLauncher({ inherited: process.env, 
       signal: closing.signal,
       observeLifeline: () => {},
-    }),
+    }, systemTimekeeper),
   };
 };
 
