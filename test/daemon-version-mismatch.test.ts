@@ -595,7 +595,11 @@ describe("planOutcome decides kick vs. no-kick per variant (kz8.5 chunk 1+4)", (
   // The daemon answered, so it is up: a kick would spawn a candidate that
   // loses the bind to it. The Rust client's Busy variant agrees.
   test("a busy render does not kick: a daemon holds the socket", () => {
-    const plan = planOutcome({ kind: "busy", phase: "deadline", message: "anything" });
+    const plan = planOutcome({
+      kind: "busy",
+      phase: "deadline",
+      message: "anything",
+    });
     expect(plan).toMatchObject({ kick: false, output: "\n" });
     expect(plan.debug).toContain("busy");
   });

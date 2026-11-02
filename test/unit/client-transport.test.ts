@@ -19,6 +19,7 @@ import {
   PROTOCOL_VERSION,
   type Response,
 } from "../../src/daemon/protocol";
+
 const HINT = "daemon may not be running";
 
 // A daemon's own TIMEOUT proves it is up: a click's client must tell it from
