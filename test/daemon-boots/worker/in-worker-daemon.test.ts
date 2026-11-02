@@ -151,13 +151,21 @@ describe("a daemon in this worker", () => {
     expect(event).toContain(` deadline=stated:${120 - DRAW_RESERVE_MS}ms `);
   });
 
-  test("a start refused beside a daemon that has not stopped leaves it the env it reads", () => {
+  test("the env is held until the last daemon over it stops, however often one is stopped", async () => {
+    const before = { ...process.env };
     daemon = startDaemon(env);
     const placed = { ...process.env };
     expect(() =>
       startDaemon({ ...env, XDG_STATE_HOME: path.join(projectDir, "other") }),
     ).toThrow("this worker's env is held by a daemon that has not stopped");
     expect({ ...process.env }).toEqual(placed);
+
+    const second = startDaemon(env);
+    await daemon.stop();
+    await daemon.stop();
+    expect(process.env.XDG_STATE_HOME).toBe(env.XDG_STATE_HOME);
+    await second.stop();
+    expect({ ...process.env }).toEqual(before);
   });
 
   test("a TIMEOUT is the helper's to ask again", async () => {
@@ -190,25 +198,6 @@ describe("a daemon in this worker", () => {
     expect(width(await render(daemon, sid, projectDir))).toBeGreaterThan(
       width(before),
     );
-  });
-
-  test("two daemons over one env give the worker's env back when the last stops, not the first", async () => {
-    const before = { ...process.env };
-    const first = startDaemon(env);
-    const second = startDaemon(env);
-    await first.stop();
-    expect(process.env.XDG_STATE_HOME).toBe(env.XDG_STATE_HOME);
-    await second.stop();
-    expect({ ...process.env }).toEqual(before);
-  });
-
-  test("a daemon stopped twice counts once among those holding the env", async () => {
-    const first = startDaemon(env);
-    const second = startDaemon(env);
-    await first.stop();
-    await first.stop();
-    expect(process.env.XDG_STATE_HOME).toBe(env.XDG_STATE_HOME);
-    await second.stop();
   });
 
   test("a stop ends a subscriber's stream and a request's backstop, lands the log, and gives the env back", async () => {
