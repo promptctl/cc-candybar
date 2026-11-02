@@ -341,36 +341,25 @@ test("a compile's clock is the draw's: read outside one, it refuses", () => {
 // render once that render returns: the store, the scope its layout rows were
 // laid under. Kept, an evicted entry's store would stay on the heap for as
 // long as any other entry carried the compile, charged to no one.
+const heldStores: object[] = [];
 test("a compile keeps nothing of a render once it returns", () => {
   const config = parseAndValidate("<test>", carouselConfig("mode", "alpha"));
   const compiled = compileDslConfig(compileInputOf(config), TEST_SIGNER);
-  // The result is dropped here, so a store the snapshot finds reachable is
-  // held by something the draw left behind.
-  drawAlone(config, compiled);
   // [LAW:verifiable-goals] Reachability is read off a heap snapshot, which
   // collects first and follows only strong edges, so no collection count or
-  // wait is in the verdict. A holder still there at the snapshot is named by
-  // its path from the heap's roots (retainer-path.ts).
-  expect(retainerPathsTo("ProbeStore")).toEqual([]);
-  expect(compiled.menuRuntime.action.bound).toBeUndefined();
-});
-
-// The control for the case above: a store something holds is found, as a path
-// that ends in it, so the case's empty answer is one the reader can fail to
-// give. Its class is its own and extends nothing: a subclass would put its
-// parent's prototype on the heap under the parent's name, where the case above
-// would read it as an instance.
-class HeldProbe {}
-const heldProbes: object[] = [];
-test("an object something still holds is found by the path to it", () => {
-  heldProbes.push(new HeldProbe());
+  // wait is in the verdict. One store is held on purpose, as the control: it
+  // is the one path the snapshot must show, so an empty answer for the drawn
+  // store is one this reader could have failed to give, whatever happens to
+  // the class's name. The drawn store's result is dropped here, so a second
+  // path is a holder the draw left behind, printed from the heap's roots.
+  heldStores.push(new ProbeStore());
   try {
-    const paths = retainerPathsTo("HeldProbe");
-    expect(paths).toHaveLength(1);
-    expect(paths[0]!.at(-1)).toBe("object / HeldProbe");
+    drawAlone(config, compiled);
+    expect(retainerPathsTo("ProbeStore")).toHaveLength(1);
   } finally {
-    heldProbes.length = 0;
+    heldStores.length = 0;
   }
+  expect(compiled.menuRuntime.action.bound).toBeUndefined();
 });
 
 // [LAW:verifiable-goals] ENTRY_BYTES, COMPILE_BYTES and VIEW_BYTES are the

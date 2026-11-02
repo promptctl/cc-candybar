@@ -295,4 +295,37 @@ describe("heap-analysis scripts", () => {
     expect(strong).not.toMatch(/WeakRef/);
     expect(strong).toMatch(/held-->/);
   });
+
+  test("heap-retainers --strong --limit skips a target nothing strong holds, and it does not use up the limit", () => {
+    // A live heap cannot hold such an object, since a snapshot collects first,
+    // so the snapshot is written by hand: the root weakly holds one `Foo`,
+    // which comes first, and strongly holds another.
+    const nodeFields = ["type", "name", "id", "self_size", "edge_count", "trace_node_id", "detachedness"];
+    const snapshot = {
+      snapshot: {
+        meta: {
+          node_fields: nodeFields,
+          node_types: [["synthetic", "object"], "string", "number", "number", "number", "number", "number"],
+          edge_fields: ["type", "name_or_index", "to_node"],
+          edge_types: [["property", "weak"], "string_or_number", "node"],
+        },
+        node_count: 3,
+        edge_count: 2,
+      },
+      // The root, then two `Foo`s; each edge's target is a node's offset.
+      nodes: [0, 0, 1, 0, 2, 0, 0, 1, 2, 3, 8, 0, 0, 0, 1, 2, 5, 8, 0, 0, 0],
+      edges: [1, 0, nodeFields.length, 0, 1, 2 * nodeFields.length],
+      strings: ["", "strongly", "Foo"],
+    };
+    const path = join(root, "hand.heapsnapshot");
+    writeFileSync(path, JSON.stringify(snapshot));
+    const out = execFileSync(
+      process.execPath,
+      [join(scriptsDir, "heap-retainers.mjs"), path, "^object / Foo$", "--strong", "--limit", "1", "--json"],
+      { encoding: "utf8" },
+    );
+    const { paths } = JSON.parse(out) as { paths: string[][] };
+    expect(paths).toHaveLength(1);
+    expect(paths[0]).toEqual(["synthetic /  --strongly-->", "object / Foo"]);
+  });
 });

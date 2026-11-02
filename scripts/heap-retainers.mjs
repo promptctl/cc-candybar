@@ -22,10 +22,9 @@
 //                is printed so truncation is never mistaken for completeness.
 //   --json       emit { paths: [[ "<root>", ..., "<target>" ], ...] }.
 //   --strong     follow only edges that keep their target alive. A weak edge
-//                (a WeakRef's, a WeakMap key's) holds nothing, so a path
-//                through one names the observer as the holder; with --strong a
-//                target no strong path reaches has no path, and so is absent
-//                from `paths`.
+//                (a WeakRef's) holds nothing, so a path through one names the
+//                observer as the holder; with --strong a target no strong path
+//                reaches has no path, and so is absent from `paths`.
 //
 // A retaining path is printed root-first: the GC root, then each retaining
 // edge's owner down to the target instance. Edge labels (.field / [index])
@@ -107,9 +106,18 @@ export function retainerPaths(s, re, limit, { strong = false } = {}) {
   for (let i = 0; i < s.nodeCount; i++) {
     if (re.test(nodeLabel(s, i))) targets.push(i);
   }
-  const traced = targets.slice(0, limit);
-  const paths = traced.map((t) => pathToRoot(s, reverse, t)).filter(Boolean);
-  return { paths, totalTargets: targets.length, traced: traced.length };
+  // A target no path reaches (under --strong, one only weak edges hold) has no
+  // path to give, so it is skipped and does not use up the limit: an empty
+  // `paths` means no target is held, not that the first few were not.
+  const paths = [];
+  let traced = 0;
+  for (const t of targets) {
+    if (paths.length === limit) break;
+    traced++;
+    const path = pathToRoot(s, reverse, t);
+    if (path) paths.push(path);
+  }
+  return { paths, totalTargets: targets.length, traced };
 }
 
 function parseArgs(argv) {
