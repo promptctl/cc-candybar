@@ -4,15 +4,22 @@
     {
       "version": "pr-569",
       "ref": "refs/pull/569/merge",
-      "sha": "54d91a974d25dcf2d23f8b3418d64c932e13d29a",
-      "timestamp": "2026-11-02T13:39:58.199Z",
+      "sha": "98ce480886bd3bbe61611e90db132d733e0a56e2",
+      "timestamp": "2026-11-02T13:42:26.978Z",
       "commits": [
         {
-          "sha": "54d91a974d25dcf2d23f8b3418d64c932e13d29a",
+          "sha": "98ce480886bd3bbe61611e90db132d733e0a56e2",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T13:39:04Z",
-          "message": "Merge 4f58be38d686c6a96491b64ad739ef9dc0c111a3 into b787b9f3545f3235453a2e26da0093def575bae1\n"
+          "timestamp": "2026-11-02T13:41:19Z",
+          "message": "Merge 2843363d15dbc474bf098e561b5ead2de3f8f09c into b787b9f3545f3235453a2e26da0093def575bae1\n"
+        },
+        {
+          "sha": "2843363d15dbc474bf098e561b5ead2de3f8f09c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T06:40:02-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into worktree-candybar-templates-zh8b.53s\n"
         },
         {
           "sha": "4f58be38d686c6a96491b64ad739ef9dc0c111a3",
