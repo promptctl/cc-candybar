@@ -2,16 +2,18 @@
 // test-records/<run>.jsonl, which CI keeps as an artifact. The record's shape
 // and every view over it live in helpers/test-records.cjs.
 //
-// A result exists only for a file that ran, so the files the run selected are
-// asked of jest's own search, which applies the same config and path filters the
-// run did. A file with no result then reads never-ran, not absent.
+// A result exists only for a file that ran. Jest counts the files it scheduled
+// after every narrowing (-o, --shard, path filters), so the count of files that
+// gave no result is read off the run itself. Only when that count is above zero
+// is jest's search asked which files they were, and a file with no result then
+// reads never-ran, not absent.
 
 const { mkdirSync, writeFileSync } = require("node:fs");
 const path = require("node:path");
 const { neverRan, recordOf } = require("./helpers/test-records.cjs");
 
-// The files the run selected, by jest's own search. Imported here and not at the
-// top so a test of the reporter does not load jest.
+// The files the config selects, by jest's own search. Imported here and not at
+// the top so a test of the reporter does not load jest.
 async function selectedBySearch(globalConfig, contexts) {
   const { SearchSource } = await import("jest");
   const selected = [];
@@ -36,13 +38,27 @@ class TestRecordsReporter {
     this.records.push(recordOf(result, this.globalConfig.rootDir, this.run));
   }
 
-  async onRunComplete(contexts) {
+  async onRunComplete(contexts, results) {
     try {
       const rootDir = this.globalConfig.rootDir;
-      const selected = (await this.select(this.globalConfig, contexts)).map((file) =>
-        path.relative(rootDir, file),
-      );
-      const records = [...this.records, ...neverRan(selected, this.records, this.run)];
+      const lost = results.numTotalTestSuites - this.records.length;
+      const lostFiles =
+        lost === 0
+          ? []
+          : neverRan(
+              (await this.select(this.globalConfig, contexts)).map((file) => path.relative(rootDir, file)),
+              this.records,
+              this.run,
+            );
+      // The search knows the config's files and not a narrowing of them, so a
+      // run that lost files it cannot name has no honest record of which.
+      if (lostFiles.length !== lost) {
+        throw new Error(
+          `jest scheduled ${results.numTotalTestSuites} files and ${this.records.length} gave a result, ` +
+            `but the search names ${lostFiles.length} files with none`,
+        );
+      }
+      const records = [...this.records, ...lostFiles];
       const dir = path.join(rootDir, "test-records");
       mkdirSync(dir, { recursive: true });
       writeFileSync(

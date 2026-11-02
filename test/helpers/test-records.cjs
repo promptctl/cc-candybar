@@ -148,8 +148,9 @@ function summarise(records) {
   return {
     layers: [...byLayer.values()].sort((a, b) => a.layer.localeCompare(b.layer)),
     runs,
-    // The jest wall of every run, which is the pre-merge wall the budget is
-    // about: the installs and the build between the runs are not tests.
+    // The span of each run's test files, summed over the runs: the installs and
+    // the build between the runs are not tests, and neither are jest's global
+    // setup and teardown, which no record sees.
     wallMs: runs.reduce((sum, run) => sum + run.wallMs, 0),
     notPassed: records.filter((r) => r.outcome !== "passed"),
   };
@@ -171,7 +172,7 @@ function renderSummary({ layers, runs, wallMs, notPassed }) {
     "|---|---:|---:|---:|---:|",
     ...rows,
     "",
-    `Jest wall time, pre-merge: ${seconds(wallMs)} (${runs
+    `Jest wall time, pre-merge (first file start to last file end): ${seconds(wallMs)} (${runs
       .map((run) => `${run.run} ${seconds(run.wallMs)}`)
       .join(", ")})`,
   ];

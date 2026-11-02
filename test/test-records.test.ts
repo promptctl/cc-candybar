@@ -69,7 +69,7 @@ describe("test records", () => {
     ]);
     expect(summary.wallMs).toBe(6_000);
     expect(summary.notPassed.map((r: Row) => r.file)).toEqual(["test/c.test.ts", "test/d.test.ts"]);
-    expect(records.renderSummary(summary)).toContain("Jest wall time, pre-merge: 6.0 s");
+    expect(records.renderSummary(summary)).toContain("Jest wall time, pre-merge (first file start to last file end): 6.0 s");
   });
 
   it("leaves a file jest built the result of out of the wall time", () => {
@@ -97,6 +97,7 @@ describe("the records reporter", () => {
     const Reporter = createRequire(__filename)("./test-records-reporter.cjs");
     return new Reporter({ rootDir }, { run: "worker", select: async () => selected });
   };
+  const scheduled = (numTotalTestSuites: number) => ({ numTotalTestSuites });
   const written = (rootDir: string): Row[] =>
     fs
       .readFileSync(path.join(rootDir, "test-records", "worker.jsonl"), "utf8")
@@ -116,7 +117,7 @@ describe("the records reporter", () => {
       {},
       result("test/empty.test.ts", { testResults: [], numPassingTests: 0, testExecError: NO_TEST }, root),
     );
-    await reporter.onRunComplete(new Set());
+    await reporter.onRunComplete(new Set(), scheduled(3));
     expect(reporter.getLastError()).toBeUndefined();
     expect(written(root).map((r) => [path.basename(r.file), r.outcome])).toEqual([
       ["ran.test.ts", "passed"],
@@ -129,7 +130,28 @@ describe("the records reporter", () => {
     const blocked = path.join(dir, "blocked");
     fs.writeFileSync(blocked, "a file where the directory would go");
     const reporter = reporterOver(blocked, []);
-    await reporter.onRunComplete(new Set());
+    await reporter.onRunComplete(new Set(), scheduled(0));
     expect(String(reporter.getLastError())).toMatch(/ENOTDIR|EEXIST/);
+  });
+
+  it("does not ask the search for a run that lost nothing, so -o and --shard runs record", async () => {
+    const root = path.join(dir, "narrowed");
+    const Reporter = createRequire(__filename)("./test-records-reporter.cjs");
+    const reporter = new Reporter(
+      { rootDir: root },
+      { run: "worker", select: async () => { throw new Error("Changed files must be set when running with -o."); } },
+    );
+    reporter.onTestResult({}, result("test/ran.test.ts", {}, root));
+    await reporter.onRunComplete(new Set(), scheduled(1));
+    expect(reporter.getLastError()).toBeUndefined();
+    expect(written(root).map((r) => r.outcome)).toEqual(["passed"]);
+  });
+
+  it("fails the run that lost a file the search cannot name", async () => {
+    const root = path.join(dir, "unnamed");
+    const reporter = reporterOver(root, [path.join(root, "test/ran.test.ts")]);
+    reporter.onTestResult({}, result("test/ran.test.ts", {}, root));
+    await reporter.onRunComplete(new Set(), scheduled(2));
+    expect(String(reporter.getLastError())).toMatch(/scheduled 2 files and 1 gave a result/);
   });
 });
