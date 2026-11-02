@@ -2,7 +2,7 @@
 // says what the launch itself said of why, so the click's reply and its event
 // carry the cause, not only the class of failure.
 
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { clickHandoff, clickLaunch } from "../src/daemon/verbs";
@@ -35,7 +35,9 @@ describe("clickHandoff", () => {
       200,
     );
     // A loaded machine can answer the bound before the opener has started.
-    while (!existsSync(pidFile)) await new Promise((r) => setTimeout(r, 20));
+    const started = Date.now() + 3000;
+    while (!existsSync(pidFile) && Date.now() < started)
+      await new Promise((r) => setTimeout(r, 20));
     const pid = Number(readFileSync(pidFile, "utf8"));
     try {
       // Past the kill grace a timed-out launch would have used.
@@ -43,6 +45,7 @@ describe("clickHandoff", () => {
       expect(alive(pid)).toBe(true);
     } finally {
       process.kill(pid, "SIGKILL");
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 
@@ -71,7 +74,7 @@ describe("clickHandoff", () => {
       (_l, m) => logged.push(m),
       2000,
     );
-    expect(logged).toEqual([expect.stringMatching(/^second rate-limited: /)]);
+    expect(logged).toEqual([expect.stringMatching(/^click.open rate-limited: /)]);
   });
 
   test("an opener that exits non-zero fails the click with its stderr", async () => {

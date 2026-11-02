@@ -25,6 +25,7 @@ import {
   jobGroupAlive,
   readJobEnd,
   type LaunchOpts,
+  type LaunchResult,
   type Launcher,
 } from "../../proc/launch";
 import type { SessionStateReader, SessionStateRW } from "../session-state";
@@ -398,15 +399,16 @@ export const CLICK_PROGRAM_TIMEOUT_MS = 5000;
 // saying what the launch itself said: the spawn's error, or the program's stderr.
 function clickFailed(
   end: {
-    reason: string;
+    reason: Extract<LaunchResult, { ok: false }>["reason"];
     exitCode: number | null;
     said: string;
   },
+  category: LaunchOpts["category"],
   what: string,
   log: DaemonContext["log"],
 ): void {
   if (end.reason === "rate-limited") {
-    log("warn", `${what} rate-limited: ${end.said}`);
+    log("warn", `${category} rate-limited: ${end.said}`);
     return;
   }
   if (end.reason === "aborted") throw new DaemonClosing(what);
@@ -436,6 +438,7 @@ export async function clickLaunch(
       exitCode: result.exitCode,
       said: result.error ?? result.stderr.trim(),
     },
+    opts.category,
     what,
     log,
   );
@@ -475,26 +478,32 @@ export async function clickHandoff(
     if (!job.ok) {
       clickFailed(
         { reason: job.reason, exitCode: null, said: job.error },
+        opts.category,
         what,
         log,
       );
       return;
     }
     job.release();
-    const deadline = Date.now() + boundMs;
+    // [LAW:no-ambient-temporal-coupling] A monotonic clock, so a wall-clock
+    // step neither stretches nor cuts the bound.
+    const deadline = performance.now() + boundMs;
     for (;;) {
       // Liveness before the verdict: the sh writes its verdict before it exits,
       // so a group seen gone and then no verdict means none is coming.
       const alive = jobGroupAlive(job.pid);
       const end = readJobEnd(files.status);
-      if (end?.kind === "exit") {
-        if (end.code === 0) return;
+      if (end !== null) {
+        if (end.kind === "exit" && end.code === 0) return;
         clickFailed(
-          {
-            reason: "non-zero",
-            exitCode: end.code,
-            said: readFileSync(files.stderr, "utf8").trim(),
-          },
+          end.kind === "exit"
+            ? {
+                reason: "non-zero",
+                exitCode: end.code,
+                said: readFileSync(files.stderr, "utf8").trim(),
+              }
+            : { reason: "timeout", exitCode: null, said: "" },
+          opts.category,
           what,
           log,
         );
@@ -504,7 +513,14 @@ export async function clickHandoff(
         throw new Error(
           `${what} failed (lost): the opener ended with no verdict`,
         );
-      if (Date.now() >= deadline) return;
+      if (performance.now() >= deadline) {
+        // [LAW:nothing-unseen] What the click leaves running is said once.
+        log(
+          "info",
+          `${opts.category} handed off at ${boundMs}ms, pid ${job.pid}`,
+        );
+        return;
+      }
       await new Promise((resolve) => setTimeout(resolve, HANDOFF_POLL_MS));
     }
   } finally {
