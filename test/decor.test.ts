@@ -907,7 +907,6 @@ describe("depth steps along the lineage", () => {
 });
 
 describe("a band item is placed by its step", () => {
-
   test("a picker's option wears what a segment at its step wears, text and all, so one menu's items read alike", () => {
     for (const shade of ["middle", "muted"] as const) {
       const decor: Decor = { variation: VARIATIONS["ends-primary"], shade: SHADES[shade] };
