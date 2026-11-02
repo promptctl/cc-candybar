@@ -4,15 +4,22 @@
     {
       "version": "pr-581",
       "ref": "refs/pull/581/merge",
-      "sha": "58276d1b90cd5c0ec0515680e3fda26a9fe9cd46",
-      "timestamp": "2026-11-02T17:26:29.415Z",
+      "sha": "97a6d1ad4422f629308fc018cc7c7ed38f072751",
+      "timestamp": "2026-11-02T17:30:53.537Z",
       "commits": [
         {
-          "sha": "58276d1b90cd5c0ec0515680e3fda26a9fe9cd46",
+          "sha": "97a6d1ad4422f629308fc018cc7c7ed38f072751",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T17:24:33Z",
-          "message": "Merge 36b00d73e96d8eae71ed4b24a6b974778b4c6687 into fac28e917dfaf39a95ca96fb9fa4fb3641d4e6ab\n"
+          "timestamp": "2026-11-02T17:29:20Z",
+          "message": "Merge ae2cca86c01cc61cbac7144b6461a6e2c37599f5 into fac28e917dfaf39a95ca96fb9fa4fb3641d4e6ab\n"
+        },
+        {
+          "sha": "ae2cca86c01cc61cbac7144b6461a6e2c37599f5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T10:28:10-07:00",
+          "message": "test(render-cache): the held control shares the case's snapshot and class, and heap-retainers traces until its limit is met of paths (brandon-unfiled-3248.na7i)\n\nA control of another class left the case's empty answer unproven for ProbeStore itself, and a second snapshot cost the file seconds. One held ProbeStore is now the path the single snapshot must show. heap-retainers sliced its targets to the limit before tracing them, so under --strong a weak-only target used up the limit and an empty answer meant 'the first few were not held'.\n"
         },
         {
           "sha": "36b00d73e96d8eae71ed4b24a6b974778b4c6687",
