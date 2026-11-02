@@ -1,0 +1,148 @@
+diff -ru --exclude=node_modules src/daemon/render-payload.ts /tmp/ccb-probe/wt/src/daemon/render-payload.ts
+--- src/daemon/render-payload.ts	2026-10-30 23:11:42
++++ /tmp/ccb-probe/wt/src/daemon/render-payload.ts	2026-10-31 01:25:27
+@@ -855,7 +855,12 @@
+ export function gitOptionsFromClosure(
+   needed: ReadonlySet<string>,
+ ): GitInfoOptions {
+-  const has = (path: string): boolean => needed.has(path);
++  const prField = (path: string): boolean =>
++    Object.keys(PR_FIELDS).some((f) => path === `git.${f}`);
++  const has = (path: string): boolean =>
++    ((globalThis as any).__wantAll === true &&
++      !(process.env.PROBE_NO_PR === "1" && prField(path))) ||
++    needed.has(path);
+   // `git.staged` / `git.unstaged` / `git.untracked` / `git.conflicts` all
+   // come from one `git status --porcelain` call — any one of them turning
+   // the flag on enables all four.
+@@ -966,6 +971,8 @@
+ 
+ function wantsOf(neededInputPaths: ReadonlySet<string>) {
+   const wants = (prefix: string): boolean =>
++    ((globalThis as any).__wantAll === true &&
++      !(prefix === "today" && process.env.PROBE_NO_TODAY === "1")) ||
+     anyPathStartsWith(neededInputPaths, prefix);
+   return {
+     git: wants("git"),
+diff -ru --exclude=node_modules src/daemon/server.ts /tmp/ccb-probe/wt/src/daemon/server.ts
+--- src/daemon/server.ts	2026-10-30 23:11:42
++++ /tmp/ccb-probe/wt/src/daemon/server.ts	2026-10-31 01:34:35
+@@ -293,6 +293,7 @@
+ // relay, subcommands) does no disk I/O. The daemon binds the file-backed
+ // storage in runDaemon(), making it the sole reader/writer of the state file.
+ const sessionState = new SessionState();
++const probeRoutes = new Map<string, net.Socket>();
+ // [LAW:locality-or-seam] Same terms: ephemeral until runDaemon binds its file.
+ const settingsHistory = new SettingsHistory(sessionState, dlog);
+ const navigationHistory = new NavigationHistory();
+@@ -1152,6 +1153,16 @@
+ 
+   const reader = makeFrameReader(
+     (frame) => {
++      if ((frame as { kind?: string }).kind === "attach") {
++        const id = (frame as unknown as { id: string }).id;
++        sock.off("data", reader);
++        clearTimeout(timer);
++        leaveInFlight();
++        responded = true;
++        probeRoutes.set(id, sock);
++        sock.on("close", () => probeRoutes.delete(id));
++        return;
++      }
+       void handleRequest(frame as Request, () => timedOut, accepted)
+         .then((r) =>
+           r.kind === "reply"
+@@ -1874,6 +1885,22 @@
+   arrival: ClickArrival,
+   facts: RequestFacts,
+ ): RequestOutcome {
++  if (verb === "to") {
++    const slash = value.indexOf("/");
++    const id = value.slice(0, slash);
++    const inner = value.slice(slash + 1);
++    const cut = inner.indexOf("/");
++    const route = probeRoutes.get(id);
++    if (route === undefined)
++      return {
++        kind: "bad-request",
++        problems: [`renderer ${id} is not attached`],
++      };
++    route.write(
++      encodeFrame({ verb: inner.slice(0, cut), value: inner.slice(cut + 1) }),
++    );
++    return { kind: "ok" };
++  }
+   if (verb === VERB_TMUX_STATUS_CLICK) {
+     noteFacts(facts, { verb });
+     return statusLineClick(value, facts);
+diff -ru --exclude=node_modules src/dsl/render.ts /tmp/ccb-probe/wt/src/dsl/render.ts
+--- src/dsl/render.ts	2026-10-30 23:11:42
++++ /tmp/ccb-probe/wt/src/dsl/render.ts	2026-10-31 01:25:39
+@@ -319,10 +319,12 @@
+       break;
+ 
+     case "env":
++      if ((globalThis as any).__wireVars === true) return wireVar(registry, name, decl, derivation);
+       registry.declareEnv(name, decl.name, decl.default);
+       break;
+ 
+     case "file":
++      if ((globalThis as any).__wireVars === true) return wireVar(registry, name, decl, derivation);
+       registry.declareFile(name, decl.path, {
+         readMode: decl.readMode,
+         cache: toCachePolicy(decl.cache),
+@@ -331,6 +333,7 @@
+       break;
+ 
+     case "shell":
++      if ((globalThis as any).__wireVars === true) return wireVar(registry, name, decl, derivation);
+       registry.declareShell(name, decl.command, {
+         cwd,
+         cache: toCachePolicy(decl.cache),
+@@ -362,6 +365,11 @@
+   }
+ }
+ 
++function wireVar(registry: any, name: string, decl: any, derivation: any): void {
++  if (decl.parse !== undefined && "json" in decl.parse) registry.declareSourceDocument(name);
++  else registry.declareInput(name, name, "string", undefined, derivation);
++}
++
+ // ─── Helpers ─────────────────────────────────────────────────────────────────
+ 
+ // [LAW:single-enforcer] Compile the config's shared helper templates into ONE
+@@ -587,7 +595,10 @@
+   // don't (e.g. configSwitcher) render normally.
+   const loadWarnings: string[] = [];
+   for (const [name, decl] of declaredVariables(config)) {
+-    if (!scopes.has(scopeOf.get(name)!)) continue;
++    const carried =
++      (globalThis as any).__wireVars === true &&
++      (decl.kind === "shell" || decl.kind === "file" || decl.kind === "env");
++    if (!scopes.has(carried ? "view" : scopeOf.get(name)!)) continue;
+     try {
+       declareOne(
+         registry,
+@@ -1591,6 +1602,7 @@
+     // effect its cell demands.
+     .map(({ line, row }) => {
+       const items = resolveFill(line.cells, drawOpts);
++      (globalThis as any).__items?.push(...items);
+       // At the root, a `deeper` line is one an open menu added.
+       const kind: RowKind = line.band === "deeper" ? "menu" : "bar";
+       return {
+diff -ru --exclude=node_modules src/render/strip.ts /tmp/ccb-probe/wt/src/render/strip.ts
+--- src/render/strip.ts	2026-10-30 23:11:42
++++ /tmp/ccb-probe/wt/src/render/strip.ts	2026-10-31 01:23:15
+@@ -77,8 +77,10 @@
+       },
+     }),
+   ];
++  const encoded = segmentsToString(segments, destination);
++  (globalThis as any).__drawn?.push({ segments, destination, text: encoded });
+   return {
+-    text: segmentsToString(segments, destination),
++    text: encoded,
+     nextChange: Math.min(Segment.nextChange(segments), told),
+   };
+ }

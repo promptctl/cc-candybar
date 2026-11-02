@@ -1,0 +1,14 @@
+{
+  variables: {
+    probeShell: { kind: "shell", command: "echo run >> /tmp/ccb-probe/shell-runs; echo shell-value", cache: { ttl: "60s" }, default: "?" },
+    probeJson: { kind: "shell", command: "echo '{\"a\":{\"b\":7}}'", parse: { json: true }, cache: { ttl: "60s" }, default: { a: { b: 0 } } },
+    probeKeyed: { kind: "shell", command: "echo keyed-value", cache: { key: "{{ .git.branch }}" }, default: "?" },
+    probeFile: { kind: "file", path: "/tmp/ccb-probe/value.txt", cache: { watch_file: "/tmp/ccb-probe/value.txt" }, default: "?" },
+    probeEnv: { kind: "env", name: "PROBE_ENV", default: "unset" },
+  },
+  segments: {
+    probe: { template: "S={{ .probeShell }} J={{ .probeJson.a.b }} K={{ .probeKeyed }} F={{ .probeFile }} E={{ .probeEnv }}" },
+  },
+  root: { rows: { status: { h: ["model", "context", "probe"] } } },
+  globals: { effect: "sparkle" },
+}
