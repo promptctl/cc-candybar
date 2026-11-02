@@ -2,6 +2,63 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-587",
+      "ref": "refs/pull/587/merge",
+      "sha": "0988af6fdef7dc933b571f5a6d3f918a62ce6e6a",
+      "timestamp": "2026-11-02T23:48:48.398Z",
+      "commits": [
+        {
+          "sha": "0988af6fdef7dc933b571f5a6d3f918a62ce6e6a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T23:47:03Z",
+          "message": "Merge ceeb02198189c504cd6b329e11f9cdea1ae1c1ca into e4792ac42dfcce8f3f64975e904729a8bf7ff51b\n"
+        },
+        {
+          "sha": "ceeb02198189c504cd6b329e11f9cdea1ae1c1ca",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T16:31:00-07:00",
+          "message": "test(rig): a rig records a render origin only when its session has none, so a seeded origin is never overwritten (candybar-testing-ihvy.4k6)\n"
+        },
+        {
+          "sha": "8d005e0c5f9161fca27b90e4fbc14e56a652ba4f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T16:25:28-07:00",
+          "message": "test(rig): the parse cache keys on each registered domain's members, rigs that seed an origin draw as that session, and the testing memory line is true again (candybar-testing-ihvy.4k6)\n"
+        },
+        {
+          "sha": "570f0712a5e10be6419f7c322d498a24f1647396",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T16:17:08-07:00",
+          "message": "test(rig): the parse cache keys on the registered option domains (candybar-testing-ihvy.4k6)\n"
+        },
+        {
+          "sha": "8c2506f323576bd6f7e6f3fd182f8253e1030763",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T16:10:11-07:00",
+          "message": "test(rig): review fixes — undo-redo keeps its seeded origin, rig records its cwd, configure-mode keeps width 200 (candybar-testing-ihvy.4k6)\n"
+        },
+        {
+          "sha": "e96a5c257e2d356a6e8faa5722083ed160763aa4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T15:54:55-07:00",
+          "message": "test(rig): 26 more test files build through buildRig, and buildRuntime is gone (candybar-testing-ihvy.4k6)\n\nEach file keeps its own vocabulary as a thin wrapper over buildRig and no longer repeats the parse, store, registry, compile, draw and click assembly.\n"
+        },
+        {
+          "sha": "aeb2cae11302f1302b0b45784e7c7d77181c8ea4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T15:45:47-07:00",
+          "message": "test(rig): buildRig assembles a render rig with a default for every field (candybar-testing-ihvy.4k6)\n\nFoundation: test/helpers/rig.ts, its test, colour-256's measurement helpers in their own module, and dsl-groups, dsl-picker and colour-256 on the rig.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-589",
       "ref": "refs/pull/589/merge",
       "sha": "e0b283c52b62b3cc2bf76167f01d33f3395c00dd",
@@ -42,63 +99,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T16:27:33-07:00",
           "message": "fix(git): a closed git cache answers a late declaration as closed, so no period re-arms after close (candybar-testing-ihvy.dbg)\n\nA render mid-wait at close declared after close had dropped every repo,\nbuilt a fresh state on the closed cache, and that state's period re-armed\nafter every pass: hundreds of timers armed after daemon.close() returned.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-587",
-      "ref": "refs/pull/587/merge",
-      "sha": "b7e529970f9cdd4bf0c395b05ce0645d45be1772",
-      "timestamp": "2026-11-02T23:34:44.263Z",
-      "commits": [
-        {
-          "sha": "b7e529970f9cdd4bf0c395b05ce0645d45be1772",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T23:33:55Z",
-          "message": "Merge 578b13becd3e46c022b207117bc84da9c2e2b26b into 3b03eb3ede4c45763df73f0f81301f74444e40a3\n"
-        },
-        {
-          "sha": "578b13becd3e46c022b207117bc84da9c2e2b26b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T16:31:00-07:00",
-          "message": "test(rig): a rig records a render origin only when its session has none, so a seeded origin is never overwritten (candybar-testing-ihvy.4k6)\n"
-        },
-        {
-          "sha": "24220c324d2ed7b11bc31c903dbc66d76aa98bca",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T16:25:28-07:00",
-          "message": "test(rig): the parse cache keys on each registered domain's members, rigs that seed an origin draw as that session, and the testing memory line is true again (candybar-testing-ihvy.4k6)\n"
-        },
-        {
-          "sha": "cf0c6f1b4058d590ed2dd8ad56cbf2ffd665992a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T16:17:08-07:00",
-          "message": "test(rig): the parse cache keys on the registered option domains (candybar-testing-ihvy.4k6)\n"
-        },
-        {
-          "sha": "e66ad45b58eeedf3e4fb2171a685c1d68f7b82f0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T16:10:11-07:00",
-          "message": "test(rig): review fixes — undo-redo keeps its seeded origin, rig records its cwd, configure-mode keeps width 200 (candybar-testing-ihvy.4k6)\n"
-        },
-        {
-          "sha": "6a7d72656c9bccda4e27a935b6ad1245b0c428f5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T15:54:55-07:00",
-          "message": "test(rig): 26 more test files build through buildRig, and buildRuntime is gone (candybar-testing-ihvy.4k6)\n\nEach file keeps its own vocabulary as a thin wrapper over buildRig and no longer repeats the parse, store, registry, compile, draw and click assembly.\n"
-        },
-        {
-          "sha": "0f5575b07650d44ec263762a439c21b2151d9a98",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T15:45:47-07:00",
-          "message": "test(rig): buildRig assembles a render rig with a default for every field (candybar-testing-ihvy.4k6)\n\nFoundation: test/helpers/rig.ts, its test, colour-256's measurement helpers in their own module, and dsl-groups, dsl-picker and colour-256 on the rig.\n"
         }
       ]
     },
