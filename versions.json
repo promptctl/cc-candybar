@@ -4,51 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "3ea62d87dbcde758789947304b189e5463076f6e",
-      "timestamp": "2026-11-02T11:57:28.781Z",
+      "sha": "a60dce7741009c8d2659bbaa435d9b53e15bf727",
+      "timestamp": "2026-11-02T11:59:28.405Z",
       "commits": [
         {
-          "sha": "3ea62d87dbcde758789947304b189e5463076f6e",
+          "sha": "a60dce7741009c8d2659bbaa435d9b53e15bf727",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T04:56:37-07:00",
-          "message": "fix(layout): directory draws the worktree-aware path, gitaculous stops drawing it (#562)\n\n* fix(layout): directory draws the worktree-aware path, gitaculous stops drawing it\n\nReverses #548's resolution the other way: directory carries the main\ncheckout's path (~-collapsed, fish-abbreviated, with the subpath and a\nlinked worktree's name in a parenthetical) in every bundled preset,\nand gitaculous is the git state alone — it draws nothing until git\nanswers with a branch, instead of filling the gap with the path.\ngit.location and gitPath are now dead and removed; gitExpanded always\nshows the repo name.\n\n* refactor(config): restore the LAW:decomposition marker and dedupe a test fixture\n\nHigh-review fixes on PR #562: the law marker on DIR_TEMPLATE's\ncollapse-then-abbreviate split was dropped when gitPath's logic\nreplaced it; GIT_QUIET_FG's comment is updated to say directory\nshares it too; git-location.test.ts's MAIN/located fixture was\nduplicated across its two describe blocks.\n\n* chore(config): remove location.gitPending, dead since the gitPath template branch it fed was removed\n\nPR #562 deleted the `.git.location \"path\"` template branch that read\ngitPending; nothing else references it."
-        }
-      ]
-    },
-    {
-      "version": "pr-564",
-      "ref": "refs/pull/564/merge",
-      "sha": "7fe4b019a66622d196e1086fe198e730e4c801c0",
-      "timestamp": "2026-11-02T11:42:57.745Z",
-      "commits": [
-        {
-          "sha": "7fe4b019a66622d196e1086fe198e730e4c801c0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T11:41:33Z",
-          "message": "Merge 18edd6269e9797dbbc5a0be8f027cacec2328a29 into 9b26334ab54c1c9fbad087ff535c804d167c9ce5\n"
-        },
-        {
-          "sha": "18edd6269e9797dbbc5a0be8f027cacec2328a29",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T04:41:16-07:00",
-          "message": "test(ci): the colour audits write their own run's records (candybar-testing-ihvy.myy)\n\nThe audits config spreads the suite's, so it inherited the \"all\" run and wrote\nover a local full-suite record.\n"
-        },
-        {
-          "sha": "49f715ca63a9a55a7c868bca9c1816df80a43fb9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T04:38:38-07:00",
-          "message": "test(ci): the records reporter reads lost files off the run, so -o and --shard record (candybar-testing-ihvy.myy)\n\nJest counts the files it scheduled after every narrowing, so the reporter takes\nthe lost-file count from the run and asks the search to name files only when\nthat count is above zero. Asked every run, the search threw under -o and read\nevery file of a shard as lost. The test report and upload now follow the\nprotocol and Rust gates, and the wall-time label says it spans the test files.\n"
-        },
-        {
-          "sha": "e8d8e54f8ed46c97d8dd65a2f199039276b3cb0b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T04:31:43-07:00",
-          "message": "test(ci): every CI run stores one record per test file (candybar-testing-ihvy.myy)\n\nA reporter writes test-records/<run>.jsonl, one record per file: layer, count,\nduration, outcome and each case. A file jest never gave a result for reads\nnever-ran and a file with no test reads empty, so neither passes for the other\nor for absent. test:report prints count and time per layer and the jest wall\ntime from those records, and fails for a run that left none. CI uploads the\nrecords.\n"
+          "timestamp": "2026-11-02T04:58:31-07:00",
+          "message": "test(ci): every CI run stores one record per test file (candybar-testing-ihvy.myy) (#564)\n\n* test(ci): every CI run stores one record per test file (candybar-testing-ihvy.myy)\n\nA reporter writes test-records/<run>.jsonl, one record per file: layer, count,\nduration, outcome and each case. A file jest never gave a result for reads\nnever-ran and a file with no test reads empty, so neither passes for the other\nor for absent. test:report prints count and time per layer and the jest wall\ntime from those records, and fails for a run that left none. CI uploads the\nrecords.\n\n* test(ci): the records reporter reads lost files off the run, so -o and --shard record (candybar-testing-ihvy.myy)\n\nJest counts the files it scheduled after every narrowing, so the reporter takes\nthe lost-file count from the run and asks the search to name files only when\nthat count is above zero. Asked every run, the search threw under -o and read\nevery file of a shard as lost. The test report and upload now follow the\nprotocol and Rust gates, and the wall-time label says it spans the test files.\n\n* test(ci): the colour audits write their own run's records (candybar-testing-ihvy.myy)\n\nThe audits config spreads the suite's, so it inherited the \"all\" run and wrote\nover a local full-suite record."
         }
       ]
     },
