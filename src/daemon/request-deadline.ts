@@ -19,8 +19,8 @@ export const REQUEST_TIMEOUT_MS = 200;
 // idle machine, but the reserve is wall time, and a draw descheduled on a busy
 // one reads tens of ms with no more work in it: CI's runner, its cores shared
 // with the other process-tier suites, reads up to 48 ms. It also holds room for
-// a user config whose effect draws several times the idle figure. A reserve
-// too small answers after its client has hung up, and the bar goes blank,
+// a user config whose effect draws several times the idle figure (a
+// maintainer's config, effect on, drew 42 ms at p90). A reserve too small answers after its client has hung up, and the bar goes blank,
 // where one too large only draws more pending.
 export const DRAW_RESERVE_MS = 60;
 
