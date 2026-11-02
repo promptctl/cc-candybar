@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "9b26334ab54c1c9fbad087ff535c804d167c9ce5",
+      "timestamp": "2026-11-02T11:36:20.223Z",
+      "commits": [
+        {
+          "sha": "9b26334ab54c1c9fbad087ff535c804d167c9ce5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T04:35:02-07:00",
+          "message": "feat(site): site:dev serves the live bar and reloads it; the bar gets a font size slider (#517)\n\n* feat(site): site:dev serves the live bar and reloads it on every rebuild\n\n* feat(site): the live bar's font size is a control, and starts larger\n\n* feat(site): the live bar's font size is a slider\n\n* fix(site): the dev server watches the page, binds loopback, and refuses unknown flags; the font size is parsed where it is read\n\nThe page and its font are esbuild entry points copied as they are, so the watch covers an edit to index.html and the plain build and the served build share one path. The server binds 127.0.0.1 (--port picks another). Flags are parsed strictly. A stored font size is parsed at the border (a whole number inside the slider's range, else the default), storage that cannot be used says so on the status line, and the label, preload and term read one size.\n\n* fix(site): a port is parsed strictly and only with --serve; the font size is kept when the drag ends\n\n--port without --serve and an empty --port no longer pass silently. The slider stores its size on change, so a storage failure is reported once per drag. The site tests share one build helper and clean up whatever they make.\n\n* fix(site): more than one output directory is refused"
+        }
+      ]
+    },
+    {
       "version": "pr-563",
       "ref": "refs/pull/563/merge",
       "sha": "79cdd0149956bf91440d5cdc20770a141826951f",
@@ -46,63 +61,6 @@
       ]
     },
     {
-      "version": "pr-517",
-      "ref": "refs/pull/517/merge",
-      "sha": "0d2d7cacfc85b4795bf5c1ac0d09bec5f7ab81de",
-      "timestamp": "2026-11-02T11:28:18.729Z",
-      "commits": [
-        {
-          "sha": "0d2d7cacfc85b4795bf5c1ac0d09bec5f7ab81de",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T04:27:36-07:00",
-          "message": "Merge a6c8b7d7d14fd8501e8baaf9140125a690b4e65f into ecc5a9d77a7c5be79a3a6fd09167de0b8deb838e\n"
-        },
-        {
-          "sha": "a6c8b7d7d14fd8501e8baaf9140125a690b4e65f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T04:27:25-07:00",
-          "message": "fix(site): more than one output directory is refused\n"
-        },
-        {
-          "sha": "2ed1ef06fbb9ffcd82ba73eb18e021875033f37a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T04:25:42-07:00",
-          "message": "fix(site): a port is parsed strictly and only with --serve; the font size is kept when the drag ends\n\n--port without --serve and an empty --port no longer pass silently. The slider stores its size on change, so a storage failure is reported once per drag. The site tests share one build helper and clean up whatever they make.\n"
-        },
-        {
-          "sha": "4651df59b77ec6c16583ae16eafb860feccec0ac",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T04:21:36-07:00",
-          "message": "fix(site): the dev server watches the page, binds loopback, and refuses unknown flags; the font size is parsed where it is read\n\nThe page and its font are esbuild entry points copied as they are, so the watch covers an edit to index.html and the plain build and the served build share one path. The server binds 127.0.0.1 (--port picks another). Flags are parsed strictly. A stored font size is parsed at the border (a whole number inside the slider's range, else the default), storage that cannot be used says so on the status line, and the label, preload and term read one size.\n"
-        },
-        {
-          "sha": "f9c9743e7f93900ed2fd60f91ba73c77b670452c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T23:54:39-06:00",
-          "message": "feat(site): the live bar's font size is a slider\n"
-        },
-        {
-          "sha": "71c23bc0e1087041c3e73712b4c7c7294c306d59",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T23:50:37-06:00",
-          "message": "feat(site): the live bar's font size is a control, and starts larger\n"
-        },
-        {
-          "sha": "c2c66b9348e3d95c014424fcd12e649cec05e0f9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T23:43:59-06:00",
-          "message": "feat(site): site:dev serves the live bar and reloads it on every rebuild\n"
-        }
-      ]
-    },
-    {
       "version": "pr-562",
       "ref": "refs/pull/562/merge",
       "sha": "7764c30aef1b749b9201dbb31e1a147eb5a17c12",
@@ -121,28 +79,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T04:23:42-07:00",
           "message": "fix(layout): directory draws the worktree-aware path, gitaculous stops drawing it\n\nReverses #548's resolution the other way: directory carries the main\ncheckout's path (~-collapsed, fish-abbreviated, with the subpath and a\nlinked worktree's name in a parenthetical) in every bundled preset,\nand gitaculous is the git state alone — it draws nothing until git\nanswers with a branch, instead of filling the gap with the path.\ngit.location and gitPath are now dead and removed; gitExpanded always\nshows the repo name.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "ecc5a9d77a7c5be79a3a6fd09167de0b8deb838e",
-      "timestamp": "2026-11-02T11:22:17.001Z",
-      "commits": [
-        {
-          "sha": "ecc5a9d77a7c5be79a3a6fd09167de0b8deb838e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T04:21:14-07:00",
-          "message": "test: delete the menu and colour tests that pin the look (#561)\n\n* test: delete the menu and colour tests that pin the look (candybar-testing-0x6u.4bt)\n\nThree whole files and nine cases asserted exact shades, tones and bytes of menus\nand turns, so any design change was an edit to them. The seam sweep keeps its\ncoverage in the nightly audit, which now walks every variation.\n\n* test: keep the group body's openness and authored-fg assertions the look test carried (candybar-testing-0x6u.4bt)\n\n* test: drop the blank line the deleted case left at a describe's head (candybar-testing-0x6u.4bt)"
-        },
-        {
-          "sha": "82f27b8e8fae409ca31e3cd886c52e4d8e84f5eb",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-02T11:21:11Z",
-          "message": "chore(release): set `package.json` to 1.178.2 [skip ci]\n\n## [1.178.2](https://github.com/promptctl/cc-candybar/compare/v1.178.1...v1.178.2) (2026-11-02)\n\n### Bug Fixes\n\n* **daemon:** the draw's reserve holds a draw descheduled on a busy machine (candybar-launch-q7o7.qjw) ([#560](https://github.com/promptctl/cc-candybar/issues/560)) ([ec506aa](https://github.com/promptctl/cc-candybar/commit/ec506aab1199cd0694cb9e8a7cd9996f75b797c1))\n"
         }
       ]
     },
