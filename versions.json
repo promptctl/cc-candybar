@@ -2,46 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-577",
-      "ref": "refs/pull/577/merge",
-      "sha": "25f655c4566c8e5f0d3db23fffc6c3208bb6820b",
-      "timestamp": "2026-11-02T15:15:43.371Z",
-      "commits": [
-        {
-          "sha": "25f655c4566c8e5f0d3db23fffc6c3208bb6820b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T15:14:28Z",
-          "message": "Merge c2f9ece4b370dd4d5cfc88ac92d2b6863c8bf604 into bddbf3b6871d4e9cf9437cb08386aac83e066245\n"
-        },
-        {
-          "sha": "c2f9ece4b370dd4d5cfc88ac92d2b6863c8bf604",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T08:14:16-07:00",
-          "message": "style(test): wrap the busy plan literal and restore the import spacing (candybar-launch-q7o7.04z)\n"
-        },
-        {
-          "sha": "eb5f041dba17f33d7d10f8978f7cd75272b5ec6a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T08:12:26-07:00",
-          "message": "fix(render): a client timeout is a typed error that carries its phase (candybar-launch-q7o7.04z)\n\ninterpretException matched the message strings CONNECT_TIMEOUT and TIMEOUT, so a\nreworded or wrapped error fell through to transient and kicked a live daemon.\nClientTimeoutError, thrown at both sites, carries the classification and the\nphase (connect | deadline); BusyOutcome carries the phase too.\n\nurl-handle now exits 1 on a connect timeout, where the click was never written,\ninstead of exiting 0 and losing it behind a stderr line. A deadline, ours or the\ndaemon's own TIMEOUT, still exits 0: the click reached the daemon.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "bddbf3b6871d4e9cf9437cb08386aac83e066245",
-      "timestamp": "2026-11-02T15:08:49.007Z",
+      "sha": "96106ff8a15730879c3089b407e2191fe629e15b",
+      "timestamp": "2026-11-02T15:24:51.339Z",
       "commits": [
         {
-          "sha": "bddbf3b6871d4e9cf9437cb08386aac83e066245",
+          "sha": "96106ff8a15730879c3089b407e2191fe629e15b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T08:07:54-07:00",
-          "message": "fix(render): a client timeout, on the connect or after it, kicks nothing (candybar-launch-q7o7.6wi) (#575)\n\n* fix(render): a client timeout, on the connect or after it, kicks nothing (candybar-launch-q7o7.6wi)\n\nA dead daemon never times out: a missing socket is ENOENT and an unbound one\nECONNREFUSED, both immediate. A timeout therefore means a live listener, and a\nkick's candidate loses the bind to it (socket-lease arbitration). Both runtimes\nnow classify the client's own connect/deadline timeouts as busy, and the\nunreachable-by-construction transient 'timeout' cause is removed.\n\n* docs(render): busy comments say a daemon holds the socket, not that it answered (candybar-launch-q7o7.6wi)\n\n* test(debug): a busy daemon is a stderr line with no spawn hint (candybar-launch-q7o7.6wi)\n\n* docs(render): the busy and click-budget comments stop saying the daemon answered (candybar-launch-q7o7.6wi)"
+          "timestamp": "2026-11-02T08:23:43-07:00",
+          "message": "fix(render): a client timeout is a typed error that carries its phase (candybar-launch-q7o7.04z) (#577)\n\n* fix(render): a client timeout is a typed error that carries its phase (candybar-launch-q7o7.04z)\n\ninterpretException matched the message strings CONNECT_TIMEOUT and TIMEOUT, so a\nreworded or wrapped error fell through to transient and kicked a live daemon.\nClientTimeoutError, thrown at both sites, carries the classification and the\nphase (connect | deadline); BusyOutcome carries the phase too.\n\nurl-handle now exits 1 on a connect timeout, where the click was never written,\ninstead of exiting 0 and losing it behind a stderr line. A deadline, ours or the\ndaemon's own TIMEOUT, still exits 0: the click reached the daemon.\n\n* style(test): wrap the busy plan literal and restore the import spacing (candybar-launch-q7o7.04z)"
+        },
+        {
+          "sha": "132e8896fcbc010047cf52b78a3594f93f7c254c",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-02T15:20:39Z",
+          "message": "chore(release): set `package.json` to 1.180.2 [skip ci]\n\n## [1.180.2](https://github.com/promptctl/cc-candybar/compare/v1.180.1...v1.180.2) (2026-11-02)\n\n### Bug Fixes\n\n* **render:** a client timeout, on the connect or after it, kicks nothing (candybar-launch-q7o7.6wi) ([#575](https://github.com/promptctl/cc-candybar/issues/575)) ([bddbf3b](https://github.com/promptctl/cc-candybar/commit/bddbf3b6871d4e9cf9437cb08386aac83e066245))\n* **render:** a render the daemon answers TIMEOUT kicks nothing (candybar-launch-q7o7.g6w) ([#574](https://github.com/promptctl/cc-candybar/issues/574)) ([685dfc6](https://github.com/promptctl/cc-candybar/commit/685dfc67e4662552cac9a0924249992f5225cbbe))\n"
         }
       ]
     },
