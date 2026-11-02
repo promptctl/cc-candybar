@@ -1,0 +1,91 @@
+// [LAW:behavior-not-structure] A bar pane the lane edge opens on a real tmux
+// server is tagged from the moment it exists: a daemon closing during the open
+// leaves no pane `pane off` cannot find, and no hook behind on the user's pane.
+
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+import { productionLaneEdge } from "../src/daemon/lane-edge";
+import { processLauncher, type Launcher } from "../src/proc/launch";
+import type { TmuxHint } from "../src/tmux-hint";
+
+const HAS_TMUX = spawnSync("tmux", ["-V"]).status === 0;
+
+(HAS_TMUX ? describe : describe.skip)("a bar pane on a real tmux", () => {
+  let dir: string;
+  let hint: TmuxHint;
+  const tmux = (...args: string[]): string => {
+    const run = spawnSync("tmux", ["-S", hint.socket, ...args], {
+      encoding: "utf8",
+    });
+    if (run.status !== 0) throw new Error(`tmux ${args[0]}: ${run.stderr}`);
+    return run.stdout;
+  };
+  const panes = (): string[] =>
+    tmux("list-panes", "-a", "-F", "#{pane_id}").trim().split("\n");
+  const hooks = (): string => tmux("show-hooks", "-p", "-t", hint.pane);
+
+  beforeEach(() => {
+    dir = mkdtempSync(path.join(os.tmpdir(), "ccb-bar-pane-"));
+    hint = {
+      socket: path.join(dir, "tmux.sock"),
+      pane: "",
+      truecolor: null,
+    } as TmuxHint;
+    tmux("-f", "/dev/null", "new-session", "-d", "-s", "bar", "-x", "80", "-y", "20");
+    hint = { ...hint, pane: panes()[0]! };
+  });
+
+  afterEach(() => {
+    // The private server's one session: tmux exits with its last.
+    spawnSync("tmux", ["-S", hint.socket, "kill-session", "-t", "bar"]);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("a daemon closing once the open's first launch answers leaves the pane tagged", async () => {
+    const closing = new AbortController();
+    // Every launch after the first is refused, as a closed daemon's are.
+    let launches = 0;
+    const launcher: Launcher = {
+      ...processLauncher,
+      launch: async (opts) => {
+        launches += 1;
+        const result = await processLauncher.launch({
+          ...opts,
+          signal: launches > 1 ? AbortSignal.abort() : undefined,
+        });
+        closing.abort();
+        return result;
+      },
+    };
+    const edge = productionLaneEdge(launcher, () => new Set(), closing.signal);
+
+    const opened = await edge.openBarPane(hint, ["sleep", "60"], {});
+
+    expect(panes()).toContain(opened);
+    const tagged = productionLaneEdge(
+      processLauncher,
+      () => new Set(),
+      new AbortController().signal,
+    );
+    expect(await tagged.barPanes(hint)).toEqual([opened]);
+    expect(hooks()).not.toContain("after-split-window");
+  });
+
+  test("a failed split leaves no hook to tag the user's next split", async () => {
+    // One row has no room for another pane.
+    tmux("resize-window", "-t", "bar", "-y", "1");
+    const edge = productionLaneEdge(
+      processLauncher,
+      () => new Set(),
+      new AbortController().signal,
+    );
+
+    await expect(edge.openBarPane(hint, ["sleep", "60"], {})).rejects.toThrow(
+      /split-window|set-hook|tmux/,
+    );
+    expect(hooks()).not.toContain("after-split-window");
+  });
+});
