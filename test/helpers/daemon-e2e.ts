@@ -34,7 +34,12 @@ import { ROUTE_ENV } from "./process-tier.cjs";
 import { detectClaudeConfigDir } from "../../src/claude-settings";
 import { PACKAGE_VERSION } from "../../src/version";
 import { logLines } from "../../src/daemon/log";
-import { valueOf } from "../../src/utils/logfmt";
+import {
+  answeredRender,
+  drewAwaitedPending,
+  renderEventsOf,
+  retriedRender,
+} from "./daemon-log";
 import { until } from "./until";
 
 // The argv a client sends: binary path first, as parseRenderArgs expects.
@@ -68,11 +73,7 @@ const PENDING_RETRY_BUDGET = 20;
 
 // A session's render events whose reply its client read, in log order.
 export function answeredEvents(log: string, sessionId: string): string[] {
-  return logLines(log).filter(
-    (l) =>
-      l.includes(`] render sid=${valueOf(sessionId)} `) &&
-      l.includes(" timedOut=N "),
-  );
+  return renderEventsOf(logLines(log), sessionId).filter(answeredRender);
 }
 
 // The click events whose client had already been told TIMEOUT, in log order.
@@ -132,17 +133,14 @@ async function renderAnswer(
       () => (event = answeredEvents(log, sessionId)[before] ?? "") !== "",
       `the render event of ${sessionId}'s answer`,
     );
-    if (/ pending=-(?: |$)/.test(event)) return resp;
-    // A source a run superseded is drawn pending by design: no request waits
-    // on it (the run may outlast the deadline), so this answer is the one.
-    if (drewOnlySuperseded(event)) return resp;
+    if (!drewAwaitedPending(event)) return resp;
     // [LAW:no-silent-failure] Only a wait its deadline ended may draw
     // pending: one that answered yet drew a value not answered means the wait
     // left out something the request started (rule 1), and asking again would
     // hide it. A value still pending after every ask is the failure too.
     // Both are named by the event that drew them, never a bar a later
     // assertion trips over.
-    if (!/ ended=deadline(?: |$)/.test(event))
+    if (!retriedRender(event))
       throw new Error(`render drew pending though its wait answered: ${event}`);
     if (attempt >= PENDING_RETRY_BUDGET)
       throw new Error(
@@ -183,22 +181,6 @@ export async function frameRequest(
     );
   }
   return parseFrame(resp.frame);
-}
-
-// Whether every value a render event drew pending is a plugin source a run
-// superseded, as its `sourcesPending=` names them.
-function drewOnlySuperseded(event: string): boolean {
-  const field = (name: string): string[] =>
-    (new RegExp(` ${name}=(\\S+)`).exec(event)?.[1] ?? "-")
-      .split(",")
-      .filter((v) => v !== "-");
-  const superseded = new Set(
-    field("sourcesPending")
-      .filter((v) => v.endsWith(":superseded"))
-      .map((v) => v.slice(0, -":superseded".length)),
-  );
-  const pending = field("pending");
-  return pending.length > 0 && pending.every((name) => superseded.has(name));
 }
 
 // The body of a status-line render request, as Claude Code's client sends it.

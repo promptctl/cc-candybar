@@ -149,8 +149,8 @@ describe("a daemon render's event names the effect it wore", () => {
     const leaves = (await renderLines(env, sessionId, 3)).map(
       (l) => l.match(/ leaves=(\S+) /)?.[1],
     );
-    // A retried request logs once per attempt, so the event that saw `b`
-    // leave is the first naming it, and every event before it names none.
+    // The event that saw `b` leave is the first naming it, and every event
+    // before it names none.
     const left = leaves.findIndex((l) => l !== "-");
     expect(left).toBeGreaterThan(0);
     expect(leaves.slice(0, left).every((l) => l === "-")).toBe(true);
