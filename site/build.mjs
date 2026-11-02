@@ -2,13 +2,13 @@
 // `pnpm bar:web`'s page and font, with a
 // transport (site/transport.ts) that runs the daemon's own modules in the page
 // over a simulated Node (site/shims).
-import { build } from "esbuild";
+import { context } from "esbuild";
 import { landscapeDir } from "./landscape-dir.mjs";
-import { copyFileSync, mkdirSync, rmSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import path from "node:path";
+import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 
-import { readFileSync } from "node:fs";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const shim = (f) => path.join(here, "shims", f);
 const alias = {};
@@ -31,23 +31,41 @@ alias.buffer = alias["node:buffer"] = "buffer";
 alias.string_decoder = alias["node:string_decoder"] = "string_decoder";
 alias.timers = alias["node:timers"] = shim("timers.ts");
 
-// The output directory: site/dist, or the one named as the first argument (the test builds into its own).
-const dist = path.resolve(process.argv[2] ?? path.join(here, "dist"));
+// `--serve` watches the sources and serves the page on loopback, reloading it on every rebuild;
+// `--port` picks the port (0 for any free one). Any other flag is refused.
+const { values, positionals } = parseArgs({
+  allowPositionals: true,
+  options: { serve: { type: "boolean", default: false }, port: { type: "string" } },
+});
+const serving = values.serve;
+if (positionals.length > 1) throw new Error(`one output directory at most, not ${positionals.length}: ${positionals.join(" ")}`);
+if (values.port !== undefined && !serving) throw new Error("--port is the dev server's: use it with --serve");
+const portText = values.port ?? "8931";
+if (!/^\d{1,5}$/.test(portText) || Number(portText) > 65535) throw new Error(`--port must be a port number, not "${portText}"`);
+const port = Number(portText);
+// The output directory: site/dist, or the one named as the first positional argument (the test builds into its own).
+const dist = path.resolve(positionals[0] ?? path.join(here, "dist"));
 rmSync(dist, { recursive: true, force: true });
-mkdirSync(dist, { recursive: true });
 const page = path.join(here, "..", "scripts", "bar-web");
-for (const f of ["index.html", "rich-powerline.woff2", "FONT-LICENSE"]) copyFileSync(path.join(page, f), path.join(dist, f));
 
 const explorer = landscapeDir();
 const landscape = explorer === null ? null : explorer + "/";
 
-const result = await build({
-  entryPoints: [path.join(here, "transport.ts")],
+const ctx = await context({
+  entryPoints: {
+    transport: path.join(here, "transport.ts"),
+    // The page and its font are entry points copied as they are, so the watch sees an edit to them as it sees one to the sources.
+    index: path.join(page, "index.html"),
+    "rich-powerline": path.join(page, "rich-powerline.woff2"),
+    "FONT-LICENSE": path.join(page, "FONT-LICENSE"),
+  },
+  loader: { ".html": "copy", ".woff2": "copy", "": "copy" },
   bundle: true,
   format: "esm",
   platform: "browser",
   target: "es2022",
-  outfile: path.join(dist, "transport.js"),
+  outdir: dist,
+  banner: { js: serving ? `new EventSource("/esbuild").addEventListener("change", () => location.reload());` : "" },
   alias,
   inject: [shim("globals.ts")],
   define: { global: "globalThis", __SOURCE_DIGEST__: "undefined",
@@ -57,5 +75,13 @@ const result = await build({
   metafile: true,
   sourcemap: true,
 });
+if (serving) {
+  await ctx.watch();
+  const served = await ctx.serve({ servedir: dist, host: "127.0.0.1", port });
+  console.log(`serving ${served.hosts.map((host) => `http://${host}:${served.port}/`).join(" ")}`);
+  await new Promise(() => {});
+}
+const result = await ctx.rebuild();
+await ctx.dispose();
 const bytes = Object.values(result.metafile.outputs).reduce((n, o) => n + o.bytes, 0);
-console.log(`built ${path.relative(process.cwd(), dist)} (transport.js (${(bytes / 1e6).toFixed(1)} MB with map)`);
+console.log(`built ${path.relative(process.cwd(), dist)} (${(bytes / 1e6).toFixed(1)} MB with maps)`);

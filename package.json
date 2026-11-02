@@ -30,6 +30,7 @@
     "bar": "node --require ./scripts/version-stamp.cjs --import tsx scripts/drive-bar.ts",
     "bar:web": "node --require ./scripts/version-stamp.cjs --import tsx scripts/bar-web.ts",
     "site:build": "node site/build.mjs",
+    "site:dev": "node site/build.mjs --serve",
     "bench": "node --require ./scripts/version-stamp.cjs --import tsx scripts/bench/index.ts",
     "load-gate": "node --require ./scripts/version-stamp.cjs --import tsx scripts/load-gate.ts",
     "check:protocol": "node scripts/check-protocol.mjs",

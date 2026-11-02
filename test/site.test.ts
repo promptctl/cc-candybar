@@ -8,7 +8,7 @@
 // copy the page cannot make says so, with its text, and the doctor runs in the
 // page: the daemon it asks about is the page's own.
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -25,9 +25,14 @@ function withoutLandscape(): NodeJS.ProcessEnv {
   return env;
 }
 
+// site/build.mjs as a command, with the deploy's environment unless a test names its own.
+function buildSite(args: string[], env: NodeJS.ProcessEnv = {}): void {
+  execFileSync("node", [path.join(ROOT, "site/build.mjs"), ...args], { stdio: "pipe", env: { ...withoutLandscape(), ...env } });
+}
+
 test("the deploy's LANDSCAPE_DIR is the live bar's link to the explorer, and a path outside the page is refused", () => {
   const out = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-site-"));
-  execFileSync("node", [path.join(ROOT, "site/build.mjs"), out], { stdio: "pipe", env: { ...withoutLandscape(), LANDSCAPE_DIR: "landscape" } });
+  buildSite([out], { LANDSCAPE_DIR: "landscape" });
   const printed = execFileSync("node", ["--input-type=module", "-e", `
     const { transport } = await import(${JSON.stringify(path.join(out, "transport.js"))});
     console.log(JSON.stringify(transport.landscape));
@@ -35,14 +40,14 @@ test("the deploy's LANDSCAPE_DIR is the live bar's link to the explorer, and a p
   `], { encoding: "utf8", timeout: 30_000 });
   expect(JSON.parse(printed.trim().split("\n").pop()!)).toBe("landscape/");
   for (const bad of ["/landscape", "./landscape", "../landscape", 'x" onclick="y'])
-    expect(() => execFileSync("node", [path.join(ROOT, "site/build.mjs"), out], { stdio: "pipe", env: { ...withoutLandscape(), LANDSCAPE_DIR: bad } })).toThrow(/LANDSCAPE_DIR must be folders/);
+    expect(() => buildSite([out], { LANDSCAPE_DIR: bad })).toThrow(/LANDSCAPE_DIR must be folders/);
   fs.rmSync(out, { recursive: true, force: true });
 });
 
 test("the built site renders, clicks, and plays its scenario with no server", () => {
   // Built into a directory of its own, so a test run never replaces the developer's site/dist.
   const out = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-site-"));
-  execFileSync("node", [path.join(ROOT, "site/build.mjs"), out], { stdio: "pipe", env: withoutLandscape() });
+  buildSite([out]);
   const probe = `
     const { transport } = await import(${JSON.stringify(path.join(out, "transport.js"))});
     if (transport.landscape !== null) throw new Error("a build outside the deploy links to an explorer: " + transport.landscape);
@@ -88,4 +93,61 @@ test("the built site renders, clicks, and plays its scenario with no server", ()
   expect(r.copied).toMatch(/^the browser did not copy .*; the text: \S+$/);
   expect(r.doctorRefused).toBeNull();
   expect(r.doctor).toContain("✓ daemon");
+});
+
+// [LAW:verifiable-goals] `pnpm site:dev` promises the page as it is on disk, served to this machine
+// alone, that reloads itself when the build changes; a plain build promises none of that.
+describe("the dev server", () => {
+  const PAGE = path.join(ROOT, "scripts/bar-web/index.html");
+  const RELOADS = 'new EventSource("/esbuild")';
+
+  // What a test makes is removed when it ends, passed or not; the server dies before its directory goes.
+  const cleanups: Array<() => void> = [];
+  afterEach(() => {
+    while (cleanups.length > 0) cleanups.pop()!();
+  });
+  const tmpDir = () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-site-"));
+    cleanups.push(() => fs.rmSync(dir, { recursive: true, force: true }));
+    return dir;
+  };
+
+  test("serves the page from disk on loopback, and only the served bundle reloads the page", async () => {
+    const server = spawn("node", [path.join(ROOT, "site/build.mjs"), "--serve", "--port", "0", tmpDir()], { env: withoutLandscape() });
+    cleanups.push(() => server.kill());
+    const serving = await new Promise<string>((resolve, reject) => {
+      let said = "";
+      server.stdout.on("data", (chunk) => {
+        said += chunk;
+        const line = said.split("\n").slice(0, -1).find((l) => l.startsWith("serving "));
+        if (line !== undefined) resolve(line);
+      });
+      server.stderr.on("data", (chunk) => (said += chunk));
+      server.on("exit", () => reject(new Error(`the dev server exited before serving: ${said}`)));
+    });
+    // It prints the addresses esbuild bound: loopback, and nothing else.
+    expect(serving).toMatch(/^serving http:\/\/127\.0\.0\.1:\d+\/$/);
+    const url = serving.slice("serving ".length);
+    expect(await (await fetch(url + "index.html")).text()).toBe(fs.readFileSync(PAGE, "utf8"));
+    expect(await (await fetch(url + "transport.js")).text()).toContain(RELOADS);
+
+    const built = tmpDir();
+    buildSite([built]);
+    expect(fs.readFileSync(path.join(built, "transport.js"), "utf8")).not.toContain(RELOADS);
+    expect(fs.readFileSync(path.join(built, "index.html"), "utf8")).toBe(fs.readFileSync(PAGE, "utf8"));
+  });
+
+  test("refuses a flag it does not know, a port that is not one, and a port with nothing to serve, and builds nothing", () => {
+    const out = path.join(os.tmpdir(), `ccb-site-refused-${process.pid}`);
+    const refused: Array<[string[], RegExp]> = [
+      [["--serve", "--bogus"], /--bogus/],
+      [["--serve", "--port", "http"], /--port must be a port number/],
+      [["--serve", "--port", ""], /--port must be a port number/],
+      [["--serve", "--port", "65536"], /--port must be a port number/],
+      [["--port", "9000"], /use it with --serve/],
+      [["extra"], /one output directory at most/],
+    ];
+    for (const [args, said] of refused) expect(() => buildSite([...args, out])).toThrow(said);
+    expect(fs.existsSync(out)).toBe(false);
+  });
 });
