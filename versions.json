@@ -4,51 +4,22 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "ec506aab1199cd0694cb9e8a7cd9996f75b797c1",
-      "timestamp": "2026-11-02T11:12:18.818Z",
+      "sha": "ecc5a9d77a7c5be79a3a6fd09167de0b8deb838e",
+      "timestamp": "2026-11-02T11:22:17.001Z",
       "commits": [
         {
-          "sha": "ec506aab1199cd0694cb9e8a7cd9996f75b797c1",
+          "sha": "ecc5a9d77a7c5be79a3a6fd09167de0b8deb838e",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T04:11:29-07:00",
-          "message": "fix(daemon): the draw's reserve holds a draw descheduled on a busy machine (candybar-launch-q7o7.qjw) (#560)\n\n* fix(daemon): the draw's reserve holds a draw descheduled on a busy machine (candybar-launch-q7o7.qjw)\n\nOn CI's runner, its cores shared with the other process-tier suites, a cold\ndraw that does a few ms of work reads up to 48 ms of wall time, failing the\n40 ms reserve. Reproduced locally with every core busy: median 2 ms, p99 48 ms.\nA larger reserve costs only more pending values; a smaller one blanks the bar.\n\n* docs(daemon): keep the user-config figure behind the draw reserve; process runs land within it (candybar-launch-q7o7.qjw)\n\n* docs(daemon): the draw reserve's comment claims no user-config coverage; process margin stays thin (candybar-launch-q7o7.qjw)\n\n* test(daemon): the held client's stated budget follows the draw reserve (candybar-launch-q7o7.qjw)"
-        }
-      ]
-    },
-    {
-      "version": "pr-561",
-      "ref": "refs/pull/561/merge",
-      "sha": "88dda1359df80246c17ad2aa6b1e8f52a8700621",
-      "timestamp": "2026-11-02T11:09:24.585Z",
-      "commits": [
-        {
-          "sha": "88dda1359df80246c17ad2aa6b1e8f52a8700621",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T11:08:34Z",
-          "message": "Merge b9380afe2c41b2ed8636588a99ed9134500644e9 into 040ba694b11dd01c6bce64b56acd016dabbf0578\n"
+          "timestamp": "2026-11-02T04:21:14-07:00",
+          "message": "test: delete the menu and colour tests that pin the look (#561)\n\n* test: delete the menu and colour tests that pin the look (candybar-testing-0x6u.4bt)\n\nThree whole files and nine cases asserted exact shades, tones and bytes of menus\nand turns, so any design change was an edit to them. The seam sweep keeps its\ncoverage in the nightly audit, which now walks every variation.\n\n* test: keep the group body's openness and authored-fg assertions the look test carried (candybar-testing-0x6u.4bt)\n\n* test: drop the blank line the deleted case left at a describe's head (candybar-testing-0x6u.4bt)"
         },
         {
-          "sha": "b9380afe2c41b2ed8636588a99ed9134500644e9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T04:08:21-07:00",
-          "message": "test: drop the blank line the deleted case left at a describe's head (candybar-testing-0x6u.4bt)\n"
-        },
-        {
-          "sha": "8deecf4665af80c97f43d18999a3cde9b626a027",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T04:06:25-07:00",
-          "message": "test: keep the group body's openness and authored-fg assertions the look test carried (candybar-testing-0x6u.4bt)\n"
-        },
-        {
-          "sha": "c0c5bb17664c0f5f286209fe070e17f3954970b3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T04:01:14-07:00",
-          "message": "test: delete the menu and colour tests that pin the look (candybar-testing-0x6u.4bt)\n\nThree whole files and nine cases asserted exact shades, tones and bytes of menus\nand turns, so any design change was an edit to them. The seam sweep keeps its\ncoverage in the nightly audit, which now walks every variation.\n"
+          "sha": "82f27b8e8fae409ca31e3cd886c52e4d8e84f5eb",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-02T11:21:11Z",
+          "message": "chore(release): set `package.json` to 1.178.2 [skip ci]\n\n## [1.178.2](https://github.com/promptctl/cc-candybar/compare/v1.178.1...v1.178.2) (2026-11-02)\n\n### Bug Fixes\n\n* **daemon:** the draw's reserve holds a draw descheduled on a busy machine (candybar-launch-q7o7.qjw) ([#560](https://github.com/promptctl/cc-candybar/issues/560)) ([ec506aa](https://github.com/promptctl/cc-candybar/commit/ec506aab1199cd0694cb9e8a7cd9996f75b797c1))\n"
         }
       ]
     },
