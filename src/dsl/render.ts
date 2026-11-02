@@ -117,6 +117,7 @@ import {
   templateInstants,
 } from "../config/loader/projections.js";
 import { valueReads } from "../config/loader/value-reads.js";
+import { SEGMENT_TEMPLATE_FIELDS } from "../config/loader/plugins.js";
 import {
   barRoot,
   bandRoot,
@@ -979,7 +980,7 @@ export function compileDslConfig(
       projections: basis.projections,
       clock: finalClock,
     });
-    for (const field of ["when", "bg", "fg", "template"] as const) {
+    for (const field of SEGMENT_TEMPLATE_FIELDS) {
       const parsed = compiled[segName]![field];
       if (parsed === undefined) continue;
       if (segReadsInstant(sources.get(parsed)!)) instant.add(parsed);
