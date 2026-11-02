@@ -71,6 +71,9 @@ importers:
       jest:
         specifier: ^30.0.5
         version: 30.3.0(@types/node@20.19.39)
+      jest-environment-node:
+        specifier: 30.3.0
+        version: 30.3.0
       json5:
         specifier: ^2.2.3
         version: 2.2.3

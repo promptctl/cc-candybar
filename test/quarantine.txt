@@ -1,0 +1,24 @@
+# The tests that have left the gate. One line each, and listing one is one line:
+#
+#   <YYYY-MM-DD> <lit ticket> <file> › <case name>
+#
+# The date is the day it was listed. The ticket owns the flake and its cause
+# (`lit show <ticket>`), so a line holds neither. The case is the name the
+# records use: its describe titles and its title, joined by " › ". A name that
+# two cases of a file carry names no single case, and the file errors.
+#
+# A listed case keeps running and keeps its record, and what fails it no longer
+# fails the run. That is whatever jest charges to the case while it runs: its
+# body, its beforeEach/afterEach, and the checks other gates throw from there
+# (the unit tier's refusal, the e2e assertion cap), so a listed case leaves those
+# too until its line goes. A beforeAll that throws is charged to every case under
+# its describe, so it is let through for a listed case, and fails the run only if
+# an unlisted case shares the describe. It is not a failure outside every case,
+# such as an afterAll that throws, or an error thrown after the case ended, which
+# belongs to whichever case is running then. Those still fail the run.
+#
+# List a flake within a day of seeing it. A line older than 7 days shows red in
+# the shape report, and the report still fails nothing, so the deadline is to fix
+# the test, or delete it, and delete the line. There are no automatic retries.
+
+2026-11-02 brandon-unfiled-3248.na7i test/render-cache-sharing.test.ts › a compile keeps nothing of a render once it returns

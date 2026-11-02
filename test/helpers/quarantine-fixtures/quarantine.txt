@@ -1,0 +1,4 @@
+2026-11-02 candybar-testing-ihvy.hcl test/helpers/quarantine-fixtures/listed.fixture.ts › listed › a case that fails
+2026-11-02 candybar-testing-ihvy.hcl test/helpers/quarantine-fixtures/after-all.fixture.ts › after all › a case that fails
+2026-11-02 candybar-testing-ihvy.hcl test/helpers/quarantine-fixtures/duplicate-title.fixture.ts › a title used twice
+2026-11-02 candybar-testing-ihvy.hcl test/helpers/quarantine-fixtures/late-throw.fixture.ts › a case that leaves a timer
