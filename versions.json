@@ -4,15 +4,22 @@
     {
       "version": "pr-580",
       "ref": "refs/pull/580/merge",
-      "sha": "3019502821d35d51b6559a05f29d68f2f9f4a7b7",
-      "timestamp": "2026-11-02T16:51:27.762Z",
+      "sha": "08fa83b9b0917f4f515dd22a7801f88db079adb8",
+      "timestamp": "2026-11-02T16:56:37.233Z",
       "commits": [
         {
-          "sha": "3019502821d35d51b6559a05f29d68f2f9f4a7b7",
+          "sha": "08fa83b9b0917f4f515dd22a7801f88db079adb8",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T09:50:31-07:00",
-          "message": "Merge ac03898da73f06544a278660fc1e9463898ff6c8 into 437abb11a8aefe9ad432e8dd48085d083d5615e0\n"
+          "timestamp": "2026-11-02T16:55:12Z",
+          "message": "Merge 3ed1910142e46a73e764a7f9dfdf07ec9f82ff0a into 437abb11a8aefe9ad432e8dd48085d083d5615e0\n"
+        },
+        {
+          "sha": "3ed1910142e46a73e764a7f9dfdf07ec9f82ff0a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T09:54:58-07:00",
+          "message": "docs(testing): the unit-layer time doc says what its checks and splits do and do not show (candybar-testing-ihvy.hf7)\n"
         },
         {
           "sha": "ac03898da73f06544a278660fc1e9463898ff6c8",
