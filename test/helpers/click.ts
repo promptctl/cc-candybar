@@ -3,6 +3,7 @@
 // content and drive it through the REAL daemon path, so assertions track "what
 // effects does this click apply" rather than the exact wire encoding.
 
+import { bareGates } from "./gates";
 import { processLauncher } from "../../src/proc/launch";
 import { HEALTHY_BUNDLE } from "./doctor-facts";
 import { TEST_SIGNER } from "./link-signer";
@@ -14,11 +15,9 @@ import {
   noManagedSettings,
 } from "./doctor-facts";
 import { parseHandlerUrl } from "../../src/install/index";
-import {
-  VERBS,
-  SESSION_RENDER_ORIGIN_KEY,
-  encodeRenderOrigin,
-} from "../../src/daemon/verbs";
+import { VERBS } from "../../src/daemon/verbs";
+import { SESSION_RENDER_ORIGIN_KEY } from "../../src/daemon/foundations/session-keys";
+import { encodeRenderOrigin } from "../../src/daemon/foundations/render-origin";
 import type { VerbContext } from "../../src/daemon/verbs";
 import type { SessionStateRW } from "../../src/daemon/session-state";
 import { SettingsHistory } from "../../src/daemon/settings-history";
@@ -68,6 +67,7 @@ export function testVerbContext(
   config?: DslConfig,
 ): VerbContext {
   return {
+    gates: bareGates(),
     stateDir: stateDir(),
     sessionState,
     history,

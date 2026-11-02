@@ -28,7 +28,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import { deriveActionValidators } from "../src/daemon/verbs/state-validators";
+import { deriveActionValidators } from "../src/daemon/foundations/state-validators";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";

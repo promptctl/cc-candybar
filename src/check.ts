@@ -63,9 +63,8 @@ import {
   type RenderWarning,
 } from "./dsl/render.js";
 import { ansiOf, type Frame } from "./render/frame.js";
-import { stateGate } from "./daemon/verbs/state-validators.js";
-import { configGate } from "./daemon/verbs/config-validators.js";
-import { reserveUpdateKeys } from "./daemon/update-notice.js";
+import type { Gates } from "./daemon/foundations/gates.js";
+import { daemonGates } from "./daemon/update-keys.js";
 import { resumeCommand } from "./claude-resume.js";
 import { instantOf, type Instant } from "./utils/instant.js";
 import { perSetting } from "./config/setting-projections.js";
@@ -374,6 +373,9 @@ function searchedLayers(
 // renderer; a verdict command must not report "clean" about a file it never
 // read.)
 export async function checkConfig(
+  // The gates the daemon holds (`daemonGates`), so what `check` refuses is
+  // what the daemon's load refuses.
+  gates: Gates,
   target: string | undefined,
   cwd: string = process.cwd(),
   // [LAW:no-ambient-temporal-coupling] The settle budget is an input of the
@@ -439,6 +441,7 @@ export async function checkConfig(
 
   try {
     const rendered = await loadRegisterRender(
+      gates,
       layers,
       { repo: resolution.repos.plugins },
       cwd,
@@ -683,6 +686,7 @@ export async function renderEffective(
 // The verdict: the prepared config rendered under every preset, every render
 // error a failure. Returns the line a fresh session renders.
 async function loadRegisterRender(
+  gates: Gates,
   chain: readonly ConfigLayer[],
   repo: RepoSession,
   cwd: string,
@@ -705,13 +709,8 @@ async function loadRegisterRender(
     // The gates the daemon derives when it loads this config, over the keys
     // its own links hold: an action table that cannot gate fails here as it
     // fails that load.
-    const releaseUpdateKeys = reserveUpdateKeys();
-    try {
-      stateGate(config);
-      configGate(config);
-    } finally {
-      releaseUpdateKeys();
-    }
+    gates.state.gateFor(config);
+    gates.config.gateFor(config);
 
     // [LAW:verifiable-goals] Every preset a session can switch to is a bar
     // the daemon renders, so every one is a pass: a segment only one preset
@@ -959,6 +958,7 @@ export async function checkCommandPlan(
         // the same argument, already absolute — `checkConfig`'s own
         // resolution, the seam for its direct callers, passes it through.
         await checkConfig(
+          daemonGates(),
           cliConfigTarget(parsed.target, process.env, cwd).path,
           cwd,
         ),

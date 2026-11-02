@@ -23,7 +23,7 @@ import { clickArrived } from "../src/doctor/edge";
 import type { ClickArrival } from "../src/doctor/sightings";
 import { VERB_DOCTOR_PROBE, VERB_DOCTOR_RUN } from "../src/click/wire";
 import { BadVerbArgs, VERBS, type VerbContext } from "../src/daemon/verbs";
-import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/verbs";
+import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
 import { SessionState } from "../src/daemon/session-state";
 import { sanitizeClientVersion } from "../src/daemon/protocol";
 import { doctorReportKeys } from "../src/doctor/report";

@@ -22,6 +22,7 @@ import { viewFacts } from "./helpers/view-facts";
 import { writeAtomic } from "../src/utils/atomic-write";
 import { until } from "./helpers/until";
 import { stateDir } from "../src/daemon/paths";
+import { bareGates } from "./helpers/gates";
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
@@ -80,7 +81,7 @@ function setUp() {
     { stateDir: stateDir(),
       launcher: processLauncher,
       storage: NO_PLUGIN_STORAGE,
-      signer: TEST_SIGNER,
+      signer: TEST_SIGNER, gates: bareGates(),
       fileEvents: NO_FILE_EVENTS,
       sessionState: new SessionState(),
       watchers,

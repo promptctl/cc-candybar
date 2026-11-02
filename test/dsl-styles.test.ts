@@ -34,7 +34,7 @@ import {
   unauthored,
 } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { deriveActionValidators } from "../src/daemon/verbs/state-validators";
+import { deriveActionValidators } from "../src/daemon/foundations/state-validators";
 import { resolveStyleSelection } from "../src/themes";
 import { instantOf } from "../src/utils/instant";
 

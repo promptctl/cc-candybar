@@ -25,6 +25,7 @@ import type {
 } from "../proc/launch";
 import type { DaemonLogger } from "../utils/logger";
 import { actsDir } from "./update-act";
+import type { Gates } from "./foundations/gates";
 import { makeUpdateWatch } from "./update-notice";
 import { makeBinaryWatch, type BundleStat } from "./binary-watch";
 import { stableAttachPreload } from "../install/index.js";
@@ -44,7 +45,6 @@ import { makeLimits, type LimitsDeps } from "./limits";
 import { SessionState } from "./session-state";
 import { SettingsHistory } from "./settings-history";
 import { NavigationHistory } from "./navigation-history";
-import { stateGate } from "./verbs/state-validators";
 import { closeIdleMenus } from "./verbs";
 import type { DoctorEdge, DoctorStores } from "../doctor/edge";
 import { ProbeArrivals } from "../doctor/handler-probe";
@@ -173,6 +173,9 @@ export interface DaemonInputs extends DaemonAdapters {
   readonly memoryLimitBytes: number;
   readonly registryUrl: string;
   readonly clock: DaemonClock;
+  // [LAW:no-shared-mutable-globals] What this daemon's loads accept: its own
+  // value, built by the root, so two daemons in one process share none.
+  readonly gates: Gates;
   // [LAW:single-enforcer] The process's one death funnel: the binary watch and
   // the memory backstop end the daemon here, never on their own.
   readonly exit: (code: number) => void;
@@ -224,19 +227,9 @@ export interface Daemon {
   close(atExit: TmuxAtExit): Promise<Settled>;
 }
 
-// [LAW:no-shared-mutable-globals] One daemon is live in a process at a time,
-// because the gates' keyspaces (verbs/state-validators.ts, config-validators.ts)
-// are module state, which an armed daemon's update notice writes. What says so
-// is the live daemon's closing signal, written only by `createDaemon`. The
-// keyspaces held as a value on the daemon make this guard unnecessary.
-let liveDaemon: AbortSignal | null = null;
-
 export function createDaemon(inputs: DaemonInputs): Daemon {
-  // Before anything is built: a refused build hands back nothing to close.
-  if (liveDaemon !== null && !liveDaemon.aborted) {
-    throw new Error("a daemon is already live in this process");
-  }
-  const { bundle, memoryLimitBytes, registryUrl, clock, exit, paths } = inputs;
+  const { bundle, memoryLimitBytes, registryUrl, clock, exit, paths, gates } =
+    inputs;
   const instant = (): Instant => instantOf(clock.date());
   // [LAW:single-enforcer] What ends the daemon's work: every launch through its
   // launcher, and the lane edge's waits.
@@ -488,6 +481,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       log,
       storage: managedStorage,
       signer: linkSigner,
+      gates,
       ledger: refreshLedger,
       // [LAW:single-enforcer] The one delivery owner, whose OS stream a
       // `watch_file` source's watch rides.
@@ -504,7 +498,11 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         history: (sessionId) => settingsHistory.depth(sessionId),
         // Measured against the gate of the config the view draws with.
         navigation: (sessionId, config) =>
-          navigationHistory.depth(sessionId, sessionState, stateGate(config)),
+          navigationHistory.depth(
+            sessionId,
+            sessionState,
+            gates.state.gateFor(config),
+          ),
       }),
     },
     {
@@ -589,6 +587,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     releaseIntervalMs: RELEASE_CHECK_INTERVAL_MS,
     registryUrl,
     fetchImpl: inputs.fetch,
+    gates,
     onApplied: () => binaryWatch.checkNow(),
     log,
   });
@@ -599,6 +598,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     monotonic: () => clock.monotonic(),
   });
   const verbCtx = {
+    gates,
     sessionState,
     stateDir: paths.state,
     journalTurns,
@@ -695,10 +695,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     limits,
     verbCtx,
   };
-
-  // [LAW:no-ambient-temporal-coupling] The last step of building, so a build
-  // that throws leaves no live daemon behind it.
-  liveDaemon = closing.signal;
 
   return {
     stats,

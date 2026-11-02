@@ -14,11 +14,11 @@
 
 import { isConfirmKey } from "../config/confirm-step";
 import { isSettingKey } from "./settings-history";
-import { UPDATE_DISMISSED_KEY } from "./update-notice";
+import { UPDATE_DISMISSED_KEY } from "./update-keys";
 import { DIAGNOSTICS_VIEWING } from "../config/door";
 import { observable, runInAction } from "mobx";
 import { recordingView, type SessionStateRW } from "./session-state";
-import type { Gate } from "./verbs/validator-registry";
+import type { Gate } from "./foundations/validator-registry";
 import { BadVerbArgs } from "./verb-error";
 
 export interface NavigationChange {

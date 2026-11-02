@@ -24,6 +24,7 @@ import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { createLauncher, type Launcher } from "../src/proc/launch";
 import { answerRepo } from "./helpers/repo-approval";
 import { stateDir } from "../src/daemon/paths";
+import { bareGates } from "./helpers/gates";
 
 // brandon-unfiled-3248.8ro6, step 2: each value lives where its scope says. A
 // directory's store holds the sources no session value reaches; each session
@@ -59,7 +60,7 @@ function makeCache(
   });
   cleanups.push(() => watchers.closeAll());
   const cache = new RenderCache(
-    { stateDir: stateDir(), launcher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
+    { stateDir: stateDir(), launcher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, gates: bareGates(),
  fileEvents: NO_FILE_EVENTS,
       sessionState: new SessionState(),
       watchers,

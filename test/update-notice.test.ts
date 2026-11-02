@@ -10,17 +10,8 @@ import {
   viewerRows,
 } from "../src/render/diagnostics";
 import { plainOf } from "../src/render/frame";
-import {
-  describeStamp,
-  factsOf,
-  updateIdentity,
-  updateNotice,
-  updateOf,
-  UPDATE_DISMISSED_KEY,
-  UPDATE_NOTICE_FIELD,
-  UPDATE_NOTICE_SESSION_KEY,
-  type Update,
-} from "../src/daemon/update-notice";
+import { describeStamp, factsOf, updateIdentity, updateNotice, updateOf, type Update } from "../src/daemon/update-notice";
+import { UPDATE_DISMISSED_KEY, UPDATE_NOTICE_FIELD, UPDATE_NOTICE_SESSION_KEY } from "../src/daemon/update-keys";
 import type { ActState } from "../src/daemon/update-act";
 import type { BuildCurrency, SourceStamp } from "../src/daemon/build-currency";
 import type { Currency } from "../src/install/currency";

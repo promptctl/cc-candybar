@@ -61,8 +61,7 @@ import {
   type Registration,
 } from "../../dsl/render.js";
 import { mb, NEAR_LIMIT } from "../limits.js";
-import { stateGate } from "../verbs/state-validators.js";
-import { configGate } from "../verbs/config-validators.js";
+import type { Gates } from "../foundations/gates.js";
 import { presetNames, presetRoot } from "../../config/presets.js";
 import {
   presetOf,
@@ -173,6 +172,8 @@ export interface RenderDeps<S extends ViewSource = ViewSource> {
   storage: PluginStorage;
   // What signs the `run` links its compiles draw (StateDeps).
   signer: LinkSigner;
+  // The gates a load builds against (StateDeps).
+  gates: Gates;
   // The ledger its states' user sources record their refreshes in
   // (StateDeps).
   ledger?: RefreshLedger;
@@ -218,6 +219,9 @@ export interface StateDeps {
   readonly storage: PluginStorage;
   // What signs the `run` links a compile draws.
   readonly signer: LinkSigner;
+  // The gates a config's sessions click through, which a load builds once so a
+  // config that cannot gate fails there.
+  readonly gates: Gates;
   // Where a state's user sources record their refreshes: the daemon's one
   // ledger. A build outside the daemon (check, the doctor, a test) leaves it
   // out, and its registries keep their own.
@@ -947,13 +951,13 @@ export function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
     warnings.push(...declareDslVariables(config, probe, cwd, VIEW_SCOPE));
     probe.dispose();
     // [LAW:no-silent-failure] The gates this config's sessions click through
-    // are derived from its action table on demand (stateGate / configGate),
+    // are derived from its action table on demand (`gates`),
     // so nothing is installed here. They are built once now so an action
     // table that cannot gate — a built-in key re-claimed, two actions that
     // contradict each other on one key — fails this load, never the first
     // click.
-    stateGate(config);
-    configGate(config);
+    deps.gates.state.gateFor(config);
+    deps.gates.config.gateFor(config);
     // [LAW:no-ambient-temporal-coupling] Each folder's watch, held by the
     // registry until the state's teardown.
     for (const key of new Set(load.sources.values()))

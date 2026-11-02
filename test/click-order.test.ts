@@ -8,12 +8,8 @@ import { MenuIdle } from "../src/daemon/menu-idle";
 import type { DaemonParts } from "../src/daemon/daemon-parts";
 import { replyTo } from "../src/daemon/reply";
 import { SessionState } from "../src/daemon/session-state";
-import {
-  SESSION_CLIENT_HINTS_KEY,
-  VERBS,
-  type VerbContext,
-  type VerbHandler,
-} from "../src/daemon/verbs";
+import { VERBS, type VerbContext, type VerbHandler } from "../src/daemon/verbs";
+import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
 import {
   VERB_COPY,
   VERB_COPY_DIAGNOSTIC,

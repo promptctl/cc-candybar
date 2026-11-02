@@ -31,7 +31,7 @@ import {
 import type { SessionStateReader, SessionStateRW } from "../session-state";
 import { holdClickError } from "../click-error";
 import type { Instant } from "../../utils/instant";
-import { stateGate, stateKeySeed } from "./state-validators";
+import { stateKeySeed } from "./key-seeds";
 import {
   disclosureNest,
   NO_NEST,
@@ -41,8 +41,14 @@ import {
 import { DISCLOSURE_CLOSED } from "../../config/disclosure";
 import type { Drawing, LaneSwitches } from "../../config/lanes";
 import { closingView } from "../closing-view";
-import { configGate, configKeySeed } from "./config-validators";
-import type { Gate, RangeParams } from "./validator-registry";
+import { configKeySeed } from "./key-seeds";
+import type { Gates } from "../foundations/gates";
+import type { Gate, RangeParams } from "../foundations/validator-registry";
+import {
+  SESSION_CLIENT_HINTS_KEY,
+  SESSION_CONFIG_OVERRIDE_KEY,
+  SESSION_RENDER_ORIGIN_KEY,
+} from "../foundations/session-keys";
 import {
   applyLayoutOp as applyLayoutOpToFile,
   deletePreset as deletePresetFromFile,
@@ -162,11 +168,7 @@ import {
   terminalFeatureFields,
   installFields,
 } from "../../doctor/report";
-import type {
-  ConfigTarget,
-  RenderOrigin,
-  RequestedOrigin,
-} from "../../config-hint";
+import type { ConfigTarget, RenderOrigin } from "../../config-hint";
 import { withMark } from "../../doctor/mark-book";
 import { withClicked } from "../../doctor/clicked-terminals";
 import { DoctorBusy } from "../../doctor/busy";
@@ -191,6 +193,8 @@ import { typeSlash, type ClaudeInputEdge } from "../../claude-input/edge";
 // What the daemon hands everything that writes a session's state: a click's
 // verb, and the idle timer that closes its menus (`closeIdleMenus`).
 export interface DaemonContext {
+  // What this daemon's clicks may write: the gates its root built.
+  readonly gates: Gates;
   readonly sessionState: SessionStateRW;
   // [LAW:effects-at-boundaries] The daemon's clock.
   readonly now: () => Instant;
@@ -637,7 +641,7 @@ const setState: VerbHandler = async (rawValue, ctx) => {
   // escape in any segment is bad input, not a handler failure (decodeWire).
   const [sessionId = "", ...rest] = decodeWire(() => decodeSegments(rawValue));
   const sid = requireSessionId(sessionId);
-  const gate = stateGate(sessionConfig(ctx, sid));
+  const gate = ctx.gates.state.gateFor(sessionConfig(ctx, sid));
   if (rest.length === 0)
     throw new BadVerbArgs(
       `set-state: <key>/<value> is required (have keys: ${gate.listKeys().join(", ")})`,
@@ -739,7 +743,7 @@ const stepState: VerbHandler = async (rawValue, ctx) => {
   }
   const by = parseInt(byRaw, 10);
   const config = sessionConfig(ctx, sid);
-  const gate = stateGate(config);
+  const gate = ctx.gates.state.gateFor(config);
   // [LAW:no-silent-failure] A key the session's config declares no range for
   // is not a stepper — reject loudly rather than fabricate bounds or silently
   // no-op.
@@ -820,20 +824,6 @@ function stepFrom(
 
 // ─── The durable store: which file, and the history over it ─────────────────
 
-// [LAW:one-source-of-truth] The config FILE is the one durable store
-// (candybar-config-dqe). A click carries only a session id, so a render
-// request records — under this daemon-internal key, the
-// SESSION_CONFIG_OVERRIDE_KEY precedent — the INPUTS it named for config
-// resolution, and a durable verb runs the same resolution over them, under
-// the session's load-config pick, at click time (durableConfig). The
-// file it lands in is the one the NEXT reload reads, not a snapshot of the
-// one the last render read: RenderCache re-resolves the same chain whenever
-// a candidate appears (a higher-precedence file supersedes a lower one), so
-// a recorded resolved path would be a second clock — a write to a file the
-// bar has already stopped reading. No re-derivation from the daemon's own
-// cwd either, which describes whichever shell spawned it.
-export const SESSION_RENDER_ORIGIN_KEY = "render-origin";
-
 // [LAW:one-source-of-truth] The one place a load-config pick outranks the
 // path the request named: what the render draws from (draw-bar.ts) and what a
 // durable click resolves (sessionOrigin) both come through here, so a click
@@ -850,22 +840,6 @@ export function sessionRenderOrigin(
   return pick === null
     ? requested
     : { ...requested, target: { source: "pick", path: pick } };
-}
-
-// The record is flat and additive, and `configFile` keeps its meaning, because
-// session state sits at one unversioned path that builds of either age read:
-// an older build finds the field it requires and ignores `source`.
-export function encodeRenderOrigin({
-  projectDir,
-  cwd,
-  target,
-}: RequestedOrigin): string {
-  return JSON.stringify({
-    projectDir,
-    cwd,
-    configFile: target.path ?? null,
-    source: target.source,
-  });
 }
 
 // [LAW:parse-dont-validate] What a record's two fields say together. The path
@@ -1028,7 +1002,7 @@ const setConfig: VerbHandler = async (rawValue, ctx) => {
   const sid = requireSessionId(sessionId);
   const origin = sessionOrigin(ctx, sid);
   const config = ctx.configFor(origin);
-  const gate = configGate(config);
+  const gate = ctx.gates.config.gateFor(config);
   if (!key) {
     throw new BadVerbArgs(
       `set-config: <key>/<value> is required (have keys: ${gate.listKeys().join(", ")})`,
@@ -1072,7 +1046,7 @@ const stepConfig: VerbHandler = async (rawValue, ctx) => {
   const by = parseInt(byRaw, 10);
   const origin = sessionOrigin(ctx, sid);
   const config = ctx.configFor(origin);
-  const gate = configGate(config);
+  const gate = ctx.gates.config.gateFor(config);
   const params = gate.rangeParamsFor(key);
   if (!params) {
     throw new BadVerbArgs(
@@ -1135,7 +1109,7 @@ const save: VerbHandler = async (value, ctx) => {
     ctx.log("info", `save: nothing unsaved (session=${sid})`);
     return;
   }
-  const gate = stateGate(config);
+  const gate = ctx.gates.state.gateFor(config);
   const pairs = drafts.map((d): readonly [string, string] => {
     const result = gate.validate(d.sessionKey, d.value);
     if (!result.ok) throw new BadVerbArgs(`save: ${result.reason}`);
@@ -1193,7 +1167,7 @@ const savePreset: VerbHandler = async (value, ctx) => {
   const snapshot = presetSnapshot(config, (key) =>
     ctx.sessionState.get(sid, key),
   );
-  const gate = stateGate(config);
+  const gate = ctx.gates.state.gateFor(config);
   const picks = snapshot.picks.map((d): readonly [keyof Globals, string] => {
     const result = gate.validate(d.sessionKey, d.value);
     if (!result.ok) throw new BadVerbArgs(`save-preset: ${result.reason}`);
@@ -1299,7 +1273,7 @@ const resetConfig: VerbHandler = async (value, ctx) => {
   const [sessionId = "", ...keys] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId);
   const origin = sessionOrigin(ctx, sid);
-  const known = configGate(ctx.configFor(origin)).listKeys();
+  const known = ctx.gates.config.gateFor(ctx.configFor(origin)).listKeys();
   const unknown =
     keys.length === 0 ? [""] : keys.filter((k) => !known.includes(k));
   if (unknown.length > 0) {
@@ -1380,7 +1354,7 @@ const applyLayoutOp: VerbHandler = async (rawValue, ctx) => {
   const sid = requireSessionId(sessionId);
   const origin = sessionOrigin(ctx, sid);
   const before = ctx.configFor(origin);
-  const gate = configGate(before);
+  const gate = ctx.gates.config.gateFor(before);
   if (!key) {
     throw new BadVerbArgs(
       `apply-layout-op: <key>/<op> is required (have: ${gate.listKeys().join(", ")})`,
@@ -1439,7 +1413,7 @@ const back: VerbHandler = async (value, ctx) => {
   const { step, discarded } = ctx.navigation.back(
     sid,
     ctx.sessionState,
-    stateGate(sessionConfig(ctx, sid)),
+    ctx.gates.state.gateFor(sessionConfig(ctx, sid)),
   );
   const restored = step.map((c) => `${c.key}=${c.before ?? "∅"}`).join(" ");
   ctx.log("info", `back: ${restored} discarded=${discarded} (session=${sid})`);
@@ -1486,14 +1460,6 @@ const applyUpdate: VerbHandler = async (value, ctx) => {
 };
 
 // ─── Doctor (brandon-doctor-b6a) ────────────────────────────────────────────
-
-// [LAW:one-source-of-truth] Where the daemon records each session's STAMPED
-// client hints (draw-bar.ts writes `JSON.stringify(parseClientHints(req))` here
-// on every render request that changes them) — the SESSION_RENDER_ORIGIN_KEY move for
-// client facts. A click carries no hints, so the doctor reasons over the facts
-// of the session's last render, read back through the SAME checkpoint the live
-// frame crossed (parseClientHints), never over the daemon's own env.
-export const SESSION_CLIENT_HINTS_KEY = "client-hints";
 
 // [LAW:no-silent-failure] A session that has never rendered has no hints —
 // a loud BadVerbArgs, never a click that acts on a guessed "not in tmux".
@@ -1950,14 +1916,6 @@ const repoConfig: VerbHandler = async (value, ctx) => {
 // plain object would be a truthy hit on Object.prototype that then throws on
 // invocation (RENDER_FAILED instead of BAD_REQUEST). Map makes the wrong
 // dispatch unrepresentable, matching src/daemon/session-state.ts.
-// [LAW:effects-at-boundaries] Per-session config override stored in SessionState.
-// Wire value: `<sessionId>/<percent-encoded-path>`. An empty path clears the
-// override, restoring the request-derived config for that session only.
-// Split at the FIRST slash — the session ID is slash-free (requireSessionId),
-// and the path contains slashes that must not be split.
-// [LAW:no-silent-failure] Path validation is at the verb boundary so a bad path
-// fails the click (BAD_REQUEST), not the next render.
-export const SESSION_CONFIG_OVERRIDE_KEY = "config-override";
 const loadConfig: VerbHandler = async (value, ctx) => {
   const slash = value.indexOf("/");
   if (slash === -1) {

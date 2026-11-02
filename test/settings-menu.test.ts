@@ -61,11 +61,9 @@ import {
 import { testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
-import {
-  VERBS,
-  SESSION_RENDER_ORIGIN_KEY,
-  encodeRenderOrigin,
-} from "../src/daemon/verbs";
+import { VERBS } from "../src/daemon/verbs";
+import { SESSION_RENDER_ORIGIN_KEY } from "../src/daemon/foundations/session-keys";
+import { encodeRenderOrigin } from "../src/daemon/foundations/render-origin";
 import type { VerbContext } from "../src/daemon/verbs";
 import type { DslConfig, LayoutNode } from "../src/config/dsl-types";
 import type { ActionDecl } from "../src/config/action";

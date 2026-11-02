@@ -90,7 +90,7 @@ This table is the target, read from `DaemonParts`, `verbCtx` and the imports on 
 
 | Piece | What moves into it | Ports its tests fake |
 |---|---|---|
-| Foundations | Session keys, the gates (`stateGate`, `configGate`), `encodeRenderOrigin`, `roleOf`, `answeredOf`, the link signer | Signing key |
+| Foundations | `src/daemon/foundations/`: session keys, the gates (`createGates`, built by `daemonGates()`), `encodeRenderOrigin`, `roleOf`, `answeredOf`. The link signer is `src/click/link-signer.ts`, below the daemon already | Signing key |
 | Sessions | `SessionState`, `SettingsHistory`, `NavigationHistory`, `JournalTurns`, `MenuIdle` | Session store, clock |
 | Config | Resolving and parsing a load | Watched store |
 | Sources | Payload providers, `RefreshLedger`, `WatcherRegistry`, `FileEventDelivery` | Launcher, watched store, git, forge, tmux, remote data |
@@ -108,7 +108,7 @@ Four knots need more than a move.
 
 **Config and Drawing share entries.** An entry's state is a compile plus a `SourceRegistry`, a reload opens each view's successor over the new state, and eviction reads pins and views. Views are children of a state, so these stay together in Drawing. Config stops at a parsed load, and Doctor and Actions read a session's config through Drawing.
 
-**The gates sit on module state.** `state-validators.ts` and `config-validators.ts` each hold a module-level keyspace, and Watchdogs writes both at run time, so it changes what a load accepts with no input showing that, and pieces built in one jest worker share them. Both become one value the root builds and passes in, in ticket 8b, and `src/check.ts` takes the same value.
+**The gates were module state.** `Gates` (`src/daemon/foundations/gates.ts`) is the state and config keyspaces as one value, built by `daemonGates()` with the update notice's keys held from construction, passed to `createDaemon`, the verb context, the render cache and `check`, so what a load accepts is in its inputs and two daemons in one process share none. Foundations is a directory with an import rule (`FOUNDATIONS_IMPORTS` in `eslint.config.mjs`): a file in it imports no other piece of `src/daemon`. One edge the rule cannot see is transitive: `config/edit-chrome`, which the validators import, reaches `daemon/cache/watchers`, `daemon/cache/file-events`, `daemon/render-sightings`, `daemon/limits` and `daemon/memory-report` through `config/synthesis-inputs` and `config/settings-menu`. It sits in `src/config`, outside any row, and the ticket that cuts Config corrects the table there.
 
 **`RuntimeStats` reads everything.** It type-imports from the modules it reports on, so it sits in Requests, and each lower piece takes only the counters it writes, as `launchStats` already is.
 

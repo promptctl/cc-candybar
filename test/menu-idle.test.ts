@@ -21,14 +21,9 @@ import {
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
-import {
-  VERBS,
-  SESSION_RENDER_ORIGIN_KEY,
-  encodeRenderOrigin,
-  closeIdleMenus,
-  clickSessionOf,
-  type VerbContext,
-} from "../src/daemon/verbs/index";
+import { VERBS, closeIdleMenus, clickSessionOf, type VerbContext } from "../src/daemon/verbs/index";
+import { SESSION_RENDER_ORIGIN_KEY } from "../src/daemon/foundations/session-keys";
+import { encodeRenderOrigin } from "../src/daemon/foundations/render-origin";
 import { instantOf, type Instant } from "../src/utils/instant";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/door";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";

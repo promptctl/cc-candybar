@@ -17,6 +17,7 @@ import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { viewFacts } from "./helpers/view-facts";
 import { fakeWatches } from "./helpers/fake-watches";
 import { stateDir } from "../src/daemon/paths";
+import { bareGates } from "./helpers/gates";
 
 // [LAW:behavior-not-structure] A reload keeps the state it serves exactly when
 // what it read from disk is what that state was built from, read through
@@ -59,7 +60,7 @@ function rig() {
     { stateDir: stateDir(),
       launcher: processLauncher,
       storage: NO_PLUGIN_STORAGE,
-      signer: TEST_SIGNER,
+      signer: TEST_SIGNER, gates: bareGates(),
       fileEvents: NO_FILE_EVENTS,
       sessionState: new SessionState(),
       watchers,

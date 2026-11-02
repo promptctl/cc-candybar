@@ -8,7 +8,7 @@
 import {
   createKeyspace,
   type KeySpecContribution,
-} from "../../src/daemon/verbs/validator-registry";
+} from "../../src/daemon/foundations/validator-registry";
 
 interface Declares {
   readonly contributions: readonly KeySpecContribution[];

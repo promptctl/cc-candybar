@@ -151,12 +151,12 @@ describe("a daemon in this worker", () => {
     expect(event).toContain(` deadline=stated:${120 - DRAW_RESERVE_MS}ms `);
   });
 
-  test("a start refused beside a live daemon leaves it the env it reads", () => {
+  test("a start refused beside a daemon that has not stopped leaves it the env it reads", () => {
     daemon = startDaemon(env);
     const placed = { ...process.env };
     expect(() =>
       startDaemon({ ...env, XDG_STATE_HOME: path.join(projectDir, "other") }),
-    ).toThrow("a daemon is already live in this process");
+    ).toThrow("this worker's env is held by a daemon that has not stopped");
     expect({ ...process.env }).toEqual(placed);
   });
 

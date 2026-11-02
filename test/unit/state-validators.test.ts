@@ -14,12 +14,8 @@
 // prototype-pollution regression. Different invariants, different test
 // homes.
 
-import {
-  makeAllowListValidator,
-  registerStateValidator,
-  stateGate,
-  type ValidateResult,
-} from "../../src/daemon/verbs/state-validators";
+import { makeAllowListValidator, type ValidateResult } from "../../src/daemon/foundations/state-validators";
+import { bareGates, stateGate } from "../helpers/gates";
 import { listResolvablePaletteNames, ENDCAPS_SHAPES } from "../../src/themes/policy";
 import { EMPTY_DEFAULT } from "../helpers/parse-and-validate";
 
@@ -100,21 +96,23 @@ describe("state-validators contract", () => {
   });
 
   test("a daemon-wide key is writable in a session until its disposer runs", () => {
-    const disposer = registerStateValidator("mode", ["full", "compact"]);
+    const gates = bareGates();
+    const gate = () => gates.state.gateFor(EMPTY_DEFAULT);
+    const disposer = gates.state.register("mode", ["full", "compact"]);
     try {
-      expect(bare().listKeys()).toContain("mode");
-      expect(bare().validate("mode", "full")).toEqual({
+      expect(gate().listKeys()).toContain("mode");
+      expect(gate().validate("mode", "full")).toEqual({
         ok: true,
         value: "full",
       });
-      const bad = bare().validate("mode", "bogus");
+      const bad = gate().validate("mode", "bogus");
       expect(bad.ok).toBe(false);
       if (!bad.ok) expect(bad.reason).toMatch(/unknown state "mode" "bogus"/);
     } finally {
       disposer();
     }
-    expect(bare().listKeys()).not.toContain("mode");
-    const after = bare().validate("mode", "full");
+    expect(gate().listKeys()).not.toContain("mode");
+    const after = gate().validate("mode", "full");
     expect(after.ok).toBe(false);
     if (!after.ok) expect(after.reason).toMatch(/unknown state key "mode"/);
   });
@@ -123,9 +121,9 @@ describe("state-validators contract", () => {
     // [LAW:no-silent-failure] Built-in keys are permanent; a claim on
     // `theme` collides loudly rather than silently hijacking the canonical
     // theme validator.
-    expect(() =>
-      registerStateValidator("theme", ["x"]),
-    ).toThrow(/built-in state key/);
+    expect(() => bareGates().state.register("theme", ["x"])).toThrow(
+      /built-in state key/,
+    );
   });
 
   test("makeAllowListValidator accepts members and rejects non-members", () => {

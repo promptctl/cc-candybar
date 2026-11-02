@@ -50,10 +50,8 @@ import { parseHandlerUrl } from "../src/install/index";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { VERBS } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
-import {
-  deriveConfigActionValidators,
-  configGate,
-} from "../src/daemon/verbs/config-validators";
+import { deriveConfigActionValidators } from "../src/daemon/foundations/config-validators";
+import { configGate } from "./helpers/gates";
 import { writeValues, type EditStore } from "../src/daemon/config-file-store";
 import {
   parsePersistTarget,
@@ -79,6 +77,7 @@ import { testVerbContext } from "./helpers/click";
 import { instantOf } from "../src/utils/instant";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { stateDir } from "../src/daemon/paths";
+import { bareGates } from "./helpers/gates";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -498,7 +497,7 @@ function makeCache(): {
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
   const cache = new RenderCache(
-    { stateDir: stateDir(), launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, fileEvents: NO_FILE_EVENTS, sessionState, watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
+    { stateDir: stateDir(), launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, gates: bareGates(), fileEvents: NO_FILE_EVENTS, sessionState, watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
     { budgetBytes: () => renderCacheBudget(memoryLimitBytes({})), observers: reloads.observers },
   );
   cleanups.unshift(() => cache.close());

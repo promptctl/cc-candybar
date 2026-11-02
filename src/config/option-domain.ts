@@ -21,7 +21,7 @@
 //
 // [LAW:one-source-of-truth] This is the ONE place a domain name resolves to
 // the domain. render/action.ts (rendering options) and
-// daemon/verbs/state-validators.ts (deriving the click gate) both call
+// daemon/foundations/state-validators.ts (deriving the click gate) both call
 // through here instead of each hand-rolling the themes/endcaps/styles branch —
 // the rendered options and the derived gate cannot diverge because there is
 // no second resolver.

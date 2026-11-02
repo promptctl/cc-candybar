@@ -28,7 +28,7 @@ import { daemonPaths, type DaemonPaths } from "../../src/daemon/paths";
 import { productionAdapters } from "../../src/daemon/production-adapters";
 import { PROTOCOL_VERSION, sendOne, type Request } from "../../src/daemon/protocol";
 import type { StatsSnapshot } from "../../src/daemon/stats";
-import { reserveUpdateKeys } from "../../src/daemon/update-notice";
+import { daemonGates } from "../../src/daemon/update-keys";
 import type { DaemonLogger } from "../../src/utils/logger";
 import type { DaemonEndpoint } from "./daemon-wire";
 import type { StartBarDaemon } from "./drive-bar";
@@ -140,6 +140,8 @@ export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
       // test/setup.ts points it at a closed port.
       registryUrl: process.env.CC_CANDYBAR_REGISTRY_URL!,
       clock: SYSTEM_CLOCK,
+      // A daemon's gates are its own: none is shared with another built here.
+      gates: daemonGates(),
       // [LAW:no-silent-failure] Nothing here should end a worker, so a reply that
       // carries an exit is loud. A case about the exit passes its own.
       exit: (code) => {
@@ -220,14 +222,31 @@ export const startBarDaemon: StartBarDaemon = async (env) => {
   return { target: daemon, stop: daemon.stop };
 };
 
+// [LAW:no-shared-mutable-globals] The env that daemons started here hold, and
+// how many. `process.env` is the worker's one ambient value, so the harness is
+// its single owner: a start that asks for another env than a daemon not yet
+// stopped holds would swap it under that daemon.
+let held: { readonly env: NodeJS.ProcessEnv; starts: number } | null = null;
+
+const sameEnv = (a: NodeJS.ProcessEnv, b: NodeJS.ProcessEnv): boolean =>
+  JSON.stringify(Object.entries(a).sort()) ===
+  JSON.stringify(Object.entries(b).sort());
+
 // A daemon serving this worker, placed by `env`: the env a spawned daemon would
 // be given is this file's own until `stop`, and the daemon's paths are read from
-// it once, at the build. One test file's `process.env` is its own, and a process
-// holds one live daemon, so a second start before a stop is refused.
+// it once, at the build. One test file's `process.env` is its own, so a start
+// asking for another env than a daemon not yet stopped holds is refused; a case
+// that wants two daemons over different places builds them with `buildDaemon`
+// and paths of their own.
 export function startDaemon(
   env: NodeJS.ProcessEnv,
   overrides: DaemonOverrides = {},
 ): InWorkerDaemon {
+  if (held !== null && !sameEnv(held.env, env)) {
+    throw new Error(
+      "startDaemon: this worker's env is held by a daemon that has not stopped, and this start asks for another",
+    );
+  }
   const before = { ...process.env };
   placeEnv(env);
   let daemon: Daemon;
@@ -239,9 +258,8 @@ export function startDaemon(
     placeEnv(before);
     throw e;
   }
-  // A booted daemon holds these from arming, so every config's gate here is
-  // built against them too.
-  const releaseUpdateKeys = reserveUpdateKeys();
+  held = held ?? { env, starts: 0 };
+  held.starts++;
   const open = new Set<Duplex>();
   const servers: net.Server[] = [];
 
@@ -290,8 +308,8 @@ export function startDaemon(
       );
       await daemonLog.drained();
       daemonLog.dispose();
-      releaseUpdateKeys();
       placeEnv(before);
+      if (held !== null && --held.starts === 0) held = null;
     },
   };
 }

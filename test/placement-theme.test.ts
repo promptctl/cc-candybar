@@ -39,7 +39,7 @@ import { testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import { parseEffects, VERB_DISPATCH, VERB_SAVE } from "../src/click/wire";
 import { VERBS, type VerbContext } from "../src/daemon/verbs";
-import { stateGate } from "../src/daemon/verbs/state-validators";
+import { stateGate } from "./helpers/gates";
 import {
   configureMember,
   EDIT_MODE_ARRANGE,

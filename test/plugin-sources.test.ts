@@ -51,6 +51,8 @@ import { viewFacts } from "./helpers/view-facts";
 import { ReloadSignal } from "./helpers/reload-signal";
 import { until } from "./helpers/until";
 import { stateDir } from "../src/daemon/paths";
+import { bareGates } from "./helpers/gates";
+import { daemonGates } from "../src/daemon/update-keys";
 
 const SOURCE = `{ scope: "session", refresh: { watch: true }, read: { file: { json: true } } }`;
 const STATUS = "plugins.p.status";
@@ -147,7 +149,7 @@ function rig(): Rig {
       sessionState,
       watchers,
       storage: providers.managedStorage,
-      signer: TEST_SIGNER,
+      signer: TEST_SIGNER, gates: bareGates(),
       fileEvents: NO_FILE_EVENTS,
       log,
       declare: (holds, facts, closure, sources) =>
@@ -263,7 +265,7 @@ describe("a source's declaration", () => {
       launcher: processLauncher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
-      signer: TEST_SIGNER,
+      signer: TEST_SIGNER, gates: bareGates(),
     });
     try {
       expect(loaded.error).toBeNull();
@@ -323,7 +325,7 @@ describe("a source's declaration", () => {
     "%s drops the plugin, naming the field and what is built",
     async (_what, source, field) => {
       const message = fatal(
-        await checkConfig(listing(`{ status: ${source} }`), dir),
+        await checkConfig(daemonGates(), listing(`{ status: ${source} }`), dir),
       );
       expect(message).toContain(
         `plugin ${path.join(dir, "p/plugin.json5")} was not loaded`,
@@ -349,7 +351,7 @@ describe("a source's declaration", () => {
       launcher: processLauncher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
-      signer: TEST_SIGNER,
+      signer: TEST_SIGNER, gates: bareGates(),
     });
     try {
       expect(loaded.state!.plugins.dropped.map((d) => [d.scope, d.name])).toEqual([["plugins", "p"]]);
@@ -378,7 +380,7 @@ describe("a source's declaration", () => {
       launcher: processLauncher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
-      signer: TEST_SIGNER,
+      signer: TEST_SIGNER, gates: bareGates(),
     });
     try {
       expect(loaded.error).toBeNull();
@@ -395,14 +397,14 @@ describe("a source's declaration", () => {
 
   test("a source's name is one identifier", async () => {
     const message = fatal(
-      await checkConfig(listing(`{ "a.b": ${SOURCE} }`), dir),
+      await checkConfig(daemonGates(), listing(`{ "a.b": ${SOURCE} }`), dir),
     );
     expect(message).toContain(`source name "a.b" is not one identifier`);
   });
 
   test("a source and a variable of the same name is a load error naming both", async () => {
     const message = fatal(
-      await checkConfig(
+      await checkConfig(daemonGates(), 
         listing(
           `{ status: ${SOURCE} }`,
           `variables: { status: { kind: "literal", value: 1 } }`,
@@ -419,7 +421,7 @@ describe("a source's declaration", () => {
   // reading it would be two names for it.
   test("two sources reading the same session file drop the plugin, naming both and the file", async () => {
     const message = fatal(
-      await checkConfig(
+      await checkConfig(daemonGates(), 
         listing(`{ status: ${SOURCE}, other: ${SOURCE} }`),
         dir,
       ),
@@ -442,7 +444,7 @@ describe("a source's declaration", () => {
       "config.json5",
       `{ plugins: ["./p/plugin.json5", "./q/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine", "plugins.p.s", "plugins.q.s"] } }`,
     );
-    const message = fatal(await checkConfig(p, dir));
+    const message = fatal(await checkConfig(daemonGates(), p, dir));
     expect(message).toContain(
       `plugin ${path.join(dir, "q/plugin.json5")} was not loaded`,
     );
@@ -463,7 +465,7 @@ describe("a source's declaration", () => {
       "config.json5",
       `{ plugins: ["./p/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
     );
-    const message = fatal(await checkConfig(p, dir));
+    const message = fatal(await checkConfig(daemonGates(), p, dir));
     expect(message).toContain(
       `plugin ${path.join(dir, "p/plugin.json5")} was not loaded`,
     );
@@ -488,7 +490,7 @@ describe("a source's declaration", () => {
       launcher: processLauncher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
-      signer: TEST_SIGNER,
+      signer: TEST_SIGNER, gates: bareGates(),
     });
     try {
       expect(pluginLoadLine(loaded.layers, loaded.state!, loaded.ms)).toContain(
@@ -504,7 +506,7 @@ describe("a source's declaration", () => {
 // reads absent, as a session's does before its program first writes.
 describe("`cc-candybar check` on a source", () => {
   test("a hasKey-gated segment exits clean, the segment hidden", async () => {
-    const outcome = await checkConfig(config(["mine", "plugins.p.gated"]), dir);
+    const outcome = await checkConfig(daemonGates(), config(["mine", "plugins.p.gated"]), dir);
     if (outcome.kind !== "clean") throw new Error(JSON.stringify(outcome));
     expect(outcome.warnings).toEqual([]);
     expect(textOf(outcome.rendered)).toContain("mine");
@@ -512,7 +514,7 @@ describe("`cc-candybar check` on a source", () => {
   });
 
   test("the same read unguarded exits fatal, naming the missing field", async () => {
-    const outcome = await checkConfig(config(["mine", "plugins.p.bare"]), dir);
+    const outcome = await checkConfig(daemonGates(), config(["mine", "plugins.p.bare"]), dir);
     if (outcome.kind !== "fatal") throw new Error(JSON.stringify(outcome));
     expect(outcome.message).toContain('segment "plugins.p.bare"');
     expect(outcome.message).toContain(

@@ -181,22 +181,45 @@ const OWNED_IMPORTS = {
   ),
 };
 
+// [LAW:one-way-deps] Foundations (src/daemon/foundations/) is the row every
+// piece of the daemon may reach, so it reaches none of them: a relative import
+// out of it into the rest of src/daemon fails. The two regexes are the two
+// spellings of that edge, `../x` and `../../daemon/x` (through src, too); `./x`
+// and the modules outside src/daemon (`../../config/x`) stay legal.
+const FOUNDATIONS_FILES = "src/daemon/foundations/**/*.ts";
+const FOUNDATIONS_IMPORTS = [
+  {
+    regex: "^(\\./)?\\.\\./[^.]",
+    message:
+      "Foundations sits below every piece of the daemon: import nothing from them. [LAW:one-way-deps]",
+  },
+  {
+    regex: "^\\.{1,2}/(\\.\\./)*(src/)?daemon(/|$)",
+    message:
+      "Foundations sits below every piece of the daemon: import nothing from them. [LAW:one-way-deps]",
+  },
+];
+
 // A file's whole rule: flat config replaces a rule per file rather than merging
-// it, so each block carries the child_process paths and every name but its own.
+// it, so each block carries the child_process paths and every name but its own,
+// and the import edges its row forbids (`rowPatterns`).
 // `patterns`, not `paths`: a path matches only the literal import string, and
 // these are imported by relative spellings that differ file to file.
-function restrictedImports(file) {
+function restrictedImports(file, rowPatterns = []) {
   return [
     "error",
     {
       paths: CHILD_PROCESS_PATHS,
-      patterns: Object.entries(OWNED_IMPORTS)
-        .filter(([, { owners }]) => !owners.includes(file))
-        .map(([name, { group, message }]) => ({
-          group,
-          importNames: [name],
-          message: `${message} [LAW:single-enforcer]`,
-        })),
+      patterns: [
+        ...Object.entries(OWNED_IMPORTS)
+          .filter(([, { owners }]) => !owners.includes(file))
+          .map(([name, { group, message }]) => ({
+            group,
+            importNames: [name],
+            message: `${message} [LAW:single-enforcer]`,
+          })),
+        ...rowPatterns,
+      ],
     },
   ];
 }
@@ -215,6 +238,12 @@ function ownedImportBlocks() {
       files: [file],
       rules: { "no-restricted-imports": restrictedImports(file) },
     })),
+    {
+      files: [FOUNDATIONS_FILES],
+      rules: {
+        "no-restricted-imports": restrictedImports(null, FOUNDATIONS_IMPORTS),
+      },
+    },
   ];
 }
 

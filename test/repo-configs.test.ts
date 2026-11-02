@@ -4,6 +4,7 @@
 // durable writer) answers the same way. The answer is per repository, holds
 // across edits (nothing here hashes a file) and covers every linked worktree.
 
+import { bareGates } from "./helpers/gates";
 import { processLauncher } from "../src/proc/launch";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -37,6 +38,7 @@ import { linkSigner } from "../src/click/link-signer";
 import { effectsOf } from "./helpers/click";
 import { answerRepo } from "./helpers/repo-approval";
 import { stateDir } from "../src/daemon/paths";
+import { daemonGates } from "../src/daemon/update-keys";
 
 let root: string;
 let project: string;
@@ -150,6 +152,7 @@ describe("the gate over a project's plugins", () => {
       sessionState: new SessionState(),
       storage: UNOWNED_STORAGE,
       signer: linkSigner(Buffer.alloc(32)),
+      gates: bareGates(),
       stateDir: stateDir(),
     };
     const waiting = loadFromDisk(project, project, undefined, deps);
@@ -200,7 +203,7 @@ describe("check", () => {
   test("an unanswered project config is reported awaiting, and nothing of it runs", async () => {
     const marker = path.join(project, "ran.marker");
     write(".cc-candybar.json5", shellConfig(marker));
-    const outcome = await checkConfig(undefined, project);
+    const outcome = await checkConfig(daemonGates(), undefined, project);
     expect(outcome.kind).toBe("clean");
     if (outcome.kind !== "clean") return;
     expect(outcome.layers).toEqual([]);
@@ -214,7 +217,7 @@ describe("check", () => {
     const marker = path.join(project, "ran.marker");
     const file = write(".cc-candybar.json5", shellConfig(marker));
     answerRepo(project);
-    const outcome = await checkConfig(undefined, project);
+    const outcome = await checkConfig(daemonGates(), undefined, project);
     expect(outcome).toMatchObject({
       kind: "clean",
       layers: [{ path: file, scope: "repo" }],
@@ -225,7 +228,7 @@ describe("check", () => {
   test("a directory whose worktree claim fails its proof is reported with the reason it answers for itself", async () => {
     write(".cc-candybar.json5", "{}");
     write(".git", "gitdir: /nonexistent/x\n");
-    const outcome = await checkConfig(undefined, project);
+    const outcome = await checkConfig(daemonGates(), undefined, project);
     expect(outcome.kind).toBe("clean");
     if (outcome.kind !== "clean") return;
     expect(outcome.warnings).toContain(

@@ -21,7 +21,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import { stateGate } from "../src/daemon/verbs/state-validators";
+import { stateGate } from "./helpers/gates";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { SETTINGS } from "../src/config/setting-projections";
 import { GLOBAL_FIELDS } from "../src/config/globals-fields";

@@ -37,7 +37,7 @@ import {
   VERB_UNDO,
 } from "../src/click/wire";
 import { VERBS, type VerbContext } from "../src/daemon/verbs";
-import { stateGate } from "../src/daemon/verbs/state-validators";
+import { stateGate } from "./helpers/gates";
 import {
   configureMember,
   EDIT_MODE_ARRANGE,

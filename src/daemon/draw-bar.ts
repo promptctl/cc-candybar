@@ -10,7 +10,7 @@ import {
 } from "./cache/file-events";
 import type { LifelineWarning } from "../proc/launch";
 import type { CheckedRenderRequest } from "./render-checkpoint.js";
-import { UPDATE_DISMISSED_KEY } from "./update-notice";
+import { UPDATE_DISMISSED_KEY } from "./update-keys";
 import { type RenderOrigin } from "../config-hint";
 import {
   PROTOCOL_VERSION,
@@ -29,13 +29,13 @@ import {
   type SessionView,
 } from "./cache/render";
 import { watchFault } from "./cache/watchers";
+import { sessionRenderOrigin } from "./verbs";
+import { encodeRenderOrigin } from "./foundations/render-origin";
 import {
-  SESSION_RENDER_ORIGIN_KEY,
   SESSION_CLIENT_HINTS_KEY,
-  encodeRenderOrigin,
-  sessionRenderOrigin,
-} from "./verbs";
-import { roleOf, answeredOf } from "./render-sightings";
+  SESSION_RENDER_ORIGIN_KEY,
+} from "./foundations/session-keys";
+import { answeredOf, roleOf } from "./foundations/sighting-roles";
 import { drawDsl, type RenderWarning } from "../dsl/render.js";
 import type { DrawnMotion } from "../render/drawn-motion.js";
 import {

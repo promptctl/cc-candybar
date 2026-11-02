@@ -19,12 +19,9 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
-import {
-  VERBS,
-  SESSION_RENDER_ORIGIN_KEY,
-  encodeRenderOrigin,
-  type VerbContext,
-} from "../src/daemon/verbs";
+import { VERBS, type VerbContext } from "../src/daemon/verbs";
+import { SESSION_RENDER_ORIGIN_KEY } from "../src/daemon/foundations/session-keys";
+import { encodeRenderOrigin } from "../src/daemon/foundations/render-origin";
 import { instantOf } from "../src/utils/instant";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
