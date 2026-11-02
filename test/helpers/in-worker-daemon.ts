@@ -24,7 +24,7 @@ import {
 import { memoryLimitBytes } from "../../src/daemon/limits";
 import { fileStorage } from "../../src/daemon/file-storage";
 import { DaemonLog } from "../../src/daemon/log";
-import { daemonPaths, logPath } from "../../src/daemon/paths";
+import { daemonPaths, type DaemonPaths } from "../../src/daemon/paths";
 import { productionAdapters } from "../../src/daemon/production-adapters";
 import { PROTOCOL_VERSION, sendOne, type Request } from "../../src/daemon/protocol";
 import type { StatsSnapshot } from "../../src/daemon/stats";
@@ -50,7 +50,8 @@ function ledgerPath(): string {
 }
 const TEST_FILE = process.env[TEST_FILE_ENV] ?? null;
 
-export type DaemonOverrides = Partial<Omit<DaemonInputs, "storage">> & {
+export type DaemonOverrides = Partial<Omit<DaemonInputs, "storage" | "paths">> & {
+  readonly paths?: DaemonPaths;
   readonly storage?: (log: DaemonLogger) => Partial<DaemonStorage>;
 };
 
@@ -111,6 +112,9 @@ export function heldClock(start: Date = new Date()): HeldClock {
 export interface BuiltDaemon {
   readonly daemon: Daemon;
   readonly daemonLog: DaemonLog;
+  // Where the daemon was aimed, which the env no longer says once a case passes
+  // its own.
+  readonly paths: DaemonPaths;
 }
 
 // A daemon built as a process builds one, unarmed unless its case arms it: the
@@ -128,27 +132,33 @@ export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
   const paths = overrides.paths ?? daemonPaths(process.env);
   fs.mkdirSync(paths.state, { recursive: true });
   const daemonLog = overrides.daemonLog ?? new DaemonLog(paths.log);
-  const daemon = createDaemon({
-    ...productionAdapters(paths, daemonLog),
-    bundle: bundleAt(path.join(paths.state, "checkout")),
-    memoryLimitBytes: memoryLimitBytes(process.env),
-    // test/setup.ts points it at a closed port.
-    registryUrl: process.env.CC_CANDYBAR_REGISTRY_URL!,
-    clock: SYSTEM_CLOCK,
-    // [LAW:no-silent-failure] Nothing here should end a worker, so a reply that
-    // carries an exit is loud. A case about the exit passes its own.
-    exit: (code) => {
-      throw new Error(`a daemon under test asked to exit ${code}`);
-    },
-    ...overrides,
-    paths,
-    daemonLog,
-    storage: (log) => ({
-      ...fileStorage(paths, log),
-      ...overrides.storage?.(log),
-    }),
-  });
-  return { daemon, daemonLog };
+  try {
+    const daemon = createDaemon({
+      ...productionAdapters(paths, daemonLog),
+      bundle: bundleAt(path.join(paths.state, "checkout")),
+      memoryLimitBytes: memoryLimitBytes(process.env),
+      // test/setup.ts points it at a closed port.
+      registryUrl: process.env.CC_CANDYBAR_REGISTRY_URL!,
+      clock: SYSTEM_CLOCK,
+      // [LAW:no-silent-failure] Nothing here should end a worker, so a reply that
+      // carries an exit is loud. A case about the exit passes its own.
+      exit: (code) => {
+        throw new Error(`a daemon under test asked to exit ${code}`);
+      },
+      ...overrides,
+      paths,
+      daemonLog,
+      storage: (log) => ({
+        ...fileStorage(paths, log),
+        ...overrides.storage?.(log),
+      }),
+    });
+    return { daemon, daemonLog, paths };
+  } catch (e) {
+    // A log this call opened is the call's to end when no daemon takes it up.
+    if (overrides.daemonLog === undefined) daemonLog.dispose();
+    throw e;
+  }
 }
 
 // A worker's daemon lays out no tmux status line, so nothing is put back.
@@ -210,10 +220,10 @@ export const startBarDaemon: StartBarDaemon = async (env) => {
   return { target: daemon, stop: daemon.stop };
 };
 
-// A daemon serving this worker, placed by `env`: a daemon's paths are read from
-// the environment when it writes, so the env a spawned daemon would be given is
-// this file's own until `stop`. One test file's `process.env` is its own, and a
-// process holds one live daemon, so a second start before a stop is refused.
+// A daemon serving this worker, placed by `env`: the env a spawned daemon would
+// be given is this file's own until `stop`, and the daemon's paths are read from
+// it once, at the build. One test file's `process.env` is its own, and a process
+// holds one live daemon, so a second start before a stop is refused.
 export function startDaemon(
   env: NodeJS.ProcessEnv,
   overrides: DaemonOverrides = {},
@@ -222,10 +232,10 @@ export function startDaemon(
   placeEnv(env);
   let daemon: Daemon;
   let daemonLog: DaemonLog;
+  let paths: DaemonPaths;
   try {
-    ({ daemon, daemonLog } = buildDaemon(overrides));
+    ({ daemon, daemonLog, paths } = buildDaemon(overrides));
   } catch (e) {
-    // A daemon already live here reads its paths from this env.
     placeEnv(before);
     throw e;
   }
@@ -249,7 +259,7 @@ export function startDaemon(
 
   return {
     daemon,
-    log: logPath(),
+    log: paths.log,
     now: () => daemon.clock.date().getTime(),
     connect,
     listen: (sockPath) =>
@@ -268,10 +278,10 @@ export function startDaemon(
     // [LAW:single-enforcer] A close leaves a connection open because a process's
     // exit ends it, so here the shell's end does: a subscriber hears the daemon
     // go, and a request's backstop goes with its stream. What is logged by now
-    // is awaited before the env goes back, because the log reads its path when
-    // it writes. A closed daemon's work needs no wait here, so close's value
-    // goes unread: its launches are refused, by its own launcher, and a line of
-    // its says it came after the close, whichever log the env names by then.
+    // is awaited and the log ended before the case's next daemon opens the same
+    // file. A closed daemon's work needs no wait here, so close's value goes
+    // unread: its launches are refused, by its own launcher, and a line of its
+    // says it came after the close.
     stop: async () => {
       void daemon.close(NO_TMUX_AT_EXIT);
       for (const end of open) end.destroy();

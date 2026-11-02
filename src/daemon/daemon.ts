@@ -166,9 +166,10 @@ export interface DaemonAdapters {
 // it does to the machine, and the numbers it runs by.
 export interface DaemonInputs extends DaemonAdapters {
   readonly bundle: RunningBundle;
-  // Every path the daemon reads or writes: a daemon aimed at a temporary
-  // directory writes nowhere else.
-  readonly paths: DaemonPaths;
+  // The paths the daemon itself reads or writes. The files an adapter owns are
+  // aimed by the same value at the adapter (production-adapters.ts), so a daemon
+  // aimed at a temporary directory writes nowhere else.
+  readonly paths: Pick<DaemonPaths, "socket" | "state" | "watchProbe">;
   readonly memoryLimitBytes: number;
   readonly registryUrl: string;
   readonly clock: DaemonClock;

@@ -689,9 +689,7 @@ describe("post-mortems", () => {
 
   test("the real lister: a directory not yet made holds none; one that is a file is said so", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "pm-"));
-    const prev = process.env.XDG_STATE_HOME;
     try {
-      process.env.XDG_STATE_HOME = path.join(root, "absent");
       expect(realLimitsDeps(0, () => {}, {
         launcher: processLauncher,
         log: () => {},
@@ -699,7 +697,6 @@ describe("post-mortems", () => {
         writeLogNow: () => {},
       }).listArtifacts()).toEqual([]);
       fs.writeFileSync(path.join(root, "file"), "");
-      process.env.XDG_STATE_HOME = path.join(root, "file");
       expect(() => realLimitsDeps(0, () => {}, {
         launcher: processLauncher,
         log: () => {},
@@ -707,8 +704,6 @@ describe("post-mortems", () => {
         writeLogNow: () => {},
       }).listArtifacts()).toThrow(/ENOTDIR/);
     } finally {
-      if (prev === undefined) delete process.env.XDG_STATE_HOME;
-      else process.env.XDG_STATE_HOME = prev;
       fs.rmSync(root, { recursive: true, force: true });
     }
   });

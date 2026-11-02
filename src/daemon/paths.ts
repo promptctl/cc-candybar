@@ -240,7 +240,6 @@ export interface DaemonPaths {
   readonly socket: string;
   readonly lease: string;
   readonly state: string;
-  readonly cache: string;
   readonly registry: string;
   readonly log: string;
   readonly sessionState: string;
@@ -254,7 +253,6 @@ export function daemonPaths(env: NodeJS.ProcessEnv = process.env): DaemonPaths {
     socket: socketPath(env),
     lease: leasePath(env),
     state: stateDir(env),
-    cache: cacheDir(env),
     registry: daemonRegistryDir(env),
     log: logPath(env),
     sessionState: sessionStatePath(env),
