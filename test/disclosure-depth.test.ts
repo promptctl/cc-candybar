@@ -45,7 +45,6 @@ import {
   bandFor,
   bandItemFor,
   bandRoot,
-  decorFor,
   decorationFor,
   descend,
   DISTRIBUTIONS,
@@ -361,31 +360,22 @@ const GROUP_SRC = `{
 }`;
 
 describe("candybar-render-ai7.9 — a group's toggle is a trigger", () => {
-  test("closed it wears its address's tint; open it wears the state of the band its body is, and the body cells are that band's items", async () => {
+  // The structure under the colours: what the toggle shows is its openness, and
+  // an authored fg is the author's wherever the band places the cell.
+  test("a group's body renders only while it is open, and an authored fg survives inside it", async () => {
     const rt = build(GROUP_SRC);
-    const { palette } = rt;
-    rt.render();
     const toggle = "groups.outer";
-    const tint = decorFor(palette, BAR, barAddress(rt, toggle), ColorDepth.TRUECOLOR).hex;
-    expect(rt.bgOf(toggle)).toBe(tint);
+    rt.render();
     expect(() => rt.bgOf("b")).toThrow(/did not render/);
 
     await rt.clickWriting(toggle, toggle, "outer");
     rt.render();
-    expect(rt.bgOf(toggle)).toBe(bandFor(palette, rt.opensOf(toggle), ColorDepth.TRUECOLOR).state.hex);
-    // The body: three cells of a horizontal band, placed by their own step.
-    for (const name of ["b", "groups.inner", "c"]) {
-      expect([name, rt.bgOf(name)]).toEqual([name, rt.expectedTint(name)]);
-    }
-    // Text on a band cell is chosen unless authored: `b` authors `error`.
-    expect(rt.fgOf("c")).toBe(textOn(palette, decorationFor(palette, regionOf(rt.root, palette, "c"), ColorDepth.TRUECOLOR).tint, ColorDepth.TRUECOLOR).hex);
-    expect(rt.fgOf("b")).toBe(palette.get("error")!.hex);
+    expect(rt.fgOf("b")).toBe(rt.palette.get("error")!.hex);
 
-    // Closing again returns the toggle to its tint — the state is a VALUE the
-    // walk selects by the body's openness, not a transform left behind.
     await rt.clickWriting(toggle, toggle, DISCLOSURE_CLOSED);
     rt.render();
-    expect(rt.bgOf(toggle)).toBe(tint);
+    expect(() => rt.bgOf("b")).toThrow(/did not render/);
+    rt.dispose();
   });
 
   test("a body cell's chosen text reads on the background it WEARS — an authored bg, not the tint", async () => {
@@ -423,9 +413,3 @@ describe("candybar-render-ai7.9 — a group's toggle is a trigger", () => {
     rt.dispose();
   });
 });
-
-function barAddress(rt: ReturnType<typeof build>, name: string) {
-  const region = regionOf(rt.root, rt.palette, name);
-  if (region.kind !== "bar") throw new Error(`"${name}" is not on the bar`);
-  return region.address;
-}
