@@ -2,109 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-573",
-      "ref": "refs/pull/573/merge",
-      "sha": "cdcee81536ce11556a25426a73c0de65f8957142",
-      "timestamp": "2026-11-02T14:08:58.998Z",
-      "commits": [
-        {
-          "sha": "cdcee81536ce11556a25426a73c0de65f8957142",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T14:07:23Z",
-          "message": "Merge 8e299a62dd19feecc25fe51f8b0bf93fac01b443 into cbfa2521a80698fc81a68c45641893de153aaa2d\n"
-        },
-        {
-          "sha": "8e299a62dd19feecc25fe51f8b0bf93fac01b443",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T07:05:37-07:00",
-          "message": "test: fs.open with a callback reads, and a unit run without git says what it needs git for (candybar-testing-ihvy.oso)\n"
-        },
-        {
-          "sha": "d09a46fd975de187915f6c755a0ea78e9d6205f7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T07:02:57-07:00",
-          "message": "test: the unit refusal honours a test's own clock, carries promisify, and sees modules the setup loaded (candybar-testing-ihvy.oso)\n"
-        },
-        {
-          "sha": "8d0d9579d0542a41353e71887ee470238865a99a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T06:54:33-07:00",
-          "message": "test: the unit refusal's header names the fixtures config it runs through (candybar-testing-ihvy.oso)\n"
-        },
-        {
-          "sha": "eb2412a08e4db11e085347813f5383e1ff2b5a2a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T06:44:04-07:00",
-          "message": "test: the unit refusal covers os.uptime, and the plan doc states the read rule the code applies (candybar-testing-ihvy.oso)\n\nperf_hooks stays unguarded: TypeScript reads its performance object while it loads, and test/unit/e2e-checks, which is under the sign-off guard, uses TypeScript, so refusing it would fail a file this ticket cannot move. The count holds for the named routes, as the doc now says.\n"
-        },
-        {
-          "sha": "613f2830737b056ed608325836b0e7079e9904a3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T06:38:43-07:00",
-          "message": "test: the unit refusal's routes are one table that installs the guards and drives their proof (candybar-testing-ihvy.oso)\n\nunit-refusal-routes.ts lists the routes per module; the sandbox setup installs a guard on each, routes.fixture.ts reaches each from a test, and unit-refusal.test.ts requires every one to fail naming its call, so no guard exists without a case. The read allowance is what git does not ignore (read once per run by the unit global setup), apart from node_modules and .git, in place of a list of five directories. worker_threads, cluster and WebSocket are refused. tier-selection also checks that each tier has a script and that pnpm test and CI run it.\n"
-        },
-        {
-          "sha": "59aefc70946518c7cbe9088cfa3eae6f20589e09",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T06:31:42-07:00",
-          "message": "test: one test holds every file to exactly one tier, and the refusal reaches the last constructed classes and clock routes (candybar-testing-ihvy.oso)\n\ntier-selection lists what each tier config selects with --listTests and fails unless every test file is selected once. jest.e2e.config.js reads the tier table. The refusal also covers ReadStream, http.ClientRequest, dns.Resolver, net.Stream, AbortSignal.timeout and process.uptime; install-currency reaches AbortSignal.timeout through fetchLatestVersion, so it returns to the test/ root. The plan doc states the read allowance once.\n"
-        },
-        {
-          "sha": "5668ea7114f2830949cb9438f4ec10ee6ff08051",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T06:26:34-07:00",
-          "message": "test: the base jest config selects nothing, and the unit refusal covers timers, socket classes and run state (candybar-testing-ihvy.oso)\n\njest.config.js holds what the tiers share and no test, so bare jest, --watch and --coverage cannot run a file outside its tier's checks; test:watch and test:coverage name the unit config. The refusal now guards node:timers and node:timers/promises (jest's fake timers leave both on real time), refuses constructing socket, server, watcher and child-process classes, hands the guard back when fake time ends, and reads nothing a run or a checkout produces (.git, dist, coverage, test-records, .claude/worktrees). reload-signal sleeps on timers/promises, so it returns to the test/ root.\n"
-        },
-        {
-          "sha": "df9715646d9e0d9fb40677a3433fb1ddf9e12761",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T06:21:52-07:00",
-          "message": "test: the 75 in-process files that pass the unit refusal move to test/unit (candybar-testing-ihvy.oso)\n\nA file enters test/unit by passing the refusal, so the unit count is true. Moves and the relative-path rewrite only. The files that stay at the test/ root touch the temp directory, spawn, or read the clock; src/daemon/stats.ts reads new Date() at module load, which keeps many of them out until the daemon takes a clock.\n"
-        },
-        {
-          "sha": "561b111cc610fe16e83653f1c218a5d10b747ddb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T06:20:04-07:00",
-          "message": "test: the unit project refuses disk, sockets, fetch, child processes, watchers and the real clock at the call (candybar-testing-ihvy.oso)\n\ntest/unit runs only through jest.unit.config.js, which installs the refusal from test/unit-setup.ts; every other config ignores the directory, as test/e2e already was. A refusal is kept until the test ends, so code that catches it still fails the test. Reads of files under the package root pass. Where each run's files live is one table, test/helpers/tiers.cjs. pnpm test runs the unit, worker and process tiers in turn, and CI reports all three.\n"
-        },
-        {
-          "sha": "0c919ded4eeb9bcea186a046ca1410d94ed0eef6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T06:18:07-07:00",
-          "message": "test: the booting files live under test/daemon-boots/{worker,process}, and the process tier is a directory (candybar-testing-ihvy.oso)\n\nThe 31 files that start the in-worker daemon and the 14 *.process.test.ts files move, with their relative imports rewritten and nothing else changed. The process-tier judge and both jest configs read the directory in place of the suffix.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "d1a536cb6c3ddd00dbea84c59587c1dbc6c9a1f9",
-      "timestamp": "2026-11-02T13:48:55.783Z",
+      "sha": "5cc2f6df487350a4af03357477193519098afd0c",
+      "timestamp": "2026-11-02T14:15:23.710Z",
       "commits": [
         {
-          "sha": "d1a536cb6c3ddd00dbea84c59587c1dbc6c9a1f9",
+          "sha": "5cc2f6df487350a4af03357477193519098afd0c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T06:47:54-07:00",
-          "message": "feat(templates): array-form segment templates and segment-scoped partials (#569)\n\n* feat(templates): array-form segment templates and segment-scoped partials (candybar-templates-zh8b.53s)\n\nA segment's `template` may now be an array of strings (joined with no\nseparator) for a long conditional that would otherwise be one unreadable\nline, and a segment may declare `partials`: named sub-templates scoped to\nit, compiled onto their own Defines chained from the shared `helpers`, so\ntwo segments can reuse a partial name with no collision and a partial can\ncall a helper but never another segment's partial. Dispatch is via the\nexisting static `{{ template \"name\" ctx }}` builtin.\n\nThe dynamic `partial` function (a computed name) needs a capability\n(`include`) that exists only on @promptctl/go-template-js's unreleased\nmaster, not its published npm version — split into a follow-up ticket\n(candybar-templates-zh8b.ph5), blocked on that release. Static unused-\npartial detection needs unused.ts to carry per-template segment identity,\nwhich it does not today — split into its own follow-up\n(candybar-templates-zh8b.mfn), not blocked on anything upstream.\n\n* fix(templates): close gaps /code-review high found in partials (candybar-templates-zh8b.53s)\n\n- cross-ref.ts: a partial reusing a global helper's name now a load error,\n  not an uncaught \"redefinition of template\" throw at compile.\n- merge.ts: a segment delta's partials merge by name over the base's, like\n  settings, instead of wholesale-replacing (which silently dropped sibling\n  partials a bundled template still dispatched to).\n- unused.ts, synthesis-inputs.ts: both now walk a segment's partial bodies,\n  so a helper/action/payload-read reachable only through one is no longer\n  invisible to unused-detection or synthesis dependency tracking.\n- menu-synth.ts: {{ menu }} inside a partial is now a load error too, for\n  the same reason it already is inside a helper (the synthesis pass never\n  follows a {{ template }} call into one).\n- plugins.ts: a plugin segment's partials now go through the same\n  self-binding/namespace pipeline (boundToSelf, fragmentTemplates,\n  wrongScopeRefs, the tombstone-standin scan) as template/bg/fg/when.\n- cross-ref.ts: collapsed the \"is this name a helper or this segment's own\n  partial\" decision, previously implemented three times, into one\n  helperKeyPath function both checkActionRefs and checkTemplateRefs call.\n- dsl-types.ts: removed a stale lead/trail mention from the partials doc\n  comment (those aren't SegmentDecl fields).\n\nNew tests pin all of the above in test/dsl-segment-partials.test.ts and\ntest/plugins.test.ts.\n\n* fix(templates): the clock, payload reads, and edit-mode synthesis follow a dispatch into a partial (candybar-templates-zh8b.53s)\n\n/code-review medium found 3 real gaps the first fix pass missed: render.ts's\ninstant-detection basis, render-payload.ts's payload-input closure seed, and\nedit-mode.ts's toggle detector all still enumerated a segment's\ntemplate/bg/fg/when alone, so a clock read, a payload read, or an\n`edit.toggle` reference reachable only through a dispatched partial was\ninvisible to each — the segment's own clock call threw at first draw, a\npayload path never got fetched, and a toggle-only-in-a-partial reference\nproduced a confusing \"unknown action\" error instead of being synthesized.\nAll three now fold `seg.partials` in, the same way cross-ref.ts/\nsynthesis-inputs.ts/menu-synth.ts/unused.ts already do. Also: cross-ref.ts\nand plugins.ts no longer hand-spell the same segment-template-field list\ntwice; plugins.ts now exports it once.\n\n* fix(templates): render.ts's instant-detection field list reuses SEGMENT_TEMPLATE_FIELDS (candybar-templates-zh8b.53s)\n\n/code-review high found the new per-segment loop hand-spelled\n[\"when\",\"bg\",\"fg\",\"template\"] in a different order than the\nSEGMENT_TEMPLATE_FIELDS constant this very PR exported for exactly this\npurpose — nothing would have caught the two drifting apart."
+          "timestamp": "2026-11-02T07:13:55-07:00",
+          "message": "test: each layer is a directory, and the unit tier refuses what a unit test may not touch (candybar-testing-ihvy.oso) (#573)\n\n* test: the booting files live under test/daemon-boots/{worker,process}, and the process tier is a directory (candybar-testing-ihvy.oso)\n\nThe 31 files that start the in-worker daemon and the 14 *.process.test.ts files move, with their relative imports rewritten and nothing else changed. The process-tier judge and both jest configs read the directory in place of the suffix.\n\n* test: the unit project refuses disk, sockets, fetch, child processes, watchers and the real clock at the call (candybar-testing-ihvy.oso)\n\ntest/unit runs only through jest.unit.config.js, which installs the refusal from test/unit-setup.ts; every other config ignores the directory, as test/e2e already was. A refusal is kept until the test ends, so code that catches it still fails the test. Reads of files under the package root pass. Where each run's files live is one table, test/helpers/tiers.cjs. pnpm test runs the unit, worker and process tiers in turn, and CI reports all three.\n\n* test: the 75 in-process files that pass the unit refusal move to test/unit (candybar-testing-ihvy.oso)\n\nA file enters test/unit by passing the refusal, so the unit count is true. Moves and the relative-path rewrite only. The files that stay at the test/ root touch the temp directory, spawn, or read the clock; src/daemon/stats.ts reads new Date() at module load, which keeps many of them out until the daemon takes a clock.\n\n* test: the base jest config selects nothing, and the unit refusal covers timers, socket classes and run state (candybar-testing-ihvy.oso)\n\njest.config.js holds what the tiers share and no test, so bare jest, --watch and --coverage cannot run a file outside its tier's checks; test:watch and test:coverage name the unit config. The refusal now guards node:timers and node:timers/promises (jest's fake timers leave both on real time), refuses constructing socket, server, watcher and child-process classes, hands the guard back when fake time ends, and reads nothing a run or a checkout produces (.git, dist, coverage, test-records, .claude/worktrees). reload-signal sleeps on timers/promises, so it returns to the test/ root.\n\n* test: one test holds every file to exactly one tier, and the refusal reaches the last constructed classes and clock routes (candybar-testing-ihvy.oso)\n\ntier-selection lists what each tier config selects with --listTests and fails unless every test file is selected once. jest.e2e.config.js reads the tier table. The refusal also covers ReadStream, http.ClientRequest, dns.Resolver, net.Stream, AbortSignal.timeout and process.uptime; install-currency reaches AbortSignal.timeout through fetchLatestVersion, so it returns to the test/ root. The plan doc states the read allowance once.\n\n* test: the unit refusal's routes are one table that installs the guards and drives their proof (candybar-testing-ihvy.oso)\n\nunit-refusal-routes.ts lists the routes per module; the sandbox setup installs a guard on each, routes.fixture.ts reaches each from a test, and unit-refusal.test.ts requires every one to fail naming its call, so no guard exists without a case. The read allowance is what git does not ignore (read once per run by the unit global setup), apart from node_modules and .git, in place of a list of five directories. worker_threads, cluster and WebSocket are refused. tier-selection also checks that each tier has a script and that pnpm test and CI run it.\n\n* test: the unit refusal covers os.uptime, and the plan doc states the read rule the code applies (candybar-testing-ihvy.oso)\n\nperf_hooks stays unguarded: TypeScript reads its performance object while it loads, and test/unit/e2e-checks, which is under the sign-off guard, uses TypeScript, so refusing it would fail a file this ticket cannot move. The count holds for the named routes, as the doc now says.\n\n* test: the unit refusal's header names the fixtures config it runs through (candybar-testing-ihvy.oso)\n\n* test: the unit refusal honours a test's own clock, carries promisify, and sees modules the setup loaded (candybar-testing-ihvy.oso)\n\n* test: fs.open with a callback reads, and a unit run without git says what it needs git for (candybar-testing-ihvy.oso)"
         },
         {
-          "sha": "b787b9f3545f3235453a2e26da0093def575bae1",
+          "sha": "cbfa2521a80698fc81a68c45641893de153aaa2d",
           "author_name": "semantic-release-bot",
           "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-02T13:36:04Z",
-          "message": "chore(release): set `package.json` to 1.179.4 [skip ci]\n\n## [1.179.4](https://github.com/promptctl/cc-candybar/compare/v1.179.3...v1.179.4) (2026-11-02)\n\n### Bug Fixes\n\n* **test:** the client-deadline cases state budgets a loaded loop cannot miss (brandon-unfiled-3248.5lkd) ([#571](https://github.com/promptctl/cc-candybar/issues/571)) ([17024dd](https://github.com/promptctl/cc-candybar/commit/17024dd1e5797082d8999dc8ba586f4bf97d1911))\n"
+          "timestamp": "2026-11-02T14:02:04Z",
+          "message": "chore(release): set `package.json` to 1.180.0 [skip ci]\n\n## [1.180.0](https://github.com/promptctl/cc-candybar/compare/v1.179.4...v1.180.0) (2026-11-02)\n\n### Features\n\n* **templates:** array-form segment templates and segment-scoped partials ([#569](https://github.com/promptctl/cc-candybar/issues/569)) ([d1a536c](https://github.com/promptctl/cc-candybar/commit/d1a536cb6c3ddd00dbea84c59587c1dbc6c9a1f9))\n"
         }
       ]
     },
