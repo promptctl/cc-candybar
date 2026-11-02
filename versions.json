@@ -2,53 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-574",
-      "ref": "refs/pull/574/merge",
-      "sha": "8a30d3bfec0c03bc019d63903e5376cdd473635d",
-      "timestamp": "2026-11-02T14:34:11.229Z",
-      "commits": [
-        {
-          "sha": "8a30d3bfec0c03bc019d63903e5376cdd473635d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T14:33:04Z",
-          "message": "Merge 9b1394233f59a666cd15d509abb8590bdc86d311 into 7d58c47f329eb86d364d736a324acf02c5b59295\n"
-        },
-        {
-          "sha": "9b1394233f59a666cd15d509abb8590bdc86d311",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T07:32:33-07:00",
-          "message": "docs(protocol): TIMEOUT is busy, not a respawn-curable transient (candybar-launch-q7o7.g6w)\n"
-        },
-        {
-          "sha": "c490b86ffa618e527e1beee5db3fd04948c0937b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T07:31:21-07:00",
-          "message": "docs(render): the Timeout cause is the client's own clock, and the Busy comments say what they mean (candybar-launch-q7o7.g6w)\n"
-        },
-        {
-          "sha": "72937bf702cecdbc2dbc9443972df62511e591d7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T07:26:59-07:00",
-          "message": "fix(render): a render the daemon answers TIMEOUT kicks nothing, in both runtimes (candybar-launch-q7o7.g6w)\n\nThe daemon's own TIMEOUT proves it is up; each kick spawned a candidate\nthat lost the bind to it. planOutcome stops kicking on busy and the Rust\nclient gets a Busy variant that emits the stale frame without a kick.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "7d58c47f329eb86d364d736a324acf02c5b59295",
-      "timestamp": "2026-11-02T14:25:05.752Z",
+      "sha": "685dfc67e4662552cac9a0924249992f5225cbbe",
+      "timestamp": "2026-11-02T14:39:16.655Z",
       "commits": [
         {
-          "sha": "7d58c47f329eb86d364d736a324acf02c5b59295",
+          "sha": "685dfc67e4662552cac9a0924249992f5225cbbe",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T07:24:13-07:00",
-          "message": "fix(lanes): a bar pane is known by the command it was split with (candybar-launch-q7o7.0oo) (#572)\n\n* fix(lanes): a bar pane is split and tagged in one tmux invocation (candybar-launch-q7o7.0oo)\n\nA daemon closing between the split and its set-option refused the tag,\nleaving a bar pane pane off could not find. A pane-scoped after-split-window\nhook now tags the new pane inside the split's own command queue; a failed\nsplit removes the hook so it cannot tag the user's next split.\n\n* fix(lanes): tag the bar pane by the split's own target, not a pane hook (candybar-launch-q7o7.0oo)\n\nPane-level after-split-window hooks fire only on tmux 3.8; earlier versions\naccept and ignore them, so the pane went untagged. A split without -d makes\nthe new pane the queue's current target, which works from tmux 3.0 and leaves\nno hook state to clean up.\n\n* fix(lanes): a bar pane open gives focus back to the pane that had it (candybar-launch-q7o7.0oo)\n\n* fix(lanes): a bar pane is known by the command it was split with (candybar-launch-q7o7.0oo)\n\nThe split records the pane's owner in its argv (bar-pane <pane>), so finding\nbar panes reads pane_start_command instead of a tag written after the split.\nOne plain split-window -d: no focus change, no chained commands to escape or\nmisname, and panes opened by earlier daemons are found the same way."
+          "timestamp": "2026-11-02T07:38:24-07:00",
+          "message": "fix(render): a render the daemon answers TIMEOUT kicks nothing (candybar-launch-q7o7.g6w) (#574)\n\n* fix(render): a render the daemon answers TIMEOUT kicks nothing, in both runtimes (candybar-launch-q7o7.g6w)\n\nThe daemon's own TIMEOUT proves it is up; each kick spawned a candidate\nthat lost the bind to it. planOutcome stops kicking on busy and the Rust\nclient gets a Busy variant that emits the stale frame without a kick.\n\n* docs(render): the Timeout cause is the client's own clock, and the Busy comments say what they mean (candybar-launch-q7o7.g6w)\n\n* docs(protocol): TIMEOUT is busy, not a respawn-curable transient (candybar-launch-q7o7.g6w)"
+        },
+        {
+          "sha": "3bc3d45db19c1310320ce78c345442c0b2e381a8",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-02T14:36:32Z",
+          "message": "chore(release): set `package.json` to 1.180.1 [skip ci]\n\n## [1.180.1](https://github.com/promptctl/cc-candybar/compare/v1.180.0...v1.180.1) (2026-11-02)\n\n### Bug Fixes\n\n* **lanes:** a bar pane is known by the command it was split with (candybar-launch-q7o7.0oo) ([#572](https://github.com/promptctl/cc-candybar/issues/572)) ([7d58c47](https://github.com/promptctl/cc-candybar/commit/7d58c47f329eb86d364d736a324acf02c5b59295))\n"
         }
       ]
     },
