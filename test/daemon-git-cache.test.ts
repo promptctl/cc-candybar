@@ -766,6 +766,20 @@ describe("GitDataProvider refreshes on its own triggers", () => {
     svc.close();
   });
 
+  test("a declaration after close is answered as closed: it builds no state, reads nothing and arms no period", async () => {
+    jest.useFakeTimers();
+    const { svc, inner, holds } = makeCache({ periodMs: 1 });
+    inner.repoRootByDir = { "/repo": "/repo" };
+    svc.close();
+
+    const lane = svc.declare(holds, "/repo", {});
+    expect(lane.current()).toEqual(failed("git cache closed"));
+    expect(svc.getStats()).toMatchObject({ size: 0, held: 0 });
+    expect(jest.getTimerCount()).toBe(0);
+    await jest.advanceTimersByTimeAsync(100);
+    expect(inner.computeCalls).toHaveLength(0);
+  });
+
   test("a period that resumes reads at the time it has left, or at once when its last read is older", async () => {
     jest.useFakeTimers();
     const { svc, inner } = makeCache();
@@ -1002,15 +1016,17 @@ describe("GitDataProvider gitDir resolution cache", () => {
     ]);
   });
 
-  test("close() drops the answers instead of carrying them past shutdown", async () => {
+  test("close() answers as closed instead of carrying an answer past shutdown", async () => {
     const { svc, inner, holds } = makeCache();
     inner.repoRootByDir = { "/nowhere": null };
     await gitOf(svc, holds, "/nowhere", {});
     expect(inner.resolveCalls).toHaveLength(1);
 
     svc.close();
-    await gitOf(svc, holds, "/nowhere", {});
-    expect(inner.resolveCalls).toHaveLength(2);
+    expect(await gitOf(svc, holds, "/nowhere", {})).toEqual(
+      failed("git cache closed"),
+    );
+    expect(inner.resolveCalls).toHaveLength(1);
   });
 });
 

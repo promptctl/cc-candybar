@@ -304,6 +304,8 @@ function composed(value: GitValue, pr: PrSource | null): Current<GitInfo> {
   return ok({ ...info.value, pullRequest: currentOf(pr) });
 }
 
+const CLOSED = failed("git cache closed");
+
 function threw(label: string): (e: unknown) => Outcome<never> {
   return (e) => failed(`${label} threw: ${String(e)}`);
 }
@@ -318,6 +320,7 @@ export class GitDataProvider {
   // (brandon-git-cache-y2t, -y9h) — and it coalesces concurrent resolutions
   // of one directory into one.
   private readonly resolutions = new Map<string, ResolutionCacheEntry>();
+  private closed = false;
   private hits = 0;
   private misses = 0;
   private changes = 0;
@@ -460,7 +463,7 @@ export class GitDataProvider {
     projectDir?: string,
   ): Lane<GitInfo> {
     const asked = this.asked(holds, workingDir, options, projectDir);
-    if (asked.kind === "not-a-repo") return settledLane(asked.outcome);
+    if (asked.kind === "settled") return settledLane(asked.outcome);
     const { value, pr } = asked;
     // A declaration finding the value stored is a hit; one that must wait
     // for its first read is a miss. A lane's reads count nothing: a frame
@@ -472,21 +475,25 @@ export class GitDataProvider {
 
   // [LAW:one-source-of-truth] The one place a home asks a repo by directory:
   // the effective gitDir is the state + watch identity, and an absent (not a
-  // repo) or failed resolution is the answer.
+  // repo) or failed resolution is the answer. [LAW:single-enforcer] A closed
+  // provider builds no state: a declaration landing after close (a render
+  // that was mid-wait) would otherwise hold a fresh repo whose period re-arms
+  // after every pass, with no close left to drop it.
   private asked(
     holds: Holds,
     workingDir: string,
     options: GitInfoOptions,
     projectDir: string | undefined,
   ):
-    | { readonly kind: "not-a-repo"; readonly outcome: Outcome<never> }
+    | { readonly kind: "settled"; readonly outcome: Outcome<never> }
     | {
         readonly kind: "asked";
         readonly value: GitValue;
         readonly pr: PrSource | null;
       } {
+    if (this.closed) return { kind: "settled", outcome: CLOSED };
     const dir = this.resolution(workingDir, projectDir);
-    if (dir.kind !== "ok") return { kind: "not-a-repo", outcome: dir };
+    if (dir.kind !== "ok") return { kind: "settled", outcome: dir };
     const { showPullRequest, ...gitOptions } = options;
     return {
       kind: "asked",
@@ -884,6 +891,7 @@ export class GitDataProvider {
     // In-flight passes still resolve (an await on inner.getGitInfo cannot be
     // cancelled) but find their state gone and store nothing; no queued pass is
     // honoured after this (drop clears each loop).
+    this.closed = true;
     for (const state of this.repos.values()) this.drop(state);
     this.repos.clear();
     this.resolutions.clear();
