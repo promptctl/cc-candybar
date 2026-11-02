@@ -2,6 +2,56 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-572",
+      "ref": "refs/pull/572/merge",
+      "sha": "8aa1e1480892fc5bfffadc7138a7792513ef1dcb",
+      "timestamp": "2026-11-02T13:45:26.292Z",
+      "commits": [
+        {
+          "sha": "8aa1e1480892fc5bfffadc7138a7792513ef1dcb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T06:44:25-07:00",
+          "message": "Merge 2b0e3429b317dd4811a2b187c4f76145bbcc3da7 into b787b9f3545f3235453a2e26da0093def575bae1\n"
+        },
+        {
+          "sha": "2b0e3429b317dd4811a2b187c4f76145bbcc3da7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T06:44:23-07:00",
+          "message": "Merge branch 'main' into candybar-launch-q7o7.0oo"
+        },
+        {
+          "sha": "d4c36d433da31e84f99be181069af357047a9684",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T06:35:51-07:00",
+          "message": "fix(lanes): a bar pane is known by the command it was split with (candybar-launch-q7o7.0oo)\n\nThe split records the pane's owner in its argv (bar-pane <pane>), so finding\nbar panes reads pane_start_command instead of a tag written after the split.\nOne plain split-window -d: no focus change, no chained commands to escape or\nmisname, and panes opened by earlier daemons are found the same way.\n"
+        },
+        {
+          "sha": "1ba8f09a76bbb2fb7fcbfc0a151955bc7b1945c9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T06:30:16-07:00",
+          "message": "fix(lanes): a bar pane open gives focus back to the pane that had it (candybar-launch-q7o7.0oo)\n"
+        },
+        {
+          "sha": "bacf3a74cad0214bcd7a9153cfbbec944b0de84f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T06:25:59-07:00",
+          "message": "fix(lanes): tag the bar pane by the split's own target, not a pane hook (candybar-launch-q7o7.0oo)\n\nPane-level after-split-window hooks fire only on tmux 3.8; earlier versions\naccept and ignore them, so the pane went untagged. A split without -d makes\nthe new pane the queue's current target, which works from tmux 3.0 and leaves\nno hook state to clean up.\n"
+        },
+        {
+          "sha": "97ef73186e67639dc5c8f150ac2a09f0e8a83565",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T06:20:01-07:00",
+          "message": "fix(lanes): a bar pane is split and tagged in one tmux invocation (candybar-launch-q7o7.0oo)\n\nA daemon closing between the split and its set-option refused the tag,\nleaving a bar pane pane off could not find. A pane-scoped after-split-window\nhook now tags the new pane inside the split's own command queue; a failed\nsplit removes the hook so it cannot tag the user's next split.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-569",
       "ref": "refs/pull/569/merge",
       "sha": "98ce480886bd3bbe61611e90db132d733e0a56e2",
@@ -48,49 +98,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T05:40:11-07:00",
           "message": "feat(templates): array-form segment templates and segment-scoped partials (candybar-templates-zh8b.53s)\n\nA segment's `template` may now be an array of strings (joined with no\nseparator) for a long conditional that would otherwise be one unreadable\nline, and a segment may declare `partials`: named sub-templates scoped to\nit, compiled onto their own Defines chained from the shared `helpers`, so\ntwo segments can reuse a partial name with no collision and a partial can\ncall a helper but never another segment's partial. Dispatch is via the\nexisting static `{{ template \"name\" ctx }}` builtin.\n\nThe dynamic `partial` function (a computed name) needs a capability\n(`include`) that exists only on @promptctl/go-template-js's unreleased\nmaster, not its published npm version — split into a follow-up ticket\n(candybar-templates-zh8b.ph5), blocked on that release. Static unused-\npartial detection needs unused.ts to carry per-template segment identity,\nwhich it does not today — split into its own follow-up\n(candybar-templates-zh8b.mfn), not blocked on anything upstream.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-572",
-      "ref": "refs/pull/572/merge",
-      "sha": "f5648445335de67905ea3fad949bb6d537bb3914",
-      "timestamp": "2026-11-02T13:37:15.335Z",
-      "commits": [
-        {
-          "sha": "f5648445335de67905ea3fad949bb6d537bb3914",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T13:36:05Z",
-          "message": "Merge d4c36d433da31e84f99be181069af357047a9684 into 17024dd1e5797082d8999dc8ba586f4bf97d1911\n"
-        },
-        {
-          "sha": "d4c36d433da31e84f99be181069af357047a9684",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T06:35:51-07:00",
-          "message": "fix(lanes): a bar pane is known by the command it was split with (candybar-launch-q7o7.0oo)\n\nThe split records the pane's owner in its argv (bar-pane <pane>), so finding\nbar panes reads pane_start_command instead of a tag written after the split.\nOne plain split-window -d: no focus change, no chained commands to escape or\nmisname, and panes opened by earlier daemons are found the same way.\n"
-        },
-        {
-          "sha": "1ba8f09a76bbb2fb7fcbfc0a151955bc7b1945c9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T06:30:16-07:00",
-          "message": "fix(lanes): a bar pane open gives focus back to the pane that had it (candybar-launch-q7o7.0oo)\n"
-        },
-        {
-          "sha": "bacf3a74cad0214bcd7a9153cfbbec944b0de84f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T06:25:59-07:00",
-          "message": "fix(lanes): tag the bar pane by the split's own target, not a pane hook (candybar-launch-q7o7.0oo)\n\nPane-level after-split-window hooks fire only on tmux 3.8; earlier versions\naccept and ignore them, so the pane went untagged. A split without -d makes\nthe new pane the queue's current target, which works from tmux 3.0 and leaves\nno hook state to clean up.\n"
-        },
-        {
-          "sha": "97ef73186e67639dc5c8f150ac2a09f0e8a83565",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T06:20:01-07:00",
-          "message": "fix(lanes): a bar pane is split and tagged in one tmux invocation (candybar-launch-q7o7.0oo)\n\nA daemon closing between the split and its set-option refused the tag,\nleaving a bar pane pane off could not find. A pane-scoped after-split-window\nhook now tags the new pane inside the split's own command queue; a failed\nsplit removes the hook so it cannot tag the user's next split.\n"
         }
       ]
     },
