@@ -7,7 +7,7 @@
 // returned early, empty or stale is a failure and not a fast sample.
 
 import path from "node:path";
-import { HOST, processLauncher } from "../../../test/helpers/host";
+import { processWorld } from "../../../src/host.js";
 
 import { SessionUsageStore } from "../../../src/daemon/cache/session-usage-store.js";
 import { GitService } from "../../../src/segments/git.js";
@@ -54,7 +54,7 @@ const gitBenchmark = ([name, shape, samples]: (typeof REPOS)[number]): Benchmark
     try {
       const repo = path.join(root, "repo");
       makeRepo(repo, shape);
-      const service = new GitService(processLauncher);
+      const service = new GitService(processWorld().launcher);
       const ms = await repeat(plan.samples, async () => {
         const info = await service.getGitInfo(repo, EVERYTHING);
         // [LAW:no-silent-failure] A read that failed, or saw a tree other
@@ -124,7 +124,7 @@ const coldFold = ([turns, samples]: (typeof COLD_TURNS)[number]): Benchmark => (
       const transcript = path.join(root, "t.jsonl");
       writeTranscript(transcript, SESSION, root, turns);
       const ms = await repeat(plan.samples, async () => {
-        const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
+        const store = new SessionUsageStore({ host: processWorld().host, sweepIntervalMs: 0 });
         await folded(store, root, transcript, turns);
       });
       return measured([{ name: "fold", samples: ms }], {
@@ -154,7 +154,7 @@ const warmFold = (
     try {
       const transcript = path.join(root, "t.jsonl");
       writeTranscript(transcript, SESSION, root, WARM_TURNS);
-      const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
+      const store = new SessionUsageStore({ host: processWorld().host, sweepIntervalMs: 0 });
       let turns = WARM_TURNS;
       await folded(store, root, transcript, turns);
       // The writer's cost stays out of the timed fold.

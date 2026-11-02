@@ -30,6 +30,7 @@ import { repoGateAt } from "../daemon/repo-configs.js";
 import { repoGateLines } from "../config/loader/repo-gate.js";
 import { listResolvablePaletteNames } from "../themes/policy.js";
 import { instantOf } from "../utils/instant.js";
+import { setDebug } from "../utils/logger.js";
 
 const THEMES = listResolvablePaletteNames();
 const LABEL = Math.max(...THEMES.map((n) => n.length)) + 2;
@@ -38,6 +39,7 @@ const WIDTH = (process.stdout.columns ?? 200) - LABEL;
 // [LAW:effects-at-boundaries] This script is its own process main: it reads the
 // machine once, as src/index.ts does.
 const world = processWorld();
+setDebug(Boolean(world.host.env.CC_CANDYBAR_DEBUG));
 const warnings: string[] = [];
 // The argv path resolved as `check` resolves its own, so `.config_path` (the
 // demo switcher's sibling links) names the file absolutely.

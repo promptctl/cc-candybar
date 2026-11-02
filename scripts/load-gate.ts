@@ -34,7 +34,7 @@
 // baseline's.
 
 import { spawn } from "node:child_process";
-import { hostOf, processLauncher } from "../test/helpers/host";
+import { processWorld } from "../src/host.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -389,7 +389,10 @@ const env: NodeJS.ProcessEnv = {
 };
 // The client half of the gate reaches the daemon through the host it is handed:
 // the daemon's own environment, its socket included.
-const host = hostOf(env, { home: dirs.home });
+// [LAW:effects-at-boundaries] This script is its own process main: it reads the
+// machine once, as src/index.ts does.
+const world = processWorld();
+const host = { env, home: dirs.home, tmp: world.host.tmp };
 
 // The daemon as the client spawns it, plus an inspector on a loopback port:
 // the one way to read its live heap is to collect it first.
@@ -633,7 +636,7 @@ interface Sample {
 const samples: Sample[] = [];
 // A daemon too busy to answer stats inside the stats client's budget.
 const unanswered: string[] = [];
-const charge = (pid: number) => chargeProbe(processLauncher, process.platform, pid);
+const charge = (pid: number) => chargeProbe(world.launcher, process.platform, pid);
 
 async function sample(started: number): Promise<void> {
   // [LAW:no-ambient-temporal-coupling] The phase and offset of the instant the

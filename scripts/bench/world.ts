@@ -16,7 +16,7 @@
 // client asks for, so no series measures it.
 
 import { spawn } from "node:child_process";
-import { hostOf } from "../../test/helpers/host";
+import { processWorld } from "../../src/host.js";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -180,7 +180,7 @@ export async function startWorld(config = "{}\n"): Promise<World> {
   };
   const terminal = sessionEnv(dirs.claude);
   // The host this world's clients are handed: its socket, its home.
-  const host = hostOf(env, { home: dirs.home });
+  const host = { env, home: dirs.home, tmp: processWorld().host.tmp };
   const log = logPath(host);
 
   // The shipped daemon's own argv, heap cap included. A process group of its
