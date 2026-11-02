@@ -83,11 +83,19 @@ export const drewAwaitedPending = (event: string): boolean =>
 export const retriedRender = (event: string): boolean =>
   drewAwaitedPending(event) && / ended=deadline(?: |$)/.test(event);
 
-// A session's render events, one per render its client kept, in log order,
-// once `count` of them are there. A request the client retried is logged once
-// per attempt: after a timeout the attempt it read is the one not timed out,
-// and after an answer that drew a source pending the attempt it kept is the
-// last one.
+// A session's render events, one per render its client kept, in log order.
+// A request the client retried is logged once per attempt: after a timeout
+// the attempt it read is the one not timed out, and after an answer that drew
+// a source pending the attempt it kept is the last one.
+export const keptRenders = (
+  lines: readonly string[],
+  sessionId: string,
+): string[] =>
+  renderEventsOf(lines, sessionId).filter(
+    (l) => answeredRender(l) && !retriedRender(l),
+  );
+
+// A session's kept render events, once `count` of them are there.
 export async function renderLines(
   env: NodeJS.ProcessEnv,
   sessionId: string,
@@ -95,10 +103,7 @@ export async function renderLines(
 ): Promise<string[]> {
   return loggedLines(
     env,
-    (lines) =>
-      renderEventsOf(lines, sessionId).filter(
-        (l) => answeredRender(l) && !retriedRender(l),
-      ),
+    (lines) => keptRenders(lines, sessionId),
     (events) => events.length >= count,
     `${count} kept render event(s) for ${sessionId}`,
   );

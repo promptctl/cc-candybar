@@ -118,9 +118,8 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
       l.includes(`tmux-status: ${what} sid=${JSON.stringify(sid)}`),
     );
   // A request whose render event is logged: everything its arrival started
-  // has been logged before it. Counted by answers, since a cold render past
-  // the daemon's per-request guard logs a timed-out attempt beside the one
-  // its retry got.
+  // has been logged before it. Counted by the renders its client kept, not by
+  // every attempt it logged.
   const renderedAgain = async (
     sid: string,
     dir = projectDir,
