@@ -439,14 +439,14 @@ export type Response =
   | { ok: false; error: string; code: ErrorCode; daemonV?: number };
 
 // [LAW:types-are-the-program] The wire-level discriminator splits failures
-// into two recovery classes: TIMEOUT is transient — the daemon is alive but
-// slow, so a respawn or retry has a real chance of recovering. Every other
-// code is permanent — respawning would hit the same response identically
-// (the daemon refuses the request for VERSION_MISMATCH or BAD_REQUEST, or
-// fails internally for RENDER_FAILED in a way the spawn loop cannot cure),
-// so the spiral-breaker contract requires the client NOT to kick. The
-// kick-vs-no-kick decision is encoded off this code, not off the error
-// string.
+// into two recovery classes: TIMEOUT is busy — the daemon is alive but slow,
+// so a retry on the next tick may succeed, but a respawn cannot: the
+// candidate would lose the bind to the live daemon. Every other code is
+// permanent — respawning would hit the same response identically (the daemon
+// refuses the request for VERSION_MISMATCH or BAD_REQUEST, or fails
+// internally for RENDER_FAILED in a way the spawn loop cannot cure). Neither
+// class kicks (the spiral-breaker contract). The decision is encoded off this
+// code, not off the error string.
 // SWITCHED_OFF is a third class: the request is well formed and the daemon
 // is healthy, but a setting the user controls refuses it — a subscription
 // whose animation lane is off. The same request succeeds once the setting is
