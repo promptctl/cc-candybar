@@ -2,60 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-579",
-      "ref": "refs/pull/579/merge",
-      "sha": "2a951aad1291a8a4bbd48af202447988ab12b260",
-      "timestamp": "2026-11-02T16:22:33.704Z",
-      "commits": [
-        {
-          "sha": "2a951aad1291a8a4bbd48af202447988ab12b260",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T16:21:37Z",
-          "message": "Merge f2baac59bf67e0e5b88f80aa96354cb4f1a165d4 into f131b11e8cd2772af9e7476f28873e7473d2a93e\n"
-        },
-        {
-          "sha": "f2baac59bf67e0e5b88f80aa96354cb4f1a165d4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T09:21:18-07:00",
-          "message": "docs(testing): the quarantine counts say which runs they add, and the last-failure dates say they count reruns (candybar-testing-ihvy.w13)\n"
-        },
-        {
-          "sha": "4a2639a8b9b44f1cc4f0b32261ea12d3e3d609aa",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T09:19:22-07:00",
-          "message": "docs(testing): the run table names each run's groups, so the group counts can be counted from it (candybar-testing-ihvy.w13)\n"
-        },
-        {
-          "sha": "cd881d269ae19e43ae3b17d5477cf744864295b6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T09:15:00-07:00",
-          "message": "docs(testing): 60 of the last 100 failed Release runs were flakes, and two product defects hid among them (candybar-testing-ihvy.w13)\n\nRecounts the last 100 Release runs whose final attempt failed, plus the 22 that failed their first attempt and passed on rerun, by failing case, verdict, cause and evidence. Feeds plan tickets 7 and 22. The frame feed's early-timer double draw and the timers armed after daemon close read as flakes and are not; the second is filed as brandon-unfiled-3248.q4r5.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "f131b11e8cd2772af9e7476f28873e7473d2a93e",
-      "timestamp": "2026-11-02T15:56:45.002Z",
+      "sha": "437abb11a8aefe9ad432e8dd48085d083d5615e0",
+      "timestamp": "2026-11-02T16:31:20.715Z",
       "commits": [
         {
-          "sha": "f131b11e8cd2772af9e7476f28873e7473d2a93e",
+          "sha": "437abb11a8aefe9ad432e8dd48085d083d5615e0",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T08:55:25-07:00",
-          "message": "test: daemon boots in a worker are on the ledger, and the cases that boot are counted and only fall (candybar-testing-ihvy.icq) (#578)\n\n* test: daemon boots in a worker are on the ledger, and the cases that boot are counted and only fall (candybar-testing-ihvy.icq)\n\nThe harness writes the same ledger line a real daemon's preload writes, route harness, and the judge allows it only under test/daemon-boots/. A ratchet file holds the number of cases there and the ceiling on real starts; CI fails unless the case count equals it, and a pull request that raises either over main. The over-ceiling message no longer offers a raise.\n\n* test: the cases that boot no daemon leave test/daemon-boots/, and the ratchet falls from 372 to 214 (candybar-testing-ihvy.icq)\n\nA probe over a worker and a process run found 158 cases in five files that reach no boot: plugins, the connection over a stand-in daemon, the session-id checkpoint and click verbs, the jest temp-directory sweep and the tmux stub's gate. Each splits on a describe boundary, so the booting remainder keeps its own file and the rest moves to the test/ root, which the unit refusal sends them to by their clock reads at load. The judge proves the split: a moved case that boots fails the worker run.\n\n* test: review fixes — a worker boot with no ledger fails at load, the null-file fault names both causes, the preload note sits with the ledger (candybar-testing-ihvy.icq)\n\n* test: review fixes — a run with no records is named, not a raw ENOENT; the shrink check reads own keys; the ledger test no longer pins its own path (candybar-testing-ihvy.icq)"
-        },
-        {
-          "sha": "7e8ae4a5476db0139bc294069ca8a1e4cf5e3085",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-02T15:34:11Z",
-          "message": "chore(release): set `package.json` to 1.180.3 [skip ci]\n\n## [1.180.3](https://github.com/promptctl/cc-candybar/compare/v1.180.2...v1.180.3) (2026-11-02)\n\n### Bug Fixes\n\n* **render:** a client timeout is a typed error that carries its phase (candybar-launch-q7o7.04z) ([#577](https://github.com/promptctl/cc-candybar/issues/577)) ([96106ff](https://github.com/promptctl/cc-candybar/commit/96106ff8a15730879c3089b407e2191fe629e15b))\n"
+          "timestamp": "2026-11-02T09:29:58-07:00",
+          "message": "docs(testing): 60 of the last 100 failed Release runs were flakes, and two product defects hid among them (#579)\n\n* docs(testing): 60 of the last 100 failed Release runs were flakes, and two product defects hid among them (candybar-testing-ihvy.w13)\n\nRecounts the last 100 Release runs whose final attempt failed, plus the 22 that failed their first attempt and passed on rerun, by failing case, verdict, cause and evidence. Feeds plan tickets 7 and 22. The frame feed's early-timer double draw and the timers armed after daemon close read as flakes and are not; the second is filed as brandon-unfiled-3248.q4r5.\n\n* docs(testing): the run table names each run's groups, so the group counts can be counted from it (candybar-testing-ihvy.w13)\n\n* docs(testing): the quarantine counts say which runs they add, and the last-failure dates say they count reruns (candybar-testing-ihvy.w13)"
         }
       ]
     },
