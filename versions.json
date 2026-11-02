@@ -4,15 +4,22 @@
     {
       "version": "pr-580",
       "ref": "refs/pull/580/merge",
-      "sha": "08fa83b9b0917f4f515dd22a7801f88db079adb8",
-      "timestamp": "2026-11-02T16:56:37.233Z",
+      "sha": "e7b2601754473f4f0f4408fee0fa78b2f31d8b97",
+      "timestamp": "2026-11-02T16:59:16.556Z",
       "commits": [
         {
-          "sha": "08fa83b9b0917f4f515dd22a7801f88db079adb8",
+          "sha": "e7b2601754473f4f0f4408fee0fa78b2f31d8b97",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T16:55:12Z",
-          "message": "Merge 3ed1910142e46a73e764a7f9dfdf07ec9f82ff0a into 437abb11a8aefe9ad432e8dd48085d083d5615e0\n"
+          "timestamp": "2026-11-02T16:57:56Z",
+          "message": "Merge d281a4c1cc1d080830cf61bccbfcfca0d15582d9 into 437abb11a8aefe9ad432e8dd48085d083d5615e0\n"
+        },
+        {
+          "sha": "d281a4c1cc1d080830cf61bccbfcfca0d15582d9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T09:57:20-07:00",
+          "message": "docs(testing): the seam seconds are an upper bound that overlaps the compile bucket (candybar-testing-ihvy.hf7)\n"
         },
         {
           "sha": "3ed1910142e46a73e764a7f9dfdf07ec9f82ff0a",
