@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-584",
+      "ref": "refs/pull/584/merge",
+      "sha": "ce4d20d14a4384b83658f1abe2cf394ea807a586",
+      "timestamp": "2026-11-02T19:27:20.138Z",
+      "commits": [
+        {
+          "sha": "ce4d20d14a4384b83658f1abe2cf394ea807a586",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T12:26:02-07:00",
+          "message": "Merge 6d49a1a140a18b1a2ed8cfc562a769eb36b494d0 into cc500459e2346bcb997ea383c9d7c0470b5fe15b\n"
+        },
+        {
+          "sha": "6d49a1a140a18b1a2ed8cfc562a769eb36b494d0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T12:22:58-07:00",
+          "message": "refactor(daemon): the gates' keyspaces are one value the root builds, and Foundations moves below every piece (candybar-testing-ihvy.42w)\n\nThe state and config keyspaces were module state that the update notice wrote at run time, so what a load accepted changed with no input showing it and a process could hold only one live daemon. Gates is now a value built by daemonGates() and passed to createDaemon, the verb context, the render cache and check; liveDaemon is gone.\n\nFoundations is src/daemon/foundations/ (validators, gates, session keys, render origin, sighting roles) with a lint rule that it imports no other piece of src/daemon.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "cc500459e2346bcb997ea383c9d7c0470b5fe15b",
