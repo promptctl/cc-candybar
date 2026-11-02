@@ -258,4 +258,74 @@ describe("heap-analysis scripts", () => {
     expect(paths[0]![0]).toMatch(/synthetic/);
     expect(paths[0]![paths[0]!.length - 1]).toMatch(/FSReqPromise/);
   });
+
+  test("heap-retainers --strong names the holder, not a WeakRef that observes the object", () => {
+    // One object held by a deep strong chain and watched by a WeakRef at the
+    // global's top level, which is the shorter way to it. The snapshot is
+    // taken in a later job: until the job that made a WeakRef ends, V8 holds
+    // its target through a root of its own.
+    const snapshot = join(root, "weak.heapsnapshot");
+    execFileSync(
+      process.execPath,
+      [
+        "-e",
+        `
+        class Watched {}
+        (() => {
+          const held = new Watched();
+          globalThis.watcher = new WeakRef(held);
+          globalThis.strongRoot = { one: { two: { three: { held } } } };
+        })();
+        setImmediate(() => require("node:v8").writeHeapSnapshot(process.argv[1]));
+        `,
+        snapshot,
+      ],
+      { stdio: "inherit" },
+    );
+    const pathsOf = (...flags: string[]): string => {
+      const out = execFileSync(
+        process.execPath,
+        [join(scriptsDir, "heap-retainers.mjs"), snapshot, "^object / Watched$", "--json", ...flags],
+        { encoding: "utf8" },
+      );
+      return JSON.stringify((JSON.parse(out) as { paths: string[][] }).paths);
+    };
+    expect(pathsOf()).toMatch(/WeakRef/);
+    const strong = pathsOf("--strong");
+    expect(strong).not.toMatch(/WeakRef/);
+    expect(strong).toMatch(/held-->/);
+  });
+
+  test("heap-retainers --strong --limit skips a target nothing strong holds, and it does not use up the limit", () => {
+    // A live heap cannot hold such an object, since a snapshot collects first,
+    // so the snapshot is written by hand: the root weakly holds one `Foo`,
+    // which comes first, and strongly holds another.
+    const nodeFields = ["type", "name", "id", "self_size", "edge_count", "trace_node_id", "detachedness"];
+    const snapshot = {
+      snapshot: {
+        meta: {
+          node_fields: nodeFields,
+          node_types: [["synthetic", "object"], "string", "number", "number", "number", "number", "number"],
+          edge_fields: ["type", "name_or_index", "to_node"],
+          edge_types: [["property", "weak"], "string_or_number", "node"],
+        },
+        node_count: 3,
+        edge_count: 2,
+      },
+      // The root, then two `Foo`s; each edge's target is a node's offset.
+      nodes: [0, 0, 1, 0, 2, 0, 0, 1, 2, 3, 8, 0, 0, 0, 1, 2, 5, 8, 0, 0, 0],
+      edges: [1, 0, nodeFields.length, 0, 1, 2 * nodeFields.length],
+      strings: ["", "strongly", "Foo"],
+    };
+    const path = join(root, "hand.heapsnapshot");
+    writeFileSync(path, JSON.stringify(snapshot));
+    const out = execFileSync(
+      process.execPath,
+      [join(scriptsDir, "heap-retainers.mjs"), path, "^object / Foo$", "--strong", "--limit", "1", "--json"],
+      { encoding: "utf8" },
+    );
+    const { paths } = JSON.parse(out) as { paths: string[][] };
+    expect(paths).toHaveLength(1);
+    expect(paths[0]).toEqual(["synthetic /  --strongly-->", "object / Foo"]);
+  });
 });

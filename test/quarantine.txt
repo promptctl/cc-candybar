@@ -20,5 +20,3 @@
 # List a flake within a day of seeing it. A line older than 7 days shows red in
 # the shape report, and the report still fails nothing, so the deadline is to fix
 # the test, or delete it, and delete the line. There are no automatic retries.
-
-2026-11-02 brandon-unfiled-3248.na7i test/render-cache-sharing.test.ts › a compile keeps nothing of a render once it returns

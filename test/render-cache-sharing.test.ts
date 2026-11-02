@@ -4,6 +4,7 @@ import type { Frame } from "../src/render/frame";
 import { linksOf } from "../src/click/read";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
+import { retainerPathsTo } from "./helpers/retainer-path";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -115,11 +116,15 @@ const render = (state: ReturnType<RenderCache["getOrCreate"]>["state"]): Frame =
   }
 };
 
+// A store whose own name a heap snapshot can find it by, since a plain
+// VariableStore is also what every other case in the process draws from.
+class ProbeStore extends VariableStore {}
+
 // Draw one frame of `compiled` from a store and registry of its own, as a
 // render-cache entry would, then dispose the registry; the store is returned
 // so a caller can watch whether anything still holds it.
 const drawAlone = (config: ValidatedConfig, compiled: CompiledConfig): VariableStore => {
-  const store = new VariableStore();
+  const store = new ProbeStore();
   const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
   declareDslVariables(config, registry, dir, EVERY_SCOPE);
   drawPayload(
@@ -336,16 +341,24 @@ test("a compile's clock is the draw's: read outside one, it refuses", () => {
 // render once that render returns: the store, the scope its layout rows were
 // laid under. Kept, an evicted entry's store would stay on the heap for as
 // long as any other entry carried the compile, charged to no one.
-test("a compile keeps nothing of a render once it returns", async () => {
-  const gc = exposeGc();
+const heldStores: object[] = [];
+test("a compile keeps nothing of a render once it returns", () => {
   const config = parseAndValidate("<test>", carouselConfig("mode", "alpha"));
   const compiled = compileDslConfig(compileInputOf(config), TEST_SIGNER);
-  const drawn = new WeakRef(drawAlone(config, compiled));
-  // A WeakRef holds its target until the job that made it ends.
-  await new Promise((resolve) => setImmediate(resolve));
-  gc();
-  gc();
-  expect(drawn.deref()).toBeUndefined();
+  // [LAW:verifiable-goals] Reachability is read off a heap snapshot, which
+  // collects first and follows only strong edges, so no collection count or
+  // wait is in the verdict. One store is held on purpose, as the control: it
+  // is the one path the snapshot must show, so an empty answer for the drawn
+  // store is one this reader could have failed to give, whatever happens to
+  // the class's name. The drawn store's result is dropped here, so a second
+  // path is a holder the draw left behind, printed from the heap's roots.
+  heldStores.push(new ProbeStore());
+  try {
+    drawAlone(config, compiled);
+    expect(retainerPathsTo("ProbeStore")).toHaveLength(1);
+  } finally {
+    heldStores.length = 0;
+  }
   expect(compiled.menuRuntime.action.bound).toBeUndefined();
 });
 
