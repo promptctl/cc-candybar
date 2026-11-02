@@ -192,6 +192,16 @@ describe("a daemon in this worker", () => {
     );
   });
 
+  test("two daemons over one env give the worker's env back when the last stops, not the first", async () => {
+    const before = { ...process.env };
+    const first = startDaemon(env);
+    const second = startDaemon(env);
+    await first.stop();
+    expect(process.env.XDG_STATE_HOME).toBe(env.XDG_STATE_HOME);
+    await second.stop();
+    expect({ ...process.env }).toEqual(before);
+  });
+
   test("a stop ends a subscriber's stream and a request's backstop, lands the log, and gives the env back", async () => {
     const sid = "in-worker-stop";
     const stateHome = process.env.XDG_STATE_HOME;

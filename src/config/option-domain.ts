@@ -167,7 +167,7 @@ for (const { name, members, library, labelOf } of NAMED_DOMAINS) {
 // [LAW:no-silent-failure] A built-in domain can never be re-claimed — a
 // config or feature registering a custom domain named "themes" gets a loud
 // load-time error, never a silent shadow of the real theme list. Registering
-// returns a disposer (same shape as registerStateValidator) so a caller with
+// returns a disposer (the same shape as a gate's register) so a caller with
 // a bounded lifetime (a test, a future per-feature domain) can clean up.
 export function registerOptionDomain(
   name: string,

@@ -174,7 +174,8 @@ export interface DaemonInputs extends DaemonAdapters {
   readonly registryUrl: string;
   readonly clock: DaemonClock;
   // [LAW:no-shared-mutable-globals] What this daemon's loads accept: its own
-  // value, built by the root, so two daemons in one process share none.
+  // value, built by the root with `daemonGates` (the update notice's links need
+  // the keys it holds), so two daemons in one process share none.
   readonly gates: Gates;
   // [LAW:single-enforcer] The process's one death funnel: the binary watch and
   // the memory backstop end the daemon here, never on their own.

@@ -189,7 +189,7 @@ const OWNED_IMPORTS = {
 const FOUNDATIONS_FILES = "src/daemon/foundations/**/*.ts";
 const FOUNDATIONS_IMPORTS = [
   {
-    regex: "^(\\./)?\\.\\./[^.]",
+    regex: "^(\\./)?\\.\\.(/([^.]|$)|$)",
     message:
       "Foundations sits below every piece of the daemon: import nothing from them. [LAW:one-way-deps]",
   },

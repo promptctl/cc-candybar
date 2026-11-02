@@ -336,8 +336,8 @@ function describeRelease(c: Currency): [LogLevel, string] {
 // the layout is a published install, starts and watches the act, and owns the two
 // click gates — the dismiss allow-list (re-registered to the current
 // identity whenever it changes, so a stale dismissal simply stops matching)
-// and the disable allow-list (registered once; `false` is the only value a
-// click writes).
+// and the dismiss allow-list's identity. The disable allow-list is in the
+// gates themselves (`daemonGates`), where a daemon is built with them.
 export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   const {
     launcher,

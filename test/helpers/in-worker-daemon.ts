@@ -223,10 +223,16 @@ export const startBarDaemon: StartBarDaemon = async (env) => {
 };
 
 // [LAW:no-shared-mutable-globals] The env that daemons started here hold, and
-// how many. `process.env` is the worker's one ambient value, so the harness is
-// its single owner: a start that asks for another env than a daemon not yet
-// stopped holds would swap it under that daemon.
-let held: { readonly env: NodeJS.ProcessEnv; starts: number } | null = null;
+// how many, with the env the first of them found, which the last to stop puts
+// back. `process.env` is the worker's one ambient value, so the harness is its
+// single owner: a start that asks for another env than a daemon not yet stopped
+// holds would swap it under that daemon, and a stop that put back what its own
+// start found would leave an earlier start's env behind.
+let held: {
+  readonly env: NodeJS.ProcessEnv;
+  readonly before: NodeJS.ProcessEnv;
+  starts: number;
+} | null = null;
 
 const sameEnv = (a: NodeJS.ProcessEnv, b: NodeJS.ProcessEnv): boolean =>
   JSON.stringify(Object.entries(a).sort()) ===
@@ -247,7 +253,7 @@ export function startDaemon(
       "startDaemon: this worker's env is held by a daemon that has not stopped, and this start asks for another",
     );
   }
-  const before = { ...process.env };
+  const before = held?.before ?? { ...process.env };
   placeEnv(env);
   let daemon: Daemon;
   let daemonLog: DaemonLog;
@@ -255,10 +261,10 @@ export function startDaemon(
   try {
     ({ daemon, daemonLog, paths } = buildDaemon(overrides));
   } catch (e) {
-    placeEnv(before);
+    if (held === null) placeEnv(before);
     throw e;
   }
-  held = held ?? { env, starts: 0 };
+  held = held ?? { env, before, starts: 0 };
   held.starts++;
   const open = new Set<Duplex>();
   const servers: net.Server[] = [];
@@ -308,8 +314,10 @@ export function startDaemon(
       );
       await daemonLog.drained();
       daemonLog.dispose();
-      placeEnv(before);
-      if (held !== null && --held.starts === 0) held = null;
+      if (held !== null && --held.starts === 0) {
+        placeEnv(held.before);
+        held = null;
+      }
     },
   };
 }
