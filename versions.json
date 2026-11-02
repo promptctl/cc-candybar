@@ -4,15 +4,22 @@
     {
       "version": "pr-581",
       "ref": "refs/pull/581/merge",
-      "sha": "ad49a8d34cace5243aa5a7d7c4cd2ec13d586898",
-      "timestamp": "2026-11-02T17:19:16.275Z",
+      "sha": "58276d1b90cd5c0ec0515680e3fda26a9fe9cd46",
+      "timestamp": "2026-11-02T17:26:29.415Z",
       "commits": [
         {
-          "sha": "ad49a8d34cace5243aa5a7d7c4cd2ec13d586898",
+          "sha": "58276d1b90cd5c0ec0515680e3fda26a9fe9cd46",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T17:18:17Z",
-          "message": "Merge efbd847b33aa5bb3fabf15f29e27105145153a96 into fac28e917dfaf39a95ca96fb9fa4fb3641d4e6ab\n"
+          "timestamp": "2026-11-02T17:24:33Z",
+          "message": "Merge 36b00d73e96d8eae71ed4b24a6b974778b4c6687 into fac28e917dfaf39a95ca96fb9fa4fb3641d4e6ab\n"
+        },
+        {
+          "sha": "36b00d73e96d8eae71ed4b24a6b974778b4c6687",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T10:24:11-07:00",
+          "message": "test(render-cache): a compile keeps nothing of a render is asserted from a heap snapshot's strong paths, not from collection (brandon-unfiled-3248.na7i)\n\nCollection is the wrong observable: gc() is synchronous, so a count of gc() calls or turns neither explains the CI failure nor tells a holder that lets go later from one that never does. The case now asserts no strong path from the heap's roots reaches a ProbeStore, and a failure prints the path. heap-retainers.mjs gains --strong so a WeakRef's edge is never named as the holder; the helper wraps that tool instead of reading snapshots itself.\n"
         },
         {
           "sha": "efbd847b33aa5bb3fabf15f29e27105145153a96",
