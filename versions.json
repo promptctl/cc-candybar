@@ -4,58 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "de3659bcf2648fda4cf4014ad37116365f6ea7cd",
-      "timestamp": "2026-11-02T15:07:29.425Z",
+      "sha": "bddbf3b6871d4e9cf9437cb08386aac83e066245",
+      "timestamp": "2026-11-02T15:08:49.007Z",
       "commits": [
         {
-          "sha": "de3659bcf2648fda4cf4014ad37116365f6ea7cd",
+          "sha": "bddbf3b6871d4e9cf9437cb08386aac83e066245",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T08:06:15-07:00",
-          "message": "test: a flake is quarantined by one line, and a line older than a week shows red (candybar-testing-ihvy.hcl) (#576)\n\n* test: a flake is quarantined by one line, and a line older than a week shows red (candybar-testing-ihvy.hcl)\n\ntest/quarantine.txt lists a case by date, lit ticket and name. A jest test\nenvironment lets a listed case's own failure through the gate: jest counts it\npending, the run passes, and the failure is kept with a mark naming the ticket.\nThe record reads the mark, the shape report prints a Quarantine section, and a\nline older than 7 days (or dated more than a day ahead) is red and fails\nnothing. na7i is the first entry; 8c9u is not listed because it has not failed\non CI.\n\n* test: the late-throw fixture waits on its timer, the pragma scan covers audits, jest-environment-node tracks jest's range (candybar-testing-ihvy.hcl)\n\n* test: the quarantine report says 1 day, not 1 days (candybar-testing-ihvy.hcl)"
-        }
-      ]
-    },
-    {
-      "version": "pr-575",
-      "ref": "refs/pull/575/merge",
-      "sha": "a53a2cd9608a5eb99bb69717664070167e36f0f8",
-      "timestamp": "2026-11-02T14:54:26.408Z",
-      "commits": [
-        {
-          "sha": "a53a2cd9608a5eb99bb69717664070167e36f0f8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T14:50:47Z",
-          "message": "Merge 274fcd6bc436d1afca54bcdc167359b7bd28e23d into 685dfc67e4662552cac9a0924249992f5225cbbe\n"
-        },
-        {
-          "sha": "274fcd6bc436d1afca54bcdc167359b7bd28e23d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T07:50:30-07:00",
-          "message": "docs(render): the busy and click-budget comments stop saying the daemon answered (candybar-launch-q7o7.6wi)\n"
-        },
-        {
-          "sha": "a64560c5e982368831831b0d8ac92dbd11f65e97",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T07:47:41-07:00",
-          "message": "test(debug): a busy daemon is a stderr line with no spawn hint (candybar-launch-q7o7.6wi)\n"
-        },
-        {
-          "sha": "e2d00ccc351c4727476311510e477fea9f2228c0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T07:45:56-07:00",
-          "message": "docs(render): busy comments say a daemon holds the socket, not that it answered (candybar-launch-q7o7.6wi)\n"
-        },
-        {
-          "sha": "02d43ae5e2198ca8199b8098899fb78a8e7f33d3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T07:43:01-07:00",
-          "message": "fix(render): a client timeout, on the connect or after it, kicks nothing (candybar-launch-q7o7.6wi)\n\nA dead daemon never times out: a missing socket is ENOENT and an unbound one\nECONNREFUSED, both immediate. A timeout therefore means a live listener, and a\nkick's candidate loses the bind to it (socket-lease arbitration). Both runtimes\nnow classify the client's own connect/deadline timeouts as busy, and the\nunreachable-by-construction transient 'timeout' cause is removed.\n"
+          "timestamp": "2026-11-02T08:07:54-07:00",
+          "message": "fix(render): a client timeout, on the connect or after it, kicks nothing (candybar-launch-q7o7.6wi) (#575)\n\n* fix(render): a client timeout, on the connect or after it, kicks nothing (candybar-launch-q7o7.6wi)\n\nA dead daemon never times out: a missing socket is ENOENT and an unbound one\nECONNREFUSED, both immediate. A timeout therefore means a live listener, and a\nkick's candidate loses the bind to it (socket-lease arbitration). Both runtimes\nnow classify the client's own connect/deadline timeouts as busy, and the\nunreachable-by-construction transient 'timeout' cause is removed.\n\n* docs(render): busy comments say a daemon holds the socket, not that it answered (candybar-launch-q7o7.6wi)\n\n* test(debug): a busy daemon is a stderr line with no spawn hint (candybar-launch-q7o7.6wi)\n\n* docs(render): the busy and click-budget comments stop saying the daemon answered (candybar-launch-q7o7.6wi)"
         }
       ]
     },
