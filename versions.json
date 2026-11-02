@@ -4,15 +4,22 @@
     {
       "version": "pr-577",
       "ref": "refs/pull/577/merge",
-      "sha": "f411f2cc95c96626787358de6c165bb27178131d",
-      "timestamp": "2026-11-02T15:14:09.786Z",
+      "sha": "25f655c4566c8e5f0d3db23fffc6c3208bb6820b",
+      "timestamp": "2026-11-02T15:15:43.371Z",
       "commits": [
         {
-          "sha": "f411f2cc95c96626787358de6c165bb27178131d",
+          "sha": "25f655c4566c8e5f0d3db23fffc6c3208bb6820b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T08:12:43-07:00",
-          "message": "Merge eb5f041dba17f33d7d10f8978f7cd75272b5ec6a into bddbf3b6871d4e9cf9437cb08386aac83e066245\n"
+          "timestamp": "2026-11-02T15:14:28Z",
+          "message": "Merge c2f9ece4b370dd4d5cfc88ac92d2b6863c8bf604 into bddbf3b6871d4e9cf9437cb08386aac83e066245\n"
+        },
+        {
+          "sha": "c2f9ece4b370dd4d5cfc88ac92d2b6863c8bf604",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T08:14:16-07:00",
+          "message": "style(test): wrap the busy plan literal and restore the import spacing (candybar-launch-q7o7.04z)\n"
         },
         {
           "sha": "eb5f041dba17f33d7d10f8978f7cd75272b5ec6a",
