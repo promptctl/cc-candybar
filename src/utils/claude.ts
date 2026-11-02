@@ -44,7 +44,7 @@ export interface ClaudeHookData {
   };
 
   // The daemon's, never Claude Code's: read once per request from the checkout.
-  location?: CheckoutLocation & { gitPending?: boolean };
+  location?: CheckoutLocation;
 
   // Optional per Anthropic schema (listed under "Fields that may be absent")
   session_name?: string;

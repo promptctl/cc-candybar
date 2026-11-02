@@ -103,7 +103,6 @@ function renderDirRaw(paths: DirPaths): Frame {
         worktree: paths.worktree ?? "",
         subpath: paths.subpath ?? "",
         noRepo: paths.noRepo ?? false,
-        gitPending: false,
       },
     };
     return drawPayload(parsed, compiled, store, registry, payload, instantOf(new Date()), {
@@ -256,7 +255,7 @@ describe("configurability seam: user template override restores full path", () =
             current_dir: "/Users/bmf/code/cc-candybar",
             added_dirs: [],
           },
-          location: { main: "/Users/bmf/code/cc-candybar", worktree: "", subpath: "", noRepo: false, gitPending: false },
+          location: { main: "/Users/bmf/code/cc-candybar", worktree: "", subpath: "", noRepo: false },
         },
         instantOf(new Date()),
         {

@@ -923,7 +923,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
             added_dirs: [],
           },
           home: opts.home,
-          location: { main: opts.main, worktree: "", subpath: "", noRepo: false, gitPending: false },
+          location: { main: opts.main, worktree: "", subpath: "", noRepo: false },
         };
         const line = drawPayload(dirOnly, compiled, store, registry, payload, instantOf(new Date()), {
           endcaps: "powerline",
