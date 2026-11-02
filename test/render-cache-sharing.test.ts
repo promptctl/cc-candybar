@@ -140,6 +140,22 @@ const exposeGc = (): (() => void) => {
   return vm.runInNewContext("gc") as () => void;
 };
 
+// [LAW:dataflow-not-control-flow] Whether `ref`'s target is collected, asked
+// over event-loop turns, not after one fixed number of gc() calls: a loaded
+// runner can leave an already-unreachable object for a later turn, and a
+// deref() keeps its target alive until the job that made it ends, so each
+// round yields before it asks again. What stays held through every round is
+// held for real.
+const COLLECT_ROUNDS = 50;
+const collected = async (ref: WeakRef<object>, gc: () => void, rounds = COLLECT_ROUNDS): Promise<boolean> => {
+  for (let round = 0; round < rounds; round++) {
+    gc();
+    if (ref.deref() === undefined) return true;
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  return false;
+};
+
 // Where a frame's carousel's ▶ steps to. Over its two options that is the one
 // the key does not hold, so it shows which variable the ring read back.
 const nextOf = (bytes: Frame): string | undefined =>
@@ -341,12 +357,17 @@ test("a compile keeps nothing of a render once it returns", async () => {
   const config = parseAndValidate("<test>", carouselConfig("mode", "alpha"));
   const compiled = compileDslConfig(compileInputOf(config), TEST_SIGNER);
   const drawn = new WeakRef(drawAlone(config, compiled));
-  // A WeakRef holds its target until the job that made it ends.
+  // A WeakRef holds its target until the job that made it ends, so the first
+  // gc() runs in a later one. A failure prints what is still held.
   await new Promise((resolve) => setImmediate(resolve));
-  gc();
-  gc();
-  expect(drawn.deref()).toBeUndefined();
+  expect((await collected(drawn, gc)) ? undefined : drawn.deref()).toBeUndefined();
   expect(compiled.menuRuntime.action.bound).toBeUndefined();
+});
+
+test("the collection poll reports an object something still holds as held", async () => {
+  const held = { n: 1 };
+  expect(await collected(new WeakRef(held), exposeGc(), 3)).toBe(false);
+  expect(held.n).toBe(1);
 });
 
 // [LAW:verifiable-goals] ENTRY_BYTES, COMPILE_BYTES and VIEW_BYTES are the
