@@ -4,15 +4,22 @@
     {
       "version": "pr-568",
       "ref": "refs/pull/568/merge",
-      "sha": "7f8a3bb067707ce9f2f28ea930e91b65cc11b61b",
-      "timestamp": "2026-11-02T12:50:18.688Z",
+      "sha": "a287eaa056719458579e3f726e1d32d0ac3c5b12",
+      "timestamp": "2026-11-02T12:53:09.191Z",
       "commits": [
         {
-          "sha": "7f8a3bb067707ce9f2f28ea930e91b65cc11b61b",
+          "sha": "a287eaa056719458579e3f726e1d32d0ac3c5b12",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T12:47:18Z",
-          "message": "Merge ab820b66ea2ca8677710b7a79fd1ff71ccdf8efe into e9865fa4807325c4bf8e73c86195d8ea246a2775\n"
+          "timestamp": "2026-11-02T12:51:01Z",
+          "message": "Merge ebba6d680327bbb989d492c2ec3f51a2488f0207 into f01de8e049daf921113beb9a862840f6a93f2135\n"
+        },
+        {
+          "sha": "ebba6d680327bbb989d492c2ec3f51a2488f0207",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T05:50:42-07:00",
+          "message": "fix(daemon): handoff verdicts are exhaustive, bound is monotonic, rate-limit logs the category (candybar-launch-q7o7.hx4)\n\nReview (medium) of #568: clickFailed's reason is the launch-failure union;\na timeout verdict fails the click rather than reading as lost; the bound uses\nperformance.now(); the rate-limit warning names the category, not the URL; a\nhandoff left running at the bound is logged; the test's wait is bounded and\ncleans its dir.\n"
         },
         {
           "sha": "ab820b66ea2ca8677710b7a79fd1ff71ccdf8efe",
@@ -27,35 +34,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T05:39:08-07:00",
           "message": "fix(daemon): an opener's click hands off, so the browser outlives the 5s bound (candybar-launch-q7o7.hx4)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-570",
-      "ref": "refs/pull/570/merge",
-      "sha": "56f0c0a01aca7f458496d9c9063965348d2e55c7",
-      "timestamp": "2026-11-02T12:50:15.124Z",
-      "commits": [
-        {
-          "sha": "56f0c0a01aca7f458496d9c9063965348d2e55c7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T12:43:50Z",
-          "message": "Merge 9d59e55f25a8dbad01cac6a32ad3c6e618eb4d26 into e9865fa4807325c4bf8e73c86195d8ea246a2775\n"
-        },
-        {
-          "sha": "9d59e55f25a8dbad01cac6a32ad3c6e618eb4d26",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T05:43:38-07:00",
-          "message": "test: say why zero in flight means the gone client's side left (brandon-unfiled-3248.cbyb)\n"
-        },
-        {
-          "sha": "7c3d087049fbfdff921ff019074ae989c44ec917",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T05:40:44-07:00",
-          "message": "fix(test): the click-error e2e holds its unanswered render until the daemon's side has ended (brandon-unfiled-3248.cbyb)\n\nThe case's `gone` client half-closed at once and assumed the daemon saw the\nclose before it wrote the answer. Nothing ordered them: when the render won, the\nend-write succeeded, the error was marked answered, and the next request read\n`over` where the test expects `owed`.\n\nThe gone render now reads tmux through the gated stub, and the test opens the\ngate only once the daemon's side has closed with the client's (inFlight back to\n0), so the answer meets an ended end by construction. Making respond call\ndelivered regardless of the write error fails the case with owed/over.\n"
         }
       ]
     },

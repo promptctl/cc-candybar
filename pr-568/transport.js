@@ -22968,7 +22968,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.179.1";
+var PACKAGE_VERSION = "1.179.2";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -69879,9 +69879,9 @@ function oneArg(value) {
   return decodeWire(() => decodeURIComponent(value));
 }
 var CLICK_PROGRAM_TIMEOUT_MS = 5e3;
-function clickFailed(end, what, log) {
+function clickFailed(end, category, what, log) {
   if (end.reason === "rate-limited") {
-    log("warn", `${what} rate-limited: ${end.said}`);
+    log("warn", `${category} rate-limited: ${end.said}`);
     return;
   }
   if (end.reason === "aborted") throw new DaemonClosing(what);
@@ -69901,6 +69901,7 @@ async function clickLaunch(launcher, opts, what, log) {
       exitCode: result.exitCode,
       said: result.error ?? result.stderr.trim()
     },
+    opts.category,
     what,
     log
   );
@@ -69919,24 +69920,26 @@ async function clickHandoff(launcher, opts, what, log, boundMs) {
     if (!job.ok) {
       clickFailed(
         { reason: job.reason, exitCode: null, said: job.error },
+        opts.category,
         what,
         log
       );
       return;
     }
     job.release();
-    const deadline = Date.now() + boundMs;
+    const deadline = performance.now() + boundMs;
     for (; ; ) {
       const alive = jobGroupAlive(job.pid);
       const end = readJobEnd(files.status);
-      if (end?.kind === "exit") {
-        if (end.code === 0) return;
+      if (end !== null) {
+        if (end.kind === "exit" && end.code === 0) return;
         clickFailed(
-          {
+          end.kind === "exit" ? {
             reason: "non-zero",
             exitCode: end.code,
             said: readFileSync(files.stderr, "utf8").trim()
-          },
+          } : { reason: "timeout", exitCode: null, said: "" },
+          opts.category,
           what,
           log
         );
@@ -69946,7 +69949,13 @@ async function clickHandoff(launcher, opts, what, log, boundMs) {
         throw new Error(
           `${what} failed (lost): the opener ended with no verdict`
         );
-      if (Date.now() >= deadline) return;
+      if (performance.now() >= deadline) {
+        log(
+          "info",
+          `${opts.category} handed off at ${boundMs}ms, pid ${job.pid}`
+        );
+        return;
+      }
       await new Promise((resolve) => setTimeout(resolve, HANDOFF_POLL_MS));
     }
   } finally {
