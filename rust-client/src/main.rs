@@ -72,9 +72,12 @@ fn main() {
     };
 
     // [LAW:types-are-the-program] The render outcome carries its own
-    // recovery semantics. Three branches:
+    // recovery semantics. Four branches:
     //   Ok        — print and persist for stale-fallback.
     //   Transient — kick a fresh daemon, emit stale frame or "\n".
+    //   Busy      — the daemon answered TIMEOUT, so it is up: emit the stale
+    //               frame or "\n" and do NOT kick (a candidate would lose the
+    //               bind to the live daemon, once per render).
     //   Permanent — daemon refused our request; respawning will not help.
     //               Emit a diagnostic and do NOT kick. Mirrors the Node
     //               caller in src/index.ts. Kicking on every failure was
@@ -92,12 +95,11 @@ fn main() {
         }
         RenderOutcome::Transient(_cause) => {
             obtain_daemon_kick();
-            let stale = parsed
-                .session_id
-                .as_deref()
-                .and_then(|sid| read_last_render(sid));
-            let bytes = stale.as_deref().map(str::as_bytes).unwrap_or(b"\n");
-            let _ = io::stdout().write_all(bytes);
+            emit_stale_or_blank(parsed.session_id.as_deref());
+            std::process::exit(0);
+        }
+        RenderOutcome::Busy => {
+            emit_stale_or_blank(parsed.session_id.as_deref());
             std::process::exit(0);
         }
         RenderOutcome::Permanent(cause) => {
@@ -110,6 +112,14 @@ fn main() {
             std::process::exit(0);
         }
     }
+}
+
+// The daemon-miss output: the session's last good frame, or a blank line when
+// there is none yet.
+fn emit_stale_or_blank(session_id: Option<&str>) {
+    let stale = session_id.and_then(|sid| read_last_render(sid));
+    let bytes = stale.as_deref().map(str::as_bytes).unwrap_or(b"\n");
+    let _ = io::stdout().write_all(bytes);
 }
 
 struct ParsedInput {
@@ -235,7 +245,7 @@ fn dist_index_path() -> Option<PathBuf> {
 
 // [LAW:types-are-the-program] Mirrors ClientOutcome in src/daemon/client.ts.
 // The variant *is* the recovery decision: Transient warrants a kick;
-// Permanent does not. Conflating them — which is what the previous shape
+// Busy (the daemon's own TIMEOUT) and Permanent do not. Conflating them — which is what the previous shape
 // did, returning Result<String, _> with everything bucketed into a single
 // failure tag — was the load-bearing half of the 452-corpse spiral (kz8.5).
 #[derive(Debug)]
@@ -243,6 +253,7 @@ fn dist_index_path() -> Option<PathBuf> {
 pub enum RenderOutcome {
     Ok(String),
     Transient(TransientCause),
+    Busy,
     Permanent(PermanentCause),
 }
 
@@ -391,8 +402,8 @@ fn render(argv: &[String], hook_data: &serde_json::Value) -> RenderOutcome {
 
 // [LAW:types-are-the-program] One place that turns a wire-level response
 // into a typed outcome — mirrors interpretResponse() in src/daemon/client-transport.ts.
-// Every non-ok wire code maps to exactly one variant; TIMEOUT is the only
-// one that becomes Transient because it is the only one a respawn can cure.
+// Every non-ok wire code maps to exactly one variant; TIMEOUT is Busy: the
+// daemon answered, so it is up and a respawn cures nothing.
 fn interpret_response(resp: serde_json::Value) -> RenderOutcome {
     let ok = resp.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
     if ok {
@@ -427,7 +438,7 @@ fn interpret_response(resp: serde_json::Value) -> RenderOutcome {
                 daemon_v,
             })
         }
-        "TIMEOUT" => RenderOutcome::Transient(TransientCause::Timeout),
+        "TIMEOUT" => RenderOutcome::Busy,
         "BAD_REQUEST" => RenderOutcome::Permanent(PermanentCause::BadRequest(msg)),
         "RENDER_FAILED" => RenderOutcome::Permanent(PermanentCause::RenderFailed(msg)),
         "SWITCHED_OFF" => RenderOutcome::Permanent(PermanentCause::SwitchedOff(msg)),
@@ -1339,6 +1350,19 @@ mod tests {
                 other => panic!("expected Permanent(MalformedResponse), got: {other:?}"),
             }
         }
+    }
+
+    #[test]
+    fn the_daemons_timeout_is_busy_and_never_transient() {
+        let busy = interpret_response(serde_json::json!({
+            "ok": false,
+            "code": "TIMEOUT",
+            "error": "request timed out",
+        }));
+        assert!(
+            matches!(busy, RenderOutcome::Busy),
+            "TIMEOUT must not kick a live daemon, got: {busy:?}"
+        );
     }
 
     #[test]

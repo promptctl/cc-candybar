@@ -35,14 +35,15 @@ export function planOutcome(outcome: ClientOutcome): OutcomePlan {
         kick: true,
         debug: `daemon unavailable (transient: ${outcome.cause}: ${outcome.message}) — kicking daemon`,
       };
-    // [LAW:one-type-per-behavior] The Rust client kicks on the daemon's
-    // TIMEOUT, so the Node render path does too: both runtimes recover a
-    // render the same way.
+    // [LAW:one-type-per-behavior] The daemon's own TIMEOUT proves it is up,
+    // so there is nothing to respawn: a kick would spawn a candidate that
+    // loses the bind to the live daemon, once per render under load. The
+    // Rust client's Busy variant does the same.
     case "busy":
       return {
         output: "\n",
-        kick: true,
-        debug: `daemon busy (${outcome.message}) — kicking daemon`,
+        kick: false,
+        debug: `daemon busy (${outcome.message}) — not kicking`,
       };
     case "permanent":
       return {

@@ -600,11 +600,11 @@ describe("planOutcome decides kick vs. no-kick per variant (kz8.5 chunk 1+4)", (
     }
   });
 
-  // The Rust client kicks on the daemon's TIMEOUT; a Node render recovers
-  // the same way, so both runtimes agree.
-  test("a busy render kicks as the Rust client does", () => {
+  // The daemon answered, so it is up: a kick would spawn a candidate that
+  // loses the bind to it. The Rust client's Busy variant agrees.
+  test("a busy render does not kick: the daemon that answered is alive", () => {
     const plan = planOutcome({ kind: "busy", message: "anything" });
-    expect(plan).toMatchObject({ kick: true, output: "\n" });
+    expect(plan).toMatchObject({ kick: false, output: "\n" });
     expect(plan.debug).toContain("busy");
   });
 
