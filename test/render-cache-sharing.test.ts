@@ -4,6 +4,7 @@ import type { Frame } from "../src/render/frame";
 import { linksOf } from "../src/click/read";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
+import { retainerPathsTo } from "./helpers/retainer-path";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -115,11 +116,15 @@ const render = (state: ReturnType<RenderCache["getOrCreate"]>["state"]): Frame =
   }
 };
 
+// A store whose own name a heap snapshot can find it by, since a plain
+// VariableStore is also what every other case in the process draws from.
+class ProbeStore extends VariableStore {}
+
 // Draw one frame of `compiled` from a store and registry of its own, as a
 // render-cache entry would, then dispose the registry; the store is returned
 // so a caller can watch whether anything still holds it.
 const drawAlone = (config: ValidatedConfig, compiled: CompiledConfig): VariableStore => {
-  const store = new VariableStore();
+  const store = new ProbeStore();
   const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
   declareDslVariables(config, registry, dir, EVERY_SCOPE);
   drawPayload(
@@ -140,12 +145,14 @@ const exposeGc = (): (() => void) => {
   return vm.runInNewContext("gc") as () => void;
 };
 
-// [LAW:dataflow-not-control-flow] Whether `ref`'s target is collected, asked
-// over event-loop turns, not after one fixed number of gc() calls: a loaded
-// runner can leave an already-unreachable object for a later turn, and a
+// [LAW:no-ambient-temporal-coupling] exception: whether `ref`'s target is
+// collected, asked over event-loop turns and not after two gc() calls. A
+// collection cannot tell a holder that a later job of this process lets go of
+// (a closing handle, a settling promise) from a holder that never does, and a
 // deref() keeps its target alive until the job that made it ends, so each
-// round yields before it asks again. What stays held through every round is
-// held for real.
+// round yields before it asks again. The bound counts turns, not time: a
+// target held through all of them is held by something that is not waiting on
+// a turn, and the caller reads the holder off the heap (retainer-path.ts).
 const COLLECT_ROUNDS = 50;
 const collected = async (ref: WeakRef<object>, gc: () => void, rounds = COLLECT_ROUNDS): Promise<boolean> => {
   for (let round = 0; round < rounds; round++) {
@@ -358,16 +365,36 @@ test("a compile keeps nothing of a render once it returns", async () => {
   const compiled = compileDslConfig(compileInputOf(config), TEST_SIGNER);
   const drawn = new WeakRef(drawAlone(config, compiled));
   // A WeakRef holds its target until the job that made it ends, so the first
-  // gc() runs in a later one. A failure prints what is still held.
+  // gc() runs in a later one.
   await new Promise((resolve) => setImmediate(resolve));
-  expect((await collected(drawn, gc)) ? undefined : drawn.deref()).toBeUndefined();
+  const released = await collected(drawn, gc);
+  // A failure prints the path from the heap's roots to the store that is
+  // still there, so what holds it is named by the run that saw it.
+  expect({ released, holders: released ? [] : await retainerPathsTo("ProbeStore") }).toEqual({
+    released: true,
+    holders: [],
+  });
   expect(compiled.menuRuntime.action.bound).toBeUndefined();
 });
 
-test("the collection poll reports an object something still holds as held", async () => {
-  const held = { n: 1 };
-  expect(await collected(new WeakRef(held), exposeGc(), 3)).toBe(false);
-  expect(held.n).toBe(1);
+// The controls for the case above: the poll says held for a target that is
+// held, and the path names the holder of one.
+const heldStores: object[] = [];
+test("an object something still holds is reported as held, with the path to its holder", async () => {
+  // Nothing in this frame names the store, so the only strong path to it is
+  // the one through heldStores.
+  const watch = (): WeakRef<object> => {
+    heldStores.push(new ProbeStore());
+    return new WeakRef(heldStores[0]!);
+  };
+  try {
+    expect(await collected(watch(), exposeGc(), 3)).toBe(false);
+    const [path] = await retainerPathsTo("ProbeStore");
+    expect(path).toContain("heldStores");
+    expect(path).toMatch(/ProbeStore$/);
+  } finally {
+    heldStores.length = 0;
+  }
 });
 
 // [LAW:verifiable-goals] ENTRY_BYTES, COMPILE_BYTES and VIEW_BYTES are the
