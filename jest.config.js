@@ -32,15 +32,14 @@ export function reportersFor(run) {
   ];
 }
 
-// [LAW:single-enforcer] A test under test/e2e/ runs only through jest.e2e.config.js,
-// which carries the cap and the assertion limit. Every other config ignores the
-// directory, so no run reaches an end-to-end test without the checks.
-// Anchored to rootDir: the pattern is a regex over absolute paths, and a bare
-// "/test/e2e/" would also ignore every test of a checkout living under such a path.
-export const E2E_DIR_PATTERN = "<rootDir>/test/e2e/";
+// [LAW:single-enforcer] This file holds what every run shares and selects no
+// test, so a bare `jest`, `--watch` or `--coverage` finds nothing and says so
+// instead of running a file outside the checks of its own tier: the unit
+// refusal, the end-to-end cap and assertion limit. A run names its tier's
+// config, and that config says what it selects.
+export const TEST_MATCH = ["**/*.test.ts"];
 
 export default {
-  testPathIgnorePatterns: [E2E_DIR_PATTERN],
   setupFiles: ["<rootDir>/test/setup.ts"],
   setupFilesAfterEnv: ["<rootDir>/test/setup-after-env.ts"],
   // [LAW:no-mode-explosion] A small fixed cap, not "cores-1" (the default),
@@ -52,12 +51,11 @@ export default {
   maxWorkers: 4,
   globalSetup: "<rootDir>/test/global-setup.ts",
   globalTeardown: "<rootDir>/test/global-teardown.ts",
-  reporters: reportersFor("all"),
   preset: "ts-jest/presets/default-esm",
   extensionsToTreatAsEsm: [".ts"],
   testEnvironment: "node",
   roots: ["<rootDir>/test"],
-  testMatch: ["**/*.test.ts"],
+  testMatch: [],
   moduleNameMapper: {
     "^@promptctl/rich-js$": "<rootDir>/node_modules/@promptctl/rich-js/dist/index.js",
     "^@promptctl/rich-js/themes/data$": "<rootDir>/node_modules/@promptctl/rich-js/dist/themes/data/index.js",
