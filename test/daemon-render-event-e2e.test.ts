@@ -736,8 +736,19 @@ describe("a failed click's error", () => {
     const config = path.join(projectDir, "drawn.json5");
     writeFileSync(config, CONFIGS.drawn);
     const args = ["cc-candybar", "--config", config];
+    // The render of the client that is gone reads tmux, and the stub answers
+    // only once this test opens its gate: the render provably outlives the
+    // client's half-close, an ordering the test owns.
+    const heldConfig = path.join(projectDir, "held.json5");
+    writeFileSync(heldConfig, HELD_CONFIG);
+    const tmuxDir = path.join(projectDir, "bin");
+    mkdirSync(tmuxDir);
+    const stub = await tmuxStub(tmuxDir);
     const clock = heldClock();
-    const daemon = startDaemon(env, { clock });
+    const daemon = startDaemon(
+      { ...env, PATH: `${tmuxDir}${path.delimiter}${env.PATH ?? ""}` },
+      { clock },
+    );
     try {
       const sid = "ev-click";
       let sent = 0;
@@ -758,20 +769,40 @@ describe("a failed click's error", () => {
       // written is answered to no one, so it carries nothing.
       expect((await sendClick(daemon, bad)).ok).toBe(false);
       const rendered = renderLinesOf(sid, logLines(env)).length;
-      // Sent and half-closed at once: the daemon's side ends with it, before
-      // the render's answer is written. It reads what it is sent, because a
-      // memory end finishes only once its peer has read to the end, and an
-      // answer no one reads would look delivered to no one with or without
-      // the half-close.
+      // Sent and half-closed at once, then held at tmux until the daemon's
+      // side has ended with it: only then does the render's answer get
+      // written, so it meets an ended end whichever of the two the daemon
+      // handles first. It reads what it is sent, because a memory end
+      // finishes only once its peer has read to the end.
       const gone = daemon.connect();
       gone.resume();
       gone.end(
         encodeFrame({
           v: PROTOCOL_VERSION,
           kind: "render",
-          ...renderBody(sid, projectDir, {}, args),
+          ...renderBody(
+            sid,
+            projectDir,
+            {
+              tmux: {
+                socket: path.join(tmuxDir, "tmux.sock"),
+                pane: "%1",
+                truecolor: null,
+              },
+            },
+            ["cc-candybar", "--config", heldConfig],
+          ),
         }),
       );
+      await stub.asked(1);
+      // The daemon's side closing with the client's is the one connection
+      // left in flight leaving it. Only the stub's ask above makes zero mean
+      // "left": before the daemon accepts, nothing is in flight either.
+      await until(
+        () => daemon.daemon.stats.inFlight === 0,
+        "the daemon's side closing with the client's",
+      );
+      await stub.open(1);
       sent = rendered + 1;
       expect(field((await landedEvents(env, sid, sent)).at(-1)!, "clickError")).toBe(
         "held",
@@ -784,7 +815,10 @@ describe("a failed click's error", () => {
       expect(field(over, "clickError")).toBe("over");
       expect(field(over, "err")).toBe("N");
     } finally {
+      // A case that failed mid-hold leaves a render only this clock can end.
+      clock.advance(REQUEST_TIMEOUT_MS);
       await daemon.stop();
+      await stub.close();
       rmSync(projectDir, { recursive: true, force: true });
       removeTmpDirs();
     }
