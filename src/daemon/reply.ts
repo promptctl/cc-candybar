@@ -17,7 +17,13 @@ import type {
 } from "./protocol";
 import { parseSessionId, type SessionId } from "./session-id";
 import { type SourceSnapshots } from "./stats";
-import { VERBS, clickLaunch, clickSessionOf, BadVerbArgs } from "./verbs";
+import {
+  VERBS,
+  CLICK_PROGRAM_TIMEOUT_MS,
+  clickHandoff,
+  clickSessionOf,
+  BadVerbArgs,
+} from "./verbs";
 import { ClickAbandoned, DaemonClosing } from "./verb-error";
 import { transcriptReads } from "../utils/transcript-fs.js";
 import { readStores } from "../doctor/edge";
@@ -734,7 +740,7 @@ async function statusLineClick(
       clientGone,
     );
   }
-  await clickLaunch(
+  await clickHandoff(
     parts.launcher,
     {
       bin: process.platform === "darwin" ? "/usr/bin/open" : "xdg-open",
@@ -743,6 +749,7 @@ async function statusLineClick(
     },
     `opening ${click.url}`,
     parts.log,
+    CLICK_PROGRAM_TIMEOUT_MS,
   );
   return { kind: "ok" };
 }
