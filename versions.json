@@ -4,15 +4,22 @@
     {
       "version": "pr-576",
       "ref": "refs/pull/576/merge",
-      "sha": "a59bffa3033aa0b8ec63581d62a7278b6ff2d677",
-      "timestamp": "2026-11-02T14:56:41.199Z",
+      "sha": "e3d0b742349f6873a89b49ee58eb275117a4afbf",
+      "timestamp": "2026-11-02T14:58:26.622Z",
       "commits": [
         {
-          "sha": "a59bffa3033aa0b8ec63581d62a7278b6ff2d677",
+          "sha": "e3d0b742349f6873a89b49ee58eb275117a4afbf",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T14:55:49Z",
-          "message": "Merge 4a4699bced337b1d3fb7dca917c5f7c0aab7451e into 685dfc67e4662552cac9a0924249992f5225cbbe\n"
+          "timestamp": "2026-11-02T14:57:29Z",
+          "message": "Merge 6fce54c3c55c8ed06b4a484927bb5b6d851a8578 into 685dfc67e4662552cac9a0924249992f5225cbbe\n"
+        },
+        {
+          "sha": "6fce54c3c55c8ed06b4a484927bb5b6d851a8578",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T07:57:17-07:00",
+          "message": "test: the quarantine report says 1 day, not 1 days (candybar-testing-ihvy.hcl)\n"
         },
         {
           "sha": "4a4699bced337b1d3fb7dca917c5f7c0aab7451e",
