@@ -83,7 +83,8 @@ const scoped = (scope: Partial<LaunchScope>): void => {
   launcher = createOneShotLauncher({ signal: ending.signal, ...scope });
 };
 const launch: Launcher["launch"] = (opts) => launcher.launch(opts);
-const launchSync: OneShotLauncher["launchSync"] = (opts) => launcher.launchSync(opts);
+const launchSync: OneShotLauncher["launchSync"] = (opts) =>
+  launcher.launchSync(opts);
 const launchDetachedSync: Launcher["launchDetachedSync"] = (opts) =>
   launcher.launchDetachedSync(opts);
 const launchJobSync: Launcher["launchJobSync"] = (opts, files) =>

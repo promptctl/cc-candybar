@@ -141,7 +141,9 @@ esac
   test("a launch its rate limit refused runs at once on the next daemon", async () => {
     const open = { bin: "/bin/echo", category: "click.open" } as const;
     const first = start();
-    expect(await first.daemon.launcher.launch(open)).toMatchObject({ ok: true });
+    expect(await first.daemon.launcher.launch(open)).toMatchObject({
+      ok: true,
+    });
     expect(await first.daemon.launcher.launch(open)).toMatchObject({
       reason: "rate-limited",
     });
@@ -149,7 +151,9 @@ esac
     await first.daemon.close(NO_TMUX_AT_EXIT);
     const second = start();
 
-    expect(await second.daemon.launcher.launch(open)).toMatchObject({ ok: true });
+    expect(await second.daemon.launcher.launch(open)).toMatchObject({
+      ok: true,
+    });
   });
 
   test("a line of its work says whose it is, and no count of the next daemon's events reads it", async () => {

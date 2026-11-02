@@ -1162,7 +1162,9 @@ export interface Launcher {
 // child's pipes close, so a detached descendant holding them holds the loop.
 // Only a process holding no loop that anyone waits on takes it: install, the
 // doctor's CLI probe, the daemon's tmux restore once serving has stopped. A
-// `Launcher` has no name for it, so daemon work cannot call it.
+// daemon's launcher has no such property at all. The process's launcher is
+// this one-shot launcher under a narrower type, so its owners are held to
+// `Launcher` by the type and the lint rule, not by the object's shape.
 export interface OneShotLauncher extends Launcher {
   launchSync(opts: LaunchOpts): LaunchResult;
 }

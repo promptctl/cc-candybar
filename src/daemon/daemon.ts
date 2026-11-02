@@ -209,6 +209,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const stats = new RuntimeStats();
   // [LAW:single-enforcer] Route all child_process spawns through src/proc/launch:
   // this daemon's launcher meters them into daemon-stats and ends them with it.
+  // The tmux restore at exit is the exception: it runs through the process's
+  // one-shot launcher, after the last stats anyone reads.
   // Its work holds this one, so a closed daemon's launches are refused here,
   // whichever daemon is live by then.
   const launcher = createLauncher({
