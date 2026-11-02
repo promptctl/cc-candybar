@@ -152,4 +152,15 @@ describe("debugPlan — the text/exit-code contract", () => {
     expect(plan.stderr).toMatch(/^segments: daemon unavailable/);
     expect(plan.code).toBe(1);
   });
+
+  it("a busy daemon is a stderr line with no spawn hint, exit 1", () => {
+    const plan = debugPlan(
+      "segments",
+      { kind: "busy", message: "CONNECT_TIMEOUT" },
+      false,
+    );
+    expect(plan.stdout).toBe("");
+    expect(plan.stderr).toBe("segments: daemon busy (CONNECT_TIMEOUT)\n");
+    expect(plan.code).toBe(1);
+  });
 });
