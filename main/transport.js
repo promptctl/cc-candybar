@@ -2343,7 +2343,7 @@ var require_buffer = __commonJS({
 });
 
 // site/shims/timers.ts
-var page, native, Timeout, idOf, setTimeout, setInterval, clearTimeout, clearInterval, setImmediate;
+var page, native, Timeout, idOf, setTimeout, setInterval, clearTimeout, clearInterval, setImmediate, clearImmediate;
 var init_timers = __esm({
   "site/shims/timers.ts"() {
     "use strict";
@@ -2392,6 +2392,7 @@ var init_timers = __esm({
     clearTimeout = (t2) => native.clearTimeout(idOf(t2));
     clearInterval = (t2) => native.clearInterval(idOf(t2));
     setImmediate = (fn, ...a) => setTimeout(fn, 0, ...a);
+    clearImmediate = clearTimeout;
   }
 });
 
@@ -8628,12 +8629,12 @@ var require_browser = __commonJS({
   "node_modules/.pnpm/abort-controller@3.0.0/node_modules/abort-controller/browser.js"(exports, module) {
     "use strict";
     init_globals();
-    var { AbortController: AbortController2, AbortSignal: AbortSignal2 } = typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : (
+    var { AbortController: AbortController2, AbortSignal } = typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : (
       /* otherwise */
       void 0
     );
     module.exports = AbortController2;
-    module.exports.AbortSignal = AbortSignal2;
+    module.exports.AbortSignal = AbortSignal;
     module.exports.default = AbortController2;
   }
 });
@@ -8649,7 +8650,7 @@ var require_util3 = __commonJS({
       codes: { ERR_INVALID_ARG_TYPE }
     } = require_errors2();
     var { kResistStopPropagation, AggregateError, SymbolDispose } = require_primordials();
-    var AbortSignal2 = globalThis.AbortSignal || require_browser().AbortSignal;
+    var AbortSignal = globalThis.AbortSignal || require_browser().AbortSignal;
     var AbortController2 = globalThis.AbortController || require_browser().AbortController;
     var AsyncFunction = Object.getPrototypeOf(async function() {
     }).constructor;
@@ -8750,7 +8751,7 @@ var require_util3 = __commonJS({
           }
         };
       },
-      AbortSignalAny: AbortSignal2.any || function AbortSignalAny(signals) {
+      AbortSignalAny: AbortSignal.any || function AbortSignalAny(signals) {
         if (signals.length === 1) {
           return signals[0];
         }
@@ -22916,7 +22917,6 @@ var inspect = (v) => {
 };
 
 // src/proc/launch.ts
-init_timers();
 function spawnErrorText(err, cwd2) {
   if (!types.isNativeError(err)) return String(err);
   const code = err.code;
@@ -22941,12 +22941,12 @@ var RATE_LIMITS = {
   // nothing, so clicking again once the dialog is closed goes through.
   "claude-input.type": 1e3
 };
-function checkRateLimit(lastStartAt, category) {
+function checkRateLimit(lastStartAt, category, now2) {
   const minIntervalMs = RATE_LIMITS[category];
   if (minIntervalMs === void 0) return { allowed: true };
   const last2 = lastStartAt.get(category);
   if (last2 === void 0) return { allowed: true };
-  const sinceLastMs = Date.now() - last2;
+  const sinceLastMs = now2 - last2;
   if (sinceLastMs >= minIntervalMs) return { allowed: true };
   return { allowed: false, minIntervalMs, sinceLastMs };
 }
@@ -22984,13 +22984,17 @@ function admit(state, category, signal) {
     state.scope.stats?.onRefused(category);
     return refusal;
   }
-  state.lastStartAt.set(category, Date.now());
+  state.lastStartAt.set(category, state.scope.clock.now());
   return null;
 }
 function refusalOf(state, category, signal) {
   if (state.scope.signal.aborted) return refusedAsAborted(state.scope.signal);
   if (signal?.aborted) return refusedAsAborted(signal);
-  const gate2 = checkRateLimit(state.lastStartAt, category);
+  const gate2 = checkRateLimit(
+    state.lastStartAt,
+    category,
+    state.scope.clock.now()
+  );
   return gate2.allowed ? null : rateLimitedResult(category, gate2.minIntervalMs, gate2.sinceLastMs);
 }
 var TIMEOUT_KILL_GRACE_MS = 250;
@@ -23017,9 +23021,9 @@ function lifelineWarnings(state) {
   ];
 }
 function spawnLifeline(state) {
-  const { stats } = state.scope;
+  const { stats, clock } = state.scope;
   stats?.onStart("lifeline");
-  const t0 = Date.now();
+  const t0 = clock.now();
   let line;
   try {
     line = spawn("awk", [LIFELINE_PROGRAM], {
@@ -23027,11 +23031,11 @@ function spawnLifeline(state) {
       detached: true
     });
   } catch (err) {
-    stats?.onEnd("lifeline", Date.now() - t0);
+    stats?.onEnd("lifeline", clock.now() - t0);
     setFault(state, `did not start: ${spawnErrorText(err, void 0)}`);
     return null;
   }
-  stats?.onEnd("lifeline", Date.now() - t0);
+  stats?.onEnd("lifeline", clock.now() - t0);
   const pipe = line.stdin;
   if (pipe === null || pipe === void 0) {
     line.once(
@@ -23103,10 +23107,10 @@ function capture(stream) {
   };
 }
 async function launchWaited(state, opts) {
-  const { stats } = state.scope;
+  const { stats, clock } = state.scope;
   const refused = admit(state, opts.category, opts.signal);
   if (refused !== null) return refused;
-  const t0 = Date.now();
+  const t0 = clock.now();
   stats?.onStart(opts.category);
   return new Promise((resolve) => {
     let child;
@@ -23118,7 +23122,7 @@ async function launchWaited(state, opts) {
         detached: true
       });
     } catch (err) {
-      stats?.onEnd(opts.category, Date.now() - t0);
+      stats?.onEnd(opts.category, clock.now() - t0);
       resolve({
         ok: false,
         reason: "spawn-error",
@@ -23149,12 +23153,12 @@ async function launchWaited(state, opts) {
     const finish = (deliver) => {
       if (settled3) return;
       settled3 = true;
-      if (timer) clearTimeout(timer);
-      if (killTimer) clearTimeout(killTimer);
-      if (groupEndTimer) clearTimeout(groupEndTimer);
+      timer?.();
+      killTimer?.();
+      groupEndTimer?.();
       unlisten();
       if (group !== void 0) unguard(state, group);
-      stats?.onEnd(opts.category, Date.now() - t0);
+      stats?.onEnd(opts.category, clock.now() - t0);
       for (const pipe of [child.stdout, child.stderr]) {
         pipe?.unref();
       }
@@ -23182,34 +23186,34 @@ async function launchWaited(state, opts) {
       const awaitGroupEnd = (delayMs) => {
         if (settled3) return;
         if (groupGone(group)) {
-          setImmediate(concludeWithGroup);
+          clock.defer(concludeWithGroup);
           return;
         }
-        groupEndTimer = setTimeout(
-          () => awaitGroupEnd(Math.min(delayMs * 2, GROUP_END_POLL_MAX_MS)),
-          delayMs
+        groupEndTimer = clock.after(
+          delayMs,
+          () => awaitGroupEnd(Math.min(delayMs * 2, GROUP_END_POLL_MAX_MS))
         );
       };
       void exited.then(
-        () => setImmediate(() => awaitGroupEnd(GROUP_END_POLL_MIN_MS))
+        () => clock.defer(() => awaitGroupEnd(GROUP_END_POLL_MIN_MS))
       );
     }
     const terminate = (cause) => {
       const ended = child.exitCode !== null || child.signalCode !== null;
       if (ended && group !== void 0 && groupGone(group)) {
         terminated = cause === "aborted" ? cause : null;
-        setImmediate(concludeWithGroup);
+        clock.defer(concludeWithGroup);
         return;
       }
       terminated = cause;
-      if (timer) clearTimeout(timer);
+      timer?.();
       unlisten();
       const pid2 = child.pid;
       if (pid2 !== void 0) {
-        killTimer = setTimeout(() => {
+        killTimer = clock.after(TIMEOUT_KILL_GRACE_MS, () => {
           signal(pid2, "SIGKILL");
-          void exited.then(() => setImmediate(concludeWithGroup));
-        }, TIMEOUT_KILL_GRACE_MS);
+          void exited.then(() => clock.defer(concludeWithGroup));
+        });
         signal(pid2, "SIGTERM");
       }
     };
@@ -23249,7 +23253,7 @@ async function launchWaited(state, opts) {
     };
     child.on("close", conclude);
     if (opts.timeoutMs && opts.timeoutMs > 0) {
-      timer = setTimeout(() => terminate("timeout"), opts.timeoutMs);
+      timer = clock.after(opts.timeoutMs, () => terminate("timeout"));
     }
     opts.signal?.addEventListener("abort", onAbort, { once: true });
     state.inFlight.add(onAbort);
@@ -23259,10 +23263,10 @@ async function launchWaited(state, opts) {
   });
 }
 function launchBlocking(state, opts) {
-  const { stats } = state.scope;
+  const { stats, clock } = state.scope;
   const refused = admit(state, opts.category);
   if (refused !== null) return refused;
-  const t0 = Date.now();
+  const t0 = clock.now();
   stats?.onStart(opts.category);
   const stdio = ["pipe", "pipe", "pipe"];
   try {
@@ -23274,7 +23278,7 @@ function launchBlocking(state, opts) {
       stdio,
       encoding: "utf8"
     });
-    stats?.onEnd(opts.category, Date.now() - t0);
+    stats?.onEnd(opts.category, clock.now() - t0);
     const stdout2 = typeof result.stdout === "string" ? result.stdout : "";
     const stderr2 = typeof result.stderr === "string" ? result.stderr : "";
     const code = result.error?.code;
@@ -23303,7 +23307,7 @@ function launchBlocking(state, opts) {
       signal: result.signal ?? null
     };
   } catch (err) {
-    stats?.onEnd(opts.category, Date.now() - t0);
+    stats?.onEnd(opts.category, clock.now() - t0);
     return {
       ok: false,
       reason: "spawn-error",
@@ -23316,13 +23320,13 @@ function launchBlocking(state, opts) {
   }
 }
 function launchOrphan(state, opts) {
-  const { stats } = state.scope;
+  const { stats, clock } = state.scope;
   const refused = admit(state, opts.category);
   if (refused !== null) return refused;
-  const t0 = Date.now();
+  const t0 = clock.now();
   stats?.onStart(opts.category);
   const result = launchDetachedSyncInner(state.scope, opts);
-  stats?.onEnd(opts.category, Date.now() - t0);
+  stats?.onEnd(opts.category, clock.now() - t0);
   return result;
 }
 function launchDetachedSyncInner(scope, opts) {
@@ -23364,11 +23368,11 @@ function launchDetachedSyncInner(scope, opts) {
 var formatJobEnd = (end) => end.kind === "exit" ? `exit ${end.code}` : "timeout";
 var JOB_SCRIPT = `out=$1 err=$2 status=$3; shift 3; read go || exit 0; "$@" >"$out" 2>"$err" </dev/null; echo "exit $?" >"$status.$$" && ln "$status.$$" "$status"; rm -f "$status.$$"`;
 function launchJob(state, opts, files) {
-  const { stats } = state.scope;
+  const { stats, clock } = state.scope;
   const refused = admit(state, opts.category);
   if (refused !== null)
     return { ok: false, reason: refused.reason, error: refused.error };
-  const t0 = Date.now();
+  const t0 = clock.now();
   stats?.onStart(opts.category);
   let child;
   try {
@@ -23392,14 +23396,14 @@ function launchJob(state, opts, files) {
       }
     );
   } catch (err) {
-    stats?.onEnd(opts.category, Date.now() - t0);
+    stats?.onEnd(opts.category, clock.now() - t0);
     return {
       ok: false,
       reason: "spawn-error",
       error: spawnErrorText(err, opts.cwd)
     };
   }
-  stats?.onEnd(opts.category, Date.now() - t0);
+  stats?.onEnd(opts.category, clock.now() - t0);
   child.once("error", () => {
   });
   const pid2 = child.pid;
@@ -23457,7 +23461,7 @@ function groupGone(pid2) {
     return err.code === "ESRCH";
   }
 }
-function endJob(pid2, status, end) {
+function endJob(pid2, status, end, clock) {
   const staged = `${status}.${process_default.pid}`;
   try {
     writeFileSync(staged, `${formatJobEnd(end)}
@@ -23479,19 +23483,22 @@ function endJob(pid2, status, end) {
   }
   const signalled = signalJob(pid2, "SIGTERM");
   if (signalled) {
-    setTimeout(() => signalJob(pid2, "SIGKILL"), TIMEOUT_KILL_GRACE_MS).unref();
+    clock.after(TIMEOUT_KILL_GRACE_MS, () => signalJob(pid2, "SIGKILL"), {
+      unref: true
+    });
   }
   return { stands, signalled };
 }
-function createLauncher(owner) {
-  return launcherWithState(owner).launcher;
+function createLauncher(owner, clock) {
+  return launcherWithState(owner, clock).launcher;
 }
-function createOneShotLauncher(owner) {
-  const { launcher, state } = launcherWithState(owner);
+function createOneShotLauncher(owner, clock) {
+  const { launcher, state } = launcherWithState(owner, clock);
   return { ...launcher, launchSync: (opts) => launchBlocking(state, opts) };
 }
-function launcherWithState(owner) {
+function launcherWithState(owner, clock) {
   const launcher = {
+    clock,
     launch: (opts) => track(state, launchWaited(state, opts)),
     launchDetachedSync: (opts) => launchOrphan(state, opts),
     launchJobSync: (opts, files) => launchJob(state, opts, files),
@@ -23517,7 +23524,8 @@ function launcherWithState(owner) {
       // A launcher with nobody to tell says the warning on stderr.
       observeLifeline: () => launcher.lifelineWarnings().forEach((w) => process_default.emitWarning(w.message)),
       signal: new AbortController().signal,
-      ...owner
+      ...owner,
+      clock
     },
     lastStartAt: /* @__PURE__ */ new Map(),
     inFlight: /* @__PURE__ */ new Set(),
@@ -23538,6 +23546,68 @@ function launcherWithState(owner) {
   return { launcher, state };
 }
 
+// src/time.ts
+init_globals();
+init_timers();
+var systemTimekeeper = {
+  now: () => Date.now(),
+  monotonic: () => performance.now(),
+  after: (ms, fire, options) => {
+    const timer = setTimeout(fire, ms);
+    if (options?.unref) {
+      timer.unref();
+    }
+    return () => clearTimeout(timer);
+  },
+  every: (ms, fire, options) => {
+    const timer = setInterval(fire, ms);
+    if (options?.unref) {
+      timer.unref();
+    }
+    return () => clearInterval(timer);
+  },
+  defer: (fire) => {
+    const turn = setImmediate(fire);
+    return () => clearImmediate(turn);
+  }
+};
+function sleep(clock, ms, signal) {
+  return new Promise((resolve, reject2) => {
+    const aborted = () => Object.assign(new Error("The operation was aborted"), {
+      name: "AbortError",
+      code: "ABORT_ERR",
+      cause: signal?.reason
+    });
+    if (signal?.aborted) {
+      reject2(aborted());
+      return;
+    }
+    const onAbort = () => {
+      cancel();
+      reject2(aborted());
+    };
+    const cancel = clock.after(ms, () => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    });
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+function timeoutSignal(clock, ms) {
+  const timeout = new AbortController();
+  clock.after(
+    ms,
+    () => timeout.abort(
+      new DOMException(
+        "The operation was aborted due to timeout",
+        "TimeoutError"
+      )
+    ),
+    { unref: true }
+  );
+  return timeout.signal;
+}
+
 // src/host.ts
 function processWorld() {
   const host = {
@@ -23545,7 +23615,12 @@ function processWorld() {
     home: os_default.homedir(),
     tmp: os_default.tmpdir()
   };
-  return { host, launcher: createOneShotLauncher({ inherited: process_default.env }) };
+  const clock = systemTimekeeper;
+  return {
+    host,
+    launcher: createOneShotLauncher({ inherited: process_default.env }, clock),
+    clock
+  };
 }
 
 // src/click/read.ts
@@ -24232,7 +24307,7 @@ function makeLimits(deps) {
   let latest = { kind: "unmeasured" };
   let inFlight = null;
   let disarmed = false;
-  let timer;
+  let clearTimer;
   function check() {
     inFlight ??= measure3().finally(() => {
       inFlight = null;
@@ -24252,7 +24327,7 @@ function makeLimits(deps) {
       "warn",
       `${chargeWords(charge)} > limit ${mb(limit)} MB (rss ${mb(rss)} MB, v8 heap ${mb(heapTotal)} MB); recording memory then shutting down`
     );
-    const stamp2 = new Date(deps.now()).toISOString().replace(/[:.]/g, "-");
+    const stamp2 = new Date(deps.clock.now()).toISOString().replace(/[:.]/g, "-");
     const identity2 = `${stamp2}-${deps.pid}`;
     await attempt(deps.log, "memory report", async () => {
       const file = artifactFile(deps.snapshotDir, "memoryReport", identity2);
@@ -24309,14 +24384,15 @@ function makeLimits(deps) {
         deps.log("warn", `memory check failed: ${e.message}`);
       }
       if (disarmed) return;
-      timer = setTimeout(() => void tick(), intervalMs);
-      timer.unref();
+      clearTimer = deps.clock.after(intervalMs, () => void tick(), {
+        unref: true
+      });
     };
     void tick();
   }
   function disarm() {
     disarmed = true;
-    clearTimeout(timer);
+    clearTimer?.();
   }
   return { check, describeNextRestart, serving, arm: arm2, disarm };
 }
@@ -24358,7 +24434,7 @@ function postMortemsOf(files) {
 function realLimitsDeps(startedAtMs, shutdown, owner, overrides = {}) {
   const dir = owner.snapshotDir;
   return {
-    now: () => Date.now(),
+    clock: owner.clock,
     pid: process_default.pid,
     snapshotDir: dir,
     log: owner.log,
@@ -25304,11 +25380,11 @@ function compareVersions([aMajor, aMinor, aPatch], [bMajor, bMinor, bPatch]) {
 var REGISTRY_URL = "https://registry.npmjs.org";
 var PACKAGE_NAME = "@promptctl/cc-candybar";
 var REGISTRY_TIMEOUT_MS = 5e3;
-async function fetchLatestVersion(packageName, fetchImpl, registryUrl) {
+async function fetchLatestVersion(packageName, fetchImpl, registryUrl, clock) {
   const url = `${registryUrl}/-/package/${encodeURIComponent(packageName)}/dist-tags`;
   try {
     const res = await fetchImpl(url, {
-      signal: AbortSignal.timeout(REGISTRY_TIMEOUT_MS)
+      signal: timeoutSignal(clock, REGISTRY_TIMEOUT_MS)
     });
     if (!res.ok) {
       return failed(`registry responded ${res.status} for ${url}`);
@@ -47244,8 +47320,10 @@ var WatcherRegistry = class {
   dirs = /* @__PURE__ */ new Map();
   counters;
   logger;
+  clock;
   closed = false;
-  constructor(opts = {}) {
+  constructor(opts) {
+    this.clock = opts.clock;
     this.counters = opts.counters;
     this.logger = opts.logger ?? defaultLogger;
   }
@@ -47461,21 +47539,24 @@ var WatcherRegistry = class {
     }
     const debounce = {
       window: invalidation,
-      timer: setTimeout(() => {
-        slot.debounce = null;
-        for (const holder of slot.holders) {
-          try {
-            holder.onInvalidate(debounce.window);
-          } catch (e) {
-            this.logger(
-              "warn",
-              `watcher invalidate threw key=${valueOf(slot.key)}: ${e.message}`
-            );
+      cancel: this.clock.after(
+        DEBOUNCE_MS,
+        () => {
+          slot.debounce = null;
+          for (const holder of slot.holders) {
+            try {
+              holder.onInvalidate(debounce.window);
+            } catch (e) {
+              this.logger(
+                "warn",
+                `watcher invalidate threw key=${valueOf(slot.key)}: ${e.message}`
+              );
+            }
           }
-        }
-      }, DEBOUNCE_MS)
+        },
+        { unref: true }
+      )
     };
-    debounce.timer.unref();
     slot.debounce = debounce;
   }
   makeHandle(slot, holder) {
@@ -47507,7 +47588,7 @@ var WatcherRegistry = class {
   // A directory watch closes with the last slot on it.
   closeSlot(slot, cause) {
     if (slot.debounce !== null) {
-      clearTimeout(slot.debounce.timer);
+      slot.debounce.cancel();
       slot.debounce = null;
     }
     for (const listener of slot.listeners) {
@@ -47568,13 +47649,15 @@ var FileEventDelivery = class {
   watchers;
   logger;
   identityOf;
+  clock;
   constructor(opts) {
     this.watchers = opts.watchers;
     this.logger = opts.logger;
+    this.clock = opts.clock;
     this.identityOf = opts.identityOf ?? statIdentity;
     this.current = {
       kind: "unmeasured",
-      since: Date.now(),
+      since: this.clock.now(),
       reason: "not started",
       missedSince: null
     };
@@ -47592,28 +47675,33 @@ var FileEventDelivery = class {
     if (this.instrument.kind !== "idle") {
       throw new Error("file events: the owner was started twice");
     }
-    const period = setInterval(() => void this.tick(), PROBE_EVERY_MS);
-    period.unref();
+    const stopPeriod = this.clock.every(
+      PROBE_EVERY_MS,
+      () => void this.tick(),
+      {
+        unref: true
+      }
+    );
     let identity2;
     try {
       fs_default.mkdirSync(folder, { recursive: true });
       identity2 = this.identityOf(folder);
     } catch (e) {
       this.end(
-        period,
+        stopPeriod,
         `the probe folder could not be made: ${e.message}`
       );
       return;
     }
     if (identity2 === "gone") {
-      this.end(period, "the probe folder was removed as it was made");
+      this.end(stopPeriod, "the probe folder was removed as it was made");
       return;
     }
     const probing = {
       kind: "probing",
       folder,
       identity: identity2,
-      period,
+      stopPeriod,
       // [LAW:single-enforcer] The only acquirer of this registry key.
       handle: this.watchers.acquire(
         `file-events:${folder}`,
@@ -47626,7 +47714,7 @@ var FileEventDelivery = class {
     const [refusal] = probing.handle.deaf;
     if (refusal !== void 0) {
       this.end(
-        period,
+        stopPeriod,
         `the OS refused the probe folder's watch: ${refusal.reason}`
       );
       return;
@@ -47650,10 +47738,10 @@ var FileEventDelivery = class {
     switch (inst.kind) {
       case "probing":
         inst.handle.release();
-        clearInterval(inst.period);
+        inst.stopPeriod();
         return;
       case "ended":
-        clearInterval(inst.period);
+        inst.stopPeriod();
         return;
       case "idle":
         return;
@@ -47673,17 +47761,17 @@ var FileEventDelivery = class {
       now2 = this.identityOf(inst.folder);
     } catch (e) {
       this.end(
-        inst.period,
+        inst.stopPeriod,
         `the probe folder cannot be read: ${e.message}`
       );
       return;
     }
     if (now2 === "gone") {
-      this.end(inst.period, "the probe folder was removed");
+      this.end(inst.stopPeriod, "the probe folder was removed");
       return;
     }
     if (!sameIdentity(now2, inst.identity)) {
-      this.end(inst.period, "the probe folder was replaced");
+      this.end(inst.stopPeriod, "the probe folder was replaced");
       return;
     }
     const d = this.current;
@@ -47703,7 +47791,7 @@ var FileEventDelivery = class {
   // with its error: it tests no watch. A probe still in flight when the
   // instrument ends or closes judges nothing.
   async probe(inst) {
-    const at = Date.now();
+    const at = this.clock.now();
     const before = this.current;
     if (before.kind === "delivering") {
       this.current = { ...before, unreported: [...before.unreported, at] };
@@ -47740,7 +47828,10 @@ var FileEventDelivery = class {
   heard(inst, heard) {
     if (this.instrument !== inst) return;
     if (heard.kind === "failed") {
-      this.end(inst.period, `the probe folder's watch failed: ${heard.reason}`);
+      this.end(
+        inst.stopPeriod,
+        `the probe folder's watch failed: ${heard.reason}`
+      );
       return;
     }
     const d = this.current;
@@ -47757,17 +47848,17 @@ var FileEventDelivery = class {
     this.catchUps++;
     this.logger(
       "info",
-      `file events resumed since=${iso(d.missedSince)} missed=${Date.now() - d.missedSince}ms from=${d.kind}`
+      `file events resumed since=${iso(d.missedSince)} missed=${this.clock.now() - d.missedSince}ms from=${d.kind}`
     );
     this.notify({ kind: "caught-up", since: d.missedSince });
   }
   // [LAW:no-silent-failure] An ended instrument holds no watch and never
   // measures again, so whatever ended it, only a restart can.
-  end(period, reason) {
+  end(stopPeriod, reason) {
     const inst = this.instrument;
     if (inst.kind === "probing") inst.handle.release();
-    this.instrument = { kind: "ended", period };
-    const at = Date.now();
+    this.instrument = { kind: "ended", stopPeriod };
+    const at = this.clock.now();
     this.move({
       kind: "unmeasured",
       since: at,
@@ -47820,9 +47911,6 @@ function fileEventsWarnings(d) {
   };
   return [{ kind: "file-events", state: d.kind, message: message() }];
 }
-
-// src/var-system/sources.ts
-init_timers();
 
 // node_modules/.pnpm/mobx@7.0.6/node_modules/mobx/dist/mobx.mjs
 init_globals();
@@ -52014,15 +52102,17 @@ function readPending(e) {
 init_globals();
 var unwritten = (value) => value === PENDING;
 var BoxNode = class {
-  constructor(name, type3, initial2) {
+  constructor(name, type3, initial2, clock) {
     this.name = name;
     this.type = type3;
+    this.clock = clock;
     if (!unwritten(initial2)) assertType(name, type3, initial2, "initial value");
     this.cell = observable.box(initial2, { deep: false });
-    this.lastChangedAt = unwritten(initial2) ? null : Date.now();
+    this.lastChangedAt = unwritten(initial2) ? null : clock.now();
   }
   name;
   type;
+  clock;
   kind = "box";
   cell;
   // [LAW:single-enforcer] One write path (`set`) updates both the value and
@@ -52053,7 +52143,7 @@ var BoxNode = class {
     if (!unwritten(value)) assertType(this.name, this.type, value, "set value");
     if (Object.is(this.cell.get(), value)) return;
     this.cell.set(value);
-    this.lastChangedAt = Date.now();
+    this.lastChangedAt = this.clock.now();
   }
   lastUpdatedMs() {
     return this.lastChangedAt;
@@ -52158,12 +52248,14 @@ var ProjectionNode = class {
   }
 };
 var DocumentCell = class {
-  constructor(name, initial2) {
+  constructor(name, initial2, clock) {
     this.name = name;
+    this.clock = clock;
     this.cell = observable.box(shaped(initial2), { deep: false });
-    this.lastChangedAt = initial2.kind === "pending" ? null : Date.now();
+    this.lastChangedAt = initial2.kind === "pending" ? null : clock.now();
   }
   name;
+  clock;
   kind = "document";
   cell;
   lastChangedAt;
@@ -52174,7 +52266,7 @@ var DocumentCell = class {
     const next = shaped(value);
     if (sameDocument(this.cell.get(), next)) return;
     this.cell.set(next);
-    this.lastChangedAt = Date.now();
+    this.lastChangedAt = this.clock.now();
   }
   lastUpdatedMs() {
     return this.lastChangedAt;
@@ -52220,9 +52312,13 @@ function assertType(name, declared, value, context) {
   }
 }
 var VariableStore = class {
-  constructor(parent = null) {
+  // [LAW:one-source-of-truth] `clock` stamps when each box and document last
+  // changed; a child store reads the same one as its parent.
+  constructor(clock, parent = null) {
+    this.clock = clock;
     this.parent = parent;
   }
+  clock;
   parent;
   // [LAW:no-ambient-temporal-coupling] Which names are declared is itself
   // observable: a reaction that read a name before its declaration (a cache
@@ -52233,10 +52329,10 @@ var VariableStore = class {
     deep: false
   });
   defineBox(name, type3, initial2) {
-    this.declare(name, new BoxNode(name, type3, initial2));
+    this.declare(name, new BoxNode(name, type3, initial2, this.clock));
   }
   defineDocument(name, initial2) {
-    this.declare(name, new DocumentCell(name, initial2));
+    this.declare(name, new DocumentCell(name, initial2, this.clock));
   }
   // A document whose reading the deriver computes from what it reads.
   defineDerivedDocument(name, deriver) {
@@ -53649,15 +53745,20 @@ var PathWatches = class {
 };
 var derived = (filePath2) => watchTargetsOf({ named: [filePath2], whole: [filePath2] });
 var TtlBucketManager = class {
+  constructor(clock) {
+    this.clock = clock;
+  }
+  clock;
+  // `stop` clears the bucket's timer.
   buckets = /* @__PURE__ */ new Map();
   subscribe(durationMs, callback) {
     let entry = this.buckets.get(durationMs);
     if (!entry) {
       const callbacks = /* @__PURE__ */ new Set();
-      const timer = setInterval(() => {
+      const stop2 = this.clock.every(durationMs, () => {
         for (const cb of callbacks) cb();
-      }, durationMs);
-      entry = { timer, callbacks };
+      });
+      entry = { stop: stop2, callbacks };
       this.buckets.set(durationMs, entry);
     }
     entry.callbacks.add(callback);
@@ -53668,12 +53769,12 @@ var TtlBucketManager = class {
     if (!entry) return;
     entry.callbacks.delete(callback);
     if (entry.callbacks.size === 0) {
-      clearInterval(entry.timer);
+      entry.stop();
       this.buckets.delete(durationMs);
     }
   }
   dispose() {
-    for (const { timer } of this.buckets.values()) clearInterval(timer);
+    for (const { stop: stop2 } of this.buckets.values()) stop2();
     this.buckets.clear();
   }
   bucketCount() {
@@ -53739,7 +53840,9 @@ var SourceRegistry = class _SourceRegistry {
   // sessionState lets the daemon inject its singleton so state-kind variables
   // share one MobX atom and one disk-persistence layer with the click verbs.
   // Omitted in tests that don't exercise state vars.
-  constructor(launcher, store, defaultEmptyValue = "", sessionState, parent = null, ledger = new RefreshLedger(), fileEvents = NO_FILE_EVENTS, watchers = new WatcherRegistry(), env2 = {}) {
+  constructor(launcher, store, defaultEmptyValue = "", sessionState, parent = null, ledger = new RefreshLedger(), fileEvents = NO_FILE_EVENTS, watchers = new WatcherRegistry({
+    clock: store.clock
+  }), env2 = {}) {
     this.launcher = launcher;
     this.store = store;
     this.defaultEmptyValue = defaultEmptyValue;
@@ -53749,6 +53852,7 @@ var SourceRegistry = class _SourceRegistry {
     this.watchers = watchers;
     this.env = env2;
     this.sessionState = sessionState;
+    this.ttlMgr = new TtlBucketManager(store.clock);
     this.watchMgr = new PathWatches(watchers, fileEvents);
   }
   launcher;
@@ -53772,7 +53876,7 @@ var SourceRegistry = class _SourceRegistry {
   });
   // Triggers for shell/file cache policies and the time source's tick:
   watchMgr;
-  ttlMgr = new TtlBucketManager();
+  ttlMgr;
   // Collects all cleanup callbacks (TTL unsubscribes, watch unsubscribes,
   // MobX reaction disposers) so dispose() tears everything down in one call.
   cleanups = [];
@@ -53850,7 +53954,7 @@ var SourceRegistry = class _SourceRegistry {
   view() {
     return new _SourceRegistry(
       this.launcher,
-      new VariableStore(this.store),
+      new VariableStore(this.store.clock, this.store),
       this.defaultEmptyValue,
       this.sessionState,
       this,
@@ -54044,11 +54148,11 @@ var SourceRegistry = class _SourceRegistry {
   documentPublisher(name, varDefault, where) {
     const fallback = varDefault === void 0 ? PENDING : ok(varDefault);
     this.store.defineDocument(name, fallback);
-    let settling;
+    let clearSettling;
     let showingRead = false;
-    this.cleanups.push(() => clearTimeout(settling));
+    this.cleanups.push(() => clearSettling?.());
     return (raw) => {
-      clearTimeout(settling);
+      clearSettling?.();
       const read2 = raw.kind === "ok" && raw.value.trim() === "" ? ABSENT : raw;
       const outcome = parsed(read2, jsonParser, where);
       this.noteOutcome(name, outcome);
@@ -54059,7 +54163,7 @@ var SourceRegistry = class _SourceRegistry {
         this.store.setDocument(name, next);
       };
       if (torn2) {
-        settling = setTimeout(show2, TORN_WRITE_SETTLE_MS);
+        clearSettling = this.store.clock.after(TORN_WRITE_SETTLE_MS, show2);
       } else {
         show2();
       }
@@ -54070,13 +54174,13 @@ var SourceRegistry = class _SourceRegistry {
     this.askedBy.set(name, by);
     const trigger = this.reads.run(name, () => {
       const asked2 = this.askedBy.get(name) ?? by;
-      const startedAt = Date.now();
+      const startedAt = this.store.clock.now();
       return reader.read().then(
         (read2) => refreshes.recorded(
           `where=${valueOf(reader.where)}`,
           asked2,
           publish(read2),
-          Date.now() - startedAt
+          this.store.clock.now() - startedAt
         ),
         (err) => {
           if (err !== this.abort.signal.reason) throw err;
@@ -54136,7 +54240,7 @@ var SourceRegistry = class _SourceRegistry {
   // passed: empty when all settled. The state a one-shot render awaits so it
   // renders what those sources yielded, never a guessed delay.
   settled(withinMs) {
-    return this.inFlight(AbortSignal.timeout(withinMs));
+    return this.inFlight(timeoutSignal(this.store.clock, withinMs));
   }
   // template: a variable whose value is derived by evaluating a go-template
   // against the current variable store.  MobX auto-tracks every store.read()
@@ -54389,7 +54493,10 @@ var SourceRegistry = class _SourceRegistry {
     return "";
   }
   recordError(name, message) {
-    this.lastErrors.set(name, { timestamp: Date.now(), message });
+    this.lastErrors.set(name, {
+      timestamp: this.store.clock.now(),
+      message
+    });
   }
   // The one fold from a policy's own outcome — whether it can fire — to the
   // variable's standing fault.
@@ -54400,7 +54507,7 @@ var SourceRegistry = class _SourceRegistry {
       if (outcome.kind !== "failed") this.policyFaults.delete(name);
       else if (this.policyFaults.get(name)?.message !== outcome.reason)
         this.policyFaults.set(name, {
-          timestamp: Date.now(),
+          timestamp: this.store.clock.now(),
           message: outcome.reason
         });
     });
@@ -66398,10 +66505,6 @@ async function answered(read2) {
     await current.landed;
   }
 }
-var afterRealTime = (ms, fire) => {
-  const timer = setTimeout(fire, ms);
-  return () => clearTimeout(timer);
-};
 function waitWithin(work, ms, late, after) {
   const wait = new AbortController();
   const clear = after(Math.max(0, ms), () => wait.abort());
@@ -66679,7 +66782,7 @@ async function refreshPayload(inputs, at, refreshed) {
   const session = deps.usageStore.request(sessionId2, hookData2.transcript_path);
   const lane = async (name, needed, run3) => {
     if (!needed) return;
-    const startedAt = performance.now();
+    const startedAt = deps.clock.monotonic();
     refreshed.set(name, null);
     let threw2 = null;
     try {
@@ -66688,7 +66791,7 @@ async function refreshPayload(inputs, at, refreshed) {
       deps.log("error", `${name} lane threw: ${inspect(e)}`);
       threw2 = `${name}: ${String(e)}`;
     }
-    refreshed.set(name, Math.round(performance.now() - startedAt));
+    refreshed.set(name, Math.round(deps.clock.monotonic() - startedAt));
     deps.faults.refreshed(sessionId2, name, threw2);
   };
   await Promise.all([
@@ -69112,7 +69215,14 @@ var ROLLING_WINDOW_MS = 6e4;
 var ROLLING_BUFFER_CAP = 16384;
 var HISTOGRAM_CAP = 16;
 var RuntimeStats = class _RuntimeStats {
-  startedAt = /* @__PURE__ */ new Date();
+  // [LAW:one-source-of-truth] The daemon's clock, which these counters read
+  // like everything else the daemon times.
+  constructor(clock) {
+    this.clock = clock;
+    this.startedAt = new Date(clock.now());
+  }
+  clock;
+  startedAt;
   requestsTotal = 0;
   requestsErrored = 0;
   requestsTimedOut = 0;
@@ -69174,7 +69284,7 @@ var RuntimeStats = class _RuntimeStats {
     }
   };
   recordRollingNow() {
-    const now2 = Date.now();
+    const now2 = this.clock.now();
     if (this.rollingTimestamps.length < ROLLING_BUFFER_CAP) {
       this.rollingTimestamps.push(now2);
       return;
@@ -69197,7 +69307,7 @@ var RuntimeStats = class _RuntimeStats {
     this.subprocessHistogramRotator.set(category, idx + 1);
   }
   snapshotSubprocesses() {
-    const cutoff = Date.now() - ROLLING_WINDOW_MS;
+    const cutoff = this.clock.now() - ROLLING_WINDOW_MS;
     let lastMinute = 0;
     for (const ts of this.rollingTimestamps) {
       if (ts >= cutoff) lastMinute++;
@@ -69237,7 +69347,7 @@ var RuntimeStats = class _RuntimeStats {
   // one reads; comparing against the producer's own output, not a second
   // spelling of the type, means a field added here is checked for there.
   static referenceSnapshot() {
-    return new _RuntimeStats().snapshot({
+    return new _RuntimeStats({ now: () => 0 }).snapshot({
       gitCache: {
         size: 0,
         held: 0,
@@ -69326,7 +69436,9 @@ var RuntimeStats = class _RuntimeStats {
       sourceDigest: extras.sourceDigest,
       protocolVersion: PROTOCOL_VERSION,
       startedAt: this.startedAt.toISOString(),
-      uptimeSec: Math.floor((Date.now() - this.startedAt.getTime()) / 1e3),
+      uptimeSec: Math.floor(
+        (this.clock.now() - this.startedAt.getTime()) / 1e3
+      ),
       rssBytes: mem.rss,
       heapUsedBytes: mem.heapUsed,
       heapTotalBytes: mem.heapTotal,
@@ -69592,7 +69704,7 @@ async function clickHandoff(launcher, opts, what, log, boundMs, tmp) {
       return;
     }
     job.release();
-    const deadline = performance.now() + boundMs;
+    const deadline = launcher.clock.monotonic() + boundMs;
     for (; ; ) {
       const alive = jobGroupAlive(job.pid);
       const end = readJobEnd(files.status);
@@ -69614,14 +69726,14 @@ async function clickHandoff(launcher, opts, what, log, boundMs, tmp) {
         throw new Error(
           `${what} failed (lost): the opener ended with no verdict`
         );
-      if (performance.now() >= deadline) {
+      if (launcher.clock.monotonic() >= deadline) {
         log(
           "info",
           `${opts.category} handed off at ${boundMs}ms, pid ${job.pid}`
         );
         return;
       }
-      await new Promise((resolve) => setTimeout(resolve, HANDOFF_POLL_MS));
+      await sleep(launcher.clock, HANDOFF_POLL_MS);
     }
   } finally {
     rmSync(dir, { recursive: true, force: true, maxRetries: 3 });
@@ -70915,7 +71027,7 @@ var Runs = class {
     this.inFlight.add(abort);
     this.started++;
     const [program, ...args] = run3.argv;
-    const startedAt = Date.now();
+    const startedAt = this.deps.clock.now();
     void this.deps.launch({
       // [LAW:types-are-the-program] A relative program path is the
       // declaring file's, as the directory it runs in is; a bare name is
@@ -70927,7 +71039,9 @@ var Runs = class {
       timeoutMs: this.timeoutMs,
       signal: abort.signal,
       category: "click.run"
-    }).then((result) => this.ended(run3, result, Date.now() - startedAt)).finally(() => {
+    }).then(
+      (result) => this.ended(run3, result, this.deps.clock.now() - startedAt)
+    ).finally(() => {
       this.inFlight.delete(abort);
       for (const resume of resumes) resume();
     });
@@ -75301,7 +75415,7 @@ var FrameFeeds = class {
     };
   }
   open(sessionId2) {
-    const now2 = this.deps.now();
+    const now2 = this.deps.clock.monotonic();
     const feed = {
       sessionId: sessionId2,
       followers: /* @__PURE__ */ new Map(),
@@ -75346,7 +75460,7 @@ var FrameFeeds = class {
       this.hasten(feed);
       return;
     }
-    if (feed.phase.kind === "due") clearTimeout(feed.phase.timer);
+    if (feed.phase.kind === "due") feed.phase.clear();
     feed.unwatch();
     feed.unpin();
     this.feeds.delete(feed.sessionId);
@@ -75368,7 +75482,7 @@ var FrameFeeds = class {
   // one frame to the next. Its moment on the monotonic clock is that instant's.
   draw(feed, due) {
     feed.phase = { kind: "drawing" };
-    const started2 = this.deps.now();
+    const started2 = this.deps.clock.monotonic();
     const wall = this.deps.instant();
     const at = Math.min(
       Math.max(due, wall),
@@ -75399,7 +75513,7 @@ var FrameFeeds = class {
       return;
     }
     feed.lastStart = moment2;
-    const finished = this.deps.now();
+    const finished = this.deps.clock.monotonic();
     this.drawn++;
     feed.drawn++;
     feed.drawMs += finished - started2;
@@ -75450,7 +75564,7 @@ var FrameFeeds = class {
   hasten(feed) {
     const { phase } = feed;
     if (phase.kind === "drawing") return false;
-    const now2 = this.deps.now();
+    const now2 = this.deps.clock.monotonic();
     const at = Math.max(now2, feed.lastStart + this.spacingOf(feed));
     if (phase.kind === "due" && phase.at <= at) return false;
     const wall = this.deps.instant();
@@ -75464,14 +75578,17 @@ var FrameFeeds = class {
   // its monotonic due time is what a wake compares against.
   arm(feed, due, wall) {
     const delay = Math.max(0, (due - wall) * 1e3);
-    this.setTimer(feed, due, this.deps.now() + delay, delay);
+    this.setTimer(feed, due, this.deps.clock.monotonic() + delay, delay);
   }
   setTimer(feed, due, dueMoment, delay) {
-    if (feed.phase.kind === "due") clearTimeout(feed.phase.timer);
+    if (feed.phase.kind === "due") feed.phase.clear();
     feed.phase = {
       kind: "due",
       at: dueMoment,
-      timer: setTimeout(() => this.fire(feed, due, dueMoment), delay)
+      clear: this.deps.clock.after(
+        delay,
+        () => this.fire(feed, due, dueMoment)
+      )
     };
   }
   // [LAW:no-ambient-temporal-coupling] A timer that fires before its moment on
@@ -75484,7 +75601,7 @@ var FrameFeeds = class {
   // not asked, so a wall stepped back, which leaves the monotonic moment
   // reached, still draws and is followed by `draw`.
   fire(feed, due, dueMoment) {
-    const remaining = dueMoment - this.deps.now();
+    const remaining = dueMoment - this.deps.clock.monotonic();
     if (remaining > 0) this.setTimer(feed, due, dueMoment, remaining);
     else this.draw(feed, due);
   }
@@ -75553,7 +75670,7 @@ var FrameFeeds = class {
   // whichever session's: a frame refreshes nothing, so it bounds what the
   // feed's `drawn=` frames could have read fresh, and is never their own.
   summarize(feed, state) {
-    const now2 = this.deps.now();
+    const now2 = this.deps.clock.monotonic();
     const refreshes = this.deps.refreshes();
     const seconds = (now2 - feed.since) / 1e3;
     const achieved = seconds === 0 ? "-" : `${(feed.drawn / seconds).toFixed(1)}fps`;
@@ -75643,7 +75760,7 @@ var RENDER_ANSWERS = {
 };
 function renderFrame(parts, sessionId2, fps, at) {
   const { clock, frameFeeds } = parts;
-  const started2 = clock.date().getTime();
+  const started2 = clock.now();
   const facts = [];
   try {
     var _stack = [];
@@ -75682,7 +75799,7 @@ function renderFrame(parts, sessionId2, fps, at) {
       "render",
       facts,
       outcome,
-      clock.date().getTime() - started2
+      clock.now() - started2
     );
     const failed2 = renderFailed(error);
     return {
@@ -76425,7 +76542,7 @@ function introspectVars(state) {
       source: sourceByName.get(name) ?? null,
       ...value,
       lastError: err !== void 0 ? { timestampMs: err.timestamp, message: err.message } : null,
-      ageMs: ageFromNode(node.lastUpdatedMs())
+      ageMs: ageFromNode(node.lastUpdatedMs(), store.clock)
     });
   }
   return out;
@@ -76456,9 +76573,9 @@ function valueOf2(node) {
       return { type: "document", value: doc.reason };
   }
 }
-function ageFromNode(lastUpdatedMs) {
+function ageFromNode(lastUpdatedMs, clock) {
   if (lastUpdatedMs === null) return null;
-  return Math.max(0, Date.now() - lastUpdatedMs);
+  return Math.max(0, clock.now() - lastUpdatedMs);
 }
 function buildSourceKindIndex(config2) {
   const index = /* @__PURE__ */ new Map();
@@ -76694,7 +76811,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
         dirWatchesActive: watcherRegistry.dirWatches(),
         nextRestartReason: limits.describeNextRestart(),
         handlerProbes: handlerProbes.list(),
-        clients: renderSightings.list(instantOf(clock.date())),
+        clients: renderSightings.list(instantOf(new Date(clock.now()))),
         bundle,
         sourceDigest: sourceDigest2,
         daemon: limits.serving(),
@@ -76703,7 +76820,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     });
   }
   if (req.kind === "render") {
-    const started2 = clock.date();
+    const started2 = new Date(clock.now());
     const at = instantOf(started2);
     const t0 = clock.monotonic();
     const queuedMs = Math.round(t0 - accepted);
@@ -77098,8 +77215,8 @@ function removeAct(dir, act) {
   }
   fs_default.rmSync(leaving, { recursive: true, force: true });
 }
-var bootedAt = () => Date.now() - os_default.uptime() * 1e3;
-async function isRecordedJob(record2, read2, boot = bootedAt()) {
+var bootedAt = (clock) => clock.now() - os_default.uptime() * 1e3;
+async function isRecordedJob(record2, read2, boot) {
   if (record2.started <= boot || !jobGroupAlive(record2.pid)) return false;
   const leader = await read2(record2.pid);
   return record2.startTime === null || leader.kind === "unavailable" || leader.token === record2.startTime;
@@ -77113,14 +77230,18 @@ function readRecord(actDir) {
   }
 }
 var sameJob = (a, b) => a.pid === b.pid && a.startTime === b.startTime;
-function makeActReader(dir, read2) {
+function makeActReader(dir, read2, clock) {
   let known = null;
   async function factsOf2(act) {
     const actDir = import_node_path34.default.join(dir, String(act));
     const record2 = readRecord(actDir);
     if (record2 === null) return null;
     if (known === null || !sameJob(known.record, record2)) {
-      known = { record: record2, ours: await isRecordedJob(record2, read2), final: null };
+      known = {
+        record: record2,
+        ours: await isRecordedJob(record2, read2, bootedAt(clock)),
+        final: null
+      };
     }
     if (known.final !== null) return known.final;
     known.ours = known.ours && jobGroupAlive(record2.pid);
@@ -77199,9 +77320,9 @@ var CLAIMED_FIRST = {
   ok: false,
   reason: "another act claimed this bundle first"
 };
-function endOverdue(dir, facts) {
+function endOverdue(dir, facts, clock) {
   const status = filesOf(import_node_path34.default.join(dir, String(facts.act))).status;
-  return endJob(facts.record.pid, status, { kind: "timeout" });
+  return endJob(facts.record.pid, status, { kind: "timeout" }, clock);
 }
 
 // src/daemon/update-notice.ts
@@ -77400,6 +77521,7 @@ function describeRelease(c) {
 }
 function makeUpdateWatch(opts) {
   const {
+    clock,
     launcher,
     entryUrl,
     digest: digest2,
@@ -77419,7 +77541,7 @@ function makeUpdateWatch(opts) {
     if (closed) throw new DaemonClosing("apply-update");
     return read2;
   };
-  const acts = makeActReader(actsDir2, readStart);
+  const acts = makeActReader(actsDir2, readStart, clock);
   let seen = null;
   let gate2 = null;
   const logBuild = changeLogger(log);
@@ -77429,8 +77551,7 @@ function makeUpdateWatch(opts) {
   let closed = false;
   const armed = [];
   const every = (run3, ms) => {
-    const timer = setInterval(run3, ms).unref();
-    armed.push(() => clearInterval(timer));
+    armed.push(clock.every(ms, run3, { unref: true }));
   };
   const current = () => closed ? null : updateOf(build, release3);
   function syncGate() {
@@ -77452,7 +77573,8 @@ function makeUpdateWatch(opts) {
     const latest = await fetchLatestVersion(
       PACKAGE_NAME,
       fetchImpl,
-      registryUrl
+      registryUrl,
+      clock
     );
     release3 = assessCurrency(PACKAGE_VERSION, latest);
     logRelease(describeRelease(release3));
@@ -77475,8 +77597,8 @@ function makeUpdateWatch(opts) {
     }
   }
   function endIfOverdue(facts) {
-    if (!facts?.alive || Date.now() <= facts.record.deadline) return;
-    const { stands, signalled } = endOverdue(actsDir2, facts);
+    if (!facts?.alive || clock.now() <= facts.record.deadline) return;
+    const { stands, signalled } = endOverdue(actsDir2, facts, clock);
     const why2 = stands ? "timed out" : "outlived its verdict";
     const ending = signalled ? "ending it" : "its group took no signal";
     log("error", `apply-update: act ${facts.act} ${why2}; ${ending}`);
@@ -77504,18 +77626,17 @@ function makeUpdateWatch(opts) {
     }
     seen = next;
   }
-  let tickTimer;
+  let clearTick;
   async function tick() {
     await actTurn(watchAct);
     if (closed) return;
-    tickTimer = setTimeout(() => void tick(), ACT_POLL_MS);
-    tickTimer.unref();
+    clearTick = clock.after(ACT_POLL_MS, () => void tick(), { unref: true });
   }
   return {
     arm() {
       sampleBuild();
       every(sampleBuild, intervalMs);
-      armed.push(() => clearTimeout(tickTimer));
+      armed.push(() => clearTick?.());
       void tick();
       if (build.kind === "not-source-checkout") {
         void pollRelease();
@@ -77556,7 +77677,7 @@ function makeUpdateWatch(opts) {
         updateIdentity(update),
         { ...facts.command, category: "update.apply" },
         ACT_TIMEOUT_MS,
-        Date.now(),
+        clock.now(),
         readStart
       );
       if (!claim.ok) {
@@ -77585,15 +77706,15 @@ function sameStamp(a, b) {
   return a.kind === "ok" && b.kind === "ok" ? a.value === b.value : a.kind === b.kind;
 }
 function makeBinaryWatch(opts) {
-  const { targets, intervalMs, stat: stat3, held, exit: exit2, log } = opts;
+  const { targets, intervalMs, stat: stat3, held, exit: exit2, log, clock } = opts;
   const logHeld = changeLogger(log);
   const boot = targets.map((path42) => ({ path: path42, stamp: mtimeOf(path42, stat3) }));
   const watched = boot.filter(({ stamp: stamp2 }) => stamp2.kind !== "failed");
-  let timer = null;
+  let stopSampling = null;
   let ended = false;
   const end = () => {
     ended = true;
-    if (timer) clearInterval(timer);
+    stopSampling?.();
   };
   const sample = async () => {
     if (ended) return;
@@ -77634,8 +77755,9 @@ function makeBinaryWatch(opts) {
           );
         }
       }
-      timer = setInterval(() => void check(), intervalMs);
-      timer.unref();
+      stopSampling = clock.every(intervalMs, () => void check(), {
+        unref: true
+      });
     },
     checkNow: check,
     close: end
@@ -77655,19 +77777,19 @@ function periodOf(every, outcome) {
   return outcome.kind === "failed" ? every.failedMs : every.okMs;
 }
 var Period = class {
-  constructor(tick, now2 = Date.now) {
+  constructor(tick, clock) {
     this.tick = tick;
-    this.now = now2;
+    this.clock = clock;
   }
   tick;
-  now;
-  timer = null;
+  clock;
+  stop = null;
   state = "released";
   last = null;
   // A read landed at `at` (now, unless the owner is resuming an answer it
   // kept from earlier). `periodMs` is chosen by the caller from the read's
   // outcome (a failed PR lookup is retried sooner than a found one).
-  landed(periodMs, at = this.now()) {
+  landed(periodMs, at = this.clock.now()) {
     this.last = { at, periodMs };
     this.schedule();
   }
@@ -77685,17 +77807,22 @@ var Period = class {
   schedule() {
     this.cancel();
     if (this.state !== "held" || this.last === null) return;
-    const wait = Math.max(0, this.last.at + this.last.periodMs - this.now());
-    this.timer = setTimeout(() => {
-      this.timer = null;
-      this.tick();
-    }, wait);
-    this.timer.unref?.();
+    const wait = Math.max(
+      0,
+      this.last.at + this.last.periodMs - this.clock.now()
+    );
+    this.stop = this.clock.after(
+      wait,
+      () => {
+        this.stop = null;
+        this.tick();
+      },
+      { unref: true }
+    );
   }
   cancel() {
-    if (this.timer === null) return;
-    clearTimeout(this.timer);
-    this.timer = null;
+    this.stop?.();
+    this.stop = null;
   }
 };
 
@@ -77774,8 +77901,10 @@ var GitDataProvider = class {
   watchers;
   ownsWatchers;
   logger;
+  clock;
   constructor(opts) {
     this.inner = opts.inner;
+    this.clock = opts.clock;
     this.periodMs = opts.periodMs ?? GIT_PERIOD_MS;
     this.maxRepos = opts.maxRepos ?? DEFAULT_MAX_REPOS;
     this.logger = opts.logger ?? quietLogger;
@@ -77794,7 +77923,10 @@ var GitDataProvider = class {
       this.watchers = opts.watchers;
       this.ownsWatchers = false;
     } else {
-      this.watchers = new WatcherRegistry({ logger: this.logger });
+      this.watchers = new WatcherRegistry({
+        clock: this.clock,
+        logger: this.logger
+      });
       this.ownsWatchers = true;
     }
   }
@@ -77822,7 +77954,7 @@ var GitDataProvider = class {
   // and never resolves.
   resolution(workingDir, projectDir) {
     const key = `${workingDir}|${projectDir ?? ""}`;
-    const now2 = Date.now();
+    const now2 = this.clock.now();
     const existing = this.resolutions.get(key);
     if (existing && now2 - existing.computedAt < RESOLUTION_TTL_MS) {
       this.resolutions.delete(key);
@@ -77918,7 +78050,7 @@ var GitDataProvider = class {
       watch: this.followWatch(root, null).watch,
       period: new Period(() => {
         void state.refresh.share(PASS, () => this.refreshPass(state));
-      }),
+      }, this.clock),
       values: /* @__PURE__ */ new Map(),
       holders: 0,
       asked: /* @__PURE__ */ new Set(),
@@ -78045,7 +78177,7 @@ var GitDataProvider = class {
   // another branch's PR. Each pass that lands writes one refresh event.
   async pass(state) {
     if (this.repos.get(state.root) !== state) return;
-    const startedAt = Date.now();
+    const startedAt = this.clock.now();
     const asked2 = [...state.asked];
     state.asked.clear();
     const followed = this.followWatch(state.root, state.watch);
@@ -78083,7 +78215,7 @@ var GitDataProvider = class {
       `${state.root} asked=${asked2.join(",") || "-"} values=${values2.length} pr=${prMove} watch=${followed.move}`,
       triggerOf(asked2),
       failures.size === 0 ? ok(null) : failed([...failures].join("; ")),
-      Date.now() - startedAt
+      this.clock.now() - startedAt
     );
   }
   // The branch's PR source, pending until the pass its first ask queues gives
@@ -78093,7 +78225,7 @@ var GitDataProvider = class {
     const pr = {
       period: new Period(() => {
         void this.readPr(state, pr, "period");
-      }),
+      }, this.clock),
       seen: /* @__PURE__ */ new Map(),
       holders: 0,
       // Its key is the first pass's to set.
@@ -78147,7 +78279,7 @@ var GitDataProvider = class {
     const key = pr.key;
     if (pr.inFlight?.key === key) return pr.inFlight.done;
     const remote = pr.remote;
-    const startedAt = Date.now();
+    const startedAt = this.clock.now();
     const lookup = remote.kind === "ok" ? this.inner.resolvePullRequest(state.root, remote.value).catch(threw("PR lookup")) : Promise.resolve(remote.kind === "failed" ? remote : ABSENT);
     const done2 = lookup.then((outcome) => {
       if (pr.inFlight?.key === key) pr.inFlight = null;
@@ -78156,9 +78288,9 @@ var GitDataProvider = class {
         `${state.root} key=${valueOf(key)}`,
         by,
         outcome,
-        Date.now() - startedAt
+        this.clock.now() - startedAt
       );
-      const at = Date.now();
+      const at = this.clock.now();
       pr.seen.delete(key);
       pr.seen.set(key, { outcome, at });
       for (const oldest of pr.seen.keys()) {
@@ -78211,12 +78343,6 @@ init_url();
 // src/utils/cache.ts
 init_globals();
 var import_node_path36 = __toESM(require_path_browserify(), 1);
-
-// site/shims/timers-promises.ts
-init_globals();
-var setTimeout2 = (ms, value) => new Promise((r) => globalThis.setTimeout(() => r(value), ms));
-
-// src/utils/cache.ts
 var CacheManager = class {
   // [LAW:one-source-of-truth] Every method takes the cache's root directory
   // (the host's `cacheDir`), so the layout under it is derived here alone.
@@ -78256,14 +78382,14 @@ var CacheManager = class {
       return true;
     }
   }
-  static async acquireLock(root, name, timeout = 5e3) {
+  static async acquireLock(root, clock, name, timeout = 5e3) {
     const RETRY_DELAY_MS = 50;
     const FILE_CREATE_FLAG = "wx";
     await this.ensureCacheDirectories(root);
     const lockFile = import_node_path36.default.join(this.locksDir(root), name);
-    const startTime = Date.now();
+    const startTime = clock.now();
     const lockContent = String(process_default.pid);
-    while (Date.now() - startTime < timeout) {
+    while (clock.now() - startTime < timeout) {
       try {
         await fs_default.promises.writeFile(lockFile, lockContent, {
           flag: FILE_CREATE_FLAG
@@ -78272,7 +78398,7 @@ var CacheManager = class {
         return true;
       } catch (error) {
         if (error.code === "EEXIST") {
-          await setTimeout2(RETRY_DELAY_MS);
+          await sleep(clock, RETRY_DELAY_MS);
         } else {
           throw error;
         }
@@ -78306,7 +78432,7 @@ var CacheManager = class {
   static createProjectHash(projectPath) {
     return createHash("md5").update(projectPath).digest("hex").substring(0, 8);
   }
-  static async getUsageCache(root, cacheType, latestMtime) {
+  static async getUsageCache(root, clock, cacheType, latestMtime) {
     const MAX_RETRIES = 3;
     const RETRY_DELAY_MS = 75;
     const FILE_ENCODING = "utf-8";
@@ -78317,7 +78443,7 @@ var CacheManager = class {
       const isCurrentlyLocked = this.isLocked(root, lockName);
       if (isCurrentlyLocked) {
         debug(`Cache for ${cacheType} is locked, waiting...`);
-        await setTimeout2(RETRY_DELAY_MS);
+        await sleep(clock, RETRY_DELAY_MS);
         continue;
       }
       try {
@@ -78342,7 +78468,7 @@ var CacheManager = class {
         debug(
           `Attempt ${attemptNumber} failed to read ${cacheType} cache: ${error.message}. Retrying...`
         );
-        await setTimeout2(RETRY_DELAY_MS);
+        await sleep(clock, RETRY_DELAY_MS);
       }
     }
     debug(`Failed to read ${cacheType} cache after ${MAX_RETRIES} attempts.`);
@@ -78357,9 +78483,9 @@ var CacheManager = class {
     }
     return data;
   }
-  static async setUsageCache(root, cacheType, data, latestMtime) {
+  static async setUsageCache(root, clock, cacheType, data, latestMtime) {
     const lockName = `${cacheType}.usage.lock`;
-    const lockAcquired = await this.acquireLock(root, lockName);
+    const lockAcquired = await this.acquireLock(root, clock, lockName);
     if (!lockAcquired) {
       debug(`Could not acquire lock to set usage cache for ${cacheType}`);
       return;
@@ -78367,7 +78493,7 @@ var CacheManager = class {
     try {
       await this.ensureCacheDirectories(root);
       const cachePath = import_node_path36.default.join(this.usageDir(root), `${cacheType}.json`);
-      const cacheTimestamp = latestMtime || Date.now();
+      const cacheTimestamp = latestMtime || clock.now();
       const cacheEntry = {
         data,
         timestamp: cacheTimestamp
@@ -78510,17 +78636,18 @@ var PricingService = class {
   static executionCache = null;
   static modelPricingCache = /* @__PURE__ */ new Map();
   static GITHUB_PRICING_URL = "https://raw.githubusercontent.com/promptctl/cc-candybar/main/pricing.json";
-  static async loadDiskCache(cacheRoot) {
+  static async loadDiskCache(cacheRoot, clock) {
     const TTL_24H = 24 * 60 * 60 * 1e3;
-    const minValidTime = Date.now() - TTL_24H;
+    const minValidTime = clock.now() - TTL_24H;
     return await CacheManager.getUsageCache(
       cacheRoot,
+      clock,
       "pricing",
       minValidTime
     );
   }
-  static async saveDiskCache(cacheRoot, data) {
-    await CacheManager.setUsageCache(cacheRoot, "pricing", data);
+  static async saveDiskCache(cacheRoot, clock, data) {
+    await CacheManager.setUsageCache(cacheRoot, clock, "pricing", data);
   }
   static async fetchPricingData() {
     return new Promise((resolve) => {
@@ -78598,14 +78725,14 @@ var PricingService = class {
       request2.end();
     });
   }
-  static async getCurrentPricing(cacheRoot) {
+  static async getCurrentPricing(cacheRoot, clock) {
     if (this.executionCache !== null) {
       debug(
         `[CACHE-HIT] Pricing execution cache: ${Object.keys(this.executionCache).length} models`
       );
       return this.executionCache;
     }
-    const diskCached = await this.loadDiskCache(cacheRoot);
+    const diskCached = await this.loadDiskCache(cacheRoot, clock);
     if (diskCached) {
       debug(
         `[CACHE-HIT] Pricing disk cache: ${Object.keys(diskCached).length} models`
@@ -78618,7 +78745,7 @@ var PricingService = class {
     }
     const freshData = await this.fetchPricingData();
     if (freshData) {
-      await this.saveDiskCache(cacheRoot, freshData);
+      await this.saveDiskCache(cacheRoot, clock, freshData);
       debug(
         `[CACHE-SET] Pricing disk cache stored: ${Object.keys(freshData).length} models`
       );
@@ -78648,12 +78775,12 @@ var PricingService = class {
     }
     return true;
   }
-  static async getModelPricing(modelId, cacheRoot) {
+  static async getModelPricing(modelId, cacheRoot, clock) {
     if (this.modelPricingCache.has(modelId)) {
       debug(`[CACHE-HIT] Model pricing cache: ${modelId}`);
       return this.modelPricingCache.get(modelId);
     }
-    const allPricing = await this.getCurrentPricing(cacheRoot);
+    const allPricing = await this.getCurrentPricing(cacheRoot, clock);
     let pricing;
     if (allPricing[modelId]) {
       pricing = allPricing[modelId];
@@ -78724,13 +78851,13 @@ var PricingService = class {
       output: 15
     };
   }
-  static async calculateCostForEntry(entry, cacheRoot) {
+  static async calculateCostForEntry(entry, cacheRoot, clock) {
     const usage = entry.message?.usage;
     if (!usage) {
       return 0;
     }
     const modelId = this.extractModelId(entry);
-    const pricing = await this.getModelPricing(modelId, cacheRoot);
+    const pricing = await this.getModelPricing(modelId, cacheRoot, clock);
     const inputTokens = usage.input_tokens || 0;
     const outputTokens = usage.output_tokens || 0;
     const cacheCreationTokens = usage.cache_creation_input_tokens || 0;
@@ -78888,7 +79015,7 @@ var KeyedSource = class {
       flight: null,
       changed: false,
       superseding: 0,
-      revisit: revisitOf(this.spec.every, {
+      revisit: revisitOf(this.spec.every, this.spec.clock, {
         period: () => this.refresh(entry, "period"),
         holdReturned: () => this.refresh(entry, "change")
       })
@@ -78908,7 +79035,7 @@ var KeyedSource = class {
     }
     const flight = {};
     entry.flight = flight;
-    const startedAt = Date.now();
+    const startedAt = this.spec.clock.now();
     void attempt3(() => this.spec.read(entry.input)).then((outcome) => {
       const stored = entry.flight === flight;
       try {
@@ -78916,7 +79043,7 @@ var KeyedSource = class {
           `${this.spec.fields(entry.input)} stored=${stored ? "Y" : "N"}`,
           by,
           outcome,
-          Date.now() - startedAt
+          this.spec.clock.now() - startedAt
         );
       } finally {
         if (stored) this.store(entry, outcome);
@@ -78967,9 +79094,9 @@ var KeyedSource = class {
     answerPending(entry, failed(`${this.spec.name} entry dropped`));
   }
 };
-function revisitOf(every, read2) {
+function revisitOf(every, clock, read2) {
   if (every === null) return new HoldReturn(read2.holdReturned);
-  const period = new Period(read2.period);
+  const period = new Period(read2.period, clock);
   return {
     landed: (outcome) => period.landed(periodOf(every, outcome)),
     hold: (held) => period.hold(held),
@@ -79037,8 +79164,8 @@ function dayKey(date2) {
   const day = String(date2.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
-function seedCutoffMs() {
-  const d = /* @__PURE__ */ new Date();
+function seedCutoffMs(now2) {
+  const d = new Date(now2);
   d.setHours(0, 0, 0, 0);
   d.setDate(d.getDate() - 1);
   return d.getTime();
@@ -79052,8 +79179,8 @@ var EMPTY_FILE_FOLD = {
   breakdown: emptyBreakdown(),
   days: /* @__PURE__ */ new Map()
 };
-async function foldFile(state, entries, cacheRoot) {
-  const keep2 = dayKey(new Date(seedCutoffMs()));
+async function foldFile(state, entries, cacheRoot, clock) {
+  const keep2 = dayKey(new Date(seedCutoffMs(clock.now())));
   let count = state.entries;
   let cost = state.cost;
   const breakdown = { ...state.breakdown };
@@ -79063,7 +79190,7 @@ async function foldFile(state, entries, cacheRoot) {
     const u = entry.message?.usage;
     if (!u) continue;
     count++;
-    const priced = entry.costUSD ?? await PricingService.calculateCostForEntry(entry.raw, cacheRoot);
+    const priced = entry.costUSD ?? await PricingService.calculateCostForEntry(entry.raw, cacheRoot, clock);
     cost += priced;
     breakdown.input += u.input_tokens || 0;
     breakdown.output += u.output_tokens || 0;
@@ -79198,9 +79325,11 @@ var SessionUsageStore = class {
   // rescan's reads are its `today` scan's.
   usage;
   sweeps = 0;
-  sweepTimer = null;
+  stopSweep = null;
+  clock;
   constructor(opts) {
     this.host = opts.host;
+    this.clock = opts.clock;
     this.log = opts.logger ?? quietLogger;
     this.ledger = opts.ledger ?? new RefreshLedger(this.log);
     this.usage = this.ledger.declare({
@@ -79218,12 +79347,14 @@ var SessionUsageStore = class {
       every: opts.rescan ?? DEFAULT_RESCAN,
       maxEntries: MAX_UNHELD_SCANS,
       logger: this.log,
-      ledger: this.ledger
+      ledger: this.ledger,
+      clock: this.clock
     });
     const interval = opts.sweepIntervalMs ?? DEFAULT_SWEEP_INTERVAL_MS;
     if (interval > 0) {
-      this.sweepTimer = setInterval(() => this.sweepStale(), interval);
-      this.sweepTimer.unref();
+      this.stopSweep = this.clock.every(interval, () => this.sweepStale(), {
+        unref: true
+      });
     }
   }
   getStats() {
@@ -79304,7 +79435,7 @@ var SessionUsageStore = class {
   refreshed(sessionId2, transcriptPath, stamp2) {
     return this.requestFlight.run(`${sessionId2}:${stamp2}`, async () => {
       const tally = { hits: 0, misses: 0 };
-      const startedAt = Date.now();
+      const startedAt = this.clock.now();
       const record2 = await this.ingest(sessionId2, transcriptPath, tally, stamp2);
       this.renderTally.hits += tally.hits;
       this.renderTally.misses += tally.misses;
@@ -79313,7 +79444,7 @@ var SessionUsageStore = class {
           `sid=${valueOf(sessionId2)}`,
           "request",
           record2,
-          Date.now() - startedAt
+          this.clock.now() - startedAt
         );
       }
       answer(
@@ -79492,7 +79623,7 @@ var SessionUsageStore = class {
   // undefined while the store holds nothing for it — asking stores nothing.
   see(sessionId2) {
     const slot = this.sessions.get(sessionId2);
-    if (slot) slot.lastSeenAt = Date.now();
+    if (slot) slot.lastSeenAt = this.clock.now();
     return slot;
   }
   // The slot something is about to be stored in, created on the first store.
@@ -79500,7 +79631,7 @@ var SessionUsageStore = class {
     const seen = this.see(sessionId2);
     if (seen) return seen;
     const slot = {
-      lastSeenAt: Date.now(),
+      lastSeenAt: this.clock.now(),
       record: void 0,
       ring: [],
       failure: observable.box(null),
@@ -79549,7 +79680,7 @@ var SessionUsageStore = class {
         filePath2,
         priorFold,
         EMPTY_FILE_FOLD,
-        (state, entries) => foldFile(state, entries, cacheDir(this.host))
+        (state, entries) => foldFile(state, entries, cacheDir(this.host), this.clock)
       );
       if (read2.kind === "failed") return read2;
       if (read2.kind === "absent") {
@@ -79574,7 +79705,7 @@ var SessionUsageStore = class {
   // absence.
   async scan(claudePaths) {
     try {
-      const cutoff = seedCutoffMs();
+      const cutoff = seedCutoffMs(this.clock.now());
       const projectPaths = await findProjectPaths(claudePaths);
       const candidates = [];
       for (const dir of projectPaths) {
@@ -79624,7 +79755,7 @@ var SessionUsageStore = class {
   // [LAW:one-source-of-truth] Today is the day of the sweep's own `now`: the
   // wall clock a frame's instant and the scan's cutoff read too.
   sweepStale() {
-    const now2 = Date.now();
+    const now2 = this.clock.now();
     const today = dayKey(new Date(now2));
     let dropped = 0;
     let held = 0;
@@ -79651,10 +79782,8 @@ var SessionUsageStore = class {
     return dropped;
   }
   close() {
-    if (this.sweepTimer) {
-      clearInterval(this.sweepTimer);
-      this.sweepTimer = null;
-    }
+    this.stopSweep?.();
+    this.stopSweep = null;
     this.scans.close();
     runInAction(() => {
       for (const { sums } of this.daySets.values()) sums.release();
@@ -79709,16 +79838,18 @@ var ObservableLru = class {
 // src/utils/transcript-fold.ts
 var MAX_SESSIONS3 = 256;
 var TranscriptFold = class {
-  constructor(empty2, step4, refreshes, log = quietLogger, maxSessions = MAX_SESSIONS3) {
+  constructor(empty2, step4, refreshes, clock, log = quietLogger, maxSessions = MAX_SESSIONS3) {
     this.empty = empty2;
     this.step = step4;
     this.refreshes = refreshes;
+    this.clock = clock;
     this.log = log;
     this.sessions = new ObservableLru(maxSessions);
   }
   empty;
   step;
   refreshes;
+  clock;
   log;
   // [LAW:no-shared-mutable-globals] Single owner, hard cap, LRU eviction. One
   // instance per projection per daemon. Observable, so a view's payload over
@@ -79738,7 +79869,7 @@ var TranscriptFold = class {
       }
       return this.store(sessionId2, folded3, { kind: "ok", value: folded3.value });
     }
-    const startedAt = Date.now();
+    const startedAt = this.clock.now();
     const read2 = await foldAppended(
       transcriptPath,
       prior,
@@ -79749,7 +79880,7 @@ var TranscriptFold = class {
       `sid=${valueOf(sessionId2)}`,
       "request",
       read2,
-      Date.now() - startedAt
+      this.clock.now() - startedAt
     );
     if (read2.kind === "failed") return this.store(sessionId2, prior, read2);
     if (read2.kind === "absent") {
@@ -79785,7 +79916,7 @@ var ContextProvider = class {
   // activity: one number per session, kept incrementally, rather than every
   // entry of the transcript re-parsed to find the last one.
   fold;
-  constructor(opts = {}) {
+  constructor(opts) {
     const logger = opts.logger ?? quietLogger;
     this.fold = new TranscriptFold(
       void 0,
@@ -79795,6 +79926,7 @@ var ContextProvider = class {
         scope: "session",
         refresh: ["request"]
       }),
+      opts.clock,
       logger
     );
   }
@@ -79940,7 +80072,7 @@ function lastResponseTime(entries) {
 }
 var MetricsProvider = class {
   fold;
-  constructor(opts = {}) {
+  constructor(opts) {
     const logger = opts.logger ?? quietLogger;
     this.fold = new TranscriptFold(
       EMPTY2,
@@ -79950,6 +80082,7 @@ var MetricsProvider = class {
         scope: "session",
         refresh: ["request"]
       }),
+      opts.clock,
       logger
     );
   }
@@ -80059,7 +80192,7 @@ function report(state) {
 }
 var ActivityProvider = class {
   fold;
-  constructor(opts = {}) {
+  constructor(opts) {
     const logger = opts.logger ?? quietLogger;
     this.fold = new TranscriptFold(
       EMPTY3,
@@ -80069,6 +80202,7 @@ var ActivityProvider = class {
         scope: "session",
         refresh: ["request"]
       }),
+      opts.clock,
       logger
     );
   }
@@ -80113,7 +80247,8 @@ ${hint.pane}`,
       every: { okMs: NAME_PERIOD_MS, failedMs: NAME_PERIOD_MS },
       maxEntries: MAX_ENTRIES,
       logger,
-      ledger: opts.ledger ?? new RefreshLedger(logger)
+      ledger: opts.ledger ?? new RefreshLedger(logger),
+      clock: opts.clock
     });
   }
   // ok — the session name; absent — tmux answered with an empty name; failed
@@ -80167,7 +80302,7 @@ function syscall(field, read2) {
 var HostService = class {
   name;
   user;
-  constructor(opts = {}) {
+  constructor(opts) {
     const logger = opts.logger ?? quietLogger;
     const ledger = opts.ledger ?? new RefreshLedger(logger);
     const one = {
@@ -80177,7 +80312,8 @@ var HostService = class {
       every: HOST_EVERY,
       maxEntries: 1,
       logger,
-      ledger
+      ledger,
+      clock: opts.clock
     };
     this.name = new KeyedSource({
       ...one,
@@ -80210,17 +80346,19 @@ var HostService = class {
 init_globals();
 var MAX_FILES = 64;
 var AutoCompactProvider = class {
-  // Observable, so a view's payload over a window is recomputed in the turn
-  // it is stored.
-  known = new ObservableLru(MAX_FILES);
-  refreshes;
-  constructor(logger = quietLogger, ledger = new RefreshLedger(logger)) {
+  constructor(clock, logger = quietLogger, ledger = new RefreshLedger(logger)) {
+    this.clock = clock;
     this.refreshes = ledger.declare({
       name: "autocompact",
       scope: "configDir",
       refresh: ["request"]
     });
   }
+  clock;
+  // Observable, so a view's payload over a window is recomputed in the turn
+  // it is stored.
+  known = new ObservableLru(MAX_FILES);
+  refreshes;
   window(settingsPath) {
     const stamp2 = stampAt(settingsPath);
     const known = this.known.get(settingsPath);
@@ -80228,13 +80366,13 @@ var AutoCompactProvider = class {
       this.known.touch(settingsPath);
       return known.outcome;
     }
-    const startedAt = Date.now();
+    const startedAt = this.clock.now();
     const outcome = readAutoCompactWindow(settingsPath);
     this.refreshes.recorded(
       `path=${valueOf(settingsPath)} stamp=${valueOf(stamp2)}`,
       "request",
       outcome,
-      Date.now() - startedAt
+      this.clock.now() - startedAt
     );
     this.known.set(settingsPath, { stamp: stamp2, outcome });
     return outcome;
@@ -80279,19 +80417,21 @@ function cacheActivityTs(line) {
 }
 var MAX_SESSIONS4 = 256;
 var CacheExpiryProvider = class {
-  // Observable, so a view's payload over an expiry is recomputed in the turn
-  // a new one is stored.
-  known = new ObservableLru(MAX_SESSIONS4);
-  // [LAW:no-silent-failure] Each read of the tail is one event, a failed one at
-  // warn; an answer believed under its stamp reads nothing, and logs nothing.
-  refreshes;
-  constructor(logger = quietLogger, ledger = new RefreshLedger(logger)) {
+  constructor(clock, logger = quietLogger, ledger = new RefreshLedger(logger)) {
+    this.clock = clock;
     this.refreshes = ledger.declare({
       name: "cache",
       scope: "session",
       refresh: ["request"]
     });
   }
+  clock;
+  // Observable, so a view's payload over an expiry is recomputed in the turn
+  // a new one is stored.
+  known = new ObservableLru(MAX_SESSIONS4);
+  // [LAW:no-silent-failure] Each read of the tail is one event, a failed one at
+  // warn; an answer believed under its stamp reads nothing, and logs nothing.
+  refreshes;
   // The session's refresh, which its statusline request makes.
   async refresh(sessionId2, transcriptPath) {
     const stamp2 = statStamp(transcriptPath);
@@ -80313,13 +80453,13 @@ var CacheExpiryProvider = class {
     return { entries: this.known.size, refreshes, failures, lastMs };
   }
   async read(sessionId2, transcriptPath, stamp2) {
-    const startedAt = Date.now();
+    const startedAt = this.clock.now();
     const outcome = await cacheExpiresAt(transcriptPath);
     this.refreshes.recorded(
       `sid=${valueOf(sessionId2)} stamp=${valueOf(stamp2)}`,
       "request",
       outcome,
-      Date.now() - startedAt
+      this.clock.now() - startedAt
     );
     return outcome;
   }
@@ -80400,12 +80540,14 @@ var ManagedStorage = class {
   logger;
   identityOf;
   fileEvents;
+  clock;
   unsubscribe;
   constructor(opts) {
     this.watchers = opts.watchers;
     this.logger = opts.logger;
     this.identityOf = opts.identityOf ?? statIdentity;
     this.fileEvents = opts.fileEvents;
+    this.clock = opts.clock;
     this.unsubscribe = opts.fileEvents.subscribe(
       (notice) => this.noticed(notice)
     );
@@ -80420,7 +80562,8 @@ var ManagedStorage = class {
       every: null,
       maxEntries: MAX_ENTRIES2,
       logger: opts.logger,
-      ledger: opts.ledger ?? new RefreshLedger(opts.logger)
+      ledger: opts.ledger ?? new RefreshLedger(opts.logger),
+      clock: opts.clock
     });
   }
   // The key a render state's build holds for a folder its config declares.
@@ -80522,10 +80665,13 @@ var ManagedStorage = class {
         { dirs: [{ path: key.folder }] },
         (invalidation) => this.invalidated(watched, invalidation)
       ),
-      sweep: setInterval(() => void this.sweep(key), STORAGE_SWEEP_EVERY_MS),
+      stopSweep: this.clock.every(
+        STORAGE_SWEEP_EVERY_MS,
+        () => void this.sweep(key),
+        { unref: true }
+      ),
       health: { kind: "watching" }
     };
-    watched.sweep.unref();
     this.watched.set(keyString(key), watched);
     if (unusable !== null) this.faulted(watched, "unusable", unusable);
     for (const refusal of watched.handle.deaf) {
@@ -80538,7 +80684,7 @@ var ManagedStorage = class {
     const id2 = keyString(watched.key);
     this.watched.delete(id2);
     watched.health = { kind: "closed" };
-    clearInterval(watched.sweep);
+    watched.stopSweep();
     watched.handle.release();
   }
   // [LAW:dataflow-not-control-flow] Routing by what the window named: the
@@ -80683,11 +80829,11 @@ var ManagedStorage = class {
   // Removes every `*.json` file nobody has written for 30 days, unless a
   // session holds it now. One event per sweep.
   async sweep(key) {
-    const startedAt = Date.now();
+    const startedAt = this.clock.now();
     const cutoff = startedAt - STORAGE_FILE_MAX_AGE_MS;
     let scanned = 0;
     let removed = 0;
-    const event = () => `plugin storage sweep folder=${valueOf(key.folder)} scanned=${scanned} removed=${removed} took=${Date.now() - startedAt}ms`;
+    const event = () => `plugin storage sweep folder=${valueOf(key.folder)} scanned=${scanned} removed=${removed} took=${this.clock.now() - startedAt}ms`;
     try {
       const entries = await fs_default.promises.readdir(key.folder, {
         withFileTypes: true
@@ -80720,31 +80866,39 @@ var ManagedStorage = class {
 
 // src/daemon/payload-providers.ts
 function createPayloadProviders(opts) {
-  const { launcher, logger, ledger } = opts;
+  const { launcher, clock, logger, ledger } = opts;
   return {
     home: opts.host.home,
-    hostService: new HostService({ logger, ledger }),
+    hostService: new HostService({ clock, logger, ledger }),
     gitProvider: new GitDataProvider({
       inner: new GitService(launcher),
       watchers: opts.watchers,
+      clock,
       logger,
       ledger
     }),
-    usageStore: new SessionUsageStore({ host: opts.host, logger, ledger }),
-    contextProvider: new ContextProvider({ logger, ledger }),
-    metricsProvider: new MetricsProvider({ logger, ledger }),
-    activityProvider: new ActivityProvider({ logger, ledger }),
-    tmuxService: new TmuxService({ launcher, logger, ledger }),
-    autoCompact: new AutoCompactProvider(logger, ledger),
-    cacheExpiry: new CacheExpiryProvider(logger, ledger),
+    usageStore: new SessionUsageStore({
+      host: opts.host,
+      clock,
+      logger,
+      ledger
+    }),
+    contextProvider: new ContextProvider({ clock, logger, ledger }),
+    metricsProvider: new MetricsProvider({ clock, logger, ledger }),
+    activityProvider: new ActivityProvider({ clock, logger, ledger }),
+    tmuxService: new TmuxService({ launcher, clock, logger, ledger }),
+    autoCompact: new AutoCompactProvider(clock, logger, ledger),
+    cacheExpiry: new CacheExpiryProvider(clock, logger, ledger),
     managedStorage: new ManagedStorage({
       watchers: opts.watchers,
       fileEvents: opts.fileEvents,
+      clock,
       logger,
       ledger
     }),
     faults: new RefreshFaults(),
-    log: opts.logger
+    log: opts.logger,
+    clock
   };
 }
 
@@ -81114,7 +81268,7 @@ function buildRenderState(load, deps) {
     (l) => (l.raw.insert ?? []).map((cell3) => cell3.seg)
   );
   const warnings = [];
-  const store = new VariableStore();
+  const store = new VariableStore(deps.clock);
   const registry = new SourceRegistry(
     deps.launcher,
     store,
@@ -81190,13 +81344,13 @@ function buildRenderState(load, deps) {
     }
   };
 }
-function settle2(frame2, chain2, resolveWarnings, attempt4) {
+function settle2(frame2, chain2, resolveWarnings, attempt4, clock) {
   const common = {
     // [LAW:one-source-of-truth] The files reported are the chain loaded.
     layers: chain2.layers.map((l) => l.path),
     home: chain2.home,
     repos: frame2.repos,
-    ms: Math.round(performance.now() - frame2.started)
+    ms: Math.round(clock.monotonic() - frame2.started)
   };
   const warning = (own2) => joinWarnings([...frame2.advisories, ...resolveWarnings, ...own2]);
   switch (attempt4.kind) {
@@ -81222,12 +81376,14 @@ function settle2(frame2, chain2, resolveWarnings, attempt4) {
 }
 function loadChain(frame2, cwd2, chain2, deps, served = null) {
   const resolved = resolveLoad(cwd2, chain2, deps.storage);
-  if (resolved.kind === "failed") return settle2(frame2, chain2, [], resolved);
+  if (resolved.kind === "failed") {
+    return settle2(frame2, chain2, [], resolved, deps.clock);
+  }
   const attempt4 = served?.loadKey === resolved.key ? { kind: "kept", state: served } : buildRenderState(resolved, deps);
-  return settle2(frame2, chain2, resolved.warnings, attempt4);
+  return settle2(frame2, chain2, resolved.warnings, attempt4, deps.clock);
 }
 function loadFromDisk(projectDir, cwd2, configFile, deps, served = null) {
-  const started2 = performance.now();
+  const started2 = deps.clock.monotonic();
   const resolution = resolveDslConfig(
     deps.locations,
     repoConfigs(deps.stateDir).read(),
@@ -81379,7 +81535,8 @@ var RenderCache = class {
   // falls back to the state directory, where the daemon's log writes on every
   // request.
   answersWatch;
-  sweep = null;
+  // What clears the hold sweep while one is running.
+  stopSweep = null;
   closed = false;
   // Every state the map serves or served, until reclaimed.
   holds = /* @__PURE__ */ new Map();
@@ -81690,9 +81847,12 @@ var RenderCache = class {
     );
   }
   armSweep() {
-    if (this.sweep !== null) return;
-    this.sweep = setInterval(() => this.releaseIdle(), HOLD_SWEEP_MS);
-    this.sweep.unref?.();
+    if (this.stopSweep !== null) return;
+    this.stopSweep = this.deps.clock.every(
+      HOLD_SWEEP_MS,
+      () => this.releaseIdle(),
+      { unref: true }
+    );
   }
   // One sweep. Public so a test can run it at an instant it chose.
   releaseIdle() {
@@ -81703,9 +81863,9 @@ var RenderCache = class {
     }
     for (const sessionId2 of this.openFailures.keys())
       if (!this.pins.has(sessionId2)) this.openFailures.delete(sessionId2);
-    if (this.entries.size === 0 && this.sweep !== null) {
-      clearInterval(this.sweep);
-      this.sweep = null;
+    if (this.entries.size === 0 && this.stopSweep !== null) {
+      this.stopSweep();
+      this.stopSweep = null;
     }
   }
   // The cache's teardown: the sweep stops, and every entry is dropped, so its
@@ -81715,8 +81875,8 @@ var RenderCache = class {
   close() {
     if (this.closed) return;
     this.closed = true;
-    if (this.sweep !== null) clearInterval(this.sweep);
-    this.sweep = null;
+    this.stopSweep?.();
+    this.stopSweep = null;
     this.answersWatch.release();
     const entries = this.entries.size;
     for (const [key, entry] of this.entries) this.drop(key, entry, "close");
@@ -82193,7 +82353,7 @@ var PaneVisibility = class {
   stop() {
     switch (this.loop.kind) {
       case "due":
-        clearTimeout(this.loop.timer);
+        this.loop.clear();
         this.end();
         return;
       case "asking":
@@ -82212,7 +82372,11 @@ var PaneVisibility = class {
       if (loop.following) {
         this.loop = {
           kind: "due",
-          timer: setTimeout(() => this.ask(), this.deps.intervalMs).unref()
+          clear: this.deps.clock.after(
+            this.deps.intervalMs,
+            () => this.ask(),
+            { unref: true }
+          )
         };
         return;
       }
@@ -83061,9 +83225,6 @@ function segmentsOf2(value) {
   }
 }
 
-// src/daemon/daemon.ts
-init_timers();
-
 // src/daemon/lane-setup.ts
 init_globals();
 var import_node_path41 = __toESM(require_path_browserify(), 1);
@@ -83871,15 +84032,15 @@ var MenuIdle = class {
     if (idle.timer?.at === due) return;
     this.disarm(idle);
     if (due === null) return;
-    const handle = setTimeout(
+    const clear = this.deps.clock.after(
+      Math.max(0, (due - this.deps.now()) * 1e3),
       () => this.fire(sessionId2),
-      Math.max(0, (due - this.deps.now()) * 1e3)
+      { unref: true }
     );
-    handle.unref();
-    idle.timer = { at: due, handle };
+    idle.timer = { at: due, clear };
   }
   disarm(idle) {
-    if (idle.timer !== null) clearTimeout(idle.timer.handle);
+    idle.timer?.clear();
     idle.timer = null;
   }
   // The deadline passed with no click: close the menus, and begin a new idle
@@ -83920,11 +84081,6 @@ var MenuIdle = class {
 };
 
 // src/daemon/daemon.ts
-var SYSTEM_CLOCK = {
-  date: () => /* @__PURE__ */ new Date(),
-  monotonic: () => performance.now(),
-  after: afterRealTime
-};
 function createDaemon(inputs) {
   const {
     bundle,
@@ -83937,11 +84093,11 @@ function createDaemon(inputs) {
     host
   } = inputs;
   const locs = locations(host);
-  const instant = () => instantOf(clock.date());
+  const instant = () => instantOf(new Date(clock.now()));
   const closing = new AbortController();
   let closed = false;
   const log = (level, msg) => inputs.daemonLog.log(level, closed ? `after close: ${msg}` : msg);
-  const stats = new RuntimeStats();
+  const stats = new RuntimeStats(clock);
   const launcher = inputs.launcher({
     inherited: host.env,
     stats: stats.launchStats,
@@ -83977,19 +84133,22 @@ function createDaemon(inputs) {
   const renderSightings = new RenderSightings();
   const doctorStores = inputs.doctorStores;
   const watcherRegistry = new WatcherRegistry({
+    clock,
     counters: stats,
     logger: log
   });
   const refreshLedger = new RefreshLedger(log);
   const fileEvents = new FileEventDelivery({
     watchers: watcherRegistry,
-    logger: log
+    logger: log,
+    clock
   });
   const payloadProviders = createPayloadProviders({
     launcher,
     host,
     watchers: watcherRegistry,
     fileEvents,
+    clock,
     logger: log,
     ledger: refreshLedger
   });
@@ -84003,6 +84162,7 @@ function createDaemon(inputs) {
   const navigationHistory = new NavigationHistory();
   const effectSessions = new EffectSessions();
   const menuIdle = new MenuIdle({
+    clock,
     now: instant,
     close: (sessionId2, idle) => closeIdleMenus(sessionId2, idle, verbCtx),
     failed: (sessionId2, error) => log(
@@ -84016,7 +84176,8 @@ function createDaemon(inputs) {
     launch: launcher.launch,
     state: sessionState,
     log,
-    now: instant
+    now: instant,
+    clock
   });
   const laneSetups = new LaneSetups({
     edge: inputs.laneEdge(
@@ -84035,7 +84196,7 @@ function createDaemon(inputs) {
     state: sessionState,
     log,
     now: instant,
-    defer: (run3) => void setImmediate(run3)
+    defer: (run3) => void clock.defer(run3)
   });
   const tmuxStatusLines = new TmuxStatusLines({
     edge: {
@@ -84073,11 +84234,12 @@ function createDaemon(inputs) {
     watching: () => paneVisibility.follow(),
     refreshes: () => refreshLedger.totals(),
     periods: FEED_PERIODS,
-    now: () => clock.monotonic(),
+    clock,
     instant,
     log
   });
   const paneVisibility = new PaneVisibility({
+    clock,
     listPanes: (socket) => runTmuxAsync(launcher, { socket }, "frames.visibility", [
       "list-panes",
       "-a",
@@ -84108,6 +84270,7 @@ function createDaemon(inputs) {
   const renderWarnings = new RenderWarningRecords();
   const renderCache = new RenderCache(
     {
+      clock,
       launcher,
       stateDir: paths2.state,
       locations: locs,
@@ -84179,6 +84342,7 @@ function createDaemon(inputs) {
   const BIN_CHECK_INTERVAL_MS = 60 * 1e3;
   const RELEASE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1e3;
   const binaryWatch = makeBinaryWatch({
+    clock,
     targets: bundle.targets,
     intervalMs: BIN_CHECK_INTERVAL_MS,
     stat: inputs.stat,
@@ -84190,6 +84354,7 @@ function createDaemon(inputs) {
     log
   });
   const updateWatch = makeUpdateWatch({
+    clock,
     launcher,
     entryUrl: bundle.entryUrl,
     digest: bundle.digest,
@@ -84407,16 +84572,16 @@ async function rotate(filePath2) {
   await fs_default.promises.rename(filePath2, `${filePath2}.1`).catch(() => {
   });
 }
-function logLine(level, msg) {
-  return `${(/* @__PURE__ */ new Date()).toISOString()} [${level}] ${msg}
+function logLine(level, msg, at) {
+  return `${new Date(at).toISOString()} [${level}] ${msg}
 `;
 }
-function sizeOnceLanded(fd, endsAt, waitMs) {
-  const until2 = performance.now() + waitMs;
+function sizeOnceLanded(clock, fd, endsAt, waitMs) {
+  const until2 = clock.monotonic() + waitMs;
   const nap = new Int32Array(new SharedArrayBuffer(4));
   for (; ; ) {
     const { size } = fs_default.fstatSync(fd);
-    if (size >= endsAt || performance.now() >= until2) return size;
+    if (size >= endsAt || clock.monotonic() >= until2) return size;
     Atomics.wait(nap, 0, 0, 1);
   }
 }
@@ -84430,10 +84595,15 @@ function unwritable(lines2, e) {
   }
 }
 var DaemonLog = class {
-  constructor(filePath2) {
+  // [LAW:effects-at-boundaries] `clock` is the machine's: the stamp on each
+  // line, and the blocking wait for a write in flight, which a held clock
+  // would never end.
+  constructor(filePath2, clock) {
     this.filePath = filePath2;
+    this.clock = clock;
   }
   filePath;
+  clock;
   sink = null;
   // Lines not yet taken and their bytes, the count of the oldest dropped to
   // stay within what the log holds, and the batch taken and on its way.
@@ -84454,7 +84624,7 @@ var DaemonLog = class {
   disposed = false;
   // One line, to the log: the daemon's `DaemonLogger`.
   log = (level, msg) => {
-    const line = logLine(level, msg);
+    const line = logLine(level, msg, this.clock.now());
     if (this.exitListener === null && !this.disposed) {
       this.exitListener = () => {
         this.exiting = true;
@@ -84574,7 +84744,8 @@ var DaemonLog = class {
   take() {
     const lost = this.dropped === 0 ? "" : logLine(
       "warn",
-      `log: ${this.dropped} earlier line(s) dropped (${this.droppedBytes} bytes): more than ${MAX_WAITING_BYTES} bytes were waiting for the disk`
+      `log: ${this.dropped} earlier line(s) dropped (${this.droppedBytes} bytes): more than ${MAX_WAITING_BYTES} bytes were waiting for the disk`,
+      this.clock.now()
     );
     const lines2 = lost + this.waiting.join("");
     this.waiting = [];
@@ -84623,7 +84794,7 @@ var DaemonLog = class {
     if (out !== null && out.state.kind === "issued") {
       const { fd, endsAt } = out.state;
       try {
-        const size = sizeOnceLanded(fd, endsAt, waitMs);
+        const size = sizeOnceLanded(this.clock, fd, endsAt, waitMs);
         if (size < endsAt && finishing) {
           first2 = out.bytes.subarray(
             Math.max(0, size - (endsAt - out.bytes.length))
@@ -84681,16 +84852,19 @@ function isSnapshot(value) {
   return true;
 }
 var FileSessionStorage = class {
-  constructor(filePath2, debounceMs = 500, logger = quietLogger) {
+  constructor(filePath2, clock, debounceMs = 500, logger = quietLogger) {
     this.filePath = filePath2;
+    this.clock = clock;
     this.debounceMs = debounceMs;
     this.logger = logger;
     this.writingPath = `${filePath2}.writing`;
   }
   filePath;
+  clock;
   debounceMs;
   logger;
-  timer = null;
+  // What clears the debounce timer while one is armed.
+  clearTimer = null;
   pending = null;
   // Whether a debounced write is on its way to the disk.
   writing = false;
@@ -84734,12 +84908,15 @@ var FileSessionStorage = class {
   // One debounced write at a time, so snapshots land in the order they were
   // taken; a save that arrives while one is being written waits for it.
   schedule() {
-    if (this.timer !== null || this.writing) return;
-    this.timer = setTimeout(() => {
-      this.timer = null;
-      void this.write();
-    }, this.debounceMs);
-    this.timer.unref();
+    if (this.clearTimer !== null || this.writing) return;
+    this.clearTimer = this.clock.after(
+      this.debounceMs,
+      () => {
+        this.clearTimer = null;
+        void this.write();
+      },
+      { unref: true }
+    );
   }
   // [LAW:effects-at-boundaries] The debounced write takes all of its disk I/O
   // off the daemon's one thread: the bytes are written and synced through the
@@ -84751,11 +84928,11 @@ var FileSessionStorage = class {
     const snapshot = this.pending;
     if (snapshot === null) return;
     const generation = this.generation;
-    const started2 = performance.now();
+    const started2 = this.clock.monotonic();
     const body = JSON.stringify(snapshot);
     const tmp = this.writingPath;
     this.writing = true;
-    const heldMs = performance.now() - started2;
+    const heldMs = this.clock.monotonic() - started2;
     try {
       await fs_default.promises.mkdir(import_node_path43.default.dirname(this.filePath), { recursive: true });
       const file = await fs_default.promises.open(tmp, "w", 384);
@@ -84780,7 +84957,7 @@ var FileSessionStorage = class {
         if (!landed) await fs_default.promises.rm(tmp, { force: true });
         this.logger(
           "info",
-          `session-state write superseded by a flush landed=${landed} took=${Math.round(performance.now() - started2)}ms held=${Math.round(heldMs)}ms`
+          `session-state write superseded by a flush landed=${landed} took=${Math.round(this.clock.monotonic() - started2)}ms held=${Math.round(heldMs)}ms`
         );
         return;
       }
@@ -84796,13 +84973,11 @@ var FileSessionStorage = class {
   // The synchronous write, for shutdown and for callers that read the file
   // back at once.
   flush() {
-    if (this.timer) {
-      clearTimeout(this.timer);
-      this.timer = null;
-    }
+    this.clearTimer?.();
+    this.clearTimer = null;
     if (this.pending === null) return;
     const snapshot = this.pending;
-    const started2 = performance.now();
+    const started2 = this.clock.monotonic();
     try {
       fs_default.mkdirSync(import_node_path43.default.dirname(this.filePath), { recursive: true });
       const tmp = `${this.filePath}.tmp`;
@@ -84812,7 +84987,7 @@ var FileSessionStorage = class {
       fs_default.rmSync(this.writingPath, { force: true });
       fs_default.renameSync(tmp, this.filePath);
       this.generation++;
-      this.saved(body, snapshot, started2, performance.now() - started2);
+      this.saved(body, snapshot, started2, this.clock.monotonic() - started2);
       this.pending = null;
     } catch (e) {
       this.logger("warn", `session-state save failed: ${e.message}`);
@@ -84823,15 +84998,15 @@ var FileSessionStorage = class {
   saved(body, snapshot, started2, heldMs) {
     this.logger(
       "info",
-      `session-state saved bytes=${import_buffer.Buffer.byteLength(body)} sessions=${Object.keys(snapshot).length} took=${Math.round(performance.now() - started2)}ms held=${Math.round(heldMs)}ms`
+      `session-state saved bytes=${import_buffer.Buffer.byteLength(body)} sessions=${Object.keys(snapshot).length} took=${Math.round(this.clock.monotonic() - started2)}ms held=${Math.round(heldMs)}ms`
     );
   }
 };
 
 // src/daemon/file-storage.ts
-function fileStorage(paths2, log) {
+function fileStorage(paths2, log, clock) {
   return {
-    session: new FileSessionStorage(paths2.sessionState, 500, log),
+    session: new FileSessionStorage(paths2.sessionState, clock, 500, log),
     history: fileHistoryStorage(paths2.settingsHistory, log)
   };
 }
@@ -85032,8 +85207,8 @@ async function paneClaude(launcher, hint) {
   };
 }
 var FOLLOW_POLL_MS = 200;
-function productionLaneEdge(launcher, following, closing) {
-  const wait = (ms) => setTimeout2(ms, void 0, { signal: closing });
+function productionLaneEdge(launcher, following, closing, clock) {
+  const wait = (ms) => sleep(clock, ms, closing);
   return {
     claudeInput: productionClaudeInputEdge(launcher),
     barPanes: async (hint) => barPanesOf(
@@ -85089,7 +85264,7 @@ function productionLaneEdge(launcher, following, closing) {
     // — the shell that started Claude Code, which may itself be a job of the
     // pane's first shell (`nix develop`, a nested `bash`).
     paneDir: async (hint, shell) => {
-      const until2 = Date.now() + SHELL_PATIENCE_MS;
+      const until2 = clock.now() + SHELL_PATIENCE_MS;
       for (; ; ) {
         const pane = await paneForeground(launcher, hint);
         if (pane.foreground === shell) {
@@ -85098,7 +85273,7 @@ function productionLaneEdge(launcher, following, closing) {
           }
           return pane.cwd;
         }
-        if (Date.now() > until2) {
+        if (clock.now() > until2) {
           throw new Error(
             `the shell in pane ${hint.pane} (pid ${shell}) did not take its terminal back within ${SHELL_PATIENCE_MS / 1e3} s`
           );
@@ -85120,9 +85295,9 @@ function productionLaneEdge(launcher, following, closing) {
       return file === null ? null : fs_default.realpathSync(file);
     },
     followed: async (sessionId2, lane, withinMs) => {
-      const until2 = Date.now() + withinMs;
+      const until2 = clock.now() + withinMs;
       while (!following(sessionId2).has(lane)) {
-        if (Date.now() > until2) return false;
+        if (clock.now() > until2) return false;
         await wait(FOLLOW_POLL_MS);
       }
       return true;
@@ -85153,9 +85328,9 @@ function productionLaneEdge(launcher, following, closing) {
       }
     },
     exited: async (pid2, withinMs) => {
-      const until2 = Date.now() + withinMs;
+      const until2 = clock.now() + withinMs;
       while (pidAlive(pid2)) {
-        if (Date.now() > until2) return false;
+        if (clock.now() > until2) return false;
         await wait(EXIT_POLL_MS);
       }
       return true;
@@ -85247,19 +85422,20 @@ function create(file) {
 }
 
 // src/daemon/production-adapters.ts
-function productionAdapters(paths2, daemonLog) {
+function productionAdapters(paths2, daemonLog, machine) {
   return {
     daemonLog,
-    launcher: createLauncher,
-    storage: (log) => fileStorage(paths2, log),
+    launcher: (own2) => createLauncher(own2, machine),
+    storage: (log) => fileStorage(paths2, log, machine),
     doctorStores: fileStores(paths2.state),
     doctorEdge: productionEdge,
     claudeInput: productionClaudeInputEdge,
-    laneEdge: productionLaneEdge,
+    laneEdge: (launcher, following, closing) => productionLaneEdge(launcher, following, closing, machine),
     linkSigner: linkSignerFromKeyFile(linkKeyFile(paths2.state)),
     limits: ({ startedAtMs, exit: exit2, launcher, log }) => realLimitsDeps(startedAtMs, exit2, {
       launcher,
       log,
+      clock: machine,
       snapshotDir: paths2.state,
       writeLogNow: () => daemonLog.writeNow()
     }),
@@ -85586,10 +85762,11 @@ var clockAt = (at) => nowSec() - (t - at);
 var id = (prefix) => `${prefix}_${(serial++).toString(36)}`;
 var onClock = ({ headAt, ...rest2 }) => headAt === void 0 ? rest2 : { ...rest2, headTime: Math.floor(clockAt(headAt)) };
 seedWorld(onClock(INITIAL_REPO));
-var HOST = processWorld().host;
+var WORLD = processWorld();
+var HOST = WORLD.host;
 var paths = daemonPaths(HOST);
 var pageDaemon = createDaemon({
-  ...productionAdapters(paths, new DaemonLog(paths.log)),
+  ...productionAdapters(paths, new DaemonLog(paths.log, WORLD.clock), WORLD.clock),
   gates: daemonGates(),
   paths,
   host: HOST,
@@ -85606,7 +85783,7 @@ var pageDaemon = createDaemon({
   }),
   memoryLimitBytes: memoryLimitBytes(HOST.env),
   registryUrl: REGISTRY_URL,
-  clock: SYSTEM_CLOCK,
+  clock: WORLD.clock,
   exit: (code) => {
     throw new Error(`the page's daemon asked to exit ${code}`);
   }

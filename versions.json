@@ -2,74 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-586",
-      "ref": "refs/pull/586/merge",
-      "sha": "7f95e0df01ea1d02e763bc3f9a348742488d5dc7",
-      "timestamp": "2026-11-02T22:25:04.389Z",
-      "commits": [
-        {
-          "sha": "7f95e0df01ea1d02e763bc3f9a348742488d5dc7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T22:23:11Z",
-          "message": "Merge d12af98da9ab3d3f46edfff4f686745e41aaa268 into 7517c26c7273173d4e5e09588fd51ac4d21131b4\n"
-        },
-        {
-          "sha": "d12af98da9ab3d3f46edfff4f686745e41aaa268",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T15:22:58-07:00",
-          "message": "refactor(time): the clock lint also bans process.hrtime, process.uptime and node:perf_hooks (candybar-testing-ihvy.aiy)\n"
-        },
-        {
-          "sha": "2f47a47505c187d4266e8dc09d6668d8fe37538c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T15:10:29-07:00",
-          "message": "refactor(time): a launcher carries the machine's clock for whoever waits on its children, and memory and the plan name the two timekeepers (candybar-testing-ihvy.aiy)\n"
-        },
-        {
-          "sha": "540880ab21d7bfb2ea203c9f9c16fd88004f0b15",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T15:06:22-07:00",
-          "message": "refactor(time): every timer, wall reading and loop turn in src goes through the Timekeeper, and lint keeps it so (candybar-testing-ihvy.aiy)\n"
-        },
-        {
-          "sha": "2b51a6a659515e73142d1a4adf6e9e3f9236a54c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T14:57:09-07:00",
-          "message": "refactor(time): the variable store, render cache and run stats read the daemon's clock (candybar-testing-ihvy.aiy)\n"
-        },
-        {
-          "sha": "727aa54efb288a4353967440e703c244420836c7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T14:53:37-07:00",
-          "message": "refactor(time): the launcher, log, limits, lane edge, session storage and update watch run on a Timekeeper they are handed (candybar-testing-ihvy.aiy)\n"
-        },
-        {
-          "sha": "67ef0a81642eff756f618fde38da81c3b3b418b5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T14:46:43-07:00",
-          "message": "feat(time): one Timekeeper port with a real clock and a held one, proven by one contract suite (candybar-testing-ihvy.aiy)\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "7517c26c7273173d4e5e09588fd51ac4d21131b4",
-      "timestamp": "2026-11-02T21:22:39.838Z",
+      "sha": "9409f66cd2ae1e887b92aeceb049c33b3c75787f",
+      "timestamp": "2026-11-02T22:31:14.564Z",
       "commits": [
         {
-          "sha": "7517c26c7273173d4e5e09588fd51ac4d21131b4",
+          "sha": "9409f66cd2ae1e887b92aeceb049c33b3c75787f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T14:21:41-07:00",
-          "message": "refactor(host): the process is read once into a Host, and tests stop writing process.env (candybar-testing-ihvy.33e) (#585)\n\n* refactor(host): the process is read once into a Host, and a launcher inherits what its owner hands it (candybar-testing-ihvy.33e)\n\nsrc names process.env, os.homedir and os.tmpdir only in src/host.ts and the preload's main; every other file takes a Host, a World (host + launcher), or the parsed Locations / DaemonPaths. Launch options carry an envOverlay over the launcher's inherited environment, the module-level launcher singletons are gone, and a lint rule keeps it so.\n\n* test(host): tests state their machine as a Host, and no test writes process.env (candybar-testing-ihvy.33e)\n\nEvery test that wrote XDG_*, the daemon socket, the breaker's variables or the like now builds a Host over the environment it names and hands it to the code under test; a child a test launches inherits its launcher's environment. A second lint config fails a write to process.env in test/, apart from the setup files, the in-worker harness and a PATH stub, and pnpm lint runs it. Memory notes the rule.\n\n* fix(host): scripts build their world from src, gallery sets the debug switch, stale width comments go (candybar-testing-ihvy.33e)"
+          "timestamp": "2026-11-02T15:30:31-07:00",
+          "message": "refactor(time): the daemon reads time and schedules work through one Timekeeper (candybar-testing-ihvy.aiy) (#586)\n\n* feat(time): one Timekeeper port with a real clock and a held one, proven by one contract suite (candybar-testing-ihvy.aiy)\n\n* refactor(time): the launcher, log, limits, lane edge, session storage and update watch run on a Timekeeper they are handed (candybar-testing-ihvy.aiy)\n\n* refactor(time): the variable store, render cache and run stats read the daemon's clock (candybar-testing-ihvy.aiy)\n\n* refactor(time): every timer, wall reading and loop turn in src goes through the Timekeeper, and lint keeps it so (candybar-testing-ihvy.aiy)\n\n* refactor(time): a launcher carries the machine's clock for whoever waits on its children, and memory and the plan name the two timekeepers (candybar-testing-ihvy.aiy)\n\n* refactor(time): the clock lint also bans process.hrtime, process.uptime and node:perf_hooks (candybar-testing-ihvy.aiy)"
         }
       ]
     },
