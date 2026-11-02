@@ -38,7 +38,7 @@ export function planOutcome(outcome: ClientOutcome): OutcomePlan {
     // [LAW:one-type-per-behavior] The daemon's own TIMEOUT proves it is up,
     // so there is nothing to respawn: a kick would spawn a candidate that
     // loses the bind to the live daemon, once per render under load. The
-    // Rust client's Busy variant does the same.
+    // Rust client's Busy variant does not kick either.
     case "busy":
       return {
         output: "\n",

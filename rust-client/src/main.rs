@@ -244,10 +244,11 @@ fn dist_index_path() -> Option<PathBuf> {
 // --- render path ---------------------------------------------------------
 
 // [LAW:types-are-the-program] Mirrors ClientOutcome in src/daemon/client.ts.
-// The variant *is* the recovery decision: Transient warrants a kick;
-// Busy (the daemon's own TIMEOUT) and Permanent do not. Conflating them — which is what the previous shape
-// did, returning Result<String, _> with everything bucketed into a single
-// failure tag — was the load-bearing half of the 452-corpse spiral (kz8.5).
+// The variant *is* the recovery decision: Transient warrants a kick; Busy
+// (the daemon's own TIMEOUT) and Permanent do not. Conflating them — which is
+// what the previous shape did, returning Result<String, _> with everything
+// bucketed into a single failure tag — was the load-bearing half of the
+// 452-corpse spiral (kz8.5).
 #[derive(Debug)]
 #[allow(dead_code)] // payload fields read only via Debug
 pub enum RenderOutcome {
@@ -261,6 +262,8 @@ pub enum RenderOutcome {
 #[allow(dead_code)] // payload strings read only via Debug
 pub enum TransientCause {
     Unreachable(String),
+    // This client's own clock ran out. Not the daemon's TIMEOUT reply, which
+    // is RenderOutcome::Busy.
     Timeout,
     Io(String),
 }
