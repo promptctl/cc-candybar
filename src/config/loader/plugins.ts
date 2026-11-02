@@ -451,11 +451,15 @@ export function withDroppedPlacements(
     (v) => v.kind === "dropped",
   );
   const templates = anyTombstone
-    ? Object.values(config.segments).flatMap((seg) =>
-        SEGMENT_TEMPLATE_FIELDS.flatMap((f) =>
+    ? Object.values(config.segments).flatMap((seg) => [
+        ...SEGMENT_TEMPLATE_FIELDS.flatMap((f) =>
           seg[f] === undefined ? [] : [seg[f]],
         ),
-      )
+        // A partial can bind an action exactly as template/bg/fg/when can —
+        // its own calls must stand in for a dropped plugin's action too
+        // (candybar-templates-zh8b.53s).
+        ...Object.values(seg.partials ?? {}),
+      ])
     : [];
   const doMembers = anyTombstone
     ? Object.values(config.actions).flatMap((a) => ("do" in a ? [...a.do] : []))
@@ -767,6 +771,12 @@ function boundToSelf(ns: string, fragment: RawDslConfig): RawDslConfig {
           seg[f] === undefined ? [] : [[f, bind(seg[f])]],
         ),
       ),
+      // A partial is a template surface of its segment, same as
+      // template/bg/fg/when — `self` binds inside one exactly as it does
+      // there (candybar-templates-zh8b.53s).
+      ...(seg.partials !== undefined && {
+        partials: each(seg.partials, bind),
+      }),
       ...(seg.vars !== undefined && {
         vars: each(seg.vars, (v) =>
           selfDepends(mapVariableTemplates(v, bind), named),
@@ -892,6 +902,12 @@ function* fragmentTemplates(
     for (const field of SEGMENT_TEMPLATE_FIELDS) {
       const t = seg[field];
       if (t !== undefined) yield [`segments.${name}.${field}`, t];
+    }
+    // A segment's own partials are a template surface too — `self`/scope
+    // checks must see them exactly as they see template/bg/fg/when
+    // (candybar-templates-zh8b.53s).
+    for (const [partialName, body] of Object.entries(seg.partials ?? {})) {
+      yield [`segments.${name}.partials.${partialName}`, body];
     }
     for (const [varName, v] of Object.entries(seg.vars ?? {})) {
       for (const [field, t] of variableTemplates(v)) {

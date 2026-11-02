@@ -858,13 +858,16 @@ export interface SegmentDecl {
   // read only through `missingDataOf`.
   readonly missingData?: MissingData;
   // Named sub-templates scoped to THIS segment: a long `template` (or
-  // `when`/`bg`/`fg`/`lead`/`trail`) dispatches to one by a literal
+  // `when`/`bg`/`fg`) dispatches to one by a literal
   // `{{ template "name" ctx }}` instead of nesting every state inline. Scoped,
   // not global like `helpers`, so two segments can each declare a partial
   // named the same thing with no collision — `registerDslConfig` compiles
   // each segment's partials into their own Defines, chained onto the config's
   // shared helpers, and parses only that segment's own template fields
-  // against it. [LAW:one-source-of-truth]
+  // against it. A name already taken by a global helper is a load error
+  // (cross-ref.ts), never a silent shadow: the chain's redefinition check
+  // would otherwise throw uncaught at compile for a config that validated
+  // clean. [LAW:one-source-of-truth]
   readonly partials?: Readonly<Record<string, string>>;
 }
 

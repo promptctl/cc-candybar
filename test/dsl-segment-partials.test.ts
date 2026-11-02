@@ -14,7 +14,11 @@ import { TEST_SIGNER } from "./helpers/link-signer";
 import { SessionState } from "../src/daemon/session-state";
 
 import { validateConfig } from "./helpers/parse-and-validate";
-import { parseDslConfig, mergeWithDefault } from "../src/config/dsl-loader";
+import {
+  parseDslConfig,
+  mergeWithDefault,
+  inheritableSegmentNames,
+} from "../src/config/dsl-loader";
 import type { DslConfig, ValidatedConfig } from "../src/config/dsl-types";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -43,7 +47,12 @@ const EMPTY_DEFAULT: DslConfig = {
 };
 
 function build(source: string, dflt: DslConfig = EMPTY_DEFAULT) {
-  const raw = parseDslConfig("<test>", source);
+  const raw = parseDslConfig(
+    "<test>",
+    source,
+    undefined,
+    inheritableSegmentNames(dflt),
+  );
   const config = validateConfig(
     { config: mergeWithDefault(raw, dflt), raw, source: source },
     "<test>",
@@ -234,5 +243,72 @@ describe("candybar-templates-zh8b.53s — segment-scoped partials", () => {
     const { config } = build(source);
     expect(config.segments.plain?.partials).toBeUndefined();
     expect(textOf(render(source, { x: 42 }))).toContain("x=42");
+  });
+
+  test("a partial reusing a global helper's name is a load error, not an uncaught compile throw", () => {
+    // Without this check, validation reports no issues and `registerDslConfig`
+    // throws an uncaught "redefinition of template" error instead — the two
+    // layers must agree the name is taken.
+    const message = issuesOf(`{
+      helpers: { money: '\${{ . }}' },
+      segments: {
+        s: {
+          template: '{{ template "money" . }}',
+          partials: { money: "shadow" },
+        },
+      },
+      root: "s",
+    }`);
+    expect(message).toMatch(
+      /segments\.s\.partials\.money[^\n]*reuses the name of a global helper/,
+    );
+  });
+
+  test("{{ menu }} inside a partial is a load error, same rule as a helper", () => {
+    const message = issuesOf(`{
+      segments: {
+        s: {
+          template: '{{ template "m" . }}',
+          partials: { m: '{{ menu "pick" "▸" "▾" }}' },
+        },
+      },
+      actions: { pick: { set: "k", from: ["a", "b"] } },
+      variables: { k: { kind: "state", key: "k", default: "a" } },
+      root: "s",
+    }`);
+    expect(message).toMatch(/segments\.s\.partials\.m[^\n]*\{\{ menu \}\}/);
+  });
+
+  test("a helper called only from inside a partial is NOT flagged unused", () => {
+    const { config } = build(`{
+      helpers: { money: '\${{ . }}' },
+      segments: {
+        s: {
+          template: '{{ template "cost" . }}',
+          partials: { cost: 'cost={{ template "money" . }}' },
+        },
+      },
+      root: "s",
+    }`);
+    expect(config.helpers.money).toBeDefined();
+  });
+
+  test("a delta's partials merge by name over a bundled base's, like settings", () => {
+    const dflt: DslConfig = {
+      ...EMPTY_DEFAULT,
+      segments: {
+        s: {
+          template: '{{ template "a" . }}{{ template "b" . }}',
+          partials: { a: "A-BASE", b: "B-BASE" },
+        },
+      },
+    };
+    const source = `{
+      segments: { s: { partials: { a: "A-USER" } } },
+      root: "s",
+    }`;
+    const out = textOf(render(source, {}, dflt));
+    expect(out).toContain("A-USER");
+    expect(out).toContain("B-BASE"); // retained, not dropped by the delta
   });
 });

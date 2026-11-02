@@ -141,6 +141,34 @@ describe("a listed plugin", () => {
   });
 });
 
+// [LAW:verifiable-goals] candybar-templates-zh8b.53s: a plugin's segment
+// `partials` is a template surface exactly like template/bg/fg/when — `self`
+// rewrites inside one the same way, and a bare helper call inside one binds
+// against the plugin's own namespace, not the scope it loads under.
+describe("a plugin segment's partials", () => {
+  // A partial's own name is never namespaced (candybar-templates-zh8b.53s) —
+  // it is called bare ("line"), unlike a helper ("self.state"), which IS.
+  const PARTIAL_DEFINITION = `{
+    data: "./state.json",
+    segments: {
+      status: {
+        when: '{{ hasKey .self.data "env" }}',
+        template: '{{ template "line" .self.data }}',
+        partials: { line: '⇪ {{ .env }} {{ template "self.state" . }}' },
+      },
+    },
+    helpers: { state: '{{ .state }}' },
+  }`;
+
+  test("self rewrites inside a partial, and its bare helper call binds to the plugin's own namespace", async () => {
+    const p = config(PARTIAL_DEFINITION);
+    write("deploy/state.json", `{ "env": "prod", "state": "live" }`);
+    const { rendered, warnings } = clean(await checkConfig(p, dir));
+    expect(rendered).toContain("⇪ prod live");
+    expect(warnings).toEqual([]);
+  });
+});
+
 describe("a plugin that does not load is dropped alone", () => {
   // The rest of the config still renders, the drop is a warning on the strip,
   // and check fails naming the definition.

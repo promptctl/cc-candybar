@@ -44,15 +44,24 @@ function synthesisReads(
   helpers: Readonly<Record<string, string>>,
 ): Set<string> {
   const reads = new Set<string>();
-  const add = (template: string | undefined): void => {
-    for (const ref of templateReads(template ?? "", helpers).keys())
+  const add = (
+    template: string | undefined,
+    scope: Readonly<Record<string, string>> = helpers,
+  ): void => {
+    for (const ref of templateReads(template ?? "", scope).keys())
       reads.add(ref);
   };
   for (const seg of Object.values(artifacts.segments)) {
-    add(seg.template);
-    add(seg.bg);
-    add(seg.fg);
-    add(seg.when);
+    // A segment's own partials are visible to its template/bg/fg/when (and to
+    // each other) exactly as helpers are (candybar-templates-zh8b.53s) — a
+    // read reachable only through one would otherwise never synthesize.
+    const segScope =
+      seg.partials === undefined ? helpers : { ...helpers, ...seg.partials };
+    add(seg.template, segScope);
+    add(seg.bg, segScope);
+    add(seg.fg, segScope);
+    add(seg.when, segScope);
+    for (const body of Object.values(seg.partials ?? {})) add(body, segScope);
   }
   for (const tree of trees) {
     for (const node of walkNodes(tree)) {
