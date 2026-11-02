@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-561",
+      "ref": "refs/pull/561/merge",
+      "sha": "ce2d4f38a296fbbcc7599a03ebbe9296176f3116",
+      "timestamp": "2026-11-02T11:02:28.796Z",
+      "commits": [
+        {
+          "sha": "ce2d4f38a296fbbcc7599a03ebbe9296176f3116",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T04:01:31-07:00",
+          "message": "Merge c0c5bb17664c0f5f286209fe070e17f3954970b3 into 040ba694b11dd01c6bce64b56acd016dabbf0578\n"
+        },
+        {
+          "sha": "c0c5bb17664c0f5f286209fe070e17f3954970b3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T04:01:14-07:00",
+          "message": "test: delete the menu and colour tests that pin the look (candybar-testing-0x6u.4bt)\n\nThree whole files and nine cases asserted exact shades, tones and bytes of menus\nand turns, so any design change was an edit to them. The seam sweep keeps its\ncoverage in the nightly audit, which now walks every variation.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-560",
       "ref": "refs/pull/560/merge",
       "sha": "96615bcd514b6172128b71733950c9dd4b4d426d",
