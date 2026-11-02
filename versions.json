@@ -4,15 +4,22 @@
     {
       "version": "pr-583",
       "ref": "refs/pull/583/merge",
-      "sha": "486d8ce8897b4cf97e55c722b9bbd4cfeb1df819",
-      "timestamp": "2026-11-02T18:50:38.511Z",
+      "sha": "d4caa171f8189b502f4c6d7adf3f2f26f51d26cb",
+      "timestamp": "2026-11-02T18:51:36.502Z",
       "commits": [
         {
-          "sha": "486d8ce8897b4cf97e55c722b9bbd4cfeb1df819",
+          "sha": "d4caa171f8189b502f4c6d7adf3f2f26f51d26cb",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T18:26:23Z",
-          "message": "Merge 5e7e8f028a7147910a5195fec2a38712112c0102 into ab8efc3e14af20e9b4e8fd57aabe300f8a2c3456\n"
+          "timestamp": "2026-11-02T11:49:43-07:00",
+          "message": "Merge e6d7fd77a6f1d61b3ee7d6ed83fe2026a8d9a67d into ab8efc3e14af20e9b4e8fd57aabe300f8a2c3456\n"
+        },
+        {
+          "sha": "e6d7fd77a6f1d61b3ee7d6ed83fe2026a8d9a67d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T11:29:10-07:00",
+          "message": "fix(log): a disposed log registers no exit listener and a flush under way ends its own descriptor (candybar-testing-ihvy.yfv)\n\nReview of #583: dispose() with a flush mid-open left the descriptor that\nflush then opened, and a line logged after dispose re-registered the exit\nlistener. dispose now marks the log, defers the close to a flush in flight,\nand a late line is written by a flush that ends its own open.\n"
         },
         {
           "sha": "5e7e8f028a7147910a5195fec2a38712112c0102",

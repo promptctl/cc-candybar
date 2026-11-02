@@ -84378,10 +84378,12 @@ var DaemonLog = class {
   // by an exit listener after this one — is written as it is logged.
   exiting = false;
   exitListener = null;
+  // Set by dispose: nothing registers or holds a resource for this log again.
+  disposed = false;
   // One line, to the log: the daemon's `DaemonLogger`.
   log = (level, msg) => {
     const line = logLine(level, msg);
-    if (this.exitListener === null) {
+    if (this.exitListener === null && !this.disposed) {
       this.exitListener = () => {
         this.exiting = true;
         this.writeWaitingSync(true, EXIT_WAIT_MS);
@@ -84420,13 +84422,17 @@ var DaemonLog = class {
   }
   // The log of a daemon that is done with it: its descriptor and its exit
   // listener go, so a process that builds many logs holds none of the ended
-  // ones. A line logged after still reaches the file, through a fresh open.
+  // ones. A line logged after still reaches the file, through an open its flush
+  // ends, and is not written at the process's exit. A flush under way ends the
+  // descriptor itself: closed from here, its number could go to the next file
+  // opened while a write still holds it.
   dispose() {
+    this.disposed = true;
     if (this.exitListener !== null) {
       process_default.off("exit", this.exitListener);
       this.exitListener = null;
     }
-    this.closeSink();
+    if (!this.flushing) this.closeSink();
   }
   closeSink() {
     if (this.sink === null) return;
@@ -84488,6 +84494,7 @@ var DaemonLog = class {
       }
     } finally {
       this.flushing = false;
+      if (this.disposed) this.closeSink();
       for (const resolve of this.drainedWaiters.splice(0)) resolve();
     }
   }
