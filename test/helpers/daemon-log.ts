@@ -55,10 +55,39 @@ export const renderEventsOf = (
 export const answeredRender = (line: string): boolean =>
   line.includes(" timedOut=N ");
 
-// A session's render events, every attempt in log order, once `count` replies
-// its client read are among them: a request the client retried after a
-// timeout is logged once per attempt, and the attempt it read is the one not
-// timed out.
+// Whether every value a render event drew pending is a plugin source a run
+// superseded, as its `sourcesPending=` names them.
+export function drewOnlySuperseded(event: string): boolean {
+  const field = (name: string): string[] =>
+    (new RegExp(` ${name}=(\\S+)`).exec(event)?.[1] ?? "-")
+      .split(",")
+      .filter((v) => v !== "-");
+  const superseded = new Set(
+    field("sourcesPending")
+      .filter((v) => v.endsWith(":superseded"))
+      .map((v) => v.slice(0, -":superseded".length)),
+  );
+  const pending = field("pending");
+  return pending.length > 0 && pending.every((name) => superseded.has(name));
+}
+
+// An answered render that drew a source still pending. A source a run
+// superseded is pending by design (no request waits on it), so it is not one.
+export const drewAwaitedPending = (event: string): boolean =>
+  !/ pending=-(?: |$)/.test(event) && !drewOnlySuperseded(event);
+
+// [LAW:one-source-of-truth] The answer `renderRequest` asks again after: one
+// that drew a source pending because its wait ended at the deadline. The retry
+// loop decides with this and `renderLines` drops what it decided, so a render
+// is read as the one event its client kept.
+export const retriedRender = (event: string): boolean =>
+  drewAwaitedPending(event) && / ended=deadline(?: |$)/.test(event);
+
+// A session's render events, one per render its client kept, in log order,
+// once `count` of them are there. A request the client retried is logged once
+// per attempt: after a timeout the attempt it read is the one not timed out,
+// and after an answer that drew a source pending the attempt it kept is the
+// last one.
 export async function renderLines(
   env: NodeJS.ProcessEnv,
   sessionId: string,
@@ -66,8 +95,11 @@ export async function renderLines(
 ): Promise<string[]> {
   return loggedLines(
     env,
-    (lines) => renderEventsOf(lines, sessionId),
-    (events) => events.filter(answeredRender).length >= count,
-    `${count} answered render event(s) for ${sessionId}`,
+    (lines) =>
+      renderEventsOf(lines, sessionId).filter(
+        (l) => answeredRender(l) && !retriedRender(l),
+      ),
+    (events) => events.length >= count,
+    `${count} kept render event(s) for ${sessionId}`,
   );
 }

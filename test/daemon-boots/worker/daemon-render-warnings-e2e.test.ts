@@ -86,9 +86,9 @@ describe("a daemon render's event names every warning, and the indicator offers 
     path.join(projectDir, `${config}.json5`),
   ];
 
-  // A request the helper retried after a reply timeout is logged once per
-  // attempt, and every attempt met the same warnings.
-  const everyAttemptReads = async (
+  // The event of each of the session's renders: one per render, whatever the
+  // helper retried to get its answer, and each met the same warnings.
+  const everyRenderReads = async (
     sessionId: string,
     answers: number,
     field: string,
@@ -155,7 +155,7 @@ describe("a daemon render's event names every warning, and the indicator offers 
       expect(pages).toHaveLength(shown.length);
       shown.forEach((word, i) => expect(pages[i]!.text).toContain(word));
 
-      await everyAttemptReads(sessionId, 2, "warn", warn);
+      await everyRenderReads(sessionId, 2, "warn", warn);
     },
   );
 
@@ -252,7 +252,7 @@ describe("a daemon render's event names every warning, and the indicator offers 
       const bar = await render(daemon, sid, dir);
       expect(indicatorOf(bar)).toBe("⚠ 1");
       expect(indicatorOf(await render(daemon, sid, dir))).toBe("⚠ 1");
-      await everyAttemptReads(sid, 2, "warn", "config-watch");
+      await everyRenderReads(sid, 2, "warn", "config-watch");
       const pages = await readDiagnostics(daemon, sid, dir, bar);
       expect(pages.map((p) => p.text)).toEqual([
         expect.stringContaining(refusal),
@@ -260,15 +260,15 @@ describe("a daemon render's event names every warning, and the indicator offers 
 
       const another = "refused-too";
       expect(indicatorOf(await render(daemon, another, dir))).toBe("⚠ 1");
-      await everyAttemptReads(another, 1, "warn", "config-watch");
+      await everyRenderReads(another, 1, "warn", "config-watch");
 
       const failedSid = "refused-broken";
       const args = ["cc-candybar", "--config", broken];
       const failed = await render(daemon, failedSid, dir, {}, args);
       expect(indicatorOf(failed)).toBe("⚠ 2");
-      await everyAttemptReads(failedSid, 1, "warn", "config-watch");
-      await everyAttemptReads(failedSid, 1, "err", "Y");
-      await everyAttemptReads(failedSid, 1, "diag", "2");
+      await everyRenderReads(failedSid, 1, "warn", "config-watch");
+      await everyRenderReads(failedSid, 1, "err", "Y");
+      await everyRenderReads(failedSid, 1, "diag", "2");
       const both = await readDiagnostics(daemon, failedSid, dir, failed, {}, args);
       expect(both.map((p) => p.text)).toEqual([
         expect.stringContaining(`Invalid config in ${broken}`),

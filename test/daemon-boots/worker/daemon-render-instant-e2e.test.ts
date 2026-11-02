@@ -54,9 +54,8 @@ describe("a daemon render is drawn at the instant its request sampled, and logs 
     const after = Date.now() / 1000;
 
     const shown = bar.match(/EPOCH=(\d+\.\d{3})/)?.[1];
-    // A request the helper retried after a reply timeout is logged once per
-    // attempt, so the reply's render is the event whose instant the bar shows,
-    // to the millisecond — which is the claim itself.
+    // The reply's render is the event whose instant the bar shows, to the
+    // millisecond — which is the claim itself.
     const instants = (await renderLines(env, sessionId)).map(
       (l) => l.match(/ at=(\d+\.\d{3}) /)?.[1],
     );

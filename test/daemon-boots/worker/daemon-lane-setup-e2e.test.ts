@@ -30,7 +30,7 @@ import { LANES, type Lane } from "../../../src/config/lanes";
 import { GLOBAL_FIELDS } from "../../../src/config/globals-fields";
 import type { ClientHints } from "../../../src/daemon/protocol";
 import { click, render, sendClick } from "../../helpers/daemon-e2e";
-import { answeredRender, logLines, renderLines } from "../../helpers/daemon-log";
+import { logLines, renderLines } from "../../helpers/daemon-log";
 import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
@@ -125,7 +125,7 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     sid: string,
     dir = projectDir,
   ): Promise<void> => {
-    const before = (await renderLines(env, sid)).filter(answeredRender).length;
+    const before = (await renderLines(env, sid)).length;
     await renderIn(sid, dir);
     await renderLines(env, sid, before + 1);
   };
