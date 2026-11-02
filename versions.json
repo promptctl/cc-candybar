@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-558",
+      "ref": "refs/pull/558/merge",
+      "sha": "d3a2097ea49cd19b3cb7a68cd56b85ef0133a8d3",
+      "timestamp": "2026-11-02T23:23:11.062Z",
+      "commits": [
+        {
+          "sha": "d3a2097ea49cd19b3cb7a68cd56b85ef0133a8d3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T23:21:55Z",
+          "message": "Merge e6169a6de27e35d3e691e93a703cb1d021c25f78 into 9409f66cd2ae1e887b92aeceb049c33b3c75787f\n"
+        },
+        {
+          "sha": "e6169a6de27e35d3e691e93a703cb1d021c25f78",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T03:57:33-06:00",
+          "message": "fix(bar-pane): a frame overwrites its rows and lands whole, so the pane stops flickering\n"
+        }
+      ]
+    },
+    {
       "version": "pr-587",
       "ref": "refs/pull/587/merge",
       "sha": "37e384d81184a2c8a2bd17d823d4d93c5b0c75fc",
@@ -78,28 +100,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-01T20:15:07-07:00",
           "message": "docs(design): the isolated daemon, tmux events and browser surface designs\n\nGoals, architecture, contracts and one document per area, with the surveys and probes behind them. The Frame is recorded as built, and the browser surface is un-parked.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-558",
-      "ref": "refs/pull/558/merge",
-      "sha": "69adeaa2b2d3beb6ef48393eeb75f353d6bc23d1",
-      "timestamp": "2026-11-02T03:11:28.368Z",
-      "commits": [
-        {
-          "sha": "69adeaa2b2d3beb6ef48393eeb75f353d6bc23d1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T20:10:31-07:00",
-          "message": "Merge b2b1d01722233748ed566752ba6c78518219e86b into ec9fa5454b16e8eff68525c059c5214d0a98a8d5\n"
-        },
-        {
-          "sha": "b2b1d01722233748ed566752ba6c78518219e86b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T03:57:33-06:00",
-          "message": "fix(bar-pane): a frame overwrites its rows and lands whole, so the pane stops flickering\n"
         }
       ]
     }
