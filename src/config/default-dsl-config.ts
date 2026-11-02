@@ -67,10 +67,17 @@ const GIT_INIT = confirmStep(
 // subpath kept whole and a linked worktree named after it. Outside a repo
 // `.location.main` is "" and the session's directory stands in. It draws
 // with no leading space, because it starts the bar's form, and reads no
-// `.git`, so it draws while git is still pending (brandon-directory-781 made
+// `.git`, so it draws while git is still pending.
+// [LAW:decomposition] Two separable concerns, in order: (1) pick which path
+// is being shown (the main checkout, or the session directory when there is
+// none) and COLLAPSE it to `~` under home, (2) ABBREVIATE fish-style, then
+// append the subpath and worktree name — facts `checkoutLocation` already
+// resolved, never recomputed. `$dir` carries the chosen path between the
+// collapse and abbreviate steps; `$text` carries the abbreviated survivor
+// into the subpath/worktree append. brandon-directory-781 made
 // fish-abbreviation the default; a user restores the full path by overriding
 // `segments.directory.template` — drop the `abbreviatePath` wrapper — the
-// existing merge-by-name seam).
+// existing merge-by-name seam.
 // The abbreviation hides the full path, so the cell is one `copyDir` link:
 // clicking it copies `.current_dir` whole. The click lives in this template,
 // so an override keeps the `action "copyDir"` wrap or loses the click.
@@ -82,14 +89,16 @@ const DIR_TEMPLATE =
   '{{ if ne .location.worktree "" }}{{ $text = printf "%s (%s %s)" $text .glyph.worktree .location.worktree }}{{ end }}' +
   '{{ action "copyDir" $text }}';
 
-// How far the two git segments' *structural* text — labels, punctuation,
-// brackets, the sha, the upstream name, the elapsed-time annotation — sits
-// toward their own background, as a percentage. It is applied as the segments'
-// `fg:`, so structural text is simply what a token renders as when the
-// template does NOT paint it; only the operative facts (branch, counts,
-// status) name a color. [LAW:dataflow-not-control-flow] — the quiet case is
-// the default that always applies, not a wrapper each token opts into. That
-// inversion is why these templates carry no de-emphasis markup at all.
+// How far structural text — labels, punctuation, brackets, the sha, the
+// upstream name, the elapsed-time annotation — sits toward its own
+// background, as a percentage. Applied as a segment's `fg:`, so structural
+// text is simply what a token renders as when the template does NOT paint
+// it; only the operative facts (branch, counts, status) name a color.
+// [LAW:dataflow-not-control-flow] — the quiet case is the default that
+// always applies, not a wrapper each token opts into. That inversion is why
+// these templates carry no de-emphasis markup at all. `directory` shares
+// this `fg:` too — it's the same git cell's text, just drawn in a different
+// segment now.
 //
 // The recipe and its measured floor are `QUIET_TEXT` (src/config/quiet-text.ts).
 const GIT_QUIET_FG = `{{ ${QUIET_TEXT} }}`;
