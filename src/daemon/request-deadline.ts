@@ -14,7 +14,7 @@ export const REQUEST_TIMEOUT_MS = 200;
 
 // What a request's wait leaves for its draw: the synchronous turn that reads
 // the view and turns it into the answer's bytes. Held to at p99 by
-// test/draw-reserve.process.test.ts, over a view's cold first draw of the bundled
+// test/daemon-boots/process/draw-reserve.test.ts, over a view's cold first draw of the bundled
 // default and of the load gate's full config. A cold draw takes a few ms on an
 // idle machine, but the reserve is wall time, and a draw descheduled on a busy
 // one reads tens of ms with no more work in it: CI's runner, its cores shared

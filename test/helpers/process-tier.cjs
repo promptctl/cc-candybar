@@ -1,14 +1,14 @@
 // [LAW:single-enforcer] The process tier: a test whose subject is the daemon
-// process lives in a `*.process.test.ts` file, and only there may a real daemon
-// start. This file holds what that rule is made of, and judges one run's starts.
-// The rule is about a process entering the `daemon` subcommand, so it is read
-// from what such a process recorded (daemon-ledger.cjs), whichever route brought
-// it there. CommonJS because the preload and the jest configs load it
+// process lives under test/daemon-boots/process/, and only there may a real
+// daemon start. This file holds what that rule is made of, and judges one run's
+// starts. The rule is about a process entering the `daemon` subcommand, so it is
+// read from what such a process recorded (daemon-ledger.cjs), whichever route
+// brought it there. CommonJS because the preload and the jest configs load it
 // untransformed.
 
-// A string, because jest's testPathIgnorePatterns takes strings and fails on a
-// RegExp.
-const PROCESS_TIER_PATTERN = "\\.process\\.test\\.ts$";
+// [LAW:one-source-of-truth] The tier is this directory, relative to the package
+// root: the jest configs and the judge read it from here.
+const PROCESS_TIER_DIR = "test/daemon-boots/process";
 
 // [LAW:verifiable-goals] The pin on a run's daemons, over the cases that spawn
 // one through the helper. It is a maximum: a filtered run starts fewer, and a
@@ -38,8 +38,8 @@ function faultOf({ file, route }) {
   if (file === null) {
     return "a daemon started by a process that carries no test file, so it was spawned with no env";
   }
-  if (!new RegExp(PROCESS_TIER_PATTERN).test(file)) {
-    return `${file} started a real daemon (${route}): only a *.process.test.ts file may, and any other test takes the in-worker harness`;
+  if (!file.startsWith(`${PROCESS_TIER_DIR}/`)) {
+    return `${file} started a real daemon (${route}): only a file under ${PROCESS_TIER_DIR}/ may, and any other test takes the in-worker harness`;
   }
   // [LAW:single-enforcer] A spawn of its own takes no pool slot and no count, so
   // the tier is no excuse for one.
@@ -74,7 +74,7 @@ function judgeDaemonStarts(starts, ceiling) {
 module.exports = {
   HELPER_START_CEILING,
   LEDGER_ENV,
-  PROCESS_TIER_PATTERN,
+  PROCESS_TIER_DIR,
   ROUTE_ENV,
   TEST_FILE_ENV,
   judgeDaemonStarts,

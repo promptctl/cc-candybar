@@ -3,7 +3,7 @@ import {
   parseLedger,
 } from "./helpers/process-tier.cjs";
 
-const TIER = "test/daemon-shutdown.process.test.ts";
+const TIER = "test/daemon-boots/process/daemon-shutdown.test.ts";
 const OUTSIDE = "test/daemon-effect-e2e.test.ts";
 type Route = "helper" | "client" | "raw";
 

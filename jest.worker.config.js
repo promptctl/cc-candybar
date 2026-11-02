@@ -3,10 +3,10 @@
 // path and runs everything but the file asked for.
 
 import base, { E2E_DIR_PATTERN, reportersFor } from "./jest.config.js";
-import { PROCESS_TIER_PATTERN } from "./test/helpers/process-tier.cjs";
+import { PROCESS_TIER_DIR } from "./test/helpers/process-tier.cjs";
 
 export default {
   ...base,
   reporters: reportersFor("worker"),
-  testPathIgnorePatterns: [PROCESS_TIER_PATTERN, E2E_DIR_PATTERN],
+  testPathIgnorePatterns: [`<rootDir>/${PROCESS_TIER_DIR}/`, E2E_DIR_PATTERN],
 };
