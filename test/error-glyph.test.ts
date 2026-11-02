@@ -5,7 +5,11 @@ import { RENDER_BUDGETS } from "../src/daemon/client";
 import { exchangeOutcome } from "../src/daemon/client-transport";
 import { formatPermanentGlyph } from "../src/render/error-glyph";
 import type { PermanentOutcome } from "../src/daemon/client-transport";
-import { PROTOCOL_VERSION, encodeFrame, makeFrameReader } from "../src/daemon/protocol";
+import {
+  PROTOCOL_VERSION,
+  encodeFrame,
+  makeFrameReader,
+} from "../src/daemon/protocol";
 
 // [LAW:behavior-not-structure] These tests assert the contract — the glyph's
 // visible text, single-line shape, prefix, and reset tail — not the
@@ -162,7 +166,7 @@ function mismatchingDaemonEnd(daemonEnd: Duplex, daemonV: number): void {
   );
 }
 
-describe("end-to-end: VERSION_MISMATCH wire → permanent outcome → glyph", () => {
+describe("VERSION_MISMATCH wire → permanent outcome → glyph", () => {
   test("stubbed daemon at a different protocol version yields a glyph that names both versions", async () => {
     const daemonV = PROTOCOL_VERSION + 7; // arbitrary "other" version
     const { daemonEnd, client } = memoryConnection();
