@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-565",
+      "ref": "refs/pull/565/merge",
+      "sha": "c983c68fb504ddde32bd3ea4ba769a807685dfe8",
+      "timestamp": "2026-11-02T12:31:58.087Z",
+      "commits": [
+        {
+          "sha": "c983c68fb504ddde32bd3ea4ba769a807685dfe8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T12:30:10Z",
+          "message": "Merge eb3f4a85b2ecb14cf7cd440c92713870c04a3b69 into c2a649577d11945c26d035121a186062bf34327f\n"
+        },
+        {
+          "sha": "eb3f4a85b2ecb14cf7cd440c92713870c04a3b69",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T05:21:21-07:00",
+          "message": "fix(url-handle): a busy click exits 0, and frames-cli takes its kick from the render policy (candybar-launch-q7o7.4yv)\n"
+        },
+        {
+          "sha": "75e067acea6eb31e96fdfe5ed53c430107ee331c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T05:16:23-07:00",
+          "message": "fix(client): busy is its own outcome kind, and a click waits past the daemon's backstop (candybar-launch-q7o7.4yv)\n"
+        },
+        {
+          "sha": "d79bf8a0b6eb91e5a9285b4bed27cbc61335ec58",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T05:12:40-07:00",
+          "message": "fix(url-handle): a daemon's TIMEOUT is busy, and a click's client no longer kicks a live daemon (candybar-launch-q7o7.4yv)\n\nReplaces the raised click bound: the daemon answering TIMEOUT proves it is\nup, so the client tells it from a wait it gave up and only kicks when no\ndaemon answered. The 200ms bound, the applet's quick return and the\njournal's stale-click refusal stay as they were.\n"
+        },
+        {
+          "sha": "d99011f89090b9dee466b879895e43d7ab540b79",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T05:05:47-07:00",
+          "message": "fix(daemon): a click is held to a click's bound, so a launching click no longer kicks a live daemon (candybar-launch-q7o7.4yv)\n\nThe connection backstop answered every request TIMEOUT at the render's\n200ms. A click awaits the program it launches (up to 5s), so the client\nheard TIMEOUT, kicked a daemon that was up, and exited 1 while the\nclick's effect still landed. The backstop is now re-armed by request\nkind once the frame is read, and the click client's budget derives from\nthe daemon's click bound.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-566",
       "ref": "refs/pull/566/merge",
       "sha": "7e93e87869d332c0225d535072702dbe20399a21",
@@ -34,49 +77,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T05:22:58-07:00",
           "message": "fix(frame-feed): a timer that fires before its moment waits it out, so no turn is drawn twice (brandon-unfiled-3248.l1mh)\n\nNode starts a timer from the loop's cached time, so one armed late in a slow\ncallback fires early by as long as that callback had run. Past\nTIMER_RESOLUTION_S the draw clamped to the wall, which fell in the turn before\nthe frame's change: that turn drawn twice, the next one late. The feed now\ncompares the timer's moment on the monotonic clock and re-arms for the rest.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-565",
-      "ref": "refs/pull/565/merge",
-      "sha": "ec5ce6cf256419e8ce68f16ebf0d7823065494a3",
-      "timestamp": "2026-11-02T12:22:41.114Z",
-      "commits": [
-        {
-          "sha": "ec5ce6cf256419e8ce68f16ebf0d7823065494a3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T12:21:44Z",
-          "message": "Merge 2e981a44660a2d81720aa8a4e473f5101f1f11a8 into c2a649577d11945c26d035121a186062bf34327f\n"
-        },
-        {
-          "sha": "2e981a44660a2d81720aa8a4e473f5101f1f11a8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T05:21:21-07:00",
-          "message": "fix(url-handle): a busy click exits 0, and frames-cli takes its kick from the render policy (candybar-launch-q7o7.4yv)\n"
-        },
-        {
-          "sha": "3a3fe33129e6b0285e1ef8257368166a666c6662",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T05:16:23-07:00",
-          "message": "fix(client): busy is its own outcome kind, and a click waits past the daemon's backstop (candybar-launch-q7o7.4yv)\n"
-        },
-        {
-          "sha": "38c2665d37d256b8a7a162e0c589c6356434eafa",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T05:12:40-07:00",
-          "message": "fix(url-handle): a daemon's TIMEOUT is busy, and a click's client no longer kicks a live daemon (candybar-launch-q7o7.4yv)\n\nReplaces the raised click bound: the daemon answering TIMEOUT proves it is\nup, so the client tells it from a wait it gave up and only kicks when no\ndaemon answered. The 200ms bound, the applet's quick return and the\njournal's stale-click refusal stay as they were.\n"
-        },
-        {
-          "sha": "246d7798412bea63b36c9a3b3c75d8d057a38e09",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T05:05:47-07:00",
-          "message": "fix(daemon): a click is held to a click's bound, so a launching click no longer kicks a live daemon (candybar-launch-q7o7.4yv)\n\nThe connection backstop answered every request TIMEOUT at the render's\n200ms. A click awaits the program it launches (up to 5s), so the client\nheard TIMEOUT, kicked a daemon that was up, and exited 1 while the\nclick's effect still landed. The backstop is now re-armed by request\nkind once the frame is read, and the click client's budget derives from\nthe daemon's click bound.\n"
         }
       ]
     },
