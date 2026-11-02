@@ -692,7 +692,6 @@ describe("toggle round trip + drop stacking", () => {
     expect(textOf(render()).split("\n")).toHaveLength(1);
   });
 
-
   // The instance-boundary property: a band is one more step on ITS trigger's
   // address, so opening it is invisible to every other segment's colour.
   test("opening a menu changes the colour of no other cell", async () => {

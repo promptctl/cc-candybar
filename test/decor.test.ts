@@ -94,7 +94,6 @@ function colourMap(shape: Shape, distribution: Distribution): Map<string, string
   );
 }
 
-
 const rung = (shade: RoleShade): number => LADDER.indexOf(shade);
 
 // How many tones a window holds, in the test's own words: the dial position's
@@ -743,7 +742,6 @@ describe("where a row turns hue", () => {
     },
   );
 
-
 });
 
 describe("distributions", () => {
@@ -894,7 +892,6 @@ describe("done-when: a vocabulary of size 1 is a uniform bar", () => {
     }
   });
 });
-
 
 describe("depth steps along the lineage", () => {
   test("each depth wears the next hue of the lineage, wrapping; a one-hue lineage keeps it", () => {

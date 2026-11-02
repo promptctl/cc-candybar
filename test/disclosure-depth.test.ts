@@ -360,6 +360,23 @@ const GROUP_SRC = `{
 }`;
 
 describe("candybar-render-ai7.9 — a group's toggle is a trigger", () => {
+  // The structure under the colours: what the toggle shows is its openness, and
+  // an authored fg is the author's wherever the band places the cell.
+  test("a group's body renders only while it is open, and an authored fg survives inside it", async () => {
+    const rt = build(GROUP_SRC);
+    const toggle = "groups.outer";
+    rt.render();
+    expect(() => rt.bgOf("b")).toThrow(/did not render/);
+
+    await rt.clickWriting(toggle, toggle, "outer");
+    rt.render();
+    expect(rt.fgOf("b")).toBe(rt.palette.get("error")!.hex);
+
+    await rt.clickWriting(toggle, toggle, DISCLOSURE_CLOSED);
+    rt.render();
+    expect(() => rt.bgOf("b")).toThrow(/did not render/);
+    rt.dispose();
+  });
 
   test("a body cell's chosen text reads on the background it WEARS — an authored bg, not the tint", async () => {
     const rt = build(GROUP_SRC);
@@ -396,4 +413,3 @@ describe("candybar-render-ai7.9 — a group's toggle is a trigger", () => {
     rt.dispose();
   });
 });
-
