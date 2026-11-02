@@ -46,7 +46,7 @@ const warnings: string[] = [];
 const target = process.argv[2];
 // [LAW:effects-at-boundaries] One instant for every theme, so the rows differ
 // only in the theme they wear.
-const at = instantOf(new Date());
+const at = instantOf(new Date(world.clock.now()));
 const named =
   target === undefined
     ? undefined

@@ -12,6 +12,7 @@ import type { ClaudeHookData, ParsedEntry, UserEntry } from "../utils/claude";
 import { TranscriptFold, type FoldOutcome } from "../utils/transcript-fold";
 import { debug, quietLogger, type DaemonLogger } from "../utils/logger";
 import { RefreshLedger } from "../utils/refresh-ledger";
+import type { Timekeeper } from "../time";
 
 import {
   ABSENT,
@@ -105,7 +106,11 @@ function lastResponseTime(entries: readonly ParsedEntry[]): number | null {
 export class MetricsProvider {
   private readonly fold: TranscriptFold<MetricsState>;
 
-  constructor(opts: { logger?: DaemonLogger; ledger?: RefreshLedger } = {}) {
+  constructor(opts: {
+    readonly clock: Pick<Timekeeper, "now">;
+    readonly logger?: DaemonLogger;
+    readonly ledger?: RefreshLedger;
+  }) {
     const logger = opts.logger ?? quietLogger;
     this.fold = new TranscriptFold<MetricsState>(
       EMPTY,
@@ -115,6 +120,7 @@ export class MetricsProvider {
         scope: "session",
         refresh: ["request"],
       }),
+      opts.clock,
       logger,
     );
   }

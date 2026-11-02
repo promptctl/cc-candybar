@@ -61,6 +61,7 @@ import { EDIT_LIVE_KEY } from "../src/config/edit-chrome";
 import { presetNames } from "../src/config/presets";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { instantOf } from "../src/utils/instant";
+import { systemTimekeeper } from "../src/time";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = "ef6";
@@ -91,7 +92,7 @@ function rig(
     DEFAULT_DSL_CONFIG,
   );
   const sessionState = new SessionState();
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
   recordRender(sessionState, SID);
@@ -717,7 +718,7 @@ function previewLabels(rendered: Frame): string[][] {
 describe("the preset control's list carries the layout beneath it", () => {
   test("every bundled preset's rows, from its resolved root", () => {
     const config = parseAndValidate("<user>", "{}", ALLOWED, DEFAULT_DSL_CONFIG);
-    const registry = new SourceRegistry(processLauncher, new VariableStore(), "");
+    const registry = new SourceRegistry(processLauncher, new VariableStore(systemTimekeeper), "");
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
     // Every segment but edit mode's chrome, which edit mode alone shows.
     const content = (node: CompiledNode): boolean =>

@@ -18,6 +18,7 @@ import { registerDslConfig, type RenderWarning } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { THEME_FLOOR } from "../src/themes";
 import { instantOf } from "../src/utils/instant";
+import { systemTimekeeper } from "../src/time";
 
 const OPTS = {
   endcaps: "powerline" as const,
@@ -51,7 +52,7 @@ function runtime(source: string) {
     source,
     new Set([THEME_FLOOR]),
   );
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const warnings: RenderWarning[] = [];

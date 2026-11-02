@@ -27,6 +27,7 @@ import { readPending } from "../src/var-system/types";
 import { PENDING } from "../src/utils/outcome";
 import { drawingAt } from "./helpers/test-engine";
 import { buildScope } from "../src/template-engine/scope";
+import { systemTimekeeper } from "../src/time";
 
 // [LAW:one-source-of-truth] Tests pin to the production constant so a future
 // MIN_SHELL_TTL_MS bump doesn't silently desync test timings.
@@ -71,7 +72,7 @@ function registryOver(
 // `env` is the environment an `env` source reads: stated by the test that means
 // one, otherwise empty (every variable unset).
 function make(defaultEmptyValue?: string, env: NodeJS.ProcessEnv = {}) {
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   return {
     store,
     registry: registryOver(
@@ -234,28 +235,52 @@ describe("SourceRegistry — input: round-trip", () => {
 
   it("resolves a nested dotted path", () => {
     const { store, registry } = make();
-    registry.declareInput("session_id", "session_id", "string", undefined, "computed");
+    registry.declareInput(
+      "session_id",
+      "session_id",
+      "string",
+      undefined,
+      "computed",
+    );
     feedInputs(registry, { session_id: "abc123" });
     expect(store.read("session_id")).toBe("abc123");
   });
 
   it("resolves deeply nested paths", () => {
     const { store, registry } = make();
-    registry.declareInput("model_name", "model.display_name", "string", undefined, "computed");
+    registry.declareInput(
+      "model_name",
+      "model.display_name",
+      "string",
+      undefined,
+      "computed",
+    );
     feedInputs(registry, { model: { display_name: "claude-opus-4" } });
     expect(store.read("model_name")).toBe("claude-opus-4");
   });
 
   it("resolves a number field", () => {
     const { store, registry } = make();
-    registry.declareInput("tokens", "context_window.total_input_tokens", "number", undefined, "computed");
+    registry.declareInput(
+      "tokens",
+      "context_window.total_input_tokens",
+      "number",
+      undefined,
+      "computed",
+    );
     feedInputs(registry, { context_window: { total_input_tokens: 5000 } });
     expect(store.read("tokens")).toBe(5000);
   });
 
   it("resolves a boolean field", () => {
     const { store, registry } = make();
-    registry.declareInput("expanded", "state.toolbarExpanded", "boolean", undefined, "computed");
+    registry.declareInput(
+      "expanded",
+      "state.toolbarExpanded",
+      "boolean",
+      undefined,
+      "computed",
+    );
     feedInputs(registry, { state: { toolbarExpanded: true } });
     expect(store.read("expanded")).toBe(true);
   });
@@ -317,7 +342,13 @@ describe("SourceRegistry — input: missing path fallback chain", () => {
 
   it("returns undefined for missing intermediate path segment", () => {
     const { store, registry } = make();
-    registry.declareInput("name", "model.display_name", "string", "default-name", "computed");
+    registry.declareInput(
+      "name",
+      "model.display_name",
+      "string",
+      "default-name",
+      "computed",
+    );
     feedInputs(registry, { model: null });
     expect(store.read("name")).toBe("default-name");
   });
@@ -325,7 +356,7 @@ describe("SourceRegistry — input: missing path fallback chain", () => {
 
 describe("SourceRegistry — input: runInAction batching", () => {
   it("updates multiple input boxes in one action so dependents invalidate once", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = registryOver(store);
     let evalCount = 0;
 
@@ -368,7 +399,7 @@ describe("SourceRegistry — input: runInAction batching", () => {
 
 describe("SourceRegistry — input boxes as computed dependencies", () => {
   it("invalidates computeds when input boxes update", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = registryOver(store);
 
     registry.declareInput("cwd", "cwd", "string", "/initial", "computed");
@@ -384,11 +415,15 @@ describe("SourceRegistry — input boxes as computed dependencies", () => {
   });
 
   it("literal box is stable as a computed dependency", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = registryOver(store);
 
     registry.declareLiteral("prefix", "cc-");
-    store.defineComputed("label", "string", (read) => `${read("prefix")}candybar`);
+    store.defineComputed(
+      "label",
+      "string",
+      (read) => `${read("prefix")}candybar`,
+    );
     expect(store.read("label")).toBe("cc-candybar");
   });
 });
@@ -419,7 +454,10 @@ describe("parseDuration", () => {
 
 function makeTmpDir(): { dir: string; cleanup: () => void } {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-test-"));
-  return { dir, cleanup: () => fs.rmSync(dir, { recursive: true, force: true }) };
+  return {
+    dir,
+    cleanup: () => fs.rmSync(dir, { recursive: true, force: true }),
+  };
 }
 
 // A test waits on what it asserts. `ran` waits on the registry's own state
@@ -450,13 +488,17 @@ async function repeatUntil(
   change: () => void,
   what: string,
 ): Promise<void> {
-  await until(async () => {
-    if (done()) return true;
-    change();
-    await elapse(50);
-    await ran(registry);
-    return done();
-  }, what, 15_000);
+  await until(
+    async () => {
+      if (done()) return true;
+      change();
+      await elapse(50);
+      await ran(registry);
+      return done();
+    },
+    what,
+    15_000,
+  );
 }
 
 // ─── shell — basic ────────────────────────────────────────────────────────────
@@ -464,21 +506,33 @@ async function repeatUntil(
 describe("SourceRegistry — shell: basic", () => {
   it("populates box with command stdout (never policy)", async () => {
     const { store, registry } = make();
-    registry.declareShell("val", 'echo "hello world"', { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
+    registry.declareShell("val", 'echo "hello world"', {
+      cwd: process.cwd(),
+      parse: TEXT,
+      cache: { kind: "never" },
+    });
     await ran(registry);
     expect(store.read("val")).toBe("hello world");
   });
 
   it("replaces newlines with spaces in multi-line output", async () => {
     const { store, registry } = make();
-    registry.declareShell("val", 'printf "a\\nb\\nc"', { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
+    registry.declareShell("val", 'printf "a\\nb\\nc"', {
+      cwd: process.cwd(),
+      parse: TEXT,
+      cache: { kind: "never" },
+    });
     await ran(registry);
     expect(store.read("val")).toBe("a b c");
   });
 
   it("folds CRLF and bare CR line breaks to spaces in text and regex output", async () => {
     const { store, registry } = make();
-    registry.declareShell("crlf", 'printf "a\\r\\nb\\rc\\r\\n"', { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
+    registry.declareShell("crlf", 'printf "a\\r\\nb\\rc\\r\\n"', {
+      cwd: process.cwd(),
+      parse: TEXT,
+      cache: { kind: "never" },
+    });
     registry.declareShell("gap", 'printf "a\\r\\nb"', {
       cwd: process.cwd(),
       parse: regex("a(\\s*)b"),
@@ -514,7 +568,11 @@ describe("SourceRegistry — shell: basic", () => {
   it("shell failure → records last_error", async () => {
     const before = Date.now();
     const { registry } = make();
-    registry.declareShell("val", "exit 2", { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
+    registry.declareShell("val", "exit 2", {
+      cwd: process.cwd(),
+      parse: TEXT,
+      cache: { kind: "never" },
+    });
     await ran(registry);
     const err = registry.getLastError("val");
     expect(err).toBeDefined();
@@ -526,11 +584,18 @@ describe("SourceRegistry — shell: basic", () => {
     const closing = new AbortController();
     closing.abort(new Error("the daemon closed"));
     const registry = new SourceRegistry(
-      createLauncher({ inherited: process.env,  signal: closing.signal }),
-      new VariableStore(),
+      createLauncher(
+        { inherited: process.env, signal: closing.signal },
+        systemTimekeeper,
+      ),
+      new VariableStore(systemTimekeeper),
     );
     live.add(registry);
-    registry.declareShell("val", "echo x", { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
+    registry.declareShell("val", "echo x", {
+      cwd: process.cwd(),
+      parse: TEXT,
+      cache: { kind: "never" },
+    });
     await ran(registry);
     expect(registry.getLastError("val")!.message).toBe(
       `shell "echo x" aborted: the daemon closed in ${process.cwd()}`,
@@ -538,20 +603,40 @@ describe("SourceRegistry — shell: basic", () => {
   });
 
   it("runs the command in its declared cwd, and every failure names that cwd", async () => {
-    const a = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "ccb-cwd-a-")));
-    const b = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "ccb-cwd-b-")));
+    const a = fs.realpathSync(
+      fs.mkdtempSync(path.join(os.tmpdir(), "ccb-cwd-a-")),
+    );
+    const b = fs.realpathSync(
+      fs.mkdtempSync(path.join(os.tmpdir(), "ccb-cwd-b-")),
+    );
     const gone = path.join(b, "removed-worktree");
     const { store, registry } = make();
     try {
-      registry.declareShell("inA", "pwd -P", { cwd: a, parse: TEXT, cache: { kind: "never" } });
-      registry.declareShell("inB", "pwd -P", { cwd: b, parse: TEXT, cache: { kind: "never" } });
-      registry.declareShell("bad", "exit 4", { cwd: b, parse: TEXT, cache: { kind: "never" } });
+      registry.declareShell("inA", "pwd -P", {
+        cwd: a,
+        parse: TEXT,
+        cache: { kind: "never" },
+      });
+      registry.declareShell("inB", "pwd -P", {
+        cwd: b,
+        parse: TEXT,
+        cache: { kind: "never" },
+      });
+      registry.declareShell("bad", "exit 4", {
+        cwd: b,
+        parse: TEXT,
+        cache: { kind: "never" },
+      });
       registry.declareShell("miss", "echo x", {
         cwd: b,
         parse: { kind: "regex", regex: /(y)/, default: undefined },
         cache: { kind: "never" },
       });
-      registry.declareShell("gone", "echo x", { cwd: gone, parse: TEXT, cache: { kind: "never" } });
+      registry.declareShell("gone", "echo x", {
+        cwd: gone,
+        parse: TEXT,
+        cache: { kind: "never" },
+      });
       await ran(registry);
       expect(store.read("inA")).toBe(a);
       expect(store.read("inB")).toBe(b);
@@ -574,7 +659,11 @@ describe("SourceRegistry — shell: basic", () => {
 
   it("shell failure → defaultEmptyValue when no varDefault", async () => {
     const { store, registry } = make("(none)");
-    registry.declareShell("val", "exit 1", { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
+    registry.declareShell("val", "exit 1", {
+      cwd: process.cwd(),
+      parse: TEXT,
+      cache: { kind: "never" },
+    });
     await ran(registry);
     expect(store.read("val")).toBe("(none)");
   });
@@ -623,7 +712,11 @@ describe("SourceRegistry — shell: basic", () => {
       // Can't re-run on "never" — use a separate variable to test error-clearing
       const { store: store2, registry: registry2 } = make();
       // Command that succeeds
-      registry2.declareShell("val", `echo "ok"`, { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
+      registry2.declareShell("val", `echo "ok"`, {
+        cwd: process.cwd(),
+        parse: TEXT,
+        cache: { kind: "never" },
+      });
       await ran(registry2);
       expect(registry2.getLastError("val")).toBeUndefined();
       expect(store2.read("val")).toBe("ok");
@@ -713,7 +806,7 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
       const f = path.join(dir, "v");
       fs.writeFileSync(f, "v1");
       const ledger = new RefreshLedger();
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = registryOver(store, "", undefined, null, ledger);
       registry.declareShell("val", `cat ${f}`, {
         cwd: process.cwd(),
@@ -910,7 +1003,12 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
       await elapse(100); // the watch attaches with no ready signal, and a removal is not repeatable
       expect(store.read("val")).toBe("v1");
       fs.rmSync(path.dirname(f), { recursive: true });
-      await repeatUntil(registry, () => store.read("val") === "(none)", () => undefined, "the store reading (none)");
+      await repeatUntil(
+        registry,
+        () => store.read("val") === "(none)",
+        () => undefined,
+        "the store reading (none)",
+      );
       expect(store.read("val")).toBe("(none)");
     } finally {
       cleanup();
@@ -1027,9 +1125,15 @@ describe("SourceRegistry — shell: key: cache policy", () => {
       const { dir, cleanup } = makeTmpDir();
       try {
         const runs = path.join(dir, "runs");
-        const store = new VariableStore();
+        const store = new VariableStore(systemTimekeeper);
         const registry = registryOver(store);
-        registry.declareInput("pane", "tmux.pane", "string", undefined, "computed");
+        registry.declareInput(
+          "pane",
+          "tmux.pane",
+          "string",
+          undefined,
+          "computed",
+        );
         registry.declareShell("val", `echo run >> ${runs}; echo ran`, {
           cwd: process.cwd(),
           parse: TEXT,
@@ -1060,7 +1164,7 @@ describe("SourceRegistry — shell: key: cache policy", () => {
       const dataFile = path.join(dir, "data");
       fs.writeFileSync(dataFile, "v1");
 
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = registryOver(store);
       // Put a box directly in the store — the key template will read it.
       store.defineBox("trigger", "string", "a");
@@ -1090,7 +1194,7 @@ describe("SourceRegistry — shell: key: cache policy", () => {
       const dataFile = path.join(dir, "data");
       fs.writeFileSync(dataFile, "v1");
 
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = registryOver(store);
       store.defineBox("trigger", "string", "a");
       registry.declareShell("val", `cat ${dataFile}`, {
@@ -1120,7 +1224,7 @@ describe("SourceRegistry — shell: key: cache policy", () => {
       const dataFile = path.join(dir, "data");
       fs.writeFileSync(dataFile, "v1");
 
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = registryOver(store);
       store.defineBox("trigger", "string", "bad");
       registry.declareShell("val", `cat ${dataFile}`, {
@@ -1137,9 +1241,15 @@ describe("SourceRegistry — shell: key: cache policy", () => {
       expect([...registry.cachePolicyFaults().keys()]).toEqual(["val"]);
       // The fault is published, as a stored value is: what a view reacts to.
       const published: Published[] = [];
-      const stop = reaction(() => registry.published(), (p) => published.push(p));
+      const stop = reaction(
+        () => registry.published(),
+        (p) => published.push(p),
+      );
       expect(registry.published().faults).toEqual([
-        { timestamp: expect.any(Number), message: expect.stringMatching(fault) },
+        {
+          timestamp: expect.any(Number),
+          message: expect.stringMatching(fault),
+        },
       ]);
 
       // A key that throws is no key: the source does not run under it.
@@ -1174,7 +1284,7 @@ describe("SourceRegistry — shell: key: cache policy", () => {
       const dataFile = path.join(dir, "data");
       fs.writeFileSync(dataFile, "v1");
 
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = registryOver(store);
       store.defineBox("trigger", "string", "ok");
       registry.declareShell("val", `cat ${dataFile}`, {
@@ -1212,7 +1322,7 @@ describe("SourceRegistry — shell: key: cache policy", () => {
     try {
       const docFile = path.join(dir, "doc.json");
       fs.writeFileSync(docFile, '{"x":"a"}');
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = registryOver(store);
       registry.declareFile("doc", docFile, {
         parse: { kind: "json", default: undefined },
@@ -1248,7 +1358,7 @@ describe("SourceRegistry — shell: key: cache policy", () => {
       const dataFile = path.join(dir, "data");
       fs.writeFileSync(dataFile, "v1");
 
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = registryOver(store);
       registry.declareShell("val", `cat ${dataFile}`, {
         cwd: process.cwd(),
@@ -1295,7 +1405,11 @@ describe("SourceRegistry — file: basic", () => {
       const f = path.join(dir, "f");
       fs.writeFileSync(f, "ref: refs/heads/main\nother");
       const { store, registry } = make();
-      registry.declareFile("val", f, { parse: TEXT, readMode: "first-line", cache: { kind: "never" } });
+      registry.declareFile("val", f, {
+        parse: TEXT,
+        readMode: "first-line",
+        cache: { kind: "never" },
+      });
       await ran(registry);
       expect(store.read("val")).toBe("ref: refs/heads/main");
     } finally {
@@ -1333,7 +1447,10 @@ describe("SourceRegistry — file: basic", () => {
   it("file missing → records last_error", async () => {
     const before = Date.now();
     const { registry } = make();
-    registry.declareFile("val", "/nonexistent/path/xyz.txt", { parse: TEXT, cache: { kind: "never" } });
+    registry.declareFile("val", "/nonexistent/path/xyz.txt", {
+      parse: TEXT,
+      cache: { kind: "never" },
+    });
     await ran(registry);
     const err = registry.getLastError("val");
     expect(err).toBeDefined();
@@ -1364,7 +1481,10 @@ describe("SourceRegistry — file: basic", () => {
       const f = path.join(dir, "f");
       fs.writeFileSync(f, "no numbers");
       const { registry } = make();
-      registry.declareFile("val", f, { parse: regex("([0-9]+)"), cache: { kind: "never" } });
+      registry.declareFile("val", f, {
+        parse: regex("([0-9]+)"),
+        cache: { kind: "never" },
+      });
       await ran(registry);
       expect(registry.getLastError("val")).toBeDefined();
       expect(registry.getLastError("val")!.message).toMatch(/regex no-match/);
@@ -1383,12 +1503,20 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
       const f = path.join(dir, "f");
       fs.writeFileSync(f, "v1");
       const { store, registry } = make();
-      registry.declareFile("val", f, { parse: TEXT, cache: { kind: "watch_file", path: f } });
+      registry.declareFile("val", f, {
+        parse: TEXT,
+        cache: { kind: "watch_file", path: f },
+      });
 
       await ran(registry);
       expect(store.read("val")).toBe("v1");
 
-      await repeatUntil(registry, () => store.read("val") === "v2", () => fs.writeFileSync(f, "v2"), "the store reading v2");
+      await repeatUntil(
+        registry,
+        () => store.read("val") === "v2",
+        () => fs.writeFileSync(f, "v2"),
+        "the store reading v2",
+      );
 
       expect(store.read("val")).toBe("v2");
     } finally {
@@ -1407,8 +1535,14 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
       fs.writeFileSync(f2, "b1");
       const { store, registry } = make();
       // Both variables watch the same path (different source files)
-      registry.declareFile("v1", f1, { parse: TEXT, cache: { kind: "watch_file", path: watchedFile } });
-      registry.declareFile("v2", f2, { parse: TEXT, cache: { kind: "watch_file", path: watchedFile } });
+      registry.declareFile("v1", f1, {
+        parse: TEXT,
+        cache: { kind: "watch_file", path: watchedFile },
+      });
+      registry.declareFile("v2", f2, {
+        parse: TEXT,
+        cache: { kind: "watch_file", path: watchedFile },
+      });
 
       await ran(registry);
       expect(store.read("v1")).toBe("a1");
@@ -1439,12 +1573,25 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
       fs.writeFileSync(watchedFile, "w");
       fs.writeFileSync(f, "v1");
       const events = handDelivery();
-      const store = new VariableStore();
-      const registry = registryOver(store, "", undefined, null, new RefreshLedger(), events);
+      const store = new VariableStore(systemTimekeeper);
+      const registry = registryOver(
+        store,
+        "",
+        undefined,
+        null,
+        new RefreshLedger(),
+        events,
+      );
       const view = registry.view();
       live.add(view);
-      registry.declareFile("home", f, { parse: TEXT, cache: { kind: "watch_file", path: watchedFile } });
-      view.declareFile("own", f, { parse: TEXT, cache: { kind: "watch_file", path: watchedFile } });
+      registry.declareFile("home", f, {
+        parse: TEXT,
+        cache: { kind: "watch_file", path: watchedFile },
+      });
+      view.declareFile("own", f, {
+        parse: TEXT,
+        cache: { kind: "watch_file", path: watchedFile },
+      });
       await ran(registry);
       await ran(view);
       expect(store.read("home")).toBe("v1");
@@ -1453,7 +1600,9 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
       fs.writeFileSync(f, "v2");
       events.notify({ kind: "caught-up", since: STALLED_AT });
       await until(
-        () => store.read("home") === "v2" && view.variableStore.read("own") === "v2",
+        () =>
+          store.read("home") === "v2" &&
+          view.variableStore.read("own") === "v2",
         "both registries re-reading v2",
       );
 
@@ -1471,7 +1620,11 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
   describe("while file events are stalled", () => {
     const STALL = "file events stopped at 2026-10-27T04:00:00.000Z";
     const stalled: Delivery = { kind: "stalled", missedSince: STALLED_AT };
-    const delivering: Delivery = { kind: "delivering", unreported: [], missedSince: null };
+    const delivering: Delivery = {
+      kind: "delivering",
+      unreported: [],
+      missedSince: null,
+    };
 
     function rig(dir: string) {
       const watched = path.join(dir, "watched");
@@ -1479,8 +1632,15 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
       fs.writeFileSync(watched, "w");
       fs.writeFileSync(data, "before");
       const events = handDelivery();
-      const store = new VariableStore();
-      const registry = registryOver(store, "", undefined, null, new RefreshLedger(), events);
+      const store = new VariableStore(systemTimekeeper);
+      const registry = registryOver(
+        store,
+        "",
+        undefined,
+        null,
+        new RefreshLedger(),
+        events,
+      );
       const cache = { kind: "watch_file", path: watched } as const;
       return { watched, data, events, store, registry, cache };
     }
@@ -1492,8 +1652,15 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         const view = registry.view();
         live.add(view);
         registry.declareFile("file", data, { parse: TEXT, cache });
-        registry.declareShell("shell", `cat ${data}`, { cwd: process.cwd(), parse: TEXT, cache });
-        registry.declareFile("timed", data, { parse: TEXT, cache: { kind: "ttl", durationMs: 60_000 } });
+        registry.declareShell("shell", `cat ${data}`, {
+          cwd: process.cwd(),
+          parse: TEXT,
+          cache,
+        });
+        registry.declareFile("timed", data, {
+          parse: TEXT,
+          cache: { kind: "ttl", durationMs: 60_000 },
+        });
         view.declareFile("own", data, { parse: TEXT, cache });
         await ran(registry);
         await ran(view);
@@ -1560,7 +1727,12 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
 
         fs.writeFileSync(data, "edited");
         events.set(
-          { kind: "unmeasured", since: STALLED_AT + 60_000, reason: "disk full", missedSince: STALLED_AT },
+          {
+            kind: "unmeasured",
+            since: STALLED_AT + 60_000,
+            reason: "disk full",
+            missedSince: STALLED_AT,
+          },
           { kind: "moved" },
         );
 
@@ -1630,20 +1802,47 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         dirWatchesOpened: 0,
         dirWatchesClosed: 0,
       };
-      const watchers = new WatcherRegistry({ counters, logger: () => {} });
-      const home = registryOver(new VariableStore(), "", undefined, null, new RefreshLedger(), undefined, watchers);
+      const watchers = new WatcherRegistry({
+        clock: systemTimekeeper,
+        counters,
+        logger: () => {},
+      });
+      const home = registryOver(
+        new VariableStore(systemTimekeeper),
+        "",
+        undefined,
+        null,
+        new RefreshLedger(),
+        undefined,
+        watchers,
+      );
       const view = home.view();
       live.add(view);
-      home.declareFile("a", f, { parse: TEXT, cache: { kind: "watch_file", path: f } });
-      view.declareFile("b", f, { parse: TEXT, cache: { kind: "watch_file", path: f } });
+      home.declareFile("a", f, {
+        parse: TEXT,
+        cache: { kind: "watch_file", path: f },
+      });
+      view.declareFile("b", f, {
+        parse: TEXT,
+        cache: { kind: "watch_file", path: f },
+      });
       await ran(home);
       await ran(view);
       expect(watchers.size()).toBe(1);
-      expect(counters).toMatchObject({ watchersOpened: 1, dirWatchesOpened: 1 });
+      expect(counters).toMatchObject({
+        watchersOpened: 1,
+        dirWatchesOpened: 1,
+      });
       view.dispose();
-      expect(counters).toMatchObject({ watchersClosed: 0, dirWatchesClosed: 0 });
+      expect(counters).toMatchObject({
+        watchersClosed: 0,
+        dirWatchesClosed: 0,
+      });
       home.dispose();
-      expect(counters).toMatchObject({ watchersClosed: 1, dirWatchesClosed: 1 });
+      expect(counters).toMatchObject({
+        watchersClosed: 1,
+        dirWatchesClosed: 1,
+      });
       expect(watchers.size()).toBe(0);
     } finally {
       cleanup();
@@ -1674,7 +1873,10 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         fs.writeFileSync(path.join(dir, "one", "state"), "v1");
         fs.writeFileSync(path.join(dir, "two", "state"), "v2");
         const { store, registry } = make();
-        registry.declareFile("val", a, { parse: TEXT, cache: { kind: "watch_file", path: a } });
+        registry.declareFile("val", a, {
+          parse: TEXT,
+          cache: { kind: "watch_file", path: a },
+        });
         await ran(registry);
         expect(store.read("val")).toBe("v1");
         await repeatUntil(
@@ -1696,7 +1898,10 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         const state = path.join(dir, "one", "state");
         fs.writeFileSync(state, "v1");
         const { store, registry } = make();
-        registry.declareFile("val", a, { parse: TEXT, cache: { kind: "watch_file", path: a } });
+        registry.declareFile("val", a, {
+          parse: TEXT,
+          cache: { kind: "watch_file", path: a },
+        });
         await ran(registry);
         expect(store.read("val")).toBe("v1");
         await repeatUntil(
@@ -1719,7 +1924,10 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
       try {
         const { a } = chain(dir);
         const { store, registry } = make();
-        registry.declareFile("val", a, { parse: text("(none)"), cache: { kind: "watch_file", path: a } });
+        registry.declareFile("val", a, {
+          parse: text("(none)"),
+          cache: { kind: "watch_file", path: a },
+        });
         await ran(registry);
         expect(store.read("val")).toBe("(none)");
         await repeatUntil(
@@ -1750,7 +1958,9 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
           parse: TEXT,
           cache: { kind: "watch_file", path: x },
         });
-        expect(registry.cachePolicyFaults().get("val")?.message).toMatch(/symbolic links/);
+        expect(registry.cachePolicyFaults().get("val")?.message).toMatch(
+          /symbolic links/,
+        );
         await repeatUntil(
           registry,
           () => !registry.cachePolicyFaults().has("val"),
@@ -1770,8 +1980,16 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
     // failed one as it is.
     it("a directory whose watch fails is the variable's fault and a re-read, and is opened again only by the period's judgment", async () => {
       const { dir, cleanup } = makeTmpDir();
-      const opened: Array<{ dir: string; handle: EventEmitter; listener: (event: string, changed: string | null) => void }> = [];
-      const watch = jest.spyOn(fs, "watch").mockImplementation(((d: string, _opts: unknown, listener: (event: string, changed: string | null) => void) => {
+      const opened: Array<{
+        dir: string;
+        handle: EventEmitter;
+        listener: (event: string, changed: string | null) => void;
+      }> = [];
+      const watch = jest.spyOn(fs, "watch").mockImplementation(((
+        d: string,
+        _opts: unknown,
+        listener: (event: string, changed: string | null) => void,
+      ) => {
         const handle = Object.assign(new EventEmitter(), { close: () => {} });
         opened.push({ dir: d, handle, listener });
         return handle;
@@ -1783,10 +2001,24 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         const a = path.join(dir, "a");
         fs.writeFileSync(state, "v1");
         fs.symlinkSync(state, a);
-        const watchers = new WatcherRegistry({ logger: () => {} });
-        const store = new VariableStore();
-        const registry = registryOver(store, undefined, undefined, null, new RefreshLedger(), undefined, watchers);
-        registry.declareFile("val", a, { parse: TEXT, cache: { kind: "watch_file", path: a } });
+        const watchers = new WatcherRegistry({
+          clock: systemTimekeeper,
+          logger: () => {},
+        });
+        const store = new VariableStore(systemTimekeeper);
+        const registry = registryOver(
+          store,
+          undefined,
+          undefined,
+          null,
+          new RefreshLedger(),
+          undefined,
+          watchers,
+        );
+        registry.declareFile("val", a, {
+          parse: TEXT,
+          cache: { kind: "watch_file", path: a },
+        });
         await ran(registry);
         expect(store.read("val")).toBe("v1");
         const opensOf = (d: string) => opened.filter((o) => o.dir === d);
@@ -1795,9 +2027,14 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         expect(registry.cachePolicyFaults().has("val")).toBe(false);
 
         fs.writeFileSync(state, "v2");
-        opensOf(one)[0]!.handle.emit("error", new Error("EMFILE: too many open files"));
+        opensOf(one)[0]!.handle.emit(
+          "error",
+          new Error("EMFILE: too many open files"),
+        );
         await until(() => store.read("val") === "v2", "the store reading v2");
-        expect(registry.cachePolicyFaults().get("val")?.message).toMatch(/watching .*one failed — EMFILE/);
+        expect(registry.cachePolicyFaults().get("val")?.message).toMatch(
+          /watching .*one failed — EMFILE/,
+        );
         expect(opensOf(one)).toHaveLength(1);
 
         // An event on the link's own directory re-derives and re-reads, and
@@ -1806,12 +2043,17 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         opensOf(real)[0]!.listener("rename", "a");
         await until(() => store.read("val") === "v3", "the store reading v3");
         expect(opensOf(one)).toHaveLength(1);
-        expect(registry.cachePolicyFaults().get("val")?.message).toMatch(/watching .*one failed — EMFILE/);
+        expect(registry.cachePolicyFaults().get("val")?.message).toMatch(
+          /watching .*one failed — EMFILE/,
+        );
 
         // The period's judgment opens it again, and the fault clears.
         watchers.judge();
         expect(opensOf(one)).toHaveLength(2);
-        await until(() => !registry.cachePolicyFaults().has("val"), "the fault cleared");
+        await until(
+          () => !registry.cachePolicyFaults().has("val"),
+          "the fault cleared",
+        );
       } finally {
         watch.mockRestore();
         cleanup();
@@ -1824,11 +2066,21 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
     // new directory, and hears the file through it.
     it("a watched directory removed and made again is watched again", async () => {
       const { dir, cleanup } = makeTmpDir();
-      const opened: Array<{ dir: string; closed: boolean; listener: (event: string, changed: string | null) => void }> = [];
-      const watch = jest.spyOn(fs, "watch").mockImplementation(((d: string, _opts: unknown, listener: (event: string, changed: string | null) => void) => {
+      const opened: Array<{
+        dir: string;
+        closed: boolean;
+        listener: (event: string, changed: string | null) => void;
+      }> = [];
+      const watch = jest.spyOn(fs, "watch").mockImplementation(((
+        d: string,
+        _opts: unknown,
+        listener: (event: string, changed: string | null) => void,
+      ) => {
         const record = { dir: d, closed: false, listener };
         opened.push(record);
-        return Object.assign(new EventEmitter(), { close: () => void (record.closed = true) });
+        return Object.assign(new EventEmitter(), {
+          close: () => void (record.closed = true),
+        });
       }) as unknown as typeof fs.watch);
       try {
         const one = path.join(fs.realpathSync(dir), "one");
@@ -1836,7 +2088,10 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         const state = path.join(one, "state");
         fs.writeFileSync(state, "v1");
         const { store, registry } = make();
-        registry.declareFile("val", state, { parse: TEXT, cache: { kind: "watch_file", path: state } });
+        registry.declareFile("val", state, {
+          parse: TEXT,
+          cache: { kind: "watch_file", path: state },
+        });
         await ran(registry);
         expect(store.read("val")).toBe("v1");
         const opensOf = (d: string) => opened.filter((o) => o.dir === d);
@@ -1846,7 +2101,10 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         fs.rmSync(one, { recursive: true });
         fs.mkdirSync(one);
         opensOf(one)[0]!.listener("rename", "one");
-        await until(() => opensOf(one).length === 2, "the directory watched again");
+        await until(
+          () => opensOf(one).length === 2,
+          "the directory watched again",
+        );
         expect(opensOf(one)).toHaveLength(2);
         expect(opensOf(one)[0]!.closed).toBe(true);
 
@@ -1895,7 +2153,10 @@ describe("SourceRegistry — dispose", () => {
       const f = path.join(dir, "f");
       fs.writeFileSync(f, "v1");
       const { store, registry } = make();
-      registry.declareFile("val", f, { parse: TEXT, cache: { kind: "watch_file", path: f } });
+      registry.declareFile("val", f, {
+        parse: TEXT,
+        cache: { kind: "watch_file", path: f },
+      });
 
       await ran(registry);
       registry.dispose();
@@ -1934,7 +2195,10 @@ describe("SourceRegistry — template: basic", () => {
   it("a number template is read as a number, so it compares as one", () => {
     const { store, registry } = make();
     store.defineBox("n", "number", 41);
-    registry.declareTemplate("next", "{{ add .n 1 }}", { ...DERIVED, type: "number" });
+    registry.declareTemplate("next", "{{ add .n 1 }}", {
+      ...DERIVED,
+      type: "number",
+    });
     registry.declareTemplate("big", "{{ gt .next 40 }}", DERIVED);
     expect(store.getType("next")).toBe("number");
     expect(store.read("next")).toBe(42);
@@ -1944,13 +2208,19 @@ describe("SourceRegistry — template: basic", () => {
   it("a number template rendering no number is a failed read, never a zero", () => {
     const { store, registry } = make();
     registry.declareTemplate("n", "soon", { ...DERIVED, type: "number" });
-    expect(() => store.read("n")).toThrow(/variable "n".*cast "soon" to number/);
+    expect(() => store.read("n")).toThrow(
+      /variable "n".*cast "soon" to number/,
+    );
     expect(registry.getLastError("n")).toBeDefined();
   });
 
   it("a number template's default answers its failure as a number", () => {
     const { store, registry } = make();
-    registry.declareTemplate("n", "soon", { ...DERIVED, type: "number", varDefault: -1 });
+    registry.declareTemplate("n", "soon", {
+      ...DERIVED,
+      type: "number",
+      varDefault: -1,
+    });
     expect(store.read("n")).toBe(-1);
   });
 
@@ -1958,9 +2228,13 @@ describe("SourceRegistry — template: basic", () => {
     // Magenta on plum: legible in truecolor, lost once both colours round to
     // 256, so the two depths give different answers. The depth is a per-render
     // fact, and a template variable is a cached derivation — it must observe it.
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = registryOver(store);
-    registry.declareTemplate("ink", `{{ readableOn "#e72abb" "#2e082f" 4.5 }}`, DERIVED);
+    registry.declareTemplate(
+      "ink",
+      `{{ readableOn "#e72abb" "#2e082f" 4.5 }}`,
+      DERIVED,
+    );
     const [fg, bg] = [parseRgbHex("e72abb"), parseRgbHex("2e082f")];
     const at = (d: ColorDepth) => ensureContrast(fg, bg, 4.5, d).hex;
     expect(at(ColorDepth.EIGHT_BIT)).not.toBe(at(ColorDepth.TRUECOLOR));
@@ -1976,7 +2250,7 @@ describe("SourceRegistry — template: basic", () => {
   });
 
   it("auto-invalidates when a box dependency changes", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = registryOver(store);
     store.defineBox("name", "string", "Alice");
     registry.declareTemplate("greeting", `Hello, {{ .name }}!`, DERIVED);
@@ -1987,7 +2261,7 @@ describe("SourceRegistry — template: basic", () => {
   });
 
   it("auto-invalidates transitively (template reading a template)", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = registryOver(store);
     store.defineBox("base", "string", "foo");
     registry.declareTemplate("mid", `{{ .base }}-mid`, DERIVED);
@@ -1999,7 +2273,7 @@ describe("SourceRegistry — template: basic", () => {
   });
 
   it("records no last_error on success", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = registryOver(store);
     store.defineBox("x", "string", "ok");
     registry.declareTemplate("t", "{{ .x }}", DERIVED);
@@ -2008,9 +2282,12 @@ describe("SourceRegistry — template: basic", () => {
   });
 
   it("varDefault returned when template evaluation fails (missing variable)", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = registryOver(store);
-    registry.declareTemplate("t", "{{ .nonexistent }}", { ...DERIVED, varDefault: "fallback" });
+    registry.declareTemplate("t", "{{ .nonexistent }}", {
+      ...DERIVED,
+      varDefault: "fallback",
+    });
     expect(store.read("t")).toBe("fallback");
     expect(registry.getLastError("t")).toBeDefined();
   });
@@ -2023,7 +2300,7 @@ describe("SourceRegistry — template: basic", () => {
   // which of the two mechanisms had swallowed it. Tolerance is now stated per
   // variable, by the `default` on the declaration that wants it.
   it("a failed template is NOT absorbed by defaultEmptyValue: the read is the failure", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = registryOver(store, "(none)");
     registry.declareTemplate("t", "{{ .nonexistent }}", DERIVED);
     expect(() => store.read("t")).toThrow(/variable "t"/);
@@ -2034,7 +2311,7 @@ describe("SourceRegistry — template: basic", () => {
   // it (⚠ naming the variable) and to `cc-candybar check` (exit 1) with no
   // co-operation from either — the same contract a non-ok document has.
   it("a template that throws with no default reads as the failure, naming variable and reason", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = registryOver(store);
     registry.declareTemplate("c", '{{ ramp 35 "step" 0 "panel" }}', DERIVED);
     // `ramp` is registered per-segment by the renderer, so a variable template
@@ -2048,9 +2325,11 @@ describe("SourceRegistry — template: basic", () => {
   // records the failure without rejecting the config. Loudness belongs at the
   // read that needs the value.
   it("a throwing template does not make registration throw; its read records the error", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = registryOver(store);
-    expect(() => registry.declareTemplate("c", "{{ .nope }}", DERIVED)).not.toThrow();
+    expect(() =>
+      registry.declareTemplate("c", "{{ .nope }}", DERIVED),
+    ).not.toThrow();
     expect(() => store.read("c")).toThrow();
     expect(registry.getLastError("c")).toBeDefined();
   });
@@ -2063,7 +2342,7 @@ describe("SourceRegistry — template: basic", () => {
     try {
       const dataFile = path.join(dir, "data");
       fs.writeFileSync(dataFile, "v1");
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = registryOver(store);
       registry.declareTemplate("broken", "{{ .nope }}", DERIVED);
       expect(() =>
@@ -2083,7 +2362,7 @@ describe("SourceRegistry — template: basic", () => {
 
 describe("SourceRegistry — template: cycle detection", () => {
   it("self-referencing template records a last_error when read", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = registryOver(store);
     registry.declareTemplate("self", "{{ .self }}", DERIVED);
     expect(() => store.read("self")).toThrow();
@@ -2100,7 +2379,7 @@ describe("SourceRegistry — template: cycle detection", () => {
   // pins that — MobX caches the deriver's exception and re-raises the same one,
   // so a second read says the same thing and the store is not left mid-compute.
   it("a self-referencing template reads as the failure, repeatably", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = registryOver(store, "(cycle)");
     registry.declareTemplate("self", "{{ .self }}", DERIVED);
     expect(() => store.read("self")).toThrow(/variable "self"/);
@@ -2178,7 +2457,7 @@ describe("SourceRegistry — depends_on cache policy", () => {
       const dataFile = path.join(dir, "data");
       fs.writeFileSync(dataFile, "v1");
 
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = registryOver(store);
       store.defineBox("trigger", "string", "a");
       registry.declareShell("val", `cat ${dataFile}`, {
@@ -2210,7 +2489,7 @@ describe("SourceRegistry — depends_on cache policy", () => {
       const dataFile = path.join(dir, "data");
       fs.writeFileSync(dataFile, "v1");
 
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = registryOver(store);
       store.defineBox("trigger", "string", "a");
       // The pass reports its own state: `cat` captures the file, `read` marks
@@ -2220,11 +2499,15 @@ describe("SourceRegistry — depends_on cache policy", () => {
       const readMark = path.join(dir, "read");
       const go = shellGate(path.join(dir, "go"));
       go.close();
-      registry.declareShell("val", `cat ${dataFile}; touch ${readMark}; ${go.hold}`, {
-        cwd: process.cwd(),
-        parse: TEXT,
-        cache: { kind: "depends_on", varNames: ["trigger"] },
-      });
+      registry.declareShell(
+        "val",
+        `cat ${dataFile}; touch ${readMark}; ${go.hold}`,
+        {
+          cwd: process.cwd(),
+          parse: TEXT,
+          cache: { kind: "depends_on", varNames: ["trigger"] },
+        },
+      );
 
       await until(() => fs.existsSync(readMark), "the pass reading the file");
       // Change both the dependency and the data: this is the collision, not a
@@ -2248,7 +2531,7 @@ describe("SourceRegistry — depends_on cache policy", () => {
       const dataFile = path.join(dir, "data");
       fs.writeFileSync(dataFile, "v1");
 
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = registryOver(store);
       store.defineBox("trigger", "string", "a");
       registry.declareShell("val", `cat ${dataFile}`, {
@@ -2277,7 +2560,7 @@ describe("SourceRegistry — depends_on cache policy", () => {
       const dataFile = path.join(dir, "data");
       fs.writeFileSync(dataFile, "v1");
 
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = registryOver(store);
       store.defineBox("a", "string", "x");
       store.defineBox("b", "string", "y");
@@ -2306,7 +2589,7 @@ describe("SourceRegistry — depends_on cache policy", () => {
       const dataFile = path.join(dir, "data");
       fs.writeFileSync(dataFile, "v1");
 
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = registryOver(store);
       store.defineBox("trigger", "string", "a");
       registry.declareShell("val", `cat ${dataFile}`, {
@@ -2337,11 +2620,17 @@ describe("SourceRegistry — state: read-through to SessionState", () => {
 
   function makeWithState() {
     const sessionState = new SessionState();
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = registryOver(store, "", sessionState);
     // session.id is the conventional source for "which session am I in" —
     // inputs derive from the payload the view is bound to.
-    registry.declareInput("session.id", "session_id", "string", undefined, "computed");
+    registry.declareInput(
+      "session.id",
+      "session_id",
+      "string",
+      undefined,
+      "computed",
+    );
     return { store, registry, sessionState };
   }
 
@@ -2401,11 +2690,11 @@ describe("SourceRegistry — state: read-through to SessionState", () => {
     // SessionState, declareState refuses rather than silently returning
     // empty — that would be a footgun where renders look fine until a
     // verb fires and "nothing happens."
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = registryOver(store);
-    expect(() =>
-      registry.declareState("theme", { key: "theme" }),
-    ).toThrow(/state-kind variables require a SessionState/);
+    expect(() => registry.declareState("theme", { key: "theme" })).toThrow(
+      /state-kind variables require a SessionState/,
+    );
   });
 });
 
@@ -2428,7 +2717,8 @@ describe("SourceRegistry — parse seam", () => {
     Reflect.get(buildScope(store), name) as Record<string, unknown>;
   const readDoc = (store: VariableStore, name: string) => {
     const doc = store.readDocument(name);
-    if (doc.kind !== "ok") throw new Error(`expected ok, got ${JSON.stringify(doc)}`);
+    if (doc.kind !== "ok")
+      throw new Error(`expected ok, got ${JSON.stringify(doc)}`);
     return doc.value;
   };
 
@@ -2448,7 +2738,12 @@ describe("SourceRegistry — parse seam", () => {
         { ...DERIVED, varDefault: "(pending)" },
       );
       await ran(registry);
-      expect(readDoc(store, "doc")).toEqual({ a: 1, b: "x", c: true, nest: { d: [1, 2] } });
+      expect(readDoc(store, "doc")).toEqual({
+        a: 1,
+        b: "x",
+        c: true,
+        nest: { d: [1, 2] },
+      });
       expect(store.read("t")).toBe("1-x-true-2");
       expect(doc(store, "doc").b).toBe("x");
       // Three fields, one template, a direct scope read: still ONE spawn.
@@ -2460,17 +2755,29 @@ describe("SourceRegistry — parse seam", () => {
 
   it("a document is a namespace, never a scalar: the scalar reads refuse it by name", async () => {
     const { store, registry } = make();
-    registry.declareShell("doc", `echo '{"a": 1}'`, { cwd: process.cwd(), parse: json(), cache: { kind: "never" } });
+    registry.declareShell("doc", `echo '{"a": 1}'`, {
+      cwd: process.cwd(),
+      parse: json(),
+      cache: { kind: "never" },
+    });
     await ran(registry);
-    expect(() => store.read("doc")).toThrow(/is a document; read its fields by path/);
+    expect(() => store.read("doc")).toThrow(
+      /is a document; read its fields by path/,
+    );
   });
 
   it("malformed JSON without a default: the document holds the failure and a read throws naming the variable", async () => {
     const { store, registry } = make();
-    registry.declareShell("doc", `echo '{not json'`, { cwd: process.cwd(), parse: json(), cache: { kind: "never" } });
+    registry.declareShell("doc", `echo '{not json'`, {
+      cwd: process.cwd(),
+      parse: json(),
+      cache: { kind: "never" },
+    });
     await ran(registry);
     expect(store.readDocument("doc")).toMatchObject({ kind: "failed" });
-    expect(() => doc(store, "doc")).toThrow(/^variable "doc": JSON parse failed: /);
+    expect(() => doc(store, "doc")).toThrow(
+      /^variable "doc": JSON parse failed: /,
+    );
     expect(registry.getLastError("doc")!.message).toMatch(/JSON parse failed/);
   });
 
@@ -2483,7 +2790,9 @@ describe("SourceRegistry — parse seam", () => {
     });
     await ran(registry);
     expect(store.readDocument("doc")).toMatchObject({ kind: "failed" });
-    expect(() => doc(store, "doc")).toThrow(/^variable "doc": JSON parse failed: /);
+    expect(() => doc(store, "doc")).toThrow(
+      /^variable "doc": JSON parse failed: /,
+    );
   });
 
   it("a file caught mid-rewrite keeps its document; one that stays broken shows the failure", async () => {
@@ -2492,7 +2801,10 @@ describe("SourceRegistry — parse seam", () => {
       const f = path.join(dir, "state.json");
       fs.writeFileSync(f, `{ "state": "one" }`);
       const { store, registry } = make();
-      registry.declareFile("doc", f, { parse: json({}), cache: { kind: "watch_file", path: f } });
+      registry.declareFile("doc", f, {
+        parse: json({}),
+        cache: { kind: "watch_file", path: f },
+      });
       await ran(registry);
       expect(readDoc(store, "doc")).toEqual({ state: "one" });
       // In place: a truncate, then a partial write — the document holds.
@@ -2505,14 +2817,21 @@ describe("SourceRegistry — parse seam", () => {
       expect(readDoc(store, "doc")).toEqual({ state: "one" });
       await repeatUntil(
         registry,
-        () => store.readDocument("doc").kind === "ok" && doc(store, "doc").state === "two",
+        () =>
+          store.readDocument("doc").kind === "ok" &&
+          doc(store, "doc").state === "two",
         () => fs.writeFileSync(f, `{ "state": "two" }`),
         "the document reading state two",
       );
       expect(readDoc(store, "doc")).toEqual({ state: "two" });
       // Left broken past the settle: the failure shows.
       fs.writeFileSync(f, `{ "sta`);
-      await repeatUntil(registry, () => store.readDocument("doc").kind === "failed", () => undefined, "the document reading failed");
+      await repeatUntil(
+        registry,
+        () => store.readDocument("doc").kind === "failed",
+        () => undefined,
+        "the document reading failed",
+      );
       expect(store.readDocument("doc")).toMatchObject({ kind: "failed" });
     } finally {
       cleanup();
@@ -2544,14 +2863,24 @@ describe("SourceRegistry — parse seam", () => {
 
   it("a failed command without a default is the same failure state, naming where it came from", async () => {
     const { store, registry } = make();
-    registry.declareShell("doc", `exit 3`, { cwd: process.cwd(), parse: json(), cache: { kind: "never" } });
+    registry.declareShell("doc", `exit 3`, {
+      cwd: process.cwd(),
+      parse: json(),
+      cache: { kind: "never" },
+    });
     await ran(registry);
-    expect(() => doc(store, "doc")).toThrow(/variable "doc": .*exited with code 3/);
+    expect(() => doc(store, "doc")).toThrow(
+      /variable "doc": .*exited with code 3/,
+    );
   });
 
   it("before the first scan lands, a read says so; settled() is the state a one-shot render awaits", async () => {
     const { store, registry } = make();
-    registry.declareShell("doc", `sleep 0.3; echo '{"a": 1}'`, { cwd: process.cwd(), parse: json(), cache: { kind: "never" } });
+    registry.declareShell("doc", `sleep 0.3; echo '{"a": 1}'`, {
+      cwd: process.cwd(),
+      parse: json(),
+      cache: { kind: "never" },
+    });
     expect(store.readDocument("doc")).toEqual({ kind: "pending" });
     expect(() => doc(store, "doc")).toThrow(
       'variable "doc" has no value yet: its source has not completed a scan',
@@ -2566,8 +2895,16 @@ describe("SourceRegistry — parse seam", () => {
       const gate = shellGate(path.join(dir, "gate"));
       gate.close();
       const { store, registry } = make();
-      registry.declareShell("slow", `${gate.hold}; echo x`, { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
-      registry.declareShell("fast", `echo y`, { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
+      registry.declareShell("slow", `${gate.hold}; echo x`, {
+        cwd: process.cwd(),
+        parse: TEXT,
+        cache: { kind: "never" },
+      });
+      registry.declareShell("fast", `echo y`, {
+        cwd: process.cwd(),
+        parse: TEXT,
+        cache: { kind: "never" },
+      });
       await until(() => store.read("fast") === "y", "fast's run publishing");
       expect(await registry.settled(0)).toEqual(["slow"]);
       gate.open();
@@ -2583,7 +2920,10 @@ describe("SourceRegistry — parse seam", () => {
       const f = path.join(dir, "budget.json");
       fs.writeFileSync(f, '{"spent": 12.5, "limit": 20}\n');
       const { store, registry } = make();
-      registry.declareFile("budget", f, { parse: json(), cache: { kind: "never" } });
+      registry.declareFile("budget", f, {
+        parse: json(),
+        cache: { kind: "never" },
+      });
       await ran(registry);
       expect(doc(store, "budget").spent).toBe(12.5);
     } finally {
@@ -2602,7 +2942,10 @@ describe("SourceRegistry — parse seam", () => {
         parse: regex("v([0-9.]+)"),
         cache: { kind: "never" },
       });
-      registry.declareFile("whole", f, { parse: regex("v([0-9.]+) second"), cache: { kind: "never" } });
+      registry.declareFile("whole", f, {
+        parse: regex("v([0-9.]+) second"),
+        cache: { kind: "never" },
+      });
       await ran(registry);
       expect(store.read("first")).toBe("1.2");
       expect(store.read("whole")).toBe("9.9");
@@ -2630,7 +2973,9 @@ describe("SourceRegistry — parse seam", () => {
       await ran(registry);
       expect(store.read("first")).toBe("1.2");
       expect(registry.getLastError("first")).toBeUndefined();
-      expect(registry.getLastError("head")?.message).toMatch(/^JSON parse failed/);
+      expect(registry.getLastError("head")?.message).toMatch(
+        /^JSON parse failed/,
+      );
     } finally {
       cleanup();
     }
@@ -2642,7 +2987,11 @@ describe("SourceRegistry — parse seam", () => {
       const f = path.join(dir, "ndjson");
       fs.writeFileSync(f, '{"n": 1}\n{"n": 2}\n');
       const { store, registry } = make();
-      registry.declareFile("head", f, { readMode: "first-line", parse: json(), cache: { kind: "never" } });
+      registry.declareFile("head", f, {
+        readMode: "first-line",
+        parse: json(),
+        cache: { kind: "never" },
+      });
       await ran(registry);
       expect(doc(store, "head").n).toBe(1);
     } finally {
@@ -2675,12 +3024,20 @@ describe("SourceRegistry — in-flight runs", () => {
       // waiting, and that publish is what re-runs B. B's own first run is
       // long done by then, so the re-run is a new in-flight entry that only
       // a re-snapshot of inFlight after A's publish can await.
-      registry.declareShell("A", "sleep 0.5; echo a", { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
-      registry.declareShell("B", `echo x >> ${spawns}; wc -l < ${spawns} | tr -d ' '`, {
+      registry.declareShell("A", "sleep 0.5; echo a", {
         cwd: process.cwd(),
         parse: TEXT,
-        cache: { kind: "depends_on", varNames: ["A"] },
+        cache: { kind: "never" },
       });
+      registry.declareShell(
+        "B",
+        `echo x >> ${spawns}; wc -l < ${spawns} | tr -d ' '`,
+        {
+          cwd: process.cwd(),
+          parse: TEXT,
+          cache: { kind: "depends_on", varNames: ["A"] },
+        },
+      );
       expect(await registry.settled(3000)).toEqual([]);
       expect(store.read("A")).toBe("a");
       expect(store.read("B")).toBe("2");
@@ -2699,9 +3056,18 @@ describe("SourceRegistry — in-flight runs", () => {
       const view = home.view();
       live.add(view);
       const period = { kind: "ttl", durationMs: MIN_SHELL_TTL_MS } as const;
-      const counted = (out: string) => `echo x >> ${spawns}; ${gate.hold}; echo ${out}`;
-      home.declareShell("dir", counted("d"), { cwd: process.cwd(), parse: TEXT, cache: period });
-      view.declareShell("own", counted("o"), { cwd: process.cwd(), parse: TEXT, cache: period });
+      const counted = (out: string) =>
+        `echo x >> ${spawns}; ${gate.hold}; echo ${out}`;
+      home.declareShell("dir", counted("d"), {
+        cwd: process.cwd(),
+        parse: TEXT,
+        cache: period,
+      });
+      view.declareShell("own", counted("o"), {
+        cwd: process.cwd(),
+        parse: TEXT,
+        cache: period,
+      });
       expect([...(await view.settled(50))].sort()).toEqual(["dir", "own"]);
       gate.open();
       expect(await view.settled(3000)).toEqual([]);
@@ -2709,9 +3075,14 @@ describe("SourceRegistry — in-flight runs", () => {
       // re-run can pass the gate while it is open, so only the runs spawned
       // after it closes are the held ones.
       gate.close();
-      const spawned = (): number => fs.readFileSync(spawns, "utf8").split("\n").length - 1;
+      const spawned = (): number =>
+        fs.readFileSync(spawns, "utf8").split("\n").length - 1;
       const closedAt = spawned();
-      await until(() => spawned() >= closedAt + 2, "both periods' re-runs spawning", 3000);
+      await until(
+        () => spawned() >= closedAt + 2,
+        "both periods' re-runs spawning",
+        3000,
+      );
       expect(await view.settled(3000)).toEqual([]);
     } finally {
       cleanup();
@@ -2722,7 +3093,7 @@ describe("SourceRegistry — in-flight runs", () => {
     const { dir, cleanup } = makeTmpDir();
     try {
       const gate = shellGate(path.join(dir, "gate"));
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = registryOver(store);
       store.defineBox("trigger", "string", "a");
       registry.declareShell("val", `${gate.hold}; echo v`, {
@@ -2743,7 +3114,11 @@ describe("SourceRegistry — in-flight runs", () => {
 
   it("inFlight() lets go of a run that never ends when its signal aborts", async () => {
     const { registry } = make();
-    registry.declareShell("stuck", "sleep 30", { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
+    registry.declareShell("stuck", "sleep 30", {
+      cwd: process.cwd(),
+      parse: TEXT,
+      cache: { kind: "never" },
+    });
     const wait = new AbortController();
     setTimeout(() => wait.abort(), 50);
     const asked = Date.now();
@@ -2756,7 +3131,8 @@ describe("SourceRegistry — in-flight runs", () => {
     const stamp = `${process.pid}${Date.now()}`;
     const marker = `ccb-registry-abort-${stamp}`;
     const nap = `sleep 5.${stamp}`;
-    const alive = (pattern: string) => spawnSync("pgrep", ["-f", pattern]).status === 0;
+    const alive = (pattern: string) =>
+      spawnSync("pgrep", ["-f", pattern]).status === 0;
     const { store, registry } = make();
     registry.declareShell("s", `${nap}; echo ${marker}`, {
       cwd: process.cwd(),

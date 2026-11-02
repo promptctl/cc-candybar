@@ -1,4 +1,5 @@
-import { afterRealTime, waitWithin } from "../src/utils/reading";
+import { waitWithin } from "../src/utils/reading";
+import { systemTimekeeper } from "../src/time";
 
 const after = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
@@ -16,7 +17,7 @@ test("work that ends inside the time answers, and its signal is aborted once the
     },
     1000,
     unexpected,
-    afterRealTime,
+    systemTimekeeper.after,
   );
   expect(end).toBe("answered");
   expect(seen?.aborted).toBe(true);
@@ -31,7 +32,7 @@ test("work still out at the deadline ends the wait there, and its signal aborts"
     },
     20,
     unexpected,
-    afterRealTime,
+    systemTimekeeper.after,
   );
   expect(end).toBe("deadline");
   expect(seen?.aborted).toBe(true);
@@ -45,7 +46,7 @@ test("a wait ends when its time does, and not before", async () => {
       () => new Promise(() => {}),
       110,
       unexpected,
-      afterRealTime,
+      systemTimekeeper.after,
     ).then((e) => {
       end = e;
     });
@@ -64,7 +65,7 @@ test("a rejection inside the time is the wait's", async () => {
       () => Promise.reject(new Error("bug")),
       1000,
       unexpected,
-      afterRealTime,
+      systemTimekeeper.after,
     ),
   ).rejects.toThrow("bug");
 });
@@ -78,7 +79,7 @@ test("a rejection after the deadline goes to its owner's report, never dropped",
     },
     5,
     (e) => late.push(e),
-    afterRealTime,
+    systemTimekeeper.after,
   );
   expect(end).toBe("deadline");
   await after(60);

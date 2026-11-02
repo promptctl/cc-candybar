@@ -42,6 +42,7 @@ import {
 import { MenuIdle } from "../src/daemon/menu-idle";
 import { selectionFor } from "./helpers/selection";
 import { textOf, type Frame, type Row } from "../src/render/frame";
+import { systemTimekeeper } from "../src/time";
 
 const at = (s: number): Instant => s as Instant;
 
@@ -82,7 +83,7 @@ describe("MenuIdle: the close follows the idle clock, whoever writes it", () => 
     now = 1000;
     closes = [];
     failures = [];
-    idle = new MenuIdle({
+    idle = new MenuIdle({ clock: systemTimekeeper,
       now: () => at(now),
       close: async (sid, { idleS, timeoutS, closed }) => {
         closed();
@@ -205,7 +206,7 @@ describe("MenuIdle: the close follows the idle clock, whoever writes it", () => 
   });
 
   test("a close that rejects is reported, and retried a timeout after the next render that draws the menu", async () => {
-    const failing = new MenuIdle({
+    const failing = new MenuIdle({ clock: systemTimekeeper,
       now: () => at(now),
       close: async () => {
         throw new Error("no config");
@@ -240,7 +241,7 @@ describe("a close that waits its turn", () => {
   test("frames during the wait queue no second close, and a kept close changes nothing", async () => {
     let release = (): void => {};
     let closes = 0;
-    const idle = new MenuIdle({
+    const idle = new MenuIdle({ clock: systemTimekeeper,
       now: () => at(now),
       close: () => {
         closes++;
@@ -268,7 +269,7 @@ describe("a close that waits its turn", () => {
     const heard: unknown[] = [];
     const note = (e: unknown): void => void heard.push(e);
     process.on("unhandledRejection", note);
-    const idle = new MenuIdle({
+    const idle = new MenuIdle({ clock: systemTimekeeper,
       now: () => at(now),
       close: () => new Promise((_resolve, no) => (reject = no)),
       failed: (_sid, e) => failures.push(e),
@@ -306,7 +307,7 @@ const PAYLOAD = {
 function buildRuntime(src: string) {
   const config = parseAndValidate("<user>", src, ALLOWED, DEFAULT_DSL_CONFIG);
   const sessionState = new SessionState();
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, {
     signer: TEST_SIGNER,

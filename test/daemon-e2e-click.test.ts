@@ -63,7 +63,7 @@ async function timingOut(outcome: RequestOutcome): Promise<StandIn> {
           );
           const write = setTimeout(() => {
             pending.delete(write);
-            fs.appendFileSync(logPath(hostOf(env)), logLine(level, line));
+            fs.appendFileSync(logPath(hostOf(env)), logLine(level, line, Date.now()));
           }, 100);
           pending.add(write);
         },

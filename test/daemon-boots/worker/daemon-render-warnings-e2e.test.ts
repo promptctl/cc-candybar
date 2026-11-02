@@ -23,10 +23,10 @@ import { textOf, type Frame } from "../../../src/render/frame";
 import { render } from "../../helpers/daemon-e2e";
 import { indicatorOf, readDiagnostics } from "../../helpers/diagnostics-viewer";
 import {
-  heldClock,
   startDaemon,
   type InWorkerDaemon,
 } from "../../helpers/in-worker-daemon";
+import { heldClock } from "../../helpers/held-clock";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import { renderLines } from "../../helpers/daemon-log";
 import { fakeWatches } from "../../helpers/fake-watches";
@@ -305,13 +305,13 @@ describe("a warning a rule over the clock starts and stops", () => {
     writeFileSync(config, CONFIGS.clock);
     // The palette rule names no theme for two seconds of every four: the
     // config, the session's state and the width stay the same throughout.
-    const clock = heldClock();
+    const clock = heldClock(new Date());
     const daemon = startDaemon(env, { clock });
     try {
       const sid = "record-clock";
       const args = ["cc-candybar", "--config", config];
       const draw = () => render(daemon, sid, projectDir, {}, args);
-      const phase = (): number => (clock.date().getTime() / 1000) % 4;
+      const phase = (): number => (clock.now() / 1000) % 4;
       const enter = (from: number): void =>
         clock.advance(((from - phase() + 4) % 4) * 1000 + 150);
       await draw();

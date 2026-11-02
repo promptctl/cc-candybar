@@ -36,6 +36,7 @@ import {
 } from "../src/themes";
 import type { Instant } from "../src/utils/instant";
 import { parseAndValidate } from "./helpers/parse-and-validate";
+import { systemTimekeeper } from "../src/time";
 
 // A frame that fades nothing in: what the effects under test here draw alone.
 const STILL_FRAME = {
@@ -83,7 +84,7 @@ function renderer(
   ) => Frame;
   readonly dispose: () => void;
 } {
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
   const opts = {

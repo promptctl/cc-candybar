@@ -6,6 +6,7 @@ import path from "node:path";
 import { DaemonLog, logLines } from "../src/daemon/log";
 import { daemonPaths } from "../src/daemon/paths";
 import { productionAdapters } from "../src/daemon/production-adapters";
+import { systemTimekeeper } from "../src/time";
 
 // [LAW:effects-at-boundaries] A daemon is aimed by the paths value it is built
 // over (candybar-testing-ihvy.yfv), so one aimed at a temporary directory
@@ -63,9 +64,9 @@ describe("a daemon aimed by its paths value", () => {
         (p) => !p.startsWith(path.join(root, "ambient")),
       ),
     ).toEqual([]);
-    const daemonLog = new DaemonLog(aimed.log);
+    const daemonLog = new DaemonLog(aimed.log, systemTimekeeper);
     try {
-      const adapters = productionAdapters(aimed, daemonLog);
+      const adapters = productionAdapters(aimed, daemonLog, systemTimekeeper);
 
       daemonLog.log("info", "a line");
       await daemonLog.drained();

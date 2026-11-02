@@ -24,7 +24,10 @@ import {
 } from "../src/daemon/cache/render";
 import { NO_FILE_EVENTS } from "../src/daemon/cache/file-events";
 import { declareLanes, renderOptionsOf } from "../src/daemon/render-payload";
-import { sessionSource, type SessionSource } from "../src/daemon/session-source";
+import {
+  sessionSource,
+  type SessionSource,
+} from "../src/daemon/session-source";
 import { SessionState } from "../src/daemon/session-state";
 import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import { drawDsl } from "../src/dsl/render";
@@ -42,7 +45,10 @@ import { linkSignerFromKeyFile } from "../src/daemon/link-key";
 import { runDeclaration, type RunAction } from "../src/config/action";
 import { effectsUrl, VERB_RUN, type EvaluatedRun } from "../src/click/wire";
 import { BadVerbArgs, type VerbContext } from "../src/daemon/verbs";
-import { SESSION_CLIENT_HINTS_KEY, SESSION_RENDER_ORIGIN_KEY } from "../src/daemon/foundations/session-keys";
+import {
+  SESSION_CLIENT_HINTS_KEY,
+  SESSION_RENDER_ORIGIN_KEY,
+} from "../src/daemon/foundations/session-keys";
 import { encodeRenderOrigin } from "../src/daemon/foundations/render-origin";
 import { sessionIdOf, type SessionId } from "../src/daemon/session-id";
 import type { StorageKey } from "../src/daemon/cache/managed-storage";
@@ -55,6 +61,7 @@ import { textOf } from "../src/render/frame";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { daemonGates } from "../src/daemon/update-keys";
+import { systemTimekeeper } from "../src/time";
 
 const SOURCE = `{ scope: "session", refresh: { watch: true }, read: { file: { json: true } } }`;
 const STATUS = "plugins.p.status";
@@ -160,7 +167,14 @@ function heldLaunch() {
     new Promise((resolve) => {
       exit = () => resolve({ ok: true, stdout: "", stderr: "", exitCode: 0 });
       opts.signal?.addEventListener("abort", () =>
-        resolve({ ok: false, reason: "aborted", stdout: "", stderr: "", exitCode: null, signal: null }),
+        resolve({
+          ok: false,
+          reason: "aborted",
+          stdout: "",
+          stderr: "",
+          exitCode: null,
+          signal: null,
+        }),
       );
     });
   return { launch, exit: () => exit() };
@@ -173,23 +187,36 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
   const log = (level: string, message: string): void => {
     lines.push(`${level} ${message}`);
   };
-  const watchers = new WatcherRegistry({ logger: log });
+  const watchers = new WatcherRegistry({
+    clock: systemTimekeeper,
+    logger: log,
+  });
   const providers = createPayloadProviders({
+    clock: systemTimekeeper,
     launcher: processLauncher,
     host: HOST,
     watchers,
-    fileEvents: new FileEventDelivery({ watchers, logger: log }),
+    fileEvents: new FileEventDelivery({
+      clock: systemTimekeeper,
+      watchers,
+      logger: log,
+    }),
     logger: log,
     ledger: new RefreshLedger(log),
   });
   const sessionState = new SessionState();
   const cache = new RenderCache<SessionSource>(
-    { stateDir: stateDir(HOST), locations: locs(), env: HOST.env,
+    {
+      clock: systemTimekeeper,
+      stateDir: stateDir(HOST),
+      locations: locs(),
+      env: HOST.env,
       launcher: processLauncher,
       sessionState,
       watchers,
       storage: providers.managedStorage,
-      signer: TEST_SIGNER, gates: bareGates(),
+      signer: TEST_SIGNER,
+      gates: bareGates(),
       fileEvents: NO_FILE_EVENTS,
       log,
       declare: (holds, facts, closure, sources) =>
@@ -204,6 +231,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
     { budgetBytes: () => 1024 * 1024 * 1024 },
   );
   const runs = new Runs({
+    clock: systemTimekeeper,
     supersede: (key, sid) => providers.managedStorage.supersede(key, sid),
     launch,
     state: sessionState,
@@ -243,13 +271,20 @@ function draw(view: SessionView<SessionSource>): {
   return { text: textOf(frame), links: linkUrls(frame), errors };
 }
 
-function viewOf(r: Rig, configFile: string, sid = SID): SessionView<SessionSource> {
+function viewOf(
+  r: Rig,
+  configFile: string,
+  sid = SID,
+): SessionView<SessionSource> {
   const held = r.cache.holdSession(dir, dir, configFile, viewFacts(dir, sid));
   cleanups.push(() => held[Symbol.dispose]());
   return held.view;
 }
 
-async function answered(view: SessionView<SessionSource>, name: string): Promise<void> {
+async function answered(
+  view: SessionView<SessionSource>,
+  name: string,
+): Promise<void> {
   await until(
     () => view.lanes().sources.get(name)?.current().kind !== "pending",
     `${name}'s first read`,
@@ -285,31 +320,52 @@ async function writeUntilRead(
 function runLink(links: readonly string[], action: string) {
   const found = links
     .map((url) => ({ url, effects: effectsOf(url) }))
-    .find(({ effects }) => effects.some((e) => e.verb === VERB_RUN && e.args[1] === action));
-  if (found === undefined) throw new Error(`no run link for ${action} in ${JSON.stringify(links)}`);
-  const [sid, name, evaluated, mac] = found.effects.find((e) => e.verb === VERB_RUN)!.args as [
-    string,
-    string,
-    string,
-    string,
-  ];
-  return { url: found.url, sid, name, evaluated, mac, drawn: JSON.parse(evaluated) as EvaluatedRun };
+    .find(({ effects }) =>
+      effects.some((e) => e.verb === VERB_RUN && e.args[1] === action),
+    );
+  if (found === undefined)
+    throw new Error(`no run link for ${action} in ${JSON.stringify(links)}`);
+  const [sid, name, evaluated, mac] = found.effects.find(
+    (e) => e.verb === VERB_RUN,
+  )!.args as [string, string, string, string];
+  return {
+    url: found.url,
+    sid,
+    name,
+    evaluated,
+    mac,
+    drawn: JSON.parse(evaluated) as EvaluatedRun,
+  };
 }
 
 // What a click on a session's link is handed: the session's recorded render
 // and client facts, the config and sources its render state holds, and the
 // run owner.
 // The declaration a view's config holds for a run, as its link signs it.
-const declarationOf = (view: SessionView<SessionSource>, name: string): string =>
-  runDeclaration(view.state.config.actions[name] as RunAction);
+const declarationOf = (
+  view: SessionView<SessionSource>,
+  name: string,
+): string => runDeclaration(view.state.config.actions[name] as RunAction);
 
-function clickContext(r: Rig, view: SessionView<SessionSource>, over: Partial<VerbContext> = {}): VerbContext {
+function clickContext(
+  r: Rig,
+  view: SessionView<SessionSource>,
+  over: Partial<VerbContext> = {},
+): VerbContext {
   r.sessionState.set(
     SID,
     SESSION_RENDER_ORIGIN_KEY,
-    encodeRenderOrigin({ projectDir: dir, cwd: dir, target: { source: "search" } }),
+    encodeRenderOrigin({
+      projectDir: dir,
+      cwd: dir,
+      target: { source: "search" },
+    }),
   );
-  r.sessionState.set(SID, SESSION_CLIENT_HINTS_KEY, JSON.stringify({ claudeConfigDir: "/u/.claude-x" }));
+  r.sessionState.set(
+    SID,
+    SESSION_CLIENT_HINTS_KEY,
+    JSON.stringify({ claudeConfigDir: "/u/.claude-x" }),
+  );
   return {
     ...testVerbContext(r.sessionState, undefined, view.state.config),
     sourcesFor: () => view.state.sources,
@@ -332,17 +388,23 @@ function daemonSessionEnv(): NodeJS.ProcessEnv {
 
 describe("a run's declaration", () => {
   function fatal(o: CheckOutcome): string {
-    if (o.kind !== "fatal") throw new Error(`expected fatal, got ${JSON.stringify(o)}`);
+    if (o.kind !== "fatal")
+      throw new Error(`expected fatal, got ${JSON.stringify(o)}`);
     return [o.message, ...o.warnings].join("\n");
   }
 
   test("a plugin's run loads: its refreshes under its namespace, its folder the directory it runs in", () => {
     const r = rig();
-    const loaded = loadFromDisk(dir, dir, config(["mine"]), { stateDir: stateDir(HOST), locations: locs(), env: HOST.env,
+    const loaded = loadFromDisk(dir, dir, config(["mine"]), {
+      clock: systemTimekeeper,
+      stateDir: stateDir(HOST),
+      locations: locs(),
+      env: HOST.env,
       launcher: processLauncher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
-      signer: TEST_SIGNER, gates: bareGates(),
+      signer: TEST_SIGNER,
+      gates: bareGates(),
     });
     try {
       expect(loaded.error).toBeNull();
@@ -364,11 +426,16 @@ describe("a run's declaration", () => {
       "conf/config.json5",
       `{ plugins: ["../p/plugin.json5"], actions: { mine: { run: ["true"], refreshes: ["${STATUS}"] } }, segments: { mine: { template: '{{ action "mine" "m" }}' } }, root: { h: ["mine"] } }`,
     );
-    const loaded = loadFromDisk(dir, dir, file, { stateDir: stateDir(HOST), locations: locs(), env: HOST.env,
+    const loaded = loadFromDisk(dir, dir, file, {
+      clock: systemTimekeeper,
+      stateDir: stateDir(HOST),
+      locations: locs(),
+      env: HOST.env,
       launcher: processLauncher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
-      signer: TEST_SIGNER, gates: bareGates(),
+      signer: TEST_SIGNER,
+      gates: bareGates(),
     });
     try {
       expect(loaded.error).toBeNull();
@@ -384,19 +451,34 @@ describe("a run's declaration", () => {
   });
 
   test.each([
-    ["an undeclared name", `["nope"]`, `refreshes "plugins.p.nope", which is not declared`],
-    ["a variable that is not a source", `["v"]`, `refreshes "plugins.p.v", which is a literal variable`],
-  ])("refreshing %s drops the plugin, naming it", async (_what, refreshes, said) => {
-    plugin(`{ go: { run: ["./write.sh"], refreshes: ${refreshes} } }, variables: { v: { kind: "literal", value: 1 } }`);
-    const file = write(
-      "config.json5",
-      `{ plugins: ["./p/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
-    );
-    const message = fatal(await checkConfig(WORLD, daemonGates(), file, dir));
-    expect(message).toContain(`plugin ${path.join(dir, "p/plugin.json5")} was not loaded`);
-    expect(message).toContain(said);
-    expect(message).toContain("a run refreshes only a declared source");
-  });
+    [
+      "an undeclared name",
+      `["nope"]`,
+      `refreshes "plugins.p.nope", which is not declared`,
+    ],
+    [
+      "a variable that is not a source",
+      `["v"]`,
+      `refreshes "plugins.p.v", which is a literal variable`,
+    ],
+  ])(
+    "refreshing %s drops the plugin, naming it",
+    async (_what, refreshes, said) => {
+      plugin(
+        `{ go: { run: ["./write.sh"], refreshes: ${refreshes} } }, variables: { v: { kind: "literal", value: 1 } }`,
+      );
+      const file = write(
+        "config.json5",
+        `{ plugins: ["./p/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
+      );
+      const message = fatal(await checkConfig(WORLD, daemonGates(), file, dir));
+      expect(message).toContain(
+        `plugin ${path.join(dir, "p/plugin.json5")} was not loaded`,
+      );
+      expect(message).toContain(said);
+      expect(message).toContain("a run refreshes only a declared source");
+    },
+  );
 
   test("a user config refreshing a name that is no source is its load error", async () => {
     const file = write(
@@ -404,24 +486,54 @@ describe("a run's declaration", () => {
       `{ actions: { mine: { run: ["true"], refreshes: ["status"] } }, segments: { mine: { template: '{{ action "mine" "m" }}' } }, root: { h: ["mine"] } }`,
     );
     const message = fatal(await checkConfig(WORLD, daemonGates(), file, dir));
-    expect(message).toContain(`actions.mine refreshes "status", which is not declared`);
+    expect(message).toContain(
+      `actions.mine refreshes "status", which is not declared`,
+    );
   });
 
   test.each([
-    ["an item that is not a template", `{ run: ["./write.sh", 3] }`, "actions.mine.run", "each a template string"],
-    ["no program", `{ run: [] }`, "actions.mine.run", "the program first and not empty"],
-    ["an env value that is not a template", `{ run: ["x"], env: { A: 1 } }`, "actions.mine.env", "to template strings"],
-    ["an env name no shell spells", `{ run: ["x"], env: { "A-B": "1" } }`, "actions.mine.env", "variable names"],
-    ["a key a run has no such thing as", `{ run: ["x"], cwd: "/" }`, "actions.mine.cwd", "Expected only: run, env, refreshes"],
-  ])("%s is a load error naming the field", async (_what, decl, field, said) => {
-    const file = write(
-      "config.json5",
-      `{ actions: { mine: ${decl} }, segments: { mine: { template: '{{ action "mine" "m" }}' } }, root: { h: ["mine"] } }`,
-    );
-    const message = fatal(await checkConfig(WORLD, daemonGates(), file, dir));
-    expect(message).toContain(field);
-    expect(message).toContain(said);
-  });
+    [
+      "an item that is not a template",
+      `{ run: ["./write.sh", 3] }`,
+      "actions.mine.run",
+      "each a template string",
+    ],
+    [
+      "no program",
+      `{ run: [] }`,
+      "actions.mine.run",
+      "the program first and not empty",
+    ],
+    [
+      "an env value that is not a template",
+      `{ run: ["x"], env: { A: 1 } }`,
+      "actions.mine.env",
+      "to template strings",
+    ],
+    [
+      "an env name no shell spells",
+      `{ run: ["x"], env: { "A-B": "1" } }`,
+      "actions.mine.env",
+      "variable names",
+    ],
+    [
+      "a key a run has no such thing as",
+      `{ run: ["x"], cwd: "/" }`,
+      "actions.mine.cwd",
+      "Expected only: run, env, refreshes",
+    ],
+  ])(
+    "%s is a load error naming the field",
+    async (_what, decl, field, said) => {
+      const file = write(
+        "config.json5",
+        `{ actions: { mine: ${decl} }, segments: { mine: { template: '{{ action "mine" "m" }}' } }, root: { h: ["mine"] } }`,
+      );
+      const message = fatal(await checkConfig(WORLD, daemonGates(), file, dir));
+      expect(message).toContain(field);
+      expect(message).toContain(said);
+    },
+  );
 
   // The bundled default declares no run: a text no file holds has no
   // directory for one to run in, so a run there is refused, naming the text.
@@ -447,7 +559,9 @@ describe("a run link", () => {
     const view = viewOf(r, config(["plugins.p.shown", "plugins.p.go"]));
     await answered(view, DOC);
     // q's source: no segment placed or unplaced reads it, only `go`'s env.
-    expect([...view.lanes().sources.keys()]).toEqual(expect.arrayContaining([STATUS, DOC]));
+    expect([...view.lanes().sources.keys()]).toEqual(
+      expect.arrayContaining([STATUS, DOC]),
+    );
     await writeUntilRead(view, DOC, SID, { home: "/h/other" });
     const { links, errors } = draw(view);
     expect(errors).toEqual([]);
@@ -458,9 +572,17 @@ describe("a run link", () => {
       env: { HOME_VALUE: "/h/other" },
     });
     const declaration = declarationOf(view, link.name);
-    expect(TEST_SIGNER.verify({ sessionId: link.sid, action: link.name, declaration, evaluated: link.evaluated }, link.mac)).toBe(
-      true,
-    );
+    expect(
+      TEST_SIGNER.verify(
+        {
+          sessionId: link.sid,
+          action: link.name,
+          declaration,
+          evaluated: link.evaluated,
+        },
+        link.mac,
+      ),
+    ).toBe(true);
   });
 
   test("a run bound by a computed name draws with the value of a source only its env reads", async () => {
@@ -470,7 +592,9 @@ describe("a run link", () => {
     await writeUntilRead(view, DOC, SID, { home2: "/h/third" });
     const { links, errors } = draw(view);
     expect(errors).toEqual([]);
-    expect(runLink(links, "plugins.p.go2").drawn.env).toEqual({ HOME_VALUE: "/h/third" });
+    expect(runLink(links, "plugins.p.go2").drawn.env).toEqual({
+      HOME_VALUE: "/h/third",
+    });
   });
 });
 
@@ -483,44 +607,81 @@ describe("a click on a run link", () => {
   }
 
   // A link with one of its fields changed after it was signed.
-  const relink = (l: { sid: string; name: string; evaluated: string; mac: string }) =>
+  const relink = (l: {
+    sid: string;
+    name: string;
+    evaluated: string;
+    mac: string;
+  }) =>
     effectsUrl([{ verb: VERB_RUN, args: [l.sid, l.name, l.evaluated, l.mac] }]);
 
   test.each([
     ["the session", (l: ReturnType<typeof runLink>) => ({ ...l, sid: "s2" })],
-    ["the action", (l: ReturnType<typeof runLink>) => ({ ...l, name: "plugins.p.go2" })],
+    [
+      "the action",
+      (l: ReturnType<typeof runLink>) => ({ ...l, name: "plugins.p.go2" }),
+    ],
     [
       "what was evaluated",
-      (l: ReturnType<typeof runLink>) => ({ ...l, evaluated: l.evaluated.replace("./write.sh", "/bin/rm") }),
+      (l: ReturnType<typeof runLink>) => ({
+        ...l,
+        evaluated: l.evaluated.replace("./write.sh", "/bin/rm"),
+      }),
     ],
-    ["the mac", (l: ReturnType<typeof runLink>) => ({ ...l, mac: `${l.mac.slice(0, -1)}${l.mac.endsWith("0") ? "1" : "0"}` })],
-    ["the mac, with text after it", (l: ReturnType<typeof runLink>) => ({ ...l, mac: `${l.mac}00` })],
-  ])("tampering with %s is refused into the session's bar, and nothing runs", async (_what, tamper) => {
-    const r = rig();
-    const { view, link } = await drawnLink(r);
-    const tampered = tamper(link);
-    const ctx = clickContext(r, view);
-    // Another session that has rendered: what its link must prove is the
-    // signature.
-    r.sessionState.set("s2", SESSION_RENDER_ORIGIN_KEY, encodeRenderOrigin({ projectDir: dir, cwd: dir, target: { source: "search" } }));
-    await expect(clickUrl(relink(tampered), ctx)).rejects.toThrow(BadVerbArgs);
-    expect(r.runs.stats()).toMatchObject({ started: 0, refused: 1 });
-    expect(r.lines).toContainEqual(
-      expect.stringMatching(
-        new RegExp(`^warn run refused sid=${tampered.sid} action=${tampered.name.replace(/\./g, "\\.")} reason=".*signature does not match`),
-      ),
-    );
-    // The refusal is in the bar of the session the link names.
-    expect(lastClickError(r.sessionState, tampered.sid)?.text).toContain("signature does not match");
-    expect(fs.existsSync(path.join(storage(), `${SID}.json`))).toBe(false);
-  });
+    [
+      "the mac",
+      (l: ReturnType<typeof runLink>) => ({
+        ...l,
+        mac: `${l.mac.slice(0, -1)}${l.mac.endsWith("0") ? "1" : "0"}`,
+      }),
+    ],
+    [
+      "the mac, with text after it",
+      (l: ReturnType<typeof runLink>) => ({ ...l, mac: `${l.mac}00` }),
+    ],
+  ])(
+    "tampering with %s is refused into the session's bar, and nothing runs",
+    async (_what, tamper) => {
+      const r = rig();
+      const { view, link } = await drawnLink(r);
+      const tampered = tamper(link);
+      const ctx = clickContext(r, view);
+      // Another session that has rendered: what its link must prove is the
+      // signature.
+      r.sessionState.set(
+        "s2",
+        SESSION_RENDER_ORIGIN_KEY,
+        encodeRenderOrigin({
+          projectDir: dir,
+          cwd: dir,
+          target: { source: "search" },
+        }),
+      );
+      await expect(clickUrl(relink(tampered), ctx)).rejects.toThrow(
+        BadVerbArgs,
+      );
+      expect(r.runs.stats()).toMatchObject({ started: 0, refused: 1 });
+      expect(r.lines).toContainEqual(
+        expect.stringMatching(
+          new RegExp(
+            `^warn run refused sid=${tampered.sid} action=${tampered.name.replace(/\./g, "\\.")} reason=".*signature does not match`,
+          ),
+        ),
+      );
+      // The refusal is in the bar of the session the link names.
+      expect(lastClickError(r.sessionState, tampered.sid)?.text).toContain(
+        "signature does not match",
+      );
+      expect(fs.existsSync(path.join(storage(), `${SID}.json`))).toBe(false);
+    },
+  );
 
   test("a link naming a session that has never rendered is refused, and nothing runs", async () => {
     const r = rig();
     const { view, link } = await drawnLink(r);
-    await expect(clickUrl(relink({ ...link, sid: "s3" }), clickContext(r, view))).rejects.toThrow(
-      "session s3 has not rendered yet — no config to act on",
-    );
+    await expect(
+      clickUrl(relink({ ...link, sid: "s3" }), clickContext(r, view)),
+    ).rejects.toThrow("session s3 has not rendered yet — no config to act on");
     expect(r.runs.stats()).toMatchObject({ started: 0, refused: 1 });
   });
 
@@ -531,10 +692,15 @@ describe("a click on a run link", () => {
     const decl = drawnUnder.actions[link.name] as RunAction;
     const edited = {
       ...drawnUnder,
-      actions: { ...drawnUnder.actions, [link.name]: { ...decl, run: ["./other.sh", ...decl.run.slice(1)] } },
+      actions: {
+        ...drawnUnder.actions,
+        [link.name]: { ...decl, run: ["./other.sh", ...decl.run.slice(1)] },
+      },
     } as typeof drawnUnder;
     const ctx = clickContext(r, view, { configFor: () => edited });
-    await expect(clickUrl(link.url, ctx)).rejects.toThrow(/its action has been edited since it was drawn/);
+    await expect(clickUrl(link.url, ctx)).rejects.toThrow(
+      /its action has been edited since it was drawn/,
+    );
     expect(r.runs.stats()).toMatchObject({ started: 0, refused: 1 });
     // The same link under the declaration it was drawn from runs.
     await clickUrl(link.url, clickContext(r, view));
@@ -544,8 +710,12 @@ describe("a click on a run link", () => {
   test("a link signed with another key is refused", async () => {
     const r = rig();
     const { view, link } = await drawnLink(r);
-    const ctx = clickContext(r, view, { links: linkSigner(Buffer.alloc(32, 9)) });
-    await expect(clickUrl(link.url, ctx)).rejects.toThrow(/signature does not match/);
+    const ctx = clickContext(r, view, {
+      links: linkSigner(Buffer.alloc(32, 9)),
+    });
+    await expect(clickUrl(link.url, ctx)).rejects.toThrow(
+      /signature does not match/,
+    );
     expect(r.runs.stats()).toMatchObject({ started: 0, refused: 1 });
   });
 
@@ -556,14 +726,25 @@ describe("a click on a run link", () => {
       const forged = {
         ...link,
         name: action,
-        mac: TEST_SIGNER.sign({ sessionId: SID, action, declaration: "[]", evaluated: link.evaluated }),
+        mac: TEST_SIGNER.sign({
+          sessionId: SID,
+          action,
+          declaration: "[]",
+          evaluated: link.evaluated,
+        }),
       };
-      await expect(clickUrl(relink(forged), clickContext(r, view))).rejects.toThrow(
+      await expect(
+        clickUrl(relink(forged), clickContext(r, view)),
+      ).rejects.toThrow(
         `"${action}" is not a run action this session's config declares`,
       );
     }
     expect(r.runs.stats()).toMatchObject({ started: 0, refused: 2 });
-    expect(r.lines).toContainEqual(expect.stringContaining('run refused sid=s1 action=plugins.p.nope reason="\\"plugins.p.nope\\" is not a run action'));
+    expect(r.lines).toContainEqual(
+      expect.stringContaining(
+        'run refused sid=s1 action=plugins.p.nope reason="\\"plugins.p.nope\\" is not a run action',
+      ),
+    );
   });
 
   test("the click returns with the program still running: the source draws its loading cell until the program exits, then its write", async () => {
@@ -577,7 +758,10 @@ describe("a click on a run link", () => {
     expect(r.runs.stats()).toMatchObject({ started: 1, running: 1 });
     // `superseded` is the state no request waits on
     // (test/render-payload-outcomes.test.ts).
-    expect(view.lanes().sources.get(STATUS)!.current()).toMatchObject({ kind: "pending", why: "superseded" });
+    expect(view.lanes().sources.get(STATUS)!.current()).toMatchObject({
+      kind: "pending",
+      why: "superseded",
+    });
     const during = draw(view).text;
     expect(during).toContain(LOADING_GLYPH);
     expect(during).not.toContain("home=/h/old");
@@ -585,19 +769,33 @@ describe("a click on a run link", () => {
     // Through real turns with its write on disk, so a source resumed before the
     // exit would draw it. A slow machine shortens this hold and cannot fail it.
     programWrites(SID, { home: "/h/new" });
-    await throughout(() => draw(view).text.includes(LOADING_GLYPH), "the loading cell while the program runs", 200);
+    await throughout(
+      () => draw(view).text.includes(LOADING_GLYPH),
+      "the loading cell while the program runs",
+      200,
+    );
 
     program.exit();
-    await until(() => draw(view).text.includes("home=/h/new"), "the program's write");
+    await until(
+      () => draw(view).text.includes("home=/h/new"),
+      "the program's write",
+    );
     expect(r.runs.stats()).toMatchObject({ started: 1, running: 0 });
   });
 
   test("the program runs in its declaring file's directory and sees the session, never the daemon", async () => {
-    const r = rig(createLauncher({ inherited: daemonSessionEnv() }).launch);
+    const r = rig(
+      createLauncher({ inherited: daemonSessionEnv() }, systemTimekeeper)
+        .launch,
+    );
     const { view, link } = await drawnLink(r);
 
     await clickUrl(link.url, clickContext(r, view));
-    await until(() => draw(view).text.includes("home=/h/new"), "the program's write", 10_000);
+    await until(
+      () => draw(view).text.includes("home=/h/new"),
+      "the program's write",
+      10_000,
+    );
     expect(r.runs.stats()).toMatchObject({ started: 1, running: 0, failed: 0 });
     expect(lastClickError(r.sessionState, SID)).toBeNull();
     const read = view.lanes().sources.get(STATUS)!.current();
@@ -614,7 +812,9 @@ describe("a click on a run link", () => {
       pane: "unset",
     });
     expect(r.lines).toContainEqual(
-      expect.stringMatching(/^info run sid=s1 action=plugins\.p\.go program=\.\/write\.sh outcome=ok exit=0 took=\d+ refreshed=plugins\.p\.status$/),
+      expect.stringMatching(
+        /^info run sid=s1 action=plugins\.p\.go program=\.\/write\.sh outcome=ok exit=0 took=\d+ refreshed=plugins\.p\.status$/,
+      ),
     );
   });
 });
@@ -630,6 +830,7 @@ describe("the run owner", () => {
     const sessionState = new SessionState();
     const held: string[] = [];
     const runs = new Runs({
+      clock: systemTimekeeper,
       supersede: (key, sid) => {
         held.push(`supersede ${key.folder} ${sid}`);
         return () => held.push(`resume ${key.folder} ${sid}`);
@@ -645,7 +846,11 @@ describe("the run owner", () => {
       sessionId: SESSION,
       action: "act",
       argv: ["/bin/sh", "-c", script],
-      envOverlay: sessionEnv({ sessionId: SID, projectDir: dir, claudeConfigDir: undefined }),
+      envOverlay: sessionEnv({
+        sessionId: SID,
+        projectDir: dir,
+        claudeConfigDir: undefined,
+      }),
       cwd: dir,
       refreshes: [{ name: STATUS, storage: KEY }],
     });
@@ -659,9 +864,15 @@ describe("the run owner", () => {
     await until(() => o.runs.stats().running === 0, "the run's end");
     expect(lastClickError(o.sessionState, SID)?.text).toBe("run act: it broke");
     expect(o.held).toEqual([`supersede /s ${SID}`, `resume /s ${SID}`]);
-    expect(o.runs.stats()).toMatchObject({ started: 1, failed: 1, timedOut: 0 });
+    expect(o.runs.stats()).toMatchObject({
+      started: 1,
+      failed: 1,
+      timedOut: 0,
+    });
     expect(o.lines).toContainEqual(
-      expect.stringMatching(/^warn run sid=s1 action=act program=\/bin\/sh outcome=exit exit=3 took=\d+ refreshed=plugins\.p\.status$/),
+      expect.stringMatching(
+        /^warn run sid=s1 action=act program=\/bin\/sh outcome=exit exit=3 took=\d+ refreshed=plugins\.p\.status$/,
+      ),
     );
   });
 
@@ -676,9 +887,15 @@ describe("the run owner", () => {
     const o = owner(200);
     o.runs.start(o.run("sleep 5"));
     await until(() => o.runs.stats().running === 0, "the timeout");
-    expect(lastClickError(o.sessionState, SID)?.text).toBe("run act: timed out after 0.2 s");
+    expect(lastClickError(o.sessionState, SID)?.text).toBe(
+      "run act: timed out after 0.2 s",
+    );
     expect(o.held).toContain(`resume /s ${SID}`);
-    expect(o.runs.stats()).toMatchObject({ started: 1, failed: 0, timedOut: 1 });
+    expect(o.runs.stats()).toMatchObject({
+      started: 1,
+      failed: 0,
+      timedOut: 1,
+    });
     expect(o.lines).toContainEqual(expect.stringContaining("outcome=timeout"));
   });
 
@@ -686,10 +903,16 @@ describe("the run owner", () => {
     const o = owner();
     o.runs.start({ ...o.run(""), argv: ["./no-such-program"] });
     await until(() => o.runs.stats().running === 0, "the failed launch");
-    expect(lastClickError(o.sessionState, SID)?.text).toMatch(/^run act: .*ENOENT/);
+    expect(lastClickError(o.sessionState, SID)?.text).toMatch(
+      /^run act: .*ENOENT/,
+    );
     expect(o.held).toContain(`resume /s ${SID}`);
     expect(o.runs.stats()).toMatchObject({ failed: 1 });
-    expect(o.lines).toContainEqual(expect.stringContaining("program=./no-such-program outcome=launch exit=-"));
+    expect(o.lines).toContainEqual(
+      expect.stringContaining(
+        "program=./no-such-program outcome=launch exit=-",
+      ),
+    );
   });
 
   test("closing the owner aborts the run in flight and resumes its sources; nothing lands in the bar", async () => {
@@ -701,7 +924,9 @@ describe("the run owner", () => {
     expect(o.held).toEqual([`supersede /s ${SID}`, `resume /s ${SID}`]);
     expect(o.lines).toContainEqual(expect.stringContaining("outcome=aborted"));
     expect(lastClickError(o.sessionState, SID)).toBeNull();
-    expect(() => o.runs.start(o.run("true"))).toThrow("run owner used after close");
+    expect(() => o.runs.start(o.run("true"))).toThrow(
+      "run owner used after close",
+    );
   });
 });
 
@@ -720,7 +945,10 @@ describe("the session's process environment", () => {
     const childSees = async (
       facts: Parameters<typeof sessionEnv>[0],
     ): Promise<Record<string, string>> => {
-      const ran = await createLauncher({ inherited: daemon }).launch({
+      const ran = await createLauncher(
+        { inherited: daemon },
+        systemTimekeeper,
+      ).launch({
         bin: "/usr/bin/env",
         envOverlay: sessionEnv(facts),
         category: "click.run",
@@ -730,17 +958,30 @@ describe("the session's process environment", () => {
         ran.stdout
           .trim()
           .split("\n")
-          .map((line) => [line.slice(0, line.indexOf("=")), line.slice(line.indexOf("=") + 1)]),
+          .map((line) => [
+            line.slice(0, line.indexOf("=")),
+            line.slice(line.indexOf("=") + 1),
+          ]),
       );
     };
-    expect(await childSees({ sessionId: "s9", projectDir: "/p", claudeConfigDir: "/u/.claude-z" })).toMatchObject({
+    expect(
+      await childSees({
+        sessionId: "s9",
+        projectDir: "/p",
+        claudeConfigDir: "/u/.claude-z",
+      }),
+    ).toMatchObject({
       PATH: "/usr/bin",
       CLAUDE_CODE_SESSION_ID: "s9",
       CLAUDE_PROJECT_DIR: "/p",
       CLAUDE_CONFIG_DIR: "/u/.claude-z",
     });
     // The default directory: the variable unset, as Claude Code reads it.
-    const defaulted = await childSees({ sessionId: "s9", projectDir: "/p", claudeConfigDir: undefined });
+    const defaulted = await childSees({
+      sessionId: "s9",
+      projectDir: "/p",
+      claudeConfigDir: undefined,
+    });
     expect(defaulted).toMatchObject({
       PATH: "/usr/bin",
       CLAUDE_CODE_SESSION_ID: "s9",
@@ -754,7 +995,12 @@ describe("the session's process environment", () => {
 describe("the link key", () => {
   test("is made once, 32 bytes readable by this user alone, and the same key across restarts", () => {
     const file = path.join(dir, "state", "link.key");
-    const fields = { sessionId: SID, action: "a", declaration: "[]", evaluated: "{}" };
+    const fields = {
+      sessionId: SID,
+      action: "a",
+      declaration: "[]",
+      evaluated: "{}",
+    };
     const mac = linkSignerFromKeyFile(file).sign(fields);
     expect(fs.statSync(file).mode & 0o777).toBe(0o600);
     expect(fs.readFileSync(file)).toHaveLength(32);
@@ -767,13 +1013,26 @@ describe("the link key", () => {
 
   test("a maker that dies writing leaves no key, and the next one makes it whole", () => {
     const file = path.join(dir, "state", "link.key");
-    const fields = { sessionId: SID, action: "a", declaration: "[]", evaluated: "{}" };
+    const fields = {
+      sessionId: SID,
+      action: "a",
+      declaration: "[]",
+      evaluated: "{}",
+    };
     const write = fs.writeFileSync;
-    jest.spyOn(fs, "writeFileSync").mockImplementationOnce((target, data, opts) => {
-      write(target, (data as Buffer).subarray(0, 3), opts as fs.WriteFileOptions);
-      throw new Error("killed mid-write");
-    });
-    expect(() => linkSignerFromKeyFile(file).sign(fields)).toThrow("killed mid-write");
+    jest
+      .spyOn(fs, "writeFileSync")
+      .mockImplementationOnce((target, data, opts) => {
+        write(
+          target,
+          (data as Buffer).subarray(0, 3),
+          opts as fs.WriteFileOptions,
+        );
+        throw new Error("killed mid-write");
+      });
+    expect(() => linkSignerFromKeyFile(file).sign(fields)).toThrow(
+      "killed mid-write",
+    );
     expect(fs.existsSync(file)).toBe(false);
     jest.restoreAllMocks();
     linkSignerFromKeyFile(file).sign(fields);
@@ -782,7 +1041,12 @@ describe("the link key", () => {
 
   test("a key already made is served from a state directory that cannot be written", () => {
     const file = path.join(dir, "state", "link.key");
-    const fields = { sessionId: SID, action: "a", declaration: "[]", evaluated: "{}" };
+    const fields = {
+      sessionId: SID,
+      action: "a",
+      declaration: "[]",
+      evaluated: "{}",
+    };
     const mac = linkSignerFromKeyFile(file).sign(fields);
     fs.chmodSync(path.dirname(file), 0o500);
     try {
@@ -794,8 +1058,13 @@ describe("the link key", () => {
 
   test("a key file of the wrong length is refused, naming it", () => {
     const file = write("state/link.key", "short");
-    expect(() => linkSignerFromKeyFile(file).sign({ sessionId: SID, action: "a", declaration: "[]", evaluated: "{}" })).toThrow(
-      `link key ${file} holds 5 bytes, not 32`,
-    );
+    expect(() =>
+      linkSignerFromKeyFile(file).sign({
+        sessionId: SID,
+        action: "a",
+        declaration: "[]",
+        evaluated: "{}",
+      }),
+    ).toThrow(`link key ${file} holds 5 bytes, not 32`);
   });
 });

@@ -13,6 +13,7 @@
 import { inspect } from "node:util";
 import type { TmuxHint } from "../tmux-hint.js";
 import type { TmuxRun } from "../proc/tmux.js";
+import type { Timekeeper } from "../time";
 
 // One line per pane: its id, its session's id, how many clients that session
 // has attached, and whether its window is the session's current one, zoomed,
@@ -105,6 +106,8 @@ type ServerView =
   | { readonly kind: "unasked"; readonly reason: string };
 
 export interface VisibilityDeps {
+  // The daemon's clock, which the loop's pace runs on.
+  clock: Pick<Timekeeper, "after">;
   // `tmux list-panes -a` and `tmux list-clients` of the server at `socket`,
   // in LIST_PANES_FORMAT and LIST_CLIENTS_FORMAT.
   listPanes(socket: string): Promise<TmuxRun>;
@@ -129,7 +132,7 @@ export interface VisibilityDeps {
 type Loop =
   | { readonly kind: "idle" }
   | { kind: "asking"; following: boolean }
-  | { readonly kind: "due"; readonly timer: ReturnType<typeof setTimeout> };
+  | { readonly kind: "due"; readonly clear: () => void };
 
 /**
  * [LAW:no-shared-mutable-globals] Every tmux server's last answer, by socket:
@@ -161,7 +164,7 @@ export class PaneVisibility {
   private stop(): void {
     switch (this.loop.kind) {
       case "due":
-        clearTimeout(this.loop.timer);
+        this.loop.clear();
         this.end();
         return;
       case "asking":
@@ -188,7 +191,11 @@ export class PaneVisibility {
         if (loop.following) {
           this.loop = {
             kind: "due",
-            timer: setTimeout(() => this.ask(), this.deps.intervalMs).unref(),
+            clear: this.deps.clock.after(
+              this.deps.intervalMs,
+              () => this.ask(),
+              { unref: true },
+            ),
           };
           return;
         }

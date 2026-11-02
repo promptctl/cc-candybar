@@ -66,6 +66,7 @@ import {
   UPDATE_NOTICE_FIELD,
   UPDATE_NOTICE_SESSION_KEY,
 } from "./update-keys";
+import type { Timekeeper } from "../time.js";
 
 // [LAW:types-are-the-program] What is newer than the running code. `source`
 // is a checkout whose tree no longer matches the bundle; `release` is an
@@ -247,6 +248,8 @@ export function updateOf(
 }
 
 export interface UpdateWatchOptions {
+  // The daemon's clock: the act's deadline and the watch's timers run on it.
+  readonly clock: Timekeeper;
   // Who the act's job and its `ps` belong to.
   readonly launcher: Launcher;
   // The daemon's `import.meta.url` — the bundle whose checkout is assessed.
@@ -340,6 +343,7 @@ function describeRelease(c: Currency): [LogLevel, string] {
 // gates themselves (`daemonGates`), where a daemon is built with them.
 export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   const {
+    clock,
     launcher,
     entryUrl,
     digest,
@@ -363,7 +367,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
     if (closed) throw new DaemonClosing("apply-update");
     return read;
   };
-  const acts = makeActReader(actsDir, readStart);
+  const acts = makeActReader(actsDir, readStart, clock);
   // [LAW:one-source-of-truth] The act as last read, for the notice's render
   // and for noticing an end; null until the first read. Every decision — a
   // second click, a restart's hold — reads the record afresh instead, since a
@@ -389,8 +393,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   let closed = false;
   const armed: Array<() => void> = [];
   const every = (run: () => void, ms: number): void => {
-    const timer = setInterval(run, ms).unref();
-    armed.push(() => clearInterval(timer));
+    armed.push(clock.every(ms, run, { unref: true }));
   };
 
   const current = (): Update | null =>
@@ -423,6 +426,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
       PACKAGE_NAME,
       fetchImpl,
       registryUrl,
+      clock,
     );
     release = assessCurrency(PACKAGE_VERSION, latest);
     logRelease(describeRelease(release));
@@ -456,8 +460,8 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   // Ends the act if its group is alive past its deadline, with a timeout
   // verdict unless the job's own landed first.
   function endIfOverdue(facts: ActFacts | null): void {
-    if (!facts?.alive || Date.now() <= facts.record.deadline) return;
-    const { stands, signalled } = endOverdue(actsDir, facts);
+    if (!facts?.alive || clock.now() <= facts.record.deadline) return;
+    const { stands, signalled } = endOverdue(actsDir, facts, clock);
     const why = stands ? "timed out" : "outlived its verdict";
     const ending = signalled ? "ending it" : "its group took no signal";
     log("error", `apply-update: act ${facts.act} ${why}; ${ending}`);
@@ -492,19 +496,18 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
 
   // [LAW:no-ambient-temporal-coupling] Each tick scheduled only once the last
   // has answered, as limits.ts's are: a slow read delays the next.
-  let tickTimer: NodeJS.Timeout | undefined;
+  let clearTick: (() => void) | undefined;
   async function tick(): Promise<void> {
     await actTurn(watchAct);
     if (closed) return;
-    tickTimer = setTimeout(() => void tick(), ACT_POLL_MS);
-    tickTimer.unref();
+    clearTick = clock.after(ACT_POLL_MS, () => void tick(), { unref: true });
   }
 
   return {
     arm() {
       sampleBuild();
       every(sampleBuild, intervalMs);
-      armed.push(() => clearTimeout(tickTimer));
+      armed.push(() => clearTick?.());
       void tick();
       // The registry is a question only a published install asks: a checkout
       // rebuilds from the source beside it, whatever npm has.
@@ -553,7 +556,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
           updateIdentity(update),
           { ...facts.command, category: "update.apply" },
           ACT_TIMEOUT_MS,
-          Date.now(),
+          clock.now(),
           readStart,
         );
         if (!claim.ok) {

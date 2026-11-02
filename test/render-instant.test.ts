@@ -15,6 +15,7 @@ import { registerDslConfig } from "../src/dsl/render";
 import { instantOf, type Instant } from "../src/utils/instant";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
+import { systemTimekeeper } from "../src/time";
 
 const OPTS = {
   endcaps: "powerline" as const,
@@ -51,7 +52,7 @@ function renderer(): {
   readonly render: (at: Instant) => Frame;
   readonly dispose: () => void;
 } {
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
   const compiled = registerDslConfig(CONFIG, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
   return {
@@ -127,7 +128,7 @@ describe("a stored instant is read against the frame's instant", () => {
   };
 
   test("one payload, two frames: each draws its own age and ETA", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(
       processLauncher,
       store,
@@ -158,7 +159,7 @@ describe("a stored instant is read against the frame's instant", () => {
   });
 
   test("no commit date reads as no age, and an unused window as no ETA", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(
       processLauncher,
       store,

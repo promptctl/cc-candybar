@@ -10,7 +10,7 @@ import {
   handleConnection,
   type ConnectionDaemon,
 } from "../src/daemon/connection";
-import { SYSTEM_CLOCK } from "../src/daemon/daemon";
+import { systemTimekeeper } from "../src/time";
 import { NOTHING_DELIVERED } from "../src/daemon/draw-bar";
 import type { Subscriber } from "../src/daemon/frame-feed";
 import {
@@ -87,9 +87,9 @@ describe("a connection over a stream", () => {
   const standIn = (
     over: Partial<ConnectionDaemon> = {},
   ): ConnectionDaemon & { stats: RuntimeStats } => ({
-    stats: new RuntimeStats(),
+    stats: new RuntimeStats(systemTimekeeper),
     log: () => {},
-    clock: SYSTEM_CLOCK,
+    clock: systemTimekeeper,
     handle: async () => replyWith(),
     subscribe: (_sessionId, subscriber) => {
       subscriptions.push(subscriber);
@@ -118,7 +118,12 @@ describe("a connection over a stream", () => {
   test("a client that gives up hangs up the daemon's end", async () => {
     const request = held();
     const daemon = standIn({ handle: request.handle });
-    const gaveUp = sendOne(open(daemon).client, STATS, Date.now() + 20);
+    const gaveUp = sendOne(
+      open(daemon).client,
+      STATS,
+      Date.now() + 20,
+      systemTimekeeper,
+    );
     await settled();
     expect(daemon.stats.inFlight).toBe(1);
 

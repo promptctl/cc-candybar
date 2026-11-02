@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { SessionId } from "../session-id";
+import type { Timekeeper } from "../../time";
 import type { WatcherHandle, WatcherRegistry, Invalidation } from "./watchers";
 import {
   stallReason,
@@ -109,7 +110,7 @@ interface Watched {
   readonly identity: FolderIdentity | "gone";
   holders: number;
   readonly handle: WatcherHandle;
-  readonly sweep: NodeJS.Timeout;
+  readonly stopSweep: () => void;
   health: Health;
 }
 
@@ -142,12 +143,16 @@ export class ManagedStorage {
   private readonly logger: DaemonLogger;
   private readonly identityOf: IdentityRead;
   private readonly fileEvents: FileEvents;
+  private readonly clock: Pick<Timekeeper, "now" | "after" | "every">;
   private readonly unsubscribe: Release;
 
   constructor(opts: {
     readonly watchers: WatcherRegistry;
     readonly logger: DaemonLogger;
     readonly fileEvents: FileEvents;
+    // [LAW:effects-at-boundaries] The daemon's clock: the sweep period, the
+    // age a file is judged against, and the source's timings.
+    readonly clock: Pick<Timekeeper, "now" | "after" | "every">;
     readonly identityOf?: IdentityRead;
     readonly ledger?: RefreshLedger;
   }) {
@@ -155,6 +160,7 @@ export class ManagedStorage {
     this.logger = opts.logger;
     this.identityOf = opts.identityOf ?? statIdentity;
     this.fileEvents = opts.fileEvents;
+    this.clock = opts.clock;
     this.unsubscribe = opts.fileEvents.subscribe((notice) =>
       this.noticed(notice),
     );
@@ -172,6 +178,7 @@ export class ManagedStorage {
       maxEntries: MAX_ENTRIES,
       logger: opts.logger,
       ledger: opts.ledger ?? new RefreshLedger(opts.logger),
+      clock: opts.clock,
     });
   }
 
@@ -291,10 +298,13 @@ export class ManagedStorage {
         { dirs: [{ path: key.folder }] },
         (invalidation) => this.invalidated(watched, invalidation),
       ),
-      sweep: setInterval(() => void this.sweep(key), STORAGE_SWEEP_EVERY_MS),
+      stopSweep: this.clock.every(
+        STORAGE_SWEEP_EVERY_MS,
+        () => void this.sweep(key),
+        { unref: true },
+      ),
       health: { kind: "watching" },
     };
-    watched.sweep.unref();
     this.watched.set(keyString(key), watched);
     // First, so its reason is the one the sources read: a folder that could
     // not be made refuses its watch too.
@@ -310,7 +320,7 @@ export class ManagedStorage {
     const id = keyString(watched.key);
     this.watched.delete(id);
     watched.health = { kind: "closed" };
-    clearInterval(watched.sweep);
+    watched.stopSweep();
     watched.handle.release();
   }
 
@@ -468,12 +478,12 @@ export class ManagedStorage {
   // Removes every `*.json` file nobody has written for 30 days, unless a
   // session holds it now. One event per sweep.
   private async sweep(key: StorageKey): Promise<void> {
-    const startedAt = Date.now();
+    const startedAt = this.clock.now();
     const cutoff = startedAt - STORAGE_FILE_MAX_AGE_MS;
     let scanned = 0;
     let removed = 0;
     const event = () =>
-      `plugin storage sweep folder=${valueOf(key.folder)} scanned=${scanned} removed=${removed} took=${Date.now() - startedAt}ms`;
+      `plugin storage sweep folder=${valueOf(key.folder)} scanned=${scanned} removed=${removed} took=${this.clock.now() - startedAt}ms`;
     try {
       const entries = await fs.promises.readdir(key.folder, {
         withFileTypes: true,

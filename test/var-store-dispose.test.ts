@@ -19,6 +19,7 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { instantOf } from "../src/utils/instant";
 import { configDisposeLine } from "../src/daemon/cache/render";
+import { systemTimekeeper } from "../src/time";
 
 const SID = "s1";
 
@@ -61,7 +62,7 @@ function renderedEntry(
     new Set(listResolvablePaletteNames()),
     DEFAULT_DSL_CONFIG,
   );
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   if (drawn) {
@@ -114,7 +115,7 @@ describe("VariableStore.dispose releases every computed's subscriptions", () => 
 
   it("refuses a declaration after dispose: it would subscribe with no release to come", () => {
     const sessionState = new SessionState();
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     store.defineComputed("a", "string", () => sessionState.get(SID, "a") ?? "");
     expect(store.read("a")).toBe("");
     expect(store.dispose()).toBe(1);
@@ -135,7 +136,7 @@ describe("VariableStore.dispose releases every computed's subscriptions", () => 
 
   it("a never-rendered registry subscribes nothing, and its dispose changes nothing", () => {
     const sessionState = new SessionState();
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(processLauncher, store, "", sessionState);
     registerDslConfig(
       parseAndValidate(
@@ -154,7 +155,7 @@ describe("VariableStore.dispose releases every computed's subscriptions", () => 
 
   it("keeps the pull-only cache while live: two reads with no change evaluate once", () => {
     const sessionState = new SessionState();
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     let evaluations = 0;
     store.defineComputed("theme", "string", () => {
       evaluations++;

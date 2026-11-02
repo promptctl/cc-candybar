@@ -15,6 +15,7 @@ import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { placementDraftKey } from "../src/config/edit-chrome";
 import { instantOf } from "../src/utils/instant";
+import { systemTimekeeper } from "../src/time";
 
 const SESSION = "s1";
 
@@ -66,7 +67,7 @@ function renderPair(
   for (const [key, value] of Object.entries(session)) {
     sessionState.set(SESSION, key, value);
   }
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const sink = new Map<string, readonly RichText[]>();
   try {

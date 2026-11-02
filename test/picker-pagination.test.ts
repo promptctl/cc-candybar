@@ -29,6 +29,7 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { swatch } from "../src/render/swatch";
 import { instantOf } from "../src/utils/instant";
 import { menuPageKey } from "../src/config/menu-keys";
+import { systemTimekeeper } from "../src/time";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const THEMES = listResolvablePaletteNames();
@@ -86,7 +87,7 @@ function buildRuntime(
 ) {
   const config = parseAndValidate("<test>", pickerConfig(), ALLOWED);
   const sessionState = new SessionState();
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const basePalette = getThemePalette("textual-dark"!);
@@ -303,7 +304,7 @@ describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols"
   ) {
     const config = parseAndValidate("<test>", menuRowConfig(), ALLOWED);
     const sessionState = new SessionState();
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(processLauncher, store, "", sessionState);
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     const basePalette = getThemePalette("textual-dark"!);

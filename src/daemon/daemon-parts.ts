@@ -1,4 +1,4 @@
-import type { DaemonClock } from "./daemon.js";
+import type { Timekeeper } from "../time.js";
 import type { FileEventDelivery } from "./cache/file-events";
 import type { RenderCache } from "./cache/render";
 import type { WatcherRegistry } from "./cache/watchers";
@@ -35,7 +35,7 @@ export interface DaemonParts {
   readonly home: string;
   // The temporary directory a click's handoff writes under.
   readonly tmp: string;
-  readonly clock: DaemonClock;
+  readonly clock: Timekeeper;
   readonly launcher: Launcher;
   readonly log: DaemonLogger;
   readonly bundle: string;

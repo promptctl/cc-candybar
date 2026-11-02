@@ -31,7 +31,7 @@ import { UNFOLLOWED_FEEDS } from "../config/lanes.js";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
-import { setTimeout as sleep } from "node:timers/promises";
+import { sleep } from "../time.js";
 
 import { detectClientHints } from "../client-hints.js";
 import {
@@ -108,13 +108,14 @@ const log: DaemonLogger = (level, message) =>
     : void process.stderr.write(`${level}: ${message}\n`);
 const warn = (message: string): void => log("warn", message);
 
-const watchers = new WatcherRegistry({ logger: log });
+const watchers = new WatcherRegistry({ clock: world.clock, logger: log });
 const providers = createPayloadProviders({
   launcher: world.launcher,
   host,
   watchers,
   // The demo holds no folder and watches nothing.
   fileEvents: NO_FILE_EVENTS,
+  clock: world.clock,
   logger: log,
   ledger: new RefreshLedger(log),
 });
@@ -142,11 +143,12 @@ function loadState(): DslRenderState {
     {
       repos,
       advisories: repoGateLines(repos),
-      started: performance.now(),
+      started: world.clock.monotonic(),
     },
     cwd,
     chain,
     {
+      clock: world.clock,
       launcher: world.launcher,
       locations: locs,
       env: host.env,
@@ -208,7 +210,7 @@ async function renderFrames(): Promise<void> {
     for (let frame = 0; frame < FRAMES; frame++) {
       // [LAW:effects-at-boundaries] Each frame is one status-line tick: one
       // instant, sampled here as the daemon samples it per request.
-      const at = instantOf(new Date());
+      const at = instantOf(new Date(world.clock.now()));
       await settlePayload(
         {
           hookData,
@@ -241,7 +243,7 @@ async function renderFrames(): Promise<void> {
           .map((row) => `  ${row}\n`)
           .join(""),
       );
-      if (frame < FRAMES - 1) await sleep(FRAME_INTERVAL_MS);
+      if (frame < FRAMES - 1) await sleep(world.clock, FRAME_INTERVAL_MS);
     }
 
     process.stdout.write("\n");

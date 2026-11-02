@@ -62,6 +62,7 @@ import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { instantOf } from "../src/utils/instant";
 import { picked, selectionFor } from "./helpers/selection";
 import { MENU_PAGE_NS } from "../src/config/reserved-names";
+import { systemTimekeeper } from "../src/time";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = "s1";
@@ -113,7 +114,7 @@ function buildRuntime(
 ) {
   const config = parseAndValidate("<test>", src, ALLOWED);
   durable.seedOrigin(sessionState, SID);
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const render = (): Frame =>

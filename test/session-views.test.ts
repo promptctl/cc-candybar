@@ -25,6 +25,7 @@ import { createLauncher, type Launcher } from "../src/proc/launch";
 import { answerRepo } from "./helpers/repo-approval";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
+import { systemTimekeeper } from "../src/time";
 
 // brandon-unfiled-3248.8ro6, step 2: each value lives where its scope says. A
 // directory's store holds the sources no session value reaches; each session
@@ -55,13 +56,29 @@ function makeCache(
 ) {
   const lines: string[] = [];
   const watchers = new WatcherRegistry({
-    counters: { watchersOpened: 0, watchersClosed: 0, watchRefusals: 0, watchErrors: 0, dirWatchesOpened: 0, dirWatchesClosed: 0 },
+    clock: systemTimekeeper,
+    counters: {
+      watchersOpened: 0,
+      watchersClosed: 0,
+      watchRefusals: 0,
+      watchErrors: 0,
+      dirWatchesOpened: 0,
+      dirWatchesClosed: 0,
+    },
     logger: () => {},
   });
   cleanups.push(() => watchers.closeAll());
   const cache = new RenderCache(
-    { stateDir: stateDir(HOST), locations: locs(), env: HOST.env, launcher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, gates: bareGates(),
- fileEvents: NO_FILE_EVENTS,
+    {
+      clock: systemTimekeeper,
+      stateDir: stateDir(HOST),
+      locations: locs(),
+      env: HOST.env,
+      launcher,
+      storage: NO_PLUGIN_STORAGE,
+      signer: TEST_SIGNER,
+      gates: bareGates(),
+      fileEvents: NO_FILE_EVENTS,
       sessionState: new SessionState(),
       watchers,
       source: SOURCES_NOTHING,
@@ -113,7 +130,10 @@ function configure(cwd: string, edition = 0): void {
     },
     root: { h: ["who"] },
   };
-  fs.writeFileSync(path.join(cwd, ".cc-candybar.json5"), JSON.stringify(config));
+  fs.writeFileSync(
+    path.join(cwd, ".cc-candybar.json5"),
+    JSON.stringify(config),
+  );
   answerRepo(cwd);
 }
 
@@ -130,7 +150,13 @@ const drawn = (
       view.registry,
       { session_id: sid, workspace: { project_dir: dir } },
       instantOf(at),
-      { endcaps: "plain", colorCompatibility: "none", wrap: true, padding: 1, width: 300 },
+      {
+        endcaps: "plain",
+        colorCompatibility: "none",
+        wrap: true,
+        padding: 1,
+        width: 300,
+      },
     ).frame,
   );
 
@@ -215,8 +241,12 @@ test("a move to another directory declares the new view before the old releases 
       return DECLARES_NOTHING(holds, facts, closure, sources);
     },
   });
-  cache.holdSession(dir, dir, undefined, viewFacts(dir, "s-a"))[Symbol.dispose]();
-  cache.holdSession(other, other, undefined, viewFacts(other, "s-a"))[Symbol.dispose]();
+  cache
+    .holdSession(dir, dir, undefined, viewFacts(dir, "s-a"))
+    [Symbol.dispose]();
+  cache
+    .holdSession(other, other, undefined, viewFacts(other, "s-a"))
+    [Symbol.dispose]();
   expect(cache.stats.views).toBe(1);
   expect(holders).toBe(1);
   expect(dropsToZero).toBe(0);
@@ -325,7 +355,9 @@ test("a view whose declaration throws answers that failure on its lanes", () => 
     reason: expect.stringContaining("closure exploded"),
   });
   expect(lines).toContainEqual(
-    expect.stringMatching(/^session view declaration threw sid="s-a": .*closure exploded/),
+    expect.stringMatching(
+      /^session view declaration threw sid="s-a": .*closure exploded/,
+    ),
   );
 });
 
@@ -342,7 +374,9 @@ test("a view held by a render in flight is disposed only when the render returns
   held[Symbol.dispose]();
   expect(cache.stats.retiredViews).toBe(0);
   expect(lines).toContainEqual(
-    expect.stringMatching(/^session view closed sid="s-a" reason=reload .* held=1 /),
+    expect.stringMatching(
+      /^session view closed sid="s-a" reason=reload .* held=1 /,
+    ),
   );
 });
 
@@ -418,7 +452,9 @@ test("a move whose new view fails to open still retires the view it replaces", (
         throw new Error("log boom");
     },
   });
-  cache.holdSession(dir, dir, undefined, viewFacts(dir, "s-a"))[Symbol.dispose]();
+  cache
+    .holdSession(dir, dir, undefined, viewFacts(dir, "s-a"))
+    [Symbol.dispose]();
   expect(() =>
     cache.holdSession(other, other, undefined, viewFacts(other, "s-a")),
   ).toThrow("log boom");
@@ -439,9 +475,9 @@ test("a view that fails to open releases the state hold it was opened under", ()
       }
     },
   });
-  expect(() => cache.holdSession(dir, dir, undefined, viewFacts(dir, "s-a"))).toThrow(
-    "log boom",
-  );
+  expect(() =>
+    cache.holdSession(dir, dir, undefined, viewFacts(dir, "s-a")),
+  ).toThrow("log boom");
   // Retired by the reload and held by nothing, the state is reclaimed now.
   configure(dir, 1);
   cache.reload(dir, dir, undefined, { kind: "write" });
@@ -493,15 +529,19 @@ test("a config load starts no view's source, and still names a session value tha
     }),
   );
   let shells = 0;
-  const launcher = createLauncher({ inherited: process.env, 
-    stats: {
-      onStart: (c) => {
-        if (c === "user-shell") shells++;
+  const launcher = createLauncher(
+    {
+      inherited: process.env,
+      stats: {
+        onStart: (c) => {
+          if (c === "user-shell") shells++;
+        },
+        onEnd: () => {},
+        onRefused: () => {},
       },
-      onEnd: () => {},
-      onRefused: () => {},
     },
-  });
+    systemTimekeeper,
+  );
   const { cache } = makeCache({}, launcher);
 
   const entry = cache.getOrCreate(dir, dir, undefined);

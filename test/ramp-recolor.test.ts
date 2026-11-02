@@ -27,6 +27,7 @@ import { testVerbContext, clickUrl, recordRender } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { resolveStyleSelection, resolveThemeSelection } from "../src/themes";
 import { instantOf } from "../src/utils/instant";
+import { systemTimekeeper } from "../src/time";
 
 const SID = "s-ramp-recolor";
 const BASE_THEME = "textual-dark";
@@ -78,7 +79,7 @@ afterEach(() => {
 function buildRuntime() {
   const config = parseAndValidate("<ramp-recolor>", SRC, ALLOWED);
   const sessionState = new SessionState();
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   registries.push(registry);

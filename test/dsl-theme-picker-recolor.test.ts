@@ -35,6 +35,7 @@ import { recordRender, testVerbContext, effectsOf, clickUrl } from "./helpers/cl
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { instantOf } from "../src/utils/instant";
+import { systemTimekeeper } from "../src/time";
 
 const SID = "s-recolor";
 const BASE_THEME = "textual-dark";
@@ -84,7 +85,7 @@ interface Painted {
 function buildRuntime() {
   const config = parseAndValidate("<recolor>", SRC, ALLOWED);
   const sessionState = new SessionState();
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const sink = new Map<string, readonly RichText[]>();

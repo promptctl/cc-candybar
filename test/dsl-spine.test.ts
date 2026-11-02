@@ -23,6 +23,7 @@ import { registerDslConfig } from "../src/dsl/render";
 import { walkNodes } from "../src/config/dsl-types";
 import { presetRoot, PRESET_FLOOR } from "../src/config/presets";
 import { instantOf } from "../src/utils/instant";
+import { systemTimekeeper } from "../src/time";
 
 // [LAW:single-enforcer] Inlined fixture values formerly served by
 // `test/parity/fixtures.ts`. The parity infra was retired alongside the
@@ -71,7 +72,7 @@ const ENV = { HOME: "" };
 describe("DSL render spine (bzh.7 steel thread)", () => {
   function buildRuntime(cwd: string) {
     const config = parseAndValidate("<test>", FIXTURE_SOURCE, ALLOWED_PALETTES);
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(processLauncher, store, "", new SessionState(), null, undefined, undefined, undefined, ENV);
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd });
     return { config, compiled, store, registry };
@@ -223,7 +224,7 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
         noSegmentPaletteSource,
         new Set(["textual-dark"]),
       );
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = new SourceRegistry(processLauncher, store, "", new SessionState(), null, undefined, undefined, undefined, ENV);
       const compiled = registerDslConfig(config, registry, {
         signer: TEST_SIGNER,

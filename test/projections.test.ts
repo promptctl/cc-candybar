@@ -23,6 +23,7 @@ import { SessionState } from "../src/daemon/session-state";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
+import { systemTimekeeper } from "../src/time";
 
 const config = (variables: string, helpers = "{}") =>
   parseAndValidate(
@@ -84,7 +85,7 @@ test("a date function of its arguments alone reads no clock", () => {
     day: { kind: "template", template: '{{ date "2006-01-02" (int .stamp) }}' },
   }`);
   expect([...own(projectionsOf(cfg)).keys()]).toEqual([]);
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store);
   try {
     declareDslVariables(cfg, registry, process.cwd(), EVERY_SCOPE);
@@ -101,7 +102,7 @@ test("a value reaching the instant by a name it does not spell is refused, never
     clock: { kind: "time", layout: "15:04:05" },
     hidden: { kind: "template", template: '{{ index . "clock" }}' },
   }`);
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store);
   try {
     declareDslVariables(cfg, registry, process.cwd(), EVERY_SCOPE);
@@ -121,7 +122,7 @@ test("a value that keeps its answer is told why, drawn or not", () => {
     clock: { kind: "time", layout: "15:04:05" },
     hidden: { kind: "template", template: '{{ index . "clock" }}' },
   }`);
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store);
   try {
     declareDslVariables(cfg, registry, process.cwd(), EVERY_SCOPE);
@@ -164,7 +165,7 @@ test("a projection is derived at each draw; a derived template is cached", () =>
     label: { kind: "literal", value: "x" },
     shown: { kind: "template", template: "{{ .label }}" },
   }`);
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store);
   try {
     // The synthesized menu's `state` variables need a SessionState this
@@ -197,7 +198,7 @@ test("the config load line names the load's projections", () => {
   const line = (variables: string, segments = "{}"): string => {
     const file = path.join(dir, "config.json5");
     fs.writeFileSync(file, `{ variables: ${variables}, segments: ${segments} }`);
-    const loaded = loadFromDisk(dir, dir, file, { stateDir: stateDir(HOST), locations: locs(), env: HOST.env, launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, gates: bareGates(),
+    const loaded = loadFromDisk(dir, dir, file, { clock: systemTimekeeper, stateDir: stateDir(HOST), locations: locs(), env: HOST.env, launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, gates: bareGates(),
       sessionState: new SessionState(),
     });
     expect(loaded.error).toBeNull();

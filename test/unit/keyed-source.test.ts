@@ -3,6 +3,7 @@ import { KeyedSource } from "../../src/utils/keyed-source";
 import { Holds } from "../../src/utils/holds";
 import { failed, ok, type Outcome } from "../../src/utils/outcome";
 import { laneOutcome } from "../../src/utils/reading";
+import { systemTimekeeper } from "../../src/time";
 
 // [LAW:behavior-not-structure] The contract of a keyed source, through its
 // read, its changes and its supersede alone: a read takes the stored value
@@ -46,6 +47,7 @@ function sourceOf(
     maxEntries: opts.maxEntries ?? 64,
     logger: (level, msg) => opts.lines?.push({ level, msg }),
     ledger: new RefreshLedger((level, msg) => opts.lines?.push({ level, msg })),
+    clock: systemTimekeeper,
   });
 }
 
@@ -336,6 +338,7 @@ describe("KeyedSource", () => {
         maxEntries: 64,
         logger: () => {},
         ledger: new RefreshLedger(),
+        clock: systemTimekeeper,
       });
 
     test("a held entry is read only on a change, never on a clock", async () => {

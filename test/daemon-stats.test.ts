@@ -9,6 +9,7 @@ import {
 import { PROTOCOL_VERSION } from "../src/daemon/protocol";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { systemTimekeeper } from "../src/time";
 
 // package.json is the version's sole authority; the tests read it the same way
 // the build does rather than restating the number.
@@ -65,7 +66,7 @@ const FILE_EVENTS = {
 
 describe("RuntimeStats.snapshot", () => {
   test("produces a stable shape with extras merged in", () => {
-    const stats = new RuntimeStats();
+    const stats = new RuntimeStats(systemTimekeeper);
     stats.requestsTotal = 10;
     stats.requestsErrored = 1;
     stats.requestsTimedOut = 2;

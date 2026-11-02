@@ -30,6 +30,7 @@ import {
   type LaneSwitches,
 } from "../config/lanes";
 import { laneOffReason } from "../config/menu-places";
+import type { Timekeeper } from "../time";
 
 // What one frame of the feed drew: the bar, the responses its subscribers
 // receive, and — for a render that threw — the render event describing it,
@@ -117,6 +118,10 @@ export interface Subscriber {
 }
 
 export interface FeedDeps<Req> {
+  // The daemon's clock: the monotonic reading every frame moment is on (a clock
+  // that never steps back: a feed measures only durations with it — its spacing,
+  // how long it has run, a draw's cost), and the timer its next frame waits on.
+  clock: Pick<Timekeeper, "monotonic" | "after">;
   // Draws a frame of the session `req` is from, for the wall instant `at`.
   // `fps` is the feed's ceiling, the most frames a second it draws this bar
   // at, which the frame shows.
@@ -154,9 +159,6 @@ export interface FeedDeps<Req> {
   // it drew, so a feed that drew without refreshing anything is seen to.
   refreshes(): Readonly<Record<RefreshTrigger, number>>;
   periods: FeedPeriods;
-  // Milliseconds on a clock that never steps back: a feed measures only
-  // durations with it — its spacing, how long it has run, a draw's cost.
-  now(): number;
   // The wall clock: the instant a frame is drawn for, which its cells' next
   // change is a time on.
   instant(): Instant;
@@ -177,7 +179,7 @@ type Phase =
   | {
       readonly kind: "due";
       readonly at: number;
-      readonly timer: ReturnType<typeof setTimeout>;
+      readonly clear: () => void;
     }
   | { readonly kind: "drawing" };
 
@@ -464,7 +466,7 @@ export class FrameFeeds<Req> {
   }
 
   private open(sessionId: string): Feed {
-    const now = this.deps.now();
+    const now = this.deps.clock.monotonic();
     const feed: Feed = {
       sessionId,
       followers: new Map(),
@@ -512,7 +514,7 @@ export class FrameFeeds<Req> {
       this.hasten(feed);
       return;
     }
-    if (feed.phase.kind === "due") clearTimeout(feed.phase.timer);
+    if (feed.phase.kind === "due") feed.phase.clear();
     feed.unwatch();
     feed.unpin();
     this.feeds.delete(feed.sessionId);
@@ -535,7 +537,7 @@ export class FrameFeeds<Req> {
   // one frame to the next. Its moment on the monotonic clock is that instant's.
   private draw(feed: Feed, due: Instant): void {
     feed.phase = { kind: "drawing" };
-    const started = this.deps.now();
+    const started = this.deps.clock.monotonic();
     const wall = this.deps.instant();
     const at = Math.min(
       Math.max(due, wall),
@@ -575,7 +577,7 @@ export class FrameFeeds<Req> {
       return;
     }
     feed.lastStart = moment;
-    const finished = this.deps.now();
+    const finished = this.deps.clock.monotonic();
     this.drawn++;
     feed.drawn++;
     feed.drawMs += finished - started;
@@ -633,7 +635,7 @@ export class FrameFeeds<Req> {
   private hasten(feed: Feed): boolean {
     const { phase } = feed;
     if (phase.kind === "drawing") return false;
-    const now = this.deps.now();
+    const now = this.deps.clock.monotonic();
     const at = Math.max(now, feed.lastStart + this.spacingOf(feed));
     if (phase.kind === "due" && phase.at <= at) return false;
     const wall = this.deps.instant();
@@ -648,7 +650,7 @@ export class FrameFeeds<Req> {
   // its monotonic due time is what a wake compares against.
   private arm(feed: Feed, due: Instant, wall: Instant): void {
     const delay = Math.max(0, (due - wall) * 1000);
-    this.setTimer(feed, due, this.deps.now() + delay, delay);
+    this.setTimer(feed, due, this.deps.clock.monotonic() + delay, delay);
   }
 
   private setTimer(
@@ -659,11 +661,13 @@ export class FrameFeeds<Req> {
   ): void {
     // [LAW:single-enforcer] The one place a feed's timer is replaced, so the
     // one that was pending is cleared here whoever sets the next.
-    if (feed.phase.kind === "due") clearTimeout(feed.phase.timer);
+    if (feed.phase.kind === "due") feed.phase.clear();
     feed.phase = {
       kind: "due",
       at: dueMoment,
-      timer: setTimeout(() => this.fire(feed, due, dueMoment), delay),
+      clear: this.deps.clock.after(delay, () =>
+        this.fire(feed, due, dueMoment),
+      ),
     };
   }
 
@@ -677,7 +681,7 @@ export class FrameFeeds<Req> {
   // not asked, so a wall stepped back, which leaves the monotonic moment
   // reached, still draws and is followed by `draw`.
   private fire(feed: Feed, due: Instant, dueMoment: number): void {
-    const remaining = dueMoment - this.deps.now();
+    const remaining = dueMoment - this.deps.clock.monotonic();
     if (remaining > 0) this.setTimer(feed, due, dueMoment, remaining);
     else this.draw(feed, due);
   }
@@ -761,7 +765,7 @@ export class FrameFeeds<Req> {
   // whichever session's: a frame refreshes nothing, so it bounds what the
   // feed's `drawn=` frames could have read fresh, and is never their own.
   private summarize(feed: Feed, state: "running" | "closed"): void {
-    const now = this.deps.now();
+    const now = this.deps.clock.monotonic();
     const refreshes = this.deps.refreshes();
     // The rate it drew at over its life, beside the most it draws at now: a
     // bar that changes less often than the ceiling is drawn as often as it

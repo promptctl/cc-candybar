@@ -31,6 +31,7 @@ import type { Locations } from "../paths";
 import type { SessionStateReader, SessionStateRW } from "../session-state";
 import { holdClickError } from "../click-error";
 import type { Instant } from "../../utils/instant";
+import { sleep } from "../../time";
 import { stateKeySeed } from "./key-seeds";
 import {
   disclosureNest,
@@ -497,7 +498,7 @@ export async function clickHandoff(
     job.release();
     // [LAW:no-ambient-temporal-coupling] A monotonic clock, so a wall-clock
     // step neither stretches nor cuts the bound.
-    const deadline = performance.now() + boundMs;
+    const deadline = launcher.clock.monotonic() + boundMs;
     for (;;) {
       // Liveness before the verdict: the sh writes its verdict before it exits,
       // so a group seen gone and then no verdict means none is coming.
@@ -523,7 +524,7 @@ export async function clickHandoff(
         throw new Error(
           `${what} failed (lost): the opener ended with no verdict`,
         );
-      if (performance.now() >= deadline) {
+      if (launcher.clock.monotonic() >= deadline) {
         // [LAW:nothing-unseen] What the click leaves running is said once.
         log(
           "info",
@@ -531,7 +532,7 @@ export async function clickHandoff(
         );
         return;
       }
-      await new Promise((resolve) => setTimeout(resolve, HANDOFF_POLL_MS));
+      await sleep(launcher.clock, HANDOFF_POLL_MS);
     }
   } finally {
     // A sh writing its verdict as the click is answered can add a file between

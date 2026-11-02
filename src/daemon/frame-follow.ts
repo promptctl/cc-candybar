@@ -135,7 +135,8 @@ export function followFrames(
   follow: FrameFollow,
 ): FrameFollower {
   let stream: FrameStream | null = null;
-  let timer: ReturnType<typeof setTimeout> | null = null;
+  // What cancels the pending reopening.
+  let cancelReopen: (() => void) | null = null;
   let closed = false;
   let retryMs = RECONNECT_FIRST_MS;
 
@@ -143,13 +144,13 @@ export function followFrames(
   // fault, which may be a daemon that restarted without it; never after a
   // lane switched off, which the daemon answered with the data in hand.
   const reopenAfter = (ms: number, refresh: boolean): void => {
-    timer = setTimeout(() => {
-      timer = null;
+    cancelReopen = world.clock.after(ms, () => {
+      cancelReopen = null;
       const before = refresh ? follow.beforeReconnect?.() : undefined;
       void (before ?? Promise.resolve()).then(() => {
         if (!closed) open();
       });
-    }, ms);
+    });
   };
 
   const open = (): void => {
@@ -189,7 +190,7 @@ export function followFrames(
   return {
     close: () => {
       closed = true;
-      if (timer !== null) clearTimeout(timer);
+      cancelReopen?.();
       stream?.close();
     },
   };

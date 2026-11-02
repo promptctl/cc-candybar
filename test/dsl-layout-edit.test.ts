@@ -111,6 +111,7 @@ import { instantOf } from "../src/utils/instant";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
+import { systemTimekeeper } from "../src/time";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -258,7 +259,9 @@ describe("cross-ref: presets.<name>.root target", () => {
           base(`{ rm: { persist: '${key}', removeSegment: 'directory' } }`),
           ALLOWED,
         ),
-      ).toThrow(/is not a "presets\.<name>\.root" target — "removeSegment" is a tree op/);
+      ).toThrow(
+        /is not a "presets\.<name>\.root" target — "removeSegment" is a tree op/,
+      );
     }
   });
 
@@ -549,9 +552,12 @@ function buildLayoutRuntime(src: string, sessionId = "s1") {
   const log: string[] = [];
   const sessionState = new SessionState();
   durable.seedOrigin(sessionState, sessionId);
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
+  const compiled = registerDslConfig(config, registry, {
+    signer: TEST_SIGNER,
+    cwd: process.cwd(),
+  });
   const basePalette = getThemePalette("textual-dark"!);
   const render = (): Frame =>
     drawPayload(
@@ -564,7 +570,12 @@ function buildLayoutRuntime(src: string, sessionId = "s1") {
       opts(),
     ).frame;
   const ctx: VerbContext = {
-    ...testVerbContext(sessionState, durable.historyFor(sessionState), undefined, durable.host),
+    ...testVerbContext(
+      sessionState,
+      durable.historyFor(sessionState),
+      undefined,
+      durable.host,
+    ),
     // The daemon's own lookup and reload: a click is gated by the config as
     // the last click left it, and an insertion mints its id against it.
     configFor: () => current,
@@ -702,13 +713,17 @@ describe("apply-layout-op click → the config file", () => {
     const afterFirst = durable.text()!;
 
     // The same `-` again: "directory" is already gone.
-    await expect(click(urls[0]!)).rejects.toThrow(/holds no placement "directory".*stale/);
+    await expect(click(urls[0]!)).rejects.toThrow(
+      /holds no placement "directory".*stale/,
+    );
     expect(durable.text()).toBe(afterFirst);
     expect(durable.history().past).toHaveLength(1);
 
     // An insert whose anchor was removed since the render, likewise.
     await click(urls[2]!); // remove git
-    await expect(click(urls[1]!)).rejects.toThrow(/holds no placement "git".*stale/);
+    await expect(click(urls[1]!)).rejects.toThrow(
+      /holds no placement "git".*stale/,
+    );
     expect(durable.parsed().root).toEqual({ v: [{ h: [] }, "bar"] });
     expect(durable.history().past).toHaveLength(2);
   });
@@ -738,16 +753,21 @@ describe("apply-layout-op click → the config file", () => {
     const { render, click } = buildLayoutRuntime(SRC_CUSTOM);
     const urls = ownUrls(render());
     // The hand edit: the preset declaration vanishes; everything else stays.
-    durable.write(SRC_CUSTOM.replace(/presets: \{ mine: [^\n]*\},/, "presets: {},"));
+    durable.write(
+      SRC_CUSTOM.replace(/presets: \{ mine: [^\n]*\},/, "presets: {},"),
+    );
     expect(durable.parsed().presets).toEqual({});
 
-    const undeclared = /neither the config file nor the bundled default declares presets\.mine/;
+    const undeclared =
+      /neither the config file nor the bundled default declares presets\.mine/;
     await expect(click(urls[0]!)).rejects.toThrow(undeclared);
     // The reset link is hand-built: the harness filters rendered preset-root
     // resets as edit chrome's own banner, and the verb is what is under test.
     const resetUrl = `${URL_SCHEME}://${VERB_RESET_CONFIG}/${encodeSegments(["s1", "presets.mine.root"])}`;
     await expect(click(resetUrl)).rejects.toThrow(undeclared);
-    expect(durable.parsed().root).toEqual({ v: [{ h: ["directory", "git"] }, "bar"] });
+    expect(durable.parsed().root).toEqual({
+      v: [{ h: ["directory", "git"] }, "bar"],
+    });
     expect(durable.history().past).toHaveLength(0);
   });
 
@@ -779,7 +799,9 @@ describe("apply-layout-op click → the config file", () => {
     await click(resetUrl);
     // The preset the user authored keeps its name: the action still targets it.
     expect(durable.parsed().presets).toEqual({ mine: {} });
-    expect(durable.parsed().root).toEqual({ v: [{ h: ["directory", "git"] }, "bar"] });
+    expect(durable.parsed().root).toEqual({
+      v: [{ h: ["directory", "git"] }, "bar"],
+    });
     expect(durable.history().past).toHaveLength(1);
   });
 
@@ -787,10 +809,16 @@ describe("apply-layout-op click → the config file", () => {
     const { config } = buildLayoutRuntime(SRC);
     const sessionState = new SessionState();
     durable.seedOrigin(sessionState, "s1");
-    const ctx: VerbContext = testVerbContext(sessionState, durable.historyFor(sessionState), config, durable.host);
+    const ctx: VerbContext = testVerbContext(
+      sessionState,
+      durable.historyFor(sessionState),
+      config,
+      durable.host,
+    );
     const applyLayoutOp = VERBS.get("apply-layout-op")!;
     const before = durable.text();
-    await expect(applyLayoutOp(
+    await expect(
+      applyLayoutOp(
         `${encodeURIComponent("s1")}/${encodeURIComponent("presets.default.root")}/${encodeURIComponent(
           encodeLayoutOp({ op: "remove", target: "noSuchSegmentAnywhere" }),
         )}`,
@@ -806,9 +834,15 @@ describe("apply-layout-op click → the config file", () => {
   // own XDG path.
   test("a click on a session with no recorded render origin is refused — no file to write", async () => {
     const { config } = buildLayoutRuntime(SRC);
-    const ctx: VerbContext = testVerbContext(new SessionState(), undefined, config, durable.host);
+    const ctx: VerbContext = testVerbContext(
+      new SessionState(),
+      undefined,
+      config,
+      durable.host,
+    );
     const applyLayoutOp = VERBS.get("apply-layout-op")!;
-    await expect(applyLayoutOp(
+    await expect(
+      applyLayoutOp(
         `${encodeURIComponent("s1")}/${encodeURIComponent("presets.default.root")}/${encodeURIComponent(
           encodeLayoutOp({ op: "remove", target: "directory" }),
         )}`,
@@ -831,8 +865,7 @@ describe("apply-layout-op click → the config file", () => {
 // action names and root key, so this keeps proving such a preset compiles and
 // renders its banner through real parseAndValidate + registerDslConfig +
 // drawDsl.
-describe('the reset-layout banner survives quote/backslash preset names', () => {
-
+describe("the reset-layout banner survives quote/backslash preset names", () => {
   test('a preset named with a " and a \\ compiles and still renders the banner', () => {
     const presetName = 'foo"bar\\baz';
     const config = parseAndValidate(
@@ -854,15 +887,23 @@ describe('the reset-layout banner survives quote/backslash preset names', () => 
     );
     // The compile itself (parse every synthesized template) must not throw —
     // an unescaped quote would break the Go-template source.
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     // The banner is edit chrome: visible only with edit mode open AND the
     // preset customized, so the render below opens edit mode for "s1".
     const sessionState = new SessionState();
     sessionState.set("s1", EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
-    const registry = new SourceRegistry(processLauncher, store, "", sessionState);
+    const registry = new SourceRegistry(
+      processLauncher,
+      store,
+      "",
+      sessionState,
+    );
     let compiled: ReturnType<typeof registerDslConfig>;
     expect(() => {
-      compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
+      compiled = registerDslConfig(config, registry, {
+        signer: TEST_SIGNER,
+        cwd: process.cwd(),
+      });
     }).not.toThrow();
     const basePalette = getThemePalette("textual-dark"!);
     const rendered = drawPayload(
@@ -909,30 +950,40 @@ describe("a preset root's own top-level `when` hides content, not the menu or ba
   }
 
   function renderGated(config: ReturnType<typeof buildConfig>): string {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const sessionState = new SessionState();
     sessionState.set("s1", EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     // Live output, not names: the subject is whether the CONTENT follows the gate.
     sessionState.set("s1", EDIT_LIVE_KEY, "open");
-    const registry = new SourceRegistry(processLauncher, store, "", sessionState);
+    const registry = new SourceRegistry(
+      processLauncher,
+      store,
+      "",
+      sessionState,
+    );
     try {
-      const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
+      const compiled = registerDslConfig(config, registry, {
+        signer: TEST_SIGNER,
+        cwd: process.cwd(),
+      });
       const basePalette = getThemePalette("textual-dark"!);
-      return textOf(drawPayload(
-        config,
-        compiled,
-        store,
-        registry,
-        {
-          session_id: "s1",
-          project_dir: "/tmp/proj",
-          preset: { effective: "gated", customized: true },
-        },
-        instantOf(new Date()),
-        opts(),
-        undefined,
-        selectionFor(config, {}, picked({ preset: "gated" })),
-      ).frame);
+      return textOf(
+        drawPayload(
+          config,
+          compiled,
+          store,
+          registry,
+          {
+            session_id: "s1",
+            project_dir: "/tmp/proj",
+            preset: { effective: "gated", customized: true },
+          },
+          instantOf(new Date()),
+          opts(),
+          undefined,
+          selectionFor(config, {}, picked({ preset: "gated" })),
+        ).frame,
+      );
     } finally {
       registry.dispose();
     }
@@ -961,13 +1012,35 @@ function makeCache(reloads?: ReloadSignal): {
 } {
   const cleanups: Array<() => void> = [];
   const watchers = new WatcherRegistry({
-    counters: { watchersOpened: 0, watchersClosed: 0, watchRefusals: 0, watchErrors: 0, dirWatchesOpened: 0, dirWatchesClosed: 0 },
+    clock: systemTimekeeper,
+    counters: {
+      watchersOpened: 0,
+      watchersClosed: 0,
+      watchRefusals: 0,
+      watchErrors: 0,
+      dirWatchesOpened: 0,
+      dirWatchesClosed: 0,
+    },
     logger: () => {},
   });
   cleanups.push(() => watchers.closeAll());
   const sessionState = new SessionState();
   const cache = new RenderCache(
-    { stateDir: stateDir(durable.host), locations: locations(durable.host), env: durable.host.env, launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, gates: bareGates(), fileEvents: NO_FILE_EVENTS, sessionState, watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
+    {
+      clock: systemTimekeeper,
+      stateDir: stateDir(durable.host),
+      locations: locations(durable.host),
+      env: durable.host.env,
+      launcher: processLauncher,
+      storage: NO_PLUGIN_STORAGE,
+      signer: TEST_SIGNER,
+      gates: bareGates(),
+      fileEvents: NO_FILE_EVENTS,
+      sessionState,
+      watchers,
+      source: SOURCES_NOTHING,
+      declare: DECLARES_NOTHING,
+    },
     {
       budgetBytes: () => renderCacheBudget(memoryLimitBytes({})),
       ...(reloads === undefined ? {} : { observers: reloads.observers }),
@@ -1010,7 +1083,11 @@ function presetNamesOf(entry: CacheEntry, preset: string): string[] {
 
 // Fire one leaf verb through the REAL handler, with the wire's own encoding
 // — exactly what a hand click sends, no key discovered from an action name.
-async function fireVerb(verb: string, ctx: VerbContext, ...args: string[]): Promise<void> {
+async function fireVerb(
+  verb: string,
+  ctx: VerbContext,
+  ...args: string[]
+): Promise<void> {
   await VERBS.get(verb)!(args.map(encodeURIComponent).join("/"), ctx);
 }
 
@@ -1024,15 +1101,22 @@ function originCtx(
 ): VerbContext {
   durable.seedOrigin(sessionState, sessionId);
   return {
-    ...testVerbContext(sessionState, durable.historyFor(sessionState), undefined, durable.host),
+    ...testVerbContext(
+      sessionState,
+      durable.historyFor(sessionState),
+      undefined,
+      durable.host,
+    ),
     // The daemon's own wiring (daemon.ts): the config a session renders with
     // is its cache entry's, and a click that must not act on the old config
     // reloads that entry from the file it just wrote.
     configFor: (origin) =>
-      cache.getOrCreate(origin.projectDir, origin.cwd, origin.target.path)
-        .state.config,
+      cache.getOrCreate(origin.projectDir, origin.cwd, origin.target.path).state
+        .config,
     reloadConfig: (origin) =>
-      cache.reload(origin.projectDir, origin.cwd, origin.target.path, { kind: "write" }),
+      cache.reload(origin.projectDir, origin.cwd, origin.target.path, {
+        kind: "write",
+      }),
   };
 }
 
@@ -1156,13 +1240,21 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
     durable.write(userConfigBody);
     const loads: string[] = [];
     const lines: string[] = [];
-    const watchers = new WatcherRegistry({ logger: () => {} });
+    const watchers = new WatcherRegistry({
+      clock: systemTimekeeper,
+      logger: () => {},
+    });
     const sessionState = new SessionState();
     const cache = new RenderCache(
-      { stateDir: stateDir(durable.host), locations: locations(durable.host), env: durable.host.env,
+      {
+        clock: systemTimekeeper,
+        stateDir: stateDir(durable.host),
+        locations: locations(durable.host),
+        env: durable.host.env,
         launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
-        signer: TEST_SIGNER, gates: bareGates(),
+        signer: TEST_SIGNER,
+        gates: bareGates(),
         fileEvents: NO_FILE_EVENTS,
         sessionState,
         watchers,
@@ -1181,9 +1273,9 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
     try {
       const dir = durable.projectDir;
       for (const sid of ["s1", "s2"])
-        cache.holdSession(dir, dir, undefined, viewFacts(dir, sid))[
-          Symbol.dispose
-        ]();
+        cache
+          .holdSession(dir, dir, undefined, viewFacts(dir, sid))
+          [Symbol.dispose]();
       const ctx = originCtx(cache, sessionState);
       let clicked = false;
       await untilHeard(
@@ -1296,13 +1388,20 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
           "presets.compact.root",
           encodeLayoutOp(op),
         );
-      await fire({ op: "insert", segment: "clock", anchor: "sidebar", relation: "after" });
+      await fire({
+        op: "insert",
+        segment: "clock",
+        anchor: "sidebar",
+        relation: "after",
+      });
       expect(durable.parsed().presets).toEqual({
         compact: { root: { h: ["sidebar", "clock"] } },
       });
       await fire({ op: "remove", target: "sidebar" });
       await fire({ op: "remove", target: "clock" });
-      expect(durable.parsed().presets).toEqual({ compact: { root: { h: [] } } });
+      expect(durable.parsed().presets).toEqual({
+        compact: { root: { h: [] } },
+      });
     } finally {
       for (const fn of cleanups) fn();
     }
@@ -1433,8 +1532,11 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         encodeLayoutOp({ op: "remove", target: "dir2" }),
       );
       expect(
-        (durable.parsed() as { root: { rows: Record<string, { h: unknown[] }> } })
-          .root.rows.extra!.h,
+        (
+          durable.parsed() as {
+            root: { rows: Record<string, { h: unknown[] }> };
+          }
+        ).root.rows.extra!.h,
       ).toEqual([]);
     } finally {
       for (const fn of cleanups) fn();
@@ -1478,7 +1580,9 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
       expect(parsed.root.rows.identity!.h).not.toContain("directory");
       expect(parsed.presets.default.root).toEqual({ rows: {} });
       // The same click again is stale, and names the root it stages.
-      await expect(removeDirectory).rejects.toThrow(/^root holds no placement "directory"/);
+      await expect(removeDirectory).rejects.toThrow(
+        /^root holds no placement "directory"/,
+      );
     } finally {
       for (const fn of cleanups) fn();
     }
@@ -1540,7 +1644,9 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
           undefined,
         );
         expect(afterRemove.lastError).toBeNull();
-        expect(presetNamesOf(afterRemove, "default")).not.toContain("gitaculous");
+        expect(presetNamesOf(afterRemove, "default")).not.toContain(
+          "gitaculous",
+        );
         expect(afterRemove.state.authoredRoots.has("default")).toBe(true);
         // The segment is gone, but the REST of the preset's chrome is still
         // there — other `-`/`+` affordances remain, so the bar isn't a dead
@@ -1652,9 +1758,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         );
         // The synthesized reset action targets the SAME key the +/-
         // affordances already write — no second gate to derive.
-        const resetActionNames = Object.entries(
-          customized.state.config.actions,
-        )
+        const resetActionNames = Object.entries(customized.state.config.actions)
           .filter(([, a]) => "reset" in a && a.reset === "presets.default.root")
           .map(([name]) => name);
         expect(resetActionNames.length).toBe(1);
@@ -1767,7 +1871,8 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
 
       // Would throw BadVerbArgs("unknown config key") before the
       // always-derived preset-root contribution.
-      await expect(fireVerb(
+      await expect(
+        fireVerb(
           "reset-config",
           originCtx(cache2, sessionState2),
           "s1",

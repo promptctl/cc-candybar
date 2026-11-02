@@ -25,10 +25,10 @@ import {
 import { logLines } from "../../helpers/daemon-log";
 import { sendDaemonRequest } from "../../helpers/daemon-wire";
 import {
-  heldClock,
   startDaemon,
   type InWorkerDaemon,
 } from "../../helpers/in-worker-daemon";
+import { heldClock } from "../../helpers/held-clock";
 import { field, landedEvents } from "../../helpers/request-event";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import { until } from "../../helpers/until";
@@ -59,7 +59,7 @@ describe("a render answers in the encoding it asks for", () => {
     const prepared = prepareIsolatedDaemonEnv("cc-candybar-encoding-e2e");
     ({ env, removeTmpDirs } = prepared);
     projectDir = mkdtempSync(path.join(os.tmpdir(), "cc-candybar-encoding-"));
-    daemon = startDaemon(prepared.env, { clock: heldClock() });
+    daemon = startDaemon(prepared.env, { clock: heldClock(new Date()) });
   });
 
   afterAll(async () => {

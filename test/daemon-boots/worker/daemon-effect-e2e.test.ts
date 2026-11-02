@@ -13,11 +13,10 @@ import {
   renderRequest,
 } from "../../helpers/daemon-e2e";
 import {
-  heldClock,
   startDaemon,
-  type HeldClock,
   type InWorkerDaemon,
 } from "../../helpers/in-worker-daemon";
+import { heldClock, type HeldClock } from "../../helpers/held-clock";
 import {
   prepareIsolatedDaemonEnv,
 } from "../../helpers/spawn-isolated-daemon";
@@ -42,7 +41,7 @@ describe("a daemon render's event names the effect it wore", () => {
       config,
       `{ globals: { effect: "shimmer" }, segments: { a: { template: 'steady' }, b: { template: 'own' } }, root: { h: ['a', { seg: 'b', settings: { effect: 'pulse' } }] } }`,
     );
-    clock = heldClock();
+    clock = heldClock(new Date());
     daemon = startDaemon(prepared.env, { clock });
   });
 

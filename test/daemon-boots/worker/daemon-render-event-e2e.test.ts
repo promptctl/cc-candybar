@@ -56,11 +56,11 @@ import {
 import { HELD_CONFIG, tmuxStub } from "../../helpers/tmux-stub";
 import { until } from "../../helpers/until";
 import {
-  heldClock,
   startDaemon,
   statsOf,
   type InWorkerDaemon,
 } from "../../helpers/in-worker-daemon";
+import { heldClock } from "../../helpers/held-clock";
 import {
   prepareIsolatedDaemonEnv,
 } from "../../helpers/spawn-isolated-daemon";
@@ -614,7 +614,7 @@ describe("a request's deadline", () => {
     const tmuxDir = path.join(projectDir, "bin");
     mkdirSync(tmuxDir);
     const stub = await tmuxStub(tmuxDir);
-    const clock = heldClock();
+    const clock = heldClock(new Date());
     const daemon = startDaemon(
       { ...env, PATH: `${tmuxDir}${path.delimiter}${env.PATH ?? ""}` },
       { clock },
@@ -744,7 +744,7 @@ describe("a failed click's error", () => {
     const tmuxDir = path.join(projectDir, "bin");
     mkdirSync(tmuxDir);
     const stub = await tmuxStub(tmuxDir);
-    const clock = heldClock();
+    const clock = heldClock(new Date());
     const daemon = startDaemon(
       { ...env, PATH: `${tmuxDir}${path.delimiter}${env.PATH ?? ""}` },
       { clock },

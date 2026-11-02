@@ -102,10 +102,11 @@ function reportLine({ check, verdict }: CheckReport): string {
 // state, keeps the outcome, and releases the sources the state started. A
 // load that failed reads the bar a fresh daemon would draw under the error.
 export function loadConfigOnce(
-  { host, launcher }: World,
+  { host, launcher, clock }: World,
   origin: RenderOrigin,
 ): ConfigLoad {
   const deps = {
+    clock,
     launcher,
     locations: locations(host),
     env: host.env,
@@ -369,8 +370,8 @@ export async function doctorCommandPlan(
           (origin) => loadConfigOnce(world, origin),
           world.host,
         ),
-        productionHandlerProbeEdge(world.launcher, world.host),
-        () => askDaemon(world.host),
+        productionHandlerProbeEdge(world.launcher, world),
+        () => askDaemon(world),
         world.host.env,
         process.cwd(),
         commandTerminal,

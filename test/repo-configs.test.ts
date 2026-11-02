@@ -40,6 +40,7 @@ import { effectsOf } from "./helpers/click";
 import { answerRepo } from "./helpers/repo-approval";
 import { locations, stateDir } from "../src/daemon/paths";
 import { daemonGates } from "../src/daemon/update-keys";
+import { systemTimekeeper } from "../src/time";
 
 let root: string;
 let project: string;
@@ -148,6 +149,7 @@ describe("the gate over a project's plugins", () => {
   test("a plugin folder awaits the directory's answer, and loads once approved", () => {
     write(".cc-candybar/plugins/deploy/plugin.json5", PLUGIN);
     const deps = {
+      clock: systemTimekeeper,
       launcher: world.launcher,
       sessionState: new SessionState(),
       storage: UNOWNED_STORAGE,

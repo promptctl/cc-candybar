@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import type { Timekeeper } from "../time";
 import type { LogLevel } from "../utils/logger";
 
 export const MAX_BYTES = 5 * 1024 * 1024;
@@ -87,20 +88,25 @@ async function rotate(filePath: string): Promise<void> {
 
 // [LAW:one-source-of-truth] One line of the log as it lands in the file: when,
 // at what level, and the message. Whatever writes a log line spells it here.
-export function logLine(level: LogLevel, msg: string): string {
-  return `${new Date().toISOString()} [${level}] ${msg}\n`;
+export function logLine(level: LogLevel, msg: string, at: number): string {
+  return `${new Date(at).toISOString()} [${level}] ${msg}\n`;
 }
 
 // The file's size once it reaches `endsAt`, or as it stands when the wait is
 // over. Blocking: only a caller that cannot yield waits here.
-function sizeOnceLanded(fd: number, endsAt: number, waitMs: number): number {
+function sizeOnceLanded(
+  clock: Pick<Timekeeper, "monotonic">,
+  fd: number,
+  endsAt: number,
+  waitMs: number,
+): number {
   // Monotonic: a clock stepped while this thread blocks neither stretches the
   // wait nor ends it early.
-  const until = performance.now() + waitMs;
+  const until = clock.monotonic() + waitMs;
   const nap = new Int32Array(new SharedArrayBuffer(4));
   for (;;) {
     const { size } = fs.fstatSync(fd);
-    if (size >= endsAt || performance.now() >= until) return size;
+    if (size >= endsAt || clock.monotonic() >= until) return size;
     Atomics.wait(nap, 0, 0, 1);
   }
 }
@@ -162,11 +168,17 @@ export class DaemonLog {
   // Set by dispose: nothing registers or holds a resource for this log again.
   private disposed = false;
 
-  constructor(private readonly filePath: string) {}
+  // [LAW:effects-at-boundaries] `clock` is the machine's: the stamp on each
+  // line, and the blocking wait for a write in flight, which a held clock
+  // would never end.
+  constructor(
+    private readonly filePath: string,
+    private readonly clock: Pick<Timekeeper, "now" | "monotonic">,
+  ) {}
 
   // One line, to the log: the daemon's `DaemonLogger`.
   readonly log = (level: LogLevel, msg: string): void => {
-    const line = logLine(level, msg);
+    const line = logLine(level, msg, this.clock.now());
     if (this.exitListener === null && !this.disposed) {
       this.exitListener = () => {
         this.exiting = true;
@@ -302,6 +314,7 @@ export class DaemonLog {
         : logLine(
             "warn",
             `log: ${this.dropped} earlier line(s) dropped (${this.droppedBytes} bytes): more than ${MAX_WAITING_BYTES} bytes were waiting for the disk`,
+            this.clock.now(),
           );
     const lines = lost + this.waiting.join("");
     this.waiting = [];
@@ -357,7 +370,7 @@ export class DaemonLog {
     if (out !== null && out.state.kind === "issued") {
       const { fd, endsAt } = out.state;
       try {
-        const size = sizeOnceLanded(fd, endsAt, waitMs);
+        const size = sizeOnceLanded(this.clock, fd, endsAt, waitMs);
         if (size < endsAt && finishing) {
           first = out.bytes.subarray(
             Math.max(0, size - (endsAt - out.bytes.length)),

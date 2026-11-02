@@ -10,6 +10,7 @@ import {
 import { TranscriptFold, type FoldOutcome } from "../utils/transcript-fold";
 import { debug, quietLogger, type DaemonLogger } from "../utils/logger";
 import { RefreshLedger } from "../utils/refresh-ledger";
+import type { Timekeeper } from "../time";
 
 export interface ContextInfo {
   totalTokens: number;
@@ -56,7 +57,11 @@ export class ContextProvider {
   // entry of the transcript re-parsed to find the last one.
   private readonly fold: TranscriptFold<ContextState>;
 
-  constructor(opts: { logger?: DaemonLogger; ledger?: RefreshLedger } = {}) {
+  constructor(opts: {
+    readonly clock: Pick<Timekeeper, "now">;
+    readonly logger?: DaemonLogger;
+    readonly ledger?: RefreshLedger;
+  }) {
     const logger = opts.logger ?? quietLogger;
     this.fold = new TranscriptFold<ContextState>(
       undefined,
@@ -66,6 +71,7 @@ export class ContextProvider {
         scope: "session",
         refresh: ["request"],
       }),
+      opts.clock,
       logger,
     );
   }

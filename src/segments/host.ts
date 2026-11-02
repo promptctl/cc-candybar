@@ -6,6 +6,7 @@ import { KeyedSource } from "../utils/keyed-source.js";
 import { quietLogger, type DaemonLogger } from "../utils/logger.js";
 import { RefreshLedger } from "../utils/refresh-ledger.js";
 import type { Lane } from "../utils/reading.js";
+import type { Timekeeper } from "../time.js";
 
 // How often the host's name and user are asked again while a view reads
 // them: the name follows the network (DHCP, a VPN), so a daemon that lives
@@ -54,12 +55,12 @@ export class HostService {
   private readonly name: KeyedSource<null, string>;
   private readonly user: KeyedSource<null, string>;
 
-  constructor(
-    opts: {
-      readonly logger?: DaemonLogger;
-      readonly ledger?: RefreshLedger;
-    } = {},
-  ) {
+  constructor(opts: {
+    // [LAW:effects-at-boundaries] Times each refresh and arms each period.
+    readonly clock: Pick<Timekeeper, "now" | "after">;
+    readonly logger?: DaemonLogger;
+    readonly ledger?: RefreshLedger;
+  }) {
     const logger = opts.logger ?? quietLogger;
     const ledger = opts.ledger ?? new RefreshLedger(logger);
     const one = {
@@ -70,6 +71,7 @@ export class HostService {
       maxEntries: 1,
       logger,
       ledger,
+      clock: opts.clock,
     } as const;
     this.name = new KeyedSource({
       ...one,

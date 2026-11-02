@@ -19,6 +19,7 @@ import { viewFacts } from "./helpers/view-facts";
 import { fakeWatches } from "./helpers/fake-watches";
 import { locations, stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
+import { systemTimekeeper } from "../src/time";
 
 // [LAW:behavior-not-structure] A reload keeps the state it serves exactly when
 // what it read from disk is what that state was built from, read through
@@ -52,13 +53,21 @@ function rig() {
   const loads: Settled[] = [];
   const causes: LoadCause[] = [];
   const lines: string[] = [];
-  const watchers = new WatcherRegistry({ logger: () => {} });
+  const watchers = new WatcherRegistry({
+    clock: systemTimekeeper,
+    logger: () => {},
+  });
   cleanups.push(() => watchers.closeAll());
   const cache = new RenderCache(
-    { stateDir: stateDir(host), locations: locations(host), env: host.env,
+    {
+      clock: systemTimekeeper,
+      stateDir: stateDir(host),
+      locations: locations(host),
+      env: host.env,
       launcher: world.launcher,
       storage: NO_PLUGIN_STORAGE,
-      signer: TEST_SIGNER, gates: bareGates(),
+      signer: TEST_SIGNER,
+      gates: bareGates(),
       fileEvents: NO_FILE_EVENTS,
       sessionState: new SessionState(),
       watchers,

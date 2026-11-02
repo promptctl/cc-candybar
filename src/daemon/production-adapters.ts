@@ -7,6 +7,7 @@ import fs from "node:fs";
 import { productionClaudeInputEdge } from "../claude-input/edge.js";
 import { fileStores, productionEdge } from "../doctor/edge";
 import { createLauncher } from "../proc/launch";
+import type { Timekeeper } from "../time";
 import type { DaemonAdapters } from "./daemon.js";
 import { fileStorage } from "./file-storage";
 import { productionLaneEdge } from "./lane-edge.js";
@@ -17,23 +18,29 @@ import type { DaemonPaths } from "./paths";
 
 // [LAW:effects-at-boundaries] Every real adapter, over the paths and the log it
 // is given, so a daemon built over a temporary directory touches nothing else.
+// `machine` is the clock the machine's side runs on: real children, real files
+// and the log's blocking wait live in real time, whatever clock the daemon
+// itself is held on.
 export function productionAdapters(
   paths: DaemonPaths,
   daemonLog: DaemonLog,
+  machine: Timekeeper,
 ): DaemonAdapters {
   return {
     daemonLog,
-    launcher: createLauncher,
-    storage: (log) => fileStorage(paths, log),
+    launcher: (own) => createLauncher(own, machine),
+    storage: (log) => fileStorage(paths, log, machine),
     doctorStores: fileStores(paths.state),
     doctorEdge: productionEdge,
     claudeInput: productionClaudeInputEdge,
-    laneEdge: productionLaneEdge,
+    laneEdge: (launcher, following, closing) =>
+      productionLaneEdge(launcher, following, closing, machine),
     linkSigner: linkSignerFromKeyFile(linkKeyFile(paths.state)),
     limits: ({ startedAtMs, exit, launcher, log }) =>
       realLimitsDeps(startedAtMs, exit, {
         launcher,
         log,
+        clock: machine,
         snapshotDir: paths.state,
         writeLogNow: () => daemonLog.writeNow(),
       }),

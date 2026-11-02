@@ -90,7 +90,7 @@ function segmentAddresses(root: CompiledNode): { name: string; address: Address 
 
 function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
   const config = parseAndValidate("<test>", src, ALLOWED, dflt);
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const sessionState = new SessionState();
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
@@ -411,6 +411,7 @@ import type { SemanticRole } from "../src/themes/decor";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { instantOf } from "../src/utils/instant";
 import { selectionFor } from "./helpers/selection";
+import { systemTimekeeper } from "../src/time";
 
 // [LAW:types-are-the-program] Keyed on the SemanticRole union, so a role added
 // to (or removed from) the type is a compile error here, not a silent gap.

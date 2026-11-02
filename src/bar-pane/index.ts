@@ -13,7 +13,6 @@
 
 import process from "node:process";
 import { parseArgs as parseCliArgs } from "node:util";
-import { setTimeout as sleep } from "node:timers/promises";
 import { renderOutcomeOf, trySessionInPane } from "../daemon/client";
 import { describeFailure } from "../daemon/client-transport";
 import { followFrames, type FrameFollower } from "../daemon/frame-follow";
@@ -22,6 +21,7 @@ import { socketPath } from "../daemon/paths";
 import { planOutcome } from "../render/outcome-plan";
 import { detectTmuxHint, type TmuxHint } from "../tmux-hint";
 import type { World } from "../host";
+import { sleep, type Timekeeper } from "../time";
 import { runTmuxAsync, type TmuxRun } from "../proc/tmux";
 import {
   LIST_CLIENTS_FORMAT,
@@ -107,11 +107,13 @@ async function askPlacement(
 // the bar pane gives up: a loaded machine misses a call now and then, a tmux
 // server that is gone misses them all. One per call the bar pane makes, so a
 // call that keeps failing is not excused by another that answers.
-function tmuxPatience(): (run: { readonly kind: "ok" } | TmuxMissed) => void {
-  let answeredAt = Date.now();
+function tmuxPatience(
+  clock: Pick<Timekeeper, "now">,
+): (run: { readonly kind: "ok" } | TmuxMissed) => void {
+  let answeredAt = clock.now();
   return (run) => {
-    if (run.kind === "ok") answeredAt = Date.now();
-    else if (Date.now() - answeredAt > TMUX_PATIENCE_MS)
+    if (run.kind === "ok") answeredAt = clock.now();
+    else if (clock.now() - answeredAt > TMUX_PATIENCE_MS)
       throw new Error(
         `tmux has not answered for ${TMUX_PATIENCE_MS / 1000} s: ${run.reason}`,
       );
@@ -200,7 +202,7 @@ async function drawBarPane(
   // What the pane last painted. Anything that disturbs the pane — a resize, a
   // line written to its stderr — makes the next draw paint the frame whole.
   let painted = "";
-  const resizeAnswered = tmuxPatience();
+  const resizeAnswered = tmuxPatience(world.clock);
   // The pane's height follows the frame's, except while the bar pane is the
   // zoomed pane, which a resize would unzoom. The height compared is the
   // pane's own, so an unzoom or a hand resize is put right too.
@@ -271,12 +273,12 @@ async function drawBarPane(
 
   // [LAW:no-ambient-temporal-coupling] This loop is the one clock for where
   // the pane is and whose bar it shows; the frames arrive on their own.
-  const placementAnswered = tmuxPatience();
+  const placementAnswered = tmuxPatience(world.clock);
   while (placement.kind !== "gone") {
     if (placement.kind === "hidden") {
       follow(null);
     } else {
-      const found = await trySessionInPane(world.host, tmux.socket, pane);
+      const found = await trySessionInPane(world, tmux.socket, pane);
       if (found.kind === "ok") {
         follow(found.value);
         status =
@@ -293,7 +295,7 @@ async function drawBarPane(
       }
     }
     redraw();
-    await sleep(TICK_MS);
+    await sleep(world.clock, TICK_MS);
     const asked = await askPlacement(world, tmux, pane);
     placementAnswered(asked);
     if (asked.kind === "ok") placement = asked.placement;

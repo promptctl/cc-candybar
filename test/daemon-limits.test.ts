@@ -15,6 +15,7 @@ import type { MemoryCharge } from "../src/daemon/memory-report";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { systemTimekeeper } from "../src/time";
 
 interface Recorder {
   shutdownCalls: number[];
@@ -41,7 +42,7 @@ interface Recorder {
 
 function makeDeps(rec: Recorder, overrides: Partial<LimitsDeps> = {}): LimitsDeps {
   return {
-    now: () => rec.fakeNow,
+    clock: { now: () => rec.fakeNow, after: systemTimekeeper.after },
     pid: rec.pid,
     snapshotDir: rec.snapshotDir,
     log: (level, msg) => rec.logs.push({ level, msg }),
@@ -693,6 +694,7 @@ describe("post-mortems", () => {
       expect(realLimitsDeps(0, () => {}, {
         launcher: processLauncher,
         log: () => {},
+        clock: systemTimekeeper,
         snapshotDir: path.join(root, "absent"),
         writeLogNow: () => {},
       }).listArtifacts()).toEqual([]);
@@ -700,6 +702,7 @@ describe("post-mortems", () => {
       expect(() => realLimitsDeps(0, () => {}, {
         launcher: processLauncher,
         log: () => {},
+        clock: systemTimekeeper,
         snapshotDir: path.join(root, "file"),
         writeLogNow: () => {},
       }).listArtifacts()).toThrow(/ENOTDIR/);

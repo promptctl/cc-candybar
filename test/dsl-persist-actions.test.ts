@@ -65,6 +65,7 @@ import { instantOf } from "../src/utils/instant";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
+import { systemTimekeeper } from "../src/time";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -163,7 +164,13 @@ describe("persistValueText", () => {
     expect(() =>
       writeValues(
         { record: () => {}, logger: () => {} },
-        { path: impossiblePath, above: [], repo: null, cwd: null, locs: locations(durable.host) },
+        {
+          path: impossiblePath,
+          above: [],
+          repo: null,
+          cwd: null,
+          locs: locations(durable.host),
+        },
         [["palette", "nord"]],
       ),
     ).toThrow();
@@ -410,9 +417,12 @@ function buildPersistRuntime(
   const config = parseAndValidate("<test>", src, ALLOWED, dflt);
   const sessionState = new SessionState();
   durable.seedOrigin(sessionState, sessionId);
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
+  const compiled = registerDslConfig(config, registry, {
+    signer: TEST_SIGNER,
+    cwd: process.cwd(),
+  });
   const basePalette = getThemePalette("textual-dark"!);
   const render = (width = Number.POSITIVE_INFINITY): Frame =>
     drawPayload(
@@ -424,7 +434,12 @@ function buildPersistRuntime(
       instantOf(new Date()),
       opts(width),
     ).frame;
-  const ctx: VerbContext = testVerbContext(sessionState, durable.historyFor(sessionState), config, durable.host);
+  const ctx: VerbContext = testVerbContext(
+    sessionState,
+    durable.historyFor(sessionState),
+    config,
+    durable.host,
+  );
   const click = async (url: string): Promise<void> => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =
@@ -558,8 +573,13 @@ describe("persist action click → the config file", () => {
     const config = parseAndValidate("<test>", src, ALLOWED);
     const sessionState = new SessionState();
     durable.seedOrigin(sessionState, "s1");
-    const store = new VariableStore();
-    const registry = new SourceRegistry(processLauncher, store, "", sessionState);
+    const store = new VariableStore(systemTimekeeper);
+    const registry = new SourceRegistry(
+      processLauncher,
+      store,
+      "",
+      sessionState,
+    );
     const compiled = registerDslConfig(config, registry, {
       signer: TEST_SIGNER,
       cwd: process.cwd(),
@@ -575,7 +595,12 @@ describe("persist action click → the config file", () => {
         instantOf(new Date()),
         opts(),
       ).frame;
-    const ctx: VerbContext = testVerbContext(sessionState, durable.historyFor(sessionState), config, durable.host);
+    const ctx: VerbContext = testVerbContext(
+      sessionState,
+      durable.historyFor(sessionState),
+      config,
+      durable.host,
+    );
     const click = async (url: string): Promise<void> => {
       const { verb, value } = parseHandlerUrl(url);
       const effects =
@@ -802,9 +827,15 @@ describe("persist action click → the config file", () => {
     );
     const sessionState = new SessionState();
     durable.seedOrigin(sessionState, "s1");
-    const ctx: VerbContext = testVerbContext(sessionState, durable.historyFor(sessionState), config, durable.host);
+    const ctx: VerbContext = testVerbContext(
+      sessionState,
+      durable.historyFor(sessionState),
+      config,
+      durable.host,
+    );
     const setConfig = VERBS.get("set-config")!;
-    await expect(setConfig(
+    await expect(
+      setConfig(
         `${encodeURIComponent("s1")}/${encodeURIComponent("not-a-real-key")}/${encodeURIComponent("x")}`,
         ctx,
       ),
@@ -822,15 +853,40 @@ function makeCache(): {
 } {
   const cleanups: Array<() => void> = [];
   const watchers = new WatcherRegistry({
-    counters: { watchersOpened: 0, watchersClosed: 0, watchRefusals: 0, watchErrors: 0, dirWatchesOpened: 0, dirWatchesClosed: 0 },
+    clock: systemTimekeeper,
+    counters: {
+      watchersOpened: 0,
+      watchersClosed: 0,
+      watchRefusals: 0,
+      watchErrors: 0,
+      dirWatchesOpened: 0,
+      dirWatchesClosed: 0,
+    },
     logger: () => {},
   });
   cleanups.push(() => watchers.closeAll());
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
   const cache = new RenderCache(
-    { stateDir: stateDir(durable.host), locations: locations(durable.host), env: durable.host.env, launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, gates: bareGates(), fileEvents: NO_FILE_EVENTS, sessionState, watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
-    { budgetBytes: () => renderCacheBudget(memoryLimitBytes({})), observers: reloads.observers },
+    {
+      clock: systemTimekeeper,
+      stateDir: stateDir(durable.host),
+      locations: locations(durable.host),
+      env: durable.host.env,
+      launcher: processLauncher,
+      storage: NO_PLUGIN_STORAGE,
+      signer: TEST_SIGNER,
+      gates: bareGates(),
+      fileEvents: NO_FILE_EVENTS,
+      sessionState,
+      watchers,
+      source: SOURCES_NOTHING,
+      declare: DECLARES_NOTHING,
+    },
+    {
+      budgetBytes: () => renderCacheBudget(memoryLimitBytes({})),
+      observers: reloads.observers,
+    },
   );
   cleanups.unshift(() => cache.close());
   return { cache, sessionState, cleanups, reloads };
@@ -854,8 +910,16 @@ describe("a durable click lands in the file the next reload reads", () => {
     const named = join(durable.projectDir, "named.json5");
     durable.seedOrigin(sessionState, "s1", named);
     durable.write(`{ globals: { palette: "textual-dark" } }`);
-    const ctx: VerbContext = testVerbContext(sessionState, durable.historyFor(sessionState), config, durable.host);
-    await VERBS.get("set-config")!(encodeSegments(["s1", "palette", "nord"]), ctx);
+    const ctx: VerbContext = testVerbContext(
+      sessionState,
+      durable.historyFor(sessionState),
+      config,
+      durable.host,
+    );
+    await VERBS.get("set-config")!(
+      encodeSegments(["s1", "palette", "nord"]),
+      ctx,
+    );
     expect(
       (
         JSON5.parse(readFileSync(named, "utf8")) as {
@@ -884,9 +948,17 @@ describe("a durable click lands in the file the next reload reads", () => {
     );
     const sessionState = new SessionState();
     durable.seedOrigin(sessionState, "s1");
-    const ctx: VerbContext = testVerbContext(sessionState, durable.historyFor(sessionState), config, durable.host);
+    const ctx: VerbContext = testVerbContext(
+      sessionState,
+      durable.historyFor(sessionState),
+      config,
+      durable.host,
+    );
     const click = async (palette: string): Promise<void> =>
-      await VERBS.get("set-config")!(encodeSegments(["s1", "palette", palette]), ctx);
+      await VERBS.get("set-config")!(
+        encodeSegments(["s1", "palette", palette]),
+        ctx,
+      );
     expect(durable.text()).toBeNull();
     await click("nord");
     expect(durable.parsed()).toEqual({ globals: { palette: "nord" } });
@@ -934,7 +1006,12 @@ describe("RenderCache: the config file is the durable store", () => {
       expect(entry.state.config.globals.palette).toBe("textual-dark");
 
       durable.seedOrigin(sessionState, "s1");
-      const ctx: VerbContext = testVerbContext(sessionState, durable.historyFor(sessionState), entry.state.config, durable.host);
+      const ctx: VerbContext = testVerbContext(
+        sessionState,
+        durable.historyFor(sessionState),
+        entry.state.config,
+        durable.host,
+      );
       let clicked = false;
       await reloads.after(entry, async () => {
         if (clicked) {

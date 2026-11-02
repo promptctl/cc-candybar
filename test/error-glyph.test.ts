@@ -6,6 +6,7 @@ import os from "node:os";
 import { formatPermanentGlyph } from "../src/render/error-glyph";
 import type { PermanentOutcome } from "../src/daemon/client-transport";
 import { PROTOCOL_VERSION, encodeFrame, makeFrameReader } from "../src/daemon/protocol";
+import { systemTimekeeper } from "../src/time";
 
 // [LAW:behavior-not-structure] These tests assert the contract — the glyph's
 // visible text, single-line shape, prefix, and reset tail — not the
@@ -181,7 +182,7 @@ describe("end-to-end: VERSION_MISMATCH wire → permanent outcome → glyph", ()
     });
     try {
       const { tryRenderViaDaemon } = await import("../src/daemon/client");
-      const outcome = await tryRenderViaDaemon(host, 
+      const outcome = await tryRenderViaDaemon({ host, clock: systemTimekeeper }, 
         {
           session_id: "test-glyph-session",
           workspace: { project_dir: "/tmp" },

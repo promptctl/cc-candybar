@@ -18,6 +18,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { parseAndValidate } from "./helpers/parse-and-validate";
+import { systemTimekeeper } from "../src/time";
 
 const git = (cwd: string, ...args: string[]) =>
   execFileSync("git", args, { cwd, stdio: "pipe" });
@@ -65,7 +66,7 @@ function drawAll(
     new Set(listResolvablePaletteNames()),
     DEFAULT_DSL_CONFIG,
   );
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
   const sink = new Map<string, readonly RichText[]>();
   try {

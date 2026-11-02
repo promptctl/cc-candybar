@@ -1,3 +1,4 @@
+import { systemTimekeeper } from "../src/time";
 import { reaction } from "mobx";
 import { HOST } from "./helpers/host";
 // [LAW:verifiable-goals] The architectural fix (brandon-daemon-memory-leak-5qh):
@@ -107,7 +108,11 @@ describe("SessionUsageStore — session projection", () => {
   test("hit when transcript mtime unchanged, miss when it advances", async () => {
     const t = join(dir, "A.jsonl");
     writeFileSync(t, usageLine("a", new Date(), 0.01));
-    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      sweepIntervalMs: 0,
+    });
     try {
       const hd = hook("A", t);
       await store.getUsageInfo("A", hd);
@@ -133,7 +138,12 @@ describe("SessionUsageStore — session projection", () => {
     const ledger = new RefreshLedger((level, msg) =>
       lines.push(`${level} ${msg}`),
     );
-    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0, ledger });
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      sweepIntervalMs: 0,
+      ledger,
+    });
     const usage = () => ledger.snapshot().find((r) => r.name === "usage");
     try {
       const t = join(dir, "A.jsonl");
@@ -154,9 +164,9 @@ describe("SessionUsageStore — session projection", () => {
         store.observeSpeed("B", broken, Date.now()),
       ]);
       expect(usage()).toMatchObject({ refreshes: { request: 2 }, failures: 1 });
-      expect(lines.filter((l) => l.startsWith("warn usage refresh"))).toEqual(
-        [expect.stringContaining("sid=B ")],
-      );
+      expect(lines.filter((l) => l.startsWith("warn usage refresh"))).toEqual([
+        expect.stringContaining("sid=B "),
+      ]);
 
       // Today's lane lands after its directory set's scan, once the other
       // lanes' refresh has answered: it reads that refresh, never its own.
@@ -196,7 +206,11 @@ describe("SessionUsageStore — session projection", () => {
       t,
       usageLine("a1", new Date(), 0.01) + usageLine("a2", new Date(), 0.02),
     );
-    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      sweepIntervalMs: 0,
+    });
     try {
       // hook() carries no cost block → officialCost null → display the
       // transcript total.
@@ -217,7 +231,11 @@ describe("SessionUsageStore — session projection", () => {
       t,
       usageLine("a1", new Date(), 0.01) + usageLine("a2", new Date(), 0.02),
     );
-    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      sweepIntervalMs: 0,
+    });
     try {
       const hd = hook("A", t);
       // Claude's authoritative figure differs from the rate-table sum (0.03).
@@ -242,7 +260,11 @@ describe("SessionUsageStore — session projection", () => {
   });
 
   test("empty sessionId does no work, and a draw of it is what its refresh answered", async () => {
-    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      sweepIntervalMs: 0,
+    });
     try {
       const bare = { session_id: "" } as ClaudeHookData;
       const info = await store.getUsageInfo("", bare);
@@ -265,13 +287,17 @@ describe("SessionUsageStore — session projection", () => {
     const now = new Date();
     const pad = "x".repeat(1024);
     const many = Array.from({ length: 1500 }, (_, i) => {
-      const parsed = JSON.parse(usageLine(`w${i}`, now, 0.001)) as Record<string, unknown>;
+      const parsed = JSON.parse(usageLine(`w${i}`, now, 0.001)) as Record<
+        string,
+        unknown
+      >;
       return JSON.stringify({ ...parsed, pad }) + "\n";
     });
-    const long = JSON.stringify({
-      ...(JSON.parse(usageLine("long", now, 0.5)) as Record<string, unknown>),
-      pad: "y".repeat(Math.floor(FOLD_WINDOW_BYTES * 2.5)),
-    }) + "\n";
+    const long =
+      JSON.stringify({
+        ...(JSON.parse(usageLine("long", now, 0.5)) as Record<string, unknown>),
+        pad: "y".repeat(Math.floor(FOLD_WINDOW_BYTES * 2.5)),
+      }) + "\n";
     writeFileSync(t, many.join("") + long);
     const subagents = join(dir, "W", "subagents");
     mkdirSync(subagents, { recursive: true });
@@ -279,13 +305,18 @@ describe("SessionUsageStore — session projection", () => {
     writeFileSync(
       agent,
       JSON.stringify({
-        ...(JSON.parse(usageLine("agent", now, 0.25)) as Record<string, unknown>),
+        ...(JSON.parse(usageLine("agent", now, 0.25)) as Record<
+          string,
+          unknown
+        >),
         sessionId: "W",
         pad: "z".repeat(Math.floor(FOLD_WINDOW_BYTES * 1.5)),
       }) + "\n",
     );
     const lines: string[] = [];
-    const store = new SessionUsageStore({ host: HOST, 
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
       sweepIntervalMs: 0,
       logger: (_level, msg) => lines.push(msg),
     });
@@ -310,7 +341,9 @@ describe("SessionUsageStore — session projection", () => {
     const lastWeek = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     writeFileSync(t, usageLine("a", lastWeek, 0.01));
     const lines: string[] = [];
-    const store = new SessionUsageStore({ host: HOST, 
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
       sweepIntervalMs: 0,
       staleAgeMs: 1,
       logger: (_level, msg) => lines.push(msg),
@@ -335,7 +368,9 @@ describe("SessionUsageStore — session projection", () => {
     const at = new Date();
     writeFileSync(t, usageLine("a", at, 0.01));
     const lines: string[] = [];
-    const store = new SessionUsageStore({ host: HOST, 
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
       sweepIntervalMs: 0,
       staleAgeMs: 1,
       logger: (_level, msg) => lines.push(msg),
@@ -356,7 +391,12 @@ describe("SessionUsageStore — session projection", () => {
   test("sweepStale holds a stale record with today's work before any `today` is asked", async () => {
     const t = join(dir, "A.jsonl");
     writeFileSync(t, usageLine("a", new Date(), 0.01));
-    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0, staleAgeMs: 1 });
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      sweepIntervalMs: 0,
+      staleAgeMs: 1,
+    });
     try {
       await store.getUsageInfo("A", hook("A", t));
       await new Promise((r) => setTimeout(r, 10));
@@ -373,7 +413,9 @@ describe("SessionUsageStore — session projection", () => {
     const lines: string[] = [];
     let now = Date.now();
     const clock = jest.spyOn(Date, "now").mockImplementation(() => now);
-    const store = new SessionUsageStore({ host: HOST, 
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
       sweepIntervalMs: 0,
       staleAgeMs: 1,
       logger: (_level, msg) => lines.push(msg),
@@ -407,7 +449,9 @@ describe("SessionUsageStore — session projection", () => {
     writeFileSync(b, usageLine("b", lastWeek, 0.01));
     let now = Date.now();
     const clock = jest.spyOn(Date, "now").mockImplementation(() => now);
-    const store = new SessionUsageStore({ host: HOST, 
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
       sweepIntervalMs: 0,
       staleAgeMs: 300,
     });
@@ -433,7 +477,11 @@ describe("SessionUsageStore — session projection", () => {
   // nothing is answered, and a refresh that finds no transcript answers the
   // empty record — two facts a draw must not confuse.
   test("a draw before the session's refresh is not answered; after one it is what the refresh answered", async () => {
-    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      sweepIntervalMs: 0,
+    });
     try {
       const bare = { session_id: "H" } as ClaudeHookData;
       expect(store.usageOf("H", bare)).toBe(PENDING);
@@ -457,14 +505,28 @@ describe("SessionUsageStore — session projection", () => {
     const t = join(dir, "A.jsonl");
     const at = new Date();
     writeFileSync(t, usageLine("a", at, 0.01));
-    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      sweepIntervalMs: 0,
+    });
     try {
       // The session's own refresh has landed, but no scan has.
       await store.getUsageInfo("A", hook("A", t));
-      expect(todayNow(store, holds, hook("A", t), dir, instantOf(at))).toBe(PENDING);
-      const today = await todayInfo(store, holds, hook("A", t), dir, instantOf(at));
+      expect(todayNow(store, holds, hook("A", t), dir, instantOf(at))).toBe(
+        PENDING,
+      );
+      const today = await todayInfo(
+        store,
+        holds,
+        hook("A", t),
+        dir,
+        instantOf(at),
+      );
       expect(today.kind).toBe("ok");
-      expect(todayNow(store, holds, hook("A", t), dir, instantOf(at))).toEqual(today);
+      expect(todayNow(store, holds, hook("A", t), dir, instantOf(at))).toEqual(
+        today,
+      );
     } finally {
       store.close();
     }
@@ -473,14 +535,22 @@ describe("SessionUsageStore — session projection", () => {
   test("K concurrent reads of one (session, mtime) parse once", async () => {
     const t = join(dir, "A.jsonl");
     writeFileSync(t, usageLine("a", new Date(), 0.01));
-    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      sweepIntervalMs: 0,
+    });
     try {
       const hd = hook("A", t);
       const oneParse = await countFsOps(() => store.getUsageInfo("A", hd));
 
       // Fresh store: K concurrent first-reads coalesce onto
       // one flight, so cumulative fs ops stay near a single parse, not K×.
-      const store2 = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
+      const store2 = new SessionUsageStore({
+        clock: systemTimekeeper,
+        host: HOST,
+        sweepIntervalMs: 0,
+      });
       const kConcurrent = await countFsOps(() =>
         Promise.all(
           Array.from({ length: 8 }, () => store2.getUsageInfo("A", hd)),
@@ -524,7 +594,10 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
         // Globally-unique sessionId per file (real session UUIDs never collide
         // across projects); cost present so the today path skips pricing I/O.
         const sid = `sess-${p}-${f}`;
-        writeFileSync(join(pdir, `${sid}.jsonl`), usageLine(sid, today, COST_PER_FILE));
+        writeFileSync(
+          join(pdir, `${sid}.jsonl`),
+          usageLine(sid, today, COST_PER_FILE),
+        );
       }
     }
     activePath = join(projectsDir, "proj-0", "sess-0-0.jsonl");
@@ -540,22 +613,47 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
   // directory, whichever other directories have been seen.
   test("a second session's directory is seeded on first sight and keeps its own sum", async () => {
     const other = mkdtempSync(join(tmpdir(), "cc-candybar-store-other-"));
-    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      sweepIntervalMs: 0,
+    });
     try {
       const odir = join(other, "projects", "proj");
       mkdirSync(odir, { recursive: true });
       const opath = join(odir, "other-0.jsonl");
       writeFileSync(opath, usageLine("other-0", new Date(), 5));
-      writeFileSync(join(odir, "other-1.jsonl"), usageLine("other-1", new Date(), 7));
+      writeFileSync(
+        join(odir, "other-1.jsonl"),
+        usageLine("other-1", new Date(), 7),
+      );
       const all = PROJECTS * FILES_PER_PROJECT * COST_PER_FILE;
 
-      const first = await todayInfo(store, holds, hook("sess-0-0", activePath), root, instantOf(new Date()));
+      const first = await todayInfo(
+        store,
+        holds,
+        hook("sess-0-0", activePath),
+        root,
+        instantOf(new Date()),
+      );
       expect(first.kind === "ok" && first.value.cost).toBeCloseTo(all, 5);
-      const second = await todayInfo(store, holds, hook("other-0", opath), other, instantOf(new Date()));
+      const second = await todayInfo(
+        store,
+        holds,
+        hook("other-0", opath),
+        other,
+        instantOf(new Date()),
+      );
       expect(second.kind === "ok" && second.value.cost).toBeCloseTo(12, 5);
       // Each directory is scanned once; a later render of either re-scans none
       // and reads the sum it read before the other was seen.
-      const again = await todayInfo(store, holds, hook("sess-0-0", activePath), root, instantOf(new Date()));
+      const again = await todayInfo(
+        store,
+        holds,
+        hook("sess-0-0", activePath),
+        root,
+        instantOf(new Date()),
+      );
       expect(again.kind === "ok" && again.value.cost).toBeCloseTo(all, 5);
       expect(store.scanStats().refreshes.first).toBe(2);
 
@@ -564,9 +662,21 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
       const late = join(odir, "other-late.jsonl");
       writeFileSync(late, usageLine("other-late", new Date(), 3));
       await store.getUsageInfo("other-late", hook("other-late", late));
-      const joined = await todayInfo(store, holds, hook("other-0", opath), other, instantOf(new Date()));
+      const joined = await todayInfo(
+        store,
+        holds,
+        hook("other-0", opath),
+        other,
+        instantOf(new Date()),
+      );
       expect(joined.kind === "ok" && joined.value.cost).toBeCloseTo(15, 5);
-      const apart = await todayInfo(store, holds, hook("sess-0-0", activePath), root, instantOf(new Date()));
+      const apart = await todayInfo(
+        store,
+        holds,
+        hook("sess-0-0", activePath),
+        root,
+        instantOf(new Date()),
+      );
       expect(apart.kind === "ok" && apart.value.cost).toBeCloseTo(all, 5);
     } finally {
       store.close();
@@ -575,9 +685,19 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
   });
 
   test("seed aggregates today cost across every session", async () => {
-    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      sweepIntervalMs: 0,
+    });
     try {
-      const info = await todayInfo(store, holds, hook("sess-0-0", activePath), root, instantOf(new Date()));
+      const info = await todayInfo(
+        store,
+        holds,
+        hook("sess-0-0", activePath),
+        root,
+        instantOf(new Date()),
+      );
       expect(info.kind).toBe("ok");
       if (info.kind !== "ok") return;
       expect(info.value.cost).toBeCloseTo(
@@ -595,9 +715,19 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
   // together they were two cold parses, and whichever landed second, the
   // request's newer fold among them, was not stored.
   test("a cold request's own session is read once, by the seed", async () => {
-    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      sweepIntervalMs: 0,
+    });
     try {
-      await todayInfo(store, holds, hook("sess-0-0", activePath), root, instantOf(new Date()));
+      await todayInfo(
+        store,
+        holds,
+        hook("sess-0-0", activePath),
+        root,
+        instantOf(new Date()),
+      );
       expect(store.getStats()).toMatchObject({ hits: 1, misses: 0 });
     } finally {
       store.close();
@@ -608,16 +738,26 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
   // seed ingesting more sessions evicted the oldest out of `today` unseen.
   test("today sums every session the seed ingests, however many", async () => {
     const many = mkdtempSync(join(tmpdir(), "cc-candybar-store-many-"));
-    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      sweepIntervalMs: 0,
+    });
     try {
       const SESSIONS = 300;
       const at = new Date();
       const pdir = join(many, "projects", "proj");
       mkdirSync(pdir, { recursive: true });
       for (let s = 0; s < SESSIONS; s++) {
-        writeFileSync(join(pdir, `many-${s}.jsonl`), usageLine(`many-${s}`, at, 1));
+        writeFileSync(
+          join(pdir, `many-${s}.jsonl`),
+          usageLine(`many-${s}`, at, 1),
+        );
       }
-      const info = await todayInfo(store, holds, hook("many-0", join(pdir, "many-0.jsonl")),
+      const info = await todayInfo(
+        store,
+        holds,
+        hook("many-0", join(pdir, "many-0.jsonl")),
         many,
         instantOf(at),
       );
@@ -640,7 +780,9 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     const tree = mkdtempSync(join(tmpdir(), "cc-candybar-store-rescan-"));
     const PERIOD_MS = 50;
     const lines: string[] = [];
-    const store = new SessionUsageStore({ host: HOST, 
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
       sweepIntervalMs: 0,
       rescan: { okMs: PERIOD_MS, failedMs: PERIOD_MS },
       logger: (level, msg) => lines.push(`${level} ${msg}`),
@@ -669,8 +811,14 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
       // moves when the rescan's records land.
       let moved = 0;
       const lane = store.declareToday(holds, tree);
-      const stop = reaction(() => lane.current(), () => moved++);
-      writeFileSync(join(pdir, "headless.jsonl"), usageLine("headless", noon, 4));
+      const stop = reaction(
+        () => lane.current(),
+        () => moved++,
+      );
+      writeFileSync(
+        join(pdir, "headless.jsonl"),
+        usageLine("headless", noon, 4),
+      );
       appendFileSync(ongoing, usageLine("ongoing-1", noon, 8));
       utimesSync(ongoing, tick, tick);
 
@@ -717,7 +865,9 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     const tree = mkdtempSync(join(tmpdir(), "cc-candybar-store-scan-fail-"));
     const lines: string[] = [];
     let failNextScan = true;
-    const store = new SessionUsageStore({ host: HOST, 
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
       sweepIntervalMs: 0,
       rescan: { okMs: 60_000, failedMs: 50 },
       logger: (level, msg) => {
@@ -735,11 +885,17 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
       const noon = new Date();
       noon.setHours(12, 0, 0, 0);
       writeFileSync(active, usageLine("active", noon, 1));
-      writeFileSync(join(pdir, "headless.jsonl"), usageLine("headless", noon, 4));
+      writeFileSync(
+        join(pdir, "headless.jsonl"),
+        usageLine("headless", noon, 4),
+      );
       const hd = hook("active", active);
 
       const first = await todayInfo(store, holds, hd, tree, instantOf(noon));
-      expect(first).toEqual({ kind: "failed", reason: "usage scan: scan broke" });
+      expect(first).toEqual({
+        kind: "failed",
+        reason: "usage scan: scan broke",
+      });
       expect(todayNow(store, holds, hd, tree, instantOf(noon))).toEqual(first);
       expect(lines).toEqual(
         expect.arrayContaining([
@@ -773,7 +929,9 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     const tree = mkdtempSync(join(tmpdir(), "cc-candybar-store-unread-"));
     const pdir = join(tree, "projects", "proj");
     const headless = join(pdir, "headless.jsonl");
-    const store = new SessionUsageStore({ host: HOST, 
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
       sweepIntervalMs: 0,
       rescan: { okMs: 60_000, failedMs: 50 },
     });
@@ -815,7 +973,9 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     const tree = mkdtempSync(join(tmpdir(), "cc candybar store unlisted-"));
     const locked = join(tree, "projects", "locked");
     const lines: string[] = [];
-    const store = new SessionUsageStore({ host: HOST, 
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
       sweepIntervalMs: 0,
       rescan: { okMs: 60_000, failedMs: 60_000 },
       logger: (level, msg) => lines.push(`${level} ${msg}`),
@@ -828,7 +988,13 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
       writeFileSync(active, usageLine("active", new Date(), 1));
       chmodSync(locked, 0o000);
 
-      const info = await todayInfo(store, holds, hook("active", active), tree, instantOf(new Date()));
+      const info = await todayInfo(
+        store,
+        holds,
+        hook("active", active),
+        tree,
+        instantOf(new Date()),
+      );
       expect(info.kind).toBe("failed");
       if (info.kind !== "failed") return;
       expect(info.reason).toMatch(/^usage scan: .*EACCES.*locked/);
@@ -853,14 +1019,22 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
   test("a projects directory the scan cannot list is today's failure", async () => {
     const tree = mkdtempSync(join(tmpdir(), "cc-candybar-store-noprojects-"));
     const projects = join(tree, "projects");
-    const store = new SessionUsageStore({ host: HOST, 
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
       sweepIntervalMs: 0,
       rescan: { okMs: 60_000, failedMs: 60_000 },
     });
     try {
       mkdirSync(projects);
       chmodSync(projects, 0o000);
-      const info = await todayInfo(store, holds, hook("active", join(projects, "p", "active.jsonl")), tree, instantOf(new Date()));
+      const info = await todayInfo(
+        store,
+        holds,
+        hook("active", join(projects, "p", "active.jsonl")),
+        tree,
+        instantOf(new Date()),
+      );
       expect(info.kind).toBe("failed");
       if (info.kind !== "failed") return;
       expect(info.reason).toMatch(/^usage scan: .*EACCES.*projects/);
@@ -874,7 +1048,11 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
   // `today` is the day sums at the frame's own day: past local midnight, with
   // no record changed and nothing read, it is the new day's — nothing spent.
   test("a frame past midnight reads the new day with no refresh", async () => {
-    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      sweepIntervalMs: 0,
+    });
     try {
       const hd = hook("sess-0-0", activePath);
       const now = new Date();
@@ -884,8 +1062,12 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
       tomorrow.setDate(tomorrow.getDate() + 1);
       tomorrow.setHours(0, 0, 1, 0);
       const ops = await countFsOps(async () => {
-        expect(todayNow(store, holds, hd, root, instantOf(tomorrow))).toBe(ABSENT);
-        expect(todayNow(store, holds, hd, root, instantOf(now))).toEqual(answered);
+        expect(todayNow(store, holds, hd, root, instantOf(tomorrow))).toBe(
+          ABSENT,
+        );
+        expect(todayNow(store, holds, hd, root, instantOf(now))).toEqual(
+          answered,
+        );
       });
       expect(ops).toBe(0);
       expect(store.scanStats().refreshes).toEqual({
@@ -900,35 +1082,53 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
   });
 
   test("after the seed, N renders with an unchanged session do ZERO transcript fs work", async () => {
-    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      sweepIntervalMs: 0,
+    });
     try {
       const hd = hook("sess-0-0", activePath);
-      const seedOps = await countFsOps(() => todayInfo(store, holds, hd, root, instantOf(new Date())));
+      const seedOps = await countFsOps(() =>
+        todayInfo(store, holds, hd, root, instantOf(new Date())),
+      );
       expect(seedOps).toBeGreaterThan(0); // the one whole-tree scan
 
       // 20 further renders: seed is memoized, active mtime unchanged → the only
       // freshness check is a sync statSync. No async fs ops at all.
       const steadyOps = await countFsOps(async () => {
-        for (let i = 0; i < 20; i++) await todayInfo(store, holds, hd, root, instantOf(new Date()));
+        for (let i = 0; i < 20; i++)
+          await todayInfo(store, holds, hd, root, instantOf(new Date()));
       });
       expect(steadyOps).toBe(0);
       // Never re-seeded, and no render rescans.
-      expect(store.scanStats().refreshes).toMatchObject({ first: 1, period: 0 });
+      expect(store.scanStats().refreshes).toMatchObject({
+        first: 1,
+        period: 0,
+      });
     } finally {
       store.close();
     }
   });
 
   test("a changed session re-parses only itself, not the tree", async () => {
-    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      sweepIntervalMs: 0,
+    });
     try {
       const hd = hook("sess-0-0", activePath);
-      const seedOps = await countFsOps(() => todayInfo(store, holds, hd, root, instantOf(new Date())));
+      const seedOps = await countFsOps(() =>
+        todayInfo(store, holds, hd, root, instantOf(new Date())),
+      );
 
       // Advance only the active session's mtime, then render once.
       const future = Math.floor(Date.now() / 1000) + 3600;
       utimesSync(activePath, future, future);
-      const reparseOps = await countFsOps(() => todayInfo(store, holds, hd, root, instantOf(new Date())));
+      const reparseOps = await countFsOps(() =>
+        todayInfo(store, holds, hd, root, instantOf(new Date())),
+      );
 
       // One session's re-parse is a tiny fraction of a whole-tree scan, and the
       // seed never runs again.

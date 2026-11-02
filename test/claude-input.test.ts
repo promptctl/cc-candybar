@@ -31,6 +31,7 @@ import type { TmuxHint } from "../src/tmux-hint";
 import { AUTOCOMPACT_WINDOWS } from "../src/segments/autocompact";
 import { instantOf } from "../src/utils/instant";
 import { lastClickError } from "../src/daemon/click-error";
+import { systemTimekeeper } from "../src/time";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const OPTS = {
@@ -221,7 +222,7 @@ function runtime(tmux: TmuxHint | null) {
     encodeRenderOrigin({ projectDir: "/tmp/proj", cwd: "/tmp/proj", target: { source: "search" } }),
   );
   sessionState.set("s1", SESSION_CLIENT_HINTS_KEY, JSON.stringify({ tmux }));
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   const raw = drawPayload(config, compiled, store, registry, { session_id: "s1" }, instantOf(new Date()), OPTS).frame;
@@ -229,7 +230,7 @@ function runtime(tmux: TmuxHint | null) {
   const ctx = {
     ...testVerbContext(sessionState, undefined, config),
     log: (_level: string, msg: string) => logged.push(msg),
-    claudeInput: productionClaudeInputEdge(createLauncher({ inherited: process.env })),
+    claudeInput: productionClaudeInputEdge(createLauncher({ inherited: process.env }, systemTimekeeper)),
   };
   const urls = linkUrls(raw).filter((u) =>
     effectsOf(u).some((e) => e.verb === VERB_SLASH),
@@ -355,12 +356,12 @@ function tray(tmux: TmuxHint | null, drawnIn: TmuxHint | null = tmux) {
     encodeRenderOrigin({ projectDir: "/tmp/proj", cwd: "/tmp/proj", target: { source: "search" } }),
   );
   sessionState.set("s1", SESSION_CLIENT_HINTS_KEY, JSON.stringify({ tmux }));
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   const ctx = {
     ...testVerbContext(sessionState, undefined, config),
-    claudeInput: productionClaudeInputEdge(createLauncher({ inherited: process.env })),
+    claudeInput: productionClaudeInputEdge(createLauncher({ inherited: process.env }, systemTimekeeper)),
   };
   // What the daemon's payload carries for that hint (RenderPayload.tmux).
   const payload = {

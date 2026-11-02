@@ -10,6 +10,7 @@ import {
   type MemoryCharge,
 } from "./memory-report";
 import type { Launcher } from "../proc/launch";
+import type { Timekeeper } from "../time";
 
 // [LAW:single-enforcer] One module owns "when does the daemon plan to die".
 // Only the memory trigger remains — idle and age limits were removed because they
@@ -235,7 +236,9 @@ export interface MemorySizes {
 }
 
 export interface LimitsDeps {
-  now: () => number;
+  // The machine's clock: when a post-mortem is stamped, and the pace of the
+  // readings.
+  clock: Pick<Timekeeper, "now" | "after">;
   // [LAW:locality-or-seam] The snapshot directory, the log sink, and the
   // writer's identity are injected, not reached for ambiently. Without these,
   // unit tests of check compute filenames against the real state directory and
@@ -295,7 +298,7 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
   // [LAW:no-ambient-temporal-coupling] A reading landing after the disarm
   // judges nothing: no report, no snapshot, no exit from a daemon closed.
   let disarmed = false;
-  let timer: NodeJS.Timeout | undefined;
+  let clearTimer: (() => void) | undefined;
 
   function check(): Promise<boolean> {
     inFlight ??= measure().finally(() => {
@@ -325,7 +328,9 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
     // `now` — still produce distinct files; the timestamp stays the leading
     // component so rotation's newest-first ordering holds. Both of a breach's
     // artifacts share this identity, which is what makes them one post-mortem.
-    const stamp = new Date(deps.now()).toISOString().replace(/[:.]/g, "-");
+    const stamp = new Date(deps.clock.now())
+      .toISOString()
+      .replace(/[:.]/g, "-");
     const identity = `${stamp}-${deps.pid}`;
 
     // [LAW:no-ambient-temporal-coupling] The attribution goes FIRST. Writing a
@@ -408,15 +413,16 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
         deps.log("warn", `memory check failed: ${(e as Error).message}`);
       }
       if (disarmed) return;
-      timer = setTimeout(() => void tick(), intervalMs);
-      timer.unref();
+      clearTimer = deps.clock.after(intervalMs, () => void tick(), {
+        unref: true,
+      });
     };
     void tick();
   }
 
   function disarm(): void {
     disarmed = true;
-    clearTimeout(timer);
+    clearTimer?.();
   }
 
   return { check, describeNextRestart, serving, arm, disarm };
@@ -504,6 +510,7 @@ export function realLimitsDeps(
   owner: {
     readonly launcher: Launcher;
     readonly log: DaemonLogger;
+    readonly clock: Pick<Timekeeper, "now" | "after">;
     // The daemon's state directory, which its post-mortems are written to.
     readonly snapshotDir: string;
     // What the log holds, written before the loop blocks (log.ts).
@@ -515,7 +522,7 @@ export function realLimitsDeps(
   // listing used for rotation, so they can never read different dirs.
   const dir = owner.snapshotDir;
   return {
-    now: () => Date.now(),
+    clock: owner.clock,
     pid: process.pid,
     snapshotDir: dir,
     log: owner.log,

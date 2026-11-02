@@ -13,11 +13,12 @@
 // `probeUrlHandler` is the sequence over them, and a test hands in its own.
 
 import { randomUUID } from "node:crypto";
-import type { Host } from "../host.js";
+import { sleep } from "../time.js";
 import fs from "node:fs";
 import { URL_SCHEME, VERB_DOCTOR_PROBE } from "../click/wire.js";
 import { describeFailure } from "../daemon/client-transport.js";
 import { fetchStats, shapeSkew } from "../daemon/client-stats.js";
+import type { ClientWorld } from "../daemon/client-transport.js";
 import { defaultSocketPath, socketPath } from "../daemon/paths.js";
 import { handlerCommand, handlerScriptPath } from "../install/index.js";
 import type { LaunchCategory, OneShotLauncher } from "../proc/launch.js";
@@ -196,8 +197,8 @@ const OPENER_SCRIPT =
   `var u = $.NSWorkspace.sharedWorkspace.URLForApplicationToOpenURL($.NSURL.URLWithString("${URL_SCHEME}://probe"));` +
   'u.isNil() ? "" : u.path.js';
 
-async function daemonView(host: Host): Promise<Asked<DaemonView>> {
-  const outcome = await fetchStats(host);
+async function daemonView(world: ClientWorld): Promise<Asked<DaemonView>> {
+  const outcome = await fetchStats(world);
   // The description is lines (a failure, then its hint); a verdict's reason is
   // one row.
   if (outcome.kind !== "ok") {
@@ -213,20 +214,21 @@ async function daemonView(host: Host): Promise<Asked<DaemonView>> {
 
 export function productionHandlerProbeEdge(
   launcher: OneShotLauncher,
-  host: Host,
+  world: ClientWorld,
 ): HandlerProbeEdge {
+  const { host, clock } = world;
   return {
     platform: process.platform,
     sockets: { own: socketPath(host), handler: defaultSocketPath() },
-    now: Date.now,
+    now: () => clock.now(),
     nonce: randomUUID,
-    daemon: () => daemonView(host),
+    daemon: () => daemonView(world),
     open: (url) => {
       // -g: the handler app must not take focus from the terminal.
       const opened = run(launcher, "doctor.open", "/usr/bin/open", ["-g", url]);
       return opened.kind === "ok" ? null : opened.reason;
     },
-    pause: () => new Promise((resolve) => setTimeout(resolve, POLL_MS)),
+    pause: () => sleep(clock, POLL_MS),
     opener: () => {
       const asked = run(
         launcher,

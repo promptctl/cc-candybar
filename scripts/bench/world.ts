@@ -180,7 +180,10 @@ export async function startWorld(config = "{}\n"): Promise<World> {
   };
   const terminal = sessionEnv(dirs.claude);
   // The host this world's clients are handed: its socket, its home.
-  const host = { env, home: dirs.home, tmp: processWorld().host.tmp };
+  const machine = processWorld();
+  const host = { env, home: dirs.home, tmp: machine.host.tmp };
+  // What its clients ask the daemon with: this world's host, the machine's clock.
+  const client = { host, clock: machine.clock };
   const log = logPath(host);
 
   // The shipped daemon's own argv, heap cap included. A process group of its
@@ -222,7 +225,7 @@ export async function startWorld(config = "{}\n"): Promise<World> {
   };
 
   const stats = async (): Promise<StatsSnapshot> => {
-    const outcome = await fetchStats(host);
+    const outcome = await fetchStats(client);
     if (outcome.kind !== "ok") {
       throw new Error(`the daemon did not answer stats: ${describeFailure(outcome)}`);
     }
@@ -235,7 +238,7 @@ export async function startWorld(config = "{}\n"): Promise<World> {
       if (exited !== null) {
         throw new Error(`the daemon ${exited} before it answered:\n${logLines(log).slice(-20).join("\n")}`);
       }
-      if ((await fetchStats(host)).kind === "ok") break;
+      if ((await fetchStats(client)).kind === "ok") break;
       if (performance.now() - spawned > BOOT_BUDGET_MS) {
         throw new Error(`the daemon did not answer within ${BOOT_BUDGET_MS} ms of its spawn`);
       }
@@ -309,7 +312,7 @@ export async function startWorld(config = "{}\n"): Promise<World> {
     async tick(session, columns, n) {
       const started = performance.now();
       const outcome = await tryRenderViaDaemon(
-        host,
+        client,
         
         hookDataOf(session, n),
         [BUNDLE],
@@ -323,7 +326,7 @@ export async function startWorld(config = "{}\n"): Promise<World> {
     },
     async frame(session, columns, n) {
       const outcome = await requestOutcome(
-        host,
+        client,
         (deadline) => ({
           kind: "render",
           encoding: "frame",

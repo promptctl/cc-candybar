@@ -63,6 +63,7 @@ import { POLLED } from "../src/config/settings-menu";
 import { DOOR_GLYPH } from "../src/config/disclosure";
 import { REMOVE_GLYPH } from "../src/config/edit-glyphs";
 import { type Instant, instantOf } from "../src/utils/instant";
+import { systemTimekeeper } from "../src/time";
 
 // The powerline cap glyphs, which visible segment text is read without.
 const CAPS = /[\u{E0B0}-\u{E0BC}]/gu;
@@ -196,7 +197,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
 
   test("registerDslConfig + drawDsl produce a non-empty line", () => {
     const parsed = parseAndValidate("<default>", SERIALIZED);
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     // The default now carries `kind: "state"` vars (the style picker); a
     // SessionState is required to declare them, exactly as the daemon supplies.
     const registry = new SourceRegistry(
@@ -274,7 +275,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         (key) => (key === "theme" ? theme : null),
         () => false,
       );
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = new SourceRegistry(
         processLauncher,
         store,
@@ -503,7 +504,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     const SID = "theming-8uj-1";
     const parsed = parseAndValidate("<default>", SERIALIZED);
     const sessionState = new SessionState();
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(processLauncher, store, "", sessionState);
     const compiled = registerDslConfig(parsed, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
     // A click is gated by the config its session renders: record the render
@@ -635,7 +636,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
     };
     const render = (padding: number): string => {
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = new SourceRegistry(
         processLauncher,
         store,
@@ -700,7 +701,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     };
 
     function render(cfg: typeof configA): Frame {
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = new SourceRegistry(
         processLauncher,
         store,
@@ -759,7 +760,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     };
 
     function render(cfg: typeof configA): Frame {
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = new SourceRegistry(
         processLauncher,
         store,
@@ -790,7 +791,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     ): Frame {
       const parsed = parseAndValidate("<default>", SERIALIZED);
       const toolbarOnly = narrowToSegment(parsed, "toolbar");
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = new SourceRegistry(
         processLauncher,
         store,
@@ -897,7 +898,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       // (kind: "input", path: "home" in DEFAULT_DSL_CONFIG) — we set it
       // on the payload object directly; no env-var mutation needed.
       const dirOnly = narrowToSegment(parsed, "directory");
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = new SourceRegistry(
         processLauncher,
         store,
@@ -1050,7 +1051,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         ...narrowed,
         variables: { ...narrowed.variables, ...variables },
       };
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = new SourceRegistry(processLauncher, store, "", sessionState);
       try {
         const compiled = registerDslConfig(cfg, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
@@ -1365,7 +1366,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     }): string {
       const parsed = parseAndValidate("<default>", SERIALIZED);
       const metricsOnly = narrowToSegment(parsed, "metrics");
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = new SourceRegistry(
         processLauncher,
         store,
@@ -1458,7 +1459,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const renderBlock = (errorAt: number, util: number): Frame => {
         const parsed = parseAndValidate("<default>", SERIALIZED);
         const blockOnly = narrowToSegment(parsed, "block", { errorAt });
-        const store = new VariableStore();
+        const store = new VariableStore(systemTimekeeper);
         const registry = new SourceRegistry(
           processLauncher,
           store,
@@ -1532,7 +1533,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         "<user>",
       );
       const sessionOnly = narrowToSegment(config, "session", settings);
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       // The merged bundled default declares `activeStyle`/`stylePage` as state
       // vars; SessionState is required to declare them, exactly as the daemon
       // supplies (matching the other full-default render helpers above). Without
@@ -1685,7 +1686,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
       // down overrides `.preset.customized` via `withPayload` instead.
       () => false,
     );
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     // [LAW:one-source-of-truth] The registry's session reader IS sessionPick:
     // the `state` vars the templates read (edit.mode gating the chrome, the
     // ↺ banner) and the globals resolved above answer from one session, not

@@ -63,6 +63,7 @@ import {
 } from "./helpers/click";
 import { SWATCH_GLYPH } from "../src/render/swatch";
 import { instantOf } from "../src/utils/instant";
+import { systemTimekeeper } from "../src/time";
 
 const luminance = ([r, g, b]: Rgb): number => {
   const ch = (v: number) => {
@@ -348,7 +349,7 @@ async function forEachStage(
     DEFAULT_DSL_CONFIG,
   );
   const sessionState = new SessionState();
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   recordRender(sessionState, "s1");
   try {

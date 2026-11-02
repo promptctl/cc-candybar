@@ -16,6 +16,7 @@ import {
 } from "../../src/proc/launch";
 import type { LaunchStatsHandle } from "../../src/proc/stats-handle";
 import { until } from "../helpers/until";
+import { systemTimekeeper } from "../../src/time";
 
 function makeSpyHandle(): {
   handle: LaunchStatsHandle;
@@ -80,7 +81,7 @@ afterAll(() => fs.rmSync(scratch, { recursive: true, force: true }));
 let launcher: TestableLauncher & OneShotLauncher;
 let ending: AbortController;
 const scoped = (scope: Partial<LaunchScope>): void => {
-  launcher = createOneShotLauncher({ inherited: process.env,  signal: ending.signal, ...scope });
+  launcher = createOneShotLauncher({ inherited: process.env,  signal: ending.signal, ...scope }, systemTimekeeper);
 };
 const launch: Launcher["launch"] = (opts) => launcher.launch(opts);
 const launchSync: OneShotLauncher["launchSync"] = (opts) =>
@@ -739,7 +740,7 @@ describe("a launcher's scope", () => {
     const first = createLauncher({ inherited: process.env, 
       stats: closed.handle,
       signal: closing.signal,
-    });
+    }, systemTimekeeper);
     closing.abort();
     const next = makeSpyHandle();
     scoped({ stats: next.handle });
@@ -757,7 +758,7 @@ describe("a launcher's scope", () => {
   });
 
   it("a daemon's launcher has no blocking launch to reach", () => {
-    const daemons = createLauncher({ inherited: process.env });
+    const daemons = createLauncher({ inherited: process.env }, systemTimekeeper);
     // @ts-expect-error A Launcher offers no launchSync.
     expect(daemons.launchSync).toBeUndefined();
     expect("launchSync" in daemons).toBe(false);
@@ -770,7 +771,7 @@ describe("a launcher's scope", () => {
       ok: false,
       reason: "rate-limited",
     });
-    const next = createOneShotLauncher({ inherited: process.env,  signal: ending.signal });
+    const next = createOneShotLauncher({ inherited: process.env,  signal: ending.signal }, systemTimekeeper);
     expect(next.launchSync(once)).toMatchObject({ ok: true });
   });
 

@@ -4,6 +4,7 @@ import {
   runInAction,
   type IObservableValue,
 } from "mobx";
+import type { Timekeeper } from "../time";
 import type { Outcome } from "./outcome";
 
 // [LAW:types-are-the-program] What a source holds for one key: nothing yet,
@@ -121,16 +122,6 @@ export async function answered<A>(read: () => A | Waiting): Promise<A> {
 // How a bounded wait ended: what it waited on answered, or its time ran out.
 export type WaitEnd = "answered" | "deadline";
 
-// Runs `fire` on a later turn, once `ms` have passed, unless what it returns
-// clears it first. Never before it returns: its callers arm it before they are
-// ready to be fired at.
-export type After = (ms: number, fire: () => void) => () => void;
-
-export const afterRealTime: After = (ms, fire) => {
-  const timer = setTimeout(fire, ms);
-  return () => clearTimeout(timer);
-};
-
 // [LAW:no-ambient-temporal-coupling][LAW:single-enforcer] The one bounded
 // wait over work that does not end at a signal of its own (a wait that does,
 // as `SourceRegistry.inFlight` does, is bounded by the signal it is given):
@@ -144,7 +135,7 @@ export function waitWithin(
   work: (signal: AbortSignal) => Promise<unknown>,
   ms: number,
   late: (e: unknown) => void,
-  after: After,
+  after: Timekeeper["after"],
 ): Promise<WaitEnd> {
   const wait = new AbortController();
   const clear = after(Math.max(0, ms), () => wait.abort());

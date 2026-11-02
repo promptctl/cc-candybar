@@ -21,6 +21,7 @@ import { instantOf } from "../src/utils/instant";
 import { contrastRatio } from "@promptctl/rich-js";
 import { truecolorOf } from "./helpers/frame";
 import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
+import { systemTimekeeper } from "../src/time";
 
 const OPTS = {
   endcaps: "plain" as const,
@@ -52,7 +53,7 @@ function renderOf(
     new Set(listResolvablePaletteNames()),
     DEFAULT_DSL_CONFIG,
   );
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   return drawPayload(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), {
@@ -132,7 +133,7 @@ describe("{{ picker }} over a catalogue", () => {
       new Set(listResolvablePaletteNames()),
       DEFAULT_DSL_CONFIG,
     );
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
     const compiled = registerDslConfig(config, registry, {
       signer: TEST_SIGNER,

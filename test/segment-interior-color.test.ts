@@ -19,6 +19,7 @@ import { registerDslConfig } from "../src/dsl/render";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { instantOf } from "../src/utils/instant";
+import { systemTimekeeper } from "../src/time";
 
 // Fires every interior-colored branch: staged→green "S", unstaged→red "U",
 // ahead→green "+1", behind→red "-1".
@@ -62,7 +63,7 @@ function render(): Frame {
     DEFAULT_DSL_CONFIG,
   );
 
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
   try {
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });

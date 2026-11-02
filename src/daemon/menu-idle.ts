@@ -16,6 +16,7 @@
 import { closesAt } from "../config/menu-timeout.js";
 import type { Instant } from "../utils/instant.js";
 import type { IdleClose } from "./verbs/index.js";
+import type { Timekeeper } from "../time";
 
 interface Idle {
   since: Instant;
@@ -23,7 +24,7 @@ interface Idle {
   shown: boolean;
   // The instant of the frame `shown` and `timeoutS` were read off.
   drawnAt: Instant;
-  timer: { readonly at: Instant; readonly handle: NodeJS.Timeout } | null;
+  timer: { readonly at: Instant; readonly clear: () => void } | null;
   // A close is waiting for its turn or running: no second one is due.
   closing: boolean;
 }
@@ -36,6 +37,8 @@ export interface MenuIdleStats {
 }
 
 export interface MenuIdleDeps {
+  // The daemon's clock, which the close timers run on.
+  readonly clock: Pick<Timekeeper, "after">;
   // The instant now, on the clock renders are drawn by.
   readonly now: () => Instant;
   // Close the session's menus: the journaled write a ✕ makes
@@ -162,16 +165,16 @@ export class MenuIdle {
     if (idle.timer?.at === due) return;
     this.disarm(idle);
     if (due === null) return;
-    const handle = setTimeout(
-      () => this.fire(sessionId),
+    const clear = this.deps.clock.after(
       Math.max(0, (due - this.deps.now()) * 1000),
+      () => this.fire(sessionId),
+      { unref: true },
     );
-    handle.unref();
-    idle.timer = { at: due, handle };
+    idle.timer = { at: due, clear };
   }
 
   private disarm(idle: Idle): void {
-    if (idle.timer !== null) clearTimeout(idle.timer.handle);
+    idle.timer?.clear();
     idle.timer = null;
   }
 

@@ -16,6 +16,7 @@ import type { ColorCompatibility } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { Instant } from "../src/utils/instant";
 import { parseAndValidate } from "./helpers/parse-and-validate";
+import { systemTimekeeper } from "../src/time";
 
 const AT = 1_800_000_000 as Instant;
 
@@ -34,7 +35,7 @@ function frameOf(
     undefined,
     DEFAULT_DSL_CONFIG,
   );
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, {
     signer: TEST_SIGNER,

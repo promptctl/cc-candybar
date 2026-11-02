@@ -16,6 +16,7 @@ import { join } from "node:path";
 
 import { CacheExpiryProvider, cacheExpiresAt } from "../src/segments/cache";
 import { ABSENT, PENDING, ok } from "../src/utils/outcome";
+import { systemTimekeeper } from "../src/time";
 
 const TTL_SEC = 60 * 60;
 
@@ -152,14 +153,14 @@ describe("CacheExpiryProvider", () => {
   const B = "2026-01-01T00:00:09.000Z"; // same length as A
 
   test("a draw before any request reads it as not answered yet", () => {
-    expect(new CacheExpiryProvider().expiryOf("s")).toBe(PENDING);
+    expect(new CacheExpiryProvider(systemTimekeeper).expiryOf("s")).toBe(PENDING);
   });
 
   test("a failed read is read again under the same stamp, never believed", async () => {
     // A failure says nothing about the bytes at the stamp: an unreadable file
     // keeps its stat (and so its stamp), and becomes readable again.
     const path = writeTranscript([entry({ ts: A, cacheRead: 1 })]);
-    const provider = new CacheExpiryProvider();
+    const provider = new CacheExpiryProvider(systemTimekeeper);
     chmodSync(path, 0o000);
     try {
       expect((await provider.refresh("s", path)).kind).toBe("failed");
@@ -175,7 +176,7 @@ describe("CacheExpiryProvider", () => {
   test("each read of the tail is one refresh counted; an answer believed under its stamp is none", async () => {
     const lines: string[] = [];
     const path = writeTranscript([entry({ ts: A, cacheRead: 1 })]);
-    const provider = new CacheExpiryProvider((level, msg) =>
+    const provider = new CacheExpiryProvider(systemTimekeeper, (level, msg) =>
       lines.push(`${level} ${msg}`),
     );
     await provider.refresh("s", path);
@@ -194,7 +195,7 @@ describe("CacheExpiryProvider", () => {
     const MTIME = 1_700_000_000;
     const path = writeTranscript([entry({ ts: A, cacheRead: 1 })]);
     utimesSync(path, MTIME, MTIME);
-    const provider = new CacheExpiryProvider();
+    const provider = new CacheExpiryProvider(systemTimekeeper);
     expect(await provider.refresh("s", path)).toEqual(ok(at(A)));
     expect(provider.expiryOf("s")).toEqual(ok(at(A)));
 

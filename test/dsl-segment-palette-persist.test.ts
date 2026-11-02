@@ -79,6 +79,7 @@ import { instantOf } from "../src/utils/instant";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
+import { systemTimekeeper } from "../src/time";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -285,9 +286,12 @@ function buildRuntime(src: string, sessionId = "s1", dflt?: DslConfig) {
   const config = parseAndValidate("<test>", src, ALLOWED, dflt);
   const sessionState = new SessionState();
   durable.seedOrigin(sessionState, sessionId);
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
+  const compiled = registerDslConfig(config, registry, {
+    signer: TEST_SIGNER,
+    cwd: process.cwd(),
+  });
   const render = (width = Number.POSITIVE_INFINITY): Frame =>
     drawPayload(
       config,
@@ -298,7 +302,12 @@ function buildRuntime(src: string, sessionId = "s1", dflt?: DslConfig) {
       instantOf(new Date()),
       opts(width),
     ).frame;
-  const ctx: VerbContext = testVerbContext(sessionState, durable.historyFor(sessionState), config, durable.host);
+  const ctx: VerbContext = testVerbContext(
+    sessionState,
+    durable.historyFor(sessionState),
+    config,
+    durable.host,
+  );
   const click = async (url: string): Promise<void> => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =
@@ -470,7 +479,17 @@ describe("config-file-store: segment-palette placement", () => {
     }`;
     durable.write(text);
     expect(() =>
-      writeValues(store(), { path: durable.configPath, above: [], repo: null, cwd: null, locs: locations(durable.host) }, [["segments.ghost.palette", "nord"]]),
+      writeValues(
+        store(),
+        {
+          path: durable.configPath,
+          above: [],
+          repo: null,
+          cwd: null,
+          locs: locations(durable.host),
+        },
+        [["segments.ghost.palette", "nord"]],
+      ),
     ).toThrow(
       /cannot edit segments\.ghost\.palette: neither the config file nor the bundled default declares segments\.ghost/,
     );
@@ -487,15 +506,40 @@ function makeCache(): {
 } {
   const cleanups: Array<() => void> = [];
   const watchers = new WatcherRegistry({
-    counters: { watchersOpened: 0, watchersClosed: 0, watchRefusals: 0, watchErrors: 0, dirWatchesOpened: 0, dirWatchesClosed: 0 },
+    clock: systemTimekeeper,
+    counters: {
+      watchersOpened: 0,
+      watchersClosed: 0,
+      watchRefusals: 0,
+      watchErrors: 0,
+      dirWatchesOpened: 0,
+      dirWatchesClosed: 0,
+    },
     logger: () => {},
   });
   cleanups.push(() => watchers.closeAll());
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
   const cache = new RenderCache(
-    { stateDir: stateDir(durable.host), locations: locations(durable.host), env: durable.host.env, launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, gates: bareGates(), fileEvents: NO_FILE_EVENTS, sessionState, watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
-    { budgetBytes: () => renderCacheBudget(memoryLimitBytes({})), observers: reloads.observers },
+    {
+      clock: systemTimekeeper,
+      stateDir: stateDir(durable.host),
+      locations: locations(durable.host),
+      env: durable.host.env,
+      launcher: processLauncher,
+      storage: NO_PLUGIN_STORAGE,
+      signer: TEST_SIGNER,
+      gates: bareGates(),
+      fileEvents: NO_FILE_EVENTS,
+      sessionState,
+      watchers,
+      source: SOURCES_NOTHING,
+      declare: DECLARES_NOTHING,
+    },
+    {
+      budgetBytes: () => renderCacheBudget(memoryLimitBytes({})),
+      observers: reloads.observers,
+    },
   );
   cleanups.unshift(() => cache.close());
   return { cache, cleanups, reloads };
@@ -541,7 +585,13 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
       await reloads.after(entry, () =>
         writeValues(
           store(),
-          { path: durable.configPath, above: [], repo: null, cwd: null, locs: locations(durable.host) },
+          {
+            path: durable.configPath,
+            above: [],
+            repo: null,
+            cwd: null,
+            locs: locations(durable.host),
+          },
           [["segments.sidebar.palette", "nord"]],
         ),
       );
@@ -573,7 +623,13 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
     }`);
     writeValues(
       store(),
-      { path: durable.configPath, above: [], repo: null, cwd: null, locs: locations(durable.host) },
+      {
+        path: durable.configPath,
+        above: [],
+        repo: null,
+        cwd: null,
+        locs: locations(durable.host),
+      },
       [["segments.sidebar.palette", "gruvbox"]],
     );
 
@@ -612,7 +668,13 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
     }`);
     writeValues(
       store(),
-      { path: durable.configPath, above: [], repo: null, cwd: null, locs: locations(durable.host) },
+      {
+        path: durable.configPath,
+        above: [],
+        repo: null,
+        cwd: null,
+        locs: locations(durable.host),
+      },
       [["segments.directory.palette", "nord"]],
     );
 

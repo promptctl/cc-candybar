@@ -31,6 +31,7 @@ import {
 } from "../proc/launch";
 import { readTailSync } from "../utils/transcript-fs";
 import type { StartTimeRead } from "./process-fingerprint";
+import type { Timekeeper } from "../time.js";
 
 export function actsDir(stateDir: string, entryPath: string): string {
   const key = createHash("sha256").update(entryPath).digest("hex").slice(0, 16);
@@ -163,7 +164,8 @@ function removeAct(dir: string, act: number): void {
 }
 
 // When this boot began, by the wall clock the record's start is written in.
-const bootedAt = (): number => Date.now() - os.uptime() * 1000;
+const bootedAt = (clock: Pick<Timekeeper, "now">): number =>
+  clock.now() - os.uptime() * 1000;
 
 // Whether the job's group is the one the record names. A job started before
 // this boot is gone, whatever holds its pid now. A live leader whose start
@@ -174,7 +176,7 @@ const bootedAt = (): number => Date.now() - os.uptime() * 1000;
 export async function isRecordedJob(
   record: ActRecord,
   read: (pid: number) => Promise<StartTimeRead>,
-  boot: number = bootedAt(),
+  boot: number,
 ): Promise<boolean> {
   if (record.started <= boot || !jobGroupAlive(record.pid)) return false;
   const leader = await read(record.pid);
@@ -223,6 +225,7 @@ const sameJob = (a: ActRecord, b: ActRecord): boolean =>
 export function makeActReader(
   dir: string,
   read: (pid: number) => Promise<StartTimeRead>,
+  clock: Pick<Timekeeper, "now">,
 ): ActReader {
   let known: Known | null = null;
 
@@ -232,7 +235,11 @@ export function makeActReader(
     const record = readRecord(actDir);
     if (record === null) return null;
     if (known === null || !sameJob(known.record, record)) {
-      known = { record, ours: await isRecordedJob(record, read), final: null };
+      known = {
+        record,
+        ours: await isRecordedJob(record, read, bootedAt(clock)),
+        final: null,
+      };
     }
     if (known.final !== null) return known.final;
     known.ours = known.ours && jobGroupAlive(record.pid);
@@ -355,7 +362,11 @@ const CLAIMED_FIRST: Claim = {
 // Ends an act whose group its reader saw alive past its deadline, with a
 // `timeout` verdict unless the job's own landed first: a live read already
 // proved the group the recorded job.
-export function endOverdue(dir: string, facts: ActFacts): JobEnding {
+export function endOverdue(
+  dir: string,
+  facts: ActFacts,
+  clock: Pick<Timekeeper, "after">,
+): JobEnding {
   const status = filesOf(path.join(dir, String(facts.act))).status;
-  return endJob(facts.record.pid, status, { kind: "timeout" });
+  return endJob(facts.record.pid, status, { kind: "timeout" }, clock);
 }

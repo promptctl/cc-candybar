@@ -26,6 +26,7 @@ import {
   type LaneSwitches,
 } from "../src/config/lanes";
 import { instantOf, type Instant } from "../src/utils/instant";
+import { systemTimekeeper } from "../src/time";
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
@@ -155,7 +156,10 @@ function harness(opts: {
     },
     refreshes: () => ledger.totals(),
     periods: PERIODS,
-    now: () => Date.now() + state.skewMs,
+    clock: {
+      monotonic: () => Date.now() + state.skewMs,
+      after: systemTimekeeper.after,
+    },
     instant: () =>
       (Math.floor(Date.now() - Math.random() * state.jitterMs) / 1000 +
         state.wallOffsetS) as Instant,
@@ -1367,7 +1371,7 @@ describe("a feed draws when its bar next changes", () => {
 // saying so, with no failure branch in the lane.
 test("a frame whose render threw is the failure's Frame, a still bar in the error glyph's words", () => {
   const parts = {
-    clock: { date: () => new Date(0) },
+    clock: { now: () => 0 },
     renderCache: {
       holdView: () => null,
       openFailure: () => ({ error: new Error("the view would not open") }),

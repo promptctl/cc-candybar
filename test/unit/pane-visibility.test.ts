@@ -10,6 +10,7 @@ import {
   type StatusLines,
 } from "../../src/daemon/pane-visibility";
 import type { TmuxRun } from "../../src/proc/tmux";
+import { systemTimekeeper } from "../../src/time";
 
 const hint = (socket: string, pane: string) => ({
   socket,
@@ -86,7 +87,7 @@ describe("PaneVisibility", () => {
     const log: string[] = [];
     const sockets = new Set(Object.keys(answers));
     const counts = { asks: 0, inFlight: 0, overlap: false, readFails: false };
-    const visibility = new PaneVisibility({
+    const visibility = new PaneVisibility({ clock: systemTimekeeper,
       listPanes: async (socket) => {
         counts.asks++;
         counts.inFlight++;

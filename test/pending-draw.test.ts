@@ -25,6 +25,7 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { lastBinding } from "./helpers/render-binding";
 import { selectionFor } from "./helpers/selection";
 import { textOf, ansiOf, type Frame } from "../src/render/frame";
+import { systemTimekeeper } from "../src/time";
 
 const AT = 1_800_000_000 as Instant;
 
@@ -52,7 +53,7 @@ interface Drawn {
 
 function renderer(cfg: ValidatedConfig) {
   const compiled = compileDslConfig(compileInputOf(cfg), TEST_SIGNER);
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const session = new SessionState();
   const registry = new SourceRegistry(processLauncher, store, "", session);
   declareDslVariables(cfg, registry, "/tmp", EVERY_SCOPE);

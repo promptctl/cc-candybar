@@ -44,7 +44,11 @@ const REPOS: ReadonlyArray<readonly [string, RepoShape, number]> = [
   ["large", { files: 10_000, commits: 50, modified: 200, untracked: 100 }, 20],
 ];
 
-const gitBenchmark = ([name, shape, samples]: (typeof REPOS)[number]): Benchmark => ({
+const gitBenchmark = ([
+  name,
+  shape,
+  samples,
+]: (typeof REPOS)[number]): Benchmark => ({
   id: `sources.git.${name}`,
   group: "sources",
   about: `every git fact the bundled presets ask, read from a checkout of ${shape.files} files with ${shape.modified} modified and ${shape.untracked} untracked (git spawned as the daemon spawns it)`,
@@ -113,7 +117,10 @@ const COLD_TURNS: ReadonlyArray<readonly [number, number]> = [
   [20_000, 4],
 ];
 
-const coldFold = ([turns, samples]: (typeof COLD_TURNS)[number]): Benchmark => ({
+const coldFold = ([
+  turns,
+  samples,
+]: (typeof COLD_TURNS)[number]): Benchmark => ({
   id: `sources.usage.cold.${turns}`,
   group: "sources",
   about: `a session's first fold of a transcript of ${turns} turns (~${turns * 3} lines), by a store that has never read it`,
@@ -124,7 +131,11 @@ const coldFold = ([turns, samples]: (typeof COLD_TURNS)[number]): Benchmark => (
       const transcript = path.join(root, "t.jsonl");
       writeTranscript(transcript, SESSION, root, turns);
       const ms = await repeat(plan.samples, async () => {
-        const store = new SessionUsageStore({ host: processWorld().host, sweepIntervalMs: 0 });
+        const store = new SessionUsageStore({
+          host: processWorld().host,
+          clock: processWorld().clock,
+          sweepIntervalMs: 0,
+        });
         await folded(store, root, transcript, turns);
       });
       return measured([{ name: "fold", samples: ms }], {
@@ -154,7 +165,11 @@ const warmFold = (
     try {
       const transcript = path.join(root, "t.jsonl");
       writeTranscript(transcript, SESSION, root, WARM_TURNS);
-      const store = new SessionUsageStore({ host: processWorld().host, sweepIntervalMs: 0 });
+      const store = new SessionUsageStore({
+        host: processWorld().host,
+        clock: processWorld().clock,
+        sweepIntervalMs: 0,
+      });
       let turns = WARM_TURNS;
       await folded(store, root, transcript, turns);
       // The writer's cost stays out of the timed fold.

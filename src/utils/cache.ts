@@ -1,12 +1,16 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import { setTimeout } from "node:timers/promises";
 import { debug } from "./logger";
+import { sleep, type Timekeeper } from "../time";
 
 interface ErrnoError extends Error {
   code?: string;
 }
+
+// [LAW:effects-at-boundaries] What the cache waits and dates entries on: every
+// method that sleeps or stamps takes the owner's clock, so a test holds it.
+export type CacheClock = Pick<Timekeeper, "now" | "after">;
 
 export interface CacheEntry<T> {
   data: T;
@@ -60,6 +64,7 @@ export class CacheManager {
 
   private static async acquireLock(
     root: string,
+    clock: CacheClock,
     name: string,
     timeout = 5000,
   ): Promise<boolean> {
@@ -68,10 +73,10 @@ export class CacheManager {
 
     await this.ensureCacheDirectories(root);
     const lockFile = path.join(this.locksDir(root), name);
-    const startTime = Date.now();
+    const startTime = clock.now();
     const lockContent = String(process.pid);
 
-    while (Date.now() - startTime < timeout) {
+    while (clock.now() - startTime < timeout) {
       try {
         await fs.promises.writeFile(lockFile, lockContent, {
           flag: FILE_CREATE_FLAG,
@@ -80,7 +85,7 @@ export class CacheManager {
         return true;
       } catch (error) {
         if ((error as ErrnoError).code === "EEXIST") {
-          await setTimeout(RETRY_DELAY_MS);
+          await sleep(clock, RETRY_DELAY_MS);
         } else {
           throw error;
         }
@@ -120,6 +125,7 @@ export class CacheManager {
 
   static async getUsageCache(
     root: string,
+    clock: CacheClock,
     cacheType: "pricing",
     latestMtime?: number,
   ): Promise<unknown> {
@@ -135,7 +141,7 @@ export class CacheManager {
       const isCurrentlyLocked = this.isLocked(root, lockName);
       if (isCurrentlyLocked) {
         debug(`Cache for ${cacheType} is locked, waiting...`);
-        await setTimeout(RETRY_DELAY_MS);
+        await sleep(clock, RETRY_DELAY_MS);
         continue;
       }
 
@@ -162,7 +168,7 @@ export class CacheManager {
         debug(
           `Attempt ${attemptNumber} failed to read ${cacheType} cache: ${(error as Error).message}. Retrying...`,
         );
-        await setTimeout(RETRY_DELAY_MS);
+        await sleep(clock, RETRY_DELAY_MS);
       }
     }
 
@@ -182,12 +188,13 @@ export class CacheManager {
 
   static async setUsageCache(
     root: string,
+    clock: CacheClock,
     cacheType: "pricing",
     data: unknown,
     latestMtime?: number,
   ): Promise<void> {
     const lockName = `${cacheType}.usage.lock`;
-    const lockAcquired = await this.acquireLock(root, lockName);
+    const lockAcquired = await this.acquireLock(root, clock, lockName);
     if (!lockAcquired) {
       debug(`Could not acquire lock to set usage cache for ${cacheType}`);
       return;
@@ -196,7 +203,7 @@ export class CacheManager {
     try {
       await this.ensureCacheDirectories(root);
       const cachePath = path.join(this.usageDir(root), `${cacheType}.json`);
-      const cacheTimestamp = latestMtime || Date.now();
+      const cacheTimestamp = latestMtime || clock.now();
       const cacheEntry: CacheEntry<unknown> = {
         data,
         timestamp: cacheTimestamp,

@@ -14,6 +14,7 @@ import { join } from "node:path";
 import { GitService } from "../src/segments/git";
 import { createLauncher } from "../src/proc/launch";
 import { ABSENT, ok } from "../src/utils/outcome";
+import { systemTimekeeper } from "../src/time";
 
 function run(cmd: string, cwd: string): void {
   execSync(cmd, { cwd, stdio: "pipe" });
@@ -184,7 +185,7 @@ describe("GitService outcome classification", () => {
     const shadowed = new GitService(
       createLauncher({
         inherited: { ...process.env, GIT_CONFIG_GLOBAL: fakeGlobal },
-      }),
+      }, systemTimekeeper),
     );
     try {
       const remotes = await shadowed.getRemotesAsync(repo);

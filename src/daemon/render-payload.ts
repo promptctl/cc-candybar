@@ -102,6 +102,7 @@ import type { RefreshFaults, RefreshLane } from "./refresh-faults.js";
 import type { SessionId } from "./session-id.js";
 import type { ManagedStorage, StorageKey } from "./cache/managed-storage.js";
 import type { JsonValue } from "../var-system/types.js";
+import type { Timekeeper } from "../time";
 
 // The resolved globals as the options drawDsl's joiner and cells read (its
 // selection is the resolution itself — RenderSelection is a Pick of it).
@@ -593,6 +594,9 @@ export interface RenderPayloadDeps {
   readonly hostService: HostService;
   // The log for a session lane whose refresh threw: a bug no owner saw.
   readonly log: DaemonLogger;
+  // [LAW:effects-at-boundaries] The daemon's clock, which times each lane's
+  // refresh.
+  readonly clock: Pick<Timekeeper, "monotonic">;
   // Each session lane whose refresh threw, until one runs clean.
   readonly faults: RefreshFaults;
   // The lanes the view's latest declaration handed it (`declareLanes`), read
@@ -1065,7 +1069,7 @@ export async function refreshPayload(
     run: () => Promise<unknown>,
   ): Promise<void> => {
     if (!needed) return;
-    const startedAt = performance.now();
+    const startedAt = deps.clock.monotonic();
     refreshed.set(name, null);
     let threw: string | null = null;
     try {
@@ -1074,7 +1078,7 @@ export async function refreshPayload(
       deps.log("error", `${name} lane threw: ${inspect(e)}`);
       threw = `${name}: ${String(e)}`;
     }
-    refreshed.set(name, Math.round(performance.now() - startedAt));
+    refreshed.set(name, Math.round(deps.clock.monotonic() - startedAt));
     deps.faults.refreshed(sessionId, name, threw);
   };
   await Promise.all([

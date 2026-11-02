@@ -129,7 +129,7 @@ Each row is tested once, at its adapter.
 
 | Dependency | Today | Ticket | Real side |
 |---|---|---|---|
-| Time and timers | `Date.now` 88, `performance.now` 14, `new Date()` 7, timers 38, `DaemonClock` in the daemon, `RuntimeStats` keeps its own | 11 | Real clock |
+| Time and timers | One `Timekeeper` (`src/time.ts`), handed down from the process's world; lint keeps every other file off the real clock | 11 | Real clock |
 | Child processes | `src/proc/launch.ts`, imported directly | 12 | Real child process |
 | Process table | `pidAlive` and `readStartTime`, imported directly | 12 | Real processes |
 | Files and file change events | `fs` at 173 sites, `DaemonStorage` for two families, `fs.watch` direct, `fs.statSync` in the binary watch | 14 | Temp directory, real `fs.watch` |

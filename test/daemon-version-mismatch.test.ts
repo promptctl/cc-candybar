@@ -15,6 +15,7 @@ import type {
   TransientOutcome,
 } from "../src/daemon/client-transport";
 import { planOutcome } from "../src/render/outcome-plan";
+import { systemTimekeeper } from "../src/time";
 
 // [LAW:behavior-not-structure] These tests assert the contract — what a
 // version-mismatched client sees and how the daemon responds — not the
@@ -331,7 +332,7 @@ describe("wire trust boundary: unknown error codes (kz8.5 followup)", () => {
     });
     try {
       const { tryRenderViaDaemon } = await import("../src/daemon/client");
-      return await tryRenderViaDaemon(host,
+      return await tryRenderViaDaemon({ host, clock: systemTimekeeper },
         {
           session_id: "test-trust-boundary",
           workspace: { project_dir: "/tmp" },
@@ -490,7 +491,7 @@ describe("wire trust boundary: protocol-violation exceptions are permanent", () 
     });
     try {
       const { tryRenderViaDaemon } = await import("../src/daemon/client");
-      return await tryRenderViaDaemon(host,
+      return await tryRenderViaDaemon({ host, clock: systemTimekeeper },
         {
           session_id: "test-proto",
           workspace: { project_dir: "/tmp" },

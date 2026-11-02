@@ -58,6 +58,7 @@ import type { ConfigLoad, DoctorEdge, DoctorStores } from "../src/doctor/edge";
 import type { TmuxHint } from "../src/tmux-hint";
 import type { TerminalEnvHint } from "../src/terminal-hint";
 import { instantOf } from "../src/utils/instant";
+import { systemTimekeeper } from "../src/time";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const TAB_KEY = `${SETTINGS_NS}tab`;
@@ -147,7 +148,7 @@ function buildRuntime(
   );
   const clients = new RenderSightings();
   clients.see("s1", renderSaid(client.hint, sessionAt()), instantOf(new Date()), 0);
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   const render = (): string =>

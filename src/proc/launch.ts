@@ -50,7 +50,7 @@ import type { Readable } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
 import { types } from "node:util";
 import type { ChildProcess, StdioOptions } from "node:child_process";
-import { setImmediate } from "node:timers";
+import type { Timekeeper } from "../time";
 
 import type { LaunchStatsHandle } from "./stats-handle";
 
@@ -204,6 +204,7 @@ const RATE_LIMITS: Partial<Record<LaunchCategory, number>> = {
 function checkRateLimit(
   lastStartAt: ReadonlyMap<LaunchCategory, number>,
   category: LaunchCategory,
+  now: number,
 ):
   | { allowed: true }
   | { allowed: false; minIntervalMs: number; sinceLastMs: number } {
@@ -211,7 +212,7 @@ function checkRateLimit(
   if (minIntervalMs === undefined) return { allowed: true };
   const last = lastStartAt.get(category);
   if (last === undefined) return { allowed: true };
-  const sinceLastMs = Date.now() - last;
+  const sinceLastMs = now - last;
   if (sinceLastMs >= minIntervalMs) return { allowed: true };
   return { allowed: false, minIntervalMs, sinceLastMs };
 }
@@ -328,6 +329,10 @@ export interface LaunchScope {
   // terminated and a later one refused, whichever part of the owner's work it
   // was. An aborted scope stays closed: nothing replaces it.
   readonly signal: AbortSignal;
+  // The machine's clock: what its launches time themselves, their timeouts and
+  // kill grace run on, and where they wait for a loop turn. A child lives in
+  // real time, so a held daemon is handed the real one here.
+  readonly clock: Timekeeper;
 }
 
 // [LAW:one-source-of-truth] Everything one owner's launches read and leave
@@ -386,7 +391,7 @@ function admit(
     state.scope.stats?.onRefused(category);
     return refusal;
   }
-  state.lastStartAt.set(category, Date.now());
+  state.lastStartAt.set(category, state.scope.clock.now());
   return null;
 }
 
@@ -397,7 +402,11 @@ function refusalOf(
 ): Refusal | null {
   if (state.scope.signal.aborted) return refusedAsAborted(state.scope.signal);
   if (signal?.aborted) return refusedAsAborted(signal);
-  const gate = checkRateLimit(state.lastStartAt, category);
+  const gate = checkRateLimit(
+    state.lastStartAt,
+    category,
+    state.scope.clock.now(),
+  );
   return gate.allowed
     ? null
     : rateLimitedResult(category, gate.minIntervalMs, gate.sinceLastMs);
@@ -480,9 +489,9 @@ function lifelineWarnings(state: LaunchState): LifelineWarning[] {
 // on the launcher's PATH, as every launched program is: where a machine keeps
 // it is the machine's fact (NixOS has no /usr/bin/awk).
 function spawnLifeline(state: LaunchState): Lifeline | null {
-  const { stats } = state.scope;
+  const { stats, clock } = state.scope;
   stats?.onStart("lifeline");
-  const t0 = Date.now();
+  const t0 = clock.now();
   let line: ChildProcess;
   try {
     line = spawn("awk", [LIFELINE_PROGRAM], {
@@ -490,11 +499,11 @@ function spawnLifeline(state: LaunchState): Lifeline | null {
       detached: true,
     });
   } catch (err) {
-    stats?.onEnd("lifeline", Date.now() - t0);
+    stats?.onEnd("lifeline", clock.now() - t0);
     setFault(state, `did not start: ${spawnErrorText(err, undefined)}`);
     return null;
   }
-  stats?.onEnd("lifeline", Date.now() - t0);
+  stats?.onEnd("lifeline", clock.now() - t0);
   // stdio[0] is "pipe", so Node hands back a socket, unless descriptors ran out:
   // that spawn fails with no throw and no stdin, and only its "error" says why.
   const pipe = line.stdin as Socket | null;
@@ -597,10 +606,10 @@ async function launchWaited(
   state: LaunchState,
   opts: AsyncLaunchOpts,
 ): Promise<LaunchResult> {
-  const { stats } = state.scope;
+  const { stats, clock } = state.scope;
   const refused = admit(state, opts.category, opts.signal);
   if (refused !== null) return refused;
-  const t0 = Date.now();
+  const t0 = clock.now();
   stats?.onStart(opts.category);
 
   return new Promise<LaunchResult>((resolve) => {
@@ -613,7 +622,7 @@ async function launchWaited(
         detached: true,
       });
     } catch (err) {
-      stats?.onEnd(opts.category, Date.now() - t0);
+      stats?.onEnd(opts.category, clock.now() - t0);
       resolve({
         ok: false,
         reason: "spawn-error",
@@ -635,9 +644,10 @@ async function launchWaited(
     const stderr = capture(child.stderr);
     const output = () => ({ stdout: stdout(), stderr: stderr() });
     let settled = false;
-    let timer: NodeJS.Timeout | null = null;
-    let killTimer: NodeJS.Timeout | null = null;
-    let groupEndTimer: NodeJS.Timeout | null = null;
+    // What clears each timer the launch has armed.
+    let timer: (() => void) | null = null;
+    let killTimer: (() => void) | null = null;
+    let groupEndTimer: (() => void) | null = null;
     // [LAW:dataflow-not-control-flow] Whether the close was caused by *our*
     // termination — and which — is data we have to carry. The OS doesn't tell
     // us why a child was signalled — without it, SIGKILL from the OOM killer,
@@ -654,12 +664,12 @@ async function launchWaited(
     const finish = (deliver: () => void) => {
       if (settled) return;
       settled = true;
-      if (timer) clearTimeout(timer);
-      if (killTimer) clearTimeout(killTimer);
-      if (groupEndTimer) clearTimeout(groupEndTimer);
+      timer?.();
+      killTimer?.();
+      groupEndTimer?.();
       unlisten();
       if (group !== undefined) unguard(state, group);
-      stats?.onEnd(opts.category, Date.now() - t0);
+      stats?.onEnd(opts.category, clock.now() - t0);
       // Whatever outlives the launch — a refused child, a descendant that left
       // the group — keeps its pipes: a destroyed one would kill it with SIGPIPE
       // at its next write, for as long as the launcher lives to read them.
@@ -700,16 +710,15 @@ async function launchWaited(
       const awaitGroupEnd = (delayMs: number) => {
         if (settled) return;
         if (groupGone(group)) {
-          setImmediate(concludeWithGroup);
+          clock.defer(concludeWithGroup);
           return;
         }
-        groupEndTimer = setTimeout(
-          () => awaitGroupEnd(Math.min(delayMs * 2, GROUP_END_POLL_MAX_MS)),
-          delayMs,
+        groupEndTimer = clock.after(delayMs, () =>
+          awaitGroupEnd(Math.min(delayMs * 2, GROUP_END_POLL_MAX_MS)),
         );
       };
       void exited.then(() =>
-        setImmediate(() => awaitGroupEnd(GROUP_END_POLL_MIN_MS)),
+        clock.defer(() => awaitGroupEnd(GROUP_END_POLL_MIN_MS)),
       );
     }
 
@@ -730,21 +739,21 @@ async function launchWaited(
       const ended = child.exitCode !== null || child.signalCode !== null;
       if (ended && group !== undefined && groupGone(group)) {
         terminated = cause === "aborted" ? cause : null;
-        setImmediate(concludeWithGroup);
+        clock.defer(concludeWithGroup);
         return;
       }
       terminated = cause;
-      if (timer) clearTimeout(timer);
+      timer?.();
       unlisten();
       const pid = child.pid;
       if (pid !== undefined) {
         // Escalation armed first, so a refused SIGTERM's cleanup clears it.
         // Concluding here is not behind the group's end: a group holding an
         // unreaped zombie never reads as gone, and this is that launch's bound.
-        killTimer = setTimeout(() => {
+        killTimer = clock.after(TIMEOUT_KILL_GRACE_MS, () => {
           signal(pid, "SIGKILL");
-          void exited.then(() => setImmediate(concludeWithGroup));
-        }, TIMEOUT_KILL_GRACE_MS);
+          void exited.then(() => clock.defer(concludeWithGroup));
+        });
         signal(pid, "SIGTERM");
       }
     };
@@ -792,7 +801,7 @@ async function launchWaited(
     child.on("close", conclude);
 
     if (opts.timeoutMs && opts.timeoutMs > 0) {
-      timer = setTimeout(() => terminate("timeout"), opts.timeoutMs);
+      timer = clock.after(opts.timeoutMs, () => terminate("timeout"));
     }
     opts.signal?.addEventListener("abort", onAbort, { once: true });
     state.inFlight.add(onAbort);
@@ -808,10 +817,10 @@ async function launchWaited(
 // Sync variant. For callers that genuinely cannot be async — the spawn
 // outcome must be settled before the function returns.
 function launchBlocking(state: LaunchState, opts: LaunchOpts): LaunchResult {
-  const { stats } = state.scope;
+  const { stats, clock } = state.scope;
   const refused = admit(state, opts.category);
   if (refused !== null) return refused;
-  const t0 = Date.now();
+  const t0 = clock.now();
   stats?.onStart(opts.category);
 
   const stdio: StdioOptions = ["pipe", "pipe", "pipe"];
@@ -826,7 +835,7 @@ function launchBlocking(state: LaunchState, opts: LaunchOpts): LaunchResult {
       encoding: "utf8",
     });
 
-    stats?.onEnd(opts.category, Date.now() - t0);
+    stats?.onEnd(opts.category, clock.now() - t0);
 
     const stdout = typeof result.stdout === "string" ? result.stdout : "";
     const stderr = typeof result.stderr === "string" ? result.stderr : "";
@@ -866,7 +875,7 @@ function launchBlocking(state: LaunchState, opts: LaunchOpts): LaunchResult {
       signal: result.signal ?? null,
     };
   } catch (err) {
-    stats?.onEnd(opts.category, Date.now() - t0);
+    stats?.onEnd(opts.category, clock.now() - t0);
     return {
       ok: false,
       reason: "spawn-error",
@@ -886,13 +895,13 @@ function launchBlocking(state: LaunchState, opts: LaunchOpts): LaunchResult {
 // `ok: false` rather than a discarded Promise reporting success), and meters
 // through the stats handle so orphan spawns still show up in daemon-stats.
 function launchOrphan(state: LaunchState, opts: LaunchOpts): LaunchResult {
-  const { stats } = state.scope;
+  const { stats, clock } = state.scope;
   const refused = admit(state, opts.category);
   if (refused !== null) return refused;
-  const t0 = Date.now();
+  const t0 = clock.now();
   stats?.onStart(opts.category);
   const result = launchDetachedSyncInner(state.scope, opts);
-  stats?.onEnd(opts.category, Date.now() - t0);
+  stats?.onEnd(opts.category, clock.now() - t0);
   return result;
 }
 
@@ -1015,11 +1024,11 @@ function launchJob(
   opts: LaunchOpts,
   files: JobFiles,
 ): JobLaunch {
-  const { stats } = state.scope;
+  const { stats, clock } = state.scope;
   const refused = admit(state, opts.category);
   if (refused !== null)
     return { ok: false, reason: refused.reason, error: refused.error };
-  const t0 = Date.now();
+  const t0 = clock.now();
   stats?.onStart(opts.category);
   let child: ChildProcess;
   try {
@@ -1043,14 +1052,14 @@ function launchJob(
       },
     );
   } catch (err) {
-    stats?.onEnd(opts.category, Date.now() - t0);
+    stats?.onEnd(opts.category, clock.now() - t0);
     return {
       ok: false,
       reason: "spawn-error",
       error: spawnErrorText(err, opts.cwd),
     };
   }
-  stats?.onEnd(opts.category, Date.now() - t0);
+  stats?.onEnd(opts.category, clock.now() - t0);
   // An async spawn failure has no pid; its `error` needs a listener or Node
   // crashes the launcher, and the missing pid already says it failed.
   child.once("error", () => {});
@@ -1145,7 +1154,12 @@ export interface JobEnding {
 // a group that outlives its verdict (a child the program left) is ended all the
 // same. A status whose directory is gone belongs to a job whose files were
 // removed once it had ended, so there is nothing left to end.
-export function endJob(pid: number, status: string, end: JobEnd): JobEnding {
+export function endJob(
+  pid: number,
+  status: string,
+  end: JobEnd,
+  clock: Pick<Timekeeper, "after">,
+): JobEnding {
   const staged = `${status}.${process.pid}`;
   try {
     writeFileSync(staged, `${formatJobEnd(end)}\n`);
@@ -1166,7 +1180,9 @@ export function endJob(pid: number, status: string, end: JobEnd): JobEnding {
   }
   const signalled = signalJob(pid, "SIGTERM");
   if (signalled) {
-    setTimeout(() => signalJob(pid, "SIGKILL"), TIMEOUT_KILL_GRACE_MS).unref();
+    clock.after(TIMEOUT_KILL_GRACE_MS, () => signalJob(pid, "SIGKILL"), {
+      unref: true,
+    });
   }
   return { stands, signalled };
 }
@@ -1174,6 +1190,9 @@ export function endJob(pid: number, status: string, end: JobEnd): JobEnding {
 // [LAW:one-type-per-behavior] One owner's launches. Each form is one lifetime
 // (the header), and all of them cross the owner's gate and report to its stats.
 export interface Launcher {
+  // The machine's clock, which its children live on: a caller that waits on a
+  // launched child's own progress waits by this one, never by a held daemon's.
+  readonly clock: Timekeeper;
   launch(opts: AsyncLaunchOpts): Promise<LaunchResult>;
   launchDetachedSync(opts: LaunchOpts): LaunchResult;
   launchJobSync(opts: LaunchOpts, files: JobFiles): JobLaunch;
@@ -1213,30 +1232,38 @@ export interface TestableLauncher extends Launcher {
 // launcher a process main builds (bar-pane, the CLI, the daemon's shell before it
 // has a daemon) and the daemon's own differ only in what they are given.
 export type LaunchOwner = Pick<LaunchScope, "inherited"> &
-  Partial<Omit<LaunchScope, "inherited">>;
+  Partial<Omit<LaunchScope, "inherited" | "clock">>;
 
 // [LAW:no-ambient-temporal-coupling] An aborted scope ends what is in flight
 // and refuses what comes after, for good, whichever other launchers run.
 // [LAW:one-type-per-behavior] The daemon's launcher has no blocking form at
 // all, so no cast or `in` check reaches one.
-export function createLauncher(owner: LaunchOwner): TestableLauncher {
-  return launcherWithState(owner).launcher;
+export function createLauncher(
+  owner: LaunchOwner,
+  clock: Timekeeper,
+): TestableLauncher {
+  return launcherWithState(owner, clock).launcher;
 }
 
 // The same launcher, with its blocking form added: for the process's one-shot
 // launcher and the tests of that form.
 export function createOneShotLauncher(
   owner: LaunchOwner,
+  clock: Timekeeper,
 ): TestableLauncher & OneShotLauncher {
-  const { launcher, state } = launcherWithState(owner);
+  const { launcher, state } = launcherWithState(owner, clock);
   return { ...launcher, launchSync: (opts) => launchBlocking(state, opts) };
 }
 
-function launcherWithState(owner: LaunchOwner): {
+function launcherWithState(
+  owner: LaunchOwner,
+  clock: Timekeeper,
+): {
   launcher: TestableLauncher;
   state: LaunchState;
 } {
   const launcher: TestableLauncher = {
+    clock,
     launch: (opts) => track(state, launchWaited(state, opts)),
     launchDetachedSync: (opts) => launchOrphan(state, opts),
     launchJobSync: (opts, files) => launchJob(state, opts, files),
@@ -1266,6 +1293,7 @@ function launcherWithState(owner: LaunchOwner): {
           .forEach((w) => process.emitWarning(w.message)),
       signal: new AbortController().signal,
       ...owner,
+      clock,
     },
     lastStartAt: new Map(),
     inFlight: new Set(),

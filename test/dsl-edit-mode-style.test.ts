@@ -33,6 +33,7 @@ import { ConfigError } from "../src/config/dsl-loader";
 import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { instantOf } from "../src/utils/instant";
+import { systemTimekeeper } from "../src/time";
 
 const SID = "s-edit-look";
 const BASE_THEME = "textual-dark";
@@ -67,7 +68,7 @@ function src(extra = ""): string {
 function buildRuntime(source: string) {
   const config = parseAndValidate("<edit-look>", source, ALLOWED);
   const sessionState = new SessionState();
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   // [LAW:single-enforcer] The real gate is the one this session's config

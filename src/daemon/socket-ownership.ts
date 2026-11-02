@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { type DaemonLogger } from "../utils/logger";
 import { type LeaseRead } from "./socket-lease";
+import type { Timekeeper } from "../time";
 
 // ─── Socket ownership self-check ─────────────────────────────────────────────
 //
@@ -152,6 +153,8 @@ export interface OwnershipWatchDeps {
   readLease: () => LeaseRead;
   shutdown: (code: number) => void;
   log: DaemonLogger;
+  // The machine's clock: the check runs in real time, beside a real socket.
+  clock: Pick<Timekeeper, "every">;
   intervalMs?: number;
 }
 
@@ -191,18 +194,21 @@ export function makeOwnershipWatch(
   function arm(
     intervalMs: number = deps.intervalMs ?? DEFAULT_OWNERSHIP_CHECK_INTERVAL_MS,
   ): { disarm(): void } {
-    const timer = setInterval(() => {
-      // [LAW:no-ambient-temporal-coupling] Self-disarm once displaced: the watch
-      // has funneled its single shutdown, so stop polling — no zombie statSync
-      // fires during the shutdown window (a hung shutdown reaches its SIGKILL
-      // backstop at 500ms). The timer's whole lifecycle lives here in arm(),
-      // mirroring armBinaryWatch which clears its interval before shutting down.
-      if (check().kind === "displaced") clearInterval(timer);
-    }, intervalMs);
     // unref so the check never keeps the process alive on its own — it only ever
     // hastens an exit, never delays one.
-    timer.unref();
-    return { disarm: () => clearInterval(timer) };
+    const disarm = deps.clock.every(
+      intervalMs,
+      () => {
+        // [LAW:no-ambient-temporal-coupling] Self-disarm once displaced: the watch
+        // has funneled its single shutdown, so stop polling — no zombie statSync
+        // fires during the shutdown window (a hung shutdown reaches its SIGKILL
+        // backstop at 500ms). The timer's whole lifecycle lives here in arm(),
+        // mirroring armBinaryWatch which clears its interval before shutting down.
+        if (check().kind === "displaced") disarm();
+      },
+      { unref: true },
+    );
+    return { disarm };
   }
 
   return { check, arm };

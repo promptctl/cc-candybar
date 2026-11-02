@@ -449,11 +449,7 @@ export async function runUrlHandle(
     process.exit(1);
   }
 
-  const outcome = await tryClickViaDaemon(
-    world.host,
-    parsed.verb,
-    parsed.value,
-  );
+  const outcome = await tryClickViaDaemon(world, parsed.verb, parsed.value);
   if (outcome.kind === "ok") {
     process.exit(0);
   }
@@ -574,7 +570,7 @@ export async function runInstall(
     PACKAGE_NAME,
     assessCurrency(
       PACKAGE_VERSION,
-      await fetchLatestVersion(PACKAGE_NAME, fetch, REGISTRY_URL),
+      await fetchLatestVersion(PACKAGE_NAME, fetch, REGISTRY_URL, world.clock),
     ),
   );
   process[report.stream].write(report.text);

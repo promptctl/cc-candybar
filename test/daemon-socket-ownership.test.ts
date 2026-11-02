@@ -10,6 +10,7 @@ import {
   type SocketIdentity,
 } from "../src/daemon/socket-ownership";
 import { type LeaseRead } from "../src/daemon/socket-lease";
+import { systemTimekeeper } from "../src/time";
 
 const BOUND: SocketIdentity = { dev: 1, ino: 100 };
 const MY_PID = 4242;
@@ -171,6 +172,7 @@ describe("makeOwnershipWatch (armed self-check → single shutdown funnel)", () 
         readLease: () => MINE,
         shutdown: (code) => shutdownCalls.push(code),
         log: () => {},
+        clock: systemTimekeeper,
         intervalMs: 1000,
         ...over,
       },

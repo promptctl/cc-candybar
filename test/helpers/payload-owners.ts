@@ -54,6 +54,7 @@ import { UNFOLLOWED_FEEDS } from "../../src/config/lanes";
 import { Holds as HoldsClass } from "../../src/utils/holds";
 import { CacheExpiryProvider } from "../../src/segments/cache";
 import { RefreshFaults } from "../../src/daemon/refresh-faults";
+import { systemTimekeeper } from "../../src/time";
 
 type Answer<T> = Outcome<T> | Promise<Outcome<T>>;
 
@@ -271,7 +272,7 @@ export function absentOwners() {
     // directory come from.
     home: HOST.home,
     // The one lane reading a real file the tests write, as the daemon's does.
-    cacheExpiry: new CacheExpiryProvider(),
+    cacheExpiry: new CacheExpiryProvider(systemTimekeeper),
     gitProvider: fakeGit(() => ABSENT),
     usageStore: fakeUsage(),
     contextProvider: fakeContext(() => ABSENT),
@@ -280,8 +281,9 @@ export function absentOwners() {
     tmuxService: fakeTmux(() => ABSENT),
     autoCompact: fakeAutoCompact(() => ABSENT),
     faults: new RefreshFaults(),
+    clock: systemTimekeeper,
     // The machine's identity, read as the daemon reads it.
-    hostService: new HostService(),
+    hostService: new HostService({ clock: systemTimekeeper }),
   };
 }
 

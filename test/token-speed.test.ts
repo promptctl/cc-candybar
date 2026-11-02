@@ -33,10 +33,7 @@ import { SessionUsageStore } from "../src/daemon/cache/session-usage-store";
 import type { ClaudeHookData } from "../src/utils/claude";
 import { ABSENT, ok } from "../src/utils/outcome";
 import { validateConfig } from "./helpers/parse-and-validate";
-import {
-  mergeWithDefault,
-  parseDslConfig,
-} from "../src/config/dsl-loader";
+import { mergeWithDefault, parseDslConfig } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { registerDslConfig } from "../src/dsl/render";
@@ -55,6 +52,7 @@ import {
   requestPayload,
   settled,
 } from "./helpers/payload-owners";
+import { systemTimekeeper } from "../src/time";
 
 // ─── projectTokensPerSecond (pure) ───────────────────────────────────────────
 
@@ -108,7 +106,11 @@ describe("SessionUsageStore.observeSpeed — prior-sample retention", () => {
     const t = join(dir, "S.jsonl");
     writeFileSync(t, usageLine("a", 10, 5));
     utimesSync(t, new Date(1000), new Date(1000));
-    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      sweepIntervalMs: 0,
+    });
     try {
       const first = await store.observeSpeed("S", t, 1_000);
       expect(first.kind).toBe("ok");
@@ -154,7 +156,11 @@ describe("SessionUsageStore.observeSpeed — prior-sample retention", () => {
     const t = join(dir, "C.jsonl");
     writeFileSync(t, usageLine("a", 10, 5));
     utimesSync(t, new Date(1000), new Date(1000));
-    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      sweepIntervalMs: 0,
+    });
     try {
       // Establish a baseline (output 5) at the first transcript state.
       await store.observeSpeed("C", t, 1_000);
@@ -188,7 +194,11 @@ describe("SessionUsageStore.observeSpeed — prior-sample retention", () => {
 
   test("the ring accumulates recent samples oldest→newest; prev is its last", async () => {
     const t = join(dir, "R.jsonl");
-    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      sweepIntervalMs: 0,
+    });
     try {
       // Three growing transcript states, each a distinct mtime ⇒ a new sample.
       let lines = "";
@@ -224,7 +234,11 @@ describe("SessionUsageStore.observeSpeed — prior-sample retention", () => {
     // and the ring must still come back sorted oldest→newest by atMs, not by the
     // order the samples were inserted.
     const t = join(dir, "O.jsonl");
-    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      sweepIntervalMs: 0,
+    });
     try {
       writeFileSync(t, usageLine("a", 10, 5));
       utimesSync(t, new Date(1000), new Date(1000));
@@ -458,15 +472,23 @@ function renderSpeed(payload: Record<string, unknown>): Frame {
     "<test>",
     ALLOWED,
   );
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   // The settings menu references `edit.toggle`, so `edit.mode` — a `state` var — is now
   // declared regardless of this file's narrowed `speed`-only root; a
   // SessionState is required to declare it (matching every other
   // DEFAULT_DSL_CONFIG-based render helper) or it silently fails to declare
   // and speed's own `when` renders an unrelated ⚠ error cell.
-  const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
+  const registry = new SourceRegistry(
+    processLauncher,
+    store,
+    "",
+    new SessionState(),
+  );
   try {
-    const compiled = registerDslConfig(cfg, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
+    const compiled = registerDslConfig(cfg, registry, {
+      signer: TEST_SIGNER,
+      cwd: "/tmp",
+    });
     return drawPayload(
       cfg,
       compiled,

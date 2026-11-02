@@ -6,6 +6,7 @@ import {
   pidAlive,
   PARENT_PID_ENV,
 } from "../src/daemon/parent-watchdog";
+import { systemTimekeeper } from "../src/time";
 
 // [LAW:verifiable-goals] The contract under test is the leak's negation: a
 // daemon spawned by a transient process MUST die when that process dies, even
@@ -41,7 +42,7 @@ describe("armParentWatchdog", () => {
 
   test("outlives-nobody never trips and arms no timer", () => {
     const onOrphaned = jest.fn();
-    const handle = armParentWatchdog({
+    const handle = armParentWatchdog({ clock: systemTimekeeper,
       anchor: { kind: "outlives-nobody" },
       isAlive: () => false,
       onOrphaned,
@@ -53,7 +54,7 @@ describe("armParentWatchdog", () => {
 
   test("anchored + spawner alive never trips", () => {
     const onOrphaned = jest.fn();
-    armParentWatchdog({
+    armParentWatchdog({ clock: systemTimekeeper,
       anchor: { kind: "anchored", pid: 999 },
       isAlive: () => true,
       onOrphaned,
@@ -65,7 +66,7 @@ describe("armParentWatchdog", () => {
 
   test("anchored + spawner gone trips with the spawner pid in the reason", () => {
     const onOrphaned = jest.fn();
-    armParentWatchdog({
+    armParentWatchdog({ clock: systemTimekeeper,
       anchor: { kind: "anchored", pid: 4242 },
       isAlive: () => false,
       onOrphaned,
@@ -77,7 +78,7 @@ describe("armParentWatchdog", () => {
 
   test("disarm stops further polling", () => {
     const onOrphaned = jest.fn();
-    const handle = armParentWatchdog({
+    const handle = armParentWatchdog({ clock: systemTimekeeper,
       anchor: { kind: "anchored", pid: 4242 },
       isAlive: () => false,
       onOrphaned,

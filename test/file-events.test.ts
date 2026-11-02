@@ -1,3 +1,4 @@
+import { systemTimekeeper } from "../src/time";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -64,7 +65,8 @@ function rig(opts: { identityOf?: IdentityRead } = {}): Rig {
   const lines: string[] = [];
   const logger = (level: string, msg: string) => lines.push(`${level} ${msg}`);
   const events = new FileEventDelivery({
-    watchers: new WatcherRegistry({ logger }),
+    clock: systemTimekeeper,
+    watchers: new WatcherRegistry({ clock: systemTimekeeper, logger }),
     logger,
     identityOf: opts.identityOf,
   });
@@ -325,7 +327,8 @@ describe("FileEventDelivery", () => {
       r.events.start(r.folder);
       expect(r.events.delivery()).toMatchObject({
         kind: "unmeasured",
-        reason: "the probe folder was removed as it was made; restart the daemon",
+        reason:
+          "the probe folder was removed as it was made; restart the daemon",
       });
       await staysEnded(r, () => {});
     });

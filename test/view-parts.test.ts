@@ -23,6 +23,7 @@ import { instantOf, type Instant } from "../src/utils/instant";
 import { recordRender, testVerbContext } from "./helpers/click";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { textOf, type Frame } from "../src/render/frame";
+import { systemTimekeeper } from "../src/time";
 
 const OPTS = {
   endcaps: "powerline" as const,
@@ -37,7 +38,7 @@ const B = instantOf(new Date(2026, 5, 4, 12, 34, 57));
 
 // A view of `config`: its store and registry, and the compile it draws with.
 function viewOf(config: ValidatedConfig, sessionState = new SessionState()) {
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
   const errors: string[] = [];

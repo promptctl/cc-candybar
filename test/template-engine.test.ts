@@ -9,6 +9,7 @@ import { VariableStore } from "../src/var-system/store";
 import { MissingFieldError, ParseError } from "@promptctl/go-template-js";
 import { ABSENT, PENDING, failed, ok } from "../src/utils/outcome";
 import { readPending, toDocument } from "../src/var-system/types";
+import { systemTimekeeper } from "../src/time";
 
 // Helper: evaluate a template against a plain-object scope, return joined text.
 function evalText(source: string, scope: object): string {
@@ -25,7 +26,7 @@ function evalStore(source: string, store: VariableStore): string {
 
 // Helper: make a store with one box variable.
 function oneBox(name: string, value: string | number | boolean): VariableStore {
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const type = typeof value as "string" | "number" | "boolean";
   store.defineBox(name, type, value);
   return store;
@@ -73,7 +74,7 @@ describe("variable resolver (store scope)", () => {
   });
 
   test("multiple dotted namespaces in one store", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     store.defineBox("git.branch", "string", "main");
     store.defineBox("git.dirty", "boolean", false);
     const scope = buildScope(store);
@@ -89,7 +90,7 @@ describe("variable resolver (store scope)", () => {
   });
 
   test("computed variable resolves correctly", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     store.defineBox("prefix", "string", "hello");
     store.defineComputed("greeting", "string", (read) => read("prefix") + " world");
     expect(evalStore("{{ .greeting }}", store)).toBe("hello world");
@@ -332,7 +333,7 @@ describe("error cases", () => {
 // name the variable — never an empty render.
 describe("documents in scope", () => {
   function docStore(outcome: Parameters<VariableStore["defineDocument"]>[1]) {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     store.defineDocument("budget", outcome);
     store.defineBox("session.id", "string", "s1");
     return store;

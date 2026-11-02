@@ -39,12 +39,7 @@ import type { World } from "../host";
 import type { OneShotLauncher } from "../proc/launch";
 import { runTmuxAtExit } from "../proc/tmux";
 import type { TmuxAtExit } from "./tmux-status";
-import {
-  createDaemon,
-  SYSTEM_CLOCK,
-  type Daemon,
-  type RunningBundle,
-} from "./daemon.js";
+import { createDaemon, type Daemon, type RunningBundle } from "./daemon.js";
 import { productionAdapters } from "./production-adapters.js";
 import { daemonGates } from "./update-keys.js";
 import { handleConnection } from "./connection.js";
@@ -118,7 +113,7 @@ function runningBundle(): RunningBundle {
 
 export function runDaemon(world: World): void {
   const paths = daemonPaths(world.host);
-  thisProcess = { world, paths, log: new DaemonLog(paths.log) };
+  thisProcess = { world, paths, log: new DaemonLog(paths.log, world.clock) };
   // Catch-alls log + exit so the supervisor (the next client) can restart us.
   // [LAW:no-defensive-null-guards] These are *trust boundaries* — we are
   // catching all of unknown space, not skipping known optional values.
@@ -201,13 +196,13 @@ async function boot(): Promise<void> {
   // The daemon is built now that we know we are the daemon process: it loads
   // prior session state and becomes the sole writer of the state file.
   const daemon = createDaemon({
-    ...productionAdapters(paths, daemonLog),
+    ...productionAdapters(paths, daemonLog, world.clock),
     bundle: runningBundle(),
     host,
     paths,
     memoryLimitBytes: memoryLimit,
     registryUrl: host.env.CC_CANDYBAR_REGISTRY_URL ?? REGISTRY_URL,
-    clock: SYSTEM_CLOCK,
+    clock: world.clock,
     gates: daemonGates(),
     exit: shutdown,
   });
@@ -217,6 +212,7 @@ async function boot(): Promise<void> {
   // daemon has no spawner to outlive (env unset) and arms an inert handle; only
   // a test-spawned daemon is anchored, so this is invisible to the real daemon.
   armParentWatchdog({
+    clock: world.clock,
     anchor: anchorFromEnv(host.env),
     isAlive: pidAlive,
     onOrphaned: (reason) => {
@@ -415,6 +411,7 @@ function armOwnershipWatch(sockPath: string, bound: SocketIdentity): void {
     readLease: () => readLease(leasePathFor(sockPath)),
     shutdown: (code) => shutdown(code),
     log: serverLog,
+    clock: daemonProcess().world.clock,
   }).arm();
 }
 
@@ -480,7 +477,9 @@ function shutdown(code: number): void {
   // signal recovers that case. The realistic 452-corpse mode was async-
   // handle retention, not a synchronous block, so the backstop is
   // load-bearing for the observed failure pattern.
-  setTimeout(() => process.kill(process.pid, "SIGKILL"), 500);
+  daemonProcess().world.clock.after(500, () =>
+    process.kill(process.pid, "SIGKILL"),
+  );
   // [LAW:single-enforcer] The atomic bind() on the unix socket path is the
   // ONLY mutex preventing duplicate daemons. The previous shape unlinked
   // the socket file FIRST, then spent O(100ms) closing watchers, flushing

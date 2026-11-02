@@ -25,6 +25,7 @@ import type { ToolCall, TodoItem } from "../utils/transcript-activity";
 import { TranscriptFold, type FoldOutcome } from "../utils/transcript-fold";
 import { quietLogger, type DaemonLogger } from "../utils/logger";
 import { RefreshLedger } from "../utils/refresh-ledger";
+import type { Timekeeper } from "../time";
 import { failed, ok, type Outcome, type Reading } from "../utils/outcome";
 
 export type { TodoItem } from "../utils/transcript-activity";
@@ -148,7 +149,11 @@ function report(state: ActivityState): ActivityInfo {
 export class ActivityProvider {
   private readonly fold: TranscriptFold<ActivityState>;
 
-  constructor(opts: { logger?: DaemonLogger; ledger?: RefreshLedger } = {}) {
+  constructor(opts: {
+    readonly clock: Pick<Timekeeper, "now">;
+    readonly logger?: DaemonLogger;
+    readonly ledger?: RefreshLedger;
+  }) {
     const logger = opts.logger ?? quietLogger;
     this.fold = new TranscriptFold<ActivityState>(
       EMPTY,
@@ -158,6 +163,7 @@ export class ActivityProvider {
         scope: "session",
         refresh: ["request"],
       }),
+      opts.clock,
       logger,
     );
   }

@@ -393,6 +393,8 @@ const env: NodeJS.ProcessEnv = {
 // machine once, as src/index.ts does.
 const world = processWorld();
 const host = { env, home: dirs.home, tmp: world.host.tmp };
+// What its clients ask the daemon with: this world's host, the machine's clock.
+const wire = { host, clock: world.clock };
 
 // The daemon as the client spawns it, plus an inspector on a loopback port:
 // the one way to read its live heap is to collect it first.
@@ -512,7 +514,7 @@ function tick(s: Session): void {
     let outcome: string;
     try {
       const rendered = await tryRenderViaDaemon(
-        host,
+        wire,
         
         hookData(s),
         [BUNDLE],
@@ -570,7 +572,7 @@ async function menuClick(s: Session, open: boolean): Promise<string> {
     ]),
   );
   try {
-    const clicked = await tryClickViaDaemon(host, verb, value);
+    const clicked = await tryClickViaDaemon(wire, verb, value);
     return clicked.kind === "ok" ? "ok" : failureLabel(clicked);
   } catch (e) {
     // [LAW:no-silent-failure] A click path that throws is a failed click.
@@ -643,7 +645,7 @@ async function sample(started: number): Promise<void> {
   // sample was asked for, not of whatever phase holds once it is answered.
   const at = Date.now() - started;
   const asked = phase;
-  const outcome = await fetchStats(host);
+  const outcome = await fetchStats(wire);
   if (outcome.kind !== "ok") {
     unanswered.push(`${at} ms: ${failureLabel(outcome)}`);
     return;
@@ -729,7 +731,7 @@ async function run(): Promise<{
       throw new Error(`daemon ${daemonExit} before serving`);
     if (Date.now() > bootDeadline)
       throw new Error("daemon did not answer stats within 15 s");
-    const outcome = await fetchStats(host);
+    const outcome = await fetchStats(wire);
     if (outcome.kind === "ok") first = outcome.value;
     else await sleep(50);
   }
