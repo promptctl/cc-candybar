@@ -35,7 +35,18 @@ const HAS_TMUX = spawnSync("tmux", ["-V"]).status === 0;
       pane: "",
       truecolor: null,
     } as TmuxHint;
-    tmux("-f", "/dev/null", "new-session", "-d", "-s", "bar", "-x", "80", "-y", "20");
+    tmux(
+      "-f",
+      "/dev/null",
+      "new-session",
+      "-d",
+      "-s",
+      "bar",
+      "-x",
+      "80",
+      "-y",
+      "20",
+    );
     hint = { ...hint, pane: panes()[0]! };
   });
 
@@ -73,6 +84,29 @@ const HAS_TMUX = spawnSync("tmux", ["-V"]).status === 0;
     );
     expect(await tagged.barPanes(hint)).toEqual([opened]);
     expect(active()).toBe(hint.pane);
+  });
+
+  test("the pane the user is in keeps focus", async () => {
+    const theirs = tmux(
+      "split-window",
+      "-h",
+      "-t",
+      hint.pane,
+      "-P",
+      "-F",
+      "#{pane_id}",
+      "sleep",
+      "60",
+    ).trim();
+    const edge = productionLaneEdge(
+      processLauncher,
+      () => new Set(),
+      new AbortController().signal,
+    );
+
+    await edge.openBarPane(hint, ["sleep", "60"], {});
+
+    expect(active()).toBe(theirs);
   });
 
   test("a failed split is reported as the split, and tags nothing", async () => {
