@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-564",
+      "ref": "refs/pull/564/merge",
+      "sha": "7fe4b019a66622d196e1086fe198e730e4c801c0",
+      "timestamp": "2026-11-02T11:42:57.745Z",
+      "commits": [
+        {
+          "sha": "7fe4b019a66622d196e1086fe198e730e4c801c0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T11:41:33Z",
+          "message": "Merge 18edd6269e9797dbbc5a0be8f027cacec2328a29 into 9b26334ab54c1c9fbad087ff535c804d167c9ce5\n"
+        },
+        {
+          "sha": "18edd6269e9797dbbc5a0be8f027cacec2328a29",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T04:41:16-07:00",
+          "message": "test(ci): the colour audits write their own run's records (candybar-testing-ihvy.myy)\n\nThe audits config spreads the suite's, so it inherited the \"all\" run and wrote\nover a local full-suite record.\n"
+        },
+        {
+          "sha": "49f715ca63a9a55a7c868bca9c1816df80a43fb9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T04:38:38-07:00",
+          "message": "test(ci): the records reporter reads lost files off the run, so -o and --shard record (candybar-testing-ihvy.myy)\n\nJest counts the files it scheduled after every narrowing, so the reporter takes\nthe lost-file count from the run and asks the search to name files only when\nthat count is above zero. Asked every run, the search threw under -o and read\nevery file of a shard as lost. The test report and upload now follow the\nprotocol and Rust gates, and the wall-time label says it spans the test files.\n"
+        },
+        {
+          "sha": "e8d8e54f8ed46c97d8dd65a2f199039276b3cb0b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T04:31:43-07:00",
+          "message": "test(ci): every CI run stores one record per test file (candybar-testing-ihvy.myy)\n\nA reporter writes test-records/<run>.jsonl, one record per file: layer, count,\nduration, outcome and each case. A file jest never gave a result for reads\nnever-ran and a file with no test reads empty, so neither passes for the other\nor for absent. test:report prints count and time per layer and the jest wall\ntime from those records, and fails for a run that left none. CI uploads the\nrecords.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-563",
       "ref": "refs/pull/563/merge",
       "sha": "4b0a34219382e22ac3ed465f8b84ab63ac8d2c5d",
@@ -27,35 +63,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T04:32:14-07:00",
           "message": "refactor(launch): Launcher loses launchSync; OneShotLauncher is the only type offering it (candybar-launch-q7o7.4em)\n\nDaemon code holds a Launcher, which has no name for the launch that holds the loop to pipe EOF, so tsc refuses the next one added there. Install, plugin install, the doctor's CLI probe and the at-exit tmux restore take the process's oneShotLauncher, which eslint's owned imports confine to them.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-564",
-      "ref": "refs/pull/564/merge",
-      "sha": "361260566ca51c4460e2c41b29849523ed782a12",
-      "timestamp": "2026-11-02T11:39:34.116Z",
-      "commits": [
-        {
-          "sha": "361260566ca51c4460e2c41b29849523ed782a12",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T11:38:47Z",
-          "message": "Merge 49f715ca63a9a55a7c868bca9c1816df80a43fb9 into 9b26334ab54c1c9fbad087ff535c804d167c9ce5\n"
-        },
-        {
-          "sha": "49f715ca63a9a55a7c868bca9c1816df80a43fb9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T04:38:38-07:00",
-          "message": "test(ci): the records reporter reads lost files off the run, so -o and --shard record (candybar-testing-ihvy.myy)\n\nJest counts the files it scheduled after every narrowing, so the reporter takes\nthe lost-file count from the run and asks the search to name files only when\nthat count is above zero. Asked every run, the search threw under -o and read\nevery file of a shard as lost. The test report and upload now follow the\nprotocol and Rust gates, and the wall-time label says it spans the test files.\n"
-        },
-        {
-          "sha": "e8d8e54f8ed46c97d8dd65a2f199039276b3cb0b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T04:31:43-07:00",
-          "message": "test(ci): every CI run stores one record per test file (candybar-testing-ihvy.myy)\n\nA reporter writes test-records/<run>.jsonl, one record per file: layer, count,\nduration, outcome and each case. A file jest never gave a result for reads\nnever-ran and a file with no test reads empty, so neither passes for the other\nor for absent. test:report prints count and time per layer and the jest wall\ntime from those records, and fails for a run that left none. CI uploads the\nrecords.\n"
         }
       ]
     },
