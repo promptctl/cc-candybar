@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "040ba694b11dd01c6bce64b56acd016dabbf0578",
+      "timestamp": "2026-11-02T05:17:32.372Z",
+      "commits": [
+        {
+          "sha": "040ba694b11dd01c6bce64b56acd016dabbf0578",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T22:16:42-07:00",
+          "message": "docs(testing): the five have no exceptions, and the Load gate stops booting the daemon (#557)\n\n* docs(testing): the five have no exceptions, and the Load gate stops booting the daemon (candybar-testing-ihvy.84o)\n\nBrandon ruled that the rule has no exceptions, and that the contract and end-to-end sections failed what he asked for. Ticket 42 moves all 15 of the Load gate's checks to the pieces that own them and states what that loses. Ticket 3's check now reads the workflows, because the start judge sees jest only. One assertion is defined, setup checks leave the tests, and the file stat and the log get contracts.\n\n* docs(testing): agents change the required checks, and it is in the done criteria (candybar-testing-ihvy.84o)\n\nBrandon ruled that updating main-protection is agent work, not a hand-off. Tickets 42 and 37 now do it before merging and prove it with gh api, and ticket 3 needs no hand edit to the hook wiring.\n\n* chore(hooks): agents may PUT main-protection, and the end-to-end sign-off hook is wired (candybar-testing-ihvy.84o)"
+        }
+      ]
+    },
+    {
       "version": "pr-559",
       "ref": "refs/pull/559/merge",
       "sha": "b6ef4a6bee819c895a35b486af6f4f56cc82d528",
@@ -42,64 +57,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T03:57:33-06:00",
           "message": "fix(bar-pane): a frame overwrites its rows and lands whole, so the pane stops flickering\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-557",
-      "ref": "refs/pull/557/merge",
-      "sha": "65bc5a8d5a76d47d13a01c1f6d0b76524875cd2f",
-      "timestamp": "2026-11-02T02:48:08.178Z",
-      "commits": [
-        {
-          "sha": "65bc5a8d5a76d47d13a01c1f6d0b76524875cd2f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T02:47:24Z",
-          "message": "Merge 4902af00c55842314b2040274ca2b112a1ed358d into ec9fa5454b16e8eff68525c059c5214d0a98a8d5\n"
-        },
-        {
-          "sha": "4902af00c55842314b2040274ca2b112a1ed358d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T19:47:13-07:00",
-          "message": "chore(hooks): agents may PUT main-protection, and the end-to-end sign-off hook is wired (candybar-testing-ihvy.84o)\n"
-        },
-        {
-          "sha": "cccb8a41f4105e1102bf4a086bd599f7b4802c7f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T19:42:56-07:00",
-          "message": "docs(testing): agents change the required checks, and it is in the done criteria (candybar-testing-ihvy.84o)\n\nBrandon ruled that updating main-protection is agent work, not a hand-off. Tickets 42 and 37 now do it before merging and prove it with gh api, and ticket 3 needs no hand edit to the hook wiring.\n"
-        },
-        {
-          "sha": "f9c2b10b127471415dec4c5582d95f7ad21d9372",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T19:00:05-07:00",
-          "message": "docs(testing): the five have no exceptions, and the Load gate stops booting the daemon (candybar-testing-ihvy.84o)\n\nBrandon ruled that the rule has no exceptions, and that the contract and end-to-end sections failed what he asked for. Ticket 42 moves all 15 of the Load gate's checks to the pieces that own them and states what that loses. Ticket 3's check now reads the workflows, because the start judge sees jest only. One assertion is defined, setup checks leave the tests, and the file stat and the log get contracts.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "ec9fa5454b16e8eff68525c059c5214d0a98a8d5",
-      "timestamp": "2026-11-02T00:39:53.139Z",
-      "commits": [
-        {
-          "sha": "ec9fa5454b16e8eff68525c059c5214d0a98a8d5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T17:38:54-07:00",
-          "message": "docs(testing): five end-to-end tests, and the daemon cut into pieces to reach them (#556)\n\n* docs(testing): plan the layered test suite\n\n* docs(testing): the plan's review and the owner's ruling on it\n\nKept as they were so the plan's rewrite can be checked against them.\n\n* docs(testing): five end-to-end tests, and the daemon cut into pieces to reach them (candybar-testing-ihvy.43x)\n\nThe plan now carries Brandon's ruling: five end-to-end tests with one\nassertion each, and any test that boots the daemon counts as one, in a\nworker or not. So the daemon is cut into ten pieces with fakes at their\ninputs, and the harness goes. Every finding of the plan's review is\nfolded in and every count is re-measured on main at 62b28e2b.\n\nThe review and the ruling are deleted here because the plan now holds\nboth; the commit before this one keeps them as they were.\n\n* docs(testing): the pieces depend one way, and one number holds the cap (candybar-testing-ihvy.43x)\n\n* docs(testing): the render is cut at its wait, and an import rule holds the pieces' order (candybar-testing-ihvy.43x)\n\n* docs(testing): each boot test moves to the piece that holds its behaviour (candybar-testing-ihvy.43x)\n\n* docs(testing): the unit that moves is a case, and the ledger lists them (candybar-testing-ihvy.43x)\n\n* docs(testing): the ratchet counts the cases left to move (candybar-testing-ihvy.43x)\n\n* docs(testing): the review's findings on tiers, the ratchet and the clock (candybar-testing-ihvy.43x)\n\nA second assertion now fails on its PR, tickets 35 and 36 no longer wait on each other, and a packed install proves the new native client. The ratchet equals the case count and sits beside the start ceiling, and ticket 2 moves the cases that reach no boot.\n\nThe contract suite stays on the fake in unit and the adapter in integration, as laws:testing has it, and each file keeps one layer. The poll helper keeps its real sleep, so a file that polls stays out of test/unit until ticket 20.\n\n* docs(testing): the medium review's findings on required checks, wiring and budgets (candybar-testing-ihvy.43x)\n\nLane clicks sit in Actions, ticket 8 takes factories for adapters that need what createDaemon builds, and ticket 35 proves the staged client is the binary built. The Feed criterion is described as it is, a check that is not required, and the required checks are Brandon's to change with ticket 37.\n\nTime budgets report a breach and count budgets fail CI. draw-reserve leaves the required checks with its cost stated, because runs miss that bound by milliseconds.\n\n* docs(testing): the five tests prove what they claim, and the checks stay wired (candybar-testing-ihvy.43x)\n\nTest 4 cannot pass on the client's cached frame, test 1 fails on any loud error, and the limit needs exactly one expect. A CI test keeps the checks wired, so the jest configs stay open to tickets 4 and 35.\n\nTicket 1 records each case, the start judge moves with ticket 35, and the request backstop gets a child program. An expired quarantine line shows red and fails no merge, because a date must not block a change that did not cause it."
-        },
-        {
-          "sha": "72ffdd27eff3be49dc0520bbd5ff5b02ee53daf2",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-01T21:04:24Z",
-          "message": "chore(release): set `package.json` to 1.178.1 [skip ci]\n\n## [1.178.1](https://github.com/promptctl/cc-candybar/compare/v1.178.0...v1.178.1) (2026-11-01)\n\n### Bug Fixes\n\n* **render:** a cell wider than its line wraps across lines (candybar-isolated-daemon-bfab.pe6) ([#555](https://github.com/promptctl/cc-candybar/issues/555)) ([62b28e2](https://github.com/promptctl/cc-candybar/commit/62b28e2b95ed10f4a7c35fc2dca80ca8550e41e5))\n"
         }
       ]
     },
