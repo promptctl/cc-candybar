@@ -4,15 +4,22 @@
     {
       "version": "pr-575",
       "ref": "refs/pull/575/merge",
-      "sha": "90ec398570da291e6303a74c9315e46c1aea7e6c",
-      "timestamp": "2026-11-02T14:47:18.990Z",
+      "sha": "fa9c1179f719d1bf311f0af7cdcf0c93bb4c89ff",
+      "timestamp": "2026-11-02T14:49:11.856Z",
       "commits": [
         {
-          "sha": "90ec398570da291e6303a74c9315e46c1aea7e6c",
+          "sha": "fa9c1179f719d1bf311f0af7cdcf0c93bb4c89ff",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T14:46:09Z",
-          "message": "Merge e2d00ccc351c4727476311510e477fea9f2228c0 into 685dfc67e4662552cac9a0924249992f5225cbbe\n"
+          "timestamp": "2026-11-02T14:48:00Z",
+          "message": "Merge a64560c5e982368831831b0d8ac92dbd11f65e97 into 685dfc67e4662552cac9a0924249992f5225cbbe\n"
+        },
+        {
+          "sha": "a64560c5e982368831831b0d8ac92dbd11f65e97",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T07:47:41-07:00",
+          "message": "test(debug): a busy daemon is a stderr line with no spawn hint (candybar-launch-q7o7.6wi)\n"
         },
         {
           "sha": "e2d00ccc351c4727476311510e477fea9f2228c0",
