@@ -22968,7 +22968,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.179.0";
+var PACKAGE_VERSION = "1.179.1";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -23255,31 +23255,6 @@ function sanitizeClient(v) {
   const path40 = sanitizeAbsolutePath(bundle);
   return CLIENT_KINDS.includes(kind) && path40 !== void 0 && (source === null || typeof source === "string" && source !== "") ? { kind, bundle: path40, source } : void 0;
 }
-
-// src/daemon/request-deadline.ts
-init_globals();
-var REQUEST_TIMEOUT_MS = 200;
-var CLICK_PROGRAM_TIMEOUT_MS = 5e3;
-var CLICK_TIMEOUT_MS = CLICK_PROGRAM_TIMEOUT_MS + 1e3;
-var DRAW_RESERVE_MS = 60;
-function parseClientDeadline(raw) {
-  if (raw === void 0) return { kind: "unstated" };
-  return typeof raw === "number" && Number.isSafeInteger(raw) && raw > 0 ? { kind: "stated", at: raw } : {
-    kind: "refused",
-    problem: `request 'deadline' is not epoch milliseconds: ${JSON.stringify(raw)}`
-  };
-}
-function waitBudgetMs(deadline, acceptedMonoMs, arrival) {
-  const clientEnd = deadline.kind === "stated" ? arrival.monoMs + (deadline.at - arrival.epochMs) : acceptedMonoMs + TOTAL_BUDGET_MS - CONNECT_TIMEOUT_MS;
-  const end = Math.min(clientEnd, acceptedMonoMs + REQUEST_TIMEOUT_MS);
-  return Math.round(end - DRAW_RESERVE_MS - arrival.monoMs);
-}
-
-// src/daemon/client.ts
-var CLICK_BUDGETS = {
-  connectMs: CONNECT_TIMEOUT_MS,
-  budgetMs: CLICK_TIMEOUT_MS + TOTAL_BUDGET_MS
-};
 
 // src/daemon/acquire.ts
 init_globals();
@@ -69872,6 +69847,7 @@ function requireSessionId(value) {
 function oneArg(value) {
   return decodeWire(() => decodeURIComponent(value));
 }
+var CLICK_PROGRAM_TIMEOUT_MS = 5e3;
 async function clickLaunch(launcher, opts, what, log) {
   const result = await launcher.launch({
     ...opts,
@@ -76717,6 +76693,23 @@ function resolvePath2(obj, dotPath) {
     cur = cur[key];
   }
   return cur;
+}
+
+// src/daemon/request-deadline.ts
+init_globals();
+var REQUEST_TIMEOUT_MS = 200;
+var DRAW_RESERVE_MS = 60;
+function parseClientDeadline(raw) {
+  if (raw === void 0) return { kind: "unstated" };
+  return typeof raw === "number" && Number.isSafeInteger(raw) && raw > 0 ? { kind: "stated", at: raw } : {
+    kind: "refused",
+    problem: `request 'deadline' is not epoch milliseconds: ${JSON.stringify(raw)}`
+  };
+}
+function waitBudgetMs(deadline, acceptedMonoMs, arrival) {
+  const clientEnd = deadline.kind === "stated" ? arrival.monoMs + (deadline.at - arrival.epochMs) : acceptedMonoMs + TOTAL_BUDGET_MS - CONNECT_TIMEOUT_MS;
+  const end = Math.min(clientEnd, acceptedMonoMs + REQUEST_TIMEOUT_MS);
+  return Math.round(end - DRAW_RESERVE_MS - arrival.monoMs);
 }
 
 // src/daemon/render-checkpoint.ts

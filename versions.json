@@ -4,15 +4,22 @@
     {
       "version": "pr-565",
       "ref": "refs/pull/565/merge",
-      "sha": "29cd2320e89d98e2c2de4bd2fea73339eb349901",
-      "timestamp": "2026-11-02T12:06:57.662Z",
+      "sha": "08f7b619bd7cbd6dda2cf424b434cdac02c9af0f",
+      "timestamp": "2026-11-02T12:13:44.918Z",
       "commits": [
         {
-          "sha": "29cd2320e89d98e2c2de4bd2fea73339eb349901",
+          "sha": "08f7b619bd7cbd6dda2cf424b434cdac02c9af0f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T05:06:03-07:00",
-          "message": "Merge 246d7798412bea63b36c9a3b3c75d8d057a38e09 into a60dce7741009c8d2659bbaa435d9b53e15bf727\n"
+          "timestamp": "2026-11-02T12:12:52Z",
+          "message": "Merge 38c2665d37d256b8a7a162e0c589c6356434eafa into c2a649577d11945c26d035121a186062bf34327f\n"
+        },
+        {
+          "sha": "38c2665d37d256b8a7a162e0c589c6356434eafa",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T05:12:40-07:00",
+          "message": "fix(url-handle): a daemon's TIMEOUT is busy, and a click's client no longer kicks a live daemon (candybar-launch-q7o7.4yv)\n\nReplaces the raised click bound: the daemon answering TIMEOUT proves it is\nup, so the client tells it from a wait it gave up and only kicks when no\ndaemon answered. The 200ms bound, the applet's quick return and the\njournal's stale-click refusal stay as they were.\n"
         },
         {
           "sha": "246d7798412bea63b36c9a3b3c75d8d057a38e09",
