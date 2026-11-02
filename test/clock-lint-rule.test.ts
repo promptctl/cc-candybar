@@ -46,6 +46,14 @@ const FORMS = {
     code: "export const x = performance.now();\n",
     rule: "no-restricted-properties",
   },
+  "process.hrtime.bigint": {
+    code: "export const x = process.hrtime.bigint();\n",
+    rule: "no-restricted-properties",
+  },
+  "process.uptime": {
+    code: "export const x = process.uptime();\n",
+    rule: "no-restricted-properties",
+  },
   "AbortSignal.timeout": {
     code: "export const x = AbortSignal.timeout(1);\n",
     rule: "no-restricted-properties",
@@ -76,6 +84,10 @@ const FORMS = {
   },
   "node:timers": {
     code: 'import { setImmediate } from "node:timers";\nexport { setImmediate };\n',
+    rule: "no-restricted-imports",
+  },
+  "node:perf_hooks": {
+    code: 'import { performance } from "node:perf_hooks";\nexport { performance };\n',
     rule: "no-restricted-imports",
   },
   "timers/promises": {

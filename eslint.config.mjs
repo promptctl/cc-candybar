@@ -27,6 +27,8 @@ const CLOCK_MESSAGE =
 const CLOCK_PROPERTIES = [
   { object: "Date", property: "now", message: CLOCK_MESSAGE },
   { object: "performance", property: "now", message: CLOCK_MESSAGE },
+  { object: "process", property: "hrtime", message: CLOCK_MESSAGE },
+  { object: "process", property: "uptime", message: CLOCK_MESSAGE },
   { object: "AbortSignal", property: "timeout", message: CLOCK_MESSAGE },
 ];
 const CLOCK_SYNTAX = [
@@ -54,6 +56,8 @@ const CLOCK_IMPORT_PATHS = [
   "timers",
   "node:timers/promises",
   "timers/promises",
+  "node:perf_hooks",
+  "perf_hooks",
 ].map((name) => ({ name, message: CLOCK_MESSAGE }));
 
 // [LAW:single-enforcer] Names only their owners may import, so what makes a
