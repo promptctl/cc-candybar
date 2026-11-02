@@ -4,15 +4,22 @@
     {
       "version": "pr-578",
       "ref": "refs/pull/578/merge",
-      "sha": "33d6fa16ab10ed600e616b37d124c7577c4448be",
-      "timestamp": "2026-11-02T15:31:52.184Z",
+      "sha": "4ae3ac18a4ca86c3068b906119ba230326fa1df8",
+      "timestamp": "2026-11-02T15:36:01.450Z",
       "commits": [
         {
-          "sha": "33d6fa16ab10ed600e616b37d124c7577c4448be",
+          "sha": "4ae3ac18a4ca86c3068b906119ba230326fa1df8",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T08:30:49-07:00",
-          "message": "Merge 0231f50d8726de595a62e7382e74e710fbb19615 into 96106ff8a15730879c3089b407e2191fe629e15b\n"
+          "timestamp": "2026-11-02T15:35:19Z",
+          "message": "Merge c98807ab340761deb694e3f8f2189b1418c6a9f4 into 7e8ae4a5476db0139bc294069ca8a1e4cf5e3085\n"
+        },
+        {
+          "sha": "c98807ab340761deb694e3f8f2189b1418c6a9f4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T08:35:05-07:00",
+          "message": "test: review fixes — a worker boot with no ledger fails at load, the null-file fault names both causes, the preload note sits with the ledger (candybar-testing-ihvy.icq)\n"
         },
         {
           "sha": "0231f50d8726de595a62e7382e74e710fbb19615",
