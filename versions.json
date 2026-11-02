@@ -2,96 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-565",
-      "ref": "refs/pull/565/merge",
-      "sha": "c983c68fb504ddde32bd3ea4ba769a807685dfe8",
-      "timestamp": "2026-11-02T12:31:58.087Z",
-      "commits": [
-        {
-          "sha": "c983c68fb504ddde32bd3ea4ba769a807685dfe8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T12:30:10Z",
-          "message": "Merge eb3f4a85b2ecb14cf7cd440c92713870c04a3b69 into c2a649577d11945c26d035121a186062bf34327f\n"
-        },
-        {
-          "sha": "eb3f4a85b2ecb14cf7cd440c92713870c04a3b69",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T05:21:21-07:00",
-          "message": "fix(url-handle): a busy click exits 0, and frames-cli takes its kick from the render policy (candybar-launch-q7o7.4yv)\n"
-        },
-        {
-          "sha": "75e067acea6eb31e96fdfe5ed53c430107ee331c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T05:16:23-07:00",
-          "message": "fix(client): busy is its own outcome kind, and a click waits past the daemon's backstop (candybar-launch-q7o7.4yv)\n"
-        },
-        {
-          "sha": "d79bf8a0b6eb91e5a9285b4bed27cbc61335ec58",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T05:12:40-07:00",
-          "message": "fix(url-handle): a daemon's TIMEOUT is busy, and a click's client no longer kicks a live daemon (candybar-launch-q7o7.4yv)\n\nReplaces the raised click bound: the daemon answering TIMEOUT proves it is\nup, so the client tells it from a wait it gave up and only kicks when no\ndaemon answered. The 200ms bound, the applet's quick return and the\njournal's stale-click refusal stay as they were.\n"
-        },
-        {
-          "sha": "d99011f89090b9dee466b879895e43d7ab540b79",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T05:05:47-07:00",
-          "message": "fix(daemon): a click is held to a click's bound, so a launching click no longer kicks a live daemon (candybar-launch-q7o7.4yv)\n\nThe connection backstop answered every request TIMEOUT at the render's\n200ms. A click awaits the program it launches (up to 5s), so the client\nheard TIMEOUT, kicked a daemon that was up, and exited 1 while the\nclick's effect still landed. The backstop is now re-armed by request\nkind once the frame is read, and the click client's budget derives from\nthe daemon's click bound.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-566",
-      "ref": "refs/pull/566/merge",
-      "sha": "7e93e87869d332c0225d535072702dbe20399a21",
-      "timestamp": "2026-11-02T12:29:03.875Z",
-      "commits": [
-        {
-          "sha": "7e93e87869d332c0225d535072702dbe20399a21",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T12:27:45Z",
-          "message": "Merge 0cb2de00b90d093de07ecf79e32fcde5063206b3 into c2a649577d11945c26d035121a186062bf34327f\n"
-        },
-        {
-          "sha": "0cb2de00b90d093de07ecf79e32fcde5063206b3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T05:27:31-07:00",
-          "message": "fix(frame-feed): setTimer clears the timer it replaces, so no caller can orphan one (brandon-unfiled-3248.l1mh)\n"
-        },
-        {
-          "sha": "0212bdfb06858a424a770dabcd97721270a707c3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T05:26:14-07:00",
-          "message": "fix(frame-feed): review of the early-fire wait: reflow the bound's comment, correct the memory line, test a second early fire and a close while waiting (brandon-unfiled-3248.l1mh)\n"
-        },
-        {
-          "sha": "f803e263f40433b50d65a1a77e3f2f45cf7a075f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T05:22:58-07:00",
-          "message": "fix(frame-feed): a timer that fires before its moment waits it out, so no turn is drawn twice (brandon-unfiled-3248.l1mh)\n\nNode starts a timer from the loop's cached time, so one armed late in a slow\ncallback fires early by as long as that callback had run. Past\nTIMER_RESOLUTION_S the draw clamped to the wall, which fell in the turn before\nthe frame's change: that turn drawn twice, the next one late. The feed now\ncompares the timer's moment on the monotonic clock and re-arms for the rest.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "a60dce7741009c8d2659bbaa435d9b53e15bf727",
-      "timestamp": "2026-11-02T11:59:28.405Z",
+      "sha": "938e46704e2e803c9a983b478618dda5cea40cc3",
+      "timestamp": "2026-11-02T12:36:14.795Z",
       "commits": [
         {
-          "sha": "a60dce7741009c8d2659bbaa435d9b53e15bf727",
+          "sha": "938e46704e2e803c9a983b478618dda5cea40cc3",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T04:58:31-07:00",
-          "message": "test(ci): every CI run stores one record per test file (candybar-testing-ihvy.myy) (#564)\n\n* test(ci): every CI run stores one record per test file (candybar-testing-ihvy.myy)\n\nA reporter writes test-records/<run>.jsonl, one record per file: layer, count,\nduration, outcome and each case. A file jest never gave a result for reads\nnever-ran and a file with no test reads empty, so neither passes for the other\nor for absent. test:report prints count and time per layer and the jest wall\ntime from those records, and fails for a run that left none. CI uploads the\nrecords.\n\n* test(ci): the records reporter reads lost files off the run, so -o and --shard record (candybar-testing-ihvy.myy)\n\nJest counts the files it scheduled after every narrowing, so the reporter takes\nthe lost-file count from the run and asks the search to name files only when\nthat count is above zero. Asked every run, the search threw under -o and read\nevery file of a shard as lost. The test report and upload now follow the\nprotocol and Rust gates, and the wall-time label says it spans the test files.\n\n* test(ci): the colour audits write their own run's records (candybar-testing-ihvy.myy)\n\nThe audits config spreads the suite's, so it inherited the \"all\" run and wrote\nover a local full-suite record."
+          "timestamp": "2026-11-02T05:35:15-07:00",
+          "message": "fix(url-handle): a daemon's TIMEOUT is busy, so a click no longer kicks a live daemon (#565)\n\n* fix(daemon): a click is held to a click's bound, so a launching click no longer kicks a live daemon (candybar-launch-q7o7.4yv)\n\nThe connection backstop answered every request TIMEOUT at the render's\n200ms. A click awaits the program it launches (up to 5s), so the client\nheard TIMEOUT, kicked a daemon that was up, and exited 1 while the\nclick's effect still landed. The backstop is now re-armed by request\nkind once the frame is read, and the click client's budget derives from\nthe daemon's click bound.\n\n* fix(url-handle): a daemon's TIMEOUT is busy, and a click's client no longer kicks a live daemon (candybar-launch-q7o7.4yv)\n\nReplaces the raised click bound: the daemon answering TIMEOUT proves it is\nup, so the client tells it from a wait it gave up and only kicks when no\ndaemon answered. The 200ms bound, the applet's quick return and the\njournal's stale-click refusal stay as they were.\n\n* fix(client): busy is its own outcome kind, and a click waits past the daemon's backstop (candybar-launch-q7o7.4yv)\n\n* fix(url-handle): a busy click exits 0, and frames-cli takes its kick from the render policy (candybar-launch-q7o7.4yv)"
+        },
+        {
+          "sha": "c2a649577d11945c26d035121a186062bf34327f",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-02T12:09:17Z",
+          "message": "chore(release): set `package.json` to 1.179.1 [skip ci]\n\n## [1.179.1](https://github.com/promptctl/cc-candybar/compare/v1.179.0...v1.179.1) (2026-11-02)\n\n### Bug Fixes\n\n* **layout:** directory draws the worktree-aware path, gitaculous stops drawing it ([#562](https://github.com/promptctl/cc-candybar/issues/562)) ([3ea62d8](https://github.com/promptctl/cc-candybar/commit/3ea62d87dbcde758789947304b189e5463076f6e))\n"
         }
       ]
     },
