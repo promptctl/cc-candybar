@@ -776,7 +776,7 @@ describe("the update watch: one turn at a time on the act files", () => {
     let exits = 0;
     const target = marker("bundle");
     fs.writeFileSync(target, "");
-    const binary = makeBinaryWatch({
+    const binary = makeBinaryWatch({ clock: systemTimekeeper,
       targets: [target],
       intervalMs: 60_000,
       stat: fs.statSync,
@@ -810,7 +810,7 @@ describe("the update watch: one turn at a time on the act files", () => {
     let exits = 0;
     const target = marker("bundle");
     fs.writeFileSync(target, "");
-    const binary = makeBinaryWatch({
+    const binary = makeBinaryWatch({ clock: systemTimekeeper,
       targets: [target],
       intervalMs: 60_000,
       stat: fs.statSync,

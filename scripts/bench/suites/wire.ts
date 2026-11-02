@@ -376,7 +376,7 @@ const configReload = (entries: number): Benchmark => ({
 async function click(url: string): Promise<number> {
   const { verb, value } = parseHandlerUrl(url);
   const started = performance.now();
-  const outcome = await tryClickViaDaemon(processWorld().host, verb, value);
+  const outcome = await tryClickViaDaemon(processWorld(), verb, value);
   const ms = performance.now() - started;
   // [LAW:no-silent-failure] A click the daemon refused did nothing; its round
   // trip is not a click's.

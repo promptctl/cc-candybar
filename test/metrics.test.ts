@@ -10,6 +10,7 @@ import {
 import { join } from "path";
 import { tmpdir } from "os";
 import type { ClaudeHookData } from "../src/utils/claude";
+import { systemTimekeeper } from "../src/time";
 
 describe("Metrics Provider", () => {
   let tempDir: string;
@@ -44,7 +45,7 @@ describe("Metrics Provider", () => {
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), "metrics-test-"));
-    metricsProvider = new MetricsProvider();
+    metricsProvider = new MetricsProvider({ clock: systemTimekeeper });
   });
 
   afterEach(() => {

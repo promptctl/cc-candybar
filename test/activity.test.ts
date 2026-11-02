@@ -163,7 +163,7 @@ function hook(path: string, session: string): ClaudeHookData {
 
 async function activityOf(...lines: string[]) {
   const { path, session } = transcript(...lines);
-  const outcome = await new ActivityProvider().getActivityInfo(
+  const outcome = await new ActivityProvider({ clock: systemTimekeeper }).getActivityInfo(
     session,
     hook(path, session),
   );
@@ -477,7 +477,7 @@ describe("the fold reports what is happening now", () => {
       userText("go"),
       toolUse({ id: "a", name: "Bash" }),
     );
-    const provider = new ActivityProvider();
+    const provider = new ActivityProvider({ clock: systemTimekeeper });
     const first = await provider.getActivityInfo(session, hook(path, session));
     expect(first.kind === "ok" && first.value.running).toEqual([
       { name: "Bash", count: 1 },
@@ -497,7 +497,7 @@ describe("the fold reports what is happening now", () => {
       done: [{ name: "Bash", count: 1 }],
     });
 
-    const whole = await new ActivityProvider().getActivityInfo(
+    const whole = await new ActivityProvider({ clock: systemTimekeeper }).getActivityInfo(
       session,
       hook(path, session),
     );
@@ -508,7 +508,7 @@ describe("the fold reports what is happening now", () => {
 
   test("a session with no transcript yet is an empty record, not a failure", async () => {
     const session = "missing";
-    const outcome = await new ActivityProvider().getActivityInfo(
+    const outcome = await new ActivityProvider({ clock: systemTimekeeper }).getActivityInfo(
       session,
       hook(join(dir, "nope.jsonl"), session),
     );
@@ -541,6 +541,7 @@ describe("the payload projection", () => {
       activityProvider: fakeActivity(async () => ok(info)),
       tmuxService: fakeTmux(async () => ABSENT),
       log: () => {},
+      clock: systemTimekeeper,
       history: () => EMPTY_HISTORY_DEPTH,
       navigation: () => 0,
       feeds: () => UNFOLLOWED_FEEDS,

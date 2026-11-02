@@ -10,6 +10,7 @@ import type { Lane } from "../config/lanes";
 import type { BandBar } from "../../mod/types";
 import type { WireFrame } from "../render/frame";
 import type { TmuxStatusBar } from "../tmux-status/frames";
+import type { Timekeeper } from "../time";
 
 // [LAW:types-are-the-program] PROTOCOL_VERSION encodes one thing:
 // "old-client × new-daemon (or vice versa) cannot communicate." It moves on
@@ -560,13 +561,14 @@ export function sendOne(
   sock: Duplex,
   req: Request,
   deadline: number,
+  clock: Pick<Timekeeper, "now" | "after">,
 ): Promise<Response> {
   return new Promise((resolve, reject) => {
     let settled = false;
     const finish = (fn: () => void) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
+      clearTimer();
       // [LAW:locality-or-seam] Only its own: the stream's other listeners are
       // what carry its end and its hang-up, and they aren't this call's.
       sock.off("data", reader);
@@ -576,12 +578,12 @@ export function sendOne(
         fn();
       } catch {}
     };
-    const timer = setTimeout(() => {
+    const clearTimer = clock.after(deadline - clock.now(), () => {
       finish(() => {
         sock.destroy();
         reject(new ClientTimeoutError("deadline"));
       });
-    }, deadline - Date.now());
+    });
 
     const reader = makeFrameReader(
       (frame) => finish(() => resolve(frame as Response)),

@@ -4,6 +4,7 @@ import path from "node:path";
 import { autorun } from "mobx";
 import { AutoCompactProvider } from "../src/segments/autocompact-provider";
 import { ok } from "../src/utils/outcome";
+import { systemTimekeeper } from "../src/time";
 
 // [LAW:behavior-not-structure] The owner of the auto-compact window
 // (brandon-unfiled-3248.8ro6, step 1): every request asks, the file is read
@@ -19,7 +20,7 @@ beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-autocompact-"));
   settings = path.join(dir, "settings.json");
   lines = [];
-  provider = new AutoCompactProvider((level, msg) =>
+  provider = new AutoCompactProvider(systemTimekeeper, (level, msg) =>
     lines.push(`${level} ${msg}`),
   );
 });

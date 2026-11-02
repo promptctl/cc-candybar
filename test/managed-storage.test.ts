@@ -1,3 +1,4 @@
+import { systemTimekeeper } from "../src/time";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -60,9 +61,14 @@ function rig(opts: { identityOf?: IdentityRead } = {}): Rig {
   };
   const lines: string[] = [];
   const logger = (level: string, msg: string) => lines.push(`${level} ${msg}`);
-  const watchers = new WatcherRegistry({ counters, logger });
+  const watchers = new WatcherRegistry({
+    clock: systemTimekeeper,
+    counters,
+    logger,
+  });
   const fileEvents = handDelivery();
   const storage = new ManagedStorage({
+    clock: systemTimekeeper,
     watchers,
     logger,
     fileEvents,

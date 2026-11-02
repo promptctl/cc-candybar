@@ -212,6 +212,7 @@ async function boot(): Promise<void> {
   // daemon has no spawner to outlive (env unset) and arms an inert handle; only
   // a test-spawned daemon is anchored, so this is invisible to the real daemon.
   armParentWatchdog({
+    clock: world.clock,
     anchor: anchorFromEnv(host.env),
     isAlive: pidAlive,
     onOrphaned: (reason) => {
@@ -410,6 +411,7 @@ function armOwnershipWatch(sockPath: string, bound: SocketIdentity): void {
     readLease: () => readLease(leasePathFor(sockPath)),
     shutdown: (code) => shutdown(code),
     log: serverLog,
+    clock: daemonProcess().world.clock,
   }).arm();
 }
 
@@ -475,7 +477,9 @@ function shutdown(code: number): void {
   // signal recovers that case. The realistic 452-corpse mode was async-
   // handle retention, not a synchronous block, so the backstop is
   // load-bearing for the observed failure pattern.
-  setTimeout(() => process.kill(process.pid, "SIGKILL"), 500);
+  daemonProcess().world.clock.after(500, () =>
+    process.kill(process.pid, "SIGKILL"),
+  );
   // [LAW:single-enforcer] The atomic bind() on the unix socket path is the
   // ONLY mutex preventing duplicate daemons. The previous shape unlinked
   // the socket file FIRST, then spent O(100ms) closing watchers, flushing

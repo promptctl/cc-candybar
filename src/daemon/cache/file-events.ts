@@ -10,6 +10,7 @@ import {
 import type { Release } from "../../utils/holds";
 import type { DaemonLogger } from "../../utils/logger";
 import { valueOf } from "../../utils/logfmt";
+import type { Timekeeper } from "../../time";
 
 // [LAW:no-ambient-temporal-coupling] How often the owner writes a probe: a
 // probe's event gets one full period, far above the watch's debounce.
@@ -91,9 +92,9 @@ type Instrument =
       readonly folder: string;
       readonly identity: FolderIdentity;
       readonly handle: WatcherHandle;
-      readonly period: NodeJS.Timeout;
+      readonly stopPeriod: () => void;
     }
-  | { readonly kind: "ended"; readonly period: NodeJS.Timeout };
+  | { readonly kind: "ended"; readonly stopPeriod: () => void };
 
 type Probing = Extract<Instrument, { kind: "probing" }>;
 
@@ -125,20 +126,25 @@ export class FileEventDelivery {
   private readonly watchers: WatcherRegistry;
   private readonly logger: DaemonLogger;
   private readonly identityOf: IdentityRead;
+  private readonly clock: Pick<Timekeeper, "now" | "every">;
 
   constructor(opts: {
     readonly watchers: WatcherRegistry;
     readonly logger: DaemonLogger;
+    // [LAW:effects-at-boundaries] The daemon's clock: the probe period, and
+    // the times probes and spans are stamped with.
+    readonly clock: Pick<Timekeeper, "now" | "every">;
     readonly identityOf?: IdentityRead;
   }) {
     this.watchers = opts.watchers;
     this.logger = opts.logger;
+    this.clock = opts.clock;
     this.identityOf = opts.identityOf ?? statIdentity;
     // [LAW:no-silent-failure] Nothing reads as delivering before it has been
     // measured.
     this.current = {
       kind: "unmeasured",
-      since: Date.now(),
+      since: this.clock.now(),
       reason: "not started",
       missedSince: null,
     };
@@ -159,28 +165,33 @@ export class FileEventDelivery {
     if (this.instrument.kind !== "idle") {
       throw new Error("file events: the owner was started twice");
     }
-    const period = setInterval(() => void this.tick(), PROBE_EVERY_MS);
-    period.unref();
+    const stopPeriod = this.clock.every(
+      PROBE_EVERY_MS,
+      () => void this.tick(),
+      {
+        unref: true,
+      },
+    );
     let identity: FolderIdentity | "gone";
     try {
       fs.mkdirSync(folder, { recursive: true });
       identity = this.identityOf(folder);
     } catch (e) {
       this.end(
-        period,
+        stopPeriod,
         `the probe folder could not be made: ${(e as Error).message}`,
       );
       return;
     }
     if (identity === "gone") {
-      this.end(period, "the probe folder was removed as it was made");
+      this.end(stopPeriod, "the probe folder was removed as it was made");
       return;
     }
     const probing: Probing = {
       kind: "probing",
       folder,
       identity,
-      period,
+      stopPeriod,
       // [LAW:single-enforcer] The only acquirer of this registry key.
       handle: this.watchers.acquire(
         `file-events:${folder}`,
@@ -193,7 +204,7 @@ export class FileEventDelivery {
     const [refusal] = probing.handle.deaf;
     if (refusal !== undefined) {
       this.end(
-        period,
+        stopPeriod,
         `the OS refused the probe folder's watch: ${refusal.reason}`,
       );
       return;
@@ -219,10 +230,10 @@ export class FileEventDelivery {
     switch (inst.kind) {
       case "probing":
         inst.handle.release();
-        clearInterval(inst.period);
+        inst.stopPeriod();
         return;
       case "ended":
-        clearInterval(inst.period);
+        inst.stopPeriod();
         return;
       case "idle":
         return;
@@ -243,17 +254,17 @@ export class FileEventDelivery {
       now = this.identityOf(inst.folder);
     } catch (e) {
       this.end(
-        inst.period,
+        inst.stopPeriod,
         `the probe folder cannot be read: ${(e as Error).message}`,
       );
       return;
     }
     if (now === "gone") {
-      this.end(inst.period, "the probe folder was removed");
+      this.end(inst.stopPeriod, "the probe folder was removed");
       return;
     }
     if (!sameIdentity(now, inst.identity)) {
-      this.end(inst.period, "the probe folder was replaced");
+      this.end(inst.stopPeriod, "the probe folder was replaced");
       return;
     }
     const d = this.current;
@@ -274,7 +285,7 @@ export class FileEventDelivery {
   // with its error: it tests no watch. A probe still in flight when the
   // instrument ends or closes judges nothing.
   private async probe(inst: Probing): Promise<void> {
-    const at = Date.now();
+    const at = this.clock.now();
     const before = this.current;
     if (before.kind === "delivering") {
       this.current = { ...before, unreported: [...before.unreported, at] };
@@ -312,7 +323,10 @@ export class FileEventDelivery {
   private heard(inst: Probing, heard: Invalidation): void {
     if (this.instrument !== inst) return;
     if (heard.kind === "failed") {
-      this.end(inst.period, `the probe folder's watch failed: ${heard.reason}`);
+      this.end(
+        inst.stopPeriod,
+        `the probe folder's watch failed: ${heard.reason}`,
+      );
       return;
     }
     const d = this.current;
@@ -329,18 +343,18 @@ export class FileEventDelivery {
     this.catchUps++;
     this.logger(
       "info",
-      `file events resumed since=${iso(d.missedSince)} missed=${Date.now() - d.missedSince}ms from=${d.kind}`,
+      `file events resumed since=${iso(d.missedSince)} missed=${this.clock.now() - d.missedSince}ms from=${d.kind}`,
     );
     this.notify({ kind: "caught-up", since: d.missedSince });
   }
 
   // [LAW:no-silent-failure] An ended instrument holds no watch and never
   // measures again, so whatever ended it, only a restart can.
-  private end(period: NodeJS.Timeout, reason: string): void {
+  private end(stopPeriod: () => void, reason: string): void {
     const inst = this.instrument;
     if (inst.kind === "probing") inst.handle.release();
-    this.instrument = { kind: "ended", period };
-    const at = Date.now();
+    this.instrument = { kind: "ended", stopPeriod };
+    const at = this.clock.now();
     this.move({
       kind: "unmeasured",
       since: at,

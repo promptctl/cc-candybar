@@ -108,13 +108,14 @@ const log: DaemonLogger = (level, message) =>
     : void process.stderr.write(`${level}: ${message}\n`);
 const warn = (message: string): void => log("warn", message);
 
-const watchers = new WatcherRegistry({ logger: log });
+const watchers = new WatcherRegistry({ clock: world.clock, logger: log });
 const providers = createPayloadProviders({
   launcher: world.launcher,
   host,
   watchers,
   // The demo holds no folder and watches nothing.
   fileEvents: NO_FILE_EVENTS,
+  clock: world.clock,
   logger: log,
   ledger: new RefreshLedger(log),
 });

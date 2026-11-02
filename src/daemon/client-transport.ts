@@ -13,7 +13,7 @@
 // branch.
 
 import net from "node:net";
-import type { Host } from "../host";
+import type { World } from "../host";
 import { socketPath } from "./paths";
 import {
   ClientTimeoutError,
@@ -23,6 +23,7 @@ import {
   type TimeoutPhase,
 } from "./protocol";
 import type { Request, Response } from "./protocol";
+import type { Timekeeper } from "../time";
 
 // Per-caller timeout policy, carried as data. The render hot path runs tight
 // budgets (a statusline refresh must not stall the host); operator-driven
@@ -92,22 +93,27 @@ type OkResponse = Extract<Response, { ok: true }>;
 // permanent/malformed_response, not a kick. The payload types themselves
 // never enter this module [LAW:one-way-deps].
 export async function requestOutcome<T>(
-  host: Host,
+  world: ClientWorld,
   request: (deadline: number) => UnversionedRequest,
   budgets: RoundTripBudgets,
   project: (resp: OkResponse) => T | undefined,
 ): Promise<RoundTripOutcome<T>> {
   let sock: net.Socket | null = null;
   try {
-    sock = await connectWithTimeout(socketPath(host), budgets.connectMs);
+    sock = await connectWithTimeout(
+      socketPath(world.host),
+      budgets.connectMs,
+      world.clock,
+    );
     // [LAW:one-source-of-truth] One instant: the one the request states and
     // the one the client's own timer gives up at.
-    const deadline = Date.now() + budgets.budgetMs;
+    const deadline = world.clock.now() + budgets.budgetMs;
     const req = request(deadline);
     const resp: Response = await sendOne(
       sock,
       { v: PROTOCOL_VERSION, ...req },
       deadline,
+      world.clock,
     );
     return interpretResponse(req.kind, resp, project);
   } catch (e) {
@@ -116,6 +122,10 @@ export async function requestOutcome<T>(
     if (sock) sock.destroy();
   }
 }
+
+// What a client of the daemon runs on: the machine it asks about, and the
+// clock its deadline is figured by.
+export type ClientWorld = Pick<World, "host" | "clock">;
 
 // [LAW:types-are-the-program] One place that turns a wire-level Response
 // into a typed Outcome. Every daemon client goes through this, so the
@@ -266,19 +276,20 @@ export function interpretException(e: unknown): FailureOutcome {
 function connectWithTimeout(
   path: string,
   timeoutMs: number,
+  clock: Pick<Timekeeper, "after">,
 ): Promise<net.Socket> {
   return new Promise((resolve, reject) => {
     const sock = net.createConnection({ path });
-    const timer = setTimeout(() => {
+    const clearTimer = clock.after(timeoutMs, () => {
       sock.destroy();
       reject(new ClientTimeoutError("connect"));
-    }, timeoutMs);
+    });
     sock.once("connect", () => {
-      clearTimeout(timer);
+      clearTimer();
       resolve(sock);
     });
     sock.once("error", (err) => {
-      clearTimeout(timer);
+      clearTimer();
       reject(err);
     });
   });

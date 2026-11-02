@@ -7,6 +7,7 @@ import type {
   SourceScope,
 } from "./refresh-ledger";
 import type { DaemonLogger } from "./logger";
+import type { Timekeeper } from "../time";
 import type { Holds, Release } from "./holds";
 import { Period, periodOf, type Every } from "./period";
 import {
@@ -60,6 +61,9 @@ export interface KeyedSourceSpec<I, T> {
   readonly maxEntries: number;
   readonly logger: DaemonLogger;
   readonly ledger: RefreshLedger;
+  // [LAW:effects-at-boundaries] Times each refresh and arms each entry's
+  // period.
+  readonly clock: Pick<Timekeeper, "now" | "after">;
 }
 
 interface Entry<I, T> extends Readable<T> {
@@ -203,7 +207,7 @@ export class KeyedSource<I, T> {
       flight: null,
       changed: false,
       superseding: 0,
-      revisit: revisitOf(this.spec.every, {
+      revisit: revisitOf(this.spec.every, this.spec.clock, {
         period: () => this.refresh(entry, "period"),
         holdReturned: () => this.refresh(entry, "change"),
       }),
@@ -229,7 +233,7 @@ export class KeyedSource<I, T> {
     }
     const flight = {};
     entry.flight = flight;
-    const startedAt = Date.now();
+    const startedAt = this.spec.clock.now();
     void attempt(() => this.spec.read(entry.input))
       .then((outcome) => {
         // [LAW:no-silent-failure] Every read that ran is an event, one a
@@ -241,7 +245,7 @@ export class KeyedSource<I, T> {
             `${this.spec.fields(entry.input)} stored=${stored ? "Y" : "N"}`,
             by,
             outcome,
-            Date.now() - startedAt,
+            this.spec.clock.now() - startedAt,
           );
         } finally {
           if (stored) this.store(entry, outcome);
@@ -312,10 +316,11 @@ interface Revisit {
 
 function revisitOf(
   every: Every | null,
+  clock: Pick<Timekeeper, "now" | "after">,
   read: { readonly period: () => void; readonly holdReturned: () => void },
 ): Revisit {
   if (every === null) return new HoldReturn(read.holdReturned);
-  const period = new Period(read.period);
+  const period = new Period(read.period, clock);
   return {
     landed: (outcome) => period.landed(periodOf(every, outcome)),
     hold: (held) => period.hold(held),

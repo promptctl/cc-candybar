@@ -15,6 +15,7 @@ import { SessionUsageStore } from "./cache/session-usage-store";
 import type { WatcherRegistry } from "./cache/watchers";
 import { GitService } from "../segments/git";
 import type { Host } from "../host";
+import type { Timekeeper } from "../time";
 import type { Launcher } from "../proc/launch";
 import type { FileEvents } from "./cache/file-events";
 import type { DaemonLogger } from "../utils/logger";
@@ -45,33 +46,44 @@ export function createPayloadProviders(opts: {
   // Whether the OS is delivering file events: the caller's one owner, which
   // only the daemon starts.
   readonly fileEvents: FileEvents;
+  // [LAW:effects-at-boundaries] The clock the providers read time and set
+  // their timers through: the daemon's.
+  readonly clock: Timekeeper;
   readonly logger: DaemonLogger;
   readonly ledger: RefreshLedger;
 }): PayloadProviders {
-  const { launcher, logger, ledger } = opts;
+  const { launcher, clock, logger, ledger } = opts;
   return {
     home: opts.host.home,
-    hostService: new HostService({ logger, ledger }),
+    hostService: new HostService({ clock, logger, ledger }),
     gitProvider: new GitDataProvider({
       inner: new GitService(launcher),
       watchers: opts.watchers,
+      clock,
       logger,
       ledger,
     }),
-    usageStore: new SessionUsageStore({ host: opts.host, logger, ledger }),
-    contextProvider: new ContextProvider({ logger, ledger }),
-    metricsProvider: new MetricsProvider({ logger, ledger }),
-    activityProvider: new ActivityProvider({ logger, ledger }),
-    tmuxService: new TmuxService({ launcher, logger, ledger }),
-    autoCompact: new AutoCompactProvider(logger, ledger),
-    cacheExpiry: new CacheExpiryProvider(logger, ledger),
+    usageStore: new SessionUsageStore({
+      host: opts.host,
+      clock,
+      logger,
+      ledger,
+    }),
+    contextProvider: new ContextProvider({ clock, logger, ledger }),
+    metricsProvider: new MetricsProvider({ clock, logger, ledger }),
+    activityProvider: new ActivityProvider({ clock, logger, ledger }),
+    tmuxService: new TmuxService({ launcher, clock, logger, ledger }),
+    autoCompact: new AutoCompactProvider(clock, logger, ledger),
+    cacheExpiry: new CacheExpiryProvider(clock, logger, ledger),
     managedStorage: new ManagedStorage({
       watchers: opts.watchers,
       fileEvents: opts.fileEvents,
+      clock,
       logger,
       ledger,
     }),
     faults: new RefreshFaults(),
     log: opts.logger,
+    clock,
   };
 }

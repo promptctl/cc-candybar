@@ -16,6 +16,46 @@ const CHILD_PROCESS_PATHS = ["child_process", "node:child_process"].map(
   }),
 );
 
+// [LAW:effects-at-boundaries] [LAW:single-enforcer] The real clock, the timer
+// globals and the loop's turn are read in src/time.ts alone; everything else is
+// handed a Timekeeper. Flat config replaces a rule per file block, so each rule
+// below is built as a function of the file and spread into every block that
+// sets it, and no block drops the clock when it adds its own restrictions.
+const CLOCK_FILE = "src/time.ts";
+const CLOCK_MESSAGE =
+  "Take the clock you are handed (src/time.ts): it alone reads the real one. [LAW:effects-at-boundaries]";
+const CLOCK_PROPERTIES = [
+  { object: "Date", property: "now", message: CLOCK_MESSAGE },
+  { object: "performance", property: "now", message: CLOCK_MESSAGE },
+  { object: "AbortSignal", property: "timeout", message: CLOCK_MESSAGE },
+];
+const CLOCK_SYNTAX = [
+  {
+    selector: "NewExpression[callee.name='Date'][arguments.length=0]",
+    message: CLOCK_MESSAGE,
+  },
+  {
+    selector:
+      "NewExpression[callee.name='Date'][arguments.length=1] > Identifier[name='undefined']",
+    message: CLOCK_MESSAGE,
+  },
+  { selector: "CallExpression[callee.name='Date']", message: CLOCK_MESSAGE },
+];
+const CLOCK_GLOBALS = [
+  "setTimeout",
+  "setInterval",
+  "setImmediate",
+  "clearTimeout",
+  "clearInterval",
+  "clearImmediate",
+].map((name) => ({ name, message: CLOCK_MESSAGE }));
+const CLOCK_IMPORT_PATHS = [
+  "node:timers",
+  "timers",
+  "node:timers/promises",
+  "timers/promises",
+].map((name) => ({ name, message: CLOCK_MESSAGE }));
+
 // [LAW:single-enforcer] Names only their owners may import, so what makes a
 // launch ownerless, or a path ambient, cannot be reached for by accident. Daemon
 // work holds its daemon's launcher: an owner's close is what refuses its
@@ -44,6 +84,13 @@ const OWNED_IMPORTS = {
     group: ["**/proc/launch", "**/proc/launch.js"],
     owners: ["src/daemon/production-adapters.ts"],
     message: "A Launcher is an owner's: take the one you are handed.",
+  },
+  // The process's one real clock, built beside its host and launcher.
+  systemTimekeeper: {
+    group: ["**/time", "**/time.js"],
+    owners: ["src/host.ts"],
+    message:
+      "The process has its one clock (src/host.ts): take the one you are given.",
   },
   // The real adapters a daemon is handed.
   fileStores: {
@@ -166,6 +213,11 @@ const OWNED_IMPORTS = {
 const HOST_READERS = ["src/host.ts", "src/attach-preload-exec.ts"];
 const HOST_READ_MESSAGE =
   "Take the Host you are handed: src/host.ts reads the process once. [LAW:effects-at-boundaries]";
+const HOST_PROPERTIES = [
+  { object: "process", property: "env", message: HOST_READ_MESSAGE },
+  { object: "os", property: "homedir", message: HOST_READ_MESSAGE },
+  { object: "os", property: "tmpdir", message: HOST_READ_MESSAGE },
+];
 const HOST_NAMED_IMPORTS = [
   {
     group: ["os", "node:os"],
@@ -207,7 +259,7 @@ function restrictedImports(file, rowPatterns = []) {
   return [
     "error",
     {
-      paths: CHILD_PROCESS_PATHS,
+      paths: [...CHILD_PROCESS_PATHS, ...CLOCK_IMPORT_PATHS],
       patterns: [
         ...Object.entries(OWNED_IMPORTS)
           .filter(([, { owners }]) => !owners.includes(file))
@@ -230,8 +282,16 @@ function ownedImportBlocks() {
   return [
     {
       files: ["src/**/*.{ts,mts}"],
-      ignores: ["src/proc/**"],
+      ignores: ["src/proc/**", CLOCK_FILE],
       rules: { "no-restricted-imports": restrictedImports(null) },
+    },
+    // src/proc/launch.ts alone may import child_process, so this block keeps the
+    // clock's paths and leaves that one out.
+    {
+      files: ["src/proc/**/*.{ts,mts}"],
+      rules: {
+        "no-restricted-imports": ["error", { paths: CLOCK_IMPORT_PATHS }],
+      },
     },
     ...owners.map((file) => ({
       files: [file],
@@ -322,14 +382,32 @@ export default [
   // alias of `process` itself is the one it cannot see.
   {
     files: ["src/**/*.{ts,mts}"],
-    ignores: HOST_READERS,
+    ignores: [...HOST_READERS, CLOCK_FILE],
     rules: {
       "no-restricted-properties": [
         "error",
-        { object: "process", property: "env", message: HOST_READ_MESSAGE },
-        { object: "os", property: "homedir", message: HOST_READ_MESSAGE },
-        { object: "os", property: "tmpdir", message: HOST_READ_MESSAGE },
+        ...HOST_PROPERTIES,
+        ...CLOCK_PROPERTIES,
       ],
+    },
+  },
+  {
+    files: HOST_READERS,
+    rules: { "no-restricted-properties": ["error", ...CLOCK_PROPERTIES] },
+  },
+  {
+    files: [CLOCK_FILE],
+    rules: { "no-restricted-properties": ["error", ...HOST_PROPERTIES] },
+  },
+  // Every file but the clock's: the timer globals, and `new Date()` with no
+  // argument. The blocks after this one repeat CLOCK_SYNTAX and CLOCK_GLOBALS
+  // beside their own, because a later block replaces the rule.
+  {
+    files: ["src/**/*.{ts,mts}"],
+    ignores: [CLOCK_FILE],
+    rules: {
+      "no-restricted-globals": ["error", ...CLOCK_GLOBALS],
+      "no-restricted-syntax": ["error", ...CLOCK_SYNTAX],
     },
   },
   // [LAW:verifiable-goals] A path the daemon serves holds its loop if it
@@ -357,6 +435,7 @@ export default [
           selector: "Identifier[name='runTmux']",
           message: "A path the daemon serves awaits `runTmuxAsync`.",
         },
+        ...CLOCK_SYNTAX,
       ],
     },
   },
@@ -368,6 +447,7 @@ export default [
       "no-restricted-globals": [
         "error",
         { name: "fetch", message: "Take `fetch` from the daemon's inputs." },
+        ...CLOCK_GLOBALS,
       ],
       "no-restricted-syntax": [
         "error",
@@ -383,6 +463,7 @@ export default [
           selector: "ImportDeclaration[source.value=/^(node:)?fs$/]",
           message: "Take the disk from the daemon's inputs.",
         },
+        ...CLOCK_SYNTAX,
       ],
     },
   },
@@ -395,6 +476,7 @@ export default [
           selector: "Identifier[name='launchSync']",
           message: "A path the daemon serves awaits `launch`.",
         },
+        ...CLOCK_SYNTAX,
       ],
     },
   },

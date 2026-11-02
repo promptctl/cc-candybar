@@ -117,7 +117,7 @@ describe("the host's sources", () => {
   // subcommand) builds the providers and renders nothing: it reads neither.
   test("nothing is read until a view declares it", async () => {
     const ledger = new RefreshLedger();
-    const host = new HostService({ ledger });
+    const host = new HostService({ clock: systemTimekeeper, ledger });
     const counts = () =>
       ledger.snapshot().map((r) => [r.name, r.refreshes.first]);
     expect(counts()).toEqual([
@@ -143,7 +143,7 @@ describe("the host's sources", () => {
     jest.useFakeTimers();
     const hostname = jest.spyOn(os, "hostname").mockReturnValue("before.lan");
     const ledger = new RefreshLedger();
-    const host = new HostService({ ledger });
+    const host = new HostService({ clock: systemTimekeeper, ledger });
     const holds = new Holds();
     try {
       const name = host.declareName(holds);

@@ -428,7 +428,7 @@ describe("the idle clock", () => {
   function clock() {
     let now = 1000;
     const closes: string[] = [];
-    const idle = new MenuIdle({
+    const idle = new MenuIdle({ clock: systemTimekeeper,
       now: () => instantOf(new Date(now * 1000)),
       close: async (sid, closing) => {
         closing.closed();
@@ -493,7 +493,7 @@ describe("the idle clock", () => {
 
 test("the click path counts a click pending from arrival, through a refusal, and logs its gather", async () => {
   const { ctx, held } = setup();
-  const idle = new MenuIdle({
+  const idle = new MenuIdle({ clock: systemTimekeeper,
     now: () => instantOf(new Date()),
     close: async () => {},
     failed: () => {},
@@ -501,7 +501,7 @@ test("the click path counts a click pending from arrival, through a refusal, and
   const { arrival: _a, turnWaited: _t, placeWaited: _p, gatherTook: _g, clientGone: _c, ...verbCtx } = ctx;
   const events: string[] = [];
   const parts = {
-    clock: { monotonic: () => performance.now(), date: () => new Date() },
+    clock: { monotonic: () => performance.now(), now: () => Date.now() },
     menuIdle: idle,
     payloadProviders: {},
     log: (_level: string, line: string) => events.push(line),
@@ -550,7 +550,7 @@ test("a click waiting behind its session's gather reports the wait; a menu with 
   expect(waits).toHaveLength(1);
   expect(waits[0]).toBeGreaterThan(0);
 
-  const idle = new MenuIdle({ now: () => instantOf(new Date(100000)), close: async () => {}, failed: () => {} });
+  const idle = new MenuIdle({ clock: systemTimekeeper, now: () => instantOf(new Date(100000)), close: async () => {}, failed: () => {} });
   idle.observe(A, instantOf(new Date(100000)), true, 30);
   expect(idle.since(A, instantOf(new Date(100000)))).toBeDefined();
   idle.clickArrived(A);

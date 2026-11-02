@@ -64,6 +64,7 @@ function setUp() {
     );
   writeConfig("{{ .status }}");
   const watchers = new WatcherRegistry({
+    clock: systemTimekeeper,
     counters: {
       watchersOpened: 0,
       watchersClosed: 0,
@@ -79,10 +80,15 @@ function setUp() {
   // The sessions each reload said drew from its entry, in order.
   const reloads: Array<readonly string[]> = [];
   const cache = new RenderCache(
-    { clock: systemTimekeeper, stateDir: stateDir(HOST), locations: locs(), env: HOST.env,
+    {
+      clock: systemTimekeeper,
+      stateDir: stateDir(HOST),
+      locations: locs(),
+      env: HOST.env,
       launcher: processLauncher,
       storage: NO_PLUGIN_STORAGE,
-      signer: TEST_SIGNER, gates: bareGates(),
+      signer: TEST_SIGNER,
+      gates: bareGates(),
       fileEvents: NO_FILE_EVENTS,
       sessionState: new SessionState(),
       watchers,

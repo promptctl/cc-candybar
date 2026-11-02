@@ -36,6 +36,7 @@ import {
   requestPayload,
   settled,
 } from "./helpers/payload-owners";
+import { systemTimekeeper } from "../src/time";
 
 type LogEntry = { level: string; msg: string };
 
@@ -55,6 +56,7 @@ function depsWith(
     metricsProvider: fakeMetrics(async () => ABSENT),
     tmuxService: fakeTmux(async () => ABSENT),
     log: (level: string, msg: string) => logs.push({ level, msg }),
+    clock: systemTimekeeper,
     history: () => EMPTY_HISTORY_DEPTH,
     navigation: () => 0,
     feeds: () => UNFOLLOWED_FEEDS,
@@ -258,7 +260,7 @@ describe("payloadOf — cache outcome lane", () => {
     const logs: LogEntry[] = [];
     // The owner logs the refresh that failed, once, as the daemon's does.
     const deps = depsWith(ABSENT, logs, {
-      cacheExpiry: new CacheExpiryProvider((level, msg) =>
+      cacheExpiry: new CacheExpiryProvider(systemTimekeeper, (level, msg) =>
         logs.push({ level, msg }),
       ),
     });

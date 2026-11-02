@@ -24,7 +24,11 @@ import {
   type KeyedOwners,
   type ViewFacts,
 } from "../src/daemon/render-payload";
-import { GitService, type GitInfo, type PullRequest } from "../src/segments/git";
+import {
+  GitService,
+  type GitInfo,
+  type PullRequest,
+} from "../src/segments/git";
 import { Holds } from "../src/utils/holds";
 import { ABSENT, failed, ok, type Outcome } from "../src/utils/outcome";
 import { settledLane, type Lane } from "../src/utils/reading";
@@ -103,10 +107,17 @@ test("a preset click that newly places the PR starts its lookup with no draw; sw
     }),
   );
   const inner = new OneRepo(processLauncher);
-  const git = new GitDataProvider({ inner, logger: () => {} });
+  const git = new GitDataProvider({
+    clock: systemTimekeeper,
+    inner,
+    logger: () => {},
+  });
   cleanups.push(() => git.close());
   const sessionState = new SessionState();
-  const watchers = new WatcherRegistry({ logger: () => {} });
+  const watchers = new WatcherRegistry({
+    clock: systemTimekeeper,
+    logger: () => {},
+  });
   cleanups.push(() => watchers.closeAll());
   // Only git is under test; the menu's other keyed lanes are declared into
   // owners that hold nothing.
@@ -116,8 +127,16 @@ test("a preset click that newly places the PR starts its lookup with no draw; sw
     usageStore: { declareToday: () => settledLane(ABSENT) },
   } as unknown as KeyedOwners;
   const cache = new RenderCache(
-    { clock: systemTimekeeper, stateDir: stateDir(HOST), locations: locs(), env: HOST.env, launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, gates: bareGates(),
- fileEvents: NO_FILE_EVENTS,
+    {
+      clock: systemTimekeeper,
+      stateDir: stateDir(HOST),
+      locations: locs(),
+      env: HOST.env,
+      launcher: processLauncher,
+      storage: NO_PLUGIN_STORAGE,
+      signer: TEST_SIGNER,
+      gates: bareGates(),
+      fileEvents: NO_FILE_EVENTS,
       sessionState,
       watchers,
       source: SOURCES_NOTHING,
@@ -204,7 +223,9 @@ test("a lane whose declaration throws is reported, takes no hold, and stops no o
       workspace: { current_dir: "/w", project_dir: "/w" },
     },
     cwd: "/w",
-    hints: parseClientHints({ tmux: { socket: "/s", pane: "%1", truecolor: null } }),
+    hints: parseClientHints({
+      tmux: { socket: "/s", pane: "%1", truecolor: null },
+    }),
   };
   // The git hold an earlier declaration took goes with the one that threw.
   holds.declare(() => take("git"));
@@ -238,9 +259,16 @@ function gitCache() {
     JSON.stringify({ root: { h: ["gitaculous"] } }),
   );
   const inner = new OneRepo(processLauncher);
-  const git = new GitDataProvider({ inner, logger: () => {} });
+  const git = new GitDataProvider({
+    clock: systemTimekeeper,
+    inner,
+    logger: () => {},
+  });
   cleanups.push(() => git.close());
-  const watchers = new WatcherRegistry({ logger: () => {} });
+  const watchers = new WatcherRegistry({
+    clock: systemTimekeeper,
+    logger: () => {},
+  });
   cleanups.push(() => watchers.closeAll());
   const owners = {
     gitProvider: git,
@@ -248,8 +276,16 @@ function gitCache() {
     usageStore: { declareToday: () => settledLane(ABSENT) },
   } as unknown as KeyedOwners;
   const cache = new RenderCache(
-    { clock: systemTimekeeper, stateDir: stateDir(HOST), locations: locs(), env: HOST.env, launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, gates: bareGates(),
- fileEvents: NO_FILE_EVENTS,
+    {
+      clock: systemTimekeeper,
+      stateDir: stateDir(HOST),
+      locations: locs(),
+      env: HOST.env,
+      launcher: processLauncher,
+      storage: NO_PLUGIN_STORAGE,
+      signer: TEST_SIGNER,
+      gates: bareGates(),
+      fileEvents: NO_FILE_EVENTS,
       sessionState: new SessionState(),
       watchers,
       source: SOURCES_NOTHING,

@@ -303,6 +303,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // Non-daemon consumers (var-system tests, future library use) take the
   // default debug-routed loggers and never write to daemon log files.
   const watcherRegistry = new WatcherRegistry({
+    clock,
     counters: stats,
     logger: log,
   });
@@ -318,12 +319,14 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const fileEvents = new FileEventDelivery({
     watchers: watcherRegistry,
     logger: log,
+    clock,
   });
   const payloadProviders = createPayloadProviders({
     launcher,
     host,
     watchers: watcherRegistry,
     fileEvents,
+    clock,
     logger: log,
     ledger: refreshLedger,
   });
@@ -342,6 +345,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // its menus (src/daemon/menu-idle.ts): a click restarts the clock, and the
   // close is the journaled write a ✕ makes.
   const menuIdle = new MenuIdle({
+    clock,
     now: instant,
     close: (sessionId, idle) => closeIdleMenus(sessionId, idle, verbCtx),
     failed: (sessionId, error) =>
@@ -362,6 +366,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     state: sessionState,
     log,
     now: instant,
+    clock,
   });
   // [LAW:single-enforcer] The one owner of what turning an animation lane on or
   // off takes (src/daemon/lane-setup.ts), told the switches each of a session's
@@ -433,7 +438,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     watching: () => paneVisibility.follow(),
     refreshes: () => refreshLedger.totals(),
     periods: FEED_PERIODS,
-    now: () => clock.monotonic(),
+    clock,
     instant,
     log,
   });
@@ -442,6 +447,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // the still rate however its bar moves, and one that comes into view is drawn
   // at once.
   const paneVisibility: PaneVisibility = new PaneVisibility({
+    clock,
     listPanes: (socket) =>
       runTmuxAsync(launcher, { socket }, "frames.visibility", [
         "list-panes",
@@ -567,6 +573,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const RELEASE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
   const binaryWatch = makeBinaryWatch({
+    clock,
     targets: bundle.targets,
     intervalMs: BIN_CHECK_INTERVAL_MS,
     stat: inputs.stat,

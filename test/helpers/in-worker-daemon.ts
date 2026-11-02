@@ -263,7 +263,12 @@ export function startDaemon(
         });
       }),
     send: (req, budgetMs) =>
-      sendOne(connect(), req as unknown as Request, Date.now() + budgetMs),
+      sendOne(
+        connect(),
+        req as unknown as Request,
+        Date.now() + budgetMs,
+        systemTimekeeper,
+      ),
     // [LAW:single-enforcer] A close leaves a connection open because a process's
     // exit ends it, so here the shell's end does: a subscriber hears the daemon
     // go, and a request's backstop goes with its stream. What is logged by now

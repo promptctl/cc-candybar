@@ -6,7 +6,11 @@
 // it does NOT spawn a daemon: introspecting a dead daemon is meaningless.
 
 import { describeFailure, requestOutcome } from "./client-transport";
-import type { RoundTripBudgets, RoundTripOutcome } from "./client-transport";
+import type {
+  ClientWorld,
+  RoundTripBudgets,
+  RoundTripOutcome,
+} from "./client-transport";
 import type { CliPlan } from "../cli-plan";
 import type {
   DebugSnapshot,
@@ -15,7 +19,6 @@ import type {
   VarSnapshot,
 } from "./debug-types";
 import type { DslConfig } from "../config/dsl-types";
-import type { Host } from "../host";
 
 // Operator-driven introspection path: legitimately slower budgets than the
 // render hot path, carried as this caller's values through the shared
@@ -24,11 +27,15 @@ const BUDGETS: RoundTripBudgets = { connectMs: 200, budgetMs: 500 };
 
 // `cc-candybar <vars|segments|config> [--json]` — `what` selects the projection.
 export async function debugCommandPlan(
-  host: Host,
+  world: ClientWorld,
   what: DebugWhat,
   args: readonly string[],
 ): Promise<CliPlan> {
-  return debugPlan(what, await fetchDebug(host, what), args.includes("--json"));
+  return debugPlan(
+    what,
+    await fetchDebug(world, what),
+    args.includes("--json"),
+  );
 }
 
 // [LAW:dataflow-not-control-flow] The outcome → (streams, exit-code) fold.
@@ -54,7 +61,7 @@ export function debugPlan(
 }
 
 function fetchDebug(
-  host: Host,
+  world: ClientWorld,
   what: DebugWhat,
 ): Promise<RoundTripOutcome<DebugSnapshot>> {
   // [LAW:no-defensive-null-guards] exception: trust boundary. The response is
@@ -62,7 +69,7 @@ function fetchDebug(
   // narrowing at the wire edge (an ok response without `debug` classifies as
   // permanent/malformed_response in the transport).
   return requestOutcome(
-    host,
+    world,
     () => ({ kind: "debug", what }),
     BUDGETS,
     (resp) => ("debug" in resp ? resp.debug : undefined),

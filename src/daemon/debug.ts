@@ -31,6 +31,7 @@ import { presetNames, presetRoot } from "../config/presets";
 import { rootNode } from "../config/root";
 import { templateReads, variableRead } from "../config/loader/refs";
 import type { CompiledConfig } from "../dsl/render";
+import type { Timekeeper } from "../time";
 import type {
   DebugSnapshot,
   DebugWhat,
@@ -119,7 +120,7 @@ export function introspectVars(
         err !== undefined
           ? { timestampMs: err.timestamp, message: err.message }
           : null,
-      ageMs: ageFromNode(node.lastUpdatedMs()),
+      ageMs: ageFromNode(node.lastUpdatedMs(), store.clock),
     });
   }
   return out;
@@ -168,9 +169,14 @@ function valueOf(node: StoreNode): Pick<VarSnapshot, "type" | "value"> {
   }
 }
 
-function ageFromNode(lastUpdatedMs: number | null): number | null {
+// [LAW:one-source-of-truth] Read on the clock the store stamped `lastUpdatedMs`
+// with, so an age never mixes two clocks.
+function ageFromNode(
+  lastUpdatedMs: number | null,
+  clock: Pick<Timekeeper, "now">,
+): number | null {
   if (lastUpdatedMs === null) return null;
-  return Math.max(0, Date.now() - lastUpdatedMs);
+  return Math.max(0, clock.now() - lastUpdatedMs);
 }
 
 // Build a name → SourceKind index from the DslConfig. Walks top-level

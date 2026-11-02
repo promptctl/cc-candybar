@@ -118,7 +118,12 @@ describe("a connection over a stream", () => {
   test("a client that gives up hangs up the daemon's end", async () => {
     const request = held();
     const daemon = standIn({ handle: request.handle });
-    const gaveUp = sendOne(open(daemon).client, STATS, Date.now() + 20);
+    const gaveUp = sendOne(
+      open(daemon).client,
+      STATS,
+      Date.now() + 20,
+      systemTimekeeper,
+    );
     await settled();
     expect(daemon.stats.inFlight).toBe(1);
 

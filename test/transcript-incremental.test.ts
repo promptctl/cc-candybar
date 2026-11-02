@@ -7,6 +7,7 @@
 // incremental fold is OBSERVATIONALLY EQUAL to a from-scratch read of the final
 // file — the optimization changes cost, never output.
 
+import { systemTimekeeper } from "../src/time";
 import {
   mkdtempSync,
   mkdirSync,
@@ -143,7 +144,9 @@ describe("foldAppended — the windowed fold", () => {
     // it, and none past the end.
     const reads = transcriptReads().reads - before.reads;
     expect(reads).toBeGreaterThanOrEqual(Math.ceil(bytes / FOLD_WINDOW_BYTES));
-    expect(reads).toBeLessThanOrEqual(Math.ceil(bytes / (FOLD_WINDOW_BYTES - 1024)));
+    expect(reads).toBeLessThanOrEqual(
+      Math.ceil(bytes / (FOLD_WINDOW_BYTES - 1024)),
+    );
     expect(transcriptReads().longLines).toBe(before.longLines);
   });
 
@@ -158,7 +161,11 @@ describe("foldAppended — the windowed fold", () => {
 
     expect(costs(folded.value)).toEqual([0.01, 0.02, 0.03]);
     expect(longLines).toEqual([
-      { path: t, offset: Buffer.byteLength(first), bytes: Buffer.byteLength(long) },
+      {
+        path: t,
+        offset: Buffer.byteLength(first),
+        bytes: Buffer.byteLength(long),
+      },
     ]);
     expect(transcriptReads().longLines - before.longLines).toBe(1);
     expect(transcriptReads().largestLine).toBeGreaterThanOrEqual(
@@ -193,14 +200,20 @@ describe("foldAppended — the windowed fold", () => {
     // One read: the window that reached the end leaves nothing to re-read.
     expect(transcriptReads().reads - before.reads).toBe(1);
 
-    appendFileSync(t, ',"message":{"usage":{"input_tokens":1,"output_tokens":1}}}\n');
+    appendFileSync(
+      t,
+      ',"message":{"usage":{"input_tokens":1,"output_tokens":1}}}\n',
+    );
     const second = await foldOf(t, first.folded, (_s, entries) => entries);
     expect(costs(second.folded.value)).toEqual([0.02]);
   });
 
   test("a rewritten (shrunk) file starts the fold over from the start", async () => {
     const t = join(dir, "A.jsonl");
-    writeFileSync(t, line(new Date(), 0.01) + line(new Date(), 0.02) + line(new Date(), 0.03));
+    writeFileSync(
+      t,
+      line(new Date(), 0.01) + line(new Date(), 0.02) + line(new Date(), 0.03),
+    );
     const first = await foldOf(t);
 
     const compacted = line(new Date(), 0.09);
@@ -234,19 +247,25 @@ describe("foldAppended — the windowed fold", () => {
     writeFileSync(
       t,
       paddedLine(0.01, Math.floor(FOLD_WINDOW_BYTES * 1.5)) +
-        Array.from({ length: 2200 }, (_, i) => paddedLine(i / 1000, 1024)).join(""),
+        Array.from({ length: 2200 }, (_, i) => paddedLine(i / 1000, 1024)).join(
+          "",
+        ),
     );
     const replaced = line(new Date(), 0.5) + line(new Date(), 0.6);
     let windows = 0;
     // The first window's step swaps the file under the path, as a rename-based
     // /compact would land mid-fold.
-    const { folded, longLines } = await foldOf(t, undefined, (state, entries) => {
-      if (windows++ === 0) {
-        writeFileSync(join(dir, "mid.new.jsonl"), replaced);
-        renameSync(join(dir, "mid.new.jsonl"), t);
-      }
-      return collect(state, entries);
-    });
+    const { folded, longLines } = await foldOf(
+      t,
+      undefined,
+      (state, entries) => {
+        if (windows++ === 0) {
+          writeFileSync(join(dir, "mid.new.jsonl"), replaced);
+          renameSync(join(dir, "mid.new.jsonl"), t);
+        }
+        return collect(state, entries);
+      },
+    );
 
     expect(costs(folded.value)).toEqual([0.5, 0.6]);
     expect(folded.cursor.offset).toBe(Buffer.byteLength(replaced));
@@ -279,7 +298,9 @@ describe("foldAppended — the windowed fold", () => {
   // every line is folded once, none twice.
   test("growth during a fold ends it, with the first stat's stamp, and the next fold reads on", async () => {
     const t = join(dir, "grow.jsonl");
-    const lines = Array.from({ length: 2200 }, (_, i) => paddedLine(i / 1000, 1024));
+    const lines = Array.from({ length: 2200 }, (_, i) =>
+      paddedLine(i / 1000, 1024),
+    );
     writeFileSync(t, lines.join(""));
     const firstStamp = statStamp(t);
     let windows = 0;
@@ -298,7 +319,12 @@ describe("foldAppended — the windowed fold", () => {
   });
 
   test("absent file (fresh session) is the absent outcome, not an error", async () => {
-    const res = await foldAppended(join(dir, "missing.jsonl"), undefined, NONE, collect);
+    const res = await foldAppended(
+      join(dir, "missing.jsonl"),
+      undefined,
+      NONE,
+      collect,
+    );
     expect(res.kind).toBe("absent");
   });
 
@@ -337,7 +363,11 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
     // Incremental: append one line per "render", ingesting between each.
     const incPath = join(dir, "inc.jsonl");
     writeFileSync(incPath, "");
-    const incStore = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
+    const incStore = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      sweepIntervalMs: 0,
+    });
     let incInfo;
     try {
       for (const c of contents) {
@@ -352,7 +382,11 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
     // From-scratch: the same final file read once by a cold store.
     const fullPath = join(dir, "full.jsonl");
     writeFileSync(fullPath, contents.join(""));
-    const freshStore = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
+    const freshStore = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      sweepIntervalMs: 0,
+    });
     let freshInfo;
     try {
       freshInfo = await freshStore.getUsageInfo("FULL", hook("FULL", fullPath));
@@ -386,7 +420,11 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
     const l2 = line(new Date(), 0.02, 200, 40);
     const l3 = line(new Date(), 0.03, 300, 60);
 
-    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      sweepIntervalMs: 0,
+    });
     try {
       // Prior established.
       writeFileSync(t, l1);
@@ -410,7 +448,11 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
 
       const fullPath = join(dir, "Rfull.jsonl");
       writeFileSync(fullPath, l1 + l2 + l3);
-      const fresh = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
+      const fresh = new SessionUsageStore({
+        clock: systemTimekeeper,
+        host: HOST,
+        sweepIntervalMs: 0,
+      });
       try {
         const freshInfo = await fresh.getUsageInfo("Rf", hook("Rf", fullPath));
         if (freshInfo.kind !== "ok") throw new Error("expected ok");
@@ -437,7 +479,11 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
   // the session's next request.
   test("a newer fold that lands after an older one is still the one stored", async () => {
     const t = join(dir, "N.jsonl");
-    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      sweepIntervalMs: 0,
+    });
     // Hold each of the first two folds until released, so the older lands first.
     const internals = store as unknown as {
       refold: (...args: unknown[]) => Promise<unknown>;
@@ -498,7 +544,11 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
       }) + "\n",
     );
 
-    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      sweepIntervalMs: 0,
+    });
     try {
       const first = await store.getUsageInfo(sid, hook(sid, mainPath));
       if (first.kind !== "ok") throw new Error("expected ok");
@@ -538,10 +588,15 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
           },
         }) + "\n",
       );
-      const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
+      const store = new SessionUsageStore({
+        clock: systemTimekeeper,
+        host: HOST,
+        sweepIntervalMs: 0,
+      });
       try {
         const usage = await store.getUsageInfo("P", hook("P", t));
-        const today = await todayInfo(store, 
+        const today = await todayInfo(
+          store,
           new Holds(),
           hook("P", t),
           cfgRoot,
@@ -563,8 +618,15 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
 
   test("a compacted (rewritten smaller) transcript re-folds to the new file's totals", async () => {
     const t = join(dir, "C.jsonl");
-    writeFileSync(t, line(new Date(), 0.01) + line(new Date(), 0.02) + line(new Date(), 0.03));
-    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
+    writeFileSync(
+      t,
+      line(new Date(), 0.01) + line(new Date(), 0.02) + line(new Date(), 0.03),
+    );
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      sweepIntervalMs: 0,
+    });
     try {
       const before = await store.getUsageInfo("C", hook("C", t));
       if (before.kind !== "ok") throw new Error("expected ok");

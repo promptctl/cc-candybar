@@ -426,6 +426,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
       PACKAGE_NAME,
       fetchImpl,
       registryUrl,
+      clock,
     );
     release = assessCurrency(PACKAGE_VERSION, latest);
     logRelease(describeRelease(release));

@@ -8,6 +8,7 @@
 // formatter that describes the report for `runInstall` to perform.
 
 import { ABSENT, failed, type Outcome } from "../utils/outcome";
+import { timeoutSignal, type Timekeeper } from "../time";
 
 // [LAW:types-are-the-program] A release version is exactly MAJOR.MINOR.PATCH.
 // semantic-release on `main` mints nothing else, and the ordering the currency
@@ -59,8 +60,8 @@ export const PACKAGE_NAME = "@promptctl/cc-candybar";
 export const REGISTRY_TIMEOUT_MS = 5_000;
 
 // [LAW:effects-at-boundaries] The one network effect in the install path. It
-// takes `fetch` and the registry as parameters so the pure core above and the
-// tests never touch the wire; the caller hands in the global and REGISTRY_URL
+// takes `fetch`, the registry and the clock its timeout runs on as parameters
+// so the pure core above and the tests never touch the wire; the caller hands in the global and REGISTRY_URL
 // (or the daemon's `CC_CANDYBAR_REGISTRY_URL` override). Every way the lookup can
 // fail to answer — refused, timed out, non-2xx, unparseable body, dist-tag not
 // a release — collapses to `failed` with its reason preserved, and a registry
@@ -70,11 +71,12 @@ export async function fetchLatestVersion(
   packageName: string,
   fetchImpl: typeof fetch,
   registryUrl: string,
+  clock: Pick<Timekeeper, "after">,
 ): Promise<Outcome<Version>> {
   const url = `${registryUrl}/-/package/${encodeURIComponent(packageName)}/dist-tags`;
   try {
     const res = await fetchImpl(url, {
-      signal: AbortSignal.timeout(REGISTRY_TIMEOUT_MS),
+      signal: timeoutSignal(clock, REGISTRY_TIMEOUT_MS),
     });
     if (!res.ok) {
       return failed(`registry responded ${res.status} for ${url}`);

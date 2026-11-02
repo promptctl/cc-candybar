@@ -140,24 +140,38 @@ function rig(): Rig {
   const log = (level: string, message: string): void => {
     lines.push(`${level} ${message}`);
   };
-  const watchers = new WatcherRegistry({ counters, logger: log });
+  const watchers = new WatcherRegistry({
+    clock: systemTimekeeper,
+    counters,
+    logger: log,
+  });
   const providers = createPayloadProviders({
+    clock: systemTimekeeper,
     launcher: world.launcher,
     host,
     watchers,
-    fileEvents: new FileEventDelivery({ watchers, logger: log }),
+    fileEvents: new FileEventDelivery({
+      clock: systemTimekeeper,
+      watchers,
+      logger: log,
+    }),
     logger: log,
     ledger: new RefreshLedger(log),
   });
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
   const cache = new RenderCache<SessionSource>(
-    { clock: systemTimekeeper, stateDir: stateDir(host), locations: locations(host), env: host.env,
+    {
+      clock: systemTimekeeper,
+      stateDir: stateDir(host),
+      locations: locations(host),
+      env: host.env,
       launcher: world.launcher,
       sessionState,
       watchers,
       storage: providers.managedStorage,
-      signer: TEST_SIGNER, gates: bareGates(),
+      signer: TEST_SIGNER,
+      gates: bareGates(),
       fileEvents: NO_FILE_EVENTS,
       log,
       declare: (holds, facts, closure, sources) =>
@@ -269,11 +283,16 @@ describe("a source's declaration", () => {
   test("the built arm loads, lowered to a session document in the plugin folder's managed storage", () => {
     const r = rig();
     const p = listing(`{ status: ${SOURCE} }`);
-    const loaded = loadFromDisk(dir, dir, p, { clock: systemTimekeeper, stateDir: stateDir(host), locations: locations(host), env: host.env,
+    const loaded = loadFromDisk(dir, dir, p, {
+      clock: systemTimekeeper,
+      stateDir: stateDir(host),
+      locations: locations(host),
+      env: host.env,
       launcher: world.launcher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
-      signer: TEST_SIGNER, gates: bareGates(),
+      signer: TEST_SIGNER,
+      gates: bareGates(),
     });
     try {
       expect(loaded.error).toBeNull();
@@ -333,7 +352,12 @@ describe("a source's declaration", () => {
     "%s drops the plugin, naming the field and what is built",
     async (_what, source, field) => {
       const message = fatal(
-        await checkConfig(world, daemonGates(), listing(`{ status: ${source} }`), dir),
+        await checkConfig(
+          world,
+          daemonGates(),
+          listing(`{ status: ${source} }`),
+          dir,
+        ),
       );
       expect(message).toContain(
         `plugin ${path.join(dir, "p/plugin.json5")} was not loaded`,
@@ -355,14 +379,21 @@ describe("a source's declaration", () => {
       "config.json5",
       `{ plugins: ["./p/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
     );
-    const loaded = loadFromDisk(dir, dir, p, { clock: systemTimekeeper, stateDir: stateDir(host), locations: locations(host), env: host.env,
+    const loaded = loadFromDisk(dir, dir, p, {
+      clock: systemTimekeeper,
+      stateDir: stateDir(host),
+      locations: locations(host),
+      env: host.env,
       launcher: world.launcher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
-      signer: TEST_SIGNER, gates: bareGates(),
+      signer: TEST_SIGNER,
+      gates: bareGates(),
     });
     try {
-      expect(loaded.state!.plugins.dropped.map((d) => [d.scope, d.name])).toEqual([["plugins", "p"]]);
+      expect(
+        loaded.state!.plugins.dropped.map((d) => [d.scope, d.name]),
+      ).toEqual([["plugins", "p"]]);
       expect(loaded.state!.sources.size).toBe(0);
       expect(fs.existsSync(path.join(dir, "p", "session"))).toBe(false);
       expect(r.providers.managedStorage.stats().folders).toBe(0);
@@ -384,20 +415,29 @@ describe("a source's declaration", () => {
          segments: { mine: { template: "x{{ .plugins.p.status.home }}" } },
          root: { h: ["mine"] } }`,
     );
-    const loaded = loadFromDisk(dir, dir, p, { clock: systemTimekeeper, stateDir: stateDir(host), locations: locations(host), env: host.env,
+    const loaded = loadFromDisk(dir, dir, p, {
+      clock: systemTimekeeper,
+      stateDir: stateDir(host),
+      locations: locations(host),
+      env: host.env,
       launcher: world.launcher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
-      signer: TEST_SIGNER, gates: bareGates(),
+      signer: TEST_SIGNER,
+      gates: bareGates(),
     });
     try {
       expect(loaded.error).toBeNull();
       const { config, plugins } = loaded.state!;
-      expect(plugins.dropped.map((d) => [d.scope, d.name])).toEqual([["plugins", "p"]]);
+      expect(plugins.dropped.map((d) => [d.scope, d.name])).toEqual([
+        ["plugins", "p"],
+      ]);
       // The namespace is the drop, so every name under it reads it.
       expect(config.variables["plugins.p"]).toMatchObject({ kind: "dropped" });
       expect(config.actions.raise).toMatchObject({ refreshes: [] });
-      expect([...plugins.reached]).toEqual([path.join(dir, "p", "plugin.json5")]);
+      expect([...plugins.reached]).toEqual([
+        path.join(dir, "p", "plugin.json5"),
+      ]);
     } finally {
       loaded.state?.registry.dispose();
     }
@@ -405,14 +445,21 @@ describe("a source's declaration", () => {
 
   test("a source's name is one identifier", async () => {
     const message = fatal(
-      await checkConfig(world, daemonGates(), listing(`{ "a.b": ${SOURCE} }`), dir),
+      await checkConfig(
+        world,
+        daemonGates(),
+        listing(`{ "a.b": ${SOURCE} }`),
+        dir,
+      ),
     );
     expect(message).toContain(`source name "a.b" is not one identifier`);
   });
 
   test("a source and a variable of the same name is a load error naming both", async () => {
     const message = fatal(
-      await checkConfig(world, daemonGates(), 
+      await checkConfig(
+        world,
+        daemonGates(),
         listing(
           `{ status: ${SOURCE} }`,
           `variables: { status: { kind: "literal", value: 1 } }`,
@@ -429,7 +476,9 @@ describe("a source's declaration", () => {
   // reading it would be two names for it.
   test("two sources reading the same session file drop the plugin, naming both and the file", async () => {
     const message = fatal(
-      await checkConfig(world, daemonGates(), 
+      await checkConfig(
+        world,
+        daemonGates(),
         listing(`{ status: ${SOURCE}, other: ${SOURCE} }`),
         dir,
       ),
@@ -494,11 +543,16 @@ describe("a source's declaration", () => {
       "config.json5",
       `{ plugins: ["./p/plugin.json5", "./q/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
     );
-    const loaded = loadFromDisk(dir, dir, p, { clock: systemTimekeeper, stateDir: stateDir(host), locations: locations(host), env: host.env,
+    const loaded = loadFromDisk(dir, dir, p, {
+      clock: systemTimekeeper,
+      stateDir: stateDir(host),
+      locations: locations(host),
+      env: host.env,
       launcher: world.launcher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
-      signer: TEST_SIGNER, gates: bareGates(),
+      signer: TEST_SIGNER,
+      gates: bareGates(),
     });
     try {
       expect(pluginLoadLine(loaded.layers, loaded.state!, loaded.ms)).toContain(
@@ -514,7 +568,12 @@ describe("a source's declaration", () => {
 // reads absent, as a session's does before its program first writes.
 describe("`cc-candybar check` on a source", () => {
   test("a hasKey-gated segment exits clean, the segment hidden", async () => {
-    const outcome = await checkConfig(world, daemonGates(), config(["mine", "plugins.p.gated"]), dir);
+    const outcome = await checkConfig(
+      world,
+      daemonGates(),
+      config(["mine", "plugins.p.gated"]),
+      dir,
+    );
     if (outcome.kind !== "clean") throw new Error(JSON.stringify(outcome));
     expect(outcome.warnings).toEqual([]);
     expect(textOf(outcome.rendered)).toContain("mine");
@@ -522,7 +581,12 @@ describe("`cc-candybar check` on a source", () => {
   });
 
   test("the same read unguarded exits fatal, naming the missing field", async () => {
-    const outcome = await checkConfig(world, daemonGates(), config(["mine", "plugins.p.bare"]), dir);
+    const outcome = await checkConfig(
+      world,
+      daemonGates(),
+      config(["mine", "plugins.p.bare"]),
+      dir,
+    );
     if (outcome.kind !== "fatal") throw new Error(JSON.stringify(outcome));
     expect(outcome.message).toContain('segment "plugins.p.bare"');
     expect(outcome.message).toContain(
@@ -636,10 +700,12 @@ describe("a source's document", () => {
 
   test("anything else at its name reads failed, never a throw", () => {
     for (const held of [null, 3, "x", { kind: "other" }]) {
-      expect(sourceDoc(() => ({ plugins: { p: { status: held } } }))()).toEqual({
-        kind: "failed",
-        reason: `variable "${STATUS}": the view's payload holds no source reading at "${STATUS}"`,
-      });
+      expect(sourceDoc(() => ({ plugins: { p: { status: held } } }))()).toEqual(
+        {
+          kind: "failed",
+          reason: `variable "${STATUS}": the view's payload holds no source reading at "${STATUS}"`,
+        },
+      );
     }
   });
 
@@ -904,13 +970,18 @@ describe("an installed plugin's storage", () => {
 // A repo's plugin and an installed one of its name each read their own
 // sources, at their own scope: `.repo.lit.<source>` beside `.plugins.lit.<source>`.
 test("sources nest by scope, each plugin's at its own namespace", () => {
-  const payload = projectSources(["plugins.lit.status", "repo.lit.status"], (name) => ({
-    kind: "ok" as const,
-    value: name,
-  }));
+  const payload = projectSources(
+    ["plugins.lit.status", "repo.lit.status"],
+    (name) => ({
+      kind: "ok" as const,
+      value: name,
+    }),
+  );
   expect(payload).toEqual({
     plugins: { lit: { status: { kind: "ok", value: "plugins.lit.status" } } },
     repo: { lit: { status: { kind: "ok", value: "repo.lit.status" } } },
   });
-  expect(projectSources([], () => ({ kind: "ok" as const, value: 0 }))).toEqual({ plugins: {}, repo: {} });
+  expect(projectSources([], () => ({ kind: "ok" as const, value: 0 }))).toEqual(
+    { plugins: {}, repo: {} },
+  );
 });

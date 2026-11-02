@@ -1,4 +1,5 @@
 import { Period } from "../../src/utils/period";
+import { systemTimekeeper } from "../../src/time";
 
 afterEach(() => {
   jest.useRealTimers();
@@ -8,7 +9,7 @@ describe("Period", () => {
   test("a disposed period never runs again, whatever holds or lands after", async () => {
     jest.useFakeTimers();
     let ticks = 0;
-    const period = new Period(() => ticks++);
+    const period = new Period(() => ticks++, systemTimekeeper);
     period.landed(1_000);
     period.hold(true);
     period.dispose();
@@ -23,7 +24,7 @@ describe("Period", () => {
   test("a landing kept from earlier resumes where it left off", async () => {
     jest.useFakeTimers();
     let ticks = 0;
-    const period = new Period(() => ticks++);
+    const period = new Period(() => ticks++, systemTimekeeper);
     period.hold(true);
 
     period.landed(1_000, Date.now() - 600);

@@ -53,6 +53,7 @@ import type { ValidatedConfig } from "./config/dsl-types.js";
 import { DEFAULT_DSL_CONFIG } from "./config/default-dsl-config.js";
 import { VariableStore } from "./var-system/store.js";
 import type { World } from "./host";
+import { timeoutSignal } from "./time";
 import { SourceRegistry } from "./var-system/sources.js";
 import { SessionState } from "./daemon/session-state.js";
 import {
@@ -113,8 +114,8 @@ export interface SettleWindow {
   readonly signal: AbortSignal;
 }
 
-function settleWindow(ms: number): SettleWindow {
-  return { ms, signal: AbortSignal.timeout(ms) };
+function settleWindow(clock: World["clock"], ms: number): SettleWindow {
+  return { ms, signal: timeoutSignal(clock, ms) };
 }
 
 // The sources still out when a wait under `settle` ended, named as the
@@ -572,7 +573,7 @@ export async function prepareConfig(
       () => null,
       () => false,
     );
-    const settle = settleWindow(settleMs);
+    const settle = settleWindow(world.clock, settleMs);
     bindPass(
       { layers, config, compiled, store, registry },
       effective,

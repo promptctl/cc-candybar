@@ -53,13 +53,21 @@ function rig() {
   const loads: Settled[] = [];
   const causes: LoadCause[] = [];
   const lines: string[] = [];
-  const watchers = new WatcherRegistry({ logger: () => {} });
+  const watchers = new WatcherRegistry({
+    clock: systemTimekeeper,
+    logger: () => {},
+  });
   cleanups.push(() => watchers.closeAll());
   const cache = new RenderCache(
-    { clock: systemTimekeeper, stateDir: stateDir(host), locations: locations(host), env: host.env,
+    {
+      clock: systemTimekeeper,
+      stateDir: stateDir(host),
+      locations: locations(host),
+      env: host.env,
       launcher: world.launcher,
       storage: NO_PLUGIN_STORAGE,
-      signer: TEST_SIGNER, gates: bareGates(),
+      signer: TEST_SIGNER,
+      gates: bareGates(),
       fileEvents: NO_FILE_EVENTS,
       sessionState: new SessionState(),
       watchers,

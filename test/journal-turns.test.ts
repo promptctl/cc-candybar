@@ -137,7 +137,7 @@ describe("the idle close decides in its turn", () => {
     let now = 1000;
     const failures: unknown[] = [];
     const fired: Array<Promise<void>> = [];
-    const idle = new MenuIdle({
+    const idle = new MenuIdle({ clock: systemTimekeeper,
       now: () => instantOf(new Date(now * 1000)),
       close: async (sid, closing) => {
         const running = closeIdleMenus(sid, closing, ctx);
@@ -302,7 +302,7 @@ describe("the click path", () => {
     const { arrival: _a, turnWaited: _t, clientGone: _g, ...verbCtx } = ctx;
     const events: string[] = [];
     const given = {
-      clock: { monotonic: () => performance.now(), date: () => new Date() },
+      clock: { monotonic: () => performance.now(), now: () => Date.now() },
       menuIdle: { clickArrived: () => {}, clickSettled: () => {} },
       payloadProviders: {},
       log: (_level: string, line: string) => events.push(line),

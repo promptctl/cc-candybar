@@ -745,6 +745,7 @@ async function statusLineClick(
   }
   await clickHandoff(
     parts.launcher,
+    parts.clock,
     {
       bin: process.platform === "darwin" ? "/usr/bin/open" : "xdg-open",
       args: [click.url],

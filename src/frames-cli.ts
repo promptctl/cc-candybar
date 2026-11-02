@@ -124,7 +124,7 @@ export async function runFrames(
       client: nodeClientHint("frames", bundle),
     };
     const outcome = await tryRenderViaDaemon(
-      world.host,
+      world,
       hook,
       renderArgs,
       cwd,

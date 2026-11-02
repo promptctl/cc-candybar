@@ -14,6 +14,7 @@
 
 import { changeLogger, type DaemonLogger } from "../utils/logger";
 import { ABSENT, failed, ok, type Outcome } from "../utils/outcome";
+import type { Timekeeper } from "../time";
 
 /** `fs.statSync`'s shape: the edge the watch reads the disk through. */
 export type BundleStat = (path: string) => { readonly mtimeMs: number };
@@ -40,6 +41,8 @@ function sameStamp(a: Outcome<number>, b: Outcome<number>): boolean {
 }
 
 export interface BinaryWatchOptions {
+  // The daemon's clock.
+  readonly clock: Pick<Timekeeper, "every">;
   readonly targets: readonly string[];
   readonly intervalMs: number;
   readonly stat: BundleStat;
@@ -58,7 +61,7 @@ export interface BinaryWatch {
 }
 
 export function makeBinaryWatch(opts: BinaryWatchOptions): BinaryWatch {
-  const { targets, intervalMs, stat, held, exit, log } = opts;
+  const { targets, intervalMs, stat, held, exit, log, clock } = opts;
   const logHeld = changeLogger(log);
   // The stamps the daemon booted with, taken the same way every sample is.
   const boot = targets.map((path) => ({ path, stamp: mtimeOf(path, stat) }));
@@ -67,12 +70,13 @@ export function makeBinaryWatch(opts: BinaryWatchOptions): BinaryWatch {
   // not watched. A stat failing later says nothing about the bundle either,
   // so it can neither match nor move the stamp.
   const watched = boot.filter(({ stamp }) => stamp.kind !== "failed");
-  let timer: NodeJS.Timeout | null = null;
+  // What clears the sampling interval while it runs.
+  let stopSampling: (() => void) | null = null;
   // Ended by the exit or the close: a check after either decides nothing.
   let ended = false;
   const end = (): void => {
     ended = true;
-    if (timer) clearInterval(timer);
+    stopSampling?.();
   };
   const sample = async (): Promise<void> => {
     if (ended) return;
@@ -117,8 +121,9 @@ export function makeBinaryWatch(opts: BinaryWatchOptions): BinaryWatch {
           );
         }
       }
-      timer = setInterval(() => void check(), intervalMs);
-      timer.unref();
+      stopSampling = clock.every(intervalMs, () => void check(), {
+        unref: true,
+      });
     },
     checkNow: check,
     close: end,

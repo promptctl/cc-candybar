@@ -107,15 +107,24 @@ function makeCache(
     dirWatchesOpened: 0,
     dirWatchesClosed: 0,
   };
-  const watchers = new WatcherRegistry({ counters, logger: () => {} });
+  const watchers = new WatcherRegistry({
+    clock: systemTimekeeper,
+    counters,
+    logger: () => {},
+  });
   cleanups.push(() => watchers.closeAll());
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
   const cache = new RenderCache(
-    { clock: systemTimekeeper, stateDir: stateDir(host), locations: locations(host), env: host.env,
+    {
+      clock: systemTimekeeper,
+      stateDir: stateDir(host),
+      locations: locations(host),
+      env: host.env,
       launcher: world.launcher,
       storage: NO_PLUGIN_STORAGE,
-      signer: TEST_SIGNER, gates: bareGates(),
+      signer: TEST_SIGNER,
+      gates: bareGates(),
       fileEvents: NO_FILE_EVENTS,
       sessionState,
       watchers,
@@ -649,7 +658,8 @@ describe("RenderCache", () => {
     const spy = jest.spyOn(fs, "watch").mockImplementation(((
       ...args: Parameters<typeof fs.watch>
     ) => {
-      if (refuse && args[0] === at) throw new Error("EMFILE: too many open files");
+      if (refuse && args[0] === at)
+        throw new Error("EMFILE: too many open files");
       return watch(...args);
     }) as typeof fs.watch);
     const { cache, cleanups, watchers } = makeCache();
@@ -676,7 +686,9 @@ describe("RenderCache", () => {
   // keeps a handle on the old tree, listening and deaf to the new one. The
   // period's judgment rebinds it, and the edit after that is heard.
   test("an entry whose project directory's parent is replaced by rename reads the new tree on the period's judgment, and hears the edit after it", async () => {
-    const root = realpathSync(mkdtempSync(join(tmpdir(), "cc-candybar-cache-swap-")));
+    const root = realpathSync(
+      mkdtempSync(join(tmpdir(), "cc-candybar-cache-swap-")),
+    );
     const proj = join(root, "proj", "app");
     const { cache, cleanups, reloads, watchers, counters } = makeCache();
     try {
@@ -711,7 +723,10 @@ describe("RenderCache", () => {
       const closed = counters.dirWatchesClosed;
       watchers.judge();
       expect(counters.dirWatchesClosed).toBe(closed + 1);
-      await until(() => x() === "new", "the entry read the tree now at its path");
+      await until(
+        () => x() === "new",
+        "the entry read the tree now at its path",
+      );
       expect(entry.configLayers).toEqual([cfg]);
 
       await reloads.after(entry, () => writeFileSync(cfg, config("edited")));
@@ -910,7 +925,10 @@ describe("RenderCache", () => {
       const cfg = join(dir, ".cc-candybar.json5");
       // The duplicate plus a dangling variable reference: the reference is
       // fatal; the advisory still reaches the bar beside it.
-      writeFileSync(cfg, DUPLICATE_KEY_CONFIG.replace("{{ .x }}", "{{ .nope }}"));
+      writeFileSync(
+        cfg,
+        DUPLICATE_KEY_CONFIG.replace("{{ .x }}", "{{ .nope }}"),
+      );
       const entry = cache.getOrCreate(dir, dir, undefined);
       expect(entry.lastError).toContain("nope");
       expect(entry.lastWarning).toContain(`${cfg}:8: duplicate key "padding"`);
@@ -1014,7 +1032,9 @@ describe("RenderCache", () => {
     const { cleanups, watchers } = makeCache();
     try {
       const dirs = watchers.watchedDirs();
-      expect(dirs).toContain(realpathSync.native(repoConfigsDir(stateDir(host))));
+      expect(dirs).toContain(
+        realpathSync.native(repoConfigsDir(stateDir(host))),
+      );
       expect(dirs).not.toContain(realpathSync.native(stateDir(host)));
     } finally {
       for (const fn of cleanups) fn();
@@ -1354,9 +1374,7 @@ describe("RenderCache", () => {
       const root = join(dir, ".cc-candybar", "plugins");
       mkdirSync(root, { recursive: true });
       const entry = cache.getOrCreate(dir, dir, undefined);
-      expect(
-        entry.state.config.segments["repo.deploy.status"],
-      ).toBeUndefined();
+      expect(entry.state.config.segments["repo.deploy.status"]).toBeUndefined();
       // Staged then renamed in, so every repetition is an event in the root.
       const staging = join(dir, "staging");
       await reloads.after(entry, () => {
@@ -1369,9 +1387,7 @@ describe("RenderCache", () => {
         renameSync(staging, join(root, "deploy"));
       });
       expect(entry.lastError).toBeNull();
-      expect(
-        entry.state.config.segments["repo.deploy.status"],
-      ).toBeDefined();
+      expect(entry.state.config.segments["repo.deploy.status"]).toBeDefined();
     } finally {
       cleanup();
       for (const fn of cleanups) fn();
@@ -1392,12 +1408,20 @@ describe("RenderCache idle sweep", () => {
   test("close disposes every state, releases its holds and leaves no timer", () => {
     jest.useFakeTimers();
     const { dir, cleanup } = mkConfigDir();
-    const watchers = new WatcherRegistry({ logger: () => {} });
+    const watchers = new WatcherRegistry({
+      clock: systemTimekeeper,
+      logger: () => {},
+    });
     const cache = new RenderCache(
-      { clock: systemTimekeeper, stateDir: stateDir(host), locations: locations(host), env: host.env,
+      {
+        clock: systemTimekeeper,
+        stateDir: stateDir(host),
+        locations: locations(host),
+        env: host.env,
         launcher: world.launcher,
         storage: NO_PLUGIN_STORAGE,
-        signer: TEST_SIGNER, gates: bareGates(),
+        signer: TEST_SIGNER,
+        gates: bareGates(),
         fileEvents: NO_FILE_EVENTS,
         sessionState: new SessionState(),
         watchers,
@@ -1444,12 +1468,20 @@ describe("RenderCache idle sweep", () => {
   // is torn down by its one dispose, which releases what its renders held.
   test("a view's dispose releases its holds and refuses new ones", () => {
     const { dir, cleanup } = mkConfigDir();
-    const watchers = new WatcherRegistry({ logger: () => {} });
+    const watchers = new WatcherRegistry({
+      clock: systemTimekeeper,
+      logger: () => {},
+    });
     const cache = new RenderCache(
-      { clock: systemTimekeeper, stateDir: stateDir(host), locations: locations(host), env: host.env,
+      {
+        clock: systemTimekeeper,
+        stateDir: stateDir(host),
+        locations: locations(host),
+        env: host.env,
         launcher: world.launcher,
         storage: NO_PLUGIN_STORAGE,
-        signer: TEST_SIGNER, gates: bareGates(),
+        signer: TEST_SIGNER,
+        gates: bareGates(),
         fileEvents: NO_FILE_EVENTS,
         sessionState: new SessionState(),
         watchers,
@@ -1489,7 +1521,10 @@ describe("RenderCache idle sweep", () => {
 
   test("a view holds what its declaration takes: a request naming other keys, or the session's preset moving, declares again at once", () => {
     const { dir, cleanup } = mkConfigDir();
-    const watchers = new WatcherRegistry({ logger: () => {} });
+    const watchers = new WatcherRegistry({
+      clock: systemTimekeeper,
+      logger: () => {},
+    });
     const sessionState = new SessionState();
     // Each declaration takes one hold per key its request names and one per
     // closure, so what it holds says which request and which preset it read.
@@ -1502,10 +1537,15 @@ describe("RenderCache idle sweep", () => {
       });
     const logs: string[] = [];
     const cache = new RenderCache(
-      { clock: systemTimekeeper, stateDir: stateDir(host), locations: locations(host), env: host.env,
+      {
+        clock: systemTimekeeper,
+        stateDir: stateDir(host),
+        locations: locations(host),
+        env: host.env,
         launcher: world.launcher,
         storage: NO_PLUGIN_STORAGE,
-        signer: TEST_SIGNER, gates: bareGates(),
+        signer: TEST_SIGNER,
+        gates: bareGates(),
         fileEvents: NO_FILE_EVENTS,
         sessionState,
         watchers,
@@ -1603,13 +1643,21 @@ describe("RenderCache idle sweep", () => {
 // config moves its view (`follow`). Only an event opens a view.
 describe("RenderCache frames and pins", () => {
   function pinCache() {
-    const watchers = new WatcherRegistry({ logger: () => {} });
+    const watchers = new WatcherRegistry({
+      clock: systemTimekeeper,
+      logger: () => {},
+    });
     const logs: string[] = [];
     const cache = new RenderCache(
-      { clock: systemTimekeeper, stateDir: stateDir(host), locations: locations(host), env: host.env,
+      {
+        clock: systemTimekeeper,
+        stateDir: stateDir(host),
+        locations: locations(host),
+        env: host.env,
         launcher: world.launcher,
         storage: NO_PLUGIN_STORAGE,
-        signer: TEST_SIGNER, gates: bareGates(),
+        signer: TEST_SIGNER,
+        gates: bareGates(),
         fileEvents: NO_FILE_EVENTS,
         sessionState: new SessionState(),
         watchers,
@@ -1749,15 +1797,23 @@ describe("RenderCache frames and pins", () => {
   });
 
   test("a reload whose successor view fails to open leaves the session with no view and its error, which a frame does not reopen", () => {
-    const watchers = new WatcherRegistry({ logger: () => {} });
+    const watchers = new WatcherRegistry({
+      clock: systemTimekeeper,
+      logger: () => {},
+    });
     const logs: string[] = [];
     const { dir, cleanup } = mkConfigDir();
     let opens = 0;
     const cache = new RenderCache(
-      { clock: systemTimekeeper, stateDir: stateDir(host), locations: locations(host), env: host.env,
+      {
+        clock: systemTimekeeper,
+        stateDir: stateDir(host),
+        locations: locations(host),
+        env: host.env,
         launcher: world.launcher,
         storage: NO_PLUGIN_STORAGE,
-        signer: TEST_SIGNER, gates: bareGates(),
+        signer: TEST_SIGNER,
+        gates: bareGates(),
         fileEvents: NO_FILE_EVENTS,
         sessionState: new SessionState(),
         watchers,
@@ -1819,13 +1875,21 @@ describe("RenderCache frames and pins", () => {
   // A failure no open feed shows has no frame to draw it in, so a sweep
   // forgets it.
   test("an unpinned session's open failure is forgotten by the next sweep", () => {
-    const watchers = new WatcherRegistry({ logger: () => {} });
+    const watchers = new WatcherRegistry({
+      clock: systemTimekeeper,
+      logger: () => {},
+    });
     const { dir, cleanup } = mkConfigDir();
     const cache = new RenderCache(
-      { clock: systemTimekeeper, stateDir: stateDir(host), locations: locations(host), env: host.env,
+      {
+        clock: systemTimekeeper,
+        stateDir: stateDir(host),
+        locations: locations(host),
+        env: host.env,
         launcher: world.launcher,
         storage: NO_PLUGIN_STORAGE,
-        signer: TEST_SIGNER, gates: bareGates(),
+        signer: TEST_SIGNER,
+        gates: bareGates(),
         fileEvents: NO_FILE_EVENTS,
         sessionState: new SessionState(),
         watchers,
@@ -1855,15 +1919,23 @@ describe("RenderCache frames and pins", () => {
   // by the request that opening was for, so a pick that fixes it shows with
   // no request after it.
   test("follow retries a failed opening by its request, and the error goes", () => {
-    const watchers = new WatcherRegistry({ logger: () => {} });
+    const watchers = new WatcherRegistry({
+      clock: systemTimekeeper,
+      logger: () => {},
+    });
     const first = mkConfigDir();
     const second = mkConfigDir();
     let opens = 0;
     const cache = new RenderCache(
-      { clock: systemTimekeeper, stateDir: stateDir(host), locations: locations(host), env: host.env,
+      {
+        clock: systemTimekeeper,
+        stateDir: stateDir(host),
+        locations: locations(host),
+        env: host.env,
         launcher: world.launcher,
         storage: NO_PLUGIN_STORAGE,
-        signer: TEST_SIGNER, gates: bareGates(),
+        signer: TEST_SIGNER,
+        gates: bareGates(),
         fileEvents: NO_FILE_EVENTS,
         sessionState: new SessionState(),
         watchers,

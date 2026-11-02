@@ -1,3 +1,4 @@
+import { systemTimekeeper } from "../src/time";
 import fs from "node:fs";
 import { processLauncher } from "./helpers/host";
 import os from "node:os";
@@ -149,6 +150,7 @@ function makeCache(
   const logs: string[] = [];
   let throwOn = opts.throwOn;
   const svc = new GitDataProvider({
+    clock: systemTimekeeper,
     periodMs: opts.periodMs,
     maxRepos: opts.maxRepos,
     inner,
@@ -1405,8 +1407,18 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
     };
     const logs: string[] = [];
     const logger = (_level: string, message: string) => logs.push(message);
-    const watchers = new WatcherRegistry({ counters, logger });
-    const svc = new GitDataProvider({ ...opts, inner, watchers, logger });
+    const watchers = new WatcherRegistry({
+      clock: systemTimekeeper,
+      counters,
+      logger,
+    });
+    const svc = new GitDataProvider({
+      clock: systemTimekeeper,
+      ...opts,
+      inner,
+      watchers,
+      logger,
+    });
     return { svc, inner, counters, logs, watchers };
   }
 

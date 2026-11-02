@@ -97,7 +97,7 @@ const SUBCOMMANDS: Readonly<Record<string, Subcommand>> = {
     runDaemon(world);
   },
   "daemon-stats": async (args) => {
-    await exitWith(await daemonStatsPlan(host, args));
+    await exitWith(await daemonStatsPlan(world, args));
   },
   // The stream owns its own lifecycle.
   frames: async () => {
@@ -129,7 +129,7 @@ const SUBCOMMANDS: Readonly<Record<string, Subcommand>> = {
     DEBUG_WHATS.map((what): [string, Subcommand] => [
       what,
       async (args) => {
-        await exitWith(await debugCommandPlan(host, what, args));
+        await exitWith(await debugCommandPlan(world, what, args));
       },
     ]),
   ),
@@ -213,7 +213,7 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
     // and an SSH session at the same time, so the answer genuinely differs per
     // request.
     const outcome = await tryRenderViaDaemon(
-      host,
+      world,
       hookData,
       // The wire's `args` shape (RenderRequest): the client's path, then its
       // flags — so not the node binary in front of them.

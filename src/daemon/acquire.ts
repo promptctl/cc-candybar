@@ -11,6 +11,7 @@ import {
   spawnBackoffPath,
   daemonDir,
 } from "./paths";
+import { sleep, type Timekeeper } from "../time";
 
 // [LAW:single-enforcer] One primitive per runtime that owns the entire
 // "obtain a daemon" verb. Every spawn site in the Node runtime now flows
@@ -62,10 +63,10 @@ export async function obtainDaemon(
   world: World,
   opts: ObtainOpts = {},
 ): Promise<ObtainResult> {
-  const { host } = world;
+  const { host, clock } = world;
   const settings = { ...DEFAULT_OPTS, ...opts };
   const spawnFn = opts.spawn ?? (() => spawnDaemonDetachedReal(world));
-  const deadline = Date.now() + settings.totalTimeoutMs;
+  const deadline = clock.now() + settings.totalTimeoutMs;
   const lockFallbackMs =
     opts.lockFallbackMs ?? Math.floor(settings.totalTimeoutMs / 2);
 
@@ -76,14 +77,14 @@ export async function obtainDaemon(
   if (setupErr) return { kind: "failed", reason: setupErr };
 
   // Fast path: is a daemon already listening?
-  if (await canConnect(socketPath(host), settings.connectTimeoutMs)) {
+  if (await canConnect(socketPath(host), settings.connectTimeoutMs, clock)) {
     return { kind: "attached" };
   }
 
   // No daemon yet. Try to win the spawn-lock so we are the one to bring it up.
-  const contentionStart = Date.now();
-  while (Date.now() < deadline) {
-    const lock = tryAcquireSpawnLock(host);
+  const contentionStart = clock.now();
+  while (clock.now() < deadline) {
+    const lock = tryAcquireSpawnLock(host, clock);
     if (lock.kind === "error") {
       // [LAW:no-silent-failure] Unrecoverable errors (EACCES, ENOTDIR,
       // broken state dir) must not silently degrade into a contention loop
@@ -94,11 +95,14 @@ export async function obtainDaemon(
       try {
         // Re-check: another caller may have spawned a daemon between our
         // initial connect and our lock acquisition.
-        if (await canConnect(socketPath(host), settings.connectTimeoutMs)) {
+        if (
+          await canConnect(socketPath(host), settings.connectTimeoutMs, clock)
+        ) {
           return { kind: "attached" };
         }
         return await spawnAndWaitForReady(
           host,
+          clock,
           spawnFn,
           settings.spawnReadyTimeoutMs,
           settings.connectTimeoutMs,
@@ -111,8 +115,8 @@ export async function obtainDaemon(
     }
     // Lock contended. Another caller is in the spawn window — brief wait,
     // then re-check for the socket they're bringing up.
-    await sleep(20);
-    if (await canConnect(socketPath(host), settings.connectTimeoutMs)) {
+    await sleep(clock, 20);
+    if (await canConnect(socketPath(host), settings.connectTimeoutMs, clock)) {
       return { kind: "attached" };
     }
     // [LAW:dataflow-not-control-flow] spawn.lock is an optimization; bind()
@@ -121,9 +125,10 @@ export async function obtainDaemon(
     // bypass the lock and let bind() inside the daemon arbitrate duplicates.
     // Same shape as a fresh spawn — caller pays one extra Node startup cost
     // in the worst case, which is the right trade for availability.
-    if (Date.now() - contentionStart > lockFallbackMs) {
+    if (clock.now() - contentionStart > lockFallbackMs) {
       return await spawnAndWaitForReady(
         host,
+        clock,
         spawnFn,
         settings.spawnReadyTimeoutMs,
         settings.connectTimeoutMs,
@@ -140,6 +145,7 @@ export async function obtainDaemon(
 // Shared by the lock-held path and the lock-fallback path so they don't drift.
 async function spawnAndWaitForReady(
   host: Host,
+  clock: Timekeeper,
   spawnFn: () => boolean,
   spawnReadyTimeoutMs: number,
   connectTimeoutMs: number,
@@ -147,7 +153,7 @@ async function spawnAndWaitForReady(
   reasonSuffix: string,
 ): Promise<ObtainResult> {
   const readyDeadline = Math.min(
-    Date.now() + spawnReadyTimeoutMs,
+    clock.now() + spawnReadyTimeoutMs,
     outerDeadline,
   );
 
@@ -156,11 +162,11 @@ async function spawnAndWaitForReady(
   // already in flight — do NOT add another Node process; wait for the in-flight
   // boot. This keeps obtainDaemon under the same global rate cap as the kick
   // path, so the rate bound holds for EVERY spawn site [LAW:one-source-of-truth].
-  if (!claimSpawnCooldown(host)) {
+  if (!claimSpawnCooldown(host, clock)) {
     // [LAW:no-silent-failure] This failure's cause is the cooldown gate, not the
     // lock path we arrived through — so it does NOT inherit reasonSuffix (which
     // tags lock-held vs lock-fallback *spawn* provenance). We never spawned here.
-    return (await pollUntilReady(host, connectTimeoutMs, readyDeadline))
+    return (await pollUntilReady(host, clock, connectTimeoutMs, readyDeadline))
       ? { kind: "attached" }
       : {
           kind: "failed",
@@ -186,7 +192,7 @@ async function spawnAndWaitForReady(
       reason: `spawn returned false${reasonSuffix}`,
     };
   }
-  return (await pollUntilReady(host, connectTimeoutMs, readyDeadline))
+  return (await pollUntilReady(host, clock, connectTimeoutMs, readyDeadline))
     ? { kind: "started" }
     : {
         kind: "failed",
@@ -200,12 +206,15 @@ async function spawnAndWaitForReady(
 // the outcome.
 async function pollUntilReady(
   host: Host,
+  clock: Timekeeper,
   connectTimeoutMs: number,
   readyDeadline: number,
 ): Promise<boolean> {
-  while (Date.now() < readyDeadline) {
-    if (await canConnect(socketPath(host), connectTimeoutMs)) return true;
-    await sleep(20);
+  while (clock.now() < readyDeadline) {
+    if (await canConnect(socketPath(host), connectTimeoutMs, clock)) {
+      return true;
+    }
+    await sleep(clock, 20);
   }
   return false;
 }
@@ -240,10 +249,10 @@ export function obtainDaemonKick(
   world: World,
   opts: { spawn?: () => boolean } = {},
 ): void {
-  const { host } = world;
+  const { host, clock } = world;
   if (ensureStateDir(host) !== null) return;
   const spawnFn = opts.spawn ?? (() => spawnDaemonDetachedReal(world));
-  const lock = tryAcquireSpawnLock(host);
+  const lock = tryAcquireSpawnLock(host, clock);
 
   // [LAW:dataflow-not-control-flow] Lock outcome is data, not control flow.
   // - "contended": typically means another caller is in the spawn window;
@@ -256,12 +265,12 @@ export function obtainDaemonKick(
   //   hard stop on availability. Fall through to an unlocked spawn.
   // - "held": normal path — spawn under the lock.
   if (lock.kind === "contended") {
-    const ageMs = spawnLockAgeMs(host);
+    const ageMs = spawnLockAgeMs(host, clock);
     if (ageMs !== null && ageMs > KICK_CONTENDED_OVERRIDE_MS) {
       process.stderr.write(
         `cc-candybar: spawn-lock held ${ageMs}ms (likely crashed holder) — spawning unlocked\n`,
       );
-      cooldownGatedSpawn(host, spawnFn);
+      cooldownGatedSpawn(host, clock, spawnFn);
     }
     return;
   }
@@ -269,11 +278,11 @@ export function obtainDaemonKick(
     process.stderr.write(
       `cc-candybar: spawn-lock unavailable (${lock.reason}) — spawning unlocked\n`,
     );
-    cooldownGatedSpawn(host, spawnFn);
+    cooldownGatedSpawn(host, clock, spawnFn);
     return;
   }
   try {
-    cooldownGatedSpawn(host, spawnFn);
+    cooldownGatedSpawn(host, clock, spawnFn);
   } finally {
     releaseSpawnLock();
   }
@@ -284,15 +293,19 @@ export function obtainDaemonKick(
 // spawn_daemon_rate_limited. On cooldown we do nothing: a spawn was attempted
 // within SPAWN_COOLDOWN_MS and is likely still booting; the kick is
 // fire-and-forget, so "already in flight" is a complete answer.
-function cooldownGatedSpawn(host: Host, spawnFn: () => boolean): void {
-  if (!claimSpawnCooldown(host)) return;
+function cooldownGatedSpawn(
+  host: Host,
+  clock: Timekeeper,
+  spawnFn: () => boolean,
+): void {
+  if (!claimSpawnCooldown(host, clock)) return;
   safeSpawn(spawnFn);
 }
 
-function spawnLockAgeMs(host: Host): number | null {
+function spawnLockAgeMs(host: Host, clock: Timekeeper): number | null {
   try {
     const st = fs.statSync(spawnLockPath(host));
-    return Date.now() - st.mtimeMs;
+    return clock.now() - st.mtimeMs;
   } catch {
     return null;
   }
@@ -486,12 +499,12 @@ export function resetSpawnBackoff(backoffPath: string): void {
 // returns false still counts against the rate, so a broken binary is not
 // retried in a tight loop. A future-mtime garbage record warns loudly and
 // falls toward ALLOWING the spawn [LAW:no-silent-failure].
-function claimSpawnCooldown(host: Host): boolean {
+function claimSpawnCooldown(host: Host, clock: Timekeeper): boolean {
   const cooldownPath = spawnCooldownPath(host);
   const backoffPath = spawnBackoffPath(host);
   const streak = readBackoffStreak(backoffPath);
   const decision = cooldownDecision(
-    cooldownAgeMs(cooldownPath),
+    cooldownAgeMs(cooldownPath, clock),
     effectiveCooldownMs(streak),
   );
   if (decision.kind === "deny") return false;
@@ -500,7 +513,7 @@ function claimSpawnCooldown(host: Host): boolean {
       `cc-candybar: spawn.cooldown mtime is ${decision.futureMs}ms in the future — ignoring and spawning\n`,
     );
   }
-  recordSpawnAttempt(cooldownPath);
+  recordSpawnAttempt(cooldownPath, clock);
   // [LAW:dataflow-not-control-flow] Every granted spawn advances the streak
   // by exactly one, unconditionally — the cap lives in the read side
   // (effectiveCooldownMs) and here (Math.min), never as a skip.
@@ -511,15 +524,15 @@ function claimSpawnCooldown(host: Host): boolean {
   return true;
 }
 
-function cooldownAgeMs(path: string): number | null {
+function cooldownAgeMs(path: string, clock: Timekeeper): number | null {
   try {
-    return Date.now() - fs.statSync(path).mtimeMs;
+    return clock.now() - fs.statSync(path).mtimeMs;
   } catch {
     return null;
   }
 }
 
-function recordSpawnAttempt(filePath: string): void {
+function recordSpawnAttempt(filePath: string, clock: Timekeeper): void {
   // [LAW:composability] Self-sufficient — ensure the state dir exists rather
   // than leaning on an ambient ensureStateDir(host) precondition, so any spawn site
   // routing through claimSpawnCooldown records correctly (mirrors Rust's
@@ -529,7 +542,7 @@ function recordSpawnAttempt(filePath: string): void {
   // un-bound the rate [LAW:no-silent-failure].
   try {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, `${process.pid} ${Date.now()}\n`, {
+    fs.writeFileSync(filePath, `${process.pid} ${clock.now()}\n`, {
       mode: 0o600,
     });
   } catch (e) {
@@ -564,13 +577,13 @@ type LockOutcome =
   | { kind: "contended" }
   | { kind: "error"; reason: string };
 
-function tryAcquireSpawnLock(host: Host): LockOutcome {
+function tryAcquireSpawnLock(host: Host, clock: Timekeeper): LockOutcome {
   const path = spawnLockPath(host);
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const fd = fs.openSync(path, "wx", 0o600);
       try {
-        fs.writeSync(fd, JSON.stringify({ pid: process.pid, ts: Date.now() }));
+        fs.writeSync(fd, JSON.stringify({ pid: process.pid, ts: clock.now() }));
       } catch {}
       heldLock = { fd, path };
       return { kind: "held" };
@@ -585,7 +598,7 @@ function tryAcquireSpawnLock(host: Host): LockOutcome {
         };
       }
     }
-    if (!isLockStale(path)) return { kind: "contended" };
+    if (!isLockStale(path, clock)) return { kind: "contended" };
     try {
       fs.unlinkSync(path);
     } catch (e) {
@@ -604,10 +617,10 @@ function tryAcquireSpawnLock(host: Host): LockOutcome {
   return { kind: "contended" };
 }
 
-function isLockStale(path: string): boolean {
+function isLockStale(path: string, clock: Timekeeper): boolean {
   try {
     const st = fs.statSync(path);
-    return Date.now() - st.mtimeMs > STALE_LOCK_MS;
+    return clock.now() - st.mtimeMs > STALE_LOCK_MS;
   } catch {
     return true;
   }
@@ -641,28 +654,27 @@ function ensureStateDir(host: Host): string | null {
 
 // ─── Connect probe ──────────────────────────────────────────────────────────
 
-function canConnect(sockPath: string, timeoutMs: number): Promise<boolean> {
+function canConnect(
+  sockPath: string,
+  timeoutMs: number,
+  clock: Timekeeper,
+): Promise<boolean> {
   return new Promise((resolve) => {
     const sock = net.connect(sockPath);
     let settled = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
+    let clearTimer: (() => void) | null = null;
     const done = (result: boolean): void => {
       if (settled) return;
       settled = true;
-      if (timer) clearTimeout(timer);
+      clearTimer?.();
       sock.removeAllListeners();
       sock.destroy();
       resolve(result);
     };
     sock.once("connect", () => done(true));
     sock.once("error", () => done(false));
-    timer = setTimeout(() => done(false), timeoutMs);
-    timer.unref();
+    clearTimer = clock.after(timeoutMs, () => done(false), { unref: true });
   });
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms).unref());
 }
 
 // ─── Default spawn implementation ───────────────────────────────────────────

@@ -10,6 +10,7 @@ import { quietLogger, type DaemonLogger } from "../utils/logger.js";
 import { valueOf } from "../utils/logfmt.js";
 import { PENDING, type Outcome, type Reading } from "../utils/outcome.js";
 import { stampOf } from "../utils/transcript-fs.js";
+import type { Timekeeper } from "../time.js";
 
 // How many settings files keep their last reading: one per Claude Code
 // directory a session reported, which a user has few of.
@@ -32,6 +33,8 @@ export class AutoCompactProvider {
   private readonly refreshes: Refreshes<"request">;
 
   constructor(
+    // [LAW:effects-at-boundaries] Times each read of the settings file.
+    private readonly clock: Pick<Timekeeper, "now">,
     logger: DaemonLogger = quietLogger,
     ledger: RefreshLedger = new RefreshLedger(logger),
   ) {
@@ -51,13 +54,13 @@ export class AutoCompactProvider {
       this.known.touch(settingsPath);
       return known.outcome;
     }
-    const startedAt = Date.now();
+    const startedAt = this.clock.now();
     const outcome = readAutoCompactWindow(settingsPath);
     this.refreshes.recorded(
       `path=${valueOf(settingsPath)} stamp=${valueOf(stamp)}`,
       "request",
       outcome,
-      Date.now() - startedAt,
+      this.clock.now() - startedAt,
     );
     this.known.set(settingsPath, { stamp, outcome });
     return outcome;

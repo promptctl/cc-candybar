@@ -9,6 +9,7 @@ import { join } from "node:path";
 
 import { ContextProvider } from "../src/segments/context";
 import type { ClaudeHookData } from "../src/utils/claude";
+import { systemTimekeeper } from "../src/time";
 
 function baseHook(overrides: Partial<ClaudeHookData> = {}): ClaudeHookData {
   return {
@@ -23,7 +24,7 @@ function baseHook(overrides: Partial<ClaudeHookData> = {}): ClaudeHookData {
 }
 
 describe("ContextProvider window-size sourcing", () => {
-  const provider = new ContextProvider();
+  const provider = new ContextProvider({ clock: systemTimekeeper });
 
   it("uses context_window_size from the hook data (1M model), not a 200k guess", async () => {
     const hook = baseHook({
@@ -157,7 +158,7 @@ describe("ContextProvider transcript fallback", () => {
   it("reads the newest main-chain usage entry, skipping sidechains", async () => {
     const t = join(dir, "t.jsonl");
     writeFileSync(t, entry(1000) + entry(2000) + entry(9999, { isSidechain: true }));
-    const outcome = await new ContextProvider().getContextInfo(noWindow(t));
+    const outcome = await new ContextProvider({ clock: systemTimekeeper }).getContextInfo(noWindow(t));
     expect(outcome).toEqual({
       kind: "ok",
       value: {
@@ -172,14 +173,14 @@ describe("ContextProvider transcript fallback", () => {
   it("is absent for a transcript with no usage-bearing entry", async () => {
     const t = join(dir, "t.jsonl");
     writeFileSync(t, JSON.stringify({ timestamp: "2026-05-31T00:00:00.000Z", type: "user" }) + "\n");
-    const outcome = await new ContextProvider().getContextInfo(noWindow(t));
+    const outcome = await new ContextProvider({ clock: systemTimekeeper }).getContextInfo(noWindow(t));
     expect(outcome.kind).toBe("absent");
   });
 
   it("follows an append through the incremental fold", async () => {
     const t = join(dir, "t.jsonl");
     writeFileSync(t, entry(1000));
-    const provider = new ContextProvider();
+    const provider = new ContextProvider({ clock: systemTimekeeper });
     const first = await provider.getContextInfo(noWindow(t));
     expect(first.kind === "ok" && first.value.totalTokens).toBe(1015);
 
@@ -190,7 +191,7 @@ describe("ContextProvider transcript fallback", () => {
   });
 
   it("is failed when the transcript cannot be read", async () => {
-    const outcome = await new ContextProvider().getContextInfo(noWindow(dir));
+    const outcome = await new ContextProvider({ clock: systemTimekeeper }).getContextInfo(noWindow(dir));
     expect(outcome.kind).toBe("failed");
   });
 });

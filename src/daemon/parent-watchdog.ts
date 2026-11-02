@@ -1,4 +1,5 @@
 import process from "node:process";
+import type { Timekeeper } from "../time";
 
 // [LAW:single-enforcer] One owner of the invariant "I must not outlive the
 // process that spawned me." A *production* daemon is spawned detached and is
@@ -51,6 +52,8 @@ export function anchorFromEnv(env: NodeJS.ProcessEnv): LivenessAnchor {
 }
 
 export interface ParentWatchdogDeps {
+  // The machine's clock: the poll runs in real time, beside a real process.
+  clock: Pick<Timekeeper, "every">;
   anchor: LivenessAnchor;
   isAlive: (pid: number) => boolean;
   onOrphaned: (reason: string) => void;
@@ -66,11 +69,14 @@ export function armParentWatchdog(deps: ParentWatchdogDeps): {
   if (deps.anchor.kind === "outlives-nobody") return { disarm: () => {} };
 
   const { pid } = deps.anchor;
-  const timer = setInterval(() => {
-    if (!deps.isAlive(pid)) deps.onOrphaned(`spawner pid ${pid} gone`);
-  }, deps.intervalMs ?? DEFAULT_POLL_INTERVAL_MS);
-  timer.unref();
-  return { disarm: () => clearInterval(timer) };
+  const disarm = deps.clock.every(
+    deps.intervalMs ?? DEFAULT_POLL_INTERVAL_MS,
+    () => {
+      if (!deps.isAlive(pid)) deps.onOrphaned(`spawner pid ${pid} gone`);
+    },
+    { unref: true },
+  );
+  return { disarm };
 }
 
 export function pidAlive(pid: number): boolean {

@@ -46,6 +46,7 @@ import type { Holds } from "../../utils/holds";
 import { KeyedSource, type KeyedSourceStats } from "../../utils/keyed-source";
 import { RefreshLedger, type Refreshes } from "../../utils/refresh-ledger";
 import type { Every } from "../../utils/period";
+import type { Timekeeper } from "../../time";
 import { Kept } from "../../var-system/store";
 
 // [LAW:one-source-of-truth] The daemon's single owner of per-session usage.
@@ -249,8 +250,8 @@ function dayKey(date: Date): string {
 
 // Files modified before this can hold no entry that lands in "today", so the
 // seed never parses them. A full day of slack absorbs timezone/rollover skew.
-function seedCutoffMs(): number {
-  const d = new Date();
+function seedCutoffMs(now: number): number {
+  const d = new Date(now);
   d.setHours(0, 0, 0, 0);
   d.setDate(d.getDate() - 1);
   return d.getTime();
@@ -293,10 +294,11 @@ async function foldFile(
   state: FileFold,
   entries: readonly ParsedEntry[],
   cacheRoot: string,
+  clock: Pick<Timekeeper, "now" | "after">,
 ): Promise<FileFold> {
   // dayKey strings sort lexically == chronologically, so "keep recent" is a
   // string comparison against yesterday's key.
-  const keep = dayKey(new Date(seedCutoffMs()));
+  const keep = dayKey(new Date(seedCutoffMs(clock.now())));
   let count = state.entries;
   let cost = state.cost;
   const breakdown = { ...state.breakdown };
@@ -308,7 +310,7 @@ async function foldFile(
     count++;
     const priced =
       entry.costUSD ??
-      (await PricingService.calculateCostForEntry(entry.raw, cacheRoot));
+      (await PricingService.calculateCostForEntry(entry.raw, cacheRoot, clock));
     cost += priced;
     breakdown.input += u.input_tokens || 0;
     breakdown.output += u.output_tokens || 0;
@@ -504,10 +506,14 @@ export class SessionUsageStore {
   // rescan's reads are its `today` scan's.
   private readonly usage: Refreshes<"request">;
   private sweeps = 0;
-  private sweepTimer: NodeJS.Timeout | null = null;
+  private stopSweep: (() => void) | null = null;
+  private readonly clock: Pick<Timekeeper, "now" | "after" | "every">;
 
   constructor(opts: {
     host: Host;
+    // [LAW:effects-at-boundaries] The daemon's clock: the sweep and the scans'
+    // periods, and the instants the store stamps, ages and cuts off by.
+    clock: Pick<Timekeeper, "now" | "after" | "every">;
     staleAgeMs?: number;
     sweepIntervalMs?: number;
     rescan?: Every;
@@ -518,6 +524,7 @@ export class SessionUsageStore {
     ledger?: RefreshLedger;
   }) {
     this.host = opts.host;
+    this.clock = opts.clock;
     this.log = opts.logger ?? quietLogger;
     this.ledger = opts.ledger ?? new RefreshLedger(this.log);
     this.usage = this.ledger.declare({
@@ -536,11 +543,13 @@ export class SessionUsageStore {
       maxEntries: MAX_UNHELD_SCANS,
       logger: this.log,
       ledger: this.ledger,
+      clock: this.clock,
     });
     const interval = opts.sweepIntervalMs ?? DEFAULT_SWEEP_INTERVAL_MS;
     if (interval > 0) {
-      this.sweepTimer = setInterval(() => this.sweepStale(), interval);
-      this.sweepTimer.unref();
+      this.stopSweep = this.clock.every(interval, () => this.sweepStale(), {
+        unref: true,
+      });
     }
   }
 
@@ -647,7 +656,7 @@ export class SessionUsageStore {
       // whether IT read is its own fact, never another session's refresh
       // landing in the same await.
       const tally: IngestTally = { hits: 0, misses: 0 };
-      const startedAt = Date.now();
+      const startedAt = this.clock.now();
       const record = await this.ingest(sessionId, transcriptPath, tally, stamp);
       this.renderTally.hits += tally.hits;
       this.renderTally.misses += tally.misses;
@@ -656,7 +665,7 @@ export class SessionUsageStore {
           `sid=${valueOf(sessionId)}`,
           "request",
           record,
-          Date.now() - startedAt,
+          this.clock.now() - startedAt,
         );
       }
       // The session's slot records that its refresh answered — a failure
@@ -935,7 +944,7 @@ export class SessionUsageStore {
   // undefined while the store holds nothing for it — asking stores nothing.
   private see(sessionId: string): SessionSlot | undefined {
     const slot = this.sessions.get(sessionId);
-    if (slot) slot.lastSeenAt = Date.now();
+    if (slot) slot.lastSeenAt = this.clock.now();
     return slot;
   }
 
@@ -944,7 +953,7 @@ export class SessionUsageStore {
     const seen = this.see(sessionId);
     if (seen) return seen;
     const slot: SessionSlot = {
-      lastSeenAt: Date.now(),
+      lastSeenAt: this.clock.now(),
       record: undefined,
       ring: [],
       failure: observable.box<string | null>(null),
@@ -1010,7 +1019,8 @@ export class SessionUsageStore {
         filePath,
         priorFold,
         EMPTY_FILE_FOLD,
-        (state, entries) => foldFile(state, entries, cacheDir(this.host)),
+        (state, entries) =>
+          foldFile(state, entries, cacheDir(this.host), this.clock),
       );
       if (read.kind === "failed") return read;
       if (read.kind === "absent") {
@@ -1042,7 +1052,7 @@ export class SessionUsageStore {
     claudePaths: readonly string[],
   ): Promise<Outcome<Scanned>> {
     try {
-      const cutoff = seedCutoffMs();
+      const cutoff = seedCutoffMs(this.clock.now());
       const projectPaths = await findProjectPaths(claudePaths);
       const candidates: Array<{
         sessionId: string;
@@ -1105,7 +1115,7 @@ export class SessionUsageStore {
   // [LAW:one-source-of-truth] Today is the day of the sweep's own `now`: the
   // wall clock a frame's instant and the scan's cutoff read too.
   sweepStale(): number {
-    const now = Date.now();
+    const now = this.clock.now();
     const today = dayKey(new Date(now));
     let dropped = 0;
     let held = 0;
@@ -1137,10 +1147,8 @@ export class SessionUsageStore {
   }
 
   close(): void {
-    if (this.sweepTimer) {
-      clearInterval(this.sweepTimer);
-      this.sweepTimer = null;
-    }
+    this.stopSweep?.();
+    this.stopSweep = null;
     this.scans.close();
     runInAction(() => {
       for (const { sums } of this.daySets.values()) sums.release();

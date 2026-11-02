@@ -1,3 +1,4 @@
+import { systemTimekeeper } from "../src/time";
 import fs from "node:fs";
 import { processLauncher } from "./helpers/host";
 import os from "node:os";
@@ -41,7 +42,7 @@ describe("WatcherRegistry", () => {
   // after a sleep that bets on it.
   test("a write to a watched name fires invalidation", async () => {
     const repo = makeRepo();
-    const reg = new WatcherRegistry();
+    const reg = new WatcherRegistry({ clock: systemTimekeeper });
     let fired = 0;
     const headPath = path.join(repo, ".git/HEAD");
     reg.acquire(
@@ -63,7 +64,7 @@ describe("WatcherRegistry", () => {
 
   test("refcount: release closes watchers when refcount hits zero", async () => {
     const repo = makeRepo();
-    const reg = new WatcherRegistry();
+    const reg = new WatcherRegistry({ clock: systemTimekeeper });
     const h1 = reg.acquire(repo, { dirs: [] }, () => {});
     const h2 = reg.acquire(repo, { dirs: [] }, () => {});
     expect(reg.size()).toBe(1);
@@ -85,7 +86,7 @@ describe("WatcherRegistry", () => {
       dirWatchesOpened: 0,
       dirWatchesClosed: 0,
     };
-    const reg = new WatcherRegistry({ counters });
+    const reg = new WatcherRegistry({ clock: systemTimekeeper, counters });
     const first = reg.follow(
       null,
       { key: "a", targets: { dirs: [] }, unbound: false },
@@ -144,7 +145,7 @@ describe("WatcherRegistry", () => {
       dirWatchesOpened: 0,
       dirWatchesClosed: 0,
     };
-    const reg = new WatcherRegistry({ counters });
+    const reg = new WatcherRegistry({ clock: systemTimekeeper, counters });
     const fired: string[] = [];
     const handles = Array.from({ length: 300 }, (_, i) =>
       reg.acquire(`k${i}`, { dirs: [] }, () => fired.push(`k${i}`)),
@@ -169,7 +170,7 @@ describe("WatcherRegistry", () => {
 
   test("hands its consumer the paths that fired in the window", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "watch-names-"));
-    const reg = new WatcherRegistry();
+    const reg = new WatcherRegistry({ clock: systemTimekeeper });
     const seen: Invalidation[] = [];
     reg.acquire(dir, { dirs: [{ path: dir }] }, (inv) => seen.push(inv));
     // FSEvents may also report the folder's own creation late, under its
@@ -195,7 +196,7 @@ describe("WatcherRegistry", () => {
 
   test("a tree target hears a write below its first level, named by its path", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "watch-tree-"));
-    const reg = new WatcherRegistry();
+    const reg = new WatcherRegistry({ clock: systemTimekeeper });
     const seen: Invalidation[] = [];
     reg.acquire(dir, { dirs: [{ path: dir, recursive: true }] }, (inv) =>
       seen.push(inv),
@@ -228,7 +229,11 @@ describe("WatcherRegistry", () => {
       dirWatchesOpened: 0,
       dirWatchesClosed: 0,
     };
-    const reg = new WatcherRegistry({ counters, logger: () => {} });
+    const reg = new WatcherRegistry({
+      clock: systemTimekeeper,
+      counters,
+      logger: () => {},
+    });
     const missing = path.join(os.tmpdir(), "watch-refused-no-such-folder");
     const handle = reg.acquire("k", { dirs: [{ path: missing }] }, () => {});
     expect(handle.deaf).toEqual([
@@ -239,9 +244,7 @@ describe("WatcherRegistry", () => {
       },
     ]);
     // A second holder of the slot is told the same.
-    expect(reg.acquire("k", { dirs: [] }, () => {}).deaf).toEqual(
-      handle.deaf,
-    );
+    expect(reg.acquire("k", { dirs: [] }, () => {}).deaf).toEqual(handle.deaf);
     expect(counters).toEqual({
       watchersOpened: 0,
       watchersClosed: 0,
@@ -265,18 +268,25 @@ describe("WatcherRegistry", () => {
     () => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), "watch-unreadable-"));
       fs.chmodSync(dir, 0o000);
-      const reg = new WatcherRegistry({ logger: () => {} });
+      const reg = new WatcherRegistry({
+        clock: systemTimekeeper,
+        logger: () => {},
+      });
       try {
         const refusal = {
           kind: "refused",
           path: dir,
           reason: expect.stringContaining("EACCES"),
         };
-        expect(reg.acquire("dir", { dirs: [{ path: dir }] }, () => {}).deaf)
-          .toEqual([refusal]);
         expect(
-          reg.acquire("tree", { dirs: [{ path: dir, recursive: true }] }, () => {})
-            .deaf,
+          reg.acquire("dir", { dirs: [{ path: dir }] }, () => {}).deaf,
+        ).toEqual([refusal]);
+        expect(
+          reg.acquire(
+            "tree",
+            { dirs: [{ path: dir, recursive: true }] },
+            () => {},
+          ).deaf,
         ).toEqual([refusal]);
         expect(reg.dirWatches()).toBe(0);
       } finally {
@@ -291,13 +301,16 @@ describe("WatcherRegistry", () => {
     const fake = standIn();
     try {
       const counters = zeroCounters();
-      const reg = new WatcherRegistry({ counters, logger: () => {} });
+      const reg = new WatcherRegistry({
+        clock: systemTimekeeper,
+        counters,
+        logger: () => {},
+      });
       const seen: Invalidation[] = [];
       reg.acquire("k", { dirs: [{ path: "/w" }] }, (inv) => seen.push(inv));
-      fake.opensOf("/w")[0]!.handle.emit(
-        "error",
-        new Error("EMFILE: too many open files"),
-      );
+      fake
+        .opensOf("/w")[0]!
+        .handle.emit("error", new Error("EMFILE: too many open files"));
       await until(() => seen.length > 0, "the error's invalidation");
       expect(seen).toEqual([
         { kind: "failed", reason: "/w: EMFILE: too many open files" },
@@ -339,11 +352,9 @@ describe("WatcherRegistry", () => {
       opened.push(record);
       return record.handle;
     }) as unknown as typeof fs.watch);
-    const opendir = jest
-      .spyOn(fs, "opendirSync")
-      .mockImplementation(
-        (() => ({ closeSync: () => {} })) as unknown as typeof fs.opendirSync,
-      );
+    const opendir = jest.spyOn(fs, "opendirSync").mockImplementation((() => ({
+      closeSync: () => {},
+    })) as unknown as typeof fs.opendirSync);
     const opensOf = (dir: string) => opened.filter((o) => o.dir === dir);
     return {
       opened,
@@ -375,9 +386,16 @@ describe("WatcherRegistry", () => {
     fs.mkdirSync(conf);
     const fake = standIn();
     try {
-      const reg = new WatcherRegistry({ logger: () => {} });
+      const reg = new WatcherRegistry({
+        clock: systemTimekeeper,
+        logger: () => {},
+      });
       const seen: Invalidation[] = [];
-      reg.acquire("k", { dirs: [{ path: conf, filenames: ["config.json5"] }] }, (inv) => seen.push(inv));
+      reg.acquire(
+        "k",
+        { dirs: [{ path: conf, filenames: ["config.json5"] }] },
+        (inv) => seen.push(inv),
+      );
       const { listener } = fake.opensOf(conf)[0]!;
       listener("change", "conf");
       listener("rename", "config.json5");
@@ -406,9 +424,16 @@ describe("WatcherRegistry", () => {
     fs.mkdirSync(conf);
     const fake = standIn();
     try {
-      const reg = new WatcherRegistry({ logger: () => {} });
+      const reg = new WatcherRegistry({
+        clock: systemTimekeeper,
+        logger: () => {},
+      });
       const seen: Invalidation[] = [];
-      reg.acquire("k", { dirs: [{ path: conf, filenames: ["config.json5"] }] }, (inv) => seen.push(inv));
+      reg.acquire(
+        "k",
+        { dirs: [{ path: conf, filenames: ["config.json5"] }] },
+        (inv) => seen.push(inv),
+      );
       const { listener } = fake.opensOf(conf)[0]!;
       fs.chmodSync(conf, 0o755);
       listener("change", "conf");
@@ -437,9 +462,14 @@ describe("WatcherRegistry", () => {
   test("an unnamed event under a name filter is unknown", async () => {
     const fake = standIn();
     try {
-      const reg = new WatcherRegistry({ logger: () => {} });
+      const reg = new WatcherRegistry({
+        clock: systemTimekeeper,
+        logger: () => {},
+      });
       const seen: Invalidation[] = [];
-      reg.acquire("k", { dirs: [{ path: "/w", filenames: ["a"] }] }, (inv) => seen.push(inv));
+      reg.acquire("k", { dirs: [{ path: "/w", filenames: ["a"] }] }, (inv) =>
+        seen.push(inv),
+      );
       fake.opensOf("/w")[0]!.listener("rename", null);
       await until(() => seen.length === 1, "the unnamed event's invalidation");
       expect(seen).toEqual([{ kind: "unknown" }]);
@@ -452,14 +482,20 @@ describe("WatcherRegistry", () => {
   test("every holder of a key hears each window", async () => {
     const fake = standIn();
     try {
-      const reg = new WatcherRegistry({ logger: () => {} });
+      const reg = new WatcherRegistry({
+        clock: systemTimekeeper,
+        logger: () => {},
+      });
       const first: Invalidation[] = [];
       const second: Invalidation[] = [];
       reg.acquire("k", { dirs: [{ path: "/w" }] }, (inv) => first.push(inv));
       reg.acquire("k", { dirs: [{ path: "/w" }] }, (inv) => second.push(inv));
       expect(fake.opened).toHaveLength(1);
       fake.opensOf("/w")[0]!.listener("rename", "a");
-      await until(() => first.length === 1 && second.length === 1, "both holders' windows");
+      await until(
+        () => first.length === 1 && second.length === 1,
+        "both holders' windows",
+      );
       expect(second).toEqual(first);
       reg.closeAll();
     } finally {
@@ -473,9 +509,21 @@ describe("WatcherRegistry", () => {
     const fake = standIn();
     try {
       const counters = zeroCounters();
-      const reg = new WatcherRegistry({ counters, logger: () => {} });
-      const a = reg.acquire("a", { dirs: [{ path: "/w", filenames: ["x"] }] }, () => {});
-      const b = reg.acquire("b", { dirs: [{ path: "/w", filenames: ["y"] }] }, () => {});
+      const reg = new WatcherRegistry({
+        clock: systemTimekeeper,
+        counters,
+        logger: () => {},
+      });
+      const a = reg.acquire(
+        "a",
+        { dirs: [{ path: "/w", filenames: ["x"] }] },
+        () => {},
+      );
+      const b = reg.acquire(
+        "b",
+        { dirs: [{ path: "/w", filenames: ["y"] }] },
+        () => {},
+      );
       expect(fake.opened).toHaveLength(1);
       expect(reg.dirWatches()).toBe(1);
       a.release();
@@ -500,7 +548,10 @@ describe("WatcherRegistry", () => {
   test("following to a key that changes only a name filter opens and closes no handle, and hears the new name", async () => {
     const fake = standIn();
     try {
-      const reg = new WatcherRegistry({ logger: () => {} });
+      const reg = new WatcherRegistry({
+        clock: systemTimekeeper,
+        logger: () => {},
+      });
       const seen: Invalidation[] = [];
       const spec = (name: string) => ({
         key: `k:${name}`,
@@ -531,7 +582,10 @@ describe("WatcherRegistry", () => {
     fs.mkdirSync(dir);
     const fake = standIn();
     try {
-      const reg = new WatcherRegistry({ logger: () => {} });
+      const reg = new WatcherRegistry({
+        clock: systemTimekeeper,
+        logger: () => {},
+      });
       reg.acquire("a", { dirs: [{ path: dir }] }, () => {});
       fs.rmSync(dir, { recursive: true });
       reg.acquire("b", { dirs: [{ path: dir }] }, () => {});
@@ -561,9 +615,17 @@ describe("WatcherRegistry", () => {
     const fake = standIn();
     try {
       const counters = zeroCounters();
-      const reg = new WatcherRegistry({ counters, logger: () => {} });
+      const reg = new WatcherRegistry({
+        clock: systemTimekeeper,
+        counters,
+        logger: () => {},
+      });
       const seen: Invalidation[] = [];
-      reg.acquire("k", { dirs: [{ path: conf, filenames: ["config.json5"] }] }, (inv) => seen.push(inv));
+      reg.acquire(
+        "k",
+        { dirs: [{ path: conf, filenames: ["config.json5"] }] },
+        (inv) => seen.push(inv),
+      );
       reg.judge();
       fs.renameSync(path.join(root, "proj"), path.join(root, "old"));
       reg.judge();
@@ -605,7 +667,11 @@ describe("WatcherRegistry", () => {
     const fake = standIn();
     try {
       const counters = zeroCounters();
-      const reg = new WatcherRegistry({ counters, logger: () => {} });
+      const reg = new WatcherRegistry({
+        clock: systemTimekeeper,
+        counters,
+        logger: () => {},
+      });
       const spec = {
         key: "k",
         targets: { dirs: [{ path: "/w" }, { path: "/v" }] },
@@ -614,10 +680,19 @@ describe("WatcherRegistry", () => {
       const seen: Invalidation[] = [];
       const other: Invalidation[] = [];
       const { watch } = reg.follow(null, spec, (inv) => seen.push(inv));
-      reg.acquire("other", { dirs: [{ path: "/w" }] }, (inv) => other.push(inv));
-      fake.opensOf("/w")[0]!.handle.emit("error", new Error("EMFILE: too many open files"));
-      await until(() => seen.length === 1 && other.length === 1, "both slots' failed windows");
-      expect(other).toEqual([{ kind: "failed", reason: "/w: EMFILE: too many open files" }]);
+      reg.acquire("other", { dirs: [{ path: "/w" }] }, (inv) =>
+        other.push(inv),
+      );
+      fake
+        .opensOf("/w")[0]!
+        .handle.emit("error", new Error("EMFILE: too many open files"));
+      await until(
+        () => seen.length === 1 && other.length === 1,
+        "both slots' failed windows",
+      );
+      expect(other).toEqual([
+        { kind: "failed", reason: "/w: EMFILE: too many open files" },
+      ]);
       expect(watch.handle.deaf).toEqual([
         { kind: "failed", path: "/w", reason: "EMFILE: too many open files" },
       ]);
@@ -632,7 +707,10 @@ describe("WatcherRegistry", () => {
       expect(fake.opensOf("/v")[0]!.closed).toBe(false);
       expect(watch.handle.deaf).toEqual([]);
       // Every slot on it hears the recovery, so the fault each reported clears.
-      await until(() => seen.length === 2 && other.length === 2, "both slots' recovery windows");
+      await until(
+        () => seen.length === 2 && other.length === 2,
+        "both slots' recovery windows",
+      );
       expect(seen[1]).toEqual({ kind: "unknown" });
       expect(other[1]).toEqual({ kind: "unknown" });
       expect(counters).toEqual({
@@ -657,9 +735,17 @@ describe("WatcherRegistry", () => {
     const fake = standIn();
     try {
       const counters = zeroCounters();
-      const reg = new WatcherRegistry({ counters, logger: () => {} });
+      const reg = new WatcherRegistry({
+        clock: systemTimekeeper,
+        counters,
+        logger: () => {},
+      });
       const seen: Invalidation[] = [];
-      const a = reg.acquire("a", { dirs: [{ path: dir, filenames: ["x"] }] }, (inv) => seen.push(inv));
+      const a = reg.acquire(
+        "a",
+        { dirs: [{ path: dir, filenames: ["x"] }] },
+        (inv) => seen.push(inv),
+      );
       fs.rmSync(dir, { recursive: true });
       fs.mkdirSync(dir);
       reg.acquire("b", { dirs: [{ path: dir }] }, () => {});
@@ -685,9 +771,14 @@ describe("WatcherRegistry", () => {
   test("acquiring a slot another holder holds reopens its deaf directory", () => {
     const fake = standIn();
     try {
-      const reg = new WatcherRegistry({ logger: () => {} });
+      const reg = new WatcherRegistry({
+        clock: systemTimekeeper,
+        logger: () => {},
+      });
       const first = reg.acquire("k", { dirs: [{ path: "/w" }] }, () => {});
-      fake.opensOf("/w")[0]!.handle.emit("error", new Error("EMFILE: too many open files"));
+      fake
+        .opensOf("/w")[0]!
+        .handle.emit("error", new Error("EMFILE: too many open files"));
       expect(first.deaf).toHaveLength(1);
       const second = reg.acquire("k", { dirs: [{ path: "/w" }] }, () => {});
       expect(fake.opensOf("/w")).toHaveLength(2);
@@ -701,7 +792,7 @@ describe("WatcherRegistry", () => {
 
   test("closeAll closes every watcher", () => {
     const repo = makeRepo();
-    const reg = new WatcherRegistry();
+    const reg = new WatcherRegistry({ clock: systemTimekeeper });
     reg.acquire(repo, { dirs: [] }, () => {});
     expect(reg.size()).toBe(1);
     reg.closeAll();
@@ -748,7 +839,11 @@ async function hearsRefOnlyMove(
   // The real reader: what it stores is what git reads off the repo, so the
   // test can ask whether the value is the ref's after a move.
   const inner = new GitService(processLauncher);
-  const svc = new GitDataProvider({ inner, periodMs: 600_000 });
+  const svc = new GitDataProvider({
+    clock: systemTimekeeper,
+    inner,
+    periodMs: 600_000,
+  });
   const lane = svc.declare(new Holds(), workingDir, {});
   await laneOutcome(lane);
   const storedHead = (): string | undefined => {
@@ -808,7 +903,9 @@ async function hearsRefOnlyMove(
 describe("watchTargetsOf", () => {
   let dir: string;
   beforeEach(() => {
-    dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-targets-")));
+    dir = fs.realpathSync(
+      fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-targets-")),
+    );
   });
   afterEach(() => rmrf(dir));
 
@@ -819,13 +916,18 @@ describe("watchTargetsOf", () => {
     const y = path.join(dir, "two", "y");
     fs.symlinkSync(y, x);
     fs.symlinkSync(x, y);
-    const { targets, reached, unresolved } = watchTargetsOf({ named: [x], whole: [] });
+    const { targets, reached, unresolved } = watchTargetsOf({
+      named: [x],
+      whole: [],
+    });
     expect(targets.dirs).toEqual([
       { path: path.join(dir, "one"), filenames: ["x"] },
       { path: path.join(dir, "two"), filenames: ["y"] },
     ]);
     expect(reached).toBe(true);
-    expect(unresolved).toEqual([{ path: x, reason: expect.stringMatching(/symbolic links/) }]);
+    expect(unresolved).toEqual([
+      { path: x, reason: expect.stringMatching(/symbolic links/) },
+    ]);
   });
 
   // A held watch binds the inode it opened on (Linux's inotify), so the same
@@ -847,7 +949,10 @@ describe("watchTargetsOf", () => {
   test("a directory watched whole hears every child, whatever names are watched in it", () => {
     const d = path.join(dir, "d");
     fs.mkdirSync(d);
-    const { targets } = watchTargetsOf({ named: [d, path.join(d, "f")], whole: [d] });
+    const { targets } = watchTargetsOf({
+      named: [d, path.join(d, "f")],
+      whole: [d],
+    });
     expect(targets.dirs).toEqual([
       { path: dir, filenames: ["d"] },
       { path: d },
@@ -855,7 +960,10 @@ describe("watchTargetsOf", () => {
   });
 
   test("a hop under a directory that does not exist yet has not reached it", () => {
-    const { targets, reached } = watchTargetsOf({ named: [path.join(dir, "later", "f")], whole: [] });
+    const { targets, reached } = watchTargetsOf({
+      named: [path.join(dir, "later", "f")],
+      whole: [],
+    });
     expect(targets.dirs).toEqual([{ path: dir, filenames: ["later"] }]);
     expect(reached).toBe(false);
   });
@@ -866,7 +974,9 @@ describe("watchTargetsOf", () => {
 describe("watchFault", () => {
   let dir: string;
   beforeEach(() => {
-    dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-fault-")));
+    dir = fs.realpathSync(
+      fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-fault-")),
+    );
   });
   afterEach(() => rmrf(dir));
 
@@ -884,25 +994,41 @@ describe("watchFault", () => {
     const x = path.join(dir, "x");
     fs.symlinkSync(`${x}.other`, x);
     fs.symlinkSync(x, `${x}.other`);
-    const derived = watchTargetsOf({ named: [x, path.join(dir, "f")], whole: [] });
-    const fault = watchFault("config", {
-      derived,
-      held: held([
-        { kind: "refused", path: "/r", reason: "EMFILE" },
-        { kind: "failed", path: "/f", reason: "gone" },
-      ]),
-    }, null);
-    expect(fault).toContain(`config: cannot follow a link chain — ${x}: more than 40 symbolic links`);
-    expect(fault).toContain("; cannot watch /r — EMFILE; watching /f failed — gone");
+    const derived = watchTargetsOf({
+      named: [x, path.join(dir, "f")],
+      whole: [],
+    });
+    const fault = watchFault(
+      "config",
+      {
+        derived,
+        held: held([
+          { kind: "refused", path: "/r", reason: "EMFILE" },
+          { kind: "failed", path: "/f", reason: "gone" },
+        ]),
+      },
+      null,
+    );
+    expect(fault).toContain(
+      `config: cannot follow a link chain — ${x}: more than 40 symbolic links`,
+    );
+    expect(fault).toContain(
+      "; cannot watch /r — EMFILE; watching /f failed — gone",
+    );
   });
 
   test("a reason beyond the watch's own is the watch's fault too", () => {
     const derived = watchTargetsOf({ named: [path.join(dir, "f")], whole: [] });
-    expect(watchFault("config", { derived, held: held([]) }, "the OS stopped")).toBe("config: the OS stopped");
+    expect(
+      watchFault("config", { derived, held: held([]) }, "the OS stopped"),
+    ).toBe("config: the OS stopped");
     expect(
       watchFault(
         "config",
-        { derived, held: held([{ kind: "refused", path: "/r", reason: "EMFILE" }]) },
+        {
+          derived,
+          held: held([{ kind: "refused", path: "/r", reason: "EMFILE" }]),
+        },
         "the OS stopped",
       ),
     ).toBe("config: cannot watch /r — EMFILE; the OS stopped");
@@ -936,7 +1062,7 @@ describe("GitDataProvider + watchers integration", () => {
   test("a HEAD change re-reads the repo with no read asking", async () => {
     const repo = makeRepo();
     const inner = new StubInner(repo);
-    const svc = new GitDataProvider({ inner });
+    const svc = new GitDataProvider({ clock: systemTimekeeper, inner });
     const holds = new Holds();
     try {
       await laneOutcome(svc.declare(holds, repo, {}));
@@ -969,7 +1095,11 @@ describe("GitDataProvider + watchers integration", () => {
   test("a held repo is re-read on its period, which a dropped watch event cannot stop", async () => {
     const repo = makeRepo();
     const inner = new StubInner(repo);
-    const svc = new GitDataProvider({ inner, periodMs: 150 });
+    const svc = new GitDataProvider({
+      clock: systemTimekeeper,
+      inner,
+      periodMs: 150,
+    });
     const holds = new Holds();
 
     await laneOutcome(svc.declare(holds, repo, {}));
@@ -989,7 +1119,7 @@ describe("GitDataProvider + watchers integration", () => {
   test("close releases all watchers", async () => {
     const repo = makeRepo();
     const inner = new StubInner(repo);
-    const svc = new GitDataProvider({ inner });
+    const svc = new GitDataProvider({ clock: systemTimekeeper, inner });
     await laneOutcome(svc.declare(new Holds(), repo, {}));
     expect(svc.getStats().watchers).toBe(1);
     svc.close();

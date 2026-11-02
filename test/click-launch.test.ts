@@ -27,6 +27,7 @@ describe("clickHandoff", () => {
     const pidFile = path.join(dir, "pid");
     await clickHandoff(
       createLauncher({ inherited: process.env }, systemTimekeeper),
+      systemTimekeeper,
       {
         bin: "/bin/sh",
         args: ["-c", `echo $$ > ${pidFile}; exec sleep 30`],
@@ -34,7 +35,8 @@ describe("clickHandoff", () => {
       },
       "opening a browser",
       () => {},
-      200, HOST.tmp,
+      200,
+      HOST.tmp,
     );
     // A loaded machine can answer the bound before the opener has started.
     const started = Date.now() + 3000;
@@ -55,6 +57,7 @@ describe("clickHandoff", () => {
     await expect(
       clickHandoff(
         createLauncher({ inherited: process.env }, systemTimekeeper),
+        systemTimekeeper,
         // Kills the job's whole group, the verdict-writing sh with it.
         { bin: "/bin/sh", args: ["-c", "kill -9 0"], category: "click.open" },
         "opening https://example.com",
@@ -66,25 +69,40 @@ describe("clickHandoff", () => {
   });
 
   test("a rate-limited opener is logged and the click acknowledged", async () => {
-    const launcher = createLauncher({ inherited: process.env }, systemTimekeeper);
+    const launcher = createLauncher(
+      { inherited: process.env },
+      systemTimekeeper,
+    );
     const opts = { bin: "/usr/bin/true", category: "click.open" } as const;
-    await clickHandoff(launcher, opts, "first", () => {}, 2000, HOST.tmp);
+    await clickHandoff(
+      launcher,
+      systemTimekeeper,
+      opts,
+      "first",
+      () => {},
+      2000,
+      HOST.tmp,
+    );
     const logged: string[] = [];
     await clickHandoff(
       launcher,
+      systemTimekeeper,
       opts,
       "second",
       (_l, m) => logged.push(m),
       2000,
       HOST.tmp,
     );
-    expect(logged).toEqual([expect.stringMatching(/^click.open rate-limited: /)]);
+    expect(logged).toEqual([
+      expect.stringMatching(/^click.open rate-limited: /),
+    ]);
   });
 
   test("an opener that exits non-zero fails the click with its stderr", async () => {
     await expect(
       clickHandoff(
         createLauncher({ inherited: process.env }, systemTimekeeper),
+        systemTimekeeper,
         {
           bin: "/bin/sh",
           args: ["-c", "echo no method available >&2; exit 3"],
@@ -104,6 +122,7 @@ describe("clickHandoff", () => {
     const t0 = Date.now();
     await clickHandoff(
       createLauncher({ inherited: process.env }, systemTimekeeper),
+      systemTimekeeper,
       { bin: "/usr/bin/true", category: "click.open" },
       "opening https://example.com",
       () => {},

@@ -18,6 +18,7 @@ import {
   makeFrameReader,
   TOTAL_BUDGET_MS,
 } from "../src/daemon/protocol";
+import { systemTimekeeper } from "../src/time";
 
 // A daemon that hands every request it reads to `seen`, and answers it with
 // `reply` — or, given none, never answers.
@@ -65,7 +66,7 @@ async function withStubDaemon<T>(
 // statusline's own are a wire fact, asserted once below.
 const render = (budgets: RoundTripBudgets) => async (host: Host) => {
   const { tryRenderViaDaemon } = await import("../src/daemon/client");
-  return tryRenderViaDaemon(host, 
+  return tryRenderViaDaemon({ host, clock: systemTimekeeper }, 
     {
       session_id: "deadline",
       workspace: { project_dir: "/tmp" },

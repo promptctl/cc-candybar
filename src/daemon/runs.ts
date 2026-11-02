@@ -13,6 +13,7 @@ import type { Resume } from "../utils/keyed-source.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import type { SessionStateRW } from "./session-state.js";
 import type { Instant } from "../utils/instant.js";
+import type { Timekeeper } from "../time.js";
 import { holdClickError } from "./click-error.js";
 import { valueOf } from "../utils/logfmt.js";
 
@@ -65,6 +66,8 @@ export interface RunsDeps {
   readonly state: SessionStateRW;
   readonly log: DaemonLogger;
   readonly now: () => Instant;
+  // [LAW:effects-at-boundaries] The daemon's clock, which times each run.
+  readonly clock: Pick<Timekeeper, "now">;
   readonly timeoutMs?: number;
 }
 
@@ -138,7 +141,7 @@ export class Runs {
     this.inFlight.add(abort);
     this.started++;
     const [program, ...args] = run.argv;
-    const startedAt = Date.now();
+    const startedAt = this.deps.clock.now();
     void this.deps
       .launch({
         // [LAW:types-are-the-program] A relative program path is the
@@ -152,7 +155,9 @@ export class Runs {
         signal: abort.signal,
         category: "click.run",
       })
-      .then((result) => this.ended(run, result, Date.now() - startedAt))
+      .then((result) =>
+        this.ended(run, result, this.deps.clock.now() - startedAt),
+      )
       .finally(() => {
         this.inFlight.delete(abort);
         // [LAW:no-ambient-temporal-coupling] However the run ended, every

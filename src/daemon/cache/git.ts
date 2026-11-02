@@ -22,6 +22,7 @@ import {
   type WatchSpec,
 } from "./watchers";
 import { boundKey, boundOf } from "../../utils/folder-identity";
+import type { Timekeeper } from "../../time";
 import { TrailingEdge } from "../../utils/trailing-edge";
 import { Period, periodOf, type Every } from "../../utils/period";
 import {
@@ -328,8 +329,12 @@ export class GitDataProvider {
   private readonly watchers: WatcherRegistry;
   private readonly ownsWatchers: boolean;
   private readonly logger: GitProviderLogger;
+  private readonly clock: Pick<Timekeeper, "now" | "after">;
 
   constructor(opts: {
+    // [LAW:effects-at-boundaries] The daemon's clock: every period, and the
+    // times the reads are stamped and timed with.
+    clock: Pick<Timekeeper, "now" | "after">;
     periodMs?: number;
     maxRepos?: number;
     inner: GitService;
@@ -341,6 +346,7 @@ export class GitDataProvider {
     ledger?: RefreshLedger;
   }) {
     this.inner = opts.inner;
+    this.clock = opts.clock;
     this.periodMs = opts.periodMs ?? GIT_PERIOD_MS;
     this.maxRepos = opts.maxRepos ?? DEFAULT_MAX_REPOS;
     this.logger = opts.logger ?? quietLogger;
@@ -361,7 +367,10 @@ export class GitDataProvider {
     } else {
       // Auto-constructed registry shares the same logger, so cache and watcher
       // events land together; with the default logger both stay quiet.
-      this.watchers = new WatcherRegistry({ logger: this.logger });
+      this.watchers = new WatcherRegistry({
+        clock: this.clock,
+        logger: this.logger,
+      });
       this.ownsWatchers = true;
     }
   }
@@ -395,7 +404,7 @@ export class GitDataProvider {
     projectDir: string | undefined,
   ): Outcome<string> {
     const key = `${workingDir}|${projectDir ?? ""}`;
-    const now = Date.now();
+    const now = this.clock.now();
 
     const existing = this.resolutions.get(key);
     if (existing && now - existing.computedAt < RESOLUTION_TTL_MS) {
@@ -523,7 +532,7 @@ export class GitDataProvider {
       watch: this.followWatch(root, null).watch,
       period: new Period(() => {
         void state.refresh.share(PASS, () => this.refreshPass(state));
-      }),
+      }, this.clock),
       values: new Map(),
       holders: 0,
       asked: new Set(),
@@ -682,7 +691,7 @@ export class GitDataProvider {
   // another branch's PR. Each pass that lands writes one refresh event.
   private async pass(state: RepoState): Promise<void> {
     if (this.repos.get(state.root) !== state) return;
-    const startedAt = Date.now();
+    const startedAt = this.clock.now();
     const asked = [...state.asked];
     state.asked.clear();
     const followed = this.followWatch(state.root, state.watch);
@@ -738,7 +747,7 @@ export class GitDataProvider {
       `${state.root} asked=${asked.join(",") || "-"} values=${values.length} pr=${prMove} watch=${followed.move}`,
       triggerOf(asked),
       failures.size === 0 ? ok(null) : failed([...failures].join("; ")),
-      Date.now() - startedAt,
+      this.clock.now() - startedAt,
     );
   }
 
@@ -749,7 +758,7 @@ export class GitDataProvider {
     const pr: PrSource = {
       period: new Period(() => {
         void this.readPr(state, pr, "period");
-      }),
+      }, this.clock),
       seen: new Map(),
       holders: 0,
       // Its key is the first pass's to set.
@@ -815,7 +824,7 @@ export class GitDataProvider {
     const key = pr.key;
     if (pr.inFlight?.key === key) return pr.inFlight.done;
     const remote = pr.remote;
-    const startedAt = Date.now();
+    const startedAt = this.clock.now();
     const lookup: Promise<Outcome<PullRequest>> =
       remote.kind === "ok"
         ? this.inner
@@ -829,10 +838,10 @@ export class GitDataProvider {
         `${state.root} key=${logfmtValue(key)}`,
         by,
         outcome,
-        Date.now() - startedAt,
+        this.clock.now() - startedAt,
       );
       // Kept under its own key whether or not the PR has moved on since.
-      const at = Date.now();
+      const at = this.clock.now();
       pr.seen.delete(key);
       pr.seen.set(key, { outcome, at });
       for (const oldest of pr.seen.keys()) {

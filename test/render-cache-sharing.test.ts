@@ -23,7 +23,13 @@ import {
 import { NO_FILE_EVENTS } from "../src/daemon/cache/file-events";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { SessionState } from "../src/daemon/session-state";
-import { compileDslConfig, compileInputOf, declareDslVariables, EVERY_SCOPE, type CompiledConfig } from "../src/dsl/render";
+import {
+  compileDslConfig,
+  compileInputOf,
+  declareDslVariables,
+  EVERY_SCOPE,
+  type CompiledConfig,
+} from "../src/dsl/render";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -60,14 +66,30 @@ afterEach(() => {
 function makeCache(budgetBytes: number, maxEntries?: number) {
   const lines: string[] = [];
   const watchers = new WatcherRegistry({
-    counters: { watchersOpened: 0, watchersClosed: 0, watchRefusals: 0, watchErrors: 0, dirWatchesOpened: 0, dirWatchesClosed: 0 },
+    clock: systemTimekeeper,
+    counters: {
+      watchersOpened: 0,
+      watchersClosed: 0,
+      watchRefusals: 0,
+      watchErrors: 0,
+      dirWatchesOpened: 0,
+      dirWatchesClosed: 0,
+    },
     logger: () => {},
   });
   cleanups.push(() => watchers.closeAll());
   const sessionState = new SessionState();
   const cache = new RenderCache(
-    { clock: systemTimekeeper, stateDir: stateDir(HOST), locations: locs(), env: HOST.env, launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, gates: bareGates(),
- fileEvents: NO_FILE_EVENTS,
+    {
+      clock: systemTimekeeper,
+      stateDir: stateDir(HOST),
+      locations: locs(),
+      env: HOST.env,
+      launcher: processLauncher,
+      storage: NO_PLUGIN_STORAGE,
+      signer: TEST_SIGNER,
+      gates: bareGates(),
+      fileEvents: NO_FILE_EVENTS,
       sessionState,
       watchers,
       source: SOURCES_NOTHING,
@@ -93,18 +115,26 @@ function file(rel: string, text: string): string {
 const drawn = (view: SessionView): string => textOf(drawnBytes(view));
 
 const drawnBytes = (view: SessionView): Frame =>
-    drawPayload(
-      view.state.config,
-      view.state.compiled,
-      view.store,
-      view.registry,
-      { session_id: view.sessionId, project_dir: dir },
-      instantOf(new Date()),
-      { endcaps: "powerline", colorCompatibility: "truecolor", wrap: true, padding: 1, width: 200 },
-    ).frame;
+  drawPayload(
+    view.state.config,
+    view.state.compiled,
+    view.store,
+    view.registry,
+    { session_id: view.sessionId, project_dir: dir },
+    instantOf(new Date()),
+    {
+      endcaps: "powerline",
+      colorCompatibility: "truecolor",
+      wrap: true,
+      padding: 1,
+      width: 200,
+    },
+  ).frame;
 
 // A frame of `state` through a view of its own, disposed after.
-const render = (state: ReturnType<RenderCache["getOrCreate"]>["state"]): Frame => {
+const render = (
+  state: ReturnType<RenderCache["getOrCreate"]>["state"],
+): Frame => {
   const view = openView(state, dir, viewFacts(dir, "s"), {
     sessionState: new SessionState(),
     source: SOURCES_NOTHING,
@@ -126,9 +156,17 @@ class ProbeStore extends VariableStore {}
 // Draw one frame of `compiled` from a store and registry of its own, as a
 // render-cache entry would, then dispose the registry; the store is returned
 // so a caller can watch whether anything still holds it.
-const drawAlone = (config: ValidatedConfig, compiled: CompiledConfig): VariableStore => {
+const drawAlone = (
+  config: ValidatedConfig,
+  compiled: CompiledConfig,
+): VariableStore => {
   const store = new ProbeStore(systemTimekeeper);
-  const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
+  const registry = new SourceRegistry(
+    processLauncher,
+    store,
+    "",
+    new SessionState(),
+  );
   declareDslVariables(config, registry, dir, EVERY_SCOPE);
   drawPayload(
     config,
@@ -137,7 +175,13 @@ const drawAlone = (config: ValidatedConfig, compiled: CompiledConfig): VariableS
     registry,
     { session_id: "s", project_dir: dir },
     instantOf(new Date()),
-    { endcaps: "powerline", colorCompatibility: "truecolor", wrap: true, padding: 1, width: 200 },
+    {
+      endcaps: "powerline",
+      colorCompatibility: "truecolor",
+      wrap: true,
+      padding: 1,
+      width: 200,
+    },
   ).frame;
   registry.dispose();
   return store;
@@ -158,7 +202,10 @@ const nextOf = (bytes: Frame): string | undefined =>
 const carouselConfig = (reader: string, value: string): string =>
   JSON.stringify({
     variables: { [reader]: { kind: "state", key: "k", default: value } },
-    actions: { pick: { set: "k", from: ["alpha", "beta"] }, list: { copy: "x" } },
+    actions: {
+      pick: { set: "k", from: ["alpha", "beta"] },
+      list: { copy: "x" },
+    },
     segments: { ring: { template: '{{ carousel "pick" "list" "k" }}' } },
     root: { h: ["ring"] },
   });
@@ -179,7 +226,9 @@ describe("entries share a compile exactly when their configs compile alike", () 
       accountedBytes: 3 * ENTRY_BYTES + COMPILE_BYTES,
     });
     // [LAW:verifiable-goals] The cache says what it built and what it shared.
-    expect(lines.filter((l) => l.startsWith("render-cache compile built "))).toHaveLength(1);
+    expect(
+      lines.filter((l) => l.startsWith("render-cache compile built ")),
+    ).toHaveLength(1);
     const made = lines.filter((l) => l.startsWith("render-cache entry "));
     expect(made).toHaveLength(3);
     expect(made[2]).toMatch(/ entries=3 compiles=1 accounted=\d+\/\d+MB$/);
@@ -246,13 +295,19 @@ describe("the cache is bounded by bytes", () => {
   test("past the budget the least recently used entry leaves, never the newest", () => {
     const { cache, lines } = makeCache(2 * ENTRY_BYTES + COMPILE_BYTES);
     const cfg = file("config.json5", carouselConfig("mode", "alpha"));
-    const at = (d: string) => cache.getOrCreate(path.join(dir, d), path.join(dir, d), cfg);
+    const at = (d: string) =>
+      cache.getOrCreate(path.join(dir, d), path.join(dir, d), cfg);
     const [, b, c] = ["a", "b", "c"].map((d) => at(d).state);
     expect(cache.stats).toMatchObject({ size: 2, compiles: 1 });
-    expect(cache.stats.accountedBytes).toBeLessThanOrEqual(cache.stats.budgetBytes);
-    expect(lines.filter((l) => l.startsWith("config disposed reason=evict"))).toHaveLength(1);
+    expect(cache.stats.accountedBytes).toBeLessThanOrEqual(
+      cache.stats.budgetBytes,
+    );
+    expect(
+      lines.filter((l) => l.startsWith("config disposed reason=evict")),
+    ).toHaveLength(1);
     // `b` and `c` are still served; `a` left, so asking for it builds it again.
-    const built = () => lines.filter((l) => l.startsWith("render-cache entry ")).length;
+    const built = () =>
+      lines.filter((l) => l.startsWith("render-cache entry ")).length;
     expect(at("c").state).toBe(c);
     expect(at("b").state).toBe(b);
     expect(built()).toBe(3);
@@ -265,11 +320,14 @@ describe("the cache is bounded by bytes", () => {
   test("past the count ceiling the least recently used entry leaves, whatever the bytes", () => {
     const { cache, lines } = makeCache(64 * COMPILE_BYTES, 2);
     const cfg = file("config.json5", carouselConfig("mode", "alpha"));
-    const at = (d: string) => cache.getOrCreate(path.join(dir, d), path.join(dir, d), cfg);
+    const at = (d: string) =>
+      cache.getOrCreate(path.join(dir, d), path.join(dir, d), cfg);
     const [, b, c] = ["a", "b", "c"].map((d) => at(d).state);
     expect(cache.stats.size).toBe(2);
     expect(cache.stats.accountedBytes).toBeLessThan(cache.stats.budgetBytes);
-    expect(lines.filter((l) => l.startsWith("config disposed reason=evict"))).toHaveLength(1);
+    expect(
+      lines.filter((l) => l.startsWith("config disposed reason=evict")),
+    ).toHaveLength(1);
     expect(at("b").state).toBe(b);
     expect(at("c").state).toBe(c);
   });
@@ -300,8 +358,12 @@ describe("the cache is bounded by bytes", () => {
     cache.reload(b, b, cfgB, { kind: "write" });
     // `b` moved onto a compile of its own; `a`, least recently used, left.
     expect(cache.stats).toMatchObject({ size: 1, compiles: 1 });
-    expect(cache.stats.accountedBytes).toBeLessThanOrEqual(cache.stats.budgetBytes);
-    expect(lines.filter((l) => l.startsWith("config disposed reason=evict"))).toHaveLength(1);
+    expect(cache.stats.accountedBytes).toBeLessThanOrEqual(
+      cache.stats.budgetBytes,
+    );
+    expect(
+      lines.filter((l) => l.startsWith("config disposed reason=evict")),
+    ).toHaveLength(1);
     expect(nextOf(render(cache.getOrCreate(b, b, cfgB).state))).toBe("alpha");
   });
 
@@ -384,7 +446,12 @@ test("an entry, a compile and a view hold no more than the cache charges for the
   // default; the first compile in a process also pays the process's one-time
   // allocations, which are no compile's, so a second is measured.
   const orphan = (): CompiledConfig => {
-    const config = parseAndValidate("<test>", "{}", undefined, DEFAULT_DSL_CONFIG);
+    const config = parseAndValidate(
+      "<test>",
+      "{}",
+      undefined,
+      DEFAULT_DSL_CONFIG,
+    );
     const compiled = compileDslConfig(compileInputOf(config), TEST_SIGNER);
     drawAlone(config, compiled);
     return compiled;
@@ -403,7 +470,12 @@ test("an entry, a compile and a view hold no more than the cache charges for the
   const entry = (i: number) => {
     const cwd = path.join(dir, `c${i}`);
     fs.mkdirSync(cwd);
-    using held = cache.holdSession(cwd, cwd, undefined, viewFacts(cwd, `e${i}`));
+    using held = cache.holdSession(
+      cwd,
+      cwd,
+      undefined,
+      viewFacts(cwd, `e${i}`),
+    );
     drawn(held.view);
     return held.state;
   };
@@ -419,7 +491,12 @@ test("an entry, a compile and a view hold no more than the cache charges for the
   // A further session in a directory already rendered from costs its view.
   const shared = keep[0]!;
   const view = (i: number): SessionView => {
-    using held = cache.holdSession(dir + "/c0", dir + "/c0", undefined, viewFacts(dir + "/c0", `v${i}`));
+    using held = cache.holdSession(
+      dir + "/c0",
+      dir + "/c0",
+      undefined,
+      viewFacts(dir + "/c0", `v${i}`),
+    );
     expect(held.state).toBe(shared);
     drawn(held.view);
     return held.view;
@@ -437,15 +514,22 @@ test("an entry, a compile and a view hold no more than the cache charges for the
   // list behind the ⚙ and the preset list, and every tab.
   const walked = async (i: number): Promise<SessionView> => {
     const sid = `w${i}`;
-    using held = cache.holdSession(dir + "/c0", dir + "/c0", undefined, viewFacts(dir + "/c0", sid));
+    using held = cache.holdSession(
+      dir + "/c0",
+      dir + "/c0",
+      undefined,
+      viewFacts(dir + "/c0", sid),
+    );
     recordRender(sessionState, sid);
     const ctx = testVerbContext(sessionState, undefined, held.state.config);
     let last = drawnBytes(held.view);
     for (const text of MENU_WALK) {
       const hit = linksOf(last).find((l) => l.text === text);
-      if (hit === undefined) throw new Error(`no link "${text}" in:\n${textOf(last)}`);
+      if (hit === undefined)
+        throw new Error(`no link "${text}" in:\n${textOf(last)}`);
       const { verb, value } = parseHandlerUrl(hit.url);
-      const effects = verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
+      const effects =
+        verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
       for (const e of effects) await VERBS.get(e.verb)!(e.value, ctx);
       last = drawnBytes(held.view);
     }

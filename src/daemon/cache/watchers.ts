@@ -8,6 +8,7 @@ import {
   canonicalDirectory,
   nearestWatchTarget,
 } from "../../utils/watch-target";
+import type { Timekeeper } from "../../time";
 
 // Logger callable used for watcher lifecycle / failure events. Daemon
 // injects its log (writes to daemon.log at the requested level); other
@@ -251,7 +252,7 @@ interface WatcherSlot {
   // home and in each session's view share one key.
   readonly holders: Set<Holder>;
   // The debounce window open now, and what it has seen so far.
-  debounce: { readonly timer: NodeJS.Timeout; window: Gathering } | null;
+  debounce: { readonly cancel: () => void; window: Gathering } | null;
 }
 
 // [LAW:no-silent-failure] A handle says, live, which of its targets the OS is
@@ -339,18 +340,20 @@ export class WatcherRegistry {
   private readonly dirs = new Map<string, DirWatch>();
   private readonly counters?: WatcherCounters;
   private readonly logger: WatcherLogger;
+  private readonly clock: Pick<Timekeeper, "after">;
   private closed = false;
 
-  constructor(
-    opts: {
-      counters?: WatcherCounters;
-      // [LAW:single-enforcer] One injection point per consumer. The daemon
-      // passes its log so watcher-failure events land in daemon.log; non-
-      // daemon consumers keep the default debug-routed logger and never
-      // touch daemon log files.
-      logger?: WatcherLogger;
-    } = {},
-  ) {
+  constructor(opts: {
+    // [LAW:effects-at-boundaries] The clock the debounce window runs on.
+    clock: Pick<Timekeeper, "after">;
+    counters?: WatcherCounters;
+    // [LAW:single-enforcer] One injection point per consumer. The daemon
+    // passes its log so watcher-failure events land in daemon.log; non-
+    // daemon consumers keep the default debug-routed logger and never
+    // touch daemon log files.
+    logger?: WatcherLogger;
+  }) {
+    this.clock = opts.clock;
     this.counters = opts.counters;
     this.logger = opts.logger ?? defaultLogger;
   }
@@ -614,21 +617,24 @@ export class WatcherRegistry {
     }
     const debounce = {
       window: invalidation,
-      timer: setTimeout(() => {
-        slot.debounce = null;
-        for (const holder of slot.holders) {
-          try {
-            holder.onInvalidate(debounce.window);
-          } catch (e) {
-            this.logger(
-              "warn",
-              `watcher invalidate threw key=${valueOf(slot.key)}: ${(e as Error).message}`,
-            );
+      cancel: this.clock.after(
+        DEBOUNCE_MS,
+        () => {
+          slot.debounce = null;
+          for (const holder of slot.holders) {
+            try {
+              holder.onInvalidate(debounce.window);
+            } catch (e) {
+              this.logger(
+                "warn",
+                `watcher invalidate threw key=${valueOf(slot.key)}: ${(e as Error).message}`,
+              );
+            }
           }
-        }
-      }, DEBOUNCE_MS),
+        },
+        { unref: true },
+      ),
     };
-    debounce.timer.unref();
     slot.debounce = debounce;
   }
 
@@ -662,7 +668,7 @@ export class WatcherRegistry {
   // A directory watch closes with the last slot on it.
   private closeSlot(slot: WatcherSlot, cause: string): void {
     if (slot.debounce !== null) {
-      clearTimeout(slot.debounce.timer);
+      slot.debounce.cancel();
       slot.debounce = null;
     }
     for (const listener of slot.listeners) {

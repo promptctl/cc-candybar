@@ -8,6 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { makeBinaryWatch } from "../src/daemon/binary-watch";
 import type { LogLevel } from "../src/utils/logger";
+import { systemTimekeeper } from "../src/time";
 
 let dir: string;
 let bundle: string;
@@ -20,7 +21,7 @@ const watch = (
   targets = [bundle],
   stat: (p: string) => { mtimeMs: number } = fs.statSync,
 ) =>
-  makeBinaryWatch({
+  makeBinaryWatch({ clock: systemTimekeeper,
     targets,
     intervalMs: 60_000,
     stat,
@@ -178,7 +179,7 @@ test("a bundle rebuilt while an update runs restarts the daemon once the update 
 
 test("two checks at once exit once", async () => {
   const answers: Array<(held: boolean) => void> = [];
-  const w = makeBinaryWatch({
+  const w = makeBinaryWatch({ clock: systemTimekeeper,
     targets: [bundle],
     intervalMs: 60_000,
     stat: fs.statSync,
@@ -197,7 +198,7 @@ test("two checks at once exit once", async () => {
 test("a close during the hold's answer exits nothing", async () => {
   let answer!: (held: boolean) => void;
   let exits = 0;
-  const w = makeBinaryWatch({
+  const w = makeBinaryWatch({ clock: systemTimekeeper,
     targets: [bundle],
     intervalMs: 60_000,
     stat: fs.statSync,
@@ -216,7 +217,7 @@ test("a close during the hold's answer exits nothing", async () => {
 
 test("a check that fails is logged, and the next one still decides", async () => {
   let failing = true;
-  const w = makeBinaryWatch({
+  const w = makeBinaryWatch({ clock: systemTimekeeper,
     targets: [bundle],
     intervalMs: 60_000,
     stat: fs.statSync,

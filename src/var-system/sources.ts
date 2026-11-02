@@ -742,7 +742,9 @@ export class SourceRegistry {
     // [LAW:single-enforcer] The daemon's one watcher registry, which holds
     // every directory watch its `watch_file` sources need; a registry outside
     // the daemon keeps its own.
-    private readonly watchers: WatcherRegistry = new WatcherRegistry(),
+    private readonly watchers: WatcherRegistry = new WatcherRegistry({
+      clock: store.clock,
+    }),
     // [LAW:one-source-of-truth] The environment an `env` source reads: the
     // daemon's host, handed in by whatever builds the registry. A registry built
     // without one reads every variable as unset, and says so on the source.

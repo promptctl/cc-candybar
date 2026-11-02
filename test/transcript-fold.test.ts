@@ -22,6 +22,7 @@ import { tmpdir } from "node:os";
 import { TranscriptFold } from "../src/utils/transcript-fold";
 import type { ParsedEntry } from "../src/utils/claude";
 import { FOLD_WINDOW_BYTES } from "../src/utils/transcript-fs";
+import { systemTimekeeper } from "../src/time";
 
 let dir: string;
 let tick = 0;
@@ -46,6 +47,7 @@ const counting = (max?: number) =>
     0,
     (n: number, _e: ParsedEntry) => n + 1,
     REFRESHES,
+    systemTimekeeper,
     undefined,
     max,
   );
@@ -141,6 +143,7 @@ test("a session with no transcript is a real zero, never a failure", async () =>
         return n + 1;
       },
       REFRESHES,
+      systemTimekeeper,
     );
     expect(await valueOf(warm, "s", path)).toBe(1);
     expect(steps).toBe(1);
@@ -202,6 +205,7 @@ test("a multi-window transcript folds every entry, and a long line is logged", a
     0,
     (n: number, _e: ParsedEntry) => n + 1,
     REFRESHES,
+    systemTimekeeper,
     (_level, msg) => logged.push(msg),
   );
 

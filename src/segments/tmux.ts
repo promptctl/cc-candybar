@@ -1,6 +1,7 @@
 import type { Launcher } from "../proc/launch";
 import { runTmuxAsync } from "../proc/tmux";
 import type { TmuxHint } from "../tmux-hint";
+import type { Timekeeper } from "../time";
 import type { Holds } from "../utils/holds";
 import { KeyedSource, type KeyedSourceStats } from "../utils/keyed-source";
 import { quietLogger, type DaemonLogger } from "../utils/logger";
@@ -32,6 +33,8 @@ export class TmuxService {
 
   constructor(opts: {
     readonly launcher: Launcher;
+    // [LAW:effects-at-boundaries] Times each refresh and arms each pane's period.
+    readonly clock: Pick<Timekeeper, "now" | "after">;
     readonly logger?: DaemonLogger;
     readonly ledger?: RefreshLedger;
   }) {
@@ -49,6 +52,7 @@ export class TmuxService {
       maxEntries: MAX_ENTRIES,
       logger,
       ledger: opts.ledger ?? new RefreshLedger(logger),
+      clock: opts.clock,
     });
   }
 

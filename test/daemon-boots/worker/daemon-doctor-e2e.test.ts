@@ -21,13 +21,21 @@ import {
 import os from "node:os";
 import path from "node:path";
 
-import { click, frameRequest, render, renderBody, renderRequest, urlWriting } from "../../helpers/daemon-e2e";
-import { bundleAt, startDaemon, statsOf } from "../../helpers/in-worker-daemon";
 import {
-  prepareIsolatedDaemonEnv,
-} from "../../helpers/spawn-isolated-daemon";
+  click,
+  frameRequest,
+  render,
+  renderBody,
+  renderRequest,
+  urlWriting,
+} from "../../helpers/daemon-e2e";
+import { bundleAt, startDaemon, statsOf } from "../../helpers/in-worker-daemon";
+import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import { effectsOf } from "../../helpers/click";
-import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../../../src/config/settings-menu";
+import {
+  SETTINGS_ANCHOR,
+  SETTINGS_OPEN,
+} from "../../../src/config/settings-menu";
 import { DISCLOSURE_CLOSED } from "../../../src/config/disclosure";
 import { SETTINGS_NS } from "../../../src/config/reserved-names";
 import {
@@ -55,7 +63,10 @@ import {
   parseDaemonClients,
   parseRateLimitSightings,
 } from "../../../src/doctor/daemon-answer";
-import { claudeConfigDir, detectClaudeConfigDir } from "../../../src/claude-settings";
+import {
+  claudeConfigDir,
+  detectClaudeConfigDir,
+} from "../../../src/claude-settings";
 import type { ClientHints } from "../../../src/daemon/protocol";
 import { answerRepo } from "../../helpers/repo-approval";
 
@@ -109,7 +120,9 @@ test("the doctor's config row reports the session's own config load", async () =
 
     // The project layer's unused helper, read over the user's file.
     expect(flat(await render(daemon, SID, projectDir))).toContain(
-      squeezed(`✗ config — ${userConfig} < ${projectConfig} (searched): helper "idle" is never called`),
+      squeezed(
+        `✗ config — ${userConfig} < ${projectConfig} (searched): helper "idle" is never called`,
+      ),
     );
 
     // Fixing it turns the row over on the very next run: the click reloads
@@ -117,7 +130,9 @@ test("the doctor's config row reports the session's own config load", async () =
     // the fs watcher catches up.
     writeFileSync(projectConfig, `{}`);
     await click(daemon, run!);
-    expect(flat(await render(daemon, SID, projectDir))).toContain(squeezed("✓ config"));
+    expect(flat(await render(daemon, SID, projectDir))).toContain(
+      squeezed("✓ config"),
+    );
   } finally {
     await daemon.stop();
     removeTmpDirs();
@@ -147,8 +162,14 @@ test("the doctor's config row says what named the session's file", async () => {
       args: string[],
     ): Promise<string> => {
       const draw = () => render(daemon, sid, projectDir, hints, args);
-      await click(daemon, urlWriting(await draw(), SETTINGS_ANCHOR, SETTINGS_OPEN));
-      await click(daemon, urlWriting(await draw(), `${SETTINGS_NS}tab`, "tools"));
+      await click(
+        daemon,
+        urlWriting(await draw(), SETTINGS_ANCHOR, SETTINGS_OPEN),
+      );
+      await click(
+        daemon,
+        urlWriting(await draw(), `${SETTINGS_NS}tab`, "tools"),
+      );
       const run = linkUrls(await draw()).find((u) =>
         effectsOf(u).some((e) => e.verb === VERB_DOCTOR_RUN),
       );
@@ -240,7 +261,9 @@ test("a probe click is listed in stats; a doctor click's handler version is its 
       ),
     );
     expect(flat(await render(daemon, SID, projectDir))).toContain(
-      squeezed("✗ URL handler — the URL handler runs cc-candybar 0.0.1; the bar runs"),
+      squeezed(
+        "✗ URL handler — the URL handler runs cc-candybar 0.0.1; the bar runs",
+      ),
     );
   } finally {
     await daemon.stop();
@@ -260,15 +283,15 @@ test("the CLI's probe reads its own link back from the daemon it was delivered t
   const daemon = startDaemon(env);
   try {
     await daemon.listen(sockPath);
-    const delivered: Promise<unknown>[] = [];
+    const delivered: Array<Promise<unknown>> = [];
     const facts = await probeUrlHandler({
-      ...productionHandlerProbeEdge(WORLD.launcher, HOST),
+      ...productionHandlerProbeEdge(WORLD.launcher, WORLD),
       platform: "darwin",
       // The stand-in for the handler app below delivers to this daemon.
       sockets: { own: sockPath, handler: sockPath },
       open: (url) => {
         const { verb, value } = parseHandlerUrl(url);
-        delivered.push(tryClickViaDaemon(HOST, verb, value));
+        delivered.push(tryClickViaDaemon(WORLD, verb, value));
         return null;
       },
     });
@@ -458,7 +481,9 @@ test("the session data row reads the transcript the session's render named", asy
     expect(run).toBeDefined();
     await click(daemon, run!);
     expect(flat(await renderT())).toContain(
-      squeezed(`✗ session data — 1 of the 2 lines in the transcript ${transcript} are not JSON objects`),
+      squeezed(
+        `✗ session data — 1 of the 2 lines in the transcript ${transcript} are not JSON objects`,
+      ),
     );
 
     writeFileSync(transcript, `{"type":"user"}\n`);
@@ -508,17 +533,16 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
       daemon,
       urlWriting(await draw(), SETTINGS_ANCHOR, SETTINGS_OPEN),
     );
-    await click(
-      daemon,
-      urlWriting(await draw(), `${SETTINGS_NS}tab`, "tools"),
-    );
+    await click(daemon, urlWriting(await draw(), `${SETTINGS_NS}tab`, "tools"));
     const run = linkUrls(await draw()).find((u) =>
       effectsOf(u).some((e) => e.verb === VERB_DOCTOR_RUN),
     );
     expect(run).toBeDefined();
     await click(daemon, run!);
     expect(flat(await draw())).toContain(
-      squeezed("✗ effect refresh — the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close), but its statusLine sets no refreshInterval"),
+      squeezed(
+        "✗ effect refresh — the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close), but its statusLine sets no refreshInterval",
+      ),
     );
 
     writeFileSync(projectConfig, barOf("still"));
@@ -529,7 +553,9 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
     // counts down to the flash before it closes on its own: the frame says
     // when that starts (candybar-animation-wbxz.014), so the bar moves.
     expect(flat(await draw())).toContain(
-      squeezed("✗ effect refresh — the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close)"),
+      squeezed(
+        "✗ effect refresh — the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close)",
+      ),
     );
 
     // The same bar with its menu closed is still, and passes.
@@ -543,10 +569,7 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
       daemon,
       urlWriting(await draw(), SETTINGS_ANCHOR, SETTINGS_OPEN),
     );
-    await click(
-      daemon,
-      urlWriting(await draw(), `${SETTINGS_NS}tab`, "tools"),
-    );
+    await click(daemon, urlWriting(await draw(), `${SETTINGS_NS}tab`, "tools"));
     expect(flat(await draw())).toContain(squeezed("✓ effect refresh"));
 
     const events = await renderLines(env, SID, drawn);

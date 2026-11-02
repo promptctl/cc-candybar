@@ -15,6 +15,7 @@ import path from "node:path";
 import { logPath } from "../../src/daemon/paths";
 import { sendOne } from "../../src/daemon/protocol";
 import type { Request, Response } from "../../src/daemon/protocol";
+import { systemTimekeeper } from "../../src/time";
 
 const DEFAULT_REPLY_BUDGET_MS = 5000;
 
@@ -91,7 +92,12 @@ function overSocket(
     sock.once("connect", () => {
       clearTimeout(connectTimer);
       sock.removeListener("error", onConnectError);
-      sendOne(sock, req as unknown as Request, Date.now() + timeoutMs).then(
+      sendOne(
+        sock,
+        req as unknown as Request,
+        Date.now() + timeoutMs,
+        systemTimekeeper,
+      ).then(
         resolve,
         reject,
       );

@@ -72,7 +72,7 @@ beforeEach(() => {
     onRefused: () => {},
   };
   launcher = createLauncher({ inherited: INHERITED, stats: handle }, systemTimekeeper);
-  svc = new TmuxService({ launcher });
+  svc = new TmuxService({ launcher, clock: systemTimekeeper });
   holds = new Holds();
 });
 
@@ -167,6 +167,7 @@ describe("TmuxService", () => {
     svc.close();
     svc = new TmuxService({
       launcher,
+      clock: systemTimekeeper,
       logger: (level, msg) => lines.push(`${level} ${msg}`),
     });
     const h = hint("/client/refuse.sock", "%1");

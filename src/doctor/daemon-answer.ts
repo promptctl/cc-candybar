@@ -7,8 +7,10 @@
 
 import { fetchStats, shapeSkew } from "../daemon/client-stats.js";
 import type { StatsSnapshot } from "../daemon/stats.js";
-import { describeFailure } from "../daemon/client-transport.js";
-import type { Host } from "../host.js";
+import {
+  describeFailure,
+  type ClientWorld,
+} from "../daemon/client-transport.js";
 import { sanitizeClient } from "../daemon/protocol.js";
 import {
   FRAMES_SEEN,
@@ -331,8 +333,8 @@ export interface DaemonAnswer {
   readonly stores: StoresRead;
 }
 
-export async function askDaemon(host: Host): Promise<DaemonAnswer> {
-  const outcome = await fetchStats(host);
+export async function askDaemon(world: ClientWorld): Promise<DaemonAnswer> {
+  const outcome = await fetchStats(world);
   if (outcome.kind !== "ok") {
     const failed = {
       kind: "failed",
