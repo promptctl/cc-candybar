@@ -43,13 +43,14 @@ const NO_LANES = Object.fromEntries(
 export function recordRender(
   sessionState: SessionStateRW,
   sessionId: string,
+  dir = "/tmp/proj",
 ): void {
   sessionState.set(
     sessionId,
     SESSION_RENDER_ORIGIN_KEY,
     encodeRenderOrigin({
-      projectDir: "/tmp/proj",
-      cwd: "/tmp/proj",
+      projectDir: dir,
+      cwd: dir,
       target: { source: "search" },
     }),
   );

@@ -1,5 +1,4 @@
 import type { Frame } from "../src/render/frame";
-import { processLauncher } from "./helpers/host";
 // [LAW:verifiable-goals] Epic k5a done-gate #1: clicking a theme picker option
 // recolors the WHOLE bar live. The action-surface tests (dsl-actions/dsl-picker)
 // prove the click writes SessionState and the active-marking moves, but they
@@ -21,33 +20,16 @@ import { processLauncher } from "./helpers/host";
 // silently starts measuring a different segment the day a cell is added ahead
 // of it.
 
-import { drawPayload } from "./helpers/draw-payload";
 import { backgroundsOf, boldUrls } from "./helpers/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
-import { selectionFor } from "./helpers/selection";
 import type { RichText } from "@promptctl/rich-js";
-import { parseAndValidate } from "./helpers/parse-and-validate";
-import { VariableStore } from "../src/var-system/store";
-import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig } from "../src/dsl/render";
-import { SessionState } from "../src/daemon/session-state";
-import { recordRender, testVerbContext, effectsOf, clickUrl } from "./helpers/click";
+import { buildRig } from "./helpers/rig";
+import { effectsOf } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { resolvedStyle } from "../src/render/rich-theme.js";
-import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "../src/time";
 
 const SID = "s-recolor";
 const BASE_THEME = "textual-dark";
 const PICKED_THEME = "textual-light";
-
-const OPTS = {
-  endcaps: "powerline" as const,
-  colorCompatibility: "truecolor" as const,
-  wrap: true,
-  padding: 0,
-  width: Number.POSITIVE_INFINITY,
-};
 
 // This mirrors the user's live config slice (a colored text segment + a theme
 // picker bound to the `theme` state key, defaulted to the config palette). No
@@ -82,12 +64,8 @@ interface Painted {
   readonly bgOf: (segment: string) => string;
 }
 
-function buildRuntime() {
-  const config = parseAndValidate("<recolor>", SRC, ALLOWED);
-  const sessionState = new SessionState();
-  const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
+function recolorBar() {
+  const rig = buildRig({ source: SRC, label: "<recolor>", palettes: ALLOWED, sessionId: SID });
   const sink = new Map<string, readonly RichText[]>();
 
   // [LAW:one-source-of-truth] Resolve the theme per render the SAME way the
@@ -98,17 +76,10 @@ function buildRuntime() {
   // globals.palette)`, and the SELECTION carries the palette, so there is no
   // separate base palette here to fall out of step with the name.)
   const render = (): Painted => {
-    const bar = drawPayload(
-      config,
-      compiled,
-      store,
-      registry,
-      { session_id: SID },
-      instantOf(new Date()),
-      OPTS,
-      { perSegmentSink: sink },
-      selectionFor(config, {}, (key) => sessionState.get(SID, key)),
-    ).frame;
+    const bar = rig.draw({
+      payload: { session_id: SID },
+      observers: { perSegmentSink: sink },
+    }).frame;
     // [LAW:no-ambient-temporal-coupling] Snapshot the sink HERE. drawDsl
     // clears it at the top of the next call, so a colour read deferred past
     // that call would measure a render this Painted never described.
@@ -129,7 +100,7 @@ function buildRuntime() {
     };
     return { bar, bgOf };
   };
-  return { config, sessionState, render };
+  return { ...rig, render };
 }
 
 // Every truecolor background a frame draws. The set of these is the bar's
@@ -138,23 +109,16 @@ function bgColors(frame: Frame): Set<string> {
   return new Set(backgroundsOf(frame).flatMap((bg) => (bg?.startsWith("#") ? [bg] : [])));
 }
 
-async function clickTheme(
-  { config, sessionState }: ReturnType<typeof buildRuntime>,
-  theme: string,
-): Promise<void> {
+async function clickTheme(rig: ReturnType<typeof recolorBar>, theme: string): Promise<void> {
   // Drive the real wire end-to-end: emit the click URL the picker would, then
   // dispatch it exactly as the daemon does (parse → dispatch → set-state).
-  const url = effectsUrl([
-    { verb: VERB_SET_STATE, args: [SID, "theme", theme] },
-  ]);
-  recordRender(sessionState, SID);
-  await clickUrl(url, testVerbContext(sessionState, undefined, config));
+  await rig.click(effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "theme", theme] }]));
 }
 
 describe("DSL theme picker — live recolor (epic k5a done-gate #1)", () => {
   test("clicking a theme repaints the whole bar's background colors", async () => {
-    const rt = buildRuntime();
-    const { sessionState, render } = rt;
+    const rt = recolorBar();
+    const { render } = rt;
 
     const beforeBgs = bgColors(render().bar);
     expect(beforeBgs.size).toBeGreaterThan(0);
@@ -173,8 +137,8 @@ describe("DSL theme picker — live recolor (epic k5a done-gate #1)", () => {
   });
 
   test("every cell the config declares repaints — the non-picker `plain` too", async () => {
-    const rt = buildRuntime();
-    const { sessionState, render } = rt;
+    const rt = recolorBar();
+    const { render } = rt;
 
     const bgsOf = (painted: Painted): Record<string, string> =>
       Object.fromEntries(DECLARED.map((name) => [name, painted.bgOf(name)]));
@@ -188,8 +152,8 @@ describe("DSL theme picker — live recolor (epic k5a done-gate #1)", () => {
   });
 
   test("active marking tracks the rendered theme: default marked, then the pick", async () => {
-    const rt = buildRuntime();
-    const { sessionState, render } = rt;
+    const rt = recolorBar();
+    const { render } = rt;
 
     // Before any click, the state var defaults to the config palette, so the
     // base theme option is the single bold (active) region.

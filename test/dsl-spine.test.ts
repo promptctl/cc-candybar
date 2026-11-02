@@ -6,24 +6,15 @@
 // [LAW:verifiable-goals] Success is a byte string that matches a committed
 // snapshot. Any byte drift fails loudly.
 
-import { drawPayload } from "./helpers/draw-payload";
-import { processLauncher } from "./helpers/host";
 import { ansiOf, textOf } from "../src/render/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
-import { SessionState } from "../src/daemon/session-state";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { getThemePalette } from "@promptctl/rich-js";
-
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { VariableStore } from "../src/var-system/store";
-import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig } from "../src/dsl/render";
 import { walkNodes } from "../src/config/dsl-types";
 import { presetRoot, PRESET_FLOOR } from "../src/config/presets";
-import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "../src/time";
+import type { RenderObservers } from "../src/dsl/render";
+import { buildRig } from "./helpers/rig";
 
 // [LAW:single-enforcer] Inlined fixture values formerly served by
 // `test/parity/fixtures.ts`. The parity infra was retired alongside the
@@ -55,27 +46,22 @@ const FIXTURE_SOURCE = readFileSync(
   "utf-8",
 );
 
-// Strip opts match the parity harness so bytes are comparable. Width is
-// Infinity so the committed snapshot stays a single line — wrap behavior
-// is tested in test/strip-flex.test.ts (the renderStripCells wrap path).
-const OPTS = {
-  endcaps: "powerline" as const,
-  colorCompatibility: "truecolor" as const, wrap: true, padding: 0,
-  width: Number.POSITIVE_INFINITY,
-};
-
 // HOME is controlled so the directory template's home-collapse branch is
 // never taken — makes path rendering deterministic across machines. (An `env`
 // source reads the registry's environment at registerDslConfig call time.)
 const ENV = { HOME: "" };
 
 describe("DSL render spine (bzh.7 steel thread)", () => {
-  function buildRuntime(cwd: string) {
-    const config = parseAndValidate("<test>", FIXTURE_SOURCE, ALLOWED_PALETTES);
-    const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(processLauncher, store, "", new SessionState(), null, undefined, undefined, undefined, ENV);
-    const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd });
-    return { config, compiled, store, registry };
+  // Strip opts are the rig's own (powerline, truecolor, wrap, padding 0, width
+  // Infinity) so the committed snapshot stays a single line — wrap behavior is
+  // tested in test/strip-flex.test.ts (the renderStripCells wrap path).
+  function spineBar(
+    cwd: string,
+    source: string = FIXTURE_SOURCE,
+    palettes: ReadonlySet<string> = ALLOWED_PALETTES,
+  ) {
+    const rig = buildRig({ source, palettes, cwd, env: ENV });
+    return { ...rig, drawHook: (observers?: RenderObservers) => rig.draw({ payload: HOOK_DATA, observers }).frame };
   }
 
   test("parseDslConfig accepts the committed fixture", () => {
@@ -86,7 +72,7 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
   });
 
   test("registerDslConfig populates the store with all declared variables", () => {
-    const { store } = buildRuntime(HOOK_DATA.workspace.current_dir);
+    const { store } = spineBar(HOOK_DATA.workspace.current_dir);
     // All four declared variables must be present.
     expect(store.has("current_dir")).toBe(true);
     expect(store.has("project_dir")).toBe(true);
@@ -95,30 +81,16 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
   });
 
   test("drawDsl draws a non-empty frame", () => {
-    const { config, compiled, store, registry } = buildRuntime(
-      HOOK_DATA.workspace.current_dir,
-    );
-    const basePalette = getThemePalette("textual-dark"!);
-    const result = drawPayload(
-      config,
-      compiled,
-      store,
-      registry,
-      HOOK_DATA,
-      instantOf(new Date()),
-      OPTS,
-    ).frame;
+    const { drawHook } = spineBar(HOOK_DATA.workspace.current_dir);
+    const result = drawHook();
     expect(result.rows.length).toBeGreaterThan(0);
     expect(textOf(result).length).toBeGreaterThan(0);
   });
 
   test("drawDsl reads its input vars from the payload it binds", () => {
-    const { config, compiled, store, registry } = buildRuntime(
-      HOOK_DATA.workspace.current_dir,
-    );
-    const basePalette = getThemePalette("textual-dark"!);
+    const { store, drawHook } = spineBar(HOOK_DATA.workspace.current_dir);
 
-    drawPayload(config, compiled, store, registry, HOOK_DATA, instantOf(new Date()), OPTS).frame;
+    drawHook();
 
     // After the first render, input boxes must hold the payload values.
     expect(store.read("current_dir")).toBe(HOOK_DATA.workspace.current_dir);
@@ -127,21 +99,15 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
   });
 
   test("drawDsl produces byte-identical output on repeated calls with the same payload", () => {
-    const { config, compiled, store, registry } = buildRuntime(
-      HOOK_DATA.workspace.current_dir,
-    );
-    const basePalette = getThemePalette("textual-dark"!);
+    const { drawHook } = spineBar(HOOK_DATA.workspace.current_dir);
 
-    const a = drawPayload(config, compiled, store, registry, HOOK_DATA, instantOf(new Date()), OPTS).frame;
-    const b = drawPayload(config, compiled, store, registry, HOOK_DATA, instantOf(new Date()), OPTS).frame;
+    const a = drawHook();
+    const b = drawHook();
     expect(a.rows).toEqual(b.rows);
   });
 
   test("perSegmentSink receives one RichText[] per rendered (non-hidden) segment, cleared on each call", () => {
-    const { config, compiled, store, registry } = buildRuntime(
-      HOOK_DATA.workspace.current_dir,
-    );
-    const basePalette = getThemePalette("textual-dark"!);
+    const { config, drawHook } = spineBar(HOOK_DATA.workspace.current_dir);
     const sink = new Map<
       string,
       readonly import("@promptctl/rich-js").RichText[]
@@ -149,16 +115,7 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
     // Pre-seed with a stale entry to verify drawDsl clears it.
     sink.set("doesNotExist", []);
 
-    drawPayload(
-      config,
-      compiled,
-      store,
-      registry,
-      HOOK_DATA,
-      instantOf(new Date()),
-      OPTS,
-      { perSegmentSink: sink },
-    ).frame;
+    drawHook({ perSegmentSink: sink });
 
     // Stale entry from a previous render must be gone.
     expect(sink.has("doesNotExist")).toBe(false);
@@ -183,21 +140,8 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
   // changes — fails loudly here. This is the "assembled-line fixture" that
   // grows monotonically as more segments reach dsl-parity.
   test("drawDsl produces exact committed bytes (spine correctness)", () => {
-    const { config, compiled, store, registry } = buildRuntime(
-      HOOK_DATA.workspace.current_dir,
-    );
-    const basePalette = getThemePalette("textual-dark"!);
-    const result = ansiOf(
-      drawPayload(
-        config,
-        compiled,
-        store,
-        registry,
-        HOOK_DATA,
-        instantOf(new Date()),
-        OPTS,
-      ).frame,
-    );
+    const { drawHook } = spineBar(HOOK_DATA.workspace.current_dir);
+    const result = ansiOf(drawHook());
     expect(result).toMatchSnapshot();
   });
 
@@ -205,34 +149,18 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
     // Build two runtimes: one with the fixture (sessionId → gruvbox palette),
     // one with a modified fixture that inherits the base palette for sessionId.
     // Different palettes must draw different rows.
-    const withGruvboxPalette = (() => {
-      const { config, compiled, store, registry } = buildRuntime(
-        HOOK_DATA.workspace.current_dir,
-      );
-      const basePalette = getThemePalette("textual-dark"!);
-      return drawPayload(config, compiled, store, registry, HOOK_DATA, instantOf(new Date()), OPTS).frame;
-    })();
+    const withGruvboxPalette = spineBar(HOOK_DATA.workspace.current_dir).drawHook();
 
     // Override: same fixture but sessionId uses the base palette (textual-dark).
     const noSegmentPaletteSource = FIXTURE_SOURCE.replace(
       "palette: 'gruvbox',",
       "",
     );
-    const withBasePaletteOnly = (() => {
-      const config = parseAndValidate(
-        "<test>",
-        noSegmentPaletteSource,
-        new Set(["textual-dark"]),
-      );
-      const store = new VariableStore(systemTimekeeper);
-      const registry = new SourceRegistry(processLauncher, store, "", new SessionState(), null, undefined, undefined, undefined, ENV);
-      const compiled = registerDslConfig(config, registry, {
-        signer: TEST_SIGNER,
-        cwd: HOOK_DATA.workspace.current_dir,
-      });
-      const basePalette = getThemePalette("textual-dark"!);
-      return drawPayload(config, compiled, store, registry, HOOK_DATA, instantOf(new Date()), OPTS).frame;
-    })();
+    const withBasePaletteOnly = spineBar(
+      HOOK_DATA.workspace.current_dir,
+      noSegmentPaletteSource,
+      new Set(["textual-dark"]),
+    ).drawHook();
 
     expect(withGruvboxPalette.rows).not.toEqual(withBasePaletteOnly.rows);
   });

@@ -16,24 +16,16 @@
 // parallel rig and no hand-built joiner — a test that restated the chain would
 // pass while the daemon diverged, which is the whole failure this ticket closes.
 
-import { drawPayload } from "./helpers/draw-payload";
-import { processLauncher } from "./helpers/host";
 import { textOf, type Frame } from "../src/render/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
-import { parseAndValidate } from "./helpers/parse-and-validate";
-import { VariableStore } from "../src/var-system/store";
-import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig } from "../src/dsl/render";
-import { SessionState } from "../src/daemon/session-state";
-import { testVerbContext, clickUrl, recordRender } from "./helpers/click";
+import { buildRig, type Rig } from "./helpers/rig";
+import type { SessionState } from "../src/daemon/session-state";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
+import { parseAndValidate } from "./helpers/parse-and-validate";
 import { ConfigError } from "../src/config/dsl-loader";
-import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
 import type { ValidatedConfig } from "../src/config/dsl-types";
-import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "../src/time";
+import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
 
 const SID = "s-edit-look";
 const BASE_THEME = "textual-dark";
@@ -65,18 +57,14 @@ function src(extra = ""): string {
 }`;
 }
 
-function buildRuntime(source: string) {
-  const config = parseAndValidate("<edit-look>", source, ALLOWED);
-  const sessionState = new SessionState();
-  const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
+function editLookBar(source: string) {
   // [LAW:single-enforcer] The real gate is the one this session's config
-  // derives — the sole authority on what a click may write. Recording the
-  // render and the config it rendered with is what makes the set-state calls
-  // below travel the same road a real click travels.
-  recordRender(sessionState, SID);
-  renderedConfig.set(sessionState, config);
+  // derives — the sole authority on what a click may write. The rig records the
+  // render and hands the click the config it rendered with, so the set-state
+  // calls below travel the same road a real click travels.
+  const rig = buildRig({ source, label: "<edit-look>", palettes: ALLOWED, sessionId: SID });
+  const { config, sessionState } = rig;
+  rigOf.set(sessionState, rig);
 
   // [LAW:one-source-of-truth] The daemon's own resolution, called the way the
   // daemon calls it — a session-key reader and the entry's customized fact.
@@ -89,27 +77,19 @@ function buildRuntime(source: string) {
 
   const render = (): Frame => {
     const effective = effectiveNow();
-    return drawPayload(
-      config,
-      compiled,
-      store,
-      registry,
-      { session_id: SID },
-      instantOf(new Date()),
-      {
+    return rig.draw({
+      payload: { session_id: SID },
+      opts: {
         endcaps: effective.endcaps,
         separator: effective.separator,
-        colorCompatibility: "truecolor" as const,
         wrap: effective.autoWrap,
         padding: effective.padding,
-        width: Number.POSITIVE_INFINITY,
       },
-      undefined,
       // The selection IS the same `effective` resolution every field above comes
       // from — so the bar cannot be painted from one resolution and labelled
       // from another.
-      effective,
-    ).frame;
+      selection: effective,
+    }).frame;
   };
 
   return { config, sessionState, render, effectiveNow };
@@ -120,16 +100,15 @@ async function setState(
   key: string,
   value: string,
 ): Promise<void> {
-  await clickUrl(
-    effectsUrl([{ verb: VERB_SET_STATE, args: [SID, key, value] }]),
-    testVerbContext(sessionState, undefined, renderedConfig.get(sessionState)),
-  );
+  await rigOf
+    .get(sessionState)!
+    .click(effectsUrl([{ verb: VERB_SET_STATE, args: [SID, key, value] }]));
 }
 
-// The config each runtime's session renders with, which is the config its
-// clicks are gated by. Keyed on the session state so a test that builds two
-// runtimes gates each one's clicks by its own config.
-const renderedConfig = new WeakMap<SessionState, ValidatedConfig>();
+// The rig each runtime's session renders with, whose config gates its clicks.
+// Keyed on the session state so a test that builds two runtimes gates each
+// one's clicks by its own config.
+const rigOf = new WeakMap<SessionState, Rig>();
 
 const enterEditMode = async (s: SessionState) =>
   await setState(s, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
@@ -137,7 +116,7 @@ const leaveEditMode = async (s: SessionState) => await setState(s, EDIT_MODE_KEY
 
 describe("edit mode's look — a staged globals fragment", () => {
   test("entering restyles the bar and leaving restores the previous bytes exactly", async () => {
-    const { sessionState, render } = buildRuntime(
+    const { sessionState, render } = editLookBar(
       src(`editGlobals: { endcaps: 'plain', default_separator: ' | ' },`),
     );
 
@@ -156,7 +135,7 @@ describe("edit mode's look — a staged globals fragment", () => {
   });
 
   test("the staged fragment outranks a session pick, which governs again on exit", async () => {
-    const { sessionState, render, effectiveNow } = buildRuntime(
+    const { sessionState, render, effectiveNow } = editLookBar(
       src(`editGlobals: { endcaps: 'plain', default_separator: ' | ' },`),
     );
 
@@ -180,10 +159,10 @@ describe("edit mode's look — a staged globals fragment", () => {
     // [LAW:verifiable-goals] The ticket's actual bar — "a config can change the
     // edit-mode look; a test demonstrates it with config data only and no
     // engine edit". Both runtimes below run the SAME engine.
-    const bundled = buildRuntime(
+    const bundled = editLookBar(
       src(`editGlobals: { endcaps: 'plain', default_separator: ' | ' },`),
     );
-    const retuned = buildRuntime(
+    const retuned = editLookBar(
       src(`editGlobals: { endcaps: 'plain', default_separator: ' ~~ ' },`),
     );
 
@@ -202,14 +181,14 @@ describe("edit mode's look — a staged globals fragment", () => {
     // globals rather than on rendered bytes, because edit mode also splices its
     // +/- CHROME into the tree: that is a different feature (edit-chrome.ts),
     // and conflating the two would make this test fail for the wrong reason.
-    const { sessionState, effectiveNow } = buildRuntime(src());
+    const { sessionState, effectiveNow } = editLookBar(src());
     const before = effectiveNow();
     await enterEditMode(sessionState);
     expect(effectiveNow()).toEqual(before);
   });
 
   test("every staged field outranks its session pick, not just style", async () => {
-    const { sessionState, effectiveNow } = buildRuntime(
+    const { sessionState, effectiveNow } = editLookBar(
       src(`editGlobals: { padding: 3, autoWrap: false },`),
     );
     await setState(sessionState, "padding", "1");
@@ -225,7 +204,7 @@ describe("edit mode's look — a staged globals fragment", () => {
   test("an unstaged field still resolves through its own session pick while editing", async () => {
     // The fragment is a DELTA, not a replacement: staging `style` says nothing
     // about `padding`, exactly as a preset's globals delta does.
-    const { sessionState, effectiveNow } = buildRuntime(
+    const { sessionState, effectiveNow } = editLookBar(
       src(`editGlobals: { endcaps: 'plain' },`),
     );
     await setState(sessionState, "padding", "4");

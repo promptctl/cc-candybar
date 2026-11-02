@@ -9,21 +9,15 @@
 // drives the real click wire, so what it proves is the loop a user runs, not a
 // function in isolation.
 
-import { drawPayload } from "./helpers/draw-payload";
-import { processLauncher } from "./helpers/host";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { VariableStore } from "../src/var-system/store";
-import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig } from "../src/dsl/render";
-import { SessionState } from "../src/daemon/session-state";
-import { testVerbContext, clickUrl, recordRender } from "./helpers/click";
+import { recordRender } from "./helpers/click";
+import { buildRig } from "./helpers/rig";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { resolveStyleSelection } from "../src/themes";
 import { effectivePresetName } from "../src/config/presets";
-import type { DslConfig, Globals, PresetDecl } from "../src/config/dsl-types";
+import type { Globals, PresetDecl } from "../src/config/dsl-types";
 import type { ThemeKey } from "@promptctl/rich-js";
 import { PADDING_RANGE } from "../src/themes/policy";
 import { floorOf } from "../src/config/globals-fields";
@@ -33,8 +27,6 @@ import {
 } from "../src/config/loader/edit-mode";
 import type { EffectiveGlobals } from "../src/config/effective-globals";
 import { globalsFor } from "./helpers/selection";
-import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "../src/time";
 
 const BASE_THEME = "textual-dark";
 const ALLOWED = new Set([BASE_THEME]);
@@ -80,56 +72,29 @@ function resolved(
   return globalsFor(config, (key) => session[key] ?? null);
 }
 
-function buildRuntime(padding: number = CONFIG_PADDING) {
-  const config = parseAndValidate("<session-globals>", src(padding), ALLOWED);
-  const sessionState = new SessionState();
-  const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
+function globalsBar(padding: number = CONFIG_PADDING) {
+  const rig = buildRig({ source: src(padding), label: "<session-globals>", palettes: ALLOWED });
+  const { config, sessionState } = rig;
   // [LAW:one-source-of-truth] Resolve both fields per render exactly as
   // draw-bar.ts does — the session's clicked value over the config default over
   // the floor. Freezing either would pass here while the real daemon moved.
   const globals = (sid: string): EffectiveGlobals =>
     globalsFor(config, (key) => sessionState.get(sid, key));
   const render = (sid: string, width: number): Frame =>
-    drawPayload(
-      config,
-      compiled,
-      store,
-      registry,
-      { session_id: sid },
-      instantOf(new Date()),
-      {
-        endcaps: "powerline" as const,
-        colorCompatibility: "truecolor" as const,
-        wrap: globals(sid).autoWrap,
-        padding: globals(sid).padding,
-        width,
-      },
-    ).frame;
+    rig.draw({
+      payload: { session_id: sid },
+      opts: { wrap: globals(sid).autoWrap, padding: globals(sid).padding, width },
+    }).frame;
 
-  const dispose = (): void => {
-    registry.dispose();
-  };
-
-  return { config, sessionState, render, dispose };
-}
-
-async function setState(
-  config: DslConfig,
-  sessionState: SessionState,
-  sid: string,
-  key: string,
-  value: string,
-): Promise<void> {
   // Drive the real wire end-to-end, the URL a rendered `{{ action }}` emits.
   // The dispatch gates the write by the config the clicking session renders,
   // so the session's render is recorded first.
-  recordRender(sessionState, sid);
-  await clickUrl(
-    effectsUrl([{ verb: VERB_SET_STATE, args: [sid, key, value] }]),
-    testVerbContext(sessionState, undefined, config),
-  );
+  const setState = async (sid: string, key: string, value: string): Promise<void> => {
+    recordRender(sessionState, sid);
+    await rig.click(effectsUrl([{ verb: VERB_SET_STATE, args: [sid, key, value] }]));
+  };
+
+  return { config, sessionState, render, setState, dispose: rig.dispose };
 }
 
 const WIDE = 200;
@@ -139,21 +104,15 @@ const NARROW = 12;
 
 describe("a padding click changes one session's bar", () => {
   it("renders what the same value in the config file would, for that session only", async () => {
-    const clicked = buildRuntime();
+    const clicked = globalsBar();
     // The oracle: a second config whose FILE says 5. A session pick of 5 has
     // to produce those exact bytes, or the two halves resolve to different
     // renders and `.effective` means two things.
-    const asIfConfigured = buildRuntime(5);
+    const asIfConfigured = globalsBar(5);
     try {
       const bystanderBefore = textOf(clicked.render("s-bystander", WIDE));
 
-      await setState(
-        clicked.config,
-        clicked.sessionState,
-        "s-clicker",
-        "padding",
-        "5",
-      );
+      await clicked.setState("s-clicker", "padding", "5");
 
       expect(textOf(clicked.render("s-clicker", WIDE))).toBe(
         textOf(asIfConfigured.render("s-clicker", WIDE)),
@@ -169,11 +128,11 @@ describe("a padding click changes one session's bar", () => {
   });
 
   it("returns to the config default when the session value goes away", async () => {
-    const { config, sessionState, render, dispose } = buildRuntime();
+    const { config, sessionState, render, setState, dispose } = globalsBar();
     try {
       const atConfigDefault = textOf(render("s-clear", WIDE));
 
-      await setState(config, sessionState, "s-clear", "padding", "7");
+      await setState("s-clear", "padding", "7");
       expect(textOf(render("s-clear", WIDE))).not.toBe(atConfigDefault);
 
       sessionState.clear("s-clear", "padding");
@@ -191,13 +150,13 @@ describe("a padding click changes one session's bar", () => {
 
 describe("an autoWrap click changes one session's bar", () => {
   it("a session pick of false beats a config default of true", async () => {
-    const { config, sessionState, render, dispose } = buildRuntime();
+    const { config, sessionState, render, setState, dispose } = globalsBar();
     try {
       expect(config.globals.autoWrap).toBe(true);
       const wrappedRows = textOf(render("s-wrap", NARROW)).split("\n").length;
       expect(wrappedRows).toBeGreaterThan(1);
 
-      await setState(config, sessionState, "s-wrap", "autoWrap", "false");
+      await setState("s-wrap", "autoWrap", "false");
 
       // The regression this pins: a `false` session pick is a real answer, not
       // a missing one. Resolving with `||` instead of `??` would fall through

@@ -21,20 +21,11 @@
 // (test/theme-carousel.test.ts), and the coverage snapshot below says so. The
 // menus left to pin are edit mode's `+` insert affordances.
 
-import { drawPayload } from "./helpers/draw-payload";
-import { processLauncher } from "./helpers/host";
 import { ansiOf, textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linksOf, type DrawnLink } from "../src/click/read";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { createEngine } from "@promptctl/go-template-js";
 
-import { parseAndValidate } from "./helpers/parse-and-validate";
-import { VariableStore } from "../src/var-system/store";
-import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig } from "../src/dsl/render";
-import { SessionState } from "../src/daemon/session-state";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { DOOR_GLYPH } from "../src/config/disclosure";
 import { ADD_GLYPH } from "../src/config/edit-glyphs";
@@ -46,25 +37,12 @@ import {
   DISCLOSURE_GLYPH_CLOSED,
   DISCLOSURE_GLYPH_OPEN,
 } from "../src/config/disclosure";
-import { recordRender, testVerbContext, effectsOf } from "./helpers/click";
-import { parseHandlerUrl } from "../src/install/index";
-import { parseEffects, VERB_DISPATCH, VERB_SET_STATE } from "../src/click/wire";
-import { VERBS } from "../src/daemon/verbs";
-import type { VerbContext } from "../src/daemon/verbs";
+import { effectsOf } from "./helpers/click";
+import { buildRig } from "./helpers/rig";
+import { VERB_SET_STATE } from "../src/click/wire";
 import type { DslConfig } from "../src/config/dsl-types";
-import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "../src/time";
 
-const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = "s1";
-
-const OPTS = {
-  endcaps: "powerline" as const,
-  colorCompatibility: "truecolor" as const,
-  wrap: true,
-  padding: 0,
-  width: Number.POSITIVE_INFINITY,
-};
 
 // Static effective values: this file only ever OPENS disclosures, never picks
 // an option, so the daemon-resolved labels stay fixed for the whole run and the
@@ -114,36 +92,19 @@ function menuOpeners(rendered: Frame): Opener[] {
   );
 }
 
-function buildRuntime(root: string) {
-  const config = parseAndValidate(
-    "<user>",
-    `{ globals: {}, root: ${root} }`,
-    ALLOWED,
-    DEFAULT_DSL_CONFIG,
-  );
-  const sessionState = new SessionState();
-  const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
+function menuBar(root: string) {
   // No theme handed in: drawDsl resolves it from `globals.palette`, so these
   // bytes are the bundled default's own declared theme (tokyo-night) — the ones
   // the daemon really emits for this config. Before brandon-themes-dzl this rig
   // passed a textual-dark palette beside a config declaring tokyo-night, and the
   // snapshot pinned a bar production never renders.
-  recordRender(sessionState, SID);
-  const ctx: VerbContext = testVerbContext(sessionState, undefined, config);
-  const render = (): Frame =>
-    drawPayload(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS).frame;
-  const click = async (url: string): Promise<void> => {
-    const { verb, value } = parseHandlerUrl(url);
-    const effects =
-      verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
-    for (const e of effects) {
-      const handler = VERBS.get(e.verb);
-      if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
-      await handler(e.value, ctx);
-    }
-  };
+  const rig = buildRig({
+    source: `{ globals: {}, root: ${root} }`,
+    label: "<user>",
+    base: DEFAULT_DSL_CONFIG,
+  });
+  const render = (): Frame => rig.draw({ payload: PAYLOAD }).frame;
+  const { config, sessionState, click } = rig;
   // Click by the label a user clicks. Loud when absent: a silently skipped
   // click would snapshot a closed menu under an "open" name and prove the
   // opposite of what this file claims [LAW:no-silent-failure].
@@ -185,7 +146,7 @@ describe("every {{ menu }} the bundled default renders", () => {
   // The coverage guard. A bundled menu added later lands in this list, and the
   // failing snapshot is the reminder that it wants bytes committed below.
   test("coverage: the menu-hosting segments of the bundled default", () => {
-    const { config } = buildRuntime(`{ h: ['model'] }`);
+    const { config } = menuBar(`{ h: ['model'] }`);
     expect(menuHostingSegments(config)).toMatchSnapshot();
   });
 
@@ -194,7 +155,7 @@ describe("every {{ menu }} the bundled default renders", () => {
   // .x2m), so it hosts no menu of its own; test/theme-carousel.test.ts pins
   // what each carousel does.
   const openConfigMenu = async () => {
-    const rig = buildRuntime(`{ h: ['directory', 'model'] }`);
+    const rig = menuBar(`{ h: ['directory', 'model'] }`);
     await rig.clickLabel(rig.render(), "🍫");
     await rig.clickLabel(rig.render(), "config");
     return rig;
@@ -227,7 +188,7 @@ describe("every {{ menu }} the bundled default renders", () => {
   // ones in this file the change was allowed to move.
   describe("edit mode's + insert affordances", () => {
     const editRig = () => {
-      const rig = buildRuntime(`{ h: ['directory', 'model'] }`);
+      const rig = menuBar(`{ h: ['directory', 'model'] }`);
       rig.sessionState.set(SID, EDIT_MODE_KEY, "arrange");
       return rig;
     };

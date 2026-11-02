@@ -2,73 +2,34 @@
 // DECLARES its settings, each PLACEMENT in `root` is an instance with its own
 // id and values, and the segment's templates read `.settings.<name>` scoped to
 // the placement being rendered.
-import { drawPayload } from "./helpers/draw-payload";
-import { processLauncher } from "./helpers/host";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import type { RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { VariableStore } from "../src/var-system/store";
-import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig } from "../src/dsl/render";
-import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError } from "../src/config/dsl-loader";
-import { testVerbContext, effectsOf, recordRender } from "./helpers/click";
-import { parseHandlerUrl } from "../src/install/index";
-import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
-import { VERBS } from "../src/daemon/verbs";
+import { effectsOf } from "./helpers/click";
+import { buildRig } from "./helpers/rig";
 import { mintPlacement } from "../src/config/layout-ops";
 import { arrangedSegment } from "../src/config/edit-chrome";
 import { insertSegmentRef, removeSegmentRef } from "../src/config/json5-edit";
 import type { LayoutNode } from "../src/config/dsl-types";
 import { resolvedStyle } from "../src/render/rich-theme.js";
-import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "../src/time";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
-function buildRuntime(src: string) {
-  const config = parseAndValidate("<test>", src, ALLOWED);
-  const sessionState = new SessionState();
-  const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
+function placementBar(src: string) {
+  const rig = buildRig({ source: src });
   const sink = new Map<string, readonly RichText[]>();
-  const render = (): Frame =>
-    drawPayload(
-      config,
-      compiled,
-      store,
-      registry,
-      { session_id: "s1", project_dir: "/tmp/proj" },
-      instantOf(new Date()),
-      {
-        endcaps: "powerline" as const,
-        colorCompatibility: "truecolor" as const,
-        wrap: true,
-        padding: 0,
-        width: Number.POSITIVE_INFINITY,
-      },
-      { perSegmentSink: sink },
-    ).frame;
-  recordRender(sessionState, "s1");
-  const ctx = testVerbContext(sessionState, undefined, config);
-  const click = async (url: string): Promise<void> => {
-    const { verb, value } = parseHandlerUrl(url);
-    const effects =
-      verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
-    for (const e of effects) await VERBS.get(e.verb)!(e.value, ctx);
-  };
+  const render = (): Frame => rig.draw({ observers: { perSegmentSink: sink } }).frame;
   // The text one placement drew, read off the sink by its id.
   const textOf = (id: string): string =>
     (sink.get(id) ?? [])
       .map((t) => t.plain)
       .join("")
       .trim();
-  return { config, sessionState, sink, render, click, textOf };
+  return { ...rig, sink, render, textOf };
 }
 
 const SESSION = `'session.id': { kind: 'input', path: 'session_id', default: '' }`;
@@ -96,7 +57,7 @@ const CLOCK_SRC = `{
 
 describe("a placement renders with its own settings", () => {
   test("each placement of one segment reads its own values, the rest defaults", () => {
-    const rt = buildRuntime(CLOCK_SRC);
+    const rt = placementBar(CLOCK_SRC);
     rt.render();
     expect(rt.textOf("clock")).toBe("hh:mm local x3");
     expect(rt.textOf("utcClock")).toBe("hh:mm:ss utc x3");
@@ -104,7 +65,7 @@ describe("a placement renders with its own settings", () => {
   });
 
   test("a setting reaches the segment's `when`, `bg:` and `fg:` too", () => {
-    const rt = buildRuntime(`{
+    const rt = placementBar(`{
       variables: { ${SESSION} },
       segments: {
         tag: {
@@ -134,7 +95,7 @@ describe("a placement renders with its own settings", () => {
 
 describe("a setting named like an Object member", () => {
   test("an unset one reads its declared default, never the inherited member", () => {
-    const rt = buildRuntime(`{
+    const rt = placementBar(`{
       variables: { ${SESSION} },
       segments: {
         tag: {
@@ -164,7 +125,7 @@ describe("two placements of a menu-hosting segment open independently", () => {
   }`;
 
   test("each placement's menu is keyed by its id, and opening one leaves the other closed", async () => {
-    const rt = buildRuntime(SRC);
+    const rt = placementBar(SRC);
     expect(rt.config.variables["menus.picker.applyTheme"]).toBeDefined();
     expect(rt.config.variables["menus.second.applyTheme"]).toBeDefined();
     const open = async (key: string): Promise<void> => {
@@ -195,7 +156,7 @@ describe("two placements of a menu-hosting segment open independently", () => {
 
 describe("a placement is named by its id", () => {
   test("a placement whose settings break its template is the one the error names", () => {
-    const rt = buildRuntime(`{
+    const rt = placementBar(`{
       variables: { ${SESSION} },
       segments: {
         tag: {

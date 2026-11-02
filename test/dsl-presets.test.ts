@@ -15,20 +15,14 @@
 // the daemon calls. No parallel rig.
 
 import { textOf } from "../src/render/frame";
-import { WORLD, processLauncher } from "./helpers/host";
-import { drawPayload } from "./helpers/draw-payload";
+import { WORLD } from "./helpers/host";
 import type { Frame } from "../src/render/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { VariableStore } from "../src/var-system/store";
-import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig } from "../src/dsl/render";
-import { SessionState } from "../src/daemon/session-state";
-import { testVerbContext, clickUrl, recordRender } from "./helpers/click";
+import { buildRig } from "./helpers/rig";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import {
   ConfigError,
@@ -40,21 +34,11 @@ import { rootNode } from "../src/config/root";
 import { deriveActionValidators } from "../src/daemon/foundations/state-validators";
 import { PRESET_FLOOR, presetGlobals, presetRoot } from "../src/config/presets";
 import { checkConfig } from "../src/check";
-import { instantOf } from "../src/utils/instant";
 import { daemonGates } from "../src/daemon/update-keys";
-import { systemTimekeeper } from "../src/time";
 
 const SID = "s-presets";
 const THEME = "textual-dark";
 const ALLOWED = new Set([THEME]);
-
-const OPTS = {
-  endcaps: "powerline" as const,
-  colorCompatibility: "truecolor" as const,
-  wrap: true,
-  padding: 0,
-  width: Number.POSITIVE_INFINITY,
-};
 
 // ─── Loader validation ────────────────────────────────────────────────────────
 
@@ -197,14 +181,7 @@ describe("preset compile diagnostics name the authored path", () => {
   // (cross-ref), the compile being where anything synthesized is parsed.
   const compileError = (src: string): string => {
     try {
-      const config = parseAndValidate("<presets>", src, ALLOWED);
-      const registry = new SourceRegistry(
-        processLauncher,
-        new VariableStore(systemTimekeeper),
-        "",
-        new SessionState(),
-      );
-      registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
+      buildRig({ source: src, label: "<presets>", palettes: ALLOWED });
     } catch (e) {
       return (e as Error).message;
     }
@@ -298,50 +275,30 @@ describe("preset selection — the arrangement the bar renders", () => {
     },
   }`;
 
-  function buildRuntime(src: string = SRC) {
-    const config = parseAndValidate("<presets>", src, ALLOWED);
-    const sessionState = new SessionState();
-    const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(processLauncher, store, "", sessionState);
-    const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
-    // A click is gated by the config its session renders; record the render so
-    // the click below resolves this config and passes through its real gate.
-    recordRender(sessionState, SID);
+  function presetBar(src: string = SRC) {
+    // Rendered by default: a click is gated by the config its session renders,
+    // so the click below resolves this config and passes through its real gate.
+    const rig = buildRig({ source: src, label: "<presets>", palettes: ALLOWED, sessionId: SID });
+    const { config, sessionState } = rig;
     // The daemon's exact order: resolve the preset, take ITS globals, render.
     const resolve = () =>
       resolveEffectiveGlobals(config, (key) => sessionState.get(SID, key), () => false);
     const render = (): Frame => {
       const effective = resolve();
-      return drawPayload(
-        config,
-        compiled,
-        store,
-        registry,
-        { session_id: SID, preset: { effective: effective.preset } },
-        instantOf(new Date()),
-        { ...OPTS, padding: effective.padding },
-        undefined,
-        effective,
-      ).frame;
+      return rig.draw({
+        payload: { session_id: SID, preset: { effective: effective.preset } },
+        opts: { padding: effective.padding },
+        selection: effective,
+      }).frame;
     };
-    const dispose = (): void => {
-      registry.dispose();
-    };
-    return { config, sessionState, resolve, render, dispose };
+    return { ...rig, resolve, render };
   }
 
-  const clickPreset = async (
-    rt: ReturnType<typeof buildRuntime>,
-    preset: string,
-  ): Promise<void> => {
-    await clickUrl(
-      effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "preset", preset] }]),
-      testVerbContext(rt.sessionState, undefined, rt.config),
-    );
-  };
+  const clickPreset = (rt: ReturnType<typeof presetBar>, preset: string): Promise<void> =>
+    rt.click(effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "preset", preset] }]));
 
   test("with no pick, the floor renders the config's own root", () => {
-    const rt = buildRuntime();
+    const rt = presetBar();
     try {
       expect(rt.resolve().preset).toBe(PRESET_FLOOR);
       const out = rt.render();
@@ -353,7 +310,7 @@ describe("preset selection — the arrangement the bar renders", () => {
   });
 
   test("a session pick restages the layout — the click drives the real wire", async () => {
-    const rt = buildRuntime();
+    const rt = presetBar();
     try {
       await clickPreset(rt,"both");
       expect(rt.resolve().preset).toBe("both");
@@ -366,7 +323,7 @@ describe("preset selection — the arrangement the bar renders", () => {
   });
 
   test("a config literal (globals.preset) selects without any session pick", () => {
-    const rt = buildRuntime(SRC.replace("padding: 1", "padding: 1, preset: 'both'"));
+    const rt = presetBar(SRC.replace("padding: 1", "padding: 1, preset: 'both'"));
     try {
       expect(rt.resolve().preset).toBe("both");
       expect(textOf(rt.render())).toContain("BETA");
@@ -376,7 +333,7 @@ describe("preset selection — the arrangement the bar renders", () => {
   });
 
   test("a session pick beats the config literal — the chain's last layer wins", async () => {
-    const rt = buildRuntime(SRC.replace("padding: 1", "padding: 1, preset: 'both'"));
+    const rt = presetBar(SRC.replace("padding: 1", "padding: 1, preset: 'both'"));
     try {
       await clickPreset(rt,PRESET_FLOOR);
       expect(rt.resolve().preset).toBe(PRESET_FLOOR);
@@ -389,7 +346,7 @@ describe("preset selection — the arrangement the bar renders", () => {
   // The globals half of a fragment: a preset carrying only `globals` restages
   // nothing and changes the display defaults, per field.
   test("a preset's globals shallow-merge over the config's, per field", async () => {
-    const rt = buildRuntime();
+    const rt = presetBar();
     try {
       expect(rt.resolve().padding).toBe(1);
       await clickPreset(rt,"roomy");
@@ -410,7 +367,7 @@ describe("preset selection — the arrangement the bar renders", () => {
   // vocabulary admitted must not throw and must not render some other
   // arrangement while a label claims it is active.
   test("a stale session pick collapses to the floor, visibly", () => {
-    const rt = buildRuntime();
+    const rt = presetBar();
     try {
       // Written straight into SessionState: this is exactly the state a click
       // against a since-edited config leaves behind, and the gate that once
@@ -430,7 +387,7 @@ describe("preset selection — the arrangement the bar renders", () => {
 
   // The per-config option domain, checked on BOTH sides of the seam.
   test("`presets` is a per-config domain in the rendered options AND the wire gate", () => {
-    const rt = buildRuntime();
+    const rt = presetBar();
     try {
       const gates = deriveActionValidators(rt.config).filter(
         (g) => g.key === "preset",

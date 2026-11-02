@@ -12,22 +12,10 @@
 // (resolveStyleSelection), the clicks driven through the real
 // wire (effectsUrl → clickUrl → VERBS). No parallel rig.
 
-import { drawPayload } from "./helpers/draw-payload";
-import { processLauncher } from "./helpers/host";
 import { runUnder } from "./helpers/frame";
 import type { Frame } from "../src/render/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
-import { selectionFor } from "./helpers/selection";
-import { parseAndValidate } from "./helpers/parse-and-validate";
-import { VariableStore } from "../src/var-system/store";
-import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig } from "../src/dsl/render";
-import { SessionState } from "../src/daemon/session-state";
-import { testVerbContext, clickUrl, recordRender } from "./helpers/click";
+import { buildRig, type Rig } from "./helpers/rig";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
-import { resolveStyleSelection, resolveThemeSelection } from "../src/themes";
-import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "../src/time";
 
 const SID = "s-ramp-recolor";
 const BASE_THEME = "textual-dark";
@@ -36,14 +24,6 @@ const BASE_THEME = "textual-dark";
 // between those two could not show the hot stops recolouring.
 const PICKED_THEME = "catppuccin-latte";
 const PICKED_STYLE = "vivid";
-
-const OPTS = {
-  endcaps: "powerline" as const,
-  colorCompatibility: "truecolor" as const,
-  wrap: true,
-  padding: 0,
-  width: Number.POSITIVE_INFINITY,
-};
 
 // `viaRamp` colours a number through named stops; `viaName` names the stop
 // the number lands on. The two cells must agree in every state.
@@ -70,41 +50,21 @@ const SRC = `{
 
 const ALLOWED = new Set([BASE_THEME, PICKED_THEME]);
 
-// Each runtime's source registry, released after the test that built it.
-const registries: SourceRegistry[] = [];
+// Each bar's source registry, released after the test that built it.
+const rigs: Rig[] = [];
 afterEach(() => {
-  for (const registry of registries.splice(0)) registry.dispose();
+  for (const rig of rigs.splice(0)) rig.dispose();
 });
 
-function buildRuntime() {
-  const config = parseAndValidate("<ramp-recolor>", SRC, ALLOWED);
-  const sessionState = new SessionState();
-  const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
-  registries.push(registry);
+function rampBar() {
   // The click gate is the config this session renders, so the theme and style
   // clicks travel the road a real click travels.
-  recordRender(sessionState, SID);
-
-  const render = (payload: { pct: number; stop: string }): Frame => {
-    return drawPayload(
-      config,
-      compiled,
-      store,
-      registry,
-      { session_id: SID, ...payload },
-      instantOf(new Date()),
-      OPTS,
-      undefined,
-      selectionFor(config, {}, (key) => sessionState.get(SID, key)),
-    ).frame;
-  };
-  const click = async (key: "theme" | "style", value: string): Promise<void> =>
-    await clickUrl(
-      effectsUrl([{ verb: VERB_SET_STATE, args: [SID, key, value] }]),
-      testVerbContext(sessionState, undefined, config),
-    );
+  const rig = buildRig({ source: SRC, label: "<ramp-recolor>", palettes: ALLOWED, sessionId: SID });
+  rigs.push(rig);
+  const render = (payload: { pct: number; stop: string }): Frame =>
+    rig.draw({ payload: { session_id: SID, ...payload } }).frame;
+  const click = (key: "theme" | "style", value: string): Promise<void> =>
+    rig.click(effectsUrl([{ verb: VERB_SET_STATE, args: [SID, key, value] }]));
   return { render, click };
 }
 
@@ -123,7 +83,7 @@ describe("ramp over palette-name stops follows the live theme", () => {
   ])(
     "at %i the ramp paints `%s` — equal to the named cell under the base theme, a theme click, and a look click",
     async (pct, stop) => {
-      const { render, click } = buildRuntime();
+      const { render, click } = rampBar();
       const agree = (): string => {
         const line = render({ pct, stop });
         const ramp = bgOf(line, " R ");

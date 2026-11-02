@@ -19,20 +19,13 @@
 //   5. It is chrome-exempt: edit mode offers no `-` that would delete the door
 //      back into edit mode.
 
-import { drawPayload } from "./helpers/draw-payload";
-import { processLauncher } from "./helpers/host";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { POWERLINE } from "./helpers/powerline";
 import type { RichText } from "@promptctl/rich-js";
-import { VariableStore } from "../src/var-system/store";
-import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig } from "../src/dsl/render";
-import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -58,19 +51,12 @@ import {
   DOOR_CLOSE_GLYPH,
   DOOR_GLYPH,
 } from "../src/config/disclosure";
-import { testVerbContext, effectsOf } from "./helpers/click";
-import { parseHandlerUrl } from "../src/install/index";
-import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
-import { VERBS } from "../src/daemon/verbs";
-import { SESSION_RENDER_ORIGIN_KEY } from "../src/daemon/foundations/session-keys";
-import { encodeRenderOrigin } from "../src/daemon/foundations/render-origin";
-import type { VerbContext } from "../src/daemon/verbs";
+import { effectsOf } from "./helpers/click";
+import { buildRig } from "./helpers/rig";
 import type { DslConfig, LayoutNode } from "../src/config/dsl-types";
 import type { ActionDecl } from "../src/config/action";
 import { SETTINGS, SETTING_PROJECTIONS } from "../src/config/setting-projections";
 import { walkNodes } from "../src/config/dsl-types";
-import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "../src/time";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -79,15 +65,6 @@ const ALLOWED = new Set(listResolvablePaletteNames());
 // then the commands).
 const MENU_LINES = 4;
 const TAB_KEY = "candybar.tab";
-
-const OPTS = {
-  endcaps: "powerline" as const,
-  colorCompatibility: "truecolor" as const,
-  wrap: true,
-  padding: 0,
-  width: Number.POSITIVE_INFINITY,
-};
-
 
 // The acceptance shape, verbatim: a user file that declares its own `root` of
 // one row of two segments, merged over the BUNDLED default (production's
@@ -106,49 +83,20 @@ const TWO_SEGMENT_ROW = `{ h: ['directory', 'model'] }`;
 const withoutDoor = (line: string): string =>
   line.replace(new RegExp(`${DOOR_GLYPH}.`, "u"), "");
 
-function buildRuntime(
+function menuBar(
   src: string,
   dflt: DslConfig = DEFAULT_DSL_CONFIG,
   payload: object = PAYLOAD,
 ) {
-  const config = parseAndValidate("<user>", src, ALLOWED, dflt);
-  const sessionState = new SessionState();
-  const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
+  // The session has rendered, as it always has before a click: edit mode's
+  // `✓` runs the settings menu's `save`, which acts on the config the
+  // session renders.
+  const rig = buildRig({ source: src, label: "<user>", base: dflt });
   // Each segment's cells from the last render, by name.
   const sink = new Map<string, readonly RichText[]>();
   const render = (): Frame => {
     sink.clear();
-    return drawPayload(config, compiled, store, registry, payload, instantOf(new Date()), OPTS, {
-      perSegmentSink: sink,
-    }).frame;
-  };
-  // The session has rendered, as it always has before a click: edit mode's
-  // `✓` runs the settings menu's `save`, which acts on the config the
-  // session renders.
-  sessionState.set(
-    "s1",
-    SESSION_RENDER_ORIGIN_KEY,
-    encodeRenderOrigin({
-      projectDir: "/tmp/proj",
-      cwd: "/tmp/proj",
-      target: { source: "search" },
-    }),
-  );
-  const ctx: VerbContext = {
-    ...testVerbContext(sessionState),
-    configFor: () => config,
-  };
-  const click = async (url: string): Promise<void> => {
-    const { verb, value } = parseHandlerUrl(url);
-    const effects =
-      verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
-    for (const e of effects) {
-      const handler = VERBS.get(e.verb);
-      if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
-      await handler(e.value, ctx);
-    }
+    return rig.draw({ payload, observers: { perSegmentSink: sink } }).frame;
   };
   // Click the affordance whose URL writes `value` to `key`, wherever it landed.
   const clickWriting = async (out: Frame, key: string, value: string): Promise<void> => {
@@ -156,9 +104,9 @@ function buildRuntime(
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
     );
     if (!url) throw new Error(`no affordance writing ${key}=${value} rendered`);
-    await click(url);
+    await rig.click(url);
   };
-  return { config, sessionState, sink, render, click, clickWriting };
+  return { ...rig, sink, render, clickWriting };
 }
 
 const PAYLOAD = {
@@ -186,14 +134,14 @@ function segmentNames(node: LayoutNode): string[] {
 
 describe("the global settings menu is reachable from a user config", () => {
   test("a user root of one row of two segments still renders the menu", () => {
-    const { render } = buildRuntime(userConfig(TWO_SEGMENT_ROW));
+    const { render } = menuBar(userConfig(TWO_SEGMENT_ROW));
     // The user declared two segments; the bar shows three cells, and the first
     // is the door their `root` could not close.
     expect(textOf(render())).toContain(DOOR_GLYPH);
   });
 
   test("the toggle opens a body carrying preset switching and the tabs", async () => {
-    const { render, clickWriting } = buildRuntime(
+    const { render, clickWriting } = menuBar(
       userConfig(TWO_SEGMENT_ROW),
     );
     const closed = textOf(render());
@@ -219,7 +167,7 @@ describe("the global settings menu is reachable from a user config", () => {
 
 
   test("edit mode is genuinely reachable: the menu's ✎ writes edit.mode and leaves the menu open", async () => {
-    const { render, clickWriting, sessionState } = buildRuntime(
+    const { render, clickWriting, sessionState } = menuBar(
       userConfig(TWO_SEGMENT_ROW),
     );
     await clickWriting(render(), SETTINGS_ANCHOR, "open");
@@ -241,7 +189,7 @@ describe("the global settings menu is reachable from a user config", () => {
   });
 
   test("the preset picker's click is admitted by the derived gate", async () => {
-    const { render, click, clickWriting, sessionState } = buildRuntime(
+    const { render, click, clickWriting, sessionState } = menuBar(
       userConfig(TWO_SEGMENT_ROW),
     );
     await clickWriting(render(), SETTINGS_ANCHOR, "open");
@@ -264,8 +212,8 @@ describe("the global settings menu is reachable from a user config", () => {
 
 describe("placement is a position, not a mode", () => {
   test("placing the anchor moves the menu; the rendered content is the same", () => {
-    const defaulted = buildRuntime(userConfig(TWO_SEGMENT_ROW));
-    const placed = buildRuntime(
+    const defaulted = menuBar(userConfig(TWO_SEGMENT_ROW));
+    const placed = menuBar(
       userConfig(`{ v: [${TWO_SEGMENT_ROW}, '${SETTINGS_ANCHOR}'] }`),
     );
 
@@ -281,7 +229,7 @@ describe("placement is a position, not a mode", () => {
   });
 
   test("a bare-segment root grows the menu beside it", () => {
-    const { render } = buildRuntime(userConfig(`'directory'`));
+    const { render } = menuBar(userConfig(`'directory'`));
     expect(textOf(render())).toContain(DOOR_GLYPH);
   });
 
@@ -531,7 +479,7 @@ describe("the default placement never inherits an author's gate", () => {
   });
 
   test("a gated first row whose gate holds shares the door's line", () => {
-    const { render } = buildRuntime(
+    const { render } = menuBar(
       `{ globals: {}, root: { v: [{ h: ['directory','model'], when: '{{ eq "a" "a" }}' }] } }`,
     );
     const bar = textOf(render());
@@ -542,7 +490,7 @@ describe("the default placement never inherits an author's gate", () => {
 
 
   test("a bar gated away entirely still renders its door", () => {
-    const { render } = buildRuntime(
+    const { render } = menuBar(
       `{ globals: {}, root: { h: ['directory','model'], when: '{{ eq "a" "b" }}' } }`,
     );
     const bar = textOf(render());
@@ -605,7 +553,7 @@ describe("the menu in a config that declares no variables", () => {
     );
 
   test("loads, renders the door, and opens every disclosure without a ⚠", async () => {
-    const { config, render, click } = buildRuntime(BARE, EMPTY_DEFAULT);
+    const { config, render, click } = menuBar(BARE, EMPTY_DEFAULT);
     const keys = disclosureKeys(config);
     const first = textOf(render());
     expect(first).toContain(DOOR_GLYPH);
@@ -825,25 +773,10 @@ describe("the menu is chrome-exempt", () => {
   });
 
   test("no `+` picker offers a settings segment back", () => {
-    const config = parseAndValidate(
-      "<user>",
-      userConfig(TWO_SEGMENT_ROW),
-      ALLOWED,
-      DEFAULT_DSL_CONFIG,
-    );
     // The addable domain is "declared, non-exempt segments".
     // A settings segment in it would mean `+` could insert a second copy of the
     // one node that must exist exactly once.
-    const compiled = registerDslConfig(
-      config,
-      new SourceRegistry(
-        processLauncher,
-        new VariableStore(systemTimekeeper),
-        "",
-        new SessionState(),
-      ),
-      { signer: TEST_SIGNER, cwd: "/tmp/proj" },
-    );
+    const { config, compiled } = menuBar(userConfig(TWO_SEGMENT_ROW));
     expect(compiled).toBeDefined();
     // Asserted on the domain's VALUES, never on `insertSegmentFrom` — that
     // field holds the domain's NAME (`ADDABLE_DOMAIN`, `edit.addable`),
@@ -862,7 +795,7 @@ describe("the menu is chrome-exempt", () => {
 
 describe("globals.menuGlyph", () => {
   test("a config's glyph is the closed door", () => {
-    const { render } = buildRuntime(
+    const { render } = menuBar(
       `{ globals: { menuGlyph: "🍬" }, root: ${TWO_SEGMENT_ROW} }`,
     );
     const out = textOf(render());
@@ -871,7 +804,7 @@ describe("globals.menuGlyph", () => {
   });
 
   test("a glyph spelling template syntax is text", () => {
-    const { render } = buildRuntime(
+    const { render } = menuBar(
       `{ globals: { menuGlyph: "🍬 .x}}" }, root: ${TWO_SEGMENT_ROW} }`,
     );
     expect(textOf(render())).toContain("🍬 .x}}");

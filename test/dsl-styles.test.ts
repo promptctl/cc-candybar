@@ -12,21 +12,13 @@
 // the click (gated by the config the session renders), and the same
 // effectiveStyleName/styleKeyByName the daemon calls. No parallel rig.
 
-import { drawPayload } from "./helpers/draw-payload";
-import { processLauncher } from "./helpers/host";
+import { selectionFor } from "./helpers/selection";
 import { plainOf, textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
-import { selectionFor } from "./helpers/selection";
 import { ownValidators } from "./helpers/ambient-chrome";
 import { parseAndValidate, validateConfig } from "./helpers/parse-and-validate";
-import { VariableStore } from "../src/var-system/store";
-import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig } from "../src/dsl/render";
-import { SessionState } from "../src/daemon/session-state";
-import { testVerbContext, clickUrl, recordRender } from "./helpers/click";
+import { buildRig } from "./helpers/rig";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
-import type { DslConfig } from "../src/config/dsl-types";
 import {
   ConfigError,
   mergeWithDefault,
@@ -36,20 +28,10 @@ import {
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { deriveActionValidators } from "../src/daemon/foundations/state-validators";
 import { resolveStyleSelection } from "../src/themes";
-import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "../src/time";
 
 const SID = "s-looks";
 const THEME = "textual-dark";
 const ALLOWED = new Set([THEME]);
-
-const OPTS = {
-  endcaps: "powerline" as const,
-  colorCompatibility: "truecolor" as const,
-  wrap: true,
-  padding: 0,
-  width: Number.POSITIVE_INFINITY,
-};
 
 // The truecolor background of the row containing a marker. Row-scoped: each
 // root row holds exactly one segment here, so the row's first background IS that
@@ -334,35 +316,16 @@ describe('from: "styles" — rendered options and the derived gate share the con
   });
 
   test("the styles() binding renders one option region per declared name", () => {
-    const config = parseAndValidate("<looks>", SRC, ALLOWED);
-    const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(
-      processLauncher,
-      store,
-      "",
-      new SessionState(),
-    );
-    const compiled = registerDslConfig(config, registry, {
-      signer: TEST_SIGNER,
-      cwd: process.cwd(),
-    });
+    const rig = buildRig({ source: SRC, label: "<looks>", palettes: ALLOWED });
     try {
-      const rendered = drawPayload(
-        config,
-        compiled,
-        store,
-        registry,
-        { session_id: SID },
-        instantOf(new Date()),
-        OPTS,
-      ).frame;
+      const rendered = rig.draw({ payload: { session_id: SID } }).frame;
       // Each style name appears as a clickable region writing itself to `style` —
       // the same names the gate above allows, from the same config map.
       for (const name of ["none", "vapor", "washed"]) {
         expect(textOf(rendered)).toContain(name);
       }
     } finally {
-      registry.dispose();
+      rig.dispose();
     }
   });
 });
@@ -389,59 +352,32 @@ describe("style click — live whole-bar recolor over the active theme", () => {
     root: { v: ['plain', 'pinned', 'picker'] },
   }`;
 
-  function buildRuntime() {
-    const config = parseAndValidate("<looks>", SRC, ALLOWED);
-    const sessionState = new SessionState();
-    const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(processLauncher, store, "", sessionState);
-    const compiled = registerDslConfig(config, registry, {
-      signer: TEST_SIGNER,
-      cwd: process.cwd(),
+  // The bar a session draws and clicks: a click is gated by the config its
+  // session renders, and the rig has rendered it as every session has.
+  function recolorBar() {
+    const rig = buildRig({
+      source: SRC,
+      label: "<looks>",
+      palettes: ALLOWED,
+      sessionId: SID,
     });
-    // A click is gated by the config its session renders: record the render
-    // the click below resolves that config from.
-    recordRender(sessionState, SID);
-    const render = (): Frame => {
-      return drawPayload(
-        config,
-        compiled,
-        store,
-        registry,
-        { session_id: SID },
-        instantOf(new Date()),
-        OPTS,
-        undefined,
-        selectionFor(config, {}, (key) => sessionState.get(SID, key)),
-      ).frame;
-    };
-    const dispose = (): void => {
-      registry.dispose();
-    };
-    return { config, sessionState, render, dispose };
+    const render = (): Frame => rig.draw({ payload: { session_id: SID } }).frame;
+    const clickStyle = (look: string): Promise<void> =>
+      rig.click(effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "style", look] }]));
+    return { ...rig, render, clickStyle };
   }
 
-  const clickStyle = async (
-    config: DslConfig,
-    sessionState: SessionState,
-    look: string,
-  ): Promise<void> => {
-    await clickUrl(
-      effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "style", look] }]),
-      testVerbContext(sessionState, undefined, config),
-    );
-  };
-
   test("clicking a style recolors an ordinary segment; clicking none restores", async () => {
-    const { config, sessionState, render, dispose } = buildRuntime();
+    const { render, clickStyle, dispose } = recolorBar();
     try {
       const before = bgOf(render(), "◆ here");
-      await clickStyle(config, sessionState, "inverted");
+      await clickStyle("inverted");
       const adapted = bgOf(render(), "◆ here");
       // The inverted style flips lightness — the surface color must move.
       expect(adapted).not.toBe(before);
       // "none" is the identity style, not a special case: an exact restore
       // (rich-js isIdentityKey fast-paths the identity transposition).
-      await clickStyle(config, sessionState, "none");
+      await clickStyle("none");
       expect(bgOf(render(), "◆ here")).toBe(before);
     } finally {
       dispose();
@@ -449,10 +385,10 @@ describe("style click — live whole-bar recolor over the active theme", () => {
   });
 
   test("an explicit per-segment palette: pin IGNORES the style", async () => {
-    const { config, sessionState, render, dispose } = buildRuntime();
+    const { render, clickStyle, dispose } = recolorBar();
     try {
       const before = bgOf(render(), "▣ pinned");
-      await clickStyle(config, sessionState, "inverted");
+      await clickStyle("inverted");
       // The pinned segment's colors are frozen by author intent — the style
       // adapts everything else (the plain segment moved; asserted above).
       expect(bgOf(render(), "▣ pinned")).toBe(before);
@@ -462,7 +398,7 @@ describe("style click — live whole-bar recolor over the active theme", () => {
   });
 
   test("a stale session style collapses to the none floor instead of crashing", () => {
-    const { sessionState, render, dispose } = buildRuntime();
+    const { sessionState, render, dispose } = recolorBar();
     try {
       const before = bgOf(render(), "◆ here");
       // A prior config's vocabulary admitted "vapor"; this config doesn't
@@ -518,27 +454,14 @@ describe("globals.style as an expression — a style chosen by data", () => {
     root: { v: ['plain', 'label'] },
   }`;
 
-  function buildRuntime(src = SRC) {
-    const config = parseAndValidate("<looks-expr>", src, ALLOWED);
-    const sessionState = new SessionState();
-    const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(processLauncher, store, "", sessionState);
-    const compiled = registerDslConfig(config, registry, {
-      signer: TEST_SIGNER,
-      cwd: process.cwd(),
-    });
+  function styleExpressionBar(src = SRC) {
+    const rig = buildRig({ source: src, label: "<looks-expr>", palettes: ALLOWED });
+    const { config, sessionState } = rig;
     const render = (pct: number, staged?: string): Frame =>
-      drawPayload(
-        config,
-        compiled,
-        store,
-        registry,
-        { session_id: SID, ctx: { pct }, style: { effective: "none" } },
-        instantOf(new Date()),
-        OPTS,
-        undefined,
+      rig.draw({
+        payload: { session_id: SID, ctx: { pct }, style: { effective: "none" } },
         // `staged` stands in for edit mode's style.
-        selectionFor(
+        selection: selectionFor(
           config,
           {
             style: resolveStyleSelection(
@@ -550,15 +473,15 @@ describe("globals.style as an expression — a style chosen by data", () => {
           },
           (key) => sessionState.get(SID, key),
         ),
-      ).frame;
-    return { sessionState, render, dispose: () => registry.dispose() };
+      }).frame;
+    return { ...rig, render };
   }
 
   // What the same bar looks like under a style chosen by NAME — the reference
   // every expression result is checked against, so "it changed colour" is never
   // mistaken for "it changed to the right colour".
   const byName = (name: string): string => {
-    const { render, dispose } = buildRuntime(
+    const { render, dispose } = styleExpressionBar(
       SRC.replace(/style: '\{\{[^']*\}\}',/, `style: '${name}',`),
     );
     try {
@@ -569,7 +492,7 @@ describe("globals.style as an expression — a style chosen by data", () => {
   };
 
   test("the expression is evaluated per render, and its result transposes the whole bar", () => {
-    const { render, dispose } = buildRuntime();
+    const { render, dispose } = styleExpressionBar();
     try {
       // Each band lands on the SAME colour the named style produces — not merely
       // a different colour from its neighbour.
@@ -584,7 +507,7 @@ describe("globals.style as an expression — a style chosen by data", () => {
   });
 
   test("style.effective reports what the expression chose, so the label cannot disagree with the bar", () => {
-    const { render, dispose } = buildRuntime();
+    const { render, dispose } = styleExpressionBar();
     try {
       expect(textOf(render(90))).toContain("L=inverted");
       expect(textOf(render(50))).toContain("L=washed");
@@ -599,7 +522,7 @@ describe("globals.style as an expression — a style chosen by data", () => {
   // written, so it outranks the expression — and the expression is not consulted
   // at all, which is what makes an explicit pick of the FLOOR hold.
   test("a session pick outranks the expression", () => {
-    const { sessionState, render, dispose } = buildRuntime();
+    const { sessionState, render, dispose } = styleExpressionBar();
     try {
       sessionState.set(SID, "style", "washed");
       expect(bgOf(render(90), "◆ here")).toBe(byName("washed"));
@@ -614,7 +537,7 @@ describe("globals.style as an expression — a style chosen by data", () => {
   });
 
   test("a staged (edit-mode) style outranks the expression too", () => {
-    const { render, dispose } = buildRuntime();
+    const { render, dispose } = styleExpressionBar();
     try {
       expect(bgOf(render(90, "washed"), "◆ here")).toBe(byName("washed"));
     } finally {
@@ -626,7 +549,7 @@ describe("globals.style as an expression — a style chosen by data", () => {
   // result is the same class of mistake as a stale session style, and collapses
   // the same way — the bar keeps rendering.
   test("a result naming no declared style collapses to the none floor, and the bar renders", () => {
-    const { render, dispose } = buildRuntime(
+    const { render, dispose } = styleExpressionBar(
       SRC.replace(/style: '\{\{[^']*\}\}',/, `style: '{{ "vapor" }}',`),
     );
     try {
@@ -650,18 +573,18 @@ describe("globals.style as an expression — a style chosen by data", () => {
     );
     // An expression naming no declared style collapses to the floor — and the
     // floor here is a real transformation, so the bar must actually wear it.
-    const { render, dispose } = buildRuntime(
+    const { render, dispose } = styleExpressionBar(
       OWN_FLOOR.replace(/style: '\{\{[^']*\}\}',/, `style: '{{ "vapor" }}',`),
     );
     // The same bar with `none` named outright: the floor's own colour.
-    const ref = buildRuntime(
+    const ref = styleExpressionBar(
       OWN_FLOOR.replace(/style: '\{\{[^']*\}\}',/, `style: 'none',`),
     );
     try {
       expect(bgOf(render(90), "◆ here")).toBe(bgOf(ref.render(0), "◆ here"));
       // And it is NOT the identity — which is what makes the assertion above
       // discriminate between reading the config and assuming the identity.
-      const identity = buildRuntime(
+      const identity = styleExpressionBar(
         SRC.replace(/style: '\{\{[^']*\}\}',/, `style: 'none',`),
       );
       try {
@@ -693,7 +616,7 @@ describe("globals.style as an expression — a style chosen by data", () => {
       ["effect", "effect"],
     ] as const) {
       expect(() =>
-        buildRuntime(
+        styleExpressionBar(
           SRC.replace(
             /style: '\{\{[^']*\}\}',/,
             `style: '{{ if eq .${read}.effective "none" }}inverted{{ else }}washed{{ end }}',`,
@@ -737,25 +660,16 @@ describe("globals.style as an expression — a style chosen by data", () => {
   });
 
   test("a malformed style expression fails at LOAD, not at render", () => {
-    const config = parseAndValidate(
-      "<looks-expr>",
-      SRC.replace(/style: '\{\{[^']*\}\}',/, `style: '{{ if .ctx.pct }}hot',`),
-      ALLOWED,
-    );
-    const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(
-      processLauncher,
-      store,
-      "",
-      new SessionState(),
-    );
-    try {
-      expect(() =>
-        registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() }),
-      ).toThrow(/globals\.style/);
-    } finally {
-      registry.dispose();
-    }
+    expect(() =>
+      buildRig({
+        source: SRC.replace(
+          /style: '\{\{[^']*\}\}',/,
+          `style: '{{ if .ctx.pct }}hot',`,
+        ),
+        label: "<looks-expr>",
+        palettes: ALLOWED,
+      }),
+    ).toThrow(/globals\.style/);
   });
 });
 
