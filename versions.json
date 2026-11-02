@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-559",
+      "ref": "refs/pull/559/merge",
+      "sha": "b6ef4a6bee819c895a35b486af6f4f56cc82d528",
+      "timestamp": "2026-11-02T03:16:14.105Z",
+      "commits": [
+        {
+          "sha": "b6ef4a6bee819c895a35b486af6f4f56cc82d528",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T20:15:21-07:00",
+          "message": "Merge dd5f21a7629d6b68b8fa387283b206357fda7faf into ec9fa5454b16e8eff68525c059c5214d0a98a8d5\n"
+        },
+        {
+          "sha": "dd5f21a7629d6b68b8fa387283b206357fda7faf",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T20:15:07-07:00",
+          "message": "docs(design): the isolated daemon, tmux events and browser surface designs\n\nGoals, architecture, contracts and one document per area, with the surveys and probes behind them. The Frame is recorded as built, and the browser surface is un-parked.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-558",
       "ref": "refs/pull/558/merge",
       "sha": "69adeaa2b2d3beb6ef48393eeb75f353d6bc23d1",
