@@ -11,6 +11,7 @@ export default {
   roots: [`<rootDir>/${UNIT_DIR}`],
   testMatch: TEST_MATCH,
   maxWorkers: "100%",
+  globalSetup: "<rootDir>/test/unit-global-setup.ts",
   reporters: reportersFor("unit"),
   setupFilesAfterEnv: [...base.setupFilesAfterEnv, "<rootDir>/test/unit-setup.ts"],
 };

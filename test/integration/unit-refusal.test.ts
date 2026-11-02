@@ -3,6 +3,9 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
+import { FS_DESCRIPTOR_OPS } from "../helpers/unit-refusal";
+import { MODULES, routesIn } from "../helpers/unit-refusal-routes";
+
 // The unit config run over fixtures that each reach for something a unit test may
 // not. A refusal unplugged from jest.unit.config.js (through the real config,
 // which the fixtures use) turns the fixture that only it fails green, and its
@@ -49,27 +52,50 @@ beforeAll(async () => {
 
 const message = (title: string) => (cases[title]?.failureMessages ?? []).join("\n");
 
-// Each surface a unit test may not reach fails at the call, naming it and the test.
+// Every route in the table has a case, cut from the same table, and each fails
+// at its call. A descriptor operation passes by design: its open was judged.
+const routes = MODULES.flatMap(([surface, name, guarding]) =>
+  routesIn(name, jest.requireActual(name), guarding)
+    .filter((route) => !FS_DESCRIPTOR_OPS.has(route.path.at(-1) ?? ""))
+    .map((route) => [surface, route.call] as const),
+);
+
+// A row removed from the table takes its guard and its case with it, so the set
+// of modules is pinned here: dropping a surface is a change to two places, as
+// raising HELPER_START_CEILING is.
+test("the table refuses every module that reaches the machine", () => {
+  expect(MODULES.map(([, name]) => name).sort()).toEqual(
+    [
+      "child_process", "cluster", "dgram", "dns", "dns/promises", "fs", "fs/promises", "http", "http2",
+      "https", "net", "timers", "timers/promises", "tls", "worker_threads",
+    ].sort(),
+  );
+});
+
+test.each(routes)("a unit test that reaches the %s with %s fails at the call", (surface, call) => {
+  expect(cases[call]?.status).toBe("failed");
+  expect(message(call)).toContain(`reached the ${surface}: ${call}(`);
+  expect(message(call)).toContain(`in test "${call}"`);
+});
+
+// The globals, and the reads of what the checkout does not own.
 test.each([
-  ["writes a file", "filesystem", "fs.writeFileSync("],
-  ["watches a directory", "filesystem", "fs.watch("],
-  ["reads outside the package", "filesystem", "fs.readFileSync("],
-  ["listens on a socket", "socket", "net.createServer("],
   ["asks the network with fetch", "network", "fetch("],
-  ["asks the network with http", "network", "http.get("],
-  ["spawns a child process", "child process", "child_process.spawnSync("],
+  ["opens a WebSocket", "network", "new WebSocket("],
+  ["waits on a real timer", "clock", "setTimeout("],
+  ["repeats on a real timer", "clock", "setInterval("],
+  ["defers to the real event loop", "clock", "setImmediate("],
   ["reads the wall clock with Date.now", "clock", "Date.now("],
   ["reads the wall clock with new Date", "clock", "new Date("],
+  ["reads the wall clock with Date called as a function", "clock", "Date("],
   ["reads the wall clock with performance.now", "clock", "performance.now("],
-  ["waits on a real timer", "clock", "setTimeout("],
-  ["reads what a run left in the checkout", "filesystem", "fs.readFileSync("],
-  ["sleeps on timers/promises", "clock", "timers/promises.setTimeout("],
-  ["constructs a socket", "socket", "new net.Socket("],
-  ["constructs an http request", "network", "new http.ClientRequest("],
-  ["constructs a dns resolver", "network", "new dns.Resolver("],
-  ["constructs a file read stream", "filesystem", "new fs.ReadStream("],
-  ["starts an abort timeout", "clock", "AbortSignal.timeout("],
+  ["reads the process clock with hrtime", "clock", "process.hrtime("],
+  ["reads the process clock with hrtime.bigint", "clock", "process.hrtime.bigint("],
   ["reads process uptime", "clock", "process.uptime("],
+  ["starts an abort timeout", "clock", "AbortSignal.timeout("],
+  ["reads outside the package", "filesystem", "fs.readFileSync("],
+  ["reads what git ignores", "filesystem", "fs.readFileSync("],
+  ["reads inside .git", "filesystem", "fs.readFileSync("],
   ["waits on a real timer after fake time ended", "clock", "setTimeout("],
   ["reads the wall clock after fake time ended", "clock", "Date.now("],
 ])("a unit test that %s fails at the call", (title, surface, call) => {

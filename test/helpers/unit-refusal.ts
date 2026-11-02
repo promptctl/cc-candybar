@@ -17,11 +17,18 @@ export interface Call {
   readonly args: readonly unknown[];
 }
 
-// Reads of the package's own files are the same data on every run, so they pass:
-// a path under the package root, apart from what a run or a checkout produces and
-// changes under it. Anything else a unit test touches is refused whole: writes,
-// temp directories, watchers, sockets, spawns.
-const RUN_STATE = [".git", ".claude/worktrees", "dist", "coverage", "test-records"];
+// The repository's own files: the checkout's, apart from what git ignores
+// (builds, records, logs, local files, other worktrees) and its own .git. `ignored`
+// is what `git ls-files --others --ignored --directory` names, relative to the
+// root; .gitignore owns the set, and test/helpers/package-files.ts reads it.
+export interface PackageFiles {
+  readonly root: string;
+  readonly ignored: readonly string[];
+}
+
+// Reads of those files are the same data on every run, so they pass. Anything
+// else a unit test touches is refused: writes, temp directories, watchers,
+// sockets, spawns.
 const FS_READS = new Set([
   "readFileSync", "readFile", "readdirSync", "readdir", "statSync", "stat",
   "lstatSync", "lstat", "existsSync", "exists", "accessSync", "access",
@@ -29,7 +36,7 @@ const FS_READS = new Set([
   "opendir", "createReadStream", "openSync", "open",
 ]);
 // A descriptor was judged when it was opened.
-const FS_DESCRIPTOR_OPS = new Set(["readSync", "read", "closeSync", "close", "fstatSync", "fstat"]);
+export const FS_DESCRIPTOR_OPS = new Set(["readSync", "read", "closeSync", "close", "fstatSync", "fstat"]);
 
 function pathOf(arg: unknown): string | null {
   if (typeof arg === "string") return arg;
@@ -52,17 +59,24 @@ function opensForReading(call: string, args: readonly unknown[]): boolean {
 // case-insensitive one that is the package's file.
 export function isUnderRoot(file: string, root: string): boolean {
   const resolved = path.resolve(file).toLowerCase();
-  const rootLower = root.toLowerCase();
+  const rootLower = path.resolve(root).toLowerCase();
   return resolved === rootLower || resolved.startsWith(rootLower + path.sep);
 }
 
-export function allows({ surface, call, args }: Call, root: string): boolean {
+function isPackageFile(file: string, { root, ignored }: PackageFiles): boolean {
+  return (
+    isUnderRoot(file, root) &&
+    ![".git", ...ignored].some((entry) => isUnderRoot(file, path.join(root, entry)))
+  );
+}
+
+export function allows({ surface, call, args }: Call, files: PackageFiles): boolean {
   if (surface !== "filesystem") return false;
   const name = nameOf(call);
   if (FS_DESCRIPTOR_OPS.has(name)) return true;
   if (!FS_READS.has(name) || !opensForReading(call, args)) return false;
   const file = pathOf(args[0]);
-  return file !== null && isUnderRoot(file, root) && !RUN_STATE.some((dir) => isUnderRoot(file, path.join(root, dir)));
+  return file !== null && isPackageFile(file, files);
 }
 
 function shown(arg: unknown): string {

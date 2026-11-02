@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { readdirSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 
@@ -55,6 +55,23 @@ test("every test file is selected by exactly one tier", async () => {
 
   expect({ unrun, twice, vanished }).toEqual({ unrun: [], twice: [], vanished: [] });
 }, 120_000);
+
+// A tier that is selected and never run proves nothing: each has a script, the
+// whole-suite script runs the three that need no sign-off, and CI runs and
+// reports each.
+test("every tier is run by its script, by pnpm test and by CI", () => {
+  const scripts = (JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as { scripts: Record<string, string> })
+    .scripts;
+  const workflow = readFileSync(join(ROOT, ".github", "workflows", "release.yml"), "utf8");
+  const recorded = ["unit", "worker", "process"];
+
+  for (const tier of TIERS) {
+    expect(scripts[`test:${tier}`]).toContain(`jest.${tier}.config.js`);
+    expect(workflow).toContain(`pnpm test:${tier}`);
+  }
+  for (const tier of recorded) expect(scripts.test).toContain(`test:${tier}`);
+  expect(workflow).toContain(`--runs ${recorded.join(",")}`);
+});
 
 test("the unit and process tiers hold their directory and the worker tier holds neither", async () => {
   const lists = await listAll();

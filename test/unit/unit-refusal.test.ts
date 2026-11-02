@@ -1,6 +1,6 @@
-import { allows, isUnderRoot, refusal, type Call } from "../helpers/unit-refusal";
+import { allows, isUnderRoot, refusal, type Call, type PackageFiles } from "../helpers/unit-refusal";
 
-const ROOT = "/work/pkg";
+const ROOT: PackageFiles = { root: "/work/pkg", ignored: ["dist/", "test-records/", ".claude/worktrees/", "debug.log"] };
 const call = (name: string, ...args: unknown[]): Call => ({ surface: "filesystem", call: name, args });
 
 describe("which file system calls a unit test may make", () => {
@@ -17,6 +17,8 @@ describe("which file system calls a unit test may make", () => {
     ["fs.readFileSync", "/tmp/other"],
     ["fs.readFileSync", "/work/pkg-sibling/a"],
     ["fs.readFileSync", "/work/pkg/test-records/unit.jsonl"],
+    ["fs.readFileSync", "/work/pkg/debug.log"],
+    ["fs.readFileSync", "/work/pkg/.claude/worktrees/w/a.ts"],
     ["fs.readdirSync", "/work/pkg/.git"],
     ["fs.readFileSync", "/work/pkg/dist/index.mjs"],
     ["fs.writeFileSync", "/work/pkg/out.txt"],
@@ -51,14 +53,14 @@ describe("which file system calls a unit test may make", () => {
 
 describe("what lies under the package root", () => {
   test("the root, its descendants and a case-swapped spelling of them", () => {
-    expect(isUnderRoot("/work/pkg", ROOT)).toBe(true);
-    expect(isUnderRoot("/work/pkg/a/../b", ROOT)).toBe(true);
-    expect(isUnderRoot("/WORK/pkg/b", ROOT)).toBe(true);
+    expect(isUnderRoot("/work/pkg", ROOT.root)).toBe(true);
+    expect(isUnderRoot("/work/pkg/a/../b", ROOT.root)).toBe(true);
+    expect(isUnderRoot("/WORK/pkg/b", ROOT.root)).toBe(true);
   });
 
   test("a sibling that shares the root's prefix, and a path that climbs out", () => {
-    expect(isUnderRoot("/work/pkg2/a", ROOT)).toBe(false);
-    expect(isUnderRoot("/work/pkg/../other", ROOT)).toBe(false);
+    expect(isUnderRoot("/work/pkg2/a", ROOT.root)).toBe(false);
+    expect(isUnderRoot("/work/pkg/../other", ROOT.root)).toBe(false);
   });
 });
 

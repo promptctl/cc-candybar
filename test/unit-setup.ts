@@ -1,12 +1,21 @@
 // Installs the unit project's refusal (test/helpers/unit-refusal.ts) on the
 // sandbox only: jest.doMock covers the modules a test and the code under test
-// require, while jest's own runtime keeps the real ones.
+// require, while jest's own runtime keeps the real ones. The routes it guards
+// are test/helpers/unit-refusal-routes.ts, and nothing here names one.
 
 import path from "node:path";
 
-import { allows, refusal, type Call, type Surface } from "./helpers/unit-refusal";
+import { IGNORED_ENV } from "./helpers/package-files";
+import { MODULES, routesIn, type Guarding, type Route } from "./helpers/unit-refusal-routes";
+import { allows, refusal, type Call, type PackageFiles, type Surface } from "./helpers/unit-refusal";
 
-const ROOT = path.resolve(__dirname, "..");
+// [LAW:no-silent-failure] Without the answer, every ignored path would read as
+// the package's own, so a run that lost it stops here.
+const ignoredPaths = process.env[IGNORED_ENV];
+if (ignoredPaths === undefined) {
+  throw new Error(`${IGNORED_ENV} is unset: the unit project runs through jest.unit.config.js, whose global setup sets it`);
+}
+const FILES: PackageFiles = { root: path.resolve(__dirname, ".."), ignored: JSON.parse(ignoredPaths) as string[] };
 
 // [LAW:no-silent-failure] Every refusal is kept until the test ends, because
 // code under test that catches the thrown error would otherwise pass a test
@@ -36,68 +45,43 @@ type AnyFn = (...args: never[]) => unknown;
 function guard(surface: Surface, name: string, real: AnyFn): AnyFn {
   const wrapped = function (this: unknown, ...args: unknown[]) {
     const call: Call = { surface, call: name, args };
-    if (!allows(call, ROOT)) refuse(call);
+    if (!allows(call, FILES)) refuse(call);
     return Reflect.apply(real, this, args);
   } as unknown as AnyFn;
   return Object.assign(wrapped, real);
 }
 
-interface Guarding {
-  // The module's functions that reach the surface.
-  readonly functions: (key: string) => boolean;
-  // Classes that reach it once constructed. A subclass is refused at its super().
-  readonly classes?: readonly string[];
+function at(root: Record<string, unknown>, path: readonly string[]): unknown {
+  return path.reduce<unknown>((node, key) => (node as Record<string, unknown>)[key], root);
 }
 
-// A module becomes a copy whose named functions and classes are guarded and
-// whose everything else (constants, pure helpers) is the real one.
-function guardModule(
-  surface: Surface,
-  moduleName: string,
-  real: Record<string, unknown>,
-  { functions, classes = [] }: Guarding,
-): Record<string, unknown> {
+// A module becomes a copy whose routes are guarded and whose everything else
+// (constants, pure helpers) is the real one. Objects on the way to a route are
+// copied, never written to, because the real ones are shared with jest.
+function guardModule(surface: Surface, moduleName: string, real: Record<string, unknown>, guarding: Guarding) {
   const copy: Record<string, unknown> = {};
-  for (const key of Object.getOwnPropertyNames(real)) {
-    const value = real[key];
-    const name = `${moduleName}.${key}`;
-    if (classes.includes(key)) {
-      copy[key] = new Proxy(value as object, { construct: () => refuse({ surface, call: `new ${name}`, args: [] }) });
-    } else if (typeof value === "function" && functions(key)) {
-      copy[key] = guard(surface, name, value as AnyFn);
-    } else if (key === "promises" && typeof value === "object" && value !== null) {
-      copy[key] = guardModule(surface, name, value as Record<string, unknown>, { functions, classes });
-    } else if (key === "scheduler" && moduleName === "timers/promises") {
-      copy[key] = { wait: refusing(surface, `${name}.wait`), yield: refusing(surface, `${name}.yield`) };
-    } else {
-      copy[key] = value;
-    }
-  }
+  for (const key of Object.getOwnPropertyNames(real)) copy[key] = real[key];
+  for (const route of routesIn(moduleName, real, guarding)) install(copy, real, route, surface);
   return copy;
 }
 
-const lowercase = (key: string) => /^[a-z]/.test(key);
-const among = (...keys: string[]) => (key: string) => keys.includes(key);
-const lookups = (key: string) => /^(lookup|resolve|reverse)/.test(key);
-const timers = among("setTimeout", "setInterval", "setImmediate");
+function install(copy: Record<string, unknown>, real: Record<string, unknown>, route: Route, surface: Surface): void {
+  const parents = route.path.slice(0, -1);
+  const last = route.path[route.path.length - 1] as string;
+  const holder = parents.reduce<Record<string, unknown>>((node, key) => {
+    node[key] = Object.assign(Object.create(Object.getPrototypeOf(node[key])), node[key]);
+    return node[key] as Record<string, unknown>;
+  }, copy);
+  const value = at(real, route.path);
+  holder[last] =
+    route.kind === "class"
+      ? new Proxy(value as object, { construct: () => refuse({ surface, call: route.call, args: [] }) })
+      : isScheduler(route)
+        ? refusing(surface, route.call)
+        : guard(surface, route.call, value as AnyFn);
+}
 
-const MODULES: Array<[Surface, string, Guarding]> = [
-  ["filesystem", "fs", { functions: lowercase, classes: ["ReadStream", "WriteStream", "FSWatcher"] }],
-  ["filesystem", "fs/promises", { functions: () => true }],
-  ["child process", "child_process", { functions: lowercase, classes: ["ChildProcess"] }],
-  ["socket", "net", { functions: among("createServer", "connect", "createConnection"), classes: ["Socket", "Server", "Stream"] }],
-  ["socket", "tls", { functions: among("createServer", "connect"), classes: ["TLSSocket", "Server"] }],
-  ["socket", "dgram", { functions: among("createSocket"), classes: ["Socket"] }],
-  ["network", "http", { functions: among("createServer", "request", "get"), classes: ["Server", "ClientRequest"] }],
-  ["network", "https", { functions: among("createServer", "request", "get"), classes: ["Server"] }],
-  ["network", "http2", { functions: among("createServer", "createSecureServer", "connect") }],
-  ["network", "dns", { functions: lookups, classes: ["Resolver"] }],
-  ["network", "dns/promises", { functions: lookups, classes: ["Resolver"] }],
-  // Jest's fake timers install on the sandbox's globals and leave these
-  // modules on real time, so nothing here has a fake to defer to.
-  ["clock", "timers", { functions: timers }],
-  ["clock", "timers/promises", { functions: timers }],
-];
+const isScheduler = (route: Route) => route.path[0] === "scheduler";
 
 for (const [surface, name, guarding] of MODULES) {
   const mocked = guardModule(surface, name, jest.requireActual<Record<string, unknown>>(name), guarding);
@@ -125,6 +109,7 @@ function guardGlobal(key: string, guard: unknown): void {
 }
 
 g.fetch = refusing("network", "fetch");
+if (g.WebSocket !== undefined) g.WebSocket = new Proxy(g.WebSocket as object, { construct: () => refuse({ surface: "network", call: "new WebSocket", args: [] }) });
 
 for (const timer of ["setTimeout", "setInterval", "setImmediate"]) {
   guardGlobal(timer, refusing("clock", timer));
@@ -138,7 +123,7 @@ guardGlobal(
       if (args.length === 0) refuse({ surface: "clock", call: "new Date", args });
       return Reflect.construct(target, args, newTarget);
     },
-    apply: refusing("clock", "Date()"),
+    apply: refusing("clock", "Date"),
     get(target, key) {
       return key === "now" ? refusing("clock", "Date.now") : Reflect.get(target, key, target);
     },
