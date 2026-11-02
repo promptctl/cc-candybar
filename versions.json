@@ -4,15 +4,22 @@
     {
       "version": "pr-517",
       "ref": "refs/pull/517/merge",
-      "sha": "92b60fcd9db4201bbe7e6f51d5ff18693d41f1c2",
-      "timestamp": "2026-11-02T11:27:01.414Z",
+      "sha": "0d2d7cacfc85b4795bf5c1ac0d09bec5f7ab81de",
+      "timestamp": "2026-11-02T11:28:18.729Z",
       "commits": [
         {
-          "sha": "92b60fcd9db4201bbe7e6f51d5ff18693d41f1c2",
+          "sha": "0d2d7cacfc85b4795bf5c1ac0d09bec5f7ab81de",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T04:25:59-07:00",
-          "message": "Merge 2ed1ef06fbb9ffcd82ba73eb18e021875033f37a into ecc5a9d77a7c5be79a3a6fd09167de0b8deb838e\n"
+          "timestamp": "2026-11-02T04:27:36-07:00",
+          "message": "Merge a6c8b7d7d14fd8501e8baaf9140125a690b4e65f into ecc5a9d77a7c5be79a3a6fd09167de0b8deb838e\n"
+        },
+        {
+          "sha": "a6c8b7d7d14fd8501e8baaf9140125a690b4e65f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T04:27:25-07:00",
+          "message": "fix(site): more than one output directory is refused\n"
         },
         {
           "sha": "2ed1ef06fbb9ffcd82ba73eb18e021875033f37a",
