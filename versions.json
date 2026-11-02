@@ -4,15 +4,22 @@
     {
       "version": "pr-584",
       "ref": "refs/pull/584/merge",
-      "sha": "901f3aa8a4ca736d1710a26042282731070a1bad",
-      "timestamp": "2026-11-02T19:33:40.511Z",
+      "sha": "8ce55390f7966220498ad04c53136a86427dccc6",
+      "timestamp": "2026-11-02T19:47:09.315Z",
       "commits": [
         {
-          "sha": "901f3aa8a4ca736d1710a26042282731070a1bad",
+          "sha": "8ce55390f7966220498ad04c53136a86427dccc6",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T19:32:39Z",
-          "message": "Merge e29c85bf8ad65e326c50e8e774af045f7fe18b00 into cc500459e2346bcb997ea383c9d7c0470b5fe15b\n"
+          "timestamp": "2026-11-02T19:45:45Z",
+          "message": "Merge adc6998da9bb5e88012773ba4583d01701603ea9 into cc500459e2346bcb997ea383c9d7c0470b5fe15b\n"
+        },
+        {
+          "sha": "adc6998da9bb5e88012773ba4583d01701603ea9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T12:45:32-07:00",
+          "message": "test(daemon-boots): the held-env cases join the one that already holds the env, so the boot ratchet stays 214 (candybar-testing-ihvy.42w)\n"
         },
         {
           "sha": "e29c85bf8ad65e326c50e8e774af045f7fe18b00",
