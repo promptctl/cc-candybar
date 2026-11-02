@@ -1,11 +1,11 @@
 // The process tier alone, the half of the suite that needs a build. With
-// `pnpm test:worker` it is all of `pnpm test`, and CI runs the two around its
-// build step.
+// `pnpm test:unit` and `pnpm test:worker` it is all of `pnpm test`, and CI runs
+// the three around its build step.
 
 import base, { reportersFor } from "./jest.config.js";
-import { PROCESS_TIER_DIR } from "./test/helpers/process-tier.cjs";
+import { PROCESS_TIER_DIR } from "./test/helpers/tiers.cjs";
 
-// The base's ignore of test/e2e/ carries over through the spread.
+// The base's ignore of test/e2e/ and test/unit/ carries over through the spread.
 export default {
   ...base,
   reporters: reportersFor("process"),

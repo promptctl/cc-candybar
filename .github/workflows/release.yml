@@ -47,8 +47,11 @@ jobs:
         run: pnpm run check:schema
 
       # [LAW:verifiable-goals] Before the build, so a test outside the process
-      # tier that comes to need one fails here. The two steps are the whole suite:
-      # one run ignores exactly what the other selects.
+      # tier that comes to need one fails here. The three test steps are the whole
+      # suite: each run selects a directory and the others ignore it.
+      - name: Test the unit tier
+        run: pnpm test:unit
+
       - name: Test outside the process tier
         run: pnpm test:worker
 
@@ -77,7 +80,7 @@ jobs:
       # records matter most, and last so a failed report cannot skip a gate.
       - name: Report tests by layer
         if: always()
-        run: pnpm test:report --runs worker,process
+        run: pnpm test:report --runs unit,worker,process
 
       - name: Keep the test records
         if: always()

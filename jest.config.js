@@ -1,3 +1,5 @@
+import { E2E_DIR, UNIT_DIR, ignoring } from "./test/helpers/tiers.cjs";
+
 // Jest reports through its "agent" reporter when an agent runs it and its
 // "default" one otherwise, but only while no reporter list is configured.
 // [LAW:one-source-of-truth] exception: the list below copies the one
@@ -33,14 +35,15 @@ export function reportersFor(run) {
 }
 
 // [LAW:single-enforcer] A test under test/e2e/ runs only through jest.e2e.config.js,
-// which carries the cap and the assertion limit. Every other config ignores the
-// directory, so no run reaches an end-to-end test without the checks.
-// Anchored to rootDir: the pattern is a regex over absolute paths, and a bare
-// "/test/e2e/" would also ignore every test of a checkout living under such a path.
-export const E2E_DIR_PATTERN = "<rootDir>/test/e2e/";
+// which carries the cap and the assertion limit, and a test under test/unit/ only
+// through jest.unit.config.js, which refuses what a unit test may not touch. This
+// base ignores both directories, so no run reaches either without its checks, and
+// `jest <path>` on one finds nothing and says so instead of passing unguarded.
+export const E2E_DIR_PATTERN = ignoring(E2E_DIR);
+export const UNIT_DIR_PATTERN = ignoring(UNIT_DIR);
 
 export default {
-  testPathIgnorePatterns: [E2E_DIR_PATTERN],
+  testPathIgnorePatterns: [E2E_DIR_PATTERN, UNIT_DIR_PATTERN],
   setupFiles: ["<rootDir>/test/setup.ts"],
   setupFilesAfterEnv: ["<rootDir>/test/setup-after-env.ts"],
   // [LAW:no-mode-explosion] A small fixed cap, not "cores-1" (the default),

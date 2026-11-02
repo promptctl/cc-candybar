@@ -6,9 +6,7 @@
 // brought it there. CommonJS because the preload and the jest configs load it
 // untransformed.
 
-// [LAW:one-source-of-truth] The tier is this directory, relative to the package
-// root: the jest configs and the judge read it from here.
-const PROCESS_TIER_DIR = "test/daemon-boots/process";
+const { PROCESS_TIER_DIR } = require("./tiers.cjs");
 
 // [LAW:verifiable-goals] The pin on a run's daemons, over the cases that spawn
 // one through the helper. It is a maximum: a filtered run starts fewer, and a
@@ -74,7 +72,6 @@ function judgeDaemonStarts(starts, ceiling) {
 module.exports = {
   HELPER_START_CEILING,
   LEDGER_ENV,
-  PROCESS_TIER_DIR,
   ROUTE_ENV,
   TEST_FILE_ENV,
   judgeDaemonStarts,
