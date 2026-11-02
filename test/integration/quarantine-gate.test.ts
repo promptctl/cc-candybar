@@ -190,10 +190,14 @@ describe("the environment the gate runs through", () => {
     expect(version("jest-environment-node")).toBe(version("jest"));
   });
 
-  it("is the environment of every test file, because none names another", () => {
-    const own = readdirSync(join(ROOT, "test"), { recursive: true, encoding: "utf8" })
-      .filter((file) => /\.(ts|cjs|js)$/.test(file))
-      .filter((file) => namesItsEnvironment(readFileSync(join(ROOT, "test", file), "utf8")));
+  // The audits' config is the suite's over audits/, so their files run in it too.
+  it("is the environment of every test and audit file, because none names another", () => {
+    const own = ["test", "audits"].flatMap((dir) =>
+      readdirSync(join(ROOT, dir), { recursive: true, encoding: "utf8" })
+        .filter((file) => /\.[cm]?[jt]sx?$/.test(file))
+        .filter((file) => namesItsEnvironment(readFileSync(join(ROOT, dir, file), "utf8")))
+        .map((file) => join(dir, file)),
+    );
     expect(own).toEqual([]);
   });
 
