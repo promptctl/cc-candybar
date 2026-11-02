@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-563",
+      "ref": "refs/pull/563/merge",
+      "sha": "79cdd0149956bf91440d5cdc20770a141826951f",
+      "timestamp": "2026-11-02T11:33:44.028Z",
+      "commits": [
+        {
+          "sha": "79cdd0149956bf91440d5cdc20770a141826951f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T04:32:33-07:00",
+          "message": "Merge fca394107925139470874abf46abec8d756f702d into ecc5a9d77a7c5be79a3a6fd09167de0b8deb838e\n"
+        },
+        {
+          "sha": "fca394107925139470874abf46abec8d756f702d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T04:32:14-07:00",
+          "message": "refactor(launch): Launcher loses launchSync; OneShotLauncher is the only type offering it (candybar-launch-q7o7.4em)\n\nDaemon code holds a Launcher, which has no name for the launch that holds the loop to pipe EOF, so tsc refuses the next one added there. Install, plugin install, the doctor's CLI probe and the at-exit tmux restore take the process's oneShotLauncher, which eslint's owned imports confine to them.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-564",
       "ref": "refs/pull/564/merge",
       "sha": "931ef53f174583dc6c391301e888bc5dca43a092",
