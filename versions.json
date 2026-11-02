@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "2b55ee999dbc13d1647e8946ffdb6557934b017a",
+      "timestamp": "2026-11-02T12:56:50.243Z",
+      "commits": [
+        {
+          "sha": "2b55ee999dbc13d1647e8946ffdb6557934b017a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T05:52:29-07:00",
+          "message": "fix(test): the click-error e2e holds its unanswered render until the daemon's side has ended (brandon-unfiled-3248.cbyb) (#570)\n\n* fix(test): the click-error e2e holds its unanswered render until the daemon's side has ended (brandon-unfiled-3248.cbyb)\n\nThe case's `gone` client half-closed at once and assumed the daemon saw the\nclose before it wrote the answer. Nothing ordered them: when the render won, the\nend-write succeeded, the error was marked answered, and the next request read\n`over` where the test expects `owed`.\n\nThe gone render now reads tmux through the gated stub, and the test opens the\ngate only once the daemon's side has closed with the client's (inFlight back to\n0), so the answer meets an ended end by construction. Making respond call\ndelivered regardless of the write error fails the case with owed/over.\n\n* test: say why zero in flight means the gone client's side left (brandon-unfiled-3248.cbyb)"
+        },
+        {
+          "sha": "f01de8e049daf921113beb9a862840f6a93f2135",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-02T12:49:08Z",
+          "message": "chore(release): set `package.json` to 1.179.2 [skip ci]\n\n## [1.179.2](https://github.com/promptctl/cc-candybar/compare/v1.179.1...v1.179.2) (2026-11-02)\n\n### Bug Fixes\n\n* **frame-feed:** a timer that fires before its moment waits it out, so no turn is drawn twice ([#566](https://github.com/promptctl/cc-candybar/issues/566)) ([e9865fa](https://github.com/promptctl/cc-candybar/commit/e9865fa4807325c4bf8e73c86195d8ea246a2775))\n* **url-handle:** a daemon's TIMEOUT is busy, so a click no longer kicks a live daemon ([#565](https://github.com/promptctl/cc-candybar/issues/565)) ([938e467](https://github.com/promptctl/cc-candybar/commit/938e46704e2e803c9a983b478618dda5cea40cc3))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-567",
       "ref": "refs/pull/567/merge",
       "sha": "20449c6e07a192cd3dfb4185823e52334793c2c7",
@@ -92,21 +114,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T05:40:11-07:00",
           "message": "feat(templates): array-form segment templates and segment-scoped partials (candybar-templates-zh8b.53s)\n\nA segment's `template` may now be an array of strings (joined with no\nseparator) for a long conditional that would otherwise be one unreadable\nline, and a segment may declare `partials`: named sub-templates scoped to\nit, compiled onto their own Defines chained from the shared `helpers`, so\ntwo segments can reuse a partial name with no collision and a partial can\ncall a helper but never another segment's partial. Dispatch is via the\nexisting static `{{ template \"name\" ctx }}` builtin.\n\nThe dynamic `partial` function (a computed name) needs a capability\n(`include`) that exists only on @promptctl/go-template-js's unreleased\nmaster, not its published npm version — split into a follow-up ticket\n(candybar-templates-zh8b.ph5), blocked on that release. Static unused-\npartial detection needs unused.ts to carry per-template segment identity,\nwhich it does not today — split into its own follow-up\n(candybar-templates-zh8b.mfn), not blocked on anything upstream.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "e9865fa4807325c4bf8e73c86195d8ea246a2775",
-      "timestamp": "2026-11-02T12:37:19.059Z",
-      "commits": [
-        {
-          "sha": "e9865fa4807325c4bf8e73c86195d8ea246a2775",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T05:35:57-07:00",
-          "message": "fix(frame-feed): a timer that fires before its moment waits it out, so no turn is drawn twice (#566)\n\n* fix(frame-feed): a timer that fires before its moment waits it out, so no turn is drawn twice (brandon-unfiled-3248.l1mh)\n\nNode starts a timer from the loop's cached time, so one armed late in a slow\ncallback fires early by as long as that callback had run. Past\nTIMER_RESOLUTION_S the draw clamped to the wall, which fell in the turn before\nthe frame's change: that turn drawn twice, the next one late. The feed now\ncompares the timer's moment on the monotonic clock and re-arms for the rest.\n\n* fix(frame-feed): review of the early-fire wait: reflow the bound's comment, correct the memory line, test a second early fire and a close while waiting (brandon-unfiled-3248.l1mh)\n\n* fix(frame-feed): setTimer clears the timer it replaces, so no caller can orphan one (brandon-unfiled-3248.l1mh)"
         }
       ]
     },
