@@ -18,10 +18,11 @@ export const REQUEST_TIMEOUT_MS = 200;
 // default and of the load gate's full config. A cold draw takes a few ms on an
 // idle machine, but the reserve is wall time, and a draw descheduled on a busy
 // one reads tens of ms with no more work in it: CI's runner, its cores shared
-// with the other process-tier suites, reads up to 48 ms. It also holds room for
-// a user config whose effect draws several times the idle figure (a
-// maintainer's config, effect on, drew 42 ms at p90). A reserve too small answers after its client has hung up, and the bar goes blank,
-// where one too large only draws more pending.
+// with the other process-tier suites, reads up to 48 ms. A user config whose
+// effect draws several times the idle figure (a maintainer's config, effect
+// on, drew 42 ms at p90) is not measured here, and on a busy machine it can
+// still outrun the reserve. A reserve too small answers after its client has
+// hung up, and the bar goes blank, where one too large only draws more pending.
 export const DRAW_RESERVE_MS = 60;
 
 // [LAW:parse-dont-validate] When the client hangs up, as the checkpoint
