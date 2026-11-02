@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-577",
+      "ref": "refs/pull/577/merge",
+      "sha": "f411f2cc95c96626787358de6c165bb27178131d",
+      "timestamp": "2026-11-02T15:14:09.786Z",
+      "commits": [
+        {
+          "sha": "f411f2cc95c96626787358de6c165bb27178131d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T08:12:43-07:00",
+          "message": "Merge eb5f041dba17f33d7d10f8978f7cd75272b5ec6a into bddbf3b6871d4e9cf9437cb08386aac83e066245\n"
+        },
+        {
+          "sha": "eb5f041dba17f33d7d10f8978f7cd75272b5ec6a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T08:12:26-07:00",
+          "message": "fix(render): a client timeout is a typed error that carries its phase (candybar-launch-q7o7.04z)\n\ninterpretException matched the message strings CONNECT_TIMEOUT and TIMEOUT, so a\nreworded or wrapped error fell through to transient and kicked a live daemon.\nClientTimeoutError, thrown at both sites, carries the classification and the\nphase (connect | deadline); BusyOutcome carries the phase too.\n\nurl-handle now exits 1 on a connect timeout, where the click was never written,\ninstead of exiting 0 and losing it behind a stderr line. A deadline, ours or the\ndaemon's own TIMEOUT, still exits 0: the click reached the daemon.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "bddbf3b6871d4e9cf9437cb08386aac83e066245",
