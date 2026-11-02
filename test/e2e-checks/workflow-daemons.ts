@@ -7,6 +7,8 @@ import { parse as parseYaml } from "yaml";
 // tests. The start judge sees jest only, so a script a workflow runs is judged
 // here: a step fails when the script it reaches, followed through package.json
 // and the script's relative imports, imports `daemonArgs` or `createDaemon`.
+// The reach is the source files a step's command line names (node, tsx) and their
+// relative imports; a shell script, a composite action or a path alias is not followed.
 // Jest runs stay the judge's and are skipped. This core reads nothing itself:
 // the workflows are text and the repository is a `Repo`, so its tests touch no disk.
 // [LAW:effects-at-boundaries]
@@ -124,17 +126,29 @@ function sourceFileOf(path: string, text: string): ts.SourceFile {
   return ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true);
 }
 
-/** Whether a module imports, or re-exports from elsewhere, a symbol that starts a daemon. */
+/**
+ * Whether a module takes a symbol that starts a daemon from another module: a
+ * named import or re-export, a destructuring (`const { createDaemon } = require(..)`,
+ * `await import(..)`), or a property read off a namespace or a require (`d.createDaemon`).
+ * A type-only import starts nothing.
+ */
 export function importsDaemonSymbol(path: string, text: string): boolean {
-  return sourceFileOf(path, text).statements.some((statement) => {
-    const names =
-      ts.isImportDeclaration(statement) && statement.importClause?.namedBindings !== undefined && ts.isNamedImports(statement.importClause.namedBindings)
-        ? statement.importClause.namedBindings.elements
-        : ts.isExportDeclaration(statement) && statement.moduleSpecifier !== undefined && statement.exportClause !== undefined && ts.isNamedExports(statement.exportClause)
-          ? statement.exportClause.elements
-          : [];
-    return names.some((element) => DAEMON_SYMBOLS.has((element.propertyName ?? element.name).text));
-  });
+  const named = (name: ts.Node | undefined): boolean => name !== undefined && ts.isIdentifier(name) && DAEMON_SYMBOLS.has(name.text);
+  const hits = (node: ts.Node): boolean => {
+    if (ts.isImportSpecifier(node)) {
+      const clause = node.parent.parent;
+      if (!node.isTypeOnly && !clause.isTypeOnly && named(node.propertyName ?? node.name)) return true;
+    } else if (ts.isExportSpecifier(node)) {
+      const declaration = node.parent.parent;
+      if (!node.isTypeOnly && !declaration.isTypeOnly && declaration.moduleSpecifier !== undefined && named(node.propertyName ?? node.name)) return true;
+    } else if (ts.isBindingElement(node)) {
+      if (named(node.propertyName ?? node.name)) return true;
+    } else if (ts.isPropertyAccessExpression(node)) {
+      if (named(node.name)) return true;
+    }
+    return ts.forEachChild(node, hits) ?? false;
+  };
+  return hits(sourceFileOf(path, text));
 }
 
 /** The first module reachable from `entry` through relative imports that imports a daemon symbol. */

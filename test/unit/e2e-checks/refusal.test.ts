@@ -7,6 +7,8 @@ const held = new Set([
   "test/e2e-checks/cap-reporter.cjs",
   "test/e2e/one.test.ts",
   "src/index.ts",
+  "test/e2e-checks",
+  "test/e2e",
 ]);
 const mainHolds = (rel: string) => held.has(rel);
 const call = (tool: string, input: Record<string, string>) => refusalOf({ tool, input, root: ROOT, mainHolds });
@@ -19,6 +21,7 @@ describe("a file tool", () => {
     ["an end-to-end test main holds", "/repo/test/e2e/one.test.ts"],
     ["a held path given relative", "test/e2e/one.test.ts"],
     ["a held path spelled with ..", "/repo/test/unit/../e2e/one.test.ts"],
+    ["a held path in a worktree under the root", "/repo/.claude/worktrees/w1/.claude/e2e-signoff.json"],
   ])("refuses an edit to %s", (_name, file) => {
     expect(call("Edit", { file_path: file })).toContain("is held by origin/main and guarded");
   });
@@ -53,6 +56,11 @@ describe("Bash", () => {
     "rm test/e2e-checks/cap-reporter.cjs",
     "pnpm test && rm test/e2e-checks/cap-reporter.cjs",
     "cat test/e2e/one.test.ts > test/e2e/one.test.ts",
+    "rm -rf test/e2e-checks",
+    "rm -rf test/e2e/",
+    "mv test/e2e-checks /tmp/x",
+    `python3 -c "open('.claude/e2e-signoff.json','w').write('{}')"`,
+    `node -e "require('fs').writeFileSync('/repo/.claude/e2e-signoff.json','')"`,
   ])("refuses a write: %s", (command) => {
     expect(call("Bash", { command })).toContain("is held by origin/main and guarded");
   });
@@ -65,6 +73,9 @@ describe("Bash", () => {
     "pnpm -s test:e2e test/e2e/one.test.ts",
     "node node_modules/jest/bin/jest.js test/e2e-checks/",
     "git add test/e2e/two.test.ts",
+    "git add test/e2e",
+    "cd test/e2e-checks && pnpm test",
+    "ls test/e2e-checks",
     "rm test/e2e/two.test.ts",
     "pnpm lint",
   ])("admits: %s", (command) => {

@@ -35,7 +35,9 @@ export function reportersFor(run) {
 // [LAW:single-enforcer] A test under test/e2e/ runs only through jest.e2e.config.js,
 // which carries the cap and the assertion limit. Every other config ignores the
 // directory, so no run reaches an end-to-end test without the checks.
-export const E2E_DIR_PATTERN = "/test/e2e/";
+// Anchored to rootDir: the pattern is a regex over absolute paths, and a bare
+// "/test/e2e/" would also ignore every test of a checkout living under such a path.
+export const E2E_DIR_PATTERN = "<rootDir>/test/e2e/";
 
 export default {
   testPathIgnorePatterns: [E2E_DIR_PATTERN],

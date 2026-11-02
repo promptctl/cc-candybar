@@ -24,26 +24,41 @@ const FILE_TOOLS = ["Edit", "Write", "MultiEdit", "NotebookEdit"];
 // [LAW:one-source-of-truth] exception: release-pin.mjs's read-only list, copied.
 // That hook runs on import and exports nothing, and its file is under its own
 // pin, so this cannot import it. Running a test reads a guarded file and writes none.
+// `cd`, `ls` and `git add` write no file; staging a file main lacks stays free.
 const READ_ONLY =
-  /^\s*(?:(?:cat|less|head|tail|grep|rg)\b|git (?:diff|log|show|status)\b|(?:pnpm|npx)(?:\s+-\S+)*\s+(?:exec\s+)?(?:jest|test\S*)|node\s+\S*jest\.js\b)/;
+  /^\s*(?:(?:cat|less|head|tail|grep|rg|ls|cd)\b|git (?:add|diff|log|show|status)\b|(?:pnpm|npx)(?:\s+-\S+)*\s+(?:exec\s+)?(?:jest|test\S*)|node\s+\S*jest\.js\b)/;
+
+// The worktree an agent works in sits under the main checkout, and the hook may be
+// handed the main checkout as its root; a guarded path is the same file in both.
+const WORKTREE_PREFIX = /^\.claude\/worktrees\/[^/]+\//;
 
 /** A path relative to the project root with forward slashes, or null outside it. */
 function relativeTo(root, file) {
   const rel = path.relative(root, path.resolve(root, file));
-  return rel === "" || rel.startsWith("..") || path.isAbsolute(rel) ? null : rel.split(path.sep).join("/");
+  return rel === "" || rel.startsWith("..") || path.isAbsolute(rel)
+    ? null
+    : rel.split(path.sep).join("/").replace(WORKTREE_PREFIX, "");
 }
 
+// A directory is guarded as the directory itself too: `rm -rf test/e2e-checks` names no file inside it.
 function isGuarded(rel) {
-  return GUARDED_FILES.includes(rel) || GUARDED_DIRECTORIES.some((dir) => rel.startsWith(dir));
+  return (
+    GUARDED_FILES.includes(rel) ||
+    GUARDED_DIRECTORIES.some((dir) => rel === dir.slice(0, -1) || rel.startsWith(dir))
+  );
 }
 
-/** The paths a Bash command writes or might write: those named by a segment that is not read-only. */
+/**
+ * The paths a Bash command writes or might write: those named by a segment that is
+ * not read-only. Tokens split on quotes, parentheses, commas and `=` as well as
+ * space, so a path inside `python -c "open('.claude/e2e-signoff.json', 'w')"` is seen.
+ * A path built by the shell (`cd` then a relative name, `$VAR`, a glob) is not.
+ */
 function pathsNamedByWrites(command) {
   return command
     .split(/&&|\|\||;|\||\n/)
     .filter((segment) => !READ_ONLY.test(segment) || segment.includes(">"))
-    .flatMap((segment) => segment.trim().split(/\s+/))
-    .map((token) => token.replace(/^["'>]+|["']+$/g, ""));
+    .flatMap((segment) => segment.split(/[\s"'`(),=<>]+/));
 }
 
 /**

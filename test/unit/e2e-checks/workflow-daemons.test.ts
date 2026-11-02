@@ -98,6 +98,24 @@ describe("violationsOf", () => {
     expect(violationsOf([workflow("pnpm indirect")], repo, []).map((v) => v.offender)).toEqual(["scripts/lib/hop.ts"]);
   });
 
+  test.each([
+    ["a namespace import", 'import * as d from "../src/daemon.js"; d.createDaemon();'],
+    ["a require destructuring", 'const { createDaemon } = require("../src/daemon.js");'],
+    ["a dynamic import", 'const { daemonArgs } = await import("../src/acquire.js");'],
+    ["a require property read", 'require("../src/daemon.js").createDaemon();'],
+  ])("flags %s", (_name, source) => {
+    const reached = repoOf({}, { ...files, "scripts/form.ts": source });
+    expect(violationsOf([workflow("node scripts/form.ts")], reached, []).map((v) => v.offender)).toEqual(["scripts/form.ts"]);
+  });
+
+  test("passes a type-only import of a daemon symbol", () => {
+    const reached = repoOf(
+      {},
+      { ...files, "scripts/types.ts": 'import type { daemonArgs } from "../src/acquire.js"; import { type createDaemon } from "../src/daemon.js";' },
+    );
+    expect(violationsOf([workflow("node scripts/types.ts")], reached, [])).toEqual([]);
+  });
+
   test("passes a script that reaches none, and a jest run", () => {
     expect(violationsOf([workflow("pnpm safe && pnpm test:worker")], repo, [])).toEqual([]);
   });

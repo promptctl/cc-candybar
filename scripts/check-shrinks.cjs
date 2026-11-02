@@ -35,13 +35,13 @@ function main(file, sha) {
   } catch (error) {
     throw new Error(`cannot read base commit ${sha}: ${error.stderr || error.message}`);
   }
-  let baseText;
-  try {
-    baseText = git(["show", `${sha}:${file}`]);
-  } catch {
+  // [LAW:no-silent-failure] ls-tree answers "absent" with empty output and fails on
+  // anything else (a corrupt object, a git error), so only absence reads as new.
+  if (git(["ls-tree", "--name-only", sha, "--", file]).trim() === "") {
     console.log(`${file} is not in ${sha}: new in this change, nothing to compare`);
     return;
   }
+  const baseText = git(["show", `${sha}:${file}`]);
   const added = addedEntries(listOf(baseText, `${file} at ${sha}`), listOf(readFileSync(file, "utf8"), file));
   if (added.length > 0) {
     throw new Error(`${file} grew since ${sha}: ${added.join(", ")}. The list may only shrink.`);
