@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-571",
+      "ref": "refs/pull/571/merge",
+      "sha": "7b2ec9f2ebbb893b8a4c92b37568c9859be92488",
+      "timestamp": "2026-11-02T13:16:15.900Z",
+      "commits": [
+        {
+          "sha": "7b2ec9f2ebbb893b8a4c92b37568c9859be92488",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T06:14:41-07:00",
+          "message": "Merge 0164094a66e354cedc769223bda166e6fe1276ca into 6d91c387cf1c1c941185bbc0ee4fc9247e21e41b\n"
+        },
+        {
+          "sha": "0164094a66e354cedc769223bda166e6fe1276ca",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T06:14:22-07:00",
+          "message": "fix(test): the client-deadline cases state budgets a loaded loop cannot miss (brandon-unfiled-3248.5lkd)\n\nThe stub serves on the jest worker's own loop, so the statusline's 50 ms connect budget\ncould pass before its accept: the stated-budget case read CONNECT_TIMEOUT (1 of 20 runs\nunder CPU load), and the never-answers case passed without the request ever reaching the stub.\ntryRenderViaDaemon takes its budgets as a value, defaulting to the wire facts the statusline\nuses; the cases state wide ones, and the never-answers case asserts it ended at its own\ndeadline (TIMEOUT) having reached the stub.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-569",
       "ref": "refs/pull/569/merge",
       "sha": "2abec362fd8b19fa91d39ae49f91cc1fb54f3417",
