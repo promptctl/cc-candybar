@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-558",
+      "ref": "refs/pull/558/merge",
+      "sha": "69adeaa2b2d3beb6ef48393eeb75f353d6bc23d1",
+      "timestamp": "2026-11-02T03:11:28.368Z",
+      "commits": [
+        {
+          "sha": "69adeaa2b2d3beb6ef48393eeb75f353d6bc23d1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T20:10:31-07:00",
+          "message": "Merge b2b1d01722233748ed566752ba6c78518219e86b into ec9fa5454b16e8eff68525c059c5214d0a98a8d5\n"
+        },
+        {
+          "sha": "b2b1d01722233748ed566752ba6c78518219e86b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T03:57:33-06:00",
+          "message": "fix(bar-pane): a frame overwrites its rows and lands whole, so the pane stops flickering\n"
+        }
+      ]
+    },
+    {
       "version": "pr-557",
       "ref": "refs/pull/557/merge",
       "sha": "65bc5a8d5a76d47d13a01c1f6d0b76524875cd2f",
