@@ -2,6 +2,56 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-586",
+      "ref": "refs/pull/586/merge",
+      "sha": "6b409320950f2fc81709a29447e271eda0016129",
+      "timestamp": "2026-11-02T22:12:45.381Z",
+      "commits": [
+        {
+          "sha": "6b409320950f2fc81709a29447e271eda0016129",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T15:11:53-07:00",
+          "message": "Merge 2f47a47505c187d4266e8dc09d6668d8fe37538c into 7517c26c7273173d4e5e09588fd51ac4d21131b4\n"
+        },
+        {
+          "sha": "2f47a47505c187d4266e8dc09d6668d8fe37538c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T15:10:29-07:00",
+          "message": "refactor(time): a launcher carries the machine's clock for whoever waits on its children, and memory and the plan name the two timekeepers (candybar-testing-ihvy.aiy)\n"
+        },
+        {
+          "sha": "540880ab21d7bfb2ea203c9f9c16fd88004f0b15",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T15:06:22-07:00",
+          "message": "refactor(time): every timer, wall reading and loop turn in src goes through the Timekeeper, and lint keeps it so (candybar-testing-ihvy.aiy)\n"
+        },
+        {
+          "sha": "2b51a6a659515e73142d1a4adf6e9e3f9236a54c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T14:57:09-07:00",
+          "message": "refactor(time): the variable store, render cache and run stats read the daemon's clock (candybar-testing-ihvy.aiy)\n"
+        },
+        {
+          "sha": "727aa54efb288a4353967440e703c244420836c7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T14:53:37-07:00",
+          "message": "refactor(time): the launcher, log, limits, lane edge, session storage and update watch run on a Timekeeper they are handed (candybar-testing-ihvy.aiy)\n"
+        },
+        {
+          "sha": "67ef0a81642eff756f618fde38da81c3b3b418b5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T14:46:43-07:00",
+          "message": "feat(time): one Timekeeper port with a real clock and a held one, proven by one contract suite (candybar-testing-ihvy.aiy)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "7517c26c7273173d4e5e09588fd51ac4d21131b4",
