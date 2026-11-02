@@ -1,6 +1,6 @@
 // [LAW:behavior-not-structure] A bar pane the lane edge opens on a real tmux
 // server is tagged from the moment it exists: a daemon closing during the open
-// leaves no pane `pane off` cannot find, and no hook behind on the user's pane.
+// leaves no pane `pane off` cannot find, and the user's pane keeps focus.
 
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -25,7 +25,8 @@ const HAS_TMUX = spawnSync("tmux", ["-V"]).status === 0;
   };
   const panes = (): string[] =>
     tmux("list-panes", "-a", "-F", "#{pane_id}").trim().split("\n");
-  const hooks = (): string => tmux("show-hooks", "-p", "-t", hint.pane);
+  const active = (): string =>
+    tmux("display-message", "-p", "-t", "bar", "#{pane_id}").trim();
 
   beforeEach(() => {
     dir = mkdtempSync(path.join(os.tmpdir(), "ccb-bar-pane-"));
@@ -71,10 +72,10 @@ const HAS_TMUX = spawnSync("tmux", ["-V"]).status === 0;
       new AbortController().signal,
     );
     expect(await tagged.barPanes(hint)).toEqual([opened]);
-    expect(hooks()).not.toContain("after-split-window");
+    expect(active()).toBe(hint.pane);
   });
 
-  test("a failed split leaves no hook to tag the user's next split", async () => {
+  test("a failed split is reported as the split, and tags nothing", async () => {
     // One row has no room for another pane.
     tmux("resize-window", "-t", "bar", "-y", "1");
     const edge = productionLaneEdge(
@@ -84,8 +85,8 @@ const HAS_TMUX = spawnSync("tmux", ["-V"]).status === 0;
     );
 
     await expect(edge.openBarPane(hint, ["sleep", "60"], {})).rejects.toThrow(
-      /split-window|set-hook|tmux/,
+      /tmux split-window failed/,
     );
-    expect(hooks()).not.toContain("after-split-window");
+    expect(await edge.barPanes(hint)).toEqual([]);
   });
 });

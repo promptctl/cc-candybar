@@ -279,18 +279,13 @@ export function productionLaneEdge(
     // between (tmux ≥ 3.0), so no path in `argv` needs quoting for one.
     // [LAW:no-ambient-temporal-coupling] The split and its tag are one tmux
     // invocation: a daemon closing between two launches refuses the second,
-    // leaving a bar pane no `pane off` finds. A pane hook on the split's
-    // target tags the new pane in the split's own command queue (tmux ≥ 3.2).
-    openBarPane: async (hint, argv, env) => {
-      const hook = ["-p", "-t", hint.pane, "after-split-window"];
-      try {
-        const split = await tmux(launcher, hint, [
-          "set-hook",
-          ...hook,
-          `set-option -p ${BAR_PANE_OPTION} "${hint.pane}"`,
-          ";",
+    // leaving a bar pane no `pane off` finds. A split without `-d` makes the
+    // new pane the queue's current target, so the untargeted `set-option`
+    // tags it; `select-pane` then gives focus back to the user's pane.
+    openBarPane: async (hint, argv, env) =>
+      (
+        await tmux(launcher, hint, [
           "split-window",
-          "-d",
           "-v",
           "-l",
           "1",
@@ -302,23 +297,16 @@ export function productionLaneEdge(
           ...Object.entries(env).flatMap(([k, v]) => ["-e", `${k}=${v}`]),
           ...argv,
           ";",
-          "set-hook",
-          "-u",
-          ...hook,
-        ]);
-        return split.trim();
-      } catch (e) {
-        // tmux skips what follows a failed command, so a failed split leaves
-        // the hook to tag the next pane split from this one.
-        const unhook = await runTmuxAsync(launcher, hint, "lane.tmux", [
-          "set-hook",
-          "-u",
-          ...hook,
-        ]);
-        if (unhook.kind === "ok") throw e;
-        throw new Error(`${(e as Error).message}; ${unhook.reason}`);
-      }
-    },
+          "set-option",
+          "-p",
+          BAR_PANE_OPTION,
+          hint.pane,
+          ";",
+          "select-pane",
+          "-t",
+          hint.pane,
+        ])
+      ).trim(),
     closePane: async (hint, pane) =>
       void (await tmux(launcher, hint, ["kill-pane", "-t", pane])),
     // [LAW:single-enforcer] The session's process environment: the
