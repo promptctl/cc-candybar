@@ -25427,7 +25427,10 @@ function recordOf(raw) {
   return typeof text4 === "string" && typeof at === "number" && (answered2 === void 0 || typeof answered2 === "boolean") ? { text: text4, at, answered: answered2 === true } : null;
 }
 
-// src/daemon/verbs/state-validators.ts
+// src/daemon/verbs/key-seeds.ts
+init_globals();
+
+// src/config/dsl-types.ts
 init_globals();
 
 // src/themes/policy.ts
@@ -38278,70 +38281,7 @@ function parseSessionInt(raw, range) {
   return Number.isInteger(value) && String(value) === raw && value >= range.min && value <= range.max ? value : null;
 }
 
-// src/config/edit-chrome.ts
-init_globals();
-var import_node_path16 = __toESM(require_path_browserify(), 1);
-
-// src/config/synthesis-inputs.ts
-init_globals();
-
-// src/config/action.ts
-init_globals();
-var ACTION_KEYS = [
-  "set",
-  "persist",
-  "copy",
-  "open",
-  "reset",
-  "undo",
-  "redo",
-  "back",
-  "rewind",
-  "save",
-  "preset",
-  "themeDefault",
-  "doctor",
-  "slash",
-  "run",
-  "do"
-];
-function runDeclaration(a) {
-  return JSON.stringify([a.run, Object.entries(a.env), a.cwd, a.refreshes]);
-}
-function* actionTemplates(a) {
-  const found = [];
-  mapActionTemplates(a, (source, field) => {
-    found.push([field, source]);
-    return source;
-  });
-  yield* found;
-}
-function mapActionTemplates(a, f) {
-  if ("copy" in a) return { ...a, copy: f(a.copy, "copy") };
-  if ("open" in a) return { ...a, open: f(a.open, "open") };
-  if ("preset" in a && a.preset === "delete")
-    return { ...a, name: f(a.name, "name") };
-  if ("run" in a) {
-    const run3 = a.run.map((item, i) => f(item, `run.${i}`));
-    return {
-      ...a,
-      run: run3,
-      env: Object.fromEntries(
-        Object.entries(a.env).map(([name, value]) => [
-          name,
-          f(value, `env.${name}`)
-        ])
-      )
-    };
-  }
-  return a;
-}
-function actionBindsTemplateValue(a) {
-  return "from" in a || "int" in a || "insertSegmentFrom" in a;
-}
-
 // src/config/dsl-types.ts
-init_globals();
 var DIRECTIONS = ["vertical", "horizontal"];
 var AXIS_OF = {
   vertical: "row",
@@ -38514,8 +38454,2588 @@ var TRUNCATE_MODES = [
   "middle"
 ];
 
-// src/config/loader/refs.ts
+// src/config/loader/globals.ts
 init_globals();
+
+// src/config/globals-fields.ts
+init_globals();
+
+// src/config/loader/validate-core.ts
+init_globals();
+var import_node_path11 = __toESM(require_path_browserify(), 1);
+
+// src/config/loader/diagnostics.ts
+init_globals();
+var ConfigError = class extends Error {
+  file;
+  issues;
+  /** Advisories the file earned before it failed — reported beside the error. */
+  warnings;
+  constructor(file, issues, warnings = []) {
+    super(formatIssues(file, issues));
+    this.name = "ConfigError";
+    this.file = file;
+    this.issues = issues;
+    this.warnings = warnings;
+  }
+};
+var DroppedFileError = class extends ConfigError {
+  prompt;
+  constructor(file, issues) {
+    super(file, issues);
+    this.name = "DroppedFileError";
+    this.prompt = [
+      "Fix my cc-candybar statusline config. It places segments that do not exist, so those cells are not drawn.",
+      `Config file to edit: ${file}`,
+      this.message,
+      "For each placement: rename it to a segment the error lists as declared (if it names a plugin file, read that file to confirm), or remove the placement. Edit only the config file; do not change any plugin file."
+    ].join("\n\n");
+  }
+};
+function findKeyLine(source, pathParts) {
+  return keyLocator(source)(pathParts);
+}
+function keyLocator(source) {
+  let parsed2;
+  const document = () => {
+    parsed2 ??= { node: parseOrUndefined(source) };
+    return parsed2.node;
+  };
+  return (pathParts) => keyLine(source, document, pathParts);
+}
+function parseOrUndefined(source) {
+  try {
+    return parseDocument(source);
+  } catch (e) {
+    if (e instanceof Json5EditError) return void 0;
+    throw e;
+  }
+}
+function keyLine(source, document, pathParts) {
+  const indexed = pathParts.some((p2) => /^\d+$/.test(p2)) ? elementPathLine(source, document(), pathParts) : void 0;
+  if (indexed !== void 0) return indexed;
+  let cursor = 0;
+  let foundCursor;
+  for (const part of pathParts) {
+    if (part === "" || /^\d+$/.test(part)) continue;
+    const found = findKeyOccurrence(source, cursor, part);
+    if (found === -1) {
+      return foundCursor !== void 0 ? lineFromOffset(source, foundCursor) : void 0;
+    }
+    cursor = found;
+    foundCursor = found;
+  }
+  return foundCursor !== void 0 ? lineFromOffset(source, foundCursor) : void 0;
+}
+function elementPathLine(source, document, pathParts) {
+  if (document === void 0) return void 0;
+  let node = document;
+  let reached;
+  let indexed = false;
+  for (const part of pathParts) {
+    const element = node.kind === "array" && /^\d+$/.test(part);
+    const next = node.kind === "array" ? element ? node.elements[Number(part)] : void 0 : entryOf(node, part)?.value;
+    if (next === void 0) break;
+    indexed ||= element;
+    node = next;
+    reached = next;
+  }
+  return reached === void 0 || !indexed ? void 0 : lineFromOffset(source, reached.span.start);
+}
+function findKeyOccurrence(source, from, key) {
+  const escaped2 = key.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
+  const re = new RegExp(`(?:["']${escaped2}["']|\\b${escaped2}\\b)\\s*:`, "g");
+  re.lastIndex = from;
+  const m = re.exec(source);
+  return m ? m.index : -1;
+}
+function lineFromOffset(source, offset) {
+  let line = 1;
+  for (let i = 0; i < offset && i < source.length; i++) {
+    if (source.charCodeAt(i) === 10) line++;
+  }
+  return line;
+}
+function editabilityNotice(filePath2, source) {
+  try {
+    parseDocument(source);
+    return null;
+  } catch (e) {
+    if (!(e instanceof Json5EditError)) throw e;
+    return `${filePath2}:${lineFromOffset(source, e.offset)}: ${e.reason} \u2014 the settings menu cannot edit this file until it is fixed`;
+  }
+}
+function formatIssues(file, issues) {
+  if (issues.length === 0) return `${file}: invalid config (no details)`;
+  const lines2 = [
+    `Invalid config in ${file} (${issues.length} issue${issues.length === 1 ? "" : "s"}):`
+  ];
+  for (const issue3 of issues) {
+    const locParts = [];
+    if (issue3.line !== void 0) {
+      locParts.push(
+        `line ${issue3.line}${issue3.col !== void 0 ? `:${issue3.col}` : ""}`
+      );
+    }
+    if (issue3.path) locParts.push(issue3.path);
+    const loc = locParts.length > 0 ? `[${locParts.join(" \u2022 ")}] ` : "";
+    lines2.push(`  ${loc}${issue3.message}`);
+  }
+  return lines2.join("\n");
+}
+
+// src/config/loader/validate-core.ts
+function requireString(ctx, path42, raw, field) {
+  const v = raw[field];
+  if (typeof v !== "string") {
+    ctx.issues.push({
+      path: `${path42}.${field}`,
+      message: `${path42}.${field} must be a string, got ${describeType(v)}`,
+      line: findKeyLine(ctx.source, [...path42.split("."), field])
+    });
+    return null;
+  }
+  return v;
+}
+function optionalTypedDefault(ctx, path42, raw, type3) {
+  const v = raw.default;
+  if (v === void 0) return void 0;
+  const ok3 = type3 === "string" && typeof v === "string" || type3 === "number" && typeof v === "number" || type3 === "boolean" && typeof v === "boolean";
+  if (!ok3) {
+    ctx.issues.push({
+      path: `${path42}.default`,
+      message: `default must be a ${type3}, got ${describeType(v)}`,
+      line: findKeyLine(ctx.source, [...path42.split("."), "default"])
+    });
+    return void 0;
+  }
+  return v;
+}
+function optionalStringField(ctx, path42, raw, field) {
+  const v = raw[field];
+  if (v === void 0) return void 0;
+  if (typeof v !== "string") {
+    ctx.issues.push({
+      path: `${path42}.${field}`,
+      message: `${path42}.${field} must be a string, got ${describeType(v)}`,
+      line: findKeyLine(ctx.source, [...path42.split("."), field])
+    });
+    return void 0;
+  }
+  return v;
+}
+function validatePaletteName(ctx, path42, raw) {
+  const v = optionalStringField(ctx, path42, raw, "palette");
+  if (v === void 0) return void 0;
+  if (!ctx.allowedPalettes.has(v)) {
+    ctx.issues.push({
+      path: `${path42}.palette`,
+      message: `Unknown palette "${v}"${retiredThemeNote(v)}. Expected one of: ${[...ctx.allowedPalettes].sort().join(", ")}`,
+      line: findKeyLine(ctx.source, [...path42.split("."), "palette"])
+    });
+    return void 0;
+  }
+  return v;
+}
+function optionalEnum(ctx, path42, raw, field, allowed) {
+  const v = raw[field];
+  if (v === void 0) return void 0;
+  if (typeof v !== "string" || !allowed.includes(v)) {
+    ctx.issues.push({
+      path: `${path42}.${field}`,
+      message: `${path42}.${field} must be one of: ${allowed.join(", ")}; got ${describeValue(v)}`,
+      line: findKeyLine(ctx.source, [...path42.split("."), field])
+    });
+    return void 0;
+  }
+  return v;
+}
+function isPlainObject(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function describeType(v) {
+  if (v === null) return "null";
+  if (Array.isArray(v)) return "array";
+  return typeof v;
+}
+function describeValue(v) {
+  if (typeof v === "string") return JSON.stringify(v);
+  if (v === void 0) return "undefined";
+  return String(v);
+}
+function record(ctx, schema, path42, raw) {
+  if (!isPlainObject(raw)) {
+    ctx.issues.push({
+      path: path42,
+      message: `${path42} must be an object, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, path42.split("."))
+    });
+    return null;
+  }
+  rejectUnknownKeys(
+    ctx,
+    path42,
+    raw,
+    schema.noun,
+    new Set(Object.keys(schema.fields)),
+    refuseRemoved(ctx, schema.removed ?? {}, path42, raw)
+  );
+  return fields(ctx, schema.fields, path42, raw);
+}
+function refuseRemoved(ctx, removed, path42, raw) {
+  const present = Object.entries(removed).filter(
+    ([key]) => raw[key] !== void 0
+  );
+  for (const [key, pointer] of present) {
+    reject(ctx, `${path42}.${key}`, `${path42}.${key} was removed: ${pointer}`);
+  }
+  return new Set(present.map(([key]) => `${path42}.${key}`));
+}
+function fields(ctx, fieldMap, path42, raw) {
+  const specs = fieldMap;
+  const out = {};
+  let ok3 = true;
+  for (const [field, spec] of Object.entries(specs)) {
+    const value = spec.parse(ctx, path42, field, raw);
+    if (value !== void 0) out[field] = value;
+    else if (spec.required) ok3 = false;
+  }
+  return ok3 ? out : null;
+}
+var EMPTY_PATHS = /* @__PURE__ */ new Set();
+function rejectUnknownKeys(ctx, path42, raw, noun, allowed, spokenFor = EMPTY_PATHS) {
+  for (const key of Object.keys(raw)) {
+    if (!allowed.has(key) && !spokenFor.has(`${path42}.${key}`)) {
+      ctx.issues.push({
+        path: `${path42}.${key}`,
+        message: `Unknown ${noun} "${key}". Expected one of: ${[...allowed].join(", ")}`,
+        line: findKeyLine(ctx.source, [...path42.split("."), key])
+      });
+    }
+  }
+}
+function reject(ctx, path42, message) {
+  ctx.issues.push({
+    path: path42,
+    message,
+    line: findKeyLine(ctx.source, path42.split("."))
+  });
+  return null;
+}
+function oneOfPresent(ctx, schema, path42, raw) {
+  if (!isPlainObject(raw)) {
+    ctx.issues.push({
+      path: path42,
+      message: `${schema.noun} must be an object, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, path42.split("."))
+    });
+    return null;
+  }
+  const arms = schema.arms;
+  const keys2 = Object.keys(arms);
+  const present = Object.keys(raw).filter((k) => k in arms);
+  const unknown = Object.keys(raw).filter((k) => !(k in arms));
+  for (const k of unknown) {
+    ctx.issues.push({
+      path: `${path42}.${k}`,
+      message: `Unknown ${schema.noun} key "${k}". Expected exactly one of: ${keys2.join(", ")}`,
+      line: findKeyLine(ctx.source, [...path42.split("."), k])
+    });
+  }
+  if (present.length === 0) {
+    ctx.issues.push({
+      path: path42,
+      message: `${schema.noun} must declare exactly one of: ${keys2.join(", ")}`,
+      line: findKeyLine(ctx.source, path42.split("."))
+    });
+    return null;
+  }
+  if (present.length > 1) {
+    ctx.issues.push({
+      path: path42,
+      message: `${schema.noun} must declare exactly one of: ${keys2.join(", ")} (found: ${present.join(", ")})`,
+      line: findKeyLine(ctx.source, path42.split("."))
+    });
+    return null;
+  }
+  const key = present[0];
+  return arms[key].parse(ctx, `${path42}.${key}`, raw[key]);
+}
+function taggedUnion(ctx, schema, path42, raw) {
+  if (!isPlainObject(raw)) {
+    ctx.issues.push({
+      path: path42,
+      message: `${path42} must be an object, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, path42.split("."))
+    });
+    return null;
+  }
+  const tagValue = raw[schema.tag];
+  if (typeof tagValue !== "string") {
+    ctx.issues.push({
+      path: `${path42}.${schema.tag}`,
+      message: `${path42}.${schema.tag} must be a string, got ${describeType(tagValue)}`,
+      line: findKeyLine(ctx.source, path42.split("."))
+    });
+    return null;
+  }
+  const arms = schema.arms;
+  if (!Object.hasOwn(arms, tagValue)) {
+    const message = Object.hasOwn(schema.retired, tagValue) ? schema.retired[tagValue](raw) : `Unknown ${schema.noun} "${tagValue}". Expected one of: ${Object.keys(arms).join(", ")}`;
+    ctx.issues.push({
+      path: `${path42}.${schema.tag}`,
+      message,
+      line: findKeyLine(ctx.source, [...path42.split("."), schema.tag])
+    });
+    return null;
+  }
+  const arm2 = arms[tagValue];
+  const before = ctx.issues.length;
+  const parsed2 = arm2.parse(ctx, path42, raw);
+  const spokenFor = new Set(ctx.issues.slice(before).map((i) => i.path));
+  rejectUnknownKeys(
+    ctx,
+    path42,
+    raw,
+    `${tagValue} ${schema.memberNoun} key`,
+    arm2.keys,
+    spokenFor
+  );
+  return parsed2;
+}
+function armFacets(tag, tagValue, fieldMap) {
+  return {
+    json: withConst(objectJson(fieldMap), tag, tagValue),
+    keys: /* @__PURE__ */ new Set([tag, ...Object.keys(fieldMap)])
+  };
+}
+function lazy(thunk) {
+  return (...args) => thunk()(...args);
+}
+function refine(inner, ...checks) {
+  return (ctx, path42, raw) => {
+    const value = inner(ctx, path42, raw);
+    if (value === null) return null;
+    for (const check of checks) {
+      if (check.ok(value)) continue;
+      const { field, message } = check.issue(value);
+      const at = field === "" ? path42 : `${path42}.${field}`;
+      ctx.issues.push({
+        path: at,
+        message,
+        line: findKeyLine(ctx.source, at.split("."))
+      });
+      return null;
+    }
+    return value;
+  };
+}
+function optionalStringSpec() {
+  return {
+    required: false,
+    json: { type: "string" },
+    parse: (ctx, path42, field, raw) => optionalStringField(ctx, path42, raw, field)
+  };
+}
+function optionalBooleanSpec() {
+  return {
+    required: false,
+    json: { type: "boolean" },
+    parse: (ctx, path42, field, raw) => {
+      const v = raw[field];
+      if (v === void 0) return void 0;
+      if (typeof v !== "boolean") {
+        ctx.issues.push({
+          path: `${path42}.${field}`,
+          message: `${field} must be a boolean, got ${describeType(v)}`,
+          line: findKeyLine(ctx.source, [field])
+        });
+        return void 0;
+      }
+      return v;
+    }
+  };
+}
+function optionalIntSpec(bounds) {
+  const { min: min2, max: max2 } = bounds;
+  return {
+    required: false,
+    json: { type: "integer", minimum: min2, maximum: max2 },
+    parse: (ctx, path42, field, raw) => {
+      const v = raw[field];
+      if (v === void 0) return void 0;
+      if (typeof v !== "number" || !Number.isInteger(v) || v < min2 || v > max2) {
+        ctx.issues.push({
+          path: `${path42}.${field}`,
+          message: `${field} must be an integer between ${min2} and ${max2}, got ${describeValue(v)}`,
+          line: findKeyLine(ctx.source, [field])
+        });
+        return void 0;
+      }
+      return v;
+    }
+  };
+}
+function optionalNumberSpec(bounds = {}) {
+  const { min: min2 } = bounds;
+  return {
+    required: false,
+    json: { type: "number", ...min2 !== void 0 && { minimum: min2 } },
+    parse: (ctx, path42, field, raw) => {
+      const v = raw[field];
+      if (v === void 0) return void 0;
+      const bad = typeof v !== "number" || !Number.isFinite(v) || min2 !== void 0 && v < min2;
+      if (bad) {
+        const shape = min2 !== void 0 ? `a finite number >= ${min2}` : "a finite number";
+        ctx.issues.push({
+          path: `${path42}.${field}`,
+          message: `${field} must be ${shape}, got ${describeValue(v)}`,
+          line: findKeyLine(ctx.source, [field])
+        });
+        return void 0;
+      }
+      return v;
+    }
+  };
+}
+function paletteSpec() {
+  return {
+    required: false,
+    // Palette NAME membership is semantic (the allowed set is resolved at load
+    // from installed palettes, not a closed compile-time enum), so the schema
+    // checks only `type: string` — the same shape/meaning split the loader keeps.
+    json: { type: "string" },
+    parse: (ctx, path42, _field, raw) => validatePaletteName(ctx, path42, raw)
+  };
+}
+function requireStringSpec() {
+  return {
+    required: true,
+    json: { type: "string" },
+    parse: (ctx, path42, field, raw) => requireString(ctx, path42, raw, field) ?? void 0
+  };
+}
+function absolutePathProblem(where, value) {
+  return (0, import_node_path11.isAbsolute)(value) ? null : `${where} must be an absolute path (\`~\` and relative paths are not expanded), got ${JSON.stringify(value)}`;
+}
+function requireAbsolutePathSpec() {
+  return {
+    required: true,
+    json: { type: "string", pattern: "^/" },
+    parse: (ctx, at, field, raw) => {
+      const v = requireString(ctx, at, raw, field);
+      if (v === null) return void 0;
+      const problem = absolutePathProblem(`${at}.${field}`, v);
+      return problem === null ? v : reject(ctx, `${at}.${field}`, problem) ?? void 0;
+    }
+  };
+}
+function optionalEnumSpec(allowed) {
+  return {
+    required: false,
+    // [LAW:one-source-of-truth] `allowed` is the single source: `parse` checks
+    // membership against it, `json` lists it as the schema `enum`.
+    json: { enum: [...allowed] },
+    parse: (ctx, path42, field, raw) => optionalEnum(ctx, path42, raw, field, allowed)
+  };
+}
+function objectJson(fieldMap, opts = { closed: true }) {
+  const specs = fieldMap;
+  const properties = {};
+  const required = [];
+  for (const [field, spec] of Object.entries(specs)) {
+    properties[field] = spec.json;
+    if (spec.required) required.push(field);
+  }
+  return {
+    type: "object",
+    properties,
+    ...required.length > 0 && { required },
+    ...opts.closed && { additionalProperties: false }
+  };
+}
+function recordJson(schema) {
+  return objectJson(schema.fields);
+}
+function withConst(base, key, value) {
+  const b = base;
+  const properties = {
+    [key]: { const: value },
+    ...b.properties
+  };
+  const required = [key, ...b.required ?? []];
+  return { ...b, properties, required };
+}
+function taggedUnionJson(schema) {
+  const arms = schema.arms;
+  return { anyOf: Object.values(arms).map((arm2) => arm2.json) };
+}
+function oneOfPresentJson(schema) {
+  const arms = schema.arms;
+  return {
+    anyOf: Object.entries(arms).map(([key, arm2]) => ({
+      type: "object",
+      properties: { [key]: arm2.json },
+      required: [key],
+      additionalProperties: false
+    }))
+  };
+}
+
+// src/config/lanes.ts
+init_globals();
+var RENDERERS = ["claude", "tmux"];
+var IN_TMUX = 'ne .tmux.pane ""';
+var LANES = {
+  band: {
+    switch: { setting: "experimentalBand", on: true, inTmux: false },
+    label: "\u{1F9EA} band (A)",
+    handsOff: true,
+    rows: null
+  },
+  statusline: {
+    switch: { setting: "experimentalStatusline", on: true, inTmux: false },
+    label: "\u{1F9EA} statusline (B)",
+    handsOff: false,
+    rows: null
+  },
+  pane: {
+    switch: { setting: "experimentalPane", on: true, inTmux: false },
+    label: "\u{1F9EA} tmux pane (C)",
+    handsOff: true,
+    rows: null
+  },
+  tmuxStatus: {
+    switch: {
+      setting: "renderer",
+      on: "tmux",
+      inTmux: true
+    },
+    label: "tmux status line",
+    handsOff: true,
+    // tmux draws at most five status rows (`status` takes on, off, 2…5).
+    rows: 5
+  }
+};
+var LANE_NAMES = Object.keys(LANES);
+var TOGGLED_LANES = LANE_NAMES.filter(
+  (lane) => LANES[lane].switch.on === true
+);
+var MOVING_FPS = 30;
+var ANSWERING = { by: "request" };
+var DRAWING_VAR = "drawing";
+var drawingVar = (field) => `${DRAWING_VAR}.${field}`;
+var UNFOLLOWED = { subscribers: 0, fps: 0, shown: true };
+var laneFeedVar = (lane, field) => `feeds.${lane}.${field}`;
+function perLane(value) {
+  return Object.fromEntries(
+    LANE_NAMES.map((lane) => [lane, value(lane)])
+  );
+}
+var UNFOLLOWED_FEEDS = perLane(() => UNFOLLOWED);
+function parseLane(raw) {
+  return typeof raw === "string" && Object.hasOwn(LANES, raw) ? raw : null;
+}
+
+// src/config/menu-timeout.ts
+init_globals();
+var flashes = (count, seconds) => Array.from({ length: count * 2 }, (_, i) => ({ lit: i % 2 === 0, seconds }));
+var CLOSING_FLASH = [
+  ...flashes(3, 1),
+  ...flashes(3, 0.25)
+];
+var CLOSING_FLASH_SECONDS = CLOSING_FLASH.reduce(
+  (sum, { seconds }) => sum + seconds,
+  0
+);
+var MENU_TIMEOUT_RANGE = { min: 15, max: 600, step: 15 };
+var MENU_TIMEOUT_DEFAULT = 120;
+var closesAt = (since, timeoutS) => since + timeoutS;
+var flashBegins = (timeoutS) => timeoutS - CLOSING_FLASH_SECONDS;
+
+// src/config/globals-fields.ts
+var control = (label2, place, {
+  previews = [],
+  shown = "true"
+} = {}) => ({ label: label2, place, previews, shown });
+var enumValues = (members, optionDomain, facets = {}) => ({
+  spec: optionalEnumSpec(members),
+  domain: { from: members },
+  parse: (raw) => members.includes(raw) ? raw : null,
+  ...optionDomain !== void 0 && {
+    optionDomain: {
+      name: optionDomain,
+      members,
+      ...facets
+    }
+  }
+});
+var markTrials = (trials) => (option) => trials.includes(option) ? `\u{1F9EA} ${option}` : option;
+var boolValues = {
+  spec: optionalBooleanSpec(),
+  domain: "bool",
+  parse: parseSessionBoolean
+};
+var intValues = (range) => ({
+  spec: optionalIntSpec(range),
+  domain: range,
+  parse: (raw) => parseSessionInt(raw, range)
+});
+function enumSetting(members, floor2, shown, extra = {}) {
+  return {
+    kind: "session",
+    ...enumValues(members, extra.optionDomain, {
+      library: extra.library,
+      labelOf: extra.labelOf
+    }),
+    floor: floor2,
+    control: shown,
+    themeDefault: extra.themeDefault ?? false
+  };
+}
+function boolSetting(floor2, shown) {
+  return {
+    kind: "session",
+    ...boolValues,
+    floor: floor2,
+    control: shown,
+    themeDefault: false
+  };
+}
+function intSetting(range, floor2, shown) {
+  return {
+    kind: "session",
+    ...intValues(range),
+    floor: floor2,
+    control: shown,
+    themeDefault: false
+  };
+}
+function selection(sessionKey, spec, domain, shown, extra = {}) {
+  return {
+    kind: "selection",
+    sessionKey,
+    spec,
+    domain,
+    control: shown,
+    themeDefault: extra.themeDefault ?? false
+  };
+}
+var text3 = (spec) => ({
+  kind: "text",
+  spec
+});
+var colorCompatibilitySpec = {
+  required: false,
+  json: { enum: [...COLOR_COMPATIBILITIES] },
+  parse: (ctx, path42, field, raw) => {
+    if (raw[field] === "auto") {
+      ctx.issues.push({
+        path: `${path42}.${field}`,
+        message: `${path42}.${field}: "auto" is not supported \u2014 the render daemon runs detached, so terminal detection would read the daemon's environment, not your terminal's. Pick an explicit depth: ${COLOR_COMPATIBILITIES.join(", ")}`,
+        line: findKeyLine(ctx.source, [...path42.split("."), field])
+      });
+      return void 0;
+    }
+    return optionalEnum(ctx, path42, raw, field, COLOR_COMPATIBILITIES);
+  }
+};
+var paletteOrRuleSpec = {
+  required: false,
+  // Shape-only, exactly as `paletteSpec`'s schema facet is: the allowed names
+  // are resolved at load from installed palettes, and a rule is a string too.
+  json: { type: "string" },
+  parse: (ctx, path42, field, raw) => {
+    const v = optionalStringField(ctx, path42, raw, field);
+    return isExpression(v) ? v : validatePaletteName(ctx, path42, raw);
+  }
+};
+var effectOrRuleSpec = {
+  required: false,
+  json: {
+    anyOf: [{ enum: [...EFFECT_NAMES] }, { type: "string", pattern: "\\{\\{" }]
+  },
+  parse: (ctx, path42, field, raw) => {
+    const v = raw[field];
+    return typeof v === "string" && isExpression(v) ? v : optionalEnum(ctx, path42, raw, field, EFFECT_NAMES);
+  }
+};
+var MENU_GLYPH = /^[^\r\n]*\S[^\r\n]*$/u;
+var CLOSE_GLYPH = new RegExp(
+  `^(?:${DOOR_CLOSE_GLYPH}|${DISCLOSURE_GLYPH_CLOSE})[\\uFE0E\\uFE0F]?$`,
+  "u"
+);
+var menuGlyphSpec = {
+  required: false,
+  json: {
+    type: "string",
+    pattern: MENU_GLYPH.source,
+    not: { pattern: CLOSE_GLYPH.source }
+  },
+  parse: (ctx, path42, field, raw) => {
+    const v = optionalStringField(ctx, path42, raw, field);
+    if (v === void 0 || MENU_GLYPH.test(v) && !CLOSE_GLYPH.test(v))
+      return v;
+    ctx.issues.push({
+      path: `${path42}.${field}`,
+      message: `${path42}.${field}: must be one line of visible text other than a close glyph ("${DOOR_CLOSE_GLYPH}", "${DISCLOSURE_GLYPH_CLOSE}") \u2014 the settings menu needs a glyph to click`,
+      line: findKeyLine(ctx.source, [...path42.split("."), field])
+    });
+    return void 0;
+  }
+};
+var LANE_ROWS = Object.fromEntries(
+  TOGGLED_LANES.map((lane) => [
+    LANES[lane].switch.setting,
+    boolSetting(false, control(LANES[lane].label, "toggles"))
+  ])
+);
+var RENDERER_DESCRIPTIONS = {
+  claude: "Claude Code's status line",
+  tmux: "the tmux status line, while this pane is shown"
+};
+var RENDERER_LIBRARY = {
+  groups: [{ id: "renderer", label: "draw the bar in" }],
+  entry: (option) => ({
+    group: "renderer",
+    description: RENDERER_DESCRIPTIONS[option]
+  })
+};
+var GLOBAL_FIELDS = {
+  // The config default for the base theme: a theme NAME, or a rule choosing
+  // one per render (brandon-themes-dzl). A placement's `theme` setting other
+  // than `bar` ignores it.
+  palette: selection(
+    "theme",
+    paletteOrRuleSpec,
+    { themes: "themes" },
+    control("\u{1F3A8} theme", "door")
+  ),
+  // The config default for the PRESET — a named fragment from `presets:`
+  // whose globals and root the session renders. Membership in the merged
+  // `presets` map is cross-ref's. [LAW:one-source-of-truth] A preset's own
+  // globals may NOT carry it: a
+  // preset selecting a preset is a second, cyclic authority over which is
+  // active. Its control sits on the door's first line, one click away:
+  // switching arrangement is what people open the menu for.
+  preset: selection(
+    "preset",
+    optionalStringSpec(),
+    { from: "presets" },
+    control("\u25A6 preset", "door", { previews: ["layout", "presetDelete"] })
+  ),
+  // The config default for the STYLE (a named theme adaptation from
+  // `styles:`), or a rule choosing one by data (brandon-looks-pe6).
+  // Membership in the merged `styles` map is cross-ref's, which exempts a rule.
+  style: selection(
+    "style",
+    optionalStringSpec(),
+    { from: "styles" },
+    control("\u25D0 style", "gear", { previews: ["palette"] }),
+    { themeDefault: true }
+  ),
+  // The looping EFFECT the whole bar wears (brandon-effects-2gka.d2i): `none`
+  // or a rich-js catalogue loop name, or a rule rendering one.
+  effect: selection(
+    "effect",
+    effectOrRuleSpec,
+    { from: EFFECT_NAMES },
+    control("\u2728 effect", "look")
+  ),
+  // The powerline cap/separator SHAPE — one of rich-js's bundled joiners.
+  endcaps: enumSetting(
+    ENDCAPS_SHAPES,
+    "powerline",
+    control("\u2726 endcaps", "look"),
+    {
+      optionDomain: "endcaps"
+    }
+  ),
+  // Which theme role each ROW of the closed bar wears, in order — a named
+  // entry of VARIATIONS (src/themes/decor.ts): rows in `secondary`, then
+  // `accent` by default (brandon-theme-picker-bgw.7g6).
+  variation: enumSetting(
+    VARIATION_NAMES,
+    "accent",
+    control("\u{1F3BC} variation", "gear", {
+      previews: ["layout"]
+    }),
+    {
+      optionDomain: "variations",
+      labelOf: markTrials(TRIAL_VARIATION_NAMES),
+      themeDefault: true
+    }
+  ),
+  // Which of its role's shades each CELL of the closed bar wears — a named
+  // position of the shade dial, SHADES (src/themes/decor.ts): a window of the
+  // role's darkenings and lightenings, or its muted form. The default is the
+  // window centred on each role's own colour — "the default will be 'middle'
+  // (standard role)" (candybar-theme-colours-6fq5.e5n).
+  shade: enumSetting(
+    SHADE_NAMES,
+    "middle",
+    control("\u{1F506} shade", "gear", {
+      previews: ["layout"]
+    }),
+    {
+      optionDomain: "shades",
+      labelOf: markTrials(TRIAL_SHADE_NAMES),
+      themeDefault: true
+    }
+  ),
+  // Whether a placement that appears mid-session fades in over 20 s
+  // (brandon-effects-2gka.631) and one that leaves dissolves out over 30 s
+  // (brandon-effects-2gka.3vt). Off: a bloom is a look somebody chooses.
+  transitions: boolSetting(false, control("fade in/out", "look")),
+  // How fast every decorative animation runs — the effects above, fades and
+  // dissolves, and a template's `frames`/`stepped` (brandon-menus-sjhy.nt2):
+  // the rate the session's animation clock advances against the wall clock
+  // (`ANIMATION_SPEEDS`, src/render/effect.ts `SessionEffects.clockAt`).
+  animationSpeed: enumSetting(
+    ANIMATION_SPEED_NAMES,
+    "1x",
+    control("speed", "look")
+  ),
+  // Whether a root row that exceeds the usable width soft-wraps, between
+  // cells and through a cell wider than a line (the legacy display.autoWrap).
+  // False renders each row as one unbounded line, overflow off-screen.
+  autoWrap: boolSetting(true, control("wrap", "config")),
+  // Spaces synthesized INSIDE each segment cell per side (intra-cell, within
+  // the bg fill — the legacy display.padding). Templates author content; this
+  // chrome is applied structurally at the cell-formation seam. Bounded above
+  // so a config value can never drive an unbounded `" ".repeat` in the daemon
+  // [LAW:no-silent-failure] — the file, the click and the session pick all
+  // honour PADDING_RANGE.
+  padding: intSetting(
+    { ...PADDING_RANGE, step: 1 },
+    1,
+    control("padding", "config")
+  ),
+  // Whether the daemon renders its update notice — the row saying newer source
+  // or a newer release exists than the code rendering the bar
+  // (src/daemon/update-notice.ts). The notice's own `[disable]` writes `false`
+  // here; a per-session, per-version dismissal lives in SessionState instead.
+  updateNotice: boolSetting(true, control("update notice", "config")),
+  // Seconds without a click before every open menu flashes and closes
+  // (src/config/menu-timeout.ts, src/daemon/menu-idle.ts).
+  menuTimeout: intSetting(
+    MENU_TIMEOUT_RANGE,
+    MENU_TIMEOUT_DEFAULT,
+    control("menu timeout", "config")
+  ),
+  // Where the bar is drawn (RENDERERS, src/config/lanes.ts). Offered only to a
+  // session inside tmux: outside it, `claude` is the one renderer there is,
+  // and a session there draws in Claude Code's status line whatever this
+  // says, leaving the setting the sessions share as it is.
+  renderer: enumSetting(
+    RENDERERS,
+    "claude",
+    control("renderer", "config", { shown: IN_TMUX }),
+    { optionDomain: "renderers", library: RENDERER_LIBRARY }
+  ),
+  ...LANE_ROWS,
+  // The color depth rich-js downsamples output to (the legacy
+  // display.colorCompatibility) — truecolor by default, deliberately NOT the
+  // legacy "auto", which the detached daemon cannot honour (see
+  // COLOR_COMPATIBILITIES). Set in the config file only: Brandon cut the
+  // control (brandon-menu-ia-q30.5y4).
+  colorCompatibility: {
+    kind: "config",
+    ...enumValues(COLOR_COMPATIBILITIES, "colorCompatibilities"),
+    // Its own spec only for the migration-pointing "auto" refusal above.
+    spec: colorCompatibilitySpec,
+    floor: "truecolor"
+  },
+  // The text segments render when their value is empty.
+  default_empty_value: text3(optionalStringSpec()),
+  // The cell separator `plain` draws between segments. Absent means the glyph
+  // rich-js's bundled `plain` joiner owns — no floor here, since naming one
+  // would be a second copy of a constant that lives in rich-js.
+  default_separator: text3(optionalStringSpec()),
+  // The settings menu's door glyph (🍫 by default, synthesized by the menu).
+  menuGlyph: text3(menuGlyphSpec)
+};
+var ROWS = Object.entries(GLOBAL_FIELDS);
+var VALUED_FIELDS = ROWS.filter(
+  ([, row2]) => row2.kind === "session" || row2.kind === "config"
+).map(([field]) => field);
+var CONTROLLED_FIELDS = ROWS.filter(
+  ([, row2]) => row2.kind === "session" || row2.kind === "selection"
+).map(([field]) => field);
+var THEME_DEFAULT_FIELDS = ROWS.filter(
+  ([, row2]) => (row2.kind === "session" || row2.kind === "selection") && row2.themeDefault
+).map(([field]) => field);
+var NAMED_DOMAINS = ROWS.flatMap(
+  ([, row2]) => "optionDomain" in row2 && row2.optionDomain !== void 0 ? [row2.optionDomain] : []
+);
+function valuedRow(field) {
+  return GLOBAL_FIELDS[field];
+}
+var floorOf2 = (field) => valuedRow(field).floor;
+function wireKindOf(field) {
+  const row2 = GLOBAL_FIELDS[field];
+  if (row2.kind === "text") return "string";
+  const { domain } = row2;
+  return domain === "bool" ? "boolean" : typeof domain === "object" && "min" in domain ? "number" : "string";
+}
+
+// src/config/menu-places.ts
+init_globals();
+
+// src/config/setting-projections.ts
+init_globals();
+var effectiveVarOf = (name) => `${name}.effective`;
+var nameOf = (field) => {
+  const row2 = GLOBAL_FIELDS[field];
+  return row2.kind === "selection" ? row2.sessionKey : field;
+};
+var SETTINGS = Object.fromEntries(
+  CONTROLLED_FIELDS.map((field) => {
+    const name = nameOf(field);
+    return [
+      name,
+      {
+        configKey: field,
+        sessionKey: name,
+        effectiveVar: effectiveVarOf(name),
+        ...GLOBAL_FIELDS[field].control
+      }
+    ];
+  })
+);
+var SETTING_NAMES = Object.keys(SETTINGS);
+var SETTING_PROJECTIONS = Object.values(SETTINGS);
+var CONFIG_ONLY_PROJECTIONS = VALUED_FIELDS.filter((field) => GLOBAL_FIELDS[field].kind === "config").map(
+  (field) => ({ configKey: field, effectiveVar: effectiveVarOf(field) })
+);
+var CONFIG_ONLY_KEYS = new Set(
+  CONFIG_ONLY_PROJECTIONS.map((p2) => p2.configKey)
+);
+var CONFIG_KEY_TO_EFFECTIVE_VAR = new Map(
+  [...SETTING_PROJECTIONS, ...CONFIG_ONLY_PROJECTIONS].map((p2) => [
+    p2.configKey,
+    p2.effectiveVar
+  ])
+);
+var SESSION_KEY_TO_EFFECTIVE_VAR = new Map(SETTING_PROJECTIONS.map((p2) => [p2.sessionKey, p2.effectiveVar]));
+function perSetting(value) {
+  return Object.fromEntries(
+    SETTING_NAMES.map((name) => [name, value(name)])
+  );
+}
+var SESSION_KEY_TO_SETTING = new Map(
+  SETTING_NAMES.map((name) => [SETTINGS[name].sessionKey, name])
+);
+
+// src/config/menu-places.ts
+var TABS = [
+  { member: "session", label: "\u26A1 session" },
+  { member: "look", label: "\u{1F3A8} look" },
+  // `📐`, because `▦` is the preset control's glyph.
+  { member: "layout", label: "\u{1F4D0} layout" },
+  { member: "config", label: "\u2699 config" },
+  { member: "tools", label: "\u{1F9F0} tools" }
+];
+var TAB_LABEL = Object.fromEntries(
+  TABS.map((t2) => [t2.member, t2.label])
+);
+var SUBMENUS = {
+  gear: { beside: "theme", trigger: "\u2699" },
+  toggles: { beside: "updateNotice", trigger: "\u{1F9EA} toggles" }
+};
+var SUBMENU_NAMES = Object.keys(SUBMENUS);
+var PLACE = perSetting(
+  (name) => SETTINGS[name].place
+);
+var isSubmenu = (place) => Object.hasOwn(SUBMENUS, place);
+var within = (place, container) => place === container || isSubmenu(place) && within(PLACE[SUBMENUS[place].beside], container);
+var placePath = (place) => isSubmenu(place) ? `${placePath(PLACE[SUBMENUS[place].beside])} \u203A ${SUBMENUS[place].trigger}` : place === "door" ? "first line" : TAB_LABEL[place];
+var settingMenuPath = (name) => placePath(PLACE[name]);
+var settingsByPlace = () => ["door", ...TABS.map((t2) => t2.member)].flatMap((top) => [
+  top,
+  ...SUBMENU_NAMES.filter((s) => within(s, top))
+]).map((place) => ({
+  path: placePath(place),
+  names: SETTING_NAMES.filter((name) => PLACE[name] === place)
+})).filter(({ names }) => names.length > 0);
+var laneOffReason = (lane) => {
+  const { setting, on: on2, inTmux: inTmux2 } = LANES[lane].switch;
+  return `${LANES[lane].label} is off \u2014 turn it on in the settings menu's ${settingMenuPath(setting)}, or set globals.${setting}: ${JSON.stringify(on2)}${inTmux2 ? "; it runs only for a session inside a tmux pane" : ""}`;
+};
+
+// src/config/loader/globals.ts
+var GLOBALS_FIELDS = Object.fromEntries(
+  Object.entries(GLOBAL_FIELDS).map(([field, row2]) => [field, row2.spec])
+);
+function settingControlDomain(field) {
+  return rangedDomain(GLOBAL_FIELDS[field]);
+}
+function rangedDomain(row2) {
+  return "optionDomain" in row2 && row2.optionDomain !== void 0 ? { from: row2.optionDomain.name } : row2.domain;
+}
+function fragmentRejection(description, message) {
+  return {
+    required: false,
+    // Always-fail: JSON Schema's `not: {}` matches nothing, so an editor flags
+    // the key at the same moment the validator does.
+    json: { not: {}, description: `not allowed here \u2014 ${description}` },
+    parse: (ctx, path42, field, raw) => {
+      if (raw[field] !== void 0) {
+        ctx.issues.push({
+          path: `${path42}.${field}`,
+          message: message(`${path42}.${field}`),
+          line: findKeyLine(ctx.source, [...path42.split("."), field])
+        });
+      }
+      return void 0;
+    }
+  };
+}
+function nestedPresetSpec(subject) {
+  return fragmentRejection(
+    `${subject} cannot select a preset`,
+    (at) => `${at}: ${subject} cannot select a preset. Which preset is active is resolved once, as session pick over globals.preset over "default"; a fragment naming another would be a second authority over that. Set the default arrangement in the top-level globals.preset instead.`
+  );
+}
+function nestedMenuGlyphSpec(subject) {
+  return fragmentRejection(
+    `${subject} cannot change the settings menu glyph`,
+    (at) => `${at}: ${subject} cannot change the settings menu glyph \u2014 one menu is shared by every preset. Set it in the top-level globals.menuGlyph instead.`
+  );
+}
+function nameOnlySpec(spec, subject, why2) {
+  return {
+    ...spec,
+    json: { ...spec.json, not: { pattern: "\\{\\{" } },
+    parse: (ctx, path42, field, raw) => {
+      const v = raw[field];
+      if (typeof v === "string" && isExpression(v)) {
+        ctx.issues.push({
+          path: `${path42}.${field}`,
+          message: `${path42}.${field}: a rule is not allowed here \u2014 ${subject} ${why2}, so it names a value. Write the rule in globals.${field} (or a preset's globals.${field}) instead.`,
+          line: findKeyLine(ctx.source, [...path42.split("."), field])
+        });
+        return void 0;
+      }
+      return spec.parse(ctx, path42, field, raw);
+    }
+  };
+}
+var REMOVED_GLOBALS = {
+  default_bg: "nothing reads it \u2014 a segment with no `bg:` wears the decoration tint of its place in the bar. Delete the key, and author `bg:` on the segments that need a fixed colour.",
+  default_fg: "nothing reads it \u2014 a segment with no `fg:` wears text chosen for contrast against its background. Delete the key, and author `fg:` on the segments that need a fixed colour.",
+  default_truncate_marker: 'nothing reads it \u2014 a segment clipped to its `width:` always ends in "\u2026". Delete the key.',
+  // brandon-menu-ia-q30.xuz: renamed, with no shim. `style` is absent here
+  // because it is still a key — it names what `style` did, and an endcaps
+  // value in it is refused by value (cross-ref.ts).
+  look: 'it was renamed "style" \u2014 write the same name as style: "<name>"',
+  progression: 'it was renamed "variation", and its values with it: accent (was secondary-accent), duo (was primary-secondary), mono (was primary)',
+  // The tmux status line became a renderer the bar fully supports, so its
+  // experimental toggle is a value of the renderer setting.
+  // [LAW:one-source-of-truth] Where the control is comes from the menu's map.
+  experimentalTmuxStatus: `it became the renderer setting \u2014 write renderer: "tmux" (or pick tmux in ${settingMenuPath("renderer")} \u203A renderer, from a session inside tmux)`,
+  // Brandon cut ascii mode: the bar draws Nerd Font glyphs, and the doctor's
+  // nerdFont check names the font that lacks them.
+  charset: "the bar always draws Nerd Font glyphs. Delete the key; `cc-candybar doctor` names what your terminal's font is missing."
+};
+var GLOBALS_SCHEMA = {
+  noun: "globals key",
+  fields: GLOBALS_FIELDS,
+  removed: REMOVED_GLOBALS
+};
+var PRESET_FRAGMENT_REJECTIONS = {
+  preset: nestedPresetSpec("a preset"),
+  menuGlyph: nestedMenuGlyphSpec("a preset")
+};
+var PRESET_GLOBALS_SCHEMA = {
+  noun: "preset globals key",
+  fields: { ...GLOBALS_FIELDS, ...PRESET_FRAGMENT_REJECTIONS },
+  removed: REMOVED_GLOBALS
+};
+function isPresetGlobalsField(key) {
+  return isGlobalsField(key) && !(key in PRESET_FRAGMENT_REJECTIONS);
+}
+var EDIT_GLOBALS_WHY = "is decided later than any rule could be settled";
+var EDIT_GLOBALS_SCHEMA = {
+  noun: "editGlobals key",
+  removed: REMOVED_GLOBALS,
+  fields: {
+    ...GLOBALS_FIELDS,
+    preset: nestedPresetSpec("the editGlobals fragment"),
+    menuGlyph: nestedMenuGlyphSpec("the editGlobals fragment"),
+    palette: nameOnlySpec(
+      GLOBALS_FIELDS.palette,
+      "the editGlobals fragment",
+      EDIT_GLOBALS_WHY
+    ),
+    style: nameOnlySpec(
+      GLOBALS_FIELDS.style,
+      "the editGlobals fragment",
+      EDIT_GLOBALS_WHY
+    ),
+    effect: nameOnlySpec(
+      GLOBALS_FIELDS.effect,
+      "the editGlobals fragment",
+      EDIT_GLOBALS_WHY
+    )
+  }
+};
+var THEME_DEFAULT_SCHEMA = {
+  noun: "theme default key",
+  fields: {
+    ...Object.fromEntries(
+      THEME_DEFAULT_FIELDS.map((f) => [f, GLOBALS_FIELDS[f]])
+    ),
+    style: nameOnlySpec(
+      GLOBALS_FIELDS.style,
+      "a theme's default",
+      "is the look that theme wears by name"
+    )
+  }
+};
+function validateThemeDefaults(ctx, raw) {
+  if (!isPlainObject(raw)) {
+    ctx.issues.push({
+      path: "themeDefaults",
+      message: `themeDefaults must be an object mapping theme names to { shade, variation, style }, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, ["themeDefaults"])
+    });
+    return {};
+  }
+  const out = {};
+  for (const [theme24, value] of Object.entries(raw)) {
+    const path42 = `themeDefaults.${theme24}`;
+    if (!ctx.allowedPalettes.has(theme24)) {
+      ctx.issues.push({
+        path: path42,
+        message: `${path42}: "${theme24}" is not an installed theme${retiredThemeNote(theme24)}. Expected one of: ${[...ctx.allowedPalettes].sort().join(", ")}`,
+        line: findKeyLine(ctx.source, ["themeDefaults", theme24])
+      });
+      continue;
+    }
+    const parsed2 = record(ctx, THEME_DEFAULT_SCHEMA, path42, value);
+    if (parsed2 !== null) out[theme24] = parsed2;
+  }
+  return out;
+}
+function validateGlobals(ctx, path42, raw) {
+  if (raw === void 0) return {};
+  return record(ctx, GLOBALS_SCHEMA, path42, raw) ?? {};
+}
+function validatePresetGlobals(ctx, path42, raw) {
+  return record(ctx, PRESET_GLOBALS_SCHEMA, path42, raw) ?? {};
+}
+function presetGlobalsJson() {
+  return recordJson(PRESET_GLOBALS_SCHEMA);
+}
+function validateEditGlobals(ctx, path42, raw) {
+  return record(ctx, EDIT_GLOBALS_SCHEMA, path42, raw) ?? {};
+}
+var GLOBALS_FIELD_NAMES = new Set(
+  Object.keys(GLOBALS_FIELDS)
+);
+function isGlobalsField(key) {
+  return GLOBALS_FIELD_NAMES.has(key);
+}
+function removedGlobalPointer(key) {
+  return Object.hasOwn(REMOVED_GLOBALS, key) ? REMOVED_GLOBALS[key] : void 0;
+}
+function listGlobalsFieldNames() {
+  return [...GLOBALS_FIELD_NAMES];
+}
+var NUMERIC_GLOBALS_FLOORS = new Map(
+  Object.entries(GLOBAL_FIELDS).flatMap(
+    ([field, row2]) => "floor" in row2 && typeof row2.floor === "number" ? [[field, row2.floor]] : []
+  )
+);
+function numericGlobalsSeeds(globals) {
+  const seeds = /* @__PURE__ */ new Map();
+  for (const [field, floor2] of NUMERIC_GLOBALS_FLOORS) {
+    const declared = globals[field];
+    seeds.set(field, typeof declared === "number" ? declared : floor2);
+  }
+  return seeds;
+}
+
+// src/daemon/setting-drafts.ts
+init_globals();
+
+// src/config/loader/persist-target.ts
+init_globals();
+var SEGMENT_PALETTE_KEY = /^segments\.([^.]+)\.palette$/;
+var PRESET_ROOT_KEY = /^presets\.(.+)\.root$/;
+var PRESET_GLOBALS_KEY = /^presets\.(.+)\.globals\.([^.]+)$/;
+var THEME_DEFAULT_KEY = /^themeDefaults\.(.+)\.([^.]+)$/;
+function presetRootKey(name) {
+  return `presets.${name}.root`;
+}
+function themeDefaultKey(theme24, field) {
+  return `themeDefaults.${theme24}.${field}`;
+}
+var isThemeDefaultField = (key) => THEME_DEFAULT_FIELDS.includes(key);
+function presetGlobalsKey(name, field) {
+  return `presets.${name}.globals.${field}`;
+}
+function parsePersistTarget(key) {
+  if (isGlobalsField(key)) return { scope: "globals", field: key };
+  const segmentMatch = SEGMENT_PALETTE_KEY.exec(key);
+  if (segmentMatch)
+    return { scope: "segment-palette", segment: segmentMatch[1] };
+  const globalsMatch = PRESET_GLOBALS_KEY.exec(key);
+  if (globalsMatch && isPresetGlobalsField(globalsMatch[2])) {
+    return {
+      scope: "preset-globals",
+      preset: globalsMatch[1],
+      field: globalsMatch[2]
+    };
+  }
+  const themeMatch = THEME_DEFAULT_KEY.exec(key);
+  if (themeMatch && isThemeDefaultField(themeMatch[2])) {
+    return {
+      scope: "theme-default",
+      theme: themeMatch[1],
+      field: themeMatch[2]
+    };
+  }
+  const presetMatch = PRESET_ROOT_KEY.exec(key);
+  return presetMatch ? { scope: "preset-root", preset: presetMatch[1] } : null;
+}
+function persistPath(target) {
+  switch (target.scope) {
+    case "globals":
+      return ["globals", target.field];
+    case "preset-globals":
+      return ["presets", target.preset, "globals", target.field];
+    case "segment-palette":
+      return ["segments", target.segment, "palette"];
+    case "theme-default":
+      return ["themeDefaults", target.theme, target.field];
+  }
+}
+
+// src/config/presets.ts
+init_globals();
+
+// src/config/root.ts
+init_globals();
+var ROW_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+function positionalRowName(index) {
+  return `#${index + 1}`;
+}
+var EMPTY_ROWS = { rows: {} };
+function isRowsFragment(fragment) {
+  return "rows" in fragment;
+}
+function positionalRows(rows) {
+  return Object.fromEntries(rows.map((row2, i) => [positionalRowName(i), row2]));
+}
+function rootOf2(node) {
+  if (node.kind === "container" && node.direction === "vertical") {
+    const { kind, direction, children: children2, ...own2 } = node;
+    return { ...own2, rows: positionalRows(children2) };
+  }
+  const { when: when2, ...rest2 } = node;
+  return {
+    ...when2 !== void 0 && { when: when2 },
+    rows: positionalRows([rest2])
+  };
+}
+function rootNode(root) {
+  const { rows, ...own2 } = root;
+  return {
+    kind: "container",
+    direction: "vertical",
+    children: Object.values(rows),
+    ...own2
+  };
+}
+function fragmentNode(fragment) {
+  return isRowsFragment(fragment) ? rootNode(fragment) : fragment;
+}
+function* fragmentNodePaths(fragment, key) {
+  if (!isRowsFragment(fragment)) {
+    yield* walkNodePaths(fragment, key);
+    return;
+  }
+  yield [rootNode(fragment), key];
+  for (const [name, row2] of Object.entries(fragment.rows)) {
+    yield* walkNodePaths(row2, `${key}.rows.${name}`);
+  }
+}
+function mergeRoot(fragment, base) {
+  return isRowsFragment(fragment) ? { ...base, ...fragment, rows: { ...base.rows, ...fragment.rows } } : rootOf2(fragment);
+}
+function insertCells(root, cells) {
+  return cells.reduce(
+    (acc, cell3) => {
+      const id2 = cell3.id ?? cell3.seg;
+      const placed2 = [...walkNodes(rootNode(acc.root))].flatMap(
+        (node2) => node2.kind === "segment" ? [node2] : []
+      );
+      if (placed2.some(
+        (node2) => node2.name === cell3.seg && (cell3.id === void 0 || placementId(node2) === cell3.id)
+      ))
+        return acc;
+      const held = placed2.find((node2) => placementId(node2) === id2);
+      if (held !== void 0)
+        return refuse2(
+          acc,
+          cell3,
+          `as "${id2}", but placement "${id2}" is already segment "${held.name}" \u2014 give the cell its own id`
+        );
+      const node = {
+        kind: "segment",
+        name: cell3.seg,
+        ...cell3.id !== void 0 && { id: cell3.id },
+        insertedBy: cell3.by
+      };
+      const rows = Object.entries(acc.root.rows).map(
+        ([name, row2]) => [
+          name,
+          row2,
+          besideRow(row2, cell3.anchor, node, cell3.relation)
+        ]
+      );
+      return rows.some(([, , placed3]) => placed3 !== null) ? {
+        ...acc,
+        root: {
+          ...acc.root,
+          rows: Object.fromEntries(
+            rows.map(([name, row2, placed3]) => [name, placed3 ?? row2])
+          )
+        }
+      } : refuse2(
+        acc,
+        cell3,
+        `${cell3.relation} "${cell3.anchor}", but there is no placement "${cell3.anchor}"`
+      );
+    },
+    { root, unplaced: [] }
+  );
+}
+function refuse2(acc, cell3, reason) {
+  return { ...acc, unplaced: [...acc.unplaced, { cell: cell3, reason }] };
+}
+function besideRow(row2, anchor, cell3, relation) {
+  if (row2.kind === "segment" && placementId(row2) === anchor) {
+    const { when: when2, ...rest2 } = row2;
+    return {
+      kind: "container",
+      direction: "horizontal",
+      children: relation === "before" ? [cell3, rest2] : [rest2, cell3],
+      ...when2 !== void 0 && { when: when2 }
+    };
+  }
+  return row2.kind === "container" ? beside(row2, anchor, cell3, relation) : besideInBody(row2, anchor, cell3, relation);
+}
+function beside(node, anchor, cell3, relation) {
+  const at = node.children.findIndex(
+    (child) => child.kind === "segment" && placementId(child) === anchor
+  );
+  if (at >= 0) {
+    const cut = relation === "before" ? at : at + 1;
+    const { when: when2 } = node.children[at];
+    return {
+      ...node,
+      children: [
+        ...node.children.slice(0, cut),
+        { ...cell3, ...when2 !== void 0 && { when: when2 } },
+        ...node.children.slice(cut)
+      ]
+    };
+  }
+  for (const [i, child] of node.children.entries()) {
+    const next = child.kind === "container" ? beside(child, anchor, cell3, relation) : besideInBody(child, anchor, cell3, relation);
+    if (next !== null) {
+      return {
+        ...node,
+        children: node.children.map((c, j) => j === i ? next : c)
+      };
+    }
+  }
+  return null;
+}
+function besideInBody(node, anchor, cell3, relation) {
+  let found = false;
+  const next = mapOpens(node, (body) => {
+    const placed2 = beside(body, anchor, cell3, relation);
+    found = placed2 !== null;
+    return placed2 ?? body;
+  });
+  return found ? next : null;
+}
+function restages(fragment) {
+  if (!isRowsFragment(fragment)) return true;
+  const { rows, ...own2 } = fragment;
+  return Object.values(own2).some((v) => v !== void 0) || Object.keys(rows).length > 0;
+}
+
+// src/config/presets.ts
+var PRESET_FLOOR = "default";
+var FLOOR_FRAGMENT = {};
+function presetNames(presets) {
+  return [.../* @__PURE__ */ new Set([PRESET_FLOOR, ...Object.keys(presets)])];
+}
+function effectivePresetName(sessionPreset, globalsPreset, declaredPresets) {
+  return effectiveMemberName(
+    void 0,
+    sessionPreset,
+    globalsPreset,
+    PRESET_FLOOR,
+    declaredPresets
+  );
+}
+function presetByName(presets, name) {
+  const preset = { [PRESET_FLOOR]: FLOOR_FRAGMENT, ...presets }[name];
+  if (preset === void 0) {
+    throw new Error(
+      `Preset "${name}" is not declared in this config \u2014 effectivePresetName collapses unknown names to "${PRESET_FLOOR}", which always resolves; a miss here means a raw name reached this function without going through that resolution`
+    );
+  }
+  return preset;
+}
+function presetRoot(config2, name) {
+  const fragment = presetByName(config2.presets, name).root ?? EMPTY_ROWS;
+  return {
+    node: rootNode(mergeRoot(fragment, config2.root)),
+    path: restages(fragment) ? `presets.${name}.root` : "root"
+  };
+}
+function placeInserts(config2, cells, authored) {
+  if (cells.length === 0) return { config: config2, notices: [] };
+  const own2 = insertCells(config2.root, cells);
+  const restaged = Object.entries(config2.presets).filter(([, preset]) => restages(preset.root ?? EMPTY_ROWS)).map(([name, preset]) => ({
+    name,
+    preset,
+    ...insertCells(mergeRoot(preset.root ?? EMPTY_ROWS, config2.root), cells)
+  }));
+  const missed = /* @__PURE__ */ new Map();
+  const miss = (tree) => ({ cell: cell3, reason }) => {
+    const reasons = missed.get(cell3) ?? /* @__PURE__ */ new Map();
+    reasons.set(reason, [...reasons.get(reason) ?? [], tree]);
+    missed.set(cell3, reasons);
+  };
+  (authored.root ? own2.unplaced : []).forEach(miss("the root"));
+  for (const { name, unplaced } of restaged.filter(
+    ({ name: name2 }) => authored.presets.has(name2)
+  ))
+    unplaced.forEach(miss(`preset "${name}"`));
+  return {
+    config: {
+      ...config2,
+      root: own2.root,
+      presets: {
+        ...config2.presets,
+        ...Object.fromEntries(
+          restaged.map(({ name, preset, root }) => [
+            name,
+            { ...preset, root: rootNode(root) }
+          ])
+        )
+      }
+    },
+    notices: [...missed].flatMap(
+      ([cell3, reasons]) => [...reasons].map(
+        ([reason, trees]) => insertNotice(cell3, `${reason} (in ${trees.join(", ")})`)
+      )
+    )
+  };
+}
+function insertNotice(cell3, what) {
+  return `${cell3.by.file}: ${cell3.by.entry} places "${cell3.seg}" ${what}`;
+}
+function presetGlobals(config2, name) {
+  return { ...config2.globals, ...presetByName(config2.presets, name).globals };
+}
+
+// src/daemon/bundled-presets.ts
+init_globals();
+
+// src/config/default-dsl-config.ts
+init_globals();
+
+// src/config/confirm-step.ts
+init_globals();
+var ARMED = "armed";
+var DISARMED = "disarmed";
+var CONFIRM_KEY_SUFFIX = ".armed";
+var isConfirmKey = (key) => key.endsWith(CONFIRM_KEY_SUFFIX);
+function confirms(key, disarm, fires) {
+  const gates = [...new Set(fires.map((f) => f.when))].filter(
+    (g) => g !== "true"
+  );
+  const nameOf2 = (held) => gates.length === 0 ? key : `${key}.${held}`;
+  const actions = {};
+  for (let held = 0; held < 2 ** gates.length; held++)
+    actions[nameOf2(held)] = {
+      do: [
+        disarm,
+        ...fires.filter(
+          (f) => f.when === "true" || held & 1 << gates.indexOf(f.when)
+        ).map((f) => f.action)
+      ]
+    };
+  const link = (i, held) => i === gates.length ? `"${nameOf2(held)}"` : `(ternary ${link(i + 1, held | 1 << i)} ${link(i + 1, held)} (${gates[i]}))`;
+  return { link: link(0, 0), actions };
+}
+function confirmStep(key, labels, fires) {
+  const stateKey = `${key}${CONFIRM_KEY_SUFFIX}`;
+  const arm2 = `${key}.arm`;
+  const disarm = `${key}.disarm`;
+  const armed = `(eq .${key} "${ARMED}")`;
+  const confirm = confirms(key, disarm, fires);
+  return {
+    // [LAW:dataflow-not-control-flow] Which view the step shows is the key's
+    // value, read back here.
+    template: `{{ if ${armed} }}{{ action ${confirm.link} "${labels.confirm}" }} {{ action "${disarm}" "\u2715" }}{{ else }}{{ action "${arm2}" "${labels.arm}" }}{{ end }}`,
+    actions: {
+      [arm2]: { set: stateKey, to: ARMED },
+      [disarm]: { set: stateKey, to: DISARMED },
+      ...confirm.actions
+    },
+    armed,
+    variables: {
+      [key]: { kind: "state", key: stateKey, default: DISARMED }
+    },
+    disarm
+  };
+}
+
+// src/config/dsl-loader.ts
+init_globals();
+var import_json53 = __toESM(require_dist(), 1);
+
+// src/config/loader/merge.ts
+init_globals();
+function mergeWithDefault(raw, dflt) {
+  return {
+    globals: { ...dflt.globals, ...raw.globals ?? {} },
+    variables: { ...dflt.variables, ...raw.variables ?? {} },
+    segments: overlayByName(
+      dflt.segments,
+      segmentDeltas(dflt.segments, raw.segments ?? {})
+    ),
+    root: mergeRoot(raw.root ?? EMPTY_ROWS, dflt.root),
+    // [LAW:one-source-of-truth] actions merge by name, same cascade — a user
+    // declares only the actions that differ from the bundled default (which
+    // ships none).
+    actions: { ...dflt.actions, ...raw.actions ?? {} },
+    // [LAW:one-source-of-truth] styles merge by name, same cascade — a user
+    // overrides one adaptation by re-declaring its name; the bundled stdlib
+    // (incl. the "none" identity floor) survives every merge by construction.
+    styles: { ...dflt.styles, ...raw.styles ?? {} },
+    // [LAW:one-source-of-truth] presets merge by name then by field, the
+    // segments overlay — a user retunes one arrangement's root without
+    // restating its globals; the bundled stdlib (incl. the "default"
+    // empty-fragment floor effectivePresetName collapses to) survives every
+    // merge by construction, exactly as styles' "none" does.
+    presets: overlayByName(
+      dflt.presets,
+      presetDeltas(dflt.presets, raw.presets ?? {})
+    ),
+    // [LAW:one-source-of-truth] themeDefaults merge by theme name then by
+    // field, the presets overlay — a file setting one theme's shade keeps the
+    // variation and style the bundled entry for that theme carries.
+    themeDefaults: overlayByName(dflt.themeDefaults, raw.themeDefaults ?? {}),
+    // [LAW:one-source-of-truth] editGlobals merges FIELD by field — the
+    // `globals` cascade above, not the by-name cascades around it, because it
+    // IS a globals fragment: a user retuning edit mode's separator says nothing
+    // about its `endcaps`, exactly as a user setting `globals.padding` says
+    // nothing about `globals.endcaps`.
+    editGlobals: { ...dflt.editGlobals, ...raw.editGlobals ?? {} },
+    // [LAW:one-source-of-truth] helpers merge by name, same cascade — a user
+    // overrides one formatter helper by re-declaring its name; the rest inherit
+    // from the bundled default.
+    helpers: { ...dflt.helpers, ...raw.helpers ?? {} }
+  };
+}
+function segmentDeltas(base, over) {
+  const byName = (name, field, delta) => delta[field] === void 0 ? delta : { ...delta, [field]: { ...base[name]?.[field], ...delta[field] } };
+  return Object.fromEntries(
+    Object.entries(over).map(([name, delta]) => [
+      name,
+      byName(name, "partials", byName(name, "settings", delta))
+    ])
+  );
+}
+function presetDeltas(base, over) {
+  return Object.fromEntries(
+    Object.entries(over).map(([name, delta]) => [
+      name,
+      delta.globals === void 0 ? delta : { ...delta, globals: { ...base[name]?.globals, ...delta.globals } }
+    ])
+  );
+}
+function overlayByName(base, over) {
+  return {
+    ...base,
+    ...Object.fromEntries(
+      Object.entries(over).map(([name, delta]) => [
+        name,
+        { ...base[name], ...delta }
+      ])
+    )
+  };
+}
+
+// src/config/loader/variables.ts
+init_globals();
+
+// src/config/loader/cache.ts
+init_globals();
+function requireCache(ctx, path42, raw, kind) {
+  if (raw.cache === void 0) {
+    ctx.issues.push({
+      path: `${path42}.cache`,
+      message: `${kind} variables must declare a cache policy (one of: ${CACHE_KEYS.join(", ")})`,
+      line: findKeyLine(ctx.source, path42.split("."))
+    });
+    return null;
+  }
+  return validateCache(ctx, `${path42}.cache`, raw.cache);
+}
+function requireCacheSpec(kind) {
+  return {
+    required: true,
+    json: cacheJson(),
+    parse: (ctx, path42, _field, raw) => requireCache(ctx, path42, raw, kind) ?? void 0
+  };
+}
+var CACHE_SCHEMA = {
+  noun: "cache",
+  arms: {
+    ttl: {
+      json: { type: "string" },
+      parse: (ctx, path42, value) => typeof value === "string" && isValidDuration(value) ? { ttl: value } : reject(
+        ctx,
+        path42,
+        `cache.ttl must be a duration string like "5s", "100ms", "2m", "1h"; got ${describeValue(value)}`
+      )
+    },
+    watch_file: {
+      json: { type: "string", pattern: "^/" },
+      parse: (ctx, path42, value) => {
+        if (typeof value !== "string")
+          return reject(
+            ctx,
+            path42,
+            `cache.watch_file must be a path string, got ${describeValue(value)}`
+          );
+        const problem = absolutePathProblem("cache.watch_file", value);
+        return problem === null ? { watch_file: value } : reject(ctx, path42, problem);
+      }
+    },
+    depends_on: {
+      json: { type: "array", items: { type: "string" } },
+      parse: (ctx, path42, value) => Array.isArray(value) && value.every((v) => typeof v === "string") ? { depends_on: value } : reject(
+        ctx,
+        path42,
+        `cache.depends_on must be an array of variable-name strings, got ${describeValue(value)}`
+      )
+    },
+    key: {
+      json: { type: "string" },
+      parse: (ctx, path42, value) => typeof value === "string" && value !== "" ? { key: value } : reject(
+        ctx,
+        path42,
+        `cache.key must be a non-empty template string, got ${describeValue(value)}`
+      )
+    },
+    never: {
+      json: { const: true },
+      parse: (ctx, path42, value) => value === true ? { never: true } : reject(
+        ctx,
+        path42,
+        `cache.never must be the literal boolean true, got ${describeValue(value)}`
+      )
+    }
+  }
+};
+function validateCache(ctx, path42, raw) {
+  return oneOfPresent(ctx, CACHE_SCHEMA, path42, raw);
+}
+function cacheJson() {
+  return oneOfPresentJson(CACHE_SCHEMA);
+}
+var DURATION_RE = /^(\d+(?:\.\d+)?)(ms|s|m|h)$/;
+function isValidDuration(s) {
+  return DURATION_RE.test(s);
+}
+
+// src/config/loader/retired-variables.ts
+init_globals();
+var RETIRED_VARIABLES = /* @__PURE__ */ new Map([
+  // brandon-settings-coverage-g4p.lx2
+  ["session.budget.amount", { segment: "session", setting: "budget" }],
+  [
+    "session.budget.warningThreshold",
+    { segment: "session", setting: "warnAt" }
+  ],
+  ["today.budget.amount", { segment: "today", setting: "budget" }],
+  ["today.budget.warningThreshold", { segment: "today", setting: "warnAt" }],
+  ["block.budget.heatThreshold", { segment: "block", setting: "warnAt" }],
+  ["block.budget.warningThreshold", { segment: "block", setting: "errorAt" }],
+  ["weekly.budget.heatThreshold", { segment: "weekly", setting: "warnAt" }],
+  ["weekly.budget.warningThreshold", { segment: "weekly", setting: "errorAt" }],
+  ["burn.eta.errorMinutes", { segment: "burnrate", setting: "errorWithin" }],
+  ["burn.eta.warnMinutes", { segment: "burnrate", setting: "warnWithin" }]
+]);
+function replacement(to) {
+  return `it became the "${to.setting}" setting of each "${to.segment}" placement \u2014 set it on the placement where a row places "${to.segment}" ({ seg: "${to.segment}", settings: { ${to.setting}: <value> } }), or redeclare segments.${to.segment}.settings.${to.setting} with the default every placement should start from`;
+}
+function retiredVariableMessage(name) {
+  const to = RETIRED_VARIABLES.get(name);
+  return to === void 0 ? void 0 : `variables.${name} is no longer read: ${replacement(to)}`;
+}
+function retiredReadHint(ref) {
+  const to = RETIRED_VARIABLES.get(ref);
+  return to === void 0 ? "" : ` \u2014 ".${ref}" is no longer a variable: ${replacement(to)}; a "${to.segment}" template reads it as ".settings.${to.setting}"`;
+}
+var RETIRED_INPUT_PATHS = /* @__PURE__ */ new Map([
+  [
+    "git.timeSinceCommit",
+    `the payload stores the commit's date as "git.committedAt" (epoch seconds), and the bundled template variable "git.timeSinceCommit" computes its age at the draw: drop this declaration`
+  ],
+  [
+    "block.etaMinutes",
+    'the bundled template variable "block.etaMinutes" computes it at the draw: drop this declaration'
+  ],
+  [
+    "weekly.etaMinutes",
+    'the bundled template variable "weekly.etaMinutes" computes it at the draw: drop this declaration'
+  ]
+]);
+var RETIRED_GIT_FIELDS = new Map([
+  [
+    "branch",
+    {
+      read: ".git.branch",
+      declare: { kind: "input", path: "git.branch", default: "" },
+      note: 'when HEAD is on no branch it reads "detached", where this kind read ""'
+    }
+  ],
+  [
+    "sha",
+    {
+      read: ".git.sha",
+      declare: { kind: "input", path: "git.sha", default: "" }
+    }
+  ],
+  [
+    "dirty",
+    {
+      read: '(ne .git.status "clean")',
+      declare: {
+        kind: "template",
+        template: '{{ ne .git.status "clean" }}',
+        type: "boolean"
+      }
+    }
+  ],
+  ...["ahead", "behind", "stash"].map(
+    (field) => [
+      field,
+      {
+        read: `.git.${field}`,
+        declare: {
+          kind: "input",
+          path: `git.${field}`,
+          type: "number",
+          default: 0
+        }
+      }
+    ]
+  )
+]);
+function json5Of(decl) {
+  const value = (v) => typeof v === "string" && v.includes('"') && !v.includes("'") ? `'${v}'` : JSON.stringify(v);
+  return `{ ${Object.entries(decl).map(([k, v]) => `${k}: ${value(v)}`).join(", ")} }`;
+}
+function retiredGitKindMessage(raw) {
+  const head = `kind "git" is retired: every git fact is an input over the payload's git lane, which the bundled default already declares \u2014 drop this declaration and`;
+  const field = typeof raw.field === "string" ? RETIRED_GIT_FIELDS.get(raw.field) : void 0;
+  if (field === void 0) {
+    const reads = [...RETIRED_GIT_FIELDS.values()].map(({ read: read2 }) => read2);
+    return `${head} read whichever of ${reads.slice(0, -1).join(", ")} or ${reads.at(-1)} it stood for, where it was read`;
+  }
+  const note = field.note === void 0 ? "" : ` (${field.note})`;
+  return `${head} read ${field.read} where it was read${note}, or declare ${json5Of(field.declare)} under a name of your own`;
+}
+
+// src/config/loader/variables.ts
+function validateVariables(ctx, pathPrefix, raw) {
+  if (raw === void 0) return {};
+  if (!isPlainObject(raw)) {
+    ctx.issues.push({
+      path: pathPrefix,
+      message: `${pathPrefix} must be an object, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, pathPrefix.split("."))
+    });
+    return {};
+  }
+  const out = {};
+  for (const [name, decl] of Object.entries(raw)) {
+    const parsed2 = taggedUnion(
+      ctx,
+      VARIABLE_SCHEMA,
+      `${pathPrefix}.${name}`,
+      decl
+    );
+    if (parsed2 !== null) out[name] = parsed2;
+  }
+  return out;
+}
+function literalValueSpec() {
+  return {
+    required: true,
+    json: { type: ["string", "number", "boolean"] },
+    parse: (ctx, path42, _field, raw) => {
+      const value = raw.value;
+      if (typeof value !== "string" && typeof value !== "number" && typeof value !== "boolean") {
+        ctx.issues.push({
+          path: `${path42}.value`,
+          message: `literal value must be string|number|boolean, got ${describeType(value)}`,
+          line: findKeyLine(ctx.source, path42.split("."))
+        });
+        return void 0;
+      }
+      return value;
+    }
+  };
+}
+function typedDefaultSpec() {
+  return {
+    required: false,
+    json: { type: ["string", "number", "boolean"] },
+    parse: (ctx, path42, _field, raw) => {
+      const t2 = raw.type;
+      const expected = t2 === "number" || t2 === "boolean" || t2 === "string" ? t2 : "string";
+      return optionalTypedDefault(ctx, path42, raw, expected);
+    }
+  };
+}
+var PARSE_SCHEMA = {
+  noun: "parse",
+  arms: {
+    text: {
+      json: { const: true },
+      parse: (ctx, path42, value) => value === true ? { text: true } : reject(
+        ctx,
+        path42,
+        `parse.text must be the literal boolean true, got ${describeValue(value)}`
+      )
+    },
+    regex: {
+      json: { type: "string" },
+      parse: (ctx, path42, value) => typeof value === "string" ? capturingPattern(ctx, path42, value) : reject(
+        ctx,
+        path42,
+        `parse.regex must be a pattern string, got ${describeValue(value)}`
+      )
+    },
+    json: {
+      json: { const: true },
+      parse: (ctx, path42, value) => value === true ? { json: true } : reject(
+        ctx,
+        path42,
+        `parse.json must be the literal boolean true, got ${describeValue(value)}`
+      )
+    }
+  }
+};
+function capturingPattern(ctx, path42, pattern2) {
+  let groups;
+  try {
+    new RegExp(pattern2);
+    groups = new RegExp(`${pattern2}|`).exec("").length - 1;
+  } catch (e) {
+    return reject(
+      ctx,
+      path42,
+      `parse.regex is not a valid regular expression: ${e.message}`
+    );
+  }
+  return groups >= 1 ? { regex: pattern2 } : reject(
+    ctx,
+    path42,
+    `parse.regex must contain a capture group \u2014 its group 1 is the value; got ${JSON.stringify(pattern2)}`
+  );
+}
+function parseSpec() {
+  return {
+    required: false,
+    json: oneOfPresentJson(PARSE_SCHEMA),
+    parse: (ctx, path42, _field, raw) => {
+      if (raw.regex !== void 0) {
+        ctx.issues.push({
+          path: `${path42}.regex`,
+          message: `${path42}.regex was retired; the regex is the parse step's regex arm now: parse: { regex: ${JSON.stringify(raw.regex)} }`,
+          line: findKeyLine(ctx.source, [...path42.split("."), "regex"])
+        });
+      }
+      return raw.parse === void 0 ? void 0 : oneOfPresent(ctx, PARSE_SCHEMA, `${path42}.parse`, raw.parse) ?? void 0;
+    }
+  };
+}
+function sourceDefaultSpec() {
+  return {
+    required: false,
+    json: {
+      type: ["string", "number", "boolean", "array", "object"],
+      description: "The value published when the source fails: a string under the text/regex parse arms, any non-null JSON value under the json arm"
+    },
+    parse: (ctx, path42, _field, raw) => isPlainObject(raw.parse) && "json" in raw.parse ? jsonDefault(ctx, path42, raw.default) : optionalStringField(ctx, path42, raw, "default")
+  };
+}
+function jsonDefault(ctx, path42, value) {
+  if (value === void 0) return void 0;
+  return isSourceDefault(value) ? value : reject(
+    ctx,
+    `${path42}.default`,
+    `${path42}.default must be a JSON value (a json-parsed source's document), got ${describeValue(value)}`
+  ) ?? void 0;
+}
+function isSourceDefault(value) {
+  return value !== null && isJsonValue(value);
+}
+function isJsonValue(value) {
+  if (value === null) return true;
+  switch (typeof value) {
+    case "string":
+    case "boolean":
+      return true;
+    case "number":
+      return Number.isFinite(value);
+    case "object": {
+      if (Array.isArray(value)) return value.every(isJsonValue);
+      const proto = Object.getPrototypeOf(value);
+      return (proto === Object.prototype || proto === null) && Object.values(value).every(isJsonValue);
+    }
+    default:
+      return false;
+  }
+}
+var LITERAL_FIELDS = {
+  value: literalValueSpec(),
+  default: optionalStringSpec()
+};
+function inputPathSpec() {
+  const text4 = requireStringSpec();
+  return {
+    ...text4,
+    parse: (ctx, path42, field, raw) => {
+      const value = text4.parse(ctx, path42, field, raw);
+      const instead = value === void 0 ? void 0 : RETIRED_INPUT_PATHS.get(value);
+      return instead === void 0 ? value : reject(
+        ctx,
+        `${path42}.${field}`,
+        `${path42}.${field} "${value}" is no longer in the payload: ${instead}`
+      ) ?? void 0;
+    }
+  };
+}
+var INPUT_FIELDS = {
+  path: inputPathSpec(),
+  type: optionalEnumSpec(["string", "number", "boolean"]),
+  default: typedDefaultSpec()
+};
+var ENV_FIELDS = {
+  name: requireStringSpec(),
+  default: optionalStringSpec()
+};
+var FILE_FIELDS = {
+  path: requireAbsolutePathSpec(),
+  readMode: optionalEnumSpec(["whole", "first-line"]),
+  parse: parseSpec(),
+  cache: requireCacheSpec("file"),
+  default: sourceDefaultSpec()
+};
+var SHELL_FIELDS = {
+  command: requireStringSpec(),
+  parse: parseSpec(),
+  cache: requireCacheSpec("shell"),
+  default: sourceDefaultSpec()
+};
+function noCachePolicy(why2) {
+  return { cache: `${why2}, so it takes no cache policy \u2014 delete the key` };
+}
+var TEMPLATE_FIELDS = {
+  template: requireStringSpec(),
+  type: optionalEnumSpec(["string", "number", "boolean"]),
+  default: typedDefaultSpec()
+};
+var TEMPLATE_VAR_REMOVED = noCachePolicy(
+  "a template variable recomputes whenever a variable it reads changes"
+);
+var TIME_FIELDS = {
+  layout: requireStringSpec(),
+  default: optionalStringSpec()
+};
+var TIME_VAR_REMOVED = noCachePolicy(
+  "a time variable reads the instant its render is drawn at"
+);
+var STATE_FIELDS = {
+  key: requireStringSpec(),
+  default: optionalStringSpec()
+};
+var VARIABLE_TAG = "kind";
+function arm(kind, fieldMap, removed = {}) {
+  return {
+    ...armFacets(VARIABLE_TAG, kind, fieldMap),
+    parse: (ctx, path42, raw) => {
+      refuseRemoved(ctx, removed, path42, raw);
+      const body = fields(ctx, fieldMap, path42, raw);
+      return body === null ? null : { kind, ...body };
+    }
+  };
+}
+var VARIABLE_SCHEMA = {
+  tag: VARIABLE_TAG,
+  noun: "source kind",
+  // `Unknown shell variable key "readMode". Expected one of: kind, command,
+  // parse, cache, default` — a field from the wrong arm, or a typo'd one, is the
+  // loud error a segment's has always been (brandon-config-9li). The author of a
+  // config they cannot see rendered has no other signal [LAW:no-silent-failure].
+  memberNoun: "variable",
+  arms: {
+    literal: arm("literal", LITERAL_FIELDS),
+    // [LAW:one-source-of-truth] `input`'s `default`/`type` cross-field invariant
+    // lives in `typedDefaultSpec` (a field spec reading its sibling), so `input`
+    // is one field map like every other arm — `arm()` derives both `parse` and
+    // `json` from INPUT_FIELDS, no hand-authored schema to keep in sync.
+    input: arm("input", INPUT_FIELDS),
+    env: arm("env", ENV_FIELDS),
+    file: arm("file", FILE_FIELDS),
+    shell: arm("shell", SHELL_FIELDS),
+    template: arm("template", TEMPLATE_FIELDS, TEMPLATE_VAR_REMOVED),
+    time: arm("time", TIME_FIELDS, TIME_VAR_REMOVED),
+    state: arm("state", STATE_FIELDS)
+  },
+  retired: { git: retiredGitKindMessage }
+};
+function variableDeclJson() {
+  return taggedUnionJson(VARIABLE_SCHEMA);
+}
+function variablesMapJson() {
+  return { type: "object", additionalProperties: variableDeclJson() };
+}
+
+// src/config/loader/segments.ts
+init_globals();
+
+// src/config/segment-groups.ts
+init_globals();
+var SEGMENT_GROUPS = [
+  "location",
+  "git",
+  "model-context",
+  "cost-limits",
+  "activity",
+  "session-tools"
+];
+var OTHER_GROUP = "other";
+var LIBRARY_GROUPS = [
+  ...SEGMENT_GROUPS,
+  OTHER_GROUP
+];
+var GROUP_LABELS = {
+  location: "location",
+  git: "git",
+  "model-context": "model & context",
+  "cost-limits": "cost & limits",
+  activity: "activity",
+  "session-tools": "session tools",
+  other: "other"
+};
+
+// src/config/loader/renamed-segments.ts
+init_globals();
+var RENAMED_SEGMENTS = /* @__PURE__ */ new Map([
+  ["gitTaculous", { kind: "built-in", to: "gitaculous" }],
+  // The one-line summary became the collapsed form of `gitaculous`
+  // (brandon-git-segment-ixf.tl0).
+  ["git", { kind: "built-in", to: "gitaculous" }],
+  // The settings menu's anchor left `settings.` so `.settings` could be a
+  // placement's own settings (brandon-segment-settings-i4n).
+  ["settings.menu", { kind: "built-in", to: "candybar.menu" }],
+  // lit's ticket moved out of the bundled bar into the plugin lit's repository
+  // ships, which reads lit's own statusline file (brandon-plugins-ktag.d6f).
+  [
+    "ticket",
+    {
+      kind: "plugin",
+      to: "plugins.lit.ticket",
+      source: "promptctl/links-issue-tracker"
+    }
+  ],
+  [
+    "ceiling",
+    {
+      kind: "removed",
+      why: "the program it showed draws it through a cc-candybar plugin of its own now \u2014 delete this reference, or place that plugin's segment"
+    }
+  ],
+  [
+    "themeSwitcher",
+    {
+      kind: "removed",
+      why: 'the settings menu\'s \u{1F3A8} theme control steps themes \u2014 delete this reference, or write your own `{{ carousel "apply" "open" "label" }}`'
+    }
+  ]
+]);
+function renamedHint(name) {
+  const renamed = RENAMED_SEGMENTS.get(name);
+  if (renamed === void 0) return "";
+  switch (renamed.kind) {
+    case "built-in":
+      return ` (the built-in segment "${name}" was renamed to "${renamed.to}" \u2014 update this reference)`;
+    case "plugin":
+      return ` (the built-in segment "${name}" became "${renamed.to}", a segment of the plugin \`cc-candybar plugin install ${renamed.source}\` installs \u2014 update this reference)`;
+    case "removed":
+      return ` (the built-in segment "${name}" was removed: ${renamed.why})`;
+  }
+}
+
+// src/config/loader/settings.ts
+init_globals();
+var SETTING_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+var SETTING_NAME_JSON = { pattern: SETTING_NAME.source };
+var SETTING_VALUE_JSON = {
+  anyOf: [{ type: "boolean" }, { type: "string" }, { type: "integer" }]
+};
+var SETTING_DECL_JSON = {
+  type: "object",
+  additionalProperties: false,
+  required: ["label", "domain", "default"],
+  properties: {
+    label: { type: "string", pattern: "^[^\\n\\r]+$" },
+    domain: {
+      anyOf: [
+        { const: "bool" },
+        {
+          type: "array",
+          items: { type: "string", pattern: "^[^/\\n\\r]+$" },
+          minItems: 1,
+          uniqueItems: true
+        },
+        {
+          type: "object",
+          additionalProperties: false,
+          required: ["min", "max"],
+          properties: {
+            min: { type: "integer" },
+            max: { type: "integer" },
+            step: { type: "integer", minimum: 1 },
+            atLeast: { type: "string", ...SETTING_NAME_JSON }
+          }
+        }
+      ]
+    },
+    default: SETTING_VALUE_JSON
+  }
+};
+var DECL_KEYS = ["label", "domain", "default"];
+var RANGE_KEYS = ["min", "max", "step", "atLeast"];
+function issue(ctx, path42, message) {
+  ctx.issues.push({
+    path: path42,
+    message,
+    line: findKeyLine(ctx.source, path42.split("."))
+  });
+  return void 0;
+}
+function parseDomain(ctx, path42, raw) {
+  if (raw === "bool") return "bool";
+  if (Array.isArray(raw)) {
+    const words2 = raw.filter((m) => typeof m === "string");
+    if (raw.length === 0 || words2.length !== raw.length) {
+      return issue(
+        ctx,
+        path42,
+        `a list domain must be a non-empty list of words, got ${JSON.stringify(raw)}`
+      );
+    }
+    if (new Set(words2).size !== words2.length) {
+      return issue(
+        ctx,
+        path42,
+        `a list domain names each word once, got ${JSON.stringify(raw)}`
+      );
+    }
+    const unwritable2 = words2.filter(
+      (w) => w === "" || w.includes("/") || /[\n\r]/.test(w)
+    );
+    if (unwritable2.length > 0) {
+      return issue(
+        ctx,
+        path42,
+        `a list domain's words must be non-empty, slash-free, and newline-free \u2014 configure mode writes each on the set-state wire \u2014 got ${JSON.stringify(unwritable2)}`
+      );
+    }
+    return words2;
+  }
+  if (isPlainObject(raw)) {
+    const { min: min2, max: max2, step: step4 = 1, atLeast } = raw;
+    const extra = Object.keys(raw).filter((k) => !RANGE_KEYS.includes(k));
+    if (extra.length === 0 && Number.isInteger(min2) && Number.isInteger(max2) && min2 <= max2 && Number.isInteger(step4) && step4 >= 1 && (atLeast === void 0 || typeof atLeast === "string")) {
+      return {
+        min: min2,
+        max: max2,
+        step: step4,
+        ...atLeast !== void 0 && { atLeast }
+      };
+    }
+    return issue(
+      ctx,
+      path42,
+      `a range domain is { min, max, step?, atLeast? } with integers min \u2264 max, a whole step \u2265 1, and atLeast naming another range setting, got ${JSON.stringify(raw)}`
+    );
+  }
+  return issue(
+    ctx,
+    path42,
+    `domain must be "bool", a list of words, or { min, max }, got ${describeValue(raw)}`
+  );
+}
+function parseSettingDecl(ctx, path42, raw) {
+  if (!isPlainObject(raw)) {
+    return issue(
+      ctx,
+      path42,
+      `${path42} must be { label, domain, default }, got ${describeType(raw)}`
+    );
+  }
+  for (const key of Object.keys(raw)) {
+    if (!DECL_KEYS.includes(key)) {
+      issue(
+        ctx,
+        `${path42}.${key}`,
+        `Unknown setting key "${key}". Expected one of: ${DECL_KEYS.join(", ")}`
+      );
+    }
+  }
+  const { label: label2 } = raw;
+  const labelOk = typeof label2 === "string" && label2.length > 0 && !/[\n\r]/.test(label2);
+  if (!labelOk) {
+    issue(
+      ctx,
+      `${path42}.label`,
+      `a setting needs a one-line, non-empty "label" \u2014 the name its control shows, spliced into a synthesized template string \u2014 got ${describeValue(label2)}`
+    );
+  }
+  const domain = parseDomain(ctx, `${path42}.domain`, raw.domain);
+  if (!labelOk || domain === void 0) return void 0;
+  const decl = { label: label2, domain, default: raw.default };
+  if (!isSettingValue(raw.default) || !inSettingDomain(decl, raw.default)) {
+    return issue(
+      ctx,
+      `${path42}.default`,
+      `default must be ${describeSettingDomain(decl)}, got ${describeValue(raw.default)}`
+    );
+  }
+  return decl;
+}
+function isSettingValue(v) {
+  return typeof v === "boolean" || typeof v === "string" || typeof v === "number";
+}
+var IMPLIED_HINTS = {
+  theme: `its default for this segment is segments.<name>.palette, and a placement sets its own with settings: { ${THEME_SETTING}: "<theme>" }`,
+  effect: `a placement follows the bar's effect, or sets its own with settings: { effect: "<effect>" }`
+};
+function isImplied(name) {
+  return IMPLIED_SETTINGS.includes(name);
+}
+function settingsDeclSpec() {
+  return {
+    required: false,
+    json: {
+      type: "object",
+      propertyNames: {
+        ...SETTING_NAME_JSON,
+        not: { enum: [...IMPLIED_SETTINGS] }
+      },
+      additionalProperties: SETTING_DECL_JSON
+    },
+    parse: (ctx, path42, field, raw) => {
+      const v = raw[field];
+      if (v === void 0) return void 0;
+      const at = `${path42}.${field}`;
+      if (!isPlainObject(v)) {
+        return issue(
+          ctx,
+          at,
+          `${at} must be an object of name \u2192 { label, domain, default }, got ${describeType(v)}`
+        );
+      }
+      const out = /* @__PURE__ */ Object.create(null);
+      for (const [name, decl] of Object.entries(v)) {
+        if (!SETTING_NAME.test(name)) {
+          issue(
+            ctx,
+            `${at}.${name}`,
+            `setting name "${name}" is read as .settings.${name} in a template, so it must be an identifier (letters, digits, _; not starting with a digit)`
+          );
+          continue;
+        }
+        if (isImplied(name)) {
+          issue(
+            ctx,
+            `${at}.${name}`,
+            `setting "${name}" is one every placement already has \u2014 ${IMPLIED_HINTS[name]}`
+          );
+          continue;
+        }
+        const parsed2 = parseSettingDecl(ctx, `${at}.${name}`, decl);
+        if (parsed2 !== void 0) out[name] = parsed2;
+      }
+      return out;
+    }
+  };
+}
+var RESERVED_ID_JSON = RESERVED_NAMESPACES.map(
+  (ns) => ns.replace(/\./g, "\\.")
+).join("|");
+function placementIdSpec() {
+  return {
+    required: false,
+    json: {
+      type: "string",
+      minLength: 1,
+      pattern: `^(?!${RESERVED_ID_JSON})[^:/]+$`
+    },
+    parse: (ctx, path42, field, raw) => {
+      const v = raw[field];
+      if (v === void 0) return void 0;
+      if (typeof v === "string" && v.length > 0 && !/[:/]/.test(v) && !isReservedName(v))
+        return v;
+      return issue(
+        ctx,
+        `${path42}.${field}`,
+        `a placement "id" must be a non-empty string without "/" or ":", outside the reserved ${RESERVED_NAMESPACES.map((ns) => `"${ns}"`).join(", ")} namespaces, got ${describeValue(v)}`
+      );
+    }
+  };
+}
+function placementSettingsSpec() {
+  return {
+    required: false,
+    json: {
+      type: "object",
+      propertyNames: SETTING_NAME_JSON,
+      additionalProperties: SETTING_VALUE_JSON
+    },
+    parse: (ctx, path42, field, raw) => {
+      const v = raw[field];
+      if (v === void 0) return void 0;
+      const at = `${path42}.${field}`;
+      if (!isPlainObject(v)) {
+        return issue(
+          ctx,
+          at,
+          `a placement's "settings" must be an object of setting name \u2192 value, got ${describeType(v)}`
+        );
+      }
+      const out = /* @__PURE__ */ Object.create(null);
+      for (const [name, value] of Object.entries(v)) {
+        if (isSettingValue(value)) out[name] = value;
+        else
+          issue(
+            ctx,
+            `${at}.${name}`,
+            `setting "${name}" must be a boolean, a word, or a number, got ${describeType(value)}`
+          );
+      }
+      return out;
+    }
+  };
+}
+
+// src/config/loader/segments.ts
+function inheritableSegmentNames(base) {
+  return new Set(
+    Object.keys(base.segments).filter((name) => !isReservedName(name))
+  );
+}
+function validateSegments(ctx, raw, inherited) {
+  if (raw === void 0) return {};
+  if (!isPlainObject(raw)) {
+    ctx.issues.push({
+      path: "segments",
+      message: `segments must be an object, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, ["segments"])
+    });
+    return {};
+  }
+  const out = {};
+  for (const [name, decl] of Object.entries(raw)) {
+    const parsed2 = record(
+      ctx,
+      inherited.has(name) ? SEGMENT_DELTA_SCHEMA : SEGMENT_SCHEMA,
+      `segments.${name}`,
+      decl
+    );
+    if (parsed2 !== null) out[name] = parsed2;
+  }
+  return out;
+}
+function joinTemplateBody(ctx, path42, field, raw) {
+  const v = raw[field];
+  if (typeof v === "string") return v;
+  if (Array.isArray(v)) {
+    let ok3 = true;
+    const parts = [];
+    for (const [i, el] of v.entries()) {
+      if (typeof el === "string") {
+        parts.push(el);
+        continue;
+      }
+      ok3 = false;
+      ctx.issues.push({
+        path: `${path42}.${field}[${i}]`,
+        message: `${path42}.${field}[${i}] must be a string, got ${describeType(el)}`,
+        line: findKeyLine(ctx.source, [...path42.split("."), field])
+      });
+    }
+    return ok3 ? parts.join("") : void 0;
+  }
+  ctx.issues.push({
+    path: `${path42}.${field}`,
+    message: `${path42}.${field} must be a string or an array of strings, got ${describeType(v)}`,
+    line: findKeyLine(ctx.source, [...path42.split("."), field])
+  });
+  return void 0;
+}
+var TEMPLATE_BODY_JSON = {
+  anyOf: [{ type: "string" }, { type: "array", items: { type: "string" } }]
+};
+function ownTemplateSpec() {
+  return {
+    required: true,
+    json: TEMPLATE_BODY_JSON,
+    parse: (ctx, path42, field, raw) => raw[field] === void 0 ? reject(
+      ctx,
+      `${path42}.${field}`,
+      `${path42} declares no template \u2014 only a segment the bundled default declares may omit it (inheriting the bundled template); a segment of your own needs its own${renamedHint(path42.slice("segments.".length))}`
+    ) ?? void 0 : joinTemplateBody(ctx, path42, field, raw)
+  };
+}
+function optionalTemplateBodySpec() {
+  return {
+    required: false,
+    json: TEMPLATE_BODY_JSON,
+    parse: (ctx, path42, field, raw) => raw[field] === void 0 ? void 0 : joinTemplateBody(ctx, path42, field, raw)
+  };
+}
+function partialsSpec() {
+  return {
+    required: false,
+    json: {
+      type: "object",
+      additionalProperties: TEMPLATE_BODY_JSON
+    },
+    parse: (ctx, path42, field, raw) => {
+      const v = raw[field];
+      if (v === void 0) return void 0;
+      if (!isPlainObject(v)) {
+        ctx.issues.push({
+          path: `${path42}.${field}`,
+          message: `${path42}.${field} must be an object, got ${describeType(v)}`,
+          line: findKeyLine(ctx.source, [...path42.split("."), field])
+        });
+        return void 0;
+      }
+      const out = /* @__PURE__ */ Object.create(null);
+      for (const name of Object.keys(v)) {
+        const body = joinTemplateBody(ctx, `${path42}.${field}`, name, v);
+        if (body !== void 0) out[name] = body;
+      }
+      return out;
+    }
+  };
+}
+function widthSpec() {
+  return {
+    required: false,
+    json: {
+      anyOf: [
+        { const: "auto" },
+        { const: "fill" },
+        { type: "integer", minimum: 1 }
+      ]
+    },
+    parse: (ctx, path42, field, raw) => {
+      const v = raw[field];
+      if (v === void 0) return void 0;
+      if (v === "auto") return "auto";
+      if (v === "fill") return "fill";
+      if (typeof v === "number" && Number.isInteger(v) && v > 0) return v;
+      ctx.issues.push({
+        path: `${path42}.${field}`,
+        message: `width must be "auto", "fill", or a positive integer, got ${describeValue(v)}`,
+        line: findKeyLine(ctx.source, [...path42.split("."), field])
+      });
+      return void 0;
+    }
+  };
+}
+function varsSpec() {
+  return {
+    required: false,
+    // [LAW:one-source-of-truth] The nested `vars` schema is the SAME name →
+    // VariableDecl map the top-level `variables` block emits — one source.
+    json: variablesMapJson(),
+    parse: (ctx, path42, field, raw) => {
+      const v = raw[field];
+      if (v === void 0) return void 0;
+      return validateVariables(ctx, `${path42}.${field}`, v);
+    }
+  };
+}
+var SEGMENT_FIELDS = {
+  template: ownTemplateSpec(),
+  // [LAW:one-source-of-truth] One row is the whole change: this table is what
+  // the validator interprets AND what `segmentDefinitions()` emits into the
+  // published JSON schema, and SEGMENT_DELTA_SCHEMA reuses it, so a file may
+  // set `description` on its own segment or on a delta over a bundled name
+  // with no further edit anywhere (brandon-config-schema-qqg).
+  description: optionalStringSpec(),
+  group: optionalEnumSpec(SEGMENT_GROUPS),
+  width: widthSpec(),
+  justify: optionalEnumSpec(JUSTIFY_MODES),
+  truncate: optionalEnumSpec(TRUNCATE_MODES),
+  bg: optionalStringSpec(),
+  fg: optionalStringSpec(),
+  when: optionalStringSpec(),
+  palette: paletteSpec(),
+  vars: varsSpec(),
+  settings: settingsDeclSpec(),
+  missingData: optionalEnumSpec(MISSING_DATA),
+  partials: partialsSpec()
+};
+var SEGMENT_SCHEMA = {
+  noun: "segment key",
+  fields: SEGMENT_FIELDS
+};
+var SEGMENT_DELTA_SCHEMA = {
+  noun: "segment key",
+  fields: { ...SEGMENT_FIELDS, template: optionalTemplateBodySpec() }
+};
+var SEGMENT_DEF_NAME = "Segment";
+var SEGMENT_DELTA_DEF_NAME = "SegmentDelta";
+var SEGMENT_REF = `#/definitions/${SEGMENT_DEF_NAME}`;
+var SEGMENT_DELTA_REF = `#/definitions/${SEGMENT_DELTA_DEF_NAME}`;
+
+// src/config/loader/layout.ts
+init_globals();
+
+// src/config/loader/reserved-namespace.ts
+init_globals();
+
+// src/config/ident.ts
+init_globals();
+function ident(name) {
+  return name.replace(/[^A-Za-z0-9]+/g, "_");
+}
 
 // src/config/loader/plugin-scope.ts
 init_globals();
@@ -38537,5632 +41057,575 @@ function otherScopeHint(name, declared) {
   return other === void 0 ? "" : ` ("${other}" is declared: a repository's own plugins are named under repo., installed ones under plugins., and a name in one is never looked up in the other)`;
 }
 
-// src/config/loader/refs.ts
-var STRING_LITERAL_RE = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`[^`]*`/g;
-function* templateBlocks(template) {
-  let open2 = template.indexOf("{{");
-  while (open2 !== -1) {
-    let block = "";
-    let i = open2 + 2;
-    const spans = [[0, i]];
-    while (i < template.length && !template.startsWith("}}", i)) {
-      if (template.startsWith("/*", i)) {
-        const close = template.indexOf("*/", i + 2);
-        i = close === -1 ? template.length : close + 2;
-        spans.push([block.length, i]);
-        continue;
-      }
-      const start = i;
-      const quote2 = template[i];
-      i += 1;
-      if (quote2 === '"' || quote2 === "'" || quote2 === "`") {
-        while (i < template.length && template[i] !== quote2) {
-          i += template[i] === "\\" && quote2 !== "`" ? 2 : 1;
-        }
-        i += 1;
-      }
-      block += template.slice(start, i);
-    }
-    if (i >= template.length) return;
-    yield {
-      text: block,
-      at: (index) => {
-        let [from, to] = spans[0];
-        for (const [b, t2] of spans) if (b <= index) [from, to] = [b, t2];
-        return to + index - from;
-      }
-    };
-    open2 = template.indexOf("{{", i + 2);
-  }
-}
-var PATH = "[A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)*";
-var OPERAND_RE = new RegExp(
-  `^(?:(\\$)(?:\\.(${PATH}))?|\\.(${PATH})?)(?=[\\s)]|$)`
-);
-function operandAt(text4, dot, root) {
-  const m = OPERAND_RE.exec(text4.trimStart());
-  if (m === null) return null;
-  const [base, field] = m[1] !== void 0 ? [root, m[2]] : [dot, m[3]];
-  if (base === null) return null;
-  return field === void 0 ? base : `${base}${field}.`;
-}
-var KEYWORD_RE = /^(\w+)\b\s*([\s\S]*)$/;
-function* scopedBlocks(template, root) {
-  const stack = [root];
-  for (const block of templateBlocks(template)) {
-    const code = block.text.replace(/^-(?=\s)/, "").trim();
-    const [, keyword = "", rest2 = ""] = KEYWORD_RE.exec(code) ?? [];
-    const top = stack[stack.length - 1];
-    const outer = stack.length > 1 ? stack[stack.length - 2] : top;
-    if (keyword === "end") {
-      if (stack.length > 1) stack.pop();
-      continue;
-    }
-    if (keyword === "else") {
-      yield { code, dot: outer, block };
-      const chained = /^with\b([\s\S]*)$/.exec(rest2);
-      stack[stack.length - 1] = chained === null ? outer : operandAt(chained[1], outer, root);
-      continue;
-    }
-    yield { code, dot: top, block };
-    if (keyword === "if") stack.push(top);
-    if (keyword === "with") stack.push(operandAt(rest2, top, root));
-    if (keyword === "range" || keyword === "define" || keyword === "block")
-      stack.push(null);
-  }
-}
-var TEMPLATE_KEYWORD_RE = /(?<![.$])\btemplate\s+$/;
-function* helperCalls(code, dot, root) {
-  let cursor = 0;
-  for (const s of [...code.matchAll(STRING_LITERAL_RE)]) {
-    const end = s.index + s[0].length;
-    if (TEMPLATE_KEYWORD_RE.test(code.slice(cursor, s.index))) {
-      yield {
-        name: s[0].slice(1, -1),
-        at: operandAt(code.slice(end), dot, root),
-        index: s.index
-      };
-    }
-    cursor = end;
-  }
-}
-function* callGraphBlocks(template, helpers) {
-  const walked = /* @__PURE__ */ new Set();
-  function* walk3(src, root, via, chain2) {
-    for (const { code, dot } of [...scopedBlocks(src, root)]) {
-      yield { code, dot, root, via };
-      for (const call of [...helperCalls(code, dot, root)]) {
-        const body = Object.hasOwn(helpers, call.name) ? helpers[call.name] : void 0;
-        const key = `${call.name}\0${call.at ?? "\0"}`;
-        if (body === void 0 || chain2.has(call.name) || walked.has(key))
-          continue;
-        walked.add(key);
-        yield* walk3(body, call.at, call.name, /* @__PURE__ */ new Set([...chain2, call.name]));
-      }
-    }
-  }
-  yield* walk3(template, "", null, /* @__PURE__ */ new Set());
-}
-function perTemplate(answer2) {
-  const answers = /* @__PURE__ */ new Map();
-  return (template) => {
-    if (!answers.has(template)) answers.set(template, answer2(template));
-    return answers.get(template);
-  };
-}
-var WALKS = /* @__PURE__ */ new WeakMap();
-function callGraph(template, helpers) {
-  let walks = WALKS.get(helpers);
-  if (walks === void 0) {
-    walks = perTemplate((t2) => [...callGraphBlocks(t2, helpers)]);
-    WALKS.set(helpers, walks);
-  }
-  return walks(template);
-}
-var REF_RE = new RegExp(`(?<![A-Za-z0-9_)$])(\\$?)\\.(${PATH})`, "g");
-function* dotRefs({ code, dot, root }) {
-  const text4 = code.replace(STRING_LITERAL_RE, "");
-  for (const r of [...text4.matchAll(REF_RE)]) {
-    const base = r[1] === "$" ? root : dot;
-    if (base !== null) yield `${base}${r[2]}`;
-  }
-}
-function templateReads(template, helpers) {
-  const reads = /* @__PURE__ */ new Map();
-  for (const block of callGraph(template, helpers)) {
-    for (const ref of dotRefs(block)) {
-      if (!reads.has(ref)) reads.set(ref, block.via);
-    }
-  }
-  return reads;
-}
-var BINDING_KEYWORD_RE = /(?<![.$])\b(action|picker|menu|carousel|swatches|swatch|themePreview)\s+$/;
-var NAME_ARGS = {
-  action: 1,
-  picker: 2,
-  menu: 1,
-  carousel: 2,
-  swatch: 1,
-  swatches: 2,
-  themePreview: 1
-};
-function* actionBindings(code) {
-  let cursor = 0;
-  let pending2 = 0;
-  let site = "action";
-  for (const s of [...code.matchAll(STRING_LITERAL_RE)]) {
-    const between = code.slice(cursor, s.index);
-    const kw = BINDING_KEYWORD_RE.exec(between);
-    if (kw !== null) {
-      pending2 = NAME_ARGS[kw[1]];
-      site = kw[1] === "action" ? "action" : "options";
-    } else if (between.trim() !== "") {
-      pending2 = 0;
-    }
-    if (pending2 > 0) {
-      yield { name: s[0].slice(1, -1), site, index: s.index };
-      pending2--;
-    }
-    cursor = s.index + s[0].length;
-  }
-}
-function templateActionRefs(template, helpers) {
-  const refs = /* @__PURE__ */ new Map();
-  for (const { code, via } of callGraph(template, helpers)) {
-    for (const { name, site } of actionBindings(code)) {
-      const key = `${name}\0${via ?? "\0"}`;
-      if (!refs.has(key)) refs.set(key, { name, site, via });
-    }
-  }
-  return [...refs.values()];
-}
-var namesTaking = (min2) => Object.keys(NAME_ARGS).filter((keyword) => NAME_ARGS[keyword] >= min2).join("|");
-var COMPUTED_BINDING_RE = new RegExp(
-  `(?<![\\w.$])(?:(?:${namesTaking(1)})\\s+|(?:${namesTaking(2)})\\s+""\\s+)(?=[^\\s"\`)|}])`
-);
-function bindsComputedAction(template, helpers) {
-  for (const { code } of callGraph(template, helpers)) {
-    if (COMPUTED_BINDING_RE.test(code.replace(STRING_LITERAL_RE, '""'))) {
-      return true;
-    }
-  }
-  return false;
-}
-var BARE_NAME_RE = /(?<![\w.$])[A-Za-z_]\w*/g;
-function templateFunctions(template, helpers) {
-  const called = /* @__PURE__ */ new Set();
-  for (const { code } of callGraph(template, helpers)) {
-    for (const [name] of code.replace(STRING_LITERAL_RE, "").matchAll(BARE_NAME_RE)) {
-      called.add(name);
-    }
-  }
-  return called;
-}
-function templateHelperRefs(template, helpers) {
-  return new Set(
-    [...templateHelperCalls(template, helpers)].filter(
-      (name) => Object.hasOwn(helpers, name)
-    )
-  );
-}
-function templateHelperCalls(template, helpers) {
-  const called = /* @__PURE__ */ new Set();
-  for (const { code, dot, root } of callGraph(template, helpers)) {
-    for (const { name } of helperCalls(code, dot, root)) called.add(name);
-  }
-  return called;
-}
-var SELF_REF_RE = (self2) => new RegExp(`(?<![A-Za-z0-9_)$])(\\$?)\\.${self2}(?![A-Za-z0-9_])`, "g");
-function bindSelf(template, self2, ns) {
-  const refRe = SELF_REF_RE(self2);
-  const named3 = ownedBy(self2);
-  const starts = [];
-  for (const { dot, block } of scopedBlocks(template, "")) {
-    const code = block.text.replace(
-      STRING_LITERAL_RE,
-      (s) => " ".repeat(s.length)
-    );
-    for (const r of code.matchAll(refRe)) {
-      const base = r[1] === "$" ? "" : dot;
-      if (base === "") starts.push(block.at(r.index + r[1].length + 1));
-    }
-    for (const { name, index } of [
-      ...helperCalls(block.text, dot, ""),
-      ...actionBindings(block.text)
-    ]) {
-      if (named3(name)) starts.push(block.at(index + 1));
-    }
-  }
-  return [...new Set(starts)].sort((a, b) => b - a).reduce(
-    (t2, start) => t2.slice(0, start) + ns + t2.slice(start + self2.length),
-    template
-  );
-}
-function* declarationsAt(config2) {
-  for (const [name, decl] of Object.entries(config2.variables)) {
-    yield [name, decl, ["variables", name]];
-  }
-  for (const [segName, seg2] of Object.entries(config2.segments)) {
-    for (const [varName, decl] of Object.entries(seg2.vars ?? {})) {
-      yield [
-        `${segName}.${varName}`,
-        decl,
-        ["segments", segName, "vars", varName]
-      ];
-    }
-  }
-}
-function* declaredVariables(config2) {
-  for (const [name, decl] of declarationsAt(config2)) yield [name, decl];
-}
-function variableRead(path42, names) {
-  const parts = path42.split(".");
-  for (let n = parts.length; n > 0; n--) {
-    const name = parts.slice(0, n).join(".");
-    if (names.has(name)) return [name];
-  }
-  const namespace = `${path42}.`;
-  return [...names].filter((name) => name.startsWith(namespace));
-}
-function refResolves(ref, scope) {
-  return variableRead(ref, scope.names).some(
-    (name) => !ref.startsWith(`${name}.`) || scope.documents.has(name)
-  );
-}
-function templateScopeOf(cfg) {
-  const names = /* @__PURE__ */ new Set();
-  const documents = /* @__PURE__ */ new Set();
-  const declare = (name, v) => {
-    names.add(name);
-    if (isDocumentDecl(v)) documents.add(name);
-  };
-  for (const [name, v] of declaredVariables(cfg)) declare(name, v);
-  return { names, documents, helpers: cfg.helpers };
-}
-function isDocumentDecl(v) {
-  return v.kind === "dropped" || v.kind === "source" || (v.kind === "shell" || v.kind === "file") && parseArm(v.parse) === "json";
-}
-
-// src/config/payload-inputs.ts
-init_globals();
-
-// src/var-system/sources.ts
-init_globals();
-
-// src/daemon/cache/watchers.ts
-init_globals();
-var import_node_path12 = __toESM(require_path_browserify(), 1);
-
-// src/utils/logfmt.ts
-init_globals();
-var BARE = /^[^\s"=\\]+$/;
-var valueOf = (value) => BARE.test(value) ? value : JSON.stringify(value);
-
-// src/utils/folder-identity.ts
-init_globals();
-var statIdentity = (folder) => {
-  try {
-    const st = fs_default.statSync(folder, { bigint: true });
-    return { dev: st.dev, ino: st.ino, birthtimeNs: st.birthtimeNs };
-  } catch (e) {
-    const code = e.code;
-    if (code === "ENOENT" || code === "ENOTDIR") return "gone";
-    throw e;
-  }
-};
-var sameIdentity = (a, b) => a.dev === b.dev && a.ino === b.ino && a.birthtimeNs === b.birthtimeNs;
-var identityKey = (identity2) => identity2 === "gone" ? "gone" : `${identity2.dev}:${identity2.ino}:${identity2.birthtimeNs}`;
-var boundOf = (folder) => {
-  try {
-    return statIdentity(folder);
-  } catch (e) {
-    return { unreadable: e.code ?? String(e) };
-  }
-};
-var boundKey = (bound) => typeof bound === "string" || "ino" in bound ? identityKey(bound) : `unreadable:${bound.unreadable}`;
-var bindsFolder = (bound) => typeof bound !== "string" && "ino" in bound;
-
-// src/utils/watch-target.ts
-init_globals();
-var import_node_path11 = __toESM(require_path_browserify(), 1);
-function nearestWatchTarget(candidate) {
-  let name = import_node_path11.default.basename(candidate);
-  let dir = import_node_path11.default.dirname(candidate);
-  for (; ; ) {
-    const real = canonicalDirectory(dir);
-    if (real !== null)
-      return { dir: real, name, leaf: dir === import_node_path11.default.dirname(candidate) };
-    name = import_node_path11.default.basename(dir);
-    dir = import_node_path11.default.dirname(dir);
-  }
-}
-function canonicalDirectory(p2) {
-  try {
-    return fs_default.statSync(p2).isDirectory() ? fs_default.realpathSync(p2) : null;
-  } catch {
-    return null;
-  }
-}
-
-// src/daemon/cache/watchers.ts
-var defaultLogger = (_level, message) => debug(message);
-var DEBOUNCE_MS = 50;
-function watchTargetsOf(paths2) {
-  const unresolved = [];
-  let reached = true;
-  const byDir = /* @__PURE__ */ new Map();
-  for (const at of paths2.named) {
-    const { hops, stopped: stopped2 } = walkLinks(at);
-    if (stopped2 !== null)
-      unresolved.push({ path: at, reason: stopped2.message });
-    for (const hop of hops) {
-      const { dir, name, leaf } = nearestWatchTarget(hop);
-      reached &&= leaf;
-      const names = byDir.has(dir) ? byDir.get(dir) : /* @__PURE__ */ new Set();
-      names?.add(name);
-      byDir.set(dir, names);
-    }
-  }
-  for (const dir of paths2.whole.map(canonicalDirectory))
-    if (dir !== null) byDir.set(dir, null);
-  const targets = {
-    dirs: [...byDir.entries()].sort(([a], [b]) => a.localeCompare(b)).map(
-      ([dirPath, names]) => names === null ? { path: dirPath } : { path: dirPath, filenames: [...names].sort() }
-    )
-  };
-  const bound = new Map(
-    targets.dirs.map((d) => {
-      const at = boundOf(d.path);
-      return [d.path, bindsFolder(at) ? boundKey(at) : null];
-    })
-  );
-  return {
-    key: JSON.stringify([targets, [...bound]]),
-    targets,
-    unbound: [...bound.values()].includes(null),
-    bound,
-    reached,
-    unresolved
-  };
-}
-function watchFault(label2, watch2, beyond) {
-  const reasons = [
-    ...watch2.derived.unresolved.map(
-      // Every reason names the path it stopped at, the kernel's and the loop's.
-      (u) => `cannot follow a link chain \u2014 ${u.reason}`
-    ),
-    ...watch2.held.handle.deaf.map(
-      (d) => d.kind === "refused" ? `cannot watch ${d.path} \u2014 ${d.reason}` : `watching ${d.path} failed \u2014 ${d.reason}`
-    ),
-    ...beyond === null ? [] : [beyond]
-  ];
-  return reasons.length === 0 ? null : `${label2}: ${reasons.join("; ")}`;
-}
-function folded(window2, next) {
-  if (next.kind === "failed") return next;
-  if (window2.kind !== "changed") return window2;
-  if (next.kind === "unknown") return next;
-  for (const p2 of next.paths) window2.paths.add(p2);
-  return window2;
-}
-var namedOf = (dir, filename) => filename === null ? { kind: "unknown" } : { kind: "changed", paths: /* @__PURE__ */ new Set([import_node_path12.default.join(dir, filename)]) };
-var failedOf = (d) => ({
-  kind: "failed",
-  reason: `${d.path}: ${d.reason}`
-});
-var heldBy = (state, handle) => state.kind === "listening" && state.handle === handle;
-var dirId = (target) => `${target.recursive === true ? "tree" : "dir"}:${target.path}`;
-var WatcherRegistry = class {
-  slots = /* @__PURE__ */ new Map();
-  dirs = /* @__PURE__ */ new Map();
-  counters;
-  logger;
-  closed = false;
-  constructor(opts = {}) {
-    this.counters = opts.counters;
-    this.logger = opts.logger ?? defaultLogger;
-  }
-  // Acquire (or share) the watch keyed by `key`. Every acquire of a key is a
-  // holder of one slot, and each holder's callback hears every window.
-  // `targets` from the first acquire wins; subsequent acquires keep the
-  // original target set (consumers must use a fresh key if they need different
-  // targets). A consumer that needs no more than "something changed" ignores
-  // the invalidation's value.
-  acquire(key, targets, onInvalidate) {
-    if (this.closed) {
-      return {
-        release: () => {
-        },
-        deaf: targets.dirs.map((d) => ({
-          kind: "refused",
-          path: d.path,
-          reason: "the watcher registry is closed"
-        }))
-      };
-    }
-    const shared = this.slots.get(key);
-    for (const { dir } of shared?.listeners ?? []) this.judged(dir, "acquire");
-    const slot = shared ?? this.opened(key, targets);
-    const holder = { onInvalidate };
-    slot.holders.add(holder);
-    return this.makeHandle(slot, holder);
-  }
-  // [LAW:single-enforcer] The one rule for a watch whose targets can move: a
-  // consumer derives its spec from disk again and the held watch follows it
-  // exactly when the key differs. The same key is the same directories, kept
-  // as they are; a new key acquires the spec's watch and then releases the
-  // held one, so a directory both name keeps its OS handle through the move.
-  // Nothing held yet is a first acquire, which is a rebind from nothing.
-  //
-  // A spec with a directory that binds nothing yet (gone, or a mount's
-  // transient fault) keeps the watch held: a derive that lands between a
-  // directory's removal and its making again would otherwise trade a watch
-  // FSEvents keeps on its path for a slot the OS refuses. The next derive
-  // that finds the directory there rebinds, since its key differs.
-  //
-  // [LAW:no-ambient-temporal-coupling] A kept watch retries nothing: its deaf
-  // directories are the period's to open again (`judge`). A follow that
-  // retried would answer the failed window its own handle's error told, and
-  // a handle that errors after every open would retry itself at the debounce
-  // cadence.
-  follow(held, spec, onInvalidate) {
-    if (held !== null && (held.key === spec.key || spec.unbound))
-      return { watch: held, move: "kept" };
-    const watch2 = {
-      key: spec.key,
-      handle: this.acquire(spec.key, spec.targets, onInvalidate)
-    };
-    held?.handle.release();
-    return { watch: watch2, move: "rebound" };
-  }
-  opened(key, targets) {
-    const slot = {
-      key,
-      listeners: [],
-      holders: /* @__PURE__ */ new Set(),
-      debounce: null
-    };
-    for (const target of targets.dirs) {
-      const dir = this.dirFor(target);
-      const listener = {
-        slot,
-        dir,
-        filter: target.filenames ? new Set(target.filenames) : null
-      };
-      dir.listeners.add(listener);
-      slot.listeners.push(listener);
-    }
-    this.slots.set(key, slot);
-    if (this.counters) {
-      if (slot.listeners.every((l) => l.dir.state.kind === "listening"))
-        this.counters.watchersOpened++;
-      else this.counters.watchRefusals++;
-    }
-    return slot;
-  }
-  // The directory watch a new slot's target joins: the one already open
-  // there, judged, or a new one.
-  dirFor(target) {
-    const id2 = dirId(target);
-    const existing = this.dirs.get(id2);
-    if (existing !== void 0) {
-      this.judged(existing, "acquire");
-      return existing;
-    }
-    const where = { path: target.path, recursive: target.recursive === true };
-    const dir = {
-      id: id2,
-      ...where,
-      listeners: /* @__PURE__ */ new Set(),
-      state: this.open(where, () => dir, "acquire", null)
-    };
-    this.dirs.set(id2, dir);
-    return dir;
-  }
-  // [LAW:single-enforcer] The one rule that a directory watch names the
-  // folder at its path, applied whenever a holder acquires the directory,
-  // whenever an event says the folder there moved, and on every period
-  // (`judge`). A deaf one is opened again; a listening one whose path holds
-  // another folder than the one it bound (removed and made again, or a strict
-  // ancestor renamed away and another tree put at its path: inotify hears the
-  // old inode, and the bound folder is what an event naming the directory is
-  // judged against) is reopened in place. A path that binds nothing right now
-  // keeps the listening handle, as `follow` keeps a held watch: a macOS watch
-  // on the path hears the folder come back.
-  judged(dir, cause) {
-    if (dir.state.kind === "deaf") {
-      this.reopen(dir, cause);
-      return;
-    }
-    const now2 = boundOf(dir.path);
-    if (bindsFolder(now2) && boundKey(now2) !== dir.state.bound)
-      this.reopen(dir, "another folder is at its path");
-  }
-  // [LAW:no-ambient-temporal-coupling] Every directory watch judged against
-  // the disk, on the period the file-event delivery owner keeps (the daemon
-  // wires it). It is the one trigger for a replacement no event reaches a
-  // handle for (a strict ancestor renamed away and another tree put at its
-  // path: inotify reports a directory's own removal or self-move, never its
-  // parent's), and the retry of a directory the OS refused or whose handle
-  // errored while no holder newly acquires it. A directory staying as it is
-  // costs one stat, or one refused open, and tells nothing.
-  judge() {
-    for (const dir of this.dirs.values()) this.judged(dir, "period");
-  }
-  // [LAW:no-silent-failure] Every slot on the directory hears it change
-  // state. Going deaf, it hears the fault. Listening again, it hears an
-  // `unknown` window: whatever changed while the directory was deaf or bound
-  // to another folder went unheard, and a holder that re-derives on it reports
-  // its fault cleared. Deaf staying deaf is no change and tells nothing.
-  reopen(dir, cause) {
-    const was = dir.state;
-    if (was.kind === "listening") this.closeHandle(dir.path, was.handle, cause);
-    dir.state = this.open(dir, () => dir, cause, was);
-    if (dir.state.kind === "listening") this.tell(dir, { kind: "unknown" });
-    else if (was.kind === "listening")
-      this.tell(dir, failedOf(dir.state.deafness));
-  }
-  // `dirOf` names the watch the handle belongs to; its callbacks run only
-  // after the open returns, once the watch holds the state returned here.
-  open(where, dirOf, cause, was) {
-    const at = where.path;
-    const bound = boundKey(boundOf(at));
-    try {
-      fs_default.opendirSync(at).closeSync();
-      const handle = fs_default.watch(
-        at,
-        { persistent: false, recursive: where.recursive },
-        (_event, changed) => this.heard(dirOf(), handle, changed)
-      );
-      handle.on("error", (e) => {
-        this.logger("warn", `watcher error ${at}: ${e.message}`);
-        if (this.counters) this.counters.watchErrors++;
-        const dir = dirOf();
-        if (!heldBy(dir.state, handle)) return;
-        this.closeHandle(at, handle, "error");
-        const deafness = {
-          kind: "failed",
-          path: at,
-          reason: e.message
-        };
-        dir.state = { kind: "deaf", deafness };
-        this.tell(dir, failedOf(deafness));
-      });
-      if (this.counters) this.counters.dirWatchesOpened++;
-      this.logger(
-        "info",
-        `dir watch opened path=${valueOf(at)} cause=${valueOf(cause)}`
-      );
-      return { kind: "listening", handle, bound };
-    } catch (e) {
-      const reason = e.message;
-      const same2 = was?.kind === "deaf" && was.deafness.kind === "refused" && was.deafness.reason === reason;
-      if (!same2) this.logger("warn", `watch failed ${at}: ${reason}`);
-      return {
-        kind: "deaf",
-        deafness: { kind: "refused", path: at, reason }
-      };
-    }
-  }
-  // [LAW:dataflow-not-control-flow] Each listener's filter is a value: a name
-  // it lists, an unnamed event (the OS may be reporting the filtered child),
-  // or the directory's own name while the folder at the path is no longer the
-  // one this handle bound (its removal or replacement, which macOS reports as
-  // a change and Linux as a rename) reaches the slot. The same name with the
-  // folder unchanged is macOS reporting a child that came or went, or a chmod,
-  // and is not. Judged once per event, for every listener. A move is then
-  // judged, so a handle never stays bound to a folder no longer at its path
-  // and every later event naming the directory is judged against the folder
-  // there.
-  heard(dir, handle, changed) {
-    const { state } = dir;
-    if (!heldBy(state, handle)) return;
-    const moved = changed === import_node_path12.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== state.bound;
-    for (const { slot, filter } of dir.listeners) {
-      if (filter === null || changed === null || filter.has(changed) || moved)
-        this.fire(slot, namedOf(dir.path, changed));
-    }
-    if (moved) this.judged(dir, "moved");
-  }
-  tell(dir, invalidation) {
-    for (const { slot } of dir.listeners) this.fire(slot, invalidation);
-  }
-  fire(slot, invalidation) {
-    if (slot.debounce !== null) {
-      slot.debounce.window = folded(slot.debounce.window, invalidation);
-      return;
-    }
-    const debounce = {
-      window: invalidation,
-      timer: setTimeout(() => {
-        slot.debounce = null;
-        for (const holder of slot.holders) {
-          try {
-            holder.onInvalidate(debounce.window);
-          } catch (e) {
-            this.logger(
-              "warn",
-              `watcher invalidate threw key=${valueOf(slot.key)}: ${e.message}`
-            );
-          }
-        }
-      }, DEBOUNCE_MS)
-    };
-    debounce.timer.unref();
-    slot.debounce = debounce;
-  }
-  makeHandle(slot, holder) {
-    return {
-      get deaf() {
-        return slot.listeners.flatMap(
-          ({ dir }) => dir.state.kind === "deaf" ? [dir.state.deafness] : []
-        );
-      },
-      release: () => {
-        if (!slot.holders.delete(holder) || slot.holders.size > 0) return;
-        if (this.slots.get(slot.key) !== slot) return;
-        this.closeSlot(slot, "last release");
-        this.slots.delete(slot.key);
-      }
-    };
-  }
-  closeHandle(at, handle, cause) {
-    try {
-      handle.close();
-    } catch {
-    }
-    if (this.counters) this.counters.dirWatchesClosed++;
-    this.logger(
-      "info",
-      `dir watch closed path=${valueOf(at)} cause=${valueOf(cause)}`
-    );
-  }
-  // A directory watch closes with the last slot on it.
-  closeSlot(slot, cause) {
-    if (slot.debounce !== null) {
-      clearTimeout(slot.debounce.timer);
-      slot.debounce = null;
-    }
-    for (const listener of slot.listeners) {
-      const { dir } = listener;
-      dir.listeners.delete(listener);
-      if (dir.listeners.size > 0) continue;
-      if (dir.state.kind === "listening")
-        this.closeHandle(dir.path, dir.state.handle, cause);
-      this.dirs.delete(dir.id);
-    }
-    if (this.counters) this.counters.watchersClosed++;
-  }
-  // The slots held now.
-  size() {
-    return this.slots.size;
-  }
-  // The OS directory watches open now.
-  dirWatches() {
-    return [...this.dirs.values()].filter((d) => d.state.kind === "listening").length;
-  }
-  // Every directory a held watch targets.
-  watchedDirs() {
-    return [...this.dirs.values()].map((d) => d.path);
-  }
-  closeAll() {
-    this.closed = true;
-    for (const slot of this.slots.values()) this.closeSlot(slot, "close");
-    this.slots.clear();
-  }
-};
-
-// src/daemon/cache/file-events.ts
-init_globals();
-var import_node_path13 = __toESM(require_path_browserify(), 1);
-var PROBE_EVERY_MS = 3e4;
-var STALL_AFTER = 2;
-var PROBE_FILE = "probe";
-var NO_FILE_EVENTS = {
-  delivery: () => ({
-    kind: "unmeasured",
-    since: 0,
-    reason: "outside the daemon",
-    missedSince: null
-  }),
-  subscribe: () => () => {
-  }
-};
-var iso = (at) => new Date(at).toISOString();
-var label = (d) => d.kind === "unmeasured" ? `unmeasured:${d.reason}` : d.kind;
-var FileEventDelivery = class {
-  current;
-  instrument = { kind: "idle" };
-  listeners = /* @__PURE__ */ new Set();
-  stalls = 0;
-  catchUps = 0;
-  probes = 0;
-  probeFailures = 0;
-  watchers;
-  logger;
-  identityOf;
-  constructor(opts) {
-    this.watchers = opts.watchers;
-    this.logger = opts.logger;
-    this.identityOf = opts.identityOf ?? statIdentity;
-    this.current = {
-      kind: "unmeasured",
-      since: Date.now(),
-      reason: "not started",
-      missedSince: null
-    };
-  }
-  delivery() {
-    return this.current;
-  }
-  subscribe(listener) {
-    this.listeners.add(listener);
-    return () => void this.listeners.delete(listener);
-  }
-  // Only the daemon starts the owner, once it has won its socket: it makes
-  // the folder, opens the one watch, and arms the period.
-  start(folder) {
-    if (this.instrument.kind !== "idle") {
-      throw new Error("file events: the owner was started twice");
-    }
-    const period = setInterval(() => void this.tick(), PROBE_EVERY_MS);
-    period.unref();
-    let identity2;
-    try {
-      fs_default.mkdirSync(folder, { recursive: true });
-      identity2 = this.identityOf(folder);
-    } catch (e) {
-      this.end(
-        period,
-        `the probe folder could not be made: ${e.message}`
-      );
-      return;
-    }
-    if (identity2 === "gone") {
-      this.end(period, "the probe folder was removed as it was made");
-      return;
-    }
-    const probing = {
-      kind: "probing",
-      folder,
-      identity: identity2,
-      period,
-      // [LAW:single-enforcer] The only acquirer of this registry key.
-      handle: this.watchers.acquire(
-        `file-events:${folder}`,
-        { dirs: [{ path: folder, filenames: [PROBE_FILE] }] },
-        (heard) => this.heard(probing, heard)
-      )
-    };
-    this.instrument = probing;
-    this.logger("info", `file events probing folder=${valueOf(folder)}`);
-    const [refusal] = probing.handle.deaf;
-    if (refusal !== void 0) {
-      this.end(
-        period,
-        `the OS refused the probe folder's watch: ${refusal.reason}`
-      );
-      return;
-    }
-    this.move({ kind: "delivering", unreported: [], missedSince: null });
-    void this.tick();
-  }
-  stats() {
-    return {
-      delivery: this.current,
-      stalls: this.stalls,
-      catchUps: this.catchUps,
-      probes: this.probes,
-      probeFailures: this.probeFailures
-    };
-  }
-  close() {
-    const inst = this.instrument;
-    this.instrument = { kind: "idle" };
-    this.listeners.clear();
-    switch (inst.kind) {
-      case "probing":
-        inst.handle.release();
-        clearInterval(inst.period);
-        return;
-      case "ended":
-        clearInterval(inst.period);
-        return;
-      case "idle":
-        return;
-    }
-  }
-  // [LAW:dataflow-not-control-flow] The same steps at the start and every
-  // period after: tell subscribers the period passed; judge the probe folder
-  // against the one the watch opened on, first, so a folder replaced at its
-  // path never reads as a stall; judge the probes still unreported; write the
-  // next one.
-  async tick() {
-    this.notify({ kind: "period" });
-    const inst = this.instrument;
-    if (inst.kind !== "probing") return;
-    let now2;
-    try {
-      now2 = this.identityOf(inst.folder);
-    } catch (e) {
-      this.end(
-        inst.period,
-        `the probe folder cannot be read: ${e.message}`
-      );
-      return;
-    }
-    if (now2 === "gone") {
-      this.end(inst.period, "the probe folder was removed");
-      return;
-    }
-    if (!sameIdentity(now2, inst.identity)) {
-      this.end(inst.period, "the probe folder was replaced");
-      return;
-    }
-    const d = this.current;
-    if (d.kind === "delivering" && d.unreported.length >= STALL_AFTER) {
-      this.stalls++;
-      this.move({
-        kind: "stalled",
-        missedSince: d.missedSince ?? d.unreported[0]
-      });
-    }
-    await this.probe(inst);
-  }
-  // A delivering watch awaits the probe; a stalled one awaits none in
-  // particular, since any report recovers it. A write that lands while
-  // unmeasured measures again, awaiting that probe, so a transient failure
-  // (a full disk) measures once it clears. A write that fails is unmeasured
-  // with its error: it tests no watch. A probe still in flight when the
-  // instrument ends or closes judges nothing.
-  async probe(inst) {
-    const at = Date.now();
-    const before = this.current;
-    if (before.kind === "delivering") {
-      this.current = { ...before, unreported: [...before.unreported, at] };
-    }
-    try {
-      await fs_default.promises.writeFile(
-        import_node_path13.default.join(inst.folder, PROBE_FILE),
-        String(at)
-      );
-    } catch (e) {
-      this.probeFailures++;
-      const d2 = this.current;
-      if (this.instrument !== inst || d2.kind === "unmeasured") return;
-      this.move({
-        kind: "unmeasured",
-        since: at,
-        reason: `the probe could not be written: ${e.message}`,
-        missedSince: d2.missedSince ?? at
-      });
-      return;
-    }
-    this.probes++;
-    const d = this.current;
-    if (this.instrument !== inst || d.kind !== "unmeasured") return;
-    this.move({
-      kind: "delivering",
-      unreported: [at],
-      missedSince: d.missedSince
-    });
-  }
-  // [LAW:no-silent-failure] The watch's own failure ends the instrument: the
-  // OS refuses an immediate retry the way it refused the first (limits,
-  // permissions). Anything else it reports proves delivery.
-  heard(inst, heard) {
-    if (this.instrument !== inst) return;
-    if (heard.kind === "failed") {
-      this.end(inst.period, `the probe folder's watch failed: ${heard.reason}`);
-      return;
-    }
-    const d = this.current;
-    const delivering = {
-      kind: "delivering",
-      unreported: [],
-      missedSince: null
-    };
-    if (d.missedSince === null) {
-      this.move(delivering);
-      return;
-    }
-    this.current = delivering;
-    this.catchUps++;
-    this.logger(
-      "info",
-      `file events resumed since=${iso(d.missedSince)} missed=${Date.now() - d.missedSince}ms from=${d.kind}`
-    );
-    this.notify({ kind: "caught-up", since: d.missedSince });
-  }
-  // [LAW:no-silent-failure] An ended instrument holds no watch and never
-  // measures again, so whatever ended it, only a restart can.
-  end(period, reason) {
-    const inst = this.instrument;
-    if (inst.kind === "probing") inst.handle.release();
-    this.instrument = { kind: "ended", period };
-    const at = Date.now();
-    this.move({
-      kind: "unmeasured",
-      since: at,
-      reason: `${reason}; restart the daemon`,
-      missedSince: this.current.missedSince ?? at
-    });
-  }
-  // [LAW:nothing-unseen] One line on each change of state, none per period.
-  move(next) {
-    const was = label(this.current);
-    this.current = next;
-    if (label(next) === was) return;
-    switch (next.kind) {
-      case "delivering":
-        this.logger("info", "file events delivering");
-        break;
-      case "stalled":
-        this.logger(
-          "warn",
-          `file events stalled since=${iso(next.missedSince)}`
-        );
-        break;
-      case "unmeasured":
-        this.logger(
-          "warn",
-          `file events unmeasured since=${iso(next.since)} reason=${JSON.stringify(next.reason)}`
-        );
-        break;
-    }
-    this.notify({ kind: "moved" });
-  }
-  notify(notice) {
-    for (const listener of [...this.listeners]) listener(notice);
-  }
-};
-var stopped = (since) => `file events stopped at ${iso(since)}; the OS has delivered none since, not even for a file the daemon wrote to test it`;
-var stallReason = (d) => d.kind === "stalled" ? stopped(d.missedSince) : null;
-function fileEventsWarnings(d) {
-  if (d.missedSince === null) return [];
-  const since = iso(d.missedSince);
-  const message = () => {
-    switch (d.kind) {
-      case "delivering":
-        return `file events unconfirmed since ${since}: the probe written to test them has not been heard yet, so an edit to the config made since may not have reloaded`;
-      case "stalled":
-        return `${stopped(d.missedSince)}, so an edit to the config will not reload until they resume`;
-      case "unmeasured":
-        return `since ${since}, the daemon cannot check whether file events are arriving: ${d.reason}`;
-    }
-  };
-  return [{ kind: "file-events", state: d.kind, message: message() }];
-}
-
-// src/var-system/sources.ts
-init_timers();
-
-// node_modules/.pnpm/mobx@7.0.6/node_modules/mobx/dist/mobx.mjs
-init_globals();
-var __MOBX_DEV__ = true;
-var niceErrors = {
-  0: `Invalid value for configuration 'enforceActions', expected 'never', 'always' or 'observed'`,
-  1(annotationType, key) {
-    return `Cannot apply '${annotationType}' to '${key.toString()}': Field not found.`;
-  },
-  /*
-  2(prop) {
-      return `invalid decorator for '${prop.toString()}'`
-  },
-  3(prop) {
-      return `Cannot decorate '${prop.toString()}': action can only be used on properties with a function value.`
-  },
-  4(prop) {
-      return `Cannot decorate '${prop.toString()}': computed can only be used on getter properties.`
-  },
-  */
-  5: "'keys()' can only be used on observable objects, arrays, sets and maps",
-  6: "'values()' can only be used on observable objects, arrays, sets and maps",
-  7: "'entries()' can only be used on observable objects, arrays and maps",
-  8: "'set()' can only be used on observable objects, arrays and maps",
-  9: "'remove()' can only be used on observable objects, arrays and maps",
-  10: "'has()' can only be used on observable objects, arrays and maps",
-  11: "'get()' can only be used on observable objects, arrays and maps",
-  12: `Invalid annotation`,
-  13: `Dynamic observable objects cannot be frozen. If you're passing observables to 3rd party component/function that calls Object.freeze, pass copy instead: toJS(observable)`,
-  14: "Intercept handlers should return nothing or a change object",
-  15: `Observable arrays cannot be frozen. If you're passing observables to 3rd party component/function that calls Object.freeze, pass copy instead: toJS(observable)`,
-  16: `Modification exception: the internal structure of an observable array was changed.`,
-  19(other) {
-    return "Cannot initialize from classes that inherit from Map: " + other.constructor.name;
-  },
-  20(other) {
-    return "Cannot initialize map from " + other;
-  },
-  21(dataStructure) {
-    return `Cannot convert to map from '${dataStructure}'`;
-  },
-  23: "It is not possible to get index atoms from arrays",
-  24(thing) {
-    return "Cannot obtain administration from " + thing;
-  },
-  25(property, name) {
-    return `the entry '${property}' does not exist in the observable map '${name}'`;
-  },
-  26: "please specify a property",
-  27(property, name) {
-    return `no observable property '${property.toString()}' found on the observable object '${name}'`;
-  },
-  28(thing) {
-    return "Cannot obtain atom from " + thing;
-  },
-  29: "Expecting some object",
-  30: "invalid action stack. did you forget to finish an action?",
-  31: "missing option for computed: get",
-  32(name, derivation) {
-    return `Cycle detected in computation ${name}: ${derivation}`;
-  },
-  33(name) {
-    return `The setter of computed value '${name}' is trying to update itself. Did you intend to update an _observable_ value, instead of the computed property?`;
-  },
-  34(name) {
-    return `[ComputedValue '${name}'] It is not possible to assign a new value to a computed value.`;
-  },
-  35: "There are multiple, different versions of MobX active. Make sure MobX is loaded only once or use `configure({ isolateGlobalState: true })`",
-  36: "isolateGlobalState should be called before MobX is running any reactions",
-  37(method) {
-    return `[mobx] \`observableArray.${method}()\` mutates the array in-place, which is not allowed inside a derivation. Use \`array.slice().${method}()\` instead`;
-  },
-  38: "'ownKeys()' can only be used on observable objects",
-  39: "'defineProperty()' can only be used on observable objects",
-  40(length) {
-    return "Out of range: " + length;
-  },
-  41(other) {
-    return "Cannot initialize set from " + other;
-  },
-  42(key) {
-    return `Invalid index: '${key}'`;
-  },
-  43(annotationType, name, kind) {
-    return `Cannot apply '${annotationType}' to '${name}' (kind: ${kind}):
-'${annotationType}' can only be used on properties with a function value.`;
-  },
-  44(annotationType) {
-    return `'${annotationType}' can only be used with 'makeObservable'`;
-  }
-};
-var errors = __MOBX_DEV__ ? niceErrors : {};
-function die(error, ...args) {
-  if (__MOBX_DEV__) {
-    let e = typeof error === "string" ? error : errors[error];
-    if (typeof e === "function") e = e.apply(null, args);
-    throw new Error(`[MobX] ${e}`);
-  }
-  throw new Error(`[MobX] minified error nr: ${error}${args.length ? " " + args.map(String).join(",") : ""}. See mobx.js.org/errors`);
-}
-var assign = Object.assign;
-var getDescriptor = Object.getOwnPropertyDescriptor;
-var defineProperty = Object.defineProperty;
-var objectPrototype = Object.prototype;
-var EMPTY_ARRAY = [];
-Object.freeze(EMPTY_ARRAY);
-var EMPTY_OBJECT = {};
-Object.freeze(EMPTY_OBJECT);
-var plainObjectString = /* @__PURE__ */ Object.toString();
-function getNextId() {
-  return ++globalState.mobxGuid;
-}
-function once(func) {
-  let invoked = false;
-  return function() {
-    if (invoked) {
-      return;
-    }
-    invoked = true;
-    return func.apply(this, arguments);
-  };
-}
-var noop = () => {
-};
-function isFunction(fn) {
-  return typeof fn === "function";
-}
-function isStringish(value) {
-  const t2 = typeof value;
-  switch (t2) {
-    case "string":
-    case "symbol":
-    case "number":
-      return true;
-  }
-  return false;
-}
-function isObject(value) {
-  return value !== null && typeof value === "object";
-}
-function isPlainObject(value) {
-  if (!isObject(value)) {
-    return false;
-  }
-  const proto = Object.getPrototypeOf(value);
-  if (proto == null) {
-    return true;
-  }
-  const protoConstructor = hasProp(proto, "constructor") && proto.constructor;
-  return typeof protoConstructor === "function" && protoConstructor.toString() === plainObjectString;
-}
-function isGenerator(obj) {
-  const constructor = obj == null ? void 0 : obj.constructor;
-  if (!constructor) {
-    return false;
-  }
-  if ("GeneratorFunction" === constructor.name || "GeneratorFunction" === constructor.displayName) {
-    return true;
-  }
-  return false;
-}
-function addHiddenProp(object, propName, value) {
-  defineProperty(object, propName, {
-    enumerable: false,
-    writable: true,
-    configurable: true,
-    value
-  });
-}
-function addHiddenFinalProp(object, propName, value) {
-  defineProperty(object, propName, {
-    enumerable: false,
-    writable: false,
-    configurable: true,
-    value
-  });
-}
-function createInstanceofPredicate(name, theClass) {
-  const propName = "isMobX" + name;
-  theClass.prototype[propName] = true;
-  return function(x) {
-    return isObject(x) && x[propName] === true;
-  };
-}
-function isES6Map(thing) {
-  return thing != null && Object.prototype.toString.call(thing) === "[object Map]";
-}
-function isPlainES6Map(thing) {
-  const mapProto = Object.getPrototypeOf(thing);
-  const objectProto = Object.getPrototypeOf(mapProto);
-  const nullProto = Object.getPrototypeOf(objectProto);
-  return nullProto === null;
-}
-function isES6Set(thing) {
-  return thing != null && Object.prototype.toString.call(thing) === "[object Set]";
-}
-function getPlainObjectKeys(object) {
-  const keys2 = Object.keys(object);
-  const symbols2 = Object.getOwnPropertySymbols(object);
-  if (!symbols2.length) {
-    return keys2;
-  }
-  return [...keys2, ...symbols2.filter((s) => objectPrototype.propertyIsEnumerable.call(object, s))];
-}
-var ownKeys2 = Reflect.ownKeys;
-function stringifyKey(key) {
-  if (typeof key === "string") {
-    return key;
-  }
-  if (typeof key === "symbol") {
-    return key.toString();
-  }
-  return new String(key).toString();
-}
-function toPrimitive(value) {
-  return value === null ? null : typeof value === "object" ? "" + value : value;
-}
-function hasProp(target, prop) {
-  return objectPrototype.hasOwnProperty.call(target, prop);
-}
-var getOwnPropertyDescriptors = Object.getOwnPropertyDescriptors;
-function getFlag(flags, mask) {
-  return !!(flags & mask);
-}
-function setFlag(flags, mask, newValue) {
-  if (newValue) {
-    flags |= mask;
-  } else {
-    flags &= ~mask;
-  }
-  return flags;
-}
-function assert20223DecoratorType(context, types2) {
-  if (__MOBX_DEV__ && !types2.includes(context.kind)) {
-    die(`The decorator applied to '${String(context.name)}' cannot be used on a ${context.kind} element`);
-  }
-}
-var $mobx = /* @__PURE__ */ Symbol("mobx administration");
-var Atom = class {
-  /**
-   * Create a new atom. For debugging purposes it is recommended to give it a name.
-   * The onBecomeObserved and onBecomeUnobserved callbacks can be used for resource management.
-   */
-  constructor(name_ = __MOBX_DEV__ ? "Atom@" + getNextId() : "Atom") {
-    this.name_ = void 0;
-    this.flags_ = 0;
-    this.observers_ = null;
-    this.lastAccessedBy_ = 0;
-    this.lowestObserverState_ = -1;
-    this.onBOL = void 0;
-    this.onBUOL = void 0;
-    this.name_ = name_;
-  }
-  // for effective unobserving. BaseAtom has true, for extra optimization, so its onBecomeUnobserved never gets called, because it's not needed
-  get isBeingObserved() {
-    return getFlag(
-      this.flags_,
-      1
-      /* AtomFlags.isBeingObserved */
-    );
-  }
-  set isBeingObserved(newValue) {
-    this.flags_ = setFlag(this.flags_, 1, newValue);
-  }
-  get isPendingUnobservation() {
-    return getFlag(
-      this.flags_,
-      2
-      /* AtomFlags.isPendingUnobservation */
-    );
-  }
-  set isPendingUnobservation(newValue) {
-    this.flags_ = setFlag(this.flags_, 2, newValue);
-  }
-  get diffValue() {
-    return getFlag(
-      this.flags_,
-      4
-      /* AtomFlags.diffValue */
-    ) ? 1 : 0;
-  }
-  set diffValue(newValue) {
-    this.flags_ = setFlag(this.flags_, 4, newValue === 1 ? true : false);
-  }
-  onBO() {
-    if (this.onBOL) {
-      this.onBOL.forEach((listener) => listener());
-    }
-  }
-  onBUO() {
-    if (this.onBUOL) {
-      this.onBUOL.forEach((listener) => listener());
-    }
-  }
-  /**
-   * Invoke this method to notify mobx that your atom has been used somehow.
-   * Returns true if there is currently a reactive context.
-   */
-  reportObserved() {
-    return reportObserved(this);
-  }
-  /**
-   * Invoke this method _after_ this method has changed to signal mobx that all its observers should invalidate.
-   */
-  reportChanged() {
-    startBatch();
-    propagateChanged(this);
-    endBatch();
-  }
-  toString() {
-    return this.name_;
-  }
-};
-var isAtom = /* @__PURE__ */ createInstanceofPredicate("Atom", Atom);
-function createAtom(name, onBecomeObservedHandler = noop, onBecomeUnobservedHandler = noop) {
-  const atom = new Atom(name);
-  if (onBecomeObservedHandler !== noop) {
-    atom.onBOL = /* @__PURE__ */ new Set([onBecomeObservedHandler]);
-  }
-  if (onBecomeUnobservedHandler !== noop) {
-    atom.onBUOL = /* @__PURE__ */ new Set([onBecomeUnobservedHandler]);
-  }
-  return atom;
-}
-function compareStructural(a, b) {
-  return deepEqual(a, b);
-}
-function compareShallow(a, b) {
-  return deepEqual(a, b, 1);
-}
-var compareDefault = Object.is;
-function deepEnhancer(v, _, name) {
-  if (v === null || typeof v !== "object" && typeof v !== "function") {
-    return v;
-  }
-  if (isObservable(v)) {
-    return v;
-  }
-  if (Array.isArray(v)) {
-    return observable.array(v, {
-      name
-    });
-  }
-  if (isPlainObject(v)) {
-    return observable.object(v, void 0, {
-      name
-    });
-  }
-  if (isES6Map(v)) {
-    return observable.map(v, {
-      name
-    });
-  }
-  if (isES6Set(v)) {
-    return observable.set(v, {
-      name
-    });
-  }
-  if (typeof v === "function" && !isAction(v) && !isFlow(v)) {
-    if (isGenerator(v)) {
-      return flow(v);
-    } else {
-      return autoAction(name, v);
-    }
-  }
-  return v;
-}
-function referenceEnhancer(newValue) {
-  return newValue;
-}
-var OVERRIDE = "override";
-function isOverride(annotation) {
-  return annotation.annotationType_ === OVERRIDE;
-}
-function createActionAnnotation(name, options) {
-  return {
-    annotationType_: name,
-    options_: options,
-    make_: make_$5,
-    extend_: extend_$4
-  };
-}
-function make_$5(adm, key, descriptor, source) {
-  var _this$options_;
-  if ((_this$options_ = this.options_) != null && _this$options_.bound) {
-    return this.extend_(adm, key, descriptor, false) === null ? 0 : 1;
-  }
-  if (source === adm.target_) {
-    return this.extend_(adm, key, descriptor, false) === null ? 0 : 2;
-  }
-  if (isAction(descriptor.value)) {
-    return 1;
-  }
-  const actionDescriptor = createActionDescriptor(adm, this, key, descriptor, false);
-  defineProperty(source, key, actionDescriptor);
-  return 2;
-}
-function extend_$4(adm, key, descriptor, proxyTrap) {
-  const actionDescriptor = createActionDescriptor(adm, this, key, descriptor);
-  return adm.defineProperty_(key, actionDescriptor, proxyTrap);
-}
-function decorateAction20223_(annotation, mthd, context) {
-  if (__MOBX_DEV__) {
-    assert20223DecoratorType(context, ["method", "field"]);
-  }
-  const {
-    kind,
-    name,
-    addInitializer
-  } = context;
-  const ann = annotation;
-  const _createAction = (m) => {
-    var _ann$options_$name, _ann$options_, _ann$options_$autoAct, _ann$options_2;
-    return createAction((_ann$options_$name = (_ann$options_ = ann.options_) == null ? void 0 : _ann$options_.name) != null ? _ann$options_$name : name.toString(), m, (_ann$options_$autoAct = (_ann$options_2 = ann.options_) == null ? void 0 : _ann$options_2.autoAction) != null ? _ann$options_$autoAct : false);
-  };
-  if (kind == "field") {
-    return function(initMthd) {
-      var _ann$options_3;
-      let mthd2 = initMthd;
-      if (!isAction(mthd2)) {
-        mthd2 = _createAction(mthd2);
-      }
-      if ((_ann$options_3 = ann.options_) != null && _ann$options_3.bound) {
-        mthd2 = mthd2.bind(this);
-        mthd2.isMobxAction = true;
-      }
-      return mthd2;
-    };
-  }
-  if (kind == "method") {
-    var _ann$options_4;
-    if (!isAction(mthd)) {
-      mthd = _createAction(mthd);
-    }
-    if ((_ann$options_4 = ann.options_) != null && _ann$options_4.bound) {
-      addInitializer(function() {
-        const self2 = this;
-        const bound = self2[name].bind(self2);
-        bound.isMobxAction = true;
-        self2[name] = bound;
-      });
-    }
-    return mthd;
-  }
-  die(43, ann.annotationType_, String(name), kind);
-}
-function assertActionDescriptor(adm, {
-  annotationType_
-}, key, {
-  value
-}) {
-  if (__MOBX_DEV__ && !isFunction(value)) {
-    die(`Cannot apply '${annotationType_}' to '${adm.name_}.${key.toString()}':
-'${annotationType_}' can only be used on properties with a function value.`);
-  }
-}
-function createActionDescriptor(adm, annotation, key, descriptor, safeDescriptors = globalState.safeDescriptors) {
-  var _annotation$options_, _annotation$options_$, _annotation$options_2, _annotation$options_$2, _annotation$options_3, _annotation$options_4, _adm$proxy_2;
-  assertActionDescriptor(adm, annotation, key, descriptor);
-  let {
-    value
-  } = descriptor;
-  if ((_annotation$options_ = annotation.options_) != null && _annotation$options_.bound) {
-    var _adm$proxy_;
-    value = value.bind((_adm$proxy_ = adm.proxy_) != null ? _adm$proxy_ : adm.target_);
-  }
-  return {
-    value: createAction(
-      (_annotation$options_$ = (_annotation$options_2 = annotation.options_) == null ? void 0 : _annotation$options_2.name) != null ? _annotation$options_$ : key.toString(),
-      value,
-      (_annotation$options_$2 = (_annotation$options_3 = annotation.options_) == null ? void 0 : _annotation$options_3.autoAction) != null ? _annotation$options_$2 : false,
-      // https://github.com/mobxjs/mobx/discussions/3140
-      (_annotation$options_4 = annotation.options_) != null && _annotation$options_4.bound ? (_adm$proxy_2 = adm.proxy_) != null ? _adm$proxy_2 : adm.target_ : void 0
-    ),
-    // Non-configurable for classes
-    // prevents accidental field redefinition in subclass
-    configurable: safeDescriptors ? adm.isPlainObject_ : true,
-    // https://github.com/mobxjs/mobx/pull/2641#issuecomment-737292058
-    enumerable: false,
-    // Non-obsevable, therefore non-writable
-    // Also prevents rewriting in subclass constructor
-    writable: safeDescriptors ? false : true
-  };
-}
-function createFlowAnnotation(name, options) {
-  return {
-    annotationType_: name,
-    options_: options,
-    make_: make_$4,
-    extend_: extend_$3
-  };
-}
-function make_$4(adm, key, descriptor, source) {
-  var _this$options_;
-  if (source === adm.target_) {
-    return this.extend_(adm, key, descriptor, false) === null ? 0 : 2;
-  }
-  if ((_this$options_ = this.options_) != null && _this$options_.bound && (!hasProp(adm.target_, key) || !isFlow(adm.target_[key]))) {
-    if (this.extend_(adm, key, descriptor, false) === null) {
-      return 0;
-    }
-  }
-  if (isFlow(descriptor.value)) {
-    return 1;
-  }
-  const flowDescriptor = createFlowDescriptor(adm, this, key, descriptor, false, false);
-  defineProperty(source, key, flowDescriptor);
-  return 2;
-}
-function extend_$3(adm, key, descriptor, proxyTrap) {
-  var _this$options_2;
-  const flowDescriptor = createFlowDescriptor(adm, this, key, descriptor, (_this$options_2 = this.options_) == null ? void 0 : _this$options_2.bound);
-  return adm.defineProperty_(key, flowDescriptor, proxyTrap);
-}
-function decorateFlow20223_(annotation, mthd, context) {
-  var _annotation$options_;
-  if (__MOBX_DEV__) {
-    assert20223DecoratorType(context, ["method"]);
-  }
-  const {
-    name,
-    addInitializer
-  } = context;
-  if (!isFlow(mthd)) {
-    mthd = flow(mthd);
-  }
-  if ((_annotation$options_ = annotation.options_) != null && _annotation$options_.bound) {
-    addInitializer(function() {
-      const self2 = this;
-      const bound = self2[name].bind(self2);
-      bound.isMobXFlow = true;
-      self2[name] = bound;
-    });
-  }
-  return mthd;
-}
-function assertFlowDescriptor(adm, {
-  annotationType_
-}, key, {
-  value
-}) {
-  if (__MOBX_DEV__ && !isFunction(value)) {
-    die(`Cannot apply '${annotationType_}' to '${adm.name_}.${key.toString()}':
-'${annotationType_}' can only be used on properties with a generator function value.`);
-  }
-}
-function createFlowDescriptor(adm, annotation, key, descriptor, bound, safeDescriptors = globalState.safeDescriptors) {
-  assertFlowDescriptor(adm, annotation, key, descriptor);
-  let {
-    value
-  } = descriptor;
-  if (!isFlow(value)) {
-    value = flow(value);
-  }
-  if (bound) {
-    var _adm$proxy_;
-    value = value.bind((_adm$proxy_ = adm.proxy_) != null ? _adm$proxy_ : adm.target_);
-    value.isMobXFlow = true;
-  }
-  return {
-    value,
-    // Non-configurable for classes
-    // prevents accidental field redefinition in subclass
-    configurable: safeDescriptors ? adm.isPlainObject_ : true,
-    // https://github.com/mobxjs/mobx/pull/2641#issuecomment-737292058
-    enumerable: false,
-    // Non-obsevable, therefore non-writable
-    // Also prevents rewriting in subclass constructor
-    writable: safeDescriptors ? false : true
-  };
-}
-function createComputedAnnotation(name, options) {
-  return {
-    annotationType_: name,
-    options_: options,
-    make_: make_$3,
-    extend_: extend_$2
-  };
-}
-function make_$3(adm, key, descriptor) {
-  return this.extend_(adm, key, descriptor, false) === null ? 0 : 1;
-}
-function extend_$2(adm, key, descriptor, proxyTrap) {
-  assertComputedDescriptor(adm, this, key, descriptor);
-  return adm.defineComputedProperty_(key, assign({}, this.options_, {
-    get: descriptor.get,
-    set: descriptor.set
-  }), proxyTrap);
-}
-function decorateComputed20223_(annotation, get3, context) {
-  if (__MOBX_DEV__) {
-    assert20223DecoratorType(context, ["getter"]);
-  }
-  const ann = annotation;
-  const {
-    name: key,
-    addInitializer
-  } = context;
-  let computedValues;
-  function createComputedValue(target, adm) {
-    const options = assign({}, ann.options_, {
-      get: get3,
-      context: target
-    });
-    options.name || (options.name = __MOBX_DEV__ ? `${adm.name_}.${key.toString()}` : `ObservableObject.${key.toString()}`);
-    return new ComputedValue(options);
-  }
-  addInitializer(function() {
-    var _adm$lazyComputedKeys;
-    const adm = asObservableObject(this)[$mobx];
-    const target = this;
-    const observable2 = adm.values_.get(key);
-    if (observable2 instanceof ComputedValue && observable2.derivation !== get3) {
-      adm.values_.delete(key);
-    }
-    ((_adm$lazyComputedKeys = adm.lazyComputedKeys_) != null ? _adm$lazyComputedKeys : adm.lazyComputedKeys_ = /* @__PURE__ */ new Map()).set(key, () => createComputedValue(target, adm));
-  });
-  return function() {
-    const adm = this[$mobx];
-    const observable2 = adm.values_.get(key);
-    if (observable2 instanceof ComputedValue && observable2.derivation !== get3) {
-      var _computedValues;
-      let computed3 = (_computedValues = computedValues) == null ? void 0 : _computedValues.get(this);
-      if (!computed3) {
-        var _computedValues2;
-        computed3 = createComputedValue(this, adm);
-        ((_computedValues2 = computedValues) != null ? _computedValues2 : computedValues = /* @__PURE__ */ new WeakMap()).set(this, computed3);
-      }
-      return computed3.get();
-    }
-    return adm.getObservablePropValue_(key);
-  };
-}
-function assertComputedDescriptor(adm, {
-  annotationType_
-}, key, {
-  get: get3
-}) {
-  if (__MOBX_DEV__ && !get3) {
-    die(`Cannot apply '${annotationType_}' to '${adm.name_}.${key.toString()}':
-'${annotationType_}' can only be used on getter(+setter) properties.`);
-  }
-}
-function createObservableAnnotation(name, options) {
-  return {
-    annotationType_: name,
-    options_: options,
-    make_: make_$2,
-    extend_: extend_$1
-  };
-}
-function make_$2(adm, key, descriptor) {
-  return this.extend_(adm, key, descriptor, false) === null ? 0 : 1;
-}
-function extend_$1(adm, key, descriptor, proxyTrap) {
-  var _this$options_$enhanc, _this$options_;
-  assertObservableDescriptor(adm, this, key, descriptor);
-  return adm.defineObservableProperty_(key, descriptor.value, (_this$options_$enhanc = (_this$options_ = this.options_) == null ? void 0 : _this$options_.enhancer_) != null ? _this$options_$enhanc : deepEnhancer, proxyTrap);
-}
-function decorateObservable20223_(annotation, desc, context) {
-  if (__MOBX_DEV__) {
-    if (context.kind === "field") {
-      throw die(`Please use \`@observable accessor ${String(context.name)}\` instead of \`@observable ${String(context.name)}\``);
-    }
-    assert20223DecoratorType(context, ["accessor"]);
-  }
-  const ann = annotation;
-  const {
-    kind,
-    name
-  } = context;
-  if (kind !== "accessor") {
-    return;
-  }
-  function registerLazy(target, value) {
-    var _adm$lazyObservableKe;
-    const adm = asObservableObject(target)[$mobx];
-    ((_adm$lazyObservableKe = adm.lazyObservableKeys_) != null ? _adm$lazyObservableKe : adm.lazyObservableKeys_ = /* @__PURE__ */ new Map()).set(name, () => {
-      var _ann$options_$enhance, _ann$options_;
-      return new ObservableValue(value, (_ann$options_$enhance = (_ann$options_ = ann.options_) == null ? void 0 : _ann$options_.enhancer_) != null ? _ann$options_$enhance : deepEnhancer, __MOBX_DEV__ ? `${adm.name_}.${name.toString()}` : `ObservableObject.${name.toString()}`, false);
-    });
-    return adm;
-  }
-  return {
-    get() {
-      var _this$$mobx;
-      const adm = (_this$$mobx = this[$mobx]) != null ? _this$$mobx : registerLazy(this, desc.get.call(this));
-      return adm.getObservablePropValue_(name);
-    },
-    set(value) {
-      var _this$$mobx2;
-      const adm = (_this$$mobx2 = this[$mobx]) != null ? _this$$mobx2 : registerLazy(this, value);
-      return adm.setObservablePropValue_(name, value);
-    },
-    init(value) {
-      registerLazy(this, value);
-      return value;
-    }
-  };
-}
-function assertObservableDescriptor(adm, {
-  annotationType_
-}, key, descriptor) {
-  if (__MOBX_DEV__ && !("value" in descriptor)) {
-    die(`Cannot apply '${annotationType_}' to '${adm.name_}.${key.toString()}':
-'${annotationType_}' cannot be used on getter/setter properties`);
-  }
-}
-var AUTO = "true";
-var autoAnnotation = /* @__PURE__ */ createAutoAnnotation();
-function createAutoAnnotation(options) {
-  return {
-    annotationType_: AUTO,
-    options_: options,
-    make_: make_$1,
-    extend_
-  };
-}
-var autoAnnotations = [autoAnnotation];
-function getAutoAnnotation(options) {
-  var _autoAnnotations$idx;
-  const deep = options.deep !== false;
-  const autoBind = !!options.autoBind;
-  const idx = (deep ? 0 : 1) | (autoBind ? 2 : 0);
-  return (_autoAnnotations$idx = autoAnnotations[idx]) != null ? _autoAnnotations$idx : autoAnnotations[idx] = createAutoAnnotation({
-    deep,
-    autoBind
-  });
-}
-function make_$1(adm, key, descriptor, source) {
-  var _this$options_3, _this$options_4;
-  if (descriptor.get) {
-    return computed.make_(adm, key, descriptor, source);
-  }
-  if (descriptor.set) {
-    const set2 = isAction(descriptor.set) ? descriptor.set : createAction(key.toString(), descriptor.set);
-    if (source === adm.target_) {
-      return adm.defineProperty_(key, {
-        configurable: globalState.safeDescriptors ? adm.isPlainObject_ : true,
-        set: set2
-      }) === null ? 0 : 2;
-    }
-    defineProperty(source, key, {
-      configurable: true,
-      set: set2
-    });
-    return 2;
-  }
-  if (source !== adm.target_ && typeof descriptor.value === "function") {
-    var _this$options_2;
-    if (isGenerator(descriptor.value)) {
-      var _this$options_;
-      const flowAnnotation2 = (_this$options_ = this.options_) != null && _this$options_.autoBind ? flowBound : flow;
-      return flowAnnotation2.make_(adm, key, descriptor, source);
-    }
-    const actionAnnotation2 = (_this$options_2 = this.options_) != null && _this$options_2.autoBind ? autoActionBound : autoAction;
-    return actionAnnotation2.make_(adm, key, descriptor, source);
-  }
-  let observableAnnotation2 = ((_this$options_3 = this.options_) == null ? void 0 : _this$options_3.deep) === false ? observableRef : observable;
-  if (typeof descriptor.value === "function" && (_this$options_4 = this.options_) != null && _this$options_4.autoBind) {
-    var _adm$proxy_;
-    descriptor.value = descriptor.value.bind((_adm$proxy_ = adm.proxy_) != null ? _adm$proxy_ : adm.target_);
-  }
-  return observableAnnotation2.make_(adm, key, descriptor, source);
-}
-function extend_(adm, key, descriptor, proxyTrap) {
-  var _this$options_5, _this$options_6;
-  if (descriptor.get) {
-    return computed.extend_(adm, key, descriptor, proxyTrap);
-  }
-  if (descriptor.set) {
-    return adm.defineProperty_(key, {
-      configurable: globalState.safeDescriptors ? adm.isPlainObject_ : true,
-      set: createAction(key.toString(), descriptor.set)
-    }, proxyTrap);
-  }
-  if (typeof descriptor.value === "function" && (_this$options_5 = this.options_) != null && _this$options_5.autoBind) {
-    var _adm$proxy_2;
-    descriptor.value = descriptor.value.bind((_adm$proxy_2 = adm.proxy_) != null ? _adm$proxy_2 : adm.target_);
-  }
-  let observableAnnotation2 = ((_this$options_6 = this.options_) == null ? void 0 : _this$options_6.deep) === false ? observableRef : observable;
-  return observableAnnotation2.extend_(adm, key, descriptor, proxyTrap);
-}
-function createDecoratorAnnotation(annotation, decorate) {
-  return assign(function decoratorAnnotation(value, context) {
-    if (context && typeof context.kind === "string") {
-      return decorate(annotation, value, context);
-    }
-    if (__MOBX_DEV__) {
-      die(`Invalid arguments for \`${annotation.annotationType_}\``);
-    }
-    return void 0;
-  }, annotation);
-}
-var OBSERVABLE = "observable";
-var OBSERVABLE_REF = "observable.ref";
-var defaultCreateObservableOptions = {
-  deep: true,
-  name: void 0,
-  defaultDecorator: void 0
-};
-Object.freeze(defaultCreateObservableOptions);
-function asCreateObservableOptions(thing) {
-  return thing || defaultCreateObservableOptions;
-}
-var observableAnnotation = /* @__PURE__ */ createObservableAnnotation(OBSERVABLE);
-var observableRefAnnotation = /* @__PURE__ */ createObservableAnnotation(OBSERVABLE_REF, {
-  enhancer_: referenceEnhancer
-});
-function createObservableDecoratorAnnotation(annotation) {
-  return createDecoratorAnnotation(annotation, decorateObservable20223_);
-}
-function getEnhancerFromOptions(options) {
-  return options.deep === true ? deepEnhancer : options.deep === false ? referenceEnhancer : getEnhancerFromAnnotation(options.defaultDecorator);
-}
-function getAnnotationFromOptions(options) {
-  var _options$defaultDecor;
-  return options ? (_options$defaultDecor = options.defaultDecorator) != null ? _options$defaultDecor : getAutoAnnotation(options) : void 0;
-}
-function getEnhancerFromAnnotation(annotation) {
-  var _annotation$options_$, _annotation$options_;
-  return !annotation ? deepEnhancer : (_annotation$options_$ = (_annotation$options_ = annotation.options_) == null ? void 0 : _annotation$options_.enhancer_) != null ? _annotation$options_$ : deepEnhancer;
-}
-function createObservable(v, arg2, arg3) {
-  if (arg2 && typeof arg2.kind === "string") {
-    return decorateObservable20223_(observableAnnotation, v, arg2);
-  }
-  if (isObservable(v)) {
-    return v;
-  }
-  if (isPlainObject(v)) {
-    return observable.object(v, arg2, arg3);
-  }
-  if (Array.isArray(v)) {
-    return observable.array(v, arg2);
-  }
-  if (isES6Map(v)) {
-    return observable.map(v, arg2);
-  }
-  if (isES6Set(v)) {
-    return observable.set(v, arg2);
-  }
-  if (typeof v === "object" && v !== null) {
-    return v;
-  }
-  return observable.box(v, arg2);
-}
-var observableFactories = {
-  box(value, options) {
-    const o = asCreateObservableOptions(options);
-    return new ObservableValue(value, getEnhancerFromOptions(o), o.name, true, o.equals);
-  },
-  array(initialValues, options) {
-    const o = asCreateObservableOptions(options);
-    return createObservableArray(initialValues, getEnhancerFromOptions(o), o.name);
-  },
-  map(initialValues, options) {
-    const o = asCreateObservableOptions(options);
-    return new ObservableMap(initialValues, getEnhancerFromOptions(o), o.name);
-  },
-  set(initialValues, options) {
-    const o = asCreateObservableOptions(options);
-    return new ObservableSet(initialValues, getEnhancerFromOptions(o), o.name);
-  },
-  object(props, annotations, options) {
-    return initObservable(() => extendObservable(asDynamicObservableObject({}, options), props, annotations));
-  }
-};
-var observableRef = /* @__PURE__ */ createObservableDecoratorAnnotation(observableRefAnnotation);
-var observable = /* @__PURE__ */ assign(createObservable, observableAnnotation, observableFactories);
-var COMPUTED = "computed";
-function createComputedDecoratorAnnotation(annotation) {
-  return createDecoratorAnnotation(annotation, decorateComputed20223_);
-}
-var computedAnnotation = /* @__PURE__ */ createComputedAnnotation(COMPUTED);
-var computed = function computed2(arg1, arg2) {
-  if (arg2 && typeof arg2.kind === "string") {
-    return decorateComputed20223_(computedAnnotation, arg1, arg2);
-  }
-  if (isPlainObject(arg1)) {
-    return createComputedDecoratorAnnotation(createComputedAnnotation(COMPUTED, arg1));
-  }
-  if (__MOBX_DEV__) {
-    if (!isFunction(arg1)) {
-      die("First argument to `computed` should be an expression.");
-    }
-    if (isFunction(arg2)) {
-      die("A setter as second argument is no longer supported, use `{ set: fn }` option instead");
-    }
-  }
-  const opts = isPlainObject(arg2) ? arg2 : {};
-  opts.get = arg1;
-  opts.name || (opts.name = arg1.name || "");
-  return new ComputedValue(opts);
-};
-assign(computed, computedAnnotation);
-var _getDescriptor$config;
-var _getDescriptor;
-var currentActionId = 0;
-var nextActionId = 1;
-var isFunctionNameConfigurable = (_getDescriptor$config = (_getDescriptor = /* @__PURE__ */ getDescriptor(() => {
-}, "name")) == null ? void 0 : _getDescriptor.configurable) != null ? _getDescriptor$config : false;
-var tmpNameDescriptor = {
-  value: "action",
-  configurable: true,
-  writable: false,
-  enumerable: false
-};
-function createAction(actionName, fn, autoAction2 = false, ref) {
-  if (__MOBX_DEV__) {
-    if (!isFunction(fn)) {
-      die("`action` can only be invoked on functions");
-    }
-    if (typeof actionName !== "string" || !actionName) {
-      die(`actions should have valid names, got: '${actionName}'`);
-    }
-  }
-  function res() {
-    return executeAction(actionName, autoAction2, fn, ref || this, arguments);
-  }
-  res.isMobxAction = true;
-  res.toString = () => fn.toString();
-  if (isFunctionNameConfigurable) {
-    tmpNameDescriptor.value = actionName;
-    defineProperty(res, "name", tmpNameDescriptor);
-  }
-  return res;
-}
-function executeAction(actionName, canRunAsDerivation, fn, scope, args) {
-  const runInfo = _startAction(actionName, canRunAsDerivation, scope, args);
-  try {
-    return fn.apply(scope, args);
-  } catch (err) {
-    runInfo.error_ = err;
-    throw err;
-  } finally {
-    _endAction(runInfo);
-  }
-}
-function _startAction(actionName, canRunAsDerivation, scope, args) {
-  const notifySpy_ = __MOBX_DEV__ && isSpyEnabled() && !!actionName;
-  let startTime_ = 0;
-  if (notifySpy_) {
-    startTime_ = Date.now();
-    const flattenedArgs = args ? Array.from(args) : EMPTY_ARRAY;
-    spyReportStart({
-      type: ACTION,
-      name: actionName,
-      object: scope,
-      arguments: flattenedArgs
-    });
-  }
-  const prevDerivation_ = globalState.trackingDerivation;
-  const runAsAction = !canRunAsDerivation || !prevDerivation_;
-  startBatch();
-  let prevAllowStateChanges_ = globalState.allowStateChanges;
-  if (runAsAction) {
-    untrackedStart();
-    if (__MOBX_DEV__) {
-      prevAllowStateChanges_ = allowStateChangesStart(true);
-    }
-  }
-  const prevAllowStateReads_ = globalState.allowStateReads;
-  if (__MOBX_DEV__) {
-    allowStateReadsStart(true);
-  }
-  const runInfo = {
-    runAsAction_: runAsAction,
-    prevDerivation_,
-    prevAllowStateChanges_,
-    prevAllowStateReads_,
-    notifySpy_,
-    startTime_,
-    actionId_: nextActionId++,
-    parentActionId_: currentActionId
-  };
-  currentActionId = runInfo.actionId_;
-  return runInfo;
-}
-function _endAction(runInfo) {
-  if (currentActionId !== runInfo.actionId_) {
-    die(30);
-  }
-  currentActionId = runInfo.parentActionId_;
-  if (runInfo.error_ !== void 0) {
-    globalState.suppressReactionErrors = true;
-  }
-  if (__MOBX_DEV__) {
-    allowStateChangesEnd(runInfo.prevAllowStateChanges_);
-    allowStateReadsEnd(runInfo.prevAllowStateReads_);
-  }
-  endBatch();
-  if (runInfo.runAsAction_) {
-    untrackedEnd(runInfo.prevDerivation_);
-  }
-  if (__MOBX_DEV__ && runInfo.notifySpy_) {
-    spyReportEnd({
-      time: Date.now() - runInfo.startTime_
-    });
-  }
-  globalState.suppressReactionErrors = false;
-}
-function allowStateChanges(allowStateChanges2, func) {
-  const prev = allowStateChangesStart(allowStateChanges2);
-  try {
-    return func();
-  } finally {
-    allowStateChangesEnd(prev);
-  }
-}
-function allowStateChangesStart(allowStateChanges2) {
-  const prev = globalState.allowStateChanges;
-  globalState.allowStateChanges = allowStateChanges2;
-  return prev;
-}
-function allowStateChangesEnd(prev) {
-  globalState.allowStateChanges = prev;
-}
-var CREATE = "create";
-var ObservableValue = class extends Atom {
-  constructor(value, enhancer_, name_ = __MOBX_DEV__ ? "ObservableValue@" + getNextId() : "ObservableValue", notifySpy = true, equals_ = compareDefault) {
-    super(name_);
-    this.enhancer_ = void 0;
-    this.name_ = void 0;
-    this.equals_ = void 0;
-    this.hasUnreportedChange_ = false;
-    this.interceptors_ = void 0;
-    this.changeListeners_ = void 0;
-    this.value_ = void 0;
-    this.dehancer = void 0;
-    this.enhancer_ = enhancer_;
-    this.name_ = name_;
-    this.equals_ = equals_;
-    this.value_ = enhancer_(value, void 0, name_);
-    if (__MOBX_DEV__ && notifySpy && isSpyEnabled()) {
-      spyReport({
-        type: CREATE,
-        object: this,
-        observableKind: "value",
-        debugObjectName: this.name_,
-        newValue: this.value_
-      });
-    }
-  }
-  dehanceValue(value) {
-    if (this.dehancer !== void 0) {
-      return this.dehancer(value);
-    }
-    return value;
-  }
-  set(newValue) {
-    const oldValue = this.value_;
-    newValue = this.prepareNewValue_(newValue);
-    if (newValue !== globalState.UNCHANGED) {
-      const notifySpy = __MOBX_DEV__ && isSpyEnabled();
-      if (__MOBX_DEV__ && notifySpy) {
-        spyReportStart({
-          type: UPDATE,
-          object: this,
-          observableKind: "value",
-          debugObjectName: this.name_,
-          newValue,
-          oldValue
-        });
-      }
-      this.setNewValue_(newValue);
-      if (__MOBX_DEV__ && notifySpy) {
-        spyReportEnd();
-      }
-    }
-  }
-  prepareNewValue_(newValue) {
-    checkIfStateModificationsAreAllowed(this);
-    if (hasInterceptors(this)) {
-      const change = interceptChange(this, {
-        object: this,
-        type: UPDATE,
-        newValue
-      });
-      if (!change) {
-        return globalState.UNCHANGED;
-      }
-      newValue = change.newValue;
-    }
-    newValue = this.enhancer_(newValue, this.value_, this.name_);
-    return this.equals_(this.value_, newValue) ? globalState.UNCHANGED : newValue;
-  }
-  setNewValue_(newValue) {
-    const oldValue = this.value_;
-    this.value_ = newValue;
-    this.reportChanged();
-    if (hasListeners(this)) {
-      notifyListeners(this, {
-        type: UPDATE,
-        object: this,
-        newValue,
-        oldValue
-      });
-    }
-  }
-  get() {
-    this.reportObserved();
-    return this.dehanceValue(this.value_);
-  }
-  raw() {
-    return this.value_;
-  }
-  toJSON() {
-    return this.get();
-  }
-  toString() {
-    return `${this.name_}[${this.value_}]`;
-  }
-  valueOf() {
-    return toPrimitive(this.get());
-  }
-  [Symbol.toPrimitive]() {
-    return this.valueOf();
-  }
-};
-var ComputedValue = class {
-  /**
-   * Create a new computed value based on a function expression.
-   *
-   * The `name` property is for debug purposes only.
-   *
-   * The `equals` property specifies the comparer function used to determine if a newly produced
-   * value differs from the previous value. Structural comparison can be convenient if you always
-   * produce a new aggregated object and don't want to notify observers if it is structurally the same.
-   * This is useful for working with vectors, mouse coordinates etc.
-   */
-  constructor(options) {
-    this.dependenciesState_ = -1;
-    this.observing_ = [];
-    this.newObserving_ = null;
-    this.observers_ = null;
-    this.runId_ = 0;
-    this.lastAccessedBy_ = 0;
-    this.lowestObserverState_ = 0;
-    this.unboundDepsCount_ = 0;
-    this.value_ = new CaughtException(null);
-    this.name_ = void 0;
-    this.triggeredBy_ = void 0;
-    this.flags_ = 0;
-    this.derivation = void 0;
-    this.setter_ = void 0;
-    this.scope_ = void 0;
-    this.equals_ = void 0;
-    this.requiresReaction_ = void 0;
-    this.keepAlive_ = void 0;
-    this.onBOL = void 0;
-    this.onBUOL = void 0;
-    if (!options.get) {
-      die(31);
-    }
-    this.derivation = options.get;
-    this.name_ = options.name || (__MOBX_DEV__ ? "ComputedValue@" + getNextId() : "ComputedValue");
-    if (options.set) {
-      this.setter_ = createAction(__MOBX_DEV__ ? this.name_ + "-setter" : "ComputedValue-setter", options.set);
-    }
-    this.equals_ = options.equals || compareDefault;
-    this.scope_ = options.context;
-    this.requiresReaction_ = options.requiresReaction;
-    this.keepAlive_ = !!options.keepAlive;
-  }
-  onBecomeStale_() {
-    propagateMaybeChanged(this);
-  }
-  onBO() {
-    if (this.onBOL) {
-      this.onBOL.forEach((listener) => listener());
-    }
-  }
-  onBUO() {
-    if (this.onBUOL) {
-      this.onBUOL.forEach((listener) => listener());
-    }
-  }
-  // to check for cycles
-  get isComputing() {
-    return getFlag(
-      this.flags_,
-      1
-      /* ComputedValueFlags.isComputing */
-    );
-  }
-  set isComputing(newValue) {
-    this.flags_ = setFlag(this.flags_, 1, newValue);
-  }
-  get isRunningSetter() {
-    return getFlag(
-      this.flags_,
-      2
-      /* ComputedValueFlags.isRunningSetter */
-    );
-  }
-  set isRunningSetter(newValue) {
-    this.flags_ = setFlag(this.flags_, 2, newValue);
-  }
-  get isBeingObserved() {
-    return getFlag(
-      this.flags_,
-      4
-      /* ComputedValueFlags.isBeingObserved */
-    );
-  }
-  set isBeingObserved(newValue) {
-    this.flags_ = setFlag(this.flags_, 4, newValue);
-  }
-  get isPendingUnobservation() {
-    return getFlag(
-      this.flags_,
-      8
-      /* ComputedValueFlags.isPendingUnobservation */
-    );
-  }
-  set isPendingUnobservation(newValue) {
-    this.flags_ = setFlag(this.flags_, 8, newValue);
-  }
-  get diffValue() {
-    return getFlag(
-      this.flags_,
-      16
-      /* ComputedValueFlags.diffValue */
-    ) ? 1 : 0;
-  }
-  set diffValue(newValue) {
-    this.flags_ = setFlag(this.flags_, 16, newValue === 1 ? true : false);
-  }
-  /**
-   * Returns the current value of this computed value.
-   * Will evaluate its computation first if needed.
-   */
-  get() {
-    if (this.isComputing) {
-      die(32, this.name_, this.derivation);
-    }
-    if (globalState.inBatch === 0 && // !globalState.trackingDerivatpion &&
-    (!this.observers_ || this.observers_.size === 0) && !this.keepAlive_) {
-      if (shouldCompute(this)) {
-        this.warnAboutUntrackedRead_();
-        startBatch();
-        this.value_ = this.computeValue_(false);
-        endBatch();
-      }
-    } else {
-      const wasBeingObserved = this.isBeingObserved;
-      reportObserved(this);
-      if (shouldCompute(this)) {
-        let prevTrackingContext = globalState.trackingContext;
-        if (!prevTrackingContext && (this.keepAlive_ || this.isBeingObserved)) {
-          globalState.trackingContext = this;
-        }
-        if (this.trackAndCompute()) {
-          propagateChangeConfirmed(this);
-        }
-        globalState.trackingContext = prevTrackingContext;
-      } else if (!wasBeingObserved && this.isBeingObserved) {
-        this.observing_.forEach(markObserved);
-      }
-    }
-    const result = this.value_;
-    if (isCaughtException(result)) {
-      throw result.cause;
-    }
-    return result;
-  }
-  set(value) {
-    if (this.setter_) {
-      if (this.isRunningSetter) {
-        die(33, this.name_);
-      }
-      this.isRunningSetter = true;
-      try {
-        this.setter_.call(this.scope_, value);
-      } finally {
-        this.isRunningSetter = false;
-      }
-    } else {
-      die(34, this.name_);
-    }
-  }
-  trackAndCompute() {
-    const oldValue = this.value_;
-    const wasSuspended = (
-      /* see #1208 */
-      this.dependenciesState_ === -1
-    );
-    const newValue = this.computeValue_(true);
-    const changed = wasSuspended || isCaughtException(oldValue) || isCaughtException(newValue) || !this.equals_(oldValue, newValue);
-    if (changed) {
-      this.value_ = newValue;
-      if (__MOBX_DEV__ && isSpyEnabled()) {
-        spyReport({
-          observableKind: "computed",
-          debugObjectName: this.name_,
-          object: this.scope_,
-          type: "update",
-          oldValue,
-          newValue
+// src/config/loader/reserved-namespace.ts
+function reservedNamespaceOf(name) {
+  const collapsed = ident(name);
+  return RESERVED_NAMESPACES.find((ns) => collapsed.startsWith(ident(ns)));
+}
+function reservedNamespaceCollisions(ctx, out, ns, synthesizedBy) {
+  for (const section of ["variables", "actions", "segments"]) {
+    for (const name of Object.keys(out[section] ?? {})) {
+      if (name.startsWith(ns)) {
+        ctx.issues.push({
+          path: `${section}.${name}`,
+          message: `"${name}" is in the reserved "${ns}" namespace (synthesized by ${synthesizedBy}) \u2014 rename it`,
+          line: findKeyLine(ctx.source, ["root"])
         });
       }
     }
-    return changed;
-  }
-  computeValue_(track2) {
-    this.isComputing = true;
-    const prev = __MOBX_DEV__ ? allowStateChangesStart(false) : false;
-    let res;
-    if (track2) {
-      res = trackDerivedFunction(this, this.derivation, this.scope_);
-    } else {
-      if (globalState.disableErrorBoundaries === true) {
-        res = this.derivation.call(this.scope_);
-      } else {
-        try {
-          res = this.derivation.call(this.scope_);
-        } catch (e) {
-          res = new CaughtException(e);
-        }
-      }
-    }
-    if (__MOBX_DEV__) {
-      allowStateChangesEnd(prev);
-    }
-    this.isComputing = false;
-    return res;
-  }
-  suspend_() {
-    if (!this.keepAlive_) {
-      clearObserving(this);
-      this.value_ = void 0;
-    }
-  }
-  warnAboutUntrackedRead_() {
-    if (!__MOBX_DEV__) {
-      return;
-    }
-    if (typeof this.requiresReaction_ === "boolean" ? this.requiresReaction_ : globalState.computedRequiresReaction) {
-      console.warn(`[mobx] Computed value '${this.name_}' is being read outside a reactive context. Doing a full recompute.`);
-    }
-  }
-  toString() {
-    return `${this.name_}[${this.derivation.toString()}]`;
-  }
-  valueOf() {
-    return toPrimitive(this.get());
-  }
-  [Symbol.toPrimitive]() {
-    return this.valueOf();
-  }
-};
-var isComputedValue = /* @__PURE__ */ createInstanceofPredicate("ComputedValue", ComputedValue);
-var CaughtException = class {
-  constructor(cause) {
-    this.cause = void 0;
-    this.cause = cause;
-  }
-};
-function isCaughtException(e) {
-  return e instanceof CaughtException;
-}
-function shouldCompute(derivation) {
-  switch (derivation.dependenciesState_) {
-    case 0:
-      return false;
-    case -1:
-    case 2:
-      return true;
-    case 1: {
-      const prevAllowStateReads = __MOBX_DEV__ ? allowStateReadsStart(true) : true;
-      const prevUntracked = untrackedStart();
-      const obs = derivation.observing_, l = obs.length;
-      for (let i = 0; i < l; i++) {
-        const obj = obs[i];
-        if (isComputedValue(obj)) {
-          if (globalState.disableErrorBoundaries) {
-            obj.get();
-          } else {
-            try {
-              obj.get();
-            } catch (e) {
-              untrackedEnd(prevUntracked);
-              if (__MOBX_DEV__) {
-                allowStateReadsEnd(prevAllowStateReads);
-              }
-              return true;
-            }
-          }
-          if (derivation.dependenciesState_ === 2) {
-            untrackedEnd(prevUntracked);
-            if (__MOBX_DEV__) {
-              allowStateReadsEnd(prevAllowStateReads);
-            }
-            return true;
-          }
-        }
-      }
-      changeDependenciesStateTo0(derivation);
-      untrackedEnd(prevUntracked);
-      if (__MOBX_DEV__) {
-        allowStateReadsEnd(prevAllowStateReads);
-      }
-      return false;
-    }
   }
 }
-function isComputingDerivation() {
-  return globalState.trackingDerivation !== null;
-}
-function checkIfStateModificationsAreAllowed(atom) {
-  if (!__MOBX_DEV__) {
-    return;
-  }
-  const hasObservers = !!atom.observers_ && atom.observers_.size > 0;
-  if (!globalState.allowStateChanges && (hasObservers || globalState.enforceActions === "always")) {
-    console.warn("[MobX] " + (globalState.enforceActions ? "Since strict-mode is enabled, changing (observed) observable values without using an action is not allowed. Tried to modify: " : "Side effects like changing state are not allowed at this point. Are you trying to modify state from, for example, a computed value or the render function of a React component? You can wrap side effects in 'runInAction' (or decorate functions with 'action') if needed. Tried to modify: ") + atom.name_);
-  }
-}
-function checkIfStateReadsAreAllowed(observable2) {
-  if (__MOBX_DEV__ && !globalState.allowStateReads && globalState.observableRequiresReaction) {
-    console.warn(`[mobx] Observable '${observable2.name_}' being read outside a reactive context.`);
-  }
-}
-function trackDerivedFunction(derivation, f, context) {
-  const prevAllowStateReads = __MOBX_DEV__ ? allowStateReadsStart(true) : true;
-  changeDependenciesStateTo0(derivation);
-  derivation.newObserving_ = new Array(
-    // Reserve constant space for initial dependencies, dynamic space otherwise.
-    // See https://github.com/mobxjs/mobx/pull/3833
-    derivation.runId_ === 0 ? 100 : derivation.observing_.length
-  );
-  derivation.unboundDepsCount_ = 0;
-  derivation.runId_ = ++globalState.runId;
-  const prevTracking = globalState.trackingDerivation;
-  globalState.trackingDerivation = derivation;
-  globalState.inBatch++;
-  let result;
-  if (globalState.disableErrorBoundaries === true) {
-    result = f.call(context);
-  } else {
-    try {
-      result = f.call(context);
-    } catch (e) {
-      result = new CaughtException(e);
-    }
-  }
-  globalState.inBatch--;
-  globalState.trackingDerivation = prevTracking;
-  bindDependencies(derivation);
-  warnAboutDerivationWithoutDependencies(derivation);
-  if (__MOBX_DEV__) {
-    allowStateReadsEnd(prevAllowStateReads);
-  }
-  return result;
-}
-function warnAboutDerivationWithoutDependencies(derivation) {
-  if (!__MOBX_DEV__) {
-    return;
-  }
-  if (derivation.observing_.length !== 0) {
-    return;
-  }
-  if (typeof derivation.requiresObservable_ === "boolean" ? derivation.requiresObservable_ : globalState.reactionRequiresObservable) {
-    console.warn(`[mobx] Derivation '${derivation.name_}' is created/updated without reading any observable value.`);
-  }
-}
-function bindDependencies(derivation) {
-  const prevObserving = derivation.observing_;
-  const observing = derivation.observing_ = derivation.newObserving_;
-  let lowestNewObservingDerivationState = 0;
-  let i0 = 0, l = derivation.unboundDepsCount_;
-  for (let i = 0; i < l; i++) {
-    const dep = observing[i];
-    if (dep.diffValue === 0) {
-      dep.diffValue = 1;
-      if (i0 !== i) {
-        observing[i0] = dep;
-      }
-      i0++;
-    }
-    if (dep.dependenciesState_ > lowestNewObservingDerivationState) {
-      lowestNewObservingDerivationState = dep.dependenciesState_;
-    }
-  }
-  observing.length = i0;
-  derivation.newObserving_ = null;
-  l = prevObserving.length;
-  while (l--) {
-    const dep = prevObserving[l];
-    if (dep.diffValue === 0) {
-      removeObserver(dep, derivation);
-    }
-    dep.diffValue = 0;
-  }
-  while (i0--) {
-    const dep = observing[i0];
-    if (dep.diffValue === 1) {
-      dep.diffValue = 0;
-      addObserver(dep, derivation);
-    }
-  }
-  if (lowestNewObservingDerivationState !== 0) {
-    derivation.dependenciesState_ = lowestNewObservingDerivationState;
-    derivation.onBecomeStale_();
-  }
-}
-function clearObserving(derivation) {
-  const obs = derivation.observing_;
-  derivation.observing_ = [];
-  let i = obs.length;
-  while (i--) {
-    removeObserver(obs[i], derivation);
-  }
-  derivation.dependenciesState_ = -1;
-}
-function untracked(action2) {
-  const prev = untrackedStart();
-  try {
-    return action2();
-  } finally {
-    untrackedEnd(prev);
-  }
-}
-function untrackedStart() {
-  const prev = globalState.trackingDerivation;
-  globalState.trackingDerivation = null;
-  return prev;
-}
-function untrackedEnd(prev) {
-  globalState.trackingDerivation = prev;
-}
-function allowStateReadsStart(allowStateReads) {
-  const prev = globalState.allowStateReads;
-  globalState.allowStateReads = allowStateReads;
-  return prev;
-}
-function allowStateReadsEnd(prev) {
-  globalState.allowStateReads = prev;
-}
-function changeDependenciesStateTo0(derivation) {
-  if (derivation.dependenciesState_ === 0) {
-    return;
-  }
-  derivation.dependenciesState_ = 0;
-  const obs = derivation.observing_;
-  let i = obs.length;
-  while (i--) {
-    obs[i].lowestObserverState_ = 0;
-  }
-}
-var MOBX_GLOBALS_VERSION = 7;
-var MobXGlobals = class {
-  constructor() {
-    this.version = MOBX_GLOBALS_VERSION;
-    this.UNCHANGED = {};
-    this.trackingDerivation = null;
-    this.trackingContext = null;
-    this.runId = 0;
-    this.mobxGuid = 0;
-    this.inBatch = 0;
-    this.pendingUnobservations = [];
-    this.pendingReactions = [];
-    this.isRunningReactions = false;
-    this.isRunningUnobservations = false;
-    this.allowStateChanges = false;
-    this.allowStateReads = true;
-    this.enforceActions = true;
-    this.spyListeners = [];
-    this.globalReactionErrorHandlers = [];
-    this.computedRequiresReaction = false;
-    this.reactionRequiresObservable = false;
-    this.observableRequiresReaction = false;
-    this.disableErrorBoundaries = false;
-    this.suppressReactionErrors = false;
-    this.safeDescriptors = true;
-  }
-};
-var canMergeGlobalState = true;
-var isolateCalled = false;
-var globalState = /* @__PURE__ */ (function() {
-  let global2 = globalThis;
-  if (global2.__mobxInstanceCount > 0 && !global2.__mobxGlobals) {
-    canMergeGlobalState = false;
-  }
-  if (global2.__mobxGlobals && global2.__mobxGlobals.version !== MOBX_GLOBALS_VERSION) {
-    canMergeGlobalState = false;
-  }
-  if (!canMergeGlobalState) {
-    setTimeout(() => {
-      if (!isolateCalled) {
-        die(35);
-      }
-    }, 1);
-    return new MobXGlobals();
-  } else if (global2.__mobxGlobals) {
-    global2.__mobxInstanceCount += 1;
-    if (!global2.__mobxGlobals.UNCHANGED) {
-      global2.__mobxGlobals.UNCHANGED = {};
-    }
-    return global2.__mobxGlobals;
-  } else {
-    global2.__mobxInstanceCount = 1;
-    return global2.__mobxGlobals = /* @__PURE__ */ new MobXGlobals();
-  }
-})();
-function addObserver(observable2, node) {
-  var _observable$observers2;
-  ((_observable$observers2 = observable2.observers_) != null ? _observable$observers2 : observable2.observers_ = /* @__PURE__ */ new Set()).add(node);
-  if (observable2.lowestObserverState_ > node.dependenciesState_) {
-    observable2.lowestObserverState_ = node.dependenciesState_;
-  }
-}
-function removeObserver(observable2, node) {
-  const observers = observable2.observers_;
-  if (!observers) {
-    return;
-  }
-  observers.delete(node);
-  if (observers.size === 0) {
-    queueForUnobservation(observable2);
-  }
-}
-function queueForUnobservation(observable2) {
-  if (observable2.isPendingUnobservation === false) {
-    observable2.isPendingUnobservation = true;
-    globalState.pendingUnobservations.push(observable2);
-  }
-}
-function startBatch() {
-  globalState.inBatch++;
-}
-function endBatch() {
-  if (--globalState.inBatch === 0) {
-    runReactions();
-    if (!globalState.isRunningUnobservations && globalState.pendingUnobservations.length > 0) {
-      runPendingUnobservations();
-    }
-  }
-}
-function runPendingUnobservations() {
-  globalState.isRunningUnobservations = true;
-  try {
-    const list2 = globalState.pendingUnobservations;
-    for (let i = 0; i < list2.length; i++) {
-      const observable2 = list2[i];
-      observable2.isPendingUnobservation = false;
-      if (!observable2.observers_ || observable2.observers_.size === 0) {
-        observable2.observers_ = null;
-        if (observable2.isBeingObserved) {
-          observable2.isBeingObserved = false;
-          observable2.onBUO();
-        }
-        if (observable2 instanceof ComputedValue) {
-          observable2.suspend_();
-        }
-      }
-    }
-    globalState.pendingUnobservations = [];
-  } finally {
-    globalState.isRunningUnobservations = false;
-  }
-}
-function markObserved(observable2) {
-  var _observable$observing;
-  if (observable2.isBeingObserved) {
-    return;
-  }
-  observable2.isBeingObserved = true;
-  observable2.onBO();
-  (_observable$observing = observable2.observing_) == null || _observable$observing.forEach(markObserved);
-}
-function reportObserved(observable2) {
-  checkIfStateReadsAreAllowed(observable2);
-  const derivation = globalState.trackingDerivation;
-  if (derivation !== null) {
-    if (derivation.runId_ !== observable2.lastAccessedBy_) {
-      observable2.lastAccessedBy_ = derivation.runId_;
-      derivation.newObserving_[derivation.unboundDepsCount_++] = observable2;
-      if (!observable2.isBeingObserved && globalState.trackingContext) {
-        observable2.isBeingObserved = true;
-        observable2.onBO();
-      }
-    }
-    return observable2.isBeingObserved;
-  } else if ((!observable2.observers_ || observable2.observers_.size === 0) && globalState.inBatch > 0) {
-    queueForUnobservation(observable2);
-  }
-  return false;
-}
-function propagateChanged(observable2) {
-  var _observable$observers3;
-  if (observable2.lowestObserverState_ === 2) {
-    return;
-  }
-  observable2.lowestObserverState_ = 2;
-  (_observable$observers3 = observable2.observers_) == null || _observable$observers3.forEach((d) => {
-    if (d.dependenciesState_ === 0) {
-      d.onBecomeStale_();
-    }
-    d.dependenciesState_ = 2;
-  });
-}
-function propagateChangeConfirmed(observable2) {
-  var _observable$observers4;
-  if (observable2.lowestObserverState_ === 2) {
-    return;
-  }
-  observable2.lowestObserverState_ = 2;
-  (_observable$observers4 = observable2.observers_) == null || _observable$observers4.forEach((d) => {
-    if (d.dependenciesState_ === 1) {
-      d.dependenciesState_ = 2;
-    } else if (d.dependenciesState_ === 0) {
-      observable2.lowestObserverState_ = 0;
-    }
-  });
-}
-function propagateMaybeChanged(observable2) {
-  var _observable$observers5;
-  if (observable2.lowestObserverState_ !== 0) {
-    return;
-  }
-  observable2.lowestObserverState_ = 1;
-  (_observable$observers5 = observable2.observers_) == null || _observable$observers5.forEach((d) => {
-    if (d.dependenciesState_ === 0) {
-      d.dependenciesState_ = 1;
-      d.onBecomeStale_();
-    }
-  });
-}
-var Reaction = class {
-  constructor(name_ = __MOBX_DEV__ ? "Reaction@" + getNextId() : "Reaction", onInvalidate_, errorHandler_, requiresObservable_) {
-    this.name_ = void 0;
-    this.onInvalidate_ = void 0;
-    this.errorHandler_ = void 0;
-    this.requiresObservable_ = void 0;
-    this.observing_ = [];
-    this.newObserving_ = [];
-    this.dependenciesState_ = -1;
-    this.runId_ = 0;
-    this.unboundDepsCount_ = 0;
-    this.flags_ = 0;
-    this.removeAbortListener_ = void 0;
-    this.name_ = name_;
-    this.onInvalidate_ = onInvalidate_;
-    this.errorHandler_ = errorHandler_;
-    this.requiresObservable_ = requiresObservable_;
-  }
-  get isDisposed() {
-    return getFlag(
-      this.flags_,
-      1
-      /* ReactionFlags.isDisposed */
-    );
-  }
-  set isDisposed(newValue) {
-    this.flags_ = setFlag(this.flags_, 1, newValue);
-  }
-  get isScheduled() {
-    return getFlag(
-      this.flags_,
-      2
-      /* ReactionFlags.isScheduled */
-    );
-  }
-  set isScheduled(newValue) {
-    this.flags_ = setFlag(this.flags_, 2, newValue);
-  }
-  get isTrackPending() {
-    return getFlag(
-      this.flags_,
-      4
-      /* ReactionFlags.isTrackPending */
-    );
-  }
-  set isTrackPending(newValue) {
-    this.flags_ = setFlag(this.flags_, 4, newValue);
-  }
-  get isRunning() {
-    return getFlag(
-      this.flags_,
-      8
-      /* ReactionFlags.isRunning */
-    );
-  }
-  set isRunning(newValue) {
-    this.flags_ = setFlag(this.flags_, 8, newValue);
-  }
-  get diffValue() {
-    return getFlag(
-      this.flags_,
-      16
-      /* ReactionFlags.diffValue */
-    ) ? 1 : 0;
-  }
-  set diffValue(newValue) {
-    this.flags_ = setFlag(this.flags_, 16, newValue === 1 ? true : false);
-  }
-  onBecomeStale_() {
-    this.schedule_();
-  }
-  schedule_() {
-    if (!this.isScheduled) {
-      this.isScheduled = true;
-      globalState.pendingReactions.push(this);
-      runReactions();
-    }
-  }
-  /**
-   * internal, use schedule() if you intend to kick off a reaction
-   */
-  runReaction_() {
-    if (!this.isDisposed) {
-      startBatch();
-      this.isScheduled = false;
-      const prev = globalState.trackingContext;
-      globalState.trackingContext = this;
-      if (shouldCompute(this)) {
-        this.isTrackPending = true;
-        try {
-          this.onInvalidate_();
-          if (__MOBX_DEV__ && this.isTrackPending && isSpyEnabled()) {
-            spyReport({
-              name: this.name_,
-              type: "scheduled-reaction"
-            });
-          }
-        } catch (e) {
-          this.reportExceptionInDerivation_(e);
-        }
-      }
-      globalState.trackingContext = prev;
-      endBatch();
-    }
-  }
-  track(fn) {
-    if (this.isDisposed) {
-      return;
-    }
-    startBatch();
-    const notify2 = __MOBX_DEV__ && isSpyEnabled();
-    let startTime;
-    if (__MOBX_DEV__ && notify2) {
-      startTime = Date.now();
-      spyReportStart({
-        name: this.name_,
-        type: "reaction"
+function pluginScopeCollisions(ctx, out, inherited) {
+  for (const section of [
+    "variables",
+    "actions",
+    "helpers",
+    "segments"
+  ]) {
+    for (const name of Object.keys(out[section] ?? {})) {
+      const scope = scopeOf(name);
+      if (scope === void 0) continue;
+      if (section !== "variables" && name === scope) continue;
+      if (section === "segments" && inherited.has(name)) continue;
+      ctx.issues.push({
+        path: `${section}.${name}`,
+        message: `"${name}" is in "${scope}", the namespace plugins own (each declares its names there from its own definition) \u2014 rename it`,
+        line: findKeyLine(ctx.source, [section, name])
       });
     }
-    this.isRunning = true;
-    const prevReaction = globalState.trackingContext;
-    globalState.trackingContext = this;
-    const result = trackDerivedFunction(this, fn, void 0);
-    globalState.trackingContext = prevReaction;
-    this.isRunning = false;
-    this.isTrackPending = false;
-    if (this.isDisposed) {
-      clearObserving(this);
-    }
-    if (isCaughtException(result)) {
-      this.reportExceptionInDerivation_(result.cause);
-    }
-    if (__MOBX_DEV__ && notify2) {
-      spyReportEnd({
-        time: Date.now() - startTime
+  }
+  for (const [segment, decl] of Object.entries(out.segments ?? {})) {
+    for (const v of Object.keys(decl.vars ?? {})) {
+      const name = `${segment}.${v}`;
+      const scope = scopeOf(name);
+      if (scope === void 0 || inherited.has(segment)) continue;
+      ctx.issues.push({
+        path: `segments.${segment}.vars.${v}`,
+        message: `segment "${segment}"'s var "${v}" is named "${name}", in "${scope}", the namespace plugins own \u2014 rename the var or the segment`,
+        line: findKeyLine(ctx.source, ["segments", segment, "vars", v])
       });
     }
-    endBatch();
   }
-  reportExceptionInDerivation_(error) {
-    if (this.errorHandler_) {
-      this.errorHandler_(error, this);
-      return;
-    }
-    if (globalState.disableErrorBoundaries) {
-      throw error;
-    }
-    const message = __MOBX_DEV__ ? `[mobx] Encountered an uncaught exception that was thrown by a reaction or observer component, in: '${this}'` : `[mobx] uncaught error in '${this}'`;
-    if (!globalState.suppressReactionErrors) {
-      console.error(message, error);
-    } else if (__MOBX_DEV__) {
-      console.warn(`[mobx] (error in reaction '${this.name_}' suppressed, fix error of causing action below)`);
-    }
-    if (__MOBX_DEV__ && isSpyEnabled()) {
-      spyReport({
-        type: "error",
-        name: this.name_,
-        message,
-        error: "" + error
+}
+
+// src/config/loader/layout.ts
+var LAYOUT_NODE_REF = "#/definitions/LayoutNode";
+var ROOT_FRAGMENT_REF = "#/definitions/RootFragment";
+var EMPTY_VERTICAL_NODE = {
+  kind: "container",
+  direction: "vertical",
+  children: []
+};
+function literalSpec(value) {
+  return { required: true, json: { const: value }, parse: () => value };
+}
+function segmentNameSpec() {
+  return {
+    // Mandatory in the schema (a missing/empty name pushes an issue → throw); the
+    // parse recovers to "" so it's a no-op for `fields`. See `cellsSegmentsSpec`.
+    required: true,
+    json: { type: "string" },
+    parse: (ctx, path42, field, raw) => {
+      const v = raw[field];
+      if (typeof v === "string" && v.length > 0) return v;
+      ctx.issues.push({
+        path: `${path42}.${field}`,
+        message: `a segment node must have a non-empty "name" (a segment name), got ${describeValue(v)}`,
+        line: findKeyLine(ctx.source, ["root"])
       });
-    }
-    globalState.globalReactionErrorHandlers.forEach((f) => f(error, this));
-  }
-  dispose() {
-    if (!this.isDisposed) {
-      var _this$removeAbortList;
-      this.isDisposed = true;
-      (_this$removeAbortList = this.removeAbortListener_) == null || _this$removeAbortList.call(this);
-      if (!this.isRunning) {
-        startBatch();
-        clearObserving(this);
-        endBatch();
-      }
-    }
-  }
-  getDisposer_(abortSignal) {
-    const dispose = () => this.dispose();
-    if (abortSignal != null && abortSignal.addEventListener && !this.isDisposed) {
-      abortSignal.addEventListener("abort", dispose);
-      this.removeAbortListener_ = () => abortSignal.removeEventListener == null ? void 0 : abortSignal.removeEventListener("abort", dispose);
-    }
-    dispose[$mobx] = this;
-    if ("dispose" in Symbol && typeof Symbol.dispose === "symbol") {
-      dispose[Symbol.dispose] = dispose;
-    }
-    return dispose;
-  }
-  toString() {
-    return `Reaction[${this.name_}]`;
-  }
-};
-var MAX_REACTION_ITERATIONS = 100;
-var reactionScheduler = (f) => f();
-function runReactions() {
-  if (globalState.inBatch > 0 || globalState.isRunningReactions) {
-    return;
-  }
-  reactionScheduler(runReactionsHelper);
-}
-function runReactionsHelper() {
-  globalState.isRunningReactions = true;
-  const allReactions = globalState.pendingReactions;
-  let iterations = 0;
-  while (allReactions.length > 0) {
-    if (++iterations === MAX_REACTION_ITERATIONS) {
-      console.error(__MOBX_DEV__ ? `Reaction doesn't converge to a stable state after ${MAX_REACTION_ITERATIONS} iterations. Probably there is a cycle in the reactive function: ${allReactions[0]}` : `[mobx] cycle in reaction: ${allReactions[0]}`);
-      allReactions.splice(0);
-    }
-    let remainingReactions = allReactions.splice(0);
-    for (let i = 0, l = remainingReactions.length; i < l; i++) {
-      remainingReactions[i].runReaction_();
-    }
-  }
-  globalState.isRunningReactions = false;
-}
-var isReaction = /* @__PURE__ */ createInstanceofPredicate("Reaction", Reaction);
-function isSpyEnabled() {
-  return __MOBX_DEV__ && !!globalState.spyListeners.length;
-}
-function spyReport(event) {
-  if (!__MOBX_DEV__) {
-    return;
-  }
-  if (!globalState.spyListeners.length) {
-    return;
-  }
-  const listeners2 = globalState.spyListeners;
-  for (let i = 0, l = listeners2.length; i < l; i++) {
-    listeners2[i](event);
-  }
-}
-function spyReportStart(event) {
-  if (!__MOBX_DEV__) {
-    return;
-  }
-  const change = assign({}, event, {
-    spyReportStart: true
-  });
-  spyReport(change);
-}
-var END_EVENT = {
-  type: "report-end",
-  spyReportEnd: true
-};
-function spyReportEnd(change) {
-  if (!__MOBX_DEV__) {
-    return;
-  }
-  if (change) {
-    spyReport(assign({}, change, {
-      type: "report-end",
-      spyReportEnd: true
-    }));
-  } else {
-    spyReport(END_EVENT);
-  }
-}
-function spy(listener) {
-  if (!__MOBX_DEV__) {
-    console.warn(`[mobx.spy] Is a no-op in production builds`);
-    return function() {
-    };
-  } else {
-    globalState.spyListeners.push(listener);
-    return once(() => {
-      globalState.spyListeners = globalState.spyListeners.filter((l) => l !== listener);
-    });
-  }
-}
-var ACTION = "action";
-var AUTOACTION = "autoAction";
-var AUTOACTION_BOUND = "autoAction.bound";
-var DEFAULT_ACTION_NAME = "<unnamed action>";
-var actionAnnotation = /* @__PURE__ */ createActionAnnotation(ACTION);
-var autoActionAnnotation = /* @__PURE__ */ createActionAnnotation(AUTOACTION, {
-  autoAction: true
-});
-var autoActionBoundAnnotation = /* @__PURE__ */ createActionAnnotation(AUTOACTION_BOUND, {
-  autoAction: true,
-  bound: true
-});
-function createActionDecoratorAnnotation(annotation) {
-  return createDecoratorAnnotation(annotation, decorateAction20223_);
-}
-function createActionFactory(autoAction2) {
-  const res = function action2(arg1, arg2) {
-    if (arg2 && typeof arg2.kind === "string") {
-      return decorateAction20223_(autoAction2 ? autoActionAnnotation : actionAnnotation, arg1, arg2);
-    }
-    if (isFunction(arg1)) {
-      return createAction(arg1.name || DEFAULT_ACTION_NAME, arg1, autoAction2);
-    }
-    if (isFunction(arg2)) {
-      return createAction(arg1, arg2, autoAction2);
-    }
-    if (isStringish(arg1)) {
-      return createActionDecoratorAnnotation(createActionAnnotation(autoAction2 ? AUTOACTION : ACTION, {
-        name: arg1,
-        autoAction: autoAction2
-      }));
-    }
-    if (__MOBX_DEV__) {
-      die("Invalid arguments for `action`");
+      return "";
     }
   };
-  return res;
 }
-var action = /* @__PURE__ */ createActionFactory(false);
-assign(action, actionAnnotation);
-var autoAction = /* @__PURE__ */ createActionFactory(true);
-assign(autoAction, autoActionAnnotation);
-var autoActionBound = /* @__PURE__ */ createActionDecoratorAnnotation(autoActionBoundAnnotation);
-function runInAction(fn) {
-  return executeAction(fn.name || DEFAULT_ACTION_NAME, false, fn, this, void 0);
-}
-function isAction(thing) {
-  return isFunction(thing) && thing.isMobxAction === true;
-}
-function autorun(view, opts = EMPTY_OBJECT) {
-  var _opts$name, _opts$signal;
-  if (__MOBX_DEV__) {
-    if (!isFunction(view)) {
-      die("Autorun expects a function as first argument");
+function directionSpec() {
+  return {
+    // Mandatory in the schema (a missing/invalid direction pushes an issue →
+    // throw); the parse recovers to "vertical", a no-op for `fields`. See
+    // `cellsSegmentsSpec`.
+    required: true,
+    json: { enum: [...DIRECTIONS] },
+    parse: (ctx, path42, field, raw) => {
+      const v = raw[field];
+      if (typeof v === "string" && DIRECTIONS.includes(v)) {
+        return v;
+      }
+      ctx.issues.push({
+        path: `${path42}.${field}`,
+        message: `a container "direction" must be one of: ${DIRECTIONS.join(", ")} (got ${JSON.stringify(v)})`,
+        line: findKeyLine(ctx.source, ["root"])
+      });
+      return "vertical";
     }
-    if (isAction(view)) {
-      die("Autorun does not accept actions since actions are untrackable");
-    }
-  }
-  const name = (_opts$name = opts == null ? void 0 : opts.name) != null ? _opts$name : __MOBX_DEV__ ? view.name || "Autorun@" + getNextId() : "Autorun";
-  const runSync = !opts.scheduler && !opts.delay;
-  let reaction2;
-  if (runSync) {
-    reaction2 = new Reaction(name, function() {
-      this.track(reactionRunner);
-    }, opts.onError, opts.requiresObservable);
-  } else {
-    const scheduler = createSchedulerFromOptions(opts);
-    let isScheduled = false;
-    reaction2 = new Reaction(name, () => {
-      if (!isScheduled) {
-        isScheduled = true;
-        scheduler(() => {
-          isScheduled = false;
-          if (!reaction2.isDisposed) {
-            reaction2.track(reactionRunner);
-          }
+  };
+}
+function childrenSpec(node) {
+  return {
+    // Mandatory in the schema (a missing/non-array `children` pushes an issue →
+    // throw); the parse recovers to [], a no-op for `fields`. See `cellsSegmentsSpec`.
+    required: true,
+    // [LAW:one-source-of-truth] The recursive field points at the node definition
+    // via `$ref` — emit's analogue of the `lazy` thunk that defers the parse-time
+    // self-reference. The runtime recursion and the schema recursion break the
+    // same cycle, declared in one place.
+    json: { type: "array", items: { $ref: LAYOUT_NODE_REF } },
+    parse: (ctx, path42, field, raw) => {
+      const v = raw[field];
+      if (!Array.isArray(v)) {
+        ctx.issues.push({
+          path: `${path42}.${field}`,
+          message: `a container must have a "children" array of layout nodes, got ${describeType(v)}`,
+          line: findKeyLine(ctx.source, ["root"])
         });
-      }
-    }, opts.onError, opts.requiresObservable);
-  }
-  function reactionRunner() {
-    view(reaction2);
-  }
-  if (!(opts != null && (_opts$signal = opts.signal) != null && _opts$signal.aborted)) {
-    reaction2.schedule_();
-  }
-  return reaction2.getDisposer_(opts == null ? void 0 : opts.signal);
-}
-var run = (f) => f();
-function createSchedulerFromOptions(opts) {
-  return opts.scheduler ? opts.scheduler : opts.delay ? (f) => setTimeout(f, opts.delay) : run;
-}
-function reaction(expression, effect, opts = EMPTY_OBJECT) {
-  var _opts$name2, _opts$signal2;
-  if (__MOBX_DEV__) {
-    if (!isFunction(expression) || !isFunction(effect)) {
-      die("First and second argument to reaction should be functions");
-    }
-    if (!isPlainObject(opts)) {
-      die("Third argument of reactions should be an object");
-    }
-  }
-  const name = (_opts$name2 = opts.name) != null ? _opts$name2 : __MOBX_DEV__ ? "Reaction@" + getNextId() : "Reaction";
-  const effectAction = action(name, opts.onError ? wrapErrorHandler(opts.onError, effect) : effect);
-  const runSync = !opts.scheduler && !opts.delay;
-  const scheduler = createSchedulerFromOptions(opts);
-  let firstTime = true;
-  let isScheduled = false;
-  let value;
-  const equals = opts.equals || compareDefault;
-  const r = new Reaction(name, () => {
-    if (firstTime || runSync) {
-      reactionRunner();
-    } else if (!isScheduled) {
-      isScheduled = true;
-      scheduler(reactionRunner);
-    }
-  }, opts.onError, opts.requiresObservable);
-  function reactionRunner() {
-    isScheduled = false;
-    if (r.isDisposed) {
-      return;
-    }
-    let changed = false;
-    const oldValue = value;
-    r.track(() => {
-      const nextValue = allowStateChanges(false, () => expression(r));
-      changed = firstTime || !equals(value, nextValue);
-      value = nextValue;
-    });
-    if (firstTime && opts.fireImmediately) {
-      effectAction(value, oldValue, r);
-    } else if (!firstTime && changed) {
-      effectAction(value, oldValue, r);
-    }
-    firstTime = false;
-  }
-  if (!(opts != null && (_opts$signal2 = opts.signal) != null && _opts$signal2.aborted)) {
-    r.schedule_();
-  }
-  return r.getDisposer_(opts == null ? void 0 : opts.signal);
-}
-function wrapErrorHandler(errorHandler, baseFn) {
-  return function() {
-    try {
-      return baseFn.apply(this, arguments);
-    } catch (e) {
-      errorHandler.call(this, e);
-    }
-  };
-}
-function extendObservable(target, properties, annotations, options) {
-  if (__MOBX_DEV__) {
-    if (arguments.length > 4) {
-      die("'extendObservable' expected 2-4 arguments");
-    }
-    if (typeof target !== "object") {
-      die("'extendObservable' expects an object as first argument");
-    }
-    if (isObservableMap(target)) {
-      die("'extendObservable' should not be used on maps, use map.merge instead");
-    }
-    if (!isPlainObject(properties)) {
-      die(`'extendObservable' only accepts plain objects as second argument`);
-    }
-    if (isObservable(properties) || isObservable(annotations)) {
-      die(`Extending an object with another observable (object) is not supported`);
-    }
-  }
-  const descriptors = getOwnPropertyDescriptors(properties);
-  initObservable(() => {
-    const adm = asObservableObject(target, options)[$mobx];
-    ownKeys2(descriptors).forEach((key) => {
-      adm.extend_(
-        key,
-        descriptors[key],
-        // must pass "undefined" for { key: undefined }
-        !annotations ? true : key in annotations ? annotations[key] : true
-      );
-    });
-  });
-  return target;
-}
-var generatorId = 0;
-var FlowCancellationError = class extends Error {
-  constructor() {
-    super("FLOW_CANCELLED");
-    Object.setPrototypeOf(this, new.target.prototype);
-    this.name = "FlowCancellationError";
-  }
-  toString() {
-    return `Error: ${this.message}`;
-  }
-};
-function createFlowDecoratorAnnotation(annotation) {
-  return createDecoratorAnnotation(annotation, decorateFlow20223_);
-}
-var flowAnnotation = /* @__PURE__ */ createFlowAnnotation("flow");
-var flowBoundAnnotation = /* @__PURE__ */ createFlowAnnotation("flow.bound", {
-  bound: true
-});
-var flow = /* @__PURE__ */ assign(function flow2(arg1, arg2) {
-  if (arg2 && typeof arg2.kind === "string") {
-    return decorateFlow20223_(flowAnnotation, arg1, arg2);
-  }
-  if (__MOBX_DEV__ && arguments.length !== 1) {
-    die(`Flow expects single argument with generator function`);
-  }
-  const generator = arg1;
-  const name = generator.name || (__MOBX_DEV__ ? "<unnamed flow>" : "flow");
-  const res = function res2() {
-    const ctx = this;
-    const args = arguments;
-    const runId = __MOBX_DEV__ ? ++generatorId : 0;
-    const gen = action(__MOBX_DEV__ ? `${name} - runid: ${runId} - init` : name, generator).apply(ctx, args);
-    let rejector;
-    let pendingPromise = void 0;
-    const promise = new Promise(function(resolve, reject2) {
-      let stepId = 0;
-      rejector = reject2;
-      function onFulfilled(res3) {
-        pendingPromise = void 0;
-        let ret;
-        try {
-          ret = action(__MOBX_DEV__ ? `${name} - runid: ${runId} - yield ${stepId++}` : name, gen.next).call(gen, res3);
-        } catch (e) {
-          return reject2(e);
-        }
-        next(ret);
-      }
-      function onRejected(err) {
-        pendingPromise = void 0;
-        let ret;
-        try {
-          ret = action(__MOBX_DEV__ ? `${name} - runid: ${runId} - yield ${stepId++}` : name, gen.throw).call(gen, err);
-        } catch (e) {
-          return reject2(e);
-        }
-        next(ret);
-      }
-      function next(ret) {
-        if (isFunction(ret == null ? void 0 : ret.then)) {
-          ret.then(next, reject2);
-          return;
-        }
-        if (ret.done) {
-          return resolve(ret.value);
-        }
-        pendingPromise = Promise.resolve(ret.value);
-        return pendingPromise.then(onFulfilled, onRejected);
-      }
-      onFulfilled(void 0);
-    });
-    const cancelActionName = __MOBX_DEV__ ? `${name} - runid: ${runId} - cancel` : name;
-    promise.cancel = action(cancelActionName, function() {
-      try {
-        if (pendingPromise) {
-          cancelPromise(pendingPromise);
-        }
-        const res3 = gen.return(void 0);
-        const yieldedPromise = Promise.resolve(res3.value);
-        yieldedPromise.then(noop, noop);
-        cancelPromise(yieldedPromise);
-        rejector(new FlowCancellationError());
-      } catch (e) {
-        rejector(e);
-      }
-    });
-    return promise;
-  };
-  res.isMobXFlow = true;
-  return res;
-}, flowAnnotation);
-var flowBound = /* @__PURE__ */ createFlowDecoratorAnnotation(flowBoundAnnotation);
-function cancelPromise(promise) {
-  if (isFunction(promise.cancel)) {
-    promise.cancel();
-  }
-}
-function isFlow(fn) {
-  return (fn == null ? void 0 : fn.isMobXFlow) === true;
-}
-function _isObservable(value, property) {
-  if (!value) {
-    return false;
-  }
-  if (property !== void 0) {
-    if (__MOBX_DEV__ && (isObservableMap(value) || isObservableArray(value))) {
-      return die("isObservable(object, propertyName) is not supported for arrays and maps. Use map.has or array.length instead.");
-    }
-    if (isObservableObject(value)) {
-      var _adm$lazyComputedKeys, _adm$lazyObservableKe;
-      const adm = value[$mobx];
-      return adm.values_.has(property) || !!((_adm$lazyComputedKeys = adm.lazyComputedKeys_) != null && _adm$lazyComputedKeys.has(property)) || !!((_adm$lazyObservableKe = adm.lazyObservableKeys_) != null && _adm$lazyObservableKe.has(property));
-    }
-    return false;
-  }
-  return isObservableObject(value) || !!value[$mobx] || isAtom(value) || isReaction(value) || isComputedValue(value);
-}
-function isObservable(value) {
-  if (__MOBX_DEV__ && arguments.length !== 1) {
-    die(`isObservable expects only 1 argument. Use isObservableProp to inspect the observability of a property`);
-  }
-  return _isObservable(value);
-}
-function transaction(action2, thisArg = void 0) {
-  startBatch();
-  try {
-    return action2.apply(thisArg);
-  } finally {
-    endBatch();
-  }
-}
-function when(predicate, arg1, arg2) {
-  if (arguments.length === 1 || arg1 && typeof arg1 === "object") {
-    return whenPromise(predicate, arg1);
-  }
-  return _when(predicate, arg1, arg2 || {});
-}
-function _when(predicate, effect, opts) {
-  let timeoutHandle;
-  if (typeof opts.timeout === "number") {
-    const error = new Error("WHEN_TIMEOUT");
-    timeoutHandle = setTimeout(() => {
-      if (!disposer[$mobx].isDisposed) {
-        disposer();
-        if (opts.onError) {
-          opts.onError(error);
-        } else {
-          throw error;
-        }
-      }
-    }, opts.timeout);
-  }
-  opts.name = __MOBX_DEV__ ? opts.name || "When@" + getNextId() : "When";
-  const effectAction = createAction(__MOBX_DEV__ ? opts.name + "-effect" : "When-effect", effect);
-  var disposer = autorun((r) => {
-    let cond = allowStateChanges(false, predicate);
-    if (cond) {
-      r.dispose();
-      if (timeoutHandle) {
-        clearTimeout(timeoutHandle);
-      }
-      effectAction();
-    }
-  }, opts);
-  return disposer;
-}
-function whenPromise(predicate, opts) {
-  var _opts$signal;
-  if (__MOBX_DEV__ && opts && opts.onError) {
-    return die(`the options 'onError' and 'promise' cannot be combined`);
-  }
-  if (opts != null && (_opts$signal = opts.signal) != null && _opts$signal.aborted) {
-    return assign(Promise.reject(new Error("WHEN_ABORTED")), {
-      cancel: () => null
-    });
-  }
-  let cancel;
-  let abort;
-  const res = new Promise((resolve, reject2) => {
-    var _opts$signal2;
-    let disposer = _when(predicate, resolve, assign({}, opts, {
-      onError: reject2
-    }));
-    cancel = () => {
-      disposer();
-      reject2(new Error("WHEN_CANCELLED"));
-    };
-    abort = () => {
-      disposer();
-      reject2(new Error("WHEN_ABORTED"));
-    };
-    opts == null || (_opts$signal2 = opts.signal) == null || _opts$signal2.addEventListener == null || _opts$signal2.addEventListener("abort", abort);
-  }).finally(() => {
-    var _opts$signal3;
-    return opts == null || (_opts$signal3 = opts.signal) == null || _opts$signal3.removeEventListener == null ? void 0 : _opts$signal3.removeEventListener("abort", abort);
-  });
-  res.cancel = cancel;
-  return res;
-}
-function getAdm(target) {
-  return target[$mobx];
-}
-var objectProxyTraps = {
-  has(target, name) {
-    return getAdm(target).has_(name);
-  },
-  get(target, name) {
-    return getAdm(target).get_(name);
-  },
-  set(target, name, value) {
-    var _getAdm$set_;
-    if (!isStringish(name)) {
-      return false;
-    }
-    return (_getAdm$set_ = getAdm(target).set_(name, value, true)) != null ? _getAdm$set_ : true;
-  },
-  deleteProperty(target, name) {
-    var _getAdm$delete_;
-    if (!isStringish(name)) {
-      return false;
-    }
-    return (_getAdm$delete_ = getAdm(target).delete_(name, true)) != null ? _getAdm$delete_ : true;
-  },
-  defineProperty(target, name, descriptor) {
-    var _getAdm$definePropert;
-    return (_getAdm$definePropert = getAdm(target).defineProperty_(name, descriptor)) != null ? _getAdm$definePropert : true;
-  },
-  ownKeys(target) {
-    return getAdm(target).ownKeys_();
-  },
-  preventExtensions(target) {
-    die(13);
-  }
-};
-function asDynamicObservableObject(target, options) {
-  var _target$$mobx, _target$$mobx$proxy_;
-  target = asObservableObject(target, options);
-  return (_target$$mobx$proxy_ = (_target$$mobx = target[$mobx]).proxy_) != null ? _target$$mobx$proxy_ : _target$$mobx.proxy_ = new Proxy(target, objectProxyTraps);
-}
-function hasInterceptors(interceptable) {
-  return interceptable.interceptors_ !== void 0 && interceptable.interceptors_.length > 0;
-}
-function interceptChange(interceptable, change) {
-  const prevU = untrackedStart();
-  try {
-    const interceptors = [...interceptable.interceptors_ || []];
-    for (let i = 0, l = interceptors.length; i < l; i++) {
-      change = interceptors[i](change);
-      if (change && !change.type) {
-        die(14);
-      }
-      if (!change) {
-        break;
-      }
-    }
-    return change;
-  } finally {
-    untrackedEnd(prevU);
-  }
-}
-function hasListeners(listenable) {
-  return listenable.changeListeners_ !== void 0 && listenable.changeListeners_.length > 0;
-}
-function notifyListeners(listenable, change) {
-  const prevU = untrackedStart();
-  let listeners2 = listenable.changeListeners_;
-  if (!listeners2) {
-    return;
-  }
-  listeners2 = listeners2.slice();
-  for (let i = 0, l = listeners2.length; i < l; i++) {
-    listeners2[i](change);
-  }
-  untrackedEnd(prevU);
-}
-var SPLICE = "splice";
-var UPDATE = "update";
-var MAX_SPLICE_SIZE = 1e4;
-var arrayTraps = {
-  get(target, name) {
-    const adm = target[$mobx];
-    if (name === $mobx) {
-      return adm;
-    }
-    if (name === "length") {
-      return adm.getArrayLength_();
-    }
-    if (typeof name === "string" && !isNaN(name)) {
-      return adm.get_(parseInt(name));
-    }
-    if (hasProp(arrayExtensions, name)) {
-      return arrayExtensions[name];
-    }
-    return target[name];
-  },
-  set(target, name, value) {
-    const adm = target[$mobx];
-    if (name === "length") {
-      adm.setArrayLength_(value);
-    } else if (typeof name === "symbol" || isNaN(name)) {
-      target[name] = value;
-    } else {
-      adm.set_(parseInt(name), value);
-    }
-    return true;
-  },
-  preventExtensions() {
-    die(15);
-  }
-};
-var ObservableArrayAdministration = class {
-  constructor(name = __MOBX_DEV__ ? "ObservableArray@" + getNextId() : "ObservableArray", enhancer, owned_) {
-    this.owned_ = void 0;
-    this.atom_ = void 0;
-    this.values_ = [];
-    this.interceptors_ = void 0;
-    this.changeListeners_ = void 0;
-    this.enhancer_ = void 0;
-    this.dehancer = void 0;
-    this.proxy_ = void 0;
-    this.lastKnownLength_ = 0;
-    this.owned_ = owned_;
-    this.atom_ = new Atom(name);
-    this.enhancer_ = (newV, oldV) => enhancer(newV, oldV, __MOBX_DEV__ ? name + "[..]" : "ObservableArray[..]");
-  }
-  dehanceValue_(value) {
-    if (this.dehancer !== void 0) {
-      return this.dehancer(value);
-    }
-    return value;
-  }
-  dehanceValues_(values2) {
-    if (this.dehancer !== void 0 && values2.length > 0) {
-      return values2.map(this.dehancer);
-    }
-    return values2;
-  }
-  getArrayLength_() {
-    this.atom_.reportObserved();
-    return this.values_.length;
-  }
-  setArrayLength_(newLength) {
-    if (!Number.isInteger(newLength) || newLength < 0) {
-      die(40, newLength);
-    }
-    let currentLength = this.values_.length;
-    if (newLength === currentLength) {
-      return;
-    } else if (newLength > currentLength) {
-      const newItems = Array.from({
-        length: newLength - currentLength
-      });
-      this.spliceWithArray_(currentLength, 0, newItems);
-    } else {
-      this.spliceWithArray_(newLength, currentLength - newLength);
-    }
-  }
-  updateArrayLength_(oldLength, delta) {
-    if (oldLength !== this.lastKnownLength_) {
-      die(16);
-    }
-    this.lastKnownLength_ += delta;
-  }
-  spliceWithArray_(index, deleteCount, newItems) {
-    checkIfStateModificationsAreAllowed(this.atom_);
-    const length = this.values_.length;
-    if (index === void 0) {
-      index = 0;
-    } else if (index > length) {
-      index = length;
-    } else if (index < 0) {
-      index = Math.max(0, length + index);
-    }
-    if (arguments.length === 1) {
-      deleteCount = length - index;
-    } else if (deleteCount === void 0 || deleteCount === null) {
-      deleteCount = 0;
-    } else {
-      deleteCount = Math.max(0, Math.min(deleteCount, length - index));
-    }
-    if (newItems === void 0) {
-      newItems = EMPTY_ARRAY;
-    }
-    if (hasInterceptors(this)) {
-      const change = interceptChange(this, {
-        object: this.proxy_,
-        type: SPLICE,
-        index,
-        removedCount: deleteCount,
-        added: newItems
-      });
-      if (!change) {
-        return EMPTY_ARRAY;
-      }
-      deleteCount = change.removedCount;
-      newItems = change.added;
-    }
-    newItems = newItems.length === 0 ? newItems : newItems.map((v) => this.enhancer_(v, void 0));
-    if (__MOBX_DEV__) {
-      const lengthDelta = newItems.length - deleteCount;
-      this.updateArrayLength_(length, lengthDelta);
-    }
-    const res = this.spliceItemsIntoValues_(index, deleteCount, newItems);
-    if (deleteCount !== 0 || newItems.length !== 0) {
-      this.notifyArraySplice_(index, newItems, res);
-    }
-    return this.dehanceValues_(res);
-  }
-  spliceItemsIntoValues_(index, deleteCount, newItems) {
-    if (newItems.length < MAX_SPLICE_SIZE) {
-      return this.values_.splice(index, deleteCount, ...newItems);
-    } else {
-      const res = this.values_.slice(index, index + deleteCount);
-      let oldItems = this.values_.slice(index + deleteCount);
-      this.values_.length += newItems.length - deleteCount;
-      for (let i = 0; i < newItems.length; i++) {
-        this.values_[index + i] = newItems[i];
-      }
-      for (let i = 0; i < oldItems.length; i++) {
-        this.values_[index + newItems.length + i] = oldItems[i];
-      }
-      return res;
-    }
-  }
-  notifyArrayChildUpdate_(index, newValue, oldValue) {
-    const notifySpy = __MOBX_DEV__ && !this.owned_ && isSpyEnabled();
-    const notify2 = hasListeners(this);
-    const change = notify2 || notifySpy ? {
-      observableKind: "array",
-      object: this.proxy_,
-      type: UPDATE,
-      debugObjectName: this.atom_.name_,
-      index,
-      newValue,
-      oldValue
-    } : null;
-    if (__MOBX_DEV__ && notifySpy) {
-      spyReportStart(change);
-    }
-    this.atom_.reportChanged();
-    if (notify2) {
-      notifyListeners(this, change);
-    }
-    if (__MOBX_DEV__ && notifySpy) {
-      spyReportEnd();
-    }
-  }
-  notifyArraySplice_(index, added, removed) {
-    const notifySpy = __MOBX_DEV__ && !this.owned_ && isSpyEnabled();
-    const notify2 = hasListeners(this);
-    const change = notify2 || notifySpy ? {
-      observableKind: "array",
-      object: this.proxy_,
-      debugObjectName: this.atom_.name_,
-      type: SPLICE,
-      index,
-      removed,
-      added,
-      removedCount: removed.length,
-      addedCount: added.length
-    } : null;
-    if (__MOBX_DEV__ && notifySpy) {
-      spyReportStart(change);
-    }
-    this.atom_.reportChanged();
-    if (notify2) {
-      notifyListeners(this, change);
-    }
-    if (__MOBX_DEV__ && notifySpy) {
-      spyReportEnd();
-    }
-  }
-  get_(index) {
-    this.atom_.reportObserved();
-    return this.dehanceValue_(this.values_[index]);
-  }
-  set_(index, newValue) {
-    const values2 = this.values_;
-    if (index < values2.length) {
-      checkIfStateModificationsAreAllowed(this.atom_);
-      const oldValue = values2[index];
-      if (hasInterceptors(this)) {
-        const change = interceptChange(this, {
-          type: UPDATE,
-          object: this.proxy_,
-          // since "this" is the real array we need to pass its proxy
-          index,
-          newValue
-        });
-        if (!change) {
-          return;
-        }
-        newValue = change.newValue;
-      }
-      newValue = this.enhancer_(newValue, oldValue);
-      const changed = newValue !== oldValue;
-      if (changed) {
-        values2[index] = newValue;
-        this.notifyArrayChildUpdate_(index, newValue, oldValue);
-      }
-    } else {
-      const newItems = Array.from({
-        length: index + 1 - values2.length
-      });
-      newItems[newItems.length - 1] = newValue;
-      this.spliceWithArray_(values2.length, 0, newItems);
-    }
-  }
-};
-function createObservableArray(initialValues, enhancer, name = __MOBX_DEV__ ? "ObservableArray@" + getNextId() : "ObservableArray", owned = false) {
-  return initObservable(() => {
-    const adm = new ObservableArrayAdministration(name, enhancer, owned);
-    addHiddenFinalProp(adm.values_, $mobx, adm);
-    const proxy = new Proxy(adm.values_, arrayTraps);
-    adm.proxy_ = proxy;
-    if (initialValues && initialValues.length) {
-      adm.spliceWithArray_(0, 0, initialValues);
-    }
-    return proxy;
-  });
-}
-var arrayExtensions = {
-  clear() {
-    return this.splice(0);
-  },
-  replace(newItems) {
-    const adm = this[$mobx];
-    return adm.spliceWithArray_(0, adm.values_.length, newItems);
-  },
-  // Used by JSON.stringify
-  toJSON() {
-    return this.slice();
-  },
-  /*
-   * functions that do alter the internal structure of the array, (based on lib.es6.d.ts)
-   * since these functions alter the inner structure of the array, the have side effects.
-   * Because the have side effects, they should not be used in computed function,
-   * and for that reason the do not call dependencyState.notifyObserved
-   */
-  splice(index, deleteCount, ...newItems) {
-    const adm = this[$mobx];
-    switch (arguments.length) {
-      case 0:
         return [];
-      case 1:
-        return adm.spliceWithArray_(index);
-      case 2:
-        return adm.spliceWithArray_(index, deleteCount);
+      }
+      return v.map((child, i) => node(ctx, `${path42}.${field}[${i}]`, child));
     }
-    return adm.spliceWithArray_(index, deleteCount, newItems);
-  },
-  spliceWithArray(index, deleteCount, newItems) {
-    return this[$mobx].spliceWithArray_(index, deleteCount, newItems);
-  },
-  push(...items) {
-    const adm = this[$mobx];
-    adm.spliceWithArray_(adm.values_.length, 0, items);
-    return adm.values_.length;
-  },
-  pop() {
-    return this.splice(Math.max(this[$mobx].values_.length - 1, 0), 1)[0];
-  },
-  shift() {
-    return this.splice(0, 1)[0];
-  },
-  unshift(...items) {
-    const adm = this[$mobx];
-    adm.spliceWithArray_(0, 0, items);
-    return adm.values_.length;
-  },
-  reverse() {
-    if (globalState.trackingDerivation) {
-      die(37, "reverse");
-    }
-    this.replace(this.slice().reverse());
-    return this;
-  },
-  sort() {
-    if (globalState.trackingDerivation) {
-      die(37, "sort");
-    }
-    const copy3 = this.slice();
-    copy3.sort.apply(copy3, arguments);
-    this.replace(copy3);
-    return this;
-  },
-  remove(value) {
-    const adm = this[$mobx];
-    const idx = adm.dehanceValues_(adm.values_).indexOf(value);
-    if (idx > -1) {
-      this.splice(idx, 1);
-      return true;
-    }
-    return false;
+  };
+}
+var SEGMENT_NODE_SCHEMA = {
+  noun: "layout-node key",
+  fields: {
+    kind: literalSpec("segment"),
+    name: segmentNameSpec(),
+    when: optionalStringSpec(),
+    id: placementIdSpec(),
+    settings: placementSettingsSpec()
   }
 };
-addArrayExtension("at", simpleFunc);
-addArrayExtension("concat", simpleFunc);
-addArrayExtension("flat", simpleFunc);
-addArrayExtension("includes", simpleFunc);
-addArrayExtension("indexOf", simpleFunc);
-addArrayExtension("join", simpleFunc);
-addArrayExtension("lastIndexOf", simpleFunc);
-addArrayExtension("slice", simpleFunc);
-addArrayExtension("toString", simpleFunc);
-addArrayExtension("toLocaleString", simpleFunc);
-addArrayExtension("toSorted", simpleFunc);
-addArrayExtension("toSpliced", simpleFunc);
-addArrayExtension("with", simpleFunc);
-addArrayExtension("every", mapLikeFunc);
-addArrayExtension("filter", mapLikeFunc);
-addArrayExtension("find", mapLikeFunc);
-addArrayExtension("findIndex", mapLikeFunc);
-addArrayExtension("findLast", mapLikeFunc);
-addArrayExtension("findLastIndex", mapLikeFunc);
-addArrayExtension("flatMap", mapLikeFunc);
-addArrayExtension("forEach", mapLikeFunc);
-addArrayExtension("map", mapLikeFunc);
-addArrayExtension("some", mapLikeFunc);
-addArrayExtension("toReversed", mapLikeFunc);
-addArrayExtension("reduce", reduceLikeFunc);
-addArrayExtension("reduceRight", reduceLikeFunc);
-function addArrayExtension(funcName, funcFactory) {
-  if (typeof Array.prototype[funcName] === "function") {
-    arrayExtensions[funcName] = funcFactory(funcName);
+var distributionSpec = () => optionalEnumSpec(DISTRIBUTION_NAMES);
+var CONTAINER_SCHEMA = {
+  noun: "layout-node key",
+  fields: {
+    kind: literalSpec("container"),
+    direction: directionSpec(),
+    children: childrenSpec(lazy(() => validateRoot)),
+    when: optionalStringSpec(),
+    distribution: distributionSpec()
   }
-}
-function simpleFunc(funcName) {
-  return function() {
-    const adm = this[$mobx];
-    adm.atom_.reportObserved();
-    const dehancedValues = adm.dehanceValues_(adm.values_);
-    return dehancedValues[funcName].apply(dehancedValues, arguments);
+};
+function segArmSpec() {
+  return {
+    required: true,
+    json: { type: "string" },
+    parse: (ctx, path42, field, raw) => {
+      const v = raw[field];
+      if (typeof v === "string" && v.length > 0) return v;
+      ctx.issues.push({
+        path: `${path42}.${field}`,
+        message: `a "seg" node must have a non-empty segment name, got ${describeValue(v)}`,
+        line: findKeyLine(ctx.source, [...path42.split("."), field])
+      });
+      return "";
+    }
   };
 }
-function mapLikeFunc(funcName) {
-  return function(callback, thisArg) {
-    const adm = this[$mobx];
-    adm.atom_.reportObserved();
-    const dehancedValues = adm.dehanceValues_(adm.values_);
-    return dehancedValues[funcName]((element, index) => {
-      return callback.call(thisArg, element, index, this);
+var SEG_ARM_SCHEMA = {
+  noun: "layout-node key",
+  fields: {
+    seg: segArmSpec(),
+    when: optionalStringSpec(),
+    id: placementIdSpec(),
+    settings: placementSettingsSpec()
+  }
+};
+var H_ARM_SCHEMA = {
+  noun: "layout-node key",
+  fields: {
+    h: childrenSpec(lazy(() => validateRoot)),
+    when: optionalStringSpec(),
+    distribution: distributionSpec()
+  }
+};
+var V_ARM_SCHEMA = {
+  noun: "layout-node key",
+  fields: {
+    v: childrenSpec(lazy(() => validateRoot)),
+    when: optionalStringSpec(),
+    distribution: distributionSpec()
+  }
+};
+var validateRoot = (ctx, path42, raw) => {
+  if (typeof raw === "string") {
+    if (raw.length === 0) {
+      ctx.issues.push({
+        path: path42,
+        message: `a bare-string layout node must be a non-empty segment name`,
+        line: findKeyLine(ctx.source, ["root"])
+      });
+      return EMPTY_VERTICAL_NODE;
+    }
+    return { kind: "segment", name: raw };
+  }
+  if (!isPlainObject(raw)) {
+    ctx.issues.push({
+      path: path42,
+      message: `a layout node must be a string (segment name) or an object with "kind" / "seg" / "h" / "v", got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, ["root"])
     });
-  };
-}
-function reduceLikeFunc(funcName) {
-  return function() {
-    const adm = this[$mobx];
-    adm.atom_.reportObserved();
-    const dehancedValues = adm.dehanceValues_(adm.values_);
-    const callback = arguments[0];
-    arguments[0] = (accumulator, currentValue, index) => {
-      return callback(accumulator, currentValue, index, this);
+    return EMPTY_VERTICAL_NODE;
+  }
+  if (raw.kind === "container") {
+    return record(ctx, CONTAINER_SCHEMA, path42, raw) ?? EMPTY_VERTICAL_NODE;
+  }
+  if (raw.kind === "segment") {
+    return record(ctx, SEGMENT_NODE_SCHEMA, path42, raw) ?? EMPTY_VERTICAL_NODE;
+  }
+  if (raw.kind === "cells") {
+    ctx.issues.push({
+      path: path42,
+      message: `kind: "cells" is no longer supported \u2014 use the h-arm spelling instead:
+  Old: { kind: "cells", segments: ["seg1", "seg2"] }
+  New: { h: ["seg1", "seg2"] }`,
+      line: findKeyLine(ctx.source, ["root"])
+    });
+    return EMPTY_VERTICAL_NODE;
+  }
+  if (raw.kind === "group") {
+    const group = record(ctx, GROUP_SCHEMA, path42, raw);
+    if (group === null) return EMPTY_VERTICAL_NODE;
+    ctx.groups.push({
+      name: group.name,
+      label: group.label,
+      ...group.open !== void 0 && { open: group.open },
+      ...group.direction !== void 0 && { direction: group.direction },
+      ...group.key !== void 0 && { key: group.key },
+      ...group.bg !== void 0 && { bg: group.bg },
+      ...group.fg !== void 0 && { fg: group.fg },
+      ...group.when !== void 0 && { when: group.when },
+      path: path42
+    });
+    return lowerGroup(group);
+  }
+  const hasH = "h" in raw;
+  const hasV = "v" in raw;
+  const hasSeg = "seg" in raw;
+  const armCount = (hasH ? 1 : 0) + (hasV ? 1 : 0) + (hasSeg ? 1 : 0);
+  if (armCount > 1) {
+    const present = ["seg", "h", "v"].filter((k) => k in raw);
+    ctx.issues.push({
+      path: path42,
+      message: `a layout node may have exactly one of "seg", "h", or "v" \u2014 got ${present.map((k) => `"${k}"`).join(" and ")} together`,
+      line: findKeyLine(ctx.source, ["root"])
+    });
+    return EMPTY_VERTICAL_NODE;
+  }
+  if (hasSeg) {
+    const arm2 = record(ctx, SEG_ARM_SCHEMA, path42, raw);
+    if (arm2 === null) return EMPTY_VERTICAL_NODE;
+    return {
+      kind: "segment",
+      name: arm2.seg,
+      ...arm2.when !== void 0 && { when: arm2.when },
+      ...arm2.id !== void 0 && { id: arm2.id },
+      ...arm2.settings !== void 0 && { settings: arm2.settings }
     };
-    return dehancedValues[funcName].apply(dehancedValues, arguments);
-  };
-}
-var isObservableArrayAdministration = /* @__PURE__ */ createInstanceofPredicate("ObservableArrayAdministration", ObservableArrayAdministration);
-function isObservableArray(thing) {
-  return isObject(thing) && isObservableArrayAdministration(thing[$mobx]);
-}
-var ObservableMapMarker = {};
-var ADD = "add";
-var DELETE = "delete";
-var ObservableMap = class {
-  constructor(initialData, enhancer_ = deepEnhancer, name_ = __MOBX_DEV__ ? "ObservableMap@" + getNextId() : "ObservableMap") {
-    this.enhancer_ = void 0;
-    this.name_ = void 0;
-    this[$mobx] = ObservableMapMarker;
-    this.data_ = void 0;
-    this.hasMap_ = void 0;
-    this.keysAtom_ = void 0;
-    this.interceptors_ = void 0;
-    this.changeListeners_ = void 0;
-    this.dehancer = void 0;
-    this.enhancer_ = enhancer_;
-    this.name_ = name_;
-    initObservable(() => {
-      this.keysAtom_ = createAtom(__MOBX_DEV__ ? `${this.name_}.keys()` : "ObservableMap.keys()");
-      this.data_ = /* @__PURE__ */ new Map();
-      this.hasMap_ = /* @__PURE__ */ new Map();
-      if (initialData) {
-        this.merge(initialData);
-      }
-    });
   }
-  has_(key) {
-    return this.data_.has(key);
+  if (hasH) {
+    const arm2 = record(ctx, H_ARM_SCHEMA, path42, raw);
+    if (arm2 === null) return EMPTY_VERTICAL_NODE;
+    return {
+      kind: "container",
+      direction: "horizontal",
+      children: arm2.h,
+      ...arm2.when !== void 0 && { when: arm2.when },
+      ...arm2.distribution !== void 0 && { distribution: arm2.distribution }
+    };
   }
-  has(key) {
-    if (!globalState.trackingDerivation) {
-      return this.has_(key);
-    }
-    let entry = this.hasMap_.get(key);
-    if (!entry) {
-      const newEntry = entry = new ObservableValue(this.has_(key), referenceEnhancer, __MOBX_DEV__ ? `${this.name_}.${stringifyKey(key)}?` : "ObservableMap.key?", false);
-      this.hasMap_.set(key, newEntry);
-      newEntry.onBUOL = /* @__PURE__ */ new Set([() => this.hasMap_.delete(key)]);
-    }
-    return entry.get();
+  if (hasV) {
+    const arm2 = record(ctx, V_ARM_SCHEMA, path42, raw);
+    if (arm2 === null) return EMPTY_VERTICAL_NODE;
+    return {
+      kind: "container",
+      direction: "vertical",
+      children: arm2.v,
+      ...arm2.when !== void 0 && { when: arm2.when },
+      ...arm2.distribution !== void 0 && { distribution: arm2.distribution }
+    };
   }
-  set(key, value) {
-    const hasKey2 = this.has_(key);
-    if (hasInterceptors(this)) {
-      const change = interceptChange(this, {
-        type: hasKey2 ? UPDATE : ADD,
-        object: this,
-        newValue: value,
-        name: key
-      });
-      if (!change) {
-        return this;
-      }
-      value = change.newValue;
-    }
-    if (hasKey2) {
-      this.updateValue_(key, value);
-    } else {
-      this.addValue_(key, value);
-    }
-    return this;
-  }
-  delete(key) {
-    checkIfStateModificationsAreAllowed(this.keysAtom_);
-    if (hasInterceptors(this)) {
-      const change = interceptChange(this, {
-        type: DELETE,
-        object: this,
-        name: key
-      });
-      if (!change) {
-        return false;
-      }
-    }
-    if (this.has_(key)) {
-      const notifySpy = __MOBX_DEV__ && isSpyEnabled();
-      const notify2 = hasListeners(this);
-      const change = notify2 || notifySpy ? {
-        observableKind: "map",
-        debugObjectName: this.name_,
-        type: DELETE,
-        object: this,
-        oldValue: this.data_.get(key).value_,
-        name: key
-      } : null;
-      if (__MOBX_DEV__ && notifySpy) {
-        spyReportStart(change);
-      }
-      transaction(() => {
-        var _this$hasMap_$get;
-        this.keysAtom_.reportChanged();
-        (_this$hasMap_$get = this.hasMap_.get(key)) == null || _this$hasMap_$get.setNewValue_(false);
-        const observable2 = this.data_.get(key);
-        observable2.setNewValue_(void 0);
-        this.data_.delete(key);
-      });
-      if (notify2) {
-        notifyListeners(this, change);
-      }
-      if (__MOBX_DEV__ && notifySpy) {
-        spyReportEnd();
-      }
-      return true;
-    }
-    return false;
-  }
-  updateValue_(key, newValue) {
-    const observable2 = this.data_.get(key);
-    newValue = observable2.prepareNewValue_(newValue);
-    if (newValue !== globalState.UNCHANGED) {
-      const notifySpy = __MOBX_DEV__ && isSpyEnabled();
-      const notify2 = hasListeners(this);
-      const change = notify2 || notifySpy ? {
-        observableKind: "map",
-        debugObjectName: this.name_,
-        type: UPDATE,
-        object: this,
-        oldValue: observable2.value_,
-        name: key,
-        newValue
-      } : null;
-      if (__MOBX_DEV__ && notifySpy) {
-        spyReportStart(change);
-      }
-      observable2.setNewValue_(newValue);
-      if (notify2) {
-        notifyListeners(this, change);
-      }
-      if (__MOBX_DEV__ && notifySpy) {
-        spyReportEnd();
-      }
-    }
-  }
-  addValue_(key, newValue) {
-    checkIfStateModificationsAreAllowed(this.keysAtom_);
-    transaction(() => {
-      var _this$hasMap_$get2;
-      const observable2 = new ObservableValue(newValue, this.enhancer_, __MOBX_DEV__ ? `${this.name_}.${stringifyKey(key)}` : "ObservableMap.key", false);
-      this.data_.set(key, observable2);
-      newValue = observable2.value_;
-      (_this$hasMap_$get2 = this.hasMap_.get(key)) == null || _this$hasMap_$get2.setNewValue_(true);
-      this.keysAtom_.reportChanged();
-    });
-    const notifySpy = __MOBX_DEV__ && isSpyEnabled();
-    const notify2 = hasListeners(this);
-    const change = notify2 || notifySpy ? {
-      observableKind: "map",
-      debugObjectName: this.name_,
-      type: ADD,
-      object: this,
-      name: key,
-      newValue
-    } : null;
-    if (__MOBX_DEV__ && notifySpy) {
-      spyReportStart(change);
-    }
-    if (notify2) {
-      notifyListeners(this, change);
-    }
-    if (__MOBX_DEV__ && notifySpy) {
-      spyReportEnd();
-    }
-  }
-  get(key) {
-    if (this.has(key)) {
-      return this.dehanceValue_(this.data_.get(key).get());
-    }
-    return this.dehanceValue_(void 0);
-  }
-  getOrInsert(key, value) {
-    if (!this.has(key)) {
-      this.set(key, value);
-    }
-    return this.get(key);
-  }
-  getOrInsertComputed(key, callback) {
-    if (!this.has(key)) {
-      this.set(key, callback(key));
-    }
-    return this.get(key);
-  }
-  dehanceValue_(value) {
-    if (this.dehancer !== void 0) {
-      return this.dehancer(value);
-    }
-    return value;
-  }
-  keys() {
-    this.keysAtom_.reportObserved();
-    return this.data_.keys();
-  }
-  values() {
-    const self2 = this;
-    const keys2 = this.keys();
-    return makeIterableForMap({
-      next() {
-        const {
-          done: done2,
-          value
-        } = keys2.next();
-        return {
-          done: done2,
-          value: done2 ? void 0 : self2.get(value)
-        };
-      }
-    });
-  }
-  entries() {
-    const self2 = this;
-    const keys2 = this.keys();
-    return makeIterableForMap({
-      next() {
-        const {
-          done: done2,
-          value
-        } = keys2.next();
-        return {
-          done: done2,
-          value: done2 ? void 0 : [value, self2.get(value)]
-        };
-      }
-    });
-  }
-  [Symbol.iterator]() {
-    return this.entries();
-  }
-  forEach(callback, thisArg) {
-    for (const [key, value] of this) {
-      callback.call(thisArg, value, key, this);
-    }
-  }
-  /** Merge another object into this object, returns this. */
-  merge(other) {
-    if (isObservableMap(other)) {
-      other = new Map(other);
-    }
-    transaction(() => {
-      if (isPlainObject(other)) {
-        getPlainObjectKeys(other).forEach((key) => this.set(key, other[key]));
-      } else if (Array.isArray(other)) {
-        other.forEach(([key, value]) => this.set(key, value));
-      } else if (isES6Map(other)) {
-        if (!isPlainES6Map(other)) {
-          die(19, other);
-        }
-        other.forEach((value, key) => this.set(key, value));
-      } else if (other !== null && other !== void 0) {
-        die(20, other);
-      }
-    });
-    return this;
-  }
-  clear() {
-    transaction(() => {
-      untracked(() => {
-        for (const key of this.keys()) {
-          this.delete(key);
-        }
-      });
-    });
-  }
-  replace(values2) {
-    transaction(() => {
-      const replacementMap = convertToMap(values2);
-      const orderedData = /* @__PURE__ */ new Map();
-      let keysReportChangedCalled = false;
-      for (const key of this.data_.keys()) {
-        if (!replacementMap.has(key)) {
-          const deleted = this.delete(key);
-          if (deleted) {
-            keysReportChangedCalled = true;
-          } else {
-            const value = this.data_.get(key);
-            orderedData.set(key, value);
-          }
-        }
-      }
-      for (const [key, value] of replacementMap.entries()) {
-        const keyExisted = this.data_.has(key);
-        this.set(key, value);
-        if (this.data_.has(key)) {
-          const _value = this.data_.get(key);
-          orderedData.set(key, _value);
-          if (!keyExisted) {
-            keysReportChangedCalled = true;
-          }
-        }
-      }
-      if (!keysReportChangedCalled) {
-        if (this.data_.size !== orderedData.size) {
-          this.keysAtom_.reportChanged();
-        } else {
-          const iter1 = this.data_.keys();
-          const iter2 = orderedData.keys();
-          let next1 = iter1.next();
-          let next2 = iter2.next();
-          while (!next1.done) {
-            if (next1.value !== next2.value) {
-              this.keysAtom_.reportChanged();
-              break;
-            }
-            next1 = iter1.next();
-            next2 = iter2.next();
-          }
-        }
-      }
-      this.data_ = orderedData;
-    });
-    return this;
-  }
-  get size() {
-    this.keysAtom_.reportObserved();
-    return this.data_.size;
-  }
-  toString() {
-    return "[object ObservableMap]";
-  }
-  toJSON() {
-    return Array.from(this);
-  }
-  get [Symbol.toStringTag]() {
-    return "Map";
-  }
+  ctx.issues.push({
+    path: `${path42}.kind`,
+    message: `a layout node "kind" must be "container", "segment", or "group", or use the terse A-grammar: a bare string, or an object with "seg", "h", or "v" (got ${JSON.stringify(raw.kind)})`,
+    line: findKeyLine(ctx.source, ["root"])
+  });
+  return EMPTY_VERTICAL_NODE;
 };
-var isObservableMap = /* @__PURE__ */ createInstanceofPredicate("ObservableMap", ObservableMap);
-function makeIterableForMap(iterator) {
-  iterator[Symbol.toStringTag] = "MapIterator";
-  return makeIterable(iterator);
-}
-function convertToMap(dataStructure) {
-  if (isES6Map(dataStructure) || isObservableMap(dataStructure)) {
-    return dataStructure;
-  } else if (Array.isArray(dataStructure)) {
-    return new Map(dataStructure);
-  } else if (isPlainObject(dataStructure)) {
-    const map = /* @__PURE__ */ new Map();
-    for (const key in dataStructure) {
-      map.set(key, dataStructure[key]);
-    }
-    return map;
-  } else {
-    return die(21, dataStructure);
-  }
-}
-var ObservableSetMarker = {};
-var ObservableSet = class {
-  constructor(initialData, enhancer = deepEnhancer, name_ = __MOBX_DEV__ ? "ObservableSet@" + getNextId() : "ObservableSet") {
-    this.name_ = void 0;
-    this[$mobx] = ObservableSetMarker;
-    this.data_ = /* @__PURE__ */ new Set();
-    this.atom_ = void 0;
-    this.changeListeners_ = void 0;
-    this.interceptors_ = void 0;
-    this.dehancer = void 0;
-    this.enhancer_ = void 0;
-    this.name_ = name_;
-    this.enhancer_ = (newV, oldV) => enhancer(newV, oldV, name_);
-    initObservable(() => {
-      this.atom_ = createAtom(this.name_);
-      if (initialData) {
-        this.replace(initialData);
-      }
-    });
-  }
-  dehanceValue_(value) {
-    if (this.dehancer !== void 0) {
-      return this.dehancer(value);
-    }
-    return value;
-  }
-  clear() {
-    transaction(() => {
-      untracked(() => {
-        for (const value of this.data_.values()) {
-          this.delete(value);
-        }
-      });
-    });
-  }
-  forEach(callbackFn, thisArg) {
-    for (const value of this) {
-      callbackFn.call(thisArg, value, value, this);
-    }
-  }
-  get size() {
-    this.atom_.reportObserved();
-    return this.data_.size;
-  }
-  add(value) {
-    checkIfStateModificationsAreAllowed(this.atom_);
-    if (hasInterceptors(this)) {
-      const change = interceptChange(this, {
-        type: ADD,
-        object: this,
-        newValue: value
-      });
-      if (!change) {
-        return this;
-      }
-      value = change.newValue;
-    }
-    if (!this.has(value)) {
-      transaction(() => {
-        value = this.enhancer_(value, void 0);
-        this.data_.add(value);
-        this.atom_.reportChanged();
-      });
-      const notifySpy = __MOBX_DEV__ && isSpyEnabled();
-      const notify2 = hasListeners(this);
-      const change = notify2 || notifySpy ? {
-        observableKind: "set",
-        debugObjectName: this.name_,
-        type: ADD,
-        object: this,
-        newValue: value
-      } : null;
-      if (notifySpy && __MOBX_DEV__) {
-        spyReportStart(change);
-      }
-      if (notify2) {
-        notifyListeners(this, change);
-      }
-      if (notifySpy && __MOBX_DEV__) {
-        spyReportEnd();
-      }
-    }
-    return this;
-  }
-  delete(value) {
-    if (hasInterceptors(this)) {
-      const change = interceptChange(this, {
-        type: DELETE,
-        object: this,
-        oldValue: value
-      });
-      if (!change) {
-        return false;
-      }
-    }
-    if (this.has(value)) {
-      const notifySpy = __MOBX_DEV__ && isSpyEnabled();
-      const notify2 = hasListeners(this);
-      const change = notify2 || notifySpy ? {
-        observableKind: "set",
-        debugObjectName: this.name_,
-        type: DELETE,
-        object: this,
-        oldValue: value
-      } : null;
-      if (notifySpy && __MOBX_DEV__) {
-        spyReportStart(change);
-      }
-      transaction(() => {
-        this.atom_.reportChanged();
-        this.data_.delete(value);
-      });
-      if (notify2) {
-        notifyListeners(this, change);
-      }
-      if (notifySpy && __MOBX_DEV__) {
-        spyReportEnd();
-      }
-      return true;
-    }
-    return false;
-  }
-  has(value) {
-    this.atom_.reportObserved();
-    return this.data_.has(this.dehanceValue_(value));
-  }
-  entries() {
-    const values2 = this.values();
-    return makeIterableForSet({
-      next() {
-        const {
-          value,
-          done: done2
-        } = values2.next();
-        return !done2 ? {
-          value: [value, value],
-          done: done2
-        } : {
-          value: void 0,
-          done: done2
-        };
-      }
-    });
-  }
-  keys() {
-    return this.values();
-  }
-  values() {
-    this.atom_.reportObserved();
-    const self2 = this;
-    const values2 = this.data_.values();
-    return makeIterableForSet({
-      next() {
-        const {
-          value,
-          done: done2
-        } = values2.next();
-        return !done2 ? {
-          value: self2.dehanceValue_(value),
-          done: done2
-        } : {
-          value: void 0,
-          done: done2
-        };
-      }
-    });
-  }
-  intersection(otherSet) {
-    return new Set(this).intersection(otherSet);
-  }
-  union(otherSet) {
-    return new Set(this).union(otherSet);
-  }
-  difference(otherSet) {
-    return new Set(this).difference(otherSet);
-  }
-  symmetricDifference(otherSet) {
-    return new Set(this).symmetricDifference(otherSet);
-  }
-  isSubsetOf(otherSet) {
-    return new Set(this).isSubsetOf(otherSet);
-  }
-  isSupersetOf(otherSet) {
-    return new Set(this).isSupersetOf(otherSet);
-  }
-  isDisjointFrom(otherSet) {
-    return new Set(this).isDisjointFrom(otherSet);
-  }
-  replace(other) {
-    if (isObservableSet(other)) {
-      other = new Set(other);
-    }
-    if (Array.isArray(other) || isES6Set(other)) {
-      transaction(() => {
-        const replacementValues = isES6Set(other) ? other : new Set(other);
-        if (replacementValues.size === 0) {
-          this.clear();
-          return;
-        }
-        if (this.data_.size === 0) {
-          replacementValues.forEach((value) => this.add(value));
-          return;
-        }
-        for (const value of this.data_.values()) {
-          if (!replacementValues.has(this.dehanceValue_(value))) {
-            this.delete(value);
-          }
-        }
-        replacementValues.forEach((value) => this.add(value));
-      });
-    } else if (other !== null && other !== void 0) {
-      die(41, other);
-    }
-    return this;
-  }
-  toJSON() {
-    return Array.from(this);
-  }
-  toString() {
-    return "[object ObservableSet]";
-  }
-  [Symbol.iterator]() {
-    return this.values();
-  }
-  get [Symbol.toStringTag]() {
-    return "Set";
-  }
-};
-var isObservableSet = /* @__PURE__ */ createInstanceofPredicate("ObservableSet", ObservableSet);
-function makeIterableForSet(iterator) {
-  iterator[Symbol.toStringTag] = "SetIterator";
-  return makeIterable(iterator);
-}
-var descriptorCache = /* @__PURE__ */ Object.create(null);
-var REMOVE = "remove";
-var ObservableObjectAdministration = class {
-  constructor(target_, values_ = /* @__PURE__ */ new Map(), name_, defaultAnnotation_ = autoAnnotation) {
-    this.target_ = void 0;
-    this.values_ = void 0;
-    this.name_ = void 0;
-    this.defaultAnnotation_ = void 0;
-    this.keysAtom_ = void 0;
-    this.changeListeners_ = void 0;
-    this.interceptors_ = void 0;
-    this.proxy_ = void 0;
-    this.isPlainObject_ = void 0;
-    this.appliedAnnotations_ = void 0;
-    this.pendingKeys_ = void 0;
-    this.lazyComputedKeys_ = void 0;
-    this.lazyObservableKeys_ = void 0;
-    this.target_ = target_;
-    this.values_ = values_;
-    this.name_ = name_;
-    this.defaultAnnotation_ = defaultAnnotation_;
-    this.keysAtom_ = new Atom(__MOBX_DEV__ ? `${this.name_}.keys` : "ObservableObject.keys");
-    this.isPlainObject_ = isPlainObject(this.target_);
-    if (__MOBX_DEV__ && !isAnnotation(this.defaultAnnotation_)) {
-      die(`defaultAnnotation must be valid annotation`);
-    }
-    if (__MOBX_DEV__) {
-      this.appliedAnnotations_ = {};
-    }
-  }
-  getObservablePropValue_(key) {
-    var _ref, _this$values_$get;
-    const observable2 = (_ref = (_this$values_$get = this.values_.get(key)) != null ? _this$values_$get : this.materializeLazyComputed_(key)) != null ? _ref : this.materializeLazyObservable_(key);
-    return observable2.get();
-  }
-  materializeLazyComputed_(key) {
-    var _this$lazyComputedKey;
-    const factory = (_this$lazyComputedKey = this.lazyComputedKeys_) == null ? void 0 : _this$lazyComputedKey.get(key);
-    if (!factory) {
-      return void 0;
-    }
-    this.lazyComputedKeys_.delete(key);
-    if (this.lazyComputedKeys_.size === 0) {
-      this.lazyComputedKeys_ = void 0;
-    }
-    const computed3 = factory();
-    this.values_.set(key, computed3);
-    return computed3;
-  }
-  materializeLazyObservable_(key) {
-    var _this$lazyObservableK;
-    const factory = (_this$lazyObservableK = this.lazyObservableKeys_) == null ? void 0 : _this$lazyObservableK.get(key);
-    if (!factory) {
-      return void 0;
-    }
-    this.lazyObservableKeys_.delete(key);
-    if (this.lazyObservableKeys_.size === 0) {
-      this.lazyObservableKeys_ = void 0;
-    }
-    const observable2 = factory();
-    this.values_.set(key, observable2);
-    return observable2;
-  }
-  setObservablePropValue_(key, newValue) {
-    var _ref2, _this$values_$get2;
-    const observable2 = (_ref2 = (_this$values_$get2 = this.values_.get(key)) != null ? _this$values_$get2 : this.materializeLazyComputed_(key)) != null ? _ref2 : this.materializeLazyObservable_(key);
-    if (observable2 instanceof ComputedValue) {
-      observable2.set(newValue);
-      return true;
-    }
-    if (hasInterceptors(this)) {
-      const change = interceptChange(this, {
-        type: UPDATE,
-        object: this.proxy_ || this.target_,
-        name: key,
-        newValue
-      });
-      if (!change) {
-        return null;
-      }
-      newValue = change.newValue;
-    }
-    newValue = observable2.prepareNewValue_(newValue);
-    if (newValue !== globalState.UNCHANGED) {
-      const notify2 = hasListeners(this);
-      const notifySpy = __MOBX_DEV__ && isSpyEnabled();
-      const change = notify2 || notifySpy ? {
-        type: UPDATE,
-        observableKind: "object",
-        debugObjectName: this.name_,
-        object: this.proxy_ || this.target_,
-        oldValue: observable2.value_,
-        name: key,
-        newValue
-      } : null;
-      if (__MOBX_DEV__ && notifySpy) {
-        spyReportStart(change);
-      }
-      observable2.setNewValue_(newValue);
-      if (notify2) {
-        notifyListeners(this, change);
-      }
-      if (__MOBX_DEV__ && notifySpy) {
-        spyReportEnd();
-      }
-    }
-    return true;
-  }
-  get_(key) {
-    if (globalState.trackingDerivation && !hasProp(this.target_, key)) {
-      this.has_(key);
-    }
-    return this.target_[key];
-  }
-  /**
-   * @param {PropertyKey} key
-   * @param {any} value
-   * @param {Annotation|boolean} annotation true - use default annotation, false - copy as is
-   * @param {boolean} proxyTrap whether it's called from proxy trap
-   * @returns {boolean|null} true on success, false on failure (proxyTrap + non-configurable), null when cancelled by interceptor
-   */
-  set_(key, value, proxyTrap = false) {
-    if (hasProp(this.target_, key)) {
-      if (this.values_.has(key)) {
-        return this.setObservablePropValue_(key, value);
-      } else if (proxyTrap) {
-        return Reflect.set(this.target_, key, value);
-      } else {
-        this.target_[key] = value;
-        return true;
-      }
-    } else {
-      return this.extend_(key, {
-        value,
-        enumerable: true,
-        writable: true,
-        configurable: true
-      }, this.defaultAnnotation_, proxyTrap);
-    }
-  }
-  // Trap for "in"
-  has_(key) {
-    if (!globalState.trackingDerivation) {
-      return key in this.target_;
-    }
-    this.pendingKeys_ || (this.pendingKeys_ = /* @__PURE__ */ new Map());
-    let entry = this.pendingKeys_.get(key);
-    if (!entry) {
-      entry = new ObservableValue(key in this.target_, referenceEnhancer, __MOBX_DEV__ ? `${this.name_}.${stringifyKey(key)}?` : "ObservableObject.key?", false);
-      this.pendingKeys_.set(key, entry);
-    }
-    return entry.get();
-  }
-  /**
-   * @param {PropertyKey} key
-   * @param {PropertyDescriptor} descriptor
-   * @param {Annotation|boolean} annotation true - use default annotation, false - copy as is
-   * @param {boolean} proxyTrap whether it's called from proxy trap
-   * @returns {boolean|null} true on success, false on failure (proxyTrap + non-configurable), null when cancelled by interceptor
-   */
-  extend_(key, descriptor, annotation, proxyTrap = false) {
-    if (annotation === true) {
-      annotation = this.defaultAnnotation_;
-    }
-    if (annotation === false) {
-      return this.defineProperty_(key, descriptor, proxyTrap);
-    }
-    assertAnnotable(this, annotation, key);
-    const outcome = annotation.extend_(this, key, descriptor, proxyTrap);
-    if (outcome) {
-      recordAnnotationApplied(this, annotation, key);
-    }
-    return outcome;
-  }
-  /**
-   * @param {PropertyKey} key
-   * @param {PropertyDescriptor} descriptor
-   * @param {boolean} proxyTrap whether it's called from proxy trap
-   * @returns {boolean|null} true on success, false on failure (proxyTrap + non-configurable), null when cancelled by interceptor
-   */
-  defineProperty_(key, descriptor, proxyTrap = false) {
-    checkIfStateModificationsAreAllowed(this.keysAtom_);
-    try {
-      startBatch();
-      const deleteOutcome = this.delete_(key);
-      if (!deleteOutcome) {
-        return deleteOutcome;
-      }
-      if (hasInterceptors(this)) {
-        const change = interceptChange(this, {
-          object: this.proxy_ || this.target_,
-          name: key,
-          type: ADD,
-          newValue: descriptor.value
+function rowsSpec() {
+  return {
+    required: true,
+    json: {
+      type: "object",
+      propertyNames: { pattern: ROW_NAME_RE.source },
+      additionalProperties: { $ref: LAYOUT_NODE_REF }
+    },
+    parse: (ctx, path42, field, raw) => {
+      const v = raw[field];
+      if (!isPlainObject(v)) {
+        ctx.issues.push({
+          path: `${path42}.${field}`,
+          message: `"rows" must be an object of row name \u2192 layout node, got ${describeType(v)}`,
+          line: findKeyLine(ctx.source, [...path42.split("."), field])
         });
-        if (!change) {
-          return null;
-        }
-        const {
-          newValue
-        } = change;
-        if (descriptor.value !== newValue) {
-          descriptor = assign({}, descriptor, {
-            value: newValue
+        return {};
+      }
+      const rows = {};
+      for (const [name, node] of Object.entries(v)) {
+        if (!ROW_NAME_RE.test(name)) {
+          ctx.issues.push({
+            path: `${path42}.${field}.${name}`,
+            message: `row name "${name}" must be an identifier (letters, digits, _; not starting with a digit) \u2014 it names the row in the config file and merges by name over the bundled default's rows`,
+            line: findKeyLine(ctx.source, [...path42.split("."), field, name])
           });
+          continue;
         }
+        rows[name] = validateRoot(ctx, `${path42}.${field}.${name}`, node);
       }
-      if (proxyTrap) {
-        if (!Reflect.defineProperty(this.target_, key, descriptor)) {
-          return false;
-        }
-      } else {
-        defineProperty(this.target_, key, descriptor);
-      }
-      this.notifyPropertyAddition_(key, descriptor.value);
-    } finally {
-      endBatch();
+      return rows;
     }
-    return true;
+  };
+}
+var ROWS_SCHEMA = {
+  noun: "root key",
+  fields: {
+    rows: rowsSpec(),
+    when: optionalStringSpec(),
+    distribution: distributionSpec()
   }
-  // If original descriptor becomes relevant, move this to annotation directly
-  defineObservableProperty_(key, value, enhancer, proxyTrap = false) {
-    checkIfStateModificationsAreAllowed(this.keysAtom_);
-    try {
-      startBatch();
-      const deleteOutcome = this.delete_(key);
-      if (!deleteOutcome) {
-        return deleteOutcome;
-      }
-      if (hasInterceptors(this)) {
-        const change = interceptChange(this, {
-          object: this.proxy_ || this.target_,
-          name: key,
-          type: ADD,
-          newValue: value
-        });
-        if (!change) {
-          return null;
-        }
-        value = change.newValue;
-      }
-      const cachedDescriptor = getCachedObservablePropDescriptor(key);
-      const descriptor = {
-        configurable: globalState.safeDescriptors ? this.isPlainObject_ : true,
-        enumerable: true,
-        get: cachedDescriptor.get,
-        set: cachedDescriptor.set
-      };
-      if (proxyTrap) {
-        if (!Reflect.defineProperty(this.target_, key, descriptor)) {
-          return false;
-        }
-      } else {
-        defineProperty(this.target_, key, descriptor);
-      }
-      const observable2 = new ObservableValue(value, enhancer, __MOBX_DEV__ ? `${this.name_}.${key.toString()}` : "ObservableObject.key", false);
-      this.values_.set(key, observable2);
-      this.notifyPropertyAddition_(key, observable2.value_);
-    } finally {
-      endBatch();
-    }
-    return true;
+};
+function validateRootFragment(ctx, path42, raw) {
+  if (isPlainObject(raw) && "rows" in raw) {
+    return record(ctx, ROWS_SCHEMA, path42, raw) ?? { rows: {} };
   }
-  // If original descriptor becomes relevant, move this to annotation directly
-  defineComputedProperty_(key, options, proxyTrap = false) {
-    checkIfStateModificationsAreAllowed(this.keysAtom_);
-    try {
-      startBatch();
-      const deleteOutcome = this.delete_(key);
-      if (!deleteOutcome) {
-        return deleteOutcome;
-      }
-      if (hasInterceptors(this)) {
-        const change = interceptChange(this, {
-          object: this.proxy_ || this.target_,
-          name: key,
-          type: ADD,
-          newValue: void 0
-        });
-        if (!change) {
-          return null;
-        }
-      }
-      options.name || (options.name = __MOBX_DEV__ ? `${this.name_}.${key.toString()}` : "ObservableObject.key");
-      options.context = this.proxy_ || this.target_;
-      const cachedDescriptor = getCachedObservablePropDescriptor(key);
-      const descriptor = {
-        configurable: globalState.safeDescriptors ? this.isPlainObject_ : true,
-        enumerable: false,
-        get: cachedDescriptor.get,
-        set: cachedDescriptor.set
-      };
-      if (proxyTrap) {
-        if (!Reflect.defineProperty(this.target_, key, descriptor)) {
-          return false;
-        }
-      } else {
-        defineProperty(this.target_, key, descriptor);
-      }
-      this.values_.set(key, new ComputedValue(options));
-      this.notifyPropertyAddition_(key, void 0);
-    } finally {
-      endBatch();
-    }
-    return true;
+  return validateRoot(ctx, path42, raw);
+}
+var INSERT_SCHEMA = {
+  noun: "insert key",
+  fields: {
+    seg: segArmSpec(),
+    id: placementIdSpec(),
+    before: optionalStringSpec(),
+    after: optionalStringSpec()
   }
-  /**
-   * @param {PropertyKey} key
-   * @param {PropertyDescriptor} descriptor
-   * @param {boolean} proxyTrap whether it's called from proxy trap
-   * @returns {boolean|null} true on success, false on failure (proxyTrap + non-configurable), null when cancelled by interceptor
-   */
-  delete_(key, proxyTrap = false) {
-    checkIfStateModificationsAreAllowed(this.keysAtom_);
-    if (!hasProp(this.target_, key)) {
-      return true;
-    }
-    if (hasInterceptors(this)) {
-      const change = interceptChange(this, {
-        object: this.proxy_ || this.target_,
-        name: key,
-        type: REMOVE
+};
+function validateInsert(ctx, raw, file) {
+  if (!Array.isArray(raw)) {
+    ctx.issues.push({
+      path: "insert",
+      message: `"insert" must be a list of cells like { seg: "name", after: "placement" }, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, ["insert"])
+    });
+    return [];
+  }
+  return raw.flatMap((entry, i) => {
+    const path42 = `insert.${i}`;
+    const arm2 = record(ctx, INSERT_SCHEMA, path42, entry);
+    if (arm2 === null) return [];
+    const sides = ["before", "after"].filter(
+      (side) => arm2[side] !== void 0
+    );
+    if (sides.length !== 1) {
+      ctx.issues.push({
+        path: path42,
+        message: `an insert cell names exactly one of "before" or "after" (the placement id it sits beside), got ${sides.length === 0 ? "neither" : "both"}`,
+        line: findKeyLine(ctx.source, path42.split("."))
       });
-      if (!change) {
-        return null;
-      }
+      return [];
     }
-    try {
-      var _this$pendingKeys_;
-      startBatch();
-      const notify2 = hasListeners(this);
-      const notifySpy = __MOBX_DEV__ && isSpyEnabled();
-      const observable2 = this.values_.get(key);
-      let value = void 0;
-      if (!observable2 && (notify2 || notifySpy)) {
-        var _getDescriptor2;
-        value = (_getDescriptor2 = getDescriptor(this.target_, key)) == null ? void 0 : _getDescriptor2.value;
-      }
-      if (proxyTrap) {
-        if (!Reflect.deleteProperty(this.target_, key)) {
-          return false;
-        }
-      } else {
-        delete this.target_[key];
-      }
-      if (__MOBX_DEV__) {
-        delete this.appliedAnnotations_[key];
-      }
-      if (observable2) {
-        this.values_.delete(key);
-        if (observable2 instanceof ObservableValue) {
-          value = observable2.value_;
-        }
-        propagateChanged(observable2);
-      }
-      this.keysAtom_.reportChanged();
-      (_this$pendingKeys_ = this.pendingKeys_) == null || (_this$pendingKeys_ = _this$pendingKeys_.get(key)) == null || _this$pendingKeys_.set(key in this.target_);
-      if (notify2 || notifySpy) {
-        const change = {
-          type: REMOVE,
-          observableKind: "object",
-          object: this.proxy_ || this.target_,
-          debugObjectName: this.name_,
-          oldValue: value,
-          name: key
-        };
-        if (__MOBX_DEV__ && notifySpy) {
-          spyReportStart(change);
-        }
-        if (notify2) {
-          notifyListeners(this, change);
-        }
-        if (__MOBX_DEV__ && notifySpy) {
-          spyReportEnd();
-        }
-      }
-    } finally {
-      endBatch();
+    if (isReservedName(arm2.seg)) {
+      ctx.issues.push({
+        path: `${path42}.seg`,
+        message: `an insert cell places a segment, and "${arm2.seg}" is the bar's own chrome \u2014 name a segment instead`,
+        line: findKeyLine(ctx.source, [...path42.split("."), "seg"])
+      });
+      return [];
     }
-    return true;
-  }
-  notifyPropertyAddition_(key, value) {
-    var _this$pendingKeys_2;
-    const notify2 = hasListeners(this);
-    const notifySpy = __MOBX_DEV__ && isSpyEnabled();
-    if (notify2 || notifySpy) {
-      const change = notify2 || notifySpy ? {
-        type: ADD,
-        observableKind: "object",
-        debugObjectName: this.name_,
-        object: this.proxy_ || this.target_,
-        name: key,
-        newValue: value
-      } : null;
-      if (__MOBX_DEV__ && notifySpy) {
-        spyReportStart(change);
-      }
-      if (notify2) {
-        notifyListeners(this, change);
-      }
-      if (__MOBX_DEV__ && notifySpy) {
-        spyReportEnd();
-      }
+    const relation = sides[0];
+    const anchor = arm2[relation];
+    if (isReservedName(anchor)) {
+      ctx.issues.push({
+        path: `${path42}.${relation}`,
+        message: `an insert cell sits beside a placement, and "${anchor}" is the bar's own chrome \u2014 anchor on a placement id instead`,
+        line: findKeyLine(ctx.source, [...path42.split("."), relation])
+      });
+      return [];
     }
-    (_this$pendingKeys_2 = this.pendingKeys_) == null || (_this$pendingKeys_2 = _this$pendingKeys_2.get(key)) == null || _this$pendingKeys_2.set(true);
-    this.keysAtom_.reportChanged();
-  }
-  ownKeys_() {
-    this.keysAtom_.reportObserved();
-    return ownKeys2(this.target_);
-  }
-  keys_() {
-    this.keysAtom_.reportObserved();
-    return Object.keys(this.target_);
-  }
-};
-function asObservableObject(target, options) {
-  var _options$name;
-  if (__MOBX_DEV__ && options && isObservableObject(target)) {
-    die(`Options can't be provided for already observable objects.`);
-  }
-  if (hasProp(target, $mobx)) {
-    if (__MOBX_DEV__ && !(getAdministration(target) instanceof ObservableObjectAdministration)) {
-      die(`Cannot convert '${getDebugName(target)}' into observable object:
-The target is already observable of different type.
-Extending builtins is not supported.`);
-    }
-    return target;
-  }
-  if (__MOBX_DEV__ && !Object.isExtensible(target)) {
-    die("Cannot make the designated object observable; it is not extensible");
-  }
-  const name = (_options$name = options == null ? void 0 : options.name) != null ? _options$name : __MOBX_DEV__ ? `${isPlainObject(target) ? "ObservableObject" : target.constructor.name}@${getNextId()}` : "ObservableObject";
-  const adm = new ObservableObjectAdministration(target, /* @__PURE__ */ new Map(), String(name), getAnnotationFromOptions(options));
-  addHiddenProp(target, $mobx, adm);
-  return target;
-}
-var isObservableObjectAdministration = /* @__PURE__ */ createInstanceofPredicate("ObservableObjectAdministration", ObservableObjectAdministration);
-function getCachedObservablePropDescriptor(key) {
-  return descriptorCache[key] || (descriptorCache[key] = {
-    get() {
-      return this[$mobx].getObservablePropValue_(key);
-    },
-    set(value) {
-      return this[$mobx].setObservablePropValue_(key, value);
-    }
+    return [
+      {
+        seg: arm2.seg,
+        ...arm2.id !== void 0 && { id: arm2.id },
+        anchor,
+        relation,
+        by: { file, entry: path42 }
+      }
+    ];
   });
 }
-function isObservableObject(thing) {
-  if (isObject(thing)) {
-    return isObservableObjectAdministration(thing[$mobx]);
-  }
-  return false;
-}
-function recordAnnotationApplied(adm, annotation, key) {
-  if (__MOBX_DEV__) {
-    adm.appliedAnnotations_[key] = annotation;
-  }
-}
-function assertAnnotable(adm, annotation, key) {
-  if (__MOBX_DEV__ && !isAnnotation(annotation)) {
-    die(`Cannot annotate '${adm.name_}.${key.toString()}': Invalid annotation.`);
-  }
-  if (__MOBX_DEV__ && !isOverride(annotation) && hasProp(adm.appliedAnnotations_, key)) {
-    const fieldName = `${adm.name_}.${key.toString()}`;
-    const currentAnnotationType = adm.appliedAnnotations_[key].annotationType_;
-    const requestedAnnotationType = annotation.annotationType_;
-    die(`Cannot apply '${requestedAnnotationType}' to '${fieldName}':
-The field is already annotated with '${currentAnnotationType}'.
-Re-annotating fields is not allowed.
-Use 'override' annotation for methods overridden by subclass.`);
-  }
-}
-function getAtom(thing, property) {
-  if (typeof thing === "object" && thing !== null) {
-    if (isObservableArray(thing)) {
-      if (property !== void 0) {
-        die(23);
+function groupNameSpec() {
+  return {
+    required: true,
+    json: { type: "string", pattern: ROW_NAME_RE.source },
+    parse: (ctx, path42, field, raw) => {
+      const v = raw[field];
+      if (typeof v !== "string" || !ROW_NAME_RE.test(v) || v === DISCLOSURE_CLOSED) {
+        ctx.issues.push({
+          path: `${path42}.${field}`,
+          message: `a group "name" must be an identifier (letters, digits, _; not starting with a digit) and not the reserved "${DISCLOSURE_CLOSED}", got ${describeValue(v)}`,
+          line: findKeyLine(ctx.source, ["root"])
+        });
+        return void 0;
       }
-      return thing[$mobx].atom_;
-    }
-    if (isObservableSet(thing)) {
-      return thing.atom_;
-    }
-    if (isObservableMap(thing)) {
-      if (property === void 0) {
-        return thing.keysAtom_;
-      }
-      const observable2 = thing.data_.get(property) || thing.hasMap_.get(property);
-      if (!observable2) {
-        die(25, property, getDebugName(thing));
-      }
-      return observable2;
-    }
-    if (isObservableObject(thing)) {
-      var _ref, _adm$values_$get;
-      if (!property) {
-        return die(26);
-      }
-      const adm = thing[$mobx];
-      const observable2 = (_ref = (_adm$values_$get = adm.values_.get(property)) != null ? _adm$values_$get : adm.materializeLazyComputed_(property)) != null ? _ref : adm.materializeLazyObservable_(property);
-      if (!observable2) {
-        die(27, property, getDebugName(thing));
-      }
-      return observable2;
-    }
-    if (isAtom(thing) || isComputedValue(thing) || isReaction(thing)) {
-      return thing;
-    }
-  } else if (isFunction(thing)) {
-    if (isReaction(thing[$mobx])) {
-      return thing[$mobx];
-    }
-  }
-  die(28);
-}
-function getAdministration(thing, property) {
-  if (!thing) {
-    die(29);
-  }
-  if (property !== void 0) {
-    return getAdministration(getAtom(thing, property));
-  }
-  if (isAtom(thing) || isComputedValue(thing) || isReaction(thing)) {
-    return thing;
-  }
-  if (isObservableMap(thing) || isObservableSet(thing)) {
-    return thing;
-  }
-  if (thing[$mobx]) {
-    return thing[$mobx];
-  }
-  die(24, thing);
-}
-function getDebugName(thing, property) {
-  let named3;
-  if (property !== void 0) {
-    named3 = getAtom(thing, property);
-  } else if (isAction(thing)) {
-    return thing.name;
-  } else if (isObservableObject(thing) || isObservableMap(thing) || isObservableSet(thing)) {
-    named3 = getAdministration(thing);
-  } else {
-    named3 = getAtom(thing);
-  }
-  return named3.name_;
-}
-function initObservable(cb) {
-  const derivation = untrackedStart();
-  const allowStateChanges2 = __MOBX_DEV__ ? allowStateChangesStart(true) : true;
-  startBatch();
-  try {
-    return cb();
-  } finally {
-    endBatch();
-    if (__MOBX_DEV__) {
-      allowStateChangesEnd(allowStateChanges2);
-    }
-    untrackedEnd(derivation);
-  }
-}
-var toString = objectPrototype.toString;
-function deepEqual(a, b, depth = -1) {
-  return eq(a, b, depth);
-}
-function eq(a, b, depth, aStack, bStack) {
-  if (a === b) {
-    return a !== 0 || 1 / a === 1 / b;
-  }
-  if (a == null || b == null) {
-    return false;
-  }
-  if (a !== a) {
-    return b !== b;
-  }
-  const type3 = typeof a;
-  if (type3 !== "function" && type3 !== "object" && typeof b != "object") {
-    return false;
-  }
-  const className = toString.call(a);
-  if (className !== toString.call(b)) {
-    return false;
-  }
-  switch (className) {
-    // Strings, numbers, regular expressions, dates, and booleans are compared by value.
-    case "[object RegExp]":
-    // RegExps are coerced to strings for comparison (Note: '' + /a/i === '/a/i')
-    case "[object String]":
-      return "" + a === "" + b;
-    case "[object Number]":
-      if (+a !== +a) {
-        return +b !== +b;
-      }
-      return +a === 0 ? 1 / +a === 1 / b : +a === +b;
-    case "[object Date]":
-    case "[object Boolean]":
-      return +a === +b;
-    case "[object Symbol]":
-      return typeof Symbol !== "undefined" && Symbol.valueOf.call(a) === Symbol.valueOf.call(b);
-    case "[object Map]":
-    case "[object Set]":
-      if (depth >= 0) {
-        depth++;
-      }
-      break;
-  }
-  a = unwrap(a);
-  b = unwrap(b);
-  const areArrays = className === "[object Array]";
-  if (!areArrays) {
-    if (typeof a != "object" || typeof b != "object") {
-      return false;
-    }
-    const aCtor = a.constructor, bCtor = b.constructor;
-    if (aCtor !== bCtor && !(isFunction(aCtor) && aCtor instanceof aCtor && isFunction(bCtor) && bCtor instanceof bCtor) && "constructor" in a && "constructor" in b) {
-      return false;
-    }
-  }
-  if (depth === 0) {
-    return false;
-  } else if (depth < 0) {
-    depth = -1;
-  }
-  aStack = aStack || [];
-  bStack = bStack || [];
-  let length = aStack.length;
-  while (length--) {
-    if (aStack[length] === a) {
-      return bStack[length] === b;
-    }
-  }
-  aStack.push(a);
-  bStack.push(b);
-  if (areArrays) {
-    length = a.length;
-    if (length !== b.length) {
-      return false;
-    }
-    while (length--) {
-      if (!eq(a[length], b[length], depth - 1, aStack, bStack)) {
-        return false;
-      }
-    }
-  } else {
-    const keys2 = Object.keys(a);
-    const _length = keys2.length;
-    if (Object.keys(b).length !== _length) {
-      return false;
-    }
-    for (let i = 0; i < _length; i++) {
-      const key = keys2[i];
-      if (!(hasProp(b, key) && eq(a[key], b[key], depth - 1, aStack, bStack))) {
-        return false;
-      }
-    }
-  }
-  aStack.pop();
-  bStack.pop();
-  return true;
-}
-function unwrap(a) {
-  if (isObservableArray(a)) {
-    return a.slice();
-  }
-  if (isES6Map(a) || isObservableMap(a)) {
-    return Array.from(a.entries());
-  }
-  if (isES6Set(a) || isObservableSet(a)) {
-    return Array.from(a.entries());
-  }
-  return a;
-}
-var _globalThis$Iterator;
-var maybeIteratorPrototype = ((_globalThis$Iterator = globalThis.Iterator) == null ? void 0 : _globalThis$Iterator.prototype) || {};
-function makeIterable(iterator) {
-  iterator[Symbol.iterator] = getSelf;
-  return assign(Object.create(maybeIteratorPrototype), iterator);
-}
-function getSelf() {
-  return this;
-}
-function isAnnotation(thing) {
-  return (
-    // Can be function
-    thing instanceof Object && typeof thing.annotationType_ === "string" && isFunction(thing.make_) && isFunction(thing.extend_)
-  );
-}
-if (__MOBX_DEV__) {
-  const g = globalThis;
-  ["Symbol", "Map", "Set", "Proxy"].forEach((m) => {
-    if (typeof g[m] === "undefined") {
-      die(`MobX requires global '${m}' to be available or polyfilled`);
-    }
-  });
-}
-if (__MOBX_DEV__ && typeof __MOBX_DEVTOOLS_GLOBAL_HOOK__ === "object") {
-  __MOBX_DEVTOOLS_GLOBAL_HOOK__.injectMobx({
-    spy,
-    extras: {
-      getDebugName
-    },
-    $mobx
-  });
-}
-
-// src/var-system/types.ts
-init_globals();
-function toDocument(value) {
-  if (Array.isArray(value)) return Object.freeze(value.map(toDocument));
-  if (value !== null && typeof value === "object") {
-    const out = /* @__PURE__ */ Object.create(null);
-    const entries = Object.entries(value).sort(
-      ([a], [b]) => a < b ? -1 : a > b ? 1 : 0
-    );
-    for (const [key, v] of entries) out[key] = toDocument(v);
-    return Object.freeze(out);
-  }
-  return value;
-}
-function typeOf(v) {
-  const t2 = typeof v;
-  if (t2 === "string" || t2 === "number" || t2 === "boolean") return t2;
-  throw new TypeError(
-    `Variable values must be string|number|boolean (got ${t2})`
-  );
-}
-function toString2(v) {
-  return typeof v === "string" ? v : String(v);
-}
-function toNumber(v) {
-  if (typeof v === "number") return v;
-  if (typeof v === "boolean") return v ? 1 : 0;
-  const trimmed = v.trim();
-  if (trimmed === "") {
-    throw new TypeError(`Cannot cast empty string to number`);
-  }
-  const n = Number(trimmed);
-  if (!Number.isFinite(n)) {
-    throw new TypeError(`Cannot cast ${JSON.stringify(v)} to number`);
-  }
-  return n;
-}
-function toBool(v) {
-  if (typeof v === "boolean") return v;
-  if (typeof v === "number") {
-    if (v === 0 || v === 1) return v === 1;
-    throw new TypeError(
-      `Cannot cast number ${v} to bool (only 0 and 1 are accepted)`
-    );
-  }
-  if (v === "true") return true;
-  if (v === "false") return false;
-  throw new TypeError(
-    `Cannot cast ${JSON.stringify(v)} to bool (expected "true" or "false")`
-  );
-}
-var PendingValueError = class extends Error {
-  constructor(variable, message) {
-    super(message);
-    this.variable = variable;
-  }
-  variable;
-};
-function readPending(e) {
-  if (e instanceof PendingValueError) return e;
-  return e instanceof Error && e.cause !== void 0 ? readPending(e.cause) : void 0;
-}
-
-// src/var-system/store.ts
-init_globals();
-var unwritten = (value) => value === PENDING;
-var BoxNode = class {
-  constructor(name, type3, initial2) {
-    this.name = name;
-    this.type = type3;
-    if (!unwritten(initial2)) assertType(name, type3, initial2, "initial value");
-    this.cell = observable.box(initial2, { deep: false });
-    this.lastChangedAt = unwritten(initial2) ? null : Date.now();
-  }
-  name;
-  type;
-  kind = "box";
-  cell;
-  // [LAW:single-enforcer] One write path (`set`) updates both the value and
-  // the timestamp; introspection reads from the same place renderers do.
-  //
-  // It records when the value last CHANGED, which is what debug.ts calls the
-  // node's age and what anyone reading that age is asking (brandon-var-system-
-  // 1tl). Stamping every write instead reported attempts, and reported them most
-  // misleadingly in the one situation where the age is consulted: a source
-  // re-running with no effect.
-  lastChangedAt;
-  // [LAW:types-are-the-program] Not written yet is not a value: it is read as
-  // THE pending signal, which every place a template is evaluated takes as its
-  // own outcome.
-  read() {
-    const value = this.cell.get();
-    if (unwritten(value)) {
-      throw new PendingValueError(
-        this.name,
-        `variable "${this.name}" has no value yet: nothing has written it`
-      );
-    }
-    return value;
-  }
-  // A box written PENDING is not answered yet again: what its payload holds
-  // is a source that has not answered (src/daemon/render-payload.ts).
-  set(value) {
-    if (!unwritten(value)) assertType(this.name, this.type, value, "set value");
-    if (Object.is(this.cell.get(), value)) return;
-    this.cell.set(value);
-    this.lastChangedAt = Date.now();
-  }
-  lastUpdatedMs() {
-    return this.lastChangedAt;
-  }
-  // The cell as written, pending included: what `stored` reads.
-  stored() {
-    return this.cell.get();
-  }
-};
-var Kept = class {
-  cell;
-  // `what` names the value in a refusal: `Variable "x"`, `Derived value "x"`.
-  // `equals` is what counts as a change: MobX's own comparison unless given.
-  constructor(what, deriver, equals) {
-    this.cell = computed(deriver, {
-      keepAlive: true,
-      ...equals !== void 0 && { equals }
-    });
-    if (typeof this.cell.suspend_ !== "function") {
-      throw new TypeError(
-        `${what}: this MobX's computed has no suspend_; release() cannot unsubscribe it`
-      );
-    }
-    if (typeof this.cell.keepAlive_ !== "boolean") {
-      throw new TypeError(
-        `${what}: this MobX's computed has no keepAlive_ flag; release() cannot lift it`
-      );
-    }
-  }
-  read() {
-    return this.cell.get();
-  }
-  // Unsubscribe from every dependency and drop the cached value. A keepAlive
-  // computed never does this on its own — MobX keeps it subscribed to whatever
-  // it read for as long as those observables live, which for a daemon-wide
-  // observable (the SessionState atom) is the life of the daemon, and that
-  // subscription kept every disposed config's whole store reachable
-  // (brandon-unfiled-3248.t14). MobX offers no public release for a keepAlive
-  // computed, so this lifts the guard its own teardown checks and runs that
-  // teardown. Must run inside an action: the unobservation it cascades is
-  // settled when the outermost batch ends.
-  // [LAW:single-enforcer] exception: two MobX internals (`keepAlive_`,
-  // `suspend_`) are reached here and nowhere else; the constructor refuses a
-  // MobX without them, and test/var-store-dispose.test.ts pins the effect.
-  release() {
-    this.cell.keepAlive_ = false;
-    this.cell.suspend_();
-  }
-};
-var Projected = class {
-  constructor(deriver) {
-    this.deriver = deriver;
-  }
-  deriver;
-  read() {
-    return this.deriver();
-  }
-};
-var ComputedNode = class {
-  constructor(name, type3, deriver) {
-    this.name = name;
-    this.type = type3;
-    this.cell = new Kept(`Variable "${name}"`, () => {
-      const v = deriver();
-      assertType(this.name, this.type, v, "computed result");
       return v;
-    });
-  }
-  name;
-  type;
-  kind = "computed";
-  cell;
-  read() {
-    return this.cell.read();
-  }
-  release() {
-    this.cell.release();
-  }
-  lastUpdatedMs() {
-    return null;
-  }
-};
-var ProjectionNode = class {
-  constructor(name, type3, deriver) {
-    this.name = name;
-    this.type = type3;
-    this.cell = new Projected(() => {
-      const v = deriver();
-      assertType(this.name, this.type, v, "projection result");
+    }
+  };
+}
+function groupKeySpec() {
+  return {
+    required: false,
+    json: { type: "string", minLength: 1 },
+    parse: (ctx, path42, field, raw) => {
+      const v = raw[field];
+      if (v === void 0) return void 0;
+      if (typeof v !== "string" || v === "" || v.includes("/")) {
+        ctx.issues.push({
+          path: `${path42}.${field}`,
+          message: `a group "key" must be a non-empty, slash-free SessionState key, got ${describeValue(v)}`,
+          line: findKeyLine(ctx.source, ["root"])
+        });
+        return void 0;
+      }
       return v;
-    });
-  }
-  name;
-  type;
-  kind = "projection";
-  cell;
-  read() {
-    return this.cell.read();
-  }
-  lastUpdatedMs() {
-    return null;
+    }
+  };
+}
+function groupLabelSpec() {
+  return {
+    required: true,
+    json: { type: "string", pattern: "^[^\\n\\r]*$" },
+    parse: (ctx, path42, field, raw) => {
+      const s = requireString(ctx, path42, raw, field);
+      if (s === null) return void 0;
+      if (/[\n\r]/.test(s)) {
+        ctx.issues.push({
+          path: `${path42}.${field}`,
+          message: `${path42}.${field}: group label must not contain newlines`,
+          line: findKeyLine(ctx.source, [...path42.split("."), field])
+        });
+        return void 0;
+      }
+      return s;
+    }
+  };
+}
+var GROUP_SCHEMA = {
+  noun: "layout-node key",
+  fields: {
+    kind: literalSpec("group"),
+    name: groupNameSpec(),
+    label: groupLabelSpec(),
+    open: optionalBooleanSpec(),
+    direction: optionalEnumSpec(DIRECTIONS),
+    key: groupKeySpec(),
+    bg: optionalStringSpec(),
+    fg: optionalStringSpec(),
+    when: optionalStringSpec(),
+    distribution: distributionSpec(),
+    children: childrenSpec(lazy(() => validateRoot))
   }
 };
-var DocumentCell = class {
-  constructor(name, initial2) {
-    this.name = name;
-    this.cell = observable.box(shaped(initial2), { deep: false });
-    this.lastChangedAt = initial2.kind === "pending" ? null : Date.now();
-  }
-  name;
-  kind = "document";
-  cell;
-  lastChangedAt;
-  read() {
-    return this.cell.get();
-  }
-  set(value) {
-    const next = shaped(value);
-    if (sameDocument(this.cell.get(), next)) return;
-    this.cell.set(next);
-    this.lastChangedAt = Date.now();
-  }
-  lastUpdatedMs() {
-    return this.lastChangedAt;
-  }
-};
-var DerivedDocument = class {
-  constructor(name, deriver) {
-    this.name = name;
-    this.cell = new Kept(
-      `Variable "${name}"`,
-      () => shaped(deriver()),
-      sameDocument
-    );
-  }
-  name;
-  kind = "document";
-  cell;
-  read() {
-    return this.cell.read();
-  }
-  release() {
-    this.cell.release();
-  }
-  lastUpdatedMs() {
-    return null;
-  }
-};
-function documentKey(outcome) {
-  return JSON.stringify(outcome);
+function groupStateKey(g) {
+  return g.key ?? GROUP_NS + g.name;
 }
-function sameDocument(a, b) {
-  return documentKey(a) === documentKey(b);
+function lowerGroup(g) {
+  const ref = GROUP_NS + g.name;
+  return disclosureNode(
+    ref,
+    { variable: ref, key: groupStateKey(g), member: g.name },
+    {
+      kind: "container",
+      direction: g.direction ?? "vertical",
+      children: g.children,
+      ...g.distribution !== void 0 && { distribution: g.distribution }
+    },
+    "drop",
+    g.when
+  );
 }
-function shaped(outcome) {
-  return outcome.kind === "ok" ? { kind: "ok", value: toDocument(outcome.value) } : outcome;
-}
-function assertType(name, declared, value, context) {
-  const actual = typeOf(value);
-  if (actual !== declared) {
-    throw new TypeError(
-      `Variable "${name}": ${context} type ${actual} does not match declared type ${declared}`
-    );
-  }
-}
-var VariableStore = class {
-  constructor(parent = null) {
-    this.parent = parent;
-  }
-  parent;
-  // [LAW:no-ambient-temporal-coupling] Which names are declared is itself
-  // observable: a reaction that read a name before its declaration (a cache
-  // key over a variable declared after it) re-runs when it is declared, so
-  // what it sees does not depend on the order the config lists variables in.
-  // `deep: false` keeps each node the object it was declared as.
-  nodes = observable.map(void 0, {
-    deep: false
+function groupIssue(ctx, path42, message) {
+  ctx.issues.push({
+    path: path42,
+    message,
+    line: findKeyLine(ctx.source, ["root"])
   });
-  defineBox(name, type3, initial2) {
-    this.declare(name, new BoxNode(name, type3, initial2));
-  }
-  defineDocument(name, initial2) {
-    this.declare(name, new DocumentCell(name, initial2));
-  }
-  // A document whose reading the deriver computes from what it reads.
-  defineDerivedDocument(name, deriver) {
-    this.declare(name, new DerivedDocument(name, deriver));
-  }
-  // Computed deriver receives a `read` function that returns the value
-  // of any variable in the store. Calling `read(other)` from inside the
-  // deriver is what registers the dependency with MobX — the deriver's
-  // body is the dep graph.
-  defineComputed(name, type3, deriver) {
-    this.defineDerived(name, type3, "computed", deriver);
-  }
-  defineDerived(name, type3, derivation, deriver) {
-    const reader = (other) => this.read(other);
-    const Node = derivation === "computed" ? ComputedNode : ProjectionNode;
-    this.declare(name, new Node(name, type3, () => deriver(reader)));
-  }
-  // A derived value of this store that is no variable — a template a draw
-  // evaluates (src/dsl/parts.ts) — held as a variable's would be: kept until
-  // what it read changes, or derived at every read, and released with them.
-  derive(name, derivation, deriver) {
-    this.refuseDisposed(`Derived value "${name}"`);
-    if (derivation === "projection") return new Projected(deriver);
-    const kept = new Kept(`Derived value "${name}"`, deriver);
-    this.kept.push(kept);
-    return kept;
-  }
-  kept = [];
-  read(name) {
-    return this.requireVar(name).read();
-  }
-  readDocument(name) {
-    const node = this.requireNode(name);
-    if (node.kind !== "document") {
-      throw new TypeError(
-        `Variable "${name}" is a ${node.kind}, not a document`
+}
+function synthesizeGroupDecls(ctx, out) {
+  reservedNamespaceCollisions(ctx, out, GROUP_NS, "group nodes");
+  const groups = ctx.groups;
+  if (groups.length === 0) return;
+  const seen = /* @__PURE__ */ new Set();
+  for (const g of groups) {
+    if (seen.has(g.name)) {
+      groupIssue(
+        ctx,
+        g.path,
+        `duplicate group name "${g.name}" \u2014 group names must be unique (they name the synthesized state var, action, and toggle segment)`
       );
     }
-    return node.read();
+    seen.add(g.name);
   }
-  // A written node's value as stored, pending included and nothing
-  // serialized: a box's value or a document's reading. Read in a reaction, it
-  // moves exactly when the node is written, which its own compare decides.
-  stored(name) {
-    const node = this.requireNode(name);
-    if (node.kind === "document") return node.read();
-    if (node.kind !== "box") {
-      throw new TypeError(
-        `Variable "${name}" is a ${node.kind}, not a written node`
-      );
-    }
-    return node.stored();
-  }
-  setDocument(name, value) {
-    const node = this.requireOwn(name);
-    if (!(node instanceof DocumentCell)) {
-      throw new TypeError(
-        node.kind === "document" ? `Variable "${name}" is a derived document: what it reads decides it, and nothing writes it` : `Variable "${name}" is a ${node.kind}, not a document (use defineDocument to create one)`
-      );
-    }
-    runInAction(() => node.set(value));
-  }
-  setBox(name, value) {
-    const node = this.requireOwn(name);
-    if (node.kind !== "box") {
-      throw new TypeError(
-        `Variable "${name}" is a ${node.kind}, not a box (use defineBox to create a settable variable)`
-      );
-    }
-    runInAction(() => node.set(value));
-  }
-  // Wrap multi-variable updates so dependents only invalidate once per
-  // batch. Used by the render path to push a whole input payload before
-  // any computed re-evaluates.
-  runInAction(fn) {
-    runInAction(fn);
-  }
-  has(name) {
-    return this.nodes.has(name) || (this.parent?.has(name) ?? false);
-  }
-  getType(name) {
-    return this.requireVar(name).type;
-  }
-  getKind(name) {
-    return this.requireNode(name).kind;
-  }
-  // [LAW:one-source-of-truth] A string that changes exactly when the node's
-  // value does — the ONE spelling a change-driven reaction (a `depends_on`
-  // cache policy) compares, total over node kinds so a document can be
-  // depended on like a scalar — or pending, while the node has no value yet.
-  // Structural for documents: every stored document has sorted keys
-  // (toDocument), so a rescan yielding the same content in another key order
-  // is not a change. A failure is a key like any other, never a failed
-  // reading: a dependant re-reads when its dependency starts or stops failing.
-  changeKey(name) {
-    const node = this.requireNode(name);
-    if (node.kind === "document") {
-      const doc = node.read();
-      return doc.kind === "pending" ? PENDING : ok(documentKey(doc));
-    }
-    try {
-      return ok(String(node.read()));
-    } catch (e) {
-      return readPending(e) !== void 0 ? PENDING : ok(` failed:${e instanceof Error ? e.message : String(e)}`);
+  for (const inner of groups) {
+    for (const outer of groups) {
+      if (inner !== outer && inner.path.startsWith(`${outer.path}.`) && groupStateKey(inner) === groupStateKey(outer)) {
+        groupIssue(
+          ctx,
+          inner.path,
+          `group "${inner.name}" shares key "${groupStateKey(inner)}" with its ancestor group "${outer.name}" \u2014 a shared key holds ONE open group, so an ancestor and a descendant cannot share one. Sibling accordions share a key; nested groups use distinct keys.`
+        );
+      }
     }
   }
-  // [LAW:types-are-the-program] Introspection (src/daemon/debug.ts) needs
-  // the whole node — type, kind, lastUpdatedMs — in one lookup, but
-  // returning the BoxNode directly would leak `.set` structurally even
-  // though VarNode does not advertise it. The returned wrapper is a fresh
-  // object exposing only the VarNode surface — `.set` is unreachable at
-  // any level (no structural escape, no plain-JS reach-through). The
-  // mutation path remains gated behind `setBox`, which wraps in
-  // runInAction to satisfy MobX strict-mode.
-  //
-  // [LAW:single-enforcer] One requireNode call per consumer-row — the
-  // round-1 dedup fix in introspectVars relies on the caller getting both
-  // type/kind and a read() in one go without paying for a second
-  // requireNode. The wrapper preserves that.
-  getNode(name) {
-    const node = this.requireNode(name);
-    return node.kind === "document" ? {
-      name: node.name,
-      kind: node.kind,
-      read: () => node.read(),
-      lastUpdatedMs: () => node.lastUpdatedMs()
-    } : {
-      name: node.name,
-      type: node.type,
-      kind: node.kind,
-      read: () => node.read(),
-      lastUpdatedMs: () => node.lastUpdatedMs()
+  const defaultByKey = /* @__PURE__ */ new Map();
+  for (const g of groups) {
+    const key = groupStateKey(g);
+    if (!defaultByKey.has(key)) defaultByKey.set(key, DISCLOSURE_CLOSED);
+    if (g.open === true) {
+      const prior = defaultByKey.get(key);
+      if (prior !== DISCLOSURE_CLOSED) {
+        groupIssue(
+          ctx,
+          g.path,
+          `groups "${prior}" and "${g.name}" share key "${key}" and both declare open: true \u2014 a shared key holds one open group; pick one`
+        );
+      }
+      defaultByKey.set(key, g.name);
+    }
+  }
+  const variables = {};
+  const actions = {};
+  const segments = {};
+  for (const g of groups) {
+    const name = GROUP_NS + g.name;
+    const key = groupStateKey(g);
+    const depth = groups.filter(
+      (other) => other !== g && g.path.startsWith(other.path + ".")
+    ).length;
+    const indent2 = "  ".repeat(depth);
+    variables[name] = disclosureStateVar(key, defaultByKey.get(key));
+    actions[name] = disclosureCycleAction(key, g.name);
+    segments[name] = {
+      template: disclosureTrigger(
+        name,
+        `${indent2}${g.label} ${DISCLOSURE_GLYPH_CLOSED}`,
+        `${indent2}${g.label} ${DISCLOSURE_GLYPH_OPEN}`
+      ),
+      ...g.bg !== void 0 && { bg: g.bg },
+      ...g.fg !== void 0 && { fg: g.fg }
     };
   }
-  names() {
-    return [...this.parent?.names() ?? [], ...this.nodes.keys()];
-  }
-  // Release every computed's subscriptions, so nothing outliving this store
-  // (the daemon-wide SessionState atom) keeps it reachable. The store's own
-  // boxes and documents die with it; only the computeds hold references
-  // outward. Reads after dispose still answer — a released computed recomputes
-  // uncached, and outside a batch subscribes to nothing (inside one, MobX
-  // tracks it for the batch and unobserves again as the batch ends) — so a
-  // late reader cannot resubscribe the store to the world for good. A
-  // declaration after dispose would: it would mint a keepAlive computed with
-  // no release to come, so `declare` and `derive` refuse it. Returns how many computeds it
-  // released, the fact the caller's log line carries (0 on a second call). One action, so the
-  // cascading unobservation settles once, when it ends. [LAW:single-enforcer]
-  // called by SourceRegistry.dispose, the one teardown of everything a config
-  // holds.
-  dispose() {
-    if (this.disposed) return 0;
-    this.disposed = true;
-    let released = 0;
-    runInAction(() => {
-      for (const node of this.nodes.values()) {
-        if (node instanceof ComputedNode || node instanceof DerivedDocument) {
-          node.release();
-          released++;
-        }
-      }
-      for (const kept of this.kept) kept.release();
-    });
-    return released + this.kept.length;
-  }
-  disposed = false;
-  requireNode(name) {
-    const node = this.nodes.get(name) ?? this.parent?.requireNode(name);
-    if (!node) throw new ReferenceError(`Unknown variable "${name}"`);
-    return node;
-  }
-  // [LAW:single-enforcer] The one door a write takes: a node of this store.
-  // A view writing its directory's node would write every session's value.
-  requireOwn(name) {
-    const node = this.nodes.get(name);
-    if (node !== void 0) return node;
-    if (this.parent?.has(name)) {
-      throw new Error(
-        `Variable "${name}" lives in the directory's store; a session's view cannot write it`
-      );
-    }
-    throw new ReferenceError(`Unknown variable "${name}"`);
-  }
-  // [LAW:parse-dont-validate] The scalar reads (`read`, `getType`) demand a
-  // VarNode; a document reached through them is a caller asking a namespace
-  // for a scalar, said so by name rather than coerced to text.
-  requireVar(name) {
-    const node = this.requireNode(name);
-    if (node.kind === "document") {
-      throw new TypeError(
-        `Variable "${name}" is a document; read its fields by path (.${name}.<field>)`
-      );
-    }
-    return node;
-  }
-  // [LAW:no-silent-failure] A computed declared after dispose has no release
-  // to come: it would subscribe to the world and hold this store exactly as
-  // before brandon-unfiled-3248.t14.
-  refuseDisposed(what) {
-    if (this.disposed) {
-      throw new Error(`${what}: cannot declare on a disposed store`);
-    }
-  }
-  declare(name, node) {
-    this.refuseDisposed(`Variable "${name}"`);
-    if (this.has(name)) {
-      throw new Error(`Variable "${name}" is already declared`);
-    }
-    runInAction(() => this.nodes.set(name, node));
-  }
-};
+  out.variables = { ...out.variables ?? {}, ...variables };
+  out.actions = { ...out.actions ?? {}, ...actions };
+  out.segments = { ...out.segments ?? {}, ...segments };
+}
 
-// src/template-engine/engine.ts
+// src/config/loader/menu-synth.ts
 init_globals();
 
 // node_modules/.pnpm/@promptctl+go-template-js@0.10.0/node_modules/@promptctl/go-template-js/dist/index.js
@@ -45429,17 +42892,17 @@ function walkFieldChain(value, idents) {
   }
   return cur;
 }
-function deepEqual2(a, b) {
+function deepEqual(a, b) {
   if (Object.is(a, b)) return true;
   if (a === null || b === null || a === void 0 || b === void 0) return false;
   if (typeof a !== typeof b) return false;
   if (Array.isArray(a) && Array.isArray(b)) {
     if (a.length !== b.length) return false;
-    return a.every((v, i) => deepEqual2(v, b[i]));
+    return a.every((v, i) => deepEqual(v, b[i]));
   }
   if (a instanceof Map && b instanceof Map) {
     if (a.size !== b.size) return false;
-    for (const [k, v] of a) if (!b.has(k) || !deepEqual2(v, b.get(k))) return false;
+    for (const [k, v] of a) if (!b.has(k) || !deepEqual(v, b.get(k))) return false;
     return true;
   }
   if (a instanceof Set && b instanceof Set) {
@@ -45451,7 +42914,7 @@ function deepEqual2(a, b) {
     const ak = Object.keys(a);
     const bk = Object.keys(b);
     if (ak.length !== bk.length) return false;
-    return ak.every((k) => deepEqual2(a[k], b[k]));
+    return ak.every((k) => deepEqual(a[k], b[k]));
   }
   return false;
 }
@@ -45623,7 +43086,7 @@ function defaultBuiltins(toString3, isT) {
 function goEqPair(a, b) {
   if (typeof a === "number" && typeof b === "bigint") return BigInt(a) === b;
   if (typeof a === "bigint" && typeof b === "number") return a === BigInt(b);
-  return deepEqual2(a, b);
+  return deepEqual(a, b);
 }
 function compare(a, b) {
   if (typeof a === "bigint" && typeof b === "bigint") return a === b ? 0 : a < b ? -1 : 1;
@@ -45651,10 +43114,10 @@ function goIndex(collection, key) {
   }
   if (collection instanceof Map) return collection.get(key);
   if (collection !== null && typeof collection === "object") {
-    if (typeof key !== "string") throw new Error(`index: object index must be string, got ${describeType(key)}`);
+    if (typeof key !== "string") throw new Error(`index: object index must be string, got ${describeType2(key)}`);
     return collection[key];
   }
-  throw new Error(`index: cannot index ${describeType(collection)}`);
+  throw new Error(`index: cannot index ${describeType2(collection)}`);
 }
 function indexArg(key, cap) {
   const x = typeof key === "bigint" ? Number(key) : key;
@@ -45679,7 +43142,7 @@ function goSlice(collection, indices) {
   if (j > k) throw new Error(`invalid slice index: ${j} > ${k}`);
   return collection.slice(i, j);
 }
-function describeType(v) {
+function describeType2(v) {
   if (v === null) return "null";
   if (v === void 0) return "undefined";
   if (Array.isArray(v)) return "array";
@@ -46432,18 +43895,18 @@ function enforceArgTypes(funcName, spec, values2, pos, src, toString3 = defaultT
     const value = values2[i];
     if (!matchesArgType(declared, value, toString3, isT)) {
       if ((declared === "int" || declared === "truncating-int") && (typeof value === "number" || typeof value === "bigint")) throw new NotIntegerError(funcName, i + 1, value, pos, { source: src });
-      throw new TypeMismatchError(funcName, i + 1, humanArgType(declared), describeValue(value), pos, { source: src });
+      throw new TypeMismatchError(funcName, i + 1, humanArgType(declared), describeValue2(value), pos, { source: src });
     }
     if (declared === "liftable" && typeof value === "string") values2[i] = fromString(value);
     if (declared === "truncating-int") values2[i] = Math.trunc(Number(value));
     else if (declared === "int" || declared === "float") values2[i] = Number(value);
     if (declared === "ordered") {
       if (firstOrdered === -1) firstOrdered = i;
-      else if (!sameOrderedKind(values2[firstOrdered], value)) throw new TypeMismatchError(funcName, i + 1, `${humanArgType("ordered")} of the same kind as ${describeValue(values2[firstOrdered])}`, describeValue(value), pos, { source: src });
+      else if (!sameOrderedKind(values2[firstOrdered], value)) throw new TypeMismatchError(funcName, i + 1, `${humanArgType("ordered")} of the same kind as ${describeValue2(values2[firstOrdered])}`, describeValue2(value), pos, { source: src });
     }
     if (declared === "comparable") {
       if (firstComparable === -1) firstComparable = i;
-      else if (!sameComparableKind(values2[firstComparable], value)) throw new TypeMismatchError(funcName, i + 1, `${humanArgType("comparable")} of the same kind as ${describeValue(values2[firstComparable])}`, describeValue(value), pos, { source: src });
+      else if (!sameComparableKind(values2[firstComparable], value)) throw new TypeMismatchError(funcName, i + 1, `${humanArgType("comparable")} of the same kind as ${describeValue2(values2[firstComparable])}`, describeValue2(value), pos, { source: src });
     }
   }
 }
@@ -46536,7 +43999,7 @@ function defaultToString(value) {
   if (typeof value === "string") return value;
   if (value === null || value === void 0) return "<nil>";
   if (typeof value === "number" || typeof value === "bigint" || typeof value === "boolean") return String(value);
-  throw new TypeMismatchError("<engine.toString>", 1, "string (or a consumer-supplied toString that flattens T)", describeValue(value), {
+  throw new TypeMismatchError("<engine.toString>", 1, "string (or a consumer-supplied toString that flattens T)", describeValue2(value), {
     line: 0,
     column: 0,
     offset: 0
@@ -46618,7 +44081,7 @@ function humanArgType(t2) {
 function errorText(e) {
   return e instanceof Error ? e.message : String(e);
 }
-function describeValue(value) {
+function describeValue2(value) {
   if (value === null) return "null";
   if (value === void 0) return "undefined";
   if (Array.isArray(value)) return "array";
@@ -47871,7 +45334,7 @@ function first(list2) {
   return list2[0];
 }
 function has(item, list2) {
-  return list2.some((e) => deepEqual2(e, item));
+  return list2.some((e) => deepEqual(e, item));
 }
 function initial(list2) {
   return list2.slice(0, -1);
@@ -47913,11 +45376,11 @@ function sortAlpha(list2) {
 }
 function uniq(list2) {
   const out = [];
-  for (const v of list2) if (!out.some((e) => deepEqual2(e, v))) out.push(v);
+  for (const v of list2) if (!out.some((e) => deepEqual(e, v))) out.push(v);
   return out;
 }
 function without(list2, ...exclude) {
-  return list2.filter((v) => !exclude.some((e) => deepEqual2(e, v)));
+  return list2.filter((v) => !exclude.some((e) => deepEqual(e, v)));
 }
 function sprigLists() {
   return {
@@ -48893,6 +46356,6087 @@ function sprigStrings() {
     }
   };
 }
+
+// src/config/menu-keys.ts
+init_globals();
+var PAGE_HOLDING_CURRENT = "-1";
+function menuMember(applyName) {
+  return applyName;
+}
+function menuStateKey(placementId2, applyName, sharedKey) {
+  return sharedKey !== void 0 ? sharedMenuStateKey(sharedKey) : MENU_NS + ident(placementId2) + "." + ident(applyName);
+}
+function sharedMenuStateKey(sharedKey) {
+  return MENU_NS + ident(sharedKey);
+}
+function menuActionName(stateKey, member) {
+  return stateKey + "." + member;
+}
+function menuPageKey(stateKey) {
+  return MENU_PAGE_NS + stateKey;
+}
+var MENU_OPTION_NAMES = [
+  "closeOnPick",
+  "paged",
+  "key",
+  "distribution"
+];
+var isMenuOptionName = (name) => MENU_OPTION_NAMES.includes(name);
+var MENU_OPTIONS_VOCABULARY = `"closeOnPick" (bool, default false), "paged" (bool, default true), "key" (string, accordion grouping), "distribution" (one of ${DISTRIBUTION_NAMES.map((n) => `"${n}"`).join(", ")}; default "${DEFAULT_DISTRIBUTION}")`;
+function parseMenuOptions(entries) {
+  for (const name of Object.keys(entries)) {
+    if (!isMenuOptionName(name)) {
+      throw new Error(
+        `unknown {{ menu }} option "${name}" \u2014 the options dict takes ${MENU_OPTIONS_VOCABULARY}`
+      );
+    }
+  }
+  const bool = (name, def) => {
+    const v = entries[name];
+    if (v === void 0) return def;
+    if (typeof v !== "boolean") {
+      throw new Error(
+        `{{ menu }} option "${name}" must be a boolean, got ${JSON.stringify(v)} (e.g. (dict "${name}" ${String(!def)}))`
+      );
+    }
+    return v;
+  };
+  const key = entries["key"];
+  if (key !== void 0 && typeof key !== "string") {
+    throw new Error(
+      `{{ menu }} option "key" must be a string naming the accordion group, got ${JSON.stringify(key)}`
+    );
+  }
+  if (key === "") {
+    throw new Error(
+      `{{ menu }} has an empty accordion key \u2014 a shared key must be a non-empty name (or omit "key" for an independent menu)`
+    );
+  }
+  const distribution = entries["distribution"];
+  if (distribution !== void 0 && !isDistributionName(distribution)) {
+    throw new Error(
+      `{{ menu }} option "distribution" must be one of: ${DISTRIBUTION_NAMES.join(", ")}; got ${JSON.stringify(distribution)}`
+    );
+  }
+  return {
+    closeOnPick: bool("closeOnPick", false),
+    paged: bool("paged", true),
+    key,
+    distribution: placedBy(distribution)
+  };
+}
+
+// src/config/loader/menu-synth.ts
+var MENU_FUNC = "menu";
+var MIGRATION = `a menu binds its trigger text the way a cycle action binds a display \u2014 write {{ menu "applyTheme" "\u25B8" "\u25BE" }} (one per state) or {{ menu "insertHere" "+" }} (one static display for both), with the rare knobs in ONE trailing dict: {{ menu "applyTheme" "\u25B8" "\u25BE" (dict "closeOnPick" true "paged" false "key" "pickers") }} (defaults: closeOnPick false, paged true, no key). The renderer no longer appends \u25B8/\u25BE of its own (candybar-settings-ui-aok.4), and the older positional tail ("pageAction" closeOnPick paged "key") was removed \u2014 the page cursor is synthesized from the menu's identity`;
+var isDictCall = (e) => e.kind === "call" && e.name === "dict";
+var isNonObjectLiteral = (e) => e.kind === "literal" && typeof e.value !== "object";
+var legalDisplayCount = (count) => cycleDisplayIssue("", count, 2) === void 0;
+function analyzeMenuCall(call) {
+  const issue3 = (message) => ({ kind: "issue", message });
+  const [applyArg, ...tail] = call.argExprs;
+  if (applyArg === void 0) {
+    return issue3(
+      `with no arguments \u2014 it takes an apply-action name and its trigger text (e.g. {{ menu "applyTheme" "\u25B8" "\u25BE" }})`
+    );
+  }
+  if (applyArg.kind !== "literal" || typeof applyArg.value !== "string") {
+    return issue3(
+      `whose apply action is not a string literal \u2014 a menu's identity is its apply-action name, which must be a literal so it can be gated at load (e.g. {{ menu "applyTheme" "\u25B8" "\u25BE" }})`
+    );
+  }
+  const last2 = tail[tail.length - 1];
+  const optsArg = last2 !== void 0 && isDictCall(last2) ? last2 : void 0;
+  const displays = optsArg === void 0 ? tail : tail.slice(0, -1);
+  if (displays.some(isDictCall)) {
+    return issue3(
+      `whose options (dict \u2026) is not its last argument \u2014 ${MIGRATION}`
+    );
+  }
+  if (last2 !== void 0 && optsArg === void 0 && !isNonObjectLiteral(last2) && legalDisplayCount(displays.length - 1)) {
+    return issue3(
+      `whose last argument is neither a literal nor a literal (dict \u2026) \u2014 the renderer tells a display from the options dict by the value it evaluates to, so this call could be read as ${displays.length} displays or as ${displays.length - 1} plus options, and both are legal. Make the options explicit as a trailing (dict \u2026) \u2014 {{ menu "${applyArg.value}" (printf "\u2026") (printf "\u2026") (dict) }} binds dynamic displays unambiguously \u2014 or bind the trigger text as literals`
+    );
+  }
+  const arity = cycleDisplayIssue("whose trigger", displays.length, 2);
+  if (arity !== void 0) return issue3(`${arity} \u2014 ${MIGRATION}`);
+  const entries = optsArg === void 0 ? {} : staticDictEntries(optsArg);
+  if (entries === null) {
+    return issue3(
+      `whose options (dict \u2026) is not fully literal \u2014 every option value must be a literal so the menu can be gated at load (a dynamic entry like (dict "key" .x) cannot)`
+    );
+  }
+  let options;
+  try {
+    options = parseMenuOptions(entries);
+  } catch (e) {
+    return issue3(`with invalid options \u2014 ${e.message}`);
+  }
+  const sharedKey = options.key;
+  if (sharedKey !== void 0) {
+    const reserved = reservedNamespaceOf(sharedKey);
+    if (reserved !== void 0) {
+      return issue3(
+        `whose accordion key "${sharedKey}" lands in the reserved "${reserved}" namespace \u2014 a key is collapsed to an identifier (${JSON.stringify(sharedKey)} becomes "${sharedMenuStateKey(sharedKey)}"), so it would share one open-state key with the synthesized accordion that owns that namespace instead of grouping only your own menus. Name the group without the reserved prefix`
+      );
+    }
+  }
+  return { kind: "ok", apply: applyArg.value, options };
+}
+function parseCalls(template) {
+  const engine = createEngine({ fromString: (s) => s });
+  try {
+    return engine.parse(template).referencedCalls().filter((c) => c.name === MENU_FUNC).map(analyzeMenuCall);
+  } catch {
+    return "parse-failed";
+  }
+}
+function hostedMenus(template, placement) {
+  const calls = parseCalls(template);
+  return calls === "parse-failed" ? [] : calls.flatMap(
+    (call) => call.kind === "ok" ? [
+      {
+        key: menuStateKey(placement, call.apply, call.options.key),
+        member: menuMember(call.apply)
+      }
+    ] : []
+  );
+}
+function segmentReferencesMenu(template) {
+  const engine = createEngine({ fromString: (s) => s });
+  try {
+    return engine.parse(template).referencedFunctions().has(MENU_FUNC);
+  } catch {
+    return false;
+  }
+}
+function menuIssue(ctx, path42, message) {
+  ctx.issues.push({ path: path42, message, line: findKeyLine(ctx.source, ["root"]) });
+}
+function checkMenuDecls(ctx, out) {
+  reservedNamespaceCollisions(ctx, out, MENU_NS, "{{ menu }} helpers");
+  reservedNamespaceCollisions(ctx, out, MENU_PAGE_NS, "{{ menu }} helpers");
+  for (const [name, body] of Object.entries(out.helpers ?? {})) {
+    if (segmentReferencesMenu(body)) {
+      ctx.issues.push({
+        path: `helpers.${name}`,
+        message: `helper "${name}" uses {{ menu }}, but a menu must live directly in a segment template \u2014 its identity is derived from the segment it sits in, which a shared helper does not have. Inline the {{ menu }} call into each segment that needs it.`,
+        line: findKeyLine(ctx.source, ["helpers", name])
+      });
+    }
+  }
+  const segments = out.segments ?? {};
+  for (const [segName, seg2] of Object.entries(segments)) {
+    for (const field of ["bg", "fg", "when"]) {
+      const tpl = seg2[field];
+      if (typeof tpl === "string" && segmentReferencesMenu(tpl)) {
+        menuIssue(
+          ctx,
+          `segments.${segName}.${field}`,
+          `segment "${segName}" uses {{ menu }} in its "${field}" \u2014 a menu is only valid in a segment's "template" (its placement is published only there; "${field}" needs a ${field === "when" ? "predicate" : "color"}). Move the {{ menu }} into the template.`
+        );
+      }
+    }
+    for (const [name, body] of Object.entries(seg2.partials ?? {})) {
+      if (segmentReferencesMenu(body)) {
+        ctx.issues.push({
+          path: `segments.${segName}.partials.${name}`,
+          message: `segments.${segName}.partials.${name} uses {{ menu }}, but a menu must live directly in a segment's "template" string \u2014 the synthesis pass that wires its state never follows a {{ template }} call into a partial. Inline the {{ menu }} call into the template itself.`,
+          line: findKeyLine(ctx.source, [
+            "segments",
+            segName,
+            "partials",
+            name
+          ])
+        });
+      }
+    }
+  }
+  if (out.root !== void 0) {
+    for (const node of walkNodes(fragmentNode(out.root))) {
+      if (typeof node.when === "string" && segmentReferencesMenu(node.when)) {
+        menuIssue(
+          ctx,
+          "root",
+          `a layout node's "when" predicate uses {{ menu }} \u2014 a menu is only valid in a segment's "template", not a node predicate. Move it into a segment.`
+        );
+      }
+    }
+  }
+  for (const [segName, { template }] of Object.entries(segments)) {
+    if (template === void 0 || !segmentReferencesMenu(template)) continue;
+    const calls = parseCalls(template);
+    if (calls === "parse-failed") continue;
+    for (const call of calls) {
+      const message = call.kind === "issue" ? call.message : identityIssue(call.apply);
+      if (message !== void 0) {
+        menuIssue(
+          ctx,
+          `segments.${segName}`,
+          `segment "${segName}" has a {{ menu }} ${message}.`
+        );
+      }
+    }
+  }
+}
+function identityIssue(apply) {
+  if (apply === "") {
+    return `with an empty apply-action name \u2014 an empty member aliases the absent-state sentinel ("") so the menu would render open before any click. Name the apply action`;
+  }
+  if (menuMember(apply) === DISCLOSURE_CLOSED) {
+    return `whose apply action is named "${DISCLOSURE_CLOSED}", which collides with the menu's closed-state sentinel and leaves it unopenable. Rename the action`;
+  }
+  return void 0;
+}
+function synthesizePlacementMenus(config2, issues) {
+  const variables = {};
+  const actions = {};
+  const callsOf = /* @__PURE__ */ new Map();
+  const reported = /* @__PURE__ */ new Set();
+  const issue3 = (segName, message) => {
+    const path42 = `segments.${segName}`;
+    if (reported.has(`${path42}\0${message}`)) return;
+    reported.add(`${path42}\0${message}`);
+    issues.push({ path: path42, message });
+  };
+  for (const preset of presetNames(config2.presets)) {
+    const ownerBySynthKey = /* @__PURE__ */ new Map();
+    const claimed = /* @__PURE__ */ new Map();
+    for (const node of walkNodes(presetRoot(config2, preset).node)) {
+      if (node.kind !== "segment") continue;
+      const seg2 = config2.segments[node.name];
+      if (seg2 === void 0) continue;
+      if (!callsOf.has(node.name)) {
+        callsOf.set(node.name, parseCalls(seg2.template));
+      }
+      const calls = callsOf.get(node.name);
+      if (calls === "parse-failed") continue;
+      const id2 = placementId(node);
+      for (const [index, call] of calls.entries()) {
+        if (call.kind === "issue" || identityIssue(call.apply) !== void 0) {
+          continue;
+        }
+        const { apply, options } = call;
+        const member = menuMember(apply);
+        const stateKey = menuStateKey(id2, apply, options.key);
+        const pageKey = menuPageKey(stateKey);
+        const owner = options.key !== void 0 ? `key ${options.key}` : `ind ${id2} ${apply}`;
+        const clashKey = [stateKey, pageKey].find((k) => {
+          const prior2 = ownerBySynthKey.get(k);
+          return prior2 !== void 0 && prior2 !== owner;
+        });
+        if (clashKey !== void 0) {
+          issue3(
+            node.name,
+            `two {{ menu }} disclosures normalize to the same state key ("${clashKey}") but were declared differently \u2014 distinct names that differ only by non-alphanumeric characters (e.g. "a-b" vs "a_b") collapse to one key and would silently share open-state. Rename so they don't collide.`
+          );
+          continue;
+        }
+        ownerBySynthKey.set(stateKey, owner);
+        ownerBySynthKey.set(pageKey, owner);
+        const identity2 = menuActionName(stateKey, member);
+        const claimant = `${node.name}\0${index}`;
+        const prior = claimed.get(identity2);
+        if (prior !== void 0 && prior !== claimant) {
+          issue3(
+            node.name,
+            `two {{ menu }} disclosures resolve to the same identity ("${identity2}") \u2014 ${options.key !== void 0 ? `menus sharing key "${options.key}" must have distinct apply actions` : `a segment cannot contain two menus over the same apply action "${apply}"`}.`
+          );
+          continue;
+        }
+        claimed.set(identity2, claimant);
+        actions[identity2] = disclosureCycleAction(stateKey, member);
+        variables[stateKey] = disclosureStateVar(stateKey, DISCLOSURE_CLOSED);
+        variables[pageKey] = { kind: "state", key: pageKey, default: "0" };
+        actions[pageKey] = { set: pageKey, int: true };
+      }
+    }
+  }
+  return {
+    ...config2,
+    variables: { ...config2.variables, ...variables },
+    actions: { ...config2.actions, ...actions }
+  };
+}
+
+// src/config/loader/edit-mode.ts
+init_globals();
+
+// src/config/loader/syntax-engine.ts
+init_globals();
+var SYNTAX_ENGINE = createEngine({ fromString: (s) => s });
+
+// src/config/loader/edit-mode.ts
+var EDIT_MODE_KEY = "edit.mode";
+var EDIT_CONFIGURE_KEY = "edit.configure";
+var EDIT_TOGGLE_ACTION = "edit.toggle";
+var EDIT_UNCONFIGURE_ACTION = "edit.unconfigure";
+var EDIT_MODE_ARRANGE = "arrange";
+var PLACEMENT_DRAFT_NS = `${EDIT_NS}draft.`;
+function configureMember(presetIdent, id2) {
+  return `${presetIdent}:${id2}`;
+}
+var EDIT_MODE_REF = {
+  variable: EDIT_MODE_KEY,
+  key: EDIT_MODE_KEY,
+  member: EDIT_MODE_ARRANGE
+};
+var EDIT_MODE_GATE = disclosureGate(EDIT_MODE_REF);
+function referencesEditToggle(template) {
+  try {
+    return SYNTAX_ENGINE.parse(template).referencedCalls().some((c) => c.name === "action" && c.args[0] === EDIT_TOGGLE_ACTION);
+  } catch {
+    return false;
+  }
+}
+function fileWantsEditMode(out) {
+  if (Object.values(out.actions ?? {}).some(
+    (a) => "do" in a && a.do.includes(EDIT_TOGGLE_ACTION)
+  )) {
+    return true;
+  }
+  for (const seg2 of Object.values(out.segments ?? {})) {
+    const fields2 = [
+      seg2.template,
+      seg2.bg,
+      seg2.fg,
+      ...Object.values(seg2.partials ?? {})
+    ];
+    for (const field of fields2) {
+      if (typeof field === "string" && referencesEditToggle(field)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+function synthesizeEditModeToggle(ctx, out) {
+  reservedNamespaceCollisions(ctx, out, EDIT_NS, "edit mode");
+  if (!fileWantsEditMode(out)) return;
+  const { variables, actions } = editModeArtifacts();
+  out.variables = { ...out.variables ?? {}, ...variables };
+  out.actions = { ...out.actions ?? {}, ...actions };
+}
+function editModeArtifacts() {
+  return {
+    variables: {
+      // Arranging lives inside the door: closing the menu leaves edit mode
+      // (brandon-menus-sjhy.9p6, Brandon: "I'd like edit mode to exit if we
+      // close the main menu").
+      [EDIT_MODE_KEY]: {
+        ...disclosureStateVar(EDIT_MODE_KEY, DISCLOSURE_CLOSED),
+        within: [SETTINGS_REF]
+      },
+      // Configuring is a level inside arranging, so leaving edit mode by any
+      // control closes it (src/config/disclosure-nest.ts).
+      [EDIT_CONFIGURE_KEY]: {
+        ...disclosureStateVar(EDIT_CONFIGURE_KEY, DISCLOSURE_CLOSED),
+        within: [EDIT_MODE_REF]
+      }
+    },
+    actions: {
+      [EDIT_TOGGLE_ACTION]: disclosureCycleAction(
+        EDIT_MODE_KEY,
+        EDIT_MODE_ARRANGE
+      ),
+      [EDIT_UNCONFIGURE_ACTION]: {
+        set: EDIT_CONFIGURE_KEY,
+        to: DISCLOSURE_CLOSED
+      }
+    }
+  };
+}
+
+// src/config/edit-chrome.ts
+init_globals();
+var import_node_path16 = __toESM(require_path_browserify(), 1);
+
+// src/config/synthesis-inputs.ts
+init_globals();
+
+// src/config/action.ts
+init_globals();
+var ACTION_KEYS = [
+  "set",
+  "persist",
+  "copy",
+  "open",
+  "reset",
+  "undo",
+  "redo",
+  "back",
+  "rewind",
+  "save",
+  "preset",
+  "themeDefault",
+  "doctor",
+  "slash",
+  "run",
+  "do"
+];
+function runDeclaration(a) {
+  return JSON.stringify([a.run, Object.entries(a.env), a.cwd, a.refreshes]);
+}
+function* actionTemplates(a) {
+  const found = [];
+  mapActionTemplates(a, (source, field) => {
+    found.push([field, source]);
+    return source;
+  });
+  yield* found;
+}
+function mapActionTemplates(a, f) {
+  if ("copy" in a) return { ...a, copy: f(a.copy, "copy") };
+  if ("open" in a) return { ...a, open: f(a.open, "open") };
+  if ("preset" in a && a.preset === "delete")
+    return { ...a, name: f(a.name, "name") };
+  if ("run" in a) {
+    const run3 = a.run.map((item, i) => f(item, `run.${i}`));
+    return {
+      ...a,
+      run: run3,
+      env: Object.fromEntries(
+        Object.entries(a.env).map(([name, value]) => [
+          name,
+          f(value, `env.${name}`)
+        ])
+      )
+    };
+  }
+  return a;
+}
+function actionBindsTemplateValue(a) {
+  return "from" in a || "int" in a || "insertSegmentFrom" in a;
+}
+
+// src/config/loader/refs.ts
+init_globals();
+var STRING_LITERAL_RE = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`[^`]*`/g;
+function* templateBlocks(template) {
+  let open2 = template.indexOf("{{");
+  while (open2 !== -1) {
+    let block = "";
+    let i = open2 + 2;
+    const spans = [[0, i]];
+    while (i < template.length && !template.startsWith("}}", i)) {
+      if (template.startsWith("/*", i)) {
+        const close = template.indexOf("*/", i + 2);
+        i = close === -1 ? template.length : close + 2;
+        spans.push([block.length, i]);
+        continue;
+      }
+      const start = i;
+      const quote2 = template[i];
+      i += 1;
+      if (quote2 === '"' || quote2 === "'" || quote2 === "`") {
+        while (i < template.length && template[i] !== quote2) {
+          i += template[i] === "\\" && quote2 !== "`" ? 2 : 1;
+        }
+        i += 1;
+      }
+      block += template.slice(start, i);
+    }
+    if (i >= template.length) return;
+    yield {
+      text: block,
+      at: (index) => {
+        let [from, to] = spans[0];
+        for (const [b, t2] of spans) if (b <= index) [from, to] = [b, t2];
+        return to + index - from;
+      }
+    };
+    open2 = template.indexOf("{{", i + 2);
+  }
+}
+var PATH = "[A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)*";
+var OPERAND_RE = new RegExp(
+  `^(?:(\\$)(?:\\.(${PATH}))?|\\.(${PATH})?)(?=[\\s)]|$)`
+);
+function operandAt(text4, dot, root) {
+  const m = OPERAND_RE.exec(text4.trimStart());
+  if (m === null) return null;
+  const [base, field] = m[1] !== void 0 ? [root, m[2]] : [dot, m[3]];
+  if (base === null) return null;
+  return field === void 0 ? base : `${base}${field}.`;
+}
+var KEYWORD_RE = /^(\w+)\b\s*([\s\S]*)$/;
+function* scopedBlocks(template, root) {
+  const stack = [root];
+  for (const block of templateBlocks(template)) {
+    const code = block.text.replace(/^-(?=\s)/, "").trim();
+    const [, keyword = "", rest2 = ""] = KEYWORD_RE.exec(code) ?? [];
+    const top = stack[stack.length - 1];
+    const outer = stack.length > 1 ? stack[stack.length - 2] : top;
+    if (keyword === "end") {
+      if (stack.length > 1) stack.pop();
+      continue;
+    }
+    if (keyword === "else") {
+      yield { code, dot: outer, block };
+      const chained = /^with\b([\s\S]*)$/.exec(rest2);
+      stack[stack.length - 1] = chained === null ? outer : operandAt(chained[1], outer, root);
+      continue;
+    }
+    yield { code, dot: top, block };
+    if (keyword === "if") stack.push(top);
+    if (keyword === "with") stack.push(operandAt(rest2, top, root));
+    if (keyword === "range" || keyword === "define" || keyword === "block")
+      stack.push(null);
+  }
+}
+var TEMPLATE_KEYWORD_RE = /(?<![.$])\btemplate\s+$/;
+function* helperCalls(code, dot, root) {
+  let cursor = 0;
+  for (const s of [...code.matchAll(STRING_LITERAL_RE)]) {
+    const end = s.index + s[0].length;
+    if (TEMPLATE_KEYWORD_RE.test(code.slice(cursor, s.index))) {
+      yield {
+        name: s[0].slice(1, -1),
+        at: operandAt(code.slice(end), dot, root),
+        index: s.index
+      };
+    }
+    cursor = end;
+  }
+}
+function* callGraphBlocks(template, helpers) {
+  const walked = /* @__PURE__ */ new Set();
+  function* walk3(src, root, via, chain2) {
+    for (const { code, dot } of [...scopedBlocks(src, root)]) {
+      yield { code, dot, root, via };
+      for (const call of [...helperCalls(code, dot, root)]) {
+        const body = Object.hasOwn(helpers, call.name) ? helpers[call.name] : void 0;
+        const key = `${call.name}\0${call.at ?? "\0"}`;
+        if (body === void 0 || chain2.has(call.name) || walked.has(key))
+          continue;
+        walked.add(key);
+        yield* walk3(body, call.at, call.name, /* @__PURE__ */ new Set([...chain2, call.name]));
+      }
+    }
+  }
+  yield* walk3(template, "", null, /* @__PURE__ */ new Set());
+}
+function perTemplate(answer2) {
+  const answers = /* @__PURE__ */ new Map();
+  return (template) => {
+    if (!answers.has(template)) answers.set(template, answer2(template));
+    return answers.get(template);
+  };
+}
+var WALKS = /* @__PURE__ */ new WeakMap();
+function callGraph(template, helpers) {
+  let walks = WALKS.get(helpers);
+  if (walks === void 0) {
+    walks = perTemplate((t2) => [...callGraphBlocks(t2, helpers)]);
+    WALKS.set(helpers, walks);
+  }
+  return walks(template);
+}
+var REF_RE = new RegExp(`(?<![A-Za-z0-9_)$])(\\$?)\\.(${PATH})`, "g");
+function* dotRefs({ code, dot, root }) {
+  const text4 = code.replace(STRING_LITERAL_RE, "");
+  for (const r of [...text4.matchAll(REF_RE)]) {
+    const base = r[1] === "$" ? root : dot;
+    if (base !== null) yield `${base}${r[2]}`;
+  }
+}
+function templateReads(template, helpers) {
+  const reads = /* @__PURE__ */ new Map();
+  for (const block of callGraph(template, helpers)) {
+    for (const ref of dotRefs(block)) {
+      if (!reads.has(ref)) reads.set(ref, block.via);
+    }
+  }
+  return reads;
+}
+var BINDING_KEYWORD_RE = /(?<![.$])\b(action|picker|menu|carousel|swatches|swatch|themePreview)\s+$/;
+var NAME_ARGS = {
+  action: 1,
+  picker: 2,
+  menu: 1,
+  carousel: 2,
+  swatch: 1,
+  swatches: 2,
+  themePreview: 1
+};
+function* actionBindings(code) {
+  let cursor = 0;
+  let pending2 = 0;
+  let site = "action";
+  for (const s of [...code.matchAll(STRING_LITERAL_RE)]) {
+    const between = code.slice(cursor, s.index);
+    const kw = BINDING_KEYWORD_RE.exec(between);
+    if (kw !== null) {
+      pending2 = NAME_ARGS[kw[1]];
+      site = kw[1] === "action" ? "action" : "options";
+    } else if (between.trim() !== "") {
+      pending2 = 0;
+    }
+    if (pending2 > 0) {
+      yield { name: s[0].slice(1, -1), site, index: s.index };
+      pending2--;
+    }
+    cursor = s.index + s[0].length;
+  }
+}
+function templateActionRefs(template, helpers) {
+  const refs = /* @__PURE__ */ new Map();
+  for (const { code, via } of callGraph(template, helpers)) {
+    for (const { name, site } of actionBindings(code)) {
+      const key = `${name}\0${via ?? "\0"}`;
+      if (!refs.has(key)) refs.set(key, { name, site, via });
+    }
+  }
+  return [...refs.values()];
+}
+var namesTaking = (min2) => Object.keys(NAME_ARGS).filter((keyword) => NAME_ARGS[keyword] >= min2).join("|");
+var COMPUTED_BINDING_RE = new RegExp(
+  `(?<![\\w.$])(?:(?:${namesTaking(1)})\\s+|(?:${namesTaking(2)})\\s+""\\s+)(?=[^\\s"\`)|}])`
+);
+function bindsComputedAction(template, helpers) {
+  for (const { code } of callGraph(template, helpers)) {
+    if (COMPUTED_BINDING_RE.test(code.replace(STRING_LITERAL_RE, '""'))) {
+      return true;
+    }
+  }
+  return false;
+}
+var BARE_NAME_RE = /(?<![\w.$])[A-Za-z_]\w*/g;
+function templateFunctions(template, helpers) {
+  const called = /* @__PURE__ */ new Set();
+  for (const { code } of callGraph(template, helpers)) {
+    for (const [name] of code.replace(STRING_LITERAL_RE, "").matchAll(BARE_NAME_RE)) {
+      called.add(name);
+    }
+  }
+  return called;
+}
+function templateHelperRefs(template, helpers) {
+  return new Set(
+    [...templateHelperCalls(template, helpers)].filter(
+      (name) => Object.hasOwn(helpers, name)
+    )
+  );
+}
+function templateHelperCalls(template, helpers) {
+  const called = /* @__PURE__ */ new Set();
+  for (const { code, dot, root } of callGraph(template, helpers)) {
+    for (const { name } of helperCalls(code, dot, root)) called.add(name);
+  }
+  return called;
+}
+var SELF_REF_RE = (self2) => new RegExp(`(?<![A-Za-z0-9_)$])(\\$?)\\.${self2}(?![A-Za-z0-9_])`, "g");
+function bindSelf(template, self2, ns) {
+  const refRe = SELF_REF_RE(self2);
+  const named3 = ownedBy(self2);
+  const starts = [];
+  for (const { dot, block } of scopedBlocks(template, "")) {
+    const code = block.text.replace(
+      STRING_LITERAL_RE,
+      (s) => " ".repeat(s.length)
+    );
+    for (const r of code.matchAll(refRe)) {
+      const base = r[1] === "$" ? "" : dot;
+      if (base === "") starts.push(block.at(r.index + r[1].length + 1));
+    }
+    for (const { name, index } of [
+      ...helperCalls(block.text, dot, ""),
+      ...actionBindings(block.text)
+    ]) {
+      if (named3(name)) starts.push(block.at(index + 1));
+    }
+  }
+  return [...new Set(starts)].sort((a, b) => b - a).reduce(
+    (t2, start) => t2.slice(0, start) + ns + t2.slice(start + self2.length),
+    template
+  );
+}
+function* declarationsAt(config2) {
+  for (const [name, decl] of Object.entries(config2.variables)) {
+    yield [name, decl, ["variables", name]];
+  }
+  for (const [segName, seg2] of Object.entries(config2.segments)) {
+    for (const [varName, decl] of Object.entries(seg2.vars ?? {})) {
+      yield [
+        `${segName}.${varName}`,
+        decl,
+        ["segments", segName, "vars", varName]
+      ];
+    }
+  }
+}
+function* declaredVariables(config2) {
+  for (const [name, decl] of declarationsAt(config2)) yield [name, decl];
+}
+function variableRead(path42, names) {
+  const parts = path42.split(".");
+  for (let n = parts.length; n > 0; n--) {
+    const name = parts.slice(0, n).join(".");
+    if (names.has(name)) return [name];
+  }
+  const namespace = `${path42}.`;
+  return [...names].filter((name) => name.startsWith(namespace));
+}
+function refResolves(ref, scope) {
+  return variableRead(ref, scope.names).some(
+    (name) => !ref.startsWith(`${name}.`) || scope.documents.has(name)
+  );
+}
+function templateScopeOf(cfg) {
+  const names = /* @__PURE__ */ new Set();
+  const documents = /* @__PURE__ */ new Set();
+  const declare = (name, v) => {
+    names.add(name);
+    if (isDocumentDecl(v)) documents.add(name);
+  };
+  for (const [name, v] of declaredVariables(cfg)) declare(name, v);
+  return { names, documents, helpers: cfg.helpers };
+}
+function isDocumentDecl(v) {
+  return v.kind === "dropped" || v.kind === "source" || (v.kind === "shell" || v.kind === "file") && parseArm(v.parse) === "json";
+}
+
+// src/config/payload-inputs.ts
+init_globals();
+
+// src/var-system/sources.ts
+init_globals();
+
+// src/daemon/cache/watchers.ts
+init_globals();
+var import_node_path13 = __toESM(require_path_browserify(), 1);
+
+// src/utils/logfmt.ts
+init_globals();
+var BARE = /^[^\s"=\\]+$/;
+var valueOf = (value) => BARE.test(value) ? value : JSON.stringify(value);
+
+// src/utils/folder-identity.ts
+init_globals();
+var statIdentity = (folder) => {
+  try {
+    const st = fs_default.statSync(folder, { bigint: true });
+    return { dev: st.dev, ino: st.ino, birthtimeNs: st.birthtimeNs };
+  } catch (e) {
+    const code = e.code;
+    if (code === "ENOENT" || code === "ENOTDIR") return "gone";
+    throw e;
+  }
+};
+var sameIdentity = (a, b) => a.dev === b.dev && a.ino === b.ino && a.birthtimeNs === b.birthtimeNs;
+var identityKey = (identity2) => identity2 === "gone" ? "gone" : `${identity2.dev}:${identity2.ino}:${identity2.birthtimeNs}`;
+var boundOf = (folder) => {
+  try {
+    return statIdentity(folder);
+  } catch (e) {
+    return { unreadable: e.code ?? String(e) };
+  }
+};
+var boundKey = (bound) => typeof bound === "string" || "ino" in bound ? identityKey(bound) : `unreadable:${bound.unreadable}`;
+var bindsFolder = (bound) => typeof bound !== "string" && "ino" in bound;
+
+// src/utils/watch-target.ts
+init_globals();
+var import_node_path12 = __toESM(require_path_browserify(), 1);
+function nearestWatchTarget(candidate) {
+  let name = import_node_path12.default.basename(candidate);
+  let dir = import_node_path12.default.dirname(candidate);
+  for (; ; ) {
+    const real = canonicalDirectory(dir);
+    if (real !== null)
+      return { dir: real, name, leaf: dir === import_node_path12.default.dirname(candidate) };
+    name = import_node_path12.default.basename(dir);
+    dir = import_node_path12.default.dirname(dir);
+  }
+}
+function canonicalDirectory(p2) {
+  try {
+    return fs_default.statSync(p2).isDirectory() ? fs_default.realpathSync(p2) : null;
+  } catch {
+    return null;
+  }
+}
+
+// src/daemon/cache/watchers.ts
+var defaultLogger = (_level, message) => debug(message);
+var DEBOUNCE_MS = 50;
+function watchTargetsOf(paths2) {
+  const unresolved = [];
+  let reached = true;
+  const byDir = /* @__PURE__ */ new Map();
+  for (const at of paths2.named) {
+    const { hops, stopped: stopped2 } = walkLinks(at);
+    if (stopped2 !== null)
+      unresolved.push({ path: at, reason: stopped2.message });
+    for (const hop of hops) {
+      const { dir, name, leaf } = nearestWatchTarget(hop);
+      reached &&= leaf;
+      const names = byDir.has(dir) ? byDir.get(dir) : /* @__PURE__ */ new Set();
+      names?.add(name);
+      byDir.set(dir, names);
+    }
+  }
+  for (const dir of paths2.whole.map(canonicalDirectory))
+    if (dir !== null) byDir.set(dir, null);
+  const targets = {
+    dirs: [...byDir.entries()].sort(([a], [b]) => a.localeCompare(b)).map(
+      ([dirPath, names]) => names === null ? { path: dirPath } : { path: dirPath, filenames: [...names].sort() }
+    )
+  };
+  const bound = new Map(
+    targets.dirs.map((d) => {
+      const at = boundOf(d.path);
+      return [d.path, bindsFolder(at) ? boundKey(at) : null];
+    })
+  );
+  return {
+    key: JSON.stringify([targets, [...bound]]),
+    targets,
+    unbound: [...bound.values()].includes(null),
+    bound,
+    reached,
+    unresolved
+  };
+}
+function watchFault(label2, watch2, beyond) {
+  const reasons = [
+    ...watch2.derived.unresolved.map(
+      // Every reason names the path it stopped at, the kernel's and the loop's.
+      (u) => `cannot follow a link chain \u2014 ${u.reason}`
+    ),
+    ...watch2.held.handle.deaf.map(
+      (d) => d.kind === "refused" ? `cannot watch ${d.path} \u2014 ${d.reason}` : `watching ${d.path} failed \u2014 ${d.reason}`
+    ),
+    ...beyond === null ? [] : [beyond]
+  ];
+  return reasons.length === 0 ? null : `${label2}: ${reasons.join("; ")}`;
+}
+function folded(window2, next) {
+  if (next.kind === "failed") return next;
+  if (window2.kind !== "changed") return window2;
+  if (next.kind === "unknown") return next;
+  for (const p2 of next.paths) window2.paths.add(p2);
+  return window2;
+}
+var namedOf = (dir, filename) => filename === null ? { kind: "unknown" } : { kind: "changed", paths: /* @__PURE__ */ new Set([import_node_path13.default.join(dir, filename)]) };
+var failedOf = (d) => ({
+  kind: "failed",
+  reason: `${d.path}: ${d.reason}`
+});
+var heldBy = (state, handle) => state.kind === "listening" && state.handle === handle;
+var dirId = (target) => `${target.recursive === true ? "tree" : "dir"}:${target.path}`;
+var WatcherRegistry = class {
+  slots = /* @__PURE__ */ new Map();
+  dirs = /* @__PURE__ */ new Map();
+  counters;
+  logger;
+  closed = false;
+  constructor(opts = {}) {
+    this.counters = opts.counters;
+    this.logger = opts.logger ?? defaultLogger;
+  }
+  // Acquire (or share) the watch keyed by `key`. Every acquire of a key is a
+  // holder of one slot, and each holder's callback hears every window.
+  // `targets` from the first acquire wins; subsequent acquires keep the
+  // original target set (consumers must use a fresh key if they need different
+  // targets). A consumer that needs no more than "something changed" ignores
+  // the invalidation's value.
+  acquire(key, targets, onInvalidate) {
+    if (this.closed) {
+      return {
+        release: () => {
+        },
+        deaf: targets.dirs.map((d) => ({
+          kind: "refused",
+          path: d.path,
+          reason: "the watcher registry is closed"
+        }))
+      };
+    }
+    const shared = this.slots.get(key);
+    for (const { dir } of shared?.listeners ?? []) this.judged(dir, "acquire");
+    const slot = shared ?? this.opened(key, targets);
+    const holder = { onInvalidate };
+    slot.holders.add(holder);
+    return this.makeHandle(slot, holder);
+  }
+  // [LAW:single-enforcer] The one rule for a watch whose targets can move: a
+  // consumer derives its spec from disk again and the held watch follows it
+  // exactly when the key differs. The same key is the same directories, kept
+  // as they are; a new key acquires the spec's watch and then releases the
+  // held one, so a directory both name keeps its OS handle through the move.
+  // Nothing held yet is a first acquire, which is a rebind from nothing.
+  //
+  // A spec with a directory that binds nothing yet (gone, or a mount's
+  // transient fault) keeps the watch held: a derive that lands between a
+  // directory's removal and its making again would otherwise trade a watch
+  // FSEvents keeps on its path for a slot the OS refuses. The next derive
+  // that finds the directory there rebinds, since its key differs.
+  //
+  // [LAW:no-ambient-temporal-coupling] A kept watch retries nothing: its deaf
+  // directories are the period's to open again (`judge`). A follow that
+  // retried would answer the failed window its own handle's error told, and
+  // a handle that errors after every open would retry itself at the debounce
+  // cadence.
+  follow(held, spec, onInvalidate) {
+    if (held !== null && (held.key === spec.key || spec.unbound))
+      return { watch: held, move: "kept" };
+    const watch2 = {
+      key: spec.key,
+      handle: this.acquire(spec.key, spec.targets, onInvalidate)
+    };
+    held?.handle.release();
+    return { watch: watch2, move: "rebound" };
+  }
+  opened(key, targets) {
+    const slot = {
+      key,
+      listeners: [],
+      holders: /* @__PURE__ */ new Set(),
+      debounce: null
+    };
+    for (const target of targets.dirs) {
+      const dir = this.dirFor(target);
+      const listener = {
+        slot,
+        dir,
+        filter: target.filenames ? new Set(target.filenames) : null
+      };
+      dir.listeners.add(listener);
+      slot.listeners.push(listener);
+    }
+    this.slots.set(key, slot);
+    if (this.counters) {
+      if (slot.listeners.every((l) => l.dir.state.kind === "listening"))
+        this.counters.watchersOpened++;
+      else this.counters.watchRefusals++;
+    }
+    return slot;
+  }
+  // The directory watch a new slot's target joins: the one already open
+  // there, judged, or a new one.
+  dirFor(target) {
+    const id2 = dirId(target);
+    const existing = this.dirs.get(id2);
+    if (existing !== void 0) {
+      this.judged(existing, "acquire");
+      return existing;
+    }
+    const where = { path: target.path, recursive: target.recursive === true };
+    const dir = {
+      id: id2,
+      ...where,
+      listeners: /* @__PURE__ */ new Set(),
+      state: this.open(where, () => dir, "acquire", null)
+    };
+    this.dirs.set(id2, dir);
+    return dir;
+  }
+  // [LAW:single-enforcer] The one rule that a directory watch names the
+  // folder at its path, applied whenever a holder acquires the directory,
+  // whenever an event says the folder there moved, and on every period
+  // (`judge`). A deaf one is opened again; a listening one whose path holds
+  // another folder than the one it bound (removed and made again, or a strict
+  // ancestor renamed away and another tree put at its path: inotify hears the
+  // old inode, and the bound folder is what an event naming the directory is
+  // judged against) is reopened in place. A path that binds nothing right now
+  // keeps the listening handle, as `follow` keeps a held watch: a macOS watch
+  // on the path hears the folder come back.
+  judged(dir, cause) {
+    if (dir.state.kind === "deaf") {
+      this.reopen(dir, cause);
+      return;
+    }
+    const now2 = boundOf(dir.path);
+    if (bindsFolder(now2) && boundKey(now2) !== dir.state.bound)
+      this.reopen(dir, "another folder is at its path");
+  }
+  // [LAW:no-ambient-temporal-coupling] Every directory watch judged against
+  // the disk, on the period the file-event delivery owner keeps (the daemon
+  // wires it). It is the one trigger for a replacement no event reaches a
+  // handle for (a strict ancestor renamed away and another tree put at its
+  // path: inotify reports a directory's own removal or self-move, never its
+  // parent's), and the retry of a directory the OS refused or whose handle
+  // errored while no holder newly acquires it. A directory staying as it is
+  // costs one stat, or one refused open, and tells nothing.
+  judge() {
+    for (const dir of this.dirs.values()) this.judged(dir, "period");
+  }
+  // [LAW:no-silent-failure] Every slot on the directory hears it change
+  // state. Going deaf, it hears the fault. Listening again, it hears an
+  // `unknown` window: whatever changed while the directory was deaf or bound
+  // to another folder went unheard, and a holder that re-derives on it reports
+  // its fault cleared. Deaf staying deaf is no change and tells nothing.
+  reopen(dir, cause) {
+    const was = dir.state;
+    if (was.kind === "listening") this.closeHandle(dir.path, was.handle, cause);
+    dir.state = this.open(dir, () => dir, cause, was);
+    if (dir.state.kind === "listening") this.tell(dir, { kind: "unknown" });
+    else if (was.kind === "listening")
+      this.tell(dir, failedOf(dir.state.deafness));
+  }
+  // `dirOf` names the watch the handle belongs to; its callbacks run only
+  // after the open returns, once the watch holds the state returned here.
+  open(where, dirOf, cause, was) {
+    const at = where.path;
+    const bound = boundKey(boundOf(at));
+    try {
+      fs_default.opendirSync(at).closeSync();
+      const handle = fs_default.watch(
+        at,
+        { persistent: false, recursive: where.recursive },
+        (_event, changed) => this.heard(dirOf(), handle, changed)
+      );
+      handle.on("error", (e) => {
+        this.logger("warn", `watcher error ${at}: ${e.message}`);
+        if (this.counters) this.counters.watchErrors++;
+        const dir = dirOf();
+        if (!heldBy(dir.state, handle)) return;
+        this.closeHandle(at, handle, "error");
+        const deafness = {
+          kind: "failed",
+          path: at,
+          reason: e.message
+        };
+        dir.state = { kind: "deaf", deafness };
+        this.tell(dir, failedOf(deafness));
+      });
+      if (this.counters) this.counters.dirWatchesOpened++;
+      this.logger(
+        "info",
+        `dir watch opened path=${valueOf(at)} cause=${valueOf(cause)}`
+      );
+      return { kind: "listening", handle, bound };
+    } catch (e) {
+      const reason = e.message;
+      const same2 = was?.kind === "deaf" && was.deafness.kind === "refused" && was.deafness.reason === reason;
+      if (!same2) this.logger("warn", `watch failed ${at}: ${reason}`);
+      return {
+        kind: "deaf",
+        deafness: { kind: "refused", path: at, reason }
+      };
+    }
+  }
+  // [LAW:dataflow-not-control-flow] Each listener's filter is a value: a name
+  // it lists, an unnamed event (the OS may be reporting the filtered child),
+  // or the directory's own name while the folder at the path is no longer the
+  // one this handle bound (its removal or replacement, which macOS reports as
+  // a change and Linux as a rename) reaches the slot. The same name with the
+  // folder unchanged is macOS reporting a child that came or went, or a chmod,
+  // and is not. Judged once per event, for every listener. A move is then
+  // judged, so a handle never stays bound to a folder no longer at its path
+  // and every later event naming the directory is judged against the folder
+  // there.
+  heard(dir, handle, changed) {
+    const { state } = dir;
+    if (!heldBy(state, handle)) return;
+    const moved = changed === import_node_path13.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== state.bound;
+    for (const { slot, filter } of dir.listeners) {
+      if (filter === null || changed === null || filter.has(changed) || moved)
+        this.fire(slot, namedOf(dir.path, changed));
+    }
+    if (moved) this.judged(dir, "moved");
+  }
+  tell(dir, invalidation) {
+    for (const { slot } of dir.listeners) this.fire(slot, invalidation);
+  }
+  fire(slot, invalidation) {
+    if (slot.debounce !== null) {
+      slot.debounce.window = folded(slot.debounce.window, invalidation);
+      return;
+    }
+    const debounce = {
+      window: invalidation,
+      timer: setTimeout(() => {
+        slot.debounce = null;
+        for (const holder of slot.holders) {
+          try {
+            holder.onInvalidate(debounce.window);
+          } catch (e) {
+            this.logger(
+              "warn",
+              `watcher invalidate threw key=${valueOf(slot.key)}: ${e.message}`
+            );
+          }
+        }
+      }, DEBOUNCE_MS)
+    };
+    debounce.timer.unref();
+    slot.debounce = debounce;
+  }
+  makeHandle(slot, holder) {
+    return {
+      get deaf() {
+        return slot.listeners.flatMap(
+          ({ dir }) => dir.state.kind === "deaf" ? [dir.state.deafness] : []
+        );
+      },
+      release: () => {
+        if (!slot.holders.delete(holder) || slot.holders.size > 0) return;
+        if (this.slots.get(slot.key) !== slot) return;
+        this.closeSlot(slot, "last release");
+        this.slots.delete(slot.key);
+      }
+    };
+  }
+  closeHandle(at, handle, cause) {
+    try {
+      handle.close();
+    } catch {
+    }
+    if (this.counters) this.counters.dirWatchesClosed++;
+    this.logger(
+      "info",
+      `dir watch closed path=${valueOf(at)} cause=${valueOf(cause)}`
+    );
+  }
+  // A directory watch closes with the last slot on it.
+  closeSlot(slot, cause) {
+    if (slot.debounce !== null) {
+      clearTimeout(slot.debounce.timer);
+      slot.debounce = null;
+    }
+    for (const listener of slot.listeners) {
+      const { dir } = listener;
+      dir.listeners.delete(listener);
+      if (dir.listeners.size > 0) continue;
+      if (dir.state.kind === "listening")
+        this.closeHandle(dir.path, dir.state.handle, cause);
+      this.dirs.delete(dir.id);
+    }
+    if (this.counters) this.counters.watchersClosed++;
+  }
+  // The slots held now.
+  size() {
+    return this.slots.size;
+  }
+  // The OS directory watches open now.
+  dirWatches() {
+    return [...this.dirs.values()].filter((d) => d.state.kind === "listening").length;
+  }
+  // Every directory a held watch targets.
+  watchedDirs() {
+    return [...this.dirs.values()].map((d) => d.path);
+  }
+  closeAll() {
+    this.closed = true;
+    for (const slot of this.slots.values()) this.closeSlot(slot, "close");
+    this.slots.clear();
+  }
+};
+
+// src/daemon/cache/file-events.ts
+init_globals();
+var import_node_path14 = __toESM(require_path_browserify(), 1);
+var PROBE_EVERY_MS = 3e4;
+var STALL_AFTER = 2;
+var PROBE_FILE = "probe";
+var NO_FILE_EVENTS = {
+  delivery: () => ({
+    kind: "unmeasured",
+    since: 0,
+    reason: "outside the daemon",
+    missedSince: null
+  }),
+  subscribe: () => () => {
+  }
+};
+var iso = (at) => new Date(at).toISOString();
+var label = (d) => d.kind === "unmeasured" ? `unmeasured:${d.reason}` : d.kind;
+var FileEventDelivery = class {
+  current;
+  instrument = { kind: "idle" };
+  listeners = /* @__PURE__ */ new Set();
+  stalls = 0;
+  catchUps = 0;
+  probes = 0;
+  probeFailures = 0;
+  watchers;
+  logger;
+  identityOf;
+  constructor(opts) {
+    this.watchers = opts.watchers;
+    this.logger = opts.logger;
+    this.identityOf = opts.identityOf ?? statIdentity;
+    this.current = {
+      kind: "unmeasured",
+      since: Date.now(),
+      reason: "not started",
+      missedSince: null
+    };
+  }
+  delivery() {
+    return this.current;
+  }
+  subscribe(listener) {
+    this.listeners.add(listener);
+    return () => void this.listeners.delete(listener);
+  }
+  // Only the daemon starts the owner, once it has won its socket: it makes
+  // the folder, opens the one watch, and arms the period.
+  start(folder) {
+    if (this.instrument.kind !== "idle") {
+      throw new Error("file events: the owner was started twice");
+    }
+    const period = setInterval(() => void this.tick(), PROBE_EVERY_MS);
+    period.unref();
+    let identity2;
+    try {
+      fs_default.mkdirSync(folder, { recursive: true });
+      identity2 = this.identityOf(folder);
+    } catch (e) {
+      this.end(
+        period,
+        `the probe folder could not be made: ${e.message}`
+      );
+      return;
+    }
+    if (identity2 === "gone") {
+      this.end(period, "the probe folder was removed as it was made");
+      return;
+    }
+    const probing = {
+      kind: "probing",
+      folder,
+      identity: identity2,
+      period,
+      // [LAW:single-enforcer] The only acquirer of this registry key.
+      handle: this.watchers.acquire(
+        `file-events:${folder}`,
+        { dirs: [{ path: folder, filenames: [PROBE_FILE] }] },
+        (heard) => this.heard(probing, heard)
+      )
+    };
+    this.instrument = probing;
+    this.logger("info", `file events probing folder=${valueOf(folder)}`);
+    const [refusal] = probing.handle.deaf;
+    if (refusal !== void 0) {
+      this.end(
+        period,
+        `the OS refused the probe folder's watch: ${refusal.reason}`
+      );
+      return;
+    }
+    this.move({ kind: "delivering", unreported: [], missedSince: null });
+    void this.tick();
+  }
+  stats() {
+    return {
+      delivery: this.current,
+      stalls: this.stalls,
+      catchUps: this.catchUps,
+      probes: this.probes,
+      probeFailures: this.probeFailures
+    };
+  }
+  close() {
+    const inst = this.instrument;
+    this.instrument = { kind: "idle" };
+    this.listeners.clear();
+    switch (inst.kind) {
+      case "probing":
+        inst.handle.release();
+        clearInterval(inst.period);
+        return;
+      case "ended":
+        clearInterval(inst.period);
+        return;
+      case "idle":
+        return;
+    }
+  }
+  // [LAW:dataflow-not-control-flow] The same steps at the start and every
+  // period after: tell subscribers the period passed; judge the probe folder
+  // against the one the watch opened on, first, so a folder replaced at its
+  // path never reads as a stall; judge the probes still unreported; write the
+  // next one.
+  async tick() {
+    this.notify({ kind: "period" });
+    const inst = this.instrument;
+    if (inst.kind !== "probing") return;
+    let now2;
+    try {
+      now2 = this.identityOf(inst.folder);
+    } catch (e) {
+      this.end(
+        inst.period,
+        `the probe folder cannot be read: ${e.message}`
+      );
+      return;
+    }
+    if (now2 === "gone") {
+      this.end(inst.period, "the probe folder was removed");
+      return;
+    }
+    if (!sameIdentity(now2, inst.identity)) {
+      this.end(inst.period, "the probe folder was replaced");
+      return;
+    }
+    const d = this.current;
+    if (d.kind === "delivering" && d.unreported.length >= STALL_AFTER) {
+      this.stalls++;
+      this.move({
+        kind: "stalled",
+        missedSince: d.missedSince ?? d.unreported[0]
+      });
+    }
+    await this.probe(inst);
+  }
+  // A delivering watch awaits the probe; a stalled one awaits none in
+  // particular, since any report recovers it. A write that lands while
+  // unmeasured measures again, awaiting that probe, so a transient failure
+  // (a full disk) measures once it clears. A write that fails is unmeasured
+  // with its error: it tests no watch. A probe still in flight when the
+  // instrument ends or closes judges nothing.
+  async probe(inst) {
+    const at = Date.now();
+    const before = this.current;
+    if (before.kind === "delivering") {
+      this.current = { ...before, unreported: [...before.unreported, at] };
+    }
+    try {
+      await fs_default.promises.writeFile(
+        import_node_path14.default.join(inst.folder, PROBE_FILE),
+        String(at)
+      );
+    } catch (e) {
+      this.probeFailures++;
+      const d2 = this.current;
+      if (this.instrument !== inst || d2.kind === "unmeasured") return;
+      this.move({
+        kind: "unmeasured",
+        since: at,
+        reason: `the probe could not be written: ${e.message}`,
+        missedSince: d2.missedSince ?? at
+      });
+      return;
+    }
+    this.probes++;
+    const d = this.current;
+    if (this.instrument !== inst || d.kind !== "unmeasured") return;
+    this.move({
+      kind: "delivering",
+      unreported: [at],
+      missedSince: d.missedSince
+    });
+  }
+  // [LAW:no-silent-failure] The watch's own failure ends the instrument: the
+  // OS refuses an immediate retry the way it refused the first (limits,
+  // permissions). Anything else it reports proves delivery.
+  heard(inst, heard) {
+    if (this.instrument !== inst) return;
+    if (heard.kind === "failed") {
+      this.end(inst.period, `the probe folder's watch failed: ${heard.reason}`);
+      return;
+    }
+    const d = this.current;
+    const delivering = {
+      kind: "delivering",
+      unreported: [],
+      missedSince: null
+    };
+    if (d.missedSince === null) {
+      this.move(delivering);
+      return;
+    }
+    this.current = delivering;
+    this.catchUps++;
+    this.logger(
+      "info",
+      `file events resumed since=${iso(d.missedSince)} missed=${Date.now() - d.missedSince}ms from=${d.kind}`
+    );
+    this.notify({ kind: "caught-up", since: d.missedSince });
+  }
+  // [LAW:no-silent-failure] An ended instrument holds no watch and never
+  // measures again, so whatever ended it, only a restart can.
+  end(period, reason) {
+    const inst = this.instrument;
+    if (inst.kind === "probing") inst.handle.release();
+    this.instrument = { kind: "ended", period };
+    const at = Date.now();
+    this.move({
+      kind: "unmeasured",
+      since: at,
+      reason: `${reason}; restart the daemon`,
+      missedSince: this.current.missedSince ?? at
+    });
+  }
+  // [LAW:nothing-unseen] One line on each change of state, none per period.
+  move(next) {
+    const was = label(this.current);
+    this.current = next;
+    if (label(next) === was) return;
+    switch (next.kind) {
+      case "delivering":
+        this.logger("info", "file events delivering");
+        break;
+      case "stalled":
+        this.logger(
+          "warn",
+          `file events stalled since=${iso(next.missedSince)}`
+        );
+        break;
+      case "unmeasured":
+        this.logger(
+          "warn",
+          `file events unmeasured since=${iso(next.since)} reason=${JSON.stringify(next.reason)}`
+        );
+        break;
+    }
+    this.notify({ kind: "moved" });
+  }
+  notify(notice) {
+    for (const listener of [...this.listeners]) listener(notice);
+  }
+};
+var stopped = (since) => `file events stopped at ${iso(since)}; the OS has delivered none since, not even for a file the daemon wrote to test it`;
+var stallReason = (d) => d.kind === "stalled" ? stopped(d.missedSince) : null;
+function fileEventsWarnings(d) {
+  if (d.missedSince === null) return [];
+  const since = iso(d.missedSince);
+  const message = () => {
+    switch (d.kind) {
+      case "delivering":
+        return `file events unconfirmed since ${since}: the probe written to test them has not been heard yet, so an edit to the config made since may not have reloaded`;
+      case "stalled":
+        return `${stopped(d.missedSince)}, so an edit to the config will not reload until they resume`;
+      case "unmeasured":
+        return `since ${since}, the daemon cannot check whether file events are arriving: ${d.reason}`;
+    }
+  };
+  return [{ kind: "file-events", state: d.kind, message: message() }];
+}
+
+// src/var-system/sources.ts
+init_timers();
+
+// node_modules/.pnpm/mobx@7.0.6/node_modules/mobx/dist/mobx.mjs
+init_globals();
+var __MOBX_DEV__ = true;
+var niceErrors = {
+  0: `Invalid value for configuration 'enforceActions', expected 'never', 'always' or 'observed'`,
+  1(annotationType, key) {
+    return `Cannot apply '${annotationType}' to '${key.toString()}': Field not found.`;
+  },
+  /*
+  2(prop) {
+      return `invalid decorator for '${prop.toString()}'`
+  },
+  3(prop) {
+      return `Cannot decorate '${prop.toString()}': action can only be used on properties with a function value.`
+  },
+  4(prop) {
+      return `Cannot decorate '${prop.toString()}': computed can only be used on getter properties.`
+  },
+  */
+  5: "'keys()' can only be used on observable objects, arrays, sets and maps",
+  6: "'values()' can only be used on observable objects, arrays, sets and maps",
+  7: "'entries()' can only be used on observable objects, arrays and maps",
+  8: "'set()' can only be used on observable objects, arrays and maps",
+  9: "'remove()' can only be used on observable objects, arrays and maps",
+  10: "'has()' can only be used on observable objects, arrays and maps",
+  11: "'get()' can only be used on observable objects, arrays and maps",
+  12: `Invalid annotation`,
+  13: `Dynamic observable objects cannot be frozen. If you're passing observables to 3rd party component/function that calls Object.freeze, pass copy instead: toJS(observable)`,
+  14: "Intercept handlers should return nothing or a change object",
+  15: `Observable arrays cannot be frozen. If you're passing observables to 3rd party component/function that calls Object.freeze, pass copy instead: toJS(observable)`,
+  16: `Modification exception: the internal structure of an observable array was changed.`,
+  19(other) {
+    return "Cannot initialize from classes that inherit from Map: " + other.constructor.name;
+  },
+  20(other) {
+    return "Cannot initialize map from " + other;
+  },
+  21(dataStructure) {
+    return `Cannot convert to map from '${dataStructure}'`;
+  },
+  23: "It is not possible to get index atoms from arrays",
+  24(thing) {
+    return "Cannot obtain administration from " + thing;
+  },
+  25(property, name) {
+    return `the entry '${property}' does not exist in the observable map '${name}'`;
+  },
+  26: "please specify a property",
+  27(property, name) {
+    return `no observable property '${property.toString()}' found on the observable object '${name}'`;
+  },
+  28(thing) {
+    return "Cannot obtain atom from " + thing;
+  },
+  29: "Expecting some object",
+  30: "invalid action stack. did you forget to finish an action?",
+  31: "missing option for computed: get",
+  32(name, derivation) {
+    return `Cycle detected in computation ${name}: ${derivation}`;
+  },
+  33(name) {
+    return `The setter of computed value '${name}' is trying to update itself. Did you intend to update an _observable_ value, instead of the computed property?`;
+  },
+  34(name) {
+    return `[ComputedValue '${name}'] It is not possible to assign a new value to a computed value.`;
+  },
+  35: "There are multiple, different versions of MobX active. Make sure MobX is loaded only once or use `configure({ isolateGlobalState: true })`",
+  36: "isolateGlobalState should be called before MobX is running any reactions",
+  37(method) {
+    return `[mobx] \`observableArray.${method}()\` mutates the array in-place, which is not allowed inside a derivation. Use \`array.slice().${method}()\` instead`;
+  },
+  38: "'ownKeys()' can only be used on observable objects",
+  39: "'defineProperty()' can only be used on observable objects",
+  40(length) {
+    return "Out of range: " + length;
+  },
+  41(other) {
+    return "Cannot initialize set from " + other;
+  },
+  42(key) {
+    return `Invalid index: '${key}'`;
+  },
+  43(annotationType, name, kind) {
+    return `Cannot apply '${annotationType}' to '${name}' (kind: ${kind}):
+'${annotationType}' can only be used on properties with a function value.`;
+  },
+  44(annotationType) {
+    return `'${annotationType}' can only be used with 'makeObservable'`;
+  }
+};
+var errors = __MOBX_DEV__ ? niceErrors : {};
+function die(error, ...args) {
+  if (__MOBX_DEV__) {
+    let e = typeof error === "string" ? error : errors[error];
+    if (typeof e === "function") e = e.apply(null, args);
+    throw new Error(`[MobX] ${e}`);
+  }
+  throw new Error(`[MobX] minified error nr: ${error}${args.length ? " " + args.map(String).join(",") : ""}. See mobx.js.org/errors`);
+}
+var assign = Object.assign;
+var getDescriptor = Object.getOwnPropertyDescriptor;
+var defineProperty = Object.defineProperty;
+var objectPrototype = Object.prototype;
+var EMPTY_ARRAY = [];
+Object.freeze(EMPTY_ARRAY);
+var EMPTY_OBJECT = {};
+Object.freeze(EMPTY_OBJECT);
+var plainObjectString = /* @__PURE__ */ Object.toString();
+function getNextId() {
+  return ++globalState.mobxGuid;
+}
+function once(func) {
+  let invoked = false;
+  return function() {
+    if (invoked) {
+      return;
+    }
+    invoked = true;
+    return func.apply(this, arguments);
+  };
+}
+var noop = () => {
+};
+function isFunction(fn) {
+  return typeof fn === "function";
+}
+function isStringish(value) {
+  const t2 = typeof value;
+  switch (t2) {
+    case "string":
+    case "symbol":
+    case "number":
+      return true;
+  }
+  return false;
+}
+function isObject(value) {
+  return value !== null && typeof value === "object";
+}
+function isPlainObject3(value) {
+  if (!isObject(value)) {
+    return false;
+  }
+  const proto = Object.getPrototypeOf(value);
+  if (proto == null) {
+    return true;
+  }
+  const protoConstructor = hasProp(proto, "constructor") && proto.constructor;
+  return typeof protoConstructor === "function" && protoConstructor.toString() === plainObjectString;
+}
+function isGenerator(obj) {
+  const constructor = obj == null ? void 0 : obj.constructor;
+  if (!constructor) {
+    return false;
+  }
+  if ("GeneratorFunction" === constructor.name || "GeneratorFunction" === constructor.displayName) {
+    return true;
+  }
+  return false;
+}
+function addHiddenProp(object, propName, value) {
+  defineProperty(object, propName, {
+    enumerable: false,
+    writable: true,
+    configurable: true,
+    value
+  });
+}
+function addHiddenFinalProp(object, propName, value) {
+  defineProperty(object, propName, {
+    enumerable: false,
+    writable: false,
+    configurable: true,
+    value
+  });
+}
+function createInstanceofPredicate(name, theClass) {
+  const propName = "isMobX" + name;
+  theClass.prototype[propName] = true;
+  return function(x) {
+    return isObject(x) && x[propName] === true;
+  };
+}
+function isES6Map(thing) {
+  return thing != null && Object.prototype.toString.call(thing) === "[object Map]";
+}
+function isPlainES6Map(thing) {
+  const mapProto = Object.getPrototypeOf(thing);
+  const objectProto = Object.getPrototypeOf(mapProto);
+  const nullProto = Object.getPrototypeOf(objectProto);
+  return nullProto === null;
+}
+function isES6Set(thing) {
+  return thing != null && Object.prototype.toString.call(thing) === "[object Set]";
+}
+function getPlainObjectKeys(object) {
+  const keys2 = Object.keys(object);
+  const symbols2 = Object.getOwnPropertySymbols(object);
+  if (!symbols2.length) {
+    return keys2;
+  }
+  return [...keys2, ...symbols2.filter((s) => objectPrototype.propertyIsEnumerable.call(object, s))];
+}
+var ownKeys2 = Reflect.ownKeys;
+function stringifyKey(key) {
+  if (typeof key === "string") {
+    return key;
+  }
+  if (typeof key === "symbol") {
+    return key.toString();
+  }
+  return new String(key).toString();
+}
+function toPrimitive(value) {
+  return value === null ? null : typeof value === "object" ? "" + value : value;
+}
+function hasProp(target, prop) {
+  return objectPrototype.hasOwnProperty.call(target, prop);
+}
+var getOwnPropertyDescriptors = Object.getOwnPropertyDescriptors;
+function getFlag(flags, mask) {
+  return !!(flags & mask);
+}
+function setFlag(flags, mask, newValue) {
+  if (newValue) {
+    flags |= mask;
+  } else {
+    flags &= ~mask;
+  }
+  return flags;
+}
+function assert20223DecoratorType(context, types2) {
+  if (__MOBX_DEV__ && !types2.includes(context.kind)) {
+    die(`The decorator applied to '${String(context.name)}' cannot be used on a ${context.kind} element`);
+  }
+}
+var $mobx = /* @__PURE__ */ Symbol("mobx administration");
+var Atom = class {
+  /**
+   * Create a new atom. For debugging purposes it is recommended to give it a name.
+   * The onBecomeObserved and onBecomeUnobserved callbacks can be used for resource management.
+   */
+  constructor(name_ = __MOBX_DEV__ ? "Atom@" + getNextId() : "Atom") {
+    this.name_ = void 0;
+    this.flags_ = 0;
+    this.observers_ = null;
+    this.lastAccessedBy_ = 0;
+    this.lowestObserverState_ = -1;
+    this.onBOL = void 0;
+    this.onBUOL = void 0;
+    this.name_ = name_;
+  }
+  // for effective unobserving. BaseAtom has true, for extra optimization, so its onBecomeUnobserved never gets called, because it's not needed
+  get isBeingObserved() {
+    return getFlag(
+      this.flags_,
+      1
+      /* AtomFlags.isBeingObserved */
+    );
+  }
+  set isBeingObserved(newValue) {
+    this.flags_ = setFlag(this.flags_, 1, newValue);
+  }
+  get isPendingUnobservation() {
+    return getFlag(
+      this.flags_,
+      2
+      /* AtomFlags.isPendingUnobservation */
+    );
+  }
+  set isPendingUnobservation(newValue) {
+    this.flags_ = setFlag(this.flags_, 2, newValue);
+  }
+  get diffValue() {
+    return getFlag(
+      this.flags_,
+      4
+      /* AtomFlags.diffValue */
+    ) ? 1 : 0;
+  }
+  set diffValue(newValue) {
+    this.flags_ = setFlag(this.flags_, 4, newValue === 1 ? true : false);
+  }
+  onBO() {
+    if (this.onBOL) {
+      this.onBOL.forEach((listener) => listener());
+    }
+  }
+  onBUO() {
+    if (this.onBUOL) {
+      this.onBUOL.forEach((listener) => listener());
+    }
+  }
+  /**
+   * Invoke this method to notify mobx that your atom has been used somehow.
+   * Returns true if there is currently a reactive context.
+   */
+  reportObserved() {
+    return reportObserved(this);
+  }
+  /**
+   * Invoke this method _after_ this method has changed to signal mobx that all its observers should invalidate.
+   */
+  reportChanged() {
+    startBatch();
+    propagateChanged(this);
+    endBatch();
+  }
+  toString() {
+    return this.name_;
+  }
+};
+var isAtom = /* @__PURE__ */ createInstanceofPredicate("Atom", Atom);
+function createAtom(name, onBecomeObservedHandler = noop, onBecomeUnobservedHandler = noop) {
+  const atom = new Atom(name);
+  if (onBecomeObservedHandler !== noop) {
+    atom.onBOL = /* @__PURE__ */ new Set([onBecomeObservedHandler]);
+  }
+  if (onBecomeUnobservedHandler !== noop) {
+    atom.onBUOL = /* @__PURE__ */ new Set([onBecomeUnobservedHandler]);
+  }
+  return atom;
+}
+function compareStructural(a, b) {
+  return deepEqual2(a, b);
+}
+function compareShallow(a, b) {
+  return deepEqual2(a, b, 1);
+}
+var compareDefault = Object.is;
+function deepEnhancer(v, _, name) {
+  if (v === null || typeof v !== "object" && typeof v !== "function") {
+    return v;
+  }
+  if (isObservable(v)) {
+    return v;
+  }
+  if (Array.isArray(v)) {
+    return observable.array(v, {
+      name
+    });
+  }
+  if (isPlainObject3(v)) {
+    return observable.object(v, void 0, {
+      name
+    });
+  }
+  if (isES6Map(v)) {
+    return observable.map(v, {
+      name
+    });
+  }
+  if (isES6Set(v)) {
+    return observable.set(v, {
+      name
+    });
+  }
+  if (typeof v === "function" && !isAction(v) && !isFlow(v)) {
+    if (isGenerator(v)) {
+      return flow(v);
+    } else {
+      return autoAction(name, v);
+    }
+  }
+  return v;
+}
+function referenceEnhancer(newValue) {
+  return newValue;
+}
+var OVERRIDE = "override";
+function isOverride(annotation) {
+  return annotation.annotationType_ === OVERRIDE;
+}
+function createActionAnnotation(name, options) {
+  return {
+    annotationType_: name,
+    options_: options,
+    make_: make_$5,
+    extend_: extend_$4
+  };
+}
+function make_$5(adm, key, descriptor, source) {
+  var _this$options_;
+  if ((_this$options_ = this.options_) != null && _this$options_.bound) {
+    return this.extend_(adm, key, descriptor, false) === null ? 0 : 1;
+  }
+  if (source === adm.target_) {
+    return this.extend_(adm, key, descriptor, false) === null ? 0 : 2;
+  }
+  if (isAction(descriptor.value)) {
+    return 1;
+  }
+  const actionDescriptor = createActionDescriptor(adm, this, key, descriptor, false);
+  defineProperty(source, key, actionDescriptor);
+  return 2;
+}
+function extend_$4(adm, key, descriptor, proxyTrap) {
+  const actionDescriptor = createActionDescriptor(adm, this, key, descriptor);
+  return adm.defineProperty_(key, actionDescriptor, proxyTrap);
+}
+function decorateAction20223_(annotation, mthd, context) {
+  if (__MOBX_DEV__) {
+    assert20223DecoratorType(context, ["method", "field"]);
+  }
+  const {
+    kind,
+    name,
+    addInitializer
+  } = context;
+  const ann = annotation;
+  const _createAction = (m) => {
+    var _ann$options_$name, _ann$options_, _ann$options_$autoAct, _ann$options_2;
+    return createAction((_ann$options_$name = (_ann$options_ = ann.options_) == null ? void 0 : _ann$options_.name) != null ? _ann$options_$name : name.toString(), m, (_ann$options_$autoAct = (_ann$options_2 = ann.options_) == null ? void 0 : _ann$options_2.autoAction) != null ? _ann$options_$autoAct : false);
+  };
+  if (kind == "field") {
+    return function(initMthd) {
+      var _ann$options_3;
+      let mthd2 = initMthd;
+      if (!isAction(mthd2)) {
+        mthd2 = _createAction(mthd2);
+      }
+      if ((_ann$options_3 = ann.options_) != null && _ann$options_3.bound) {
+        mthd2 = mthd2.bind(this);
+        mthd2.isMobxAction = true;
+      }
+      return mthd2;
+    };
+  }
+  if (kind == "method") {
+    var _ann$options_4;
+    if (!isAction(mthd)) {
+      mthd = _createAction(mthd);
+    }
+    if ((_ann$options_4 = ann.options_) != null && _ann$options_4.bound) {
+      addInitializer(function() {
+        const self2 = this;
+        const bound = self2[name].bind(self2);
+        bound.isMobxAction = true;
+        self2[name] = bound;
+      });
+    }
+    return mthd;
+  }
+  die(43, ann.annotationType_, String(name), kind);
+}
+function assertActionDescriptor(adm, {
+  annotationType_
+}, key, {
+  value
+}) {
+  if (__MOBX_DEV__ && !isFunction(value)) {
+    die(`Cannot apply '${annotationType_}' to '${adm.name_}.${key.toString()}':
+'${annotationType_}' can only be used on properties with a function value.`);
+  }
+}
+function createActionDescriptor(adm, annotation, key, descriptor, safeDescriptors = globalState.safeDescriptors) {
+  var _annotation$options_, _annotation$options_$, _annotation$options_2, _annotation$options_$2, _annotation$options_3, _annotation$options_4, _adm$proxy_2;
+  assertActionDescriptor(adm, annotation, key, descriptor);
+  let {
+    value
+  } = descriptor;
+  if ((_annotation$options_ = annotation.options_) != null && _annotation$options_.bound) {
+    var _adm$proxy_;
+    value = value.bind((_adm$proxy_ = adm.proxy_) != null ? _adm$proxy_ : adm.target_);
+  }
+  return {
+    value: createAction(
+      (_annotation$options_$ = (_annotation$options_2 = annotation.options_) == null ? void 0 : _annotation$options_2.name) != null ? _annotation$options_$ : key.toString(),
+      value,
+      (_annotation$options_$2 = (_annotation$options_3 = annotation.options_) == null ? void 0 : _annotation$options_3.autoAction) != null ? _annotation$options_$2 : false,
+      // https://github.com/mobxjs/mobx/discussions/3140
+      (_annotation$options_4 = annotation.options_) != null && _annotation$options_4.bound ? (_adm$proxy_2 = adm.proxy_) != null ? _adm$proxy_2 : adm.target_ : void 0
+    ),
+    // Non-configurable for classes
+    // prevents accidental field redefinition in subclass
+    configurable: safeDescriptors ? adm.isPlainObject_ : true,
+    // https://github.com/mobxjs/mobx/pull/2641#issuecomment-737292058
+    enumerable: false,
+    // Non-obsevable, therefore non-writable
+    // Also prevents rewriting in subclass constructor
+    writable: safeDescriptors ? false : true
+  };
+}
+function createFlowAnnotation(name, options) {
+  return {
+    annotationType_: name,
+    options_: options,
+    make_: make_$4,
+    extend_: extend_$3
+  };
+}
+function make_$4(adm, key, descriptor, source) {
+  var _this$options_;
+  if (source === adm.target_) {
+    return this.extend_(adm, key, descriptor, false) === null ? 0 : 2;
+  }
+  if ((_this$options_ = this.options_) != null && _this$options_.bound && (!hasProp(adm.target_, key) || !isFlow(adm.target_[key]))) {
+    if (this.extend_(adm, key, descriptor, false) === null) {
+      return 0;
+    }
+  }
+  if (isFlow(descriptor.value)) {
+    return 1;
+  }
+  const flowDescriptor = createFlowDescriptor(adm, this, key, descriptor, false, false);
+  defineProperty(source, key, flowDescriptor);
+  return 2;
+}
+function extend_$3(adm, key, descriptor, proxyTrap) {
+  var _this$options_2;
+  const flowDescriptor = createFlowDescriptor(adm, this, key, descriptor, (_this$options_2 = this.options_) == null ? void 0 : _this$options_2.bound);
+  return adm.defineProperty_(key, flowDescriptor, proxyTrap);
+}
+function decorateFlow20223_(annotation, mthd, context) {
+  var _annotation$options_;
+  if (__MOBX_DEV__) {
+    assert20223DecoratorType(context, ["method"]);
+  }
+  const {
+    name,
+    addInitializer
+  } = context;
+  if (!isFlow(mthd)) {
+    mthd = flow(mthd);
+  }
+  if ((_annotation$options_ = annotation.options_) != null && _annotation$options_.bound) {
+    addInitializer(function() {
+      const self2 = this;
+      const bound = self2[name].bind(self2);
+      bound.isMobXFlow = true;
+      self2[name] = bound;
+    });
+  }
+  return mthd;
+}
+function assertFlowDescriptor(adm, {
+  annotationType_
+}, key, {
+  value
+}) {
+  if (__MOBX_DEV__ && !isFunction(value)) {
+    die(`Cannot apply '${annotationType_}' to '${adm.name_}.${key.toString()}':
+'${annotationType_}' can only be used on properties with a generator function value.`);
+  }
+}
+function createFlowDescriptor(adm, annotation, key, descriptor, bound, safeDescriptors = globalState.safeDescriptors) {
+  assertFlowDescriptor(adm, annotation, key, descriptor);
+  let {
+    value
+  } = descriptor;
+  if (!isFlow(value)) {
+    value = flow(value);
+  }
+  if (bound) {
+    var _adm$proxy_;
+    value = value.bind((_adm$proxy_ = adm.proxy_) != null ? _adm$proxy_ : adm.target_);
+    value.isMobXFlow = true;
+  }
+  return {
+    value,
+    // Non-configurable for classes
+    // prevents accidental field redefinition in subclass
+    configurable: safeDescriptors ? adm.isPlainObject_ : true,
+    // https://github.com/mobxjs/mobx/pull/2641#issuecomment-737292058
+    enumerable: false,
+    // Non-obsevable, therefore non-writable
+    // Also prevents rewriting in subclass constructor
+    writable: safeDescriptors ? false : true
+  };
+}
+function createComputedAnnotation(name, options) {
+  return {
+    annotationType_: name,
+    options_: options,
+    make_: make_$3,
+    extend_: extend_$2
+  };
+}
+function make_$3(adm, key, descriptor) {
+  return this.extend_(adm, key, descriptor, false) === null ? 0 : 1;
+}
+function extend_$2(adm, key, descriptor, proxyTrap) {
+  assertComputedDescriptor(adm, this, key, descriptor);
+  return adm.defineComputedProperty_(key, assign({}, this.options_, {
+    get: descriptor.get,
+    set: descriptor.set
+  }), proxyTrap);
+}
+function decorateComputed20223_(annotation, get3, context) {
+  if (__MOBX_DEV__) {
+    assert20223DecoratorType(context, ["getter"]);
+  }
+  const ann = annotation;
+  const {
+    name: key,
+    addInitializer
+  } = context;
+  let computedValues;
+  function createComputedValue(target, adm) {
+    const options = assign({}, ann.options_, {
+      get: get3,
+      context: target
+    });
+    options.name || (options.name = __MOBX_DEV__ ? `${adm.name_}.${key.toString()}` : `ObservableObject.${key.toString()}`);
+    return new ComputedValue(options);
+  }
+  addInitializer(function() {
+    var _adm$lazyComputedKeys;
+    const adm = asObservableObject(this)[$mobx];
+    const target = this;
+    const observable2 = adm.values_.get(key);
+    if (observable2 instanceof ComputedValue && observable2.derivation !== get3) {
+      adm.values_.delete(key);
+    }
+    ((_adm$lazyComputedKeys = adm.lazyComputedKeys_) != null ? _adm$lazyComputedKeys : adm.lazyComputedKeys_ = /* @__PURE__ */ new Map()).set(key, () => createComputedValue(target, adm));
+  });
+  return function() {
+    const adm = this[$mobx];
+    const observable2 = adm.values_.get(key);
+    if (observable2 instanceof ComputedValue && observable2.derivation !== get3) {
+      var _computedValues;
+      let computed3 = (_computedValues = computedValues) == null ? void 0 : _computedValues.get(this);
+      if (!computed3) {
+        var _computedValues2;
+        computed3 = createComputedValue(this, adm);
+        ((_computedValues2 = computedValues) != null ? _computedValues2 : computedValues = /* @__PURE__ */ new WeakMap()).set(this, computed3);
+      }
+      return computed3.get();
+    }
+    return adm.getObservablePropValue_(key);
+  };
+}
+function assertComputedDescriptor(adm, {
+  annotationType_
+}, key, {
+  get: get3
+}) {
+  if (__MOBX_DEV__ && !get3) {
+    die(`Cannot apply '${annotationType_}' to '${adm.name_}.${key.toString()}':
+'${annotationType_}' can only be used on getter(+setter) properties.`);
+  }
+}
+function createObservableAnnotation(name, options) {
+  return {
+    annotationType_: name,
+    options_: options,
+    make_: make_$2,
+    extend_: extend_$1
+  };
+}
+function make_$2(adm, key, descriptor) {
+  return this.extend_(adm, key, descriptor, false) === null ? 0 : 1;
+}
+function extend_$1(adm, key, descriptor, proxyTrap) {
+  var _this$options_$enhanc, _this$options_;
+  assertObservableDescriptor(adm, this, key, descriptor);
+  return adm.defineObservableProperty_(key, descriptor.value, (_this$options_$enhanc = (_this$options_ = this.options_) == null ? void 0 : _this$options_.enhancer_) != null ? _this$options_$enhanc : deepEnhancer, proxyTrap);
+}
+function decorateObservable20223_(annotation, desc, context) {
+  if (__MOBX_DEV__) {
+    if (context.kind === "field") {
+      throw die(`Please use \`@observable accessor ${String(context.name)}\` instead of \`@observable ${String(context.name)}\``);
+    }
+    assert20223DecoratorType(context, ["accessor"]);
+  }
+  const ann = annotation;
+  const {
+    kind,
+    name
+  } = context;
+  if (kind !== "accessor") {
+    return;
+  }
+  function registerLazy(target, value) {
+    var _adm$lazyObservableKe;
+    const adm = asObservableObject(target)[$mobx];
+    ((_adm$lazyObservableKe = adm.lazyObservableKeys_) != null ? _adm$lazyObservableKe : adm.lazyObservableKeys_ = /* @__PURE__ */ new Map()).set(name, () => {
+      var _ann$options_$enhance, _ann$options_;
+      return new ObservableValue(value, (_ann$options_$enhance = (_ann$options_ = ann.options_) == null ? void 0 : _ann$options_.enhancer_) != null ? _ann$options_$enhance : deepEnhancer, __MOBX_DEV__ ? `${adm.name_}.${name.toString()}` : `ObservableObject.${name.toString()}`, false);
+    });
+    return adm;
+  }
+  return {
+    get() {
+      var _this$$mobx;
+      const adm = (_this$$mobx = this[$mobx]) != null ? _this$$mobx : registerLazy(this, desc.get.call(this));
+      return adm.getObservablePropValue_(name);
+    },
+    set(value) {
+      var _this$$mobx2;
+      const adm = (_this$$mobx2 = this[$mobx]) != null ? _this$$mobx2 : registerLazy(this, value);
+      return adm.setObservablePropValue_(name, value);
+    },
+    init(value) {
+      registerLazy(this, value);
+      return value;
+    }
+  };
+}
+function assertObservableDescriptor(adm, {
+  annotationType_
+}, key, descriptor) {
+  if (__MOBX_DEV__ && !("value" in descriptor)) {
+    die(`Cannot apply '${annotationType_}' to '${adm.name_}.${key.toString()}':
+'${annotationType_}' cannot be used on getter/setter properties`);
+  }
+}
+var AUTO = "true";
+var autoAnnotation = /* @__PURE__ */ createAutoAnnotation();
+function createAutoAnnotation(options) {
+  return {
+    annotationType_: AUTO,
+    options_: options,
+    make_: make_$1,
+    extend_
+  };
+}
+var autoAnnotations = [autoAnnotation];
+function getAutoAnnotation(options) {
+  var _autoAnnotations$idx;
+  const deep = options.deep !== false;
+  const autoBind = !!options.autoBind;
+  const idx = (deep ? 0 : 1) | (autoBind ? 2 : 0);
+  return (_autoAnnotations$idx = autoAnnotations[idx]) != null ? _autoAnnotations$idx : autoAnnotations[idx] = createAutoAnnotation({
+    deep,
+    autoBind
+  });
+}
+function make_$1(adm, key, descriptor, source) {
+  var _this$options_3, _this$options_4;
+  if (descriptor.get) {
+    return computed.make_(adm, key, descriptor, source);
+  }
+  if (descriptor.set) {
+    const set2 = isAction(descriptor.set) ? descriptor.set : createAction(key.toString(), descriptor.set);
+    if (source === adm.target_) {
+      return adm.defineProperty_(key, {
+        configurable: globalState.safeDescriptors ? adm.isPlainObject_ : true,
+        set: set2
+      }) === null ? 0 : 2;
+    }
+    defineProperty(source, key, {
+      configurable: true,
+      set: set2
+    });
+    return 2;
+  }
+  if (source !== adm.target_ && typeof descriptor.value === "function") {
+    var _this$options_2;
+    if (isGenerator(descriptor.value)) {
+      var _this$options_;
+      const flowAnnotation2 = (_this$options_ = this.options_) != null && _this$options_.autoBind ? flowBound : flow;
+      return flowAnnotation2.make_(adm, key, descriptor, source);
+    }
+    const actionAnnotation2 = (_this$options_2 = this.options_) != null && _this$options_2.autoBind ? autoActionBound : autoAction;
+    return actionAnnotation2.make_(adm, key, descriptor, source);
+  }
+  let observableAnnotation2 = ((_this$options_3 = this.options_) == null ? void 0 : _this$options_3.deep) === false ? observableRef : observable;
+  if (typeof descriptor.value === "function" && (_this$options_4 = this.options_) != null && _this$options_4.autoBind) {
+    var _adm$proxy_;
+    descriptor.value = descriptor.value.bind((_adm$proxy_ = adm.proxy_) != null ? _adm$proxy_ : adm.target_);
+  }
+  return observableAnnotation2.make_(adm, key, descriptor, source);
+}
+function extend_(adm, key, descriptor, proxyTrap) {
+  var _this$options_5, _this$options_6;
+  if (descriptor.get) {
+    return computed.extend_(adm, key, descriptor, proxyTrap);
+  }
+  if (descriptor.set) {
+    return adm.defineProperty_(key, {
+      configurable: globalState.safeDescriptors ? adm.isPlainObject_ : true,
+      set: createAction(key.toString(), descriptor.set)
+    }, proxyTrap);
+  }
+  if (typeof descriptor.value === "function" && (_this$options_5 = this.options_) != null && _this$options_5.autoBind) {
+    var _adm$proxy_2;
+    descriptor.value = descriptor.value.bind((_adm$proxy_2 = adm.proxy_) != null ? _adm$proxy_2 : adm.target_);
+  }
+  let observableAnnotation2 = ((_this$options_6 = this.options_) == null ? void 0 : _this$options_6.deep) === false ? observableRef : observable;
+  return observableAnnotation2.extend_(adm, key, descriptor, proxyTrap);
+}
+function createDecoratorAnnotation(annotation, decorate) {
+  return assign(function decoratorAnnotation(value, context) {
+    if (context && typeof context.kind === "string") {
+      return decorate(annotation, value, context);
+    }
+    if (__MOBX_DEV__) {
+      die(`Invalid arguments for \`${annotation.annotationType_}\``);
+    }
+    return void 0;
+  }, annotation);
+}
+var OBSERVABLE = "observable";
+var OBSERVABLE_REF = "observable.ref";
+var defaultCreateObservableOptions = {
+  deep: true,
+  name: void 0,
+  defaultDecorator: void 0
+};
+Object.freeze(defaultCreateObservableOptions);
+function asCreateObservableOptions(thing) {
+  return thing || defaultCreateObservableOptions;
+}
+var observableAnnotation = /* @__PURE__ */ createObservableAnnotation(OBSERVABLE);
+var observableRefAnnotation = /* @__PURE__ */ createObservableAnnotation(OBSERVABLE_REF, {
+  enhancer_: referenceEnhancer
+});
+function createObservableDecoratorAnnotation(annotation) {
+  return createDecoratorAnnotation(annotation, decorateObservable20223_);
+}
+function getEnhancerFromOptions(options) {
+  return options.deep === true ? deepEnhancer : options.deep === false ? referenceEnhancer : getEnhancerFromAnnotation(options.defaultDecorator);
+}
+function getAnnotationFromOptions(options) {
+  var _options$defaultDecor;
+  return options ? (_options$defaultDecor = options.defaultDecorator) != null ? _options$defaultDecor : getAutoAnnotation(options) : void 0;
+}
+function getEnhancerFromAnnotation(annotation) {
+  var _annotation$options_$, _annotation$options_;
+  return !annotation ? deepEnhancer : (_annotation$options_$ = (_annotation$options_ = annotation.options_) == null ? void 0 : _annotation$options_.enhancer_) != null ? _annotation$options_$ : deepEnhancer;
+}
+function createObservable(v, arg2, arg3) {
+  if (arg2 && typeof arg2.kind === "string") {
+    return decorateObservable20223_(observableAnnotation, v, arg2);
+  }
+  if (isObservable(v)) {
+    return v;
+  }
+  if (isPlainObject3(v)) {
+    return observable.object(v, arg2, arg3);
+  }
+  if (Array.isArray(v)) {
+    return observable.array(v, arg2);
+  }
+  if (isES6Map(v)) {
+    return observable.map(v, arg2);
+  }
+  if (isES6Set(v)) {
+    return observable.set(v, arg2);
+  }
+  if (typeof v === "object" && v !== null) {
+    return v;
+  }
+  return observable.box(v, arg2);
+}
+var observableFactories = {
+  box(value, options) {
+    const o = asCreateObservableOptions(options);
+    return new ObservableValue(value, getEnhancerFromOptions(o), o.name, true, o.equals);
+  },
+  array(initialValues, options) {
+    const o = asCreateObservableOptions(options);
+    return createObservableArray(initialValues, getEnhancerFromOptions(o), o.name);
+  },
+  map(initialValues, options) {
+    const o = asCreateObservableOptions(options);
+    return new ObservableMap(initialValues, getEnhancerFromOptions(o), o.name);
+  },
+  set(initialValues, options) {
+    const o = asCreateObservableOptions(options);
+    return new ObservableSet(initialValues, getEnhancerFromOptions(o), o.name);
+  },
+  object(props, annotations, options) {
+    return initObservable(() => extendObservable(asDynamicObservableObject({}, options), props, annotations));
+  }
+};
+var observableRef = /* @__PURE__ */ createObservableDecoratorAnnotation(observableRefAnnotation);
+var observable = /* @__PURE__ */ assign(createObservable, observableAnnotation, observableFactories);
+var COMPUTED = "computed";
+function createComputedDecoratorAnnotation(annotation) {
+  return createDecoratorAnnotation(annotation, decorateComputed20223_);
+}
+var computedAnnotation = /* @__PURE__ */ createComputedAnnotation(COMPUTED);
+var computed = function computed2(arg1, arg2) {
+  if (arg2 && typeof arg2.kind === "string") {
+    return decorateComputed20223_(computedAnnotation, arg1, arg2);
+  }
+  if (isPlainObject3(arg1)) {
+    return createComputedDecoratorAnnotation(createComputedAnnotation(COMPUTED, arg1));
+  }
+  if (__MOBX_DEV__) {
+    if (!isFunction(arg1)) {
+      die("First argument to `computed` should be an expression.");
+    }
+    if (isFunction(arg2)) {
+      die("A setter as second argument is no longer supported, use `{ set: fn }` option instead");
+    }
+  }
+  const opts = isPlainObject3(arg2) ? arg2 : {};
+  opts.get = arg1;
+  opts.name || (opts.name = arg1.name || "");
+  return new ComputedValue(opts);
+};
+assign(computed, computedAnnotation);
+var _getDescriptor$config;
+var _getDescriptor;
+var currentActionId = 0;
+var nextActionId = 1;
+var isFunctionNameConfigurable = (_getDescriptor$config = (_getDescriptor = /* @__PURE__ */ getDescriptor(() => {
+}, "name")) == null ? void 0 : _getDescriptor.configurable) != null ? _getDescriptor$config : false;
+var tmpNameDescriptor = {
+  value: "action",
+  configurable: true,
+  writable: false,
+  enumerable: false
+};
+function createAction(actionName, fn, autoAction2 = false, ref) {
+  if (__MOBX_DEV__) {
+    if (!isFunction(fn)) {
+      die("`action` can only be invoked on functions");
+    }
+    if (typeof actionName !== "string" || !actionName) {
+      die(`actions should have valid names, got: '${actionName}'`);
+    }
+  }
+  function res() {
+    return executeAction(actionName, autoAction2, fn, ref || this, arguments);
+  }
+  res.isMobxAction = true;
+  res.toString = () => fn.toString();
+  if (isFunctionNameConfigurable) {
+    tmpNameDescriptor.value = actionName;
+    defineProperty(res, "name", tmpNameDescriptor);
+  }
+  return res;
+}
+function executeAction(actionName, canRunAsDerivation, fn, scope, args) {
+  const runInfo = _startAction(actionName, canRunAsDerivation, scope, args);
+  try {
+    return fn.apply(scope, args);
+  } catch (err) {
+    runInfo.error_ = err;
+    throw err;
+  } finally {
+    _endAction(runInfo);
+  }
+}
+function _startAction(actionName, canRunAsDerivation, scope, args) {
+  const notifySpy_ = __MOBX_DEV__ && isSpyEnabled() && !!actionName;
+  let startTime_ = 0;
+  if (notifySpy_) {
+    startTime_ = Date.now();
+    const flattenedArgs = args ? Array.from(args) : EMPTY_ARRAY;
+    spyReportStart({
+      type: ACTION,
+      name: actionName,
+      object: scope,
+      arguments: flattenedArgs
+    });
+  }
+  const prevDerivation_ = globalState.trackingDerivation;
+  const runAsAction = !canRunAsDerivation || !prevDerivation_;
+  startBatch();
+  let prevAllowStateChanges_ = globalState.allowStateChanges;
+  if (runAsAction) {
+    untrackedStart();
+    if (__MOBX_DEV__) {
+      prevAllowStateChanges_ = allowStateChangesStart(true);
+    }
+  }
+  const prevAllowStateReads_ = globalState.allowStateReads;
+  if (__MOBX_DEV__) {
+    allowStateReadsStart(true);
+  }
+  const runInfo = {
+    runAsAction_: runAsAction,
+    prevDerivation_,
+    prevAllowStateChanges_,
+    prevAllowStateReads_,
+    notifySpy_,
+    startTime_,
+    actionId_: nextActionId++,
+    parentActionId_: currentActionId
+  };
+  currentActionId = runInfo.actionId_;
+  return runInfo;
+}
+function _endAction(runInfo) {
+  if (currentActionId !== runInfo.actionId_) {
+    die(30);
+  }
+  currentActionId = runInfo.parentActionId_;
+  if (runInfo.error_ !== void 0) {
+    globalState.suppressReactionErrors = true;
+  }
+  if (__MOBX_DEV__) {
+    allowStateChangesEnd(runInfo.prevAllowStateChanges_);
+    allowStateReadsEnd(runInfo.prevAllowStateReads_);
+  }
+  endBatch();
+  if (runInfo.runAsAction_) {
+    untrackedEnd(runInfo.prevDerivation_);
+  }
+  if (__MOBX_DEV__ && runInfo.notifySpy_) {
+    spyReportEnd({
+      time: Date.now() - runInfo.startTime_
+    });
+  }
+  globalState.suppressReactionErrors = false;
+}
+function allowStateChanges(allowStateChanges2, func) {
+  const prev = allowStateChangesStart(allowStateChanges2);
+  try {
+    return func();
+  } finally {
+    allowStateChangesEnd(prev);
+  }
+}
+function allowStateChangesStart(allowStateChanges2) {
+  const prev = globalState.allowStateChanges;
+  globalState.allowStateChanges = allowStateChanges2;
+  return prev;
+}
+function allowStateChangesEnd(prev) {
+  globalState.allowStateChanges = prev;
+}
+var CREATE = "create";
+var ObservableValue = class extends Atom {
+  constructor(value, enhancer_, name_ = __MOBX_DEV__ ? "ObservableValue@" + getNextId() : "ObservableValue", notifySpy = true, equals_ = compareDefault) {
+    super(name_);
+    this.enhancer_ = void 0;
+    this.name_ = void 0;
+    this.equals_ = void 0;
+    this.hasUnreportedChange_ = false;
+    this.interceptors_ = void 0;
+    this.changeListeners_ = void 0;
+    this.value_ = void 0;
+    this.dehancer = void 0;
+    this.enhancer_ = enhancer_;
+    this.name_ = name_;
+    this.equals_ = equals_;
+    this.value_ = enhancer_(value, void 0, name_);
+    if (__MOBX_DEV__ && notifySpy && isSpyEnabled()) {
+      spyReport({
+        type: CREATE,
+        object: this,
+        observableKind: "value",
+        debugObjectName: this.name_,
+        newValue: this.value_
+      });
+    }
+  }
+  dehanceValue(value) {
+    if (this.dehancer !== void 0) {
+      return this.dehancer(value);
+    }
+    return value;
+  }
+  set(newValue) {
+    const oldValue = this.value_;
+    newValue = this.prepareNewValue_(newValue);
+    if (newValue !== globalState.UNCHANGED) {
+      const notifySpy = __MOBX_DEV__ && isSpyEnabled();
+      if (__MOBX_DEV__ && notifySpy) {
+        spyReportStart({
+          type: UPDATE,
+          object: this,
+          observableKind: "value",
+          debugObjectName: this.name_,
+          newValue,
+          oldValue
+        });
+      }
+      this.setNewValue_(newValue);
+      if (__MOBX_DEV__ && notifySpy) {
+        spyReportEnd();
+      }
+    }
+  }
+  prepareNewValue_(newValue) {
+    checkIfStateModificationsAreAllowed(this);
+    if (hasInterceptors(this)) {
+      const change = interceptChange(this, {
+        object: this,
+        type: UPDATE,
+        newValue
+      });
+      if (!change) {
+        return globalState.UNCHANGED;
+      }
+      newValue = change.newValue;
+    }
+    newValue = this.enhancer_(newValue, this.value_, this.name_);
+    return this.equals_(this.value_, newValue) ? globalState.UNCHANGED : newValue;
+  }
+  setNewValue_(newValue) {
+    const oldValue = this.value_;
+    this.value_ = newValue;
+    this.reportChanged();
+    if (hasListeners(this)) {
+      notifyListeners(this, {
+        type: UPDATE,
+        object: this,
+        newValue,
+        oldValue
+      });
+    }
+  }
+  get() {
+    this.reportObserved();
+    return this.dehanceValue(this.value_);
+  }
+  raw() {
+    return this.value_;
+  }
+  toJSON() {
+    return this.get();
+  }
+  toString() {
+    return `${this.name_}[${this.value_}]`;
+  }
+  valueOf() {
+    return toPrimitive(this.get());
+  }
+  [Symbol.toPrimitive]() {
+    return this.valueOf();
+  }
+};
+var ComputedValue = class {
+  /**
+   * Create a new computed value based on a function expression.
+   *
+   * The `name` property is for debug purposes only.
+   *
+   * The `equals` property specifies the comparer function used to determine if a newly produced
+   * value differs from the previous value. Structural comparison can be convenient if you always
+   * produce a new aggregated object and don't want to notify observers if it is structurally the same.
+   * This is useful for working with vectors, mouse coordinates etc.
+   */
+  constructor(options) {
+    this.dependenciesState_ = -1;
+    this.observing_ = [];
+    this.newObserving_ = null;
+    this.observers_ = null;
+    this.runId_ = 0;
+    this.lastAccessedBy_ = 0;
+    this.lowestObserverState_ = 0;
+    this.unboundDepsCount_ = 0;
+    this.value_ = new CaughtException(null);
+    this.name_ = void 0;
+    this.triggeredBy_ = void 0;
+    this.flags_ = 0;
+    this.derivation = void 0;
+    this.setter_ = void 0;
+    this.scope_ = void 0;
+    this.equals_ = void 0;
+    this.requiresReaction_ = void 0;
+    this.keepAlive_ = void 0;
+    this.onBOL = void 0;
+    this.onBUOL = void 0;
+    if (!options.get) {
+      die(31);
+    }
+    this.derivation = options.get;
+    this.name_ = options.name || (__MOBX_DEV__ ? "ComputedValue@" + getNextId() : "ComputedValue");
+    if (options.set) {
+      this.setter_ = createAction(__MOBX_DEV__ ? this.name_ + "-setter" : "ComputedValue-setter", options.set);
+    }
+    this.equals_ = options.equals || compareDefault;
+    this.scope_ = options.context;
+    this.requiresReaction_ = options.requiresReaction;
+    this.keepAlive_ = !!options.keepAlive;
+  }
+  onBecomeStale_() {
+    propagateMaybeChanged(this);
+  }
+  onBO() {
+    if (this.onBOL) {
+      this.onBOL.forEach((listener) => listener());
+    }
+  }
+  onBUO() {
+    if (this.onBUOL) {
+      this.onBUOL.forEach((listener) => listener());
+    }
+  }
+  // to check for cycles
+  get isComputing() {
+    return getFlag(
+      this.flags_,
+      1
+      /* ComputedValueFlags.isComputing */
+    );
+  }
+  set isComputing(newValue) {
+    this.flags_ = setFlag(this.flags_, 1, newValue);
+  }
+  get isRunningSetter() {
+    return getFlag(
+      this.flags_,
+      2
+      /* ComputedValueFlags.isRunningSetter */
+    );
+  }
+  set isRunningSetter(newValue) {
+    this.flags_ = setFlag(this.flags_, 2, newValue);
+  }
+  get isBeingObserved() {
+    return getFlag(
+      this.flags_,
+      4
+      /* ComputedValueFlags.isBeingObserved */
+    );
+  }
+  set isBeingObserved(newValue) {
+    this.flags_ = setFlag(this.flags_, 4, newValue);
+  }
+  get isPendingUnobservation() {
+    return getFlag(
+      this.flags_,
+      8
+      /* ComputedValueFlags.isPendingUnobservation */
+    );
+  }
+  set isPendingUnobservation(newValue) {
+    this.flags_ = setFlag(this.flags_, 8, newValue);
+  }
+  get diffValue() {
+    return getFlag(
+      this.flags_,
+      16
+      /* ComputedValueFlags.diffValue */
+    ) ? 1 : 0;
+  }
+  set diffValue(newValue) {
+    this.flags_ = setFlag(this.flags_, 16, newValue === 1 ? true : false);
+  }
+  /**
+   * Returns the current value of this computed value.
+   * Will evaluate its computation first if needed.
+   */
+  get() {
+    if (this.isComputing) {
+      die(32, this.name_, this.derivation);
+    }
+    if (globalState.inBatch === 0 && // !globalState.trackingDerivatpion &&
+    (!this.observers_ || this.observers_.size === 0) && !this.keepAlive_) {
+      if (shouldCompute(this)) {
+        this.warnAboutUntrackedRead_();
+        startBatch();
+        this.value_ = this.computeValue_(false);
+        endBatch();
+      }
+    } else {
+      const wasBeingObserved = this.isBeingObserved;
+      reportObserved(this);
+      if (shouldCompute(this)) {
+        let prevTrackingContext = globalState.trackingContext;
+        if (!prevTrackingContext && (this.keepAlive_ || this.isBeingObserved)) {
+          globalState.trackingContext = this;
+        }
+        if (this.trackAndCompute()) {
+          propagateChangeConfirmed(this);
+        }
+        globalState.trackingContext = prevTrackingContext;
+      } else if (!wasBeingObserved && this.isBeingObserved) {
+        this.observing_.forEach(markObserved);
+      }
+    }
+    const result = this.value_;
+    if (isCaughtException(result)) {
+      throw result.cause;
+    }
+    return result;
+  }
+  set(value) {
+    if (this.setter_) {
+      if (this.isRunningSetter) {
+        die(33, this.name_);
+      }
+      this.isRunningSetter = true;
+      try {
+        this.setter_.call(this.scope_, value);
+      } finally {
+        this.isRunningSetter = false;
+      }
+    } else {
+      die(34, this.name_);
+    }
+  }
+  trackAndCompute() {
+    const oldValue = this.value_;
+    const wasSuspended = (
+      /* see #1208 */
+      this.dependenciesState_ === -1
+    );
+    const newValue = this.computeValue_(true);
+    const changed = wasSuspended || isCaughtException(oldValue) || isCaughtException(newValue) || !this.equals_(oldValue, newValue);
+    if (changed) {
+      this.value_ = newValue;
+      if (__MOBX_DEV__ && isSpyEnabled()) {
+        spyReport({
+          observableKind: "computed",
+          debugObjectName: this.name_,
+          object: this.scope_,
+          type: "update",
+          oldValue,
+          newValue
+        });
+      }
+    }
+    return changed;
+  }
+  computeValue_(track2) {
+    this.isComputing = true;
+    const prev = __MOBX_DEV__ ? allowStateChangesStart(false) : false;
+    let res;
+    if (track2) {
+      res = trackDerivedFunction(this, this.derivation, this.scope_);
+    } else {
+      if (globalState.disableErrorBoundaries === true) {
+        res = this.derivation.call(this.scope_);
+      } else {
+        try {
+          res = this.derivation.call(this.scope_);
+        } catch (e) {
+          res = new CaughtException(e);
+        }
+      }
+    }
+    if (__MOBX_DEV__) {
+      allowStateChangesEnd(prev);
+    }
+    this.isComputing = false;
+    return res;
+  }
+  suspend_() {
+    if (!this.keepAlive_) {
+      clearObserving(this);
+      this.value_ = void 0;
+    }
+  }
+  warnAboutUntrackedRead_() {
+    if (!__MOBX_DEV__) {
+      return;
+    }
+    if (typeof this.requiresReaction_ === "boolean" ? this.requiresReaction_ : globalState.computedRequiresReaction) {
+      console.warn(`[mobx] Computed value '${this.name_}' is being read outside a reactive context. Doing a full recompute.`);
+    }
+  }
+  toString() {
+    return `${this.name_}[${this.derivation.toString()}]`;
+  }
+  valueOf() {
+    return toPrimitive(this.get());
+  }
+  [Symbol.toPrimitive]() {
+    return this.valueOf();
+  }
+};
+var isComputedValue = /* @__PURE__ */ createInstanceofPredicate("ComputedValue", ComputedValue);
+var CaughtException = class {
+  constructor(cause) {
+    this.cause = void 0;
+    this.cause = cause;
+  }
+};
+function isCaughtException(e) {
+  return e instanceof CaughtException;
+}
+function shouldCompute(derivation) {
+  switch (derivation.dependenciesState_) {
+    case 0:
+      return false;
+    case -1:
+    case 2:
+      return true;
+    case 1: {
+      const prevAllowStateReads = __MOBX_DEV__ ? allowStateReadsStart(true) : true;
+      const prevUntracked = untrackedStart();
+      const obs = derivation.observing_, l = obs.length;
+      for (let i = 0; i < l; i++) {
+        const obj = obs[i];
+        if (isComputedValue(obj)) {
+          if (globalState.disableErrorBoundaries) {
+            obj.get();
+          } else {
+            try {
+              obj.get();
+            } catch (e) {
+              untrackedEnd(prevUntracked);
+              if (__MOBX_DEV__) {
+                allowStateReadsEnd(prevAllowStateReads);
+              }
+              return true;
+            }
+          }
+          if (derivation.dependenciesState_ === 2) {
+            untrackedEnd(prevUntracked);
+            if (__MOBX_DEV__) {
+              allowStateReadsEnd(prevAllowStateReads);
+            }
+            return true;
+          }
+        }
+      }
+      changeDependenciesStateTo0(derivation);
+      untrackedEnd(prevUntracked);
+      if (__MOBX_DEV__) {
+        allowStateReadsEnd(prevAllowStateReads);
+      }
+      return false;
+    }
+  }
+}
+function isComputingDerivation() {
+  return globalState.trackingDerivation !== null;
+}
+function checkIfStateModificationsAreAllowed(atom) {
+  if (!__MOBX_DEV__) {
+    return;
+  }
+  const hasObservers = !!atom.observers_ && atom.observers_.size > 0;
+  if (!globalState.allowStateChanges && (hasObservers || globalState.enforceActions === "always")) {
+    console.warn("[MobX] " + (globalState.enforceActions ? "Since strict-mode is enabled, changing (observed) observable values without using an action is not allowed. Tried to modify: " : "Side effects like changing state are not allowed at this point. Are you trying to modify state from, for example, a computed value or the render function of a React component? You can wrap side effects in 'runInAction' (or decorate functions with 'action') if needed. Tried to modify: ") + atom.name_);
+  }
+}
+function checkIfStateReadsAreAllowed(observable2) {
+  if (__MOBX_DEV__ && !globalState.allowStateReads && globalState.observableRequiresReaction) {
+    console.warn(`[mobx] Observable '${observable2.name_}' being read outside a reactive context.`);
+  }
+}
+function trackDerivedFunction(derivation, f, context) {
+  const prevAllowStateReads = __MOBX_DEV__ ? allowStateReadsStart(true) : true;
+  changeDependenciesStateTo0(derivation);
+  derivation.newObserving_ = new Array(
+    // Reserve constant space for initial dependencies, dynamic space otherwise.
+    // See https://github.com/mobxjs/mobx/pull/3833
+    derivation.runId_ === 0 ? 100 : derivation.observing_.length
+  );
+  derivation.unboundDepsCount_ = 0;
+  derivation.runId_ = ++globalState.runId;
+  const prevTracking = globalState.trackingDerivation;
+  globalState.trackingDerivation = derivation;
+  globalState.inBatch++;
+  let result;
+  if (globalState.disableErrorBoundaries === true) {
+    result = f.call(context);
+  } else {
+    try {
+      result = f.call(context);
+    } catch (e) {
+      result = new CaughtException(e);
+    }
+  }
+  globalState.inBatch--;
+  globalState.trackingDerivation = prevTracking;
+  bindDependencies(derivation);
+  warnAboutDerivationWithoutDependencies(derivation);
+  if (__MOBX_DEV__) {
+    allowStateReadsEnd(prevAllowStateReads);
+  }
+  return result;
+}
+function warnAboutDerivationWithoutDependencies(derivation) {
+  if (!__MOBX_DEV__) {
+    return;
+  }
+  if (derivation.observing_.length !== 0) {
+    return;
+  }
+  if (typeof derivation.requiresObservable_ === "boolean" ? derivation.requiresObservable_ : globalState.reactionRequiresObservable) {
+    console.warn(`[mobx] Derivation '${derivation.name_}' is created/updated without reading any observable value.`);
+  }
+}
+function bindDependencies(derivation) {
+  const prevObserving = derivation.observing_;
+  const observing = derivation.observing_ = derivation.newObserving_;
+  let lowestNewObservingDerivationState = 0;
+  let i0 = 0, l = derivation.unboundDepsCount_;
+  for (let i = 0; i < l; i++) {
+    const dep = observing[i];
+    if (dep.diffValue === 0) {
+      dep.diffValue = 1;
+      if (i0 !== i) {
+        observing[i0] = dep;
+      }
+      i0++;
+    }
+    if (dep.dependenciesState_ > lowestNewObservingDerivationState) {
+      lowestNewObservingDerivationState = dep.dependenciesState_;
+    }
+  }
+  observing.length = i0;
+  derivation.newObserving_ = null;
+  l = prevObserving.length;
+  while (l--) {
+    const dep = prevObserving[l];
+    if (dep.diffValue === 0) {
+      removeObserver(dep, derivation);
+    }
+    dep.diffValue = 0;
+  }
+  while (i0--) {
+    const dep = observing[i0];
+    if (dep.diffValue === 1) {
+      dep.diffValue = 0;
+      addObserver(dep, derivation);
+    }
+  }
+  if (lowestNewObservingDerivationState !== 0) {
+    derivation.dependenciesState_ = lowestNewObservingDerivationState;
+    derivation.onBecomeStale_();
+  }
+}
+function clearObserving(derivation) {
+  const obs = derivation.observing_;
+  derivation.observing_ = [];
+  let i = obs.length;
+  while (i--) {
+    removeObserver(obs[i], derivation);
+  }
+  derivation.dependenciesState_ = -1;
+}
+function untracked(action2) {
+  const prev = untrackedStart();
+  try {
+    return action2();
+  } finally {
+    untrackedEnd(prev);
+  }
+}
+function untrackedStart() {
+  const prev = globalState.trackingDerivation;
+  globalState.trackingDerivation = null;
+  return prev;
+}
+function untrackedEnd(prev) {
+  globalState.trackingDerivation = prev;
+}
+function allowStateReadsStart(allowStateReads) {
+  const prev = globalState.allowStateReads;
+  globalState.allowStateReads = allowStateReads;
+  return prev;
+}
+function allowStateReadsEnd(prev) {
+  globalState.allowStateReads = prev;
+}
+function changeDependenciesStateTo0(derivation) {
+  if (derivation.dependenciesState_ === 0) {
+    return;
+  }
+  derivation.dependenciesState_ = 0;
+  const obs = derivation.observing_;
+  let i = obs.length;
+  while (i--) {
+    obs[i].lowestObserverState_ = 0;
+  }
+}
+var MOBX_GLOBALS_VERSION = 7;
+var MobXGlobals = class {
+  constructor() {
+    this.version = MOBX_GLOBALS_VERSION;
+    this.UNCHANGED = {};
+    this.trackingDerivation = null;
+    this.trackingContext = null;
+    this.runId = 0;
+    this.mobxGuid = 0;
+    this.inBatch = 0;
+    this.pendingUnobservations = [];
+    this.pendingReactions = [];
+    this.isRunningReactions = false;
+    this.isRunningUnobservations = false;
+    this.allowStateChanges = false;
+    this.allowStateReads = true;
+    this.enforceActions = true;
+    this.spyListeners = [];
+    this.globalReactionErrorHandlers = [];
+    this.computedRequiresReaction = false;
+    this.reactionRequiresObservable = false;
+    this.observableRequiresReaction = false;
+    this.disableErrorBoundaries = false;
+    this.suppressReactionErrors = false;
+    this.safeDescriptors = true;
+  }
+};
+var canMergeGlobalState = true;
+var isolateCalled = false;
+var globalState = /* @__PURE__ */ (function() {
+  let global2 = globalThis;
+  if (global2.__mobxInstanceCount > 0 && !global2.__mobxGlobals) {
+    canMergeGlobalState = false;
+  }
+  if (global2.__mobxGlobals && global2.__mobxGlobals.version !== MOBX_GLOBALS_VERSION) {
+    canMergeGlobalState = false;
+  }
+  if (!canMergeGlobalState) {
+    setTimeout(() => {
+      if (!isolateCalled) {
+        die(35);
+      }
+    }, 1);
+    return new MobXGlobals();
+  } else if (global2.__mobxGlobals) {
+    global2.__mobxInstanceCount += 1;
+    if (!global2.__mobxGlobals.UNCHANGED) {
+      global2.__mobxGlobals.UNCHANGED = {};
+    }
+    return global2.__mobxGlobals;
+  } else {
+    global2.__mobxInstanceCount = 1;
+    return global2.__mobxGlobals = /* @__PURE__ */ new MobXGlobals();
+  }
+})();
+function addObserver(observable2, node) {
+  var _observable$observers2;
+  ((_observable$observers2 = observable2.observers_) != null ? _observable$observers2 : observable2.observers_ = /* @__PURE__ */ new Set()).add(node);
+  if (observable2.lowestObserverState_ > node.dependenciesState_) {
+    observable2.lowestObserverState_ = node.dependenciesState_;
+  }
+}
+function removeObserver(observable2, node) {
+  const observers = observable2.observers_;
+  if (!observers) {
+    return;
+  }
+  observers.delete(node);
+  if (observers.size === 0) {
+    queueForUnobservation(observable2);
+  }
+}
+function queueForUnobservation(observable2) {
+  if (observable2.isPendingUnobservation === false) {
+    observable2.isPendingUnobservation = true;
+    globalState.pendingUnobservations.push(observable2);
+  }
+}
+function startBatch() {
+  globalState.inBatch++;
+}
+function endBatch() {
+  if (--globalState.inBatch === 0) {
+    runReactions();
+    if (!globalState.isRunningUnobservations && globalState.pendingUnobservations.length > 0) {
+      runPendingUnobservations();
+    }
+  }
+}
+function runPendingUnobservations() {
+  globalState.isRunningUnobservations = true;
+  try {
+    const list2 = globalState.pendingUnobservations;
+    for (let i = 0; i < list2.length; i++) {
+      const observable2 = list2[i];
+      observable2.isPendingUnobservation = false;
+      if (!observable2.observers_ || observable2.observers_.size === 0) {
+        observable2.observers_ = null;
+        if (observable2.isBeingObserved) {
+          observable2.isBeingObserved = false;
+          observable2.onBUO();
+        }
+        if (observable2 instanceof ComputedValue) {
+          observable2.suspend_();
+        }
+      }
+    }
+    globalState.pendingUnobservations = [];
+  } finally {
+    globalState.isRunningUnobservations = false;
+  }
+}
+function markObserved(observable2) {
+  var _observable$observing;
+  if (observable2.isBeingObserved) {
+    return;
+  }
+  observable2.isBeingObserved = true;
+  observable2.onBO();
+  (_observable$observing = observable2.observing_) == null || _observable$observing.forEach(markObserved);
+}
+function reportObserved(observable2) {
+  checkIfStateReadsAreAllowed(observable2);
+  const derivation = globalState.trackingDerivation;
+  if (derivation !== null) {
+    if (derivation.runId_ !== observable2.lastAccessedBy_) {
+      observable2.lastAccessedBy_ = derivation.runId_;
+      derivation.newObserving_[derivation.unboundDepsCount_++] = observable2;
+      if (!observable2.isBeingObserved && globalState.trackingContext) {
+        observable2.isBeingObserved = true;
+        observable2.onBO();
+      }
+    }
+    return observable2.isBeingObserved;
+  } else if ((!observable2.observers_ || observable2.observers_.size === 0) && globalState.inBatch > 0) {
+    queueForUnobservation(observable2);
+  }
+  return false;
+}
+function propagateChanged(observable2) {
+  var _observable$observers3;
+  if (observable2.lowestObserverState_ === 2) {
+    return;
+  }
+  observable2.lowestObserverState_ = 2;
+  (_observable$observers3 = observable2.observers_) == null || _observable$observers3.forEach((d) => {
+    if (d.dependenciesState_ === 0) {
+      d.onBecomeStale_();
+    }
+    d.dependenciesState_ = 2;
+  });
+}
+function propagateChangeConfirmed(observable2) {
+  var _observable$observers4;
+  if (observable2.lowestObserverState_ === 2) {
+    return;
+  }
+  observable2.lowestObserverState_ = 2;
+  (_observable$observers4 = observable2.observers_) == null || _observable$observers4.forEach((d) => {
+    if (d.dependenciesState_ === 1) {
+      d.dependenciesState_ = 2;
+    } else if (d.dependenciesState_ === 0) {
+      observable2.lowestObserverState_ = 0;
+    }
+  });
+}
+function propagateMaybeChanged(observable2) {
+  var _observable$observers5;
+  if (observable2.lowestObserverState_ !== 0) {
+    return;
+  }
+  observable2.lowestObserverState_ = 1;
+  (_observable$observers5 = observable2.observers_) == null || _observable$observers5.forEach((d) => {
+    if (d.dependenciesState_ === 0) {
+      d.dependenciesState_ = 1;
+      d.onBecomeStale_();
+    }
+  });
+}
+var Reaction = class {
+  constructor(name_ = __MOBX_DEV__ ? "Reaction@" + getNextId() : "Reaction", onInvalidate_, errorHandler_, requiresObservable_) {
+    this.name_ = void 0;
+    this.onInvalidate_ = void 0;
+    this.errorHandler_ = void 0;
+    this.requiresObservable_ = void 0;
+    this.observing_ = [];
+    this.newObserving_ = [];
+    this.dependenciesState_ = -1;
+    this.runId_ = 0;
+    this.unboundDepsCount_ = 0;
+    this.flags_ = 0;
+    this.removeAbortListener_ = void 0;
+    this.name_ = name_;
+    this.onInvalidate_ = onInvalidate_;
+    this.errorHandler_ = errorHandler_;
+    this.requiresObservable_ = requiresObservable_;
+  }
+  get isDisposed() {
+    return getFlag(
+      this.flags_,
+      1
+      /* ReactionFlags.isDisposed */
+    );
+  }
+  set isDisposed(newValue) {
+    this.flags_ = setFlag(this.flags_, 1, newValue);
+  }
+  get isScheduled() {
+    return getFlag(
+      this.flags_,
+      2
+      /* ReactionFlags.isScheduled */
+    );
+  }
+  set isScheduled(newValue) {
+    this.flags_ = setFlag(this.flags_, 2, newValue);
+  }
+  get isTrackPending() {
+    return getFlag(
+      this.flags_,
+      4
+      /* ReactionFlags.isTrackPending */
+    );
+  }
+  set isTrackPending(newValue) {
+    this.flags_ = setFlag(this.flags_, 4, newValue);
+  }
+  get isRunning() {
+    return getFlag(
+      this.flags_,
+      8
+      /* ReactionFlags.isRunning */
+    );
+  }
+  set isRunning(newValue) {
+    this.flags_ = setFlag(this.flags_, 8, newValue);
+  }
+  get diffValue() {
+    return getFlag(
+      this.flags_,
+      16
+      /* ReactionFlags.diffValue */
+    ) ? 1 : 0;
+  }
+  set diffValue(newValue) {
+    this.flags_ = setFlag(this.flags_, 16, newValue === 1 ? true : false);
+  }
+  onBecomeStale_() {
+    this.schedule_();
+  }
+  schedule_() {
+    if (!this.isScheduled) {
+      this.isScheduled = true;
+      globalState.pendingReactions.push(this);
+      runReactions();
+    }
+  }
+  /**
+   * internal, use schedule() if you intend to kick off a reaction
+   */
+  runReaction_() {
+    if (!this.isDisposed) {
+      startBatch();
+      this.isScheduled = false;
+      const prev = globalState.trackingContext;
+      globalState.trackingContext = this;
+      if (shouldCompute(this)) {
+        this.isTrackPending = true;
+        try {
+          this.onInvalidate_();
+          if (__MOBX_DEV__ && this.isTrackPending && isSpyEnabled()) {
+            spyReport({
+              name: this.name_,
+              type: "scheduled-reaction"
+            });
+          }
+        } catch (e) {
+          this.reportExceptionInDerivation_(e);
+        }
+      }
+      globalState.trackingContext = prev;
+      endBatch();
+    }
+  }
+  track(fn) {
+    if (this.isDisposed) {
+      return;
+    }
+    startBatch();
+    const notify2 = __MOBX_DEV__ && isSpyEnabled();
+    let startTime;
+    if (__MOBX_DEV__ && notify2) {
+      startTime = Date.now();
+      spyReportStart({
+        name: this.name_,
+        type: "reaction"
+      });
+    }
+    this.isRunning = true;
+    const prevReaction = globalState.trackingContext;
+    globalState.trackingContext = this;
+    const result = trackDerivedFunction(this, fn, void 0);
+    globalState.trackingContext = prevReaction;
+    this.isRunning = false;
+    this.isTrackPending = false;
+    if (this.isDisposed) {
+      clearObserving(this);
+    }
+    if (isCaughtException(result)) {
+      this.reportExceptionInDerivation_(result.cause);
+    }
+    if (__MOBX_DEV__ && notify2) {
+      spyReportEnd({
+        time: Date.now() - startTime
+      });
+    }
+    endBatch();
+  }
+  reportExceptionInDerivation_(error) {
+    if (this.errorHandler_) {
+      this.errorHandler_(error, this);
+      return;
+    }
+    if (globalState.disableErrorBoundaries) {
+      throw error;
+    }
+    const message = __MOBX_DEV__ ? `[mobx] Encountered an uncaught exception that was thrown by a reaction or observer component, in: '${this}'` : `[mobx] uncaught error in '${this}'`;
+    if (!globalState.suppressReactionErrors) {
+      console.error(message, error);
+    } else if (__MOBX_DEV__) {
+      console.warn(`[mobx] (error in reaction '${this.name_}' suppressed, fix error of causing action below)`);
+    }
+    if (__MOBX_DEV__ && isSpyEnabled()) {
+      spyReport({
+        type: "error",
+        name: this.name_,
+        message,
+        error: "" + error
+      });
+    }
+    globalState.globalReactionErrorHandlers.forEach((f) => f(error, this));
+  }
+  dispose() {
+    if (!this.isDisposed) {
+      var _this$removeAbortList;
+      this.isDisposed = true;
+      (_this$removeAbortList = this.removeAbortListener_) == null || _this$removeAbortList.call(this);
+      if (!this.isRunning) {
+        startBatch();
+        clearObserving(this);
+        endBatch();
+      }
+    }
+  }
+  getDisposer_(abortSignal) {
+    const dispose = () => this.dispose();
+    if (abortSignal != null && abortSignal.addEventListener && !this.isDisposed) {
+      abortSignal.addEventListener("abort", dispose);
+      this.removeAbortListener_ = () => abortSignal.removeEventListener == null ? void 0 : abortSignal.removeEventListener("abort", dispose);
+    }
+    dispose[$mobx] = this;
+    if ("dispose" in Symbol && typeof Symbol.dispose === "symbol") {
+      dispose[Symbol.dispose] = dispose;
+    }
+    return dispose;
+  }
+  toString() {
+    return `Reaction[${this.name_}]`;
+  }
+};
+var MAX_REACTION_ITERATIONS = 100;
+var reactionScheduler = (f) => f();
+function runReactions() {
+  if (globalState.inBatch > 0 || globalState.isRunningReactions) {
+    return;
+  }
+  reactionScheduler(runReactionsHelper);
+}
+function runReactionsHelper() {
+  globalState.isRunningReactions = true;
+  const allReactions = globalState.pendingReactions;
+  let iterations = 0;
+  while (allReactions.length > 0) {
+    if (++iterations === MAX_REACTION_ITERATIONS) {
+      console.error(__MOBX_DEV__ ? `Reaction doesn't converge to a stable state after ${MAX_REACTION_ITERATIONS} iterations. Probably there is a cycle in the reactive function: ${allReactions[0]}` : `[mobx] cycle in reaction: ${allReactions[0]}`);
+      allReactions.splice(0);
+    }
+    let remainingReactions = allReactions.splice(0);
+    for (let i = 0, l = remainingReactions.length; i < l; i++) {
+      remainingReactions[i].runReaction_();
+    }
+  }
+  globalState.isRunningReactions = false;
+}
+var isReaction = /* @__PURE__ */ createInstanceofPredicate("Reaction", Reaction);
+function isSpyEnabled() {
+  return __MOBX_DEV__ && !!globalState.spyListeners.length;
+}
+function spyReport(event) {
+  if (!__MOBX_DEV__) {
+    return;
+  }
+  if (!globalState.spyListeners.length) {
+    return;
+  }
+  const listeners2 = globalState.spyListeners;
+  for (let i = 0, l = listeners2.length; i < l; i++) {
+    listeners2[i](event);
+  }
+}
+function spyReportStart(event) {
+  if (!__MOBX_DEV__) {
+    return;
+  }
+  const change = assign({}, event, {
+    spyReportStart: true
+  });
+  spyReport(change);
+}
+var END_EVENT = {
+  type: "report-end",
+  spyReportEnd: true
+};
+function spyReportEnd(change) {
+  if (!__MOBX_DEV__) {
+    return;
+  }
+  if (change) {
+    spyReport(assign({}, change, {
+      type: "report-end",
+      spyReportEnd: true
+    }));
+  } else {
+    spyReport(END_EVENT);
+  }
+}
+function spy(listener) {
+  if (!__MOBX_DEV__) {
+    console.warn(`[mobx.spy] Is a no-op in production builds`);
+    return function() {
+    };
+  } else {
+    globalState.spyListeners.push(listener);
+    return once(() => {
+      globalState.spyListeners = globalState.spyListeners.filter((l) => l !== listener);
+    });
+  }
+}
+var ACTION = "action";
+var AUTOACTION = "autoAction";
+var AUTOACTION_BOUND = "autoAction.bound";
+var DEFAULT_ACTION_NAME = "<unnamed action>";
+var actionAnnotation = /* @__PURE__ */ createActionAnnotation(ACTION);
+var autoActionAnnotation = /* @__PURE__ */ createActionAnnotation(AUTOACTION, {
+  autoAction: true
+});
+var autoActionBoundAnnotation = /* @__PURE__ */ createActionAnnotation(AUTOACTION_BOUND, {
+  autoAction: true,
+  bound: true
+});
+function createActionDecoratorAnnotation(annotation) {
+  return createDecoratorAnnotation(annotation, decorateAction20223_);
+}
+function createActionFactory(autoAction2) {
+  const res = function action2(arg1, arg2) {
+    if (arg2 && typeof arg2.kind === "string") {
+      return decorateAction20223_(autoAction2 ? autoActionAnnotation : actionAnnotation, arg1, arg2);
+    }
+    if (isFunction(arg1)) {
+      return createAction(arg1.name || DEFAULT_ACTION_NAME, arg1, autoAction2);
+    }
+    if (isFunction(arg2)) {
+      return createAction(arg1, arg2, autoAction2);
+    }
+    if (isStringish(arg1)) {
+      return createActionDecoratorAnnotation(createActionAnnotation(autoAction2 ? AUTOACTION : ACTION, {
+        name: arg1,
+        autoAction: autoAction2
+      }));
+    }
+    if (__MOBX_DEV__) {
+      die("Invalid arguments for `action`");
+    }
+  };
+  return res;
+}
+var action = /* @__PURE__ */ createActionFactory(false);
+assign(action, actionAnnotation);
+var autoAction = /* @__PURE__ */ createActionFactory(true);
+assign(autoAction, autoActionAnnotation);
+var autoActionBound = /* @__PURE__ */ createActionDecoratorAnnotation(autoActionBoundAnnotation);
+function runInAction(fn) {
+  return executeAction(fn.name || DEFAULT_ACTION_NAME, false, fn, this, void 0);
+}
+function isAction(thing) {
+  return isFunction(thing) && thing.isMobxAction === true;
+}
+function autorun(view, opts = EMPTY_OBJECT) {
+  var _opts$name, _opts$signal;
+  if (__MOBX_DEV__) {
+    if (!isFunction(view)) {
+      die("Autorun expects a function as first argument");
+    }
+    if (isAction(view)) {
+      die("Autorun does not accept actions since actions are untrackable");
+    }
+  }
+  const name = (_opts$name = opts == null ? void 0 : opts.name) != null ? _opts$name : __MOBX_DEV__ ? view.name || "Autorun@" + getNextId() : "Autorun";
+  const runSync = !opts.scheduler && !opts.delay;
+  let reaction2;
+  if (runSync) {
+    reaction2 = new Reaction(name, function() {
+      this.track(reactionRunner);
+    }, opts.onError, opts.requiresObservable);
+  } else {
+    const scheduler = createSchedulerFromOptions(opts);
+    let isScheduled = false;
+    reaction2 = new Reaction(name, () => {
+      if (!isScheduled) {
+        isScheduled = true;
+        scheduler(() => {
+          isScheduled = false;
+          if (!reaction2.isDisposed) {
+            reaction2.track(reactionRunner);
+          }
+        });
+      }
+    }, opts.onError, opts.requiresObservable);
+  }
+  function reactionRunner() {
+    view(reaction2);
+  }
+  if (!(opts != null && (_opts$signal = opts.signal) != null && _opts$signal.aborted)) {
+    reaction2.schedule_();
+  }
+  return reaction2.getDisposer_(opts == null ? void 0 : opts.signal);
+}
+var run = (f) => f();
+function createSchedulerFromOptions(opts) {
+  return opts.scheduler ? opts.scheduler : opts.delay ? (f) => setTimeout(f, opts.delay) : run;
+}
+function reaction(expression, effect, opts = EMPTY_OBJECT) {
+  var _opts$name2, _opts$signal2;
+  if (__MOBX_DEV__) {
+    if (!isFunction(expression) || !isFunction(effect)) {
+      die("First and second argument to reaction should be functions");
+    }
+    if (!isPlainObject3(opts)) {
+      die("Third argument of reactions should be an object");
+    }
+  }
+  const name = (_opts$name2 = opts.name) != null ? _opts$name2 : __MOBX_DEV__ ? "Reaction@" + getNextId() : "Reaction";
+  const effectAction = action(name, opts.onError ? wrapErrorHandler(opts.onError, effect) : effect);
+  const runSync = !opts.scheduler && !opts.delay;
+  const scheduler = createSchedulerFromOptions(opts);
+  let firstTime = true;
+  let isScheduled = false;
+  let value;
+  const equals = opts.equals || compareDefault;
+  const r = new Reaction(name, () => {
+    if (firstTime || runSync) {
+      reactionRunner();
+    } else if (!isScheduled) {
+      isScheduled = true;
+      scheduler(reactionRunner);
+    }
+  }, opts.onError, opts.requiresObservable);
+  function reactionRunner() {
+    isScheduled = false;
+    if (r.isDisposed) {
+      return;
+    }
+    let changed = false;
+    const oldValue = value;
+    r.track(() => {
+      const nextValue = allowStateChanges(false, () => expression(r));
+      changed = firstTime || !equals(value, nextValue);
+      value = nextValue;
+    });
+    if (firstTime && opts.fireImmediately) {
+      effectAction(value, oldValue, r);
+    } else if (!firstTime && changed) {
+      effectAction(value, oldValue, r);
+    }
+    firstTime = false;
+  }
+  if (!(opts != null && (_opts$signal2 = opts.signal) != null && _opts$signal2.aborted)) {
+    r.schedule_();
+  }
+  return r.getDisposer_(opts == null ? void 0 : opts.signal);
+}
+function wrapErrorHandler(errorHandler, baseFn) {
+  return function() {
+    try {
+      return baseFn.apply(this, arguments);
+    } catch (e) {
+      errorHandler.call(this, e);
+    }
+  };
+}
+function extendObservable(target, properties, annotations, options) {
+  if (__MOBX_DEV__) {
+    if (arguments.length > 4) {
+      die("'extendObservable' expected 2-4 arguments");
+    }
+    if (typeof target !== "object") {
+      die("'extendObservable' expects an object as first argument");
+    }
+    if (isObservableMap(target)) {
+      die("'extendObservable' should not be used on maps, use map.merge instead");
+    }
+    if (!isPlainObject3(properties)) {
+      die(`'extendObservable' only accepts plain objects as second argument`);
+    }
+    if (isObservable(properties) || isObservable(annotations)) {
+      die(`Extending an object with another observable (object) is not supported`);
+    }
+  }
+  const descriptors = getOwnPropertyDescriptors(properties);
+  initObservable(() => {
+    const adm = asObservableObject(target, options)[$mobx];
+    ownKeys2(descriptors).forEach((key) => {
+      adm.extend_(
+        key,
+        descriptors[key],
+        // must pass "undefined" for { key: undefined }
+        !annotations ? true : key in annotations ? annotations[key] : true
+      );
+    });
+  });
+  return target;
+}
+var generatorId = 0;
+var FlowCancellationError = class extends Error {
+  constructor() {
+    super("FLOW_CANCELLED");
+    Object.setPrototypeOf(this, new.target.prototype);
+    this.name = "FlowCancellationError";
+  }
+  toString() {
+    return `Error: ${this.message}`;
+  }
+};
+function createFlowDecoratorAnnotation(annotation) {
+  return createDecoratorAnnotation(annotation, decorateFlow20223_);
+}
+var flowAnnotation = /* @__PURE__ */ createFlowAnnotation("flow");
+var flowBoundAnnotation = /* @__PURE__ */ createFlowAnnotation("flow.bound", {
+  bound: true
+});
+var flow = /* @__PURE__ */ assign(function flow2(arg1, arg2) {
+  if (arg2 && typeof arg2.kind === "string") {
+    return decorateFlow20223_(flowAnnotation, arg1, arg2);
+  }
+  if (__MOBX_DEV__ && arguments.length !== 1) {
+    die(`Flow expects single argument with generator function`);
+  }
+  const generator = arg1;
+  const name = generator.name || (__MOBX_DEV__ ? "<unnamed flow>" : "flow");
+  const res = function res2() {
+    const ctx = this;
+    const args = arguments;
+    const runId = __MOBX_DEV__ ? ++generatorId : 0;
+    const gen = action(__MOBX_DEV__ ? `${name} - runid: ${runId} - init` : name, generator).apply(ctx, args);
+    let rejector;
+    let pendingPromise = void 0;
+    const promise = new Promise(function(resolve, reject2) {
+      let stepId = 0;
+      rejector = reject2;
+      function onFulfilled(res3) {
+        pendingPromise = void 0;
+        let ret;
+        try {
+          ret = action(__MOBX_DEV__ ? `${name} - runid: ${runId} - yield ${stepId++}` : name, gen.next).call(gen, res3);
+        } catch (e) {
+          return reject2(e);
+        }
+        next(ret);
+      }
+      function onRejected(err) {
+        pendingPromise = void 0;
+        let ret;
+        try {
+          ret = action(__MOBX_DEV__ ? `${name} - runid: ${runId} - yield ${stepId++}` : name, gen.throw).call(gen, err);
+        } catch (e) {
+          return reject2(e);
+        }
+        next(ret);
+      }
+      function next(ret) {
+        if (isFunction(ret == null ? void 0 : ret.then)) {
+          ret.then(next, reject2);
+          return;
+        }
+        if (ret.done) {
+          return resolve(ret.value);
+        }
+        pendingPromise = Promise.resolve(ret.value);
+        return pendingPromise.then(onFulfilled, onRejected);
+      }
+      onFulfilled(void 0);
+    });
+    const cancelActionName = __MOBX_DEV__ ? `${name} - runid: ${runId} - cancel` : name;
+    promise.cancel = action(cancelActionName, function() {
+      try {
+        if (pendingPromise) {
+          cancelPromise(pendingPromise);
+        }
+        const res3 = gen.return(void 0);
+        const yieldedPromise = Promise.resolve(res3.value);
+        yieldedPromise.then(noop, noop);
+        cancelPromise(yieldedPromise);
+        rejector(new FlowCancellationError());
+      } catch (e) {
+        rejector(e);
+      }
+    });
+    return promise;
+  };
+  res.isMobXFlow = true;
+  return res;
+}, flowAnnotation);
+var flowBound = /* @__PURE__ */ createFlowDecoratorAnnotation(flowBoundAnnotation);
+function cancelPromise(promise) {
+  if (isFunction(promise.cancel)) {
+    promise.cancel();
+  }
+}
+function isFlow(fn) {
+  return (fn == null ? void 0 : fn.isMobXFlow) === true;
+}
+function _isObservable(value, property) {
+  if (!value) {
+    return false;
+  }
+  if (property !== void 0) {
+    if (__MOBX_DEV__ && (isObservableMap(value) || isObservableArray(value))) {
+      return die("isObservable(object, propertyName) is not supported for arrays and maps. Use map.has or array.length instead.");
+    }
+    if (isObservableObject(value)) {
+      var _adm$lazyComputedKeys, _adm$lazyObservableKe;
+      const adm = value[$mobx];
+      return adm.values_.has(property) || !!((_adm$lazyComputedKeys = adm.lazyComputedKeys_) != null && _adm$lazyComputedKeys.has(property)) || !!((_adm$lazyObservableKe = adm.lazyObservableKeys_) != null && _adm$lazyObservableKe.has(property));
+    }
+    return false;
+  }
+  return isObservableObject(value) || !!value[$mobx] || isAtom(value) || isReaction(value) || isComputedValue(value);
+}
+function isObservable(value) {
+  if (__MOBX_DEV__ && arguments.length !== 1) {
+    die(`isObservable expects only 1 argument. Use isObservableProp to inspect the observability of a property`);
+  }
+  return _isObservable(value);
+}
+function transaction(action2, thisArg = void 0) {
+  startBatch();
+  try {
+    return action2.apply(thisArg);
+  } finally {
+    endBatch();
+  }
+}
+function when(predicate, arg1, arg2) {
+  if (arguments.length === 1 || arg1 && typeof arg1 === "object") {
+    return whenPromise(predicate, arg1);
+  }
+  return _when(predicate, arg1, arg2 || {});
+}
+function _when(predicate, effect, opts) {
+  let timeoutHandle;
+  if (typeof opts.timeout === "number") {
+    const error = new Error("WHEN_TIMEOUT");
+    timeoutHandle = setTimeout(() => {
+      if (!disposer[$mobx].isDisposed) {
+        disposer();
+        if (opts.onError) {
+          opts.onError(error);
+        } else {
+          throw error;
+        }
+      }
+    }, opts.timeout);
+  }
+  opts.name = __MOBX_DEV__ ? opts.name || "When@" + getNextId() : "When";
+  const effectAction = createAction(__MOBX_DEV__ ? opts.name + "-effect" : "When-effect", effect);
+  var disposer = autorun((r) => {
+    let cond = allowStateChanges(false, predicate);
+    if (cond) {
+      r.dispose();
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
+      effectAction();
+    }
+  }, opts);
+  return disposer;
+}
+function whenPromise(predicate, opts) {
+  var _opts$signal;
+  if (__MOBX_DEV__ && opts && opts.onError) {
+    return die(`the options 'onError' and 'promise' cannot be combined`);
+  }
+  if (opts != null && (_opts$signal = opts.signal) != null && _opts$signal.aborted) {
+    return assign(Promise.reject(new Error("WHEN_ABORTED")), {
+      cancel: () => null
+    });
+  }
+  let cancel;
+  let abort;
+  const res = new Promise((resolve, reject2) => {
+    var _opts$signal2;
+    let disposer = _when(predicate, resolve, assign({}, opts, {
+      onError: reject2
+    }));
+    cancel = () => {
+      disposer();
+      reject2(new Error("WHEN_CANCELLED"));
+    };
+    abort = () => {
+      disposer();
+      reject2(new Error("WHEN_ABORTED"));
+    };
+    opts == null || (_opts$signal2 = opts.signal) == null || _opts$signal2.addEventListener == null || _opts$signal2.addEventListener("abort", abort);
+  }).finally(() => {
+    var _opts$signal3;
+    return opts == null || (_opts$signal3 = opts.signal) == null || _opts$signal3.removeEventListener == null ? void 0 : _opts$signal3.removeEventListener("abort", abort);
+  });
+  res.cancel = cancel;
+  return res;
+}
+function getAdm(target) {
+  return target[$mobx];
+}
+var objectProxyTraps = {
+  has(target, name) {
+    return getAdm(target).has_(name);
+  },
+  get(target, name) {
+    return getAdm(target).get_(name);
+  },
+  set(target, name, value) {
+    var _getAdm$set_;
+    if (!isStringish(name)) {
+      return false;
+    }
+    return (_getAdm$set_ = getAdm(target).set_(name, value, true)) != null ? _getAdm$set_ : true;
+  },
+  deleteProperty(target, name) {
+    var _getAdm$delete_;
+    if (!isStringish(name)) {
+      return false;
+    }
+    return (_getAdm$delete_ = getAdm(target).delete_(name, true)) != null ? _getAdm$delete_ : true;
+  },
+  defineProperty(target, name, descriptor) {
+    var _getAdm$definePropert;
+    return (_getAdm$definePropert = getAdm(target).defineProperty_(name, descriptor)) != null ? _getAdm$definePropert : true;
+  },
+  ownKeys(target) {
+    return getAdm(target).ownKeys_();
+  },
+  preventExtensions(target) {
+    die(13);
+  }
+};
+function asDynamicObservableObject(target, options) {
+  var _target$$mobx, _target$$mobx$proxy_;
+  target = asObservableObject(target, options);
+  return (_target$$mobx$proxy_ = (_target$$mobx = target[$mobx]).proxy_) != null ? _target$$mobx$proxy_ : _target$$mobx.proxy_ = new Proxy(target, objectProxyTraps);
+}
+function hasInterceptors(interceptable) {
+  return interceptable.interceptors_ !== void 0 && interceptable.interceptors_.length > 0;
+}
+function interceptChange(interceptable, change) {
+  const prevU = untrackedStart();
+  try {
+    const interceptors = [...interceptable.interceptors_ || []];
+    for (let i = 0, l = interceptors.length; i < l; i++) {
+      change = interceptors[i](change);
+      if (change && !change.type) {
+        die(14);
+      }
+      if (!change) {
+        break;
+      }
+    }
+    return change;
+  } finally {
+    untrackedEnd(prevU);
+  }
+}
+function hasListeners(listenable) {
+  return listenable.changeListeners_ !== void 0 && listenable.changeListeners_.length > 0;
+}
+function notifyListeners(listenable, change) {
+  const prevU = untrackedStart();
+  let listeners2 = listenable.changeListeners_;
+  if (!listeners2) {
+    return;
+  }
+  listeners2 = listeners2.slice();
+  for (let i = 0, l = listeners2.length; i < l; i++) {
+    listeners2[i](change);
+  }
+  untrackedEnd(prevU);
+}
+var SPLICE = "splice";
+var UPDATE = "update";
+var MAX_SPLICE_SIZE = 1e4;
+var arrayTraps = {
+  get(target, name) {
+    const adm = target[$mobx];
+    if (name === $mobx) {
+      return adm;
+    }
+    if (name === "length") {
+      return adm.getArrayLength_();
+    }
+    if (typeof name === "string" && !isNaN(name)) {
+      return adm.get_(parseInt(name));
+    }
+    if (hasProp(arrayExtensions, name)) {
+      return arrayExtensions[name];
+    }
+    return target[name];
+  },
+  set(target, name, value) {
+    const adm = target[$mobx];
+    if (name === "length") {
+      adm.setArrayLength_(value);
+    } else if (typeof name === "symbol" || isNaN(name)) {
+      target[name] = value;
+    } else {
+      adm.set_(parseInt(name), value);
+    }
+    return true;
+  },
+  preventExtensions() {
+    die(15);
+  }
+};
+var ObservableArrayAdministration = class {
+  constructor(name = __MOBX_DEV__ ? "ObservableArray@" + getNextId() : "ObservableArray", enhancer, owned_) {
+    this.owned_ = void 0;
+    this.atom_ = void 0;
+    this.values_ = [];
+    this.interceptors_ = void 0;
+    this.changeListeners_ = void 0;
+    this.enhancer_ = void 0;
+    this.dehancer = void 0;
+    this.proxy_ = void 0;
+    this.lastKnownLength_ = 0;
+    this.owned_ = owned_;
+    this.atom_ = new Atom(name);
+    this.enhancer_ = (newV, oldV) => enhancer(newV, oldV, __MOBX_DEV__ ? name + "[..]" : "ObservableArray[..]");
+  }
+  dehanceValue_(value) {
+    if (this.dehancer !== void 0) {
+      return this.dehancer(value);
+    }
+    return value;
+  }
+  dehanceValues_(values2) {
+    if (this.dehancer !== void 0 && values2.length > 0) {
+      return values2.map(this.dehancer);
+    }
+    return values2;
+  }
+  getArrayLength_() {
+    this.atom_.reportObserved();
+    return this.values_.length;
+  }
+  setArrayLength_(newLength) {
+    if (!Number.isInteger(newLength) || newLength < 0) {
+      die(40, newLength);
+    }
+    let currentLength = this.values_.length;
+    if (newLength === currentLength) {
+      return;
+    } else if (newLength > currentLength) {
+      const newItems = Array.from({
+        length: newLength - currentLength
+      });
+      this.spliceWithArray_(currentLength, 0, newItems);
+    } else {
+      this.spliceWithArray_(newLength, currentLength - newLength);
+    }
+  }
+  updateArrayLength_(oldLength, delta) {
+    if (oldLength !== this.lastKnownLength_) {
+      die(16);
+    }
+    this.lastKnownLength_ += delta;
+  }
+  spliceWithArray_(index, deleteCount, newItems) {
+    checkIfStateModificationsAreAllowed(this.atom_);
+    const length = this.values_.length;
+    if (index === void 0) {
+      index = 0;
+    } else if (index > length) {
+      index = length;
+    } else if (index < 0) {
+      index = Math.max(0, length + index);
+    }
+    if (arguments.length === 1) {
+      deleteCount = length - index;
+    } else if (deleteCount === void 0 || deleteCount === null) {
+      deleteCount = 0;
+    } else {
+      deleteCount = Math.max(0, Math.min(deleteCount, length - index));
+    }
+    if (newItems === void 0) {
+      newItems = EMPTY_ARRAY;
+    }
+    if (hasInterceptors(this)) {
+      const change = interceptChange(this, {
+        object: this.proxy_,
+        type: SPLICE,
+        index,
+        removedCount: deleteCount,
+        added: newItems
+      });
+      if (!change) {
+        return EMPTY_ARRAY;
+      }
+      deleteCount = change.removedCount;
+      newItems = change.added;
+    }
+    newItems = newItems.length === 0 ? newItems : newItems.map((v) => this.enhancer_(v, void 0));
+    if (__MOBX_DEV__) {
+      const lengthDelta = newItems.length - deleteCount;
+      this.updateArrayLength_(length, lengthDelta);
+    }
+    const res = this.spliceItemsIntoValues_(index, deleteCount, newItems);
+    if (deleteCount !== 0 || newItems.length !== 0) {
+      this.notifyArraySplice_(index, newItems, res);
+    }
+    return this.dehanceValues_(res);
+  }
+  spliceItemsIntoValues_(index, deleteCount, newItems) {
+    if (newItems.length < MAX_SPLICE_SIZE) {
+      return this.values_.splice(index, deleteCount, ...newItems);
+    } else {
+      const res = this.values_.slice(index, index + deleteCount);
+      let oldItems = this.values_.slice(index + deleteCount);
+      this.values_.length += newItems.length - deleteCount;
+      for (let i = 0; i < newItems.length; i++) {
+        this.values_[index + i] = newItems[i];
+      }
+      for (let i = 0; i < oldItems.length; i++) {
+        this.values_[index + newItems.length + i] = oldItems[i];
+      }
+      return res;
+    }
+  }
+  notifyArrayChildUpdate_(index, newValue, oldValue) {
+    const notifySpy = __MOBX_DEV__ && !this.owned_ && isSpyEnabled();
+    const notify2 = hasListeners(this);
+    const change = notify2 || notifySpy ? {
+      observableKind: "array",
+      object: this.proxy_,
+      type: UPDATE,
+      debugObjectName: this.atom_.name_,
+      index,
+      newValue,
+      oldValue
+    } : null;
+    if (__MOBX_DEV__ && notifySpy) {
+      spyReportStart(change);
+    }
+    this.atom_.reportChanged();
+    if (notify2) {
+      notifyListeners(this, change);
+    }
+    if (__MOBX_DEV__ && notifySpy) {
+      spyReportEnd();
+    }
+  }
+  notifyArraySplice_(index, added, removed) {
+    const notifySpy = __MOBX_DEV__ && !this.owned_ && isSpyEnabled();
+    const notify2 = hasListeners(this);
+    const change = notify2 || notifySpy ? {
+      observableKind: "array",
+      object: this.proxy_,
+      debugObjectName: this.atom_.name_,
+      type: SPLICE,
+      index,
+      removed,
+      added,
+      removedCount: removed.length,
+      addedCount: added.length
+    } : null;
+    if (__MOBX_DEV__ && notifySpy) {
+      spyReportStart(change);
+    }
+    this.atom_.reportChanged();
+    if (notify2) {
+      notifyListeners(this, change);
+    }
+    if (__MOBX_DEV__ && notifySpy) {
+      spyReportEnd();
+    }
+  }
+  get_(index) {
+    this.atom_.reportObserved();
+    return this.dehanceValue_(this.values_[index]);
+  }
+  set_(index, newValue) {
+    const values2 = this.values_;
+    if (index < values2.length) {
+      checkIfStateModificationsAreAllowed(this.atom_);
+      const oldValue = values2[index];
+      if (hasInterceptors(this)) {
+        const change = interceptChange(this, {
+          type: UPDATE,
+          object: this.proxy_,
+          // since "this" is the real array we need to pass its proxy
+          index,
+          newValue
+        });
+        if (!change) {
+          return;
+        }
+        newValue = change.newValue;
+      }
+      newValue = this.enhancer_(newValue, oldValue);
+      const changed = newValue !== oldValue;
+      if (changed) {
+        values2[index] = newValue;
+        this.notifyArrayChildUpdate_(index, newValue, oldValue);
+      }
+    } else {
+      const newItems = Array.from({
+        length: index + 1 - values2.length
+      });
+      newItems[newItems.length - 1] = newValue;
+      this.spliceWithArray_(values2.length, 0, newItems);
+    }
+  }
+};
+function createObservableArray(initialValues, enhancer, name = __MOBX_DEV__ ? "ObservableArray@" + getNextId() : "ObservableArray", owned = false) {
+  return initObservable(() => {
+    const adm = new ObservableArrayAdministration(name, enhancer, owned);
+    addHiddenFinalProp(adm.values_, $mobx, adm);
+    const proxy = new Proxy(adm.values_, arrayTraps);
+    adm.proxy_ = proxy;
+    if (initialValues && initialValues.length) {
+      adm.spliceWithArray_(0, 0, initialValues);
+    }
+    return proxy;
+  });
+}
+var arrayExtensions = {
+  clear() {
+    return this.splice(0);
+  },
+  replace(newItems) {
+    const adm = this[$mobx];
+    return adm.spliceWithArray_(0, adm.values_.length, newItems);
+  },
+  // Used by JSON.stringify
+  toJSON() {
+    return this.slice();
+  },
+  /*
+   * functions that do alter the internal structure of the array, (based on lib.es6.d.ts)
+   * since these functions alter the inner structure of the array, the have side effects.
+   * Because the have side effects, they should not be used in computed function,
+   * and for that reason the do not call dependencyState.notifyObserved
+   */
+  splice(index, deleteCount, ...newItems) {
+    const adm = this[$mobx];
+    switch (arguments.length) {
+      case 0:
+        return [];
+      case 1:
+        return adm.spliceWithArray_(index);
+      case 2:
+        return adm.spliceWithArray_(index, deleteCount);
+    }
+    return adm.spliceWithArray_(index, deleteCount, newItems);
+  },
+  spliceWithArray(index, deleteCount, newItems) {
+    return this[$mobx].spliceWithArray_(index, deleteCount, newItems);
+  },
+  push(...items) {
+    const adm = this[$mobx];
+    adm.spliceWithArray_(adm.values_.length, 0, items);
+    return adm.values_.length;
+  },
+  pop() {
+    return this.splice(Math.max(this[$mobx].values_.length - 1, 0), 1)[0];
+  },
+  shift() {
+    return this.splice(0, 1)[0];
+  },
+  unshift(...items) {
+    const adm = this[$mobx];
+    adm.spliceWithArray_(0, 0, items);
+    return adm.values_.length;
+  },
+  reverse() {
+    if (globalState.trackingDerivation) {
+      die(37, "reverse");
+    }
+    this.replace(this.slice().reverse());
+    return this;
+  },
+  sort() {
+    if (globalState.trackingDerivation) {
+      die(37, "sort");
+    }
+    const copy3 = this.slice();
+    copy3.sort.apply(copy3, arguments);
+    this.replace(copy3);
+    return this;
+  },
+  remove(value) {
+    const adm = this[$mobx];
+    const idx = adm.dehanceValues_(adm.values_).indexOf(value);
+    if (idx > -1) {
+      this.splice(idx, 1);
+      return true;
+    }
+    return false;
+  }
+};
+addArrayExtension("at", simpleFunc);
+addArrayExtension("concat", simpleFunc);
+addArrayExtension("flat", simpleFunc);
+addArrayExtension("includes", simpleFunc);
+addArrayExtension("indexOf", simpleFunc);
+addArrayExtension("join", simpleFunc);
+addArrayExtension("lastIndexOf", simpleFunc);
+addArrayExtension("slice", simpleFunc);
+addArrayExtension("toString", simpleFunc);
+addArrayExtension("toLocaleString", simpleFunc);
+addArrayExtension("toSorted", simpleFunc);
+addArrayExtension("toSpliced", simpleFunc);
+addArrayExtension("with", simpleFunc);
+addArrayExtension("every", mapLikeFunc);
+addArrayExtension("filter", mapLikeFunc);
+addArrayExtension("find", mapLikeFunc);
+addArrayExtension("findIndex", mapLikeFunc);
+addArrayExtension("findLast", mapLikeFunc);
+addArrayExtension("findLastIndex", mapLikeFunc);
+addArrayExtension("flatMap", mapLikeFunc);
+addArrayExtension("forEach", mapLikeFunc);
+addArrayExtension("map", mapLikeFunc);
+addArrayExtension("some", mapLikeFunc);
+addArrayExtension("toReversed", mapLikeFunc);
+addArrayExtension("reduce", reduceLikeFunc);
+addArrayExtension("reduceRight", reduceLikeFunc);
+function addArrayExtension(funcName, funcFactory) {
+  if (typeof Array.prototype[funcName] === "function") {
+    arrayExtensions[funcName] = funcFactory(funcName);
+  }
+}
+function simpleFunc(funcName) {
+  return function() {
+    const adm = this[$mobx];
+    adm.atom_.reportObserved();
+    const dehancedValues = adm.dehanceValues_(adm.values_);
+    return dehancedValues[funcName].apply(dehancedValues, arguments);
+  };
+}
+function mapLikeFunc(funcName) {
+  return function(callback, thisArg) {
+    const adm = this[$mobx];
+    adm.atom_.reportObserved();
+    const dehancedValues = adm.dehanceValues_(adm.values_);
+    return dehancedValues[funcName]((element, index) => {
+      return callback.call(thisArg, element, index, this);
+    });
+  };
+}
+function reduceLikeFunc(funcName) {
+  return function() {
+    const adm = this[$mobx];
+    adm.atom_.reportObserved();
+    const dehancedValues = adm.dehanceValues_(adm.values_);
+    const callback = arguments[0];
+    arguments[0] = (accumulator, currentValue, index) => {
+      return callback(accumulator, currentValue, index, this);
+    };
+    return dehancedValues[funcName].apply(dehancedValues, arguments);
+  };
+}
+var isObservableArrayAdministration = /* @__PURE__ */ createInstanceofPredicate("ObservableArrayAdministration", ObservableArrayAdministration);
+function isObservableArray(thing) {
+  return isObject(thing) && isObservableArrayAdministration(thing[$mobx]);
+}
+var ObservableMapMarker = {};
+var ADD = "add";
+var DELETE = "delete";
+var ObservableMap = class {
+  constructor(initialData, enhancer_ = deepEnhancer, name_ = __MOBX_DEV__ ? "ObservableMap@" + getNextId() : "ObservableMap") {
+    this.enhancer_ = void 0;
+    this.name_ = void 0;
+    this[$mobx] = ObservableMapMarker;
+    this.data_ = void 0;
+    this.hasMap_ = void 0;
+    this.keysAtom_ = void 0;
+    this.interceptors_ = void 0;
+    this.changeListeners_ = void 0;
+    this.dehancer = void 0;
+    this.enhancer_ = enhancer_;
+    this.name_ = name_;
+    initObservable(() => {
+      this.keysAtom_ = createAtom(__MOBX_DEV__ ? `${this.name_}.keys()` : "ObservableMap.keys()");
+      this.data_ = /* @__PURE__ */ new Map();
+      this.hasMap_ = /* @__PURE__ */ new Map();
+      if (initialData) {
+        this.merge(initialData);
+      }
+    });
+  }
+  has_(key) {
+    return this.data_.has(key);
+  }
+  has(key) {
+    if (!globalState.trackingDerivation) {
+      return this.has_(key);
+    }
+    let entry = this.hasMap_.get(key);
+    if (!entry) {
+      const newEntry = entry = new ObservableValue(this.has_(key), referenceEnhancer, __MOBX_DEV__ ? `${this.name_}.${stringifyKey(key)}?` : "ObservableMap.key?", false);
+      this.hasMap_.set(key, newEntry);
+      newEntry.onBUOL = /* @__PURE__ */ new Set([() => this.hasMap_.delete(key)]);
+    }
+    return entry.get();
+  }
+  set(key, value) {
+    const hasKey2 = this.has_(key);
+    if (hasInterceptors(this)) {
+      const change = interceptChange(this, {
+        type: hasKey2 ? UPDATE : ADD,
+        object: this,
+        newValue: value,
+        name: key
+      });
+      if (!change) {
+        return this;
+      }
+      value = change.newValue;
+    }
+    if (hasKey2) {
+      this.updateValue_(key, value);
+    } else {
+      this.addValue_(key, value);
+    }
+    return this;
+  }
+  delete(key) {
+    checkIfStateModificationsAreAllowed(this.keysAtom_);
+    if (hasInterceptors(this)) {
+      const change = interceptChange(this, {
+        type: DELETE,
+        object: this,
+        name: key
+      });
+      if (!change) {
+        return false;
+      }
+    }
+    if (this.has_(key)) {
+      const notifySpy = __MOBX_DEV__ && isSpyEnabled();
+      const notify2 = hasListeners(this);
+      const change = notify2 || notifySpy ? {
+        observableKind: "map",
+        debugObjectName: this.name_,
+        type: DELETE,
+        object: this,
+        oldValue: this.data_.get(key).value_,
+        name: key
+      } : null;
+      if (__MOBX_DEV__ && notifySpy) {
+        spyReportStart(change);
+      }
+      transaction(() => {
+        var _this$hasMap_$get;
+        this.keysAtom_.reportChanged();
+        (_this$hasMap_$get = this.hasMap_.get(key)) == null || _this$hasMap_$get.setNewValue_(false);
+        const observable2 = this.data_.get(key);
+        observable2.setNewValue_(void 0);
+        this.data_.delete(key);
+      });
+      if (notify2) {
+        notifyListeners(this, change);
+      }
+      if (__MOBX_DEV__ && notifySpy) {
+        spyReportEnd();
+      }
+      return true;
+    }
+    return false;
+  }
+  updateValue_(key, newValue) {
+    const observable2 = this.data_.get(key);
+    newValue = observable2.prepareNewValue_(newValue);
+    if (newValue !== globalState.UNCHANGED) {
+      const notifySpy = __MOBX_DEV__ && isSpyEnabled();
+      const notify2 = hasListeners(this);
+      const change = notify2 || notifySpy ? {
+        observableKind: "map",
+        debugObjectName: this.name_,
+        type: UPDATE,
+        object: this,
+        oldValue: observable2.value_,
+        name: key,
+        newValue
+      } : null;
+      if (__MOBX_DEV__ && notifySpy) {
+        spyReportStart(change);
+      }
+      observable2.setNewValue_(newValue);
+      if (notify2) {
+        notifyListeners(this, change);
+      }
+      if (__MOBX_DEV__ && notifySpy) {
+        spyReportEnd();
+      }
+    }
+  }
+  addValue_(key, newValue) {
+    checkIfStateModificationsAreAllowed(this.keysAtom_);
+    transaction(() => {
+      var _this$hasMap_$get2;
+      const observable2 = new ObservableValue(newValue, this.enhancer_, __MOBX_DEV__ ? `${this.name_}.${stringifyKey(key)}` : "ObservableMap.key", false);
+      this.data_.set(key, observable2);
+      newValue = observable2.value_;
+      (_this$hasMap_$get2 = this.hasMap_.get(key)) == null || _this$hasMap_$get2.setNewValue_(true);
+      this.keysAtom_.reportChanged();
+    });
+    const notifySpy = __MOBX_DEV__ && isSpyEnabled();
+    const notify2 = hasListeners(this);
+    const change = notify2 || notifySpy ? {
+      observableKind: "map",
+      debugObjectName: this.name_,
+      type: ADD,
+      object: this,
+      name: key,
+      newValue
+    } : null;
+    if (__MOBX_DEV__ && notifySpy) {
+      spyReportStart(change);
+    }
+    if (notify2) {
+      notifyListeners(this, change);
+    }
+    if (__MOBX_DEV__ && notifySpy) {
+      spyReportEnd();
+    }
+  }
+  get(key) {
+    if (this.has(key)) {
+      return this.dehanceValue_(this.data_.get(key).get());
+    }
+    return this.dehanceValue_(void 0);
+  }
+  getOrInsert(key, value) {
+    if (!this.has(key)) {
+      this.set(key, value);
+    }
+    return this.get(key);
+  }
+  getOrInsertComputed(key, callback) {
+    if (!this.has(key)) {
+      this.set(key, callback(key));
+    }
+    return this.get(key);
+  }
+  dehanceValue_(value) {
+    if (this.dehancer !== void 0) {
+      return this.dehancer(value);
+    }
+    return value;
+  }
+  keys() {
+    this.keysAtom_.reportObserved();
+    return this.data_.keys();
+  }
+  values() {
+    const self2 = this;
+    const keys2 = this.keys();
+    return makeIterableForMap({
+      next() {
+        const {
+          done: done2,
+          value
+        } = keys2.next();
+        return {
+          done: done2,
+          value: done2 ? void 0 : self2.get(value)
+        };
+      }
+    });
+  }
+  entries() {
+    const self2 = this;
+    const keys2 = this.keys();
+    return makeIterableForMap({
+      next() {
+        const {
+          done: done2,
+          value
+        } = keys2.next();
+        return {
+          done: done2,
+          value: done2 ? void 0 : [value, self2.get(value)]
+        };
+      }
+    });
+  }
+  [Symbol.iterator]() {
+    return this.entries();
+  }
+  forEach(callback, thisArg) {
+    for (const [key, value] of this) {
+      callback.call(thisArg, value, key, this);
+    }
+  }
+  /** Merge another object into this object, returns this. */
+  merge(other) {
+    if (isObservableMap(other)) {
+      other = new Map(other);
+    }
+    transaction(() => {
+      if (isPlainObject3(other)) {
+        getPlainObjectKeys(other).forEach((key) => this.set(key, other[key]));
+      } else if (Array.isArray(other)) {
+        other.forEach(([key, value]) => this.set(key, value));
+      } else if (isES6Map(other)) {
+        if (!isPlainES6Map(other)) {
+          die(19, other);
+        }
+        other.forEach((value, key) => this.set(key, value));
+      } else if (other !== null && other !== void 0) {
+        die(20, other);
+      }
+    });
+    return this;
+  }
+  clear() {
+    transaction(() => {
+      untracked(() => {
+        for (const key of this.keys()) {
+          this.delete(key);
+        }
+      });
+    });
+  }
+  replace(values2) {
+    transaction(() => {
+      const replacementMap = convertToMap(values2);
+      const orderedData = /* @__PURE__ */ new Map();
+      let keysReportChangedCalled = false;
+      for (const key of this.data_.keys()) {
+        if (!replacementMap.has(key)) {
+          const deleted = this.delete(key);
+          if (deleted) {
+            keysReportChangedCalled = true;
+          } else {
+            const value = this.data_.get(key);
+            orderedData.set(key, value);
+          }
+        }
+      }
+      for (const [key, value] of replacementMap.entries()) {
+        const keyExisted = this.data_.has(key);
+        this.set(key, value);
+        if (this.data_.has(key)) {
+          const _value = this.data_.get(key);
+          orderedData.set(key, _value);
+          if (!keyExisted) {
+            keysReportChangedCalled = true;
+          }
+        }
+      }
+      if (!keysReportChangedCalled) {
+        if (this.data_.size !== orderedData.size) {
+          this.keysAtom_.reportChanged();
+        } else {
+          const iter1 = this.data_.keys();
+          const iter2 = orderedData.keys();
+          let next1 = iter1.next();
+          let next2 = iter2.next();
+          while (!next1.done) {
+            if (next1.value !== next2.value) {
+              this.keysAtom_.reportChanged();
+              break;
+            }
+            next1 = iter1.next();
+            next2 = iter2.next();
+          }
+        }
+      }
+      this.data_ = orderedData;
+    });
+    return this;
+  }
+  get size() {
+    this.keysAtom_.reportObserved();
+    return this.data_.size;
+  }
+  toString() {
+    return "[object ObservableMap]";
+  }
+  toJSON() {
+    return Array.from(this);
+  }
+  get [Symbol.toStringTag]() {
+    return "Map";
+  }
+};
+var isObservableMap = /* @__PURE__ */ createInstanceofPredicate("ObservableMap", ObservableMap);
+function makeIterableForMap(iterator) {
+  iterator[Symbol.toStringTag] = "MapIterator";
+  return makeIterable(iterator);
+}
+function convertToMap(dataStructure) {
+  if (isES6Map(dataStructure) || isObservableMap(dataStructure)) {
+    return dataStructure;
+  } else if (Array.isArray(dataStructure)) {
+    return new Map(dataStructure);
+  } else if (isPlainObject3(dataStructure)) {
+    const map = /* @__PURE__ */ new Map();
+    for (const key in dataStructure) {
+      map.set(key, dataStructure[key]);
+    }
+    return map;
+  } else {
+    return die(21, dataStructure);
+  }
+}
+var ObservableSetMarker = {};
+var ObservableSet = class {
+  constructor(initialData, enhancer = deepEnhancer, name_ = __MOBX_DEV__ ? "ObservableSet@" + getNextId() : "ObservableSet") {
+    this.name_ = void 0;
+    this[$mobx] = ObservableSetMarker;
+    this.data_ = /* @__PURE__ */ new Set();
+    this.atom_ = void 0;
+    this.changeListeners_ = void 0;
+    this.interceptors_ = void 0;
+    this.dehancer = void 0;
+    this.enhancer_ = void 0;
+    this.name_ = name_;
+    this.enhancer_ = (newV, oldV) => enhancer(newV, oldV, name_);
+    initObservable(() => {
+      this.atom_ = createAtom(this.name_);
+      if (initialData) {
+        this.replace(initialData);
+      }
+    });
+  }
+  dehanceValue_(value) {
+    if (this.dehancer !== void 0) {
+      return this.dehancer(value);
+    }
+    return value;
+  }
+  clear() {
+    transaction(() => {
+      untracked(() => {
+        for (const value of this.data_.values()) {
+          this.delete(value);
+        }
+      });
+    });
+  }
+  forEach(callbackFn, thisArg) {
+    for (const value of this) {
+      callbackFn.call(thisArg, value, value, this);
+    }
+  }
+  get size() {
+    this.atom_.reportObserved();
+    return this.data_.size;
+  }
+  add(value) {
+    checkIfStateModificationsAreAllowed(this.atom_);
+    if (hasInterceptors(this)) {
+      const change = interceptChange(this, {
+        type: ADD,
+        object: this,
+        newValue: value
+      });
+      if (!change) {
+        return this;
+      }
+      value = change.newValue;
+    }
+    if (!this.has(value)) {
+      transaction(() => {
+        value = this.enhancer_(value, void 0);
+        this.data_.add(value);
+        this.atom_.reportChanged();
+      });
+      const notifySpy = __MOBX_DEV__ && isSpyEnabled();
+      const notify2 = hasListeners(this);
+      const change = notify2 || notifySpy ? {
+        observableKind: "set",
+        debugObjectName: this.name_,
+        type: ADD,
+        object: this,
+        newValue: value
+      } : null;
+      if (notifySpy && __MOBX_DEV__) {
+        spyReportStart(change);
+      }
+      if (notify2) {
+        notifyListeners(this, change);
+      }
+      if (notifySpy && __MOBX_DEV__) {
+        spyReportEnd();
+      }
+    }
+    return this;
+  }
+  delete(value) {
+    if (hasInterceptors(this)) {
+      const change = interceptChange(this, {
+        type: DELETE,
+        object: this,
+        oldValue: value
+      });
+      if (!change) {
+        return false;
+      }
+    }
+    if (this.has(value)) {
+      const notifySpy = __MOBX_DEV__ && isSpyEnabled();
+      const notify2 = hasListeners(this);
+      const change = notify2 || notifySpy ? {
+        observableKind: "set",
+        debugObjectName: this.name_,
+        type: DELETE,
+        object: this,
+        oldValue: value
+      } : null;
+      if (notifySpy && __MOBX_DEV__) {
+        spyReportStart(change);
+      }
+      transaction(() => {
+        this.atom_.reportChanged();
+        this.data_.delete(value);
+      });
+      if (notify2) {
+        notifyListeners(this, change);
+      }
+      if (notifySpy && __MOBX_DEV__) {
+        spyReportEnd();
+      }
+      return true;
+    }
+    return false;
+  }
+  has(value) {
+    this.atom_.reportObserved();
+    return this.data_.has(this.dehanceValue_(value));
+  }
+  entries() {
+    const values2 = this.values();
+    return makeIterableForSet({
+      next() {
+        const {
+          value,
+          done: done2
+        } = values2.next();
+        return !done2 ? {
+          value: [value, value],
+          done: done2
+        } : {
+          value: void 0,
+          done: done2
+        };
+      }
+    });
+  }
+  keys() {
+    return this.values();
+  }
+  values() {
+    this.atom_.reportObserved();
+    const self2 = this;
+    const values2 = this.data_.values();
+    return makeIterableForSet({
+      next() {
+        const {
+          value,
+          done: done2
+        } = values2.next();
+        return !done2 ? {
+          value: self2.dehanceValue_(value),
+          done: done2
+        } : {
+          value: void 0,
+          done: done2
+        };
+      }
+    });
+  }
+  intersection(otherSet) {
+    return new Set(this).intersection(otherSet);
+  }
+  union(otherSet) {
+    return new Set(this).union(otherSet);
+  }
+  difference(otherSet) {
+    return new Set(this).difference(otherSet);
+  }
+  symmetricDifference(otherSet) {
+    return new Set(this).symmetricDifference(otherSet);
+  }
+  isSubsetOf(otherSet) {
+    return new Set(this).isSubsetOf(otherSet);
+  }
+  isSupersetOf(otherSet) {
+    return new Set(this).isSupersetOf(otherSet);
+  }
+  isDisjointFrom(otherSet) {
+    return new Set(this).isDisjointFrom(otherSet);
+  }
+  replace(other) {
+    if (isObservableSet(other)) {
+      other = new Set(other);
+    }
+    if (Array.isArray(other) || isES6Set(other)) {
+      transaction(() => {
+        const replacementValues = isES6Set(other) ? other : new Set(other);
+        if (replacementValues.size === 0) {
+          this.clear();
+          return;
+        }
+        if (this.data_.size === 0) {
+          replacementValues.forEach((value) => this.add(value));
+          return;
+        }
+        for (const value of this.data_.values()) {
+          if (!replacementValues.has(this.dehanceValue_(value))) {
+            this.delete(value);
+          }
+        }
+        replacementValues.forEach((value) => this.add(value));
+      });
+    } else if (other !== null && other !== void 0) {
+      die(41, other);
+    }
+    return this;
+  }
+  toJSON() {
+    return Array.from(this);
+  }
+  toString() {
+    return "[object ObservableSet]";
+  }
+  [Symbol.iterator]() {
+    return this.values();
+  }
+  get [Symbol.toStringTag]() {
+    return "Set";
+  }
+};
+var isObservableSet = /* @__PURE__ */ createInstanceofPredicate("ObservableSet", ObservableSet);
+function makeIterableForSet(iterator) {
+  iterator[Symbol.toStringTag] = "SetIterator";
+  return makeIterable(iterator);
+}
+var descriptorCache = /* @__PURE__ */ Object.create(null);
+var REMOVE = "remove";
+var ObservableObjectAdministration = class {
+  constructor(target_, values_ = /* @__PURE__ */ new Map(), name_, defaultAnnotation_ = autoAnnotation) {
+    this.target_ = void 0;
+    this.values_ = void 0;
+    this.name_ = void 0;
+    this.defaultAnnotation_ = void 0;
+    this.keysAtom_ = void 0;
+    this.changeListeners_ = void 0;
+    this.interceptors_ = void 0;
+    this.proxy_ = void 0;
+    this.isPlainObject_ = void 0;
+    this.appliedAnnotations_ = void 0;
+    this.pendingKeys_ = void 0;
+    this.lazyComputedKeys_ = void 0;
+    this.lazyObservableKeys_ = void 0;
+    this.target_ = target_;
+    this.values_ = values_;
+    this.name_ = name_;
+    this.defaultAnnotation_ = defaultAnnotation_;
+    this.keysAtom_ = new Atom(__MOBX_DEV__ ? `${this.name_}.keys` : "ObservableObject.keys");
+    this.isPlainObject_ = isPlainObject3(this.target_);
+    if (__MOBX_DEV__ && !isAnnotation(this.defaultAnnotation_)) {
+      die(`defaultAnnotation must be valid annotation`);
+    }
+    if (__MOBX_DEV__) {
+      this.appliedAnnotations_ = {};
+    }
+  }
+  getObservablePropValue_(key) {
+    var _ref, _this$values_$get;
+    const observable2 = (_ref = (_this$values_$get = this.values_.get(key)) != null ? _this$values_$get : this.materializeLazyComputed_(key)) != null ? _ref : this.materializeLazyObservable_(key);
+    return observable2.get();
+  }
+  materializeLazyComputed_(key) {
+    var _this$lazyComputedKey;
+    const factory = (_this$lazyComputedKey = this.lazyComputedKeys_) == null ? void 0 : _this$lazyComputedKey.get(key);
+    if (!factory) {
+      return void 0;
+    }
+    this.lazyComputedKeys_.delete(key);
+    if (this.lazyComputedKeys_.size === 0) {
+      this.lazyComputedKeys_ = void 0;
+    }
+    const computed3 = factory();
+    this.values_.set(key, computed3);
+    return computed3;
+  }
+  materializeLazyObservable_(key) {
+    var _this$lazyObservableK;
+    const factory = (_this$lazyObservableK = this.lazyObservableKeys_) == null ? void 0 : _this$lazyObservableK.get(key);
+    if (!factory) {
+      return void 0;
+    }
+    this.lazyObservableKeys_.delete(key);
+    if (this.lazyObservableKeys_.size === 0) {
+      this.lazyObservableKeys_ = void 0;
+    }
+    const observable2 = factory();
+    this.values_.set(key, observable2);
+    return observable2;
+  }
+  setObservablePropValue_(key, newValue) {
+    var _ref2, _this$values_$get2;
+    const observable2 = (_ref2 = (_this$values_$get2 = this.values_.get(key)) != null ? _this$values_$get2 : this.materializeLazyComputed_(key)) != null ? _ref2 : this.materializeLazyObservable_(key);
+    if (observable2 instanceof ComputedValue) {
+      observable2.set(newValue);
+      return true;
+    }
+    if (hasInterceptors(this)) {
+      const change = interceptChange(this, {
+        type: UPDATE,
+        object: this.proxy_ || this.target_,
+        name: key,
+        newValue
+      });
+      if (!change) {
+        return null;
+      }
+      newValue = change.newValue;
+    }
+    newValue = observable2.prepareNewValue_(newValue);
+    if (newValue !== globalState.UNCHANGED) {
+      const notify2 = hasListeners(this);
+      const notifySpy = __MOBX_DEV__ && isSpyEnabled();
+      const change = notify2 || notifySpy ? {
+        type: UPDATE,
+        observableKind: "object",
+        debugObjectName: this.name_,
+        object: this.proxy_ || this.target_,
+        oldValue: observable2.value_,
+        name: key,
+        newValue
+      } : null;
+      if (__MOBX_DEV__ && notifySpy) {
+        spyReportStart(change);
+      }
+      observable2.setNewValue_(newValue);
+      if (notify2) {
+        notifyListeners(this, change);
+      }
+      if (__MOBX_DEV__ && notifySpy) {
+        spyReportEnd();
+      }
+    }
+    return true;
+  }
+  get_(key) {
+    if (globalState.trackingDerivation && !hasProp(this.target_, key)) {
+      this.has_(key);
+    }
+    return this.target_[key];
+  }
+  /**
+   * @param {PropertyKey} key
+   * @param {any} value
+   * @param {Annotation|boolean} annotation true - use default annotation, false - copy as is
+   * @param {boolean} proxyTrap whether it's called from proxy trap
+   * @returns {boolean|null} true on success, false on failure (proxyTrap + non-configurable), null when cancelled by interceptor
+   */
+  set_(key, value, proxyTrap = false) {
+    if (hasProp(this.target_, key)) {
+      if (this.values_.has(key)) {
+        return this.setObservablePropValue_(key, value);
+      } else if (proxyTrap) {
+        return Reflect.set(this.target_, key, value);
+      } else {
+        this.target_[key] = value;
+        return true;
+      }
+    } else {
+      return this.extend_(key, {
+        value,
+        enumerable: true,
+        writable: true,
+        configurable: true
+      }, this.defaultAnnotation_, proxyTrap);
+    }
+  }
+  // Trap for "in"
+  has_(key) {
+    if (!globalState.trackingDerivation) {
+      return key in this.target_;
+    }
+    this.pendingKeys_ || (this.pendingKeys_ = /* @__PURE__ */ new Map());
+    let entry = this.pendingKeys_.get(key);
+    if (!entry) {
+      entry = new ObservableValue(key in this.target_, referenceEnhancer, __MOBX_DEV__ ? `${this.name_}.${stringifyKey(key)}?` : "ObservableObject.key?", false);
+      this.pendingKeys_.set(key, entry);
+    }
+    return entry.get();
+  }
+  /**
+   * @param {PropertyKey} key
+   * @param {PropertyDescriptor} descriptor
+   * @param {Annotation|boolean} annotation true - use default annotation, false - copy as is
+   * @param {boolean} proxyTrap whether it's called from proxy trap
+   * @returns {boolean|null} true on success, false on failure (proxyTrap + non-configurable), null when cancelled by interceptor
+   */
+  extend_(key, descriptor, annotation, proxyTrap = false) {
+    if (annotation === true) {
+      annotation = this.defaultAnnotation_;
+    }
+    if (annotation === false) {
+      return this.defineProperty_(key, descriptor, proxyTrap);
+    }
+    assertAnnotable(this, annotation, key);
+    const outcome = annotation.extend_(this, key, descriptor, proxyTrap);
+    if (outcome) {
+      recordAnnotationApplied(this, annotation, key);
+    }
+    return outcome;
+  }
+  /**
+   * @param {PropertyKey} key
+   * @param {PropertyDescriptor} descriptor
+   * @param {boolean} proxyTrap whether it's called from proxy trap
+   * @returns {boolean|null} true on success, false on failure (proxyTrap + non-configurable), null when cancelled by interceptor
+   */
+  defineProperty_(key, descriptor, proxyTrap = false) {
+    checkIfStateModificationsAreAllowed(this.keysAtom_);
+    try {
+      startBatch();
+      const deleteOutcome = this.delete_(key);
+      if (!deleteOutcome) {
+        return deleteOutcome;
+      }
+      if (hasInterceptors(this)) {
+        const change = interceptChange(this, {
+          object: this.proxy_ || this.target_,
+          name: key,
+          type: ADD,
+          newValue: descriptor.value
+        });
+        if (!change) {
+          return null;
+        }
+        const {
+          newValue
+        } = change;
+        if (descriptor.value !== newValue) {
+          descriptor = assign({}, descriptor, {
+            value: newValue
+          });
+        }
+      }
+      if (proxyTrap) {
+        if (!Reflect.defineProperty(this.target_, key, descriptor)) {
+          return false;
+        }
+      } else {
+        defineProperty(this.target_, key, descriptor);
+      }
+      this.notifyPropertyAddition_(key, descriptor.value);
+    } finally {
+      endBatch();
+    }
+    return true;
+  }
+  // If original descriptor becomes relevant, move this to annotation directly
+  defineObservableProperty_(key, value, enhancer, proxyTrap = false) {
+    checkIfStateModificationsAreAllowed(this.keysAtom_);
+    try {
+      startBatch();
+      const deleteOutcome = this.delete_(key);
+      if (!deleteOutcome) {
+        return deleteOutcome;
+      }
+      if (hasInterceptors(this)) {
+        const change = interceptChange(this, {
+          object: this.proxy_ || this.target_,
+          name: key,
+          type: ADD,
+          newValue: value
+        });
+        if (!change) {
+          return null;
+        }
+        value = change.newValue;
+      }
+      const cachedDescriptor = getCachedObservablePropDescriptor(key);
+      const descriptor = {
+        configurable: globalState.safeDescriptors ? this.isPlainObject_ : true,
+        enumerable: true,
+        get: cachedDescriptor.get,
+        set: cachedDescriptor.set
+      };
+      if (proxyTrap) {
+        if (!Reflect.defineProperty(this.target_, key, descriptor)) {
+          return false;
+        }
+      } else {
+        defineProperty(this.target_, key, descriptor);
+      }
+      const observable2 = new ObservableValue(value, enhancer, __MOBX_DEV__ ? `${this.name_}.${key.toString()}` : "ObservableObject.key", false);
+      this.values_.set(key, observable2);
+      this.notifyPropertyAddition_(key, observable2.value_);
+    } finally {
+      endBatch();
+    }
+    return true;
+  }
+  // If original descriptor becomes relevant, move this to annotation directly
+  defineComputedProperty_(key, options, proxyTrap = false) {
+    checkIfStateModificationsAreAllowed(this.keysAtom_);
+    try {
+      startBatch();
+      const deleteOutcome = this.delete_(key);
+      if (!deleteOutcome) {
+        return deleteOutcome;
+      }
+      if (hasInterceptors(this)) {
+        const change = interceptChange(this, {
+          object: this.proxy_ || this.target_,
+          name: key,
+          type: ADD,
+          newValue: void 0
+        });
+        if (!change) {
+          return null;
+        }
+      }
+      options.name || (options.name = __MOBX_DEV__ ? `${this.name_}.${key.toString()}` : "ObservableObject.key");
+      options.context = this.proxy_ || this.target_;
+      const cachedDescriptor = getCachedObservablePropDescriptor(key);
+      const descriptor = {
+        configurable: globalState.safeDescriptors ? this.isPlainObject_ : true,
+        enumerable: false,
+        get: cachedDescriptor.get,
+        set: cachedDescriptor.set
+      };
+      if (proxyTrap) {
+        if (!Reflect.defineProperty(this.target_, key, descriptor)) {
+          return false;
+        }
+      } else {
+        defineProperty(this.target_, key, descriptor);
+      }
+      this.values_.set(key, new ComputedValue(options));
+      this.notifyPropertyAddition_(key, void 0);
+    } finally {
+      endBatch();
+    }
+    return true;
+  }
+  /**
+   * @param {PropertyKey} key
+   * @param {PropertyDescriptor} descriptor
+   * @param {boolean} proxyTrap whether it's called from proxy trap
+   * @returns {boolean|null} true on success, false on failure (proxyTrap + non-configurable), null when cancelled by interceptor
+   */
+  delete_(key, proxyTrap = false) {
+    checkIfStateModificationsAreAllowed(this.keysAtom_);
+    if (!hasProp(this.target_, key)) {
+      return true;
+    }
+    if (hasInterceptors(this)) {
+      const change = interceptChange(this, {
+        object: this.proxy_ || this.target_,
+        name: key,
+        type: REMOVE
+      });
+      if (!change) {
+        return null;
+      }
+    }
+    try {
+      var _this$pendingKeys_;
+      startBatch();
+      const notify2 = hasListeners(this);
+      const notifySpy = __MOBX_DEV__ && isSpyEnabled();
+      const observable2 = this.values_.get(key);
+      let value = void 0;
+      if (!observable2 && (notify2 || notifySpy)) {
+        var _getDescriptor2;
+        value = (_getDescriptor2 = getDescriptor(this.target_, key)) == null ? void 0 : _getDescriptor2.value;
+      }
+      if (proxyTrap) {
+        if (!Reflect.deleteProperty(this.target_, key)) {
+          return false;
+        }
+      } else {
+        delete this.target_[key];
+      }
+      if (__MOBX_DEV__) {
+        delete this.appliedAnnotations_[key];
+      }
+      if (observable2) {
+        this.values_.delete(key);
+        if (observable2 instanceof ObservableValue) {
+          value = observable2.value_;
+        }
+        propagateChanged(observable2);
+      }
+      this.keysAtom_.reportChanged();
+      (_this$pendingKeys_ = this.pendingKeys_) == null || (_this$pendingKeys_ = _this$pendingKeys_.get(key)) == null || _this$pendingKeys_.set(key in this.target_);
+      if (notify2 || notifySpy) {
+        const change = {
+          type: REMOVE,
+          observableKind: "object",
+          object: this.proxy_ || this.target_,
+          debugObjectName: this.name_,
+          oldValue: value,
+          name: key
+        };
+        if (__MOBX_DEV__ && notifySpy) {
+          spyReportStart(change);
+        }
+        if (notify2) {
+          notifyListeners(this, change);
+        }
+        if (__MOBX_DEV__ && notifySpy) {
+          spyReportEnd();
+        }
+      }
+    } finally {
+      endBatch();
+    }
+    return true;
+  }
+  notifyPropertyAddition_(key, value) {
+    var _this$pendingKeys_2;
+    const notify2 = hasListeners(this);
+    const notifySpy = __MOBX_DEV__ && isSpyEnabled();
+    if (notify2 || notifySpy) {
+      const change = notify2 || notifySpy ? {
+        type: ADD,
+        observableKind: "object",
+        debugObjectName: this.name_,
+        object: this.proxy_ || this.target_,
+        name: key,
+        newValue: value
+      } : null;
+      if (__MOBX_DEV__ && notifySpy) {
+        spyReportStart(change);
+      }
+      if (notify2) {
+        notifyListeners(this, change);
+      }
+      if (__MOBX_DEV__ && notifySpy) {
+        spyReportEnd();
+      }
+    }
+    (_this$pendingKeys_2 = this.pendingKeys_) == null || (_this$pendingKeys_2 = _this$pendingKeys_2.get(key)) == null || _this$pendingKeys_2.set(true);
+    this.keysAtom_.reportChanged();
+  }
+  ownKeys_() {
+    this.keysAtom_.reportObserved();
+    return ownKeys2(this.target_);
+  }
+  keys_() {
+    this.keysAtom_.reportObserved();
+    return Object.keys(this.target_);
+  }
+};
+function asObservableObject(target, options) {
+  var _options$name;
+  if (__MOBX_DEV__ && options && isObservableObject(target)) {
+    die(`Options can't be provided for already observable objects.`);
+  }
+  if (hasProp(target, $mobx)) {
+    if (__MOBX_DEV__ && !(getAdministration(target) instanceof ObservableObjectAdministration)) {
+      die(`Cannot convert '${getDebugName(target)}' into observable object:
+The target is already observable of different type.
+Extending builtins is not supported.`);
+    }
+    return target;
+  }
+  if (__MOBX_DEV__ && !Object.isExtensible(target)) {
+    die("Cannot make the designated object observable; it is not extensible");
+  }
+  const name = (_options$name = options == null ? void 0 : options.name) != null ? _options$name : __MOBX_DEV__ ? `${isPlainObject3(target) ? "ObservableObject" : target.constructor.name}@${getNextId()}` : "ObservableObject";
+  const adm = new ObservableObjectAdministration(target, /* @__PURE__ */ new Map(), String(name), getAnnotationFromOptions(options));
+  addHiddenProp(target, $mobx, adm);
+  return target;
+}
+var isObservableObjectAdministration = /* @__PURE__ */ createInstanceofPredicate("ObservableObjectAdministration", ObservableObjectAdministration);
+function getCachedObservablePropDescriptor(key) {
+  return descriptorCache[key] || (descriptorCache[key] = {
+    get() {
+      return this[$mobx].getObservablePropValue_(key);
+    },
+    set(value) {
+      return this[$mobx].setObservablePropValue_(key, value);
+    }
+  });
+}
+function isObservableObject(thing) {
+  if (isObject(thing)) {
+    return isObservableObjectAdministration(thing[$mobx]);
+  }
+  return false;
+}
+function recordAnnotationApplied(adm, annotation, key) {
+  if (__MOBX_DEV__) {
+    adm.appliedAnnotations_[key] = annotation;
+  }
+}
+function assertAnnotable(adm, annotation, key) {
+  if (__MOBX_DEV__ && !isAnnotation(annotation)) {
+    die(`Cannot annotate '${adm.name_}.${key.toString()}': Invalid annotation.`);
+  }
+  if (__MOBX_DEV__ && !isOverride(annotation) && hasProp(adm.appliedAnnotations_, key)) {
+    const fieldName = `${adm.name_}.${key.toString()}`;
+    const currentAnnotationType = adm.appliedAnnotations_[key].annotationType_;
+    const requestedAnnotationType = annotation.annotationType_;
+    die(`Cannot apply '${requestedAnnotationType}' to '${fieldName}':
+The field is already annotated with '${currentAnnotationType}'.
+Re-annotating fields is not allowed.
+Use 'override' annotation for methods overridden by subclass.`);
+  }
+}
+function getAtom(thing, property) {
+  if (typeof thing === "object" && thing !== null) {
+    if (isObservableArray(thing)) {
+      if (property !== void 0) {
+        die(23);
+      }
+      return thing[$mobx].atom_;
+    }
+    if (isObservableSet(thing)) {
+      return thing.atom_;
+    }
+    if (isObservableMap(thing)) {
+      if (property === void 0) {
+        return thing.keysAtom_;
+      }
+      const observable2 = thing.data_.get(property) || thing.hasMap_.get(property);
+      if (!observable2) {
+        die(25, property, getDebugName(thing));
+      }
+      return observable2;
+    }
+    if (isObservableObject(thing)) {
+      var _ref, _adm$values_$get;
+      if (!property) {
+        return die(26);
+      }
+      const adm = thing[$mobx];
+      const observable2 = (_ref = (_adm$values_$get = adm.values_.get(property)) != null ? _adm$values_$get : adm.materializeLazyComputed_(property)) != null ? _ref : adm.materializeLazyObservable_(property);
+      if (!observable2) {
+        die(27, property, getDebugName(thing));
+      }
+      return observable2;
+    }
+    if (isAtom(thing) || isComputedValue(thing) || isReaction(thing)) {
+      return thing;
+    }
+  } else if (isFunction(thing)) {
+    if (isReaction(thing[$mobx])) {
+      return thing[$mobx];
+    }
+  }
+  die(28);
+}
+function getAdministration(thing, property) {
+  if (!thing) {
+    die(29);
+  }
+  if (property !== void 0) {
+    return getAdministration(getAtom(thing, property));
+  }
+  if (isAtom(thing) || isComputedValue(thing) || isReaction(thing)) {
+    return thing;
+  }
+  if (isObservableMap(thing) || isObservableSet(thing)) {
+    return thing;
+  }
+  if (thing[$mobx]) {
+    return thing[$mobx];
+  }
+  die(24, thing);
+}
+function getDebugName(thing, property) {
+  let named3;
+  if (property !== void 0) {
+    named3 = getAtom(thing, property);
+  } else if (isAction(thing)) {
+    return thing.name;
+  } else if (isObservableObject(thing) || isObservableMap(thing) || isObservableSet(thing)) {
+    named3 = getAdministration(thing);
+  } else {
+    named3 = getAtom(thing);
+  }
+  return named3.name_;
+}
+function initObservable(cb) {
+  const derivation = untrackedStart();
+  const allowStateChanges2 = __MOBX_DEV__ ? allowStateChangesStart(true) : true;
+  startBatch();
+  try {
+    return cb();
+  } finally {
+    endBatch();
+    if (__MOBX_DEV__) {
+      allowStateChangesEnd(allowStateChanges2);
+    }
+    untrackedEnd(derivation);
+  }
+}
+var toString = objectPrototype.toString;
+function deepEqual2(a, b, depth = -1) {
+  return eq(a, b, depth);
+}
+function eq(a, b, depth, aStack, bStack) {
+  if (a === b) {
+    return a !== 0 || 1 / a === 1 / b;
+  }
+  if (a == null || b == null) {
+    return false;
+  }
+  if (a !== a) {
+    return b !== b;
+  }
+  const type3 = typeof a;
+  if (type3 !== "function" && type3 !== "object" && typeof b != "object") {
+    return false;
+  }
+  const className = toString.call(a);
+  if (className !== toString.call(b)) {
+    return false;
+  }
+  switch (className) {
+    // Strings, numbers, regular expressions, dates, and booleans are compared by value.
+    case "[object RegExp]":
+    // RegExps are coerced to strings for comparison (Note: '' + /a/i === '/a/i')
+    case "[object String]":
+      return "" + a === "" + b;
+    case "[object Number]":
+      if (+a !== +a) {
+        return +b !== +b;
+      }
+      return +a === 0 ? 1 / +a === 1 / b : +a === +b;
+    case "[object Date]":
+    case "[object Boolean]":
+      return +a === +b;
+    case "[object Symbol]":
+      return typeof Symbol !== "undefined" && Symbol.valueOf.call(a) === Symbol.valueOf.call(b);
+    case "[object Map]":
+    case "[object Set]":
+      if (depth >= 0) {
+        depth++;
+      }
+      break;
+  }
+  a = unwrap(a);
+  b = unwrap(b);
+  const areArrays = className === "[object Array]";
+  if (!areArrays) {
+    if (typeof a != "object" || typeof b != "object") {
+      return false;
+    }
+    const aCtor = a.constructor, bCtor = b.constructor;
+    if (aCtor !== bCtor && !(isFunction(aCtor) && aCtor instanceof aCtor && isFunction(bCtor) && bCtor instanceof bCtor) && "constructor" in a && "constructor" in b) {
+      return false;
+    }
+  }
+  if (depth === 0) {
+    return false;
+  } else if (depth < 0) {
+    depth = -1;
+  }
+  aStack = aStack || [];
+  bStack = bStack || [];
+  let length = aStack.length;
+  while (length--) {
+    if (aStack[length] === a) {
+      return bStack[length] === b;
+    }
+  }
+  aStack.push(a);
+  bStack.push(b);
+  if (areArrays) {
+    length = a.length;
+    if (length !== b.length) {
+      return false;
+    }
+    while (length--) {
+      if (!eq(a[length], b[length], depth - 1, aStack, bStack)) {
+        return false;
+      }
+    }
+  } else {
+    const keys2 = Object.keys(a);
+    const _length = keys2.length;
+    if (Object.keys(b).length !== _length) {
+      return false;
+    }
+    for (let i = 0; i < _length; i++) {
+      const key = keys2[i];
+      if (!(hasProp(b, key) && eq(a[key], b[key], depth - 1, aStack, bStack))) {
+        return false;
+      }
+    }
+  }
+  aStack.pop();
+  bStack.pop();
+  return true;
+}
+function unwrap(a) {
+  if (isObservableArray(a)) {
+    return a.slice();
+  }
+  if (isES6Map(a) || isObservableMap(a)) {
+    return Array.from(a.entries());
+  }
+  if (isES6Set(a) || isObservableSet(a)) {
+    return Array.from(a.entries());
+  }
+  return a;
+}
+var _globalThis$Iterator;
+var maybeIteratorPrototype = ((_globalThis$Iterator = globalThis.Iterator) == null ? void 0 : _globalThis$Iterator.prototype) || {};
+function makeIterable(iterator) {
+  iterator[Symbol.iterator] = getSelf;
+  return assign(Object.create(maybeIteratorPrototype), iterator);
+}
+function getSelf() {
+  return this;
+}
+function isAnnotation(thing) {
+  return (
+    // Can be function
+    thing instanceof Object && typeof thing.annotationType_ === "string" && isFunction(thing.make_) && isFunction(thing.extend_)
+  );
+}
+if (__MOBX_DEV__) {
+  const g = globalThis;
+  ["Symbol", "Map", "Set", "Proxy"].forEach((m) => {
+    if (typeof g[m] === "undefined") {
+      die(`MobX requires global '${m}' to be available or polyfilled`);
+    }
+  });
+}
+if (__MOBX_DEV__ && typeof __MOBX_DEVTOOLS_GLOBAL_HOOK__ === "object") {
+  __MOBX_DEVTOOLS_GLOBAL_HOOK__.injectMobx({
+    spy,
+    extras: {
+      getDebugName
+    },
+    $mobx
+  });
+}
+
+// src/var-system/types.ts
+init_globals();
+function toDocument(value) {
+  if (Array.isArray(value)) return Object.freeze(value.map(toDocument));
+  if (value !== null && typeof value === "object") {
+    const out = /* @__PURE__ */ Object.create(null);
+    const entries = Object.entries(value).sort(
+      ([a], [b]) => a < b ? -1 : a > b ? 1 : 0
+    );
+    for (const [key, v] of entries) out[key] = toDocument(v);
+    return Object.freeze(out);
+  }
+  return value;
+}
+function typeOf(v) {
+  const t2 = typeof v;
+  if (t2 === "string" || t2 === "number" || t2 === "boolean") return t2;
+  throw new TypeError(
+    `Variable values must be string|number|boolean (got ${t2})`
+  );
+}
+function toString2(v) {
+  return typeof v === "string" ? v : String(v);
+}
+function toNumber(v) {
+  if (typeof v === "number") return v;
+  if (typeof v === "boolean") return v ? 1 : 0;
+  const trimmed = v.trim();
+  if (trimmed === "") {
+    throw new TypeError(`Cannot cast empty string to number`);
+  }
+  const n = Number(trimmed);
+  if (!Number.isFinite(n)) {
+    throw new TypeError(`Cannot cast ${JSON.stringify(v)} to number`);
+  }
+  return n;
+}
+function toBool(v) {
+  if (typeof v === "boolean") return v;
+  if (typeof v === "number") {
+    if (v === 0 || v === 1) return v === 1;
+    throw new TypeError(
+      `Cannot cast number ${v} to bool (only 0 and 1 are accepted)`
+    );
+  }
+  if (v === "true") return true;
+  if (v === "false") return false;
+  throw new TypeError(
+    `Cannot cast ${JSON.stringify(v)} to bool (expected "true" or "false")`
+  );
+}
+var PendingValueError = class extends Error {
+  constructor(variable, message) {
+    super(message);
+    this.variable = variable;
+  }
+  variable;
+};
+function readPending(e) {
+  if (e instanceof PendingValueError) return e;
+  return e instanceof Error && e.cause !== void 0 ? readPending(e.cause) : void 0;
+}
+
+// src/var-system/store.ts
+init_globals();
+var unwritten = (value) => value === PENDING;
+var BoxNode = class {
+  constructor(name, type3, initial2) {
+    this.name = name;
+    this.type = type3;
+    if (!unwritten(initial2)) assertType(name, type3, initial2, "initial value");
+    this.cell = observable.box(initial2, { deep: false });
+    this.lastChangedAt = unwritten(initial2) ? null : Date.now();
+  }
+  name;
+  type;
+  kind = "box";
+  cell;
+  // [LAW:single-enforcer] One write path (`set`) updates both the value and
+  // the timestamp; introspection reads from the same place renderers do.
+  //
+  // It records when the value last CHANGED, which is what debug.ts calls the
+  // node's age and what anyone reading that age is asking (brandon-var-system-
+  // 1tl). Stamping every write instead reported attempts, and reported them most
+  // misleadingly in the one situation where the age is consulted: a source
+  // re-running with no effect.
+  lastChangedAt;
+  // [LAW:types-are-the-program] Not written yet is not a value: it is read as
+  // THE pending signal, which every place a template is evaluated takes as its
+  // own outcome.
+  read() {
+    const value = this.cell.get();
+    if (unwritten(value)) {
+      throw new PendingValueError(
+        this.name,
+        `variable "${this.name}" has no value yet: nothing has written it`
+      );
+    }
+    return value;
+  }
+  // A box written PENDING is not answered yet again: what its payload holds
+  // is a source that has not answered (src/daemon/render-payload.ts).
+  set(value) {
+    if (!unwritten(value)) assertType(this.name, this.type, value, "set value");
+    if (Object.is(this.cell.get(), value)) return;
+    this.cell.set(value);
+    this.lastChangedAt = Date.now();
+  }
+  lastUpdatedMs() {
+    return this.lastChangedAt;
+  }
+  // The cell as written, pending included: what `stored` reads.
+  stored() {
+    return this.cell.get();
+  }
+};
+var Kept = class {
+  cell;
+  // `what` names the value in a refusal: `Variable "x"`, `Derived value "x"`.
+  // `equals` is what counts as a change: MobX's own comparison unless given.
+  constructor(what, deriver, equals) {
+    this.cell = computed(deriver, {
+      keepAlive: true,
+      ...equals !== void 0 && { equals }
+    });
+    if (typeof this.cell.suspend_ !== "function") {
+      throw new TypeError(
+        `${what}: this MobX's computed has no suspend_; release() cannot unsubscribe it`
+      );
+    }
+    if (typeof this.cell.keepAlive_ !== "boolean") {
+      throw new TypeError(
+        `${what}: this MobX's computed has no keepAlive_ flag; release() cannot lift it`
+      );
+    }
+  }
+  read() {
+    return this.cell.get();
+  }
+  // Unsubscribe from every dependency and drop the cached value. A keepAlive
+  // computed never does this on its own — MobX keeps it subscribed to whatever
+  // it read for as long as those observables live, which for a daemon-wide
+  // observable (the SessionState atom) is the life of the daemon, and that
+  // subscription kept every disposed config's whole store reachable
+  // (brandon-unfiled-3248.t14). MobX offers no public release for a keepAlive
+  // computed, so this lifts the guard its own teardown checks and runs that
+  // teardown. Must run inside an action: the unobservation it cascades is
+  // settled when the outermost batch ends.
+  // [LAW:single-enforcer] exception: two MobX internals (`keepAlive_`,
+  // `suspend_`) are reached here and nowhere else; the constructor refuses a
+  // MobX without them, and test/var-store-dispose.test.ts pins the effect.
+  release() {
+    this.cell.keepAlive_ = false;
+    this.cell.suspend_();
+  }
+};
+var Projected = class {
+  constructor(deriver) {
+    this.deriver = deriver;
+  }
+  deriver;
+  read() {
+    return this.deriver();
+  }
+};
+var ComputedNode = class {
+  constructor(name, type3, deriver) {
+    this.name = name;
+    this.type = type3;
+    this.cell = new Kept(`Variable "${name}"`, () => {
+      const v = deriver();
+      assertType(this.name, this.type, v, "computed result");
+      return v;
+    });
+  }
+  name;
+  type;
+  kind = "computed";
+  cell;
+  read() {
+    return this.cell.read();
+  }
+  release() {
+    this.cell.release();
+  }
+  lastUpdatedMs() {
+    return null;
+  }
+};
+var ProjectionNode = class {
+  constructor(name, type3, deriver) {
+    this.name = name;
+    this.type = type3;
+    this.cell = new Projected(() => {
+      const v = deriver();
+      assertType(this.name, this.type, v, "projection result");
+      return v;
+    });
+  }
+  name;
+  type;
+  kind = "projection";
+  cell;
+  read() {
+    return this.cell.read();
+  }
+  lastUpdatedMs() {
+    return null;
+  }
+};
+var DocumentCell = class {
+  constructor(name, initial2) {
+    this.name = name;
+    this.cell = observable.box(shaped(initial2), { deep: false });
+    this.lastChangedAt = initial2.kind === "pending" ? null : Date.now();
+  }
+  name;
+  kind = "document";
+  cell;
+  lastChangedAt;
+  read() {
+    return this.cell.get();
+  }
+  set(value) {
+    const next = shaped(value);
+    if (sameDocument(this.cell.get(), next)) return;
+    this.cell.set(next);
+    this.lastChangedAt = Date.now();
+  }
+  lastUpdatedMs() {
+    return this.lastChangedAt;
+  }
+};
+var DerivedDocument = class {
+  constructor(name, deriver) {
+    this.name = name;
+    this.cell = new Kept(
+      `Variable "${name}"`,
+      () => shaped(deriver()),
+      sameDocument
+    );
+  }
+  name;
+  kind = "document";
+  cell;
+  read() {
+    return this.cell.read();
+  }
+  release() {
+    this.cell.release();
+  }
+  lastUpdatedMs() {
+    return null;
+  }
+};
+function documentKey(outcome) {
+  return JSON.stringify(outcome);
+}
+function sameDocument(a, b) {
+  return documentKey(a) === documentKey(b);
+}
+function shaped(outcome) {
+  return outcome.kind === "ok" ? { kind: "ok", value: toDocument(outcome.value) } : outcome;
+}
+function assertType(name, declared, value, context) {
+  const actual = typeOf(value);
+  if (actual !== declared) {
+    throw new TypeError(
+      `Variable "${name}": ${context} type ${actual} does not match declared type ${declared}`
+    );
+  }
+}
+var VariableStore = class {
+  constructor(parent = null) {
+    this.parent = parent;
+  }
+  parent;
+  // [LAW:no-ambient-temporal-coupling] Which names are declared is itself
+  // observable: a reaction that read a name before its declaration (a cache
+  // key over a variable declared after it) re-runs when it is declared, so
+  // what it sees does not depend on the order the config lists variables in.
+  // `deep: false` keeps each node the object it was declared as.
+  nodes = observable.map(void 0, {
+    deep: false
+  });
+  defineBox(name, type3, initial2) {
+    this.declare(name, new BoxNode(name, type3, initial2));
+  }
+  defineDocument(name, initial2) {
+    this.declare(name, new DocumentCell(name, initial2));
+  }
+  // A document whose reading the deriver computes from what it reads.
+  defineDerivedDocument(name, deriver) {
+    this.declare(name, new DerivedDocument(name, deriver));
+  }
+  // Computed deriver receives a `read` function that returns the value
+  // of any variable in the store. Calling `read(other)` from inside the
+  // deriver is what registers the dependency with MobX — the deriver's
+  // body is the dep graph.
+  defineComputed(name, type3, deriver) {
+    this.defineDerived(name, type3, "computed", deriver);
+  }
+  defineDerived(name, type3, derivation, deriver) {
+    const reader = (other) => this.read(other);
+    const Node = derivation === "computed" ? ComputedNode : ProjectionNode;
+    this.declare(name, new Node(name, type3, () => deriver(reader)));
+  }
+  // A derived value of this store that is no variable — a template a draw
+  // evaluates (src/dsl/parts.ts) — held as a variable's would be: kept until
+  // what it read changes, or derived at every read, and released with them.
+  derive(name, derivation, deriver) {
+    this.refuseDisposed(`Derived value "${name}"`);
+    if (derivation === "projection") return new Projected(deriver);
+    const kept = new Kept(`Derived value "${name}"`, deriver);
+    this.kept.push(kept);
+    return kept;
+  }
+  kept = [];
+  read(name) {
+    return this.requireVar(name).read();
+  }
+  readDocument(name) {
+    const node = this.requireNode(name);
+    if (node.kind !== "document") {
+      throw new TypeError(
+        `Variable "${name}" is a ${node.kind}, not a document`
+      );
+    }
+    return node.read();
+  }
+  // A written node's value as stored, pending included and nothing
+  // serialized: a box's value or a document's reading. Read in a reaction, it
+  // moves exactly when the node is written, which its own compare decides.
+  stored(name) {
+    const node = this.requireNode(name);
+    if (node.kind === "document") return node.read();
+    if (node.kind !== "box") {
+      throw new TypeError(
+        `Variable "${name}" is a ${node.kind}, not a written node`
+      );
+    }
+    return node.stored();
+  }
+  setDocument(name, value) {
+    const node = this.requireOwn(name);
+    if (!(node instanceof DocumentCell)) {
+      throw new TypeError(
+        node.kind === "document" ? `Variable "${name}" is a derived document: what it reads decides it, and nothing writes it` : `Variable "${name}" is a ${node.kind}, not a document (use defineDocument to create one)`
+      );
+    }
+    runInAction(() => node.set(value));
+  }
+  setBox(name, value) {
+    const node = this.requireOwn(name);
+    if (node.kind !== "box") {
+      throw new TypeError(
+        `Variable "${name}" is a ${node.kind}, not a box (use defineBox to create a settable variable)`
+      );
+    }
+    runInAction(() => node.set(value));
+  }
+  // Wrap multi-variable updates so dependents only invalidate once per
+  // batch. Used by the render path to push a whole input payload before
+  // any computed re-evaluates.
+  runInAction(fn) {
+    runInAction(fn);
+  }
+  has(name) {
+    return this.nodes.has(name) || (this.parent?.has(name) ?? false);
+  }
+  getType(name) {
+    return this.requireVar(name).type;
+  }
+  getKind(name) {
+    return this.requireNode(name).kind;
+  }
+  // [LAW:one-source-of-truth] A string that changes exactly when the node's
+  // value does — the ONE spelling a change-driven reaction (a `depends_on`
+  // cache policy) compares, total over node kinds so a document can be
+  // depended on like a scalar — or pending, while the node has no value yet.
+  // Structural for documents: every stored document has sorted keys
+  // (toDocument), so a rescan yielding the same content in another key order
+  // is not a change. A failure is a key like any other, never a failed
+  // reading: a dependant re-reads when its dependency starts or stops failing.
+  changeKey(name) {
+    const node = this.requireNode(name);
+    if (node.kind === "document") {
+      const doc = node.read();
+      return doc.kind === "pending" ? PENDING : ok(documentKey(doc));
+    }
+    try {
+      return ok(String(node.read()));
+    } catch (e) {
+      return readPending(e) !== void 0 ? PENDING : ok(` failed:${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  // [LAW:types-are-the-program] Introspection (src/daemon/debug.ts) needs
+  // the whole node — type, kind, lastUpdatedMs — in one lookup, but
+  // returning the BoxNode directly would leak `.set` structurally even
+  // though VarNode does not advertise it. The returned wrapper is a fresh
+  // object exposing only the VarNode surface — `.set` is unreachable at
+  // any level (no structural escape, no plain-JS reach-through). The
+  // mutation path remains gated behind `setBox`, which wraps in
+  // runInAction to satisfy MobX strict-mode.
+  //
+  // [LAW:single-enforcer] One requireNode call per consumer-row — the
+  // round-1 dedup fix in introspectVars relies on the caller getting both
+  // type/kind and a read() in one go without paying for a second
+  // requireNode. The wrapper preserves that.
+  getNode(name) {
+    const node = this.requireNode(name);
+    return node.kind === "document" ? {
+      name: node.name,
+      kind: node.kind,
+      read: () => node.read(),
+      lastUpdatedMs: () => node.lastUpdatedMs()
+    } : {
+      name: node.name,
+      type: node.type,
+      kind: node.kind,
+      read: () => node.read(),
+      lastUpdatedMs: () => node.lastUpdatedMs()
+    };
+  }
+  names() {
+    return [...this.parent?.names() ?? [], ...this.nodes.keys()];
+  }
+  // Release every computed's subscriptions, so nothing outliving this store
+  // (the daemon-wide SessionState atom) keeps it reachable. The store's own
+  // boxes and documents die with it; only the computeds hold references
+  // outward. Reads after dispose still answer — a released computed recomputes
+  // uncached, and outside a batch subscribes to nothing (inside one, MobX
+  // tracks it for the batch and unobserves again as the batch ends) — so a
+  // late reader cannot resubscribe the store to the world for good. A
+  // declaration after dispose would: it would mint a keepAlive computed with
+  // no release to come, so `declare` and `derive` refuse it. Returns how many computeds it
+  // released, the fact the caller's log line carries (0 on a second call). One action, so the
+  // cascading unobservation settles once, when it ends. [LAW:single-enforcer]
+  // called by SourceRegistry.dispose, the one teardown of everything a config
+  // holds.
+  dispose() {
+    if (this.disposed) return 0;
+    this.disposed = true;
+    let released = 0;
+    runInAction(() => {
+      for (const node of this.nodes.values()) {
+        if (node instanceof ComputedNode || node instanceof DerivedDocument) {
+          node.release();
+          released++;
+        }
+      }
+      for (const kept of this.kept) kept.release();
+    });
+    return released + this.kept.length;
+  }
+  disposed = false;
+  requireNode(name) {
+    const node = this.nodes.get(name) ?? this.parent?.requireNode(name);
+    if (!node) throw new ReferenceError(`Unknown variable "${name}"`);
+    return node;
+  }
+  // [LAW:single-enforcer] The one door a write takes: a node of this store.
+  // A view writing its directory's node would write every session's value.
+  requireOwn(name) {
+    const node = this.nodes.get(name);
+    if (node !== void 0) return node;
+    if (this.parent?.has(name)) {
+      throw new Error(
+        `Variable "${name}" lives in the directory's store; a session's view cannot write it`
+      );
+    }
+    throw new ReferenceError(`Unknown variable "${name}"`);
+  }
+  // [LAW:parse-dont-validate] The scalar reads (`read`, `getType`) demand a
+  // VarNode; a document reached through them is a caller asking a namespace
+  // for a scalar, said so by name rather than coerced to text.
+  requireVar(name) {
+    const node = this.requireNode(name);
+    if (node.kind === "document") {
+      throw new TypeError(
+        `Variable "${name}" is a document; read its fields by path (.${name}.<field>)`
+      );
+    }
+    return node;
+  }
+  // [LAW:no-silent-failure] A computed declared after dispose has no release
+  // to come: it would subscribe to the world and hold this store exactly as
+  // before brandon-unfiled-3248.t14.
+  refuseDisposed(what) {
+    if (this.disposed) {
+      throw new Error(`${what}: cannot declare on a disposed store`);
+    }
+  }
+  declare(name, node) {
+    this.refuseDisposed(`Variable "${name}"`);
+    if (this.has(name)) {
+      throw new Error(`Variable "${name}" is already declared`);
+    }
+    runInAction(() => this.nodes.set(name, node));
+  }
+};
+
+// src/template-engine/engine.ts
+init_globals();
 
 // node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/index.js
 init_globals();
@@ -50856,975 +54400,6 @@ var SourceRegistry = class _SourceRegistry {
   }
 };
 
-// src/config/lanes.ts
-init_globals();
-var RENDERERS = ["claude", "tmux"];
-var IN_TMUX = 'ne .tmux.pane ""';
-var LANES = {
-  band: {
-    switch: { setting: "experimentalBand", on: true, inTmux: false },
-    label: "\u{1F9EA} band (A)",
-    handsOff: true,
-    rows: null
-  },
-  statusline: {
-    switch: { setting: "experimentalStatusline", on: true, inTmux: false },
-    label: "\u{1F9EA} statusline (B)",
-    handsOff: false,
-    rows: null
-  },
-  pane: {
-    switch: { setting: "experimentalPane", on: true, inTmux: false },
-    label: "\u{1F9EA} tmux pane (C)",
-    handsOff: true,
-    rows: null
-  },
-  tmuxStatus: {
-    switch: {
-      setting: "renderer",
-      on: "tmux",
-      inTmux: true
-    },
-    label: "tmux status line",
-    handsOff: true,
-    // tmux draws at most five status rows (`status` takes on, off, 2…5).
-    rows: 5
-  }
-};
-var LANE_NAMES = Object.keys(LANES);
-var TOGGLED_LANES = LANE_NAMES.filter(
-  (lane) => LANES[lane].switch.on === true
-);
-var MOVING_FPS = 30;
-var ANSWERING = { by: "request" };
-var DRAWING_VAR = "drawing";
-var drawingVar = (field) => `${DRAWING_VAR}.${field}`;
-var UNFOLLOWED = { subscribers: 0, fps: 0, shown: true };
-var laneFeedVar = (lane, field) => `feeds.${lane}.${field}`;
-function perLane(value) {
-  return Object.fromEntries(
-    LANE_NAMES.map((lane) => [lane, value(lane)])
-  );
-}
-var UNFOLLOWED_FEEDS = perLane(() => UNFOLLOWED);
-function parseLane(raw) {
-  return typeof raw === "string" && Object.hasOwn(LANES, raw) ? raw : null;
-}
-
-// src/config/setting-projections.ts
-init_globals();
-
-// src/config/globals-fields.ts
-init_globals();
-
-// src/config/loader/validate-core.ts
-init_globals();
-var import_node_path14 = __toESM(require_path_browserify(), 1);
-
-// src/config/loader/diagnostics.ts
-init_globals();
-var ConfigError = class extends Error {
-  file;
-  issues;
-  /** Advisories the file earned before it failed — reported beside the error. */
-  warnings;
-  constructor(file, issues, warnings = []) {
-    super(formatIssues(file, issues));
-    this.name = "ConfigError";
-    this.file = file;
-    this.issues = issues;
-    this.warnings = warnings;
-  }
-};
-var DroppedFileError = class extends ConfigError {
-  prompt;
-  constructor(file, issues) {
-    super(file, issues);
-    this.name = "DroppedFileError";
-    this.prompt = [
-      "Fix my cc-candybar statusline config. It places segments that do not exist, so those cells are not drawn.",
-      `Config file to edit: ${file}`,
-      this.message,
-      "For each placement: rename it to a segment the error lists as declared (if it names a plugin file, read that file to confirm), or remove the placement. Edit only the config file; do not change any plugin file."
-    ].join("\n\n");
-  }
-};
-function findKeyLine(source, pathParts) {
-  return keyLocator(source)(pathParts);
-}
-function keyLocator(source) {
-  let parsed2;
-  const document = () => {
-    parsed2 ??= { node: parseOrUndefined(source) };
-    return parsed2.node;
-  };
-  return (pathParts) => keyLine(source, document, pathParts);
-}
-function parseOrUndefined(source) {
-  try {
-    return parseDocument(source);
-  } catch (e) {
-    if (e instanceof Json5EditError) return void 0;
-    throw e;
-  }
-}
-function keyLine(source, document, pathParts) {
-  const indexed = pathParts.some((p2) => /^\d+$/.test(p2)) ? elementPathLine(source, document(), pathParts) : void 0;
-  if (indexed !== void 0) return indexed;
-  let cursor = 0;
-  let foundCursor;
-  for (const part of pathParts) {
-    if (part === "" || /^\d+$/.test(part)) continue;
-    const found = findKeyOccurrence(source, cursor, part);
-    if (found === -1) {
-      return foundCursor !== void 0 ? lineFromOffset(source, foundCursor) : void 0;
-    }
-    cursor = found;
-    foundCursor = found;
-  }
-  return foundCursor !== void 0 ? lineFromOffset(source, foundCursor) : void 0;
-}
-function elementPathLine(source, document, pathParts) {
-  if (document === void 0) return void 0;
-  let node = document;
-  let reached;
-  let indexed = false;
-  for (const part of pathParts) {
-    const element = node.kind === "array" && /^\d+$/.test(part);
-    const next = node.kind === "array" ? element ? node.elements[Number(part)] : void 0 : entryOf(node, part)?.value;
-    if (next === void 0) break;
-    indexed ||= element;
-    node = next;
-    reached = next;
-  }
-  return reached === void 0 || !indexed ? void 0 : lineFromOffset(source, reached.span.start);
-}
-function findKeyOccurrence(source, from, key) {
-  const escaped2 = key.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
-  const re = new RegExp(`(?:["']${escaped2}["']|\\b${escaped2}\\b)\\s*:`, "g");
-  re.lastIndex = from;
-  const m = re.exec(source);
-  return m ? m.index : -1;
-}
-function lineFromOffset(source, offset) {
-  let line = 1;
-  for (let i = 0; i < offset && i < source.length; i++) {
-    if (source.charCodeAt(i) === 10) line++;
-  }
-  return line;
-}
-function editabilityNotice(filePath2, source) {
-  try {
-    parseDocument(source);
-    return null;
-  } catch (e) {
-    if (!(e instanceof Json5EditError)) throw e;
-    return `${filePath2}:${lineFromOffset(source, e.offset)}: ${e.reason} \u2014 the settings menu cannot edit this file until it is fixed`;
-  }
-}
-function formatIssues(file, issues) {
-  if (issues.length === 0) return `${file}: invalid config (no details)`;
-  const lines2 = [
-    `Invalid config in ${file} (${issues.length} issue${issues.length === 1 ? "" : "s"}):`
-  ];
-  for (const issue3 of issues) {
-    const locParts = [];
-    if (issue3.line !== void 0) {
-      locParts.push(
-        `line ${issue3.line}${issue3.col !== void 0 ? `:${issue3.col}` : ""}`
-      );
-    }
-    if (issue3.path) locParts.push(issue3.path);
-    const loc = locParts.length > 0 ? `[${locParts.join(" \u2022 ")}] ` : "";
-    lines2.push(`  ${loc}${issue3.message}`);
-  }
-  return lines2.join("\n");
-}
-
-// src/config/loader/validate-core.ts
-function requireString(ctx, path42, raw, field) {
-  const v = raw[field];
-  if (typeof v !== "string") {
-    ctx.issues.push({
-      path: `${path42}.${field}`,
-      message: `${path42}.${field} must be a string, got ${describeType2(v)}`,
-      line: findKeyLine(ctx.source, [...path42.split("."), field])
-    });
-    return null;
-  }
-  return v;
-}
-function optionalTypedDefault(ctx, path42, raw, type3) {
-  const v = raw.default;
-  if (v === void 0) return void 0;
-  const ok3 = type3 === "string" && typeof v === "string" || type3 === "number" && typeof v === "number" || type3 === "boolean" && typeof v === "boolean";
-  if (!ok3) {
-    ctx.issues.push({
-      path: `${path42}.default`,
-      message: `default must be a ${type3}, got ${describeType2(v)}`,
-      line: findKeyLine(ctx.source, [...path42.split("."), "default"])
-    });
-    return void 0;
-  }
-  return v;
-}
-function optionalStringField(ctx, path42, raw, field) {
-  const v = raw[field];
-  if (v === void 0) return void 0;
-  if (typeof v !== "string") {
-    ctx.issues.push({
-      path: `${path42}.${field}`,
-      message: `${path42}.${field} must be a string, got ${describeType2(v)}`,
-      line: findKeyLine(ctx.source, [...path42.split("."), field])
-    });
-    return void 0;
-  }
-  return v;
-}
-function validatePaletteName(ctx, path42, raw) {
-  const v = optionalStringField(ctx, path42, raw, "palette");
-  if (v === void 0) return void 0;
-  if (!ctx.allowedPalettes.has(v)) {
-    ctx.issues.push({
-      path: `${path42}.palette`,
-      message: `Unknown palette "${v}"${retiredThemeNote(v)}. Expected one of: ${[...ctx.allowedPalettes].sort().join(", ")}`,
-      line: findKeyLine(ctx.source, [...path42.split("."), "palette"])
-    });
-    return void 0;
-  }
-  return v;
-}
-function optionalEnum(ctx, path42, raw, field, allowed) {
-  const v = raw[field];
-  if (v === void 0) return void 0;
-  if (typeof v !== "string" || !allowed.includes(v)) {
-    ctx.issues.push({
-      path: `${path42}.${field}`,
-      message: `${path42}.${field} must be one of: ${allowed.join(", ")}; got ${describeValue2(v)}`,
-      line: findKeyLine(ctx.source, [...path42.split("."), field])
-    });
-    return void 0;
-  }
-  return v;
-}
-function isPlainObject3(v) {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
-function describeType2(v) {
-  if (v === null) return "null";
-  if (Array.isArray(v)) return "array";
-  return typeof v;
-}
-function describeValue2(v) {
-  if (typeof v === "string") return JSON.stringify(v);
-  if (v === void 0) return "undefined";
-  return String(v);
-}
-function record(ctx, schema, path42, raw) {
-  if (!isPlainObject3(raw)) {
-    ctx.issues.push({
-      path: path42,
-      message: `${path42} must be an object, got ${describeType2(raw)}`,
-      line: findKeyLine(ctx.source, path42.split("."))
-    });
-    return null;
-  }
-  rejectUnknownKeys(
-    ctx,
-    path42,
-    raw,
-    schema.noun,
-    new Set(Object.keys(schema.fields)),
-    refuseRemoved(ctx, schema.removed ?? {}, path42, raw)
-  );
-  return fields(ctx, schema.fields, path42, raw);
-}
-function refuseRemoved(ctx, removed, path42, raw) {
-  const present = Object.entries(removed).filter(
-    ([key]) => raw[key] !== void 0
-  );
-  for (const [key, pointer] of present) {
-    reject(ctx, `${path42}.${key}`, `${path42}.${key} was removed: ${pointer}`);
-  }
-  return new Set(present.map(([key]) => `${path42}.${key}`));
-}
-function fields(ctx, fieldMap, path42, raw) {
-  const specs = fieldMap;
-  const out = {};
-  let ok3 = true;
-  for (const [field, spec] of Object.entries(specs)) {
-    const value = spec.parse(ctx, path42, field, raw);
-    if (value !== void 0) out[field] = value;
-    else if (spec.required) ok3 = false;
-  }
-  return ok3 ? out : null;
-}
-var EMPTY_PATHS = /* @__PURE__ */ new Set();
-function rejectUnknownKeys(ctx, path42, raw, noun, allowed, spokenFor = EMPTY_PATHS) {
-  for (const key of Object.keys(raw)) {
-    if (!allowed.has(key) && !spokenFor.has(`${path42}.${key}`)) {
-      ctx.issues.push({
-        path: `${path42}.${key}`,
-        message: `Unknown ${noun} "${key}". Expected one of: ${[...allowed].join(", ")}`,
-        line: findKeyLine(ctx.source, [...path42.split("."), key])
-      });
-    }
-  }
-}
-function reject(ctx, path42, message) {
-  ctx.issues.push({
-    path: path42,
-    message,
-    line: findKeyLine(ctx.source, path42.split("."))
-  });
-  return null;
-}
-function oneOfPresent(ctx, schema, path42, raw) {
-  if (!isPlainObject3(raw)) {
-    ctx.issues.push({
-      path: path42,
-      message: `${schema.noun} must be an object, got ${describeType2(raw)}`,
-      line: findKeyLine(ctx.source, path42.split("."))
-    });
-    return null;
-  }
-  const arms = schema.arms;
-  const keys2 = Object.keys(arms);
-  const present = Object.keys(raw).filter((k) => k in arms);
-  const unknown = Object.keys(raw).filter((k) => !(k in arms));
-  for (const k of unknown) {
-    ctx.issues.push({
-      path: `${path42}.${k}`,
-      message: `Unknown ${schema.noun} key "${k}". Expected exactly one of: ${keys2.join(", ")}`,
-      line: findKeyLine(ctx.source, [...path42.split("."), k])
-    });
-  }
-  if (present.length === 0) {
-    ctx.issues.push({
-      path: path42,
-      message: `${schema.noun} must declare exactly one of: ${keys2.join(", ")}`,
-      line: findKeyLine(ctx.source, path42.split("."))
-    });
-    return null;
-  }
-  if (present.length > 1) {
-    ctx.issues.push({
-      path: path42,
-      message: `${schema.noun} must declare exactly one of: ${keys2.join(", ")} (found: ${present.join(", ")})`,
-      line: findKeyLine(ctx.source, path42.split("."))
-    });
-    return null;
-  }
-  const key = present[0];
-  return arms[key].parse(ctx, `${path42}.${key}`, raw[key]);
-}
-function taggedUnion(ctx, schema, path42, raw) {
-  if (!isPlainObject3(raw)) {
-    ctx.issues.push({
-      path: path42,
-      message: `${path42} must be an object, got ${describeType2(raw)}`,
-      line: findKeyLine(ctx.source, path42.split("."))
-    });
-    return null;
-  }
-  const tagValue = raw[schema.tag];
-  if (typeof tagValue !== "string") {
-    ctx.issues.push({
-      path: `${path42}.${schema.tag}`,
-      message: `${path42}.${schema.tag} must be a string, got ${describeType2(tagValue)}`,
-      line: findKeyLine(ctx.source, path42.split("."))
-    });
-    return null;
-  }
-  const arms = schema.arms;
-  if (!Object.hasOwn(arms, tagValue)) {
-    const message = Object.hasOwn(schema.retired, tagValue) ? schema.retired[tagValue](raw) : `Unknown ${schema.noun} "${tagValue}". Expected one of: ${Object.keys(arms).join(", ")}`;
-    ctx.issues.push({
-      path: `${path42}.${schema.tag}`,
-      message,
-      line: findKeyLine(ctx.source, [...path42.split("."), schema.tag])
-    });
-    return null;
-  }
-  const arm2 = arms[tagValue];
-  const before = ctx.issues.length;
-  const parsed2 = arm2.parse(ctx, path42, raw);
-  const spokenFor = new Set(ctx.issues.slice(before).map((i) => i.path));
-  rejectUnknownKeys(
-    ctx,
-    path42,
-    raw,
-    `${tagValue} ${schema.memberNoun} key`,
-    arm2.keys,
-    spokenFor
-  );
-  return parsed2;
-}
-function armFacets(tag, tagValue, fieldMap) {
-  return {
-    json: withConst(objectJson(fieldMap), tag, tagValue),
-    keys: /* @__PURE__ */ new Set([tag, ...Object.keys(fieldMap)])
-  };
-}
-function lazy(thunk) {
-  return (...args) => thunk()(...args);
-}
-function refine(inner, ...checks) {
-  return (ctx, path42, raw) => {
-    const value = inner(ctx, path42, raw);
-    if (value === null) return null;
-    for (const check of checks) {
-      if (check.ok(value)) continue;
-      const { field, message } = check.issue(value);
-      const at = field === "" ? path42 : `${path42}.${field}`;
-      ctx.issues.push({
-        path: at,
-        message,
-        line: findKeyLine(ctx.source, at.split("."))
-      });
-      return null;
-    }
-    return value;
-  };
-}
-function optionalStringSpec() {
-  return {
-    required: false,
-    json: { type: "string" },
-    parse: (ctx, path42, field, raw) => optionalStringField(ctx, path42, raw, field)
-  };
-}
-function optionalBooleanSpec() {
-  return {
-    required: false,
-    json: { type: "boolean" },
-    parse: (ctx, path42, field, raw) => {
-      const v = raw[field];
-      if (v === void 0) return void 0;
-      if (typeof v !== "boolean") {
-        ctx.issues.push({
-          path: `${path42}.${field}`,
-          message: `${field} must be a boolean, got ${describeType2(v)}`,
-          line: findKeyLine(ctx.source, [field])
-        });
-        return void 0;
-      }
-      return v;
-    }
-  };
-}
-function optionalIntSpec(bounds) {
-  const { min: min2, max: max2 } = bounds;
-  return {
-    required: false,
-    json: { type: "integer", minimum: min2, maximum: max2 },
-    parse: (ctx, path42, field, raw) => {
-      const v = raw[field];
-      if (v === void 0) return void 0;
-      if (typeof v !== "number" || !Number.isInteger(v) || v < min2 || v > max2) {
-        ctx.issues.push({
-          path: `${path42}.${field}`,
-          message: `${field} must be an integer between ${min2} and ${max2}, got ${describeValue2(v)}`,
-          line: findKeyLine(ctx.source, [field])
-        });
-        return void 0;
-      }
-      return v;
-    }
-  };
-}
-function optionalNumberSpec(bounds = {}) {
-  const { min: min2 } = bounds;
-  return {
-    required: false,
-    json: { type: "number", ...min2 !== void 0 && { minimum: min2 } },
-    parse: (ctx, path42, field, raw) => {
-      const v = raw[field];
-      if (v === void 0) return void 0;
-      const bad = typeof v !== "number" || !Number.isFinite(v) || min2 !== void 0 && v < min2;
-      if (bad) {
-        const shape = min2 !== void 0 ? `a finite number >= ${min2}` : "a finite number";
-        ctx.issues.push({
-          path: `${path42}.${field}`,
-          message: `${field} must be ${shape}, got ${describeValue2(v)}`,
-          line: findKeyLine(ctx.source, [field])
-        });
-        return void 0;
-      }
-      return v;
-    }
-  };
-}
-function paletteSpec() {
-  return {
-    required: false,
-    // Palette NAME membership is semantic (the allowed set is resolved at load
-    // from installed palettes, not a closed compile-time enum), so the schema
-    // checks only `type: string` — the same shape/meaning split the loader keeps.
-    json: { type: "string" },
-    parse: (ctx, path42, _field, raw) => validatePaletteName(ctx, path42, raw)
-  };
-}
-function requireStringSpec() {
-  return {
-    required: true,
-    json: { type: "string" },
-    parse: (ctx, path42, field, raw) => requireString(ctx, path42, raw, field) ?? void 0
-  };
-}
-function absolutePathProblem(where, value) {
-  return (0, import_node_path14.isAbsolute)(value) ? null : `${where} must be an absolute path (\`~\` and relative paths are not expanded), got ${JSON.stringify(value)}`;
-}
-function requireAbsolutePathSpec() {
-  return {
-    required: true,
-    json: { type: "string", pattern: "^/" },
-    parse: (ctx, at, field, raw) => {
-      const v = requireString(ctx, at, raw, field);
-      if (v === null) return void 0;
-      const problem = absolutePathProblem(`${at}.${field}`, v);
-      return problem === null ? v : reject(ctx, `${at}.${field}`, problem) ?? void 0;
-    }
-  };
-}
-function optionalEnumSpec(allowed) {
-  return {
-    required: false,
-    // [LAW:one-source-of-truth] `allowed` is the single source: `parse` checks
-    // membership against it, `json` lists it as the schema `enum`.
-    json: { enum: [...allowed] },
-    parse: (ctx, path42, field, raw) => optionalEnum(ctx, path42, raw, field, allowed)
-  };
-}
-function objectJson(fieldMap, opts = { closed: true }) {
-  const specs = fieldMap;
-  const properties = {};
-  const required = [];
-  for (const [field, spec] of Object.entries(specs)) {
-    properties[field] = spec.json;
-    if (spec.required) required.push(field);
-  }
-  return {
-    type: "object",
-    properties,
-    ...required.length > 0 && { required },
-    ...opts.closed && { additionalProperties: false }
-  };
-}
-function recordJson(schema) {
-  return objectJson(schema.fields);
-}
-function withConst(base, key, value) {
-  const b = base;
-  const properties = {
-    [key]: { const: value },
-    ...b.properties
-  };
-  const required = [key, ...b.required ?? []];
-  return { ...b, properties, required };
-}
-function taggedUnionJson(schema) {
-  const arms = schema.arms;
-  return { anyOf: Object.values(arms).map((arm2) => arm2.json) };
-}
-function oneOfPresentJson(schema) {
-  const arms = schema.arms;
-  return {
-    anyOf: Object.entries(arms).map(([key, arm2]) => ({
-      type: "object",
-      properties: { [key]: arm2.json },
-      required: [key],
-      additionalProperties: false
-    }))
-  };
-}
-
-// src/config/menu-timeout.ts
-init_globals();
-var flashes = (count, seconds) => Array.from({ length: count * 2 }, (_, i) => ({ lit: i % 2 === 0, seconds }));
-var CLOSING_FLASH = [
-  ...flashes(3, 1),
-  ...flashes(3, 0.25)
-];
-var CLOSING_FLASH_SECONDS = CLOSING_FLASH.reduce(
-  (sum, { seconds }) => sum + seconds,
-  0
-);
-var MENU_TIMEOUT_RANGE = { min: 15, max: 600, step: 15 };
-var MENU_TIMEOUT_DEFAULT = 120;
-var closesAt = (since, timeoutS) => since + timeoutS;
-var flashBegins = (timeoutS) => timeoutS - CLOSING_FLASH_SECONDS;
-
-// src/config/globals-fields.ts
-var control = (label2, place, {
-  previews = [],
-  shown = "true"
-} = {}) => ({ label: label2, place, previews, shown });
-var enumValues = (members, optionDomain, facets = {}) => ({
-  spec: optionalEnumSpec(members),
-  domain: { from: members },
-  parse: (raw) => members.includes(raw) ? raw : null,
-  ...optionDomain !== void 0 && {
-    optionDomain: {
-      name: optionDomain,
-      members,
-      ...facets
-    }
-  }
-});
-var markTrials = (trials) => (option) => trials.includes(option) ? `\u{1F9EA} ${option}` : option;
-var boolValues = {
-  spec: optionalBooleanSpec(),
-  domain: "bool",
-  parse: parseSessionBoolean
-};
-var intValues = (range) => ({
-  spec: optionalIntSpec(range),
-  domain: range,
-  parse: (raw) => parseSessionInt(raw, range)
-});
-function enumSetting(members, floor2, shown, extra = {}) {
-  return {
-    kind: "session",
-    ...enumValues(members, extra.optionDomain, {
-      library: extra.library,
-      labelOf: extra.labelOf
-    }),
-    floor: floor2,
-    control: shown,
-    themeDefault: extra.themeDefault ?? false
-  };
-}
-function boolSetting(floor2, shown) {
-  return {
-    kind: "session",
-    ...boolValues,
-    floor: floor2,
-    control: shown,
-    themeDefault: false
-  };
-}
-function intSetting(range, floor2, shown) {
-  return {
-    kind: "session",
-    ...intValues(range),
-    floor: floor2,
-    control: shown,
-    themeDefault: false
-  };
-}
-function selection(sessionKey, spec, domain, shown, extra = {}) {
-  return {
-    kind: "selection",
-    sessionKey,
-    spec,
-    domain,
-    control: shown,
-    themeDefault: extra.themeDefault ?? false
-  };
-}
-var text3 = (spec) => ({
-  kind: "text",
-  spec
-});
-var colorCompatibilitySpec = {
-  required: false,
-  json: { enum: [...COLOR_COMPATIBILITIES] },
-  parse: (ctx, path42, field, raw) => {
-    if (raw[field] === "auto") {
-      ctx.issues.push({
-        path: `${path42}.${field}`,
-        message: `${path42}.${field}: "auto" is not supported \u2014 the render daemon runs detached, so terminal detection would read the daemon's environment, not your terminal's. Pick an explicit depth: ${COLOR_COMPATIBILITIES.join(", ")}`,
-        line: findKeyLine(ctx.source, [...path42.split("."), field])
-      });
-      return void 0;
-    }
-    return optionalEnum(ctx, path42, raw, field, COLOR_COMPATIBILITIES);
-  }
-};
-var paletteOrRuleSpec = {
-  required: false,
-  // Shape-only, exactly as `paletteSpec`'s schema facet is: the allowed names
-  // are resolved at load from installed palettes, and a rule is a string too.
-  json: { type: "string" },
-  parse: (ctx, path42, field, raw) => {
-    const v = optionalStringField(ctx, path42, raw, field);
-    return isExpression(v) ? v : validatePaletteName(ctx, path42, raw);
-  }
-};
-var effectOrRuleSpec = {
-  required: false,
-  json: {
-    anyOf: [{ enum: [...EFFECT_NAMES] }, { type: "string", pattern: "\\{\\{" }]
-  },
-  parse: (ctx, path42, field, raw) => {
-    const v = raw[field];
-    return typeof v === "string" && isExpression(v) ? v : optionalEnum(ctx, path42, raw, field, EFFECT_NAMES);
-  }
-};
-var MENU_GLYPH = /^[^\r\n]*\S[^\r\n]*$/u;
-var CLOSE_GLYPH = new RegExp(
-  `^(?:${DOOR_CLOSE_GLYPH}|${DISCLOSURE_GLYPH_CLOSE})[\\uFE0E\\uFE0F]?$`,
-  "u"
-);
-var menuGlyphSpec = {
-  required: false,
-  json: {
-    type: "string",
-    pattern: MENU_GLYPH.source,
-    not: { pattern: CLOSE_GLYPH.source }
-  },
-  parse: (ctx, path42, field, raw) => {
-    const v = optionalStringField(ctx, path42, raw, field);
-    if (v === void 0 || MENU_GLYPH.test(v) && !CLOSE_GLYPH.test(v))
-      return v;
-    ctx.issues.push({
-      path: `${path42}.${field}`,
-      message: `${path42}.${field}: must be one line of visible text other than a close glyph ("${DOOR_CLOSE_GLYPH}", "${DISCLOSURE_GLYPH_CLOSE}") \u2014 the settings menu needs a glyph to click`,
-      line: findKeyLine(ctx.source, [...path42.split("."), field])
-    });
-    return void 0;
-  }
-};
-var LANE_ROWS = Object.fromEntries(
-  TOGGLED_LANES.map((lane) => [
-    LANES[lane].switch.setting,
-    boolSetting(false, control(LANES[lane].label, "toggles"))
-  ])
-);
-var RENDERER_DESCRIPTIONS = {
-  claude: "Claude Code's status line",
-  tmux: "the tmux status line, while this pane is shown"
-};
-var RENDERER_LIBRARY = {
-  groups: [{ id: "renderer", label: "draw the bar in" }],
-  entry: (option) => ({
-    group: "renderer",
-    description: RENDERER_DESCRIPTIONS[option]
-  })
-};
-var GLOBAL_FIELDS = {
-  // The config default for the base theme: a theme NAME, or a rule choosing
-  // one per render (brandon-themes-dzl). A placement's `theme` setting other
-  // than `bar` ignores it.
-  palette: selection(
-    "theme",
-    paletteOrRuleSpec,
-    { themes: "themes" },
-    control("\u{1F3A8} theme", "door")
-  ),
-  // The config default for the PRESET — a named fragment from `presets:`
-  // whose globals and root the session renders. Membership in the merged
-  // `presets` map is cross-ref's. [LAW:one-source-of-truth] A preset's own
-  // globals may NOT carry it: a
-  // preset selecting a preset is a second, cyclic authority over which is
-  // active. Its control sits on the door's first line, one click away:
-  // switching arrangement is what people open the menu for.
-  preset: selection(
-    "preset",
-    optionalStringSpec(),
-    { from: "presets" },
-    control("\u25A6 preset", "door", { previews: ["layout", "presetDelete"] })
-  ),
-  // The config default for the STYLE (a named theme adaptation from
-  // `styles:`), or a rule choosing one by data (brandon-looks-pe6).
-  // Membership in the merged `styles` map is cross-ref's, which exempts a rule.
-  style: selection(
-    "style",
-    optionalStringSpec(),
-    { from: "styles" },
-    control("\u25D0 style", "gear", { previews: ["palette"] }),
-    { themeDefault: true }
-  ),
-  // The looping EFFECT the whole bar wears (brandon-effects-2gka.d2i): `none`
-  // or a rich-js catalogue loop name, or a rule rendering one.
-  effect: selection(
-    "effect",
-    effectOrRuleSpec,
-    { from: EFFECT_NAMES },
-    control("\u2728 effect", "look")
-  ),
-  // The powerline cap/separator SHAPE — one of rich-js's bundled joiners.
-  endcaps: enumSetting(
-    ENDCAPS_SHAPES,
-    "powerline",
-    control("\u2726 endcaps", "look"),
-    {
-      optionDomain: "endcaps"
-    }
-  ),
-  // Which theme role each ROW of the closed bar wears, in order — a named
-  // entry of VARIATIONS (src/themes/decor.ts): rows in `secondary`, then
-  // `accent` by default (brandon-theme-picker-bgw.7g6).
-  variation: enumSetting(
-    VARIATION_NAMES,
-    "accent",
-    control("\u{1F3BC} variation", "gear", {
-      previews: ["layout"]
-    }),
-    {
-      optionDomain: "variations",
-      labelOf: markTrials(TRIAL_VARIATION_NAMES),
-      themeDefault: true
-    }
-  ),
-  // Which of its role's shades each CELL of the closed bar wears — a named
-  // position of the shade dial, SHADES (src/themes/decor.ts): a window of the
-  // role's darkenings and lightenings, or its muted form. The default is the
-  // window centred on each role's own colour — "the default will be 'middle'
-  // (standard role)" (candybar-theme-colours-6fq5.e5n).
-  shade: enumSetting(
-    SHADE_NAMES,
-    "middle",
-    control("\u{1F506} shade", "gear", {
-      previews: ["layout"]
-    }),
-    {
-      optionDomain: "shades",
-      labelOf: markTrials(TRIAL_SHADE_NAMES),
-      themeDefault: true
-    }
-  ),
-  // Whether a placement that appears mid-session fades in over 20 s
-  // (brandon-effects-2gka.631) and one that leaves dissolves out over 30 s
-  // (brandon-effects-2gka.3vt). Off: a bloom is a look somebody chooses.
-  transitions: boolSetting(false, control("fade in/out", "look")),
-  // How fast every decorative animation runs — the effects above, fades and
-  // dissolves, and a template's `frames`/`stepped` (brandon-menus-sjhy.nt2):
-  // the rate the session's animation clock advances against the wall clock
-  // (`ANIMATION_SPEEDS`, src/render/effect.ts `SessionEffects.clockAt`).
-  animationSpeed: enumSetting(
-    ANIMATION_SPEED_NAMES,
-    "1x",
-    control("speed", "look")
-  ),
-  // Whether a root row that exceeds the usable width soft-wraps, between
-  // cells and through a cell wider than a line (the legacy display.autoWrap).
-  // False renders each row as one unbounded line, overflow off-screen.
-  autoWrap: boolSetting(true, control("wrap", "config")),
-  // Spaces synthesized INSIDE each segment cell per side (intra-cell, within
-  // the bg fill — the legacy display.padding). Templates author content; this
-  // chrome is applied structurally at the cell-formation seam. Bounded above
-  // so a config value can never drive an unbounded `" ".repeat` in the daemon
-  // [LAW:no-silent-failure] — the file, the click and the session pick all
-  // honour PADDING_RANGE.
-  padding: intSetting(
-    { ...PADDING_RANGE, step: 1 },
-    1,
-    control("padding", "config")
-  ),
-  // Whether the daemon renders its update notice — the row saying newer source
-  // or a newer release exists than the code rendering the bar
-  // (src/daemon/update-notice.ts). The notice's own `[disable]` writes `false`
-  // here; a per-session, per-version dismissal lives in SessionState instead.
-  updateNotice: boolSetting(true, control("update notice", "config")),
-  // Seconds without a click before every open menu flashes and closes
-  // (src/config/menu-timeout.ts, src/daemon/menu-idle.ts).
-  menuTimeout: intSetting(
-    MENU_TIMEOUT_RANGE,
-    MENU_TIMEOUT_DEFAULT,
-    control("menu timeout", "config")
-  ),
-  // Where the bar is drawn (RENDERERS, src/config/lanes.ts). Offered only to a
-  // session inside tmux: outside it, `claude` is the one renderer there is,
-  // and a session there draws in Claude Code's status line whatever this
-  // says, leaving the setting the sessions share as it is.
-  renderer: enumSetting(
-    RENDERERS,
-    "claude",
-    control("renderer", "config", { shown: IN_TMUX }),
-    { optionDomain: "renderers", library: RENDERER_LIBRARY }
-  ),
-  ...LANE_ROWS,
-  // The color depth rich-js downsamples output to (the legacy
-  // display.colorCompatibility) — truecolor by default, deliberately NOT the
-  // legacy "auto", which the detached daemon cannot honour (see
-  // COLOR_COMPATIBILITIES). Set in the config file only: Brandon cut the
-  // control (brandon-menu-ia-q30.5y4).
-  colorCompatibility: {
-    kind: "config",
-    ...enumValues(COLOR_COMPATIBILITIES, "colorCompatibilities"),
-    // Its own spec only for the migration-pointing "auto" refusal above.
-    spec: colorCompatibilitySpec,
-    floor: "truecolor"
-  },
-  // The text segments render when their value is empty.
-  default_empty_value: text3(optionalStringSpec()),
-  // The cell separator `plain` draws between segments. Absent means the glyph
-  // rich-js's bundled `plain` joiner owns — no floor here, since naming one
-  // would be a second copy of a constant that lives in rich-js.
-  default_separator: text3(optionalStringSpec()),
-  // The settings menu's door glyph (🍫 by default, synthesized by the menu).
-  menuGlyph: text3(menuGlyphSpec)
-};
-var ROWS = Object.entries(GLOBAL_FIELDS);
-var VALUED_FIELDS = ROWS.filter(
-  ([, row2]) => row2.kind === "session" || row2.kind === "config"
-).map(([field]) => field);
-var CONTROLLED_FIELDS = ROWS.filter(
-  ([, row2]) => row2.kind === "session" || row2.kind === "selection"
-).map(([field]) => field);
-var THEME_DEFAULT_FIELDS = ROWS.filter(
-  ([, row2]) => (row2.kind === "session" || row2.kind === "selection") && row2.themeDefault
-).map(([field]) => field);
-var NAMED_DOMAINS = ROWS.flatMap(
-  ([, row2]) => "optionDomain" in row2 && row2.optionDomain !== void 0 ? [row2.optionDomain] : []
-);
-function valuedRow(field) {
-  return GLOBAL_FIELDS[field];
-}
-var floorOf2 = (field) => valuedRow(field).floor;
-function wireKindOf(field) {
-  const row2 = GLOBAL_FIELDS[field];
-  if (row2.kind === "text") return "string";
-  const { domain } = row2;
-  return domain === "bool" ? "boolean" : typeof domain === "object" && "min" in domain ? "number" : "string";
-}
-
-// src/config/setting-projections.ts
-var effectiveVarOf = (name) => `${name}.effective`;
-var nameOf = (field) => {
-  const row2 = GLOBAL_FIELDS[field];
-  return row2.kind === "selection" ? row2.sessionKey : field;
-};
-var SETTINGS = Object.fromEntries(
-  CONTROLLED_FIELDS.map((field) => {
-    const name = nameOf(field);
-    return [
-      name,
-      {
-        configKey: field,
-        sessionKey: name,
-        effectiveVar: effectiveVarOf(name),
-        ...GLOBAL_FIELDS[field].control
-      }
-    ];
-  })
-);
-var SETTING_NAMES = Object.keys(SETTINGS);
-var SETTING_PROJECTIONS = Object.values(SETTINGS);
-var CONFIG_ONLY_PROJECTIONS = VALUED_FIELDS.filter((field) => GLOBAL_FIELDS[field].kind === "config").map(
-  (field) => ({ configKey: field, effectiveVar: effectiveVarOf(field) })
-);
-var CONFIG_ONLY_KEYS = new Set(
-  CONFIG_ONLY_PROJECTIONS.map((p2) => p2.configKey)
-);
-var CONFIG_KEY_TO_EFFECTIVE_VAR = new Map(
-  [...SETTING_PROJECTIONS, ...CONFIG_ONLY_PROJECTIONS].map((p2) => [
-    p2.configKey,
-    p2.effectiveVar
-  ])
-);
-var SESSION_KEY_TO_EFFECTIVE_VAR = new Map(SETTING_PROJECTIONS.map((p2) => [p2.sessionKey, p2.effectiveVar]));
-function perSetting(value) {
-  return Object.fromEntries(
-    SETTING_NAMES.map((name) => [name, value(name)])
-  );
-}
-var SESSION_KEY_TO_SETTING = new Map(
-  SETTING_NAMES.map((name) => [SETTINGS[name].sessionKey, name])
-);
-
 // src/config/payload-inputs.ts
 function effectiveInput(field, effectiveVar) {
   const row2 = GLOBAL_FIELDS[field];
@@ -52074,241 +54649,6 @@ function synthesisInputs(artifacts, trees, config2) {
   return ensured;
 }
 
-// src/config/presets.ts
-init_globals();
-
-// src/config/root.ts
-init_globals();
-var ROW_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
-function positionalRowName(index) {
-  return `#${index + 1}`;
-}
-var EMPTY_ROWS = { rows: {} };
-function isRowsFragment(fragment) {
-  return "rows" in fragment;
-}
-function positionalRows(rows) {
-  return Object.fromEntries(rows.map((row2, i) => [positionalRowName(i), row2]));
-}
-function rootOf2(node) {
-  if (node.kind === "container" && node.direction === "vertical") {
-    const { kind, direction, children: children2, ...own2 } = node;
-    return { ...own2, rows: positionalRows(children2) };
-  }
-  const { when: when2, ...rest2 } = node;
-  return {
-    ...when2 !== void 0 && { when: when2 },
-    rows: positionalRows([rest2])
-  };
-}
-function rootNode(root) {
-  const { rows, ...own2 } = root;
-  return {
-    kind: "container",
-    direction: "vertical",
-    children: Object.values(rows),
-    ...own2
-  };
-}
-function fragmentNode(fragment) {
-  return isRowsFragment(fragment) ? rootNode(fragment) : fragment;
-}
-function* fragmentNodePaths(fragment, key) {
-  if (!isRowsFragment(fragment)) {
-    yield* walkNodePaths(fragment, key);
-    return;
-  }
-  yield [rootNode(fragment), key];
-  for (const [name, row2] of Object.entries(fragment.rows)) {
-    yield* walkNodePaths(row2, `${key}.rows.${name}`);
-  }
-}
-function mergeRoot(fragment, base) {
-  return isRowsFragment(fragment) ? { ...base, ...fragment, rows: { ...base.rows, ...fragment.rows } } : rootOf2(fragment);
-}
-function insertCells(root, cells) {
-  return cells.reduce(
-    (acc, cell3) => {
-      const id2 = cell3.id ?? cell3.seg;
-      const placed2 = [...walkNodes(rootNode(acc.root))].flatMap(
-        (node2) => node2.kind === "segment" ? [node2] : []
-      );
-      if (placed2.some(
-        (node2) => node2.name === cell3.seg && (cell3.id === void 0 || placementId(node2) === cell3.id)
-      ))
-        return acc;
-      const held = placed2.find((node2) => placementId(node2) === id2);
-      if (held !== void 0)
-        return refuse2(
-          acc,
-          cell3,
-          `as "${id2}", but placement "${id2}" is already segment "${held.name}" \u2014 give the cell its own id`
-        );
-      const node = {
-        kind: "segment",
-        name: cell3.seg,
-        ...cell3.id !== void 0 && { id: cell3.id },
-        insertedBy: cell3.by
-      };
-      const rows = Object.entries(acc.root.rows).map(
-        ([name, row2]) => [
-          name,
-          row2,
-          besideRow(row2, cell3.anchor, node, cell3.relation)
-        ]
-      );
-      return rows.some(([, , placed3]) => placed3 !== null) ? {
-        ...acc,
-        root: {
-          ...acc.root,
-          rows: Object.fromEntries(
-            rows.map(([name, row2, placed3]) => [name, placed3 ?? row2])
-          )
-        }
-      } : refuse2(
-        acc,
-        cell3,
-        `${cell3.relation} "${cell3.anchor}", but there is no placement "${cell3.anchor}"`
-      );
-    },
-    { root, unplaced: [] }
-  );
-}
-function refuse2(acc, cell3, reason) {
-  return { ...acc, unplaced: [...acc.unplaced, { cell: cell3, reason }] };
-}
-function besideRow(row2, anchor, cell3, relation) {
-  if (row2.kind === "segment" && placementId(row2) === anchor) {
-    const { when: when2, ...rest2 } = row2;
-    return {
-      kind: "container",
-      direction: "horizontal",
-      children: relation === "before" ? [cell3, rest2] : [rest2, cell3],
-      ...when2 !== void 0 && { when: when2 }
-    };
-  }
-  return row2.kind === "container" ? beside(row2, anchor, cell3, relation) : besideInBody(row2, anchor, cell3, relation);
-}
-function beside(node, anchor, cell3, relation) {
-  const at = node.children.findIndex(
-    (child) => child.kind === "segment" && placementId(child) === anchor
-  );
-  if (at >= 0) {
-    const cut = relation === "before" ? at : at + 1;
-    const { when: when2 } = node.children[at];
-    return {
-      ...node,
-      children: [
-        ...node.children.slice(0, cut),
-        { ...cell3, ...when2 !== void 0 && { when: when2 } },
-        ...node.children.slice(cut)
-      ]
-    };
-  }
-  for (const [i, child] of node.children.entries()) {
-    const next = child.kind === "container" ? beside(child, anchor, cell3, relation) : besideInBody(child, anchor, cell3, relation);
-    if (next !== null) {
-      return {
-        ...node,
-        children: node.children.map((c, j) => j === i ? next : c)
-      };
-    }
-  }
-  return null;
-}
-function besideInBody(node, anchor, cell3, relation) {
-  let found = false;
-  const next = mapOpens(node, (body) => {
-    const placed2 = beside(body, anchor, cell3, relation);
-    found = placed2 !== null;
-    return placed2 ?? body;
-  });
-  return found ? next : null;
-}
-function restages(fragment) {
-  if (!isRowsFragment(fragment)) return true;
-  const { rows, ...own2 } = fragment;
-  return Object.values(own2).some((v) => v !== void 0) || Object.keys(rows).length > 0;
-}
-
-// src/config/presets.ts
-var PRESET_FLOOR = "default";
-var FLOOR_FRAGMENT = {};
-function presetNames(presets) {
-  return [.../* @__PURE__ */ new Set([PRESET_FLOOR, ...Object.keys(presets)])];
-}
-function effectivePresetName(sessionPreset, globalsPreset, declaredPresets) {
-  return effectiveMemberName(
-    void 0,
-    sessionPreset,
-    globalsPreset,
-    PRESET_FLOOR,
-    declaredPresets
-  );
-}
-function presetByName(presets, name) {
-  const preset = { [PRESET_FLOOR]: FLOOR_FRAGMENT, ...presets }[name];
-  if (preset === void 0) {
-    throw new Error(
-      `Preset "${name}" is not declared in this config \u2014 effectivePresetName collapses unknown names to "${PRESET_FLOOR}", which always resolves; a miss here means a raw name reached this function without going through that resolution`
-    );
-  }
-  return preset;
-}
-function presetRoot(config2, name) {
-  const fragment = presetByName(config2.presets, name).root ?? EMPTY_ROWS;
-  return {
-    node: rootNode(mergeRoot(fragment, config2.root)),
-    path: restages(fragment) ? `presets.${name}.root` : "root"
-  };
-}
-function placeInserts(config2, cells, authored) {
-  if (cells.length === 0) return { config: config2, notices: [] };
-  const own2 = insertCells(config2.root, cells);
-  const restaged = Object.entries(config2.presets).filter(([, preset]) => restages(preset.root ?? EMPTY_ROWS)).map(([name, preset]) => ({
-    name,
-    preset,
-    ...insertCells(mergeRoot(preset.root ?? EMPTY_ROWS, config2.root), cells)
-  }));
-  const missed = /* @__PURE__ */ new Map();
-  const miss = (tree) => ({ cell: cell3, reason }) => {
-    const reasons = missed.get(cell3) ?? /* @__PURE__ */ new Map();
-    reasons.set(reason, [...reasons.get(reason) ?? [], tree]);
-    missed.set(cell3, reasons);
-  };
-  (authored.root ? own2.unplaced : []).forEach(miss("the root"));
-  for (const { name, unplaced } of restaged.filter(
-    ({ name: name2 }) => authored.presets.has(name2)
-  ))
-    unplaced.forEach(miss(`preset "${name}"`));
-  return {
-    config: {
-      ...config2,
-      root: own2.root,
-      presets: {
-        ...config2.presets,
-        ...Object.fromEntries(
-          restaged.map(({ name, preset, root }) => [
-            name,
-            { ...preset, root: rootNode(root) }
-          ])
-        )
-      }
-    },
-    notices: [...missed].flatMap(
-      ([cell3, reasons]) => [...reasons].map(
-        ([reason, trees]) => insertNotice(cell3, `${reason} (in ${trees.join(", ")})`)
-      )
-    )
-  };
-}
-function insertNotice(cell3, what) {
-  return `${cell3.by.file}: ${cell3.by.entry} places "${cell3.seg}" ${what}`;
-}
-function presetGlobals(config2, name) {
-  return { ...config2.globals, ...presetByName(config2.presets, name).globals };
-}
-
 // src/config/option-domain.ts
 init_globals();
 
@@ -52445,85 +54785,6 @@ function unknownOptionDomain(from, perConfigDomains) {
 
 // src/config/setting-control.ts
 init_globals();
-
-// src/config/menu-keys.ts
-init_globals();
-
-// src/config/ident.ts
-init_globals();
-function ident(name) {
-  return name.replace(/[^A-Za-z0-9]+/g, "_");
-}
-
-// src/config/menu-keys.ts
-var PAGE_HOLDING_CURRENT = "-1";
-function menuMember(applyName) {
-  return applyName;
-}
-function menuStateKey(placementId2, applyName, sharedKey) {
-  return sharedKey !== void 0 ? sharedMenuStateKey(sharedKey) : MENU_NS + ident(placementId2) + "." + ident(applyName);
-}
-function sharedMenuStateKey(sharedKey) {
-  return MENU_NS + ident(sharedKey);
-}
-function menuActionName(stateKey, member) {
-  return stateKey + "." + member;
-}
-function menuPageKey(stateKey) {
-  return MENU_PAGE_NS + stateKey;
-}
-var MENU_OPTION_NAMES = [
-  "closeOnPick",
-  "paged",
-  "key",
-  "distribution"
-];
-var isMenuOptionName = (name) => MENU_OPTION_NAMES.includes(name);
-var MENU_OPTIONS_VOCABULARY = `"closeOnPick" (bool, default false), "paged" (bool, default true), "key" (string, accordion grouping), "distribution" (one of ${DISTRIBUTION_NAMES.map((n) => `"${n}"`).join(", ")}; default "${DEFAULT_DISTRIBUTION}")`;
-function parseMenuOptions(entries) {
-  for (const name of Object.keys(entries)) {
-    if (!isMenuOptionName(name)) {
-      throw new Error(
-        `unknown {{ menu }} option "${name}" \u2014 the options dict takes ${MENU_OPTIONS_VOCABULARY}`
-      );
-    }
-  }
-  const bool = (name, def) => {
-    const v = entries[name];
-    if (v === void 0) return def;
-    if (typeof v !== "boolean") {
-      throw new Error(
-        `{{ menu }} option "${name}" must be a boolean, got ${JSON.stringify(v)} (e.g. (dict "${name}" ${String(!def)}))`
-      );
-    }
-    return v;
-  };
-  const key = entries["key"];
-  if (key !== void 0 && typeof key !== "string") {
-    throw new Error(
-      `{{ menu }} option "key" must be a string naming the accordion group, got ${JSON.stringify(key)}`
-    );
-  }
-  if (key === "") {
-    throw new Error(
-      `{{ menu }} has an empty accordion key \u2014 a shared key must be a non-empty name (or omit "key" for an independent menu)`
-    );
-  }
-  const distribution = entries["distribution"];
-  if (distribution !== void 0 && !isDistributionName(distribution)) {
-    throw new Error(
-      `{{ menu }} option "distribution" must be one of: ${DISTRIBUTION_NAMES.join(", ")}; got ${JSON.stringify(distribution)}`
-    );
-  }
-  return {
-    closeOnPick: bool("closeOnPick", false),
-    paged: bool("paged", true),
-    key,
-    distribution: placedBy(distribution)
-  };
-}
-
-// src/config/setting-control.ts
 var optionsOf = (domain) => "from" in domain ? domain.from : domain.themes;
 function controlDomainAdmits(domain, value, perConfigDomains) {
   if (domain === "bool") return parseSessionBoolean(value) !== null;
@@ -52621,460 +54882,6 @@ function optionPicker(key, name, listKey, from, face) {
       [page2]: { kind: "state", key: page2, default: "0" }
     },
     list: { ref, rows }
-  };
-}
-
-// src/config/loader/persist-target.ts
-init_globals();
-
-// src/config/loader/globals.ts
-init_globals();
-
-// src/config/menu-places.ts
-init_globals();
-var TABS = [
-  { member: "session", label: "\u26A1 session" },
-  { member: "look", label: "\u{1F3A8} look" },
-  // `📐`, because `▦` is the preset control's glyph.
-  { member: "layout", label: "\u{1F4D0} layout" },
-  { member: "config", label: "\u2699 config" },
-  { member: "tools", label: "\u{1F9F0} tools" }
-];
-var TAB_LABEL = Object.fromEntries(
-  TABS.map((t2) => [t2.member, t2.label])
-);
-var SUBMENUS = {
-  gear: { beside: "theme", trigger: "\u2699" },
-  toggles: { beside: "updateNotice", trigger: "\u{1F9EA} toggles" }
-};
-var SUBMENU_NAMES = Object.keys(SUBMENUS);
-var PLACE = perSetting(
-  (name) => SETTINGS[name].place
-);
-var isSubmenu = (place) => Object.hasOwn(SUBMENUS, place);
-var within = (place, container) => place === container || isSubmenu(place) && within(PLACE[SUBMENUS[place].beside], container);
-var placePath = (place) => isSubmenu(place) ? `${placePath(PLACE[SUBMENUS[place].beside])} \u203A ${SUBMENUS[place].trigger}` : place === "door" ? "first line" : TAB_LABEL[place];
-var settingMenuPath = (name) => placePath(PLACE[name]);
-var settingsByPlace = () => ["door", ...TABS.map((t2) => t2.member)].flatMap((top) => [
-  top,
-  ...SUBMENU_NAMES.filter((s) => within(s, top))
-]).map((place) => ({
-  path: placePath(place),
-  names: SETTING_NAMES.filter((name) => PLACE[name] === place)
-})).filter(({ names }) => names.length > 0);
-var laneOffReason = (lane) => {
-  const { setting, on: on2, inTmux: inTmux2 } = LANES[lane].switch;
-  return `${LANES[lane].label} is off \u2014 turn it on in the settings menu's ${settingMenuPath(setting)}, or set globals.${setting}: ${JSON.stringify(on2)}${inTmux2 ? "; it runs only for a session inside a tmux pane" : ""}`;
-};
-
-// src/config/loader/globals.ts
-var GLOBALS_FIELDS = Object.fromEntries(
-  Object.entries(GLOBAL_FIELDS).map(([field, row2]) => [field, row2.spec])
-);
-function settingControlDomain(field) {
-  return rangedDomain(GLOBAL_FIELDS[field]);
-}
-function rangedDomain(row2) {
-  return "optionDomain" in row2 && row2.optionDomain !== void 0 ? { from: row2.optionDomain.name } : row2.domain;
-}
-function fragmentRejection(description, message) {
-  return {
-    required: false,
-    // Always-fail: JSON Schema's `not: {}` matches nothing, so an editor flags
-    // the key at the same moment the validator does.
-    json: { not: {}, description: `not allowed here \u2014 ${description}` },
-    parse: (ctx, path42, field, raw) => {
-      if (raw[field] !== void 0) {
-        ctx.issues.push({
-          path: `${path42}.${field}`,
-          message: message(`${path42}.${field}`),
-          line: findKeyLine(ctx.source, [...path42.split("."), field])
-        });
-      }
-      return void 0;
-    }
-  };
-}
-function nestedPresetSpec(subject) {
-  return fragmentRejection(
-    `${subject} cannot select a preset`,
-    (at) => `${at}: ${subject} cannot select a preset. Which preset is active is resolved once, as session pick over globals.preset over "default"; a fragment naming another would be a second authority over that. Set the default arrangement in the top-level globals.preset instead.`
-  );
-}
-function nestedMenuGlyphSpec(subject) {
-  return fragmentRejection(
-    `${subject} cannot change the settings menu glyph`,
-    (at) => `${at}: ${subject} cannot change the settings menu glyph \u2014 one menu is shared by every preset. Set it in the top-level globals.menuGlyph instead.`
-  );
-}
-function nameOnlySpec(spec, subject, why2) {
-  return {
-    ...spec,
-    json: { ...spec.json, not: { pattern: "\\{\\{" } },
-    parse: (ctx, path42, field, raw) => {
-      const v = raw[field];
-      if (typeof v === "string" && isExpression(v)) {
-        ctx.issues.push({
-          path: `${path42}.${field}`,
-          message: `${path42}.${field}: a rule is not allowed here \u2014 ${subject} ${why2}, so it names a value. Write the rule in globals.${field} (or a preset's globals.${field}) instead.`,
-          line: findKeyLine(ctx.source, [...path42.split("."), field])
-        });
-        return void 0;
-      }
-      return spec.parse(ctx, path42, field, raw);
-    }
-  };
-}
-var REMOVED_GLOBALS = {
-  default_bg: "nothing reads it \u2014 a segment with no `bg:` wears the decoration tint of its place in the bar. Delete the key, and author `bg:` on the segments that need a fixed colour.",
-  default_fg: "nothing reads it \u2014 a segment with no `fg:` wears text chosen for contrast against its background. Delete the key, and author `fg:` on the segments that need a fixed colour.",
-  default_truncate_marker: 'nothing reads it \u2014 a segment clipped to its `width:` always ends in "\u2026". Delete the key.',
-  // brandon-menu-ia-q30.xuz: renamed, with no shim. `style` is absent here
-  // because it is still a key — it names what `style` did, and an endcaps
-  // value in it is refused by value (cross-ref.ts).
-  look: 'it was renamed "style" \u2014 write the same name as style: "<name>"',
-  progression: 'it was renamed "variation", and its values with it: accent (was secondary-accent), duo (was primary-secondary), mono (was primary)',
-  // The tmux status line became a renderer the bar fully supports, so its
-  // experimental toggle is a value of the renderer setting.
-  // [LAW:one-source-of-truth] Where the control is comes from the menu's map.
-  experimentalTmuxStatus: `it became the renderer setting \u2014 write renderer: "tmux" (or pick tmux in ${settingMenuPath("renderer")} \u203A renderer, from a session inside tmux)`,
-  // Brandon cut ascii mode: the bar draws Nerd Font glyphs, and the doctor's
-  // nerdFont check names the font that lacks them.
-  charset: "the bar always draws Nerd Font glyphs. Delete the key; `cc-candybar doctor` names what your terminal's font is missing."
-};
-var GLOBALS_SCHEMA = {
-  noun: "globals key",
-  fields: GLOBALS_FIELDS,
-  removed: REMOVED_GLOBALS
-};
-var PRESET_FRAGMENT_REJECTIONS = {
-  preset: nestedPresetSpec("a preset"),
-  menuGlyph: nestedMenuGlyphSpec("a preset")
-};
-var PRESET_GLOBALS_SCHEMA = {
-  noun: "preset globals key",
-  fields: { ...GLOBALS_FIELDS, ...PRESET_FRAGMENT_REJECTIONS },
-  removed: REMOVED_GLOBALS
-};
-function isPresetGlobalsField(key) {
-  return isGlobalsField(key) && !(key in PRESET_FRAGMENT_REJECTIONS);
-}
-var EDIT_GLOBALS_WHY = "is decided later than any rule could be settled";
-var EDIT_GLOBALS_SCHEMA = {
-  noun: "editGlobals key",
-  removed: REMOVED_GLOBALS,
-  fields: {
-    ...GLOBALS_FIELDS,
-    preset: nestedPresetSpec("the editGlobals fragment"),
-    menuGlyph: nestedMenuGlyphSpec("the editGlobals fragment"),
-    palette: nameOnlySpec(
-      GLOBALS_FIELDS.palette,
-      "the editGlobals fragment",
-      EDIT_GLOBALS_WHY
-    ),
-    style: nameOnlySpec(
-      GLOBALS_FIELDS.style,
-      "the editGlobals fragment",
-      EDIT_GLOBALS_WHY
-    ),
-    effect: nameOnlySpec(
-      GLOBALS_FIELDS.effect,
-      "the editGlobals fragment",
-      EDIT_GLOBALS_WHY
-    )
-  }
-};
-var THEME_DEFAULT_SCHEMA = {
-  noun: "theme default key",
-  fields: {
-    ...Object.fromEntries(
-      THEME_DEFAULT_FIELDS.map((f) => [f, GLOBALS_FIELDS[f]])
-    ),
-    style: nameOnlySpec(
-      GLOBALS_FIELDS.style,
-      "a theme's default",
-      "is the look that theme wears by name"
-    )
-  }
-};
-function validateThemeDefaults(ctx, raw) {
-  if (!isPlainObject3(raw)) {
-    ctx.issues.push({
-      path: "themeDefaults",
-      message: `themeDefaults must be an object mapping theme names to { shade, variation, style }, got ${describeType2(raw)}`,
-      line: findKeyLine(ctx.source, ["themeDefaults"])
-    });
-    return {};
-  }
-  const out = {};
-  for (const [theme24, value] of Object.entries(raw)) {
-    const path42 = `themeDefaults.${theme24}`;
-    if (!ctx.allowedPalettes.has(theme24)) {
-      ctx.issues.push({
-        path: path42,
-        message: `${path42}: "${theme24}" is not an installed theme${retiredThemeNote(theme24)}. Expected one of: ${[...ctx.allowedPalettes].sort().join(", ")}`,
-        line: findKeyLine(ctx.source, ["themeDefaults", theme24])
-      });
-      continue;
-    }
-    const parsed2 = record(ctx, THEME_DEFAULT_SCHEMA, path42, value);
-    if (parsed2 !== null) out[theme24] = parsed2;
-  }
-  return out;
-}
-function validateGlobals(ctx, path42, raw) {
-  if (raw === void 0) return {};
-  return record(ctx, GLOBALS_SCHEMA, path42, raw) ?? {};
-}
-function validatePresetGlobals(ctx, path42, raw) {
-  return record(ctx, PRESET_GLOBALS_SCHEMA, path42, raw) ?? {};
-}
-function presetGlobalsJson() {
-  return recordJson(PRESET_GLOBALS_SCHEMA);
-}
-function validateEditGlobals(ctx, path42, raw) {
-  return record(ctx, EDIT_GLOBALS_SCHEMA, path42, raw) ?? {};
-}
-var GLOBALS_FIELD_NAMES = new Set(
-  Object.keys(GLOBALS_FIELDS)
-);
-function isGlobalsField(key) {
-  return GLOBALS_FIELD_NAMES.has(key);
-}
-function removedGlobalPointer(key) {
-  return Object.hasOwn(REMOVED_GLOBALS, key) ? REMOVED_GLOBALS[key] : void 0;
-}
-function listGlobalsFieldNames() {
-  return [...GLOBALS_FIELD_NAMES];
-}
-var NUMERIC_GLOBALS_FLOORS = new Map(
-  Object.entries(GLOBAL_FIELDS).flatMap(
-    ([field, row2]) => "floor" in row2 && typeof row2.floor === "number" ? [[field, row2.floor]] : []
-  )
-);
-function numericGlobalsSeeds(globals) {
-  const seeds = /* @__PURE__ */ new Map();
-  for (const [field, floor2] of NUMERIC_GLOBALS_FLOORS) {
-    const declared = globals[field];
-    seeds.set(field, typeof declared === "number" ? declared : floor2);
-  }
-  return seeds;
-}
-
-// src/config/loader/persist-target.ts
-var SEGMENT_PALETTE_KEY = /^segments\.([^.]+)\.palette$/;
-var PRESET_ROOT_KEY = /^presets\.(.+)\.root$/;
-var PRESET_GLOBALS_KEY = /^presets\.(.+)\.globals\.([^.]+)$/;
-var THEME_DEFAULT_KEY = /^themeDefaults\.(.+)\.([^.]+)$/;
-function presetRootKey(name) {
-  return `presets.${name}.root`;
-}
-function themeDefaultKey(theme24, field) {
-  return `themeDefaults.${theme24}.${field}`;
-}
-var isThemeDefaultField = (key) => THEME_DEFAULT_FIELDS.includes(key);
-function presetGlobalsKey(name, field) {
-  return `presets.${name}.globals.${field}`;
-}
-function parsePersistTarget(key) {
-  if (isGlobalsField(key)) return { scope: "globals", field: key };
-  const segmentMatch = SEGMENT_PALETTE_KEY.exec(key);
-  if (segmentMatch)
-    return { scope: "segment-palette", segment: segmentMatch[1] };
-  const globalsMatch = PRESET_GLOBALS_KEY.exec(key);
-  if (globalsMatch && isPresetGlobalsField(globalsMatch[2])) {
-    return {
-      scope: "preset-globals",
-      preset: globalsMatch[1],
-      field: globalsMatch[2]
-    };
-  }
-  const themeMatch = THEME_DEFAULT_KEY.exec(key);
-  if (themeMatch && isThemeDefaultField(themeMatch[2])) {
-    return {
-      scope: "theme-default",
-      theme: themeMatch[1],
-      field: themeMatch[2]
-    };
-  }
-  const presetMatch = PRESET_ROOT_KEY.exec(key);
-  return presetMatch ? { scope: "preset-root", preset: presetMatch[1] } : null;
-}
-function persistPath(target) {
-  switch (target.scope) {
-    case "globals":
-      return ["globals", target.field];
-    case "preset-globals":
-      return ["presets", target.preset, "globals", target.field];
-    case "segment-palette":
-      return ["segments", target.segment, "palette"];
-    case "theme-default":
-      return ["themeDefaults", target.theme, target.field];
-  }
-}
-
-// src/config/segment-groups.ts
-init_globals();
-var SEGMENT_GROUPS = [
-  "location",
-  "git",
-  "model-context",
-  "cost-limits",
-  "activity",
-  "session-tools"
-];
-var OTHER_GROUP = "other";
-var LIBRARY_GROUPS = [
-  ...SEGMENT_GROUPS,
-  OTHER_GROUP
-];
-var GROUP_LABELS = {
-  location: "location",
-  git: "git",
-  "model-context": "model & context",
-  "cost-limits": "cost & limits",
-  activity: "activity",
-  "session-tools": "session tools",
-  other: "other"
-};
-
-// src/config/loader/edit-mode.ts
-init_globals();
-
-// src/config/loader/syntax-engine.ts
-init_globals();
-var SYNTAX_ENGINE = createEngine({ fromString: (s) => s });
-
-// src/config/loader/reserved-namespace.ts
-init_globals();
-function reservedNamespaceOf(name) {
-  const collapsed = ident(name);
-  return RESERVED_NAMESPACES.find((ns) => collapsed.startsWith(ident(ns)));
-}
-function reservedNamespaceCollisions(ctx, out, ns, synthesizedBy) {
-  for (const section of ["variables", "actions", "segments"]) {
-    for (const name of Object.keys(out[section] ?? {})) {
-      if (name.startsWith(ns)) {
-        ctx.issues.push({
-          path: `${section}.${name}`,
-          message: `"${name}" is in the reserved "${ns}" namespace (synthesized by ${synthesizedBy}) \u2014 rename it`,
-          line: findKeyLine(ctx.source, ["root"])
-        });
-      }
-    }
-  }
-}
-function pluginScopeCollisions(ctx, out, inherited) {
-  for (const section of [
-    "variables",
-    "actions",
-    "helpers",
-    "segments"
-  ]) {
-    for (const name of Object.keys(out[section] ?? {})) {
-      const scope = scopeOf(name);
-      if (scope === void 0) continue;
-      if (section !== "variables" && name === scope) continue;
-      if (section === "segments" && inherited.has(name)) continue;
-      ctx.issues.push({
-        path: `${section}.${name}`,
-        message: `"${name}" is in "${scope}", the namespace plugins own (each declares its names there from its own definition) \u2014 rename it`,
-        line: findKeyLine(ctx.source, [section, name])
-      });
-    }
-  }
-  for (const [segment, decl] of Object.entries(out.segments ?? {})) {
-    for (const v of Object.keys(decl.vars ?? {})) {
-      const name = `${segment}.${v}`;
-      const scope = scopeOf(name);
-      if (scope === void 0 || inherited.has(segment)) continue;
-      ctx.issues.push({
-        path: `segments.${segment}.vars.${v}`,
-        message: `segment "${segment}"'s var "${v}" is named "${name}", in "${scope}", the namespace plugins own \u2014 rename the var or the segment`,
-        line: findKeyLine(ctx.source, ["segments", segment, "vars", v])
-      });
-    }
-  }
-}
-
-// src/config/loader/edit-mode.ts
-var EDIT_MODE_KEY = "edit.mode";
-var EDIT_CONFIGURE_KEY = "edit.configure";
-var EDIT_TOGGLE_ACTION = "edit.toggle";
-var EDIT_UNCONFIGURE_ACTION = "edit.unconfigure";
-var EDIT_MODE_ARRANGE = "arrange";
-var PLACEMENT_DRAFT_NS = `${EDIT_NS}draft.`;
-function configureMember(presetIdent, id2) {
-  return `${presetIdent}:${id2}`;
-}
-var EDIT_MODE_REF = {
-  variable: EDIT_MODE_KEY,
-  key: EDIT_MODE_KEY,
-  member: EDIT_MODE_ARRANGE
-};
-var EDIT_MODE_GATE = disclosureGate(EDIT_MODE_REF);
-function referencesEditToggle(template) {
-  try {
-    return SYNTAX_ENGINE.parse(template).referencedCalls().some((c) => c.name === "action" && c.args[0] === EDIT_TOGGLE_ACTION);
-  } catch {
-    return false;
-  }
-}
-function fileWantsEditMode(out) {
-  if (Object.values(out.actions ?? {}).some(
-    (a) => "do" in a && a.do.includes(EDIT_TOGGLE_ACTION)
-  )) {
-    return true;
-  }
-  for (const seg2 of Object.values(out.segments ?? {})) {
-    const fields2 = [
-      seg2.template,
-      seg2.bg,
-      seg2.fg,
-      ...Object.values(seg2.partials ?? {})
-    ];
-    for (const field of fields2) {
-      if (typeof field === "string" && referencesEditToggle(field)) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-function synthesizeEditModeToggle(ctx, out) {
-  reservedNamespaceCollisions(ctx, out, EDIT_NS, "edit mode");
-  if (!fileWantsEditMode(out)) return;
-  const { variables, actions } = editModeArtifacts();
-  out.variables = { ...out.variables ?? {}, ...variables };
-  out.actions = { ...out.actions ?? {}, ...actions };
-}
-function editModeArtifacts() {
-  return {
-    variables: {
-      // Arranging lives inside the door: closing the menu leaves edit mode
-      // (brandon-menus-sjhy.9p6, Brandon: "I'd like edit mode to exit if we
-      // close the main menu").
-      [EDIT_MODE_KEY]: {
-        ...disclosureStateVar(EDIT_MODE_KEY, DISCLOSURE_CLOSED),
-        within: [SETTINGS_REF]
-      },
-      // Configuring is a level inside arranging, so leaving edit mode by any
-      // control closes it (src/config/disclosure-nest.ts).
-      [EDIT_CONFIGURE_KEY]: {
-        ...disclosureStateVar(EDIT_CONFIGURE_KEY, DISCLOSURE_CLOSED),
-        within: [EDIT_MODE_REF]
-      }
-    },
-    actions: {
-      [EDIT_TOGGLE_ACTION]: disclosureCycleAction(
-        EDIT_MODE_KEY,
-        EDIT_MODE_ARRANGE
-      ),
-      [EDIT_UNCONFIGURE_ACTION]: {
-        set: EDIT_CONFIGURE_KEY,
-        to: DISCLOSURE_CLOSED
-      }
-    }
   };
 }
 
@@ -54062,12 +55869,16 @@ init_globals();
 init_globals();
 var DRAWN_MOTIONS = ["moves", "can-move", "still"];
 
-// src/daemon/render-sightings.ts
-var SIGHTINGS_KEPT = 64;
+// src/daemon/foundations/sighting-roles.ts
+init_globals();
 function answeredOf(hookData2) {
   const usage = hookData2.context_window?.current_usage;
   return usage === null ? "no" : usage === void 0 ? "unknown" : "yes";
 }
+var roleOf = (client) => client?.kind === "frames" ? "frames" : "statusline";
+
+// src/daemon/render-sightings.ts
+var SIGHTINGS_KEPT = 64;
 function rateLimitsSeen(hookData2) {
   const windows2 = hookData2.rate_limits;
   if (windows2?.five_hour != null || windows2?.seven_day != null) {
@@ -54082,7 +55893,6 @@ function transcriptSaid(hookData2) {
   };
 }
 var FRAMES_SEEN = [...DRAWN_MOTIONS, "failed", "drawing"];
-var roleOf = (client) => client?.kind === "frames" ? "frames" : "statusline";
 var RenderSightings = class {
   seen = /* @__PURE__ */ new Map();
   // `order`: the request's arrival order. Renders settle out of order — the
@@ -55232,53 +57042,6 @@ function quickActions(prefix) {
 // src/config/command-tray.ts
 init_globals();
 
-// src/config/confirm-step.ts
-init_globals();
-var ARMED = "armed";
-var DISARMED = "disarmed";
-var CONFIRM_KEY_SUFFIX = ".armed";
-var isConfirmKey = (key) => key.endsWith(CONFIRM_KEY_SUFFIX);
-function confirms(key, disarm, fires) {
-  const gates = [...new Set(fires.map((f) => f.when))].filter(
-    (g) => g !== "true"
-  );
-  const nameOf2 = (held) => gates.length === 0 ? key : `${key}.${held}`;
-  const actions = {};
-  for (let held = 0; held < 2 ** gates.length; held++)
-    actions[nameOf2(held)] = {
-      do: [
-        disarm,
-        ...fires.filter(
-          (f) => f.when === "true" || held & 1 << gates.indexOf(f.when)
-        ).map((f) => f.action)
-      ]
-    };
-  const link = (i, held) => i === gates.length ? `"${nameOf2(held)}"` : `(ternary ${link(i + 1, held | 1 << i)} ${link(i + 1, held)} (${gates[i]}))`;
-  return { link: link(0, 0), actions };
-}
-function confirmStep(key, labels, fires) {
-  const stateKey = `${key}${CONFIRM_KEY_SUFFIX}`;
-  const arm2 = `${key}.arm`;
-  const disarm = `${key}.disarm`;
-  const armed = `(eq .${key} "${ARMED}")`;
-  const confirm = confirms(key, disarm, fires);
-  return {
-    // [LAW:dataflow-not-control-flow] Which view the step shows is the key's
-    // value, read back here.
-    template: `{{ if ${armed} }}{{ action ${confirm.link} "${labels.confirm}" }} {{ action "${disarm}" "\u2715" }}{{ else }}{{ action "${arm2}" "${labels.arm}" }}{{ end }}`,
-    actions: {
-      [arm2]: { set: stateKey, to: ARMED },
-      [disarm]: { set: stateKey, to: DISARMED },
-      ...confirm.actions
-    },
-    armed,
-    variables: {
-      [key]: { kind: "state", key: stateKey, default: DISARMED }
-    },
-    disarm
-  };
-}
-
 // src/claude-input/slash-line.ts
 init_globals();
 var SLASH_LINE_PATTERN = "^/[^\\s\\x00-\\x1f\\x7f-\\x9f/][^\\x00-\\x1f\\x7f-\\x9f]*$";
@@ -56423,1777 +58186,17 @@ function synthesizeEditChrome(config2) {
   };
 }
 
-// src/daemon/setting-drafts.ts
-init_globals();
-
-// src/daemon/bundled-presets.ts
-init_globals();
-
-// src/config/default-dsl-config.ts
-init_globals();
-
-// src/config/dsl-loader.ts
-init_globals();
-var import_json53 = __toESM(require_dist(), 1);
-
-// src/config/loader/merge.ts
-init_globals();
-function mergeWithDefault(raw, dflt) {
-  return {
-    globals: { ...dflt.globals, ...raw.globals ?? {} },
-    variables: { ...dflt.variables, ...raw.variables ?? {} },
-    segments: overlayByName(
-      dflt.segments,
-      segmentDeltas(dflt.segments, raw.segments ?? {})
-    ),
-    root: mergeRoot(raw.root ?? EMPTY_ROWS, dflt.root),
-    // [LAW:one-source-of-truth] actions merge by name, same cascade — a user
-    // declares only the actions that differ from the bundled default (which
-    // ships none).
-    actions: { ...dflt.actions, ...raw.actions ?? {} },
-    // [LAW:one-source-of-truth] styles merge by name, same cascade — a user
-    // overrides one adaptation by re-declaring its name; the bundled stdlib
-    // (incl. the "none" identity floor) survives every merge by construction.
-    styles: { ...dflt.styles, ...raw.styles ?? {} },
-    // [LAW:one-source-of-truth] presets merge by name then by field, the
-    // segments overlay — a user retunes one arrangement's root without
-    // restating its globals; the bundled stdlib (incl. the "default"
-    // empty-fragment floor effectivePresetName collapses to) survives every
-    // merge by construction, exactly as styles' "none" does.
-    presets: overlayByName(
-      dflt.presets,
-      presetDeltas(dflt.presets, raw.presets ?? {})
-    ),
-    // [LAW:one-source-of-truth] themeDefaults merge by theme name then by
-    // field, the presets overlay — a file setting one theme's shade keeps the
-    // variation and style the bundled entry for that theme carries.
-    themeDefaults: overlayByName(dflt.themeDefaults, raw.themeDefaults ?? {}),
-    // [LAW:one-source-of-truth] editGlobals merges FIELD by field — the
-    // `globals` cascade above, not the by-name cascades around it, because it
-    // IS a globals fragment: a user retuning edit mode's separator says nothing
-    // about its `endcaps`, exactly as a user setting `globals.padding` says
-    // nothing about `globals.endcaps`.
-    editGlobals: { ...dflt.editGlobals, ...raw.editGlobals ?? {} },
-    // [LAW:one-source-of-truth] helpers merge by name, same cascade — a user
-    // overrides one formatter helper by re-declaring its name; the rest inherit
-    // from the bundled default.
-    helpers: { ...dflt.helpers, ...raw.helpers ?? {} }
-  };
-}
-function segmentDeltas(base, over) {
-  const byName = (name, field, delta) => delta[field] === void 0 ? delta : { ...delta, [field]: { ...base[name]?.[field], ...delta[field] } };
-  return Object.fromEntries(
-    Object.entries(over).map(([name, delta]) => [
-      name,
-      byName(name, "partials", byName(name, "settings", delta))
-    ])
-  );
-}
-function presetDeltas(base, over) {
-  return Object.fromEntries(
-    Object.entries(over).map(([name, delta]) => [
-      name,
-      delta.globals === void 0 ? delta : { ...delta, globals: { ...base[name]?.globals, ...delta.globals } }
-    ])
-  );
-}
-function overlayByName(base, over) {
-  return {
-    ...base,
-    ...Object.fromEntries(
-      Object.entries(over).map(([name, delta]) => [
-        name,
-        { ...base[name], ...delta }
-      ])
-    )
-  };
-}
-
-// src/config/loader/variables.ts
-init_globals();
-
-// src/config/loader/cache.ts
-init_globals();
-function requireCache(ctx, path42, raw, kind) {
-  if (raw.cache === void 0) {
-    ctx.issues.push({
-      path: `${path42}.cache`,
-      message: `${kind} variables must declare a cache policy (one of: ${CACHE_KEYS.join(", ")})`,
-      line: findKeyLine(ctx.source, path42.split("."))
-    });
-    return null;
-  }
-  return validateCache(ctx, `${path42}.cache`, raw.cache);
-}
-function requireCacheSpec(kind) {
-  return {
-    required: true,
-    json: cacheJson(),
-    parse: (ctx, path42, _field, raw) => requireCache(ctx, path42, raw, kind) ?? void 0
-  };
-}
-var CACHE_SCHEMA = {
-  noun: "cache",
-  arms: {
-    ttl: {
-      json: { type: "string" },
-      parse: (ctx, path42, value) => typeof value === "string" && isValidDuration(value) ? { ttl: value } : reject(
-        ctx,
-        path42,
-        `cache.ttl must be a duration string like "5s", "100ms", "2m", "1h"; got ${describeValue2(value)}`
-      )
-    },
-    watch_file: {
-      json: { type: "string", pattern: "^/" },
-      parse: (ctx, path42, value) => {
-        if (typeof value !== "string")
-          return reject(
-            ctx,
-            path42,
-            `cache.watch_file must be a path string, got ${describeValue2(value)}`
-          );
-        const problem = absolutePathProblem("cache.watch_file", value);
-        return problem === null ? { watch_file: value } : reject(ctx, path42, problem);
-      }
-    },
-    depends_on: {
-      json: { type: "array", items: { type: "string" } },
-      parse: (ctx, path42, value) => Array.isArray(value) && value.every((v) => typeof v === "string") ? { depends_on: value } : reject(
-        ctx,
-        path42,
-        `cache.depends_on must be an array of variable-name strings, got ${describeValue2(value)}`
-      )
-    },
-    key: {
-      json: { type: "string" },
-      parse: (ctx, path42, value) => typeof value === "string" && value !== "" ? { key: value } : reject(
-        ctx,
-        path42,
-        `cache.key must be a non-empty template string, got ${describeValue2(value)}`
-      )
-    },
-    never: {
-      json: { const: true },
-      parse: (ctx, path42, value) => value === true ? { never: true } : reject(
-        ctx,
-        path42,
-        `cache.never must be the literal boolean true, got ${describeValue2(value)}`
-      )
-    }
-  }
-};
-function validateCache(ctx, path42, raw) {
-  return oneOfPresent(ctx, CACHE_SCHEMA, path42, raw);
-}
-function cacheJson() {
-  return oneOfPresentJson(CACHE_SCHEMA);
-}
-var DURATION_RE = /^(\d+(?:\.\d+)?)(ms|s|m|h)$/;
-function isValidDuration(s) {
-  return DURATION_RE.test(s);
-}
-
-// src/config/loader/retired-variables.ts
-init_globals();
-var RETIRED_VARIABLES = /* @__PURE__ */ new Map([
-  // brandon-settings-coverage-g4p.lx2
-  ["session.budget.amount", { segment: "session", setting: "budget" }],
-  [
-    "session.budget.warningThreshold",
-    { segment: "session", setting: "warnAt" }
-  ],
-  ["today.budget.amount", { segment: "today", setting: "budget" }],
-  ["today.budget.warningThreshold", { segment: "today", setting: "warnAt" }],
-  ["block.budget.heatThreshold", { segment: "block", setting: "warnAt" }],
-  ["block.budget.warningThreshold", { segment: "block", setting: "errorAt" }],
-  ["weekly.budget.heatThreshold", { segment: "weekly", setting: "warnAt" }],
-  ["weekly.budget.warningThreshold", { segment: "weekly", setting: "errorAt" }],
-  ["burn.eta.errorMinutes", { segment: "burnrate", setting: "errorWithin" }],
-  ["burn.eta.warnMinutes", { segment: "burnrate", setting: "warnWithin" }]
-]);
-function replacement(to) {
-  return `it became the "${to.setting}" setting of each "${to.segment}" placement \u2014 set it on the placement where a row places "${to.segment}" ({ seg: "${to.segment}", settings: { ${to.setting}: <value> } }), or redeclare segments.${to.segment}.settings.${to.setting} with the default every placement should start from`;
-}
-function retiredVariableMessage(name) {
-  const to = RETIRED_VARIABLES.get(name);
-  return to === void 0 ? void 0 : `variables.${name} is no longer read: ${replacement(to)}`;
-}
-function retiredReadHint(ref) {
-  const to = RETIRED_VARIABLES.get(ref);
-  return to === void 0 ? "" : ` \u2014 ".${ref}" is no longer a variable: ${replacement(to)}; a "${to.segment}" template reads it as ".settings.${to.setting}"`;
-}
-var RETIRED_INPUT_PATHS = /* @__PURE__ */ new Map([
-  [
-    "git.timeSinceCommit",
-    `the payload stores the commit's date as "git.committedAt" (epoch seconds), and the bundled template variable "git.timeSinceCommit" computes its age at the draw: drop this declaration`
-  ],
-  [
-    "block.etaMinutes",
-    'the bundled template variable "block.etaMinutes" computes it at the draw: drop this declaration'
-  ],
-  [
-    "weekly.etaMinutes",
-    'the bundled template variable "weekly.etaMinutes" computes it at the draw: drop this declaration'
-  ]
-]);
-var RETIRED_GIT_FIELDS = new Map([
-  [
-    "branch",
-    {
-      read: ".git.branch",
-      declare: { kind: "input", path: "git.branch", default: "" },
-      note: 'when HEAD is on no branch it reads "detached", where this kind read ""'
-    }
-  ],
-  [
-    "sha",
-    {
-      read: ".git.sha",
-      declare: { kind: "input", path: "git.sha", default: "" }
-    }
-  ],
-  [
-    "dirty",
-    {
-      read: '(ne .git.status "clean")',
-      declare: {
-        kind: "template",
-        template: '{{ ne .git.status "clean" }}',
-        type: "boolean"
-      }
-    }
-  ],
-  ...["ahead", "behind", "stash"].map(
-    (field) => [
-      field,
-      {
-        read: `.git.${field}`,
-        declare: {
-          kind: "input",
-          path: `git.${field}`,
-          type: "number",
-          default: 0
-        }
-      }
-    ]
-  )
-]);
-function json5Of(decl) {
-  const value = (v) => typeof v === "string" && v.includes('"') && !v.includes("'") ? `'${v}'` : JSON.stringify(v);
-  return `{ ${Object.entries(decl).map(([k, v]) => `${k}: ${value(v)}`).join(", ")} }`;
-}
-function retiredGitKindMessage(raw) {
-  const head = `kind "git" is retired: every git fact is an input over the payload's git lane, which the bundled default already declares \u2014 drop this declaration and`;
-  const field = typeof raw.field === "string" ? RETIRED_GIT_FIELDS.get(raw.field) : void 0;
-  if (field === void 0) {
-    const reads = [...RETIRED_GIT_FIELDS.values()].map(({ read: read2 }) => read2);
-    return `${head} read whichever of ${reads.slice(0, -1).join(", ")} or ${reads.at(-1)} it stood for, where it was read`;
-  }
-  const note = field.note === void 0 ? "" : ` (${field.note})`;
-  return `${head} read ${field.read} where it was read${note}, or declare ${json5Of(field.declare)} under a name of your own`;
-}
-
-// src/config/loader/variables.ts
-function validateVariables(ctx, pathPrefix, raw) {
-  if (raw === void 0) return {};
-  if (!isPlainObject3(raw)) {
-    ctx.issues.push({
-      path: pathPrefix,
-      message: `${pathPrefix} must be an object, got ${describeType2(raw)}`,
-      line: findKeyLine(ctx.source, pathPrefix.split("."))
-    });
-    return {};
-  }
-  const out = {};
-  for (const [name, decl] of Object.entries(raw)) {
-    const parsed2 = taggedUnion(
-      ctx,
-      VARIABLE_SCHEMA,
-      `${pathPrefix}.${name}`,
-      decl
-    );
-    if (parsed2 !== null) out[name] = parsed2;
-  }
-  return out;
-}
-function literalValueSpec() {
-  return {
-    required: true,
-    json: { type: ["string", "number", "boolean"] },
-    parse: (ctx, path42, _field, raw) => {
-      const value = raw.value;
-      if (typeof value !== "string" && typeof value !== "number" && typeof value !== "boolean") {
-        ctx.issues.push({
-          path: `${path42}.value`,
-          message: `literal value must be string|number|boolean, got ${describeType2(value)}`,
-          line: findKeyLine(ctx.source, path42.split("."))
-        });
-        return void 0;
-      }
-      return value;
-    }
-  };
-}
-function typedDefaultSpec() {
-  return {
-    required: false,
-    json: { type: ["string", "number", "boolean"] },
-    parse: (ctx, path42, _field, raw) => {
-      const t2 = raw.type;
-      const expected = t2 === "number" || t2 === "boolean" || t2 === "string" ? t2 : "string";
-      return optionalTypedDefault(ctx, path42, raw, expected);
-    }
-  };
-}
-var PARSE_SCHEMA = {
-  noun: "parse",
-  arms: {
-    text: {
-      json: { const: true },
-      parse: (ctx, path42, value) => value === true ? { text: true } : reject(
-        ctx,
-        path42,
-        `parse.text must be the literal boolean true, got ${describeValue2(value)}`
-      )
-    },
-    regex: {
-      json: { type: "string" },
-      parse: (ctx, path42, value) => typeof value === "string" ? capturingPattern(ctx, path42, value) : reject(
-        ctx,
-        path42,
-        `parse.regex must be a pattern string, got ${describeValue2(value)}`
-      )
-    },
-    json: {
-      json: { const: true },
-      parse: (ctx, path42, value) => value === true ? { json: true } : reject(
-        ctx,
-        path42,
-        `parse.json must be the literal boolean true, got ${describeValue2(value)}`
-      )
-    }
-  }
-};
-function capturingPattern(ctx, path42, pattern2) {
-  let groups;
-  try {
-    new RegExp(pattern2);
-    groups = new RegExp(`${pattern2}|`).exec("").length - 1;
-  } catch (e) {
-    return reject(
-      ctx,
-      path42,
-      `parse.regex is not a valid regular expression: ${e.message}`
-    );
-  }
-  return groups >= 1 ? { regex: pattern2 } : reject(
-    ctx,
-    path42,
-    `parse.regex must contain a capture group \u2014 its group 1 is the value; got ${JSON.stringify(pattern2)}`
-  );
-}
-function parseSpec() {
-  return {
-    required: false,
-    json: oneOfPresentJson(PARSE_SCHEMA),
-    parse: (ctx, path42, _field, raw) => {
-      if (raw.regex !== void 0) {
-        ctx.issues.push({
-          path: `${path42}.regex`,
-          message: `${path42}.regex was retired; the regex is the parse step's regex arm now: parse: { regex: ${JSON.stringify(raw.regex)} }`,
-          line: findKeyLine(ctx.source, [...path42.split("."), "regex"])
-        });
-      }
-      return raw.parse === void 0 ? void 0 : oneOfPresent(ctx, PARSE_SCHEMA, `${path42}.parse`, raw.parse) ?? void 0;
-    }
-  };
-}
-function sourceDefaultSpec() {
-  return {
-    required: false,
-    json: {
-      type: ["string", "number", "boolean", "array", "object"],
-      description: "The value published when the source fails: a string under the text/regex parse arms, any non-null JSON value under the json arm"
-    },
-    parse: (ctx, path42, _field, raw) => isPlainObject3(raw.parse) && "json" in raw.parse ? jsonDefault(ctx, path42, raw.default) : optionalStringField(ctx, path42, raw, "default")
-  };
-}
-function jsonDefault(ctx, path42, value) {
-  if (value === void 0) return void 0;
-  return isSourceDefault(value) ? value : reject(
-    ctx,
-    `${path42}.default`,
-    `${path42}.default must be a JSON value (a json-parsed source's document), got ${describeValue2(value)}`
-  ) ?? void 0;
-}
-function isSourceDefault(value) {
-  return value !== null && isJsonValue(value);
-}
-function isJsonValue(value) {
-  if (value === null) return true;
-  switch (typeof value) {
-    case "string":
-    case "boolean":
-      return true;
-    case "number":
-      return Number.isFinite(value);
-    case "object": {
-      if (Array.isArray(value)) return value.every(isJsonValue);
-      const proto = Object.getPrototypeOf(value);
-      return (proto === Object.prototype || proto === null) && Object.values(value).every(isJsonValue);
-    }
-    default:
-      return false;
-  }
-}
-var LITERAL_FIELDS = {
-  value: literalValueSpec(),
-  default: optionalStringSpec()
-};
-function inputPathSpec() {
-  const text4 = requireStringSpec();
-  return {
-    ...text4,
-    parse: (ctx, path42, field, raw) => {
-      const value = text4.parse(ctx, path42, field, raw);
-      const instead = value === void 0 ? void 0 : RETIRED_INPUT_PATHS.get(value);
-      return instead === void 0 ? value : reject(
-        ctx,
-        `${path42}.${field}`,
-        `${path42}.${field} "${value}" is no longer in the payload: ${instead}`
-      ) ?? void 0;
-    }
-  };
-}
-var INPUT_FIELDS = {
-  path: inputPathSpec(),
-  type: optionalEnumSpec(["string", "number", "boolean"]),
-  default: typedDefaultSpec()
-};
-var ENV_FIELDS = {
-  name: requireStringSpec(),
-  default: optionalStringSpec()
-};
-var FILE_FIELDS = {
-  path: requireAbsolutePathSpec(),
-  readMode: optionalEnumSpec(["whole", "first-line"]),
-  parse: parseSpec(),
-  cache: requireCacheSpec("file"),
-  default: sourceDefaultSpec()
-};
-var SHELL_FIELDS = {
-  command: requireStringSpec(),
-  parse: parseSpec(),
-  cache: requireCacheSpec("shell"),
-  default: sourceDefaultSpec()
-};
-function noCachePolicy(why2) {
-  return { cache: `${why2}, so it takes no cache policy \u2014 delete the key` };
-}
-var TEMPLATE_FIELDS = {
-  template: requireStringSpec(),
-  type: optionalEnumSpec(["string", "number", "boolean"]),
-  default: typedDefaultSpec()
-};
-var TEMPLATE_VAR_REMOVED = noCachePolicy(
-  "a template variable recomputes whenever a variable it reads changes"
-);
-var TIME_FIELDS = {
-  layout: requireStringSpec(),
-  default: optionalStringSpec()
-};
-var TIME_VAR_REMOVED = noCachePolicy(
-  "a time variable reads the instant its render is drawn at"
-);
-var STATE_FIELDS = {
-  key: requireStringSpec(),
-  default: optionalStringSpec()
-};
-var VARIABLE_TAG = "kind";
-function arm(kind, fieldMap, removed = {}) {
-  return {
-    ...armFacets(VARIABLE_TAG, kind, fieldMap),
-    parse: (ctx, path42, raw) => {
-      refuseRemoved(ctx, removed, path42, raw);
-      const body = fields(ctx, fieldMap, path42, raw);
-      return body === null ? null : { kind, ...body };
-    }
-  };
-}
-var VARIABLE_SCHEMA = {
-  tag: VARIABLE_TAG,
-  noun: "source kind",
-  // `Unknown shell variable key "readMode". Expected one of: kind, command,
-  // parse, cache, default` — a field from the wrong arm, or a typo'd one, is the
-  // loud error a segment's has always been (brandon-config-9li). The author of a
-  // config they cannot see rendered has no other signal [LAW:no-silent-failure].
-  memberNoun: "variable",
-  arms: {
-    literal: arm("literal", LITERAL_FIELDS),
-    // [LAW:one-source-of-truth] `input`'s `default`/`type` cross-field invariant
-    // lives in `typedDefaultSpec` (a field spec reading its sibling), so `input`
-    // is one field map like every other arm — `arm()` derives both `parse` and
-    // `json` from INPUT_FIELDS, no hand-authored schema to keep in sync.
-    input: arm("input", INPUT_FIELDS),
-    env: arm("env", ENV_FIELDS),
-    file: arm("file", FILE_FIELDS),
-    shell: arm("shell", SHELL_FIELDS),
-    template: arm("template", TEMPLATE_FIELDS, TEMPLATE_VAR_REMOVED),
-    time: arm("time", TIME_FIELDS, TIME_VAR_REMOVED),
-    state: arm("state", STATE_FIELDS)
-  },
-  retired: { git: retiredGitKindMessage }
-};
-function variableDeclJson() {
-  return taggedUnionJson(VARIABLE_SCHEMA);
-}
-function variablesMapJson() {
-  return { type: "object", additionalProperties: variableDeclJson() };
-}
-
-// src/config/loader/segments.ts
-init_globals();
-
-// src/config/loader/renamed-segments.ts
-init_globals();
-var RENAMED_SEGMENTS = /* @__PURE__ */ new Map([
-  ["gitTaculous", { kind: "built-in", to: "gitaculous" }],
-  // The one-line summary became the collapsed form of `gitaculous`
-  // (brandon-git-segment-ixf.tl0).
-  ["git", { kind: "built-in", to: "gitaculous" }],
-  // The settings menu's anchor left `settings.` so `.settings` could be a
-  // placement's own settings (brandon-segment-settings-i4n).
-  ["settings.menu", { kind: "built-in", to: "candybar.menu" }],
-  // lit's ticket moved out of the bundled bar into the plugin lit's repository
-  // ships, which reads lit's own statusline file (brandon-plugins-ktag.d6f).
-  [
-    "ticket",
-    {
-      kind: "plugin",
-      to: "plugins.lit.ticket",
-      source: "promptctl/links-issue-tracker"
-    }
-  ],
-  [
-    "ceiling",
-    {
-      kind: "removed",
-      why: "the program it showed draws it through a cc-candybar plugin of its own now \u2014 delete this reference, or place that plugin's segment"
-    }
-  ],
-  [
-    "themeSwitcher",
-    {
-      kind: "removed",
-      why: 'the settings menu\'s \u{1F3A8} theme control steps themes \u2014 delete this reference, or write your own `{{ carousel "apply" "open" "label" }}`'
-    }
-  ]
-]);
-function renamedHint(name) {
-  const renamed = RENAMED_SEGMENTS.get(name);
-  if (renamed === void 0) return "";
-  switch (renamed.kind) {
-    case "built-in":
-      return ` (the built-in segment "${name}" was renamed to "${renamed.to}" \u2014 update this reference)`;
-    case "plugin":
-      return ` (the built-in segment "${name}" became "${renamed.to}", a segment of the plugin \`cc-candybar plugin install ${renamed.source}\` installs \u2014 update this reference)`;
-    case "removed":
-      return ` (the built-in segment "${name}" was removed: ${renamed.why})`;
-  }
-}
-
-// src/config/loader/settings.ts
-init_globals();
-var SETTING_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
-var SETTING_NAME_JSON = { pattern: SETTING_NAME.source };
-var SETTING_VALUE_JSON = {
-  anyOf: [{ type: "boolean" }, { type: "string" }, { type: "integer" }]
-};
-var SETTING_DECL_JSON = {
-  type: "object",
-  additionalProperties: false,
-  required: ["label", "domain", "default"],
-  properties: {
-    label: { type: "string", pattern: "^[^\\n\\r]+$" },
-    domain: {
-      anyOf: [
-        { const: "bool" },
-        {
-          type: "array",
-          items: { type: "string", pattern: "^[^/\\n\\r]+$" },
-          minItems: 1,
-          uniqueItems: true
-        },
-        {
-          type: "object",
-          additionalProperties: false,
-          required: ["min", "max"],
-          properties: {
-            min: { type: "integer" },
-            max: { type: "integer" },
-            step: { type: "integer", minimum: 1 },
-            atLeast: { type: "string", ...SETTING_NAME_JSON }
-          }
-        }
-      ]
-    },
-    default: SETTING_VALUE_JSON
-  }
-};
-var DECL_KEYS = ["label", "domain", "default"];
-var RANGE_KEYS = ["min", "max", "step", "atLeast"];
-function issue(ctx, path42, message) {
-  ctx.issues.push({
-    path: path42,
-    message,
-    line: findKeyLine(ctx.source, path42.split("."))
-  });
-  return void 0;
-}
-function parseDomain(ctx, path42, raw) {
-  if (raw === "bool") return "bool";
-  if (Array.isArray(raw)) {
-    const words2 = raw.filter((m) => typeof m === "string");
-    if (raw.length === 0 || words2.length !== raw.length) {
-      return issue(
-        ctx,
-        path42,
-        `a list domain must be a non-empty list of words, got ${JSON.stringify(raw)}`
-      );
-    }
-    if (new Set(words2).size !== words2.length) {
-      return issue(
-        ctx,
-        path42,
-        `a list domain names each word once, got ${JSON.stringify(raw)}`
-      );
-    }
-    const unwritable2 = words2.filter(
-      (w) => w === "" || w.includes("/") || /[\n\r]/.test(w)
-    );
-    if (unwritable2.length > 0) {
-      return issue(
-        ctx,
-        path42,
-        `a list domain's words must be non-empty, slash-free, and newline-free \u2014 configure mode writes each on the set-state wire \u2014 got ${JSON.stringify(unwritable2)}`
-      );
-    }
-    return words2;
-  }
-  if (isPlainObject3(raw)) {
-    const { min: min2, max: max2, step: step4 = 1, atLeast } = raw;
-    const extra = Object.keys(raw).filter((k) => !RANGE_KEYS.includes(k));
-    if (extra.length === 0 && Number.isInteger(min2) && Number.isInteger(max2) && min2 <= max2 && Number.isInteger(step4) && step4 >= 1 && (atLeast === void 0 || typeof atLeast === "string")) {
-      return {
-        min: min2,
-        max: max2,
-        step: step4,
-        ...atLeast !== void 0 && { atLeast }
-      };
-    }
-    return issue(
-      ctx,
-      path42,
-      `a range domain is { min, max, step?, atLeast? } with integers min \u2264 max, a whole step \u2265 1, and atLeast naming another range setting, got ${JSON.stringify(raw)}`
-    );
-  }
-  return issue(
-    ctx,
-    path42,
-    `domain must be "bool", a list of words, or { min, max }, got ${describeValue2(raw)}`
-  );
-}
-function parseSettingDecl(ctx, path42, raw) {
-  if (!isPlainObject3(raw)) {
-    return issue(
-      ctx,
-      path42,
-      `${path42} must be { label, domain, default }, got ${describeType2(raw)}`
-    );
-  }
-  for (const key of Object.keys(raw)) {
-    if (!DECL_KEYS.includes(key)) {
-      issue(
-        ctx,
-        `${path42}.${key}`,
-        `Unknown setting key "${key}". Expected one of: ${DECL_KEYS.join(", ")}`
-      );
-    }
-  }
-  const { label: label2 } = raw;
-  const labelOk = typeof label2 === "string" && label2.length > 0 && !/[\n\r]/.test(label2);
-  if (!labelOk) {
-    issue(
-      ctx,
-      `${path42}.label`,
-      `a setting needs a one-line, non-empty "label" \u2014 the name its control shows, spliced into a synthesized template string \u2014 got ${describeValue2(label2)}`
-    );
-  }
-  const domain = parseDomain(ctx, `${path42}.domain`, raw.domain);
-  if (!labelOk || domain === void 0) return void 0;
-  const decl = { label: label2, domain, default: raw.default };
-  if (!isSettingValue(raw.default) || !inSettingDomain(decl, raw.default)) {
-    return issue(
-      ctx,
-      `${path42}.default`,
-      `default must be ${describeSettingDomain(decl)}, got ${describeValue2(raw.default)}`
-    );
-  }
-  return decl;
-}
-function isSettingValue(v) {
-  return typeof v === "boolean" || typeof v === "string" || typeof v === "number";
-}
-var IMPLIED_HINTS = {
-  theme: `its default for this segment is segments.<name>.palette, and a placement sets its own with settings: { ${THEME_SETTING}: "<theme>" }`,
-  effect: `a placement follows the bar's effect, or sets its own with settings: { effect: "<effect>" }`
-};
-function isImplied(name) {
-  return IMPLIED_SETTINGS.includes(name);
-}
-function settingsDeclSpec() {
-  return {
-    required: false,
-    json: {
-      type: "object",
-      propertyNames: {
-        ...SETTING_NAME_JSON,
-        not: { enum: [...IMPLIED_SETTINGS] }
-      },
-      additionalProperties: SETTING_DECL_JSON
-    },
-    parse: (ctx, path42, field, raw) => {
-      const v = raw[field];
-      if (v === void 0) return void 0;
-      const at = `${path42}.${field}`;
-      if (!isPlainObject3(v)) {
-        return issue(
-          ctx,
-          at,
-          `${at} must be an object of name \u2192 { label, domain, default }, got ${describeType2(v)}`
-        );
-      }
-      const out = /* @__PURE__ */ Object.create(null);
-      for (const [name, decl] of Object.entries(v)) {
-        if (!SETTING_NAME.test(name)) {
-          issue(
-            ctx,
-            `${at}.${name}`,
-            `setting name "${name}" is read as .settings.${name} in a template, so it must be an identifier (letters, digits, _; not starting with a digit)`
-          );
-          continue;
-        }
-        if (isImplied(name)) {
-          issue(
-            ctx,
-            `${at}.${name}`,
-            `setting "${name}" is one every placement already has \u2014 ${IMPLIED_HINTS[name]}`
-          );
-          continue;
-        }
-        const parsed2 = parseSettingDecl(ctx, `${at}.${name}`, decl);
-        if (parsed2 !== void 0) out[name] = parsed2;
-      }
-      return out;
-    }
-  };
-}
-var RESERVED_ID_JSON = RESERVED_NAMESPACES.map(
-  (ns) => ns.replace(/\./g, "\\.")
-).join("|");
-function placementIdSpec() {
-  return {
-    required: false,
-    json: {
-      type: "string",
-      minLength: 1,
-      pattern: `^(?!${RESERVED_ID_JSON})[^:/]+$`
-    },
-    parse: (ctx, path42, field, raw) => {
-      const v = raw[field];
-      if (v === void 0) return void 0;
-      if (typeof v === "string" && v.length > 0 && !/[:/]/.test(v) && !isReservedName(v))
-        return v;
-      return issue(
-        ctx,
-        `${path42}.${field}`,
-        `a placement "id" must be a non-empty string without "/" or ":", outside the reserved ${RESERVED_NAMESPACES.map((ns) => `"${ns}"`).join(", ")} namespaces, got ${describeValue2(v)}`
-      );
-    }
-  };
-}
-function placementSettingsSpec() {
-  return {
-    required: false,
-    json: {
-      type: "object",
-      propertyNames: SETTING_NAME_JSON,
-      additionalProperties: SETTING_VALUE_JSON
-    },
-    parse: (ctx, path42, field, raw) => {
-      const v = raw[field];
-      if (v === void 0) return void 0;
-      const at = `${path42}.${field}`;
-      if (!isPlainObject3(v)) {
-        return issue(
-          ctx,
-          at,
-          `a placement's "settings" must be an object of setting name \u2192 value, got ${describeType2(v)}`
-        );
-      }
-      const out = /* @__PURE__ */ Object.create(null);
-      for (const [name, value] of Object.entries(v)) {
-        if (isSettingValue(value)) out[name] = value;
-        else
-          issue(
-            ctx,
-            `${at}.${name}`,
-            `setting "${name}" must be a boolean, a word, or a number, got ${describeType2(value)}`
-          );
-      }
-      return out;
-    }
-  };
-}
-
-// src/config/loader/segments.ts
-function inheritableSegmentNames(base) {
-  return new Set(
-    Object.keys(base.segments).filter((name) => !isReservedName(name))
-  );
-}
-function validateSegments(ctx, raw, inherited) {
-  if (raw === void 0) return {};
-  if (!isPlainObject3(raw)) {
-    ctx.issues.push({
-      path: "segments",
-      message: `segments must be an object, got ${describeType2(raw)}`,
-      line: findKeyLine(ctx.source, ["segments"])
-    });
-    return {};
-  }
-  const out = {};
-  for (const [name, decl] of Object.entries(raw)) {
-    const parsed2 = record(
-      ctx,
-      inherited.has(name) ? SEGMENT_DELTA_SCHEMA : SEGMENT_SCHEMA,
-      `segments.${name}`,
-      decl
-    );
-    if (parsed2 !== null) out[name] = parsed2;
-  }
-  return out;
-}
-function joinTemplateBody(ctx, path42, field, raw) {
-  const v = raw[field];
-  if (typeof v === "string") return v;
-  if (Array.isArray(v)) {
-    let ok3 = true;
-    const parts = [];
-    for (const [i, el] of v.entries()) {
-      if (typeof el === "string") {
-        parts.push(el);
-        continue;
-      }
-      ok3 = false;
-      ctx.issues.push({
-        path: `${path42}.${field}[${i}]`,
-        message: `${path42}.${field}[${i}] must be a string, got ${describeType2(el)}`,
-        line: findKeyLine(ctx.source, [...path42.split("."), field])
-      });
-    }
-    return ok3 ? parts.join("") : void 0;
-  }
-  ctx.issues.push({
-    path: `${path42}.${field}`,
-    message: `${path42}.${field} must be a string or an array of strings, got ${describeType2(v)}`,
-    line: findKeyLine(ctx.source, [...path42.split("."), field])
-  });
-  return void 0;
-}
-var TEMPLATE_BODY_JSON = {
-  anyOf: [{ type: "string" }, { type: "array", items: { type: "string" } }]
-};
-function ownTemplateSpec() {
-  return {
-    required: true,
-    json: TEMPLATE_BODY_JSON,
-    parse: (ctx, path42, field, raw) => raw[field] === void 0 ? reject(
-      ctx,
-      `${path42}.${field}`,
-      `${path42} declares no template \u2014 only a segment the bundled default declares may omit it (inheriting the bundled template); a segment of your own needs its own${renamedHint(path42.slice("segments.".length))}`
-    ) ?? void 0 : joinTemplateBody(ctx, path42, field, raw)
-  };
-}
-function optionalTemplateBodySpec() {
-  return {
-    required: false,
-    json: TEMPLATE_BODY_JSON,
-    parse: (ctx, path42, field, raw) => raw[field] === void 0 ? void 0 : joinTemplateBody(ctx, path42, field, raw)
-  };
-}
-function partialsSpec() {
-  return {
-    required: false,
-    json: {
-      type: "object",
-      additionalProperties: TEMPLATE_BODY_JSON
-    },
-    parse: (ctx, path42, field, raw) => {
-      const v = raw[field];
-      if (v === void 0) return void 0;
-      if (!isPlainObject3(v)) {
-        ctx.issues.push({
-          path: `${path42}.${field}`,
-          message: `${path42}.${field} must be an object, got ${describeType2(v)}`,
-          line: findKeyLine(ctx.source, [...path42.split("."), field])
-        });
-        return void 0;
-      }
-      const out = /* @__PURE__ */ Object.create(null);
-      for (const name of Object.keys(v)) {
-        const body = joinTemplateBody(ctx, `${path42}.${field}`, name, v);
-        if (body !== void 0) out[name] = body;
-      }
-      return out;
-    }
-  };
-}
-function widthSpec() {
-  return {
-    required: false,
-    json: {
-      anyOf: [
-        { const: "auto" },
-        { const: "fill" },
-        { type: "integer", minimum: 1 }
-      ]
-    },
-    parse: (ctx, path42, field, raw) => {
-      const v = raw[field];
-      if (v === void 0) return void 0;
-      if (v === "auto") return "auto";
-      if (v === "fill") return "fill";
-      if (typeof v === "number" && Number.isInteger(v) && v > 0) return v;
-      ctx.issues.push({
-        path: `${path42}.${field}`,
-        message: `width must be "auto", "fill", or a positive integer, got ${describeValue2(v)}`,
-        line: findKeyLine(ctx.source, [...path42.split("."), field])
-      });
-      return void 0;
-    }
-  };
-}
-function varsSpec() {
-  return {
-    required: false,
-    // [LAW:one-source-of-truth] The nested `vars` schema is the SAME name →
-    // VariableDecl map the top-level `variables` block emits — one source.
-    json: variablesMapJson(),
-    parse: (ctx, path42, field, raw) => {
-      const v = raw[field];
-      if (v === void 0) return void 0;
-      return validateVariables(ctx, `${path42}.${field}`, v);
-    }
-  };
-}
-var SEGMENT_FIELDS = {
-  template: ownTemplateSpec(),
-  // [LAW:one-source-of-truth] One row is the whole change: this table is what
-  // the validator interprets AND what `segmentDefinitions()` emits into the
-  // published JSON schema, and SEGMENT_DELTA_SCHEMA reuses it, so a file may
-  // set `description` on its own segment or on a delta over a bundled name
-  // with no further edit anywhere (brandon-config-schema-qqg).
-  description: optionalStringSpec(),
-  group: optionalEnumSpec(SEGMENT_GROUPS),
-  width: widthSpec(),
-  justify: optionalEnumSpec(JUSTIFY_MODES),
-  truncate: optionalEnumSpec(TRUNCATE_MODES),
-  bg: optionalStringSpec(),
-  fg: optionalStringSpec(),
-  when: optionalStringSpec(),
-  palette: paletteSpec(),
-  vars: varsSpec(),
-  settings: settingsDeclSpec(),
-  missingData: optionalEnumSpec(MISSING_DATA),
-  partials: partialsSpec()
-};
-var SEGMENT_SCHEMA = {
-  noun: "segment key",
-  fields: SEGMENT_FIELDS
-};
-var SEGMENT_DELTA_SCHEMA = {
-  noun: "segment key",
-  fields: { ...SEGMENT_FIELDS, template: optionalTemplateBodySpec() }
-};
-var SEGMENT_DEF_NAME = "Segment";
-var SEGMENT_DELTA_DEF_NAME = "SegmentDelta";
-var SEGMENT_REF = `#/definitions/${SEGMENT_DEF_NAME}`;
-var SEGMENT_DELTA_REF = `#/definitions/${SEGMENT_DELTA_DEF_NAME}`;
-
-// src/config/loader/layout.ts
-init_globals();
-var LAYOUT_NODE_REF = "#/definitions/LayoutNode";
-var ROOT_FRAGMENT_REF = "#/definitions/RootFragment";
-var EMPTY_VERTICAL_NODE = {
-  kind: "container",
-  direction: "vertical",
-  children: []
-};
-function literalSpec(value) {
-  return { required: true, json: { const: value }, parse: () => value };
-}
-function segmentNameSpec() {
-  return {
-    // Mandatory in the schema (a missing/empty name pushes an issue → throw); the
-    // parse recovers to "" so it's a no-op for `fields`. See `cellsSegmentsSpec`.
-    required: true,
-    json: { type: "string" },
-    parse: (ctx, path42, field, raw) => {
-      const v = raw[field];
-      if (typeof v === "string" && v.length > 0) return v;
-      ctx.issues.push({
-        path: `${path42}.${field}`,
-        message: `a segment node must have a non-empty "name" (a segment name), got ${describeValue2(v)}`,
-        line: findKeyLine(ctx.source, ["root"])
-      });
-      return "";
-    }
-  };
-}
-function directionSpec() {
-  return {
-    // Mandatory in the schema (a missing/invalid direction pushes an issue →
-    // throw); the parse recovers to "vertical", a no-op for `fields`. See
-    // `cellsSegmentsSpec`.
-    required: true,
-    json: { enum: [...DIRECTIONS] },
-    parse: (ctx, path42, field, raw) => {
-      const v = raw[field];
-      if (typeof v === "string" && DIRECTIONS.includes(v)) {
-        return v;
-      }
-      ctx.issues.push({
-        path: `${path42}.${field}`,
-        message: `a container "direction" must be one of: ${DIRECTIONS.join(", ")} (got ${JSON.stringify(v)})`,
-        line: findKeyLine(ctx.source, ["root"])
-      });
-      return "vertical";
-    }
-  };
-}
-function childrenSpec(node) {
-  return {
-    // Mandatory in the schema (a missing/non-array `children` pushes an issue →
-    // throw); the parse recovers to [], a no-op for `fields`. See `cellsSegmentsSpec`.
-    required: true,
-    // [LAW:one-source-of-truth] The recursive field points at the node definition
-    // via `$ref` — emit's analogue of the `lazy` thunk that defers the parse-time
-    // self-reference. The runtime recursion and the schema recursion break the
-    // same cycle, declared in one place.
-    json: { type: "array", items: { $ref: LAYOUT_NODE_REF } },
-    parse: (ctx, path42, field, raw) => {
-      const v = raw[field];
-      if (!Array.isArray(v)) {
-        ctx.issues.push({
-          path: `${path42}.${field}`,
-          message: `a container must have a "children" array of layout nodes, got ${describeType2(v)}`,
-          line: findKeyLine(ctx.source, ["root"])
-        });
-        return [];
-      }
-      return v.map((child, i) => node(ctx, `${path42}.${field}[${i}]`, child));
-    }
-  };
-}
-var SEGMENT_NODE_SCHEMA = {
-  noun: "layout-node key",
-  fields: {
-    kind: literalSpec("segment"),
-    name: segmentNameSpec(),
-    when: optionalStringSpec(),
-    id: placementIdSpec(),
-    settings: placementSettingsSpec()
-  }
-};
-var distributionSpec = () => optionalEnumSpec(DISTRIBUTION_NAMES);
-var CONTAINER_SCHEMA = {
-  noun: "layout-node key",
-  fields: {
-    kind: literalSpec("container"),
-    direction: directionSpec(),
-    children: childrenSpec(lazy(() => validateRoot)),
-    when: optionalStringSpec(),
-    distribution: distributionSpec()
-  }
-};
-function segArmSpec() {
-  return {
-    required: true,
-    json: { type: "string" },
-    parse: (ctx, path42, field, raw) => {
-      const v = raw[field];
-      if (typeof v === "string" && v.length > 0) return v;
-      ctx.issues.push({
-        path: `${path42}.${field}`,
-        message: `a "seg" node must have a non-empty segment name, got ${describeValue2(v)}`,
-        line: findKeyLine(ctx.source, [...path42.split("."), field])
-      });
-      return "";
-    }
-  };
-}
-var SEG_ARM_SCHEMA = {
-  noun: "layout-node key",
-  fields: {
-    seg: segArmSpec(),
-    when: optionalStringSpec(),
-    id: placementIdSpec(),
-    settings: placementSettingsSpec()
-  }
-};
-var H_ARM_SCHEMA = {
-  noun: "layout-node key",
-  fields: {
-    h: childrenSpec(lazy(() => validateRoot)),
-    when: optionalStringSpec(),
-    distribution: distributionSpec()
-  }
-};
-var V_ARM_SCHEMA = {
-  noun: "layout-node key",
-  fields: {
-    v: childrenSpec(lazy(() => validateRoot)),
-    when: optionalStringSpec(),
-    distribution: distributionSpec()
-  }
-};
-var validateRoot = (ctx, path42, raw) => {
-  if (typeof raw === "string") {
-    if (raw.length === 0) {
-      ctx.issues.push({
-        path: path42,
-        message: `a bare-string layout node must be a non-empty segment name`,
-        line: findKeyLine(ctx.source, ["root"])
-      });
-      return EMPTY_VERTICAL_NODE;
-    }
-    return { kind: "segment", name: raw };
-  }
-  if (!isPlainObject3(raw)) {
-    ctx.issues.push({
-      path: path42,
-      message: `a layout node must be a string (segment name) or an object with "kind" / "seg" / "h" / "v", got ${describeType2(raw)}`,
-      line: findKeyLine(ctx.source, ["root"])
-    });
-    return EMPTY_VERTICAL_NODE;
-  }
-  if (raw.kind === "container") {
-    return record(ctx, CONTAINER_SCHEMA, path42, raw) ?? EMPTY_VERTICAL_NODE;
-  }
-  if (raw.kind === "segment") {
-    return record(ctx, SEGMENT_NODE_SCHEMA, path42, raw) ?? EMPTY_VERTICAL_NODE;
-  }
-  if (raw.kind === "cells") {
-    ctx.issues.push({
-      path: path42,
-      message: `kind: "cells" is no longer supported \u2014 use the h-arm spelling instead:
-  Old: { kind: "cells", segments: ["seg1", "seg2"] }
-  New: { h: ["seg1", "seg2"] }`,
-      line: findKeyLine(ctx.source, ["root"])
-    });
-    return EMPTY_VERTICAL_NODE;
-  }
-  if (raw.kind === "group") {
-    const group = record(ctx, GROUP_SCHEMA, path42, raw);
-    if (group === null) return EMPTY_VERTICAL_NODE;
-    ctx.groups.push({
-      name: group.name,
-      label: group.label,
-      ...group.open !== void 0 && { open: group.open },
-      ...group.direction !== void 0 && { direction: group.direction },
-      ...group.key !== void 0 && { key: group.key },
-      ...group.bg !== void 0 && { bg: group.bg },
-      ...group.fg !== void 0 && { fg: group.fg },
-      ...group.when !== void 0 && { when: group.when },
-      path: path42
-    });
-    return lowerGroup(group);
-  }
-  const hasH = "h" in raw;
-  const hasV = "v" in raw;
-  const hasSeg = "seg" in raw;
-  const armCount = (hasH ? 1 : 0) + (hasV ? 1 : 0) + (hasSeg ? 1 : 0);
-  if (armCount > 1) {
-    const present = ["seg", "h", "v"].filter((k) => k in raw);
-    ctx.issues.push({
-      path: path42,
-      message: `a layout node may have exactly one of "seg", "h", or "v" \u2014 got ${present.map((k) => `"${k}"`).join(" and ")} together`,
-      line: findKeyLine(ctx.source, ["root"])
-    });
-    return EMPTY_VERTICAL_NODE;
-  }
-  if (hasSeg) {
-    const arm2 = record(ctx, SEG_ARM_SCHEMA, path42, raw);
-    if (arm2 === null) return EMPTY_VERTICAL_NODE;
-    return {
-      kind: "segment",
-      name: arm2.seg,
-      ...arm2.when !== void 0 && { when: arm2.when },
-      ...arm2.id !== void 0 && { id: arm2.id },
-      ...arm2.settings !== void 0 && { settings: arm2.settings }
-    };
-  }
-  if (hasH) {
-    const arm2 = record(ctx, H_ARM_SCHEMA, path42, raw);
-    if (arm2 === null) return EMPTY_VERTICAL_NODE;
-    return {
-      kind: "container",
-      direction: "horizontal",
-      children: arm2.h,
-      ...arm2.when !== void 0 && { when: arm2.when },
-      ...arm2.distribution !== void 0 && { distribution: arm2.distribution }
-    };
-  }
-  if (hasV) {
-    const arm2 = record(ctx, V_ARM_SCHEMA, path42, raw);
-    if (arm2 === null) return EMPTY_VERTICAL_NODE;
-    return {
-      kind: "container",
-      direction: "vertical",
-      children: arm2.v,
-      ...arm2.when !== void 0 && { when: arm2.when },
-      ...arm2.distribution !== void 0 && { distribution: arm2.distribution }
-    };
-  }
-  ctx.issues.push({
-    path: `${path42}.kind`,
-    message: `a layout node "kind" must be "container", "segment", or "group", or use the terse A-grammar: a bare string, or an object with "seg", "h", or "v" (got ${JSON.stringify(raw.kind)})`,
-    line: findKeyLine(ctx.source, ["root"])
-  });
-  return EMPTY_VERTICAL_NODE;
-};
-function rowsSpec() {
-  return {
-    required: true,
-    json: {
-      type: "object",
-      propertyNames: { pattern: ROW_NAME_RE.source },
-      additionalProperties: { $ref: LAYOUT_NODE_REF }
-    },
-    parse: (ctx, path42, field, raw) => {
-      const v = raw[field];
-      if (!isPlainObject3(v)) {
-        ctx.issues.push({
-          path: `${path42}.${field}`,
-          message: `"rows" must be an object of row name \u2192 layout node, got ${describeType2(v)}`,
-          line: findKeyLine(ctx.source, [...path42.split("."), field])
-        });
-        return {};
-      }
-      const rows = {};
-      for (const [name, node] of Object.entries(v)) {
-        if (!ROW_NAME_RE.test(name)) {
-          ctx.issues.push({
-            path: `${path42}.${field}.${name}`,
-            message: `row name "${name}" must be an identifier (letters, digits, _; not starting with a digit) \u2014 it names the row in the config file and merges by name over the bundled default's rows`,
-            line: findKeyLine(ctx.source, [...path42.split("."), field, name])
-          });
-          continue;
-        }
-        rows[name] = validateRoot(ctx, `${path42}.${field}.${name}`, node);
-      }
-      return rows;
-    }
-  };
-}
-var ROWS_SCHEMA = {
-  noun: "root key",
-  fields: {
-    rows: rowsSpec(),
-    when: optionalStringSpec(),
-    distribution: distributionSpec()
-  }
-};
-function validateRootFragment(ctx, path42, raw) {
-  if (isPlainObject3(raw) && "rows" in raw) {
-    return record(ctx, ROWS_SCHEMA, path42, raw) ?? { rows: {} };
-  }
-  return validateRoot(ctx, path42, raw);
-}
-var INSERT_SCHEMA = {
-  noun: "insert key",
-  fields: {
-    seg: segArmSpec(),
-    id: placementIdSpec(),
-    before: optionalStringSpec(),
-    after: optionalStringSpec()
-  }
-};
-function validateInsert(ctx, raw, file) {
-  if (!Array.isArray(raw)) {
-    ctx.issues.push({
-      path: "insert",
-      message: `"insert" must be a list of cells like { seg: "name", after: "placement" }, got ${describeType2(raw)}`,
-      line: findKeyLine(ctx.source, ["insert"])
-    });
-    return [];
-  }
-  return raw.flatMap((entry, i) => {
-    const path42 = `insert.${i}`;
-    const arm2 = record(ctx, INSERT_SCHEMA, path42, entry);
-    if (arm2 === null) return [];
-    const sides = ["before", "after"].filter(
-      (side) => arm2[side] !== void 0
-    );
-    if (sides.length !== 1) {
-      ctx.issues.push({
-        path: path42,
-        message: `an insert cell names exactly one of "before" or "after" (the placement id it sits beside), got ${sides.length === 0 ? "neither" : "both"}`,
-        line: findKeyLine(ctx.source, path42.split("."))
-      });
-      return [];
-    }
-    if (isReservedName(arm2.seg)) {
-      ctx.issues.push({
-        path: `${path42}.seg`,
-        message: `an insert cell places a segment, and "${arm2.seg}" is the bar's own chrome \u2014 name a segment instead`,
-        line: findKeyLine(ctx.source, [...path42.split("."), "seg"])
-      });
-      return [];
-    }
-    const relation = sides[0];
-    const anchor = arm2[relation];
-    if (isReservedName(anchor)) {
-      ctx.issues.push({
-        path: `${path42}.${relation}`,
-        message: `an insert cell sits beside a placement, and "${anchor}" is the bar's own chrome \u2014 anchor on a placement id instead`,
-        line: findKeyLine(ctx.source, [...path42.split("."), relation])
-      });
-      return [];
-    }
-    return [
-      {
-        seg: arm2.seg,
-        ...arm2.id !== void 0 && { id: arm2.id },
-        anchor,
-        relation,
-        by: { file, entry: path42 }
-      }
-    ];
-  });
-}
-function groupNameSpec() {
-  return {
-    required: true,
-    json: { type: "string", pattern: ROW_NAME_RE.source },
-    parse: (ctx, path42, field, raw) => {
-      const v = raw[field];
-      if (typeof v !== "string" || !ROW_NAME_RE.test(v) || v === DISCLOSURE_CLOSED) {
-        ctx.issues.push({
-          path: `${path42}.${field}`,
-          message: `a group "name" must be an identifier (letters, digits, _; not starting with a digit) and not the reserved "${DISCLOSURE_CLOSED}", got ${describeValue2(v)}`,
-          line: findKeyLine(ctx.source, ["root"])
-        });
-        return void 0;
-      }
-      return v;
-    }
-  };
-}
-function groupKeySpec() {
-  return {
-    required: false,
-    json: { type: "string", minLength: 1 },
-    parse: (ctx, path42, field, raw) => {
-      const v = raw[field];
-      if (v === void 0) return void 0;
-      if (typeof v !== "string" || v === "" || v.includes("/")) {
-        ctx.issues.push({
-          path: `${path42}.${field}`,
-          message: `a group "key" must be a non-empty, slash-free SessionState key, got ${describeValue2(v)}`,
-          line: findKeyLine(ctx.source, ["root"])
-        });
-        return void 0;
-      }
-      return v;
-    }
-  };
-}
-function groupLabelSpec() {
-  return {
-    required: true,
-    json: { type: "string", pattern: "^[^\\n\\r]*$" },
-    parse: (ctx, path42, field, raw) => {
-      const s = requireString(ctx, path42, raw, field);
-      if (s === null) return void 0;
-      if (/[\n\r]/.test(s)) {
-        ctx.issues.push({
-          path: `${path42}.${field}`,
-          message: `${path42}.${field}: group label must not contain newlines`,
-          line: findKeyLine(ctx.source, [...path42.split("."), field])
-        });
-        return void 0;
-      }
-      return s;
-    }
-  };
-}
-var GROUP_SCHEMA = {
-  noun: "layout-node key",
-  fields: {
-    kind: literalSpec("group"),
-    name: groupNameSpec(),
-    label: groupLabelSpec(),
-    open: optionalBooleanSpec(),
-    direction: optionalEnumSpec(DIRECTIONS),
-    key: groupKeySpec(),
-    bg: optionalStringSpec(),
-    fg: optionalStringSpec(),
-    when: optionalStringSpec(),
-    distribution: distributionSpec(),
-    children: childrenSpec(lazy(() => validateRoot))
-  }
-};
-function groupStateKey(g) {
-  return g.key ?? GROUP_NS + g.name;
-}
-function lowerGroup(g) {
-  const ref = GROUP_NS + g.name;
-  return disclosureNode(
-    ref,
-    { variable: ref, key: groupStateKey(g), member: g.name },
-    {
-      kind: "container",
-      direction: g.direction ?? "vertical",
-      children: g.children,
-      ...g.distribution !== void 0 && { distribution: g.distribution }
-    },
-    "drop",
-    g.when
-  );
-}
-function groupIssue(ctx, path42, message) {
-  ctx.issues.push({
-    path: path42,
-    message,
-    line: findKeyLine(ctx.source, ["root"])
-  });
-}
-function synthesizeGroupDecls(ctx, out) {
-  reservedNamespaceCollisions(ctx, out, GROUP_NS, "group nodes");
-  const groups = ctx.groups;
-  if (groups.length === 0) return;
-  const seen = /* @__PURE__ */ new Set();
-  for (const g of groups) {
-    if (seen.has(g.name)) {
-      groupIssue(
-        ctx,
-        g.path,
-        `duplicate group name "${g.name}" \u2014 group names must be unique (they name the synthesized state var, action, and toggle segment)`
-      );
-    }
-    seen.add(g.name);
-  }
-  for (const inner of groups) {
-    for (const outer of groups) {
-      if (inner !== outer && inner.path.startsWith(`${outer.path}.`) && groupStateKey(inner) === groupStateKey(outer)) {
-        groupIssue(
-          ctx,
-          inner.path,
-          `group "${inner.name}" shares key "${groupStateKey(inner)}" with its ancestor group "${outer.name}" \u2014 a shared key holds ONE open group, so an ancestor and a descendant cannot share one. Sibling accordions share a key; nested groups use distinct keys.`
-        );
-      }
-    }
-  }
-  const defaultByKey = /* @__PURE__ */ new Map();
-  for (const g of groups) {
-    const key = groupStateKey(g);
-    if (!defaultByKey.has(key)) defaultByKey.set(key, DISCLOSURE_CLOSED);
-    if (g.open === true) {
-      const prior = defaultByKey.get(key);
-      if (prior !== DISCLOSURE_CLOSED) {
-        groupIssue(
-          ctx,
-          g.path,
-          `groups "${prior}" and "${g.name}" share key "${key}" and both declare open: true \u2014 a shared key holds one open group; pick one`
-        );
-      }
-      defaultByKey.set(key, g.name);
-    }
-  }
-  const variables = {};
-  const actions = {};
-  const segments = {};
-  for (const g of groups) {
-    const name = GROUP_NS + g.name;
-    const key = groupStateKey(g);
-    const depth = groups.filter(
-      (other) => other !== g && g.path.startsWith(other.path + ".")
-    ).length;
-    const indent2 = "  ".repeat(depth);
-    variables[name] = disclosureStateVar(key, defaultByKey.get(key));
-    actions[name] = disclosureCycleAction(key, g.name);
-    segments[name] = {
-      template: disclosureTrigger(
-        name,
-        `${indent2}${g.label} ${DISCLOSURE_GLYPH_CLOSED}`,
-        `${indent2}${g.label} ${DISCLOSURE_GLYPH_OPEN}`
-      ),
-      ...g.bg !== void 0 && { bg: g.bg },
-      ...g.fg !== void 0 && { fg: g.fg }
-    };
-  }
-  out.variables = { ...out.variables ?? {}, ...variables };
-  out.actions = { ...out.actions ?? {}, ...actions };
-  out.segments = { ...out.segments ?? {}, ...segments };
-}
-
-// src/config/loader/menu-synth.ts
-init_globals();
-var MENU_FUNC = "menu";
-var MIGRATION = `a menu binds its trigger text the way a cycle action binds a display \u2014 write {{ menu "applyTheme" "\u25B8" "\u25BE" }} (one per state) or {{ menu "insertHere" "+" }} (one static display for both), with the rare knobs in ONE trailing dict: {{ menu "applyTheme" "\u25B8" "\u25BE" (dict "closeOnPick" true "paged" false "key" "pickers") }} (defaults: closeOnPick false, paged true, no key). The renderer no longer appends \u25B8/\u25BE of its own (candybar-settings-ui-aok.4), and the older positional tail ("pageAction" closeOnPick paged "key") was removed \u2014 the page cursor is synthesized from the menu's identity`;
-var isDictCall = (e) => e.kind === "call" && e.name === "dict";
-var isNonObjectLiteral = (e) => e.kind === "literal" && typeof e.value !== "object";
-var legalDisplayCount = (count) => cycleDisplayIssue("", count, 2) === void 0;
-function analyzeMenuCall(call) {
-  const issue3 = (message) => ({ kind: "issue", message });
-  const [applyArg, ...tail] = call.argExprs;
-  if (applyArg === void 0) {
-    return issue3(
-      `with no arguments \u2014 it takes an apply-action name and its trigger text (e.g. {{ menu "applyTheme" "\u25B8" "\u25BE" }})`
-    );
-  }
-  if (applyArg.kind !== "literal" || typeof applyArg.value !== "string") {
-    return issue3(
-      `whose apply action is not a string literal \u2014 a menu's identity is its apply-action name, which must be a literal so it can be gated at load (e.g. {{ menu "applyTheme" "\u25B8" "\u25BE" }})`
-    );
-  }
-  const last2 = tail[tail.length - 1];
-  const optsArg = last2 !== void 0 && isDictCall(last2) ? last2 : void 0;
-  const displays = optsArg === void 0 ? tail : tail.slice(0, -1);
-  if (displays.some(isDictCall)) {
-    return issue3(
-      `whose options (dict \u2026) is not its last argument \u2014 ${MIGRATION}`
-    );
-  }
-  if (last2 !== void 0 && optsArg === void 0 && !isNonObjectLiteral(last2) && legalDisplayCount(displays.length - 1)) {
-    return issue3(
-      `whose last argument is neither a literal nor a literal (dict \u2026) \u2014 the renderer tells a display from the options dict by the value it evaluates to, so this call could be read as ${displays.length} displays or as ${displays.length - 1} plus options, and both are legal. Make the options explicit as a trailing (dict \u2026) \u2014 {{ menu "${applyArg.value}" (printf "\u2026") (printf "\u2026") (dict) }} binds dynamic displays unambiguously \u2014 or bind the trigger text as literals`
-    );
-  }
-  const arity = cycleDisplayIssue("whose trigger", displays.length, 2);
-  if (arity !== void 0) return issue3(`${arity} \u2014 ${MIGRATION}`);
-  const entries = optsArg === void 0 ? {} : staticDictEntries(optsArg);
-  if (entries === null) {
-    return issue3(
-      `whose options (dict \u2026) is not fully literal \u2014 every option value must be a literal so the menu can be gated at load (a dynamic entry like (dict "key" .x) cannot)`
-    );
-  }
-  let options;
-  try {
-    options = parseMenuOptions(entries);
-  } catch (e) {
-    return issue3(`with invalid options \u2014 ${e.message}`);
-  }
-  const sharedKey = options.key;
-  if (sharedKey !== void 0) {
-    const reserved = reservedNamespaceOf(sharedKey);
-    if (reserved !== void 0) {
-      return issue3(
-        `whose accordion key "${sharedKey}" lands in the reserved "${reserved}" namespace \u2014 a key is collapsed to an identifier (${JSON.stringify(sharedKey)} becomes "${sharedMenuStateKey(sharedKey)}"), so it would share one open-state key with the synthesized accordion that owns that namespace instead of grouping only your own menus. Name the group without the reserved prefix`
-      );
-    }
-  }
-  return { kind: "ok", apply: applyArg.value, options };
-}
-function parseCalls(template) {
-  const engine = createEngine({ fromString: (s) => s });
-  try {
-    return engine.parse(template).referencedCalls().filter((c) => c.name === MENU_FUNC).map(analyzeMenuCall);
-  } catch {
-    return "parse-failed";
-  }
-}
-function hostedMenus(template, placement) {
-  const calls = parseCalls(template);
-  return calls === "parse-failed" ? [] : calls.flatMap(
-    (call) => call.kind === "ok" ? [
-      {
-        key: menuStateKey(placement, call.apply, call.options.key),
-        member: menuMember(call.apply)
-      }
-    ] : []
-  );
-}
-function segmentReferencesMenu(template) {
-  const engine = createEngine({ fromString: (s) => s });
-  try {
-    return engine.parse(template).referencedFunctions().has(MENU_FUNC);
-  } catch {
-    return false;
-  }
-}
-function menuIssue(ctx, path42, message) {
-  ctx.issues.push({ path: path42, message, line: findKeyLine(ctx.source, ["root"]) });
-}
-function checkMenuDecls(ctx, out) {
-  reservedNamespaceCollisions(ctx, out, MENU_NS, "{{ menu }} helpers");
-  reservedNamespaceCollisions(ctx, out, MENU_PAGE_NS, "{{ menu }} helpers");
-  for (const [name, body] of Object.entries(out.helpers ?? {})) {
-    if (segmentReferencesMenu(body)) {
-      ctx.issues.push({
-        path: `helpers.${name}`,
-        message: `helper "${name}" uses {{ menu }}, but a menu must live directly in a segment template \u2014 its identity is derived from the segment it sits in, which a shared helper does not have. Inline the {{ menu }} call into each segment that needs it.`,
-        line: findKeyLine(ctx.source, ["helpers", name])
-      });
-    }
-  }
-  const segments = out.segments ?? {};
-  for (const [segName, seg2] of Object.entries(segments)) {
-    for (const field of ["bg", "fg", "when"]) {
-      const tpl = seg2[field];
-      if (typeof tpl === "string" && segmentReferencesMenu(tpl)) {
-        menuIssue(
-          ctx,
-          `segments.${segName}.${field}`,
-          `segment "${segName}" uses {{ menu }} in its "${field}" \u2014 a menu is only valid in a segment's "template" (its placement is published only there; "${field}" needs a ${field === "when" ? "predicate" : "color"}). Move the {{ menu }} into the template.`
-        );
-      }
-    }
-    for (const [name, body] of Object.entries(seg2.partials ?? {})) {
-      if (segmentReferencesMenu(body)) {
-        ctx.issues.push({
-          path: `segments.${segName}.partials.${name}`,
-          message: `segments.${segName}.partials.${name} uses {{ menu }}, but a menu must live directly in a segment's "template" string \u2014 the synthesis pass that wires its state never follows a {{ template }} call into a partial. Inline the {{ menu }} call into the template itself.`,
-          line: findKeyLine(ctx.source, [
-            "segments",
-            segName,
-            "partials",
-            name
-          ])
-        });
-      }
-    }
-  }
-  if (out.root !== void 0) {
-    for (const node of walkNodes(fragmentNode(out.root))) {
-      if (typeof node.when === "string" && segmentReferencesMenu(node.when)) {
-        menuIssue(
-          ctx,
-          "root",
-          `a layout node's "when" predicate uses {{ menu }} \u2014 a menu is only valid in a segment's "template", not a node predicate. Move it into a segment.`
-        );
-      }
-    }
-  }
-  for (const [segName, { template }] of Object.entries(segments)) {
-    if (template === void 0 || !segmentReferencesMenu(template)) continue;
-    const calls = parseCalls(template);
-    if (calls === "parse-failed") continue;
-    for (const call of calls) {
-      const message = call.kind === "issue" ? call.message : identityIssue(call.apply);
-      if (message !== void 0) {
-        menuIssue(
-          ctx,
-          `segments.${segName}`,
-          `segment "${segName}" has a {{ menu }} ${message}.`
-        );
-      }
-    }
-  }
-}
-function identityIssue(apply) {
-  if (apply === "") {
-    return `with an empty apply-action name \u2014 an empty member aliases the absent-state sentinel ("") so the menu would render open before any click. Name the apply action`;
-  }
-  if (menuMember(apply) === DISCLOSURE_CLOSED) {
-    return `whose apply action is named "${DISCLOSURE_CLOSED}", which collides with the menu's closed-state sentinel and leaves it unopenable. Rename the action`;
-  }
-  return void 0;
-}
-function synthesizePlacementMenus(config2, issues) {
-  const variables = {};
-  const actions = {};
-  const callsOf = /* @__PURE__ */ new Map();
-  const reported = /* @__PURE__ */ new Set();
-  const issue3 = (segName, message) => {
-    const path42 = `segments.${segName}`;
-    if (reported.has(`${path42}\0${message}`)) return;
-    reported.add(`${path42}\0${message}`);
-    issues.push({ path: path42, message });
-  };
-  for (const preset of presetNames(config2.presets)) {
-    const ownerBySynthKey = /* @__PURE__ */ new Map();
-    const claimed = /* @__PURE__ */ new Map();
-    for (const node of walkNodes(presetRoot(config2, preset).node)) {
-      if (node.kind !== "segment") continue;
-      const seg2 = config2.segments[node.name];
-      if (seg2 === void 0) continue;
-      if (!callsOf.has(node.name)) {
-        callsOf.set(node.name, parseCalls(seg2.template));
-      }
-      const calls = callsOf.get(node.name);
-      if (calls === "parse-failed") continue;
-      const id2 = placementId(node);
-      for (const [index, call] of calls.entries()) {
-        if (call.kind === "issue" || identityIssue(call.apply) !== void 0) {
-          continue;
-        }
-        const { apply, options } = call;
-        const member = menuMember(apply);
-        const stateKey = menuStateKey(id2, apply, options.key);
-        const pageKey = menuPageKey(stateKey);
-        const owner = options.key !== void 0 ? `key ${options.key}` : `ind ${id2} ${apply}`;
-        const clashKey = [stateKey, pageKey].find((k) => {
-          const prior2 = ownerBySynthKey.get(k);
-          return prior2 !== void 0 && prior2 !== owner;
-        });
-        if (clashKey !== void 0) {
-          issue3(
-            node.name,
-            `two {{ menu }} disclosures normalize to the same state key ("${clashKey}") but were declared differently \u2014 distinct names that differ only by non-alphanumeric characters (e.g. "a-b" vs "a_b") collapse to one key and would silently share open-state. Rename so they don't collide.`
-          );
-          continue;
-        }
-        ownerBySynthKey.set(stateKey, owner);
-        ownerBySynthKey.set(pageKey, owner);
-        const identity2 = menuActionName(stateKey, member);
-        const claimant = `${node.name}\0${index}`;
-        const prior = claimed.get(identity2);
-        if (prior !== void 0 && prior !== claimant) {
-          issue3(
-            node.name,
-            `two {{ menu }} disclosures resolve to the same identity ("${identity2}") \u2014 ${options.key !== void 0 ? `menus sharing key "${options.key}" must have distinct apply actions` : `a segment cannot contain two menus over the same apply action "${apply}"`}.`
-          );
-          continue;
-        }
-        claimed.set(identity2, claimant);
-        actions[identity2] = disclosureCycleAction(stateKey, member);
-        variables[stateKey] = disclosureStateVar(stateKey, DISCLOSURE_CLOSED);
-        variables[pageKey] = { kind: "state", key: pageKey, default: "0" };
-        actions[pageKey] = { set: pageKey, int: true };
-      }
-    }
-  }
-  return {
-    ...config2,
-    variables: { ...config2.variables, ...variables },
-    actions: { ...config2.actions, ...actions }
-  };
-}
-
 // src/config/loader/actions.ts
 init_globals();
 init_os();
 var import_node_path17 = __toESM(require_path_browserify(), 1);
 function validateActions(ctx, raw, home) {
   if (raw === void 0) return {};
-  if (!isPlainObject3(raw)) {
+  if (!isPlainObject(raw)) {
     issue2(
       ctx,
       "actions",
-      `actions must be an object, got ${describeType2(raw)}`
+      `actions must be an object, got ${describeType(raw)}`
     );
     return {};
   }
@@ -58212,11 +58215,11 @@ function issue2(ctx, path42, message) {
   });
 }
 function validateActionDecl(ctx, path42, raw, home) {
-  if (!isPlainObject3(raw)) {
+  if (!isPlainObject(raw)) {
     issue2(
       ctx,
       path42,
-      `${path42} must be an action object, got ${describeType2(raw)}`
+      `${path42} must be an action object, got ${describeType(raw)}`
     );
     return null;
   }
@@ -58315,7 +58318,7 @@ function markerArm(key) {
       issue2(
         ctx,
         `${path42}.${key}`,
-        `${key} must be the literal true (it takes no key \u2014 ${MARKER_SUBJECT[key]}), got ${describeValue2(raw[key])}`
+        `${key} must be the literal true (it takes no key \u2014 ${MARKER_SUBJECT[key]}), got ${describeValue(raw[key])}`
       );
       return null;
     }
@@ -58337,7 +58340,7 @@ function presetArm(ctx, path42, raw) {
     issue2(
       ctx,
       `${path42}.preset`,
-      `preset must be "save" or "delete", got ${describeValue2(verb)}`
+      `preset must be "save" or "delete", got ${describeValue(verb)}`
     );
     return null;
   }
@@ -58358,7 +58361,7 @@ function themeDefaultArm(ctx, path42, raw) {
     issue2(
       ctx,
       `${path42}.themeDefault`,
-      `themeDefault must be "save" (it saves the look the session draws as the active theme's default), got ${describeValue2(raw.themeDefault)}`
+      `themeDefault must be "save" (it saves the look the session draws as the active theme's default), got ${describeValue(raw.themeDefault)}`
     );
     return null;
   }
@@ -58385,7 +58388,7 @@ function doctorArm(ctx, path42, raw) {
     issue2(
       ctx,
       `${path42}.doctor`,
-      `doctor must be ${Object.keys(DOCTOR_KEYS).map((v) => `"${v}"`).join(", ")}, got ${describeValue2(verb)}`
+      `doctor must be ${Object.keys(DOCTOR_KEYS).map((v) => `"${v}"`).join(", ")}, got ${describeValue(verb)}`
     );
     return null;
   }
@@ -58396,7 +58399,7 @@ function doctorArm(ctx, path42, raw) {
     issue2(
       ctx,
       `${path42}.check`,
-      `doctor ${verb} must name a check (have: ${nameable.map((c) => c.name).join(", ")}), got ${describeValue2(check)}`
+      `doctor ${verb} must name a check (have: ${nameable.map((c) => c.name).join(", ")}), got ${describeValue(check)}`
     );
     return null;
   }
@@ -58406,7 +58409,7 @@ function doctorArm(ctx, path42, raw) {
     issue2(
       ctx,
       `${path42}.mark`,
-      `doctor mark must be ${GLYPH_MARKS.map((m) => `"${m}"`).join(" or ")}, got ${describeValue2(mark)}`
+      `doctor mark must be ${GLYPH_MARKS.map((m) => `"${m}"`).join(" or ")}, got ${describeValue(mark)}`
     );
     return null;
   }
@@ -58446,17 +58449,17 @@ function runArm(home) {
       issue2(
         ctx,
         `${path42}.run`,
-        `run must list the program and its arguments, each a template string, the program first and not empty, got ${describeValue2(run3)}`
+        `run must list the program and its arguments, each a template string, the program first and not empty, got ${describeValue(run3)}`
       );
     }
     const env2 = raw.env ?? {};
-    if (!isPlainObject3(env2) || Object.entries(env2).some(
+    if (!isPlainObject(env2) || Object.entries(env2).some(
       ([name, value]) => !ENV_NAME.test(name) || typeof value !== "string"
     )) {
       issue2(
         ctx,
         `${path42}.env`,
-        `env must map variable names (letters, digits and _, not starting with a digit) to template strings, got ${describeValue2(env2)}`
+        `env must map variable names (letters, digits and _, not starting with a digit) to template strings, got ${describeValue(env2)}`
       );
     }
     const refreshes = raw.refreshes ?? [];
@@ -58464,7 +58467,7 @@ function runArm(home) {
       issue2(
         ctx,
         `${path42}.refreshes`,
-        `refreshes must list the names of the sources the program writes, got ${describeValue2(refreshes)}`
+        `refreshes must list the names of the sources the program writes, got ${describeValue(refreshes)}`
       );
     }
     if (!("dir" in home)) {
@@ -58511,7 +58514,7 @@ function doArm(ctx, path42, raw) {
     issue2(
       ctx,
       `${path42}.do`,
-      `do must list at least two action names (the first is the click's face, the rest ride along in the same click), got ${describeValue2(members)}`
+      `do must list at least two action names (the first is the click's face, the rest ride along in the same click), got ${describeValue(members)}`
     );
     return null;
   }
@@ -58776,7 +58779,7 @@ function fromSpec(discriminator) {
       issue2(
         ctx,
         at,
-        `${field} must be a domain name (a string) or an inline domain (an array of strings), got ${describeValue2(from)}`
+        `${field} must be a domain name (a string) or an inline domain (an array of strings), got ${describeValue(from)}`
       );
       return void 0;
     }
@@ -58799,7 +58802,7 @@ function cycleSpec(discriminator) {
         issue2(
           ctx,
           at,
-          `cycle must be an array of strings (the enumerated values a click steps through), got ${describeType2(v)}`
+          `cycle must be an array of strings (the enumerated values a click steps through), got ${describeType(v)}`
         );
         return void 0;
       }
@@ -58851,7 +58854,7 @@ function intMarkerSpec() {
         issue2(
           ctx,
           `${path42}.${field}`,
-          `int must be the literal true (declares the key an unbounded integer cursor \u2014 a paged picker's page key), got ${describeValue2(raw[field])}`
+          `int must be the literal true (declares the key an unbounded integer cursor \u2014 a paged picker's page key), got ${describeValue(raw[field])}`
         );
         return void 0;
       }
@@ -58893,7 +58896,7 @@ function relationSpec() {
         issue2(
           ctx,
           `${path42}.${field}`,
-          `relation must be "before" or "after", got ${describeValue2(v)}`
+          `relation must be "before" or "after", got ${describeValue(v)}`
         );
         return void 0;
       }
@@ -58911,7 +58914,7 @@ function requireIntSpec() {
         issue2(
           ctx,
           `${path42}.${field}`,
-          `${field} must be an integer, got ${describeValue2(v)}`
+          `${field} must be an integer, got ${describeValue(v)}`
         );
         return void 0;
       }
@@ -58935,10 +58938,10 @@ var STYLE_SCHEMA = {
   }
 };
 function validateStyles(ctx, raw) {
-  if (!isPlainObject3(raw)) {
+  if (!isPlainObject(raw)) {
     ctx.issues.push({
       path: "styles",
-      message: `styles must be an object mapping style names to adaptation objects, got ${describeType2(raw)}`,
+      message: `styles must be an object mapping style names to adaptation objects, got ${describeType(raw)}`,
       line: findKeyLine(ctx.source, ["styles"])
     });
     return {};
@@ -58984,10 +58987,10 @@ var PRESET_SCHEMA = {
   fields: { root: presetRootSpec, globals: presetGlobalsSpec }
 };
 function validatePresets(ctx, raw) {
-  if (!isPlainObject3(raw)) {
+  if (!isPlainObject(raw)) {
     ctx.issues.push({
       path: "presets",
-      message: `presets must be an object mapping preset names to config fragments, got ${describeType2(raw)}`,
+      message: `presets must be an object mapping preset names to config fragments, got ${describeType(raw)}`,
       line: findKeyLine(ctx.source, ["presets"])
     });
     return {};
@@ -59012,10 +59015,10 @@ function validatePresets(ctx, raw) {
 init_globals();
 function validateHelpers(ctx, raw) {
   if (raw === void 0) return {};
-  if (!isPlainObject3(raw)) {
+  if (!isPlainObject(raw)) {
     ctx.issues.push({
       path: "helpers",
-      message: `helpers must be an object, got ${describeType2(raw)}`,
+      message: `helpers must be an object, got ${describeType(raw)}`,
       line: findKeyLine(ctx.source, ["helpers"])
     });
     return {};
@@ -59025,7 +59028,7 @@ function validateHelpers(ctx, raw) {
     if (typeof body !== "string") {
       ctx.issues.push({
         path: `helpers.${name}`,
-        message: `helpers.${name} must be a string template body, got ${describeValue2(body)}`,
+        message: `helpers.${name} must be a string template body, got ${describeValue(body)}`,
         line: findKeyLine(ctx.source, ["helpers", name])
       });
       continue;
@@ -59614,10 +59617,10 @@ function fragmentOf(file, id2, { source, json: json2 }, { checkout }) {
   const fail2 = () => {
     throw new ConfigError(file, issues);
   };
-  if (!isPlainObject3(json2)) {
+  if (!isPlainObject(json2)) {
     issues.push({
       path: "",
-      message: `a plugin definition must be an object, got ${describeType2(json2)}`
+      message: `a plugin definition must be an object, got ${describeType(json2)}`
     });
     return fail2();
   }
@@ -59902,10 +59905,10 @@ var BUILT_SOURCE = {
   read: { file: { json: true } }
 };
 function sourcesOf(sources, file, issues) {
-  if (!isPlainObject3(sources)) {
+  if (!isPlainObject(sources)) {
     issues.push({
       path: "sources",
-      message: `"sources" must be an object of named sources, got ${describeType2(sources)}`
+      message: `"sources" must be an object of named sources, got ${describeType(sources)}`
     });
     return {};
   }
@@ -59955,7 +59958,7 @@ function sourceFileOf(source) {
   return import_node_path18.default.join(source.storage, sessionFileName("<session id>"));
 }
 function unbuilt(authored, built, at) {
-  if (!isPlainObject3(built) || !isPlainObject3(authored)) {
+  if (!isPlainObject(built) || !isPlainObject(authored)) {
     return JSON.stringify(authored) === JSON.stringify(built) ? [] : [{ field: at, is: `is ${JSON.stringify(authored)}` }];
   }
   return [
@@ -59971,7 +59974,7 @@ function dataPathOf(data, file, checkout, issues) {
   if (typeof data === "string" && data !== "") {
     return resolveUserPath(import_node_path18.default.dirname(file), data);
   }
-  if (isPlainObject3(data) && Object.keys(data).length === 1 && typeof data.checkout === "string" && data.checkout !== "") {
+  if (isPlainObject(data) && Object.keys(data).length === 1 && typeof data.checkout === "string" && data.checkout !== "") {
     const rel = data.checkout;
     if (import_node_path18.default.isAbsolute(rel) || rel.startsWith("~") || import_node_path18.default.normalize(rel).split(import_node_path18.default.sep)[0] === "..") {
       issues.push({
@@ -59989,7 +59992,7 @@ function dataPathOf(data, file, checkout, issues) {
     }
     return import_node_path18.default.resolve(checkout.root, rel);
   }
-  if (isPlainObject3(data) && "project" in data) {
+  if (isPlainObject(data) && "project" in data) {
     issues.push({
       path: "data.project",
       message: `data: { project } is now data: { checkout }: the same path, relative to the root of the git checkout the session works in (a linked worktree is its own checkout)`
@@ -61777,13 +61780,13 @@ function parseDslFile(filePath2, source, allowedPalettes, under2) {
     unplaced: [],
     inherited: []
   };
-  if (!isPlainObject3(json2)) {
+  if (!isPlainObject(json2)) {
     throw new ConfigError(
       filePath2,
       [
         {
           path: "",
-          message: `Config root must be an object, got ${describeType2(json2)}`
+          message: `Config root must be an object, got ${describeType(json2)}`
         }
       ],
       warnings
@@ -61791,7 +61794,7 @@ function parseDslFile(filePath2, source, allowedPalettes, under2) {
   }
   const { inherited, layer } = under2(
     json2.plugins === void 0 ? [] : validatePluginRefs({ ...ctx, issues: [] }, json2.plugins) ?? [],
-    isPlainObject3(json2.segments) ? Object.keys(json2.segments) : []
+    isPlainObject(json2.segments) ? Object.keys(json2.segments) : []
   );
   const raw = validateTopLevel(
     ctx,
@@ -61906,7 +61909,7 @@ function validatePluginRefs(ctx, raw) {
   }
   ctx.issues.push({
     path: "plugins",
-    message: `"plugins" must be a list of plugin definition paths, got ${describeType2(raw)}`,
+    message: `"plugins" must be a list of plugin definition paths, got ${describeType(raw)}`,
     line: findKeyLine(ctx.source, ["plugins"])
   });
   return void 0;
@@ -63598,275 +63601,7 @@ function holds(doc, path42) {
   return typeof doc === "object" && doc !== null && holds(doc[step4], rest2);
 }
 
-// src/daemon/verbs/validator-registry.ts
-init_globals();
-var INT_RE = /^-?\d+$/;
-function makeAllowListValidator(allowed, label2, wire = "set-state") {
-  const slashOffenders = allowed.filter((v) => v.includes("/"));
-  if (slashOffenders.length > 0) {
-    throw new Error(
-      `makeAllowListValidator(${label2}): values contain "/" \u2014 the ${wire} wire shape splits values on "/" so slash-bearing options cannot be addressed. Offending values: ${slashOffenders.join(", ")}`
-    );
-  }
-  if (allowed.includes("")) {
-    throw new Error(
-      `makeAllowListValidator(${label2}): empty string is not a writable option \u2014 the validator rejects empty input before the allow-list check, so an "" in the allowed list could be rendered but never delivered. Remove "" from the allowed list.`
-    );
-  }
-  const allowedSet = new Set(allowed);
-  const allowedList = [...allowed];
-  return (raw) => {
-    if (!raw) return { ok: false, reason: `${label2} value is required` };
-    if (!allowedSet.has(raw)) {
-      return {
-        ok: false,
-        reason: `unknown ${label2} "${raw}" (have: ${allowedList.join(", ")})`
-      };
-    }
-    return { ok: true, value: raw };
-  };
-}
-function makeIntValidator(label2) {
-  return (raw) => {
-    if (!raw) return { ok: false, reason: `${label2} value is required` };
-    if (!INT_RE.test(raw)) {
-      return { ok: false, reason: `${label2} must be an integer, got "${raw}"` };
-    }
-    const neg = raw[0] === "-";
-    const digits = (neg ? raw.slice(1) : raw).replace(/^0+/, "");
-    if (digits === "") return { ok: true, value: "0" };
-    return { ok: true, value: neg ? `-${digits}` : digits };
-  };
-}
-function makeRangeValidator(min2, max2, label2) {
-  return (raw) => {
-    if (!raw) return { ok: false, reason: `${label2} value is required` };
-    if (!INT_RE.test(raw)) {
-      return { ok: false, reason: `${label2} must be an integer, got "${raw}"` };
-    }
-    const clamped = Math.max(min2, Math.min(max2, parseInt(raw, 10)));
-    return { ok: true, value: String(clamped) };
-  };
-}
-function mergeKeySpecs(key, specs, noun = "state") {
-  const ranges = specs.filter((s) => s.kind === "range");
-  const hasInt = specs.some((s) => s.kind === "int");
-  const allowed = specs.flatMap(
-    (s) => s.kind === "allow-list" ? s.allowed : []
-  );
-  if (ranges.length === 0 && !hasInt) {
-    return { kind: "allow-list", allowed: [...new Set(allowed)] };
-  }
-  const nonInt = allowed.filter((v) => !INT_RE.test(v));
-  if (nonInt.length > 0) {
-    throw new Error(
-      `${noun} action table: key "${key}" is an integer spec (a paged cursor or a bounded value) but a click writes non-integer value(s) to it (${nonInt.join(", ")}). A ${noun} key has one key shape \u2014 point that click at a distinct key, or write an integer.`
-    );
-  }
-  if (hasInt && ranges.length > 0) {
-    throw new Error(
-      `${noun} action table: key "${key}" is declared as both a paged cursor (int) and a bounded value (range) \u2014 a ${noun} key has one key shape. Use distinct keys.`
-    );
-  }
-  if (ranges.length > 0) {
-    const min2 = Math.min(...ranges.map((r) => r.min));
-    const max2 = Math.max(...ranges.map((r) => r.max));
-    const outOfRange = allowed.filter((v) => {
-      const n = parseInt(v, 10);
-      return n < min2 || n > max2;
-    });
-    if (outOfRange.length > 0) {
-      throw new Error(
-        `${noun} action table: key "${key}" is a bounded range [${min2},${max2}] but a click writes out-of-range value(s) to it (${outOfRange.join(", ")}). The range gate would clamp them, storing a different value than the click renders \u2014 write an in-range integer, or point that click at a distinct key.`
-      );
-    }
-    return { kind: "range", min: min2, max: max2 };
-  }
-  return { kind: "int" };
-}
-function wireForNoun(noun) {
-  return noun === "config" ? "set-config" : "set-state";
-}
-function validatorForSpec(key, spec, noun) {
-  if (spec.kind === "int") return makeIntValidator(`menu page "${key}"`);
-  if (spec.kind === "range")
-    return makeRangeValidator(spec.min, spec.max, `${noun} stepper "${key}"`);
-  return makeAllowListValidator(
-    spec.allowed,
-    `${noun} "${key}"`,
-    wireForNoun(noun)
-  );
-}
-function mergeContributions(contributions, noun = "state") {
-  const byKey = /* @__PURE__ */ new Map();
-  for (const { key, spec } of contributions) {
-    const specs = byKey.get(key);
-    if (specs) specs.push(spec);
-    else byKey.set(key, [spec]);
-  }
-  return [...byKey].map(([key, specs]) => ({
-    key,
-    spec: mergeKeySpecs(key, specs, noun)
-  }));
-}
-function createGate(baseline, daemonWide, derived3, noun) {
-  const validators = new Map(Object.entries(baseline));
-  const ranges = /* @__PURE__ */ new Map();
-  const daemonKeys = new Set(daemonWide.map((d) => d.key));
-  for (const { key, spec } of derived3) {
-    if (daemonKeys.has(key) && spec.kind !== "allow-list") {
-      throw new Error(
-        `${noun} gate: key "${key}" is written by the daemon's own links as one of a list of values, and cannot be declared as ${spec.kind === "int" ? "a paged cursor (int)" : "a bounded value (range)"}. Use a distinct key.`
-      );
-    }
-  }
-  const contributions = [
-    ...daemonWide.map(({ key, allowed }) => ({
-      key,
-      spec: { kind: "allow-list", allowed }
-    })),
-    ...derived3
-  ];
-  for (const { key, spec } of mergeContributions(contributions, noun)) {
-    if (!key) throw new Error(`${noun} gate: key is required`);
-    if (key.includes("/")) {
-      throw new Error(
-        `${noun} gate: key "${key}" contains "/" \u2014 the wire shape splits on "/" so a slash-bearing key cannot be addressed. Use a slash-free key.`
-      );
-    }
-    if (Object.hasOwn(baseline, key)) {
-      throw new Error(
-        `${noun} gate: key "${key}" is a built-in ${noun} key and cannot be re-claimed (built-in keys: ${Object.keys(baseline).join(", ")})`
-      );
-    }
-    validators.set(key, validatorForSpec(key, spec, noun));
-    if (spec.kind === "range") {
-      ranges.set(key, { min: spec.min, max: spec.max });
-    }
-  }
-  return {
-    validate(key, rawValue) {
-      const validator = validators.get(key);
-      if (!validator) {
-        return {
-          ok: false,
-          reason: `unknown ${noun} key "${key}" (have: ${[...validators.keys()].join(", ")})`
-        };
-      }
-      return validator(rawValue);
-    },
-    listKeys: () => [...validators.keys()],
-    rangeParamsFor: (key) => ranges.get(key) ?? null
-  };
-}
-function createKeyspace(baseline, noun, derive) {
-  const daemonWide = [];
-  let epoch = 0;
-  const gates = /* @__PURE__ */ new WeakMap();
-  return {
-    register(key, allowed) {
-      const contribution = { key, allowed };
-      createGate(baseline, [contribution], [], noun);
-      daemonWide.push(contribution);
-      epoch++;
-      let active2 = true;
-      return () => {
-        if (!active2) return;
-        active2 = false;
-        daemonWide.splice(daemonWide.indexOf(contribution), 1);
-        epoch++;
-      };
-    },
-    gateFor(config2) {
-      const held = gates.get(config2);
-      if (held?.epoch === epoch) return held.gate;
-      const gate2 = createGate(baseline, daemonWide, derive(config2), noun);
-      gates.set(config2, { epoch, gate: gate2 });
-      return gate2;
-    }
-  };
-}
-
-// src/daemon/verbs/state-validators.ts
-var RESOLVABLE_THEMES_LIST = listResolvablePaletteNames();
-var RESOLVABLE_THEMES = new Set(RESOLVABLE_THEMES_LIST);
-var RESOLVABLE_ENDCAPS = new Set(ENDCAPS_SHAPES);
-var validateTheme = (raw) => {
-  if (!raw) return { ok: false, reason: "theme name is required" };
-  if (!RESOLVABLE_THEMES.has(raw)) {
-    return {
-      ok: false,
-      reason: `unknown theme "${raw}" (have: ${RESOLVABLE_THEMES_LIST.join(", ")})`
-    };
-  }
-  return { ok: true, value: raw };
-};
-var validateEndcaps = (raw) => {
-  if (!raw) return { ok: false, reason: "endcaps name is required" };
-  if (!RESOLVABLE_ENDCAPS.has(raw)) {
-    return {
-      ok: false,
-      reason: `unknown endcaps "${raw}" (have: ${ENDCAPS_SHAPES.join(", ")})`
-    };
-  }
-  return { ok: true, value: raw };
-};
-var BOOLEAN_TRUTHY = /* @__PURE__ */ new Set(["1", "true"]);
-var BOOLEAN_FALSY = /* @__PURE__ */ new Set(["0", "false"]);
-var validateBoolean = (raw) => {
-  if (BOOLEAN_TRUTHY.has(raw)) return { ok: true, value: "1" };
-  if (BOOLEAN_FALSY.has(raw)) return { ok: true, value: "" };
-  return {
-    ok: false,
-    reason: `expected boolean-ish (1, 0, true, false), got "${raw}"`
-  };
-};
-var BASELINE = {
-  endcaps: validateEndcaps,
-  theme: validateTheme,
-  "toolbar-expanded": validateBoolean
-};
-var keyspace = createKeyspace(BASELINE, "state", deriveActionValidators);
-function registerStateValidator(key, allowed) {
-  return keyspace.register(key, allowed);
-}
-function stateGate(config2) {
-  return keyspace.gateFor(config2);
-}
-function actionKeySpecs(a, perConfigDomains) {
-  if (!("set" in a)) return [];
-  if ("to" in a) {
-    return [{ key: a.set, spec: { kind: "allow-list", allowed: [a.to] } }];
-  }
-  if ("from" in a) {
-    return [
-      {
-        key: a.set,
-        spec: {
-          kind: "allow-list",
-          allowed: resolveOptionDomain(a.from, perConfigDomains).members
-        }
-      }
-    ];
-  }
-  if ("int" in a) {
-    return [{ key: a.set, spec: { kind: "int" } }];
-  }
-  if ("cycle" in a) {
-    return [{ key: a.set, spec: { kind: "allow-list", allowed: a.cycle } }];
-  }
-  return [
-    {
-      key: a.set,
-      spec: { kind: "range", min: a.min, max: a.max }
-    }
-  ];
-}
-function dropBaselineAllowLists(contributions) {
-  return contributions.filter(
-    (c) => c.spec.kind !== "allow-list" || !Object.hasOwn(BASELINE, c.key)
-  );
-}
+// src/daemon/verbs/key-seeds.ts
 function stateKeySeed(config2, sessionPick, key) {
   const setting = SESSION_KEY_TO_SETTING.get(key);
   if (setting !== void 0) {
@@ -63877,16 +63612,9 @@ function stateKeySeed(config2, sessionPick, key) {
   }
   return null;
 }
-function actionContributions(config2) {
-  const perConfigDomains = configOptionDomains(config2);
-  return dropBaselineAllowLists(
-    Object.values(config2.actions).flatMap(
-      (a) => actionKeySpecs(a, perConfigDomains)
-    )
-  );
-}
-function deriveActionValidators(config2) {
-  return mergeContributions(actionContributions(config2));
+function configKeySeed(globals, key) {
+  const seed = numericGlobalsSeeds(globals).get(key);
+  return seed === void 0 ? null : String(seed);
 }
 
 // src/config/disclosure-nest.ts
@@ -64055,149 +63783,11 @@ function closingView(store, nestOf2, log) {
   };
 }
 
-// src/daemon/verbs/config-validators.ts
+// src/daemon/foundations/session-keys.ts
 init_globals();
-
-// src/config/layout-ops.ts
-init_globals();
-function encodeLayoutOp(op) {
-  return op.op === "remove" ? `remove:${op.target}` : `insert:${op.segment}:${op.anchor}:${op.relation}`;
-}
-function decodeLayoutOp(token) {
-  const parts = token.split(":");
-  if (parts[0] === "remove" && parts.length === 2 && parts[1]) {
-    return { op: "remove", target: parts[1] };
-  }
-  if (parts[0] === "insert" && parts.length === 4 && parts[1] && parts[2] && (parts[3] === "before" || parts[3] === "after")) {
-    return {
-      op: "insert",
-      segment: parts[1],
-      anchor: parts[2],
-      relation: parts[3]
-    };
-  }
-  return null;
-}
-function mintPlacement(segment, anchor, trees) {
-  const taken = new Set(
-    trees.map(placementIds).filter((held) => held.includes(anchor)).flat()
-  );
-  const id2 = freePlacementId(segment, taken);
-  return id2 === segment ? { seg: segment } : { seg: segment, id: id2 };
-}
-
-// src/daemon/verbs/config-validators.ts
-var keyspace2 = createKeyspace({}, "config", deriveConfigActionValidators);
-function registerConfigValidator(key, allowed) {
-  return keyspace2.register(key, allowed);
-}
-function configGate(config2) {
-  return keyspace2.gateFor(config2);
-}
-function actionKeySpecs2(a, perConfigDomains) {
-  if (!("persist" in a)) return [];
-  if ("to" in a) {
-    return [{ key: a.persist, spec: { kind: "allow-list", allowed: [a.to] } }];
-  }
-  if ("from" in a) {
-    return [
-      {
-        key: a.persist,
-        spec: {
-          kind: "allow-list",
-          allowed: resolveOptionDomain(a.from, perConfigDomains).members
-        }
-      }
-    ];
-  }
-  if ("cycle" in a) {
-    return [{ key: a.persist, spec: { kind: "allow-list", allowed: a.cycle } }];
-  }
-  if ("removeSegment" in a) {
-    return [
-      {
-        key: a.persist,
-        spec: {
-          kind: "allow-list",
-          allowed: [encodeLayoutOp({ op: "remove", target: a.removeSegment })]
-        }
-      }
-    ];
-  }
-  if ("insertSegment" in a) {
-    return [
-      {
-        key: a.persist,
-        spec: {
-          kind: "allow-list",
-          allowed: [
-            encodeLayoutOp({
-              op: "insert",
-              segment: a.insertSegment,
-              anchor: a.anchor,
-              relation: a.relation
-            })
-          ]
-        }
-      }
-    ];
-  }
-  if ("insertSegmentFrom" in a) {
-    return [
-      {
-        key: a.persist,
-        spec: {
-          kind: "allow-list",
-          allowed: resolveOptionDomain(
-            a.insertSegmentFrom,
-            perConfigDomains
-          ).members.map(
-            (segment) => encodeLayoutOp({
-              op: "insert",
-              segment,
-              anchor: a.anchor,
-              relation: a.relation
-            })
-          )
-        }
-      }
-    ];
-  }
-  return [
-    {
-      key: a.persist,
-      spec: { kind: "range", min: a.min, max: a.max }
-    }
-  ];
-}
-function configKeySeed(globals, key) {
-  const seed = numericGlobalsSeeds(globals).get(key);
-  return seed === void 0 ? null : String(seed);
-}
-function clearableContributions(config2) {
-  const keys2 = /* @__PURE__ */ new Set();
-  for (const a of Object.values(config2.actions)) {
-    if ("reset" in a) keys2.add(a.reset);
-    const target = "persist" in a ? parsePersistTarget(a.persist) : null;
-    if (target?.scope === "preset-root") keys2.add(presetRootKey(target.preset));
-  }
-  return [...keys2].map((key) => ({
-    key,
-    spec: { kind: "allow-list", allowed: [] }
-  }));
-}
-function actionContributions2(config2) {
-  const perConfigDomains = configOptionDomains(config2);
-  return [
-    ...clearableContributions(config2),
-    ...Object.values(config2.actions).flatMap(
-      (a) => actionKeySpecs2(a, perConfigDomains)
-    )
-  ];
-}
-function deriveConfigActionValidators(config2) {
-  return mergeContributions(actionContributions2(config2), "config");
-}
+var SESSION_RENDER_ORIGIN_KEY = "render-origin";
+var SESSION_CLIENT_HINTS_KEY = "client-hints";
+var SESSION_CONFIG_OVERRIDE_KEY = "config-override";
 
 // src/daemon/config-file-store.ts
 init_globals();
@@ -64234,8 +63824,38 @@ function decodeWire(decode) {
 
 // src/daemon/config-file-store.ts
 var import_json54 = __toESM(require_dist(), 1);
-var BOOLEAN_TRUTHY2 = /* @__PURE__ */ new Set(["1", "true"]);
-var BOOLEAN_FALSY2 = /* @__PURE__ */ new Set(["0", "false", ""]);
+
+// src/config/layout-ops.ts
+init_globals();
+function encodeLayoutOp(op) {
+  return op.op === "remove" ? `remove:${op.target}` : `insert:${op.segment}:${op.anchor}:${op.relation}`;
+}
+function decodeLayoutOp(token) {
+  const parts = token.split(":");
+  if (parts[0] === "remove" && parts.length === 2 && parts[1]) {
+    return { op: "remove", target: parts[1] };
+  }
+  if (parts[0] === "insert" && parts.length === 4 && parts[1] && parts[2] && (parts[3] === "before" || parts[3] === "after")) {
+    return {
+      op: "insert",
+      segment: parts[1],
+      anchor: parts[2],
+      relation: parts[3]
+    };
+  }
+  return null;
+}
+function mintPlacement(segment, anchor, trees) {
+  const taken = new Set(
+    trees.map(placementIds).filter((held) => held.includes(anchor)).flat()
+  );
+  const id2 = freePlacementId(segment, taken);
+  return id2 === segment ? { seg: segment } : { seg: segment, id: id2 };
+}
+
+// src/daemon/config-file-store.ts
+var BOOLEAN_TRUTHY = /* @__PURE__ */ new Set(["1", "true"]);
+var BOOLEAN_FALSY = /* @__PURE__ */ new Set(["0", "false", ""]);
 function persistValueText(key, raw) {
   const target = requireValueTarget(key);
   const kind = target.scope === "segment-palette" ? "string" : wireKindOf(target.field);
@@ -64249,8 +63869,8 @@ function persistValueText(key, raw) {
     }
     return String(n);
   }
-  if (BOOLEAN_TRUTHY2.has(raw)) return "true";
-  if (BOOLEAN_FALSY2.has(raw)) return "false";
+  if (BOOLEAN_TRUTHY.has(raw)) return "true";
+  if (BOOLEAN_FALSY.has(raw)) return "false";
   throw new Error(
     `persistValueText: "${key}" expects boolean-ish (1, 0, true, false), got "${raw}"`
   );
@@ -70058,7 +69678,7 @@ var toolbarToggle = async (value, ctx) => {
 var setState = async (rawValue, ctx) => {
   const [sessionId2 = "", ...rest2] = decodeWire(() => decodeSegments(rawValue));
   const sid = requireSessionId(sessionId2);
-  const gate2 = stateGate(sessionConfig(ctx, sid));
+  const gate2 = ctx.gates.state.gateFor(sessionConfig(ctx, sid));
   if (rest2.length === 0)
     throw new BadVerbArgs(
       `set-state: <key>/<value> is required (have keys: ${gate2.listKeys().join(", ")})`
@@ -70112,7 +69732,7 @@ var stepState = async (rawValue, ctx) => {
   }
   const by = parseInt(byRaw, 10);
   const config2 = sessionConfig(ctx, sid);
-  const gate2 = stateGate(config2);
+  const gate2 = ctx.gates.state.gateFor(config2);
   const params = gate2.rangeParamsFor(key);
   if (!params) {
     throw new BadVerbArgs(
@@ -70160,22 +69780,9 @@ function stepFrom(verb, key, params, declared) {
   }
   return clampTo(params, parseInt(declared, 10));
 }
-var SESSION_RENDER_ORIGIN_KEY = "render-origin";
 function sessionRenderOrigin(requested, state, sid) {
   const pick2 = state.get(sid, SESSION_CONFIG_OVERRIDE_KEY);
   return pick2 === null ? requested : { ...requested, target: { source: "pick", path: pick2 } };
-}
-function encodeRenderOrigin({
-  projectDir,
-  cwd: cwd2,
-  target
-}) {
-  return JSON.stringify({
-    projectDir,
-    cwd: cwd2,
-    configFile: target.path ?? null,
-    source: target.source
-  });
 }
 function recordedTarget(source, configFile) {
   if (configFile === null) return { source: "search" };
@@ -70256,7 +69863,7 @@ var setConfig = async (rawValue, ctx) => {
   const sid = requireSessionId(sessionId2);
   const origin = sessionOrigin(ctx, sid);
   const config2 = ctx.configFor(origin);
-  const gate2 = configGate(config2);
+  const gate2 = ctx.gates.config.gateFor(config2);
   if (!key) {
     throw new BadVerbArgs(
       `set-config: <key>/<value> is required (have keys: ${gate2.listKeys().join(", ")})`
@@ -70295,7 +69902,7 @@ var stepConfig = async (rawValue, ctx) => {
   const by = parseInt(byRaw, 10);
   const origin = sessionOrigin(ctx, sid);
   const config2 = ctx.configFor(origin);
-  const gate2 = configGate(config2);
+  const gate2 = ctx.gates.config.gateFor(config2);
   const params = gate2.rangeParamsFor(key);
   if (!params) {
     throw new BadVerbArgs(
@@ -70337,7 +69944,7 @@ var save = async (value, ctx) => {
     ctx.log("info", `save: nothing unsaved (session=${sid})`);
     return;
   }
-  const gate2 = stateGate(config2);
+  const gate2 = ctx.gates.state.gateFor(config2);
   const pairs2 = drafts.map((d) => {
     const result = gate2.validate(d.sessionKey, d.value);
     if (!result.ok) throw new BadVerbArgs(`save: ${result.reason}`);
@@ -70377,7 +69984,7 @@ var savePreset = async (value, ctx) => {
     config2,
     (key) => ctx.sessionState.get(sid, key)
   );
-  const gate2 = stateGate(config2);
+  const gate2 = ctx.gates.state.gateFor(config2);
   const picks = snapshot.picks.map((d) => {
     const result = gate2.validate(d.sessionKey, d.value);
     if (!result.ok) throw new BadVerbArgs(`save-preset: ${result.reason}`);
@@ -70456,7 +70063,7 @@ var resetConfig = async (value, ctx) => {
   const [sessionId2 = "", ...keys2] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId2);
   const origin = sessionOrigin(ctx, sid);
-  const known = configGate(ctx.configFor(origin)).listKeys();
+  const known = ctx.gates.config.gateFor(ctx.configFor(origin)).listKeys();
   const unknown = keys2.length === 0 ? [""] : keys2.filter((k) => !known.includes(k));
   if (unknown.length > 0) {
     throw new BadVerbArgs(
@@ -70506,7 +70113,7 @@ var applyLayoutOp2 = async (rawValue, ctx) => {
   const sid = requireSessionId(sessionId2);
   const origin = sessionOrigin(ctx, sid);
   const before = ctx.configFor(origin);
-  const gate2 = configGate(before);
+  const gate2 = ctx.gates.config.gateFor(before);
   if (!key) {
     throw new BadVerbArgs(
       `apply-layout-op: <key>/<op> is required (have: ${gate2.listKeys().join(", ")})`
@@ -70547,7 +70154,7 @@ var back = async (value, ctx) => {
   const { step: step4, discarded } = ctx.navigation.back(
     sid,
     ctx.sessionState,
-    stateGate(sessionConfig(ctx, sid))
+    ctx.gates.state.gateFor(sessionConfig(ctx, sid))
   );
   const restored = step4.map((c) => `${c.key}=${c.before ?? "\u2205"}`).join(" ");
   ctx.log("info", `back: ${restored} discarded=${discarded} (session=${sid})`);
@@ -70576,7 +70183,6 @@ var applyUpdate = async (value, ctx) => {
   requireSessionId(oneArg(value));
   await ctx.applyUpdate();
 };
-var SESSION_CLIENT_HINTS_KEY = "client-hints";
 function sessionHints(ctx, sid) {
   const raw = ctx.sessionState.get(sid, SESSION_CLIENT_HINTS_KEY);
   if (raw === null) {
@@ -70894,7 +70500,6 @@ var repoConfig = async (value, ctx) => {
   );
   ctx.reloadConfig(sessionOrigin(ctx, sid));
 };
-var SESSION_CONFIG_OVERRIDE_KEY = "config-override";
 var loadConfig2 = async (value, ctx) => {
   const slash2 = value.indexOf("/");
   if (slash2 === -1) {
@@ -71370,553 +70975,436 @@ var Runs = class {
 
 // src/daemon/draw-bar.ts
 init_globals();
-var import_node_path33 = __toESM(require_path_browserify(), 1);
-
-// src/daemon/update-notice.ts
-init_globals();
-
-// src/daemon/update-act.ts
-init_globals();
-init_os();
 var import_node_path32 = __toESM(require_path_browserify(), 1);
-function actsDir(stateDir2, entryPath) {
-  const key = createHash("sha256").update(entryPath).digest("hex").slice(0, 16);
-  return import_node_path32.default.join(stateDir2, "update-act", key);
-}
-var IDLE = { kind: "idle" };
-function judgeAct(facts) {
-  if (facts === null) return IDLE;
-  const { act, record: record2, alive, end, lastLine } = facts;
-  if (alive) return { kind: "running", act };
-  if (end === null) {
-    return {
-      kind: "failed",
-      act,
-      identity: record2.identity,
-      reason: "lost: the act ended without a verdict"
-    };
+
+// src/daemon/update-keys.ts
+init_globals();
+
+// src/daemon/foundations/gates.ts
+init_globals();
+
+// src/daemon/foundations/config-validators.ts
+init_globals();
+
+// src/daemon/foundations/validator-registry.ts
+init_globals();
+var INT_RE = /^-?\d+$/;
+function makeAllowListValidator(allowed, label2, wire = "set-state") {
+  const slashOffenders = allowed.filter((v) => v.includes("/"));
+  if (slashOffenders.length > 0) {
+    throw new Error(
+      `makeAllowListValidator(${label2}): values contain "/" \u2014 the ${wire} wire shape splits values on "/" so slash-bearing options cannot be addressed. Offending values: ${slashOffenders.join(", ")}`
+    );
   }
-  if (end.kind === "exit" && end.code === 0) return { kind: "succeeded", act };
-  const reason = end.kind === "timeout" ? "timeout" : `non-zero (exit ${end.code}): ${lastLine ?? "no output"}`;
-  return { kind: "failed", act, identity: record2.identity, reason };
-}
-var filesOf = (actDir) => ({
-  stdout: import_node_path32.default.join(actDir, "stdout"),
-  stderr: import_node_path32.default.join(actDir, "stderr"),
-  status: import_node_path32.default.join(actDir, "status")
-});
-var recordOf2 = (actDir) => import_node_path32.default.join(actDir, "record.json");
-function actNumbers(dir) {
-  let names;
-  try {
-    names = fs_default.readdirSync(dir);
-  } catch (err) {
-    if (err.code === "ENOENT") return [];
-    throw err;
+  if (allowed.includes("")) {
+    throw new Error(
+      `makeAllowListValidator(${label2}): empty string is not a writable option \u2014 the validator rejects empty input before the allow-list check, so an "" in the allowed list could be rendered but never delivered. Remove "" from the allowed list.`
+    );
   }
-  return names.filter((n) => /^\d+$/.test(n)).map(Number).sort((a, b) => a - b);
-}
-var TAIL_BYTES = 4096;
-function lastLineOf(file) {
-  const tail = readTailSync(file, TAIL_BYTES);
-  switch (tail.kind) {
-    case "absent":
-      return null;
-    case "failed":
-      throw new Error(`${file}: ${tail.reason}`);
-    case "ok":
-      return tail.value.buf.toString("utf8").split(/\r?\n/).map((s) => s.trim()).filter((s) => s !== "").at(-1) ?? null;
-  }
-}
-function removeAct(dir, act) {
-  const leaving = import_node_path32.default.join(dir, `.removed-${act}-${process_default.pid}`);
-  try {
-    fs_default.renameSync(import_node_path32.default.join(dir, String(act)), leaving);
-  } catch (err) {
-    if (err.code === "ENOENT") return;
-    throw err;
-  }
-  fs_default.rmSync(leaving, { recursive: true, force: true });
-}
-var bootedAt = () => Date.now() - os_default.uptime() * 1e3;
-async function isRecordedJob(record2, read2, boot = bootedAt()) {
-  if (record2.started <= boot || !jobGroupAlive(record2.pid)) return false;
-  const leader = await read2(record2.pid);
-  return record2.startTime === null || leader.kind === "unavailable" || leader.token === record2.startTime;
-}
-function readRecord(actDir) {
-  try {
-    return JSON.parse(fs_default.readFileSync(recordOf2(actDir), "utf8"));
-  } catch (err) {
-    if (err.code === "ENOENT") return null;
-    throw err;
-  }
-}
-var sameJob = (a, b) => a.pid === b.pid && a.startTime === b.startTime;
-function makeActReader(dir, read2) {
-  let known = null;
-  async function factsOf2(act) {
-    const actDir = import_node_path32.default.join(dir, String(act));
-    const record2 = readRecord(actDir);
-    if (record2 === null) return null;
-    if (known === null || !sameJob(known.record, record2)) {
-      known = { record: record2, ours: await isRecordedJob(record2, read2), final: null };
+  const allowedSet = new Set(allowed);
+  const allowedList = [...allowed];
+  return (raw) => {
+    if (!raw) return { ok: false, reason: `${label2} value is required` };
+    if (!allowedSet.has(raw)) {
+      return {
+        ok: false,
+        reason: `unknown ${label2} "${raw}" (have: ${allowedList.join(", ")})`
+      };
     }
-    if (known.final !== null) return known.final;
-    known.ours = known.ours && jobGroupAlive(record2.pid);
-    const files = filesOf(actDir);
-    const end = readJobEnd(files.status);
-    const lastLine = end === null ? null : lastLineOf(files.stderr) ?? lastLineOf(files.stdout);
-    if (!fs_default.existsSync(actDir)) return null;
-    const facts = { act, record: record2, alive: known.ours, end, lastLine };
-    if (!facts.alive) known.final = facts;
-    return facts;
+    return { ok: true, value: raw };
+  };
+}
+function makeIntValidator(label2) {
+  return (raw) => {
+    if (!raw) return { ok: false, reason: `${label2} value is required` };
+    if (!INT_RE.test(raw)) {
+      return { ok: false, reason: `${label2} must be an integer, got "${raw}"` };
+    }
+    const neg = raw[0] === "-";
+    const digits = (neg ? raw.slice(1) : raw).replace(/^0+/, "");
+    if (digits === "") return { ok: true, value: "0" };
+    return { ok: true, value: neg ? `-${digits}` : digits };
+  };
+}
+function makeRangeValidator(min2, max2, label2) {
+  return (raw) => {
+    if (!raw) return { ok: false, reason: `${label2} value is required` };
+    if (!INT_RE.test(raw)) {
+      return { ok: false, reason: `${label2} must be an integer, got "${raw}"` };
+    }
+    const clamped = Math.max(min2, Math.min(max2, parseInt(raw, 10)));
+    return { ok: true, value: String(clamped) };
+  };
+}
+function mergeKeySpecs(key, specs, noun = "state") {
+  const ranges = specs.filter((s) => s.kind === "range");
+  const hasInt = specs.some((s) => s.kind === "int");
+  const allowed = specs.flatMap(
+    (s) => s.kind === "allow-list" ? s.allowed : []
+  );
+  if (ranges.length === 0 && !hasInt) {
+    return { kind: "allow-list", allowed: [...new Set(allowed)] };
+  }
+  const nonInt = allowed.filter((v) => !INT_RE.test(v));
+  if (nonInt.length > 0) {
+    throw new Error(
+      `${noun} action table: key "${key}" is an integer spec (a paged cursor or a bounded value) but a click writes non-integer value(s) to it (${nonInt.join(", ")}). A ${noun} key has one key shape \u2014 point that click at a distinct key, or write an integer.`
+    );
+  }
+  if (hasInt && ranges.length > 0) {
+    throw new Error(
+      `${noun} action table: key "${key}" is declared as both a paged cursor (int) and a bounded value (range) \u2014 a ${noun} key has one key shape. Use distinct keys.`
+    );
+  }
+  if (ranges.length > 0) {
+    const min2 = Math.min(...ranges.map((r) => r.min));
+    const max2 = Math.max(...ranges.map((r) => r.max));
+    const outOfRange = allowed.filter((v) => {
+      const n = parseInt(v, 10);
+      return n < min2 || n > max2;
+    });
+    if (outOfRange.length > 0) {
+      throw new Error(
+        `${noun} action table: key "${key}" is a bounded range [${min2},${max2}] but a click writes out-of-range value(s) to it (${outOfRange.join(", ")}). The range gate would clamp them, storing a different value than the click renders \u2014 write an in-range integer, or point that click at a distinct key.`
+      );
+    }
+    return { kind: "range", min: min2, max: max2 };
+  }
+  return { kind: "int" };
+}
+function wireForNoun(noun) {
+  return noun === "config" ? "set-config" : "set-state";
+}
+function validatorForSpec(key, spec, noun) {
+  if (spec.kind === "int") return makeIntValidator(`menu page "${key}"`);
+  if (spec.kind === "range")
+    return makeRangeValidator(spec.min, spec.max, `${noun} stepper "${key}"`);
+  return makeAllowListValidator(
+    spec.allowed,
+    `${noun} "${key}"`,
+    wireForNoun(noun)
+  );
+}
+function mergeContributions(contributions, noun = "state") {
+  const byKey = /* @__PURE__ */ new Map();
+  for (const { key, spec } of contributions) {
+    const specs = byKey.get(key);
+    if (specs) specs.push(spec);
+    else byKey.set(key, [spec]);
+  }
+  return [...byKey].map(([key, specs]) => ({
+    key,
+    spec: mergeKeySpecs(key, specs, noun)
+  }));
+}
+function createGate(baseline, daemonWide, derived3, noun) {
+  const validators = new Map(Object.entries(baseline));
+  const ranges = /* @__PURE__ */ new Map();
+  const daemonKeys = new Set(daemonWide.map((d) => d.key));
+  for (const { key, spec } of derived3) {
+    if (daemonKeys.has(key) && spec.kind !== "allow-list") {
+      throw new Error(
+        `${noun} gate: key "${key}" is written by the daemon's own links as one of a list of values, and cannot be declared as ${spec.kind === "int" ? "a paged cursor (int)" : "a bounded value (range)"}. Use a distinct key.`
+      );
+    }
+  }
+  const contributions = [
+    ...daemonWide.map(({ key, allowed }) => ({
+      key,
+      spec: { kind: "allow-list", allowed }
+    })),
+    ...derived3
+  ];
+  for (const { key, spec } of mergeContributions(contributions, noun)) {
+    if (!key) throw new Error(`${noun} gate: key is required`);
+    if (key.includes("/")) {
+      throw new Error(
+        `${noun} gate: key "${key}" contains "/" \u2014 the wire shape splits on "/" so a slash-bearing key cannot be addressed. Use a slash-free key.`
+      );
+    }
+    if (Object.hasOwn(baseline, key)) {
+      throw new Error(
+        `${noun} gate: key "${key}" is a built-in ${noun} key and cannot be re-claimed (built-in keys: ${Object.keys(baseline).join(", ")})`
+      );
+    }
+    validators.set(key, validatorForSpec(key, spec, noun));
+    if (spec.kind === "range") {
+      ranges.set(key, { min: spec.min, max: spec.max });
+    }
   }
   return {
-    async read() {
-      let vanished = null;
-      for (; ; ) {
-        const act = actNumbers(dir).at(-1);
-        if (act === void 0) return null;
-        if (act === vanished) {
-          throw new Error(
-            `${import_node_path32.default.join(dir, String(act))}: an act with no record`
-          );
-        }
-        const facts = await factsOf2(act);
-        if (facts !== null) return facts;
-        vanished = act;
+    validate(key, rawValue) {
+      const validator = validators.get(key);
+      if (!validator) {
+        return {
+          ok: false,
+          reason: `unknown ${noun} key "${key}" (have: ${[...validators.keys()].join(", ")})`
+        };
       }
+      return validator(rawValue);
+    },
+    listKeys: () => [...validators.keys()],
+    rangeParamsFor: (key) => ranges.get(key) ?? null
+  };
+}
+function createKeyspace(baseline, noun, derive) {
+  const daemonWide = [];
+  let epoch = 0;
+  const gates = /* @__PURE__ */ new WeakMap();
+  return {
+    register(key, allowed) {
+      const contribution = { key, allowed };
+      createGate(baseline, [contribution], [], noun);
+      daemonWide.push(contribution);
+      epoch++;
+      let active2 = true;
+      return () => {
+        if (!active2) return;
+        active2 = false;
+        daemonWide.splice(daemonWide.indexOf(contribution), 1);
+        epoch++;
+      };
+    },
+    gateFor(config2) {
+      const held = gates.get(config2);
+      if (held?.epoch === epoch) return held.gate;
+      const gate2 = createGate(baseline, daemonWide, derive(config2), noun);
+      gates.set(config2, { epoch, gate: gate2 });
+      return gate2;
     }
   };
 }
-function stakeClaim(dir, actDir, record2) {
-  fs_default.mkdirSync(dir, { recursive: true });
-  const staging = fs_default.mkdtempSync(import_node_path32.default.join(dir, ".claim-"));
-  try {
-    fs_default.writeFileSync(recordOf2(staging), JSON.stringify(record2));
-    fs_default.renameSync(staging, actDir);
-    return true;
-  } catch (err) {
-    const code = err.code;
-    if (code === "ENOTEMPTY" || code === "EEXIST") return false;
-    throw err;
-  } finally {
-    fs_default.rmSync(staging, { recursive: true, force: true });
-  }
-}
-async function claimAct(launcher, dir, after, identity2, command, timeoutMs, now2, read2) {
-  const act = (after ?? 0) + 1;
-  const actDir = import_node_path32.default.join(dir, String(act));
-  const job = launcher.launchJobSync(command, filesOf(actDir));
-  if (!job.ok) throw new Error(`apply-update: ${job.error}`);
-  let stood = false;
-  try {
-    const start = await read2(job.pid);
-    const record2 = {
-      identity: identity2,
-      pid: job.pid,
-      startTime: start.kind === "start" ? start.token : null,
-      started: now2,
-      deadline: now2 + timeoutMs
-    };
-    if (!stakeClaim(dir, actDir, record2)) return CLAIMED_FIRST;
-    if (actNumbers(dir).some((n) => n > act)) {
-      removeAct(dir, act);
-      return CLAIMED_FIRST;
-    }
-    stood = true;
-  } finally {
-    if (stood) job.release();
-    else job.withdraw();
-  }
-  for (const n of actNumbers(dir).filter((n2) => n2 < act)) {
-    removeAct(dir, n);
-  }
-  return { ok: true, act };
-}
-var CLAIMED_FIRST = {
-  ok: false,
-  reason: "another act claimed this bundle first"
-};
-function endOverdue(dir, facts) {
-  const status = filesOf(import_node_path32.default.join(dir, String(facts.act))).status;
-  return endJob(facts.record.pid, status, { kind: "timeout" });
-}
 
-// src/daemon/process-fingerprint.ts
-init_globals();
-async function readStartTime(pid2, launch) {
-  const res = await launch({
-    bin: "ps",
-    args: ["-o", "lstart=", "-p", String(pid2)],
-    category: "process-fingerprint",
-    timeoutMs: 2e3,
-    // [FRAMING:representation] Pin BOTH locale and timezone so the token is
-    // deterministic across daemons — the writer and reader must render the same
-    // process identically for opaque string equality to be sound. LC_ALL=C fixes
-    // the strftime format; TZ=UTC fixes localtime(), so DST / TZ / tzdata changes
-    // can't make one live process render two different start-time strings.
-    env: { ...process_default.env, LC_ALL: "C", TZ: "UTC" }
-  });
-  if (res.ok) {
-    const token = res.stdout.trim();
-    if (token.length > 0) return { kind: "start", token };
-    return { kind: "unavailable", detail: "ps produced no start-time" };
-  }
-  const detail = res.reason === "spawn-error" ? res.error ?? "ps spawn failed" : `ps ${res.reason} (exit ${res.exitCode})`;
-  return { kind: "unavailable", detail };
+// src/daemon/foundations/config-validators.ts
+function makeConfigKeyspace() {
+  return createKeyspace({}, "config", deriveConfigActionValidators);
 }
-
-// src/utils/keyed-serial-queue.ts
-init_globals();
-var KeyedSerialQueue = class {
-  // Each key's tasks still to run, while one runs.
-  waiting = /* @__PURE__ */ new Map();
-  run(key, task) {
-    return new Promise((resolve, reject2) => {
-      const entry = async () => {
-        try {
-          resolve(await task());
-        } catch (e) {
-          reject2(e);
+function actionKeySpecs(a, perConfigDomains) {
+  if (!("persist" in a)) return [];
+  if ("to" in a) {
+    return [{ key: a.persist, spec: { kind: "allow-list", allowed: [a.to] } }];
+  }
+  if ("from" in a) {
+    return [
+      {
+        key: a.persist,
+        spec: {
+          kind: "allow-list",
+          allowed: resolveOptionDomain(a.from, perConfigDomains).members
         }
-      };
-      const behind = this.waiting.get(key);
-      if (behind !== void 0) {
-        behind.push(entry);
-        return;
       }
-      const tasks = [];
-      this.waiting.set(key, tasks);
-      const drain = (next) => void next().then(() => {
-        const after = tasks.shift();
-        if (after === void 0) this.waiting.delete(key);
-        else drain(after);
-      });
-      drain(entry);
-    });
+    ];
   }
-};
+  if ("cycle" in a) {
+    return [{ key: a.persist, spec: { kind: "allow-list", allowed: a.cycle } }];
+  }
+  if ("removeSegment" in a) {
+    return [
+      {
+        key: a.persist,
+        spec: {
+          kind: "allow-list",
+          allowed: [encodeLayoutOp({ op: "remove", target: a.removeSegment })]
+        }
+      }
+    ];
+  }
+  if ("insertSegment" in a) {
+    return [
+      {
+        key: a.persist,
+        spec: {
+          kind: "allow-list",
+          allowed: [
+            encodeLayoutOp({
+              op: "insert",
+              segment: a.insertSegment,
+              anchor: a.anchor,
+              relation: a.relation
+            })
+          ]
+        }
+      }
+    ];
+  }
+  if ("insertSegmentFrom" in a) {
+    return [
+      {
+        key: a.persist,
+        spec: {
+          kind: "allow-list",
+          allowed: resolveOptionDomain(
+            a.insertSegmentFrom,
+            perConfigDomains
+          ).members.map(
+            (segment) => encodeLayoutOp({
+              op: "insert",
+              segment,
+              anchor: a.anchor,
+              relation: a.relation
+            })
+          )
+        }
+      }
+    ];
+  }
+  return [
+    {
+      key: a.persist,
+      spec: { kind: "range", min: a.min, max: a.max }
+    }
+  ];
+}
+function clearableContributions(config2) {
+  const keys2 = /* @__PURE__ */ new Set();
+  for (const a of Object.values(config2.actions)) {
+    if ("reset" in a) keys2.add(a.reset);
+    const target = "persist" in a ? parsePersistTarget(a.persist) : null;
+    if (target?.scope === "preset-root") keys2.add(presetRootKey(target.preset));
+  }
+  return [...keys2].map((key) => ({
+    key,
+    spec: { kind: "allow-list", allowed: [] }
+  }));
+}
+function actionContributions(config2) {
+  const perConfigDomains = configOptionDomains(config2);
+  return [
+    ...clearableContributions(config2),
+    ...Object.values(config2.actions).flatMap(
+      (a) => actionKeySpecs(a, perConfigDomains)
+    )
+  ];
+}
+function deriveConfigActionValidators(config2) {
+  return mergeContributions(actionContributions(config2), "config");
+}
 
-// src/daemon/update-notice.ts
+// src/daemon/foundations/state-validators.ts
+init_globals();
+var RESOLVABLE_THEMES_LIST = listResolvablePaletteNames();
+var RESOLVABLE_THEMES = new Set(RESOLVABLE_THEMES_LIST);
+var RESOLVABLE_ENDCAPS = new Set(ENDCAPS_SHAPES);
+var validateTheme = (raw) => {
+  if (!raw) return { ok: false, reason: "theme name is required" };
+  if (!RESOLVABLE_THEMES.has(raw)) {
+    return {
+      ok: false,
+      reason: `unknown theme "${raw}" (have: ${RESOLVABLE_THEMES_LIST.join(", ")})`
+    };
+  }
+  return { ok: true, value: raw };
+};
+var validateEndcaps = (raw) => {
+  if (!raw) return { ok: false, reason: "endcaps name is required" };
+  if (!RESOLVABLE_ENDCAPS.has(raw)) {
+    return {
+      ok: false,
+      reason: `unknown endcaps "${raw}" (have: ${ENDCAPS_SHAPES.join(", ")})`
+    };
+  }
+  return { ok: true, value: raw };
+};
+var BOOLEAN_TRUTHY2 = /* @__PURE__ */ new Set(["1", "true"]);
+var BOOLEAN_FALSY2 = /* @__PURE__ */ new Set(["0", "false"]);
+var validateBoolean = (raw) => {
+  if (BOOLEAN_TRUTHY2.has(raw)) return { ok: true, value: "1" };
+  if (BOOLEAN_FALSY2.has(raw)) return { ok: true, value: "" };
+  return {
+    ok: false,
+    reason: `expected boolean-ish (1, 0, true, false), got "${raw}"`
+  };
+};
+var BASELINE = {
+  endcaps: validateEndcaps,
+  theme: validateTheme,
+  "toolbar-expanded": validateBoolean
+};
+function makeStateKeyspace() {
+  return createKeyspace(BASELINE, "state", deriveActionValidators);
+}
+function actionKeySpecs2(a, perConfigDomains) {
+  if (!("set" in a)) return [];
+  if ("to" in a) {
+    return [{ key: a.set, spec: { kind: "allow-list", allowed: [a.to] } }];
+  }
+  if ("from" in a) {
+    return [
+      {
+        key: a.set,
+        spec: {
+          kind: "allow-list",
+          allowed: resolveOptionDomain(a.from, perConfigDomains).members
+        }
+      }
+    ];
+  }
+  if ("int" in a) {
+    return [{ key: a.set, spec: { kind: "int" } }];
+  }
+  if ("cycle" in a) {
+    return [{ key: a.set, spec: { kind: "allow-list", allowed: a.cycle } }];
+  }
+  return [
+    {
+      key: a.set,
+      spec: { kind: "range", min: a.min, max: a.max }
+    }
+  ];
+}
+function dropBaselineAllowLists(contributions) {
+  return contributions.filter(
+    (c) => c.spec.kind !== "allow-list" || !Object.hasOwn(BASELINE, c.key)
+  );
+}
+function actionContributions2(config2) {
+  const perConfigDomains = configOptionDomains(config2);
+  return dropBaselineAllowLists(
+    Object.values(config2.actions).flatMap(
+      (a) => actionKeySpecs2(a, perConfigDomains)
+    )
+  );
+}
+function deriveActionValidators(config2) {
+  return mergeContributions(actionContributions2(config2));
+}
+
+// src/daemon/foundations/gates.ts
+function createGates(held) {
+  const state = makeStateKeyspace();
+  const config2 = makeConfigKeyspace();
+  for (const { key, allowed } of held.state) state.register(key, allowed);
+  for (const { key, allowed } of held.config) config2.register(key, allowed);
+  return { state, config: config2 };
+}
+
+// src/daemon/update-keys.ts
 var UPDATE_DISMISSED_KEY = "update.dismissed";
 var UPDATE_NOTICE_FIELD = "updateNotice";
 var UPDATE_NOTICE_SESSION_KEY = SETTINGS.updateNotice.sessionKey;
-function updateIdentity(update) {
-  return update.kind === "source" ? update.newer.digest : formatVersion(update.newer);
+function daemonGates() {
+  return createGates({
+    config: [{ key: UPDATE_NOTICE_FIELD, allowed: ["false"] }],
+    state: [
+      { key: UPDATE_NOTICE_SESSION_KEY, allowed: ["false"] },
+      { key: UPDATE_DISMISSED_KEY, allowed: [] }
+    ]
+  });
 }
-var describeStamp = (s) => `${s.version} [${shortDigest(s.digest)}]`;
-function factsOf(update) {
-  switch (update.kind) {
-    case "source":
-      return {
-        headline: "Newer source",
-        newer: describeStamp(update.newer),
-        running: describeStamp(update.running),
-        act: "rebuild",
-        busy: "rebuilding\u2026",
-        command: { bin: "pnpm", args: ["build"], cwd: update.root }
-      };
-    case "release":
-      return {
-        headline: "Newer release",
-        newer: formatVersion(update.newer),
-        running: formatVersion(update.running),
-        act: "upgrade",
-        busy: "upgrading\u2026",
-        command: {
-          bin: "pnpm",
-          args: [
-            "dlx",
-            `${PACKAGE_NAME}@${formatVersion(update.newer)}`,
-            "install"
-          ]
-        }
-      };
-  }
-}
-function updateNotice(update, act, ctx) {
-  if (update === null) return [];
-  const identity2 = updateIdentity(update);
-  if (!ctx.enabled || ctx.dismissed === identity2) return [];
-  const facts = factsOf(update);
-  const sentence = `${facts.headline}: ${facts.newer}. You're on ${facts.running}.`;
-  const failure = act.kind === "failed" && act.identity === identity2 ? [`${facts.act} failed: ${act.reason}`] : [];
-  const message = [sentence, ...failure].join("\n");
-  const actSpan = act.kind === "running" ? diagnosticSpan(`[${facts.busy}]`, null) : diagnosticSpan(
-    `[${facts.act}]`,
-    effectsUrl([{ verb: VERB_APPLY_UPDATE, args: [ctx.sessionId] }])
-  );
-  const first2 = [
-    diagnosticSpan(sentence, null),
-    actSpan,
-    diagnosticSpan(
-      "[dismiss]",
-      effectsUrl([
-        {
-          verb: VERB_SET_STATE,
-          args: [ctx.sessionId, UPDATE_DISMISSED_KEY, identity2]
-        }
-      ])
-    ),
-    diagnosticSpan(
-      "[disable]",
-      effectsUrl([
-        {
-          verb: VERB_SET_CONFIG,
-          args: [ctx.sessionId, UPDATE_NOTICE_FIELD, "false"]
-        },
-        {
-          verb: VERB_SET_STATE,
-          args: [ctx.sessionId, UPDATE_NOTICE_SESSION_KEY, "false"]
-        }
-      ])
-    )
-  ];
-  const rest2 = failure.map((f) => [diagnosticSpan(f, null)]);
-  return [
-    {
-      severity: UPDATE_SEVERITY,
-      about: `update\0${identity2}`,
-      message,
-      copy: message,
-      lines: [first2, ...rest2]
-    }
-  ];
-}
-function updateOf(build, release3) {
-  if (build.kind === "stale") {
-    return {
-      kind: "source",
-      root: build.root,
-      newer: build.source,
-      running: build.running
-    };
-  }
-  if (build.kind === "not-source-checkout" && release3 !== null && release3.kind === "stale") {
-    return {
-      kind: "release",
-      newer: release3.latest,
-      running: release3.installed
-    };
-  }
-  return null;
-}
-var ACT_TIMEOUT_MS = 10 * 60 * 1e3;
-var ACT_POLL_MS = 2e3;
-function describeBuild(b) {
-  switch (b.kind) {
-    case "current":
-      return ["info", `build: current ${describeStamp(b.stamp)}`];
-    case "stale":
-      return [
-        "info",
-        `build: stale \u2014 source ${describeStamp(b.source)}, running ${describeStamp(b.running)}`
-      ];
-    case "not-source-checkout":
-      return ["info", "build: not a source checkout"];
-    case "unchecked":
-      return ["warn", `build: unchecked: ${b.reason}`];
-  }
-}
-function describeRelease(c) {
-  switch (c.kind) {
-    case "current":
-      return ["info", `release: current ${formatVersion(c.installed)}`];
-    case "stale":
-      return [
-        "info",
-        `release: stale \u2014 latest ${formatVersion(c.latest)}, running ${formatVersion(c.installed)}`
-      ];
-    case "ahead":
-      return [
-        "info",
-        `release: ahead \u2014 running ${formatVersion(c.installed)}, latest ${formatVersion(c.latest)}`
-      ];
-    case "unchecked":
-      return ["warn", `release: unchecked: ${c.reason}`];
-  }
-}
-function reserveUpdateKeys() {
-  const disposers = [
-    registerConfigValidator(UPDATE_NOTICE_FIELD, ["false"]),
-    registerStateValidator(UPDATE_NOTICE_SESSION_KEY, ["false"]),
-    registerStateValidator(UPDATE_DISMISSED_KEY, [])
-  ];
-  return () => disposers.forEach((dispose) => dispose());
-}
-function makeUpdateWatch(opts) {
-  const {
-    launcher,
-    entryUrl,
-    digest: digest2,
-    actsDir: actsDir2,
-    intervalMs,
-    releaseIntervalMs,
-    registryUrl,
-    fetchImpl,
-    onApplied,
-    log
-  } = opts;
-  let build = { kind: "unchecked", reason: "not sampled yet" };
-  let release3 = null;
-  const readStart = async (pid2) => {
-    const read2 = await readStartTime(pid2, launcher.launch);
-    if (closed) throw new DaemonClosing("apply-update");
-    return read2;
-  };
-  const acts = makeActReader(actsDir2, readStart);
-  let seen = null;
-  let gate2 = null;
-  const logBuild = changeLogger(log);
-  const logRelease = changeLogger(log);
-  const actQueue = new KeyedSerialQueue();
-  const actTurn = (body) => actQueue.run("acts", body);
-  let closed = false;
-  const armed = [];
-  const every = (run3, ms) => {
-    const timer = setInterval(run3, ms).unref();
-    armed.push(() => clearInterval(timer));
-  };
-  const current = () => closed ? null : updateOf(build, release3);
-  function syncGate() {
-    const update = current();
-    const identity2 = update === null ? null : updateIdentity(update);
-    if ((gate2 === null ? null : gate2.identity) === identity2) return;
-    gate2?.dispose();
-    gate2 = identity2 === null ? null : {
-      identity: identity2,
-      dispose: registerStateValidator(UPDATE_DISMISSED_KEY, [identity2])
-    };
-  }
-  function sampleBuild() {
-    build = assessBuild(entryUrl, () => bundleStamp(digest2));
-    logBuild(describeBuild(build));
-    syncGate();
-  }
-  async function pollRelease() {
-    const latest = await fetchLatestVersion(
-      PACKAGE_NAME,
-      fetchImpl,
-      registryUrl
-    );
-    release3 = assessCurrency(PACKAGE_VERSION, latest);
-    logRelease(describeRelease(release3));
-    syncGate();
-  }
-  let unreadable = null;
-  const logUnreadable = changeLogger(log);
-  async function touchActs(touch) {
-    try {
-      const value = await touch();
-      unreadable = null;
-      return { ok: true, value };
-    } catch (err) {
-      if (err instanceof DaemonClosing) {
-        return { ok: false, error: err.message };
-      }
-      unreadable = `update act files (${actsDir2}): ${err.message}`;
-      logUnreadable(["error", unreadable]);
-      return { ok: false, error: unreadable };
-    }
-  }
-  function endIfOverdue(facts) {
-    if (!facts?.alive || Date.now() <= facts.record.deadline) return;
-    const { stands, signalled } = endOverdue(actsDir2, facts);
-    const why2 = stands ? "timed out" : "outlived its verdict";
-    const ending = signalled ? "ending it" : "its group took no signal";
-    log("error", `apply-update: act ${facts.act} ${why2}; ${ending}`);
-  }
-  async function watchAct() {
-    const read2 = await touchActs(async () => {
-      const facts = await acts.read();
-      if (!closed) endIfOverdue(facts);
-      return facts;
-    });
-    if (closed || !read2.ok) return;
-    const next = judgeAct(read2.value);
-    if (seen === null && next.kind === "running") {
-      log("info", `apply-update: act ${next.act} is running; watching it`);
-    }
-    if (seen?.kind === "running" && next.kind !== "running") {
-      if (next.kind === "succeeded") {
-        log("info", `apply-update: act ${next.act} succeeded`);
-        sampleBuild();
-        onApplied();
-      }
-      if (next.kind === "failed") {
-        log("error", `apply-update: act ${next.act} failed: ${next.reason}`);
-      }
-    }
-    seen = next;
-  }
-  let tickTimer;
-  async function tick() {
-    await actTurn(watchAct);
-    if (closed) return;
-    tickTimer = setTimeout(() => void tick(), ACT_POLL_MS);
-    tickTimer.unref();
-  }
-  return {
-    arm() {
-      armed.push(reserveUpdateKeys());
-      sampleBuild();
-      every(sampleBuild, intervalMs);
-      armed.push(() => clearTimeout(tickTimer));
-      void tick();
-      if (build.kind === "not-source-checkout") {
-        void pollRelease();
-        every(() => void pollRelease(), releaseIntervalMs);
-      }
-    },
-    close() {
-      closed = true;
-      syncGate();
-      armed.forEach((release4) => release4());
-    },
-    notice: (ctx) => updateNotice(current(), seen ?? IDLE, ctx),
-    running: () => actTurn(async () => {
-      const read2 = await touchActs(() => acts.read());
-      return read2.ok && judgeAct(read2.value).kind === "running";
-    }),
-    error: () => unreadable,
-    act: () => actTurn(async () => {
-      if (closed) throw new DaemonClosing("apply-update");
-      const read2 = await touchActs(() => acts.read());
-      if (closed) throw new DaemonClosing("apply-update");
-      if (!read2.ok) throw new BadVerbArgs(`apply-update: ${read2.error}`);
-      const update = current();
-      if (update === null) {
-        throw new BadVerbArgs(
-          "apply-update: nothing newer is known to apply"
-        );
-      }
-      const facts = factsOf(update);
-      const newest = read2.value;
-      if (judgeAct(newest).kind === "running") {
-        throw new BadVerbArgs(`apply-update: already ${facts.busy}`);
-      }
-      const claim = await claimAct(
-        launcher,
-        actsDir2,
-        newest === null ? null : newest.act,
-        updateIdentity(update),
-        { ...facts.command, category: "update.apply" },
-        ACT_TIMEOUT_MS,
-        Date.now(),
-        readStart
-      );
-      if (!claim.ok) {
-        throw new BadVerbArgs(`apply-update: ${claim.reason}`);
-      }
-      log(
-        "info",
-        `apply-update: act ${claim.act}: ${facts.act} \u2014 ${facts.command.bin} ${facts.command.args?.join(" ") ?? ""}`
-      );
-      seen = { kind: "running", act: claim.act };
-    })
-  };
+
+// src/daemon/foundations/render-origin.ts
+init_globals();
+function encodeRenderOrigin({
+  projectDir,
+  cwd: cwd2,
+  target
+}) {
+  return JSON.stringify({
+    projectDir,
+    cwd: cwd2,
+    configFile: target.path ?? null,
+    source: target.source
+  });
 }
 
 // src/dsl/render.ts
@@ -76280,7 +75768,7 @@ function setUpRender(parts, arrived3, at, facts) {
     ...arrived3,
     hookData: {
       ...arrived3.hookData,
-      ...dir !== void 0 && import_node_path33.default.isAbsolute(dir) && { location: checkoutLocation(dir) }
+      ...dir !== void 0 && import_node_path32.default.isAbsolute(dir) && { location: checkoutLocation(dir) }
     }
   };
   const sessionId2 = req.sessionId;
@@ -76718,7 +76206,7 @@ init_process();
 
 // src/daemon/render-checkpoint.ts
 init_globals();
-var import_node_path34 = __toESM(require_path_browserify(), 1);
+var import_node_path33 = __toESM(require_path_browserify(), 1);
 
 // src/utils/schema-validator.ts
 init_globals();
@@ -76862,7 +76350,7 @@ function checkRenderRequest(req, stats, log) {
   if (!sessionId2.ok) {
     wireProblems.push(`field 'session_id' ${sessionId2.problem}`);
   }
-  if (typeof req.cwd !== "string" || !(0, import_node_path34.isAbsolute)(req.cwd)) {
+  if (typeof req.cwd !== "string" || !(0, import_node_path33.isAbsolute)(req.cwd)) {
     wireProblems.push(
       `request 'cwd' is not an absolute path: ${JSON.stringify(req.cwd)}`
     );
@@ -77329,7 +76817,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
         // [LAW:no-silent-failure] Include the allowed values so a
         // CLI consumer (or operator) sees what is supported without
         // grep — same pattern as the set-state verb's unknown-key error
-        // in src/daemon/verbs/state-validators.ts.
+        // in src/daemon/foundations/state-validators.ts.
         error: `unknown debug 'what': ${String(req.what)} (have: ${DEBUG_WHATS.join(", ")})`,
         code: "BAD_REQUEST",
         daemonV: PROTOCOL_VERSION
@@ -77542,6 +77030,542 @@ var refusedRender = (problems) => ({
   },
   delivered: NOTHING_DELIVERED
 });
+
+// src/daemon/update-act.ts
+init_globals();
+init_os();
+var import_node_path34 = __toESM(require_path_browserify(), 1);
+function actsDir(stateDir2, entryPath) {
+  const key = createHash("sha256").update(entryPath).digest("hex").slice(0, 16);
+  return import_node_path34.default.join(stateDir2, "update-act", key);
+}
+var IDLE = { kind: "idle" };
+function judgeAct(facts) {
+  if (facts === null) return IDLE;
+  const { act, record: record2, alive, end, lastLine } = facts;
+  if (alive) return { kind: "running", act };
+  if (end === null) {
+    return {
+      kind: "failed",
+      act,
+      identity: record2.identity,
+      reason: "lost: the act ended without a verdict"
+    };
+  }
+  if (end.kind === "exit" && end.code === 0) return { kind: "succeeded", act };
+  const reason = end.kind === "timeout" ? "timeout" : `non-zero (exit ${end.code}): ${lastLine ?? "no output"}`;
+  return { kind: "failed", act, identity: record2.identity, reason };
+}
+var filesOf = (actDir) => ({
+  stdout: import_node_path34.default.join(actDir, "stdout"),
+  stderr: import_node_path34.default.join(actDir, "stderr"),
+  status: import_node_path34.default.join(actDir, "status")
+});
+var recordOf2 = (actDir) => import_node_path34.default.join(actDir, "record.json");
+function actNumbers(dir) {
+  let names;
+  try {
+    names = fs_default.readdirSync(dir);
+  } catch (err) {
+    if (err.code === "ENOENT") return [];
+    throw err;
+  }
+  return names.filter((n) => /^\d+$/.test(n)).map(Number).sort((a, b) => a - b);
+}
+var TAIL_BYTES = 4096;
+function lastLineOf(file) {
+  const tail = readTailSync(file, TAIL_BYTES);
+  switch (tail.kind) {
+    case "absent":
+      return null;
+    case "failed":
+      throw new Error(`${file}: ${tail.reason}`);
+    case "ok":
+      return tail.value.buf.toString("utf8").split(/\r?\n/).map((s) => s.trim()).filter((s) => s !== "").at(-1) ?? null;
+  }
+}
+function removeAct(dir, act) {
+  const leaving = import_node_path34.default.join(dir, `.removed-${act}-${process_default.pid}`);
+  try {
+    fs_default.renameSync(import_node_path34.default.join(dir, String(act)), leaving);
+  } catch (err) {
+    if (err.code === "ENOENT") return;
+    throw err;
+  }
+  fs_default.rmSync(leaving, { recursive: true, force: true });
+}
+var bootedAt = () => Date.now() - os_default.uptime() * 1e3;
+async function isRecordedJob(record2, read2, boot = bootedAt()) {
+  if (record2.started <= boot || !jobGroupAlive(record2.pid)) return false;
+  const leader = await read2(record2.pid);
+  return record2.startTime === null || leader.kind === "unavailable" || leader.token === record2.startTime;
+}
+function readRecord(actDir) {
+  try {
+    return JSON.parse(fs_default.readFileSync(recordOf2(actDir), "utf8"));
+  } catch (err) {
+    if (err.code === "ENOENT") return null;
+    throw err;
+  }
+}
+var sameJob = (a, b) => a.pid === b.pid && a.startTime === b.startTime;
+function makeActReader(dir, read2) {
+  let known = null;
+  async function factsOf2(act) {
+    const actDir = import_node_path34.default.join(dir, String(act));
+    const record2 = readRecord(actDir);
+    if (record2 === null) return null;
+    if (known === null || !sameJob(known.record, record2)) {
+      known = { record: record2, ours: await isRecordedJob(record2, read2), final: null };
+    }
+    if (known.final !== null) return known.final;
+    known.ours = known.ours && jobGroupAlive(record2.pid);
+    const files = filesOf(actDir);
+    const end = readJobEnd(files.status);
+    const lastLine = end === null ? null : lastLineOf(files.stderr) ?? lastLineOf(files.stdout);
+    if (!fs_default.existsSync(actDir)) return null;
+    const facts = { act, record: record2, alive: known.ours, end, lastLine };
+    if (!facts.alive) known.final = facts;
+    return facts;
+  }
+  return {
+    async read() {
+      let vanished = null;
+      for (; ; ) {
+        const act = actNumbers(dir).at(-1);
+        if (act === void 0) return null;
+        if (act === vanished) {
+          throw new Error(
+            `${import_node_path34.default.join(dir, String(act))}: an act with no record`
+          );
+        }
+        const facts = await factsOf2(act);
+        if (facts !== null) return facts;
+        vanished = act;
+      }
+    }
+  };
+}
+function stakeClaim(dir, actDir, record2) {
+  fs_default.mkdirSync(dir, { recursive: true });
+  const staging = fs_default.mkdtempSync(import_node_path34.default.join(dir, ".claim-"));
+  try {
+    fs_default.writeFileSync(recordOf2(staging), JSON.stringify(record2));
+    fs_default.renameSync(staging, actDir);
+    return true;
+  } catch (err) {
+    const code = err.code;
+    if (code === "ENOTEMPTY" || code === "EEXIST") return false;
+    throw err;
+  } finally {
+    fs_default.rmSync(staging, { recursive: true, force: true });
+  }
+}
+async function claimAct(launcher, dir, after, identity2, command, timeoutMs, now2, read2) {
+  const act = (after ?? 0) + 1;
+  const actDir = import_node_path34.default.join(dir, String(act));
+  const job = launcher.launchJobSync(command, filesOf(actDir));
+  if (!job.ok) throw new Error(`apply-update: ${job.error}`);
+  let stood = false;
+  try {
+    const start = await read2(job.pid);
+    const record2 = {
+      identity: identity2,
+      pid: job.pid,
+      startTime: start.kind === "start" ? start.token : null,
+      started: now2,
+      deadline: now2 + timeoutMs
+    };
+    if (!stakeClaim(dir, actDir, record2)) return CLAIMED_FIRST;
+    if (actNumbers(dir).some((n) => n > act)) {
+      removeAct(dir, act);
+      return CLAIMED_FIRST;
+    }
+    stood = true;
+  } finally {
+    if (stood) job.release();
+    else job.withdraw();
+  }
+  for (const n of actNumbers(dir).filter((n2) => n2 < act)) {
+    removeAct(dir, n);
+  }
+  return { ok: true, act };
+}
+var CLAIMED_FIRST = {
+  ok: false,
+  reason: "another act claimed this bundle first"
+};
+function endOverdue(dir, facts) {
+  const status = filesOf(import_node_path34.default.join(dir, String(facts.act))).status;
+  return endJob(facts.record.pid, status, { kind: "timeout" });
+}
+
+// src/daemon/update-notice.ts
+init_globals();
+
+// src/daemon/process-fingerprint.ts
+init_globals();
+async function readStartTime(pid2, launch) {
+  const res = await launch({
+    bin: "ps",
+    args: ["-o", "lstart=", "-p", String(pid2)],
+    category: "process-fingerprint",
+    timeoutMs: 2e3,
+    // [FRAMING:representation] Pin BOTH locale and timezone so the token is
+    // deterministic across daemons — the writer and reader must render the same
+    // process identically for opaque string equality to be sound. LC_ALL=C fixes
+    // the strftime format; TZ=UTC fixes localtime(), so DST / TZ / tzdata changes
+    // can't make one live process render two different start-time strings.
+    env: { ...process_default.env, LC_ALL: "C", TZ: "UTC" }
+  });
+  if (res.ok) {
+    const token = res.stdout.trim();
+    if (token.length > 0) return { kind: "start", token };
+    return { kind: "unavailable", detail: "ps produced no start-time" };
+  }
+  const detail = res.reason === "spawn-error" ? res.error ?? "ps spawn failed" : `ps ${res.reason} (exit ${res.exitCode})`;
+  return { kind: "unavailable", detail };
+}
+
+// src/utils/keyed-serial-queue.ts
+init_globals();
+var KeyedSerialQueue = class {
+  // Each key's tasks still to run, while one runs.
+  waiting = /* @__PURE__ */ new Map();
+  run(key, task) {
+    return new Promise((resolve, reject2) => {
+      const entry = async () => {
+        try {
+          resolve(await task());
+        } catch (e) {
+          reject2(e);
+        }
+      };
+      const behind = this.waiting.get(key);
+      if (behind !== void 0) {
+        behind.push(entry);
+        return;
+      }
+      const tasks = [];
+      this.waiting.set(key, tasks);
+      const drain = (next) => void next().then(() => {
+        const after = tasks.shift();
+        if (after === void 0) this.waiting.delete(key);
+        else drain(after);
+      });
+      drain(entry);
+    });
+  }
+};
+
+// src/daemon/update-notice.ts
+function updateIdentity(update) {
+  return update.kind === "source" ? update.newer.digest : formatVersion(update.newer);
+}
+var describeStamp = (s) => `${s.version} [${shortDigest(s.digest)}]`;
+function factsOf(update) {
+  switch (update.kind) {
+    case "source":
+      return {
+        headline: "Newer source",
+        newer: describeStamp(update.newer),
+        running: describeStamp(update.running),
+        act: "rebuild",
+        busy: "rebuilding\u2026",
+        command: { bin: "pnpm", args: ["build"], cwd: update.root }
+      };
+    case "release":
+      return {
+        headline: "Newer release",
+        newer: formatVersion(update.newer),
+        running: formatVersion(update.running),
+        act: "upgrade",
+        busy: "upgrading\u2026",
+        command: {
+          bin: "pnpm",
+          args: [
+            "dlx",
+            `${PACKAGE_NAME}@${formatVersion(update.newer)}`,
+            "install"
+          ]
+        }
+      };
+  }
+}
+function updateNotice(update, act, ctx) {
+  if (update === null) return [];
+  const identity2 = updateIdentity(update);
+  if (!ctx.enabled || ctx.dismissed === identity2) return [];
+  const facts = factsOf(update);
+  const sentence = `${facts.headline}: ${facts.newer}. You're on ${facts.running}.`;
+  const failure = act.kind === "failed" && act.identity === identity2 ? [`${facts.act} failed: ${act.reason}`] : [];
+  const message = [sentence, ...failure].join("\n");
+  const actSpan = act.kind === "running" ? diagnosticSpan(`[${facts.busy}]`, null) : diagnosticSpan(
+    `[${facts.act}]`,
+    effectsUrl([{ verb: VERB_APPLY_UPDATE, args: [ctx.sessionId] }])
+  );
+  const first2 = [
+    diagnosticSpan(sentence, null),
+    actSpan,
+    diagnosticSpan(
+      "[dismiss]",
+      effectsUrl([
+        {
+          verb: VERB_SET_STATE,
+          args: [ctx.sessionId, UPDATE_DISMISSED_KEY, identity2]
+        }
+      ])
+    ),
+    diagnosticSpan(
+      "[disable]",
+      effectsUrl([
+        {
+          verb: VERB_SET_CONFIG,
+          args: [ctx.sessionId, UPDATE_NOTICE_FIELD, "false"]
+        },
+        {
+          verb: VERB_SET_STATE,
+          args: [ctx.sessionId, UPDATE_NOTICE_SESSION_KEY, "false"]
+        }
+      ])
+    )
+  ];
+  const rest2 = failure.map((f) => [diagnosticSpan(f, null)]);
+  return [
+    {
+      severity: UPDATE_SEVERITY,
+      about: `update\0${identity2}`,
+      message,
+      copy: message,
+      lines: [first2, ...rest2]
+    }
+  ];
+}
+function updateOf(build, release3) {
+  if (build.kind === "stale") {
+    return {
+      kind: "source",
+      root: build.root,
+      newer: build.source,
+      running: build.running
+    };
+  }
+  if (build.kind === "not-source-checkout" && release3 !== null && release3.kind === "stale") {
+    return {
+      kind: "release",
+      newer: release3.latest,
+      running: release3.installed
+    };
+  }
+  return null;
+}
+var ACT_TIMEOUT_MS = 10 * 60 * 1e3;
+var ACT_POLL_MS = 2e3;
+function describeBuild(b) {
+  switch (b.kind) {
+    case "current":
+      return ["info", `build: current ${describeStamp(b.stamp)}`];
+    case "stale":
+      return [
+        "info",
+        `build: stale \u2014 source ${describeStamp(b.source)}, running ${describeStamp(b.running)}`
+      ];
+    case "not-source-checkout":
+      return ["info", "build: not a source checkout"];
+    case "unchecked":
+      return ["warn", `build: unchecked: ${b.reason}`];
+  }
+}
+function describeRelease(c) {
+  switch (c.kind) {
+    case "current":
+      return ["info", `release: current ${formatVersion(c.installed)}`];
+    case "stale":
+      return [
+        "info",
+        `release: stale \u2014 latest ${formatVersion(c.latest)}, running ${formatVersion(c.installed)}`
+      ];
+    case "ahead":
+      return [
+        "info",
+        `release: ahead \u2014 running ${formatVersion(c.installed)}, latest ${formatVersion(c.latest)}`
+      ];
+    case "unchecked":
+      return ["warn", `release: unchecked: ${c.reason}`];
+  }
+}
+function makeUpdateWatch(opts) {
+  const {
+    launcher,
+    entryUrl,
+    digest: digest2,
+    actsDir: actsDir2,
+    intervalMs,
+    releaseIntervalMs,
+    registryUrl,
+    fetchImpl,
+    gates,
+    onApplied,
+    log
+  } = opts;
+  let build = { kind: "unchecked", reason: "not sampled yet" };
+  let release3 = null;
+  const readStart = async (pid2) => {
+    const read2 = await readStartTime(pid2, launcher.launch);
+    if (closed) throw new DaemonClosing("apply-update");
+    return read2;
+  };
+  const acts = makeActReader(actsDir2, readStart);
+  let seen = null;
+  let gate2 = null;
+  const logBuild = changeLogger(log);
+  const logRelease = changeLogger(log);
+  const actQueue = new KeyedSerialQueue();
+  const actTurn = (body) => actQueue.run("acts", body);
+  let closed = false;
+  const armed = [];
+  const every = (run3, ms) => {
+    const timer = setInterval(run3, ms).unref();
+    armed.push(() => clearInterval(timer));
+  };
+  const current = () => closed ? null : updateOf(build, release3);
+  function syncGate() {
+    const update = current();
+    const identity2 = update === null ? null : updateIdentity(update);
+    if ((gate2 === null ? null : gate2.identity) === identity2) return;
+    gate2?.dispose();
+    gate2 = identity2 === null ? null : {
+      identity: identity2,
+      dispose: gates.state.register(UPDATE_DISMISSED_KEY, [identity2])
+    };
+  }
+  function sampleBuild() {
+    build = assessBuild(entryUrl, () => bundleStamp(digest2));
+    logBuild(describeBuild(build));
+    syncGate();
+  }
+  async function pollRelease() {
+    const latest = await fetchLatestVersion(
+      PACKAGE_NAME,
+      fetchImpl,
+      registryUrl
+    );
+    release3 = assessCurrency(PACKAGE_VERSION, latest);
+    logRelease(describeRelease(release3));
+    syncGate();
+  }
+  let unreadable = null;
+  const logUnreadable = changeLogger(log);
+  async function touchActs(touch) {
+    try {
+      const value = await touch();
+      unreadable = null;
+      return { ok: true, value };
+    } catch (err) {
+      if (err instanceof DaemonClosing) {
+        return { ok: false, error: err.message };
+      }
+      unreadable = `update act files (${actsDir2}): ${err.message}`;
+      logUnreadable(["error", unreadable]);
+      return { ok: false, error: unreadable };
+    }
+  }
+  function endIfOverdue(facts) {
+    if (!facts?.alive || Date.now() <= facts.record.deadline) return;
+    const { stands, signalled } = endOverdue(actsDir2, facts);
+    const why2 = stands ? "timed out" : "outlived its verdict";
+    const ending = signalled ? "ending it" : "its group took no signal";
+    log("error", `apply-update: act ${facts.act} ${why2}; ${ending}`);
+  }
+  async function watchAct() {
+    const read2 = await touchActs(async () => {
+      const facts = await acts.read();
+      if (!closed) endIfOverdue(facts);
+      return facts;
+    });
+    if (closed || !read2.ok) return;
+    const next = judgeAct(read2.value);
+    if (seen === null && next.kind === "running") {
+      log("info", `apply-update: act ${next.act} is running; watching it`);
+    }
+    if (seen?.kind === "running" && next.kind !== "running") {
+      if (next.kind === "succeeded") {
+        log("info", `apply-update: act ${next.act} succeeded`);
+        sampleBuild();
+        onApplied();
+      }
+      if (next.kind === "failed") {
+        log("error", `apply-update: act ${next.act} failed: ${next.reason}`);
+      }
+    }
+    seen = next;
+  }
+  let tickTimer;
+  async function tick() {
+    await actTurn(watchAct);
+    if (closed) return;
+    tickTimer = setTimeout(() => void tick(), ACT_POLL_MS);
+    tickTimer.unref();
+  }
+  return {
+    arm() {
+      sampleBuild();
+      every(sampleBuild, intervalMs);
+      armed.push(() => clearTimeout(tickTimer));
+      void tick();
+      if (build.kind === "not-source-checkout") {
+        void pollRelease();
+        every(() => void pollRelease(), releaseIntervalMs);
+      }
+    },
+    close() {
+      closed = true;
+      syncGate();
+      armed.forEach((release4) => release4());
+    },
+    notice: (ctx) => updateNotice(current(), seen ?? IDLE, ctx),
+    running: () => actTurn(async () => {
+      const read2 = await touchActs(() => acts.read());
+      return read2.ok && judgeAct(read2.value).kind === "running";
+    }),
+    error: () => unreadable,
+    act: () => actTurn(async () => {
+      if (closed) throw new DaemonClosing("apply-update");
+      const read2 = await touchActs(() => acts.read());
+      if (closed) throw new DaemonClosing("apply-update");
+      if (!read2.ok) throw new BadVerbArgs(`apply-update: ${read2.error}`);
+      const update = current();
+      if (update === null) {
+        throw new BadVerbArgs(
+          "apply-update: nothing newer is known to apply"
+        );
+      }
+      const facts = factsOf(update);
+      const newest = read2.value;
+      if (judgeAct(newest).kind === "running") {
+        throw new BadVerbArgs(`apply-update: already ${facts.busy}`);
+      }
+      const claim = await claimAct(
+        launcher,
+        actsDir2,
+        newest === null ? null : newest.act,
+        updateIdentity(update),
+        { ...facts.command, category: "update.apply" },
+        ACT_TIMEOUT_MS,
+        Date.now(),
+        readStart
+      );
+      if (!claim.ok) {
+        throw new BadVerbArgs(`apply-update: ${claim.reason}`);
+      }
+      log(
+        "info",
+        `apply-update: act ${claim.act}: ${facts.act} \u2014 ${facts.command.bin} ${facts.command.args?.join(" ") ?? ""}`
+      );
+      seen = { kind: "running", act: claim.act };
+    })
+  };
+}
 
 // src/daemon/binary-watch.ts
 init_globals();
@@ -81092,8 +81116,8 @@ function buildRenderState(load, deps) {
     const probe2 = registry.view();
     warnings.push(...declareDslVariables(config2, probe2, cwd2, VIEW_SCOPE));
     probe2.dispose();
-    stateGate(config2);
-    configGate(config2);
+    deps.gates.state.gateFor(config2);
+    deps.gates.config.gateFor(config2);
     for (const key of new Set(load.sources.values()))
       registry.own(deps.storage.watch(key));
   } catch (err) {
@@ -83876,12 +83900,8 @@ var SYSTEM_CLOCK = {
   monotonic: () => performance.now(),
   after: afterRealTime
 };
-var liveDaemon = null;
 function createDaemon(inputs) {
-  if (liveDaemon !== null && !liveDaemon.aborted) {
-    throw new Error("a daemon is already live in this process");
-  }
-  const { bundle, memoryLimitBytes: memoryLimitBytes2, registryUrl, clock, exit: exit2, paths: paths2 } = inputs;
+  const { bundle, memoryLimitBytes: memoryLimitBytes2, registryUrl, clock, exit: exit2, paths: paths2, gates } = inputs;
   const instant = () => instantOf(clock.date());
   const closing = new AbortController();
   let closed = false;
@@ -84058,6 +84078,7 @@ function createDaemon(inputs) {
       log,
       storage: managedStorage,
       signer: linkSigner2,
+      gates,
       ledger: refreshLedger,
       // [LAW:single-enforcer] The one delivery owner, whose OS stream a
       // `watch_file` source's watch rides.
@@ -84072,7 +84093,11 @@ function createDaemon(inputs) {
         sessionState,
         history: (sessionId2) => settingsHistory.depth(sessionId2),
         // Measured against the gate of the config the view draws with.
-        navigation: (sessionId2, config2) => navigationHistory.depth(sessionId2, sessionState, stateGate(config2))
+        navigation: (sessionId2, config2) => navigationHistory.depth(
+          sessionId2,
+          sessionState,
+          gates.state.gateFor(config2)
+        )
       })
     },
     {
@@ -84136,6 +84161,7 @@ function createDaemon(inputs) {
     releaseIntervalMs: RELEASE_CHECK_INTERVAL_MS,
     registryUrl,
     fetchImpl: inputs.fetch,
+    gates,
     onApplied: () => binaryWatch.checkNow(),
     log
   });
@@ -84144,6 +84170,7 @@ function createDaemon(inputs) {
     monotonic: () => clock.monotonic()
   });
   const verbCtx = {
+    gates,
     sessionState,
     stateDir: paths2.state,
     journalTurns,
@@ -84230,7 +84257,6 @@ function createDaemon(inputs) {
     limits,
     verbCtx
   };
-  liveDaemon = closing.signal;
   return {
     stats,
     launcher,
@@ -85517,6 +85543,7 @@ seedWorld(onClock(INITIAL_REPO));
 var paths = daemonPaths(process_default.env);
 var pageDaemon = createDaemon({
   ...productionAdapters(paths, new DaemonLog(paths.log)),
+  gates: daemonGates(),
   paths,
   bundle: {
     entryUrl: "file:///app/dist/index.mjs",

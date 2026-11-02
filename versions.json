@@ -2,60 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-584",
-      "ref": "refs/pull/584/merge",
-      "sha": "8ce55390f7966220498ad04c53136a86427dccc6",
-      "timestamp": "2026-11-02T19:47:09.315Z",
-      "commits": [
-        {
-          "sha": "8ce55390f7966220498ad04c53136a86427dccc6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T19:45:45Z",
-          "message": "Merge adc6998da9bb5e88012773ba4583d01701603ea9 into cc500459e2346bcb997ea383c9d7c0470b5fe15b\n"
-        },
-        {
-          "sha": "adc6998da9bb5e88012773ba4583d01701603ea9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T12:45:32-07:00",
-          "message": "test(daemon-boots): the held-env cases join the one that already holds the env, so the boot ratchet stays 214 (candybar-testing-ihvy.42w)\n"
-        },
-        {
-          "sha": "e29c85bf8ad65e326c50e8e774af045f7fe18b00",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T12:32:28-07:00",
-          "message": "fix(test): a daemon stopped twice counts once; the held env is a copy; a held gate key outlives a later registration (candybar-testing-ihvy.42w)\n"
-        },
-        {
-          "sha": "c1a049d5758343c03dc890cc637bbcb1289e2dd0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T12:30:07-07:00",
-          "message": "fix(test): the last daemon to stop gives the worker's env back; stale comments and memory line follow the gates move (candybar-testing-ihvy.42w)\n"
-        },
-        {
-          "sha": "6d49a1a140a18b1a2ed8cfc562a769eb36b494d0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T12:22:58-07:00",
-          "message": "refactor(daemon): the gates' keyspaces are one value the root builds, and Foundations moves below every piece (candybar-testing-ihvy.42w)\n\nThe state and config keyspaces were module state that the update notice wrote at run time, so what a load accepted changed with no input showing it and a process could hold only one live daemon. Gates is now a value built by daemonGates() and passed to createDaemon, the verb context, the render cache and check; liveDaemon is gone.\n\nFoundations is src/daemon/foundations/ (validators, gates, session keys, render origin, sighting roles) with a lint rule that it imports no other piece of src/daemon.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "cc500459e2346bcb997ea383c9d7c0470b5fe15b",
-      "timestamp": "2026-11-02T18:59:37.680Z",
+      "sha": "805df08b803697644135dd02d9fc34fee4b2208a",
+      "timestamp": "2026-11-02T19:54:41.786Z",
       "commits": [
         {
-          "sha": "cc500459e2346bcb997ea383c9d7c0470b5fe15b",
+          "sha": "805df08b803697644135dd02d9fc34fee4b2208a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T11:58:34-07:00",
-          "message": "refactor(daemon): createDaemon takes every adapter and every path as an input (candybar-testing-ihvy.yfv) (#583)\n\n* refactor(daemon): createDaemon takes every adapter and every path as an input (candybar-testing-ihvy.yfv)\n\nDaemonInputs gains a DaemonPaths value and DaemonAdapters (log, launcher,\nstorage, doctor stores and edge, Claude input, lane edge, link signer, limits,\nfetch, stat). production-adapters.ts is the one module that names the real\nones; server.ts is the daemon process's one reader of paths.ts, and the page in\nsite/ and the test harness build over the same adapters. The log's module state\nbecomes a DaemonLog built over a path. OWNED_IMPORTS enforces the ownership.\nThe keyspaces and the Foundations row are carved to candybar-testing-ihvy.42w;\npricing's disk cache stays a named reader until its port (89p).\n\n* refactor(daemon): DaemonInputs.paths names only what createDaemon reads, and the harness ends every log it opens (candybar-testing-ihvy.yfv)\n\nReview of #583: DaemonPaths drops the unread cache member and DaemonInputs\nnarrows to socket, state and watchProbe; the harness handle reports the log\npath the daemon was built with, a failed build ends the log it opened, and\ndaemon-value ends every log a case opened. The memory lines that gave the\nenv-at-write-time reason for one live daemon and for paths-not-inputs now say\nwhat is true.\n\n* fix(log): a disposed log registers no exit listener and a flush under way ends its own descriptor (candybar-testing-ihvy.yfv)\n\nReview of #583: dispose() with a flush mid-open left the descriptor that\nflush then opened, and a line logged after dispose re-registered the exit\nlistener. dispose now marks the log, defers the close to a flush in flight,\nand a late line is written by a flush that ends its own open."
+          "timestamp": "2026-11-02T12:53:39-07:00",
+          "message": "refactor(daemon): the gates' keyspaces are one value the root builds, and Foundations moves below every piece (candybar-testing-ihvy.42w) (#584)\n\n* refactor(daemon): the gates' keyspaces are one value the root builds, and Foundations moves below every piece (candybar-testing-ihvy.42w)\n\nThe state and config keyspaces were module state that the update notice wrote at run time, so what a load accepted changed with no input showing it and a process could hold only one live daemon. Gates is now a value built by daemonGates() and passed to createDaemon, the verb context, the render cache and check; liveDaemon is gone.\n\nFoundations is src/daemon/foundations/ (validators, gates, session keys, render origin, sighting roles) with a lint rule that it imports no other piece of src/daemon.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(test): the last daemon to stop gives the worker's env back; stale comments and memory line follow the gates move (candybar-testing-ihvy.42w)\n\n* fix(test): a daemon stopped twice counts once; the held env is a copy; a held gate key outlives a later registration (candybar-testing-ihvy.42w)\n\n* test(daemon-boots): the held-env cases join the one that already holds the env, so the boot ratchet stays 214 (candybar-testing-ihvy.42w)\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
         }
       ]
     },
