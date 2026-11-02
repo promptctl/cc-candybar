@@ -1,0 +1,108 @@
+import { refusalOf } from "../../e2e-checks/refusal.cjs";
+
+const ROOT = "/repo";
+const held = new Set([
+  ".claude/e2e-signoff.json",
+  ".claude/hooks/e2e-signoff.mjs",
+  "test/e2e-checks/cap-reporter.cjs",
+  "test/e2e/one.test.ts",
+  "src/index.ts",
+  "test/e2e-checks",
+  "test/e2e",
+]);
+const mainHolds = (rel: string) => held.has(rel);
+const call = (tool: string, input: Record<string, string>) => refusalOf({ tool, input, root: ROOT, mainHolds });
+
+describe("a file tool", () => {
+  test.each([
+    ["the sign-off file", "/repo/.claude/e2e-signoff.json"],
+    ["the hook", "/repo/.claude/hooks/e2e-signoff.mjs"],
+    ["a check", "/repo/test/e2e-checks/cap-reporter.cjs"],
+    ["an end-to-end test main holds", "/repo/test/e2e/one.test.ts"],
+    ["a held path given relative", "test/e2e/one.test.ts"],
+    ["a held path spelled with ..", "/repo/test/unit/../e2e/one.test.ts"],
+    ["a held path in a worktree under the root", "/repo/.claude/worktrees/w1/.claude/e2e-signoff.json"],
+  ])("refuses an edit to %s", (_name, file) => {
+    expect(call("Edit", { file_path: file })).toContain("is held by origin/main and guarded");
+  });
+
+  test.each(["Write", "MultiEdit"])("refuses %s the same way", (tool) => {
+    expect(call(tool, { file_path: "/repo/.claude/e2e-signoff.json" })).not.toBeNull();
+  });
+
+  test("refuses a notebook edit by notebook_path", () => {
+    expect(call("NotebookEdit", { notebook_path: "/repo/test/e2e/one.test.ts" })).not.toBeNull();
+  });
+
+  test.each([
+    ["a new end-to-end test main lacks", "/repo/test/e2e/two.test.ts"],
+    ["a new check main lacks", "/repo/test/e2e-checks/new-check.cjs"],
+    ["a source file, held or not", "/repo/src/index.ts"],
+    ["a path outside the project", "/elsewhere/test/e2e/one.test.ts"],
+    ["a sibling directory that shares a prefix", "/repo/test/e2e-other/one.test.ts"],
+  ])("admits an edit to %s", (_name, file) => {
+    expect(call("Edit", { file_path: file })).toBeNull();
+  });
+
+  test("admits a read", () => {
+    expect(call("Read", { file_path: "/repo/.claude/e2e-signoff.json" })).toBeNull();
+  });
+});
+
+describe("Bash", () => {
+  test.each([
+    "sed -i '' s/5/9/ .claude/e2e-signoff.json",
+    "echo x > test/e2e/one.test.ts",
+    "rm test/e2e-checks/cap-reporter.cjs",
+    "pnpm test && rm test/e2e-checks/cap-reporter.cjs",
+    "cat test/e2e/one.test.ts > test/e2e/one.test.ts",
+    "ls & rm .claude/e2e-signoff.json",
+    "cat $(rm -f test/e2e-checks/cap-reporter.cjs)",
+    "cat `rm test/e2e/one.test.ts`",
+    "git diff --output=.claude/e2e-signoff.json",
+    "cd test/e2e-checks && rm cap-reporter.cjs",
+    "cd .claude && sed -i s/5/50/ e2e-signoff.json",
+    "rm -rf test/e2e-checks",
+    "rm -rf test/e2e/",
+    "mv test/e2e-checks /tmp/x",
+    `python3 -c "open('.claude/e2e-signoff.json','w').write('{}')"`,
+    `node -e "require('fs').writeFileSync('/repo/.claude/e2e-signoff.json','')"`,
+  ])("refuses a write: %s", (command) => {
+    expect(call("Bash", { command })).toContain("is held by origin/main and guarded");
+  });
+
+  test.each([
+    "cat .claude/e2e-signoff.json",
+    "grep -rn cap test/e2e-checks",
+    "git diff test/e2e/one.test.ts",
+    "pnpm test:e2e",
+    "pnpm -s test:e2e test/e2e/one.test.ts",
+    "node node_modules/jest/bin/jest.js test/e2e-checks/",
+    "git add test/e2e/two.test.ts",
+    "git add test/e2e",
+    "cd test/e2e-checks && pnpm test",
+    "ls test/e2e-checks",
+    "grep -rn cap test/e2e-checks 2>&1",
+    "cd test/e2e-checks && rm new-check.cjs",
+    "rm test/e2e/two.test.ts",
+    "pnpm lint",
+  ])("admits: %s", (command) => {
+    expect(call("Bash", { command })).toBeNull();
+  });
+});
+
+test("an error from the probe is not swallowed", () => {
+  const cannotTell = () => {
+    throw new Error("no origin/main");
+  };
+  expect(() =>
+    refusalOf({ tool: "Edit", input: { file_path: "/repo/test/e2e/one.test.ts" }, root: ROOT, mainHolds: cannotTell }),
+  ).toThrow("no origin/main");
+});
+
+test("an unguarded edit does not consult the probe", () => {
+  const neverAsked = () => {
+    throw new Error("probed");
+  };
+  expect(refusalOf({ tool: "Edit", input: { file_path: "/repo/src/index.ts" }, root: ROOT, mainHolds: neverAsked })).toBeNull();
+});

@@ -28,6 +28,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # A transitional list may shrink and never grow (test/transitional-daemon-workflows).
+      # The script fetches the base commit itself, which this depth-1 checkout lacks.
+      - name: Excused-workflows list only shrinks
+        if: github.event_name == 'pull_request'
+        run: node scripts/check-shrinks.cjs test/transitional-daemon-workflows/excused-workflows.json ${{ github.event.pull_request.base.sha }}
+
       - name: Lint
         run: pnpm run lint
 
@@ -51,6 +57,11 @@ jobs:
 
       - name: Test the process tier
         run: pnpm test:process
+
+      # [LAW:single-enforcer] The only run of test/e2e/: the sign-off's cap and
+      # assertion limit are checked here, and every other config ignores the directory.
+      - name: Test end-to-end
+        run: pnpm test:e2e
 
       - name: Protocol-version guard
         run: pnpm run check:protocol
