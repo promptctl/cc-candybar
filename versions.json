@@ -4,15 +4,22 @@
     {
       "version": "pr-561",
       "ref": "refs/pull/561/merge",
-      "sha": "3f604a840a60b34cf23daf1651d4a4fa8cea6405",
-      "timestamp": "2026-11-02T11:08:23.723Z",
+      "sha": "88dda1359df80246c17ad2aa6b1e8f52a8700621",
+      "timestamp": "2026-11-02T11:09:24.585Z",
       "commits": [
         {
-          "sha": "3f604a840a60b34cf23daf1651d4a4fa8cea6405",
+          "sha": "88dda1359df80246c17ad2aa6b1e8f52a8700621",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T11:06:43Z",
-          "message": "Merge 8deecf4665af80c97f43d18999a3cde9b626a027 into 040ba694b11dd01c6bce64b56acd016dabbf0578\n"
+          "timestamp": "2026-11-02T11:08:34Z",
+          "message": "Merge b9380afe2c41b2ed8636588a99ed9134500644e9 into 040ba694b11dd01c6bce64b56acd016dabbf0578\n"
+        },
+        {
+          "sha": "b9380afe2c41b2ed8636588a99ed9134500644e9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T04:08:21-07:00",
+          "message": "test: drop the blank line the deleted case left at a describe's head (candybar-testing-0x6u.4bt)\n"
         },
         {
           "sha": "8deecf4665af80c97f43d18999a3cde9b626a027",
