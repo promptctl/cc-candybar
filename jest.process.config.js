@@ -5,6 +5,7 @@
 import base, { reportersFor } from "./jest.config.js";
 import { PROCESS_TIER_PATTERN } from "./test/helpers/process-tier.cjs";
 
+// The base's ignore of test/e2e/ carries over through the spread.
 export default {
   ...base,
   reporters: reportersFor("process"),

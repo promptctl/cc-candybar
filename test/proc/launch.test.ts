@@ -671,7 +671,7 @@ describe("a launcher's scope", () => {
         stderr: path.join(scratch, "job.err"),
         status: path.join(scratch, "job.status"),
       }),
-    ).toEqual({ ok: false, error: "the daemon closed" });
+    ).toEqual({ ok: false, reason: "aborted", error: "the daemon closed" });
 
     await new Promise((resolve) => setTimeout(resolve, 100));
     expect(fs.existsSync(marker)).toBe(false);
@@ -832,6 +832,7 @@ describe("a launcher's scope", () => {
 
     expect(launchJobSync(once, files)).toEqual({
       ok: false,
+      reason: "rate-limited",
       error: expect.stringContaining("rate-limited: click.open"),
     });
   });

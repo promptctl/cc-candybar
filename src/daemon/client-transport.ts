@@ -26,21 +26,28 @@ export interface RoundTripBudgets {
 }
 
 // [LAW:types-are-the-program] The outcome carries its own recovery
-// semantics. `transient` failures mean the daemon was unavailable/slow —
+// semantics. `transient` failures mean no daemon answered in time —
 // kicking a fresh daemon is the right response. `permanent` failures mean
 // the daemon refused our request semantically — kicking does NOT help
-// because the next daemon will refuse the same request the same way. The
-// caller's branch is no longer uniform: it matches on `kind` and routes
-// kick vs. show-error off the type, not off a stringified `reason`. This
-// asymmetry was missing in the previous shape and is the root of the
+// because the next daemon will refuse the same request the same way. `busy`
+// is the daemon's own TIMEOUT: it answered, so it is up, and the request may
+// still be running in it; whether that warrants a kick is each caller's to
+// say. The caller's branch is no longer uniform: it matches on `kind` and
+// routes kick vs. show-error off the type, not off a stringified `reason`.
+// This asymmetry was missing in the previous shape and is the root of the
 // 452-corpse spiral (kz8.5).
 export type RoundTripOutcome<T> = { kind: "ok"; value: T } | FailureOutcome;
 
-export type FailureOutcome = TransientOutcome | PermanentOutcome;
+export type FailureOutcome = TransientOutcome | BusyOutcome | PermanentOutcome;
 
 export interface TransientOutcome {
   kind: "transient";
   cause: "unreachable" | "timeout" | "io_error";
+  message: string;
+}
+
+export interface BusyOutcome {
+  kind: "busy";
   message: string;
 }
 
@@ -166,10 +173,8 @@ export function interpretResponse<T>(
         daemonV: asProtocolVersion(raw.daemonV),
       };
     case "TIMEOUT":
-      // Daemon is alive but didn't answer in time — same recovery as
-      // unreachable: kick and emit stale/blank. This is the *only* non-ok
-      // wire code that maps to transient.
-      return { kind: "transient", cause: "timeout", message: errorMessage };
+      // Daemon is alive but didn't answer in time.
+      return { kind: "busy", message: errorMessage };
     case "BAD_REQUEST":
       return { kind: "permanent", cause: "bad_request", message: errorMessage };
     case "RENDER_FAILED":
@@ -265,9 +270,13 @@ function connectWithTimeout(
 // (src/install/index.ts) are deliberately separate presentations with their
 // own contracts (ANSI styling and Rust-parity truncation; per-cause click
 // diagnostics). The spawn hint appears only on transient failures — on a
-// permanent failure the daemon is demonstrably running, and suggesting a
-// respawn would send the operator down the wrong path.
+// busy or permanent failure the daemon answered, so it is demonstrably
+// running, and suggesting a respawn would send the operator down the wrong
+// path.
 export function describeFailure(outcome: FailureOutcome): string {
+  if (outcome.kind === "busy") {
+    return `daemon busy (${outcome.message})`;
+  }
   if (outcome.kind === "transient") {
     return (
       `daemon unavailable (${outcome.cause}: ${outcome.message})\n` +

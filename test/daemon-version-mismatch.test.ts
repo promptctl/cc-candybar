@@ -600,6 +600,14 @@ describe("planOutcome decides kick vs. no-kick per variant (kz8.5 chunk 1+4)", (
     }
   });
 
+  // The Rust client kicks on the daemon's TIMEOUT; a Node render recovers
+  // the same way, so both runtimes agree.
+  test("a busy render kicks as the Rust client does", () => {
+    const plan = planOutcome({ kind: "busy", message: "anything" });
+    expect(plan).toMatchObject({ kick: true, output: "\n" });
+    expect(plan.debug).toContain("busy");
+  });
+
   test("every permanent cause does NOT kick (the spiral-breaker)", () => {
     const permanentOutcomes: PermanentOutcome[] = [
       { kind: "permanent", cause: "version_mismatch", clientV: 3, daemonV: 4 },

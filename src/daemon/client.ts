@@ -14,17 +14,19 @@ import {
   type ClientHints,
   type Response,
 } from "./protocol";
+import { REQUEST_TIMEOUT_MS } from "./request-deadline";
 import { PACKAGE_VERSION } from "../version";
-
-const CLICK_BUDGET_MS = 200;
 
 export const RENDER_BUDGETS: RoundTripBudgets = {
   connectMs: CONNECT_TIMEOUT_MS,
   budgetMs: TOTAL_BUDGET_MS,
 };
+// [LAW:one-source-of-truth] A click or pane lookup waits past the daemon's
+// own backstop, so a slow one hears the daemon's TIMEOUT (busy, no kick)
+// rather than giving up first and kicking a daemon that is up.
 const CLICK_BUDGETS: RoundTripBudgets = {
   connectMs: CONNECT_TIMEOUT_MS,
-  budgetMs: CLICK_BUDGET_MS,
+  budgetMs: REQUEST_TIMEOUT_MS + TOTAL_BUDGET_MS,
 };
 
 // The render/click outcome vocabulary, mirrored by the Rust client's outcome
@@ -56,15 +58,19 @@ export function renderOutcomeOf(resp: Response): ClientOutcome {
 // [LAW:one-source-of-truth] `hints` carries every fact the daemon cannot
 // observe for itself; it is spread onto the request verbatim so this relay
 // never becomes a second place that decides what the client saw.
+// [LAW:dataflow-not-control-flow] The budgets are a value the caller may state;
+// the statusline states none and gets the wire facts. A test whose subject is
+// the deadline, not the speed of a loaded runner's loop, states wider ones.
 export function tryRenderViaDaemon(
   hookData: ClaudeHookData,
   args: string[],
   cwd: string,
   hints: ClientHints,
+  budgets: RoundTripBudgets = RENDER_BUDGETS,
 ): Promise<ClientOutcome> {
   return requestOutcome(
     (deadline) => ({ kind: "render", hookData, args, cwd, deadline, ...hints }),
-    RENDER_BUDGETS,
+    budgets,
     projectOutput,
   );
 }

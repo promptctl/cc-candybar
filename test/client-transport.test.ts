@@ -5,16 +5,41 @@
 // respawn would send the operator down the wrong path (the CLI analogue of
 // the render path's kick-vs-no-kick split).
 
-import { describeFailure } from "../src/daemon/client-transport";
+import {
+  describeFailure,
+  interpretResponse,
+} from "../src/daemon/client-transport";
 import type {
   PermanentOutcome,
   TransientOutcome,
 } from "../src/daemon/client-transport";
+import { PROTOCOL_VERSION, type Response } from "../src/daemon/protocol";
 
 const HINT = "daemon may not be running";
 
+// A daemon's own TIMEOUT proves it is up: a click's client must tell it from
+// a wait it gave up itself, or it kicks a live daemon mid-click.
+test("the daemon's TIMEOUT reads as busy, not as a client timeout", () => {
+  const resp = {
+    ok: false,
+    error: "request exceeded 200ms",
+    code: "TIMEOUT",
+    daemonV: PROTOCOL_VERSION,
+  } as Response;
+  expect(interpretResponse("click", resp, () => undefined)).toEqual({
+    kind: "busy",
+    message: "request exceeded 200ms",
+  });
+});
+
 describe("describeFailure", () => {
-  test("every transient cause carries the spawn hint", () => {
+  test("a busy daemon carries no spawn hint", () => {
+    const text = describeFailure({ kind: "busy", message: "x" });
+    expect(text).not.toContain(HINT);
+    expect(text).toContain("busy");
+  });
+
+  test("every transient cause a dead daemon explains carries the spawn hint", () => {
     const causes: TransientOutcome["cause"][] = [
       "unreachable",
       "timeout",

@@ -8,7 +8,10 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 
+import { RENDER_BUDGETS } from "../src/daemon/client";
+import type { RoundTripBudgets } from "../src/daemon/client-transport";
 import {
+  CONNECT_TIMEOUT_MS,
   encodeFrame,
   makeFrameReader,
   TOTAL_BUDGET_MS,
@@ -57,7 +60,13 @@ async function withStubDaemon<T>(
   }
 }
 
-const render = async () => {
+// [LAW:no-ambient-temporal-coupling] The stub serves on this worker's own event
+// loop, so on a loaded runner its accept can land after the statusline's 50 ms
+// connect budget and the client answers CONNECT_TIMEOUT. What these cases
+// prove is the deadline a request states and the client keeps, not that a
+// loaded loop is fast, so they state budgets no loop delay reaches. The
+// statusline's own are a wire fact, asserted once below.
+const render = (budgets: RoundTripBudgets) => async () => {
   const { tryRenderViaDaemon } = await import("../src/daemon/client");
   return tryRenderViaDaemon(
     {
@@ -68,30 +77,50 @@ const render = async () => {
     ["cc-candybar"],
     "/tmp",
     {},
+    budgets,
   );
 };
 
 describe("the Node client's deadline", () => {
+  test("the statusline's budgets are the wire facts", () => {
+    expect(RENDER_BUDGETS).toEqual({
+      connectMs: CONNECT_TIMEOUT_MS,
+      budgetMs: TOTAL_BUDGET_MS,
+    });
+  });
+
   test("a render request states the client's budget from the connect", async () => {
+    const budgets = { connectMs: 5_000, budgetMs: 2_000 };
     let deadline: unknown;
     const before = Date.now();
     await expect(
-      withStubDaemon({ ok: true, output: "bar" }, render, (req) => {
+      withStubDaemon({ ok: true, output: "bar" }, render(budgets), (req) => {
         deadline = req.deadline;
       }),
     ).resolves.toEqual({ kind: "ok", value: "bar" });
     const after = Date.now();
-    expect(deadline).toBeGreaterThanOrEqual(before + TOTAL_BUDGET_MS);
-    expect(deadline).toBeLessThanOrEqual(after + TOTAL_BUDGET_MS);
+    expect(deadline).toBeGreaterThanOrEqual(before + budgets.budgetMs);
+    expect(deadline).toBeLessThanOrEqual(after + budgets.budgetMs);
   });
 
   test("a client the daemon never answers gives up at the deadline it stated", async () => {
     let deadline = 0;
-    const outcome = await withStubDaemon(null, render, (req) => {
-      deadline = req.deadline as number;
-    });
+    const outcome = await withStubDaemon(
+      null,
+      render({ connectMs: 5_000, budgetMs: 1_000 }),
+      (req) => {
+        deadline = req.deadline as number;
+      },
+    );
     const gaveUp = Date.now();
-    expect(outcome).toMatchObject({ kind: "transient", cause: "timeout" });
+    // Its own deadline timer, not the connect's: the request reached the stub
+    // and the client waited for an answer it never got.
+    expect(outcome).toMatchObject({
+      kind: "transient",
+      cause: "timeout",
+      message: "TIMEOUT",
+    });
+    expect(deadline).toBeGreaterThan(0);
     // Within the millisecond the two clocks round to.
     expect(gaveUp).toBeGreaterThanOrEqual(deadline - 1);
   });
