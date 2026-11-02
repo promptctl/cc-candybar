@@ -44,7 +44,7 @@ const REPLY_BUDGET_MS = 5000;
 
 // [LAW:no-ambient-temporal-coupling] `TIMEOUT` (request-deadline.ts's REQUEST_TIMEOUT_MS
 // — a real 200ms per-request guard protecting the daemon from one slow request
-// blocking every other connection) is classified `transient` by the real client
+// blocking every other connection) is classified `busy` by the real client
 // (client-transport.ts's interpretResponse): the daemon is up, just slow for
 // this one request, and the documented recovery is retry, not fail. A cold
 // first render for a brand-new (projectDir, cwd) — first git subprocess spawn,

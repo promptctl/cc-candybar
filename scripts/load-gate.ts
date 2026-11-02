@@ -47,6 +47,7 @@ import { effectsUrl, VERB_SET_STATE } from "../src/click/wire.js";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure.js";
 import { tryClickViaDaemon, tryRenderViaDaemon } from "../src/daemon/client.js";
 import { fetchStats } from "../src/daemon/client-stats.js";
+import type { FailureOutcome } from "../src/daemon/client-transport.js";
 import { mb, memoryLimitBytes } from "../src/daemon/limits.js";
 import { logLines } from "../src/daemon/log.js";
 import { logPath } from "../src/daemon/paths.js";
@@ -68,6 +69,11 @@ import { transcriptPath, transcriptTurn } from "./lib/transcript.js";
 const REPO = path.resolve(import.meta.dirname, "..");
 const BUNDLE = path.join(REPO, "dist", "index.mjs");
 const FIXTURES = path.join(import.meta.dirname, "load-gate");
+
+// A failed round trip as one tally key: its kind, and its cause where the
+// kind has more than one.
+const failureLabel = (o: FailureOutcome): string =>
+  o.kind === "busy" ? o.kind : `${o.kind}/${o.cause}`;
 
 const { values } = parseArgs({
   options: {
@@ -514,7 +520,7 @@ function tick(s: Session): void {
         },
       );
       outcome =
-        rendered.kind === "ok" ? "ok" : `${rendered.kind}/${rendered.cause}`;
+        rendered.kind === "ok" ? "ok" : failureLabel(rendered);
       if (rendered.kind === "ok") s.answers++;
     } catch (e) {
       // [LAW:no-silent-failure] A client path that throws is a failed render,
@@ -557,7 +563,7 @@ async function menuClick(s: Session, open: boolean): Promise<string> {
   );
   try {
     const clicked = await tryClickViaDaemon(verb, value);
-    return clicked.kind === "ok" ? "ok" : `${clicked.kind}/${clicked.cause}`;
+    return clicked.kind === "ok" ? "ok" : failureLabel(clicked);
   } catch (e) {
     // [LAW:no-silent-failure] A click path that throws is a failed click.
     return `threw/${e instanceof Error ? e.message : String(e)}`;
@@ -631,7 +637,7 @@ async function sample(started: number): Promise<void> {
   const asked = phase;
   const outcome = await fetchStats();
   if (outcome.kind !== "ok") {
-    unanswered.push(`${at} ms: ${outcome.kind}/${outcome.cause}`);
+    unanswered.push(`${at} ms: ${failureLabel(outcome)}`);
     return;
   }
   const reading = await charge(outcome.value.pid)(outcome.value.rssBytes);
@@ -913,7 +919,7 @@ async function run(): Promise<{
         .join("")}`,
     },
     {
-      // The client's own budget is the verdict: a click past it is a timeout.
+      // The daemon's backstop is the verdict: a click past it is busy.
       name: "steady clicks",
       pass:
         clicks.length >= expectedClicks * 0.9 &&
