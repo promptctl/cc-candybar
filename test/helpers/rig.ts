@@ -120,6 +120,10 @@ export interface Rig {
 // [LAW:types-are-the-program] The shared config is not frozen: it is `readonly`
 // throughout by type, and a runtime freeze would reach `DEFAULT_DSL_CONFIG`'s
 // own decl objects (`mergeWithDefault` is shallow), which a test does not own.
+//
+// The key is the parse's inputs, not the registries a parse reads (option
+// domains): a test that registers a domain before parsing and removes it after
+// gives its source a label of its own, or a later parse of the same text hits.
 const parses = new WeakMap<DslConfig, Map<string, ValidatedConfig>>();
 
 // A compile is shared by what a compile takes: its config (the key) and its
@@ -200,7 +204,7 @@ export function buildRig(init: RigInit = {}): Rig {
     EVERY_SCOPE,
   );
   const compiled = { ...registered.compiled, loadWarnings: registered.loadWarnings };
-  if (init.rendered ?? true) recordRender(sessionState, sessionId);
+  if (init.rendered ?? true) recordRender(sessionState, sessionId, cwd);
   const ctx = testVerbContext(sessionState, init.history, config, init.host);
   return {
     config,

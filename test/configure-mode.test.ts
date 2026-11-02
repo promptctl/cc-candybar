@@ -113,6 +113,7 @@ function configureBar(src: string, preset?: string) {
   const { config } = rig;
   const render = (): Frame =>
     rig.draw({
+      opts: { width: 200 },
       selection: preset === undefined ? undefined : selectionFor(config, {}, picked({ preset })),
     }).frame;
   // The config a click reads, re-read from the file on a reload — as the
