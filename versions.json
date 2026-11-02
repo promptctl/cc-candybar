@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-570",
+      "ref": "refs/pull/570/merge",
+      "sha": "dabc35002e184579ece856d6b5d163aefd52f1bf",
+      "timestamp": "2026-11-02T12:43:39.756Z",
+      "commits": [
+        {
+          "sha": "dabc35002e184579ece856d6b5d163aefd52f1bf",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T05:41:07-07:00",
+          "message": "Merge 7c3d087049fbfdff921ff019074ae989c44ec917 into e9865fa4807325c4bf8e73c86195d8ea246a2775\n"
+        },
+        {
+          "sha": "7c3d087049fbfdff921ff019074ae989c44ec917",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T05:40:44-07:00",
+          "message": "fix(test): the click-error e2e holds its unanswered render until the daemon's side has ended (brandon-unfiled-3248.cbyb)\n\nThe case's `gone` client half-closed at once and assumed the daemon saw the\nclose before it wrote the answer. Nothing ordered them: when the render won, the\nend-write succeeded, the error was marked answered, and the next request read\n`over` where the test expects `owed`.\n\nThe gone render now reads tmux through the gated stub, and the test opens the\ngate only once the daemon's side has closed with the client's (inFlight back to\n0), so the answer meets an ended end by construction. Making respond call\ndelivered regardless of the write error fails the case with owed/over.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-569",
       "ref": "refs/pull/569/merge",
       "sha": "81f206e393ade46d40441fdaef4da5ceb347178c",
