@@ -862,7 +862,7 @@ describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
     await withTempState(async () => {
       jest.resetModules();
       const { obtainDaemonKick } = await import("../src/daemon/acquire");
-      const { spawnCooldownPath } = await import("../src/daemon/paths");
+      const { spawnBackoffPath, spawnCooldownPath } = await import("../src/daemon/paths");
 
       let spawned = 0;
       const spawn = (): boolean => {
@@ -892,7 +892,7 @@ describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
     await withTempState(async () => {
       jest.resetModules();
       const { obtainDaemonKick } = await import("../src/daemon/acquire");
-      const { spawnCooldownPath } = await import("../src/daemon/paths");
+      const { spawnBackoffPath, spawnCooldownPath } = await import("../src/daemon/paths");
 
       // Suppress the expected "daemon spawn failed" stderr from the throwing
       // spawn so the test output stays clean.
@@ -1073,7 +1073,7 @@ describe("spawn backoff under sustained non-convergence (brandon-daemon-lifecycl
     await withTempState(async () => {
       jest.resetModules();
       const { obtainDaemonKick } = await import("../src/daemon/acquire");
-      const { spawnCooldownPath } = await import("../src/daemon/paths");
+      const { spawnBackoffPath, spawnCooldownPath } = await import("../src/daemon/paths");
 
       // A spawn that "succeeds" (a process forked) but the daemon never binds
       // — the fork-exhaustion scenario from the epic's incident report, where
@@ -1130,7 +1130,7 @@ describe("spawn backoff under sustained non-convergence (brandon-daemon-lifecycl
       jest.resetModules();
       const { obtainDaemonKick, resetSpawnBackoff, SPAWN_COOLDOWN_MS } =
         await import("../src/daemon/acquire");
-      const { spawnCooldownPath } = await import("../src/daemon/paths");
+      const { spawnBackoffPath, spawnCooldownPath } = await import("../src/daemon/paths");
 
       let spawned = 0;
       const spawn = (): boolean => {
@@ -1159,7 +1159,7 @@ describe("spawn backoff under sustained non-convergence (brandon-daemon-lifecycl
         expect(spawned).toBe(3);
 
         // The daemon FINALLY binds — server.ts's onListening calls this.
-        resetSpawnBackoff();
+        resetSpawnBackoff(spawnBackoffPath());
 
         obtainDaemonKick({ spawn });
         expect(spawned).toBe(4);

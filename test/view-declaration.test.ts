@@ -31,6 +31,7 @@ import { settledLane, type Lane } from "../src/utils/reading";
 import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { answerRepo } from "./helpers/repo-approval";
+import { stateDir } from "../src/daemon/paths";
 
 const REPO = "/repo";
 
@@ -113,7 +114,7 @@ test("a preset click that newly places the PR starts its lookup with no draw; sw
     usageStore: { declareToday: () => settledLane(ABSENT) },
   } as unknown as KeyedOwners;
   const cache = new RenderCache(
-    { launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
+    { stateDir: stateDir(), launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
  fileEvents: NO_FILE_EVENTS,
       sessionState,
       watchers,
@@ -245,7 +246,7 @@ function gitCache() {
     usageStore: { declareToday: () => settledLane(ABSENT) },
   } as unknown as KeyedOwners;
   const cache = new RenderCache(
-    { launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
+    { stateDir: stateDir(), launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
  fileEvents: NO_FILE_EVENTS,
       sessionState: new SessionState(),
       watchers,

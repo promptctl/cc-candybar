@@ -21,6 +21,7 @@ import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { viewFacts } from "./helpers/view-facts";
 import { writeAtomic } from "../src/utils/atomic-write";
 import { until } from "./helpers/until";
+import { stateDir } from "../src/daemon/paths";
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
@@ -76,7 +77,7 @@ function setUp() {
   // The sessions each reload said drew from its entry, in order.
   const reloads: Array<readonly string[]> = [];
   const cache = new RenderCache(
-    {
+    { stateDir: stateDir(),
       launcher: processLauncher,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,

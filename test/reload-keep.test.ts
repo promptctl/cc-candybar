@@ -16,6 +16,7 @@ import { TEST_SIGNER } from "./helpers/link-signer";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { viewFacts } from "./helpers/view-facts";
 import { fakeWatches } from "./helpers/fake-watches";
+import { stateDir } from "../src/daemon/paths";
 
 // [LAW:behavior-not-structure] A reload keeps the state it serves exactly when
 // what it read from disk is what that state was built from, read through
@@ -55,7 +56,7 @@ function rig() {
   const watchers = new WatcherRegistry({ logger: () => {} });
   cleanups.push(() => watchers.closeAll());
   const cache = new RenderCache(
-    {
+    { stateDir: stateDir(),
       launcher: processLauncher,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,

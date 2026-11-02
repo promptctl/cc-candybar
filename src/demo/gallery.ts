@@ -24,6 +24,7 @@ import { resolveEffectiveGlobals } from "../config/effective-globals.js";
 import { prepareConfig, renderEffective } from "../check.js";
 import { ansiOf } from "../render/frame.js";
 import { homeLayer } from "../config/dsl-loader.js";
+import { stateDir } from "../daemon/paths.js";
 import { repoGateAt } from "../daemon/repo-configs.js";
 import { repoGateLines } from "../config/loader/repo-gate.js";
 import { listResolvablePaletteNames } from "../themes/policy.js";
@@ -42,7 +43,7 @@ const target = process.argv[2];
 const at = instantOf(new Date());
 const named =
   target === undefined ? undefined : resolveUserPath(process.cwd(), target);
-const repos = repoGateAt(process.cwd());
+const repos = repoGateAt(stateDir(), process.cwd());
 warnings.push(...repoGateLines(repos));
 const prepared = await prepareConfig(
   // The file named is explicit: no repository supplies it.

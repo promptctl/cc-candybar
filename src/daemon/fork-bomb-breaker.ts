@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { daemonRegistryDir, ensureOwnedPrivateDir } from "./paths";
+import { ensureOwnedPrivateDir } from "./paths";
 import {
   readStartTime,
   sameLiveProcess,
@@ -285,11 +285,12 @@ export function releaseRegistration(
 // this pid were somehow recycled between them.
 export function realBreakerDeps(
   myStartTime: string | null,
+  registryDir: string,
   overrides: Partial<BreakerDeps> = {},
 ): BreakerDeps {
   return {
     isolated: Boolean(process.env["CC_CANDYBAR_SOCKET"]),
-    registryDir: daemonRegistryDir(),
+    registryDir,
     ceiling: daemonCeiling(),
     pid: process.pid,
     startTime: myStartTime,

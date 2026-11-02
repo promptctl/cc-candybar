@@ -5,11 +5,10 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { inspect } from "node:util";
 import {
-  daemonDir,
+  daemonPaths,
   ensureSocketParentSafe,
-  leasePath,
   leasePathFor,
-  socketPath,
+  type DaemonPaths,
 } from "./paths";
 import {
   arbitrateSocket,
@@ -34,7 +33,8 @@ import {
   readRegistryEntry,
 } from "./fork-bomb-breaker";
 import { bakedDigest } from "./build-currency";
-import { dlog } from "./log";
+import { DaemonLog } from "./log";
+import type { LogLevel } from "../utils/logger";
 import {
   oneShotLauncher,
   processLauncher,
@@ -48,13 +48,13 @@ import {
   type Daemon,
   type RunningBundle,
 } from "./daemon.js";
+import { productionAdapters } from "./production-adapters.js";
 import { handleConnection } from "./connection.js";
 import { REGISTRY_URL } from "../install/currency";
 import { PROTOCOL_VERSION } from "./protocol";
 import { mb, memoryLimitBytes } from "./limits";
 import { armParentWatchdog, anchorFromEnv, pidAlive } from "./parent-watchdog";
 import { resetSpawnBackoff } from "./acquire";
-import { fileStorage } from "./file-storage";
 
 // Daemon entry point. Tries to bind the Unix socket — atomic bind() is the
 // single-instance enforcer (two daemons cannot both bind the same path; the
@@ -80,6 +80,24 @@ let breakerRegistryPath: string | null = null;
 // death has nothing to close.
 let serving: Daemon | null = null;
 
+// [LAW:effects-at-boundaries] The process this daemon is: every path it touches,
+// read from the environment here and nowhere below, and the log those paths
+// name. Fixed once by `runDaemon`, before anything that can fail.
+interface DaemonProcess {
+  readonly paths: DaemonPaths;
+  readonly log: DaemonLog;
+}
+let thisProcess: DaemonProcess | null = null;
+
+function daemonProcess(): DaemonProcess {
+  if (thisProcess === null) throw new Error("runDaemon has not started");
+  return thisProcess;
+}
+
+function serverLog(level: LogLevel, msg: string): void {
+  daemonProcess().log.log(level, msg);
+}
+
 // [LAW:one-source-of-truth] The daemon's one read of the running entry's identity:
 // `import.meta.url` stays in this shell, which a jest worker never loads.
 function runningBundle(): RunningBundle {
@@ -100,6 +118,8 @@ function runningBundle(): RunningBundle {
 }
 
 export function runDaemon(): void {
+  const paths = daemonPaths(process.env);
+  thisProcess = { paths, log: new DaemonLog(paths.log) };
   // Catch-alls log + exit so the supervisor (the next client) can restart us.
   // [LAW:no-defensive-null-guards] These are *trust boundaries* — we are
   // catching all of unknown space, not skipping known optional values.
@@ -110,16 +130,16 @@ export function runDaemon(): void {
   // SIGKILL backstop) rather than funneling through the same death path as
   // every other failure mode.
   process.on("uncaughtException", (err) => {
-    dlog("error", `uncaughtException: ${err.stack || err.message}`);
+    serverLog("error", `uncaughtException: ${err.stack || err.message}`);
     shutdown(1);
   });
   process.on("unhandledRejection", (reason) => {
-    dlog("error", `unhandledRejection: ${String(reason)}`);
+    serverLog("error", `unhandledRejection: ${String(reason)}`);
     shutdown(1);
   });
   for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
     process.on(sig, () => {
-      dlog("info", `received ${sig}, shutting down`);
+      serverLog("info", `received ${sig}, shutting down`);
       shutdown(0);
     });
   }
@@ -131,7 +151,7 @@ export function runDaemon(): void {
 }
 
 function refuseBoot(err: unknown): void {
-  dlog("error", `refusing to boot: ${inspect(err)}`);
+  serverLog("error", `refusing to boot: ${inspect(err)}`);
   shutdown(1);
 }
 
@@ -153,9 +173,12 @@ async function boot(): Promise<void> {
   myStartTime = await readOwnStartTime(process.pid, (pid) =>
     readStartTime(pid, processLauncher.launch),
   );
-  const admission = await admitDaemon(realBreakerDeps(myStartTime));
+  const { paths, log: daemonLog } = daemonProcess();
+  const admission = await admitDaemon(
+    realBreakerDeps(myStartTime, paths.registry),
+  );
   if (!admission.decision.allow) {
-    dlog(
+    serverLog(
       "warn",
       `fork-bomb breaker: ${admission.decision.reason}; refusing to boot`,
     );
@@ -164,7 +187,7 @@ async function boot(): Promise<void> {
   }
   breakerRegistryPath = admission.registryPath;
 
-  fs.mkdirSync(daemonDir(), { recursive: true });
+  fs.mkdirSync(paths.state, { recursive: true });
   // [LAW:single-enforcer] Verify the socket parent is uid==me + mode 0700 +
   // not a symlink before we bind. Without this check, a same-host attacker
   // could pre-create the predictable `/tmp/cc-candybar-<uid>` directory and
@@ -173,13 +196,14 @@ async function boot(): Promise<void> {
   // No symmetric client-side check: the daemon is the sole creator, so a
   // successful bind already proves the parent is trusted. Failure here surfaces
   // as a daemon exit; the client falls back to the last cached render.
-  ensureSocketParentSafe(socketPath());
+  ensureSocketParentSafe(paths.socket);
 
   // The daemon is built now that we know we are the daemon process: it loads
   // prior session state and becomes the sole writer of the state file.
   const daemon = createDaemon({
+    ...productionAdapters(paths, daemonLog),
     bundle: runningBundle(),
-    storage: fileStorage,
+    paths,
     memoryLimitBytes: memoryLimit,
     registryUrl: process.env.CC_CANDYBAR_REGISTRY_URL ?? REGISTRY_URL,
     clock: SYSTEM_CLOCK,
@@ -194,7 +218,7 @@ async function boot(): Promise<void> {
     anchor: anchorFromEnv(process.env),
     isAlive: pidAlive,
     onOrphaned: (reason) => {
-      dlog("info", `parent watchdog: ${reason}; shutting down`);
+      serverLog("info", `parent watchdog: ${reason}; shutting down`);
       shutdown(0);
     },
   });
@@ -205,7 +229,7 @@ async function boot(): Promise<void> {
   // Two daemons cannot both bind the same Unix socket path; the kernel makes
   // duplicate-daemon unrepresentable. The pidfile is diagnostic only — never
   // load-bearing for exclusion.
-  bindOrAttachAndExit(daemon, server, socketPath(), /* retried */ false);
+  bindOrAttachAndExit(daemon, server, paths.socket, /* retried */ false);
 }
 
 // [LAW:dataflow-not-control-flow] One operation ("bring this server up or
@@ -228,14 +252,14 @@ function bindOrAttachAndExit(
   server.once("error", (err) => {
     const code = (err as NodeJS.ErrnoException).code;
     if (code !== "EADDRINUSE") {
-      dlog("error", `server error: ${err.message}`);
+      serverLog("error", `server error: ${err.message}`);
       shutdown(1);
       return;
     }
     if (retried) {
       // Lost a rebind race with another duplicate. The kernel arbitrated; we
       // are the loser. Exit cleanly so the winner serves.
-      dlog("info", "lost rebind race; another daemon is alive — exiting");
+      serverLog("info", "lost rebind race; another daemon is alive — exiting");
       process.exit(0);
       return;
     }
@@ -273,7 +297,7 @@ async function handleAddressInUse(
       }),
   );
   if (decision.kind === "attach-and-exit") {
-    dlog("info", `EADDRINUSE: ${decision.reason} — exiting`);
+    serverLog("info", `EADDRINUSE: ${decision.reason} — exiting`);
     process.exit(0);
     // [LAW:no-ambient-temporal-coupling] process.exit() halts synchronously, so
     // the reclaim below is already unreachable — but the explicit return makes
@@ -282,7 +306,7 @@ async function handleAddressInUse(
     // live daemon's socket.
     return;
   }
-  dlog(
+  serverLog(
     "warn",
     `EADDRINUSE: ${decision.reason} — unlinking stale socket and rebinding`,
   );
@@ -295,7 +319,7 @@ async function handleAddressInUse(
     fs.unlinkSync(sockPath);
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "ENOENT") {
-      dlog(
+      serverLog(
         "error",
         `cannot unlink stale socket ${sockPath}: ${(e as Error).message}`,
       );
@@ -330,7 +354,7 @@ function onListening(daemon: Daemon, sockPath: string): void {
   // toward the SAFE direction without writing a lease that would stomp a thief's.
   const boundRead = readSocketIdentity(sockPath);
   if (boundRead.kind !== "present") {
-    dlog(
+    serverLog(
       "warn",
       `no ownable socket at bind callback (${boundRead.kind}); exiting`,
     );
@@ -350,9 +374,9 @@ function onListening(daemon: Daemon, sockPath: string): void {
   try {
     fs.chmodSync(sockPath, 0o600);
   } catch (e) {
-    dlog("warn", `chmod socket failed: ${(e as Error).message}`);
+    serverLog("warn", `chmod socket failed: ${(e as Error).message}`);
   }
-  dlog(
+  serverLog(
     "info",
     // [FRAMING:representation] Report the heap cap V8 actually applied (the
     // territory), not the flag the spawner meant to pass (the map) — the one
@@ -365,7 +389,7 @@ function onListening(daemon: Daemon, sockPath: string): void {
   // "did an outage just end" — see resetSpawnBackoff's doc comment in
   // acquire.ts. Any consecutive-spawn backoff accumulated getting here no
   // longer applies once a daemon is actually serving.
-  resetSpawnBackoff();
+  resetSpawnBackoff(daemonProcess().paths.spawnBackoff);
   daemon.arm();
   armOwnershipWatch(sockPath, boundRead.identity);
 }
@@ -388,7 +412,7 @@ function armOwnershipWatch(sockPath: string, bound: SocketIdentity): void {
     readIdentity: () => readSocketIdentity(sockPath),
     readLease: () => readLease(leasePathFor(sockPath)),
     shutdown: (code) => shutdown(code),
-    log: dlog,
+    log: serverLog,
   }).arm();
 }
 
@@ -414,7 +438,7 @@ function writeLeaseFile(sockPath: string): void {
     binPath: process.argv[1],
     startTime: myStartTime,
   });
-  if (reason !== null) dlog("warn", `lease write failed: ${reason}`);
+  if (reason !== null) serverLog("warn", `lease write failed: ${reason}`);
 }
 
 // --- shutdown ---
@@ -473,7 +497,7 @@ function shutdown(code: number): void {
   // displaced daemon (socket stolen, thief wrote its own lease) must not delete
   // the live owner's lease on its way out, or the next EADDRINUSE would read
   // `absent` and reclaim the thief's live socket — cascading the theft.
-  removeLeaseIfOwned(leasePath(), process.pid);
+  removeLeaseIfOwned(daemonProcess().paths.lease, process.pid);
   // [LAW:one-source-of-truth] Same "only if it still names us" guard as the
   // lease above, reused via releaseRegistration — a slot this daemon never
   // claimed (exempt production, or refused before claiming one) is null and

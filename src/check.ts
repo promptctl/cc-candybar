@@ -26,7 +26,8 @@
 // window for the whole verdict; the daemon's first cold render does not (its
 // next render shows what check showed).
 
-import { linkSignerFromKeyFile } from "./daemon/link-key.js";
+import { linkKeyFile, linkSignerFromKeyFile } from "./daemon/link-key.js";
+import { stateDir } from "./daemon/paths.js";
 import { repoConfigs } from "./daemon/repo-configs.js";
 import { repoGateLines } from "./config/loader/repo-gate.js";
 import type { ConfigResolution } from "./config/loader/discovery.js";
@@ -395,7 +396,7 @@ export async function checkConfig(
   // [LAW:single-enforcer] The daemon's gate, under the same answers: a
   // repository the bar would not run, `check` names and runs nothing of.
   const resolution = resolveDslConfig(
-    repoConfigs().read(),
+    repoConfigs(stateDir()).read(),
     cwd,
     cwd,
     configPath ?? undefined,
@@ -544,7 +545,7 @@ export async function prepareConfig(
     // signed with the one key.
     const compiled = registerDslConfig(config, registry, {
       cwd,
-      signer: linkSignerFromKeyFile(),
+      signer: linkSignerFromKeyFile(linkKeyFile(stateDir())),
     });
     warnings.push(...compiled.loadWarnings);
     // A view's inputs are pending until its source answers, and a source

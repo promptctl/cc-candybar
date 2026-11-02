@@ -36,6 +36,7 @@ import { VERB_REPO_CONFIG } from "../src/click/wire";
 import { linkSigner } from "../src/click/link-signer";
 import { effectsOf } from "./helpers/click";
 import { answerRepo } from "./helpers/repo-approval";
+import { stateDir } from "../src/daemon/paths";
 
 let root: string;
 let project: string;
@@ -149,6 +150,7 @@ describe("the gate over a project's plugins", () => {
       sessionState: new SessionState(),
       storage: UNOWNED_STORAGE,
       signer: linkSigner(Buffer.alloc(32)),
+      stateDir: stateDir(),
     };
     const waiting = loadFromDisk(project, project, undefined, deps);
     expect(waiting.repos.awaiting).toEqual([project]);

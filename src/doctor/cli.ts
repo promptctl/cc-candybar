@@ -14,7 +14,8 @@
 // is one function either way.
 
 import { oneShotLauncher } from "../proc/launch.js";
-import { linkSignerFromKeyFile } from "../daemon/link-key.js";
+import { linkKeyFile, linkSignerFromKeyFile } from "../daemon/link-key.js";
+import { stateDir } from "../daemon/paths.js";
 import { openSync } from "node:fs";
 import process from "node:process";
 import { WriteStream } from "node:tty";
@@ -104,7 +105,8 @@ export function loadConfigOnce(origin: RenderOrigin): ConfigLoad {
     launcher: oneShotLauncher,
     sessionState: new SessionState(),
     storage: UNOWNED_STORAGE,
-    signer: linkSignerFromKeyFile(),
+    signer: linkSignerFromKeyFile(linkKeyFile(stateDir())),
+    stateDir: stateDir(),
   };
   const loaded = loadFromDisk(
     origin.projectDir,

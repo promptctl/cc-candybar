@@ -29,24 +29,23 @@ export function stateDir(env: NodeJS.ProcessEnv = process.env): string {
   return path.join(base, "cc-candybar");
 }
 
-export function cacheDir(): string {
+export function cacheDir(env: NodeJS.ProcessEnv = process.env): string {
   const base =
-    xdgEnv(process.env, "XDG_CACHE_HOME") ?? path.join(os.homedir(), ".cache");
+    xdgEnv(env, "XDG_CACHE_HOME") ?? path.join(os.homedir(), ".cache");
   return path.join(base, "cc-candybar");
 }
 
-export function configDir(): string {
+export function configDir(env: NodeJS.ProcessEnv = process.env): string {
   const base =
-    xdgEnv(process.env, "XDG_CONFIG_HOME") ??
-    path.join(os.homedir(), ".config");
+    xdgEnv(env, "XDG_CONFIG_HOME") ?? path.join(os.homedir(), ".config");
   return path.join(base, "cc-candybar");
 }
 
 // `daemonDir` kept as the canonical name for the runtime root so existing
 // callers (limits.ts, server.ts) don't need to learn a new term. It now
 // resolves under $XDG_STATE_HOME/cc-candybar instead of ~/.claude/powerline.
-export function daemonDir(): string {
-  return stateDir();
+export function daemonDir(env: NodeJS.ProcessEnv = process.env): string {
+  return stateDir(env);
 }
 
 // [LAW:one-source-of-truth] The socket IS the daemon's identity — same as
@@ -55,8 +54,8 @@ export function daemonDir(): string {
 // is cleared on reboot, which is fine — the daemon doesn't survive reboots.
 // CC_CANDYBAR_SOCKET is the only explicit override for intentional isolation
 // (tests, dev, multiple intentional instances).
-export function socketPath(): string {
-  return process.env.CC_CANDYBAR_SOCKET || defaultSocketPath();
+export function socketPath(env: NodeJS.ProcessEnv = process.env): string {
+  return env.CC_CANDYBAR_SOCKET || defaultSocketPath();
 }
 
 // The socket a process with no override reaches — the URL handler app's, which
@@ -152,8 +151,8 @@ export function leasePathFor(sockPath: string): string {
   return `${sockPath}.lease`;
 }
 
-export function leasePath(): string {
-  return leasePathFor(socketPath());
+export function leasePath(env: NodeJS.ProcessEnv = process.env): string {
+  return leasePathFor(socketPath(env));
 }
 
 export function sessionStatePath(env: NodeJS.ProcessEnv = process.env): string {
@@ -164,8 +163,10 @@ export function sessionStatePath(env: NodeJS.ProcessEnv = process.env): string {
 // settings change it made (src/daemon/settings-history.ts). Daemon-owned
 // runtime state, so it sits beside session-state.json — the config files its
 // steps snapshot are the user's, wherever discovery resolved them.
-export function settingsHistoryPath(): string {
-  return path.join(stateDir(), "settings-history.json");
+export function settingsHistoryPath(
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  return path.join(stateDir(env), "settings-history.json");
 }
 
 // [LAW:one-source-of-truth] The fork-bomb breaker's daemon-population registry
@@ -178,8 +179,10 @@ export function settingsHistoryPath(): string {
 // `CC_CANDYBAR_DAEMON_REGISTRY_DIR` is the explicit override, used only by
 // tests of the breaker itself so they don't contend over the machine's real
 // shared registry.
-export function daemonRegistryDir(): string {
-  const override = process.env.CC_CANDYBAR_DAEMON_REGISTRY_DIR;
+export function daemonRegistryDir(
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const override = env.CC_CANDYBAR_DAEMON_REGISTRY_DIR;
   if (override) return override;
   const uid = os.userInfo().uid;
   return path.join("/tmp", `cc-candybar-${uid}`, "daemons");
@@ -189,8 +192,8 @@ export function daemonRegistryDir(): string {
 // the spawn window — never for the daemon's lifetime. The actual one-daemon
 // invariant is enforced by atomic bind() on socketPath() inside the daemon.
 // This file is a thundering-herd optimization, not the load-bearing lock.
-export function spawnLockPath(): string {
-  return path.join(stateDir(), "spawn.lock");
+export function spawnLockPath(env: NodeJS.ProcessEnv = process.env): string {
+  return path.join(stateDir(env), "spawn.lock");
 }
 
 // [LAW:one-source-of-truth] The spawn-RATE bound (as distinct from spawn.lock's
@@ -200,8 +203,10 @@ export function spawnLockPath(): string {
 // and diffed by scripts/check-protocol.mjs — a drift would silently split the
 // rate bound in two.
 const SPAWN_COOLDOWN_FILE = "spawn.cooldown";
-export function spawnCooldownPath(): string {
-  return path.join(stateDir(), SPAWN_COOLDOWN_FILE);
+export function spawnCooldownPath(
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  return path.join(stateDir(env), SPAWN_COOLDOWN_FILE);
 }
 
 // [LAW:one-source-of-truth] Sibling of spawn.cooldown: that file's mtime
@@ -211,16 +216,48 @@ export function spawnCooldownPath(): string {
 // (see effectiveCooldownMs in acquire.ts). Same filename mirrored TS↔Rust,
 // diffed by scripts/check-protocol.mjs.
 const SPAWN_BACKOFF_FILE = "spawn.backoff";
-export function spawnBackoffPath(): string {
-  return path.join(stateDir(), SPAWN_BACKOFF_FILE);
+export function spawnBackoffPath(env: NodeJS.ProcessEnv = process.env): string {
+  return path.join(stateDir(env), SPAWN_BACKOFF_FILE);
 }
 
 // The daemon's own folder for testing its file watch: never the state
 // directory itself, where the log writes on every request.
-export function watchProbeDir(): string {
-  return path.join(stateDir(), "watch-probe");
+export function watchProbeDir(env: NodeJS.ProcessEnv = process.env): string {
+  return path.join(stateDir(env), "watch-probe");
 }
 
 export function logPath(env: NodeJS.ProcessEnv = process.env): string {
   return path.join(stateDir(env), "daemon.log");
+}
+
+// [LAW:effects-at-boundaries] Every path a daemon process touches, read from
+// the environment once and handed down as a value: the daemon's modules take
+// the one they write to, so a daemon aimed at a temporary directory writes
+// nowhere else. A process's entry point is the one place that builds it.
+// [LAW:one-source-of-truth] Each member is the accessor above of the same name,
+// so the layout is still derived in this file alone.
+export interface DaemonPaths {
+  readonly socket: string;
+  readonly lease: string;
+  readonly state: string;
+  readonly registry: string;
+  readonly log: string;
+  readonly sessionState: string;
+  readonly settingsHistory: string;
+  readonly watchProbe: string;
+  readonly spawnBackoff: string;
+}
+
+export function daemonPaths(env: NodeJS.ProcessEnv = process.env): DaemonPaths {
+  return {
+    socket: socketPath(env),
+    lease: leasePath(env),
+    state: stateDir(env),
+    registry: daemonRegistryDir(env),
+    log: logPath(env),
+    sessionState: sessionStatePath(env),
+    settingsHistory: settingsHistoryPath(env),
+    watchProbe: watchProbeDir(env),
+    spawnBackoff: spawnBackoffPath(env),
+  };
 }

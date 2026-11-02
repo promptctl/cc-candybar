@@ -16,7 +16,7 @@ import path from "node:path";
 import { effectsUrl, VERB_SET_STATE } from "../../../src/click/wire";
 import { CLICK_ERROR_HOLD_S } from "../../../src/daemon/click-error";
 import { SYSTEM_CLOCK } from "../../../src/daemon/daemon";
-import { dlog, logLines } from "../../../src/daemon/log";
+import { logLines } from "../../../src/daemon/log";
 import { logPath } from "../../../src/daemon/paths";
 import {
   encodeFrame,
@@ -235,10 +235,9 @@ describe("a daemon in this worker", () => {
     daemon.connect();
     expect(stats.inFlight).toBe(1);
 
-    // Logged with the env placed, so it belongs in this daemon's log, and the
-    // log reads its path when it writes.
+    // Logged through the daemon's own log.
     const last = "the last line before the stop";
-    dlog("info", last);
+    daemon.daemon.log("info", last);
     const { log } = daemon;
     await daemon.stop();
     daemon = null;

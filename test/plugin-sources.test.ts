@@ -50,6 +50,7 @@ import { textOf, ansiOf } from "../src/render/frame";
 import { viewFacts } from "./helpers/view-facts";
 import { ReloadSignal } from "./helpers/reload-signal";
 import { until } from "./helpers/until";
+import { stateDir } from "../src/daemon/paths";
 
 const SOURCE = `{ scope: "session", refresh: { watch: true }, read: { file: { json: true } } }`;
 const STATUS = "plugins.p.status";
@@ -141,7 +142,7 @@ function rig(): Rig {
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
   const cache = new RenderCache<SessionSource>(
-    {
+    { stateDir: stateDir(),
       launcher: processLauncher,
       sessionState,
       watchers,
@@ -258,7 +259,7 @@ describe("a source's declaration", () => {
   test("the built arm loads, lowered to a session document in the plugin folder's managed storage", () => {
     const r = rig();
     const p = listing(`{ status: ${SOURCE} }`);
-    const loaded = loadFromDisk(dir, dir, p, {
+    const loaded = loadFromDisk(dir, dir, p, { stateDir: stateDir(),
       launcher: processLauncher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
@@ -344,7 +345,7 @@ describe("a source's declaration", () => {
       "config.json5",
       `{ plugins: ["./p/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
     );
-    const loaded = loadFromDisk(dir, dir, p, {
+    const loaded = loadFromDisk(dir, dir, p, { stateDir: stateDir(),
       launcher: processLauncher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
@@ -373,7 +374,7 @@ describe("a source's declaration", () => {
          segments: { mine: { template: "x{{ .plugins.p.status.home }}" } },
          root: { h: ["mine"] } }`,
     );
-    const loaded = loadFromDisk(dir, dir, p, {
+    const loaded = loadFromDisk(dir, dir, p, { stateDir: stateDir(),
       launcher: processLauncher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
@@ -483,7 +484,7 @@ describe("a source's declaration", () => {
       "config.json5",
       `{ plugins: ["./p/plugin.json5", "./q/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
     );
-    const loaded = loadFromDisk(dir, dir, p, {
+    const loaded = loadFromDisk(dir, dir, p, { stateDir: stateDir(),
       launcher: processLauncher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
