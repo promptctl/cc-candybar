@@ -117,7 +117,11 @@ describe("the Node client's deadline", () => {
     // and the client waited for an answer it never got.
     // Busy, not transient: a daemon accepted the request, so a kick's
     // candidate would lose the bind to it.
-    expect(outcome).toEqual({ kind: "busy", message: "TIMEOUT" });
+    expect(outcome).toEqual({
+      kind: "busy",
+      phase: "deadline",
+      message: "TIMEOUT",
+    });
     expect(deadline).toBeGreaterThan(0);
     // Within the millisecond the two clocks round to.
     expect(gaveUp).toBeGreaterThanOrEqual(deadline - 1);

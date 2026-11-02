@@ -14,7 +14,13 @@
 
 import net from "node:net";
 import { socketPath } from "./paths";
-import { PROTOCOL_VERSION, ProtocolError, sendOne } from "./protocol";
+import {
+  ClientTimeoutError,
+  PROTOCOL_VERSION,
+  ProtocolError,
+  sendOne,
+  type TimeoutPhase,
+} from "./protocol";
 import type { Request, Response } from "./protocol";
 
 // Per-caller timeout policy, carried as data. The render hot path runs tight
@@ -48,8 +54,12 @@ export interface TransientOutcome {
   message: string;
 }
 
+// `phase` is whether the request got to the listener: "connect" — it never
+// did, so a click is undelivered; "deadline" — it was sent and no answer came
+// in time, whether our clock or the daemon's own TIMEOUT reply ended the wait.
 export interface BusyOutcome {
   kind: "busy";
+  phase: TimeoutPhase;
   message: string;
 }
 
@@ -175,8 +185,8 @@ export function interpretResponse<T>(
         daemonV: asProtocolVersion(raw.daemonV),
       };
     case "TIMEOUT":
-      // Daemon is alive but didn't answer in time.
-      return { kind: "busy", message: errorMessage };
+      // Daemon is alive but didn't answer in time: the request reached it.
+      return { kind: "busy", phase: "deadline", message: errorMessage };
     case "BAD_REQUEST":
       return { kind: "permanent", cause: "bad_request", message: errorMessage };
     case "RENDER_FAILED":
@@ -238,8 +248,8 @@ export function interpretException(e: unknown): FailureOutcome {
   // listener holds the socket and has not answered in time. The one miss: a
   // starved client whose timer beats that immediate error reports a dead
   // daemon busy, and the next tick kicks it.
-  if (message === "CONNECT_TIMEOUT" || message === "TIMEOUT") {
-    return { kind: "busy", message };
+  if (e instanceof ClientTimeoutError) {
+    return { kind: "busy", phase: e.phase, message };
   }
   if (
     message.includes("ECONNREFUSED") ||
@@ -259,7 +269,7 @@ function connectWithTimeout(
     const sock = net.createConnection({ path });
     const timer = setTimeout(() => {
       sock.destroy();
-      reject(new Error("CONNECT_TIMEOUT"));
+      reject(new ClientTimeoutError("connect"));
     }, timeoutMs);
     sock.once("connect", () => {
       clearTimeout(timer);

@@ -473,6 +473,21 @@ export class ProtocolError extends Error {
   }
 }
 
+// [LAW:types-are-the-program] A client's own clock running out, carrying which
+// clock: "connect" — no listener accepted, so the request was never written;
+// "deadline" — it was written and no answer came in time. The kick-vs-busy
+// decision (client-transport.ts `interpretException`) and the delivered-or-not
+// decision (a click's exit code) route on this value, not on the message,
+// which stays "CONNECT_TIMEOUT"/"TIMEOUT" only for logs.
+export type TimeoutPhase = "connect" | "deadline";
+
+export class ClientTimeoutError extends Error {
+  constructor(readonly phase: TimeoutPhase) {
+    super(phase === "connect" ? "CONNECT_TIMEOUT" : "TIMEOUT");
+    this.name = "ClientTimeoutError";
+  }
+}
+
 // 4-byte big-endian length prefix + UTF-8 JSON body. Length-prefix beats
 // newline-delimited because error messages may contain embedded newlines and
 // we'd rather not parse them out of-band.
@@ -564,7 +579,7 @@ export function sendOne(
     const timer = setTimeout(() => {
       finish(() => {
         sock.destroy();
-        reject(new Error("TIMEOUT"));
+        reject(new ClientTimeoutError("deadline"));
       });
     }, deadline - Date.now());
 
