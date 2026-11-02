@@ -208,7 +208,7 @@ describe("the quarantine in the records", () => {
 
   it("shows a line inside its week as not red, and prints nothing when the list is empty", () => {
     const fresh = records.summarise([], entries.slice(0, 1), Date.UTC(2026, 10, 3));
-    expect(records.renderSummary(fresh)).toContain("⚪ test/a.test.ts › a › b (abc-1.x): no record this run, listed 1 days ago");
+    expect(records.renderSummary(fresh)).toContain("⚪ test/a.test.ts › a › b (abc-1.x): no record this run, listed 1 day ago");
     expect(records.renderSummary(records.summarise([], [], NOW))).not.toContain("Quarantine");
   });
 });

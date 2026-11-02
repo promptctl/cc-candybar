@@ -268,7 +268,8 @@ function renderSummary({ layers, runs, wallMs, notPassed, quarantine }) {
     );
     lines.push(
       ...quarantine.map((entry) => {
-        const dated = entry.ageDays < 0 ? `dated ${-entry.ageDays} days ahead` : `listed ${entry.ageDays} days ago`;
+        const days = (n) => `${n} ${n === 1 ? "day" : "days"}`;
+        const dated = entry.ageDays < 0 ? `dated ${days(-entry.ageDays)} ahead` : `listed ${days(entry.ageDays)} ago`;
         return `- ${entry.expired ? "🔴" : "⚪"} ${entry.file} › ${entry.name} (${entry.ticket}): ${entry.thisRun} this run, ${dated}`;
       }),
     );
