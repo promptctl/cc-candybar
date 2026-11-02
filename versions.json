@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-581",
+      "ref": "refs/pull/581/merge",
+      "sha": "65a840894b13cba57f10f7c3f13ec3f47b22c985",
+      "timestamp": "2026-11-02T17:11:20.035Z",
+      "commits": [
+        {
+          "sha": "65a840894b13cba57f10f7c3f13ec3f47b22c985",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T10:10:23-07:00",
+          "message": "Merge 50518f9728cc5e7f0fda687359b6e1a76bfd286b into fac28e917dfaf39a95ca96fb9fa4fb3641d4e6ab\n"
+        },
+        {
+          "sha": "50518f9728cc5e7f0fda687359b6e1a76bfd286b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T10:09:52-07:00",
+          "message": "test(render-cache): the compile-keeps-nothing case polls collection over turns, and its quarantine line goes (brandon-unfiled-3248.na7i)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "fac28e917dfaf39a95ca96fb9fa4fb3641d4e6ab",
