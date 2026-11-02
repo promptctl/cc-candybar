@@ -86,7 +86,7 @@ function shown(arg: unknown): string {
 }
 
 export function refusal(call: Call, testName: string | undefined): string {
-  const where = testName === undefined ? "while the file loaded" : `in test "${testName}"`;
+  const where = testName === undefined ? "outside a test (while the file loaded, or in a beforeAll or afterAll hook)" : `in test "${testName}"`;
   const shownCall = `${call.call}(${call.args.slice(0, 2).map(shown).join(", ")})`;
   return (
     `a unit test reached the ${call.surface}: ${shownCall} ${where}. ` +

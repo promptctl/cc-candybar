@@ -1,3 +1,4 @@
+import { ignoredFrom } from "../helpers/package-files";
 import { allows, isUnderRoot, refusal, type Call, type PackageFiles } from "../helpers/unit-refusal";
 
 const ROOT: PackageFiles = { root: "/work/pkg", ignored: ["dist/", "test-records/", ".claude/worktrees/", "debug.log"] };
@@ -70,7 +71,23 @@ describe("the refusal's message", () => {
     expect(text).toContain('reached the filesystem: fs.writeFileSync("/tmp/a", "data") in test "writes a file"');
   });
 
-  test("says the file was loading when no test is running", () => {
-    expect(refusal(call("fs.statSync", "/tmp/a"), undefined)).toContain("while the file loaded");
+  test("says the call was outside a test, at load or in a hook, when no test is running", () => {
+    const text = refusal(call("fs.statSync", "/tmp/a"), undefined);
+    expect(text).toContain("while the file loaded");
+    expect(text).toContain("beforeAll or afterAll hook");
+  });
+});
+
+describe("what git's ignored listing becomes", () => {
+  test("keeps a path whose name has a special character as itself", () => {
+    expect(ignoredFrom("dist/\0tést/\0debug.log\0")).toEqual(["dist/", "tést/", "debug.log"]);
+  });
+
+  test("leaves node_modules at any depth out, because the lockfile pins it", () => {
+    expect(ignoredFrom("node_modules/\0scripts/bar-web/node_modules/\0dist/\0")).toEqual(["dist/"]);
+  });
+
+  test("keeps a path that only ends in node_modules", () => {
+    expect(ignoredFrom("my_node_modules/\0")).toEqual(["my_node_modules/"]);
   });
 });

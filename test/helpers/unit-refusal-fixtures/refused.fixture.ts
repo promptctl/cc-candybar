@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 
 // The refusals that are not a module's route: the globals, and reads of what the
 // checkout does not own. Each must fail at its call, and
@@ -69,4 +70,8 @@ test("reads what git ignores", () => {
 
 test("reads inside .git", () => {
   fs.readFileSync(path.join(__dirname, "..", "..", "..", ".git"));
+});
+
+test("promisifies an exists outside the package", async () => {
+  await promisify(fs.exists)(path.join(os.tmpdir(), "unit-refusal-fixture"));
 });

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -24,6 +24,9 @@ interface Case {
 let cases: Record<string, Case>;
 
 beforeAll(async () => {
+  // The "reads what git ignores" fixture reads under test-records, and git lists
+  // an ignored directory only once it exists, which a fresh checkout has not yet.
+  mkdirSync(join(ROOT, "test-records"), { recursive: true });
   const dir = mkdtempSync(join(tmpdir(), "unit-refusal-"));
   const json = join(dir, "result.json");
   const output = await new Promise<string>((resolveRun, reject) => {
@@ -98,6 +101,8 @@ test.each([
   ["reads inside .git", "filesystem", "fs.readFileSync("],
   ["waits on a real timer after fake time ended", "clock", "setTimeout("],
   ["reads the wall clock after fake time ended", "clock", "Date.now("],
+  ["reads the wall clock after a spy on it was restored", "clock", "Date.now("],
+  ["promisifies an exists outside the package", "filesystem", "fs.exists("],
 ])("a unit test that %s fails at the call", (title, surface, call) => {
   expect(cases[title]?.status).toBe("failed");
   expect(message(title)).toContain(`reached the ${surface}: ${call}`);
@@ -114,6 +119,8 @@ test.each([
   "reads a file the package holds",
   "builds a date from a value",
   "waits on a fake timer",
+  "fakes the clock with a spy of its own",
+  "promisifies an exists of a file the package holds",
 ])("a unit test that %s passes", (title) => {
   expect(cases[title]?.status).toBe("passed");
 });

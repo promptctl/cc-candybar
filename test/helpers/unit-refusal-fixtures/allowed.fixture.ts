@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { promisify } from "node:util";
 
 // What a unit test may do, and must stay passing: read a file the package holds,
 // build a date from a value, and run on fake time.
@@ -23,4 +24,17 @@ test("waits on a fake timer", () => {
   } finally {
     jest.useRealTimers();
   }
+});
+
+test("fakes the clock with a spy of its own", () => {
+  const spy = jest.spyOn(Date, "now").mockReturnValue(42);
+  try {
+    expect(Date.now()).toBe(42);
+  } finally {
+    spy.mockRestore();
+  }
+});
+
+test("promisifies an exists of a file the package holds", async () => {
+  await expect(promisify(fs.exists)(path.join(__dirname, "..", "..", "..", "package.json"))).resolves.toBe(true);
 });
