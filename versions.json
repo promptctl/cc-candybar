@@ -4,15 +4,22 @@
     {
       "version": "pr-584",
       "ref": "refs/pull/584/merge",
-      "sha": "4ee088ff29ef882f872541b5d7837ca544587e47",
-      "timestamp": "2026-11-02T19:31:26.657Z",
+      "sha": "901f3aa8a4ca736d1710a26042282731070a1bad",
+      "timestamp": "2026-11-02T19:33:40.511Z",
       "commits": [
         {
-          "sha": "4ee088ff29ef882f872541b5d7837ca544587e47",
+          "sha": "901f3aa8a4ca736d1710a26042282731070a1bad",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T19:30:20Z",
-          "message": "Merge c1a049d5758343c03dc890cc637bbcb1289e2dd0 into cc500459e2346bcb997ea383c9d7c0470b5fe15b\n"
+          "timestamp": "2026-11-02T19:32:39Z",
+          "message": "Merge e29c85bf8ad65e326c50e8e774af045f7fe18b00 into cc500459e2346bcb997ea383c9d7c0470b5fe15b\n"
+        },
+        {
+          "sha": "e29c85bf8ad65e326c50e8e774af045f7fe18b00",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T12:32:28-07:00",
+          "message": "fix(test): a daemon stopped twice counts once; the held env is a copy; a held gate key outlives a later registration (candybar-testing-ihvy.42w)\n"
         },
         {
           "sha": "c1a049d5758343c03dc890cc637bbcb1289e2dd0",
