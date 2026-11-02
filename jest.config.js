@@ -22,6 +22,16 @@ const jestReporter = AGENT_ENV_VARS.some((key) => (process.env[key] ?? "") !== "
   ? "agent"
   : "default";
 
+// [LAW:nothing-unseen] Every run keeps one record per test file, named for the
+// run so the two CI steps and a local `pnpm test` do not overwrite each other.
+export function reportersFor(run) {
+  return [
+    jestReporter,
+    "<rootDir>/test/stackless-failure-reporter.mjs",
+    ["<rootDir>/test/test-records-reporter.cjs", { run }],
+  ];
+}
+
 export default {
   setupFiles: ["<rootDir>/test/setup.ts"],
   setupFilesAfterEnv: ["<rootDir>/test/setup-after-env.ts"],
@@ -34,7 +44,7 @@ export default {
   maxWorkers: 4,
   globalSetup: "<rootDir>/test/global-setup.ts",
   globalTeardown: "<rootDir>/test/global-teardown.ts",
-  reporters: [jestReporter, "<rootDir>/test/stackless-failure-reporter.mjs"],
+  reporters: reportersFor("all"),
   preset: "ts-jest/presets/default-esm",
   extensionsToTreatAsEsm: [".ts"],
   testEnvironment: "node",

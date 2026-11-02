@@ -22,6 +22,7 @@
     "test": "jest",
     "test:worker": "jest --config jest.worker.config.js",
     "test:process": "jest --config jest.process.config.js",
+    "test:report": "node scripts/test-report.mjs",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "audit:colour": "jest --config audits/jest.config.js",

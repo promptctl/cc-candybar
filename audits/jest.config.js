@@ -7,7 +7,7 @@
 // [LAW:no-silent-failure] Any other caller fails here, loudly, before a
 // single test is collected.
 
-import base from "../jest.config.js";
+import base, { reportersFor } from "../jest.config.js";
 
 if (process.env.GITHUB_EVENT_NAME !== "schedule") {
   throw new Error(
@@ -20,6 +20,8 @@ export default {
   rootDir: "..",
   roots: ["<rootDir>/audits"],
   testMatch: ["**/*.audit.ts"],
+  // [LAW:one-source-of-truth] Its own run name, so an audit does not write over the suite's records.
+  reporters: reportersFor("audits"),
   // One test is one walk of the registry under a depth and style, which
   // is minutes, never tens of them: a test that overruns this is hung, and
   // failing it names it, where the job's own limit would name nothing.
