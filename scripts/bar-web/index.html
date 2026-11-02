@@ -42,6 +42,7 @@
   button:hover { border-color: var(--accent); }
   button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
   button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  #font-slider { accent-color: currentColor; width: 120px; }
   #size { font-family: var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
   main { padding: 16px; display: grid; gap: 12px; }
   #about { margin: 0; max-width: 72ch; color: var(--muted); }
@@ -80,7 +81,7 @@
     <button type="button" id="fit">fit window</button>
   </div>
   <div class="group"><span class="label">font</span>
-    <input type="range" id="font-slider" aria-label="Font size" style="accent-color: currentColor; width: 120px">
+    <input type="range" id="font-slider" aria-label="Font size">
     <span id="font-size"></span>
   </div>
   <div class="group"><span class="label">terminal ground</span>
@@ -141,13 +142,31 @@ function say(text, cls) {
   $("status").replaceChildren(Object.assign(document.createElement("span"), { className: cls ?? "", textContent: text }));
 }
 
+// The font size is a preference this browser keeps. What comes back from storage is parsed here: a value
+// that is not a whole size within the slider's range is not a size, so the default stands. Storage the
+// page may not use leaves the default too, and says so.
 const FONT_SIZES = { min: 10, max: 32, default: 16 };
 const FONT_SIZE_KEY = "cc-candybar:bar-font-size";
-const storedFontSize = Number(localStorage.getItem(FONT_SIZE_KEY));
+function storedFontSize() {
+  try {
+    const size = Number(localStorage.getItem(FONT_SIZE_KEY));
+    return Number.isInteger(size) && size >= FONT_SIZES.min && size <= FONT_SIZES.max ? size : FONT_SIZES.default;
+  } catch (e) {
+    say(`font size not read: ${e.message}`, "muted");
+    return FONT_SIZES.default;
+  }
+}
+function rememberFontSize(size) {
+  try {
+    localStorage.setItem(FONT_SIZE_KEY, size);
+  } catch (e) {
+    say(`font size not remembered: ${e.message}`, "muted");
+  }
+}
 
 const term = new Terminal({
   fontFamily: getComputedStyle(document.documentElement).getPropertyValue("--mono"),
-  fontSize: storedFontSize || FONT_SIZES.default,
+  fontSize: storedFontSize(),
   convertEol: true,
   disableStdin: true,
   cursorBlink: false,
@@ -278,11 +297,12 @@ $("fit").addEventListener("click", () => { frame.style.width = "100%"; });
 // The frame keeps its width, so a larger font is fewer columns and the bar lays itself out again.
 const fontSlider = $("font-slider");
 Object.assign(fontSlider, { min: FONT_SIZES.min, max: FONT_SIZES.max, value: term.options.fontSize });
-$("font-size").textContent = `${term.options.fontSize}px`;
+const showFontSize = () => { $("font-size").textContent = `${term.options.fontSize}px`; };
+showFontSize();
 fontSlider.addEventListener("input", () => {
   term.options.fontSize = fontSlider.valueAsNumber;
-  localStorage.setItem(FONT_SIZE_KEY, fontSlider.value);
-  $("font-size").textContent = `${fontSlider.value}px`;
+  rememberFontSize(term.options.fontSize);
+  showFontSize();
   refit();
 });
 document.querySelectorAll("[data-ground]").forEach((b) => b.addEventListener("click", () => {
@@ -325,7 +345,7 @@ function mountScenario(scenario) {
 }
 
 // Measure cells only once the Powerline face is loaded, or the arrows are measured in a fallback.
-document.fonts.load("14px 'Rich Powerline'", "").then(() => {
+document.fonts.load(`${term.options.fontSize}px 'Rich Powerline'`, "").then(() => {
   frame.style.setProperty("--ground", GROUNDS.dark.background);
   term.open($("term"));
   term.resize(fitCols(), term.rows);

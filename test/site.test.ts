@@ -8,7 +8,7 @@
 // copy the page cannot make says so, with its text, and the doctor runs in the
 // page: the daemon it asks about is the page's own.
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -88,4 +88,49 @@ test("the built site renders, clicks, and plays its scenario with no server", ()
   expect(r.copied).toMatch(/^the browser did not copy .*; the text: \S+$/);
   expect(r.doctorRefused).toBeNull();
   expect(r.doctor).toContain("✓ daemon");
+});
+
+// [LAW:verifiable-goals] `pnpm site:dev` promises the page as it is on disk, served to this machine
+// alone, that reloads itself when the build changes; a plain build promises none of that.
+describe("the dev server", () => {
+  const PAGE = path.join(ROOT, "scripts/bar-web/index.html");
+  const RELOADS = 'new EventSource("/esbuild")';
+
+  test("serves the page from disk on loopback, and only the served bundle reloads the page", async () => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-site-"));
+    const server = spawn("node", [path.join(ROOT, "site/build.mjs"), "--serve", "--port", "0", out], { env: withoutLandscape() });
+    try {
+      const serving = await new Promise<string>((resolve, reject) => {
+        let said = "";
+        server.stdout.on("data", (chunk) => {
+          said += chunk;
+          const line = said.split("\n").slice(0, -1).find((l) => l.startsWith("serving "));
+          if (line !== undefined) resolve(line);
+        });
+        server.stderr.on("data", (chunk) => (said += chunk));
+        server.on("exit", () => reject(new Error(`the dev server exited before serving: ${said}`)));
+      });
+      // It prints the addresses esbuild bound: loopback, and nothing else.
+      expect(serving).toMatch(/^serving http:\/\/127\.0\.0\.1:\d+\/$/);
+      const url = serving.slice("serving ".length);
+      expect(await (await fetch(url + "index.html")).text()).toBe(fs.readFileSync(PAGE, "utf8"));
+      expect(await (await fetch(url + "transport.js")).text()).toContain(RELOADS);
+    } finally {
+      server.kill();
+      fs.rmSync(out, { recursive: true, force: true });
+    }
+
+    const built = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-site-"));
+    execFileSync("node", [path.join(ROOT, "site/build.mjs"), built], { stdio: "pipe", env: withoutLandscape() });
+    expect(fs.readFileSync(path.join(built, "transport.js"), "utf8")).not.toContain(RELOADS);
+    expect(fs.readFileSync(path.join(built, "index.html"), "utf8")).toBe(fs.readFileSync(PAGE, "utf8"));
+    fs.rmSync(built, { recursive: true, force: true });
+  });
+
+  test("refuses a flag it does not know and a port that is not one, and builds nothing", () => {
+    const out = path.join(os.tmpdir(), `ccb-site-refused-${process.pid}`);
+    expect(() => execFileSync("node", [path.join(ROOT, "site/build.mjs"), "--serve", "--bogus", out], { stdio: "pipe", env: withoutLandscape() })).toThrow(/--bogus/);
+    expect(() => execFileSync("node", [path.join(ROOT, "site/build.mjs"), "--serve", "--port", "http", out], { stdio: "pipe", env: withoutLandscape() })).toThrow(/--port must be a port number/);
+    expect(fs.existsSync(out)).toBe(false);
+  });
 });
