@@ -15,12 +15,14 @@ export const REQUEST_TIMEOUT_MS = 200;
 // What a request's wait leaves for its draw: the synchronous turn that reads
 // the view and turns it into the answer's bytes. Held to at p99 by
 // test/draw-reserve.process.test.ts, over a view's cold first draw of the bundled
-// default and of the load gate's full config. Measured 2026-10-26: p99 3-5 ms
-// idle, 8 ms beside a parallel test run. The rest is room for a user config
-// whose effect draws several times that (a maintainer's config, effect on,
-// drew 42 ms at p90): a reserve too small answers after its client has hung
-// up, and the bar goes blank, where one too large only draws more pending.
-export const DRAW_RESERVE_MS = 40;
+// default and of the load gate's full config. A cold draw takes a few ms on an
+// idle machine, but the reserve is wall time, and a draw descheduled on a busy
+// one reads tens of ms with no more work in it: CI's runner, its cores shared
+// with the other process-tier suites, reads up to 48 ms. It also holds room for
+// a user config whose effect draws several times the idle figure. A reserve
+// too small answers after its client has hung up, and the bar goes blank,
+// where one too large only draws more pending.
+export const DRAW_RESERVE_MS = 60;
 
 // [LAW:parse-dont-validate] When the client hangs up, as the checkpoint
 // parsed it: the epoch milliseconds it stated, or nothing, from a client too
