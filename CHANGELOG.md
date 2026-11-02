@@ -1,3 +1,9 @@
+## [1.179.1](https://github.com/promptctl/cc-candybar/compare/v1.179.0...v1.179.1) (2026-11-02)
+
+### Bug Fixes
+
+* **layout:** directory draws the worktree-aware path, gitaculous stops drawing it ([#562](https://github.com/promptctl/cc-candybar/issues/562)) ([3ea62d8](https://github.com/promptctl/cc-candybar/commit/3ea62d87dbcde758789947304b189e5463076f6e))
+
 ## [1.179.0](https://github.com/promptctl/cc-candybar/compare/v1.178.2...v1.179.0) (2026-11-02)
 
 ### Features
