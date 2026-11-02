@@ -94,6 +94,7 @@
     "eslint-plugin-prettier": "^5.5.4",
     "events": "3.3.0",
     "jest": "^30.0.5",
+    "jest-environment-node": "^30.0.5",
     "json5": "^2.2.3",
     "memfs": "4.80.0",
     "mobx": "^7.0.6",
