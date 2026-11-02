@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-574",
+      "ref": "refs/pull/574/merge",
+      "sha": "de332b53f98475032e48e2c4d077e7cf34da8618",
+      "timestamp": "2026-11-02T14:28:24.837Z",
+      "commits": [
+        {
+          "sha": "de332b53f98475032e48e2c4d077e7cf34da8618",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T07:27:19-07:00",
+          "message": "Merge 72937bf702cecdbc2dbc9443972df62511e591d7 into 7d58c47f329eb86d364d736a324acf02c5b59295\n"
+        },
+        {
+          "sha": "72937bf702cecdbc2dbc9443972df62511e591d7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T07:26:59-07:00",
+          "message": "fix(render): a render the daemon answers TIMEOUT kicks nothing, in both runtimes (candybar-launch-q7o7.g6w)\n\nThe daemon's own TIMEOUT proves it is up; each kick spawned a candidate\nthat lost the bind to it. planOutcome stops kicking on busy and the Rust\nclient gets a Busy variant that emits the stale frame without a kick.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "7d58c47f329eb86d364d736a324acf02c5b59295",
