@@ -22,12 +22,12 @@ The daemon is the problem to solve. It can only be reached whole today, so every
 **Checkpoint.** On a machine with the network off and no `dist/`, a person runs unit and contract and watches them finish inside budget. The breaks below are scripted as a job, and the person runs them once as acceptance, one at a time:
 
 1. Change a rule in pure code. One unit test fails and names the input.
-2. Change how an adapter parses its dependency's output. The adapter's contract fails on the real side and passes on the fake, which says which side moved.
+2. Change how an adapter parses its dependency's output. Its contract fails on the real side in integration and passes on the fake in unit, which says which side moved.
 3. Mis-wire one port in production assembly, such as a wrong path. An end-to-end test fails, and typecheck and everything below it pass. A port left out altogether fails `tsc`, because assembly takes a record type.
 4. Call `Date.now()` in `src` outside the clock adapter. Lint fails. Lint guards `src`.
 5. Reach the real clock from a unit test. The unit project refuses it and names the call. The refusal guards tests.
 6. Add a sixth end-to-end test, then a second assertion to an existing one. CI fails each, and an agent's edit to the sign-off file is refused.
-7. Search `test/` for `createDaemon`. It appears only under `test/e2e/`.
+7. Search `test/` for an import of `createDaemon`. There is none.
 
 They then read a CI run's shape report and see the pyramid hold by count and by time.
 
@@ -42,7 +42,7 @@ CI's latest full run (41336423169) ran 6,486 tests in about 8 minutes: 377 s of 
 | Real filesystem, git or `fs.watch` | 73 | 1,410 | 30% |
 | In process, an upper bound | 175 | 2,281 | 49% |
 
-The 45 files are 31 that use the in-worker harness and 14 in the process tier. Of their 292 cases, about 170 reach a boot; the rest share a file with one. `plugins.test.ts` shows the difference: 101 cases, 3 of which boot. Ticket 2 counts all 292, because a case that does not boot has to leave those files too.
+The 45 files are 31 that use the in-worker harness and 14 in the process tier. Of their 292 cases, about 170 reach a boot; the rest share a file with one. `plugins.test.ts` shows the difference: 101 cases, 3 of which boot. Ticket 2 moves the rest out, so what is left to count is what the pieces have to move.
 
 What shapes the plan:
 
@@ -89,7 +89,7 @@ This table is the target, read from `DaemonParts`, `verbCtx` and the imports on 
 | Sources | Payload providers, `RefreshLedger`, `WatcherRegistry`, `FileEventDelivery` | Launcher, watched store, git, forge, tmux, remote data |
 | Watchdogs | `updateWatch`, `binaryWatch`, `limits` | Launcher, clock, watched store, a file stat, the release port |
 | Drawing | `RenderCache` with its entries, state, reload and eviction, `sessionSource`, `draw-bar`, `RenderWarningRecords`, `EffectSessions` | Launcher, clock, watched store |
-| Feeds | `FrameFeeds`, `renderFrame`, `PaneVisibility`, `TmuxStatusLines`, `LaneSetups` | tmux, Claude input, launcher, process table, watched store, clock |
+| Feeds | `FrameFeeds`, `PaneVisibility`, `TmuxStatusLines`, `LaneSetups`, `lanesAt`, `laneClicked` | tmux, Claude input, launcher, process table, watched store, clock |
 | Doctor | Doctor edge, stores, `ProbeArrivals`, `RenderSightings` | Launcher, watched store |
 | Actions | Verbs, `Runs`, `closeIdleMenus` | Launcher, Claude input |
 | Requests | `handleRequest`, `replyTo`, `handleConnection`, `RuntimeStats`, the order of a render | Client connection, clock |
@@ -122,7 +122,7 @@ Each row is tested once, at its adapter.
 
 | Dependency | Today | Ticket | Real side |
 |---|---|---|---|
-| Time and timers | `Date.now` 88, timers 38, `DaemonClock` in the daemon, `RuntimeStats` keeps its own | 11 | Real clock |
+| Time and timers | `Date.now` 88, `performance.now` 14, `new Date()` 7, timers 38, `DaemonClock` in the daemon, `RuntimeStats` keeps its own | 11 | Real clock |
 | Child processes | `src/proc/launch.ts`, imported directly | 12 | Real child process |
 | Process table | `pidAlive` and `readStartTime`, imported directly | 12 | Real processes |
 | Files and file change events | `fs` at 173 sites, `DaemonStorage` for two families, `fs.watch` direct | 14 | Temp directory, real `fs.watch` |
@@ -141,11 +141,12 @@ Each row is tested once, at its adapter.
 **1. Every CI run stores one record per test file.** A record holds file, layer, count, duration and outcome, and is kept as a run artifact. The shape report, the flake rate and the budget checks are all views over it, so each fact has one home. Every file in a project emits a record, so a file that ran zero tests and a file that never ran read differently. The report also tracks time-to-diagnose, from a red run to the ticket naming its cause. [LAW:nothing-unseen] [LAW:one-source-of-truth]
 Done when a CI run shows count and time per layer, covering every file, plus pre-merge wall time.
 
-**2. The cases in `test/daemon-boots/` are counted, and the count only falls.** The ledger behind `judgeDaemonStarts` gains a harness route, so a boot from any other file fails, as a real daemon outside the process tier does today. `HELPER_START_CEILING` becomes a transitional ratchet on the number of cases in `test/daemon-boots/`, read from ticket 1's record, and `judgeDaemonStarts` stops suggesting a raise. A CI step compares the number with `main` and fails any rise. It counts cases, not starts, because most booting cases share a start in a `beforeAll`, and a partial move has to lower it. It is a different fact from the cap in ticket 3, and ticket 35 deletes it. This follows tickets 1 and 4 at once, because it stops new boots while the cutting runs. [LAW:single-enforcer]
-Done when a boot outside the allowed directories, a new case in `test/daemon-boots/` and a raised ratchet each fail CI.
+**2. The cases in `test/daemon-boots/` are counted, and the count only falls.** The ledger behind `judgeDaemonStarts` gains a harness route, so a boot from any other file fails, as a real daemon outside the process tier does today. A transitional ratchet holds the number of cases in `test/daemon-boots/`, read from ticket 1's record, and CI fails unless the count equals it, so a move lowers it in the same change and leaves no room for a new case. It counts cases, not starts, because most booting cases share a start in a `beforeAll`, and a partial move has to lower it. `HELPER_START_CEILING` stays beside it as the pin on how many real daemons a run starts, which a case count cannot see: turning a shared `beforeAll` into a `beforeEach` adds no case. `judgeDaemonStarts` stops suggesting a raise, and a CI step compares both numbers with `main` and fails any rise. Neither is the cap in ticket 3, and ticket 35 deletes both. The cases that reach no boot then leave those files in a commit of their own, for `test/unit` if they pass the refusal and the `test/` root if not. The judge proves that split, because a moved case that boots fails it. This follows tickets 1 and 4 at once, because it stops new boots while the cutting runs. [LAW:single-enforcer]
+Done when a boot outside the allowed directories, a new case in `test/daemon-boots/` and a raised ratchet or ceiling each fail CI, and `test/daemon-boots/` holds only cases that reach a boot.
 
 **3. The cap and the assertion limit are enforced.** Creates `test/e2e/`, the sign-off file and the run-time assertion check from "The five end-to-end tests". The cap counts the tests in `test/e2e/`. The refusal is a new hook of its own that also refuses edits to itself, because `.claude/hooks/release-pin.mjs` says every refusal is about the 1.x pin. Hooks are wired in `.claude/settings.json`, which that pin refuses agents, so Brandon adds that one entry.
-Done when break 6 of the checkpoint fails as written.
+`test/e2e/` stays empty until ticket 35, so the checks are proven on fixtures.
+Done when six fixture tests fail the cap, a fixture test with two assertions fails the limit, and an agent's edit to the sign-off file is refused.
 
 **4. Each layer is a directory, and each tier is its own jest run.** A file's layer is one fact, read from where it lives. `test/unit`, `test/integration`, `test/contract` and `test/e2e` are the layers. The 45 booting files move to `test/daemon-boots/worker/` and `test/daemon-boots/process/`, the judge reads those directories in place of the `*.process.test.ts` suffix, and the suffix goes. A real daemon may still start only from `process/`, so no test can trade the harness for a real daemon. Everything else stays at the `test/` root, a transitional location that must be empty when the epic ends, so nothing has to pretend to a layer it does not fit.
 The unit project refuses disk, sockets, child processes, watchers and the real clock at the call, not at import, because many files reach `src/proc/launch.ts` without calling it. Reading a file the package itself ships is allowed, since it is the same data on every run. A file enters `test/unit` by passing the refusal, so the unit count is always true, and the in-process files that already pass move here in this ticket, in a commit of their own. Each tier stays a separate jest invocation, as `test:worker` and `test:process` are now, because `maxWorkers` is global to a run: unit runs on all cores and only the booting tier keeps the cap of 4. [LAW:single-enforcer]
@@ -166,7 +167,7 @@ Done when `createDaemon`'s body constructs no adapter, `server.ts` is the daemon
 **9. Configuration is parsed once at the root and passed down as a value.** `src` reads the environment only at entry points (45 reads today), and tests stop writing `process.env` (187 writes today). Daemon-side facts about a session keep arriving as hints from the client. Depends on 8.
 Done when no test writes `process.env` and a lint rule keeps env reads at entry points.
 
-**10. Test rigs assemble through builders that default every field.** The parse of the bundled default is shared per worker as frozen data. Anything holding a subscription stays per test: `daemon-memory.md` records that a compile holds MobX subscriptions, so sharing it would be a shared mutable fixture that ticket 34's random order turns into failures nobody can localize. Depends on 6 and 8.
+**10. Test rigs assemble through builders that default every field.** The parse of the bundled default is shared per worker as frozen data, and its compile is shared by what a compile takes, such as its signer. `daemon-memory.md` records why that is safe: a compile holds no store, and its one binding is set only for the synchronous walk. A store holds subscriptions, so it stays per test, or it would be a shared mutable fixture that ticket 34's random order turns into failures nobody can localize. Depends on 6 and 8.
 Done when `buildRuntime`'s 29 copies and `colour-256`'s 370-line preamble are gone, and rig cost shows as a drop in ticket 1's record.
 
 ### Stage 3: ports
@@ -176,14 +177,14 @@ Every port ticket delivers the same things in one change:
 - A narrow port in this project's vocabulary, not the dependency's.
 - One real adapter that translates the dependency's errors and types at the edge.
 - One in-memory fake with real semantics and inspection hooks, in its own file beside the port. Only the fake assembly and tests import it, so tsdown leaves it out of the bundle.
-- One contract suite, run on the fake in the unit project and on the adapter in the integration project.
+- One contract suite in `test/contract/`, which takes either implementation. A file in `test/unit` runs it on the fake and a file in `test/integration` runs it on the adapter, so each file keeps one layer.
 - Tests moved down to the fake, and every per-file stand-in for that dependency deleted.
 - A new entry in the ESLint rule that today keeps `child_process` inside `src/proc/launch.ts`, so nothing can reach around the port.
 
 Ticket 11 builds the contract pattern and the rest reuse it. Order follows how many tests each port frees, and tickets 1 and 2 may reorder 13 to 19.
 
-**11. The daemon reads time and schedules work through one clock.** `DaemonClock` already carries `after`, so it grows into the port. `RuntimeStats` gives up its own wall clock, and the shared poll helper waits through `after`, so it is not the one real sleep the refusal has to exempt. Depends on 8.
-Done when `Date.now` and timers appear only in the clock adapter, and the fake runs due timers when advanced.
+**11. The daemon reads time and schedules work through one clock.** `DaemonClock` already carries `after`, so it grows into the port. `RuntimeStats` gives up its own wall clock. The shared poll helper keeps its real sleep, because a budget read off a fake clock never ends and the wait would lose its named failure, so a file that still polls fails the refusal and stays at the `test/` root until ticket 20. Depends on 8.
+Done when `Date.now`, `performance.now`, `new Date()` with no argument and timers appear only in the clock adapter, and the fake runs due timers when advanced.
 
 **12. Sources spawn through an injected launcher.** Depends on `candybar-launch-q7o7`. Liveness and start-time reads go through a process table port beside it. The fake launcher serves shell sources and the launcher's own contract only. git, forge and tmux logic use their own fakes, because canned stdout beside a git fake is a second route to faking git.
 Done when `pending-draw`'s real `/bin/sh` and the other child-spawning files either use the fake or test the adapter.
@@ -217,7 +218,7 @@ Tickets 21 to 30 are the ten pieces, each with the deliverables above. They need
 
 **21. Feeds.** `daemon-frame-feed-e2e` is the largest booting file, with 27 cases. `FrameFeeds` already takes its draw as an input, so the fake draw needs no other piece. Depends on 11, 12, 14 and 17.
 
-**22. Drawing.** Offers setup and draw as above. `src/check.ts` and `src/demo/dsl.ts` assemble this piece instead of their own rigs, which keeps one render path. `daemon-render-event-e2e` caused 8 of the 23 failed runs counted at 8da9964e, which ticket 5 recounts: name the logic it protects and unit-test it. Its click-event and `BAD_REQUEST` cases are written by `reply.ts`, so they go to ticket 29. Depends on 8, 11 to 19, 23 and 28.
+**22. Drawing.** Offers setup and draw as above. `src/check.ts` and `src/demo/dsl.ts` assemble this piece instead of their own rigs, which keeps one render path. `daemon-render-event-e2e` caused 8 of the 23 failed runs counted at 8da9964e, which ticket 5 recounts: name the logic it protects and unit-test it. Its click-event and `BAD_REQUEST` cases are written by `reply.ts`, so they go to ticket 29. The root's closures over `parts` and `renderCache` that `FrameFeeds` takes go here, because they reach Drawing. Depends on 8, 11 to 19, 23 and 28.
 
 **23. Config.** A load resolves and parses to a plain value that `RenderCache` takes, and reload stays in the cache. Depends on 14.
 
@@ -240,7 +241,7 @@ Tickets 21 to 30 are the ten pieces, each with the deliverables above. They need
 **31. Each decision is proven once, exhaustively, at its pure function, and render sweeps shrink to representatives.** Absorbs `j0bh`. The cases come from ticket 6. A cheaper sweep may not prove less: for each sweep reduced, breaking the decision must still fail a test, and the exhaustive test on the pure function is the record of that. [LAW:behavior-not-structure]
 Done when the unit layer's time in ticket 1 is inside budget.
 
-**32. The TypeScript client, the Rust client and the daemon each test against one recorded case set, and none needs another running.** Extends `frame-follow-cases.json` and `diagnostic-text-cases.json` to requests, replies, errors, versioning and the three-state hint rule (absent, null, value). Acquire's decisions join it, because the shipped client is Rust and has its own daemon-miss path. `check:protocol` stays beside it, because mirrored constants such as timeouts never appear in an interaction.
+**32. The TypeScript client, the Rust client and the daemon each test against one recorded case set, and none needs another running.** Extends `frame-follow-cases.json` and `diagnostic-text-cases.json` to requests, replies, errors, versioning and the three-state hint rule (absent, null, value). Acquire's decisions join it, because the shipped client is Rust and has its own daemon-miss path. `check:protocol` stays beside it, because mirrored constants such as timeouts never appear in an interaction. The daemon's side depends on 29.
 Done when a change to one side's reading of the wire fails that side's own suite.
 
 **33. Acquire and install each decide in pure code and act in a thin shell.** `src/daemon/acquire.ts` and `src/install/index.ts` take what they observed and return what to do. `spawn?: () => boolean`, labelled a test hook, goes with the port, and a sweep finds any other test-only path. The state directory is shared by the daemon, the client's acquire path, the update job and the lifeline, so each of its files gets one typed owner that the others read through. [LAW:effects-at-boundaries] [LAW:no-mode-explosion]
@@ -251,14 +252,14 @@ Done when the decisions have unit tests with no process, and the shell has no br
 **34. Tests run in random order.** An order-dependent failure is a bug in the test.
 Done when random order is the default in CI and the suite passes on repeated seeds.
 
-**35. The five end-to-end tests run on the packed artifact.** Each runs from `pnpm pack` installed into a temp prefix, with the native binary from `release.yml`'s `build-rust` job. `test/helpers/in-worker-daemon.ts` goes. The ratchet reaches zero and is deleted, which leaves the sign-off cap as the only number. Depends on 21 to 30 and 36.
-Done when `test/e2e/` holds the five, break 7 holds, and `test/daemon-boots/` is empty because its cases moved. A case is deleted only with the lower test that now proves its behaviour named on the ticket, or because it proved only the harness that goes here. `drive-bar` and `bar-web` prove tools under `scripts/` that are no piece, so their cases move to those tools over a fake client connection.
+**35. The five end-to-end tests run on the packed artifact.** Each runs from `pnpm pack` installed into a temp prefix. A tarball's `optionalDependencies` name the last published platform package, because `scripts/release.mjs` rewrites them only as it publishes, so the job packs the platform package around the binary from `release.yml`'s `build-rust` job and installs both tarballs with no registry. Setup fails if the install staged the node shim, because test 1 is the Rust client's only end-to-end proof and its one assertion would pass either way. `test/helpers/in-worker-daemon.ts` goes. The ratchet reaches zero, and it and the ceiling are deleted, which leaves the sign-off cap as the only number. Depends on 21 to 30 and 36.
+Done when `test/e2e/` holds the five, break 7 holds, no jest test outside `test/e2e/` boots the daemon, and `test/daemon-boots/` is empty because its cases moved. A case is deleted only with the lower test that now proves its behaviour named on the ticket, or because it proved only the harness that goes here. `drive-bar` and `bar-web` prove tools under `scripts/` that are no piece, so their cases move to those tools over a fake client connection.
 
 **36. Measurements stop booting the daemon where they can.** `draw-reserve` measures the drawing piece in a small process of its own, and moves to the scheduled tier. Takes `tl8u`, and depends on `candybar-launch-q7o7.qjw` and 22. The Load gate and the Feed criterion are measured on the built daemon by their nature, and they are covered under Decisions.
-Done when no jest test outside `test/e2e/` boots the daemon.
+Done when `draw-reserve` boots no daemon and runs in the scheduled tier.
 
-**37. CI runs four tiers.** Fast loop: unit and contract. Integration: adapters. End-to-end: the five, in the release job before `semantic-release`. Scheduled: performance, soak and recording refreshes, non-blocking.
-Done when each tier is its own job, a merge needs the first two, and a publish needs the third.
+**37. CI runs four tiers.** Fast loop: unit and contract. Integration: adapters, with each port's contract on the real side. End-to-end: the five, after `build-rust`, on every PR and on `main` ahead of `release`. Scheduled: performance, soak and recording refreshes, non-blocking.
+Done when each tier is its own job, a merge needs the first three, and `release` needs the third.
 
 **38. Budgets are checks, and a lasting breach becomes design work.** Each budget reads ticket 1's record and fails when breached. A breach lasting more than one release opens an architecture ticket, whose fix is a seam, a port or a boundary.
 Done when a deliberately slow unit test fails the check.
@@ -279,7 +280,7 @@ Done when the file is shorter and the hand-faking advice is gone.
 
 ## Order
 
-The epic ranks directly below `candybar-launch-q7o7`. Tickets 1, 3, 4 and 7 are ready at once, ticket 2 once 1 and 4 land, and 5 and 6 once the records exist. Stage 2 comes before any port, because a port with no root to plug into frees no test. Stage 3 and Stage 4 interleave by the dependencies named on each piece, and Stage 5 can run beside them. Stage 6 comes last.
+The epic ranks directly below `candybar-launch-q7o7`. Tickets 1, 3 and 7 are ready at once, ticket 4 once 1 lands, ticket 2 once 1 and 4 land, and 5 and 6 once the records exist. Stage 2 comes before any port, because a port with no root to plug into frees no test. Stage 3 and Stage 4 interleave by the dependencies named on each piece, and Stage 5 can run beside them. Stage 6 comes last.
 
 ## Decisions
 
@@ -287,7 +288,7 @@ The epic ranks directly below `candybar-launch-q7o7`. Tickets 1, 3, 4 and 7 are 
 - **Booting the daemon makes a test end-to-end, in process or not.** The document lets a unit test drive a whole use case in process. Here that is what hid the missing seams: a test that needs all of the daemon to reach one behaviour shows the seam is missing, wherever it runs.
 - **The cut goes further than the process boundary.** The document puts seams only at the process boundary and warns against interface noise. Pieces here are capabilities, as its Principle 6 asks, and a piece's fake exists only where the piece above would otherwise pull real ports.
 - **Agents do not hold the cap.** Only Brandon can change it or the assertion limit, so a deadline cannot erode it. While tests are moving, agents can only lower the ratchet.
-- **End-to-end runs in the release job, before publishing.** A merge publishes automatically and there is no staging, so a test after that cannot stop a bad release. This is also what ships: the tarball and the native binary.
+- **End-to-end runs before publishing, and on every PR.** A merge publishes automatically and there is no staging, so a test after that cannot stop a bad release, and `release` needs this job on `main`. The assertion limit is read at run time, so the job also runs on every PR, or a second assertion would first fail after its merge. It tests what ships: the tarball and the native binary.
 - **The Load gate and the Feed criterion stay required, and they need Brandon's sign-off.** A loop-blocking regression ships to every statusline on the next tick, and no lower test catches it; the launch epic exists because of one. They boot the built daemon, so by the rule above they are end-to-end and sit outside the five. They stay as they are until Brandon rules on an entry in the sign-off file. Nothing before ticket 37 depends on the answer.
 - **The refusal lands early, on a transitional location.** The document adds the dependency rule after the pattern exists. Here it applies only inside `test/unit`, and the `test/` root holds what has no seam yet, so the rule never has to lie about a file. The epic does not close until that root is empty.
 - **The layer lives in the directory.** It replaces the `*.process.test.ts` suffix in one change, so there is one spelling of the fact and one judge.
