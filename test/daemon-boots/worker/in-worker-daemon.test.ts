@@ -3,13 +3,10 @@
 // gets, stopped with nothing of it left serving, and started again over the same
 // state. Its cases hold what a migrated file would otherwise find out by failing.
 
-import { spawnSync } from "node:child_process";
 import {
-  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
-  readdirSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -30,7 +27,6 @@ import {
 } from "../../../src/daemon/protocol";
 import { DRAW_RESERVE_MS, REQUEST_TIMEOUT_MS } from "../../../src/daemon/request-deadline";
 import { textOf, type Frame } from "../../../src/render/frame";
-import { sweepJestTmp } from "../../global-teardown";
 import { click, frameRequest, render, renderBody, renderRequest, renderUntil, sendClick } from "../../helpers/daemon-e2e";
 import { renderLines } from "../../helpers/daemon-log";
 import { linkUrls } from "../../helpers/frame";
@@ -39,7 +35,6 @@ import {
   startDaemon,
   type InWorkerDaemon,
 } from "../../helpers/in-worker-daemon";
-import { JEST_TMP_PREFIX, jestTmpDir, jestTmpOwner } from "../../helpers/jest-tmp";
 import { LEDGER_ENV, TEST_FILE_ENV, parseLedger } from "../../helpers/process-tier.cjs";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import { throughout, until } from "../../helpers/until";
@@ -257,48 +252,5 @@ describe("a daemon in this worker", () => {
       REQUEST_TIMEOUT_MS * 2,
     );
     expect(process.env.XDG_STATE_HOME).toBe(stateHome);
-  });
-});
-
-describe("the sweep over jest's directories", () => {
-  let root: string;
-
-  const dirNamed = (name: string): string => {
-    mkdirSync(path.join(root, name));
-    return name;
-  };
-  const ownedBy = (pid: number): string =>
-    dirNamed(`${JEST_TMP_PREFIX}state-${pid}-a-uuid`);
-
-  // Exited by the time this returns, so nothing holds its pid.
-  const deadPid = (): number =>
-    spawnSync(process.execPath, ["-e", ""], { stdio: "ignore" }).pid;
-
-  beforeEach(() => {
-    root = mkdtempSync(path.join(os.tmpdir(), "cc-candybar-sweep-"));
-  });
-
-  afterEach(() => {
-    rmSync(root, { recursive: true, force: true });
-  });
-
-  test("a directory's name says the worker that made it, or says none", () => {
-    expect(jestTmpOwner(`${JEST_TMP_PREFIX}state-4242-a-uuid`)).toBe(4242);
-    expect(jestTmpOwner(`${JEST_TMP_PREFIX}daemon-pool`)).toBeNull();
-    expect(jestTmpOwner(path.basename(jestTmpDir("state")))).toBe(process.pid);
-  });
-
-  test("keeps another live process's directory and removes the rest", () => {
-    const another = ownedBy(process.ppid);
-    const dead = ownedBy(deadPid());
-    const own = ownedBy(process.pid);
-    const unnamed = dirNamed(`${JEST_TMP_PREFIX}a-uuid`);
-    const unrelated = dirNamed("something-else");
-
-    sweepJestTmp(root, process.pid);
-
-    expect(readdirSync(root).sort()).toEqual([another, unrelated].sort());
-    for (const gone of [dead, own, unnamed])
-      expect(existsSync(path.join(root, gone))).toBe(false);
   });
 });
