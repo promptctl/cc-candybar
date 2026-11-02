@@ -4,94 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "2b55ee999dbc13d1647e8946ffdb6557934b017a",
-      "timestamp": "2026-11-02T12:56:50.243Z",
+      "sha": "1cacad328e17c86fb91323df437230b3957ec6a0",
+      "timestamp": "2026-11-02T12:58:40.667Z",
       "commits": [
         {
-          "sha": "2b55ee999dbc13d1647e8946ffdb6557934b017a",
+          "sha": "1cacad328e17c86fb91323df437230b3957ec6a0",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T05:52:29-07:00",
-          "message": "fix(test): the click-error e2e holds its unanswered render until the daemon's side has ended (brandon-unfiled-3248.cbyb) (#570)\n\n* fix(test): the click-error e2e holds its unanswered render until the daemon's side has ended (brandon-unfiled-3248.cbyb)\n\nThe case's `gone` client half-closed at once and assumed the daemon saw the\nclose before it wrote the answer. Nothing ordered them: when the render won, the\nend-write succeeded, the error was marked answered, and the next request read\n`over` where the test expects `owed`.\n\nThe gone render now reads tmux through the gated stub, and the test opens the\ngate only once the daemon's side has closed with the client's (inFlight back to\n0), so the answer meets an ended end by construction. Making respond call\ndelivered regardless of the write error fails the case with owed/over.\n\n* test: say why zero in flight means the gone client's side left (brandon-unfiled-3248.cbyb)"
-        },
-        {
-          "sha": "f01de8e049daf921113beb9a862840f6a93f2135",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-02T12:49:08Z",
-          "message": "chore(release): set `package.json` to 1.179.2 [skip ci]\n\n## [1.179.2](https://github.com/promptctl/cc-candybar/compare/v1.179.1...v1.179.2) (2026-11-02)\n\n### Bug Fixes\n\n* **frame-feed:** a timer that fires before its moment waits it out, so no turn is drawn twice ([#566](https://github.com/promptctl/cc-candybar/issues/566)) ([e9865fa](https://github.com/promptctl/cc-candybar/commit/e9865fa4807325c4bf8e73c86195d8ea246a2775))\n* **url-handle:** a daemon's TIMEOUT is busy, so a click no longer kicks a live daemon ([#565](https://github.com/promptctl/cc-candybar/issues/565)) ([938e467](https://github.com/promptctl/cc-candybar/commit/938e46704e2e803c9a983b478618dda5cea40cc3))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-567",
-      "ref": "refs/pull/567/merge",
-      "sha": "20449c6e07a192cd3dfb4185823e52334793c2c7",
-      "timestamp": "2026-11-02T12:55:35.461Z",
-      "commits": [
-        {
-          "sha": "20449c6e07a192cd3dfb4185823e52334793c2c7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T12:52:38Z",
-          "message": "Merge 5ea7b7fa33943d45a50e2f33e730801ef6fbdca8 into 2b55ee999dbc13d1647e8946ffdb6557934b017a\n"
-        },
-        {
-          "sha": "5ea7b7fa33943d45a50e2f33e730801ef6fbdca8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T05:44:50-07:00",
-          "message": "fix(e2e): the sign-off guard splits on & and substitutions, follows cd, and probes each path once (candybar-testing-ihvy.7dc)\n"
-        },
-        {
-          "sha": "199d1d114d2e783a0356447382087d37006bc73a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T05:42:20-07:00",
-          "message": "fix(e2e): the sign-off guard sees directories, quoted paths and worktrees; shrink check fails on git errors (candybar-testing-ihvy.7dc)\n"
-        },
-        {
-          "sha": "031c7a0ab8afa617dce6480f9e4d97b82192826d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T05:36:52-07:00",
-          "message": "test(e2e): the cap and the assertion limit are enforced (candybar-testing-ihvy.7dc)\n\nThe sign-off file (.claude/e2e-signoff.json) holds the end-to-end cap and the\nassertion limit. jest.e2e.config.js adds a reporter that fails a run holding\nmore tests than the cap and a setup file that fails a test whose assertion\ncount is not the limit; every other config ignores test/e2e/, so no run\nreaches an end-to-end test without them. Fixtures that break each check, run\nthrough the real config by test/integration/e2e-checks, turn red if a check is\nunplugged. The e2e-signoff hook now refuses an agent's edit to the sign-off,\nthe checks, their tests and fixtures, itself, and any test/e2e/ file that\norigin/main holds, and fails closed.\n\nA workflow check fails CI on a step that reaches a script importing\ndaemonArgs or createDaemon. load-gate.yml is excused on a transitional list\n(test/transitional-daemon-workflows) that a CI step holds to shrinking;\ncandybar-testing-ihvy.4vv deletes the directory.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-568",
-      "ref": "refs/pull/568/merge",
-      "sha": "a287eaa056719458579e3f726e1d32d0ac3c5b12",
-      "timestamp": "2026-11-02T12:53:09.191Z",
-      "commits": [
-        {
-          "sha": "a287eaa056719458579e3f726e1d32d0ac3c5b12",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T12:51:01Z",
-          "message": "Merge ebba6d680327bbb989d492c2ec3f51a2488f0207 into f01de8e049daf921113beb9a862840f6a93f2135\n"
-        },
-        {
-          "sha": "ebba6d680327bbb989d492c2ec3f51a2488f0207",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T05:50:42-07:00",
-          "message": "fix(daemon): handoff verdicts are exhaustive, bound is monotonic, rate-limit logs the category (candybar-launch-q7o7.hx4)\n\nReview (medium) of #568: clickFailed's reason is the launch-failure union;\na timeout verdict fails the click rather than reading as lost; the bound uses\nperformance.now(); the rate-limit warning names the category, not the URL; a\nhandoff left running at the bound is logged; the test's wait is bounded and\ncleans its dir.\n"
-        },
-        {
-          "sha": "ab820b66ea2ca8677710b7a79fd1ff71ccdf8efe",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T05:47:03-07:00",
-          "message": "fix(daemon): a handoff click maps refusals like any click, and a lost opener fails loudly (candybar-launch-q7o7.hx4)\n\nReview (high) of #568: the job's refusal carries its reason, so a rate-limited\nopener is logged and acknowledged and a closing daemon is DaemonClosing. One\nfailure mapping serves both click launches. A job whose group ends with no\nverdict is lost and throws. Stdout goes to /dev/null so a handed-off browser\nfills no unlinked file; the dir removal retries the verdict-write race; the\nbound is a parameter so tests run in ms.\n"
-        },
-        {
-          "sha": "9e6efa7f274019b532fd9976f082570fafd67d4d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T05:39:08-07:00",
-          "message": "fix(daemon): an opener's click hands off, so the browser outlives the 5s bound (candybar-launch-q7o7.hx4)\n"
+          "timestamp": "2026-11-02T05:56:49-07:00",
+          "message": "fix(daemon): an opener's click hands off, so the browser outlives the 5s bound (#568)\n\n* fix(daemon): an opener's click hands off, so the browser outlives the 5s bound (candybar-launch-q7o7.hx4)\n\n* fix(daemon): a handoff click maps refusals like any click, and a lost opener fails loudly (candybar-launch-q7o7.hx4)\n\nReview (high) of #568: the job's refusal carries its reason, so a rate-limited\nopener is logged and acknowledged and a closing daemon is DaemonClosing. One\nfailure mapping serves both click launches. A job whose group ends with no\nverdict is lost and throws. Stdout goes to /dev/null so a handed-off browser\nfills no unlinked file; the dir removal retries the verdict-write race; the\nbound is a parameter so tests run in ms.\n\n* fix(daemon): handoff verdicts are exhaustive, bound is monotonic, rate-limit logs the category (candybar-launch-q7o7.hx4)\n\nReview (medium) of #568: clickFailed's reason is the launch-failure union;\na timeout verdict fails the click rather than reading as lost; the bound uses\nperformance.now(); the rate-limit warning names the category, not the URL; a\nhandoff left running at the bound is logged; the test's wait is bounded and\ncleans its dir."
         }
       ]
     },
