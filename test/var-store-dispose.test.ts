@@ -8,7 +8,7 @@
 // disposed store reachable from that atom — 2,500 observers against 12 live
 // entries in the breach snapshot of 2026-10-19 — until the RSS backstop fired.
 import { drawPayload } from "./helpers/draw-payload";
-import { processLauncher } from "../src/proc/launch";
+import { processLauncher } from "./helpers/host";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";

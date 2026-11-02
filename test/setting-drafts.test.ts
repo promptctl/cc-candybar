@@ -5,6 +5,7 @@
 // case that decides where a save must write and what a pick compares against.
 
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
+import { locs } from "./helpers/host";
 import { mergeWithDefault } from "../src/config/dsl-loader";
 import {
   parsePersistTarget,
@@ -166,7 +167,7 @@ describe("a save under a preset that pins the field lands where it renders", () 
     const before = drafts(source, p);
     writeValues(
       { record: () => {}, logger: () => {} },
-      { path: file, above: [], repo: null, cwd: null },
+      { path: file, above: [], repo: null, cwd: null, locs: locs() },
       before.map(({ target, value }) => [target, value] as const),
     );
     const after = readFileSync(file, "utf8");

@@ -9,8 +9,8 @@
 // so "spawns once" is a count of lines, and "in the turn the fact moved" is
 // the run in flight before any draw.
 
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
+import { processLauncher } from "./helpers/host";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";

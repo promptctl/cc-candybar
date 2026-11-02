@@ -1,4 +1,5 @@
 import { textOf } from "../src/render/frame";
+import { processLauncher } from "./helpers/host";
 // [LAW:behavior-not-structure] The gate for brandon-activity-ue7: what the bar
 // SAYS Claude is doing, for a given transcript. Every test writes real JSONL and
 // reads either the provider's record, the payload the daemon would send, or the
@@ -6,7 +7,6 @@ import { textOf } from "../src/render/frame";
 
 import { drawPayload } from "./helpers/draw-payload";
 import type { Frame } from "../src/render/frame";
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";

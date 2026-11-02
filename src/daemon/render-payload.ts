@@ -567,6 +567,10 @@ export interface ActivityToolPayload {
 // ─── Provider dependencies ────────────────────────────────────────────────────
 
 export interface RenderPayloadDeps {
+  // [LAW:one-source-of-truth] The user's home directory: the one derivation
+  // (`Host.home`) the payload's `home`, the default Claude Code directory and
+  // the usage store's transcripts share.
+  readonly home: string;
   readonly gitProvider: GitDataProvider;
   // [LAW:one-source-of-truth] One store backs BOTH the `session` and `today`
   // projections — they are folds over the same per-session records, not two
@@ -1009,8 +1013,8 @@ export function renderWidth(hints: ClientHints): number {
 // The settings file of THIS session's Claude Code, from the client's
 // `claudeConfigDir` hint — never the daemon's own env, which answers for
 // whichever session spawned it. [LAW:single-enforcer]
-function settingsPathOf(hints: ClientHints): string {
-  return claudeSettingsPath(claudeConfigDir(hints.claudeConfigDir));
+function settingsPathOf(hints: ClientHints, home: string): string {
+  return claudeSettingsPath(claudeConfigDir(hints.claudeConfigDir, home));
 }
 
 // The lanes a request's arrival refreshed: how long each took, or null while
@@ -1095,7 +1099,7 @@ export async function refreshPayload(
     // bar is drawn moves no rate.
     lane("speed", want.speed, () => session.speed(dateOf(at).getTime())),
     lane("autocompact", want.autocompact, async () =>
-      deps.autoCompact.window(settingsPathOf(hints)),
+      deps.autoCompact.window(settingsPathOf(hints, deps.home)),
     ),
   ]);
 }
@@ -1325,7 +1329,7 @@ function readLanes(inputs: PayloadInputs): Lanes {
     ),
     speed: read("speed", want.speed, () => deps.usageStore.speedOf(sessionId)),
     autoCompact: read("autocompact", want.autocompact, () =>
-      deps.autoCompact.stored(settingsPathOf(inputs.hints)),
+      deps.autoCompact.stored(settingsPathOf(inputs.hints, deps.home)),
     ),
     sources: new Map(
       [...lanes.sources].map(([name, lane]) => [name, lane.current()]),
@@ -1468,7 +1472,7 @@ function projectPayload(
     expiresAt,
   }));
 
-  // home is always available — it's a single env-var read, no I/O cost.
+  // home is always available — the host's value, no I/O cost.
   // Letting the gate skip it would add a branch with no win.
   // [LAW:single-enforcer] All path-shaped payload fields are normalized
   // to forward-slash separators at this boundary. The DSL's directory
@@ -1477,7 +1481,7 @@ function projectPayload(
   // (current_dir = "C:\Users\Alice") would never match a forward-slash
   // home prefix. Normalize *here*, not in the template — keeps DSL
   // templates platform-agnostic by construction.
-  const home = posixify(process.env.HOME ?? process.env.USERPROFILE);
+  const home = posixify(inputs.deps.home);
   const workspace = hookData.workspace
     ? {
         ...hookData.workspace,

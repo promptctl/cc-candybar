@@ -1,3 +1,4 @@
+import type { Host } from "./host";
 import { explicitConfigPath } from "./utils/user-path";
 
 // The client's explicit-config probe — the `CC_CANDYBAR_CONFIG` the shell
@@ -29,10 +30,10 @@ export const CONFIG_ENV = "CC_CANDYBAR_CONFIG";
 // no cwd of their own. So the daemon accepts only an absolute hint, like
 // `claudeConfigDir` (src/claude-settings.ts).
 export function detectConfigEnv(
-  env: Readonly<Record<string, string | undefined>>,
+  { env, home }: Pick<Host, "env" | "home">,
   cwd: string,
 ): string | undefined {
-  return explicitConfigPath(cwd, env[CONFIG_ENV]);
+  return explicitConfigPath(cwd, env[CONFIG_ENV], home);
 }
 
 // [LAW:types-are-the-program] The config a request names, and what named it:
@@ -72,12 +73,12 @@ export function requestedConfigTarget(
 // `explicitConfigPath` reading.
 export function cliConfigTarget(
   arg: string | undefined,
-  env: Readonly<Record<string, string | undefined>>,
+  host: Pick<Host, "env" | "home">,
   cwd: string,
 ): RequestedTarget {
   return requestedConfigTarget(
-    explicitConfigPath(cwd, arg),
-    detectConfigEnv(env, cwd),
+    explicitConfigPath(cwd, arg, host.home),
+    detectConfigEnv(host, cwd),
   );
 }
 

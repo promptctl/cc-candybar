@@ -7,12 +7,14 @@
 // so no suite re-spells the origin key or the history path.
 //
 // [LAW:single-enforcer] Every env var that steers where a durable write lands
-// is isolated here, for the fixture's lifetime, and restored on dispose: the
-// XDG pair derive the history path and the first-ever-write fallback. (A
+// is isolated in the fixture's `host`, which a test hands to what it drives:
+// the XDG pair derive the history path and the first-ever-write fallback. (A
 // developer's own CC_CANDYBAR_CONFIG cannot leak in: the daemon reads none —
 // it is a client hint, composed into the render origin, brandon-config-5g8.)
 
 import { requestedConfigTarget } from "../../src/config-hint";
+import { HOST, hostOf } from "./host";
+import type { Host } from "../../src/host";
 import {
   mkdirSync,
   mkdtempSync,
@@ -35,6 +37,8 @@ import { SESSION_RENDER_ORIGIN_KEY } from "../../src/daemon/foundations/session-
 import { encodeRenderOrigin } from "../../src/daemon/foundations/render-origin";
 
 export interface DurableConfig {
+  /** The machine the fixture's files are under: its XDG pair names them. */
+  readonly host: Host;
   /** The session's projectDir AND cwd — the temp root. */
   readonly projectDir: string;
   /** The user's XDG `config.json5` — the file every durable write lands in. */
@@ -65,26 +69,14 @@ export interface DurableConfig {
   dispose(): void;
 }
 
-type EnvVars = Readonly<Record<string, string | undefined>>;
-
-/** Set each var to its value; undefined unsets it. */
-function assignEnv(vars: EnvVars): void {
-  for (const [name, value] of Object.entries(vars)) {
-    if (value === undefined) delete process.env[name];
-    else process.env[name] = value;
-  }
-}
 
 export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
   const root = mkdtempSync(join(tmpdir(), prefix));
-  const isolated: EnvVars = {
+  const host = hostOf({
+    ...process.env,
     XDG_STATE_HOME: join(root, "state"),
     XDG_CONFIG_HOME: join(root, "xdg-config"),
-  };
-  const saved: EnvVars = Object.fromEntries(
-    Object.keys(isolated).map((name) => [name, process.env[name]]),
-  );
-  assignEnv(isolated);
+  });
   const configPath = join(root, "xdg-config", "cc-candybar", "config.json5");
   mkdirSync(dirname(configPath), { recursive: true });
   const readOrNull = (file: string): string | null => {
@@ -97,10 +89,11 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
   };
   const readText = (): string | null => readOrNull(configPath);
   return {
+    host,
     projectDir: root,
     configPath,
     projectPath: join(root, ".cc-candybar.json5"),
-    historyPath: settingsHistoryPath(),
+    historyPath: settingsHistoryPath(host),
     write: (text) => writeFileSync(configPath, text),
     text: readText,
     parsed: () => JSON5.parse(readText() ?? "") as Record<string, unknown>,
@@ -108,7 +101,7 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
     // absent file and an absent entry both read as the empty stack.
     history: (sessionId = "s1") =>
       (
-        JSON.parse(readOrNull(settingsHistoryPath()) ?? "{}") as Record<
+        JSON.parse(readOrNull(settingsHistoryPath(host)) ?? "{}") as Record<
           string,
           SessionHistory
         >
@@ -120,7 +113,7 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
       new SettingsHistory(
         sessionState,
         () => {},
-        fileHistoryStorage(settingsHistoryPath(), () => {}),
+        fileHistoryStorage(settingsHistoryPath(host), () => {}),
       ),
     seedOrigin: (sessionState, sessionId, configFile) =>
       sessionState.set(
@@ -133,7 +126,6 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
         }),
       ),
     dispose: () => {
-      assignEnv(saved);
       rmSync(root, { recursive: true, force: true });
     },
   };

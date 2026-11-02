@@ -6,10 +6,10 @@
 // the facts of the session's "last render" exactly as production does.
 
 import { drawPayload } from "./helpers/draw-payload";
+import { processLauncher } from "./helpers/host";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { RenderSightings } from "../src/daemon/render-sightings";
 import type { ServingDaemon } from "../src/daemon/limits";

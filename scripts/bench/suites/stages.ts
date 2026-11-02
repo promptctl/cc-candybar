@@ -8,6 +8,8 @@
 // daemon's scheduling in the way. The tick is `wire`.
 
 import fs from "node:fs";
+import { locations } from "../../../src/daemon/paths.js";
+import { processWorld } from "../../../src/host.js";
 import path from "node:path";
 
 import {
@@ -51,6 +53,7 @@ async function prepared(
   const warnings: string[] = [];
   // An example file is explicit: no repository supplies it.
   const config = await prepareConfig(
+    processWorld(),
     layers.map(homeLayer),
     NO_REPO,
     cwd,
@@ -153,6 +156,7 @@ export const STAGES: readonly Benchmark[] = [
       try {
         const ms = await repeat(plan.samples, () => {
           loadConfigChain(
+            locations(processWorld().host),
             [],
             DEFAULT_DSL_CONFIG,
             { warned: () => {} },

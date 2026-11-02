@@ -216,21 +216,25 @@ function checkRateLimit(
   return { allowed: false, minIntervalMs, sinceLastMs };
 }
 
-// [LAW:one-source-of-truth] The environment a child inherits is THIS module's
-// `process.env`, resolved here for every spawn site. Passing `undefined` lets
-// node read the host process's environment directly, which is a second clock:
-// under a realm boundary (Jest's sandbox copies `process.env` per test file)
-// the two diverge, and a PATH the test set for a `shell` source never reached
-// the shell it spawned (brandon-custom-segments-g5z.3's doc stubs ran as 127).
-function childEnv(opts: LaunchOpts): NodeJS.ProcessEnv {
-  return opts.env ?? process.env;
+// [LAW:one-source-of-truth] The environment a child gets is the owner's
+// inherited one (`LaunchScope.inherited`, handed in by the process main or the
+// daemon's root) under the launch's overlay, resolved here for every spawn
+// site. Passing `undefined` lets node read the host process's environment
+// directly, which is a second clock: under a realm boundary (Jest's sandbox
+// copies `process.env` per test file) the two diverge, and a PATH the test set
+// for a `shell` source never reached the shell it spawned
+// (brandon-custom-segments-g5z.3's doc stubs ran as 127). An overlay entry set
+// to `undefined` removes that variable: node's spawn skips undefined values.
+function childEnv(scope: LaunchScope, opts: LaunchOpts): NodeJS.ProcessEnv {
+  return { ...scope.inherited, ...opts.envOverlay };
 }
 
 export interface LaunchOpts {
   bin: string;
   args?: string[];
   cwd?: string;
-  env?: NodeJS.ProcessEnv;
+  // Set over the launcher's inherited environment; `undefined` unsets.
+  envOverlay?: Readonly<Record<string, string | undefined>>;
   timeoutMs?: number;
   stdinInput?: string | Buffer;
   category: LaunchCategory;
@@ -309,6 +313,10 @@ function rateLimitedResult(
 
 // Who a launcher's launches belong to.
 export interface LaunchScope {
+  // The environment this owner's children inherit, under each launch's
+  // `envOverlay`. The owner's root passes the same environment it reads its own
+  // facts from, so a daemon has one.
+  readonly inherited: NodeJS.ProcessEnv;
   // Meters every launch into the owner's stats. Null pays no metering cost.
   readonly stats: LaunchStatsHandle | null;
   // Hears each change in why the lifeline is down (`fault`, below). The daemon
@@ -600,7 +608,7 @@ async function launchWaited(
     try {
       child = spawn(opts.bin, opts.args ?? [], {
         cwd: opts.cwd,
-        env: childEnv(opts),
+        env: childEnv(state.scope, opts),
         stdio: ["pipe", "pipe", "pipe"],
         detached: true,
       });
@@ -810,7 +818,7 @@ function launchBlocking(state: LaunchState, opts: LaunchOpts): LaunchResult {
   try {
     const result = spawnSync(opts.bin, opts.args ?? [], {
       cwd: opts.cwd,
-      env: childEnv(opts),
+      env: childEnv(state.scope, opts),
       input: opts.stdinInput,
       timeout:
         opts.timeoutMs && opts.timeoutMs > 0 ? opts.timeoutMs : undefined,
@@ -883,17 +891,20 @@ function launchOrphan(state: LaunchState, opts: LaunchOpts): LaunchResult {
   if (refused !== null) return refused;
   const t0 = Date.now();
   stats?.onStart(opts.category);
-  const result = launchDetachedSyncInner(opts);
+  const result = launchDetachedSyncInner(state.scope, opts);
   stats?.onEnd(opts.category, Date.now() - t0);
   return result;
 }
 
-function launchDetachedSyncInner(opts: LaunchOpts): LaunchResult {
+function launchDetachedSyncInner(
+  scope: LaunchScope,
+  opts: LaunchOpts,
+): LaunchResult {
   let child;
   try {
     child = spawn(opts.bin, opts.args ?? [], {
       cwd: opts.cwd,
-      env: childEnv(opts),
+      env: childEnv(scope, opts),
       detached: true,
       stdio: "ignore",
     });
@@ -1026,7 +1037,7 @@ function launchJob(
       ],
       {
         cwd: opts.cwd,
-        env: childEnv(opts),
+        env: childEnv(state.scope, opts),
         detached: true,
         stdio: ["pipe", "ignore", "ignore"],
       },
@@ -1197,24 +1208,31 @@ export interface TestableLauncher extends Launcher {
   __lifelineForTest(): { pid: number | undefined; cut(): void };
 }
 
+// What an owner hands its launcher: the environment its children inherit, and
+// any of the rest of its scope. Nothing here is read from the process, so a
+// launcher a process main builds (bar-pane, the CLI, the daemon's shell before it
+// has a daemon) and the daemon's own differ only in what they are given.
+export type LaunchOwner = Pick<LaunchScope, "inherited"> &
+  Partial<Omit<LaunchScope, "inherited">>;
+
 // [LAW:no-ambient-temporal-coupling] An aborted scope ends what is in flight
 // and refuses what comes after, for good, whichever other launchers run.
 // [LAW:one-type-per-behavior] The daemon's launcher has no blocking form at
 // all, so no cast or `in` check reaches one.
-export function createLauncher(owner: Partial<LaunchScope>): TestableLauncher {
+export function createLauncher(owner: LaunchOwner): TestableLauncher {
   return launcherWithState(owner).launcher;
 }
 
 // The same launcher, with its blocking form added: for the process's one-shot
 // launcher and the tests of that form.
 export function createOneShotLauncher(
-  owner: Partial<LaunchScope>,
+  owner: LaunchOwner,
 ): TestableLauncher & OneShotLauncher {
   const { launcher, state } = launcherWithState(owner);
   return { ...launcher, launchSync: (opts) => launchBlocking(state, opts) };
 }
 
-function launcherWithState(owner: Partial<LaunchScope>): {
+function launcherWithState(owner: LaunchOwner): {
   launcher: TestableLauncher;
   state: LaunchState;
 } {
@@ -1267,11 +1285,3 @@ function launcherWithState(owner: Partial<LaunchScope>): {
   );
   return { launcher, state };
 }
-
-// What a process with no daemon launches through: the CLI, bar-pane, and a
-// daemon's shell before it has a daemon. Nothing closes it. Daemon work never
-// reaches for this: it holds its daemon's, which is what the close refuses
-// (eslint.config.mjs). `oneShotLauncher` is the same launcher with its
-// blocking form named, for what holds no loop.
-export const oneShotLauncher: OneShotLauncher = createOneShotLauncher({});
-export const processLauncher: Launcher = oneShotLauncher;

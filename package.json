@@ -17,7 +17,7 @@
     "dev": "tsdown --watch",
     "typecheck": "tsc --noEmit",
     "start": "node dist/index.mjs",
-    "lint": "eslint src/",
+    "lint": "eslint src/ && eslint -c eslint.tests.config.mjs test/",
     "lint:fix": "eslint src/ --fix",
     "test": "pnpm test:unit && pnpm test:worker && pnpm test:process",
     "test:unit": "jest --config jest.unit.config.js",

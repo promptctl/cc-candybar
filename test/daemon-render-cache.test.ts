@@ -5,8 +5,9 @@
 // eviction. The legacy renderer's render-cache tests were deleted in
 // bzh.2; this is the new, smaller test set scoped to the DSL spine.
 
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
+import { HOST, WORLD, hostOf, worldOf } from "./helpers/host";
+import type { Host, World } from "../src/host";
 import {
   chmodSync,
   mkdirSync,
@@ -64,8 +65,13 @@ import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { answerRepo } from "./helpers/repo-approval";
 import { repoConfigsDir, repoConfigsPath } from "../src/daemon/repo-configs";
-import { stateDir } from "../src/daemon/paths";
+import { locations, stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
+
+// The machine the caches below load on: this worker's own unless a describe
+// states another for its tests.
+let host: Host = HOST;
+let world: World = WORLD;
 
 // Flatten a layout tree to its segment names, in pre-order — the post-`root`
 // equivalent of the old `config.layout.flatMap(r => r.segments)`.
@@ -105,8 +111,8 @@ function makeCache(
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
   const cache = new RenderCache(
-    { stateDir: stateDir(),
-      launcher: processLauncher,
+    { stateDir: stateDir(host), locations: locations(host), env: host.env,
+      launcher: world.launcher,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER, gates: bareGates(),
       fileEvents: NO_FILE_EVENTS,
@@ -145,15 +151,14 @@ describe("RenderCache", () => {
   // unrelated to what they're asserting. The override points at a fresh
   // tmpdir scoped to this test suite so the XDG layer is empty by default.
   let xdgIsolateDir: string;
-  let savedXdg: string | undefined;
   beforeAll(() => {
     xdgIsolateDir = mkdtempSync(join(tmpdir(), "cc-candybar-cache-xdg-"));
-    savedXdg = process.env.XDG_CONFIG_HOME;
-    process.env.XDG_CONFIG_HOME = xdgIsolateDir;
+    host = hostOf({ ...HOST.env, XDG_CONFIG_HOME: xdgIsolateDir });
+    world = worldOf(host);
   });
   afterAll(() => {
-    if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME;
-    else process.env.XDG_CONFIG_HOME = savedXdg;
+    host = HOST;
+    world = WORLD;
     rmSync(xdgIsolateDir, { recursive: true, force: true });
   });
 
@@ -1008,8 +1013,8 @@ describe("RenderCache", () => {
     const { cleanups, watchers } = makeCache();
     try {
       const dirs = watchers.watchedDirs();
-      expect(dirs).toContain(realpathSync.native(repoConfigsDir(stateDir())));
-      expect(dirs).not.toContain(realpathSync.native(stateDir()));
+      expect(dirs).toContain(realpathSync.native(repoConfigsDir(stateDir(host))));
+      expect(dirs).not.toContain(realpathSync.native(stateDir(host)));
     } finally {
       for (const fn of cleanups) fn();
     }
@@ -1080,7 +1085,7 @@ describe("RenderCache", () => {
         [realpathSync.native(dir)]: "declined",
       });
       await reloads.after(entry, () =>
-        writeFileSync(repoConfigsPath(stateDir()), declined),
+        writeFileSync(repoConfigsPath(stateDir(host)), declined),
       );
       expect(entry.configLayers).toEqual([]);
       expect(entry.repos.declined).toEqual([realpathSync.native(dir)]);
@@ -1388,8 +1393,8 @@ describe("RenderCache idle sweep", () => {
     const { dir, cleanup } = mkConfigDir();
     const watchers = new WatcherRegistry({ logger: () => {} });
     const cache = new RenderCache(
-      { stateDir: stateDir(),
-        launcher: processLauncher,
+      { stateDir: stateDir(host), locations: locations(host), env: host.env,
+        launcher: world.launcher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER, gates: bareGates(),
         fileEvents: NO_FILE_EVENTS,
@@ -1440,8 +1445,8 @@ describe("RenderCache idle sweep", () => {
     const { dir, cleanup } = mkConfigDir();
     const watchers = new WatcherRegistry({ logger: () => {} });
     const cache = new RenderCache(
-      { stateDir: stateDir(),
-        launcher: processLauncher,
+      { stateDir: stateDir(host), locations: locations(host), env: host.env,
+        launcher: world.launcher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER, gates: bareGates(),
         fileEvents: NO_FILE_EVENTS,
@@ -1496,8 +1501,8 @@ describe("RenderCache idle sweep", () => {
       });
     const logs: string[] = [];
     const cache = new RenderCache(
-      { stateDir: stateDir(),
-        launcher: processLauncher,
+      { stateDir: stateDir(host), locations: locations(host), env: host.env,
+        launcher: world.launcher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER, gates: bareGates(),
         fileEvents: NO_FILE_EVENTS,
@@ -1600,8 +1605,8 @@ describe("RenderCache frames and pins", () => {
     const watchers = new WatcherRegistry({ logger: () => {} });
     const logs: string[] = [];
     const cache = new RenderCache(
-      { stateDir: stateDir(),
-        launcher: processLauncher,
+      { stateDir: stateDir(host), locations: locations(host), env: host.env,
+        launcher: world.launcher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER, gates: bareGates(),
         fileEvents: NO_FILE_EVENTS,
@@ -1748,8 +1753,8 @@ describe("RenderCache frames and pins", () => {
     const { dir, cleanup } = mkConfigDir();
     let opens = 0;
     const cache = new RenderCache(
-      { stateDir: stateDir(),
-        launcher: processLauncher,
+      { stateDir: stateDir(host), locations: locations(host), env: host.env,
+        launcher: world.launcher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER, gates: bareGates(),
         fileEvents: NO_FILE_EVENTS,
@@ -1816,8 +1821,8 @@ describe("RenderCache frames and pins", () => {
     const watchers = new WatcherRegistry({ logger: () => {} });
     const { dir, cleanup } = mkConfigDir();
     const cache = new RenderCache(
-      { stateDir: stateDir(),
-        launcher: processLauncher,
+      { stateDir: stateDir(host), locations: locations(host), env: host.env,
+        launcher: world.launcher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER, gates: bareGates(),
         fileEvents: NO_FILE_EVENTS,
@@ -1854,8 +1859,8 @@ describe("RenderCache frames and pins", () => {
     const second = mkConfigDir();
     let opens = 0;
     const cache = new RenderCache(
-      { stateDir: stateDir(),
-        launcher: processLauncher,
+      { stateDir: stateDir(host), locations: locations(host), env: host.env,
+        launcher: world.launcher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER, gates: bareGates(),
         fileEvents: NO_FILE_EVENTS,

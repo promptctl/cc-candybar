@@ -3,6 +3,8 @@
 // user's plugin root, from a local path, a GitHub slug, or a git URL.
 
 import { execFileSync } from "node:child_process";
+import { HOST, hostOf, worldOf } from "./helpers/host";
+import type { World } from "../src/host";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -50,7 +52,7 @@ describe("parsePluginSource", () => {
     ["file:///srv/app", "file:///srv/app"],
     ["git@github.com:owner/repo.git", "git@github.com:owner/repo.git"],
   ])("%s is the git repo %s", (arg, url) => {
-    expect(parsePluginSource(arg, "/cwd", isDir([]))).toEqual({
+    expect(parsePluginSource(arg, "/cwd", HOST.home, isDir([]))).toEqual({
       kind: "git",
       url,
       shown: url,
@@ -59,7 +61,7 @@ describe("parsePluginSource", () => {
 
   test("a password in a URL is masked wherever the source is shown", () => {
     const url = "https://me:ghp_secret@github.com/org/private.git";
-    expect(parsePluginSource(url, "/cwd", isDir([]))).toEqual({
+    expect(parsePluginSource(url, "/cwd", HOST.home, isDir([]))).toEqual({
       kind: "git",
       url,
       shown: "https://me:***@github.com/org/private.git",
@@ -68,7 +70,7 @@ describe("parsePluginSource", () => {
 
   test("a directory that exists is a path, even one spelled like a slug", () => {
     expect(
-      parsePluginSource("owner/repo", "/cwd", isDir(["/cwd/owner/repo"])),
+      parsePluginSource("owner/repo", "/cwd", HOST.home, isDir(["/cwd/owner/repo"])),
     ).toEqual({
       kind: "path",
       dir: "/cwd/owner/repo",
@@ -76,7 +78,7 @@ describe("parsePluginSource", () => {
   });
 
   test("anything else names nothing, and says so", () => {
-    expect(parsePluginSource("./nowhere/at/all", "/cwd", isDir([]))).toEqual({
+    expect(parsePluginSource("./nowhere/at/all", "/cwd", HOST.home, isDir([]))).toEqual({
       error: `"./nowhere/at/all" is not a directory, a GitHub repo slug (owner/repo) or a git URL`,
     });
   });
@@ -86,7 +88,7 @@ describe("installFromRepo", () => {
   test("installs each folder's definition into the root, and a re-run updates it", () => {
     const root = path.join(dir, "plugins");
     const repo = repoWith({ app: DEFINITION });
-    expect(installFromRepo(repo, root, "repo")).toEqual([
+    expect(installFromRepo(repo, root, "repo", HOST.home)).toEqual([
       { path: path.join(root, "app/plugin.json5"), placed: "installed" },
     ]);
     expect(fs.readFileSync(path.join(root, "app/plugin.json5"), "utf8")).toBe(
@@ -101,7 +103,7 @@ describe("installFromRepo", () => {
     // The app's data beside the installed definition is the app's, not the
     // repo's: an update replaces the definition and keeps it.
     fs.writeFileSync(path.join(root, "app/state.json"), '{"status":"ok"}');
-    expect(installFromRepo(repo, root, "repo")).toEqual([
+    expect(installFromRepo(repo, root, "repo", HOST.home)).toEqual([
       { path: path.join(root, "app/plugin.json5"), placed: "updated" },
     ]);
     expect(fs.readFileSync(path.join(root, "app/plugin.json5"), "utf8")).toBe(
@@ -126,7 +128,7 @@ describe("installFromRepo", () => {
     fs.mkdirSync(root);
     fs.symlinkSync(work, path.join(root, "app"));
     expect(
-      installFromRepo(repoWith({ app: DEFINITION }), root, "repo"),
+      installFromRepo(repoWith({ app: DEFINITION }), root, "repo", HOST.home),
     ).toEqual([
       { path: path.join(root, "app/plugin.json5"), placed: "replaced" },
     ]);
@@ -146,7 +148,7 @@ describe("installFromRepo", () => {
       app: DEFINITION,
       broken: `{ segments: { s: { template: '{{ .plugins.broken.data.x }}' } }, shell: "rm -rf /" }`,
     });
-    expect(() => installFromRepo(repo, root, "repo")).toThrow(
+    expect(() => installFromRepo(repo, root, "repo", HOST.home)).toThrow(
       /^repo: \.cc-candybar\/plugins\/broken\/plugin\.json5 would not load: .*shell/,
     );
     expect(fs.readdirSync(root)).toEqual([]);
@@ -154,7 +156,7 @@ describe("installFromRepo", () => {
 
   test("a repo with no plugins is an error, never an empty install", () => {
     expect(() =>
-      installFromRepo(repoWith({}), path.join(dir, "plugins"), "repo"),
+      installFromRepo(repoWith({}), path.join(dir, "plugins"), "repo", HOST.home),
     ).toThrow(
       /^repo has no plugins: none at \.cc-candybar\/plugins\/<name>\/plugin\.json5/,
     );
@@ -166,7 +168,7 @@ describe("installFromRepo", () => {
     fs.mkdirSync(path.join(repo, ".cc-candybar/plugins/empty"));
     let message = "";
     try {
-      installFromRepo(repo, root, "repo");
+      installFromRepo(repo, root, "repo", HOST.home);
     } catch (e) {
       message = (e as Error).message;
     }
@@ -185,7 +187,7 @@ describe("installFromRepo", () => {
       a: DEFINITION.replaceAll(".app.", ".a."),
       b: DEFINITION.replaceAll(".app.", ".b."),
     });
-    expect(() => installFromRepo(repo, root, "repo")).toThrow(
+    expect(() => installFromRepo(repo, root, "repo", HOST.home)).toThrow(
       `${path.join(root, "b")} is a file, not a plugin folder: move it, then install again`,
     );
     expect(fs.readdirSync(root)).toEqual(["b"]);
@@ -198,7 +200,7 @@ describe("installFromRepo", () => {
     const root = path.join(dir, "plugins");
     const repo = repoWith({ app: DEFINITION });
     fs.writeFileSync(path.join(repo, ".cc-candybar/plugins/README.md"), "x");
-    expect(installFromRepo(repo, root, "repo")).toEqual([
+    expect(installFromRepo(repo, root, "repo", HOST.home)).toEqual([
       { path: path.join(root, "app/plugin.json5"), placed: "installed" },
     ]);
     expect(fs.readdirSync(root)).toEqual(["app"]);
@@ -206,17 +208,15 @@ describe("installFromRepo", () => {
 });
 
 describe("runPlugin", () => {
-  const saved = process.env.XDG_DATA_HOME;
+  let world: World;
   let log: jest.SpyInstance;
   let err: jest.SpyInstance;
   beforeEach(() => {
-    process.env.XDG_DATA_HOME = path.join(dir, "data");
+    world = worldOf(hostOf({ ...HOST.env, XDG_DATA_HOME: path.join(dir, "data") }));
     log = jest.spyOn(console, "log").mockImplementation(() => {});
     err = jest.spyOn(console, "error").mockImplementation(() => {});
   });
   afterEach(() => {
-    if (saved === undefined) delete process.env.XDG_DATA_HOME;
-    else process.env.XDG_DATA_HOME = saved;
     log.mockRestore();
     err.mockRestore();
   });
@@ -234,14 +234,10 @@ describe("runPlugin", () => {
     // A hook's GIT_DIR names another repository; the clone ignores it.
     const other = path.join(dir, "other");
     execFileSync("git", ["init", "-q", other]);
-    const savedGitDir = process.env.GIT_DIR;
-    process.env.GIT_DIR = path.join(other, ".git");
-    try {
-      expect(runPlugin(["install", url])).toBe(0);
-    } finally {
-      if (savedGitDir === undefined) delete process.env.GIT_DIR;
-      else process.env.GIT_DIR = savedGitDir;
-    }
+    const hooked = worldOf(
+      hostOf({ ...world.host.env, GIT_DIR: path.join(other, ".git") }),
+    );
+    expect(runPlugin(["install", url], hooked)).toBe(0);
     expect(fs.existsSync(path.join(other, ".git/info/sparse-checkout"))).toBe(
       false,
     );
@@ -263,7 +259,7 @@ describe("runPlugin", () => {
     git("init", "-q");
     git("add", ".");
     git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "c");
-    expect(runPlugin(["install", `file://${repo}`])).toBe(1);
+    expect(runPlugin(["install", `file://${repo}`], world)).toBe(1);
     expect(err).toHaveBeenCalledWith(
       `plugin install: file://${repo} has no plugins: none at .cc-candybar/plugins/<name>/plugin.json5`,
     );
@@ -272,7 +268,7 @@ describe("runPlugin", () => {
   test.each([[[]], [["install"]], [["remove", "x"]], [["install", "a", "b"]]])(
     "%j is a usage error",
     (argv) => {
-      expect(runPlugin(argv)).toBe(2);
+      expect(runPlugin(argv, world)).toBe(2);
       expect(err).toHaveBeenCalledWith(
         "Usage: cc-candybar plugin install <path | owner/repo | git URL>",
       );

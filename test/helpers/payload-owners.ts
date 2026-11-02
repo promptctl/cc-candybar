@@ -12,6 +12,7 @@
 // the lanes over the fakes as a view's declaration does.
 
 import type { Holds } from "../../src/utils/holds";
+import { HOST } from "./host";
 import type { ClaudeHookData } from "../../src/utils/claude";
 import { sessionIdOf } from "../../src/daemon/session-id";
 import type { GitInfo, GitInfoOptions } from "../../src/segments/git";
@@ -266,6 +267,9 @@ export function fakeAutoCompact(
 // Every lane answering ABSENT: a payload whose sources have nothing.
 export function absentOwners() {
   return {
+    // The user's home, which the payload's `home` and the default Claude Code
+    // directory come from.
+    home: HOST.home,
     // The one lane reading a real file the tests write, as the daemon's does.
     cacheExpiry: new CacheExpiryProvider(),
     gitProvider: fakeGit(() => ABSENT),

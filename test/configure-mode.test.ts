@@ -15,10 +15,10 @@
 //     counts it, and saving writes it INTO the placement in the config file.
 
 import { drawPayload } from "./helpers/draw-payload";
+import { locs, processLauncher } from "./helpers/host";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { configurePlacement } from "./helpers/configure";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -138,7 +138,7 @@ function buildRuntime(
   // daemon's render cache does.
   let current = config;
   const ctx: VerbContext = {
-    ...testVerbContext(sessionState, durable.historyFor(sessionState)),
+    ...testVerbContext(sessionState, durable.historyFor(sessionState), undefined, durable.host),
     configFor: () => current,
     reloadConfig: () => {
       current = parseAndValidate("<reloaded>", durable.text()!, ALLOWED);

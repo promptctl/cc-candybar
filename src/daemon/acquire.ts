@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
-import { processLauncher } from "../proc/launch";
+import type { Host, World } from "../host";
 import { heapCapMb } from "./limits";
 import process from "node:process";
 import {
@@ -15,8 +15,8 @@ import {
 // [LAW:single-enforcer] One primitive per runtime that owns the entire
 // "obtain a daemon" verb. Every spawn site in the Node runtime now flows
 // through this one path; the Rust client mirrors it in its own
-// obtain-daemon primitive. Both runtimes agree on socketPath() and
-// spawnLockPath() *and* on the lock mechanism: open(path, O_CREAT | O_EXCL)
+// obtain-daemon primitive. Both runtimes agree on socketPath(host) and
+// spawnLockPath(host) *and* on the lock mechanism: open(path, O_CREAT | O_EXCL)
 // — existence == held; release by unlinking. A Rust kick and a Node kick
 // are mutually recognizable.
 //
@@ -59,10 +59,12 @@ const DEFAULT_OPTS: Required<Omit<ObtainOpts, "spawn" | "lockFallbackMs">> = {
 };
 
 export async function obtainDaemon(
+  world: World,
   opts: ObtainOpts = {},
 ): Promise<ObtainResult> {
+  const { host } = world;
   const settings = { ...DEFAULT_OPTS, ...opts };
-  const spawnFn = opts.spawn ?? spawnDaemonDetachedReal;
+  const spawnFn = opts.spawn ?? (() => spawnDaemonDetachedReal(world));
   const deadline = Date.now() + settings.totalTimeoutMs;
   const lockFallbackMs =
     opts.lockFallbackMs ?? Math.floor(settings.totalTimeoutMs / 2);
@@ -70,18 +72,18 @@ export async function obtainDaemon(
   // [LAW:no-defensive-null-guards] obtainDaemon is typed Promise<ObtainResult>
   // — synchronous filesystem failures (read-only FS, permission denial) must
   // become typed failure outcomes, not throws that surprise the caller.
-  const setupErr = ensureStateDir();
+  const setupErr = ensureStateDir(host);
   if (setupErr) return { kind: "failed", reason: setupErr };
 
   // Fast path: is a daemon already listening?
-  if (await canConnect(socketPath(), settings.connectTimeoutMs)) {
+  if (await canConnect(socketPath(host), settings.connectTimeoutMs)) {
     return { kind: "attached" };
   }
 
   // No daemon yet. Try to win the spawn-lock so we are the one to bring it up.
   const contentionStart = Date.now();
   while (Date.now() < deadline) {
-    const lock = tryAcquireSpawnLock();
+    const lock = tryAcquireSpawnLock(host);
     if (lock.kind === "error") {
       // [LAW:no-silent-failure] Unrecoverable errors (EACCES, ENOTDIR,
       // broken state dir) must not silently degrade into a contention loop
@@ -92,10 +94,11 @@ export async function obtainDaemon(
       try {
         // Re-check: another caller may have spawned a daemon between our
         // initial connect and our lock acquisition.
-        if (await canConnect(socketPath(), settings.connectTimeoutMs)) {
+        if (await canConnect(socketPath(host), settings.connectTimeoutMs)) {
           return { kind: "attached" };
         }
         return await spawnAndWaitForReady(
+          host,
           spawnFn,
           settings.spawnReadyTimeoutMs,
           settings.connectTimeoutMs,
@@ -109,7 +112,7 @@ export async function obtainDaemon(
     // Lock contended. Another caller is in the spawn window — brief wait,
     // then re-check for the socket they're bringing up.
     await sleep(20);
-    if (await canConnect(socketPath(), settings.connectTimeoutMs)) {
+    if (await canConnect(socketPath(host), settings.connectTimeoutMs)) {
       return { kind: "attached" };
     }
     // [LAW:dataflow-not-control-flow] spawn.lock is an optimization; bind()
@@ -120,6 +123,7 @@ export async function obtainDaemon(
     // in the worst case, which is the right trade for availability.
     if (Date.now() - contentionStart > lockFallbackMs) {
       return await spawnAndWaitForReady(
+        host,
         spawnFn,
         settings.spawnReadyTimeoutMs,
         settings.connectTimeoutMs,
@@ -135,6 +139,7 @@ export async function obtainDaemon(
 // Spawn the daemon, then poll for it to bind. Returns the typed outcome.
 // Shared by the lock-held path and the lock-fallback path so they don't drift.
 async function spawnAndWaitForReady(
+  host: Host,
   spawnFn: () => boolean,
   spawnReadyTimeoutMs: number,
   connectTimeoutMs: number,
@@ -151,11 +156,11 @@ async function spawnAndWaitForReady(
   // already in flight — do NOT add another Node process; wait for the in-flight
   // boot. This keeps obtainDaemon under the same global rate cap as the kick
   // path, so the rate bound holds for EVERY spawn site [LAW:one-source-of-truth].
-  if (!claimSpawnCooldown()) {
+  if (!claimSpawnCooldown(host)) {
     // [LAW:no-silent-failure] This failure's cause is the cooldown gate, not the
     // lock path we arrived through — so it does NOT inherit reasonSuffix (which
     // tags lock-held vs lock-fallback *spawn* provenance). We never spawned here.
-    return (await pollUntilReady(connectTimeoutMs, readyDeadline))
+    return (await pollUntilReady(host, connectTimeoutMs, readyDeadline))
       ? { kind: "attached" }
       : {
           kind: "failed",
@@ -181,7 +186,7 @@ async function spawnAndWaitForReady(
       reason: `spawn returned false${reasonSuffix}`,
     };
   }
-  return (await pollUntilReady(connectTimeoutMs, readyDeadline))
+  return (await pollUntilReady(host, connectTimeoutMs, readyDeadline))
     ? { kind: "started" }
     : {
         kind: "failed",
@@ -194,11 +199,12 @@ async function spawnAndWaitForReady(
 // both need "did a daemon come up in time", they differ only in how they label
 // the outcome.
 async function pollUntilReady(
+  host: Host,
   connectTimeoutMs: number,
   readyDeadline: number,
 ): Promise<boolean> {
   while (Date.now() < readyDeadline) {
-    if (await canConnect(socketPath(), connectTimeoutMs)) return true;
+    if (await canConnect(socketPath(host), connectTimeoutMs)) return true;
     await sleep(20);
   }
   return false;
@@ -230,10 +236,14 @@ async function pollUntilReady(
 // still recovering from a crashed-mid-spawn holder well before STALE_LOCK_MS.
 const KICK_CONTENDED_OVERRIDE_MS = 2_000;
 
-export function obtainDaemonKick(opts: { spawn?: () => boolean } = {}): void {
-  if (ensureStateDir() !== null) return;
-  const spawnFn = opts.spawn ?? spawnDaemonDetachedReal;
-  const lock = tryAcquireSpawnLock();
+export function obtainDaemonKick(
+  world: World,
+  opts: { spawn?: () => boolean } = {},
+): void {
+  const { host } = world;
+  if (ensureStateDir(host) !== null) return;
+  const spawnFn = opts.spawn ?? (() => spawnDaemonDetachedReal(world));
+  const lock = tryAcquireSpawnLock(host);
 
   // [LAW:dataflow-not-control-flow] Lock outcome is data, not control flow.
   // - "contended": typically means another caller is in the spawn window;
@@ -246,12 +256,12 @@ export function obtainDaemonKick(opts: { spawn?: () => boolean } = {}): void {
   //   hard stop on availability. Fall through to an unlocked spawn.
   // - "held": normal path — spawn under the lock.
   if (lock.kind === "contended") {
-    const ageMs = spawnLockAgeMs();
+    const ageMs = spawnLockAgeMs(host);
     if (ageMs !== null && ageMs > KICK_CONTENDED_OVERRIDE_MS) {
       process.stderr.write(
         `cc-candybar: spawn-lock held ${ageMs}ms (likely crashed holder) — spawning unlocked\n`,
       );
-      cooldownGatedSpawn(spawnFn);
+      cooldownGatedSpawn(host, spawnFn);
     }
     return;
   }
@@ -259,11 +269,11 @@ export function obtainDaemonKick(opts: { spawn?: () => boolean } = {}): void {
     process.stderr.write(
       `cc-candybar: spawn-lock unavailable (${lock.reason}) — spawning unlocked\n`,
     );
-    cooldownGatedSpawn(spawnFn);
+    cooldownGatedSpawn(host, spawnFn);
     return;
   }
   try {
-    cooldownGatedSpawn(spawnFn);
+    cooldownGatedSpawn(host, spawnFn);
   } finally {
     releaseSpawnLock();
   }
@@ -274,14 +284,14 @@ export function obtainDaemonKick(opts: { spawn?: () => boolean } = {}): void {
 // spawn_daemon_rate_limited. On cooldown we do nothing: a spawn was attempted
 // within SPAWN_COOLDOWN_MS and is likely still booting; the kick is
 // fire-and-forget, so "already in flight" is a complete answer.
-function cooldownGatedSpawn(spawnFn: () => boolean): void {
-  if (!claimSpawnCooldown()) return;
+function cooldownGatedSpawn(host: Host, spawnFn: () => boolean): void {
+  if (!claimSpawnCooldown(host)) return;
   safeSpawn(spawnFn);
 }
 
-function spawnLockAgeMs(): number | null {
+function spawnLockAgeMs(host: Host): number | null {
   try {
-    const st = fs.statSync(spawnLockPath());
+    const st = fs.statSync(spawnLockPath(host));
     return Date.now() - st.mtimeMs;
   } catch {
     return null;
@@ -476,9 +486,9 @@ export function resetSpawnBackoff(backoffPath: string): void {
 // returns false still counts against the rate, so a broken binary is not
 // retried in a tight loop. A future-mtime garbage record warns loudly and
 // falls toward ALLOWING the spawn [LAW:no-silent-failure].
-function claimSpawnCooldown(): boolean {
-  const cooldownPath = spawnCooldownPath();
-  const backoffPath = spawnBackoffPath();
+function claimSpawnCooldown(host: Host): boolean {
+  const cooldownPath = spawnCooldownPath(host);
+  const backoffPath = spawnBackoffPath(host);
   const streak = readBackoffStreak(backoffPath);
   const decision = cooldownDecision(
     cooldownAgeMs(cooldownPath),
@@ -511,7 +521,7 @@ function cooldownAgeMs(path: string): number | null {
 
 function recordSpawnAttempt(filePath: string): void {
   // [LAW:composability] Self-sufficient — ensure the state dir exists rather
-  // than leaning on an ambient ensureStateDir() precondition, so any spawn site
+  // than leaning on an ambient ensureStateDir(host) precondition, so any spawn site
   // routing through claimSpawnCooldown records correctly (mirrors Rust's
   // record_spawn_attempt). Content is human-diagnostic only; the mtime is the
   // authority. A write failure means no cooldown recorded — worst case one extra
@@ -554,8 +564,8 @@ type LockOutcome =
   | { kind: "contended" }
   | { kind: "error"; reason: string };
 
-function tryAcquireSpawnLock(): LockOutcome {
-  const path = spawnLockPath();
+function tryAcquireSpawnLock(host: Host): LockOutcome {
+  const path = spawnLockPath(host);
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const fd = fs.openSync(path, "wx", 0o600);
@@ -620,12 +630,12 @@ function releaseSpawnLock(): void {
 // Returns null on success, or a reason string on unrecoverable failure. Used
 // by both obtainDaemon (which converts to a `failed` result) and
 // obtainDaemonKick (which silently gives up — there is no caller to report to).
-function ensureStateDir(): string | null {
+function ensureStateDir(host: Host): string | null {
   try {
-    fs.mkdirSync(daemonDir(), { recursive: true });
+    fs.mkdirSync(daemonDir(host), { recursive: true });
     return null;
   } catch (e) {
-    return `mkdir ${daemonDir()}: ${(e as Error).message}`;
+    return `mkdir ${daemonDir(host)}: ${(e as Error).message}`;
   }
 }
 
@@ -672,7 +682,7 @@ export function daemonArgs(script: string, env: NodeJS.ProcessEnv): string[] {
 // [LAW:single-enforcer] Routes through src/proc/launch so daemon-spawn shows
 // up in subprocess metering (category "daemon-spawn"). The launch primitive
 // owns the only child_process import in this file.
-function spawnDaemonDetachedReal(): boolean {
+function spawnDaemonDetachedReal({ host, launcher }: World): boolean {
   const node = process.execPath;
   const script = process.argv[1];
   if (!script) return false;
@@ -681,9 +691,9 @@ function spawnDaemonDetachedReal(): boolean {
   // process-table pressure) propagates as `false` instead of being silently
   // reported as success. The previous `void launch({detached:true})` form
   // discarded the Promise and unconditionally returned true.
-  const result = processLauncher.launchDetachedSync({
+  const result = launcher.launchDetachedSync({
     bin: node,
-    args: daemonArgs(script, process.env),
+    args: daemonArgs(script, host.env),
     category: "daemon-spawn",
   });
   return result.ok;

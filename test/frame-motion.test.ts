@@ -3,7 +3,7 @@
 // effect does, and a bar with neither is still.
 
 import { drawPayload } from "./helpers/draw-payload";
-import { processLauncher } from "../src/proc/launch";
+import { processLauncher } from "./helpers/host";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { picked, selectionFor } from "./helpers/selection";
 import { SessionState } from "../src/daemon/session-state";

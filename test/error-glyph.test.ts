@@ -1,4 +1,5 @@
 import net from "node:net";
+import { hostOf } from "./helpers/host";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -173,16 +174,14 @@ describe("end-to-end: VERSION_MISMATCH wire → permanent outcome → glyph", ()
     const daemonV = PROTOCOL_VERSION + 7; // arbitrary "other" version
 
     const server = await spinUpMismatchSocket(sockPath, daemonV);
-    const prevXdg = process.env.XDG_STATE_HOME;
-    const prevSock = process.env.CC_CANDYBAR_SOCKET;
-    process.env.XDG_STATE_HOME = tmpRoot;
-    process.env.CC_CANDYBAR_SOCKET = sockPath;
+    const host = hostOf({
+      ...process.env,
+      XDG_STATE_HOME: tmpRoot,
+      CC_CANDYBAR_SOCKET: sockPath,
+    });
     try {
-      // Import client lazily so socketPath() resolves to CC_CANDYBAR_SOCKET
-      // (paths.ts reads env at call time, but using a fresh import is robust
-      // against any future caching of the resolved path).
       const { tryRenderViaDaemon } = await import("../src/daemon/client");
-      const outcome = await tryRenderViaDaemon(
+      const outcome = await tryRenderViaDaemon(host, 
         {
           session_id: "test-glyph-session",
           workspace: { project_dir: "/tmp" },
@@ -205,10 +204,6 @@ describe("end-to-end: VERSION_MISMATCH wire → permanent outcome → glyph", ()
       expect(glyph.startsWith(OPEN)).toBe(true);
       expect(glyph.endsWith(TAIL)).toBe(true);
     } finally {
-      if (prevXdg === undefined) delete process.env.XDG_STATE_HOME;
-      else process.env.XDG_STATE_HOME = prevXdg;
-      if (prevSock === undefined) delete process.env.CC_CANDYBAR_SOCKET;
-      else process.env.CC_CANDYBAR_SOCKET = prevSock;
       await new Promise<void>((r) => server.close(() => r()));
       try {
         fs.rmSync(tmpRoot, { recursive: true, force: true });

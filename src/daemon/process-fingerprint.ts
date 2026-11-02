@@ -80,7 +80,7 @@ export async function readStartTime(
     // process identically for opaque string equality to be sound. LC_ALL=C fixes
     // the strftime format; TZ=UTC fixes localtime(), so DST / TZ / tzdata changes
     // can't make one live process render two different start-time strings.
-    env: { ...process.env, LC_ALL: "C", TZ: "UTC" },
+    envOverlay: { LC_ALL: "C", TZ: "UTC" },
   });
   if (res.ok) {
     const token = res.stdout.trim();

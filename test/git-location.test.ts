@@ -2,6 +2,7 @@
 // checkout, and what `directory` draws from it. `gitaculous` reads the same
 // payload fields only to decide whether it has a branch to show at all.
 import { drawPayload } from "./helpers/draw-payload";
+import { processLauncher } from "./helpers/host";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -9,7 +10,6 @@ import path from "node:path";
 import type { RichText } from "@promptctl/rich-js";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { registerDslConfig } from "../src/dsl/render";
-import { processLauncher } from "../src/proc/launch";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { checkoutLocation } from "../src/utils/git-root";

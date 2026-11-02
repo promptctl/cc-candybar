@@ -890,7 +890,7 @@ export class GitService {
       bin: "git",
       args: [...args],
       cwd: options.cwd,
-      env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+      envOverlay: { GIT_OPTIONAL_LOCKS: "0" },
       timeoutMs: options.timeout,
       category: "git",
     });
@@ -1424,7 +1424,6 @@ export class GitService {
       bin,
       args: [...args],
       cwd: options.cwd,
-      env: { ...process.env },
       timeoutMs: options.timeout,
       category: "forge",
     });

@@ -11,9 +11,9 @@
 //     threshold variable, fails to load and says what to write instead.
 
 import { drawPayload } from "./helpers/draw-payload";
+import { locs, processLauncher } from "./helpers/host";
 import type { Frame } from "../src/render/frame";
 import { backgroundsOf, linkUrls } from "./helpers/frame";
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { picked, selectionFor } from "./helpers/selection";
 import { configurePlacement } from "./helpers/configure";
@@ -90,7 +90,7 @@ function buildRuntime(src: string, utilization: number) {
       selectionFor(config, {}, picked({ theme: THEME })),
     ).frame;
   const ctx: VerbContext = {
-    ...testVerbContext(sessionState, durable.historyFor(sessionState)),
+    ...testVerbContext(sessionState, durable.historyFor(sessionState), undefined, durable.host),
     configFor: () => config,
   };
   // Through the verb the URL names — `dispatch` included, which is what
@@ -153,7 +153,7 @@ describe("block's thresholds are settings configure mode steps", () => {
     const error = placementDraftKey("default", "block", "errorAt");
     const setState = VERBS.get("set-state")!;
     const ctx = {
-      ...testVerbContext(rt.sessionState, durable.historyFor(rt.sessionState)),
+      ...testVerbContext(rt.sessionState, durable.historyFor(rt.sessionState), undefined, durable.host),
       configFor: () => load(BLOCK_ONLY),
     };
     await expect(setState(`${SID}/${warn}/70/${error}/60`, ctx),

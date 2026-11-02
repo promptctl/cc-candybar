@@ -4,6 +4,7 @@
 // beside it.
 
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
+import { locs } from "./helpers/host";
 import {
   inheritableSegmentNames,
   homeLayer,
@@ -153,7 +154,7 @@ describe("a chain whose merge fails", () => {
   };
   test("is blamed on the error that refused it, not on a lower file's undeclared placement", () => {
     const load = () =>
-      loadConfigChain(
+      loadConfigChain(locs(), 
         ["/lower.json5", "/upper.json5"].map(homeLayer),
         DEFAULT_DSL_CONFIG,
         { warned: () => {} },
@@ -168,7 +169,7 @@ describe("a chain whose merge fails", () => {
 
 describe("a lower layer's undeclared placement", () => {
   const chain = (files: Record<string, string>) =>
-    loadConfigChain(
+    loadConfigChain(locs(), 
       Object.keys(files).map(homeLayer),
       DEFAULT_DSL_CONFIG,
       { warned: () => {} },

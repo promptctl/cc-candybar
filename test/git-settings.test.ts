@@ -3,7 +3,7 @@
 // on one bar — a bare copy on every default and a copy with one setting off —
 // so it pins both the setting's effect and that two copies never share a value.
 import { drawPayload } from "./helpers/draw-payload";
-import { processLauncher } from "../src/proc/launch";
+import { processLauncher } from "./helpers/host";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import type { RichText } from "@promptctl/rich-js";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";

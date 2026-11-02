@@ -7,6 +7,7 @@
 // reads a real one, and the scenario (scenario.ts) moves that machine.
 
 import { VERB_COPY } from "../src/click/wire";
+import { processWorld } from "../src/host";
 import { describeLink, effectsOf, HOST_VERBS, linksOf } from "../src/click/read";
 import { createDaemon, SYSTEM_CLOCK } from "../src/daemon/daemon";
 import { memoryLimitBytes } from "../src/daemon/limits";
@@ -67,11 +68,15 @@ seedWorld(onClock(INITIAL_REPO) as RepoState);
 // The daemon the page runs has the limits a daemon has, so the doctor can ask
 // it what it holds; it is never armed, so nothing counts its memory, as no
 // socket was won. Nothing it holds outlives the page.
-const paths = daemonPaths(process.env);
+// The page is a process main of its own: it reads the machine it runs on (the
+// simulated one, under the node shims) once.
+const HOST = processWorld().host;
+const paths = daemonPaths(HOST);
 const pageDaemon = createDaemon({
   ...productionAdapters(paths, new DaemonLog(paths.log)),
   gates: daemonGates(),
   paths,
+  host: HOST,
   bundle: {
     entryUrl: "file:///app/dist/index.mjs",
     digest: null,
@@ -83,7 +88,7 @@ const pageDaemon = createDaemon({
     session: EPHEMERAL_SESSION_STORAGE,
     history: EPHEMERAL_HISTORY_STORAGE,
   }),
-  memoryLimitBytes: memoryLimitBytes(process.env),
+  memoryLimitBytes: memoryLimitBytes(HOST.env),
   registryUrl: REGISTRY_URL,
   clock: SYSTEM_CLOCK,
   exit: (code) => {

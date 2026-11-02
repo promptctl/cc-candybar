@@ -1,4 +1,5 @@
 import type { Frame } from "../src/render/frame";
+import { WORLD, processLauncher } from "./helpers/host";
 // brandon-theme-picker-bgw.fe0 — text keeps its contrast at 256 colours.
 // brandon-theme-picker-bgw.ddk — so does every seam, and at ansi nothing is
 // drawn on its own ground's index.
@@ -20,7 +21,6 @@ import type { Frame } from "../src/render/frame";
 
 import { drawPayload } from "./helpers/draw-payload";
 import { linkUrls } from "./helpers/frame";
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import {
   listThemePalettes,
@@ -262,7 +262,7 @@ async function closedBars(): Promise<{
   dispose: () => void;
 }> {
   const at = instantOf(new Date());
-  const prepared = await prepareConfig([], NO_REPO, process.cwd(), [], at);
+  const prepared = await prepareConfig(WORLD, [], NO_REPO, process.cwd(), [], at);
   return {
     render: async (theme, colorCompatibility) =>
       drawnChars(

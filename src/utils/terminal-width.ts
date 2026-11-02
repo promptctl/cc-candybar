@@ -27,25 +27,8 @@ const RESERVED_CHARS = 2;
 // Every consumer that needs to honor Claude Code's statusline gutter routes
 // through here; there is no parallel `cols - N` math anywhere. Exposed so callers
 // that already have a raw width (e.g. the daemon's wire-fallback path,
-// the demo reading process.stdout.columns) can apply the reserve without
-// re-entering the env/stderr resolution chain in getTerminalWidth.
+// the demo reading process.stdout.columns) can apply the reserve to a width
+// they already hold.
 export function applyClaudeCodeReserve(rawCols: number): number {
   return Math.max(1, rawCols - RESERVED_CHARS);
-}
-
-export function getTerminalWidth(termColsHint?: number): number | null {
-  if (termColsHint && termColsHint > 0)
-    return applyClaudeCodeReserve(termColsHint);
-
-  const envColumns = process.env.COLUMNS;
-  if (envColumns) {
-    const parsed = parseInt(envColumns, 10);
-    if (!isNaN(parsed) && parsed > 0) return applyClaudeCodeReserve(parsed);
-  }
-
-  if (process.stderr.columns && process.stderr.columns > 0) {
-    return applyClaudeCodeReserve(process.stderr.columns);
-  }
-
-  return null;
 }

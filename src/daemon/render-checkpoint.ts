@@ -39,6 +39,7 @@ import {
 function parseRenderArgs(
   args: string[],
   cwd: string,
+  home: string,
 ): {
   configFile: string | undefined;
   refusedArgs: readonly RefusedArg[];
@@ -74,7 +75,7 @@ function parseRenderArgs(
     }
   });
   return {
-    configFile: explicitConfigPath(cwd, config?.value),
+    configFile: explicitConfigPath(cwd, config?.value, home),
     // In argv order, each refusal once.
     refusedArgs: refused.filter(
       (r, i) =>
@@ -129,6 +130,7 @@ export function checkRenderRequest(
   req: ReaderRenderRequest,
   stats: Pick<RuntimeStats, "firstSightOfUnknownHookField">,
   log: DaemonLogger,
+  home: string,
 ): { ok: true; req: CheckedRenderRequest } | { ok: false; problems: string[] } {
   // [LAW:single-enforcer] One trust-boundary check for incoming hookData.
   // The validator reports missing/wrong-typed required fields and unknown
@@ -204,7 +206,7 @@ export function checkRenderRequest(
   // [LAW:dataflow-not-control-flow] The *request's* cwd, not the daemon's
   // process.cwd(), so config resolution depends only on request data — the
   // daemon's own working directory must not influence output.
-  const { configFile, refusedArgs } = parseRenderArgs(req.args, req.cwd);
+  const { configFile, refusedArgs } = parseRenderArgs(req.args, req.cwd, home);
   return {
     ok: true,
     req: {

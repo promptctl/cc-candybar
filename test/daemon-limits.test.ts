@@ -1,5 +1,5 @@
 import { until } from "./helpers/until";
-import { processLauncher } from "../src/proc/launch";
+import { processLauncher } from "./helpers/host";
 import {
   makeLimits,
   type LimitsDeps,

@@ -5,6 +5,7 @@
 // output-string payload projection. [LAW:dataflow-not-control-flow]
 // The render budgets are wire facts, declared in ./protocol.
 
+import type { Host } from "../host";
 import type { ClaudeHookData } from "../utils/claude";
 import { interpretResponse, requestOutcome } from "./client-transport";
 import type { RoundTripBudgets, RoundTripOutcome } from "./client-transport";
@@ -62,6 +63,7 @@ export function renderOutcomeOf(resp: Response): ClientOutcome {
 // the statusline states none and gets the wire facts. A test whose subject is
 // the deadline, not the speed of a loaded runner's loop, states wider ones.
 export function tryRenderViaDaemon(
+  host: Host,
   hookData: ClaudeHookData,
   args: string[],
   cwd: string,
@@ -69,6 +71,7 @@ export function tryRenderViaDaemon(
   budgets: RoundTripBudgets = RENDER_BUDGETS,
 ): Promise<ClientOutcome> {
   return requestOutcome(
+    host,
     (deadline) => ({ kind: "render", hookData, args, cwd, deadline, ...hints }),
     budgets,
     projectOutput,
@@ -78,10 +81,12 @@ export function tryRenderViaDaemon(
 // The session that last rendered from a tmux pane (PaneSessionRequest), or
 // null when the daemon holds no request from it.
 export function trySessionInPane(
+  host: Host,
   socket: string,
   pane: string,
 ): Promise<RoundTripOutcome<string | null>> {
   return requestOutcome(
+    host,
     () => ({ kind: "pane-session", socket, pane }),
     CLICK_BUDGETS,
     (resp) => ("paneSession" in resp ? resp.paneSession : undefined),
@@ -92,10 +97,12 @@ export function trySessionInPane(
 // click failures decompose into the same transient/permanent split, so the
 // caller's "ok? done : kick + fallback" logic gets the same typed input.
 export function tryClickViaDaemon(
+  host: Host,
   verb: string,
   value: string,
 ): Promise<ClientOutcome> {
   return requestOutcome(
+    host,
     () => ({ kind: "click", verb, value, clientVersion: PACKAGE_VERSION }),
     CLICK_BUDGETS,
     projectOutput,

@@ -5,7 +5,8 @@
 // across edits (nothing here hashes a file) and covers every linked worktree.
 
 import { bareGates } from "./helpers/gates";
-import { processLauncher } from "../src/proc/launch";
+import { HOST, hostOf, worldOf } from "./helpers/host";
+import type { Host, World } from "../src/host";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -37,12 +38,13 @@ import { VERB_REPO_CONFIG } from "../src/click/wire";
 import { linkSigner } from "../src/click/link-signer";
 import { effectsOf } from "./helpers/click";
 import { answerRepo } from "./helpers/repo-approval";
-import { stateDir } from "../src/daemon/paths";
+import { locations, stateDir } from "../src/daemon/paths";
 import { daemonGates } from "../src/daemon/update-keys";
 
 let root: string;
 let project: string;
-let savedXdg: string | undefined;
+let host: Host;
+let world: World;
 
 beforeEach(() => {
   root = fs.realpathSync(
@@ -50,13 +52,11 @@ beforeEach(() => {
   );
   project = path.join(root, "repo");
   fs.mkdirSync(project);
-  savedXdg = process.env.XDG_CONFIG_HOME;
-  process.env.XDG_CONFIG_HOME = path.join(root, "xdg");
+  host = hostOf({ ...HOST.env, XDG_CONFIG_HOME: path.join(root, "xdg") });
+  world = worldOf(host);
 });
 
 afterEach(() => {
-  if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME;
-  else process.env.XDG_CONFIG_HOME = savedXdg;
   fs.rmSync(root, { recursive: true, force: true });
 });
 
@@ -73,14 +73,14 @@ function write(rel: string, text: string): string {
 }
 
 const layersOf = (answers: RepoAnswers) => {
-  const r = resolveDslConfig(answers, project, project);
+  const r = resolveDslConfig(locations(host), answers, project, project);
   return r.kind === "chain" ? r.layers.map((l) => l.path) : null;
 };
 
 describe("the gate over a project's config file", () => {
   test("unanswered, it is no layer, and the gate names the directory awaiting", () => {
     const file = write(".cc-candybar.json5", "{}");
-    const resolved = resolveDslConfig(book({}), project, project);
+    const resolved = resolveDslConfig(locations(host), book({}), project, project);
     expect(layersOf(book({}))).toEqual([]);
     expect(resolved.repos).toEqual({
       plugins: null,
@@ -95,7 +95,7 @@ describe("the gate over a project's config file", () => {
 
   test("declined, it is no layer and nothing awaits", () => {
     write(".cc-candybar.json5", "{}");
-    const resolved = resolveDslConfig(
+    const resolved = resolveDslConfig(locations(host), 
       book({ [project]: "declined" }),
       project,
       project,
@@ -112,7 +112,7 @@ describe("the gate over a project's config file", () => {
     expect(layersOf(book({}))).toEqual([user]);
     const named = write("named.json5", "{}");
     write(".cc-candybar.json5", "{}");
-    const explicit = resolveDslConfig(book({}), project, project, named);
+    const explicit = resolveDslConfig(locations(host), book({}), project, project, named);
     // An explicit file is the user's, whatever repository it sits in.
     expect(explicit.kind === "chain" && explicit.layers).toEqual([
       { path: named, scope: "plugins" },
@@ -122,12 +122,12 @@ describe("the gate over a project's config file", () => {
 
   test("the durable writer's chain leaves out what the bar's leaves out", () => {
     write(".cc-candybar.json5", "{}");
-    expect(durableConfig(book({}), project, project).above).toEqual([]);
+    expect(durableConfig(locations(host), book({}), project, project).above).toEqual([]);
   });
 
   test("a book that cannot be read answers for nobody, asks nothing, and says so", () => {
     write(".cc-candybar.json5", "{}");
-    const resolved = resolveDslConfig(
+    const resolved = resolveDslConfig(locations(host), 
       { kind: "failed", reason: "repo-configs.json is not JSON" },
       project,
       project,
@@ -148,12 +148,12 @@ describe("the gate over a project's plugins", () => {
   test("a plugin folder awaits the directory's answer, and loads once approved", () => {
     write(".cc-candybar/plugins/deploy/plugin.json5", PLUGIN);
     const deps = {
-      launcher: processLauncher,
+      launcher: world.launcher,
       sessionState: new SessionState(),
       storage: UNOWNED_STORAGE,
       signer: linkSigner(Buffer.alloc(32)),
       gates: bareGates(),
-      stateDir: stateDir(),
+      stateDir: stateDir(host), locations: locations(host), env: host.env,
     };
     const waiting = loadFromDisk(project, project, undefined, deps);
     expect(waiting.repos.awaiting).toEqual([project]);
@@ -177,7 +177,7 @@ describe("the gate over a project's plugins", () => {
     fs.mkdirSync(path.join(project, ".cc-candybar/plugins"), {
       recursive: true,
     });
-    expect(resolveDslConfig(book({}), project, project).repos.awaiting).toEqual(
+    expect(resolveDslConfig(locations(host), book({}), project, project).repos.awaiting).toEqual(
       [],
     );
   });
@@ -203,7 +203,7 @@ describe("check", () => {
   test("an unanswered project config is reported awaiting, and nothing of it runs", async () => {
     const marker = path.join(project, "ran.marker");
     write(".cc-candybar.json5", shellConfig(marker));
-    const outcome = await checkConfig(daemonGates(), undefined, project);
+    const outcome = await checkConfig(world, daemonGates(), undefined, project);
     expect(outcome.kind).toBe("clean");
     if (outcome.kind !== "clean") return;
     expect(outcome.layers).toEqual([]);
@@ -217,7 +217,7 @@ describe("check", () => {
     const marker = path.join(project, "ran.marker");
     const file = write(".cc-candybar.json5", shellConfig(marker));
     answerRepo(project);
-    const outcome = await checkConfig(daemonGates(), undefined, project);
+    const outcome = await checkConfig(world, daemonGates(), undefined, project);
     expect(outcome).toMatchObject({
       kind: "clean",
       layers: [{ path: file, scope: "repo" }],
@@ -228,7 +228,7 @@ describe("check", () => {
   test("a directory whose worktree claim fails its proof is reported with the reason it answers for itself", async () => {
     write(".cc-candybar.json5", "{}");
     write(".git", "gitdir: /nonexistent/x\n");
-    const outcome = await checkConfig(daemonGates(), undefined, project);
+    const outcome = await checkConfig(world, daemonGates(), undefined, project);
     expect(outcome.kind).toBe("clean");
     if (outcome.kind !== "clean") return;
     expect(outcome.warnings).toContain(
@@ -401,7 +401,7 @@ describe("a repository's worktrees answer as the repository", () => {
     execFileSync("git", args, { stdio: "ignore" });
   };
   const resolveAt = (answers: RepoAnswers, dir: string) =>
-    resolveDslConfig(answers, dir, dir);
+    resolveDslConfig(locations(host), answers, dir, dir);
   const layersAt = (answers: RepoAnswers, dir: string) => {
     const r = resolveAt(answers, dir);
     return r.kind === "chain" ? r.layers.map((l) => l.path) : null;

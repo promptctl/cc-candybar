@@ -35,11 +35,8 @@ import {
 import { bakedDigest } from "./build-currency";
 import { DaemonLog } from "./log";
 import type { LogLevel } from "../utils/logger";
-import {
-  oneShotLauncher,
-  processLauncher,
-  type OneShotLauncher,
-} from "../proc/launch";
+import type { World } from "../host";
+import type { OneShotLauncher } from "../proc/launch";
 import { runTmuxAtExit } from "../proc/tmux";
 import type { TmuxAtExit } from "./tmux-status";
 import {
@@ -81,10 +78,11 @@ let breakerRegistryPath: string | null = null;
 // death has nothing to close.
 let serving: Daemon | null = null;
 
-// [LAW:effects-at-boundaries] The process this daemon is: every path it touches,
-// read from the environment here and nowhere below, and the log those paths
-// name. Fixed once by `runDaemon`, before anything that can fail.
+// [LAW:effects-at-boundaries] The process this daemon is: the world its main
+// handed it, every path it touches (parsed from that world's host here and
+// nowhere below), and the log those paths name. Fixed once by `runDaemon`, before anything that can fail.
 interface DaemonProcess {
+  readonly world: World;
   readonly paths: DaemonPaths;
   readonly log: DaemonLog;
 }
@@ -118,9 +116,9 @@ function runningBundle(): RunningBundle {
   };
 }
 
-export function runDaemon(): void {
-  const paths = daemonPaths(process.env);
-  thisProcess = { paths, log: new DaemonLog(paths.log) };
+export function runDaemon(world: World): void {
+  const paths = daemonPaths(world.host);
+  thisProcess = { world, paths, log: new DaemonLog(paths.log) };
   // Catch-alls log + exit so the supervisor (the next client) can restart us.
   // [LAW:no-defensive-null-guards] These are *trust boundaries* — we are
   // catching all of unknown space, not skipping known optional values.
@@ -162,7 +160,9 @@ async function boot(): Promise<void> {
   // registers us, before the bind, before the lease, and before a `daemon up`
   // line could claim a boot that is about to die. Parsed once, threaded into
   // the limits and the boot line.
-  const memoryLimit = memoryLimitBytes(process.env);
+  const { world, paths, log: daemonLog } = daemonProcess();
+  const { host } = world;
+  const memoryLimit = memoryLimitBytes(host.env);
 
   // [LAW:single-enforcer] The fork-bomb circuit breaker runs FIRST among the
   // resource-committing steps (no dir created, no socket touched, no session
@@ -172,11 +172,10 @@ async function boot(): Promise<void> {
   // fingerprint later, so it is read exactly once and threaded through both
   // (see realBreakerDeps' doc comment).
   myStartTime = await readOwnStartTime(process.pid, (pid) =>
-    readStartTime(pid, processLauncher.launch),
+    readStartTime(pid, world.launcher.launch),
   );
-  const { paths, log: daemonLog } = daemonProcess();
   const admission = await admitDaemon(
-    realBreakerDeps(myStartTime, paths.registry),
+    realBreakerDeps(world, myStartTime, paths.registry),
   );
   if (!admission.decision.allow) {
     serverLog(
@@ -204,9 +203,10 @@ async function boot(): Promise<void> {
   const daemon = createDaemon({
     ...productionAdapters(paths, daemonLog),
     bundle: runningBundle(),
+    host,
     paths,
     memoryLimitBytes: memoryLimit,
-    registryUrl: process.env.CC_CANDYBAR_REGISTRY_URL ?? REGISTRY_URL,
+    registryUrl: host.env.CC_CANDYBAR_REGISTRY_URL ?? REGISTRY_URL,
     clock: SYSTEM_CLOCK,
     gates: daemonGates(),
     exit: shutdown,
@@ -217,7 +217,7 @@ async function boot(): Promise<void> {
   // daemon has no spawner to outlive (env unset) and arms an inert handle; only
   // a test-spawned daemon is anchored, so this is invisible to the real daemon.
   armParentWatchdog({
-    anchor: anchorFromEnv(process.env),
+    anchor: anchorFromEnv(host.env),
     isAlive: pidAlive,
     onOrphaned: (reason) => {
       serverLog("info", `parent watchdog: ${reason}; shutting down`);
@@ -494,7 +494,7 @@ function shutdown(code: number): void {
   // process.exit; the stale path that remains is recovered by the
   // existing handleAddressInUse logic on the next daemon's startup
   // (probe → dead → unlink + rebind, ~50ms one-shot cost).
-  serving?.close(tmuxAtExit(oneShotLauncher));
+  serving?.close(tmuxAtExit(daemonProcess().world.launcher));
   // [LAW:one-source-of-truth] Remove the lease only if it still names us. A
   // displaced daemon (socket stolen, thief wrote its own lease) must not delete
   // the live owner's lease on its way out, or the next EADDRINUSE would read

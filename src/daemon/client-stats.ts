@@ -1,5 +1,6 @@
 import { describeFailure, requestOutcome } from "./client-transport";
 import type { CliPlan } from "../cli-plan";
+import type { Host } from "../host";
 import type { RoundTripBudgets, RoundTripOutcome } from "./client-transport";
 import { RuntimeStats, type StatsSnapshot } from "./stats";
 import { fileEventsLine } from "./cache/file-events";
@@ -16,9 +17,10 @@ const BUDGETS: RoundTripBudgets = { connectMs: 200, budgetMs: 500 };
 // dead daemon is meaningless. A failure is the plan's stderr and a non-zero
 // code.
 export async function daemonStatsPlan(
+  host: Host,
   args: readonly string[],
 ): Promise<CliPlan> {
-  return statsPlan(await fetchStats(), args.includes("--json"));
+  return statsPlan(await fetchStats(host), args.includes("--json"));
 }
 
 // [LAW:dataflow-not-control-flow] The outcome → (streams, exit-code) fold.
@@ -44,12 +46,15 @@ export function statsPlan(
   return { stdout: json ?? formatStats(outcome.value), stderr: "", code: 0 };
 }
 
-export function fetchStats(): Promise<RoundTripOutcome<StatsSnapshot>> {
+export function fetchStats(
+  host: Host,
+): Promise<RoundTripOutcome<StatsSnapshot>> {
   // [LAW:no-defensive-null-guards] exception: trust boundary. The response is
   // an unchecked cast from socket JSON; the presence check is the explicit
   // narrowing at the wire edge (an ok response without `stats` classifies as
   // permanent/malformed_response in the transport).
   return requestOutcome(
+    host,
     () => ({ kind: "stats" }),
     BUDGETS,
     (resp) => ("stats" in resp ? resp.stats : undefined),

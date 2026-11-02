@@ -24,13 +24,12 @@
 
 import { linkKeyFile, linkSignerFromKeyFile } from "../daemon/link-key.js";
 import { daemonGates } from "../daemon/update-keys.js";
-import { stateDir } from "../daemon/paths.js";
+import { locations, stateDir } from "../daemon/paths.js";
 import { repoGateAt } from "../daemon/repo-configs.js";
 import { repoGateLines } from "../config/loader/repo-gate.js";
 import { UNFOLLOWED_FEEDS } from "../config/lanes.js";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
-import { tmpdir } from "node:os";
 import process from "node:process";
 import { setTimeout as sleep } from "node:timers/promises";
 
@@ -50,7 +49,7 @@ import { WatcherRegistry } from "../daemon/cache/watchers.js";
 import { NO_FILE_EVENTS } from "../daemon/cache/file-events.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import { createPayloadProviders } from "../daemon/payload-providers.js";
-import { processLauncher } from "../proc/launch.js";
+import { processWorld } from "../host.js";
 import { RefreshLedger } from "../utils/refresh-ledger.js";
 import { parseClientHints } from "../daemon/protocol.js";
 import {
@@ -69,7 +68,7 @@ import { SessionEffects } from "../render/effect.js";
 import { ansiOf } from "../render/frame.js";
 import type { RenderedLine } from "../dsl/node-registry.js";
 import type { ClaudeHookData } from "../utils/claude.js";
-import { debug } from "../utils/logger.js";
+import { debug, setDebug } from "../utils/logger.js";
 import { instantOf } from "../utils/instant.js";
 
 const FRAMES = 4;
@@ -77,6 +76,11 @@ const FRAME_INTERVAL_MS = 450;
 
 const here = dirname(fileURLToPath(import.meta.url));
 const cwd = process.cwd();
+// [LAW:effects-at-boundaries] This script is its own process main: it reads the
+// machine once, as src/index.ts does, and the debug channel follows it.
+const world = processWorld();
+const { host } = world;
+setDebug(Boolean(host.env.CC_CANDYBAR_DEBUG));
 const configPath = resolve(process.argv[2] ?? join(here, "statusline.json5"));
 const sessionId = sessionIdOf("demo0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b");
 
@@ -86,15 +90,13 @@ const sessionId = sessionIdOf("demo0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b");
 const hookData: ClaudeHookData = {
   hook_event_name: "Status",
   session_id: sessionId,
-  transcript_path: join(tmpdir(), `cc-candybar-demo-${sessionId}.jsonl`),
+  transcript_path: join(host.tmp, `cc-candybar-demo-${sessionId}.jsonl`),
   cwd,
   model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
   workspace: { current_dir: cwd, project_dir: cwd, added_dirs: [] },
 };
 // The demo's frames go to stdout, so stdout is the stream on the terminal.
-const hints = parseClientHints(
-  detectClientHints(process.env, cwd, process.stdout),
-);
+const hints = parseClientHints(detectClientHints(host, cwd, process.stdout));
 const width = renderWidth(hints);
 
 // [LAW:no-silent-failure] What the daemon writes to daemon.log, the demo says
@@ -108,7 +110,8 @@ const warn = (message: string): void => log("warn", message);
 
 const watchers = new WatcherRegistry({ logger: log });
 const providers = createPayloadProviders({
-  launcher: processLauncher,
+  launcher: world.launcher,
+  host,
   watchers,
   // The demo holds no folder and watches nothing.
   fileEvents: NO_FILE_EVENTS,
@@ -124,12 +127,14 @@ const sessionState = new SessionState();
 // earns are reported whether or not it goes on to load, as the daemon's strip
 // and `cc-candybar check` report them.
 function loadState(): DslRenderState {
-  const repos = repoGateAt(stateDir(), cwd);
+  const locs = locations(host);
+  const repos = repoGateAt(stateDir(host), cwd);
   // The file it was given is named explicitly: no repository supplies it.
   const chain = {
     layers: [homeLayer(configPath)],
     home: configPath,
     repo: repos.plugins,
+    locs,
   };
   // [LAW:single-enforcer] The daemon's own load and settle: the advisories
   // come out of the one place every load composes them.
@@ -142,12 +147,14 @@ function loadState(): DslRenderState {
     cwd,
     chain,
     {
-      launcher: processLauncher,
+      launcher: world.launcher,
+      locations: locs,
+      env: host.env,
       sessionState,
       storage: UNOWNED_STORAGE,
-      signer: linkSignerFromKeyFile(linkKeyFile(stateDir())),
+      signer: linkSignerFromKeyFile(linkKeyFile(stateDir(host))),
       gates: daemonGates(),
-      stateDir: stateDir(),
+      stateDir: stateDir(host),
     },
   );
   if (loaded.warning !== null) warn(loaded.warning);

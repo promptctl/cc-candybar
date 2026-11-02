@@ -14,14 +14,9 @@
 // daemon's own render event, read back from its log, is the record of what it
 // did with it. `frame` is a reader's lookup between samples, asking for what no
 // client asks for, so no series measures it.
-//
-// [LAW:no-shared-mutable-globals] exception: the client reads its socket from
-// `process.env.CC_CANDYBAR_SOCKET` at call time and nothing in its API can say
-// otherwise, so the one world alive points the process's env at its socket. A
-// world's owner is `startWorld` and `stop`; two worlds at once would fight
-// over it.
 
 import { spawn } from "node:child_process";
+import { processWorld } from "../../src/host.js";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -184,9 +179,10 @@ export async function startWorld(config = "{}\n"): Promise<World> {
     ...HERMETIC_GIT_ENV,
   };
   const terminal = sessionEnv(dirs.claude);
-  const log = logPath(env);
+  // The host this world's clients are handed: its socket, its home.
+  const host = { env, home: dirs.home, tmp: processWorld().host.tmp };
+  const log = logPath(host);
 
-  process.env.CC_CANDYBAR_SOCKET = socket;
   // The shipped daemon's own argv, heap cap included. A process group of its
   // own, so the whole daemon is signalled and not only its first process.
   const spawned = performance.now();
@@ -214,7 +210,6 @@ export async function startWorld(config = "{}\n"): Promise<World> {
     } catch {
       // Already gone: killing a dead daemon is the goal reached.
     }
-    delete process.env.CC_CANDYBAR_SOCKET;
     const refused = fs.existsSync(unknownCalls)
       ? fs.readFileSync(unknownCalls, "utf8").trim()
       : null;
@@ -227,7 +222,7 @@ export async function startWorld(config = "{}\n"): Promise<World> {
   };
 
   const stats = async (): Promise<StatsSnapshot> => {
-    const outcome = await fetchStats();
+    const outcome = await fetchStats(host);
     if (outcome.kind !== "ok") {
       throw new Error(`the daemon did not answer stats: ${describeFailure(outcome)}`);
     }
@@ -240,7 +235,7 @@ export async function startWorld(config = "{}\n"): Promise<World> {
       if (exited !== null) {
         throw new Error(`the daemon ${exited} before it answered:\n${logLines(log).slice(-20).join("\n")}`);
       }
-      if ((await fetchStats()).kind === "ok") break;
+      if ((await fetchStats(host)).kind === "ok") break;
       if (performance.now() - spawned > BOOT_BUDGET_MS) {
         throw new Error(`the daemon did not answer within ${BOOT_BUDGET_MS} ms of its spawn`);
       }
@@ -279,7 +274,9 @@ export async function startWorld(config = "{}\n"): Promise<World> {
 
   // What a client reports of the terminal it runs at.
   const hintsOf = (session: Session, columns: number): ClientHints => ({
-    ...detectClientHints(terminal, session.cwd, { columns, rows: 48 }),
+    ...detectClientHints(
+      { env: terminal, home: dirs.home },
+      session.cwd, { columns, rows: 48 }),
     client: CLIENT,
   });
 
@@ -312,6 +309,8 @@ export async function startWorld(config = "{}\n"): Promise<World> {
     async tick(session, columns, n) {
       const started = performance.now();
       const outcome = await tryRenderViaDaemon(
+        host,
+        
         hookDataOf(session, n),
         [BUNDLE],
         session.cwd,
@@ -324,6 +323,7 @@ export async function startWorld(config = "{}\n"): Promise<World> {
     },
     async frame(session, columns, n) {
       const outcome = await requestOutcome(
+        host,
         (deadline) => ({
           kind: "render",
           encoding: "frame",

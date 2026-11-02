@@ -3,6 +3,7 @@
 // carry the cause, not only the class of failure.
 
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { HOST } from "./helpers/host";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { clickHandoff, clickLaunch } from "../src/daemon/verbs";
@@ -24,7 +25,7 @@ describe("clickHandoff", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "handoff-test-"));
     const pidFile = path.join(dir, "pid");
     await clickHandoff(
-      createLauncher({}),
+      createLauncher({ inherited: process.env }),
       {
         bin: "/bin/sh",
         args: ["-c", `echo $$ > ${pidFile}; exec sleep 30`],
@@ -32,7 +33,7 @@ describe("clickHandoff", () => {
       },
       "opening a browser",
       () => {},
-      200,
+      200, HOST.tmp,
     );
     // A loaded machine can answer the bound before the opener has started.
     const started = Date.now() + 3000;
@@ -52,20 +53,21 @@ describe("clickHandoff", () => {
   test("an opener whose sh dies with no verdict fails the click as lost", async () => {
     await expect(
       clickHandoff(
-        createLauncher({}),
+        createLauncher({ inherited: process.env }),
         // Kills the job's whole group, the verdict-writing sh with it.
         { bin: "/bin/sh", args: ["-c", "kill -9 0"], category: "click.open" },
         "opening https://example.com",
         () => {},
         2000,
+        HOST.tmp,
       ),
     ).rejects.toThrow("opening https://example.com failed (lost)");
   });
 
   test("a rate-limited opener is logged and the click acknowledged", async () => {
-    const launcher = createLauncher({});
+    const launcher = createLauncher({ inherited: process.env });
     const opts = { bin: "/usr/bin/true", category: "click.open" } as const;
-    await clickHandoff(launcher, opts, "first", () => {}, 2000);
+    await clickHandoff(launcher, opts, "first", () => {}, 2000, HOST.tmp);
     const logged: string[] = [];
     await clickHandoff(
       launcher,
@@ -73,6 +75,7 @@ describe("clickHandoff", () => {
       "second",
       (_l, m) => logged.push(m),
       2000,
+      HOST.tmp,
     );
     expect(logged).toEqual([expect.stringMatching(/^click.open rate-limited: /)]);
   });
@@ -80,7 +83,7 @@ describe("clickHandoff", () => {
   test("an opener that exits non-zero fails the click with its stderr", async () => {
     await expect(
       clickHandoff(
-        createLauncher({}),
+        createLauncher({ inherited: process.env }),
         {
           bin: "/bin/sh",
           args: ["-c", "echo no method available >&2; exit 3"],
@@ -89,6 +92,7 @@ describe("clickHandoff", () => {
         "opening https://example.com",
         () => {},
         2000,
+        HOST.tmp,
       ),
     ).rejects.toThrow(
       "opening https://example.com failed (non-zero, exit 3): no method available",
@@ -98,11 +102,12 @@ describe("clickHandoff", () => {
   test("an opener that exits zero is answered at once", async () => {
     const t0 = Date.now();
     await clickHandoff(
-      createLauncher({}),
+      createLauncher({ inherited: process.env }),
       { bin: "/usr/bin/true", category: "click.open" },
       "opening https://example.com",
       () => {},
       2000,
+      HOST.tmp,
     );
     expect(Date.now() - t0).toBeLessThan(2000);
   });
@@ -112,7 +117,7 @@ describe("clickLaunch", () => {
   test("a program that cannot start is a throw naming the spawn's own error", async () => {
     await expect(
       clickLaunch(
-        createLauncher({}),
+        createLauncher({ inherited: process.env }),
         {
           bin: "/nonexistent/cc-candybar-no-such-opener",
           args: ["https://example.com"],

@@ -2,7 +2,8 @@
 
 import { Runs } from "./runs.js";
 import { inspect } from "node:util";
-import type { DaemonPaths } from "./paths";
+import { locations, type DaemonPaths } from "./paths";
+import type { Host } from "../host";
 import type { DaemonLog } from "./log";
 import type { Request } from "./protocol";
 import type { DaemonParts } from "./daemon-parts.js";
@@ -18,7 +19,7 @@ import type { CheckedRenderRequest } from "./render-checkpoint.js";
 import type { SessionStorage } from "./session-state";
 import type { HistoryStorage } from "./settings-history";
 import type {
-  LaunchScope,
+  LaunchOwner,
   Launcher,
   Settled,
   TestableLauncher,
@@ -127,7 +128,7 @@ export interface DaemonAdapters {
   // The file the daemon's work logs to.
   readonly daemonLog: DaemonLog;
   // What every launch of the daemon's work goes through.
-  readonly launcher: (own: Partial<LaunchScope>) => TestableLauncher;
+  readonly launcher: (own: LaunchOwner) => TestableLauncher;
   // Their files, for a daemon that won the socket, which makes it their sole
   // writer. Built over the daemon's log: a write in flight at the close finishes
   // after it, and what it logs says so like any other line of the daemon's work.
@@ -138,6 +139,7 @@ export interface DaemonAdapters {
   readonly doctorEdge: (
     launcher: Launcher,
     loadConfig: DoctorEdge["loadConfig"],
+    host: Host,
   ) => DoctorEdge;
   readonly claudeInput: (launcher: Launcher) => ClaudeInputEdge;
   // What turning an animation lane on or off does to the machine: it is told
@@ -166,6 +168,10 @@ export interface DaemonAdapters {
 // it does to the machine, and the numbers it runs by.
 export interface DaemonInputs extends DaemonAdapters {
   readonly bundle: RunningBundle;
+  // [LAW:one-source-of-truth] What the process knows of its machine: its
+  // environment, home and temporary directory. The daemon reads them from here
+  // alone, and its launcher's children inherit the same environment.
+  readonly host: Host;
   // The paths the daemon itself reads or writes. The files an adapter owns are
   // aimed by the same value at the adapter (production-adapters.ts), so a daemon
   // aimed at a temporary directory writes nowhere else.
@@ -229,8 +235,18 @@ export interface Daemon {
 }
 
 export function createDaemon(inputs: DaemonInputs): Daemon {
-  const { bundle, memoryLimitBytes, registryUrl, clock, exit, paths, gates } =
-    inputs;
+  const {
+    bundle,
+    memoryLimitBytes,
+    registryUrl,
+    clock,
+    exit,
+    paths,
+    gates,
+    host,
+  } = inputs;
+  // Parsed once, here, and handed to everything that loads a config.
+  const locs = locations(host);
   const instant = (): Instant => instantOf(clock.date());
   // [LAW:single-enforcer] What ends the daemon's work: every launch through its
   // launcher, and the lane edge's waits.
@@ -254,6 +270,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // Its work holds this one, so a closed daemon's launches are refused here,
   // whichever daemon is live by then.
   const launcher = inputs.launcher({
+    inherited: host.env,
     stats: stats.launchStats,
     signal: closing.signal,
     // [LAW:no-silent-failure] Each change in whether what the daemon launches
@@ -318,6 +335,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   });
   const payloadProviders = createPayloadProviders({
     launcher,
+    host,
     watchers: watcherRegistry,
     fileEvents,
     logger: log,
@@ -374,7 +392,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       bundle: bundle.path,
       node: bundle.node,
       socket: paths.socket,
-      preload: stableAttachPreload(bundle.path),
+      preload: stableAttachPreload(bundle.path, host),
     },
     state: sessionState,
     log,
@@ -477,6 +495,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     {
       launcher,
       stateDir: paths.state,
+      locations: locs,
+      env: host.env,
       sessionState,
       watchers: watcherRegistry,
       log,
@@ -602,6 +622,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     gates,
     sessionState,
     stateDir: paths.state,
+    locations: locs,
     journalTurns,
     clickLanded: (sessionId: string) => menuIdle.clicked(sessionId, instant()),
     log,
@@ -613,18 +634,22 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     // [LAW:no-ambient-temporal-coupling] Reloaded first, as a save does: a
     // doctor click is a verdict on the files as they are now, not on
     // whether the fs watcher has caught up with an edit made a moment ago.
-    doctor: inputs.doctorEdge(launcher, (origin) => {
-      const at = [origin.projectDir, origin.cwd, origin.target.path] as const;
-      renderCache.reload(...at, { kind: "doctor" });
-      const entry = renderCache.getOrCreate(...at);
-      return {
-        layers: entry.configLayers,
-        error: entry.lastError,
-        warning: entry.lastWarning,
-        unused: entry.state.unused,
-        config: entry.state.config,
-      };
-    }),
+    doctor: inputs.doctorEdge(
+      launcher,
+      (origin) => {
+        const at = [origin.projectDir, origin.cwd, origin.target.path] as const;
+        renderCache.reload(...at, { kind: "doctor" });
+        const entry = renderCache.getOrCreate(...at);
+        return {
+          layers: entry.configLayers,
+          error: entry.lastError,
+          warning: entry.lastWarning,
+          unused: entry.state.unused,
+          config: entry.state.config,
+        };
+      },
+      host,
+    ),
     doctorStores,
     probes: handlerProbes,
     clients: renderSightings,
@@ -668,6 +693,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   };
 
   const parts: DaemonParts = {
+    home: host.home,
+    tmp: host.tmp,
     launcher,
     log,
     clock,

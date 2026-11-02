@@ -7,8 +7,8 @@
 // snapshot. Any byte drift fails loudly.
 
 import { drawPayload } from "./helpers/draw-payload";
+import { processLauncher } from "./helpers/host";
 import { ansiOf, textOf } from "../src/render/frame";
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { SessionState } from "../src/daemon/session-state";
 import { readFileSync } from "node:fs";
@@ -64,23 +64,15 @@ const OPTS = {
 };
 
 // HOME is controlled so the directory template's home-collapse branch is
-// never taken — makes path rendering deterministic across machines.
-// (declareEnv reads process.env.HOME at registerDslConfig call time.)
-let savedHome: string | undefined;
-beforeEach(() => {
-  savedHome = process.env["HOME"];
-  process.env["HOME"] = "";
-});
-afterEach(() => {
-  if (savedHome !== undefined) process.env["HOME"] = savedHome;
-  else delete process.env["HOME"];
-});
+// never taken — makes path rendering deterministic across machines. (An `env`
+// source reads the registry's environment at registerDslConfig call time.)
+const ENV = { HOME: "" };
 
 describe("DSL render spine (bzh.7 steel thread)", () => {
   function buildRuntime(cwd: string) {
     const config = parseAndValidate("<test>", FIXTURE_SOURCE, ALLOWED_PALETTES);
     const store = new VariableStore();
-    const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
+    const registry = new SourceRegistry(processLauncher, store, "", new SessionState(), null, undefined, undefined, undefined, ENV);
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd });
     return { config, compiled, store, registry };
   }
@@ -232,7 +224,7 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
         new Set(["textual-dark"]),
       );
       const store = new VariableStore();
-      const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
+      const registry = new SourceRegistry(processLauncher, store, "", new SessionState(), null, undefined, undefined, undefined, ENV);
       const compiled = registerDslConfig(config, registry, {
         signer: TEST_SIGNER,
         cwd: HOOK_DATA.workspace.current_dir,

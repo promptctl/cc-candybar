@@ -1,3 +1,4 @@
+import { HOST } from "./host";
 import type { Asked, DaemonProcess, DoctorFacts, MarkBook, PostMortemsRead } from "../../src/doctor/checks";
 import type { FrameSeen, FrameSighting } from "../../src/daemon/render-sightings";
 import type { SettingsSource } from "../../src/claude-settings";
@@ -132,8 +133,12 @@ export const CARRIED = { kind: "ok", value: ["carried"] } as const;
 // transcript: the checkout's gh logged in, the transcript all JSON.
 // The managed settings directory every test edge reads: test/setup.ts's, a
 // directory that holds no policy.
-export const noManagedSettings = (): Pick<DoctorEdge, "managedSettingsDir"> => ({
+export const noManagedSettings = (): Pick<
+  DoctorEdge,
+  "managedSettingsDir" | "home"
+> => ({
   managedSettingsDir: process.env.CC_CANDYBAR_CLAUDE_MANAGED_DIR!,
+  home: HOST.home,
 });
 
 export const healthyDataEdge = (): Pick<

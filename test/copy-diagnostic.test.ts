@@ -3,7 +3,8 @@
 // under that key: the full prompt reaches the clipboard while the link stays
 // short, and a key that draw does not list is refused loudly.
 
-import { processLauncher, type LaunchOpts } from "../src/proc/launch";
+import { type LaunchOpts } from "../src/proc/launch";
+import { processLauncher } from "./helpers/host";
 import { collectDiagnostics, copyKeys } from "../src/render/diagnostics";
 import { SessionState } from "../src/daemon/session-state";
 import { DroppedFileError } from "../src/config/loader/diagnostics";

@@ -7,7 +7,7 @@ import {
   sameLiveProcess,
   type ProcessIdentity,
 } from "./process-fingerprint";
-import { processLauncher } from "../proc/launch";
+import type { World } from "../host";
 import { pidAlive } from "./parent-watchdog";
 
 // ─── Daemon-side fork-bomb circuit breaker ───────────────────────────────────
@@ -68,8 +68,8 @@ const DEFAULT_CEILING = 16;
 // that likely meant 160) instead of surfacing it. `Number` requires the
 // WHOLE string to be numeric, so a typo becomes NaN and falls through to the
 // default like any other garbage value.
-export function daemonCeiling(): number {
-  const raw = Number(process.env["CC_CANDYBAR_DAEMON_CEILING"] ?? "");
+export function daemonCeiling(env: Readonly<NodeJS.ProcessEnv>): number {
+  const raw = Number(env["CC_CANDYBAR_DAEMON_CEILING"] ?? "");
   return Number.isInteger(raw) && raw > 0 ? raw : DEFAULT_CEILING;
 }
 
@@ -284,20 +284,20 @@ export function releaseRegistration(
 // independent `ps` calls could theoretically observe different processes if
 // this pid were somehow recycled between them.
 export function realBreakerDeps(
+  { host, launcher }: World,
   myStartTime: string | null,
   registryDir: string,
   overrides: Partial<BreakerDeps> = {},
 ): BreakerDeps {
   return {
-    isolated: Boolean(process.env["CC_CANDYBAR_SOCKET"]),
+    isolated: Boolean(host.env["CC_CANDYBAR_SOCKET"]),
     registryDir,
-    ceiling: daemonCeiling(),
+    ceiling: daemonCeiling(host.env),
     pid: process.pid,
     startTime: myStartTime,
     isSameLiveProcess: (pid, startTime) =>
       sameLiveProcess(pid, startTime, {
-        readStartTime: (candidate) =>
-          readStartTime(candidate, processLauncher.launch),
+        readStartTime: (candidate) => readStartTime(candidate, launcher.launch),
         pidAlive,
       }),
     listFiles: listRegistryFiles,
@@ -352,7 +352,7 @@ export function realBreakerDeps(
     // on; there the one-level leaf check alone is the correct, portable
     // parity with how ensureSocketParentSafe treats an overridden
     // CC_CANDYBAR_SOCKET (exactly one level, whatever that parent is).
-    ensureDirSafe: process.env["CC_CANDYBAR_DAEMON_REGISTRY_DIR"]
+    ensureDirSafe: host.env["CC_CANDYBAR_DAEMON_REGISTRY_DIR"]
       ? ensureOwnedPrivateDir
       : (dir: string): void => {
           ensureOwnedPrivateDir(path.dirname(dir));

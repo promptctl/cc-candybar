@@ -4,6 +4,8 @@
 // same storage to see a restart.
 
 import { NO_TMUX_AT_EXIT } from "../../helpers/in-worker-daemon";
+import { hostOf } from "../../helpers/host";
+import type { Host } from "../../../src/host";
 import { createHook } from "node:async_hooks";
 import {
   chmodSync,
@@ -26,7 +28,11 @@ import {
   type DaemonClock,
 } from "../../../src/daemon/daemon";
 import { pidAlive } from "../../../src/daemon/parent-watchdog";
-import { sessionStatePath, settingsHistoryPath } from "../../../src/daemon/paths";
+import {
+  daemonPaths,
+  sessionStatePath,
+  settingsHistoryPath,
+} from "../../../src/daemon/paths";
 import {
   PROTOCOL_VERSION,
   type ReaderRenderRequest,
@@ -86,6 +92,11 @@ describe("the daemon is a value", () => {
   // Every log the case opened: a case that builds a second daemon ends both.
   const openLogs: DaemonLog[] = [];
 
+  // The machine a case runs on, read when asked: the worker's environment as it
+  // stands (a case may have put a stub on PATH), with its state under `root`.
+  const hostNow = (): Host =>
+    hostOf({ ...process.env, XDG_STATE_HOME: path.join(root, "state") });
+
   const construct = (
     inputs: {
       clock?: DaemonClock;
@@ -96,6 +107,8 @@ describe("the daemon is a value", () => {
   ): Daemon => {
     const { session } = inputs;
     const { daemon, daemonLog } = buildDaemon({
+      host: hostNow(),
+      paths: daemonPaths(hostNow()),
       bundle: bundleAt(
         inputs.checkout ?? path.join(root, "checkout"),
         inputs.digest,
@@ -171,7 +184,6 @@ describe("the daemon is a value", () => {
   beforeAll(() => {
     resources.enable();
     root = mkdtempSync(path.join(os.tmpdir(), "cc-candybar-value-"));
-    process.env.XDG_STATE_HOME = path.join(root, "state");
     // A source checkout: what the band's setup needs of the bundle it runs.
     const checkout = path.join(root, "checkout");
     mkdirSync(path.join(checkout, "dist"), { recursive: true });
@@ -192,8 +204,8 @@ describe("the daemon is a value", () => {
     }
     // A live scope would refuse the next test's daemon; this file runs one at a
     // time, so what is left here is the case's own.
-    rmSync(sessionStatePath(), { force: true });
-    rmSync(settingsHistoryPath(), { force: true });
+    rmSync(sessionStatePath(hostNow()), { force: true });
+    rmSync(settingsHistoryPath(hostNow()), { force: true });
     if (scratchPath !== undefined) process.env.PATH = scratchPath;
     scratchPath = undefined;
   });
@@ -230,7 +242,7 @@ describe("the daemon is a value", () => {
         ]),
       ),
     ).rejects.toThrow(closed);
-    expect(existsSync(settingsHistoryPath())).toBe(false);
+    expect(existsSync(settingsHistoryPath(hostNow()))).toBe(false);
     const refused = jest.fn();
     expect(() =>
       daemon.subscribe("value-refused", {
@@ -388,7 +400,7 @@ describe("the daemon is a value", () => {
       () => false,
     );
 
-    const sessionFile = sessionStatePath();
+    const sessionFile = sessionStatePath(hostNow());
     const closing = await daemon.close(NO_TMUX_AT_EXIT);
     open = null;
     afterClose = { armed: [], fired: [] };

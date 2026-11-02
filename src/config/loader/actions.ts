@@ -18,7 +18,6 @@
 // `set` and `persist` share one field-map definition) and this file owns only the
 // thin total present-key dispatch — the irreducible union eliminator.
 
-import os from "node:os";
 import {
   ACTION_KEYS,
   type ActionDecl,
@@ -146,13 +145,16 @@ function validateActionDecl(
 // of the file that declares it, which a `run` declared there runs in, or a
 // text no file holds, named for the error a `run` there
 // is — it has no directory to run in.
-export type ActionHome = { readonly dir: string } | { readonly text: string };
+export type ActionHome =
+  | { readonly dir: string | null }
+  | { readonly text: string };
 
 // The home of a table parsed from `filePath`: a file's directory when it is
 // one, else the text's name (a label in angle brackets names no file).
 export function actionHomeOf(filePath: string): ActionHome {
-  // The bundled config has no file, and its runs name their own directory.
-  if (filePath === "<default>") return { dir: os.homedir() };
+  // The bundled config has no file: its runs go in the user's home, which the
+  // daemon knows and this parse, at import, does not.
+  if (filePath === "<default>") return { dir: null };
   return nodePath.isAbsolute(filePath)
     ? { dir: nodePath.dirname(filePath) }
     : { text: filePath };

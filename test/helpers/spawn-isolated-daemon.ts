@@ -15,6 +15,7 @@
 // the convenience wrapper for the (more common) single-daemon-per-test case.
 
 import type { ChildProcess } from "node:child_process";
+import { hostOf } from "./host";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -331,7 +332,7 @@ function processDid(exit: ExitResult | null): string {
 // readiness failure that quotes both names its cause, where the phase above only
 // names which half of the boot it died in.
 function daemonLogTail(env: NodeJS.ProcessEnv, lines = 20): string {
-  const file = logPath(env);
+  const file = logPath(hostOf(env));
   let text: string;
   try {
     text = fs.readFileSync(file, "utf8");

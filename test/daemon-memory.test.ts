@@ -62,12 +62,6 @@ const IN_FLIGHT_CEILING = 64;
 const RENDER_CONCURRENCY = 8;
 
 let root: string;
-// [LAW:single-enforcer] Jest workers run files sequentially in one process;
-// restore the env we borrow so the scan root can't leak into another file.
-const savedEnv = {
-  cache: process.env.XDG_CACHE_HOME,
-};
-
 beforeAll(() => {
   root = mkdtempSync(join(tmpdir(), "cc-candybar-mem-"));
   const projectsDir = join(root, "projects");
@@ -87,18 +81,11 @@ beforeAll(() => {
       writeFileSync(join(dir, `sess-${f}.jsonl`), line + "\n");
     }
   }
-  process.env.XDG_CACHE_HOME = join(root, "cache");
 });
 
 afterAll(() => {
   rmSync(root, { recursive: true, force: true });
-  restoreEnv("XDG_CACHE_HOME", savedEnv.cache);
 });
-
-function restoreEnv(name: string, value: string | undefined): void {
-  if (value === undefined) delete process.env[name];
-  else process.env[name] = value;
-}
 
 // Observe libuv's pending fs-request table from outside the code under test.
 // FSREQPROMISE is the async_hooks resource type for fs/promises operations —

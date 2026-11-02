@@ -19,7 +19,6 @@
 //   cc-candybar://<verb>/<value>   where <value> may itself contain `/`.
 
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   jobGroupAlive,
@@ -28,6 +27,7 @@ import {
   type LaunchResult,
   type Launcher,
 } from "../../proc/launch";
+import type { Locations } from "../paths";
 import type { SessionStateReader, SessionStateRW } from "../session-state";
 import { holdClickError } from "../click-error";
 import type { Instant } from "../../utils/instant";
@@ -203,6 +203,9 @@ export interface DaemonContext {
   readonly launcher: Launcher;
   // The state directory whose answers book a click reads and records in.
   readonly stateDir: string;
+  // Where the user's config and installed plugins live: a click's write
+  // resolves its home under them.
+  readonly locations: Locations;
   // [LAW:effects-at-boundaries] The update notice's act (src/daemon/
   // update-notice.ts), handed in by the daemon: the verb names the effect,
   // the watch that knows what is newer performs it.
@@ -468,8 +471,9 @@ export async function clickHandoff(
   what: string,
   log: DaemonContext["log"],
   boundMs: number,
+  tmp: string,
 ): Promise<void> {
-  const dir = mkdtempSync(path.join(tmpdir(), "cc-candybar-handoff-"));
+  const dir = mkdtempSync(path.join(tmp, "cc-candybar-handoff-"));
   // The job's files go when the click is answered: a program still running
   // keeps the descriptors it already holds, and its sh's verdict, written to a
   // directory that is gone, has no reader left to miss it.
@@ -928,7 +932,7 @@ function reloadIfWritten(ctx: Unbound, sid: string, step: Step): void {
   // A session with no recorded render has no cache entry to draw stale.
   const origin = recordedOrigin(ctx, sid);
   if (origin === null) return;
-  const { path } = originHome(ctx.stateDir, origin);
+  const { path } = originHome(ctx, origin);
   if (step.some((c) => c.kind === "file" && c.file === path)) {
     ctx.reloadConfig(origin);
   }
@@ -971,9 +975,13 @@ function nestOf(
 
 // [LAW:single-enforcer] The home as the render resolves it, under the same
 // answers: a click's chain leaves out what the bar's leaves out.
-function originHome(stateDir: string, origin: RenderOrigin): ConfigHome {
+function originHome(
+  ctx: Pick<ClickContext, "stateDir" | "locations">,
+  origin: RenderOrigin,
+): ConfigHome {
   return durableConfig(
-    repoConfigs(stateDir).read(),
+    ctx.locations,
+    repoConfigs(ctx.stateDir).read(),
     origin.projectDir,
     origin.cwd,
     origin.target.path,
@@ -1010,7 +1018,7 @@ const setConfig: VerbHandler = async (rawValue, ctx) => {
   }
   const result = gate.validate(key, incoming);
   if (!result.ok) throw new BadVerbArgs(`set-config: ${result.reason}`);
-  const home = originHome(ctx.stateDir, origin);
+  const home = originHome(ctx, origin);
   const landing = durableLanding(
     config,
     (k) => ctx.sessionState.get(sid, k),
@@ -1054,7 +1062,7 @@ const stepConfig: VerbHandler = async (rawValue, ctx) => {
         `(have keys: ${gate.listKeys().join(", ")})`,
     );
   }
-  const home = originHome(ctx.stateDir, origin);
+  const home = originHome(ctx, origin);
   const landing = durableLanding(
     config,
     (k) => ctx.sessionState.get(sid, k),
@@ -1116,7 +1124,7 @@ const save: VerbHandler = async (value, ctx) => {
     return [d.target, result.value];
   });
   gatePlacements("save", gate, placements);
-  const home = originHome(ctx.stateDir, origin);
+  const home = originHome(ctx, origin);
   writeDrafts(editStore(ctx, sid), home, pairs, placements);
   ctx.reloadConfig(origin);
   for (const key of [
@@ -1174,7 +1182,7 @@ const savePreset: VerbHandler = async (value, ctx) => {
     return [d.configKey, result.value];
   });
   gatePlacements("save-preset", gate, snapshot.placements);
-  const home = originHome(ctx.stateDir, origin);
+  const home = originHome(ctx, origin);
   const name = writePreset(
     editStore(ctx, sid),
     home,
@@ -1221,7 +1229,7 @@ const saveThemeDefault: VerbHandler = async (value, ctx) => {
       "save-theme-default: the theme is chosen by a rule (globals.palette), so there is no name to save as a theme's default — pick one in the menu first",
     );
   }
-  const home = originHome(ctx.stateDir, origin);
+  const home = originHome(ctx, origin);
   writeThemeDefault(editStore(ctx, sid), home, save.theme, save.look);
   ctx.reloadConfig(origin);
   const pick = (key: string) => ctx.sessionState.get(sid, key);
@@ -1250,7 +1258,7 @@ const deletePreset: VerbHandler = async (value, ctx) => {
     );
   }
   const origin = sessionOrigin(ctx, sid);
-  const home = originHome(ctx.stateDir, origin);
+  const home = originHome(ctx, origin);
   deletePresetFromFile(editStore(ctx, sid), home, name);
   ctx.reloadConfig(origin);
   const key = SETTINGS.preset.sessionKey;
@@ -1281,7 +1289,7 @@ const resetConfig: VerbHandler = async (value, ctx) => {
       `reset-config: unknown config key "${unknown.join('", "')}" (have: ${known.join(", ")})`,
     );
   }
-  const home = originHome(ctx.stateDir, origin);
+  const home = originHome(ctx, origin);
   const layers = keys.map(resetLayers);
   const fileKeys = layers.flatMap((l) => l.fileKeys);
   const sessionKeys = layers.flatMap((l) => l.sessionKeys);
@@ -1368,7 +1376,7 @@ const applyLayoutOp: VerbHandler = async (rawValue, ctx) => {
       `apply-layout-op: "${result.value}" is not a layout op token`,
     );
   }
-  const home = originHome(ctx.stateDir, origin);
+  const home = originHome(ctx, origin);
   const placed = applyLayoutOpToFile(editStore(ctx, sid), home, key, op);
   // A removed placement's session state ends with it (endedSessionKeys).
   // Measured on the file as it now reads, and released in the same click, so
@@ -1834,15 +1842,16 @@ function runOf(
     argv: [program, ...args],
     // [LAW:single-enforcer] The session's process environment, the action's
     // own variables over it.
-    env: {
-      ...sessionEnv(process.env, {
+    envOverlay: {
+      ...sessionEnv({
         sessionId: sid,
         projectDir: origin.projectDir,
         claudeConfigDir: sessionHints(ctx, sid).claudeConfigDir,
       }),
       ...drawn.env,
     },
-    cwd: decl.cwd,
+    // The bundled config's runs go in the user's home.
+    cwd: decl.cwd ?? ctx.locations.home,
     // The loader proved every name a declared source of this config, whose
     // state holds its key.
     refreshes: decl.refreshes.map((name) => ({

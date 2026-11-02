@@ -3,6 +3,7 @@
 // and takes its outcome from the click event the daemon logs once it has run.
 
 import fs from "node:fs";
+import { hostOf } from "./helpers/host";
 import net from "node:net";
 
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
@@ -62,7 +63,7 @@ async function timingOut(outcome: RequestOutcome): Promise<StandIn> {
           );
           const write = setTimeout(() => {
             pending.delete(write);
-            fs.appendFileSync(logPath(env), logLine(level, line));
+            fs.appendFileSync(logPath(hostOf(env)), logLine(level, line));
           }, 100);
           pending.add(write);
         },

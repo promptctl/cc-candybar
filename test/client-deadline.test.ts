@@ -4,6 +4,8 @@
 // gives up at. A stub daemon reads what the client sent.
 
 import fs from "node:fs";
+import { hostOf } from "./helpers/host";
+import type { Host } from "../src/host";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -21,7 +23,7 @@ import {
 // `reply` — or, given none, never answers.
 async function withStubDaemon<T>(
   reply: object | null,
-  run: () => Promise<T>,
+  run: (host: Host) => Promise<T>,
   seen: (req: Record<string, unknown>) => void,
 ): Promise<T> {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-deadline-"));
@@ -42,19 +44,14 @@ async function withStubDaemon<T>(
     );
   });
   await new Promise<void>((resolve) => server.listen(sockPath, resolve));
-  const prev = {
-    XDG_STATE_HOME: process.env.XDG_STATE_HOME,
-    CC_CANDYBAR_SOCKET: process.env.CC_CANDYBAR_SOCKET,
-  };
-  process.env.XDG_STATE_HOME = root;
-  process.env.CC_CANDYBAR_SOCKET = sockPath;
+  const host = hostOf({
+    ...process.env,
+    XDG_STATE_HOME: root,
+    CC_CANDYBAR_SOCKET: sockPath,
+  });
   try {
-    return await run();
+    return await run(host);
   } finally {
-    for (const [key, value] of Object.entries(prev)) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
     await new Promise<void>((resolve) => server.close(() => resolve()));
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -66,9 +63,9 @@ async function withStubDaemon<T>(
 // prove is the deadline a request states and the client keeps, not that a
 // loaded loop is fast, so they state budgets no loop delay reaches. The
 // statusline's own are a wire fact, asserted once below.
-const render = (budgets: RoundTripBudgets) => async () => {
+const render = (budgets: RoundTripBudgets) => async (host: Host) => {
   const { tryRenderViaDaemon } = await import("../src/daemon/client");
-  return tryRenderViaDaemon(
+  return tryRenderViaDaemon(host, 
     {
       session_id: "deadline",
       workspace: { project_dir: "/tmp" },

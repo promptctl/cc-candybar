@@ -4,7 +4,8 @@
 // effects does this click apply" rather than the exact wire encoding.
 
 import { bareGates } from "./gates";
-import { processLauncher } from "../../src/proc/launch";
+import { HOST, processLauncher } from "./host";
+import type { Host } from "../../src/host";
 import { HEALTHY_BUNDLE } from "./doctor-facts";
 import { TEST_SIGNER } from "./link-signer";
 import { JournalTurns } from "../../src/daemon/journal-turns";
@@ -31,7 +32,7 @@ import {
   resolveEffectiveGlobals,
 } from "../../src/config/effective-globals";
 import { LANE_NAMES, type LaneSwitches } from "../../src/config/lanes";
-import { stateDir } from "../../src/daemon/paths";
+import { locations, stateDir } from "../../src/daemon/paths";
 
 const NO_LANES = Object.fromEntries(
   LANE_NAMES.map((lane) => [lane, false]),
@@ -65,10 +66,11 @@ export function testVerbContext(
   sessionState: SessionStateRW,
   history: SettingsHistory = new SettingsHistory(sessionState, () => {}),
   config?: DslConfig,
+  host: Host = HOST,
 ): VerbContext {
   return {
     gates: bareGates(),
-    stateDir: stateDir(),
+    stateDir: stateDir(host), locations: locations(host),
     sessionState,
     history,
     navigation: new NavigationHistory(),

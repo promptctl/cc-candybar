@@ -7,7 +7,7 @@
 // one rig, so a field the render path comes to need reaches them all.
 
 import { drawPayload } from "./draw-payload";
-import { processLauncher } from "../../src/proc/launch";
+import { processLauncher } from "./host";
 import type { RichText } from "@promptctl/rich-js";
 import { DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
 import { resolveEffectiveGlobals } from "../../src/config/effective-globals";

@@ -141,22 +141,23 @@ export class PricingService {
   private static readonly GITHUB_PRICING_URL =
     "https://raw.githubusercontent.com/promptctl/cc-candybar/main/pricing.json";
 
-  private static async loadDiskCache(): Promise<Record<
-    string,
-    ModelPricing
-  > | null> {
+  private static async loadDiskCache(
+    cacheRoot: string,
+  ): Promise<Record<string, ModelPricing> | null> {
     const TTL_24H = 24 * 60 * 60 * 1000;
     const minValidTime = Date.now() - TTL_24H;
     return (await CacheManager.getUsageCache(
+      cacheRoot,
       "pricing",
       minValidTime,
     )) as Record<string, ModelPricing> | null;
   }
 
   private static async saveDiskCache(
+    cacheRoot: string,
     data: Record<string, ModelPricing>,
   ): Promise<void> {
-    await CacheManager.setUsageCache("pricing", data);
+    await CacheManager.setUsageCache(cacheRoot, "pricing", data);
   }
 
   private static async fetchPricingData(): Promise<Record<
@@ -249,7 +250,9 @@ export class PricingService {
     });
   }
 
-  static async getCurrentPricing(): Promise<Record<string, ModelPricing>> {
+  static async getCurrentPricing(
+    cacheRoot: string,
+  ): Promise<Record<string, ModelPricing>> {
     if (this.executionCache !== null) {
       debug(
         `[CACHE-HIT] Pricing execution cache: ${Object.keys(this.executionCache).length} models`,
@@ -257,7 +260,7 @@ export class PricingService {
       return this.executionCache;
     }
 
-    const diskCached = await this.loadDiskCache();
+    const diskCached = await this.loadDiskCache(cacheRoot);
     if (diskCached) {
       debug(
         `[CACHE-HIT] Pricing disk cache: ${Object.keys(diskCached).length} models`,
@@ -271,7 +274,7 @@ export class PricingService {
 
     const freshData = await this.fetchPricingData();
     if (freshData) {
-      await this.saveDiskCache(freshData);
+      await this.saveDiskCache(cacheRoot, freshData);
       debug(
         `[CACHE-SET] Pricing disk cache stored: ${Object.keys(freshData).length} models`,
       );
@@ -313,13 +316,16 @@ export class PricingService {
     return true;
   }
 
-  static async getModelPricing(modelId: string): Promise<ModelPricing> {
+  static async getModelPricing(
+    modelId: string,
+    cacheRoot: string,
+  ): Promise<ModelPricing> {
     if (this.modelPricingCache.has(modelId)) {
       debug(`[CACHE-HIT] Model pricing cache: ${modelId}`);
       return this.modelPricingCache.get(modelId)!;
     }
 
-    const allPricing = await this.getCurrentPricing();
+    const allPricing = await this.getCurrentPricing(cacheRoot);
     let pricing: ModelPricing;
 
     if (allPricing[modelId]) {
@@ -402,14 +408,17 @@ export class PricingService {
     );
   }
 
-  static async calculateCostForEntry(entry: PrunedRaw): Promise<number> {
+  static async calculateCostForEntry(
+    entry: PrunedRaw,
+    cacheRoot: string,
+  ): Promise<number> {
     const usage = entry.message?.usage;
     if (!usage) {
       return 0;
     }
 
     const modelId = this.extractModelId(entry);
-    const pricing = await this.getModelPricing(modelId);
+    const pricing = await this.getModelPricing(modelId, cacheRoot);
 
     const inputTokens = usage.input_tokens || 0;
     const outputTokens = usage.output_tokens || 0;

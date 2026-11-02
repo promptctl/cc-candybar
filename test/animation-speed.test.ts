@@ -4,8 +4,8 @@
 // speed moves no loop to another phase, and a readout of real time
 // (`realtimeFrames`) keeps real time.
 import { drawPayload } from "./helpers/draw-payload";
+import { processLauncher } from "./helpers/host";
 import { textOf } from "../src/render/frame";
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { DEFAULT_TERMINAL_THEME, RichText } from "@promptctl/rich-js";
 

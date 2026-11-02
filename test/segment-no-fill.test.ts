@@ -9,7 +9,7 @@
 //     text on its own ground, the one pair known to read there.
 
 import { drawPayload } from "./helpers/draw-payload";
-import { processLauncher } from "../src/proc/launch";
+import { processLauncher } from "./helpers/host";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { getThemePalette, resolveColorRef } from "@promptctl/rich-js";
 import type { RichText } from "@promptctl/rich-js";

@@ -85,6 +85,7 @@ import {
 } from "./watchers.js";
 import { quietLogger, type DaemonLogger } from "../../utils/logger.js";
 import { valueOf } from "../../utils/logfmt.js";
+import type { Locations } from "../paths.js";
 import { digestOf, type Projection } from "../../utils/plain.js";
 import { Holds } from "../../utils/holds.js";
 import { ABSENT, failed, PENDING } from "../../utils/outcome.js";
@@ -165,6 +166,10 @@ export interface RenderDeps<S extends ViewSource = ViewSource> {
   // The daemon's state directory, where the repositories' answers are kept
   // (StateDeps).
   stateDir: string;
+  // Where the user's config and installed plugins live (StateDeps).
+  locations: Locations;
+  // What an `env` source reads (StateDeps).
+  env: Readonly<Record<string, string | undefined>>;
   sessionState: SessionStateRW;
   watchers: WatcherRegistry;
   // The owner of every plugin's managed storage, whose folders a state's
@@ -215,6 +220,10 @@ export interface StateDeps {
   // The state directory whose answers book a load reads: which repositories'
   // plugins it may run.
   readonly stateDir: string;
+  // Where the user's config and installed plugins live.
+  readonly locations: Locations;
+  // The environment an `env` source reads: the daemon's host.
+  readonly env: Readonly<Record<string, string | undefined>>;
   readonly sessionState: SessionStateRW;
   readonly storage: PluginStorage;
   // What signs the `run` links a compile draws.
@@ -365,6 +374,8 @@ export interface ConfigChain {
   readonly home: string;
   // The session's project, once approved: where the plugins it ships live.
   readonly repo: ApprovedRepo | null;
+  // Where the installed plugins the chain loads over live.
+  readonly locs: Locations;
 }
 
 // [LAW:nothing-unseen] Which plugins a daemon load merged, how many variables
@@ -660,7 +671,7 @@ function authoredRoots(
 // (a loop, an unreadable component) is watched as far as the walk got and
 // reported in `unresolved` with the reason, so the caller can say which path
 // hears less than it should.
-function watchTargetsFor(entry: CacheEntry): PathsWatch {
+function watchTargetsFor(entry: CacheEntry, locs: Locations): PathsWatch {
   // A plugin definition is part of the config it is listed in: installing,
   // fixing or editing one reloads the config as an edit to the file would.
   const { loaded, dropped, unreached } = entry.state.plugins;
@@ -674,7 +685,12 @@ function watchTargetsFor(entry: CacheEntry): PathsWatch {
   ];
   return watchTargetsOf({
     named: [
-      ...dslConfigCandidatePaths(entry.projectDir, entry.cwd, entry.configFile),
+      ...dslConfigCandidatePaths(
+        locs,
+        entry.projectDir,
+        entry.cwd,
+        entry.configFile,
+      ),
       ...roots,
       ...loaded.map((d) => d.path),
       ...[...dropped, ...unreached].map((d) => d.path),
@@ -793,6 +809,7 @@ function loadKey(inputs: LoadInputs): string {
       layers: chain.layers,
       home: chain.home,
       repo: chain.repo,
+      locs: chain.locs,
     } satisfies Projection<ConfigChain>,
     loaded: {
       layers: loaded.layers.map(
@@ -864,6 +881,7 @@ export function resolveLoad(
   const warnings: string[] = [];
   try {
     const loaded = loadConfigChain(
+      chain.locs,
       chain.layers,
       DEFAULT_DSL_CONFIG,
       { warned: (w) => warnings.push(...w) },
@@ -921,6 +939,7 @@ export function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
     deps.ledger,
     deps.fileEvents,
     deps.watchers,
+    deps.env,
   );
 
   let registration: Registration;
@@ -1110,6 +1129,7 @@ export function loadFromDisk(
 ): LoadOutcome {
   const started = performance.now();
   const resolution = resolveDslConfig(
+    deps.locations,
     repoConfigs(deps.stateDir).read(),
     projectDir,
     cwd,
@@ -1122,6 +1142,7 @@ export function loadFromDisk(
     layers: resolution.kind === "chain" ? resolution.layers : [],
     home: resolution.home,
     repo: repos.plugins,
+    locs: deps.locations,
   };
   // [LAW:dataflow-not-control-flow] Advisories run every load, independent
   // of load success — even if the .json5 fails to parse, the user still
@@ -1132,7 +1153,7 @@ export function loadFromDisk(
   // appearing — triggers reload and re-detection automatically; nothing
   // else needs to invalidate this.
   const advisories = [
-    detectConfigCollisions(projectDir, cwd),
+    detectConfigCollisions(deps.locations, projectDir, cwd),
     configResolutionNotice(resolution),
     repoUnreadNotice(repos),
   ];
@@ -1158,7 +1179,7 @@ export function fallbackState(
   // as the load would have.
   const resolved = resolveLoad(
     cwd,
-    { layers: [], home: "", repo },
+    { layers: [], home: "", repo, locs: deps.locations },
     deps.storage,
   );
   const built =
@@ -2198,7 +2219,7 @@ export class RenderCache<
     entry.configLayers = loaded.layers;
     entry.configHome = loaded.home;
     entry.repos = loaded.repos;
-    const paths = watchTargetsFor(entry);
+    const paths = watchTargetsFor(entry, this.deps.locations);
     const { targets, unresolved } = paths;
     // [LAW:one-source-of-truth] The key names the target set and the folders
     // it binds, so the registry's `follow` rebinds exactly when either moved.

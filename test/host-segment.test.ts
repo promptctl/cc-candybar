@@ -15,9 +15,9 @@
 // what lands in the payload, and whether the bundled segment renders.
 
 import { textOf } from "../src/render/frame";
+import { processLauncher } from "./helpers/host";
 import { drawPayload } from "./helpers/draw-payload";
 import type { Frame } from "../src/render/frame";
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
@@ -197,16 +197,13 @@ describe("host identity in the render payload", () => {
   // The daemon's own SSH_* env belongs to whichever shell spawned it, which is
   // very often NOT the session being rendered. Consulting it as a "helpful"
   // fallback would mislabel every session that daemon serves.
-  test("the daemon ignores its OWN SSH_* env — only the hint decides", async () => {
-    const saved = process.env.SSH_CONNECTION;
-    process.env.SSH_CONNECTION = "10.0.0.1 51000 10.0.0.2 22";
-    try {
-      expect((await payloadWith({})).host.ssh).toBeUndefined();
-      expect((await payloadWith({ ssh: false })).host.ssh).toBe(false);
-    } finally {
-      if (saved === undefined) delete process.env.SSH_CONNECTION;
-      else process.env.SSH_CONNECTION = saved;
-    }
+  // The payload's deps carry the daemon's home and nothing of its environment
+  // (RenderPayloadDeps), so a daemon spawned from an SSH shell has no SSH_* to
+  // consult: the hint is the only source.
+  test("only the hint decides whether the session is over SSH", async () => {
+    expect((await payloadWith({})).host.ssh).toBeUndefined();
+    expect((await payloadWith({ ssh: false })).host.ssh).toBe(false);
+    expect((await payloadWith({ ssh: true })).host.ssh).toBe(true);
   });
 });
 

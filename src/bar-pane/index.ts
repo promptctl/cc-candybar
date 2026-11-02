@@ -21,7 +21,7 @@ import { obtainDaemonKick } from "../daemon/acquire";
 import { socketPath } from "../daemon/paths";
 import { planOutcome } from "../render/outcome-plan";
 import { detectTmuxHint, type TmuxHint } from "../tmux-hint";
-import { processLauncher } from "../proc/launch";
+import type { World } from "../host";
 import { runTmuxAsync, type TmuxRun } from "../proc/tmux";
 import {
   LIST_CLIENTS_FORMAT,
@@ -74,13 +74,14 @@ export function placementFrom(
 type TmuxMissed = Exclude<TmuxRun, { kind: "ok" }>;
 
 async function askPlacement(
+  world: World,
   tmux: TmuxHint,
   pane: string,
 ): Promise<
   { readonly kind: "ok"; readonly placement: Placement } | TmuxMissed
 > {
   const [panes, clients] = await Promise.all([
-    runTmuxAsync(processLauncher, tmux, "bar-pane.tmux", [
+    runTmuxAsync(world.launcher, tmux, "bar-pane.tmux", [
       "list-panes",
       "-a",
       "-f",
@@ -88,7 +89,7 @@ async function askPlacement(
       "-F",
       LIST_PANES_FORMAT,
     ]),
-    runTmuxAsync(processLauncher, tmux, "bar-pane.tmux", [
+    runTmuxAsync(world.launcher, tmux, "bar-pane.tmux", [
       "list-clients",
       "-F",
       LIST_CLIENTS_FORMAT,
@@ -134,9 +135,12 @@ export function parseArgs(argv: readonly string[]): { pane: string } {
 
 // The subcommand's own exit code: its failures are the bar pane's, named as
 // such, never the statusline's.
-export async function runBarPane(argv: readonly string[]): Promise<number> {
+export async function runBarPane(
+  argv: readonly string[],
+  world: World,
+): Promise<number> {
   try {
-    await drawBarPane(argv);
+    await drawBarPane(argv, world);
     return 0;
   } catch (e) {
     process.stderr.write(`cc-candybar bar-pane: ${(e as Error).message}\n`);
@@ -144,16 +148,19 @@ export async function runBarPane(argv: readonly string[]): Promise<number> {
   }
 }
 
-async function drawBarPane(argv: readonly string[]): Promise<void> {
+async function drawBarPane(
+  argv: readonly string[],
+  world: World,
+): Promise<void> {
   const { pane } = parseArgs(argv);
-  const tmux = detectTmuxHint(process.env);
+  const tmux = detectTmuxHint(world.host.env);
   if (tmux === null)
     throw new Error("cc-candybar bar-pane runs in a tmux pane");
   if (!process.stdout.isTTY)
     throw new Error("cc-candybar bar-pane draws on its pane's terminal");
   // [LAW:no-silent-failure] A pane id this tmux server does not have is a
   // mistake to say, not a pane that closed.
-  const first = await askPlacement(tmux, pane);
+  const first = await askPlacement(world, tmux, pane);
   if (first.kind !== "ok") throw new Error(first.reason);
   let placement = first.placement;
   if (placement.kind === "gone")
@@ -203,7 +210,7 @@ async function drawBarPane(argv: readonly string[]): Promise<void> {
     if (next.rows !== process.stdout.rows && !placement.zoomed)
       // Missed: the pane keeps its height, and the next draw asks again.
       resizeAnswered(
-        await runTmuxAsync(processLauncher, tmux, "bar-pane.tmux", [
+        await runTmuxAsync(world.launcher, tmux, "bar-pane.tmux", [
           "resize-pane",
           "-t",
           tmux.pane,
@@ -253,7 +260,7 @@ async function drawBarPane(argv: readonly string[]): Promise<void> {
     following = {
       sessionId,
       said,
-      follower: followFrames(socketPath(), sessionId, "pane", {
+      follower: followFrames(world, socketPath(world.host), sessionId, "pane", {
         frame: (resp) => say(planOutcome(renderOutcomeOf(resp)).output),
         off: (resp) => say(resp.error),
         fault: say,
@@ -269,16 +276,16 @@ async function drawBarPane(argv: readonly string[]): Promise<void> {
     if (placement.kind === "hidden") {
       follow(null);
     } else {
-      const found = await trySessionInPane(tmux.socket, pane);
+      const found = await trySessionInPane(world.host, tmux.socket, pane);
       if (found.kind === "ok") {
         follow(found.value);
         status =
           found.value === null
-            ? `waiting for pane ${pane}'s statusline to render on ${socketPath()}`
+            ? `waiting for pane ${pane}'s statusline to render on ${socketPath(world.host)}`
             : `waiting for pane ${pane}'s bar`;
       } else {
         if (found.kind === "transient") {
-          obtainDaemonKick();
+          obtainDaemonKick(world);
           // The kick may say why on stderr, which is this pane.
           painted = "";
         }
@@ -287,7 +294,7 @@ async function drawBarPane(argv: readonly string[]): Promise<void> {
     }
     redraw();
     await sleep(TICK_MS);
-    const asked = await askPlacement(tmux, pane);
+    const asked = await askPlacement(world, tmux, pane);
     placementAnswered(asked);
     if (asked.kind === "ok") placement = asked.placement;
   }

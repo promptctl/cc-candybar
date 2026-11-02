@@ -1,5 +1,5 @@
-import { processLauncher } from "../src/proc/launch";
 import { execSync } from "node:child_process";
+import { processLauncher } from "./helpers/host";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

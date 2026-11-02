@@ -4,6 +4,7 @@
 // on a gate; the click-path cases drive `replyTo`, the daemon's real click arm.
 
 import { JournalTurns } from "../src/daemon/journal-turns";
+import { HOST, locs } from "./helpers/host";
 import { MenuIdle } from "../src/daemon/menu-idle";
 import type { DaemonParts } from "../src/daemon/daemon-parts";
 import { replyTo } from "../src/daemon/reply";
@@ -289,7 +290,7 @@ describe("a gather is a snapshot of one config", () => {
       const seen: Array<string | null> = [];
       const healthy = healthyDaemonEdge().daemons;
       const ctx: VerbContext = {
-        ...testVerbContext(sessionState, fixture.historyFor(sessionState), config),
+        ...testVerbContext(sessionState, fixture.historyFor(sessionState), config, fixture.host),
         doctorStores: emptyStores(),
         doctor: edge({
           daemons: () => {
@@ -324,9 +325,9 @@ describe("a gather is a snapshot of one config", () => {
   });
 
   test("the re-gather asks the real rate limiter nothing twice", async () => {
-    const launcher = createLauncher({});
+    const launcher = createLauncher({ inherited: process.env });
     let load = LOAD;
-    const real = productionEdge(launcher, () => load);
+    const real = productionEdge(launcher, () => load, HOST);
     const parked = gate();
     let daemons = 0;
     const { ctx, reports, sessionState } = setup();

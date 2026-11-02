@@ -9,9 +9,9 @@
 // (via parseDslConfig). Two boundaries, one truth.
 
 import { drawPayload } from "./helpers/draw-payload";
+import { processLauncher } from "./helpers/host";
 import { plainOf, textOf, type Frame, type Row, type Run } from "../src/render/frame";
 import { linkUrls, runAt, runUnder, truecolorOf } from "./helpers/frame";
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
 import {

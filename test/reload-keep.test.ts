@@ -1,5 +1,6 @@
-import { processLauncher } from "../src/proc/launch";
 import fs from "node:fs";
+import { HOST, hostOf, worldOf } from "./helpers/host";
+import type { Host, World } from "../src/host";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -16,7 +17,7 @@ import { TEST_SIGNER } from "./helpers/link-signer";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { viewFacts } from "./helpers/view-facts";
 import { fakeWatches } from "./helpers/fake-watches";
-import { stateDir } from "../src/daemon/paths";
+import { locations, stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 
 // [LAW:behavior-not-structure] A reload keeps the state it serves exactly when
@@ -25,28 +26,25 @@ import { bareGates } from "./helpers/gates";
 // warning it carries, and what each load says it did.
 
 let dir: string;
-let saved: { home?: string; dirs?: string; config?: string };
+let host: Host;
+let world: World;
 const cleanups: Array<() => void> = [];
 
 beforeEach(() => {
   dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "reload-keep-")));
   // No installed plugin and no user config reaches a load but the test's own.
-  saved = {
-    home: process.env.XDG_DATA_HOME,
-    dirs: process.env.XDG_DATA_DIRS,
-    config: process.env.XDG_CONFIG_HOME,
-  };
-  process.env.XDG_DATA_HOME = path.join(dir, "data");
-  process.env.XDG_DATA_DIRS = path.join(dir, "share");
-  process.env.XDG_CONFIG_HOME = path.join(dir, "xdg");
+  host = hostOf({
+    ...HOST.env,
+    XDG_DATA_HOME: path.join(dir, "data"),
+    XDG_DATA_DIRS: path.join(dir, "share"),
+    XDG_CONFIG_HOME: path.join(dir, "xdg"),
+  });
+  world = worldOf(host);
 });
 
 afterEach(() => {
   for (const fn of cleanups.splice(0).reverse()) fn();
   jest.restoreAllMocks();
-  process.env.XDG_DATA_HOME = saved.home;
-  process.env.XDG_DATA_DIRS = saved.dirs;
-  process.env.XDG_CONFIG_HOME = saved.config;
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -57,8 +55,8 @@ function rig() {
   const watchers = new WatcherRegistry({ logger: () => {} });
   cleanups.push(() => watchers.closeAll());
   const cache = new RenderCache(
-    { stateDir: stateDir(),
-      launcher: processLauncher,
+    { stateDir: stateDir(host), locations: locations(host), env: host.env,
+      launcher: world.launcher,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER, gates: bareGates(),
       fileEvents: NO_FILE_EVENTS,

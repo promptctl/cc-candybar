@@ -4,11 +4,14 @@
 // own cwd, never left for the detached daemon to resolve against its own
 // (brandon-config-nuq6). The Rust client's config_env_hint test holds the
 // same table.
-import os from "node:os";
 import path from "node:path";
+import { hostOf } from "../helpers/host";
 import { CONFIG_ENV, cliConfigTarget, detectConfigEnv } from "../../src/config-hint";
 
 const CWD = "/work/proj";
+// A home no machine has, so `~` expands to the host a test states.
+const HOME = "/home/test";
+const on = (env: NodeJS.ProcessEnv) => hostOf(env, { home: HOME });
 
 describe("detectConfigEnv (client-side CC_CANDYBAR_CONFIG probe)", () => {
   test("names the documented variable", () => {
@@ -16,17 +19,17 @@ describe("detectConfigEnv (client-side CC_CANDYBAR_CONFIG probe)", () => {
   });
 
   test("unset or empty is no override", () => {
-    expect(detectConfigEnv({}, CWD)).toBeUndefined();
-    expect(detectConfigEnv({ CC_CANDYBAR_CONFIG: "" }, CWD)).toBeUndefined();
+    expect(detectConfigEnv(on({}), CWD)).toBeUndefined();
+    expect(detectConfigEnv(on({ CC_CANDYBAR_CONFIG: "" }), CWD)).toBeUndefined();
   });
 
   test("a set value is resolved against the client's cwd, `~` against home", () => {
-    const hint = (v: string) => detectConfigEnv({ CC_CANDYBAR_CONFIG: v }, CWD);
+    const hint = (v: string) => detectConfigEnv(on({ CC_CANDYBAR_CONFIG: v }), CWD);
     expect(hint("/etc/bar.json5")).toBe("/etc/bar.json5");
     expect(hint("examples/demo.json5")).toBe("/work/proj/examples/demo.json5");
     expect(hint("../x/./y.json5")).toBe("/work/x/y.json5");
-    expect(hint("~/bar.json5")).toBe(path.join(os.homedir(), "bar.json5"));
-    expect(hint("~")).toBe(os.homedir());
+    expect(hint("~/bar.json5")).toBe(path.join(HOME, "bar.json5"));
+    expect(hint("~")).toBe(HOME);
     expect(hint("~alice/c.json5")).toBe("/work/proj/~alice/c.json5");
   });
 });
@@ -36,7 +39,7 @@ describe("detectConfigEnv (client-side CC_CANDYBAR_CONFIG probe)", () => {
 // unset — is no argument, as it is to the bar's `--config`, so the variable
 // is the target; a named file outranks the variable.
 describe("cliConfigTarget (the file a CLI run checks)", () => {
-  const ENV = { CC_CANDYBAR_CONFIG: "env.json5" };
+  const ENV = on({ CC_CANDYBAR_CONFIG: "env.json5" });
 
   test("no argument, or an empty one, falls to $CC_CANDYBAR_CONFIG", () => {
     const environment = { source: "environment", path: "/work/proj/env.json5" };
@@ -45,8 +48,8 @@ describe("cliConfigTarget (the file a CLI run checks)", () => {
   });
 
   test("with neither, the run searches", () => {
-    expect(cliConfigTarget("", {}, CWD)).toEqual({ source: "search" });
-    expect(cliConfigTarget(undefined, {}, CWD)).toEqual({ source: "search" });
+    expect(cliConfigTarget("", on({}), CWD)).toEqual({ source: "search" });
+    expect(cliConfigTarget(undefined, on({}), CWD)).toEqual({ source: "search" });
   });
 
   test("a named file outranks the variable and is resolved against cwd", () => {

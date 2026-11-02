@@ -305,7 +305,7 @@ export async function replyTo(
     // [LAW:one-source-of-truth] The count of render requests received is that
     // order.
     const order = ++stats.requestsTotal;
-    const checked = checkRenderRequest(req, stats, parts.log);
+    const checked = checkRenderRequest(req, stats, parts.log, parts.home);
     // [LAW:single-enforcer] A render REQUEST is a client sighting — the
     // frames a feed draws from a session's data are not, so this is the one
     // write, here rather than in drawRender. It is written as the request
@@ -318,7 +318,10 @@ export async function replyTo(
           client: req.hints.client ?? null,
           termCols: req.hints.termCols ?? null,
           rateLimits: req.rateLimits,
-          claudeConfigDir: claudeConfigDir(req.hints.claudeConfigDir),
+          claudeConfigDir: claudeConfigDir(
+            req.hints.claudeConfigDir,
+            parts.home,
+          ),
           projectDir: req.requested.projectDir,
           transcript: transcriptSaid(req.hookData),
           frame,
@@ -750,6 +753,7 @@ async function statusLineClick(
     `opening ${click.url}`,
     parts.log,
     CLICK_PROGRAM_TIMEOUT_MS,
+    parts.tmp,
   );
   return { kind: "ok" };
 }

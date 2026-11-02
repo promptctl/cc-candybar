@@ -1,4 +1,5 @@
 import { plainOf, textOf, type Frame, type Run } from "../src/render/frame";
+import { processLauncher } from "./helpers/host";
 import { runUnder, sameDraw } from "./helpers/frame";
 // [LAW:verifiable-goals] brandon-effects-2gka.d2i: the whole bar wears a looping
 // effect chosen by `globals.effect`. An effect changes colours and nothing else,
@@ -7,7 +8,6 @@ import { runUnder, sameDraw } from "./helpers/frame";
 
 import { drawPayload } from "./helpers/draw-payload";
 import { linkUrls } from "./helpers/frame";
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
 import {

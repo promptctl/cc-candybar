@@ -3,7 +3,6 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { setTimeout } from "node:timers/promises";
 import { debug } from "./logger";
-import { cacheDir } from "../daemon/paths";
 
 interface ErrnoError extends Error {
   code?: string;
@@ -15,12 +14,18 @@ export interface CacheEntry<T> {
 }
 
 export class CacheManager {
-  private static readonly CACHE_DIR = cacheDir();
-  private static readonly USAGE_CACHE_DIR = path.join(this.CACHE_DIR, "usage");
-  private static readonly LOCKS_DIR = path.join(this.CACHE_DIR, "locks");
+  // [LAW:one-source-of-truth] Every method takes the cache's root directory
+  // (the host's `cacheDir`), so the layout under it is derived here alone.
+  private static usageDir(root: string): string {
+    return path.join(root, "usage");
+  }
 
-  private static isLocked(name: string): boolean {
-    const lockFile = path.join(this.LOCKS_DIR, name);
+  private static locksDir(root: string): string {
+    return path.join(root, "locks");
+  }
+
+  private static isLocked(root: string, name: string): boolean {
+    const lockFile = path.join(this.locksDir(root), name);
     if (!fs.existsSync(lockFile)) {
       return false;
     }
@@ -54,14 +59,15 @@ export class CacheManager {
   }
 
   private static async acquireLock(
+    root: string,
     name: string,
     timeout = 5000,
   ): Promise<boolean> {
     const RETRY_DELAY_MS = 50;
     const FILE_CREATE_FLAG = "wx";
 
-    await this.ensureCacheDirectories();
-    const lockFile = path.join(this.LOCKS_DIR, name);
+    await this.ensureCacheDirectories(root);
+    const lockFile = path.join(this.locksDir(root), name);
     const startTime = Date.now();
     const lockContent = String(process.pid);
 
@@ -84,8 +90,8 @@ export class CacheManager {
     return false;
   }
 
-  private static async releaseLock(name: string): Promise<void> {
-    const lockFile = path.join(this.LOCKS_DIR, name);
+  private static async releaseLock(root: string, name: string): Promise<void> {
+    const lockFile = path.join(this.locksDir(root), name);
     try {
       await fs.promises.unlink(lockFile);
       debug(`Lock released for ${name}`);
@@ -96,12 +102,12 @@ export class CacheManager {
     }
   }
 
-  static async ensureCacheDirectories(): Promise<void> {
+  static async ensureCacheDirectories(root: string): Promise<void> {
     try {
       await Promise.all([
-        fs.promises.mkdir(this.CACHE_DIR, { recursive: true }),
-        fs.promises.mkdir(this.USAGE_CACHE_DIR, { recursive: true }),
-        fs.promises.mkdir(this.LOCKS_DIR, { recursive: true }),
+        fs.promises.mkdir(root, { recursive: true }),
+        fs.promises.mkdir(this.usageDir(root), { recursive: true }),
+        fs.promises.mkdir(this.locksDir(root), { recursive: true }),
       ]);
     } catch (error) {
       debug("Failed to create cache directories:", error);
@@ -113,6 +119,7 @@ export class CacheManager {
   }
 
   static async getUsageCache(
+    root: string,
     cacheType: "pricing",
     latestMtime?: number,
   ): Promise<unknown> {
@@ -120,12 +127,12 @@ export class CacheManager {
     const RETRY_DELAY_MS = 75;
     const FILE_ENCODING = "utf-8";
 
-    await this.ensureCacheDirectories();
-    const cachePath = path.join(this.USAGE_CACHE_DIR, `${cacheType}.json`);
+    await this.ensureCacheDirectories(root);
+    const cachePath = path.join(this.usageDir(root), `${cacheType}.json`);
     const lockName = `${cacheType}.usage.lock`;
 
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-      const isCurrentlyLocked = this.isLocked(lockName);
+      const isCurrentlyLocked = this.isLocked(root, lockName);
       if (isCurrentlyLocked) {
         debug(`Cache for ${cacheType} is locked, waiting...`);
         await setTimeout(RETRY_DELAY_MS);
@@ -174,20 +181,21 @@ export class CacheManager {
   }
 
   static async setUsageCache(
+    root: string,
     cacheType: "pricing",
     data: unknown,
     latestMtime?: number,
   ): Promise<void> {
     const lockName = `${cacheType}.usage.lock`;
-    const lockAcquired = await this.acquireLock(lockName);
+    const lockAcquired = await this.acquireLock(root, lockName);
     if (!lockAcquired) {
       debug(`Could not acquire lock to set usage cache for ${cacheType}`);
       return;
     }
 
     try {
-      await this.ensureCacheDirectories();
-      const cachePath = path.join(this.USAGE_CACHE_DIR, `${cacheType}.json`);
+      await this.ensureCacheDirectories(root);
+      const cachePath = path.join(this.usageDir(root), `${cacheType}.json`);
       const cacheTimestamp = latestMtime || Date.now();
       const cacheEntry: CacheEntry<unknown> = {
         data,
@@ -200,7 +208,7 @@ export class CacheManager {
     } catch (error) {
       debug(`Failed to save ${cacheType} usage cache:`, error);
     } finally {
-      await this.releaseLock(lockName);
+      await this.releaseLock(root, lockName);
     }
   }
 }

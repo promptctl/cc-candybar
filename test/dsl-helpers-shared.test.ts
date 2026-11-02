@@ -1,12 +1,10 @@
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
+import { processLauncher } from "./helpers/host";
+import { NO_PROJECT } from "./helpers/no-project";
 import v8 from "node:v8";
 import vm from "node:vm";
 import { validateConfig } from "./helpers/parse-and-validate";
-import {
-  loadConfig,
-  NO_PROJECT,
-} from "../src/config/dsl-loader";
+import { loadConfig } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { registerDslConfig } from "../src/dsl/render";
 import { SourceRegistry } from "../src/var-system/sources";

@@ -10,6 +10,7 @@
 // out while it ran. A tick that was fast because it drew nothing is a failure.
 
 import fs from "node:fs";
+import { processWorld } from "../../../src/host.js";
 
 import { effectsUrl, VERB_SET_STATE } from "../../../src/click/wire.js";
 import { linksOf } from "../../../src/click/read.js";
@@ -375,7 +376,7 @@ const configReload = (entries: number): Benchmark => ({
 async function click(url: string): Promise<number> {
   const { verb, value } = parseHandlerUrl(url);
   const started = performance.now();
-  const outcome = await tryClickViaDaemon(verb, value);
+  const outcome = await tryClickViaDaemon(processWorld().host, verb, value);
   const ms = performance.now() - started;
   // [LAW:no-silent-failure] A click the daemon refused did nothing; its round
   // trip is not a click's.

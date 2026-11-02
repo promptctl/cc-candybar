@@ -1,15 +1,12 @@
 import { spawn } from "node:child_process";
+import { processLauncher } from "./helpers/host";
 import {
   readStartTime,
   readOwnStartTime,
   sameLiveProcess,
   type StartTimeRead,
 } from "../src/daemon/process-fingerprint";
-import {
-  processLauncher,
-  type LaunchResult,
-  type Launcher,
-} from "../src/proc/launch";
+import { type LaunchResult, type Launcher } from "../src/proc/launch";
 
 const realRead = (pid: number): Promise<StartTimeRead> =>
   readStartTime(pid, processLauncher.launch);
@@ -70,7 +67,7 @@ describe("readStartTime (injected launcher — the unavailable branches)", () =>
   test("pins LC_ALL=C and TZ=UTC on the ps subprocess (locale- and tz-independent token)", async () => {
     let seenEnv: NodeJS.ProcessEnv | undefined;
     const capture: Launcher["launch"] = async (opts) => {
-      seenEnv = opts.env;
+      seenEnv = opts.envOverlay;
       return okStdout("Thu Jul  9 05:04:25 2026");
     };
     await readStartTime(123, capture);

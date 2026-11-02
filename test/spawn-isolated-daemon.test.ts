@@ -12,6 +12,7 @@
 // which arm spoke is therefore a claim about the mechanism, not about a clock.
 
 import fs from "node:fs";
+import { HOST, hostOf } from "./helpers/host";
 import os from "node:os";
 import path from "node:path";
 
@@ -25,12 +26,12 @@ const LOG_LINE = "2026-09-12T00:00:00.000Z [error] refusing to boot: nope";
 const STDERR_LINE = "Error: died before it had a log";
 const SOCK = "/tmp/ccb-x/cc-candybar/socket";
 
-// An env whose logPath() names a real file, so the projection under test reads
+// An env whose logPath(HOST) names a real file, so the projection under test reads
 // the daemon's own words the way it does in production.
 function envWithLog(): NodeJS.ProcessEnv {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-rf-"));
   const env: NodeJS.ProcessEnv = { XDG_STATE_HOME: root };
-  const file = logPath(env);
+  const file = logPath(hostOf(env));
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, `${LOG_LINE}\n`);
   return env;
@@ -90,7 +91,7 @@ describe("readinessFailure — what the socket did, what our process did", () =>
     for (const phase of phases) {
       for (const exit of exits) {
         const m = message({ phase, exit });
-        expect(m).toContain(logPath(env));
+        expect(m).toContain(logPath(hostOf(env)));
         expect(m).toContain(LOG_LINE);
         expect(m).toContain(`stderr:\n${STDERR_LINE}`);
       }

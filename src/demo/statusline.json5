@@ -10,7 +10,7 @@
 {
   globals: {
     // Base palette for every segment that doesn't pull its own (see `branch`).
-    palette: 'textual-dark',
+    palette: "textual-dark",
   },
 
   // ── Variables: where each segment's data comes from ──────────────────────
@@ -19,24 +19,29 @@
   // is a load-time error, not a silent blank.
   variables: {
     // env  — read straight from the process environment.
-    user: { kind: 'env', name: 'USER', default: 'anon' },
+    user: { kind: "env", name: "USER", default: "anon" },
 
     // input — pulled from the JSON payload Claude Code sends each render tick.
-    cwd:     { kind: 'input', path: 'workspace.current_dir', default: '?' },
-    model:   { kind: 'input', path: 'model.display_name',    default: '' },
-    session: { kind: 'input', path: 'session_id',            default: '' },
+    cwd: { kind: "input", path: "workspace.current_dir", default: "?" },
+    model: { kind: "input", path: "model.display_name", default: "" },
+    session: { kind: "input", path: "session_id", default: "" },
 
     // template — derived from other vars; recomputed reactively when they move.
-    sid:  { kind: 'template', template: '{{ trunc 8 .session }}' },
-    here: { kind: 'template', template: '{{ basename .cwd }}' },
+    sid: { kind: "template", template: "{{ trunc 8 .session }}" },
+    here: { kind: "template", template: "{{ basename .cwd }}" },
 
     // shell — run a command, cache the result for a TTL window. Populates
     // asynchronously: until the command returns, `.branch` is the default ''.
-    branch: { kind: 'shell', command: 'git branch --show-current', cache: { ttl: '5s' }, default: '' },
+    branch: {
+      kind: "shell",
+      command: "git branch --show-current",
+      cache: { ttl: "5s" },
+      default: "",
+    },
 
     // time — the instant the bar is drawn at, formatted with a Go
     // reference-time layout.
-    clock: { kind: 'time', layout: '15:04:05' },
+    clock: { kind: "time", layout: "15:04:05" },
 
     // (file and git kinds exist too — omitted here to stay minimal.)
   },
@@ -48,42 +53,42 @@
   // background. `when` hides a segment when it evaluates false.
   segments: {
     user: {
-      template: ' {{ .user }} ',
-      bg: 'primary',
-      fg: '{{ contrastOn (bgOf) }}',
+      template: " {{ .user }} ",
+      bg: "primary",
+      fg: "{{ contrastOn (bgOf) }}",
     },
     directory: {
-      template: ' {{ .here }} ',
-      bg: 'surface',
-      fg: 'foreground',
+      template: " {{ .here }} ",
+      bg: "surface",
+      fg: "foreground",
     },
     branch: {
-      template: ' {{ .branch }} ',
-      bg: 'accent',
-      fg: '{{ contrastOn (bgOf) }}',
-      when: '{{ ne .branch "" }}',   // hidden entirely outside a git repo
-      palette: 'gruvbox',      // this segment pulls its OWN palette (per-segment switch)
+      template: " {{ .branch }} ",
+      bg: "accent",
+      fg: "{{ contrastOn (bgOf) }}",
+      when: '{{ ne .branch "" }}', // hidden entirely outside a git repo
+      palette: "gruvbox", // this segment pulls its OWN palette (per-segment switch)
     },
     model: {
-      template: ' {{ .model }} ',
-      bg: 'secondary',
-      fg: '{{ contrastOn (bgOf) }}',
+      template: " {{ .model }} ",
+      bg: "secondary",
+      fg: "{{ contrastOn (bgOf) }}",
       when: '{{ ne .model "" }}',
     },
     session: {
-      template: ' ⌗{{ .sid }} ',
-      bg: 'surface',
-      fg: 'foreground',
+      template: " ⌗{{ .sid }} ",
+      bg: "surface",
+      fg: "foreground",
     },
     clock: {
-      template: ' {{ .clock }} ',
-      bg: 'primary',
-      fg: '{{ contrastOn (bgOf) }}',
+      template: " {{ .clock }} ",
+      bg: "primary",
+      fg: "{{ contrastOn (bgOf) }}",
     },
   },
 
   // ── Layout: Option A shape grammar — one horizontal row of segment refs.
   // { v: [...] } for multiple rows; { h: ['a', 'b'], when: '...' } for a gated row;
   // bare string 'segname' for a single segment ref.
-  root: { h: ['user', 'directory', 'branch', 'model', 'session', 'clock'] },
+  root: { h: ["user", "directory", "branch", "model", "session", "clock"] },
 }

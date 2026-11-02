@@ -12,11 +12,11 @@
 //     one ground, and save writes the pick into the placement.
 
 import { drawPayload } from "./helpers/draw-payload";
+import { locs, processLauncher } from "./helpers/host";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linksOf } from "../src/click/read";
 import { linkUrls } from "./helpers/frame";
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
 import { configurePlacement } from "./helpers/configure";
@@ -117,7 +117,7 @@ function buildRuntime(src: string, sessionState = new SessionState()) {
   };
   let current = config;
   const ctx: VerbContext = {
-    ...testVerbContext(sessionState, durable.historyFor(sessionState)),
+    ...testVerbContext(sessionState, durable.historyFor(sessionState), undefined, durable.host),
     configFor: () => current,
     reloadConfig: () => {
       current = parseAndValidate("<reloaded>", durable.text()!, ALLOWED);

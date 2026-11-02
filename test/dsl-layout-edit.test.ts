@@ -1,4 +1,6 @@
 import { textOf } from "../src/render/frame";
+import { locations } from "../src/daemon/paths";
+import { HOST, locs, processLauncher } from "./helpers/host";
 // [LAW:verifiable-goals] brandon-layout-edit-2gc.1 done-gates, driven through
 // the real spine (mirroring dsl-persist-actions.test.ts's model one arm
 // over), re-aimed at the config FILE as the one durable store
@@ -46,7 +48,6 @@ import { textOf } from "../src/render/frame";
 import { drawPayload } from "./helpers/draw-payload";
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { picked, selectionFor } from "./helpers/selection";
 import { ownLinks } from "./helpers/ambient-chrome";
@@ -563,7 +564,7 @@ function buildLayoutRuntime(src: string, sessionId = "s1") {
       opts(),
     ).frame;
   const ctx: VerbContext = {
-    ...testVerbContext(sessionState, durable.historyFor(sessionState)),
+    ...testVerbContext(sessionState, durable.historyFor(sessionState), undefined, durable.host),
     // The daemon's own lookup and reload: a click is gated by the config as
     // the last click left it, and an insertion mints its id against it.
     configFor: () => current,
@@ -786,11 +787,7 @@ describe("apply-layout-op click → the config file", () => {
     const { config } = buildLayoutRuntime(SRC);
     const sessionState = new SessionState();
     durable.seedOrigin(sessionState, "s1");
-    const ctx: VerbContext = testVerbContext(
-      sessionState,
-      durable.historyFor(sessionState),
-      config,
-    );
+    const ctx: VerbContext = testVerbContext(sessionState, durable.historyFor(sessionState), config, durable.host);
     const applyLayoutOp = VERBS.get("apply-layout-op")!;
     const before = durable.text();
     await expect(applyLayoutOp(
@@ -809,11 +806,7 @@ describe("apply-layout-op click → the config file", () => {
   // own XDG path.
   test("a click on a session with no recorded render origin is refused — no file to write", async () => {
     const { config } = buildLayoutRuntime(SRC);
-    const ctx: VerbContext = testVerbContext(
-      new SessionState(),
-      undefined,
-      config,
-    );
+    const ctx: VerbContext = testVerbContext(new SessionState(), undefined, config, durable.host);
     const applyLayoutOp = VERBS.get("apply-layout-op")!;
     await expect(applyLayoutOp(
         `${encodeURIComponent("s1")}/${encodeURIComponent("presets.default.root")}/${encodeURIComponent(
@@ -974,7 +967,7 @@ function makeCache(reloads?: ReloadSignal): {
   cleanups.push(() => watchers.closeAll());
   const sessionState = new SessionState();
   const cache = new RenderCache(
-    { stateDir: stateDir(), launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, gates: bareGates(), fileEvents: NO_FILE_EVENTS, sessionState, watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
+    { stateDir: stateDir(durable.host), locations: locations(durable.host), env: durable.host.env, launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, gates: bareGates(), fileEvents: NO_FILE_EVENTS, sessionState, watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
     {
       budgetBytes: () => renderCacheBudget(memoryLimitBytes({})),
       ...(reloads === undefined ? {} : { observers: reloads.observers }),
@@ -1031,7 +1024,7 @@ function originCtx(
 ): VerbContext {
   durable.seedOrigin(sessionState, sessionId);
   return {
-    ...testVerbContext(sessionState, durable.historyFor(sessionState)),
+    ...testVerbContext(sessionState, durable.historyFor(sessionState), undefined, durable.host),
     // The daemon's own wiring (daemon.ts): the config a session renders with
     // is its cache entry's, and a click that must not act on the old config
     // reloads that entry from the file it just wrote.
@@ -1166,7 +1159,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
     const watchers = new WatcherRegistry({ logger: () => {} });
     const sessionState = new SessionState();
     const cache = new RenderCache(
-      { stateDir: stateDir(),
+      { stateDir: stateDir(durable.host), locations: locations(durable.host), env: durable.host.env,
         launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER, gates: bareGates(),

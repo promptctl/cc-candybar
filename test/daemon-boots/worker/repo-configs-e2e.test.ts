@@ -1,4 +1,5 @@
 import type { Frame } from "../../../src/render/frame";
+import { hostOf } from "../../helpers/host";
 // [LAW:verifiable-goals] A cloned repository's cc-candybar config runs only
 // once the user approves it, by one click in the bar, and the answer holds:
 // across a daemon restart and across edits of the file, as Claude Code's
@@ -139,7 +140,7 @@ describe("a repository's config waits for the user's one answer", () => {
     await until(
       () =>
         fs
-          .readFileSync(logPath(isolated.env), "utf8")
+          .readFileSync(logPath(hostOf(isolated.env)), "utf8")
           .split("\n")
           .some((l) => l.includes("config loaded ") && l.includes(loadedLine)),
       "the config loaded event naming the waiting repository",
@@ -151,7 +152,7 @@ describe("a repository's config waits for the user's one answer", () => {
     expect(forged).not.toBe(approve);
     const refused = await sendClick(daemon, forged);
     expect(refused.ok).toBe(false);
-    expect(fs.existsSync(repoConfigsPath(stateDir(isolated.env)))).toBe(false);
+    expect(fs.existsSync(repoConfigsPath(stateDir(hostOf(isolated.env))))).toBe(false);
     expect(fs.existsSync(marker)).toBe(false);
   });
 
@@ -265,7 +266,7 @@ describe("a repository's config waits for the user's one answer", () => {
     );
     // An answer kept under the worktree's own path, before answers were kept
     // by repository: it disagrees with the repository's, so it asks.
-    repoConfigs(stateDir(isolated.env)).update(() => ({
+    repoConfigs(stateDir(hostOf(isolated.env))).update(() => ({
       [project]: "declined",
       [wt]: "approved",
     }));
@@ -295,13 +296,13 @@ describe("a repository's config waits for the user's one answer", () => {
       await until(
         () =>
           fs
-            .readFileSync(logPath(isolated.env), "utf8")
+            .readFileSync(logPath(hostOf(isolated.env)), "utf8")
             .includes(
               `repo-config: ${project} approved superseded=${wt} absent=- unchecked=- `,
             ),
         "the repo-config event naming the superseded worktree entry",
       );
-      expect(repoConfigs(stateDir(isolated.env)).read()).toEqual({
+      expect(repoConfigs(stateDir(hostOf(isolated.env))).read()).toEqual({
         kind: "ok",
         value: { [project]: "approved" },
       });

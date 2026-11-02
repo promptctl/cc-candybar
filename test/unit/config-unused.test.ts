@@ -6,10 +6,8 @@
 // real loader; the expectation is the names an author would have to remove.
 
 import { validateConfig } from "../helpers/parse-and-validate";
-import {
-  loadConfigSource,
-  NO_PROJECT,
-} from "../../src/config/dsl-loader";
+import { NO_PROJECT } from "../helpers/no-project";
+import { loadConfigSource } from "../../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
 import { unusedDeclarations } from "../../src/config/unused";
 

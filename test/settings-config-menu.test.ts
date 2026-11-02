@@ -17,19 +17,16 @@
 //      globals, so the bar the file alone renders draws the saved value.
 
 import { drawPayload } from "./helpers/draw-payload";
+import { locs, processLauncher } from "./helpers/host";
+import { NO_PROJECT } from "./helpers/no-project";
 import { textOf, type Frame } from "../src/render/frame";
 import { linksOf } from "../src/click/read";
 import { linkUrls } from "./helpers/frame";
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { POLLED, PRESET_DELETE_GLYPH } from "../src/config/settings-menu";
-import {
-  ConfigError,
-  loadConfigSource,
-  NO_PROJECT,
-} from "../src/config/dsl-loader";
+import { ConfigError, loadConfigSource } from "../src/config/dsl-loader";
 import { SessionState } from "../src/daemon/session-state";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
@@ -136,7 +133,7 @@ function rig(
   const logs: string[] = [];
   const reloads: { text: string; picks: Record<string, string | null> }[] = [];
   const ctx: VerbContext = {
-    ...testVerbContext(sessionState, durable?.historyFor(sessionState)),
+    ...testVerbContext(sessionState, durable?.historyFor(sessionState), undefined, durable?.host),
     log: (_level, msg) => logs.push(msg),
     configFor: () => entry.config,
     reloadConfig: () => {

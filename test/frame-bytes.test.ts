@@ -11,8 +11,8 @@
 // row, a ColorBlend, a moving effect or a fade fails here, not silently.
 
 import { drawPayload } from "./helpers/draw-payload";
+import { processLauncher } from "./helpers/host";
 import { ColorDepth, Style, type ColorSpec } from "@promptctl/rich-js";
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
 import { parseAndValidate } from "./helpers/parse-and-validate";

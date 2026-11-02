@@ -25,8 +25,8 @@
 // forcing them through one type would be the "wrong abstraction stretched
 // over a shape it wasn't designed for" the carrying-cost law warns against.
 
-import { processLauncher } from "../../src/proc/launch";
 import fs from "node:fs";
+import { processLauncher } from "./host";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";

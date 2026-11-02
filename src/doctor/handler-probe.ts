@@ -13,6 +13,7 @@
 // `probeUrlHandler` is the sequence over them, and a test hands in its own.
 
 import { randomUUID } from "node:crypto";
+import type { Host } from "../host.js";
 import fs from "node:fs";
 import { URL_SCHEME, VERB_DOCTOR_PROBE } from "../click/wire.js";
 import { describeFailure } from "../daemon/client-transport.js";
@@ -195,8 +196,8 @@ const OPENER_SCRIPT =
   `var u = $.NSWorkspace.sharedWorkspace.URLForApplicationToOpenURL($.NSURL.URLWithString("${URL_SCHEME}://probe"));` +
   'u.isNil() ? "" : u.path.js';
 
-async function daemonView(): Promise<Asked<DaemonView>> {
-  const outcome = await fetchStats();
+async function daemonView(host: Host): Promise<Asked<DaemonView>> {
+  const outcome = await fetchStats(host);
   // The description is lines (a failure, then its hint); a verdict's reason is
   // one row.
   if (outcome.kind !== "ok") {
@@ -212,13 +213,14 @@ async function daemonView(): Promise<Asked<DaemonView>> {
 
 export function productionHandlerProbeEdge(
   launcher: OneShotLauncher,
+  host: Host,
 ): HandlerProbeEdge {
   return {
     platform: process.platform,
-    sockets: { own: socketPath(), handler: defaultSocketPath() },
+    sockets: { own: socketPath(host), handler: defaultSocketPath() },
     now: Date.now,
     nonce: randomUUID,
-    daemon: daemonView,
+    daemon: () => daemonView(host),
     open: (url) => {
       // -g: the handler app must not take focus from the terminal.
       const opened = run(launcher, "doctor.open", "/usr/bin/open", ["-g", url]);

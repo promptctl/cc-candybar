@@ -13,6 +13,7 @@
 // branch.
 
 import net from "node:net";
+import type { Host } from "../host";
 import { socketPath } from "./paths";
 import {
   ClientTimeoutError,
@@ -91,13 +92,14 @@ type OkResponse = Extract<Response, { ok: true }>;
 // permanent/malformed_response, not a kick. The payload types themselves
 // never enter this module [LAW:one-way-deps].
 export async function requestOutcome<T>(
+  host: Host,
   request: (deadline: number) => UnversionedRequest,
   budgets: RoundTripBudgets,
   project: (resp: OkResponse) => T | undefined,
 ): Promise<RoundTripOutcome<T>> {
   let sock: net.Socket | null = null;
   try {
-    sock = await connectWithTimeout(socketPath(), budgets.connectMs);
+    sock = await connectWithTimeout(socketPath(host), budgets.connectMs);
     // [LAW:one-source-of-truth] One instant: the one the request states and
     // the one the client's own timer gives up at.
     const deadline = Date.now() + budgets.budgetMs;

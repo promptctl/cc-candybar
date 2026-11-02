@@ -6,18 +6,10 @@
 // through parseDslConfig.
 
 import fs from "node:fs";
+import { NO_PROJECT } from "./helpers/no-project";
 import os from "node:os";
 import path from "node:path";
-import {
-  ConfigError,
-  templateReads,
-  findKeyLine,
-  loadConfig,
-  NO_PROJECT,
-  parseDslConfig,
-  mergeWithDefault,
-  validateRenderable,
-} from "../src/config/dsl-loader";
+import { ConfigError, templateReads, findKeyLine, loadConfig, parseDslConfig, mergeWithDefault, validateRenderable } from "../src/config/dsl-loader";
 import { presenceOf } from "../src/config/loader/unplaced";
 import { SETTINGS_ANCHOR } from "../src/config/door";
 import {

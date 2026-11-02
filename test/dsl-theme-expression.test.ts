@@ -1,4 +1,5 @@
 import type { Frame } from "../src/render/frame";
+import { processLauncher } from "./helpers/host";
 // [LAW:verifiable-goals] brandon-themes-dzl done-gates: (1) `globals.palette`
 // accepts a TEMPLATE, evaluated per render, so the bar's theme can follow data;
 // (2) precedence comes out IDENTICAL to the style's — staged over session over the
@@ -25,7 +26,6 @@ import type { Frame } from "../src/render/frame";
 
 import { drawPayload } from "./helpers/draw-payload";
 import { textOf } from "../src/render/frame";
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { picked, selectionFor } from "./helpers/selection";
 import { transposePalette, getThemePalette } from "@promptctl/rich-js";

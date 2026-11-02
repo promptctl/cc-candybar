@@ -25,6 +25,7 @@ import { JSON_DIALECT, setValue } from "../config/json5-edit.js";
 import { writeAtomic } from "../utils/atomic-write.js";
 import type { ClientHints } from "../daemon/protocol.js";
 import { runTmuxAsync } from "../proc/tmux.js";
+import type { Host } from "../host.js";
 import type { LaunchResult, Launcher } from "../proc/launch.js";
 import {
   FORGE_CLI,
@@ -262,6 +263,8 @@ export interface DoctorEdge {
   // reads, so the daemon's own environment may move it, which test/setup.ts
   // does so no test reads the host's policy.
   readonly managedSettingsDir: string;
+  // The user's home: where Claude Code's default directory is.
+  readonly home: string;
   readonly install: InstallEdge;
   // Every cc-candybar daemon process this user runs (`daemonProcesses`).
   readonly daemons: () => Promise<Asked<readonly DaemonProcess[]>>;
@@ -443,7 +446,7 @@ async function daemons(
     category: "doctor.daemons",
     // The start time as the table writes it, in one format whatever the
     // user's locale and zone (src/daemon/process-fingerprint.ts).
-    env: { ...process.env, LC_ALL: "C", TZ: "UTC" },
+    envOverlay: { LC_ALL: "C", TZ: "UTC" },
   });
   if (!run.ok) {
     const detail = run.error ?? `${run.reason}: ${run.stderr.trim()}`;
@@ -471,15 +474,17 @@ async function probeTmux(
 export function productionEdge(
   launcher: Launcher,
   loadConfig: DoctorEdge["loadConfig"],
+  host: Host,
 ): DoctorEdge {
   return {
     probeTmux: (hint) => probeTmux(launcher, hint),
     remoteLogin: (pid) => remoteLogin(launcher, pid),
     fontInUse: (terminal, env, glyphs) =>
-      fontInUse(launcher, terminal, env, glyphs),
+      fontInUse(launcher, terminal, env, glyphs, host.home),
     loadConfig,
+    home: host.home,
     managedSettingsDir:
-      process.env.CC_CANDYBAR_CLAUDE_MANAGED_DIR ??
+      host.env.CC_CANDYBAR_CLAUDE_MANAGED_DIR ??
       claudeManagedSettingsDir(process.platform),
     install: productionInstallEdge,
     daemons: () => daemons(launcher),
@@ -591,7 +596,7 @@ export async function forgeLogin(
       bin: "git",
       args: [...REMOTES_ARGS],
       cwd,
-      env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+      envOverlay: { GIT_OPTIONAL_LOCKS: "0" },
       timeoutMs: 2000,
       category: "doctor.forge",
     }),
@@ -967,7 +972,9 @@ export async function gatherFacts(
       {
         managedDir: edge.managedSettingsDir,
         projectDir: origin.projectDir,
-        userFile: claudeSettingsPath(claudeConfigDir(hints.claudeConfigDir)),
+        userFile: claudeSettingsPath(
+          claudeConfigDir(hints.claudeConfigDir, edge.home),
+        ),
       },
       bars.kind === "ok" ? bars.value : [],
     ),

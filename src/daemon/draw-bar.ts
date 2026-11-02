@@ -287,9 +287,9 @@ function requestFacts(
   //
   // [LAW:single-enforcer] Every hint is captured client-side because the
   // daemon is detached and shared: its env answers for whichever shell
-  // spawned it. We do NOT consult getTerminalWidth's env/stderr fallbacks
-  // for width, and we do NOT consult SSH_* for remoteness — both would
-  // describe a different session than the one being rendered.
+  // spawned it. We do NOT read the daemon's env or stderr for width, and we do
+  // NOT consult SSH_* for remoteness — both would describe a different
+  // session than the one being rendered.
   const hints = req.hints;
   const refused = refusedHints(req, hints);
   const hintsError = refusedHintsError(refused);

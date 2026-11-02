@@ -31,35 +31,13 @@ const PATHS = [
 ];
 
 const OWNED_IMPORTS = {
-  // A process with no daemon, or a daemon's shell before it has one.
-  processLauncher: {
-    group: ["**/proc/launch", "**/proc/launch.js"],
-    owners: [
-      "src/bar-pane/index.ts",
-      "src/check.ts",
-      "src/daemon/acquire.ts",
-      "src/daemon/fork-bomb-breaker.ts",
-      "src/daemon/server.ts",
-      "src/demo/dsl.ts",
-    ],
-    message: "Daemon work launches through its daemon's Launcher.",
-  },
-  // The launch that holds the loop to pipe EOF: only where no loop is served.
-  // The daemon's server takes it for the tmux restore, after serving stops.
-  oneShotLauncher: {
-    group: ["**/proc/launch", "**/proc/launch.js"],
-    owners: [
-      "src/daemon/server.ts",
-      "src/doctor/cli.ts",
-      "src/index.ts",
-      "src/plugin-install.ts",
-    ],
-    message: "Only a process serving no loop holds its loop for a launch.",
-  },
+  // The process's one launcher, built beside the host it inherits from: a
+  // process main takes it from `processWorld`, and everything else is handed it.
   createOneShotLauncher: {
     group: ["**/proc/launch", "**/proc/launch.js"],
-    owners: [],
-    message: "The process has its one-shot launcher: take oneShotLauncher.",
+    owners: ["src/host.ts"],
+    message:
+      "The process has its one-shot launcher: take the one you are given.",
   },
   // The composition root of the one owner that is not the process.
   createLauncher: {
@@ -158,12 +136,11 @@ const OWNED_IMPORTS = {
   // (candybar-testing-ihvy.89p), which takes its directory as an input.
   cacheDir: {
     group: PATHS,
-    owners: ["src/utils/cache.ts"],
+    owners: ["src/daemon/cache/session-usage-store.ts"],
     message: "A daemon is handed its paths: take the value you are given.",
   },
   ...Object.fromEntries(
     [
-      "configDir",
       "logPath",
       "leasePath",
       "sessionStatePath",
@@ -180,6 +157,27 @@ const OWNED_IMPORTS = {
     ]),
   ),
 };
+
+// [LAW:effects-at-boundaries] [LAW:single-enforcer] The environment, the home
+// directory (`os.homedir` reads `HOME`) and the temporary directory
+// (`os.tmpdir` reads `TMPDIR`) are read once, by `processWorld` in
+// src/host.ts, and handed down as a `Host`. The preload's main runs apart from
+// the rest of src and reads its own. Every other file takes what it is given.
+const HOST_READERS = ["src/host.ts", "src/attach-preload-exec.ts"];
+const HOST_READ_MESSAGE =
+  "Take the Host you are handed: src/host.ts reads the process once. [LAW:effects-at-boundaries]";
+const HOST_NAMED_IMPORTS = [
+  {
+    group: ["os", "node:os"],
+    importNames: ["homedir", "tmpdir"],
+    message: HOST_READ_MESSAGE,
+  },
+  {
+    group: ["process", "node:process"],
+    importNames: ["env"],
+    message: HOST_READ_MESSAGE,
+  },
+];
 
 // [LAW:one-way-deps] Foundations (src/daemon/foundations/) is the row every
 // piece of the daemon may reach, so it reaches none of them: a relative import
@@ -218,6 +216,7 @@ function restrictedImports(file, rowPatterns = []) {
             importNames: [name],
             message: `${message} [LAW:single-enforcer]`,
           })),
+        ...HOST_NAMED_IMPORTS,
         ...rowPatterns,
       ],
     },
@@ -316,6 +315,22 @@ export default [
   },
   prettierConfig,
   ...ownedImportBlocks(),
+  // `no-restricted-properties` is its own rule, so the per-file replacement of
+  // `no-restricted-imports` and `no-restricted-syntax` above leaves it alone.
+  // It also catches the destructured spelling (`const { env } = process`); an
+  // alias of `process` itself is the one it cannot see.
+  {
+    files: ["src/**/*.{ts,mts}"],
+    ignores: HOST_READERS,
+    rules: {
+      "no-restricted-properties": [
+        "error",
+        { object: "process", property: "env", message: HOST_READ_MESSAGE },
+        { object: "os", property: "homedir", message: HOST_READ_MESSAGE },
+        { object: "os", property: "tmpdir", message: HOST_READ_MESSAGE },
+      ],
+    },
+  },
   // [LAW:verifiable-goals] A path the daemon serves holds its loop if it
   // launches synchronously, so these cannot name the way to. Goes with the
   // launchSync half when `Launcher` drops it (candybar-launch-q7o7.4em).

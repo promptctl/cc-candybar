@@ -15,6 +15,7 @@ import type {
   VarSnapshot,
 } from "./debug-types";
 import type { DslConfig } from "../config/dsl-types";
+import type { Host } from "../host";
 
 // Operator-driven introspection path: legitimately slower budgets than the
 // render hot path, carried as this caller's values through the shared
@@ -23,10 +24,11 @@ const BUDGETS: RoundTripBudgets = { connectMs: 200, budgetMs: 500 };
 
 // `cc-candybar <vars|segments|config> [--json]` — `what` selects the projection.
 export async function debugCommandPlan(
+  host: Host,
   what: DebugWhat,
   args: readonly string[],
 ): Promise<CliPlan> {
-  return debugPlan(what, await fetchDebug(what), args.includes("--json"));
+  return debugPlan(what, await fetchDebug(host, what), args.includes("--json"));
 }
 
 // [LAW:dataflow-not-control-flow] The outcome → (streams, exit-code) fold.
@@ -51,12 +53,16 @@ export function debugPlan(
   };
 }
 
-function fetchDebug(what: DebugWhat): Promise<RoundTripOutcome<DebugSnapshot>> {
+function fetchDebug(
+  host: Host,
+  what: DebugWhat,
+): Promise<RoundTripOutcome<DebugSnapshot>> {
   // [LAW:no-defensive-null-guards] exception: trust boundary. The response is
   // an unchecked cast from socket JSON; the presence check is the explicit
   // narrowing at the wire edge (an ok response without `debug` classifies as
   // permanent/malformed_response in the transport).
   return requestOutcome(
+    host,
     () => ({ kind: "debug", what }),
     BUDGETS,
     (resp) => ("debug" in resp ? resp.debug : undefined),

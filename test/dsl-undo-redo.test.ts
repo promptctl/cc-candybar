@@ -23,9 +23,9 @@
 //      edit or another session's write — and never overwrites it.
 
 import { drawPayload } from "./helpers/draw-payload";
+import { locs, processLauncher } from "./helpers/host";
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
 import { chmodSync, writeFileSync } from "node:fs";
@@ -178,7 +178,7 @@ function buildRuntime(
   // the file on a reload.
   let current: DslConfig = config;
   const ctx: VerbContext = {
-    ...testVerbContext(sessionState, history),
+    ...testVerbContext(sessionState, history, undefined, durable.host),
     configFor: () => current,
     reloadConfig: () => {
       current = parseAndValidate("<test>", durable.text()!, ALLOWED);

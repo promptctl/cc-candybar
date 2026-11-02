@@ -22,10 +22,10 @@
 // menus left to pin are edit mode's `+` insert affordances.
 
 import { drawPayload } from "./helpers/draw-payload";
+import { processLauncher } from "./helpers/host";
 import { ansiOf, textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linksOf, type DrawnLink } from "../src/click/read";
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { createEngine } from "@promptctl/go-template-js";
 

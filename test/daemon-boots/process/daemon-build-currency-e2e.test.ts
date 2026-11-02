@@ -3,6 +3,7 @@
 // test/daemon-build-currency-e2e.test.ts, and take no build.
 
 import fs from "node:fs";
+import { hostOf } from "../../helpers/host";
 import os from "node:os";
 import path from "node:path";
 
@@ -42,7 +43,7 @@ async function viewerClosedOnDisk(
   env: NodeJS.ProcessEnv,
   sid: string,
 ): Promise<void> {
-  const file = sessionStatePath(env);
+  const file = sessionStatePath(hostOf(env));
   // Before the first save there is no file; the write is a rename, so a file
   // that is there is whole.
   const closed = (): boolean =>

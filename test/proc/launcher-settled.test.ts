@@ -13,7 +13,7 @@ const scope = () => {
   const closing = new AbortController();
   return {
     closing,
-    launcher: createLauncher({
+    launcher: createLauncher({ inherited: process.env, 
       signal: closing.signal,
       observeLifeline: () => {},
     }),
