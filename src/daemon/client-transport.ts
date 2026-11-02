@@ -33,8 +33,9 @@ export interface RoundTripBudgets {
 // means a daemon is listening and out of time: its own TIMEOUT reply, or our
 // clock running out on the connect or the deadline. A kick cannot cure it —
 // the candidate loses the bind to the live owner (socket-lease.ts) — and the
-// request may still be running in it. The caller's branch is no longer uniform: it matches on `kind` and
-// routes kick vs. show-error off the type, not off a stringified `reason`.
+// request may or may not have reached it. The caller's branch is no longer
+// uniform: it matches on `kind` and routes kick vs. show-error off the type,
+// not off a stringified `reason`.
 // This asymmetry was missing in the previous shape and is the root of the
 // 452-corpse spiral (kz8.5).
 export type RoundTripOutcome<T> = { kind: "ok"; value: T } | FailureOutcome;
@@ -234,7 +235,9 @@ export function interpretException(e: unknown): FailureOutcome {
   const message = e instanceof Error ? e.message : String(e);
   // A dead daemon never times out: a missing socket file is ENOENT and an
   // unbound one ECONNREFUSED, both immediate. So a client timeout means a
-  // listener holds the socket and has not answered in time.
+  // listener holds the socket and has not answered in time. The one miss: a
+  // starved client whose timer beats that immediate error reports a dead
+  // daemon busy, and the next tick kicks it.
   if (message === "CONNECT_TIMEOUT" || message === "TIMEOUT") {
     return { kind: "busy", message };
   }
@@ -275,9 +278,9 @@ function connectWithTimeout(
 // (src/install/index.ts) are deliberately separate presentations with their
 // own contracts (ANSI styling and Rust-parity truncation; per-cause click
 // diagnostics). The spawn hint appears only on transient failures — on a
-// busy or permanent failure the daemon answered, so it is demonstrably
-// running, and suggesting a respawn would send the operator down the wrong
-// path.
+// busy failure a daemon holds the socket and on a permanent one it answered,
+// so it is demonstrably running, and suggesting a respawn would send the
+// operator down the wrong path.
 export function describeFailure(outcome: FailureOutcome): string {
   if (outcome.kind === "busy") {
     return `daemon busy (${outcome.message})`;

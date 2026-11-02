@@ -75,9 +75,10 @@ fn main() {
     // recovery semantics. Four branches:
     //   Ok        — print and persist for stale-fallback.
     //   Transient — kick a fresh daemon, emit stale frame or "\n".
-    //   Busy      — the daemon answered TIMEOUT, so it is up: emit the stale
-    //               frame or "\n" and do NOT kick (a candidate would lose the
-    //               bind to the live daemon, once per render).
+    //   Busy      — a daemon holds the socket: it answered TIMEOUT, or this
+    //               client's clock ran out. Emit the stale frame or "\n" and
+    //               do NOT kick (a candidate would lose the bind to the live
+    //               daemon, once per render).
     //   Permanent — daemon refused our request; respawning will not help.
     //               Emit a diagnostic and do NOT kick. Mirrors the Node
     //               caller in src/index.ts. Kicking on every failure was
@@ -458,7 +459,9 @@ fn interpret_response(resp: serde_json::Value) -> RenderOutcome {
 // TIMEOUT is. A dead daemon never times out: a missing socket file is NotFound
 // and an unbound one ConnectionRefused, both immediate. So a timeout, on the
 // connect or after it, means a listener holds the socket and the live owner
-// would win the bind against a kick's candidate. Mirrors `interpretException`.
+// would win the bind against a kick's candidate. The one miss: a starved
+// client whose timer beats that immediate error reports a dead daemon busy,
+// and the next tick kicks it. Mirrors `interpretException`.
 //
 // [LAW:one-type-per-behavior] InvalidData/InvalidInput come from
 // write_frame/read_frame when the protocol layer detects an oversized

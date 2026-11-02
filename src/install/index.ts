@@ -460,10 +460,11 @@ export async function runUrlHandle(rawUrl: string | undefined): Promise<void> {
   }
 
   if (outcome.kind === "busy") {
-    // The daemon answered, so it is up and holds the click: it runs it, or
-    // refuses it as stale, and its log says which. Kicking would respawn a
-    // live daemon mid-click, and a non-zero exit is an error dialog from the
-    // handler app over a click that may well have landed.
+    // A daemon holds the socket, either answering TIMEOUT or leaving our
+    // clock to run out. If the click reached it, it runs it or refuses it as
+    // stale and its log says which. Kicking would respawn a live daemon
+    // mid-click, and a non-zero exit is an error dialog from the handler app
+    // over a click that may well have landed.
     process.stderr.write(`url-handle: daemon busy (${outcome.message})\n`);
     process.exit(0);
   }
