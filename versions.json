@@ -2,53 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-580",
-      "ref": "refs/pull/580/merge",
-      "sha": "e7b2601754473f4f0f4408fee0fa78b2f31d8b97",
-      "timestamp": "2026-11-02T16:59:16.556Z",
-      "commits": [
-        {
-          "sha": "e7b2601754473f4f0f4408fee0fa78b2f31d8b97",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T16:57:56Z",
-          "message": "Merge d281a4c1cc1d080830cf61bccbfcfca0d15582d9 into 437abb11a8aefe9ad432e8dd48085d083d5615e0\n"
-        },
-        {
-          "sha": "d281a4c1cc1d080830cf61bccbfcfca0d15582d9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T09:57:20-07:00",
-          "message": "docs(testing): the seam seconds are an upper bound that overlaps the compile bucket (candybar-testing-ihvy.hf7)\n"
-        },
-        {
-          "sha": "3ed1910142e46a73e764a7f9dfdf07ec9f82ff0a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T09:54:58-07:00",
-          "message": "docs(testing): the unit-layer time doc says what its checks and splits do and do not show (candybar-testing-ihvy.hf7)\n"
-        },
-        {
-          "sha": "ac03898da73f06544a278660fc1e9463898ff6c8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T09:49:52-07:00",
-          "message": "docs(testing): rendering is 40% and config compile 24% of the slowest unit-layer files, and 243 s of named sweeps wait on a seam (candybar-testing-ihvy.hf7)\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "437abb11a8aefe9ad432e8dd48085d083d5615e0",
-      "timestamp": "2026-11-02T16:31:20.715Z",
+      "sha": "fac28e917dfaf39a95ca96fb9fa4fb3641d4e6ab",
+      "timestamp": "2026-11-02T17:06:46.293Z",
       "commits": [
         {
-          "sha": "437abb11a8aefe9ad432e8dd48085d083d5615e0",
+          "sha": "fac28e917dfaf39a95ca96fb9fa4fb3641d4e6ab",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T09:29:58-07:00",
-          "message": "docs(testing): 60 of the last 100 failed Release runs were flakes, and two product defects hid among them (#579)\n\n* docs(testing): 60 of the last 100 failed Release runs were flakes, and two product defects hid among them (candybar-testing-ihvy.w13)\n\nRecounts the last 100 Release runs whose final attempt failed, plus the 22 that failed their first attempt and passed on rerun, by failing case, verdict, cause and evidence. Feeds plan tickets 7 and 22. The frame feed's early-timer double draw and the timers armed after daemon close read as flakes and are not; the second is filed as brandon-unfiled-3248.q4r5.\n\n* docs(testing): the run table names each run's groups, so the group counts can be counted from it (candybar-testing-ihvy.w13)\n\n* docs(testing): the quarantine counts say which runs they add, and the last-failure dates say they count reruns (candybar-testing-ihvy.w13)"
+          "timestamp": "2026-11-02T10:05:46-07:00",
+          "message": "docs(testing): rendering is 40% and config compile 24% of the slowest unit-layer files, and 243 s of named sweeps wait on a seam (candybar-testing-ihvy.hf7) (#580)\n\n* docs(testing): rendering is 40% and config compile 24% of the slowest unit-layer files, and 243 s of named sweeps wait on a seam (candybar-testing-ihvy.hf7)\n\n* docs(testing): the unit-layer time doc says what its checks and splits do and do not show (candybar-testing-ihvy.hf7)\n\n* docs(testing): the seam seconds are an upper bound that overlaps the compile bucket (candybar-testing-ihvy.hf7)"
         }
       ]
     },
