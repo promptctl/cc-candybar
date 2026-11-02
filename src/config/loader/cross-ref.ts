@@ -1044,11 +1044,21 @@ function checkActionRefs(
   path: string,
   template: string,
   line: number | undefined,
+  // [LAW:one-source-of-truth] The call-graph's name→body map: the global
+  // `helpers` by default, OR a segment's own (helpers + partials) when the
+  // template being checked is that segment's — so an `{{ action }}` inside a
+  // partial is walked into, not silently skipped
+  // (candybar-templates-zh8b.53s). Never `cfg.actions`: that stays `cfg`'s,
+  // since partials never declare actions of their own.
+  helpers: Readonly<Record<string, string>> = cfg.helpers,
+  // Where a name in `helpers` that ISN'T a global helper actually lives — a
+  // segment's `partials` map. Absent ≡ every name in `helpers` is global.
+  keyPathOf: (name: string) => readonly string[] = (name) => ["helpers", name],
 ): void {
   const field = path.slice(path.lastIndexOf(".") + 1);
   for (const { name: aref, site, via } of templateActionRefs(
     template,
-    cfg.helpers,
+    helpers,
   )) {
     if (Object.prototype.hasOwnProperty.call(cfg.actions, aref)) continue;
     const inOptions =
@@ -1060,6 +1070,7 @@ function checkActionRefs(
         ctx,
         via,
         `Template references unknown action "${aref}"${inOptions}`,
+        keyPathOf(via),
       );
       continue;
     }
@@ -1090,6 +1101,10 @@ function checkTemplateRefs(
     // The settings that segment declares, so a read of one it does not
     // declare says which it does.
     settings?: SegmentDecl["settings"];
+    // That segment's own partials — so a `via` name found among them is
+    // reported at `segments.<segCtx>.partials.<name>`, not `helpers.<name>`
+    // (candybar-templates-zh8b.53s). Always paired with `segCtx`.
+    partials?: Readonly<Record<string, string>>;
   },
 ): void {
   for (const [ref, via] of templateReads(template, scope.helpers)) {
@@ -1119,6 +1134,9 @@ function checkTemplateRefs(
         ctx,
         via,
         `Template references unknown variable ".${ref}"${retiredReadHint(ref)}`,
+        opts?.partials !== undefined && Object.hasOwn(opts.partials, via)
+          ? ["segments", opts.segCtx!, "partials", via]
+          : ["helpers", via],
       );
       continue;
     }
@@ -1140,17 +1158,23 @@ function checkTemplateRefs(
 // reported at the helper — the
 // one place the author fixes it, in their file when they override a bundled
 // helper — and ONCE, however many templates reach it.
+// [LAW:one-source-of-truth] `keyPath` is the dotted key into the SOURCE this
+// helper name actually was declared at — `["helpers", name]` for a global
+// helper, `["segments", segName, "partials", name]` for a segment's own
+// (candybar-templates-zh8b.53s). Defaulted so every pre-existing call site
+// (global helpers only) is unchanged.
 function checkHelperIssue(
   ctx: ValidateCtx,
   helper: string,
   message: string,
+  keyPath: readonly string[] = ["helpers", helper],
 ): void {
-  const path = `helpers.${helper}`;
+  const path = keyPath.join(".");
   if (ctx.issues.some((i) => i.path === path && i.message === message)) return;
   ctx.issues.push({
     path,
     message,
-    line: findKeyLine(ctx.source, ["helpers", helper]),
+    line: findKeyLine(ctx.source, keyPath),
   });
 }
 
@@ -1530,13 +1554,26 @@ export function validateDeclarations(
     // segment declares, and nothing else under that name.
     const settings = settingsOf(seg);
     checkSettingOrder(ctx, segName, settings);
-    const segScope = withSettingsScope(templateScope, settings);
+    // [LAW:one-source-of-truth] A segment's own `partials` are visible to its
+    // own `{{ template "name" ctx }}`/action-ref checks, same as a helper —
+    // candybar-templates-zh8b.53s's compile scopes them the same way (chained
+    // onto the shared helpers Defines, parsed only for this segment). Never
+    // merged into the SHARED templateScope passed to other segments or nodes.
+    const segHelpers =
+      seg.partials === undefined
+        ? templateScope.helpers
+        : { ...templateScope.helpers, ...seg.partials };
+    const segScope = withSettingsScope(
+      { ...templateScope, helpers: segHelpers },
+      settings,
+    );
     for (const field of ["template", "bg", "fg", "when"] as const) {
       const tpl = seg[field];
       if (typeof tpl !== "string") continue;
       checkTemplateRefs(ctx, `segments.${segName}.${field}`, tpl, segScope, {
         segCtx: segName,
         settings,
+        partials: seg.partials,
       });
       checkActionRefs(
         ctx,
@@ -1544,6 +1581,11 @@ export function validateDeclarations(
         `segments.${segName}.${field}`,
         tpl,
         findKeyLine(ctx.source, ["segments", segName, field]),
+        segHelpers,
+        (name) =>
+          seg.partials !== undefined && Object.hasOwn(seg.partials, name)
+            ? ["segments", segName, "partials", name]
+            : ["helpers", name],
       );
     }
   }

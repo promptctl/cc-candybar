@@ -382,6 +382,62 @@ A segment with no `bg:` wears a tint the theme derives from its position in
 the row. Authoring a `bg:` is a statement of meaning — this cell is hot — and
 the next step is how to state it from a number.
 
+### A long template, split across lines
+
+`template:` may be an array of strings instead of one: JSON5 has no block
+strings, so a template with several states written as nested conditionals
+becomes one unreadable line otherwise. An array joins with **no** separator —
+you still spell every space and newline you want, across more lines:
+
+```json5 check:pass
+{
+  variables: {
+    pct: { kind: "input", path: "pct", type: "number" },
+  },
+  segments: {
+    gauge: {
+      template: [
+        "{{ .pct }}%",
+        '{{ if gt .pct 90 }} ⚑{{ end }}',
+      ],
+    },
+  },
+  root: "gauge",
+}
+```
+
+For a template with real repetition — several branches sharing the same
+shape — declare named sub-templates under `partials:` and dispatch to one
+with the standard `{{ template "name" ctx }}`. A partial is scoped to the
+segment that declares it: two segments may each name a partial the same
+thing with no collision, and a partial may call any `helpers:` entry (never
+another segment's partial):
+
+```json5 check:pass
+{
+  variables: {
+    pct: { kind: "input", path: "pct", type: "number" },
+  },
+  segments: {
+    gauge: {
+      template: '{{ template "bar" .pct }}',
+      partials: {
+        bar: [
+          "{{ . }}%",
+          '{{ if gt . 90 }} ⚑{{ end }}',
+        ],
+      },
+    },
+  },
+  root: "gauge",
+}
+```
+
+`{{ template "name" ctx }}` takes a **literal** name, known when the config
+loads. A name computed at render time (picking a partial by a variable's
+current value) needs a different function this version does not yet carry —
+if your template wants that, nest the states as a conditional for now.
+
 ## Step 5 — colour: a `ramp` over one field
 
 ```

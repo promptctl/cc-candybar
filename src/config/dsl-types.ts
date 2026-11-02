@@ -857,6 +857,15 @@ export interface SegmentDecl {
   // a payload with no rate limits. Absent is "fail";
   // read only through `missingDataOf`.
   readonly missingData?: MissingData;
+  // Named sub-templates scoped to THIS segment: a long `template` (or
+  // `when`/`bg`/`fg`/`lead`/`trail`) dispatches to one by a literal
+  // `{{ template "name" ctx }}` instead of nesting every state inline. Scoped,
+  // not global like `helpers`, so two segments can each declare a partial
+  // named the same thing with no collision — `registerDslConfig` compiles
+  // each segment's partials into their own Defines, chained onto the config's
+  // shared helpers, and parses only that segment's own template fields
+  // against it. [LAW:one-source-of-truth]
+  readonly partials?: Readonly<Record<string, string>>;
 }
 
 export const MISSING_DATA = ["fail", "ignore"] as const;
