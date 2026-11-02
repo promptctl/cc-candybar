@@ -11,8 +11,6 @@ export function e2eConfig({ run, roots = base.roots, testMatch }) {
     ...base,
     roots,
     testMatch,
-    // The base ignores test/e2e/; this is the one run meant to pick it up.
-    testPathIgnorePatterns: [],
     reporters: [...reportersFor(run), CAP_REPORTER],
     setupFilesAfterEnv: [...base.setupFilesAfterEnv, ASSERTION_LIMIT_SETUP],
   };

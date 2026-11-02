@@ -17,9 +17,11 @@ export interface Call {
   readonly args: readonly unknown[];
 }
 
-// Reads of the package's own files are the same data on every run, so they pass
-// when the path lies under the package root. Anything else a unit test touches
-// is refused whole: writes, temp directories, watchers, sockets, spawns.
+// Reads of the package's own files are the same data on every run, so they pass:
+// a path under the package root, apart from what a run or a checkout produces and
+// changes under it. Anything else a unit test touches is refused whole: writes,
+// temp directories, watchers, sockets, spawns.
+const RUN_STATE = [".git", ".claude/worktrees", "dist", "coverage", "test-records"];
 const FS_READS = new Set([
   "readFileSync", "readFile", "readdirSync", "readdir", "statSync", "stat",
   "lstatSync", "lstat", "existsSync", "exists", "accessSync", "access",
@@ -60,7 +62,7 @@ export function allows({ surface, call, args }: Call, root: string): boolean {
   if (FS_DESCRIPTOR_OPS.has(name)) return true;
   if (!FS_READS.has(name) || !opensForReading(call, args)) return false;
   const file = pathOf(args[0]);
-  return file !== null && isUnderRoot(file, root);
+  return file !== null && isUnderRoot(file, root) && !RUN_STATE.some((dir) => isUnderRoot(file, path.join(root, dir)));
 }
 
 function shown(arg: unknown): string {

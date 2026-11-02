@@ -62,6 +62,11 @@ test.each([
   ["reads the wall clock with new Date", "clock", "new Date("],
   ["reads the wall clock with performance.now", "clock", "performance.now("],
   ["waits on a real timer", "clock", "setTimeout("],
+  ["reads what a run left in the checkout", "filesystem", "fs.readFileSync("],
+  ["sleeps on timers/promises", "clock", "timers/promises.setTimeout("],
+  ["constructs a socket", "socket", "new net.Socket("],
+  ["waits on a real timer after fake time ended", "clock", "setTimeout("],
+  ["reads the wall clock after fake time ended", "clock", "Date.now("],
 ])("a unit test that %s fails at the call", (title, surface, call) => {
   expect(cases[title]?.status).toBe("failed");
   expect(message(title)).toContain(`reached the ${surface}: ${call}`);

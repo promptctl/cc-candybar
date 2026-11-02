@@ -1,5 +1,5 @@
 import { setTimeout as sleep } from "node:timers/promises";
-import { RETRY_MS, untilHeard } from "../helpers/reload-signal";
+import { RETRY_MS, untilHeard } from "./helpers/reload-signal";
 
 // Past the round cadence, so the probe outlives the round that made it.
 const LATE_MS = 2 * RETRY_MS;

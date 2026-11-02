@@ -1,5 +1,3 @@
-import { E2E_DIR, UNIT_DIR, ignoring } from "./test/helpers/tiers.cjs";
-
 // Jest reports through its "agent" reporter when an agent runs it and its
 // "default" one otherwise, but only while no reporter list is configured.
 // [LAW:one-source-of-truth] exception: the list below copies the one
@@ -34,16 +32,14 @@ export function reportersFor(run) {
   ];
 }
 
-// [LAW:single-enforcer] A test under test/e2e/ runs only through jest.e2e.config.js,
-// which carries the cap and the assertion limit, and a test under test/unit/ only
-// through jest.unit.config.js, which refuses what a unit test may not touch. This
-// base ignores both directories, so no run reaches either without its checks, and
-// `jest <path>` on one finds nothing and says so instead of passing unguarded.
-export const E2E_DIR_PATTERN = ignoring(E2E_DIR);
-export const UNIT_DIR_PATTERN = ignoring(UNIT_DIR);
+// [LAW:single-enforcer] This file holds what every run shares and selects no
+// test, so a bare `jest`, `--watch` or `--coverage` finds nothing and says so
+// instead of running a file outside the checks of its own tier: the unit
+// refusal, the end-to-end cap and assertion limit. A run names its tier's
+// config, and that config says what it selects.
+export const TEST_MATCH = ["**/*.test.ts"];
 
 export default {
-  testPathIgnorePatterns: [E2E_DIR_PATTERN, UNIT_DIR_PATTERN],
   setupFiles: ["<rootDir>/test/setup.ts"],
   setupFilesAfterEnv: ["<rootDir>/test/setup-after-env.ts"],
   // [LAW:no-mode-explosion] A small fixed cap, not "cores-1" (the default),
@@ -55,12 +51,11 @@ export default {
   maxWorkers: 4,
   globalSetup: "<rootDir>/test/global-setup.ts",
   globalTeardown: "<rootDir>/test/global-teardown.ts",
-  reporters: reportersFor("all"),
   preset: "ts-jest/presets/default-esm",
   extensionsToTreatAsEsm: [".ts"],
   testEnvironment: "node",
   roots: ["<rootDir>/test"],
-  testMatch: ["**/*.test.ts"],
+  testMatch: [],
   moduleNameMapper: {
     "^@promptctl/rich-js$": "<rootDir>/node_modules/@promptctl/rich-js/dist/index.js",
     "^@promptctl/rich-js/themes/data$": "<rootDir>/node_modules/@promptctl/rich-js/dist/themes/data/index.js",

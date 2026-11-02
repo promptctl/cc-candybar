@@ -16,6 +16,9 @@ describe("which file system calls a unit test may make", () => {
   test.each([
     ["fs.readFileSync", "/tmp/other"],
     ["fs.readFileSync", "/work/pkg-sibling/a"],
+    ["fs.readFileSync", "/work/pkg/test-records/unit.jsonl"],
+    ["fs.readdirSync", "/work/pkg/.git"],
+    ["fs.readFileSync", "/work/pkg/dist/index.mjs"],
     ["fs.writeFileSync", "/work/pkg/out.txt"],
     ["fs.mkdtempSync", "/tmp/x-"],
     ["fs.watch", "/work/pkg/src"],

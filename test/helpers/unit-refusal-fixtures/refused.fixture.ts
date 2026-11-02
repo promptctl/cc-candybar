@@ -4,6 +4,7 @@ import net from "node:net";
 import { spawnSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 
 // One test per surface the unit project refuses. Each must fail at its call,
 // and test/integration/unit-refusal reads which did and what each said.
@@ -50,4 +51,16 @@ test("reads the wall clock with performance.now", () => {
 
 test("waits on a real timer", () => {
   setTimeout(() => undefined, 1);
+});
+
+test("reads what a run left in the checkout", () => {
+  fs.readFileSync(path.join(__dirname, "..", "..", "..", "test-records", "unit.jsonl"));
+});
+
+test("sleeps on timers/promises", async () => {
+  await sleep(1);
+});
+
+test("constructs a socket", () => {
+  new net.Socket();
 });
