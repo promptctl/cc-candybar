@@ -27,7 +27,7 @@ import {
   type Request,
   type Response,
 } from "../src/daemon/protocol";
-import { REQUEST_TIMEOUT_MS } from "../src/daemon/request-deadline";
+import { DRAW_RESERVE_MS, REQUEST_TIMEOUT_MS } from "../src/daemon/request-deadline";
 import { textOf, type Frame } from "../src/render/frame";
 import { sweepJestTmp } from "./global-teardown";
 import { click, frameRequest, render, renderBody, renderRequest, renderUntil, sendClick } from "./helpers/daemon-e2e";
@@ -136,7 +136,7 @@ describe("a daemon in this worker", () => {
       deadline: daemon.now() + 120,
     });
     const [event] = await renderLines(env, sid);
-    expect(event).toContain(" deadline=stated:80ms ");
+    expect(event).toContain(` deadline=stated:${120 - DRAW_RESERVE_MS}ms `);
   });
 
   test("a start refused beside a live daemon leaves it the env it reads", () => {
