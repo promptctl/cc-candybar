@@ -2,116 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-556",
-      "ref": "refs/pull/556/merge",
-      "sha": "3be0ae9f7598c49ee07294ab6f33aa6d788f9a02",
-      "timestamp": "2026-11-02T00:31:37.289Z",
-      "commits": [
-        {
-          "sha": "3be0ae9f7598c49ee07294ab6f33aa6d788f9a02",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T00:30:42Z",
-          "message": "Merge d5c7fcd1d303ee34dcf2a35a67d2d608c0d5a2d9 into 72ffdd27eff3be49dc0520bbd5ff5b02ee53daf2\n"
-        },
-        {
-          "sha": "d5c7fcd1d303ee34dcf2a35a67d2d608c0d5a2d9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T17:30:39-07:00",
-          "message": "Merge branch 'main' into candybar-testing-ihvy.43x"
-        },
-        {
-          "sha": "e7903a0db3933289a9860639930292423c249e26",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T17:22:04-07:00",
-          "message": "docs(testing): the five tests prove what they claim, and the checks stay wired (candybar-testing-ihvy.43x)\n\nTest 4 cannot pass on the client's cached frame, test 1 fails on any loud error, and the limit needs exactly one expect. A CI test keeps the checks wired, so the jest configs stay open to tickets 4 and 35.\n\nTicket 1 records each case, the start judge moves with ticket 35, and the request backstop gets a child program. An expired quarantine line shows red and fails no merge, because a date must not block a change that did not cause it.\n"
-        },
-        {
-          "sha": "f0f75b15e2d55ed47f0fb1e12b531d0ff2c80cf4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T17:11:09-07:00",
-          "message": "docs(testing): the medium review's findings on required checks, wiring and budgets (candybar-testing-ihvy.43x)\n\nLane clicks sit in Actions, ticket 8 takes factories for adapters that need what createDaemon builds, and ticket 35 proves the staged client is the binary built. The Feed criterion is described as it is, a check that is not required, and the required checks are Brandon's to change with ticket 37.\n\nTime budgets report a breach and count budgets fail CI. draw-reserve leaves the required checks with its cost stated, because runs miss that bound by milliseconds.\n"
-        },
-        {
-          "sha": "5bbef69e4e14ffad0b6528016f43e600e8922a89",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T17:01:32-07:00",
-          "message": "docs(testing): the review's findings on tiers, the ratchet and the clock (candybar-testing-ihvy.43x)\n\nA second assertion now fails on its PR, tickets 35 and 36 no longer wait on each other, and a packed install proves the new native client. The ratchet equals the case count and sits beside the start ceiling, and ticket 2 moves the cases that reach no boot.\n\nThe contract suite stays on the fake in unit and the adapter in integration, as laws:testing has it, and each file keeps one layer. The poll helper keeps its real sleep, so a file that polls stays out of test/unit until ticket 20.\n"
-        },
-        {
-          "sha": "f2ae450ac04ca82f6ac9f713b73314a172833ac5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T14:48:47-07:00",
-          "message": "docs(testing): the ratchet counts the cases left to move (candybar-testing-ihvy.43x)\n"
-        },
-        {
-          "sha": "ade1bf28b7a5b8f0601a8dc0ecafe86097a064d5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T14:41:47-07:00",
-          "message": "docs(testing): the unit that moves is a case, and the ledger lists them (candybar-testing-ihvy.43x)\n"
-        },
-        {
-          "sha": "b22720aea9e0dd22779dc4083b75294ac247e422",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T14:34:59-07:00",
-          "message": "docs(testing): each boot test moves to the piece that holds its behaviour (candybar-testing-ihvy.43x)\n"
-        },
-        {
-          "sha": "67b637edfc903567f6c5eb581986fceb860edc7b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T14:24:32-07:00",
-          "message": "docs(testing): the render is cut at its wait, and an import rule holds the pieces' order (candybar-testing-ihvy.43x)\n"
-        },
-        {
-          "sha": "0a6899b39f30c43ec6269657cace6e69464f9c85",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T14:15:09-07:00",
-          "message": "docs(testing): the pieces depend one way, and one number holds the cap (candybar-testing-ihvy.43x)\n"
-        },
-        {
-          "sha": "015d83257fb4fb46dfb754a5fe6ebc82a42fb301",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T14:05:14-07:00",
-          "message": "docs(testing): five end-to-end tests, and the daemon cut into pieces to reach them (candybar-testing-ihvy.43x)\n\nThe plan now carries Brandon's ruling: five end-to-end tests with one\nassertion each, and any test that boots the daemon counts as one, in a\nworker or not. So the daemon is cut into ten pieces with fakes at their\ninputs, and the harness goes. Every finding of the plan's review is\nfolded in and every count is re-measured on main at 62b28e2b.\n\nThe review and the ruling are deleted here because the plan now holds\nboth; the commit before this one keeps them as they were.\n"
-        },
-        {
-          "sha": "610e310c486ae1163fd581feac8d9fff5d03e3ff",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T14:00:22-07:00",
-          "message": "docs(testing): the plan's review and the owner's ruling on it\n\nKept as they were so the plan's rewrite can be checked against them.\n"
-        },
-        {
-          "sha": "a5cfce18ef09e1e35625665d75364472541c6e47",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T01:05:14-06:00",
-          "message": "docs(testing): plan the layered test suite\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "62b28e2b95ed10f4a7c35fc2dca80ca8550e41e5",
-      "timestamp": "2026-11-01T20:54:10.013Z",
+      "sha": "ec9fa5454b16e8eff68525c059c5214d0a98a8d5",
+      "timestamp": "2026-11-02T00:39:53.139Z",
       "commits": [
         {
-          "sha": "62b28e2b95ed10f4a7c35fc2dca80ca8550e41e5",
+          "sha": "ec9fa5454b16e8eff68525c059c5214d0a98a8d5",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T13:53:14-07:00",
-          "message": "fix(render): a cell wider than its line wraps across lines (candybar-isolated-daemon-bfab.pe6) (#555)\n\n* fix(render): a cell wider than its line wraps across lines (candybar-isolated-daemon-bfab.pe6)\n\nA row breaks only between strip items, so one long cell had nowhere to go.\nClaude Code draws each statusline line truncated, so the line lost its right\nend where the bar could not see it. On a long branch that was the git cell's\n`▸`, and on a doctor row the reason it was opened to read.\n\nThe row seam now divides any item wider than a line into items that fit, at\nthe breaks rich-js's own word wrap chooses. Nothing is cut. `paged: false` now\nwraps as its docs have always said, with no picker logic, and `autoWrap: false`\nkeeps each row one unbounded line.\n\nThe ticket offered shortening or a warning. A cut loses content nobody chose\nto lose: controls sit at both ends of a cell and between them. A warning would\nflip on every resize of a terminal nobody has to fix.\n\nWrapping spends height. Closed bars do not change from width 80 up. Two costs\nare accepted and filed: an open doctor report can now pass the terminal's\nheight at sizes where it used to fit (brandon-unfiled-3248.9yxg), and the tmux\nstatus line, which silently shows five rows, loses more of a narrow pane's bar\n(brandon-unfiled-3248.vvdp). `cellBreaks` on the render event and the feed\nsummary says how often this happens.\n\n* fix(render): a cell divides only when it overflows as drawn, and loses no text (candybar-isolated-daemon-bfab.pe6)\n\nA full-width space hanging at a break lost text: rich-js crops it in half at\nthe edge, so the drawn line was no slice of the text and its search missed. The\nsearch now looks for a line's content, less the whitespace hanging off it.\n\nEvery cell was charged a painted cell's caps, so an unpainted spacer came up\nshort of the edge and a cell that fit broke across lines. Whether a cell\ndivides is now measured through the draw; a piece still wraps at the painted\nline, so it fits however it is painted.\n\nA justified cell's padding no longer spends rows on nothing, and the wrap draws\nplain text, which keeps a cell's styles and justification out of it.\n\n* fix(render): a wrapped cell starts on the line left open, and its lines keep their padding (candybar-isolated-daemon-bfab.pe6)\n\nA short cell ahead of a wrapped one stood alone on a row, because the first\npiece was as wide as a whole line. On an open doctor report that spent a blank\nrow on each row it hit, and height is what wrapping costs. The first piece now\nwraps from the cells already on the line, measured through the draw, and a\nfirst word that doesn't fit moves to the next line whole.\n\nA piece that opens a line wears the cell's padding, so a continuation doesn't\nsit flush against the cap. The widest-glyph floor had two spellings and now has\none name.\n\nA wrapped cell's pending placeholder still draws one line\n(candybar-isolated-daemon-bfab.1gq); the memory says so.\n\n* fix(render): a piece opening a line past a dropped blank keeps its padding (candybar-isolated-daemon-bfab.pe6)\n\nThe blank filter ran before padding read a piece's index, so when a cell's left\npadding split off as a blank piece, the piece that actually opened the line\ncounted as first and went unpadded. Two comments this change made false now say\nwhat happens."
+          "timestamp": "2026-11-01T17:38:54-07:00",
+          "message": "docs(testing): five end-to-end tests, and the daemon cut into pieces to reach them (#556)\n\n* docs(testing): plan the layered test suite\n\n* docs(testing): the plan's review and the owner's ruling on it\n\nKept as they were so the plan's rewrite can be checked against them.\n\n* docs(testing): five end-to-end tests, and the daemon cut into pieces to reach them (candybar-testing-ihvy.43x)\n\nThe plan now carries Brandon's ruling: five end-to-end tests with one\nassertion each, and any test that boots the daemon counts as one, in a\nworker or not. So the daemon is cut into ten pieces with fakes at their\ninputs, and the harness goes. Every finding of the plan's review is\nfolded in and every count is re-measured on main at 62b28e2b.\n\nThe review and the ruling are deleted here because the plan now holds\nboth; the commit before this one keeps them as they were.\n\n* docs(testing): the pieces depend one way, and one number holds the cap (candybar-testing-ihvy.43x)\n\n* docs(testing): the render is cut at its wait, and an import rule holds the pieces' order (candybar-testing-ihvy.43x)\n\n* docs(testing): each boot test moves to the piece that holds its behaviour (candybar-testing-ihvy.43x)\n\n* docs(testing): the unit that moves is a case, and the ledger lists them (candybar-testing-ihvy.43x)\n\n* docs(testing): the ratchet counts the cases left to move (candybar-testing-ihvy.43x)\n\n* docs(testing): the review's findings on tiers, the ratchet and the clock (candybar-testing-ihvy.43x)\n\nA second assertion now fails on its PR, tickets 35 and 36 no longer wait on each other, and a packed install proves the new native client. The ratchet equals the case count and sits beside the start ceiling, and ticket 2 moves the cases that reach no boot.\n\nThe contract suite stays on the fake in unit and the adapter in integration, as laws:testing has it, and each file keeps one layer. The poll helper keeps its real sleep, so a file that polls stays out of test/unit until ticket 20.\n\n* docs(testing): the medium review's findings on required checks, wiring and budgets (candybar-testing-ihvy.43x)\n\nLane clicks sit in Actions, ticket 8 takes factories for adapters that need what createDaemon builds, and ticket 35 proves the staged client is the binary built. The Feed criterion is described as it is, a check that is not required, and the required checks are Brandon's to change with ticket 37.\n\nTime budgets report a breach and count budgets fail CI. draw-reserve leaves the required checks with its cost stated, because runs miss that bound by milliseconds.\n\n* docs(testing): the five tests prove what they claim, and the checks stay wired (candybar-testing-ihvy.43x)\n\nTest 4 cannot pass on the client's cached frame, test 1 fails on any loud error, and the limit needs exactly one expect. A CI test keeps the checks wired, so the jest configs stay open to tickets 4 and 35.\n\nTicket 1 records each case, the start judge moves with ticket 35, and the request backstop gets a child program. An expired quarantine line shows red and fails no merge, because a date must not block a change that did not cause it."
+        },
+        {
+          "sha": "72ffdd27eff3be49dc0520bbd5ff5b02ee53daf2",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-01T21:04:24Z",
+          "message": "chore(release): set `package.json` to 1.178.1 [skip ci]\n\n## [1.178.1](https://github.com/promptctl/cc-candybar/compare/v1.178.0...v1.178.1) (2026-11-01)\n\n### Bug Fixes\n\n* **render:** a cell wider than its line wraps across lines (candybar-isolated-daemon-bfab.pe6) ([#555](https://github.com/promptctl/cc-candybar/issues/555)) ([62b28e2](https://github.com/promptctl/cc-candybar/commit/62b28e2b95ed10f4a7c35fc2dca80ca8550e41e5))\n"
         }
       ]
     },
