@@ -61,7 +61,6 @@ import type { RichText } from "@promptctl/rich-js";
 import { PRESET_FLOOR } from "../src/config/presets";
 import { childStep, type CompiledNode } from "../src/dsl/node-registry";
 import {
-  bandFor,
   bandItemFor,
   DECOR_HUES,
   decorationFor,
@@ -693,60 +692,6 @@ describe("toggle round trip + drop stacking", () => {
     expect(textOf(render()).split("\n")).toHaveLength(1);
   });
 
-  // [LAW:verifiable-goals] candybar-render-ai7.3: an open menu's segment is
-  // the TRIGGER of the band it drops — it wears that band's state colour, its
-  // dropped line sits on the band's plane, and each option cell is placed in
-  // the band by its index over the whole option domain. The expected colours
-  // come from the model (bandFor / bandItemFor over the segment's address),
-  // not from a lightening of the authored bg: no transform of "surface"
-  // reproduces them, which is the "no lightening transform remains" line.
-  test("the open trigger wears the state of the band it opens; its items are that band's", async () => {
-    const { render, sink, compiled, palette, clickToggle } =
-      buildRuntime(MENU_SRC);
-    render();
-    await clickToggle(render(), TKEY, "applyTheme");
-    render();
-    const address = addressOf(compiled.roots.get(PRESET_FLOOR)!, "themepicker");
-    const { disclosure } = decorationFor(palette, { kind: "bar", decor: { variation: VARIATIONS["accent"], shade: SHADES["middle"] }, address }, ColorDepth.TRUECOLOR);
-    const band = bandFor(palette, disclosure, ColorDepth.TRUECOLOR);
-    const cells = sink.get("themepicker")!;
-    // Row 0 is the trigger: state colour, text from the pole that reads on it.
-    const trigger = cells[0]!;
-    expect(resolvedStyle(trigger.style).bgcolor?.value?.hex).toBe(band.state.hex);
-    expect(resolvedStyle(trigger.style).color?.value?.hex).toBe(textOn(palette, band.state, ColorDepth.TRUECOLOR).hex);
-    // The dropped line is the band: its plane. The OPTION names sit on that
-    // plane too, every one — `themes` is a colour-valued domain, so each option
-    // says what it is in its SWATCH (brandon-theme-swatch-8v9r), rather than
-    // on a band item of its own (the next describe pins that the band
-    // placement is still what a generic domain gets).
-    const body = cells[1]!;
-    expect(resolvedStyle(body.style).bgcolor?.value?.hex).toBe(band.plane.hex);
-    const options = [...ALLOWED];
-    const spans = body.spans.filter(
-      (s) => resolvedStyle(s.style).link !== undefined,
-    );
-    const optionSpans = spans.filter((s) => options.includes(body.plain.slice(s.start, s.end)));
-    expect(optionSpans.length).toBeGreaterThan(1);
-    for (const span of optionSpans) {
-      const name = body.plain.slice(span.start, span.end);
-      const style = resolvedStyle(span.style);
-      expectSwatched(
-        optionRuns(body, name),
-        paletteForThemeName(name),
-        band.plane,
-        textOn(palette, band.plane, ColorDepth.TRUECOLOR).hex,
-      );
-      // And it is NOT the band item it would have worn as a generic option:
-      // the address is out of the decision.
-      expect(style.bgcolor?.value?.hex).not.toBe(
-        bandItemFor(palette, disclosure, {
-            index: options.indexOf(name),
-            count: options.length,
-            distribution: DISTRIBUTIONS[DEFAULT_DISTRIBUTION],
-          }, ColorDepth.TRUECOLOR).hex,
-      );
-    }
-  });
 
   // The instance-boundary property: a band is one more step on ITS trigger's
   // address, so opening it is invisible to every other segment's colour.

@@ -32,9 +32,8 @@
 // the one it joins wears an exempt shade, so two cells of one text (every ✕,
 // every blank lead) never lend each other an exemption.
 //
-// [LAW:one-source-of-truth] The one sweep: test/seam-sweep.test.ts holds it
-// under every shipped variation, and audits/seam-sweep.audit.ts under every
-// trial tuning, so both hold one rule with one reader.
+// [LAW:one-source-of-truth] The one sweep: audits/seam-sweep.audit.ts holds it
+// under every variation, shipped and trial, with one rule and one reader.
 
 import { ColorDepth, drawnColour, getThemePalette, listThemePalettes, type ColorRgba, type Palette, type RichText } from "@promptctl/rich-js";
 import { sharedMenuStateKey } from "../../src/config/menu-keys";
@@ -112,7 +111,7 @@ function flatShades(palette: Palette, drawnAt: ColorDepth): ReadonlySet<string> 
 // give: its role's ladder `drawnAt` draws only in colours the design stands
 // beside the press (`besidePress`). The press exemption, read by every frame
 // that holds a seam beside an open trigger.
-export function pressHasNoneToGive(palette: Palette, decor: Decor, depth: number, drawnAt: ColorDepth): boolean {
+function pressHasNoneToGive(palette: Palette, decor: Decor, depth: number, drawnAt: ColorDepth): boolean {
   const hue = hueOf({ decor, depth });
   const taken = besidePress(palette, decor, depth, drawnAt);
   return LADDER.every((rung) => taken.has(drawnColour(palette.get(shadeRole(hue, rung)), drawnAt).hex));
