@@ -4,15 +4,22 @@
     {
       "version": "pr-574",
       "ref": "refs/pull/574/merge",
-      "sha": "9b008bd6c4a2ae03af37124b18d8b65689644f5d",
-      "timestamp": "2026-11-02T14:32:55.794Z",
+      "sha": "8a30d3bfec0c03bc019d63903e5376cdd473635d",
+      "timestamp": "2026-11-02T14:34:11.229Z",
       "commits": [
         {
-          "sha": "9b008bd6c4a2ae03af37124b18d8b65689644f5d",
+          "sha": "8a30d3bfec0c03bc019d63903e5376cdd473635d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T14:31:56Z",
-          "message": "Merge c490b86ffa618e527e1beee5db3fd04948c0937b into 7d58c47f329eb86d364d736a324acf02c5b59295\n"
+          "timestamp": "2026-11-02T14:33:04Z",
+          "message": "Merge 9b1394233f59a666cd15d509abb8590bdc86d311 into 7d58c47f329eb86d364d736a324acf02c5b59295\n"
+        },
+        {
+          "sha": "9b1394233f59a666cd15d509abb8590bdc86d311",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T07:32:33-07:00",
+          "message": "docs(protocol): TIMEOUT is busy, not a respawn-curable transient (candybar-launch-q7o7.g6w)\n"
         },
         {
           "sha": "c490b86ffa618e527e1beee5db3fd04948c0937b",
