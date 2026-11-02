@@ -75901,13 +75901,30 @@ var FrameFeeds = class {
   // the instant a caller set is never rebuilt from a second, truncated one;
   // its monotonic due time is what a wake compares against.
   arm(feed, due, wall) {
-    if (feed.phase.kind === "due") clearTimeout(feed.phase.timer);
     const delay = Math.max(0, (due - wall) * 1e3);
+    this.setTimer(feed, due, this.deps.now() + delay, delay);
+  }
+  setTimer(feed, due, dueMoment, delay) {
+    if (feed.phase.kind === "due") clearTimeout(feed.phase.timer);
     feed.phase = {
       kind: "due",
-      at: this.deps.now() + delay,
-      timer: setTimeout(() => this.draw(feed, due), delay)
+      at: dueMoment,
+      timer: setTimeout(() => this.fire(feed, due, dueMoment), delay)
     };
+  }
+  // [LAW:no-ambient-temporal-coupling] A timer that fires before its moment on
+  // the monotonic clock waits out the rest instead of drawing. Node starts a
+  // timer from the loop's cached time, so one armed late in a slow callback —
+  // a draw on a busy machine — fires early by as long as that callback had
+  // run, with no bound but the machine's load. Drawn then, its frame is clamped
+  // to within TIMER_RESOLUTION_S of the wall, which falls in the turn before
+  // `due`: that turn drawn twice and the one after it late. The wall clock is
+  // not asked, so a wall stepped back, which leaves the monotonic moment
+  // reached, still draws and is followed by `draw`.
+  fire(feed, due, dueMoment) {
+    const remaining = dueMoment - this.deps.now();
+    if (remaining > 0) this.setTimer(feed, due, dueMoment, remaining);
+    else this.draw(feed, due);
   }
   shown(feed) {
     const noted = this.requests.get(feed.sessionId);
