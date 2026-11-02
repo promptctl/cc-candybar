@@ -1,3 +1,10 @@
+## [1.180.2](https://github.com/promptctl/cc-candybar/compare/v1.180.1...v1.180.2) (2026-11-02)
+
+### Bug Fixes
+
+* **render:** a client timeout, on the connect or after it, kicks nothing (candybar-launch-q7o7.6wi) ([#575](https://github.com/promptctl/cc-candybar/issues/575)) ([bddbf3b](https://github.com/promptctl/cc-candybar/commit/bddbf3b6871d4e9cf9437cb08386aac83e066245))
+* **render:** a render the daemon answers TIMEOUT kicks nothing (candybar-launch-q7o7.g6w) ([#574](https://github.com/promptctl/cc-candybar/issues/574)) ([685dfc6](https://github.com/promptctl/cc-candybar/commit/685dfc67e4662552cac9a0924249992f5225cbbe))
+
 ## [1.180.1](https://github.com/promptctl/cc-candybar/compare/v1.180.0...v1.180.1) (2026-11-02)
 
 ### Bug Fixes
