@@ -1,3 +1,9 @@
+## [1.180.1](https://github.com/promptctl/cc-candybar/compare/v1.180.0...v1.180.1) (2026-11-02)
+
+### Bug Fixes
+
+* **lanes:** a bar pane is known by the command it was split with (candybar-launch-q7o7.0oo) ([#572](https://github.com/promptctl/cc-candybar/issues/572)) ([7d58c47](https://github.com/promptctl/cc-candybar/commit/7d58c47f329eb86d364d736a324acf02c5b59295))
+
 ## [1.180.0](https://github.com/promptctl/cc-candybar/compare/v1.179.4...v1.180.0) (2026-11-02)
 
 ### Features
