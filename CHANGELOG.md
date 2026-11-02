@@ -1,3 +1,9 @@
+## [1.179.4](https://github.com/promptctl/cc-candybar/compare/v1.179.3...v1.179.4) (2026-11-02)
+
+### Bug Fixes
+
+* **test:** the client-deadline cases state budgets a loaded loop cannot miss (brandon-unfiled-3248.5lkd) ([#571](https://github.com/promptctl/cc-candybar/issues/571)) ([17024dd](https://github.com/promptctl/cc-candybar/commit/17024dd1e5797082d8999dc8ba586f4bf97d1911))
+
 ## [1.179.3](https://github.com/promptctl/cc-candybar/compare/v1.179.2...v1.179.3) (2026-11-02)
 
 ### Bug Fixes
