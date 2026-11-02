@@ -4,15 +4,22 @@
     {
       "version": "pr-557",
       "ref": "refs/pull/557/merge",
-      "sha": "26ab90dc9965dff078519ba305ec9e89ef43c5f5",
-      "timestamp": "2026-11-02T02:01:14.932Z",
+      "sha": "828d4ba0f6444d8026eac38b67e3d043a683d9f0",
+      "timestamp": "2026-11-02T02:44:16.648Z",
       "commits": [
         {
-          "sha": "26ab90dc9965dff078519ba305ec9e89ef43c5f5",
+          "sha": "828d4ba0f6444d8026eac38b67e3d043a683d9f0",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T19:00:25-07:00",
-          "message": "Merge f9c2b10b127471415dec4c5582d95f7ad21d9372 into ec9fa5454b16e8eff68525c059c5214d0a98a8d5\n"
+          "timestamp": "2026-11-02T02:43:21Z",
+          "message": "Merge cccb8a41f4105e1102bf4a086bd599f7b4802c7f into ec9fa5454b16e8eff68525c059c5214d0a98a8d5\n"
+        },
+        {
+          "sha": "cccb8a41f4105e1102bf4a086bd599f7b4802c7f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T19:42:56-07:00",
+          "message": "docs(testing): agents change the required checks, and it is in the done criteria (candybar-testing-ihvy.84o)\n\nBrandon ruled that updating main-protection is agent work, not a hand-off. Tickets 42 and 37 now do it before merging and prove it with gh api, and ticket 3 needs no hand edit to the hook wiring.\n"
         },
         {
           "sha": "f9c2b10b127471415dec4c5582d95f7ad21d9372",
