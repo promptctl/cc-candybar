@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-578",
+      "ref": "refs/pull/578/merge",
+      "sha": "33d6fa16ab10ed600e616b37d124c7577c4448be",
+      "timestamp": "2026-11-02T15:31:52.184Z",
+      "commits": [
+        {
+          "sha": "33d6fa16ab10ed600e616b37d124c7577c4448be",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T08:30:49-07:00",
+          "message": "Merge 0231f50d8726de595a62e7382e74e710fbb19615 into 96106ff8a15730879c3089b407e2191fe629e15b\n"
+        },
+        {
+          "sha": "0231f50d8726de595a62e7382e74e710fbb19615",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T08:30:18-07:00",
+          "message": "test: the cases that boot no daemon leave test/daemon-boots/, and the ratchet falls from 372 to 214 (candybar-testing-ihvy.icq)\n\nA probe over a worker and a process run found 158 cases in five files that reach no boot: plugins, the connection over a stand-in daemon, the session-id checkpoint and click verbs, the jest temp-directory sweep and the tmux stub's gate. Each splits on a describe boundary, so the booting remainder keeps its own file and the rest moves to the test/ root, which the unit refusal sends them to by their clock reads at load. The judge proves the split: a moved case that boots fails the worker run.\n"
+        },
+        {
+          "sha": "29dad7d82b21746fef3d436de78d9d316d612bf3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T08:17:49-07:00",
+          "message": "test: daemon boots in a worker are on the ledger, and the cases that boot are counted and only fall (candybar-testing-ihvy.icq)\n\nThe harness writes the same ledger line a real daemon's preload writes, route harness, and the judge allows it only under test/daemon-boots/. A ratchet file holds the number of cases there and the ceiling on real starts; CI fails unless the case count equals it, and a pull request that raises either over main. The over-ceiling message no longer offers a raise.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "96106ff8a15730879c3089b407e2191fe629e15b",
