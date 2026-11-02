@@ -4,15 +4,22 @@
     {
       "version": "pr-566",
       "ref": "refs/pull/566/merge",
-      "sha": "70540fd18f78c4003cf4a420338619d2c3610ed1",
-      "timestamp": "2026-11-02T12:24:12.894Z",
+      "sha": "8455a2adc0c6dcfa3e6912773ee3048e8d2eeb82",
+      "timestamp": "2026-11-02T12:27:37.758Z",
       "commits": [
         {
-          "sha": "70540fd18f78c4003cf4a420338619d2c3610ed1",
+          "sha": "8455a2adc0c6dcfa3e6912773ee3048e8d2eeb82",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T05:23:11-07:00",
-          "message": "Merge f803e263f40433b50d65a1a77e3f2f45cf7a075f into c2a649577d11945c26d035121a186062bf34327f\n"
+          "timestamp": "2026-11-02T12:26:29Z",
+          "message": "Merge 0212bdfb06858a424a770dabcd97721270a707c3 into c2a649577d11945c26d035121a186062bf34327f\n"
+        },
+        {
+          "sha": "0212bdfb06858a424a770dabcd97721270a707c3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T05:26:14-07:00",
+          "message": "fix(frame-feed): review of the early-fire wait: reflow the bound's comment, correct the memory line, test a second early fire and a close while waiting (brandon-unfiled-3248.l1mh)\n"
         },
         {
           "sha": "f803e263f40433b50d65a1a77e3f2f45cf7a075f",
