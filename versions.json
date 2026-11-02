@@ -2,53 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-585",
-      "ref": "refs/pull/585/merge",
-      "sha": "f604dac0de3d8ce8ea2e78a4b84765627b3fd6d0",
-      "timestamp": "2026-11-02T21:14:00.092Z",
-      "commits": [
-        {
-          "sha": "f604dac0de3d8ce8ea2e78a4b84765627b3fd6d0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T21:12:54Z",
-          "message": "Merge 638372d519261755248ee9441fb8baba9caa1d31 into 805df08b803697644135dd02d9fc34fee4b2208a\n"
-        },
-        {
-          "sha": "638372d519261755248ee9441fb8baba9caa1d31",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T14:12:39-07:00",
-          "message": "fix(host): scripts build their world from src, gallery sets the debug switch, stale width comments go (candybar-testing-ihvy.33e)\n"
-        },
-        {
-          "sha": "1b331129f0c394763a5df26fea708efd362cee5b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T14:05:40-07:00",
-          "message": "test(host): tests state their machine as a Host, and no test writes process.env (candybar-testing-ihvy.33e)\n\nEvery test that wrote XDG_*, the daemon socket, the breaker's variables or the like now builds a Host over the environment it names and hands it to the code under test; a child a test launches inherits its launcher's environment. A second lint config fails a write to process.env in test/, apart from the setup files, the in-worker harness and a PATH stub, and pnpm lint runs it. Memory notes the rule.\n"
-        },
-        {
-          "sha": "fc619300bb1cc3625ffdc717980417dbbef075e3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T13:31:18-07:00",
-          "message": "refactor(host): the process is read once into a Host, and a launcher inherits what its owner hands it (candybar-testing-ihvy.33e)\n\nsrc names process.env, os.homedir and os.tmpdir only in src/host.ts and the preload's main; every other file takes a Host, a World (host + launcher), or the parsed Locations / DaemonPaths. Launch options carry an envOverlay over the launcher's inherited environment, the module-level launcher singletons are gone, and a lint rule keeps it so.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "805df08b803697644135dd02d9fc34fee4b2208a",
-      "timestamp": "2026-11-02T19:54:41.786Z",
+      "sha": "7517c26c7273173d4e5e09588fd51ac4d21131b4",
+      "timestamp": "2026-11-02T21:22:39.838Z",
       "commits": [
         {
-          "sha": "805df08b803697644135dd02d9fc34fee4b2208a",
+          "sha": "7517c26c7273173d4e5e09588fd51ac4d21131b4",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T12:53:39-07:00",
-          "message": "refactor(daemon): the gates' keyspaces are one value the root builds, and Foundations moves below every piece (candybar-testing-ihvy.42w) (#584)\n\n* refactor(daemon): the gates' keyspaces are one value the root builds, and Foundations moves below every piece (candybar-testing-ihvy.42w)\n\nThe state and config keyspaces were module state that the update notice wrote at run time, so what a load accepted changed with no input showing it and a process could hold only one live daemon. Gates is now a value built by daemonGates() and passed to createDaemon, the verb context, the render cache and check; liveDaemon is gone.\n\nFoundations is src/daemon/foundations/ (validators, gates, session keys, render origin, sighting roles) with a lint rule that it imports no other piece of src/daemon.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(test): the last daemon to stop gives the worker's env back; stale comments and memory line follow the gates move (candybar-testing-ihvy.42w)\n\n* fix(test): a daemon stopped twice counts once; the held env is a copy; a held gate key outlives a later registration (candybar-testing-ihvy.42w)\n\n* test(daemon-boots): the held-env cases join the one that already holds the env, so the boot ratchet stays 214 (candybar-testing-ihvy.42w)\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
+          "timestamp": "2026-11-02T14:21:41-07:00",
+          "message": "refactor(host): the process is read once into a Host, and tests stop writing process.env (candybar-testing-ihvy.33e) (#585)\n\n* refactor(host): the process is read once into a Host, and a launcher inherits what its owner hands it (candybar-testing-ihvy.33e)\n\nsrc names process.env, os.homedir and os.tmpdir only in src/host.ts and the preload's main; every other file takes a Host, a World (host + launcher), or the parsed Locations / DaemonPaths. Launch options carry an envOverlay over the launcher's inherited environment, the module-level launcher singletons are gone, and a lint rule keeps it so.\n\n* test(host): tests state their machine as a Host, and no test writes process.env (candybar-testing-ihvy.33e)\n\nEvery test that wrote XDG_*, the daemon socket, the breaker's variables or the like now builds a Host over the environment it names and hands it to the code under test; a child a test launches inherits its launcher's environment. A second lint config fails a write to process.env in test/, apart from the setup files, the in-worker harness and a PATH stub, and pnpm lint runs it. Memory notes the rule.\n\n* fix(host): scripts build their world from src, gallery sets the debug switch, stale width comments go (candybar-testing-ihvy.33e)"
         }
       ]
     },

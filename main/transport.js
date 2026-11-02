@@ -2431,414 +2431,6 @@ var init_url = __esm({
   }
 });
 
-// node_modules/.pnpm/path-browserify@1.0.1/node_modules/path-browserify/index.js
-var require_path_browserify = __commonJS({
-  "node_modules/.pnpm/path-browserify@1.0.1/node_modules/path-browserify/index.js"(exports, module) {
-    "use strict";
-    init_globals();
-    function assertPath(path42) {
-      if (typeof path42 !== "string") {
-        throw new TypeError("Path must be a string. Received " + JSON.stringify(path42));
-      }
-    }
-    function normalizeStringPosix(path42, allowAboveRoot) {
-      var res = "";
-      var lastSegmentLength = 0;
-      var lastSlash = -1;
-      var dots = 0;
-      var code;
-      for (var i = 0; i <= path42.length; ++i) {
-        if (i < path42.length)
-          code = path42.charCodeAt(i);
-        else if (code === 47)
-          break;
-        else
-          code = 47;
-        if (code === 47) {
-          if (lastSlash === i - 1 || dots === 1) {
-          } else if (lastSlash !== i - 1 && dots === 2) {
-            if (res.length < 2 || lastSegmentLength !== 2 || res.charCodeAt(res.length - 1) !== 46 || res.charCodeAt(res.length - 2) !== 46) {
-              if (res.length > 2) {
-                var lastSlashIndex = res.lastIndexOf("/");
-                if (lastSlashIndex !== res.length - 1) {
-                  if (lastSlashIndex === -1) {
-                    res = "";
-                    lastSegmentLength = 0;
-                  } else {
-                    res = res.slice(0, lastSlashIndex);
-                    lastSegmentLength = res.length - 1 - res.lastIndexOf("/");
-                  }
-                  lastSlash = i;
-                  dots = 0;
-                  continue;
-                }
-              } else if (res.length === 2 || res.length === 1) {
-                res = "";
-                lastSegmentLength = 0;
-                lastSlash = i;
-                dots = 0;
-                continue;
-              }
-            }
-            if (allowAboveRoot) {
-              if (res.length > 0)
-                res += "/..";
-              else
-                res = "..";
-              lastSegmentLength = 2;
-            }
-          } else {
-            if (res.length > 0)
-              res += "/" + path42.slice(lastSlash + 1, i);
-            else
-              res = path42.slice(lastSlash + 1, i);
-            lastSegmentLength = i - lastSlash - 1;
-          }
-          lastSlash = i;
-          dots = 0;
-        } else if (code === 46 && dots !== -1) {
-          ++dots;
-        } else {
-          dots = -1;
-        }
-      }
-      return res;
-    }
-    function _format(sep2, pathObject) {
-      var dir = pathObject.dir || pathObject.root;
-      var base = pathObject.base || (pathObject.name || "") + (pathObject.ext || "");
-      if (!dir) {
-        return base;
-      }
-      if (dir === pathObject.root) {
-        return dir + base;
-      }
-      return dir + sep2 + base;
-    }
-    var posix = {
-      // path.resolve([from ...], to)
-      resolve: function resolve() {
-        var resolvedPath = "";
-        var resolvedAbsolute = false;
-        var cwd2;
-        for (var i = arguments.length - 1; i >= -1 && !resolvedAbsolute; i--) {
-          var path42;
-          if (i >= 0)
-            path42 = arguments[i];
-          else {
-            if (cwd2 === void 0)
-              cwd2 = process_default.cwd();
-            path42 = cwd2;
-          }
-          assertPath(path42);
-          if (path42.length === 0) {
-            continue;
-          }
-          resolvedPath = path42 + "/" + resolvedPath;
-          resolvedAbsolute = path42.charCodeAt(0) === 47;
-        }
-        resolvedPath = normalizeStringPosix(resolvedPath, !resolvedAbsolute);
-        if (resolvedAbsolute) {
-          if (resolvedPath.length > 0)
-            return "/" + resolvedPath;
-          else
-            return "/";
-        } else if (resolvedPath.length > 0) {
-          return resolvedPath;
-        } else {
-          return ".";
-        }
-      },
-      normalize: function normalize(path42) {
-        assertPath(path42);
-        if (path42.length === 0) return ".";
-        var isAbsolute3 = path42.charCodeAt(0) === 47;
-        var trailingSeparator = path42.charCodeAt(path42.length - 1) === 47;
-        path42 = normalizeStringPosix(path42, !isAbsolute3);
-        if (path42.length === 0 && !isAbsolute3) path42 = ".";
-        if (path42.length > 0 && trailingSeparator) path42 += "/";
-        if (isAbsolute3) return "/" + path42;
-        return path42;
-      },
-      isAbsolute: function isAbsolute3(path42) {
-        assertPath(path42);
-        return path42.length > 0 && path42.charCodeAt(0) === 47;
-      },
-      join: function join4() {
-        if (arguments.length === 0)
-          return ".";
-        var joined;
-        for (var i = 0; i < arguments.length; ++i) {
-          var arg = arguments[i];
-          assertPath(arg);
-          if (arg.length > 0) {
-            if (joined === void 0)
-              joined = arg;
-            else
-              joined += "/" + arg;
-          }
-        }
-        if (joined === void 0)
-          return ".";
-        return posix.normalize(joined);
-      },
-      relative: function relative(from, to) {
-        assertPath(from);
-        assertPath(to);
-        if (from === to) return "";
-        from = posix.resolve(from);
-        to = posix.resolve(to);
-        if (from === to) return "";
-        var fromStart = 1;
-        for (; fromStart < from.length; ++fromStart) {
-          if (from.charCodeAt(fromStart) !== 47)
-            break;
-        }
-        var fromEnd = from.length;
-        var fromLen = fromEnd - fromStart;
-        var toStart = 1;
-        for (; toStart < to.length; ++toStart) {
-          if (to.charCodeAt(toStart) !== 47)
-            break;
-        }
-        var toEnd = to.length;
-        var toLen = toEnd - toStart;
-        var length = fromLen < toLen ? fromLen : toLen;
-        var lastCommonSep = -1;
-        var i = 0;
-        for (; i <= length; ++i) {
-          if (i === length) {
-            if (toLen > length) {
-              if (to.charCodeAt(toStart + i) === 47) {
-                return to.slice(toStart + i + 1);
-              } else if (i === 0) {
-                return to.slice(toStart + i);
-              }
-            } else if (fromLen > length) {
-              if (from.charCodeAt(fromStart + i) === 47) {
-                lastCommonSep = i;
-              } else if (i === 0) {
-                lastCommonSep = 0;
-              }
-            }
-            break;
-          }
-          var fromCode = from.charCodeAt(fromStart + i);
-          var toCode = to.charCodeAt(toStart + i);
-          if (fromCode !== toCode)
-            break;
-          else if (fromCode === 47)
-            lastCommonSep = i;
-        }
-        var out = "";
-        for (i = fromStart + lastCommonSep + 1; i <= fromEnd; ++i) {
-          if (i === fromEnd || from.charCodeAt(i) === 47) {
-            if (out.length === 0)
-              out += "..";
-            else
-              out += "/..";
-          }
-        }
-        if (out.length > 0)
-          return out + to.slice(toStart + lastCommonSep);
-        else {
-          toStart += lastCommonSep;
-          if (to.charCodeAt(toStart) === 47)
-            ++toStart;
-          return to.slice(toStart);
-        }
-      },
-      _makeLong: function _makeLong(path42) {
-        return path42;
-      },
-      dirname: function dirname2(path42) {
-        assertPath(path42);
-        if (path42.length === 0) return ".";
-        var code = path42.charCodeAt(0);
-        var hasRoot = code === 47;
-        var end = -1;
-        var matchedSlash = true;
-        for (var i = path42.length - 1; i >= 1; --i) {
-          code = path42.charCodeAt(i);
-          if (code === 47) {
-            if (!matchedSlash) {
-              end = i;
-              break;
-            }
-          } else {
-            matchedSlash = false;
-          }
-        }
-        if (end === -1) return hasRoot ? "/" : ".";
-        if (hasRoot && end === 1) return "//";
-        return path42.slice(0, end);
-      },
-      basename: function basename(path42, ext) {
-        if (ext !== void 0 && typeof ext !== "string") throw new TypeError('"ext" argument must be a string');
-        assertPath(path42);
-        var start = 0;
-        var end = -1;
-        var matchedSlash = true;
-        var i;
-        if (ext !== void 0 && ext.length > 0 && ext.length <= path42.length) {
-          if (ext.length === path42.length && ext === path42) return "";
-          var extIdx = ext.length - 1;
-          var firstNonSlashEnd = -1;
-          for (i = path42.length - 1; i >= 0; --i) {
-            var code = path42.charCodeAt(i);
-            if (code === 47) {
-              if (!matchedSlash) {
-                start = i + 1;
-                break;
-              }
-            } else {
-              if (firstNonSlashEnd === -1) {
-                matchedSlash = false;
-                firstNonSlashEnd = i + 1;
-              }
-              if (extIdx >= 0) {
-                if (code === ext.charCodeAt(extIdx)) {
-                  if (--extIdx === -1) {
-                    end = i;
-                  }
-                } else {
-                  extIdx = -1;
-                  end = firstNonSlashEnd;
-                }
-              }
-            }
-          }
-          if (start === end) end = firstNonSlashEnd;
-          else if (end === -1) end = path42.length;
-          return path42.slice(start, end);
-        } else {
-          for (i = path42.length - 1; i >= 0; --i) {
-            if (path42.charCodeAt(i) === 47) {
-              if (!matchedSlash) {
-                start = i + 1;
-                break;
-              }
-            } else if (end === -1) {
-              matchedSlash = false;
-              end = i + 1;
-            }
-          }
-          if (end === -1) return "";
-          return path42.slice(start, end);
-        }
-      },
-      extname: function extname(path42) {
-        assertPath(path42);
-        var startDot = -1;
-        var startPart = 0;
-        var end = -1;
-        var matchedSlash = true;
-        var preDotState = 0;
-        for (var i = path42.length - 1; i >= 0; --i) {
-          var code = path42.charCodeAt(i);
-          if (code === 47) {
-            if (!matchedSlash) {
-              startPart = i + 1;
-              break;
-            }
-            continue;
-          }
-          if (end === -1) {
-            matchedSlash = false;
-            end = i + 1;
-          }
-          if (code === 46) {
-            if (startDot === -1)
-              startDot = i;
-            else if (preDotState !== 1)
-              preDotState = 1;
-          } else if (startDot !== -1) {
-            preDotState = -1;
-          }
-        }
-        if (startDot === -1 || end === -1 || // We saw a non-dot character immediately before the dot
-        preDotState === 0 || // The (right-most) trimmed path component is exactly '..'
-        preDotState === 1 && startDot === end - 1 && startDot === startPart + 1) {
-          return "";
-        }
-        return path42.slice(startDot, end);
-      },
-      format: function format(pathObject) {
-        if (pathObject === null || typeof pathObject !== "object") {
-          throw new TypeError('The "pathObject" argument must be of type Object. Received type ' + typeof pathObject);
-        }
-        return _format("/", pathObject);
-      },
-      parse: function parse3(path42) {
-        assertPath(path42);
-        var ret = { root: "", dir: "", base: "", ext: "", name: "" };
-        if (path42.length === 0) return ret;
-        var code = path42.charCodeAt(0);
-        var isAbsolute3 = code === 47;
-        var start;
-        if (isAbsolute3) {
-          ret.root = "/";
-          start = 1;
-        } else {
-          start = 0;
-        }
-        var startDot = -1;
-        var startPart = 0;
-        var end = -1;
-        var matchedSlash = true;
-        var i = path42.length - 1;
-        var preDotState = 0;
-        for (; i >= start; --i) {
-          code = path42.charCodeAt(i);
-          if (code === 47) {
-            if (!matchedSlash) {
-              startPart = i + 1;
-              break;
-            }
-            continue;
-          }
-          if (end === -1) {
-            matchedSlash = false;
-            end = i + 1;
-          }
-          if (code === 46) {
-            if (startDot === -1) startDot = i;
-            else if (preDotState !== 1) preDotState = 1;
-          } else if (startDot !== -1) {
-            preDotState = -1;
-          }
-        }
-        if (startDot === -1 || end === -1 || // We saw a non-dot character immediately before the dot
-        preDotState === 0 || // The (right-most) trimmed path component is exactly '..'
-        preDotState === 1 && startDot === end - 1 && startDot === startPart + 1) {
-          if (end !== -1) {
-            if (startPart === 0 && isAbsolute3) ret.base = ret.name = path42.slice(1, end);
-            else ret.base = ret.name = path42.slice(startPart, end);
-          }
-        } else {
-          if (startPart === 0 && isAbsolute3) {
-            ret.name = path42.slice(1, startDot);
-            ret.base = path42.slice(1, end);
-          } else {
-            ret.name = path42.slice(startPart, startDot);
-            ret.base = path42.slice(startPart, end);
-          }
-          ret.ext = path42.slice(startDot, end);
-        }
-        if (startPart > 0) ret.dir = path42.slice(0, startPart - 1);
-        else if (isAbsolute3) ret.dir = "/";
-        return ret;
-      },
-      sep: "/",
-      delimiter: ":",
-      win32: null,
-      posix: null
-    };
-    posix.posix = posix;
-    module.exports = posix;
-  }
-});
-
 // node_modules/.pnpm/tslib@2.8.1/node_modules/tslib/tslib.es6.mjs
 var tslib_es6_exports = {};
 __export(tslib_es6_exports, {
@@ -3362,6 +2954,414 @@ var init_tslib_es6 = __esm({
       __disposeResources,
       __rewriteRelativeImportExtension
     };
+  }
+});
+
+// node_modules/.pnpm/path-browserify@1.0.1/node_modules/path-browserify/index.js
+var require_path_browserify = __commonJS({
+  "node_modules/.pnpm/path-browserify@1.0.1/node_modules/path-browserify/index.js"(exports, module) {
+    "use strict";
+    init_globals();
+    function assertPath(path42) {
+      if (typeof path42 !== "string") {
+        throw new TypeError("Path must be a string. Received " + JSON.stringify(path42));
+      }
+    }
+    function normalizeStringPosix(path42, allowAboveRoot) {
+      var res = "";
+      var lastSegmentLength = 0;
+      var lastSlash = -1;
+      var dots = 0;
+      var code;
+      for (var i = 0; i <= path42.length; ++i) {
+        if (i < path42.length)
+          code = path42.charCodeAt(i);
+        else if (code === 47)
+          break;
+        else
+          code = 47;
+        if (code === 47) {
+          if (lastSlash === i - 1 || dots === 1) {
+          } else if (lastSlash !== i - 1 && dots === 2) {
+            if (res.length < 2 || lastSegmentLength !== 2 || res.charCodeAt(res.length - 1) !== 46 || res.charCodeAt(res.length - 2) !== 46) {
+              if (res.length > 2) {
+                var lastSlashIndex = res.lastIndexOf("/");
+                if (lastSlashIndex !== res.length - 1) {
+                  if (lastSlashIndex === -1) {
+                    res = "";
+                    lastSegmentLength = 0;
+                  } else {
+                    res = res.slice(0, lastSlashIndex);
+                    lastSegmentLength = res.length - 1 - res.lastIndexOf("/");
+                  }
+                  lastSlash = i;
+                  dots = 0;
+                  continue;
+                }
+              } else if (res.length === 2 || res.length === 1) {
+                res = "";
+                lastSegmentLength = 0;
+                lastSlash = i;
+                dots = 0;
+                continue;
+              }
+            }
+            if (allowAboveRoot) {
+              if (res.length > 0)
+                res += "/..";
+              else
+                res = "..";
+              lastSegmentLength = 2;
+            }
+          } else {
+            if (res.length > 0)
+              res += "/" + path42.slice(lastSlash + 1, i);
+            else
+              res = path42.slice(lastSlash + 1, i);
+            lastSegmentLength = i - lastSlash - 1;
+          }
+          lastSlash = i;
+          dots = 0;
+        } else if (code === 46 && dots !== -1) {
+          ++dots;
+        } else {
+          dots = -1;
+        }
+      }
+      return res;
+    }
+    function _format(sep2, pathObject) {
+      var dir = pathObject.dir || pathObject.root;
+      var base = pathObject.base || (pathObject.name || "") + (pathObject.ext || "");
+      if (!dir) {
+        return base;
+      }
+      if (dir === pathObject.root) {
+        return dir + base;
+      }
+      return dir + sep2 + base;
+    }
+    var posix = {
+      // path.resolve([from ...], to)
+      resolve: function resolve() {
+        var resolvedPath = "";
+        var resolvedAbsolute = false;
+        var cwd2;
+        for (var i = arguments.length - 1; i >= -1 && !resolvedAbsolute; i--) {
+          var path42;
+          if (i >= 0)
+            path42 = arguments[i];
+          else {
+            if (cwd2 === void 0)
+              cwd2 = process_default.cwd();
+            path42 = cwd2;
+          }
+          assertPath(path42);
+          if (path42.length === 0) {
+            continue;
+          }
+          resolvedPath = path42 + "/" + resolvedPath;
+          resolvedAbsolute = path42.charCodeAt(0) === 47;
+        }
+        resolvedPath = normalizeStringPosix(resolvedPath, !resolvedAbsolute);
+        if (resolvedAbsolute) {
+          if (resolvedPath.length > 0)
+            return "/" + resolvedPath;
+          else
+            return "/";
+        } else if (resolvedPath.length > 0) {
+          return resolvedPath;
+        } else {
+          return ".";
+        }
+      },
+      normalize: function normalize(path42) {
+        assertPath(path42);
+        if (path42.length === 0) return ".";
+        var isAbsolute3 = path42.charCodeAt(0) === 47;
+        var trailingSeparator = path42.charCodeAt(path42.length - 1) === 47;
+        path42 = normalizeStringPosix(path42, !isAbsolute3);
+        if (path42.length === 0 && !isAbsolute3) path42 = ".";
+        if (path42.length > 0 && trailingSeparator) path42 += "/";
+        if (isAbsolute3) return "/" + path42;
+        return path42;
+      },
+      isAbsolute: function isAbsolute3(path42) {
+        assertPath(path42);
+        return path42.length > 0 && path42.charCodeAt(0) === 47;
+      },
+      join: function join4() {
+        if (arguments.length === 0)
+          return ".";
+        var joined;
+        for (var i = 0; i < arguments.length; ++i) {
+          var arg = arguments[i];
+          assertPath(arg);
+          if (arg.length > 0) {
+            if (joined === void 0)
+              joined = arg;
+            else
+              joined += "/" + arg;
+          }
+        }
+        if (joined === void 0)
+          return ".";
+        return posix.normalize(joined);
+      },
+      relative: function relative(from, to) {
+        assertPath(from);
+        assertPath(to);
+        if (from === to) return "";
+        from = posix.resolve(from);
+        to = posix.resolve(to);
+        if (from === to) return "";
+        var fromStart = 1;
+        for (; fromStart < from.length; ++fromStart) {
+          if (from.charCodeAt(fromStart) !== 47)
+            break;
+        }
+        var fromEnd = from.length;
+        var fromLen = fromEnd - fromStart;
+        var toStart = 1;
+        for (; toStart < to.length; ++toStart) {
+          if (to.charCodeAt(toStart) !== 47)
+            break;
+        }
+        var toEnd = to.length;
+        var toLen = toEnd - toStart;
+        var length = fromLen < toLen ? fromLen : toLen;
+        var lastCommonSep = -1;
+        var i = 0;
+        for (; i <= length; ++i) {
+          if (i === length) {
+            if (toLen > length) {
+              if (to.charCodeAt(toStart + i) === 47) {
+                return to.slice(toStart + i + 1);
+              } else if (i === 0) {
+                return to.slice(toStart + i);
+              }
+            } else if (fromLen > length) {
+              if (from.charCodeAt(fromStart + i) === 47) {
+                lastCommonSep = i;
+              } else if (i === 0) {
+                lastCommonSep = 0;
+              }
+            }
+            break;
+          }
+          var fromCode = from.charCodeAt(fromStart + i);
+          var toCode = to.charCodeAt(toStart + i);
+          if (fromCode !== toCode)
+            break;
+          else if (fromCode === 47)
+            lastCommonSep = i;
+        }
+        var out = "";
+        for (i = fromStart + lastCommonSep + 1; i <= fromEnd; ++i) {
+          if (i === fromEnd || from.charCodeAt(i) === 47) {
+            if (out.length === 0)
+              out += "..";
+            else
+              out += "/..";
+          }
+        }
+        if (out.length > 0)
+          return out + to.slice(toStart + lastCommonSep);
+        else {
+          toStart += lastCommonSep;
+          if (to.charCodeAt(toStart) === 47)
+            ++toStart;
+          return to.slice(toStart);
+        }
+      },
+      _makeLong: function _makeLong(path42) {
+        return path42;
+      },
+      dirname: function dirname2(path42) {
+        assertPath(path42);
+        if (path42.length === 0) return ".";
+        var code = path42.charCodeAt(0);
+        var hasRoot = code === 47;
+        var end = -1;
+        var matchedSlash = true;
+        for (var i = path42.length - 1; i >= 1; --i) {
+          code = path42.charCodeAt(i);
+          if (code === 47) {
+            if (!matchedSlash) {
+              end = i;
+              break;
+            }
+          } else {
+            matchedSlash = false;
+          }
+        }
+        if (end === -1) return hasRoot ? "/" : ".";
+        if (hasRoot && end === 1) return "//";
+        return path42.slice(0, end);
+      },
+      basename: function basename(path42, ext) {
+        if (ext !== void 0 && typeof ext !== "string") throw new TypeError('"ext" argument must be a string');
+        assertPath(path42);
+        var start = 0;
+        var end = -1;
+        var matchedSlash = true;
+        var i;
+        if (ext !== void 0 && ext.length > 0 && ext.length <= path42.length) {
+          if (ext.length === path42.length && ext === path42) return "";
+          var extIdx = ext.length - 1;
+          var firstNonSlashEnd = -1;
+          for (i = path42.length - 1; i >= 0; --i) {
+            var code = path42.charCodeAt(i);
+            if (code === 47) {
+              if (!matchedSlash) {
+                start = i + 1;
+                break;
+              }
+            } else {
+              if (firstNonSlashEnd === -1) {
+                matchedSlash = false;
+                firstNonSlashEnd = i + 1;
+              }
+              if (extIdx >= 0) {
+                if (code === ext.charCodeAt(extIdx)) {
+                  if (--extIdx === -1) {
+                    end = i;
+                  }
+                } else {
+                  extIdx = -1;
+                  end = firstNonSlashEnd;
+                }
+              }
+            }
+          }
+          if (start === end) end = firstNonSlashEnd;
+          else if (end === -1) end = path42.length;
+          return path42.slice(start, end);
+        } else {
+          for (i = path42.length - 1; i >= 0; --i) {
+            if (path42.charCodeAt(i) === 47) {
+              if (!matchedSlash) {
+                start = i + 1;
+                break;
+              }
+            } else if (end === -1) {
+              matchedSlash = false;
+              end = i + 1;
+            }
+          }
+          if (end === -1) return "";
+          return path42.slice(start, end);
+        }
+      },
+      extname: function extname(path42) {
+        assertPath(path42);
+        var startDot = -1;
+        var startPart = 0;
+        var end = -1;
+        var matchedSlash = true;
+        var preDotState = 0;
+        for (var i = path42.length - 1; i >= 0; --i) {
+          var code = path42.charCodeAt(i);
+          if (code === 47) {
+            if (!matchedSlash) {
+              startPart = i + 1;
+              break;
+            }
+            continue;
+          }
+          if (end === -1) {
+            matchedSlash = false;
+            end = i + 1;
+          }
+          if (code === 46) {
+            if (startDot === -1)
+              startDot = i;
+            else if (preDotState !== 1)
+              preDotState = 1;
+          } else if (startDot !== -1) {
+            preDotState = -1;
+          }
+        }
+        if (startDot === -1 || end === -1 || // We saw a non-dot character immediately before the dot
+        preDotState === 0 || // The (right-most) trimmed path component is exactly '..'
+        preDotState === 1 && startDot === end - 1 && startDot === startPart + 1) {
+          return "";
+        }
+        return path42.slice(startDot, end);
+      },
+      format: function format(pathObject) {
+        if (pathObject === null || typeof pathObject !== "object") {
+          throw new TypeError('The "pathObject" argument must be of type Object. Received type ' + typeof pathObject);
+        }
+        return _format("/", pathObject);
+      },
+      parse: function parse3(path42) {
+        assertPath(path42);
+        var ret = { root: "", dir: "", base: "", ext: "", name: "" };
+        if (path42.length === 0) return ret;
+        var code = path42.charCodeAt(0);
+        var isAbsolute3 = code === 47;
+        var start;
+        if (isAbsolute3) {
+          ret.root = "/";
+          start = 1;
+        } else {
+          start = 0;
+        }
+        var startDot = -1;
+        var startPart = 0;
+        var end = -1;
+        var matchedSlash = true;
+        var i = path42.length - 1;
+        var preDotState = 0;
+        for (; i >= start; --i) {
+          code = path42.charCodeAt(i);
+          if (code === 47) {
+            if (!matchedSlash) {
+              startPart = i + 1;
+              break;
+            }
+            continue;
+          }
+          if (end === -1) {
+            matchedSlash = false;
+            end = i + 1;
+          }
+          if (code === 46) {
+            if (startDot === -1) startDot = i;
+            else if (preDotState !== 1) preDotState = 1;
+          } else if (startDot !== -1) {
+            preDotState = -1;
+          }
+        }
+        if (startDot === -1 || end === -1 || // We saw a non-dot character immediately before the dot
+        preDotState === 0 || // The (right-most) trimmed path component is exactly '..'
+        preDotState === 1 && startDot === end - 1 && startDot === startPart + 1) {
+          if (end !== -1) {
+            if (startPart === 0 && isAbsolute3) ret.base = ret.name = path42.slice(1, end);
+            else ret.base = ret.name = path42.slice(startPart, end);
+          }
+        } else {
+          if (startPart === 0 && isAbsolute3) {
+            ret.name = path42.slice(1, startDot);
+            ret.base = path42.slice(1, end);
+          } else {
+            ret.name = path42.slice(startPart, startDot);
+            ret.base = path42.slice(startPart, end);
+          }
+          ret.ext = path42.slice(startDot, end);
+        }
+        if (startPart > 0) ret.dir = path42.slice(0, startPart - 1);
+        else if (isAbsolute3) ret.dir = "/";
+        return ret;
+      },
+      sep: "/",
+      delimiter: ":",
+      win32: null,
+      posix: null
+    };
+    posix.posix = posix;
+    module.exports = posix;
   }
 });
 
@@ -22774,553 +22774,16 @@ function splitVerb(s) {
   return i === -1 ? { verb: s, value: "" } : { verb: s.slice(0, i), value: s.slice(i + 1) };
 }
 
-// src/click/read.ts
-init_globals();
-
-// src/install/index.ts
-init_globals();
-
-// src/attach-launcher.ts
-init_globals();
-var import_node_path = __toESM(require_path_browserify(), 1);
-
-// src/claude-command-line.ts
-init_globals();
-
-// src/shell-word.ts
-init_globals();
-var SHELL_SAFE = /^[A-Za-z0-9_./,:@%+-][A-Za-z0-9_./,:@%+=-]*$/;
-function singleQuoted(s) {
-  return `'${s.replaceAll("'", `'\\''`)}'`;
-}
-function shellWord(s) {
-  return SHELL_SAFE.test(s) ? s : singleQuoted(s);
-}
-
-// src/claude-command-line.ts
-function claudeCommandLine(command) {
-  const cd = command.dir === void 0 ? "" : `cd ${shellWord(command.dir)} && `;
-  const env2 = command.env.map(([name, value]) => `${name}=${shellWord(value)} `).join("");
-  return `${cd}${env2}${[command.program, ...command.args].map(shellWord).join(" ")}`;
-}
-
-// src/attach-launcher.ts
-var ATTACH_DIR = "cc-extra";
-function attachLauncherOf(bundle) {
-  return import_node_path.default.join(import_node_path.default.dirname(bundle), ATTACH_DIR, "src", "bun-attach.js");
-}
-function moduleGraphReaderOf(launcher) {
-  return import_node_path.default.join(import_node_path.default.dirname(launcher), "bun-graph.js");
-}
-var ATTACH_PRELOAD = "attach-preload.cjs";
-function attachPreloadOf(bundle) {
-  return import_node_path.default.join(import_node_path.default.dirname(bundle), ATTACH_PRELOAD);
-}
-var PRELOAD_VARIABLE = "BUN_OPTIONS";
-function attachCommandLine(preload, command) {
-  return claudeCommandLine({
-    ...command,
-    env: [
-      ...command.env,
-      [PRELOAD_VARIABLE, `--preload ${preload.replace(/[\\\s]/g, "\\$&")}`]
-    ]
-  });
-}
-
-// src/daemon/build-currency.ts
-init_globals();
-
-// site/shims/fs.ts
-init_globals();
-var import_memfs = __toESM(require_lib8(), 1);
-var fs_default = import_memfs.fs;
-var {
-  existsSync,
-  readFileSync,
-  writeFileSync,
-  statSync,
-  lstatSync,
-  readdirSync,
-  mkdirSync,
-  rmSync,
-  unlinkSync,
-  renameSync,
-  openSync,
-  readSync,
-  closeSync,
-  fstatSync,
-  writeSync,
-  appendFileSync,
-  realpathSync,
-  readlinkSync,
-  mkdtempSync,
-  copyFileSync,
-  watch,
-  watchFile,
-  unwatchFile,
-  constants,
-  promises,
-  accessSync,
-  createReadStream,
-  createWriteStream,
-  chmodSync,
-  utimesSync,
-  symlinkSync,
-  linkSync,
-  rmdirSync,
-  ftruncateSync,
-  fsyncSync,
-  Stats
-} = import_memfs.fs;
-
-// src/daemon/build-currency.ts
-var import_node_path3 = __toESM(require_path_browserify(), 1);
-init_url();
-
-// src/source-digest.ts
-init_globals();
-
-// site/shims/crypto.ts
-init_globals();
-var import_buffer2 = __toESM(require_buffer(), 1);
-function fnv(text4) {
-  let h = 2166136261;
-  for (let i = 0; i < text4.length; i++) h = Math.imul(h ^ text4.charCodeAt(i), 16777619) >>> 0;
-  return h.toString(16).padStart(8, "0").repeat(8);
-}
-function createHash(_alg) {
-  let acc = "";
-  const h = {
-    update(d) {
-      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
-      return h;
-    },
-    digest(_enc2) {
-      return fnv(acc);
-    }
-  };
-  return h;
-}
-function createHmac(_alg, key) {
-  let acc = import_buffer2.Buffer.from(key).toString("hex");
-  const h = {
-    update(d) {
-      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
-      return h;
-    },
-    digest() {
-      return import_buffer2.Buffer.from(fnv(acc), "hex");
-    }
-  };
-  return h;
-}
-function timingSafeEqual(a, b) {
-  if (a.length !== b.length) throw new RangeError("Input buffers must have the same byte length");
-  return a.every((byte, i) => byte === b[i]);
-}
-var randomUUID = () => globalThis.crypto.randomUUID();
-var randomBytes = (n) => globalThis.crypto.getRandomValues(new Uint8Array(n));
-var crypto_default = { createHash, createHmac, timingSafeEqual, randomUUID, randomBytes };
-
-// src/source-digest.ts
-var import_node_path2 = __toESM(require_path_browserify(), 1);
-var isSourceEntry = (name) => !name.startsWith(".") && !name.endsWith("~");
-function entryBytes(p2, st) {
-  return st.isSymbolicLink() ? import_buffer.Buffer.from(fs_default.readlinkSync(p2)) : fs_default.readFileSync(p2);
-}
-function sourceEntries(root, dir, keep2 = isSourceEntry) {
-  return fs_default.readdirSync(dir).filter(keep2).sort().flatMap((name) => {
-    const p2 = import_node_path2.default.join(dir, name);
-    const st = fs_default.lstatSync(p2, { throwIfNoEntry: false });
-    if (st === void 0) return [];
-    if (st.isDirectory()) return sourceEntries(root, p2);
-    const rel = import_node_path2.default.relative(root, p2).split(import_node_path2.default.sep).join("/");
-    return [[rel, entryBytes(p2, st)]];
-  });
-}
-function digestOf(entries) {
-  const h = crypto_default.createHash("sha256");
-  for (const [rel, bytes] of entries) {
-    h.update(rel).update("\0").update(bytes).update("\0");
-  }
-  return h.digest("hex");
-}
-function sourceDigest(srcDir) {
-  return digestOf(sourceEntries(srcDir, srcDir));
-}
-var CRATE_SOURCE = ["Cargo.toml", "Cargo.lock", "src"];
-function crateDigest(crateDir) {
-  return digestOf(
-    sourceEntries(
-      crateDir,
-      crateDir,
-      (name) => CRATE_SOURCE.includes(name)
-    )
-  );
-}
-var SHORT_DIGEST_LENGTH = 7;
-var shortDigest = (digest2) => digest2.slice(0, SHORT_DIGEST_LENGTH);
-
-// src/version.ts
-init_globals();
-if (false) {
-  throw new Error(
-    "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
-  );
-}
-var PACKAGE_VERSION = "1.180.3";
-
-// src/daemon/build-currency.ts
-function sourceCheckoutOf(bundlePath) {
-  const root = import_node_path3.default.dirname(import_node_path3.default.dirname(bundlePath));
-  return fs_default.existsSync(import_node_path3.default.join(root, "src")) ? root : null;
-}
-function bundleStamp(digest2) {
-  if (digest2 === null) {
-    throw new Error(
-      "this bundle carries no source digest (build via `pnpm build`, which stamps it)"
-    );
-  }
-  return { version: PACKAGE_VERSION, digest: digest2 };
-}
-function checkoutVersion(root) {
-  const raw = JSON.parse(
-    fs_default.readFileSync(import_node_path3.default.join(root, "package.json"), "utf8")
-  );
-  const version = typeof raw === "object" && raw !== null ? raw.version : void 0;
-  if (typeof version !== "string") {
-    throw new Error(`${import_node_path3.default.join(root, "package.json")} has no version string`);
-  }
-  return version;
-}
-function assessBuild(entryUrl, runningStamp) {
-  try {
-    const root = sourceCheckoutOf(fileURLToPath(entryUrl));
-    if (root === null) return { kind: "not-source-checkout" };
-    const running = runningStamp();
-    const digest2 = sourceDigest(import_node_path3.default.join(root, "src"));
-    if (digest2 === running.digest)
-      return { kind: "current", root, stamp: running };
-    return {
-      kind: "stale",
-      root,
-      source: { version: checkoutVersion(root), digest: digest2 },
-      running
-    };
-  } catch (e) {
-    return { kind: "unchecked", reason: e.message };
-  }
-}
-
-// src/install/index.ts
-var import_node_path10 = __toESM(require_path_browserify(), 1);
-init_os();
-
-// site/shims/unavailable.ts
-init_globals();
-var refuse = (name) => () => {
-  throw new Error(`${name} is not available in the page`);
-};
-var connect = refuse("net.connect");
-var createServer = refuse("net.createServer");
-var createConnection = refuse("net.createConnection");
-var get = refuse("https.get");
-var request = refuse("https.request");
-var createInterface = refuse("readline.createInterface");
-var createRequire = refuse("module.createRequire");
-var json = refuse("stream/consumers.json");
-var text = refuse("stream/consumers.text");
-var writeHeapSnapshot = refuse("v8.writeHeapSnapshot");
-var getHeapStatistics = () => ({ used_heap_size: 0, total_heap_size: 0, heap_size_limit: 0 });
-var unavailable_default = { connect, createServer, createConnection, get, request, createInterface, createRequire, json, text, writeHeapSnapshot, getHeapStatistics };
-
-// src/utils/atomic-write.ts
-init_globals();
-var import_node_path4 = __toESM(require_path_browserify(), 1);
-function writeAtomic(at, text4, mode) {
-  const file = resolvedTarget(at);
-  fs_default.mkdirSync(import_node_path4.default.dirname(file), { recursive: true });
-  const tmp = `${file}.tmp`;
-  const fileMode = mode ?? fs_default.statSync(file, { throwIfNoEntry: false })?.mode;
-  try {
-    fs_default.writeFileSync(
-      tmp,
-      text4,
-      fileMode === void 0 ? {} : { mode: fileMode }
-    );
-    fs_default.renameSync(tmp, file);
-  } catch (e) {
-    fs_default.rmSync(tmp, { force: true });
-    throw e;
-  }
-}
-function resolvedTarget(at) {
-  return linkChain(at).at(-1);
-}
-function linkChain(at) {
-  const { hops, stopped: stopped2 } = walkLinks(at);
-  if (stopped2 !== null) throw stopped2;
-  return hops;
-}
-function walkLinks(at) {
-  const hops = [at];
-  try {
-    for (let n = 0; n < MAX_LINK_HOPS; n++) {
-      const next = linkTarget(hops[hops.length - 1]);
-      if (next === null) return { hops, stopped: null };
-      hops.push(next);
-    }
-    return {
-      hops,
-      stopped: new Error(`${at}: more than ${MAX_LINK_HOPS} symbolic links`)
-    };
-  } catch (e) {
-    return { hops, stopped: e };
-  }
-}
-function linkTarget(file) {
-  try {
-    if (!fs_default.lstatSync(file).isSymbolicLink()) return null;
-    return import_node_path4.default.resolve(
-      fs_default.realpathSync(import_node_path4.default.dirname(file)),
-      fs_default.readlinkSync(file)
-    );
-  } catch (e) {
-    const { code } = e;
-    if (code === "ENOENT" || code === "ENOTDIR") return null;
-    throw e;
-  }
-}
-var MAX_LINK_HOPS = 40;
-
-// src/daemon/client.ts
-init_globals();
-
-// src/daemon/client-transport.ts
-init_globals();
-
-// src/daemon/paths.ts
+// src/host.ts
 init_globals();
 init_os();
-var import_node_path5 = __toESM(require_path_browserify(), 1);
-function xdgEnv(env2, name) {
-  const v = env2[name];
-  return v && v.length > 0 ? v : void 0;
-}
-function stateDir(env2 = process_default.env) {
-  const base = xdgEnv(env2, "XDG_STATE_HOME") ?? import_node_path5.default.join(os_default.homedir(), ".local", "state");
-  return import_node_path5.default.join(base, "cc-candybar");
-}
-function cacheDir(env2 = process_default.env) {
-  const base = xdgEnv(env2, "XDG_CACHE_HOME") ?? import_node_path5.default.join(os_default.homedir(), ".cache");
-  return import_node_path5.default.join(base, "cc-candybar");
-}
-function socketPath(env2 = process_default.env) {
-  return env2.CC_CANDYBAR_SOCKET || defaultSocketPath();
-}
-function defaultSocketPath() {
-  const uid = os_default.userInfo().uid;
-  return import_node_path5.default.join("/tmp", `cc-candybar-${uid}`, "socket");
-}
-function leasePathFor(sockPath) {
-  return `${sockPath}.lease`;
-}
-function leasePath(env2 = process_default.env) {
-  return leasePathFor(socketPath(env2));
-}
-function sessionStatePath(env2 = process_default.env) {
-  return import_node_path5.default.join(stateDir(env2), "session-state.json");
-}
-function settingsHistoryPath(env2 = process_default.env) {
-  return import_node_path5.default.join(stateDir(env2), "settings-history.json");
-}
-function daemonRegistryDir(env2 = process_default.env) {
-  const override = env2.CC_CANDYBAR_DAEMON_REGISTRY_DIR;
-  if (override) return override;
-  const uid = os_default.userInfo().uid;
-  return import_node_path5.default.join("/tmp", `cc-candybar-${uid}`, "daemons");
-}
-var SPAWN_BACKOFF_FILE = "spawn.backoff";
-function spawnBackoffPath(env2 = process_default.env) {
-  return import_node_path5.default.join(stateDir(env2), SPAWN_BACKOFF_FILE);
-}
-function watchProbeDir(env2 = process_default.env) {
-  return import_node_path5.default.join(stateDir(env2), "watch-probe");
-}
-function logPath(env2 = process_default.env) {
-  return import_node_path5.default.join(stateDir(env2), "daemon.log");
-}
-function daemonPaths(env2 = process_default.env) {
-  return {
-    socket: socketPath(env2),
-    lease: leasePath(env2),
-    state: stateDir(env2),
-    registry: daemonRegistryDir(env2),
-    log: logPath(env2),
-    sessionState: sessionStatePath(env2),
-    settingsHistory: settingsHistoryPath(env2),
-    watchProbe: watchProbeDir(env2),
-    spawnBackoff: spawnBackoffPath(env2)
-  };
-}
-
-// src/daemon/protocol.ts
-init_globals();
-var import_node_path6 = __toESM(require_path_browserify(), 1);
-
-// src/terminal-hint.ts
-init_globals();
-var TERMINAL_ENV_VARS = [
-  // iTerm2 (`iTerm.app`), Ghostty (`ghostty`), WezTerm (`WezTerm`), and the
-  // version beside it. Inside tmux it is tmux's own `tmux`.
-  "TERM_PROGRAM",
-  "TERM_PROGRAM_VERSION",
-  // kitty (`xterm-kitty`) and Alacritty (`alacritty`) name themselves here.
-  "TERM",
-  // The iTerm2 profile the session's window was opened with.
-  "ITERM_PROFILE",
-  // Where a terminal that reads a config file (Alacritty) finds it.
-  "XDG_CONFIG_HOME"
-];
-
-// src/client-hint.ts
-init_globals();
-var CLIENT_KINDS = ["native", "node", "frames"];
-
-// src/daemon/protocol.ts
-var PROTOCOL_VERSION = 3;
-var CONNECT_TIMEOUT_MS = 50;
-var TOTAL_BUDGET_MS = 150;
-var RENDER_ENCODINGS = ["ansi", "frame"];
-var CLIENT_HINT_FIELDS = Object.keys({
-  termCols: true,
-  termRows: true,
-  ssh: true,
-  tmux: true,
-  configEnv: true,
-  claudeConfigDir: true,
-  terminalEnv: true,
-  client: true
-});
-function parseClientHints(req) {
-  const termCols = sanitizeTermExtent(req.termCols);
-  const termRows = sanitizeTermExtent(req.termRows);
-  const ssh = sanitizeSsh(req.ssh);
-  const tmux3 = sanitizeTmux(req.tmux);
-  const configEnv = sanitizeAbsolutePath(req.configEnv);
-  const claudeConfigDir2 = sanitizeAbsolutePath(req.claudeConfigDir);
-  const terminalEnv = sanitizeTerminalEnv(req.terminalEnv);
-  const client = sanitizeClient(req.client);
-  return {
-    ...termCols !== void 0 && { termCols },
-    ...termRows !== void 0 && { termRows },
-    ...ssh !== void 0 && { ssh },
-    ...tmux3 !== void 0 && { tmux: tmux3 },
-    ...configEnv !== void 0 && { configEnv },
-    ...claudeConfigDir2 !== void 0 && { claudeConfigDir: claudeConfigDir2 },
-    ...terminalEnv !== void 0 && { terminalEnv },
-    ...client !== void 0 && { client }
-  };
-}
-function refusedHints(req, hints) {
-  return CLIENT_HINT_FIELDS.filter(
-    (k) => req[k] !== void 0 && hints[k] === void 0
-  ).map((hint) => ({ hint, sent: req[hint] }));
-}
-function refusedHintsError(refused) {
-  return refused.length === 0 ? null : `Client hints refused: ${refused.map(({ hint, sent }) => `${hint}=${JSON.stringify(sent)}`).join(
-    ", "
-  )} \u2014 is the statusline client older than the daemon? Reinstall it (\`cc-candybar install\`, or \`just install-rust\` in a checkout).`;
-}
-var REFUSAL_LINES = {
-  unknown: (args) => `Unknown flags: ${args}`,
-  // Only the last `--config` can lack a file, and it wins, so an earlier one
-  // that named a file is not applied either.
-  "no-value": (arg) => `${arg} names no file \u2014 the bar renders with no ${arg}`,
-  positional: (args) => `Unexpected arguments: ${args}`
-};
-function refusedArgsError(refused) {
-  const lines2 = Object.keys(REFUSAL_LINES).flatMap((why2) => {
-    const args = refused.filter((r) => r.why === why2).map((r) => r.arg);
-    return args.length === 0 ? [] : [REFUSAL_LINES[why2](args.join(", "))];
-  });
-  return lines2.length === 0 ? null : lines2.join("\n");
-}
-function sanitizeTerminalEnv(v) {
-  if (typeof v !== "object" || v === null || Array.isArray(v)) return void 0;
-  const o = v;
-  const set2 = TERMINAL_ENV_VARS.filter((name) => o[name] !== void 0);
-  return set2.every((name) => typeof o[name] === "string" && o[name] !== "") ? Object.fromEntries(set2.map((name) => [name, o[name]])) : void 0;
-}
-function sanitizeAbsolutePath(v) {
-  return typeof v === "string" && import_node_path6.default.isAbsolute(v) ? v : void 0;
-}
-function sanitizeTmux(v) {
-  if (v === null) return null;
-  if (typeof v !== "object") return void 0;
-  const o = v;
-  const { socket, pane, truecolor } = o;
-  if (typeof socket !== "string" || socket === "") return void 0;
-  if (typeof pane !== "string" || pane === "") return void 0;
-  if (truecolor !== null && (typeof truecolor !== "string" || truecolor === ""))
-    return void 0;
-  return { socket, pane, truecolor };
-}
-var MAX_TERM_EXTENT = 1e4;
-function sanitizeTermExtent(v) {
-  if (typeof v !== "number") return void 0;
-  if (!Number.isFinite(v)) return void 0;
-  const n = Math.floor(v);
-  if (n <= 0) return void 0;
-  return n > MAX_TERM_EXTENT ? MAX_TERM_EXTENT : n;
-}
-function sanitizeSsh(v) {
-  return typeof v === "boolean" ? v : void 0;
-}
-function sanitizeClientVersion(v) {
-  return typeof v === "string" && v !== "" && v.length <= 64 ? v : null;
-}
-var MAX_FRAME_BYTES = 16 * 1024 * 1024;
-function sanitizeClient(v) {
-  if (typeof v !== "object" || v === null || Array.isArray(v)) return void 0;
-  const { kind, bundle, source } = v;
-  const path42 = sanitizeAbsolutePath(bundle);
-  return CLIENT_KINDS.includes(kind) && path42 !== void 0 && (source === null || typeof source === "string" && source !== "") ? { kind, bundle: path42, source } : void 0;
-}
-
-// src/daemon/request-deadline.ts
-init_globals();
-var REQUEST_TIMEOUT_MS = 200;
-var DRAW_RESERVE_MS = 60;
-function parseClientDeadline(raw) {
-  if (raw === void 0) return { kind: "unstated" };
-  return typeof raw === "number" && Number.isSafeInteger(raw) && raw > 0 ? { kind: "stated", at: raw } : {
-    kind: "refused",
-    problem: `request 'deadline' is not epoch milliseconds: ${JSON.stringify(raw)}`
-  };
-}
-function waitBudgetMs(deadline, acceptedMonoMs, arrival) {
-  const clientEnd = deadline.kind === "stated" ? arrival.monoMs + (deadline.at - arrival.epochMs) : acceptedMonoMs + TOTAL_BUDGET_MS - CONNECT_TIMEOUT_MS;
-  const end = Math.min(clientEnd, acceptedMonoMs + REQUEST_TIMEOUT_MS);
-  return Math.round(end - DRAW_RESERVE_MS - arrival.monoMs);
-}
-
-// src/daemon/client.ts
-var CLICK_BUDGETS = {
-  connectMs: CONNECT_TIMEOUT_MS,
-  budgetMs: REQUEST_TIMEOUT_MS + TOTAL_BUDGET_MS
-};
-
-// src/daemon/acquire.ts
-init_globals();
-var import_node_path8 = __toESM(require_path_browserify(), 1);
 
 // src/proc/launch.ts
 init_globals();
 
 // site/shims/child_process.ts
 init_globals();
-var import_buffer3 = __toESM(require_buffer(), 1);
+var import_buffer2 = __toESM(require_buffer(), 1);
 var import_events2 = __toESM(require_events(), 1);
 var RESIDENT = "resident";
 var programs = /* @__PURE__ */ new Map();
@@ -23332,7 +22795,7 @@ var Stream = class extends import_events2.EventEmitter {
     return this;
   }
   chunk(text4) {
-    this.emit("data", this.encoding === null ? import_buffer3.Buffer.from(text4) : text4);
+    this.emit("data", this.encoding === null ? import_buffer2.Buffer.from(text4) : text4);
   }
   pipe() {
     return this;
@@ -23394,6 +22857,49 @@ function spawnSync(cmd, args = [], opts = {}) {
   return { pid: nextPid++, status: run3.code, signal: null, stdout: run3.stdout, stderr: run3.stderr ?? "", output: [null, run3.stdout, run3.stderr ?? ""] };
 }
 
+// site/shims/fs.ts
+init_globals();
+var import_memfs = __toESM(require_lib8(), 1);
+var fs_default = import_memfs.fs;
+var {
+  existsSync,
+  readFileSync,
+  writeFileSync,
+  statSync,
+  lstatSync,
+  readdirSync,
+  mkdirSync,
+  rmSync,
+  unlinkSync,
+  renameSync,
+  openSync,
+  readSync,
+  closeSync,
+  fstatSync,
+  writeSync,
+  appendFileSync,
+  realpathSync,
+  readlinkSync,
+  mkdtempSync,
+  copyFileSync,
+  watch,
+  watchFile,
+  unwatchFile,
+  constants,
+  promises,
+  accessSync,
+  createReadStream,
+  createWriteStream,
+  chmodSync,
+  utimesSync,
+  symlinkSync,
+  linkSync,
+  rmdirSync,
+  ftruncateSync,
+  fsyncSync,
+  Stats
+} = import_memfs.fs;
+
 // src/proc/launch.ts
 var import_node_string_decoder = __toESM(require_string_decoder(), 1);
 
@@ -23444,8 +22950,8 @@ function checkRateLimit(lastStartAt, category) {
   if (sinceLastMs >= minIntervalMs) return { allowed: true };
   return { allowed: false, minIntervalMs, sinceLastMs };
 }
-function childEnv(opts) {
-  return opts.env ?? process_default.env;
+function childEnv(scope, opts) {
+  return { ...scope.inherited, ...opts.envOverlay };
 }
 var refusedAsAborted = ({ reason }) => ({
   ok: false,
@@ -23607,7 +23113,7 @@ async function launchWaited(state, opts) {
     try {
       child = spawn(opts.bin, opts.args ?? [], {
         cwd: opts.cwd,
-        env: childEnv(opts),
+        env: childEnv(state.scope, opts),
         stdio: ["pipe", "pipe", "pipe"],
         detached: true
       });
@@ -23762,7 +23268,7 @@ function launchBlocking(state, opts) {
   try {
     const result = spawnSync(opts.bin, opts.args ?? [], {
       cwd: opts.cwd,
-      env: childEnv(opts),
+      env: childEnv(state.scope, opts),
       input: opts.stdinInput,
       timeout: opts.timeoutMs && opts.timeoutMs > 0 ? opts.timeoutMs : void 0,
       stdio,
@@ -23815,16 +23321,16 @@ function launchOrphan(state, opts) {
   if (refused !== null) return refused;
   const t0 = Date.now();
   stats?.onStart(opts.category);
-  const result = launchDetachedSyncInner(opts);
+  const result = launchDetachedSyncInner(state.scope, opts);
   stats?.onEnd(opts.category, Date.now() - t0);
   return result;
 }
-function launchDetachedSyncInner(opts) {
+function launchDetachedSyncInner(scope, opts) {
   let child;
   try {
     child = spawn(opts.bin, opts.args ?? [], {
       cwd: opts.cwd,
-      env: childEnv(opts),
+      env: childEnv(scope, opts),
       detached: true,
       stdio: "ignore"
     });
@@ -23880,7 +23386,7 @@ function launchJob(state, opts, files) {
       ],
       {
         cwd: opts.cwd,
-        env: childEnv(opts),
+        env: childEnv(state.scope, opts),
         detached: true,
         stdio: ["pipe", "ignore", "ignore"]
       }
@@ -24031,7 +23537,522 @@ function launcherWithState(owner) {
   );
   return { launcher, state };
 }
-var oneShotLauncher = createOneShotLauncher({});
+
+// src/host.ts
+function processWorld() {
+  const host = {
+    env: process_default.env,
+    home: os_default.homedir(),
+    tmp: os_default.tmpdir()
+  };
+  return { host, launcher: createOneShotLauncher({ inherited: process_default.env }) };
+}
+
+// src/click/read.ts
+init_globals();
+
+// src/install/index.ts
+init_globals();
+
+// src/attach-launcher.ts
+init_globals();
+var import_node_path = __toESM(require_path_browserify(), 1);
+
+// src/claude-command-line.ts
+init_globals();
+
+// src/shell-word.ts
+init_globals();
+var SHELL_SAFE = /^[A-Za-z0-9_./,:@%+-][A-Za-z0-9_./,:@%+=-]*$/;
+function singleQuoted(s) {
+  return `'${s.replaceAll("'", `'\\''`)}'`;
+}
+function shellWord(s) {
+  return SHELL_SAFE.test(s) ? s : singleQuoted(s);
+}
+
+// src/claude-command-line.ts
+function claudeCommandLine(command) {
+  const cd = command.dir === void 0 ? "" : `cd ${shellWord(command.dir)} && `;
+  const env2 = command.env.map(([name, value]) => `${name}=${shellWord(value)} `).join("");
+  return `${cd}${env2}${[command.program, ...command.args].map(shellWord).join(" ")}`;
+}
+
+// src/attach-launcher.ts
+var ATTACH_DIR = "cc-extra";
+function attachLauncherOf(bundle) {
+  return import_node_path.default.join(import_node_path.default.dirname(bundle), ATTACH_DIR, "src", "bun-attach.js");
+}
+function moduleGraphReaderOf(launcher) {
+  return import_node_path.default.join(import_node_path.default.dirname(launcher), "bun-graph.js");
+}
+var ATTACH_PRELOAD = "attach-preload.cjs";
+function attachPreloadOf(bundle) {
+  return import_node_path.default.join(import_node_path.default.dirname(bundle), ATTACH_PRELOAD);
+}
+var PRELOAD_VARIABLE = "BUN_OPTIONS";
+function attachCommandLine(preload, command) {
+  return claudeCommandLine({
+    ...command,
+    env: [
+      ...command.env,
+      [PRELOAD_VARIABLE, `--preload ${preload.replace(/[\\\s]/g, "\\$&")}`]
+    ]
+  });
+}
+
+// src/daemon/build-currency.ts
+init_globals();
+var import_node_path3 = __toESM(require_path_browserify(), 1);
+init_url();
+
+// src/source-digest.ts
+init_globals();
+
+// site/shims/crypto.ts
+init_globals();
+var import_buffer3 = __toESM(require_buffer(), 1);
+function fnv(text4) {
+  let h = 2166136261;
+  for (let i = 0; i < text4.length; i++) h = Math.imul(h ^ text4.charCodeAt(i), 16777619) >>> 0;
+  return h.toString(16).padStart(8, "0").repeat(8);
+}
+function createHash(_alg) {
+  let acc = "";
+  const h = {
+    update(d) {
+      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
+      return h;
+    },
+    digest(_enc2) {
+      return fnv(acc);
+    }
+  };
+  return h;
+}
+function createHmac(_alg, key) {
+  let acc = import_buffer3.Buffer.from(key).toString("hex");
+  const h = {
+    update(d) {
+      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
+      return h;
+    },
+    digest() {
+      return import_buffer3.Buffer.from(fnv(acc), "hex");
+    }
+  };
+  return h;
+}
+function timingSafeEqual(a, b) {
+  if (a.length !== b.length) throw new RangeError("Input buffers must have the same byte length");
+  return a.every((byte, i) => byte === b[i]);
+}
+var randomUUID = () => globalThis.crypto.randomUUID();
+var randomBytes = (n) => globalThis.crypto.getRandomValues(new Uint8Array(n));
+var crypto_default = { createHash, createHmac, timingSafeEqual, randomUUID, randomBytes };
+
+// src/source-digest.ts
+var import_node_path2 = __toESM(require_path_browserify(), 1);
+var isSourceEntry = (name) => !name.startsWith(".") && !name.endsWith("~");
+function entryBytes(p2, st) {
+  return st.isSymbolicLink() ? import_buffer.Buffer.from(fs_default.readlinkSync(p2)) : fs_default.readFileSync(p2);
+}
+function sourceEntries(root, dir, keep2 = isSourceEntry) {
+  return fs_default.readdirSync(dir).filter(keep2).sort().flatMap((name) => {
+    const p2 = import_node_path2.default.join(dir, name);
+    const st = fs_default.lstatSync(p2, { throwIfNoEntry: false });
+    if (st === void 0) return [];
+    if (st.isDirectory()) return sourceEntries(root, p2);
+    const rel = import_node_path2.default.relative(root, p2).split(import_node_path2.default.sep).join("/");
+    return [[rel, entryBytes(p2, st)]];
+  });
+}
+function digestOf(entries) {
+  const h = crypto_default.createHash("sha256");
+  for (const [rel, bytes] of entries) {
+    h.update(rel).update("\0").update(bytes).update("\0");
+  }
+  return h.digest("hex");
+}
+function sourceDigest(srcDir) {
+  return digestOf(sourceEntries(srcDir, srcDir));
+}
+var CRATE_SOURCE = ["Cargo.toml", "Cargo.lock", "src"];
+function crateDigest(crateDir) {
+  return digestOf(
+    sourceEntries(
+      crateDir,
+      crateDir,
+      (name) => CRATE_SOURCE.includes(name)
+    )
+  );
+}
+var SHORT_DIGEST_LENGTH = 7;
+var shortDigest = (digest2) => digest2.slice(0, SHORT_DIGEST_LENGTH);
+
+// src/version.ts
+init_globals();
+if (false) {
+  throw new Error(
+    "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
+  );
+}
+var PACKAGE_VERSION = "1.180.3";
+
+// src/daemon/build-currency.ts
+function sourceCheckoutOf(bundlePath) {
+  const root = import_node_path3.default.dirname(import_node_path3.default.dirname(bundlePath));
+  return fs_default.existsSync(import_node_path3.default.join(root, "src")) ? root : null;
+}
+function bundleStamp(digest2) {
+  if (digest2 === null) {
+    throw new Error(
+      "this bundle carries no source digest (build via `pnpm build`, which stamps it)"
+    );
+  }
+  return { version: PACKAGE_VERSION, digest: digest2 };
+}
+function checkoutVersion(root) {
+  const raw = JSON.parse(
+    fs_default.readFileSync(import_node_path3.default.join(root, "package.json"), "utf8")
+  );
+  const version = typeof raw === "object" && raw !== null ? raw.version : void 0;
+  if (typeof version !== "string") {
+    throw new Error(`${import_node_path3.default.join(root, "package.json")} has no version string`);
+  }
+  return version;
+}
+function assessBuild(entryUrl, runningStamp) {
+  try {
+    const root = sourceCheckoutOf(fileURLToPath(entryUrl));
+    if (root === null) return { kind: "not-source-checkout" };
+    const running = runningStamp();
+    const digest2 = sourceDigest(import_node_path3.default.join(root, "src"));
+    if (digest2 === running.digest)
+      return { kind: "current", root, stamp: running };
+    return {
+      kind: "stale",
+      root,
+      source: { version: checkoutVersion(root), digest: digest2 },
+      running
+    };
+  } catch (e) {
+    return { kind: "unchecked", reason: e.message };
+  }
+}
+
+// src/install/index.ts
+var import_node_path10 = __toESM(require_path_browserify(), 1);
+
+// site/shims/unavailable.ts
+init_globals();
+var refuse = (name) => () => {
+  throw new Error(`${name} is not available in the page`);
+};
+var connect = refuse("net.connect");
+var createServer = refuse("net.createServer");
+var createConnection = refuse("net.createConnection");
+var get = refuse("https.get");
+var request = refuse("https.request");
+var createInterface = refuse("readline.createInterface");
+var createRequire = refuse("module.createRequire");
+var json = refuse("stream/consumers.json");
+var text = refuse("stream/consumers.text");
+var writeHeapSnapshot = refuse("v8.writeHeapSnapshot");
+var getHeapStatistics = () => ({ used_heap_size: 0, total_heap_size: 0, heap_size_limit: 0 });
+var unavailable_default = { connect, createServer, createConnection, get, request, createInterface, createRequire, json, text, writeHeapSnapshot, getHeapStatistics };
+
+// src/daemon/paths.ts
+init_globals();
+init_os();
+var import_node_path4 = __toESM(require_path_browserify(), 1);
+function xdgEnv(env2, name) {
+  const v = env2[name];
+  return v && v.length > 0 ? v : void 0;
+}
+function stateDir(host) {
+  const base = xdgEnv(host.env, "XDG_STATE_HOME") ?? import_node_path4.default.join(host.home, ".local", "state");
+  return import_node_path4.default.join(base, "cc-candybar");
+}
+function cacheDir(host) {
+  const base = xdgEnv(host.env, "XDG_CACHE_HOME") ?? import_node_path4.default.join(host.home, ".cache");
+  return import_node_path4.default.join(base, "cc-candybar");
+}
+function socketPath(host) {
+  return host.env.CC_CANDYBAR_SOCKET || defaultSocketPath();
+}
+function defaultSocketPath() {
+  const uid = os_default.userInfo().uid;
+  return import_node_path4.default.join("/tmp", `cc-candybar-${uid}`, "socket");
+}
+function leasePathFor(sockPath) {
+  return `${sockPath}.lease`;
+}
+function leasePath(host) {
+  return leasePathFor(socketPath(host));
+}
+function sessionStatePath(host) {
+  return import_node_path4.default.join(stateDir(host), "session-state.json");
+}
+function settingsHistoryPath(host) {
+  return import_node_path4.default.join(stateDir(host), "settings-history.json");
+}
+function daemonRegistryDir(host) {
+  const override = host.env.CC_CANDYBAR_DAEMON_REGISTRY_DIR;
+  if (override) return override;
+  const uid = os_default.userInfo().uid;
+  return import_node_path4.default.join("/tmp", `cc-candybar-${uid}`, "daemons");
+}
+var SPAWN_BACKOFF_FILE = "spawn.backoff";
+function spawnBackoffPath(host) {
+  return import_node_path4.default.join(stateDir(host), SPAWN_BACKOFF_FILE);
+}
+function watchProbeDir(host) {
+  return import_node_path4.default.join(stateDir(host), "watch-probe");
+}
+function logPath(host) {
+  return import_node_path4.default.join(stateDir(host), "daemon.log");
+}
+function daemonPaths(host) {
+  return {
+    socket: socketPath(host),
+    lease: leasePath(host),
+    state: stateDir(host),
+    registry: daemonRegistryDir(host),
+    log: logPath(host),
+    sessionState: sessionStatePath(host),
+    settingsHistory: settingsHistoryPath(host),
+    watchProbe: watchProbeDir(host),
+    spawnBackoff: spawnBackoffPath(host)
+  };
+}
+function locations(host) {
+  const { env: env2 } = host;
+  const xdgDefault = "/usr/local/share:/usr/share";
+  const defaultDataDirs = process_default.platform === "darwin" ? `${import_node_path4.default.join(xdgEnv(env2, "HOMEBREW_PREFIX") ?? "/opt/homebrew", "share")}:${xdgDefault}` : xdgDefault;
+  return {
+    home: host.home,
+    configHome: xdgEnv(env2, "XDG_CONFIG_HOME") ?? import_node_path4.default.join(host.home, ".config"),
+    dataHome: xdgEnv(env2, "XDG_DATA_HOME") ?? import_node_path4.default.join(host.home, ".local", "share"),
+    dataDirs: (xdgEnv(env2, "XDG_DATA_DIRS") ?? defaultDataDirs).split(":").filter((d) => d !== "")
+  };
+}
+
+// src/utils/atomic-write.ts
+init_globals();
+var import_node_path5 = __toESM(require_path_browserify(), 1);
+function writeAtomic(at, text4, mode) {
+  const file = resolvedTarget(at);
+  fs_default.mkdirSync(import_node_path5.default.dirname(file), { recursive: true });
+  const tmp = `${file}.tmp`;
+  const fileMode = mode ?? fs_default.statSync(file, { throwIfNoEntry: false })?.mode;
+  try {
+    fs_default.writeFileSync(
+      tmp,
+      text4,
+      fileMode === void 0 ? {} : { mode: fileMode }
+    );
+    fs_default.renameSync(tmp, file);
+  } catch (e) {
+    fs_default.rmSync(tmp, { force: true });
+    throw e;
+  }
+}
+function resolvedTarget(at) {
+  return linkChain(at).at(-1);
+}
+function linkChain(at) {
+  const { hops, stopped: stopped2 } = walkLinks(at);
+  if (stopped2 !== null) throw stopped2;
+  return hops;
+}
+function walkLinks(at) {
+  const hops = [at];
+  try {
+    for (let n = 0; n < MAX_LINK_HOPS; n++) {
+      const next = linkTarget(hops[hops.length - 1]);
+      if (next === null) return { hops, stopped: null };
+      hops.push(next);
+    }
+    return {
+      hops,
+      stopped: new Error(`${at}: more than ${MAX_LINK_HOPS} symbolic links`)
+    };
+  } catch (e) {
+    return { hops, stopped: e };
+  }
+}
+function linkTarget(file) {
+  try {
+    if (!fs_default.lstatSync(file).isSymbolicLink()) return null;
+    return import_node_path5.default.resolve(
+      fs_default.realpathSync(import_node_path5.default.dirname(file)),
+      fs_default.readlinkSync(file)
+    );
+  } catch (e) {
+    const { code } = e;
+    if (code === "ENOENT" || code === "ENOTDIR") return null;
+    throw e;
+  }
+}
+var MAX_LINK_HOPS = 40;
+
+// src/daemon/client.ts
+init_globals();
+
+// src/daemon/client-transport.ts
+init_globals();
+
+// src/daemon/protocol.ts
+init_globals();
+var import_node_path6 = __toESM(require_path_browserify(), 1);
+
+// src/terminal-hint.ts
+init_globals();
+var TERMINAL_ENV_VARS = [
+  // iTerm2 (`iTerm.app`), Ghostty (`ghostty`), WezTerm (`WezTerm`), and the
+  // version beside it. Inside tmux it is tmux's own `tmux`.
+  "TERM_PROGRAM",
+  "TERM_PROGRAM_VERSION",
+  // kitty (`xterm-kitty`) and Alacritty (`alacritty`) name themselves here.
+  "TERM",
+  // The iTerm2 profile the session's window was opened with.
+  "ITERM_PROFILE",
+  // Where a terminal that reads a config file (Alacritty) finds it.
+  "XDG_CONFIG_HOME"
+];
+
+// src/client-hint.ts
+init_globals();
+var CLIENT_KINDS = ["native", "node", "frames"];
+
+// src/daemon/protocol.ts
+var PROTOCOL_VERSION = 3;
+var CONNECT_TIMEOUT_MS = 50;
+var TOTAL_BUDGET_MS = 150;
+var RENDER_ENCODINGS = ["ansi", "frame"];
+var CLIENT_HINT_FIELDS = Object.keys({
+  termCols: true,
+  termRows: true,
+  ssh: true,
+  tmux: true,
+  configEnv: true,
+  claudeConfigDir: true,
+  terminalEnv: true,
+  client: true
+});
+function parseClientHints(req) {
+  const termCols = sanitizeTermExtent(req.termCols);
+  const termRows = sanitizeTermExtent(req.termRows);
+  const ssh = sanitizeSsh(req.ssh);
+  const tmux3 = sanitizeTmux(req.tmux);
+  const configEnv = sanitizeAbsolutePath(req.configEnv);
+  const claudeConfigDir2 = sanitizeAbsolutePath(req.claudeConfigDir);
+  const terminalEnv = sanitizeTerminalEnv(req.terminalEnv);
+  const client = sanitizeClient(req.client);
+  return {
+    ...termCols !== void 0 && { termCols },
+    ...termRows !== void 0 && { termRows },
+    ...ssh !== void 0 && { ssh },
+    ...tmux3 !== void 0 && { tmux: tmux3 },
+    ...configEnv !== void 0 && { configEnv },
+    ...claudeConfigDir2 !== void 0 && { claudeConfigDir: claudeConfigDir2 },
+    ...terminalEnv !== void 0 && { terminalEnv },
+    ...client !== void 0 && { client }
+  };
+}
+function refusedHints(req, hints) {
+  return CLIENT_HINT_FIELDS.filter(
+    (k) => req[k] !== void 0 && hints[k] === void 0
+  ).map((hint) => ({ hint, sent: req[hint] }));
+}
+function refusedHintsError(refused) {
+  return refused.length === 0 ? null : `Client hints refused: ${refused.map(({ hint, sent }) => `${hint}=${JSON.stringify(sent)}`).join(
+    ", "
+  )} \u2014 is the statusline client older than the daemon? Reinstall it (\`cc-candybar install\`, or \`just install-rust\` in a checkout).`;
+}
+var REFUSAL_LINES = {
+  unknown: (args) => `Unknown flags: ${args}`,
+  // Only the last `--config` can lack a file, and it wins, so an earlier one
+  // that named a file is not applied either.
+  "no-value": (arg) => `${arg} names no file \u2014 the bar renders with no ${arg}`,
+  positional: (args) => `Unexpected arguments: ${args}`
+};
+function refusedArgsError(refused) {
+  const lines2 = Object.keys(REFUSAL_LINES).flatMap((why2) => {
+    const args = refused.filter((r) => r.why === why2).map((r) => r.arg);
+    return args.length === 0 ? [] : [REFUSAL_LINES[why2](args.join(", "))];
+  });
+  return lines2.length === 0 ? null : lines2.join("\n");
+}
+function sanitizeTerminalEnv(v) {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return void 0;
+  const o = v;
+  const set2 = TERMINAL_ENV_VARS.filter((name) => o[name] !== void 0);
+  return set2.every((name) => typeof o[name] === "string" && o[name] !== "") ? Object.fromEntries(set2.map((name) => [name, o[name]])) : void 0;
+}
+function sanitizeAbsolutePath(v) {
+  return typeof v === "string" && import_node_path6.default.isAbsolute(v) ? v : void 0;
+}
+function sanitizeTmux(v) {
+  if (v === null) return null;
+  if (typeof v !== "object") return void 0;
+  const o = v;
+  const { socket, pane, truecolor } = o;
+  if (typeof socket !== "string" || socket === "") return void 0;
+  if (typeof pane !== "string" || pane === "") return void 0;
+  if (truecolor !== null && (typeof truecolor !== "string" || truecolor === ""))
+    return void 0;
+  return { socket, pane, truecolor };
+}
+var MAX_TERM_EXTENT = 1e4;
+function sanitizeTermExtent(v) {
+  if (typeof v !== "number") return void 0;
+  if (!Number.isFinite(v)) return void 0;
+  const n = Math.floor(v);
+  if (n <= 0) return void 0;
+  return n > MAX_TERM_EXTENT ? MAX_TERM_EXTENT : n;
+}
+function sanitizeSsh(v) {
+  return typeof v === "boolean" ? v : void 0;
+}
+function sanitizeClientVersion(v) {
+  return typeof v === "string" && v !== "" && v.length <= 64 ? v : null;
+}
+var MAX_FRAME_BYTES = 16 * 1024 * 1024;
+function sanitizeClient(v) {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return void 0;
+  const { kind, bundle, source } = v;
+  const path42 = sanitizeAbsolutePath(bundle);
+  return CLIENT_KINDS.includes(kind) && path42 !== void 0 && (source === null || typeof source === "string" && source !== "") ? { kind, bundle: path42, source } : void 0;
+}
+
+// src/daemon/request-deadline.ts
+init_globals();
+var REQUEST_TIMEOUT_MS = 200;
+var DRAW_RESERVE_MS = 60;
+function parseClientDeadline(raw) {
+  if (raw === void 0) return { kind: "unstated" };
+  return typeof raw === "number" && Number.isSafeInteger(raw) && raw > 0 ? { kind: "stated", at: raw } : {
+    kind: "refused",
+    problem: `request 'deadline' is not epoch milliseconds: ${JSON.stringify(raw)}`
+  };
+}
+function waitBudgetMs(deadline, acceptedMonoMs, arrival) {
+  const clientEnd = deadline.kind === "stated" ? arrival.monoMs + (deadline.at - arrival.epochMs) : acceptedMonoMs + TOTAL_BUDGET_MS - CONNECT_TIMEOUT_MS;
+  const end = Math.min(clientEnd, acceptedMonoMs + REQUEST_TIMEOUT_MS);
+  return Math.round(end - DRAW_RESERVE_MS - arrival.monoMs);
+}
+
+// src/daemon/client.ts
+var CLICK_BUDGETS = {
+  connectMs: CONNECT_TIMEOUT_MS,
+  budgetMs: REQUEST_TIMEOUT_MS + TOTAL_BUDGET_MS
+};
+
+// src/daemon/acquire.ts
+init_globals();
+var import_node_path8 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/limits.ts
 init_globals();
@@ -24380,7 +24401,6 @@ init_process();
 
 // src/claude-settings.ts
 init_globals();
-init_os();
 var import_node_path9 = __toESM(require_path_browserify(), 1);
 
 // src/config/json5-edit.ts
@@ -24911,7 +24931,8 @@ function isPending(value) {
 
 // src/utils/logger.ts
 init_globals();
-var debugOn = () => Boolean(process_default.env.CC_CANDYBAR_DEBUG);
+var debugEnabled = false;
+var debugOn = () => debugEnabled;
 function debug(message, ...args) {
   if (debugOn()) {
     console.error(`[DEBUG] ${message}`, ...args);
@@ -25171,8 +25192,8 @@ function readTailSync(path42, maxBytes) {
 
 // src/claude-settings.ts
 var CLAUDE_CONFIG_DIR_ENV = "CLAUDE_CONFIG_DIR";
-function claudeConfigDir(detected) {
-  return detected ?? import_node_path9.default.join(os_default.homedir(), ".claude");
+function claudeConfigDir(detected, home) {
+  return detected ?? import_node_path9.default.join(home, ".claude");
 }
 function claudeSettingsPath(configDir) {
   return import_node_path9.default.join(configDir, "settings.json");
@@ -25349,25 +25370,19 @@ function shipsNative(platform3, arch2) {
 }
 
 // src/install/index.ts
-function supportDir() {
+function supportDir(host) {
   if (process_default.platform === "darwin") {
-    return import_node_path10.default.join(
-      os_default.homedir(),
-      "Library",
-      "Application Support",
-      "CCCandybar"
-    );
+    return import_node_path10.default.join(host.home, "Library", "Application Support", "CCCandybar");
   }
-  const xdgData = process_default.env.XDG_DATA_HOME ?? import_node_path10.default.join(os_default.homedir(), ".local", "share");
-  return import_node_path10.default.join(xdgData, "cc-candybar");
+  return import_node_path10.default.join(locations(host).dataHome, "cc-candybar");
 }
-function stagedDistPath(dir = supportDir()) {
+function stagedDistPath(dir) {
   return import_node_path10.default.join(dir, "dist", "index.mjs");
 }
-function stableAttachPreload(runningBundle) {
+function stableAttachPreload(runningBundle, host) {
   const checkout = sourceCheckoutOf(runningBundle);
   return attachPreloadOf(
-    checkout === null ? stagedDistPath() : import_node_path10.default.join(checkout, "dist", "index.mjs")
+    checkout === null ? stagedDistPath(supportDir(host)) : import_node_path10.default.join(checkout, "dist", "index.mjs")
   );
 }
 function parseHandlerUrl(rawUrl, scheme = URL_SCHEME) {
@@ -25388,7 +25403,6 @@ function parseHandlerUrl(rawUrl, scheme = URL_SCHEME) {
 
 // src/daemon/verbs/index.ts
 init_globals();
-init_os();
 var import_node_path30 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/click-error.ts
@@ -53725,7 +53739,7 @@ var SourceRegistry = class _SourceRegistry {
   // sessionState lets the daemon inject its singleton so state-kind variables
   // share one MobX atom and one disk-persistence layer with the click verbs.
   // Omitted in tests that don't exercise state vars.
-  constructor(launcher, store, defaultEmptyValue = "", sessionState, parent = null, ledger = new RefreshLedger(), fileEvents = NO_FILE_EVENTS, watchers = new WatcherRegistry()) {
+  constructor(launcher, store, defaultEmptyValue = "", sessionState, parent = null, ledger = new RefreshLedger(), fileEvents = NO_FILE_EVENTS, watchers = new WatcherRegistry(), env2 = {}) {
     this.launcher = launcher;
     this.store = store;
     this.defaultEmptyValue = defaultEmptyValue;
@@ -53733,6 +53747,7 @@ var SourceRegistry = class _SourceRegistry {
     this.ledger = ledger;
     this.fileEvents = fileEvents;
     this.watchers = watchers;
+    this.env = env2;
     this.sessionState = sessionState;
     this.watchMgr = new PathWatches(watchers, fileEvents);
   }
@@ -53743,6 +53758,7 @@ var SourceRegistry = class _SourceRegistry {
   ledger;
   fileEvents;
   watchers;
+  env;
   lastErrors = /* @__PURE__ */ new Map();
   // A cache policy that cannot fire is a STANDING fault, not a read's
   // outcome: a read that succeeds afterwards says nothing about whether the
@@ -53840,7 +53856,8 @@ var SourceRegistry = class _SourceRegistry {
       this,
       this.ledger,
       this.fileEvents,
-      this.watchers
+      this.watchers,
+      this.env
     );
   }
   // [LAW:one-source-of-truth] The registry IS the owner of its store — every
@@ -53924,10 +53941,10 @@ var SourceRegistry = class _SourceRegistry {
       );
     }
   }
-  // env: resolved once at declaration from process.env; box written once, never again.
+  // env: resolved once at declaration from the registry's environment; box written once, never again.
   // type is always 'string' — env vars are text by nature.
   declareEnv(name, envVar, varDefault) {
-    const raw = process_default.env[envVar];
+    const raw = this.env[envVar];
     if (raw !== void 0) {
       this.store.defineBox(name, "string", raw);
       return;
@@ -55155,16 +55172,15 @@ init_globals();
 
 // src/utils/user-path.ts
 init_globals();
-init_os();
 var import_node_path15 = __toESM(require_path_browserify(), 1);
-function expandHome(p2) {
-  return p2 === "~" || p2.startsWith("~/") || p2.startsWith("~\\") ? os_default.homedir() + p2.slice(1) : p2;
+function expandHome(p2, home) {
+  return p2 === "~" || p2.startsWith("~/") || p2.startsWith("~\\") ? home + p2.slice(1) : p2;
 }
-function resolveUserPath(base, p2) {
-  return import_node_path15.default.resolve(base, expandHome(p2));
+function resolveUserPath(base, p2, home) {
+  return import_node_path15.default.resolve(base, expandHome(p2, home));
 }
-function explicitConfigPath(base, p2) {
-  return typeof p2 === "string" && p2 !== "" ? resolveUserPath(base, p2) : void 0;
+function explicitConfigPath(base, p2, home) {
+  return typeof p2 === "string" && p2 !== "" ? resolveUserPath(base, p2, home) : void 0;
 }
 
 // src/config-hint.ts
@@ -58188,7 +58204,6 @@ function synthesizeEditChrome(config2) {
 
 // src/config/loader/actions.ts
 init_globals();
-init_os();
 var import_node_path17 = __toESM(require_path_browserify(), 1);
 function validateActions(ctx, raw, home) {
   if (raw === void 0) return {};
@@ -58243,7 +58258,7 @@ function validateActionDecl(ctx, path42, raw, home) {
   return actionArms(home)[present[0]](ctx, path42, raw);
 }
 function actionHomeOf(filePath2) {
-  if (filePath2 === "<default>") return { dir: os_default.homedir() };
+  if (filePath2 === "<default>") return { dir: null };
   return import_node_path17.default.isAbsolute(filePath2) ? { dir: import_node_path17.default.dirname(filePath2) } : { text: filePath2 };
 }
 var actionArms = (home) => ({
@@ -59346,9 +59361,9 @@ function reasonOf(err) {
   }
   return err instanceof Error ? err.message : String(err);
 }
-function listedPlugins(refs, from, scope) {
+function listedPlugins(refs, from, scope, home) {
   return refs.map(
-    (ref) => pluginDefinition(resolveUserPath(import_node_path18.default.dirname(from), ref), scope)
+    (ref) => pluginDefinition(resolveUserPath(import_node_path18.default.dirname(from), ref, home), scope)
   );
 }
 function applyPlugins(definitions, ctx, base, validate) {
@@ -59611,7 +59626,7 @@ function settingFor(label2, values2) {
     default: first2
   };
 }
-function fragmentOf(file, id2, { source, json: json2 }, { checkout }) {
+function fragmentOf(file, id2, { source, json: json2 }, { checkout, home }) {
   const ns = pluginNs(id2);
   const issues = [];
   const fail2 = () => {
@@ -59632,7 +59647,7 @@ function fragmentOf(file, id2, { source, json: json2 }, { checkout }) {
       });
     }
   }
-  const dataPath = json2.data === void 0 ? void 0 : dataPathOf(json2.data, file, checkout, issues);
+  const dataPath = json2.data === void 0 ? void 0 : dataPathOf(json2.data, file, checkout, home, issues);
   const sources = json2.sources === void 0 ? {} : sourcesOf(json2.sources, file, issues);
   if (issues.length > 0) return fail2();
   const ctx = {
@@ -59970,9 +59985,9 @@ function unbuilt(authored, built, at) {
     return unbuilt(authored[key], built[key], field);
   });
 }
-function dataPathOf(data, file, checkout, issues) {
+function dataPathOf(data, file, checkout, home, issues) {
   if (typeof data === "string" && data !== "") {
-    return resolveUserPath(import_node_path18.default.dirname(file), data);
+    return resolveUserPath(import_node_path18.default.dirname(file), data, home);
   }
   if (isPlainObject(data) && Object.keys(data).length === 1 && typeof data.checkout === "string" && data.checkout !== "") {
     const rel = data.checkout;
@@ -60945,30 +60960,23 @@ function validateNoNesting(ctx, cfg, names) {
 
 // src/config/loader/plugin-folders.ts
 init_globals();
-init_os();
 var import_node_path19 = __toESM(require_path_browserify(), 1);
-function pluginRoots(repo2) {
-  const dataDirs = (process_default.env.XDG_DATA_DIRS || defaultDataDirs()).split(":").filter((d) => d !== "");
+function pluginRoots(locs, repo2) {
   const installed = [
-    ...[...dataDirs].reverse().map((d) => import_node_path19.default.join(d, "cc-candybar", "plugins")),
-    userPluginRoot()
+    ...[...locs.dataDirs].reverse().map((d) => import_node_path19.default.join(d, "cc-candybar", "plugins")),
+    userPluginRoot(locs)
   ];
   return [
     ...installed.filter((r, i) => installed.lastIndexOf(r) === i).map((dir) => ({ dir, scope: "plugins" })),
     ...repo2 === null ? [] : [{ dir: import_node_path19.default.join(repo2, REPO_PLUGIN_DIR), scope: "repo" }]
   ];
 }
-function userPluginRoot() {
-  const dataHome = process_default.env.XDG_DATA_HOME || import_node_path19.default.join(os_default.homedir(), ".local", "share");
-  return import_node_path19.default.join(dataHome, "cc-candybar", "plugins");
+function userPluginRoot(locs) {
+  return import_node_path19.default.join(locs.dataHome, "cc-candybar", "plugins");
 }
 var REPO_PLUGIN_DIR = import_node_path19.default.join(".cc-candybar", "plugins");
-function defaultDataDirs() {
-  const xdg = "/usr/local/share:/usr/share";
-  return process_default.platform === "darwin" ? `${import_node_path19.default.join(process_default.env.HOMEBREW_PREFIX || "/opt/homebrew", "share")}:${xdg}` : xdg;
-}
-function installedPlugins(repo2) {
-  const roots = pluginRoots(repo2);
+function installedPlugins(locs, repo2) {
+  const roots = pluginRoots(locs, repo2);
   const byNs = /* @__PURE__ */ new Map();
   const unchecked = [];
   const strays = [];
@@ -61124,7 +61132,6 @@ function checkoutLocation(dir) {
 
 // src/config/loader/discovery.ts
 init_globals();
-init_os();
 var import_node_path21 = __toESM(require_path_browserify(), 1);
 
 // src/utils/presence.ts
@@ -61204,7 +61211,7 @@ function repoUnreadNotice(gate2) {
 
 // src/config/loader/discovery.ts
 var CONFIG_EXTENSIONS = ["json5", "json"];
-function dslConfigCandidatePaths(projectDir, cwd2, configFile) {
+function dslConfigCandidatePaths(locs, projectDir, cwd2, configFile) {
   if (configFile !== void 0) return [configFile];
   const effectiveCwd = cwd2 ?? process_default.cwd();
   return [
@@ -61215,22 +61222,22 @@ function dslConfigCandidatePaths(projectDir, cwd2, configFile) {
       ...CONFIG_EXTENSIONS.map(
         (ext) => import_node_path21.default.join(effectiveCwd, `${REPO_CONFIG_BASE}.${ext}`)
       ),
-      ...CONFIG_EXTENSIONS.map((ext) => `${xdgConfigBase()}.${ext}`)
+      ...CONFIG_EXTENSIONS.map((ext) => `${xdgConfigBase(locs)}.${ext}`)
     ])
   ];
 }
 var REPO_CONFIG_BASE = ".cc-candybar";
-function xdgConfigBase() {
-  const xdgConfigHome = process_default.env.XDG_CONFIG_HOME ?? import_node_path21.default.join(os_default.homedir(), ".config");
-  return import_node_path21.default.join(xdgConfigHome, "cc-candybar", "config");
+function xdgConfigBase(locs) {
+  return import_node_path21.default.join(locs.configHome, "cc-candybar", "config");
 }
 function homeLayer(path42) {
   return { path: path42, scope: "plugins" };
 }
-function resolveDslConfig(answers, projectDir, cwd2, configFile) {
+function resolveDslConfig(locs, answers, projectDir, cwd2, configFile) {
   const unchecked = [];
   const atLocation = /* @__PURE__ */ new Map();
   for (const candidate of dslConfigCandidatePaths(
+    locs,
     projectDir,
     cwd2,
     configFile
@@ -61249,7 +61256,7 @@ function resolveDslConfig(answers, projectDir, cwd2, configFile) {
     if (!atLocation.has(location)) {
       atLocation.set(location, {
         file: candidate,
-        repo: configFile !== void 0 || isUserFile(candidate) ? null : { dir, link: worktreeLink(dir) }
+        repo: configFile !== void 0 || isUserFile(locs, candidate) ? null : { dir, link: worktreeLink(dir) }
       });
     }
   }
@@ -61270,7 +61277,7 @@ function resolveDslConfig(answers, projectDir, cwd2, configFile) {
     return {
       kind: "chain",
       layers,
-      home: userHome(layers),
+      home: userHome(locs, layers),
       unchecked,
       repos
     };
@@ -61282,8 +61289,10 @@ function resolveDslConfig(answers, projectDir, cwd2, configFile) {
   }
   return own2 === void 0 ? { kind: "missing", path: configFile, home, repos } : { kind: "unreadable", ...own2, home, repos };
 }
-function isUserFile(candidate) {
-  return CONFIG_EXTENSIONS.some((e) => candidate === `${xdgConfigBase()}.${e}`);
+function isUserFile(locs, candidate) {
+  return CONFIG_EXTENSIONS.some(
+    (e) => candidate === `${xdgConfigBase(locs)}.${e}`
+  );
 }
 function repoProject(projectDir) {
   if (projectDir === void 0 || presence(projectDir) !== "present") {
@@ -61298,17 +61307,18 @@ function repoProject(projectDir) {
     ships: !("error" in listed) && listed.folders.length > 0
   };
 }
-function userHome(layers) {
-  return layers.find((l) => isUserFile(l.path))?.path ?? `${xdgConfigBase()}.${CONFIG_EXTENSIONS[0]}`;
+function userHome(locs, layers) {
+  return layers.find((l) => isUserFile(locs, l.path))?.path ?? `${xdgConfigBase(locs)}.${CONFIG_EXTENSIONS[0]}`;
 }
-function durableConfig(answers, projectDir, cwd2, configFile) {
-  const resolved = resolveDslConfig(answers, projectDir, cwd2, configFile);
+function durableConfig(locs, answers, projectDir, cwd2, configFile) {
+  const resolved = resolveDslConfig(locs, answers, projectDir, cwd2, configFile);
   const layers = resolved.kind === "chain" ? resolved.layers : [];
   return {
     path: resolved.home,
     above: layers.filter((l) => l.path !== resolved.home),
     repo: resolved.repos.plugins,
-    cwd: cwd2 ?? null
+    cwd: cwd2 ?? null,
+    locs
   };
 }
 function configResolutionNotice(resolution) {
@@ -61330,8 +61340,8 @@ function noticeLines(resolution) {
       ];
   }
 }
-function detectConfigCollisions(projectDir, cwd2) {
-  const existing = dslConfigCandidatePaths(projectDir, cwd2).filter(
+function detectConfigCollisions(locs, projectDir, cwd2) {
+  const existing = dslConfigCandidatePaths(locs, projectDir, cwd2).filter(
     (candidate) => presence(candidate) === "present"
   );
   const groups = /* @__PURE__ */ new Map();
@@ -61352,27 +61362,15 @@ function detectConfigCollisions(projectDir, cwd2) {
 }
 
 // src/config/dsl-loader.ts
-function loadConfig(path42, dflt, ctx, allowedPalettes) {
-  return path42 === null ? { ...NO_FILE, config: mergeWithDefault(NO_FILE.raw, dflt) } : loadConfigSource(
-    path42,
-    fs_default.readFileSync(path42, "utf-8"),
-    dflt,
-    ctx,
-    allowedPalettes
-  );
+function noFile(dflt) {
+  return { ...NO_FILE, config: mergeWithDefault(NO_FILE.raw, dflt) };
 }
-var NO_PROJECT = {
-  scope: "plugins",
-  repo: null,
-  checkout: null,
-  beneath: { dropped: [], rendering: /* @__PURE__ */ new Map() }
-};
 function loadConfigSource(path42, source, dflt, ctx, allowedPalettes) {
   const parsed2 = parseDslFile(path42, source, allowedPalettes, (refs, names) => {
     const layer = applyPlugins(
       // [LAW:one-source-of-truth] The layer's scope, decided where the
       // layer was discovered, rides on every definition it lists.
-      listedPlugins(refs, path42, ctx.scope),
+      listedPlugins(refs, path42, ctx.scope, ctx.home),
       ctx,
       { config: dflt, rendering: ctx.beneath.rendering },
       (c, plugin, replaces) => checkPlugin(c, plugin, replaces, path42, allowedPalettes)
@@ -61433,12 +61431,13 @@ function statKey(file) {
     return e.code ?? "unreadable";
   }
 }
-function loadConfigChain(chain2, dflt, trace, session, read2 = (p2) => fs_default.readFileSync(p2, "utf-8"), allowedPalettes) {
+function loadConfigChain(locs, chain2, dflt, trace, session, read2 = (p2) => fs_default.readFileSync(p2, "utf-8"), allowedPalettes) {
   const ctx = {
     repo: session.repo,
-    checkout: session.cwd === null ? null : checkoutOf(session.cwd)
+    checkout: session.cwd === null ? null : checkoutOf(session.cwd),
+    home: locs.home
   };
-  const found = installedPlugins(ctx.repo);
+  const found = installedPlugins(locs, ctx.repo);
   const merged = installedLayer(found.definitions, ctx, dflt, allowedPalettes);
   const plugins2 = {
     ...merged,
@@ -61505,7 +61504,7 @@ function loadConfigChain(chain2, dflt, trace, session, read2 = (p2) => fs_defaul
       installed,
       ...renderable(
         validateRenderable(
-          loadConfig(null, base, NO_PROJECT),
+          noFile(base),
           rendering,
           "<default>",
           allowedPalettes
@@ -64089,6 +64088,7 @@ function loadedOrNull(home, text4) {
 }
 function chainOver(home, text4) {
   return loadConfigChain(
+    home.locs,
     text4 !== null ? [homeLayer(home.path), ...home.above] : home.above,
     DEFAULT_DSL_CONFIG,
     { warned: () => {
@@ -65394,11 +65394,11 @@ var SESSION_FACT_VARIABLES = [
   "TMUX",
   "TMUX_PANE"
 ];
-function sessionEnv(daemonEnv, facts) {
-  const env2 = { ...daemonEnv };
-  for (const name of SESSION_FACT_VARIABLES) delete env2[name];
+function sessionEnv(facts) {
   return {
-    ...env2,
+    ...Object.fromEntries(
+      SESSION_FACT_VARIABLES.map((name) => [name, void 0])
+    ),
     CLAUDE_CODE_SESSION_ID: facts.sessionId,
     CLAUDE_PROJECT_DIR: facts.projectDir,
     ...facts.claudeConfigDir !== void 0 && {
@@ -65833,7 +65833,7 @@ var GitService = class {
       bin: "git",
       args: [...args],
       cwd: options.cwd,
-      env: { ...process_default.env, GIT_OPTIONAL_LOCKS: "0" },
+      envOverlay: { GIT_OPTIONAL_LOCKS: "0" },
       timeoutMs: options.timeout,
       category: "git"
     });
@@ -66264,7 +66264,6 @@ var GitService = class {
       bin,
       args: [...args],
       cwd: options.cwd,
-      env: { ...process_default.env },
       timeoutMs: options.timeout,
       category: "forge"
     });
@@ -66667,8 +66666,8 @@ function wantsOf(neededInputPaths) {
 function renderWidth(hints) {
   return applyClaudeCodeReserve(hints.termCols ?? DEFAULT_TERMINAL_WIDTH);
 }
-function settingsPathOf(hints) {
-  return claudeSettingsPath(claudeConfigDir(hints.claudeConfigDir));
+function settingsPathOf(hints, home) {
+  return claudeSettingsPath(claudeConfigDir(hints.claudeConfigDir, home));
 }
 function refreshedFact(refreshed) {
   return [...refreshed].map(([lane, ms]) => `${lane}:${ms === null ? "\u2026" : `${ms}ms`}`).join(",") || "-";
@@ -66724,7 +66723,7 @@ async function refreshPayload(inputs, at, refreshed) {
     lane(
       "autocompact",
       want.autocompact,
-      async () => deps.autoCompact.window(settingsPathOf(hints))
+      async () => deps.autoCompact.window(settingsPathOf(hints, deps.home))
     )
   ]);
 }
@@ -66857,7 +66856,7 @@ function readLanes(inputs) {
     autoCompact: read2(
       "autocompact",
       want.autocompact,
-      () => deps.autoCompact.stored(settingsPathOf(inputs.hints))
+      () => deps.autoCompact.stored(settingsPathOf(inputs.hints, deps.home))
     ),
     sources: new Map(
       [...lanes.sources].map(([name, lane]) => [name, lane.current()])
@@ -66936,7 +66935,7 @@ function projectPayload(inputs, draw2, lanes) {
   const cachePayload = over(lanes.cache, (expiresAt) => ({
     expiresAt
   }));
-  const home = posixify(process_default.env.HOME ?? process_default.env.USERPROFILE);
+  const home = posixify(inputs.deps.home);
   const workspace = hookData2.workspace ? {
     ...hookData2.workspace,
     current_dir: posixify(hookData2.workspace.current_dir) ?? "",
@@ -67244,7 +67243,6 @@ function dataNeeds(config2, preset) {
 // src/utils/claude.ts
 init_globals();
 var import_node_path27 = __toESM(require_path_browserify(), 1);
-init_os();
 
 // src/utils/transcript-activity.ts
 init_globals();
@@ -67316,9 +67314,8 @@ function entryActivity(parsed2, userEntry) {
 }
 
 // src/utils/claude.ts
-function getClaudePaths(detected) {
+function getClaudePaths(detected, homeDir) {
   if (detected !== void 0) return [detected];
-  const homeDir = homedir();
   return [(0, import_node_path27.join)(homeDir, ".config", "claude"), (0, import_node_path27.join)(homeDir, ".claude")].filter(
     (dir) => existsSync(dir)
   );
@@ -67500,7 +67497,6 @@ async function foldAppended(filePath2, prior, empty2, step4) {
 
 // src/doctor/font-edge.ts
 init_globals();
-init_os();
 var import_node_path28 = __toESM(require_path_browserify(), 1);
 
 // node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/index.js
@@ -68529,8 +68525,7 @@ function alacrittyFamilyIn(file, home, depth) {
   }
   return { kind: "ok", value: found };
 }
-async function alacrittyFont(launcher, env2, glyphs) {
-  const home = os_default.homedir();
+async function alacrittyFont(launcher, env2, glyphs, home) {
   const config2 = alacrittyConfigPaths(home, env2.XDG_CONFIG_HOME).find(
     (p2) => fs_default.existsSync(p2)
   );
@@ -68556,10 +68551,10 @@ async function alacrittyFont(launcher, env2, glyphs) {
 }
 var READERS = {
   iterm2: itermFont,
-  alacritty: (launcher, _version, env2, glyphs) => alacrittyFont(launcher, env2, glyphs)
+  alacritty: (launcher, _version, env2, glyphs, home) => alacrittyFont(launcher, env2, glyphs, home)
 };
-function fontInUse(launcher, terminal, env2, glyphs) {
-  return READERS[terminal.name](launcher, terminal.version, env2, glyphs);
+function fontInUse(launcher, terminal, env2, glyphs, home) {
+  return READERS[terminal.name](launcher, terminal.version, env2, glyphs, home);
 }
 
 // src/doctor/post-mortems-read.ts
@@ -68744,7 +68739,7 @@ async function daemons(launcher) {
     category: "doctor.daemons",
     // The start time as the table writes it, in one format whatever the
     // user's locale and zone (src/daemon/process-fingerprint.ts).
-    env: { ...process_default.env, LC_ALL: "C", TZ: "UTC" }
+    envOverlay: { LC_ALL: "C", TZ: "UTC" }
   });
   if (!run3.ok) {
     const detail = run3.error ?? `${run3.reason}: ${run3.stderr.trim()}`;
@@ -68764,13 +68759,14 @@ async function probeTmux(launcher, hint) {
   if (run3.kind === "failed") return { kind: "failed", reason: run3.reason };
   return parseTmuxClient(run3.stdout);
 }
-function productionEdge(launcher, loadConfig3) {
+function productionEdge(launcher, loadConfig2, host) {
   return {
     probeTmux: (hint) => probeTmux(launcher, hint),
     remoteLogin: (pid2) => remoteLogin(launcher, pid2),
-    fontInUse: (terminal, env2, glyphs) => fontInUse(launcher, terminal, env2, glyphs),
-    loadConfig: loadConfig3,
-    managedSettingsDir: process_default.env.CC_CANDYBAR_CLAUDE_MANAGED_DIR ?? claudeManagedSettingsDir(process_default.platform),
+    fontInUse: (terminal, env2, glyphs) => fontInUse(launcher, terminal, env2, glyphs, host.home),
+    loadConfig: loadConfig2,
+    home: host.home,
+    managedSettingsDir: host.env.CC_CANDYBAR_CLAUDE_MANAGED_DIR ?? claudeManagedSettingsDir(process_default.platform),
     install: productionInstallEdge,
     daemons: () => daemons(launcher),
     forge: (cwd2) => forgeLogin(launcher, cwd2),
@@ -68829,7 +68825,7 @@ async function forgeLogin(launcher, cwd2) {
       bin: "git",
       args: [...REMOTES_ARGS],
       cwd: cwd2,
-      env: { ...process_default.env, GIT_OPTIONAL_LOCKS: "0" },
+      envOverlay: { GIT_OPTIONAL_LOCKS: "0" },
       timeoutMs: 2e3,
       category: "doctor.forge"
     })
@@ -69052,7 +69048,9 @@ async function gatherFacts(edge, hints, origin, sessionPick, serving, rateLimits
       {
         managedDir: edge.managedSettingsDir,
         projectDir: origin.projectDir,
-        userFile: claudeSettingsPath(claudeConfigDir(hints.claudeConfigDir))
+        userFile: claudeSettingsPath(
+          claudeConfigDir(hints.claudeConfigDir, edge.home)
+        )
       },
       bars.kind === "ok" ? bars.value : []
     )
@@ -69574,8 +69572,8 @@ async function clickLaunch(launcher, opts, what, log) {
   );
 }
 var HANDOFF_POLL_MS = 50;
-async function clickHandoff(launcher, opts, what, log, boundMs) {
-  const dir = mkdtempSync(import_node_path30.default.join(tmpdir(), "cc-candybar-handoff-"));
+async function clickHandoff(launcher, opts, what, log, boundMs, tmp) {
+  const dir = mkdtempSync(import_node_path30.default.join(tmp, "cc-candybar-handoff-"));
   try {
     const files = {
       // Unread, and a handed-off browser would write to it for its whole life.
@@ -69824,7 +69822,7 @@ function recordedOrigin(ctx, sid) {
 function reloadIfWritten(ctx, sid, step4) {
   const origin = recordedOrigin(ctx, sid);
   if (origin === null) return;
-  const { path: path42 } = originHome(ctx.stateDir, origin);
+  const { path: path42 } = originHome(ctx, origin);
   if (step4.some((c) => c.kind === "file" && c.file === path42)) {
     ctx.reloadConfig(origin);
   }
@@ -69842,9 +69840,10 @@ function nestOf(ctx, sid) {
   const origin = recordedOrigin(ctx, sid);
   return origin === null ? NO_NEST : disclosureNest(ctx.configFor(origin));
 }
-function originHome(stateDir2, origin) {
+function originHome(ctx, origin) {
   return durableConfig(
-    repoConfigs(stateDir2).read(),
+    ctx.locations,
+    repoConfigs(ctx.stateDir).read(),
     origin.projectDir,
     origin.cwd,
     origin.target.path
@@ -69871,7 +69870,7 @@ var setConfig = async (rawValue, ctx) => {
   }
   const result = gate2.validate(key, incoming);
   if (!result.ok) throw new BadVerbArgs(`set-config: ${result.reason}`);
-  const home = originHome(ctx.stateDir, origin);
+  const home = originHome(ctx, origin);
   const landing = durableLanding(
     config2,
     (k) => ctx.sessionState.get(sid, k),
@@ -69909,7 +69908,7 @@ var stepConfig = async (rawValue, ctx) => {
       `step-config: key "${key}" is not a bounded (range) config key (have keys: ${gate2.listKeys().join(", ")})`
     );
   }
-  const home = originHome(ctx.stateDir, origin);
+  const home = originHome(ctx, origin);
   const landing = durableLanding(
     config2,
     (k) => ctx.sessionState.get(sid, k),
@@ -69951,7 +69950,7 @@ var save = async (value, ctx) => {
     return [d.target, result.value];
   });
   gatePlacements("save", gate2, placements);
-  const home = originHome(ctx.stateDir, origin);
+  const home = originHome(ctx, origin);
   writeDrafts(editStore(ctx, sid), home, pairs2, placements);
   ctx.reloadConfig(origin);
   for (const key of [
@@ -69991,7 +69990,7 @@ var savePreset = async (value, ctx) => {
     return [d.configKey, result.value];
   });
   gatePlacements("save-preset", gate2, snapshot.placements);
-  const home = originHome(ctx.stateDir, origin);
+  const home = originHome(ctx, origin);
   const name = writePreset(
     editStore(ctx, sid),
     home,
@@ -70027,7 +70026,7 @@ var saveThemeDefault = async (value, ctx) => {
       "save-theme-default: the theme is chosen by a rule (globals.palette), so there is no name to save as a theme's default \u2014 pick one in the menu first"
     );
   }
-  const home = originHome(ctx.stateDir, origin);
+  const home = originHome(ctx, origin);
   writeThemeDefault(editStore(ctx, sid), home, save2.theme, save2.look);
   ctx.reloadConfig(origin);
   const pick2 = (key) => ctx.sessionState.get(sid, key);
@@ -70052,7 +70051,7 @@ var deletePreset2 = async (value, ctx) => {
     );
   }
   const origin = sessionOrigin(ctx, sid);
-  const home = originHome(ctx.stateDir, origin);
+  const home = originHome(ctx, origin);
   deletePreset(editStore(ctx, sid), home, name);
   ctx.reloadConfig(origin);
   const key = SETTINGS.preset.sessionKey;
@@ -70070,7 +70069,7 @@ var resetConfig = async (value, ctx) => {
       `reset-config: unknown config key "${unknown.join('", "')}" (have: ${known.join(", ")})`
     );
   }
-  const home = originHome(ctx.stateDir, origin);
+  const home = originHome(ctx, origin);
   const layers = keys2.map(resetLayers);
   const fileKeys = layers.flatMap((l) => l.fileKeys);
   const sessionKeys = layers.flatMap((l) => l.sessionKeys);
@@ -70127,7 +70126,7 @@ var applyLayoutOp2 = async (rawValue, ctx) => {
       `apply-layout-op: "${result.value}" is not a layout op token`
     );
   }
-  const home = originHome(ctx.stateDir, origin);
+  const home = originHome(ctx, origin);
   const placed2 = applyLayoutOp(editStore(ctx, sid), home, key, op);
   ctx.reloadConfig(origin);
   const released = endedSessionKeys(
@@ -70445,15 +70444,16 @@ function runOf2([sessionId2 = "", action2 = "", evaluated2 = "", mac = ""], ctx)
     argv: [program, ...args],
     // [LAW:single-enforcer] The session's process environment, the action's
     // own variables over it.
-    env: {
-      ...sessionEnv(process_default.env, {
+    envOverlay: {
+      ...sessionEnv({
         sessionId: sid,
         projectDir: origin.projectDir,
         claudeConfigDir: sessionHints(ctx, sid).claudeConfigDir
       }),
       ...drawn.env
     },
-    cwd: decl.cwd,
+    // The bundled config's runs go in the user's home.
+    cwd: decl.cwd ?? ctx.locations.home,
     // The loader proved every name a declared source of this config, whose
     // state holds its key.
     refreshes: decl.refreshes.map((name) => ({
@@ -70500,7 +70500,7 @@ var repoConfig = async (value, ctx) => {
   );
   ctx.reloadConfig(sessionOrigin(ctx, sid));
 };
-var loadConfig2 = async (value, ctx) => {
+var loadConfig = async (value, ctx) => {
   const slash2 = value.indexOf("/");
   if (slash2 === -1) {
     throw new BadVerbArgs(
@@ -70531,7 +70531,7 @@ var loadConfig2 = async (value, ctx) => {
 };
 var LEAF_VERBS = /* @__PURE__ */ new Map([
   [VERB_COPY, inTurn(copy)],
-  [VERB_LOAD_CONFIG, inTurn(loadConfig2)],
+  [VERB_LOAD_CONFIG, inTurn(loadConfig)],
   [VERB_OPEN_VSCODE, inTurn(openVscode)],
   [VERB_SET_STATE, inTurn(setState)],
   [VERB_STEP_STATE, inTurn(stepState)],
@@ -70922,7 +70922,7 @@ var Runs = class {
       // looked up on PATH.
       bin: program.includes("/") ? import_node_path31.default.resolve(run3.cwd, program) : program,
       args,
-      env: run3.env,
+      envOverlay: run3.envOverlay,
       cwd: run3.cwd,
       timeoutMs: this.timeoutMs,
       signal: abort.signal,
@@ -76298,7 +76298,7 @@ function resolvePath2(obj, dotPath) {
 }
 
 // src/daemon/render-checkpoint.ts
-function parseRenderArgs(args, cwd2) {
+function parseRenderArgs(args, cwd2, home) {
   const { tokens } = (0, import_parseargs.parseArgs)({
     args: args.slice(1),
     // skip binary path
@@ -76322,7 +76322,7 @@ function parseRenderArgs(args, cwd2) {
     }
   });
   return {
-    configFile: explicitConfigPath(cwd2, config2?.value),
+    configFile: explicitConfigPath(cwd2, config2?.value, home),
     // In argv order, each refusal once.
     refusedArgs: refused.filter(
       (r, i) => refused.findIndex((o) => o.arg === r.arg && o.why === r.why) === i
@@ -76337,7 +76337,7 @@ function parseRenderEncoding(raw) {
     problem: `request 'encoding' is not one of ${RENDER_ENCODINGS.join(", ")}: ${JSON.stringify(raw)}`
   };
 }
-function checkRenderRequest(req, stats, log) {
+function checkRenderRequest(req, stats, log, home) {
   const { report: report2 } = validateHookData(req.hookData);
   const wireProblems = [];
   for (const path42 of report2.missingRequired) {
@@ -76378,7 +76378,7 @@ function checkRenderRequest(req, stats, log) {
     }
   }
   const hints = parseClientHints(req);
-  const { configFile, refusedArgs } = parseRenderArgs(req.args, req.cwd);
+  const { configFile, refusedArgs } = parseRenderArgs(req.args, req.cwd, home);
   return {
     ok: true,
     req: {
@@ -76709,14 +76709,17 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     const queuedMs = Math.round(t0 - accepted);
     const facts = [];
     const order2 = ++stats.requestsTotal;
-    const checked = checkRenderRequest(req, stats, parts.log);
+    const checked = checkRenderRequest(req, stats, parts.log, parts.home);
     const sighted = (req2, frame2) => renderSightings.see(
       req2.sessionId,
       {
         client: req2.hints.client ?? null,
         termCols: req2.hints.termCols ?? null,
         rateLimits: req2.rateLimits,
-        claudeConfigDir: claudeConfigDir(req2.hints.claudeConfigDir),
+        claudeConfigDir: claudeConfigDir(
+          req2.hints.claudeConfigDir,
+          parts.home
+        ),
         projectDir: req2.requested.projectDir,
         transcript: transcriptSaid(req2.hookData),
         frame: frame2
@@ -77016,7 +77019,8 @@ async function statusLineClick(parts, value, facts, clientGone) {
     },
     `opening ${click3.url}`,
     parts.log,
-    CLICK_PROGRAM_TIMEOUT_MS
+    CLICK_PROGRAM_TIMEOUT_MS,
+    parts.tmp
   );
   return { kind: "ok" };
 }
@@ -77216,7 +77220,7 @@ async function readStartTime(pid2, launch) {
     // process identically for opaque string equality to be sound. LC_ALL=C fixes
     // the strftime format; TZ=UTC fixes localtime(), so DST / TZ / tzdata changes
     // can't make one live process render two different start-time strings.
-    env: { ...process_default.env, LC_ALL: "C", TZ: "UTC" }
+    envOverlay: { LC_ALL: "C", TZ: "UTC" }
   });
   if (res.ok) {
     const token = res.stdout.trim();
@@ -78214,11 +78218,16 @@ var setTimeout2 = (ms, value) => new Promise((r) => globalThis.setTimeout(() => 
 
 // src/utils/cache.ts
 var CacheManager = class {
-  static CACHE_DIR = cacheDir();
-  static USAGE_CACHE_DIR = import_node_path36.default.join(this.CACHE_DIR, "usage");
-  static LOCKS_DIR = import_node_path36.default.join(this.CACHE_DIR, "locks");
-  static isLocked(name) {
-    const lockFile = import_node_path36.default.join(this.LOCKS_DIR, name);
+  // [LAW:one-source-of-truth] Every method takes the cache's root directory
+  // (the host's `cacheDir`), so the layout under it is derived here alone.
+  static usageDir(root) {
+    return import_node_path36.default.join(root, "usage");
+  }
+  static locksDir(root) {
+    return import_node_path36.default.join(root, "locks");
+  }
+  static isLocked(root, name) {
+    const lockFile = import_node_path36.default.join(this.locksDir(root), name);
     if (!fs_default.existsSync(lockFile)) {
       return false;
     }
@@ -78247,11 +78256,11 @@ var CacheManager = class {
       return true;
     }
   }
-  static async acquireLock(name, timeout = 5e3) {
+  static async acquireLock(root, name, timeout = 5e3) {
     const RETRY_DELAY_MS = 50;
     const FILE_CREATE_FLAG = "wx";
-    await this.ensureCacheDirectories();
-    const lockFile = import_node_path36.default.join(this.LOCKS_DIR, name);
+    await this.ensureCacheDirectories(root);
+    const lockFile = import_node_path36.default.join(this.locksDir(root), name);
     const startTime = Date.now();
     const lockContent = String(process_default.pid);
     while (Date.now() - startTime < timeout) {
@@ -78272,8 +78281,8 @@ var CacheManager = class {
     debug(`Failed to acquire lock for ${name} within ${timeout}ms`);
     return false;
   }
-  static async releaseLock(name) {
-    const lockFile = import_node_path36.default.join(this.LOCKS_DIR, name);
+  static async releaseLock(root, name) {
+    const lockFile = import_node_path36.default.join(this.locksDir(root), name);
     try {
       await fs_default.promises.unlink(lockFile);
       debug(`Lock released for ${name}`);
@@ -78283,12 +78292,12 @@ var CacheManager = class {
       }
     }
   }
-  static async ensureCacheDirectories() {
+  static async ensureCacheDirectories(root) {
     try {
       await Promise.all([
-        fs_default.promises.mkdir(this.CACHE_DIR, { recursive: true }),
-        fs_default.promises.mkdir(this.USAGE_CACHE_DIR, { recursive: true }),
-        fs_default.promises.mkdir(this.LOCKS_DIR, { recursive: true })
+        fs_default.promises.mkdir(root, { recursive: true }),
+        fs_default.promises.mkdir(this.usageDir(root), { recursive: true }),
+        fs_default.promises.mkdir(this.locksDir(root), { recursive: true })
       ]);
     } catch (error) {
       debug("Failed to create cache directories:", error);
@@ -78297,15 +78306,15 @@ var CacheManager = class {
   static createProjectHash(projectPath) {
     return createHash("md5").update(projectPath).digest("hex").substring(0, 8);
   }
-  static async getUsageCache(cacheType, latestMtime) {
+  static async getUsageCache(root, cacheType, latestMtime) {
     const MAX_RETRIES = 3;
     const RETRY_DELAY_MS = 75;
     const FILE_ENCODING = "utf-8";
-    await this.ensureCacheDirectories();
-    const cachePath = import_node_path36.default.join(this.USAGE_CACHE_DIR, `${cacheType}.json`);
+    await this.ensureCacheDirectories(root);
+    const cachePath = import_node_path36.default.join(this.usageDir(root), `${cacheType}.json`);
     const lockName = `${cacheType}.usage.lock`;
     for (let attempt4 = 0; attempt4 < MAX_RETRIES; attempt4++) {
-      const isCurrentlyLocked = this.isLocked(lockName);
+      const isCurrentlyLocked = this.isLocked(root, lockName);
       if (isCurrentlyLocked) {
         debug(`Cache for ${cacheType} is locked, waiting...`);
         await setTimeout2(RETRY_DELAY_MS);
@@ -78348,16 +78357,16 @@ var CacheManager = class {
     }
     return data;
   }
-  static async setUsageCache(cacheType, data, latestMtime) {
+  static async setUsageCache(root, cacheType, data, latestMtime) {
     const lockName = `${cacheType}.usage.lock`;
-    const lockAcquired = await this.acquireLock(lockName);
+    const lockAcquired = await this.acquireLock(root, lockName);
     if (!lockAcquired) {
       debug(`Could not acquire lock to set usage cache for ${cacheType}`);
       return;
     }
     try {
-      await this.ensureCacheDirectories();
-      const cachePath = import_node_path36.default.join(this.USAGE_CACHE_DIR, `${cacheType}.json`);
+      await this.ensureCacheDirectories(root);
+      const cachePath = import_node_path36.default.join(this.usageDir(root), `${cacheType}.json`);
       const cacheTimestamp = latestMtime || Date.now();
       const cacheEntry = {
         data,
@@ -78369,7 +78378,7 @@ var CacheManager = class {
     } catch (error) {
       debug(`Failed to save ${cacheType} usage cache:`, error);
     } finally {
-      await this.releaseLock(lockName);
+      await this.releaseLock(root, lockName);
     }
   }
 };
@@ -78501,16 +78510,17 @@ var PricingService = class {
   static executionCache = null;
   static modelPricingCache = /* @__PURE__ */ new Map();
   static GITHUB_PRICING_URL = "https://raw.githubusercontent.com/promptctl/cc-candybar/main/pricing.json";
-  static async loadDiskCache() {
+  static async loadDiskCache(cacheRoot) {
     const TTL_24H = 24 * 60 * 60 * 1e3;
     const minValidTime = Date.now() - TTL_24H;
     return await CacheManager.getUsageCache(
+      cacheRoot,
       "pricing",
       minValidTime
     );
   }
-  static async saveDiskCache(data) {
-    await CacheManager.setUsageCache("pricing", data);
+  static async saveDiskCache(cacheRoot, data) {
+    await CacheManager.setUsageCache(cacheRoot, "pricing", data);
   }
   static async fetchPricingData() {
     return new Promise((resolve) => {
@@ -78588,14 +78598,14 @@ var PricingService = class {
       request2.end();
     });
   }
-  static async getCurrentPricing() {
+  static async getCurrentPricing(cacheRoot) {
     if (this.executionCache !== null) {
       debug(
         `[CACHE-HIT] Pricing execution cache: ${Object.keys(this.executionCache).length} models`
       );
       return this.executionCache;
     }
-    const diskCached = await this.loadDiskCache();
+    const diskCached = await this.loadDiskCache(cacheRoot);
     if (diskCached) {
       debug(
         `[CACHE-HIT] Pricing disk cache: ${Object.keys(diskCached).length} models`
@@ -78608,7 +78618,7 @@ var PricingService = class {
     }
     const freshData = await this.fetchPricingData();
     if (freshData) {
-      await this.saveDiskCache(freshData);
+      await this.saveDiskCache(cacheRoot, freshData);
       debug(
         `[CACHE-SET] Pricing disk cache stored: ${Object.keys(freshData).length} models`
       );
@@ -78638,12 +78648,12 @@ var PricingService = class {
     }
     return true;
   }
-  static async getModelPricing(modelId) {
+  static async getModelPricing(modelId, cacheRoot) {
     if (this.modelPricingCache.has(modelId)) {
       debug(`[CACHE-HIT] Model pricing cache: ${modelId}`);
       return this.modelPricingCache.get(modelId);
     }
-    const allPricing = await this.getCurrentPricing();
+    const allPricing = await this.getCurrentPricing(cacheRoot);
     let pricing;
     if (allPricing[modelId]) {
       pricing = allPricing[modelId];
@@ -78714,13 +78724,13 @@ var PricingService = class {
       output: 15
     };
   }
-  static async calculateCostForEntry(entry) {
+  static async calculateCostForEntry(entry, cacheRoot) {
     const usage = entry.message?.usage;
     if (!usage) {
       return 0;
     }
     const modelId = this.extractModelId(entry);
-    const pricing = await this.getModelPricing(modelId);
+    const pricing = await this.getModelPricing(modelId, cacheRoot);
     const inputTokens = usage.input_tokens || 0;
     const outputTokens = usage.output_tokens || 0;
     const cacheCreationTokens = usage.cache_creation_input_tokens || 0;
@@ -79042,7 +79052,7 @@ var EMPTY_FILE_FOLD = {
   breakdown: emptyBreakdown(),
   days: /* @__PURE__ */ new Map()
 };
-async function foldFile(state, entries) {
+async function foldFile(state, entries, cacheRoot) {
   const keep2 = dayKey(new Date(seedCutoffMs()));
   let count = state.entries;
   let cost = state.cost;
@@ -79053,7 +79063,7 @@ async function foldFile(state, entries) {
     const u = entry.message?.usage;
     if (!u) continue;
     count++;
-    const priced = entry.costUSD ?? await PricingService.calculateCostForEntry(entry.raw);
+    const priced = entry.costUSD ?? await PricingService.calculateCostForEntry(entry.raw, cacheRoot);
     cost += priced;
     breakdown.input += u.input_tokens || 0;
     breakdown.output += u.output_tokens || 0;
@@ -79178,6 +79188,9 @@ var SessionUsageStore = class {
   // the record (session, speed, today) share it, so it records and logs once.
   requestFlight = new SingleFlight();
   staleAgeMs;
+  // The machine the store reads: where transcripts live, and where the
+  // pricing table is cached.
+  host;
   log;
   renderTally = { hits: 0, misses: 0 };
   ledger;
@@ -79186,7 +79199,8 @@ var SessionUsageStore = class {
   usage;
   sweeps = 0;
   sweepTimer = null;
-  constructor(opts = {}) {
+  constructor(opts) {
+    this.host = opts.host;
     this.log = opts.logger ?? quietLogger;
     this.ledger = opts.ledger ?? new RefreshLedger(this.log);
     this.usage = this.ledger.declare({
@@ -79338,7 +79352,7 @@ var SessionUsageStore = class {
   // frame that reads it. The lane answers the set's day sums once a scan has
   // answered; which day of them is the draw's (`todayAt`).
   declareToday(holds2, claudeConfigDir2) {
-    const claudePaths = getClaudePaths(claudeConfigDir2);
+    const claudePaths = getClaudePaths(claudeConfigDir2, this.host.home);
     const scans = this.scans.declare(holds2, claudePaths);
     const set2 = this.daySet(claudePaths);
     return {
@@ -79535,7 +79549,7 @@ var SessionUsageStore = class {
         filePath2,
         priorFold,
         EMPTY_FILE_FOLD,
-        foldFile
+        (state, entries) => foldFile(state, entries, cacheDir(this.host))
       );
       if (read2.kind === "failed") return read2;
       if (read2.kind === "absent") {
@@ -80708,6 +80722,7 @@ var ManagedStorage = class {
 function createPayloadProviders(opts) {
   const { launcher, logger, ledger } = opts;
   return {
+    home: opts.host.home,
     hostService: new HostService({ logger, ledger }),
     gitProvider: new GitDataProvider({
       inner: new GitService(launcher),
@@ -80715,7 +80730,7 @@ function createPayloadProviders(opts) {
       logger,
       ledger
     }),
-    usageStore: new SessionUsageStore({ logger, ledger }),
+    usageStore: new SessionUsageStore({ host: opts.host, logger, ledger }),
     contextProvider: new ContextProvider({ logger, ledger }),
     metricsProvider: new MetricsProvider({ logger, ledger }),
     activityProvider: new ActivityProvider({ logger, ledger }),
@@ -80970,7 +80985,7 @@ function authoredRoots(config2, raw) {
     )
   );
 }
-function watchTargetsFor(entry) {
+function watchTargetsFor(entry, locs) {
   const { loaded, dropped, unreached } = entry.state.plugins;
   const roots = [
     .../* @__PURE__ */ new Set([
@@ -80980,7 +80995,12 @@ function watchTargetsFor(entry) {
   ];
   return watchTargetsOf({
     named: [
-      ...dslConfigCandidatePaths(entry.projectDir, entry.cwd, entry.configFile),
+      ...dslConfigCandidatePaths(
+        locs,
+        entry.projectDir,
+        entry.cwd,
+        entry.configFile
+      ),
       ...roots,
       ...loaded.map((d) => d.path),
       ...[...dropped, ...unreached].map((d) => d.path),
@@ -81015,7 +81035,8 @@ function loadKey(inputs) {
     chain: {
       layers: chain2.layers,
       home: chain2.home,
-      repo: chain2.repo
+      repo: chain2.repo,
+      locs: chain2.locs
     },
     loaded: {
       layers: loaded.layers.map(
@@ -81066,6 +81087,7 @@ function resolveLoad(cwd2, chain2, storage) {
   const warnings = [];
   try {
     const loaded = loadConfigChain(
+      chain2.locs,
       chain2.layers,
       DEFAULT_DSL_CONFIG,
       { warned: (w) => warnings.push(...w) },
@@ -81101,7 +81123,8 @@ function buildRenderState(load, deps) {
     null,
     deps.ledger,
     deps.fileEvents,
-    deps.watchers
+    deps.watchers,
+    deps.env
   );
   let registration;
   try {
@@ -81206,6 +81229,7 @@ function loadChain(frame2, cwd2, chain2, deps, served = null) {
 function loadFromDisk(projectDir, cwd2, configFile, deps, served = null) {
   const started2 = performance.now();
   const resolution = resolveDslConfig(
+    deps.locations,
     repoConfigs(deps.stateDir).read(),
     projectDir,
     cwd2,
@@ -81215,10 +81239,11 @@ function loadFromDisk(projectDir, cwd2, configFile, deps, served = null) {
   const chain2 = {
     layers: resolution.kind === "chain" ? resolution.layers : [],
     home: resolution.home,
-    repo: repos.plugins
+    repo: repos.plugins,
+    locs: deps.locations
   };
   const advisories = [
-    detectConfigCollisions(projectDir, cwd2),
+    detectConfigCollisions(deps.locations, projectDir, cwd2),
     configResolutionNotice(resolution),
     repoUnreadNotice(repos)
   ];
@@ -81227,7 +81252,7 @@ function loadFromDisk(projectDir, cwd2, configFile, deps, served = null) {
 function fallbackState(cwd2, repo2, deps) {
   const resolved = resolveLoad(
     cwd2,
-    { layers: [], home: "", repo: repo2 },
+    { layers: [], home: "", repo: repo2, locs: deps.locations },
     deps.storage
   );
   const built = resolved.kind === "failed" ? resolved : buildRenderState(resolved, deps);
@@ -81896,7 +81921,7 @@ var RenderCache = class {
     entry.configLayers = loaded.layers;
     entry.configHome = loaded.home;
     entry.repos = loaded.repos;
-    const paths2 = watchTargetsFor(entry);
+    const paths2 = watchTargetsFor(entry, this.deps.locations);
     const { targets, unresolved } = paths2;
     const key = `config:${entry.projectDir}:${entry.cwd}:${entry.configFile ?? ""}:${paths2.key}`;
     const { watch: watch2, move } = this.deps.watchers.follow(
@@ -83901,13 +83926,24 @@ var SYSTEM_CLOCK = {
   after: afterRealTime
 };
 function createDaemon(inputs) {
-  const { bundle, memoryLimitBytes: memoryLimitBytes2, registryUrl, clock, exit: exit2, paths: paths2, gates } = inputs;
+  const {
+    bundle,
+    memoryLimitBytes: memoryLimitBytes2,
+    registryUrl,
+    clock,
+    exit: exit2,
+    paths: paths2,
+    gates,
+    host
+  } = inputs;
+  const locs = locations(host);
   const instant = () => instantOf(clock.date());
   const closing = new AbortController();
   let closed = false;
   const log = (level, msg) => inputs.daemonLog.log(level, closed ? `after close: ${msg}` : msg);
   const stats = new RuntimeStats();
   const launcher = inputs.launcher({
+    inherited: host.env,
     stats: stats.launchStats,
     signal: closing.signal,
     // [LAW:no-silent-failure] Each change in whether what the daemon launches
@@ -83951,6 +83987,7 @@ function createDaemon(inputs) {
   });
   const payloadProviders = createPayloadProviders({
     launcher,
+    host,
     watchers: watcherRegistry,
     fileEvents,
     logger: log,
@@ -83993,7 +84030,7 @@ function createDaemon(inputs) {
       bundle: bundle.path,
       node: bundle.node,
       socket: paths2.socket,
-      preload: stableAttachPreload(bundle.path)
+      preload: stableAttachPreload(bundle.path, host)
     },
     state: sessionState,
     log,
@@ -84073,6 +84110,8 @@ function createDaemon(inputs) {
     {
       launcher,
       stateDir: paths2.state,
+      locations: locs,
+      env: host.env,
       sessionState,
       watchers: watcherRegistry,
       log,
@@ -84173,6 +84212,7 @@ function createDaemon(inputs) {
     gates,
     sessionState,
     stateDir: paths2.state,
+    locations: locs,
     journalTurns,
     clickLanded: (sessionId2) => menuIdle.clicked(sessionId2, instant()),
     log,
@@ -84184,18 +84224,22 @@ function createDaemon(inputs) {
     // [LAW:no-ambient-temporal-coupling] Reloaded first, as a save does: a
     // doctor click is a verdict on the files as they are now, not on
     // whether the fs watcher has caught up with an edit made a moment ago.
-    doctor: inputs.doctorEdge(launcher, (origin) => {
-      const at = [origin.projectDir, origin.cwd, origin.target.path];
-      renderCache.reload(...at, { kind: "doctor" });
-      const entry = renderCache.getOrCreate(...at);
-      return {
-        layers: entry.configLayers,
-        error: entry.lastError,
-        warning: entry.lastWarning,
-        unused: entry.state.unused,
-        config: entry.state.config
-      };
-    }),
+    doctor: inputs.doctorEdge(
+      launcher,
+      (origin) => {
+        const at = [origin.projectDir, origin.cwd, origin.target.path];
+        renderCache.reload(...at, { kind: "doctor" });
+        const entry = renderCache.getOrCreate(...at);
+        return {
+          layers: entry.configLayers,
+          error: entry.lastError,
+          warning: entry.lastWarning,
+          unused: entry.state.unused,
+          config: entry.state.config
+        };
+      },
+      host
+    ),
     doctorStores,
     probes: handlerProbes,
     clients: renderSightings,
@@ -84229,6 +84273,8 @@ function createDaemon(inputs) {
     diagnosticCopy: (sessionId2, by, key) => renderCache.drawnCopy(sessionId2, by, key)
   };
   const parts = {
+    home: host.home,
+    tmp: host.tmp,
     launcher,
     log,
     clock,
@@ -85027,7 +85073,7 @@ function productionLaneEdge(launcher, following, closing) {
       await launcher.launch({
         bin: "claude",
         args: [...args],
-        env: sessionEnv(process_default.env, session),
+        envOverlay: sessionEnv(session),
         timeoutMs: 3e4,
         category: "lane.claude"
       })
@@ -85540,11 +85586,13 @@ var clockAt = (at) => nowSec() - (t - at);
 var id = (prefix) => `${prefix}_${(serial++).toString(36)}`;
 var onClock = ({ headAt, ...rest2 }) => headAt === void 0 ? rest2 : { ...rest2, headTime: Math.floor(clockAt(headAt)) };
 seedWorld(onClock(INITIAL_REPO));
-var paths = daemonPaths(process_default.env);
+var HOST = processWorld().host;
+var paths = daemonPaths(HOST);
 var pageDaemon = createDaemon({
   ...productionAdapters(paths, new DaemonLog(paths.log)),
   gates: daemonGates(),
   paths,
+  host: HOST,
   bundle: {
     entryUrl: "file:///app/dist/index.mjs",
     digest: null,
@@ -85556,7 +85604,7 @@ var pageDaemon = createDaemon({
     session: EPHEMERAL_SESSION_STORAGE,
     history: EPHEMERAL_HISTORY_STORAGE
   }),
-  memoryLimitBytes: memoryLimitBytes(process_default.env),
+  memoryLimitBytes: memoryLimitBytes(HOST.env),
   registryUrl: REGISTRY_URL,
   clock: SYSTEM_CLOCK,
   exit: (code) => {
