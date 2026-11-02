@@ -105,6 +105,7 @@ function configureBar(src: string, preset?: string) {
   durable.seedOrigin(sessionState, SID);
   const rig = buildRig({
     source: src,
+    sessionId: SID,
     sessionState,
     history: durable.historyFor(sessionState),
     host: durable.host,

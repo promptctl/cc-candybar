@@ -80,6 +80,7 @@ function themeBar(src: string) {
   durable.seedOrigin(sessionState, SID);
   const rig = buildRig({
     source: src,
+    sessionId: SID,
     sessionState,
     history: durable.historyFor(sessionState),
     host: durable.host,

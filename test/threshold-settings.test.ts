@@ -61,6 +61,7 @@ function thresholdBar(src: string, utilization: number) {
     label: "<test>",
     base: DEFAULT_DSL_CONFIG,
     palettes: ALLOWED,
+    sessionId: SID,
     sessionState,
     history: durable.historyFor(sessionState),
     host: durable.host,

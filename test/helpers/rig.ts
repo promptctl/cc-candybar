@@ -17,7 +17,10 @@
 
 import { DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
 import type { DslConfig, ValidatedConfig } from "../../src/config/dsl-types";
-import { knownOptionDomainNames } from "../../src/config/option-domain";
+import {
+  knownOptionDomainNames,
+  resolveOptionDomain,
+} from "../../src/config/option-domain";
 import { SessionState } from "../../src/daemon/session-state";
 import {
   compileDslConfig,
@@ -122,9 +125,11 @@ export interface Rig {
 // throughout by type, and a runtime freeze would reach `DEFAULT_DSL_CONFIG`'s
 // own decl objects (`mergeWithDefault` is shallow), which a test does not own.
 //
-// A parse also reads the option-domain registry, so the key carries the names
-// registered when it ran: a test that registers a domain around a parse never
-// shares it with one that does not.
+// A parse also reads the option-domain registry (cross-ref resolves a `from` to
+// its members), so the key carries each registered domain's members as they
+// stood when it ran: a test that registers a domain around a parse never shares
+// it with one that does not, nor with one that registered the same name over
+// other members.
 const parses = new WeakMap<DslConfig, Map<string, ValidatedConfig>>();
 
 // A compile is shared by what a compile takes: its config (the key) and its
@@ -136,13 +141,27 @@ const parses = new WeakMap<DslConfig, Map<string, ValidatedConfig>>();
 // and one test file's draws run one at a time; an overlap would throw.
 const compiles = new WeakMap<LinkSigner, Map<string, CompiledConfig>>();
 
-function held<K extends object, V>(memo: WeakMap<K, Map<string, V>>, key: K): Map<string, V> {
+function held<K extends object, V>(
+  memo: WeakMap<K, Map<string, V>>,
+  key: K,
+): Map<string, V> {
   let entries = memo.get(key);
   if (entries === undefined) {
     entries = new Map();
     memo.set(key, entries);
   }
   return entries;
+}
+
+function registeredDomains(): readonly (readonly [
+  string,
+  readonly string[],
+])[] {
+  const none = new Map();
+  return knownOptionDomainNames(none).map((name) => [
+    name,
+    resolveOptionDomain(name, none).members,
+  ]);
 }
 
 /** The parse of `source` over `base`, built once and handed to every rig that asks. */
@@ -157,7 +176,7 @@ export function parsedConfig(
     label,
     source,
     [...palettes].sort(),
-    knownOptionDomainNames(new Map()),
+    registeredDomains(),
   ]);
   let config = entries.get(key);
   if (config === undefined) {
@@ -209,7 +228,10 @@ export function buildRig(init: RigInit = {}): Rig {
     sharedCompile(init.signer ?? TEST_SIGNER),
     EVERY_SCOPE,
   );
-  const compiled = { ...registered.compiled, loadWarnings: registered.loadWarnings };
+  const compiled = {
+    ...registered.compiled,
+    loadWarnings: registered.loadWarnings,
+  };
   if (init.rendered ?? true) recordRender(sessionState, sessionId, cwd);
   const ctx = testVerbContext(sessionState, init.history, config, init.host);
   return {
@@ -230,7 +252,8 @@ export function buildRig(init: RigInit = {}): Rig {
         draw.at ?? instantOf(new Date()),
         { ...RIG_OPTS, ...draw.opts },
         draw.observers,
-        draw.selection ?? selectionFor(config, {}, (key) => sessionState.get(sessionId, key)),
+        draw.selection ??
+          selectionFor(config, {}, (key) => sessionState.get(sessionId, key)),
       ),
     click: (url) => clickUrl(url, ctx),
     dispose: () => registry.dispose(),
