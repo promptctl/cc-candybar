@@ -8,6 +8,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   readdirSync,
   rmSync,
   writeFileSync,
@@ -39,6 +40,7 @@ import {
   type InWorkerDaemon,
 } from "../../helpers/in-worker-daemon";
 import { JEST_TMP_PREFIX, jestTmpDir, jestTmpOwner } from "../../helpers/jest-tmp";
+import { LEDGER_ENV, TEST_FILE_ENV, parseLedger } from "../../helpers/process-tier.cjs";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import { throughout, until } from "../../helpers/until";
 
@@ -95,6 +97,21 @@ describe("a daemon in this worker", () => {
       "the bar the click widened",
     );
     expect(await renderLines(env, sid, 2)).not.toEqual([]);
+  });
+
+  // [LAW:verifiable-goals] The boot judge sees a daemon built here only by this
+  // line, so a harness that stopped writing it would let any file boot one. Only
+  // this file's worker writes lines under its name, so the count of those is not
+  // moved by a concurrent worker's.
+  test("a start is on the ledger as a harness boot, by the file that built it", () => {
+    const ledger = process.env[LEDGER_ENV]!;
+    const file = process.env[TEST_FILE_ENV]!;
+    const booted = () =>
+      parseLedger(readFileSync(ledger, "utf8")).filter((start) => start.file === file);
+    const before = booted().length;
+    daemon = startDaemon(env);
+    expect(booted().slice(before)).toEqual([{ file, route: "harness" }]);
+    expect(file).toBe("test/daemon-boots/worker/in-worker-daemon.test.ts");
   });
 
   // [LAW:verifiable-goals] An answer carries a failed click's error only once

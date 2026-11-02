@@ -32,6 +32,14 @@ import type { DaemonLogger } from "../../src/utils/logger";
 import type { DaemonEndpoint } from "./daemon-wire";
 import type { StartBarDaemon } from "./drive-bar";
 import { memoryConnection } from "./memory-connection";
+import { LEDGER_ENV, TEST_FILE_ENV, recordDaemonStart } from "./process-tier.cjs";
+
+// [LAW:single-enforcer] What a boot here is recorded with. `startDaemon` replaces
+// the worker's env with the case's own, which holds neither, so both are read
+// once as this module loads, before a case places anything. Both exist by then:
+// global setup made the ledger, and test/setup-after-env.ts named the file.
+const LEDGER = process.env[LEDGER_ENV]!;
+const TEST_FILE = process.env[TEST_FILE_ENV] ?? null;
 
 export type DaemonOverrides = Partial<Omit<DaemonInputs, "storage">> & {
   readonly storage?: (log: DaemonLogger) => Partial<DaemonStorage>;
@@ -98,6 +106,9 @@ export function heldClock(start: Date = new Date()): HeldClock {
 // Delivery unstarted is `unmeasured` with nothing missed, and adds no warning
 // (src/daemon/cache/file-events.ts).
 export function buildDaemon(overrides: DaemonOverrides = {}): Daemon {
+  // [LAW:nothing-unseen] Every daemon built in a worker comes through here, so the
+  // judge sees each one by the file that built it, as it sees a real daemon.
+  recordDaemonStart({ ledger: LEDGER, file: TEST_FILE, route: "harness" });
   fs.mkdirSync(stateDir(), { recursive: true });
   return createDaemon({
     bundle: bundleAt(path.join(stateDir(), "checkout")),

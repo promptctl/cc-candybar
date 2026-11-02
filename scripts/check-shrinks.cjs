@@ -1,6 +1,8 @@
 #!/usr/bin/env node
-// Fails when a JSON list gained an entry since a base commit: a transitional
-// list may shrink and never grow. Usage: check-shrinks.cjs <file> <base-sha>.
+// Fails when a JSON file grew since a base commit: a transitional list may shrink
+// and never grow. The file is a list of strings (an entry added grows it) or an
+// object of numbers (a value raised, or a key added, grows it).
+// Usage: check-shrinks.cjs <file> <base-sha>.
 // It fetches the base itself, because CI's checkout is depth 1 and holds no base
 // commit, and fails loudly, naming the ref, when it cannot read it.
 //
@@ -15,16 +17,42 @@ function addedEntries(base, head) {
   return head.filter((entry) => !base.includes(entry));
 }
 
+/**
+ * @param {Readonly<Record<string, number>>} base
+ * @param {Readonly<Record<string, number>>} head
+ * @returns {string[]} each key whose number rose, or that the base lacked
+ */
+function risenCounts(base, head) {
+  return Object.entries(head)
+    .filter(([key, value]) => !(key in base) || value > base[key])
+    .map(([key, value]) => (key in base ? `${key} ${base[key]} -> ${value}` : `${key} (new, ${value})`));
+}
+
 function git(args) {
   return execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 }
 
-function listOf(text, source) {
-  const list = JSON.parse(text);
-  if (!Array.isArray(list) || list.some((entry) => typeof entry !== "string")) {
-    throw new Error(`${source} must hold a JSON list of strings`);
+// [LAW:one-source-of-truth] A file's shape says how it grows, so one reader names
+// both, and a comparison across shapes is an error and not a pass.
+function shrinkableOf(text, source) {
+  const value = JSON.parse(text);
+  if (Array.isArray(value) && value.every((entry) => typeof entry === "string")) {
+    return { kind: "list", value };
   }
-  return list;
+  if (
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.values(value).every((n) => Number.isInteger(n) && n >= 0)
+  ) {
+    return { kind: "counts", value };
+  }
+  throw new Error(`${source} must hold a JSON list of strings or an object of non-negative integers`);
+}
+
+function grownBy(base, head, file, sha) {
+  if (base.kind !== head.kind) throw new Error(`${file} was a ${base.kind} at ${sha} and is a ${head.kind} now`);
+  return base.kind === "list" ? addedEntries(base.value, head.value) : risenCounts(base.value, head.value);
 }
 
 function main(file, sha) {
@@ -42,14 +70,19 @@ function main(file, sha) {
     return;
   }
   const baseText = git(["show", `${sha}:${file}`]);
-  const added = addedEntries(listOf(baseText, `${file} at ${sha}`), listOf(readFileSync(file, "utf8"), file));
-  if (added.length > 0) {
-    throw new Error(`${file} grew since ${sha}: ${added.join(", ")}. The list may only shrink.`);
+  const grown = grownBy(
+    shrinkableOf(baseText, `${file} at ${sha}`),
+    shrinkableOf(readFileSync(file, "utf8"), file),
+    file,
+    sha,
+  );
+  if (grown.length > 0) {
+    throw new Error(`${file} grew since ${sha}: ${grown.join(", ")}. It may only shrink.`);
   }
   console.log(`${file} did not grow since ${sha}`);
 }
 
-module.exports = { addedEntries };
+module.exports = { addedEntries, risenCounts };
 
 if (require.main === module) {
   try {

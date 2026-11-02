@@ -34,6 +34,12 @@ jobs:
         if: github.event_name == 'pull_request'
         run: node scripts/check-shrinks.cjs test/transitional-daemon-workflows/excused-workflows.json ${{ github.event.pull_request.base.sha }}
 
+      # The ratchet on daemon boots only falls: its case count and the ceiling on
+      # real daemon starts are numbers in one file (test/transitional-daemon-boots).
+      - name: Daemon-boot ratchet only falls
+        if: github.event_name == 'pull_request'
+        run: node scripts/check-shrinks.cjs test/transitional-daemon-boots/ratchet.json ${{ github.event.pull_request.base.sha }}
+
       - name: Lint
         run: pnpm run lint
 
@@ -74,6 +80,14 @@ jobs:
 
       - name: Rust tests (spawn-boundary guard)
         run: cargo test --manifest-path rust-client/Cargo.toml
+
+      # [LAW:single-enforcer] The cases under test/daemon-boots/ equal the ratchet,
+      # counted from the two booting runs' records. `always()` so a red test run
+      # still says what the count was, and before the report so the records it
+      # reads exist.
+      - name: Daemon-boot cases equal the ratchet
+        if: always()
+        run: node scripts/check-boot-ratchet.mjs --runs worker,process
 
       # One record per test file, kept so a number about the suite is read from
       # a run and not remembered. `always()` because a red run is the one whose
