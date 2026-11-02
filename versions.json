@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-563",
+      "ref": "refs/pull/563/merge",
+      "sha": "4b0a34219382e22ac3ed465f8b84ab63ac8d2c5d",
+      "timestamp": "2026-11-02T11:39:38.771Z",
+      "commits": [
+        {
+          "sha": "4b0a34219382e22ac3ed465f8b84ab63ac8d2c5d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T11:38:50Z",
+          "message": "Merge 2c8b1ee310fe0390821ae670e63e49b49f741099 into 9b26334ab54c1c9fbad087ff535c804d167c9ce5\n"
+        },
+        {
+          "sha": "2c8b1ee310fe0390821ae670e63e49b49f741099",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T04:38:28-07:00",
+          "message": "fix(launch): the daemon's launcher carries no launchSync at runtime; narrow the processLauncher owners (candybar-launch-q7o7.4em)\n"
+        },
+        {
+          "sha": "fca394107925139470874abf46abec8d756f702d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T04:32:14-07:00",
+          "message": "refactor(launch): Launcher loses launchSync; OneShotLauncher is the only type offering it (candybar-launch-q7o7.4em)\n\nDaemon code holds a Launcher, which has no name for the launch that holds the loop to pipe EOF, so tsc refuses the next one added there. Install, plugin install, the doctor's CLI probe and the at-exit tmux restore take the process's oneShotLauncher, which eslint's owned imports confine to them.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-564",
       "ref": "refs/pull/564/merge",
       "sha": "361260566ca51c4460e2c41b29849523ed782a12",
@@ -42,28 +71,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T04:35:02-07:00",
           "message": "feat(site): site:dev serves the live bar and reloads it; the bar gets a font size slider (#517)\n\n* feat(site): site:dev serves the live bar and reloads it on every rebuild\n\n* feat(site): the live bar's font size is a control, and starts larger\n\n* feat(site): the live bar's font size is a slider\n\n* fix(site): the dev server watches the page, binds loopback, and refuses unknown flags; the font size is parsed where it is read\n\nThe page and its font are esbuild entry points copied as they are, so the watch covers an edit to index.html and the plain build and the served build share one path. The server binds 127.0.0.1 (--port picks another). Flags are parsed strictly. A stored font size is parsed at the border (a whole number inside the slider's range, else the default), storage that cannot be used says so on the status line, and the label, preload and term read one size.\n\n* fix(site): a port is parsed strictly and only with --serve; the font size is kept when the drag ends\n\n--port without --serve and an empty --port no longer pass silently. The slider stores its size on change, so a storage failure is reported once per drag. The site tests share one build helper and clean up whatever they make.\n\n* fix(site): more than one output directory is refused"
-        }
-      ]
-    },
-    {
-      "version": "pr-563",
-      "ref": "refs/pull/563/merge",
-      "sha": "79cdd0149956bf91440d5cdc20770a141826951f",
-      "timestamp": "2026-11-02T11:33:44.028Z",
-      "commits": [
-        {
-          "sha": "79cdd0149956bf91440d5cdc20770a141826951f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T04:32:33-07:00",
-          "message": "Merge fca394107925139470874abf46abec8d756f702d into ecc5a9d77a7c5be79a3a6fd09167de0b8deb838e\n"
-        },
-        {
-          "sha": "fca394107925139470874abf46abec8d756f702d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T04:32:14-07:00",
-          "message": "refactor(launch): Launcher loses launchSync; OneShotLauncher is the only type offering it (candybar-launch-q7o7.4em)\n\nDaemon code holds a Launcher, which has no name for the launch that holds the loop to pipe EOF, so tsc refuses the next one added there. Install, plugin install, the doctor's CLI probe and the at-exit tmux restore take the process's oneShotLauncher, which eslint's owned imports confine to them.\n"
         }
       ]
     },

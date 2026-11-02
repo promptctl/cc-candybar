@@ -23917,12 +23917,15 @@ function endJob(pid2, status, end) {
   return { stands, signalled };
 }
 function createLauncher(owner) {
-  return createOneShotLauncher(owner);
+  return launcherWithState(owner).launcher;
 }
 function createOneShotLauncher(owner) {
+  const { launcher, state } = launcherWithState(owner);
+  return { ...launcher, launchSync: (opts) => launchBlocking(state, opts) };
+}
+function launcherWithState(owner) {
   const launcher = {
     launch: (opts) => track(state, launchWaited(state, opts)),
-    launchSync: (opts) => launchBlocking(state, opts),
     launchDetachedSync: (opts) => launchOrphan(state, opts),
     launchJobSync: (opts, files) => launchJob(state, opts, files),
     lifelineWarnings: () => lifelineWarnings(state),
@@ -23965,7 +23968,7 @@ function createOneShotLauncher(owner) {
     },
     { once: true }
   );
-  return launcher;
+  return { launcher, state };
 }
 var oneShotLauncher = createOneShotLauncher({});
 
@@ -84524,8 +84527,7 @@ function createDaemon(inputs) {
         // the journal in flight commits what landed; none opens after.
         ["journalTurns close", () => journalTurns.close()],
         // [LAW:single-enforcer] Every tmux status line this daemon laid out is put
-        // back before it goes (src/daemon/tmux-status.ts). It runs tmux, so it
-        // comes before the abort that ends the daemon's launches.
+        // back before it goes (src/daemon/tmux-status.ts).
         ["tmuxStatusLines restore", () => tmuxStatusLines.restoreAll(atExit)],
         // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, what
         // is in flight is terminated, whichever owner's work it was, and the
