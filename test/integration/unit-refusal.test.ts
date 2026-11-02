@@ -7,9 +7,9 @@ import { FS_DESCRIPTOR_OPS } from "../helpers/unit-refusal";
 import { MODULES, routesIn } from "../helpers/unit-refusal-routes";
 
 // The unit config run over fixtures that each reach for something a unit test may
-// not. A refusal unplugged from jest.unit.config.js (through the real config,
-// which the fixtures use) turns the fixture that only it fails green, and its
-// case here red. Real jest child processes: nothing else shows the project
+// not, run through jest.unit-fixtures.config.js (the unit config with the fixtures
+// as its roots). A refusal unplugged from test/unit-setup.ts turns the fixture
+// that only it fails green, and its case here red. Real jest child processes: nothing else shows the project
 // refuses what it names, at the call and with the test named.
 
 const ROOT = resolve(__dirname, "../..");
