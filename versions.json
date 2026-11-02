@@ -4,15 +4,22 @@
     {
       "version": "pr-587",
       "ref": "refs/pull/587/merge",
-      "sha": "5386a0c40d3e4ad331cfbe8f5145ffe537c10d5f",
-      "timestamp": "2026-11-02T22:56:35.179Z",
+      "sha": "e03f1f3d4ceabfb19b2888602d0757040343a08c",
+      "timestamp": "2026-11-02T23:11:35.317Z",
       "commits": [
         {
-          "sha": "5386a0c40d3e4ad331cfbe8f5145ffe537c10d5f",
+          "sha": "e03f1f3d4ceabfb19b2888602d0757040343a08c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T15:55:35-07:00",
-          "message": "Merge f8282f3611d73a29ffbf1e6231193d7f4242c696 into 9409f66cd2ae1e887b92aeceb049c33b3c75787f\n"
+          "timestamp": "2026-11-02T23:10:26Z",
+          "message": "Merge 8b56f678268acef36a480cbb448d1140f9e3f9c3 into 9409f66cd2ae1e887b92aeceb049c33b3c75787f\n"
+        },
+        {
+          "sha": "8b56f678268acef36a480cbb448d1140f9e3f9c3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T16:10:11-07:00",
+          "message": "test(rig): review fixes — undo-redo keeps its seeded origin, rig records its cwd, configure-mode keeps width 200 (candybar-testing-ihvy.4k6)\n"
         },
         {
           "sha": "f8282f3611d73a29ffbf1e6231193d7f4242c696",
