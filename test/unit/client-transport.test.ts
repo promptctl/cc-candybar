@@ -7,6 +7,7 @@
 
 import {
   describeFailure,
+  interpretException,
   interpretResponse,
 } from "../../src/daemon/client-transport";
 import type {
@@ -32,6 +33,29 @@ test("the daemon's TIMEOUT reads as busy, not as a client timeout", () => {
   });
 });
 
+// A dead daemon never times out (a missing socket is ENOENT, an unbound one
+// ECONNREFUSED, both immediate), so a client timeout is a listener that has not
+// answered: a kick's candidate would lose the bind to it. The connect's timeout
+// and the deadline's reach the classifier as these two messages.
+test.each(["CONNECT_TIMEOUT", "TIMEOUT"])(
+  "a client %s reads as busy, so nothing is kicked",
+  (message) => {
+    expect(interpretException(new Error(message))).toEqual({
+      kind: "busy",
+      message,
+    });
+  },
+);
+
+test("a dead daemon's immediate refusals stay transient", () => {
+  for (const code of ["ECONNREFUSED", "ENOENT"]) {
+    expect(interpretException(new Error(`connect ${code}`))).toMatchObject({
+      kind: "transient",
+      cause: "unreachable",
+    });
+  }
+});
+
 describe("describeFailure", () => {
   test("a busy daemon carries no spawn hint", () => {
     const text = describeFailure({ kind: "busy", message: "x" });
@@ -40,11 +64,7 @@ describe("describeFailure", () => {
   });
 
   test("every transient cause a dead daemon explains carries the spawn hint", () => {
-    const causes: TransientOutcome["cause"][] = [
-      "unreachable",
-      "timeout",
-      "io_error",
-    ];
+    const causes: TransientOutcome["cause"][] = ["unreachable", "io_error"];
     for (const cause of causes) {
       const text = describeFailure({ kind: "transient", cause, message: "x" });
       expect(text).toContain(HINT);

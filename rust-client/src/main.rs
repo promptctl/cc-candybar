@@ -75,9 +75,10 @@ fn main() {
     // recovery semantics. Four branches:
     //   Ok        — print and persist for stale-fallback.
     //   Transient — kick a fresh daemon, emit stale frame or "\n".
-    //   Busy      — the daemon answered TIMEOUT, so it is up: emit the stale
-    //               frame or "\n" and do NOT kick (a candidate would lose the
-    //               bind to the live daemon, once per render).
+    //   Busy      — a daemon holds the socket: it answered TIMEOUT, or this
+    //               client's clock ran out. Emit the stale frame or "\n" and
+    //               do NOT kick (a candidate would lose the bind to the live
+    //               daemon, once per render).
     //   Permanent — daemon refused our request; respawning will not help.
     //               Emit a diagnostic and do NOT kick. Mirrors the Node
     //               caller in src/index.ts. Kicking on every failure was
@@ -245,7 +246,8 @@ fn dist_index_path() -> Option<PathBuf> {
 
 // [LAW:types-are-the-program] Mirrors ClientOutcome in src/daemon/client.ts.
 // The variant *is* the recovery decision: Transient warrants a kick; Busy
-// (the daemon's own TIMEOUT) and Permanent do not. Conflating them — which is
+// (a live daemon that ran out of time: its own TIMEOUT, or this client's clock
+// on the connect or the deadline) and Permanent do not. Conflating them — which is
 // what the previous shape did, returning Result<String, _> with everything
 // bucketed into a single failure tag — was the load-bearing half of the
 // 452-corpse spiral (kz8.5).
@@ -262,9 +264,6 @@ pub enum RenderOutcome {
 #[allow(dead_code)] // payload strings read only via Debug
 pub enum TransientCause {
     Unreachable(String),
-    // This client's own clock ran out. Not the daemon's TIMEOUT reply, which
-    // is RenderOutcome::Busy.
-    Timeout,
     Io(String),
 }
 
@@ -456,6 +455,14 @@ fn interpret_response(resp: serde_json::Value) -> RenderOutcome {
 // cause; unknown kinds fall through to Io. We never silently bucket
 // these into a stringified failure that loses the recovery signal.
 //
+// [LAW:one-type-per-behavior] TimedOut/WouldBlock are Busy, as the daemon's own
+// TIMEOUT is. A dead daemon never times out: a missing socket file is NotFound
+// and an unbound one ConnectionRefused, both immediate. So a timeout, on the
+// connect or after it, means a listener holds the socket and the live owner
+// would win the bind against a kick's candidate. The one miss: a starved
+// client whose timer beats that immediate error reports a dead daemon busy,
+// and the next tick kicks it. Mirrors `interpretException`.
+//
 // [LAW:one-type-per-behavior] InvalidData/InvalidInput come from
 // write_frame/read_frame when the protocol layer detects an oversized
 // frame — that is a protocol violation, not a connection failure. The
@@ -468,7 +475,7 @@ fn classify_io_error(e: io::Error) -> RenderOutcome {
         ConnectionRefused | NotFound => {
             RenderOutcome::Transient(TransientCause::Unreachable(e.to_string()))
         }
-        TimedOut | WouldBlock => RenderOutcome::Transient(TransientCause::Timeout),
+        TimedOut | WouldBlock => RenderOutcome::Busy,
         InvalidData | InvalidInput => {
             RenderOutcome::Permanent(PermanentCause::MalformedResponse(e.to_string()))
         }
@@ -1380,11 +1387,20 @@ mod tests {
             nf,
             RenderOutcome::Transient(TransientCause::Unreachable(_))
         ));
-        let to = classify_io_error(io::Error::from(io::ErrorKind::TimedOut));
-        assert!(matches!(
-            to,
-            RenderOutcome::Transient(TransientCause::Timeout)
-        ));
+    }
+
+    // The connect's timeout and the read/write deadline both surface as these
+    // kinds, so one pin covers a listener that never accepted and one that
+    // accepted and never answered.
+    #[test]
+    fn classify_io_error_routes_client_timeouts_to_busy() {
+        for kind in [io::ErrorKind::TimedOut, io::ErrorKind::WouldBlock] {
+            let busy = classify_io_error(io::Error::from(kind));
+            assert!(
+                matches!(busy, RenderOutcome::Busy),
+                "{kind:?} must not kick a live daemon, got: {busy:?}"
+            );
+        }
     }
 
     #[test]

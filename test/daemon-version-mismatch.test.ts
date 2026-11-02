@@ -262,13 +262,6 @@ describe("ClientOutcome typing (kz8.5 chunk 1)", () => {
     ).toBe(true);
     expect(
       kickWorthy({
-        kind: "transient",
-        cause: "timeout",
-        message: "any",
-      }),
-    ).toBe(true);
-    expect(
-      kickWorthy({
         kind: "permanent",
         cause: "version_mismatch",
         clientV: 3,
@@ -580,7 +573,6 @@ describe("planOutcome decides kick vs. no-kick per variant (kz8.5 chunk 1+4)", (
   test("every transient cause kicks and carries a debug message", () => {
     const transientCauses: TransientOutcome["cause"][] = [
       "unreachable",
-      "timeout",
       "io_error",
     ];
     for (const cause of transientCauses) {
@@ -602,7 +594,7 @@ describe("planOutcome decides kick vs. no-kick per variant (kz8.5 chunk 1+4)", (
 
   // The daemon answered, so it is up: a kick would spawn a candidate that
   // loses the bind to it. The Rust client's Busy variant agrees.
-  test("a busy render does not kick: the daemon that answered is alive", () => {
+  test("a busy render does not kick: a daemon holds the socket", () => {
     const plan = planOutcome({ kind: "busy", message: "anything" });
     expect(plan).toMatchObject({ kick: false, output: "\n" });
     expect(plan.debug).toContain("busy");
