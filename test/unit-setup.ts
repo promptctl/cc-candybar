@@ -66,7 +66,7 @@ function guardModule(
     } else if (typeof value === "function" && functions(key)) {
       copy[key] = guard(surface, name, value as AnyFn);
     } else if (key === "promises" && typeof value === "object" && value !== null) {
-      copy[key] = guardModule("filesystem", "fs.promises", value as Record<string, unknown>, { functions: () => true });
+      copy[key] = guardModule(surface, name, value as Record<string, unknown>, { functions, classes });
     } else if (key === "scheduler" && moduleName === "timers/promises") {
       copy[key] = { wait: refusing(surface, `${name}.wait`), yield: refusing(surface, `${name}.yield`) };
     } else {
@@ -82,17 +82,17 @@ const lookups = (key: string) => /^(lookup|resolve|reverse)/.test(key);
 const timers = among("setTimeout", "setInterval", "setImmediate");
 
 const MODULES: Array<[Surface, string, Guarding]> = [
-  ["filesystem", "fs", { functions: lowercase, classes: ["WriteStream", "FSWatcher"] }],
+  ["filesystem", "fs", { functions: lowercase, classes: ["ReadStream", "WriteStream", "FSWatcher"] }],
   ["filesystem", "fs/promises", { functions: () => true }],
   ["child process", "child_process", { functions: lowercase, classes: ["ChildProcess"] }],
-  ["socket", "net", { functions: among("createServer", "connect", "createConnection"), classes: ["Socket", "Server"] }],
+  ["socket", "net", { functions: among("createServer", "connect", "createConnection"), classes: ["Socket", "Server", "Stream"] }],
   ["socket", "tls", { functions: among("createServer", "connect"), classes: ["TLSSocket", "Server"] }],
   ["socket", "dgram", { functions: among("createSocket"), classes: ["Socket"] }],
-  ["network", "http", { functions: among("createServer", "request", "get"), classes: ["Server"] }],
+  ["network", "http", { functions: among("createServer", "request", "get"), classes: ["Server", "ClientRequest"] }],
   ["network", "https", { functions: among("createServer", "request", "get"), classes: ["Server"] }],
   ["network", "http2", { functions: among("createServer", "createSecureServer", "connect") }],
-  ["network", "dns", { functions: lookups }],
-  ["network", "dns/promises", { functions: lookups }],
+  ["network", "dns", { functions: lookups, classes: ["Resolver"] }],
+  ["network", "dns/promises", { functions: lookups, classes: ["Resolver"] }],
   // Jest's fake timers install on the sandbox's globals and leave these
   // modules on real time, so nothing here has a fake to defer to.
   ["clock", "timers", { functions: timers }],
@@ -157,6 +157,14 @@ g.performance = new Proxy(performance, {
   set: (target, key, value) => Reflect.set(target, key, value === guardedNow ? nativeNow : value),
 });
 
+// AbortSignal is a class a test shares with jest, so it is wrapped and not
+// written to; its one clock route is the static timeout.
+const guardedTimeout = refusing("clock", "AbortSignal.timeout");
+g.AbortSignal = new Proxy(AbortSignal, {
+  get: (target, key) => (key === "timeout" ? guardedTimeout : Reflect.get(target, key, target)),
+});
+
+process.uptime = refusing("clock", "process.uptime") as typeof process.uptime;
 process.hrtime = Object.assign(refusing("clock", "process.hrtime"), {
   bigint: refusing("clock", "process.hrtime.bigint"),
 }) as unknown as NodeJS.HRTime;

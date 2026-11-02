@@ -65,6 +65,11 @@ test.each([
   ["reads what a run left in the checkout", "filesystem", "fs.readFileSync("],
   ["sleeps on timers/promises", "clock", "timers/promises.setTimeout("],
   ["constructs a socket", "socket", "new net.Socket("],
+  ["constructs an http request", "network", "new http.ClientRequest("],
+  ["constructs a dns resolver", "network", "new dns.Resolver("],
+  ["constructs a file read stream", "filesystem", "new fs.ReadStream("],
+  ["starts an abort timeout", "clock", "AbortSignal.timeout("],
+  ["reads process uptime", "clock", "process.uptime("],
   ["waits on a real timer after fake time ended", "clock", "setTimeout("],
   ["reads the wall clock after fake time ended", "clock", "Date.now("],
 ])("a unit test that %s fails at the call", (title, surface, call) => {

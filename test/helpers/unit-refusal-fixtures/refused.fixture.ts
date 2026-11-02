@@ -1,3 +1,4 @@
+import dns from "node:dns";
 import fs from "node:fs";
 import http from "node:http";
 import net from "node:net";
@@ -63,4 +64,25 @@ test("sleeps on timers/promises", async () => {
 
 test("constructs a socket", () => {
   new net.Socket();
+});
+
+test("constructs an http request", () => {
+  new http.ClientRequest("http://127.0.0.1:1");
+});
+
+test("constructs a dns resolver", () => {
+  new dns.Resolver();
+});
+
+test("constructs a file read stream", () => {
+  const ReadStream = fs.ReadStream as unknown as new (file: string) => unknown;
+  new ReadStream(path.join(os.tmpdir(), "unit-refusal-fixture"));
+});
+
+test("starts an abort timeout", () => {
+  AbortSignal.timeout(1);
+});
+
+test("reads process uptime", () => {
+  process.uptime();
 });

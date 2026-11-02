@@ -6,8 +6,8 @@ import {
   parseReleaseVersion,
   REGISTRY_URL,
   type Currency,
-} from "../../src/install/currency";
-import { ABSENT, failed, ok } from "../../src/utils/outcome";
+} from "../src/install/currency";
+import { ABSENT, failed, ok } from "../src/utils/outcome";
 
 const PKG = "@promptctl/cc-candybar";
 const DIST_TAGS_URL = `${REGISTRY_URL}/-/package/${encodeURIComponent(PKG)}/dist-tags`;
