@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-572",
+      "ref": "refs/pull/572/merge",
+      "sha": "303f8c75bddfa713d67b7a2e5d0241c4c364eb08",
+      "timestamp": "2026-11-02T13:23:06.325Z",
+      "commits": [
+        {
+          "sha": "303f8c75bddfa713d67b7a2e5d0241c4c364eb08",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T06:20:14-07:00",
+          "message": "Merge 97ef73186e67639dc5c8f150ac2a09f0e8a83565 into 6d91c387cf1c1c941185bbc0ee4fc9247e21e41b\n"
+        },
+        {
+          "sha": "97ef73186e67639dc5c8f150ac2a09f0e8a83565",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T06:20:01-07:00",
+          "message": "fix(lanes): a bar pane is split and tagged in one tmux invocation (candybar-launch-q7o7.0oo)\n\nA daemon closing between the split and its set-option refused the tag,\nleaving a bar pane pane off could not find. A pane-scoped after-split-window\nhook now tags the new pane inside the split's own command queue; a failed\nsplit removes the hook so it cannot tag the user's next split.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-571",
       "ref": "refs/pull/571/merge",
       "sha": "ea859a5fa7cc6d2770429378cfe98f50dd5ab8f3",
