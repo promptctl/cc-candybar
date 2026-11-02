@@ -23828,7 +23828,8 @@ var JOB_SCRIPT = `out=$1 err=$2 status=$3; shift 3; read go || exit 0; "$@" >"$o
 function launchJob(state, opts, files) {
   const { stats } = state.scope;
   const refused = admit(state, opts.category);
-  if (refused !== null) return { ok: false, error: refused.error };
+  if (refused !== null)
+    return { ok: false, reason: refused.reason, error: refused.error };
   const t0 = Date.now();
   stats?.onStart(opts.category);
   let child;
@@ -23854,7 +23855,11 @@ function launchJob(state, opts, files) {
     );
   } catch (err) {
     stats?.onEnd(opts.category, Date.now() - t0);
-    return { ok: false, error: spawnErrorText(err, opts.cwd) };
+    return {
+      ok: false,
+      reason: "spawn-error",
+      error: spawnErrorText(err, opts.cwd)
+    };
   }
   stats?.onEnd(opts.category, Date.now() - t0);
   child.once("error", () => {
@@ -23867,6 +23872,7 @@ function launchJob(state, opts, files) {
     gate2.destroy();
     return {
       ok: false,
+      reason: "spawn-error",
       error: `spawn(/bin/sh): no pid (shell not found or unexecutable)`
     };
   }
@@ -69873,49 +69879,78 @@ function oneArg(value) {
   return decodeWire(() => decodeURIComponent(value));
 }
 var CLICK_PROGRAM_TIMEOUT_MS = 5e3;
+function clickFailed(end, what, log) {
+  if (end.reason === "rate-limited") {
+    log("warn", `${what} rate-limited: ${end.said}`);
+    return;
+  }
+  if (end.reason === "aborted") throw new DaemonClosing(what);
+  throw new Error(
+    `${what} failed (${end.reason}, exit ${end.exitCode ?? "null"})${end.said === "" ? "" : `: ${end.said}`}`
+  );
+}
 async function clickLaunch(launcher, opts, what, log) {
   const result = await launcher.launch({
     ...opts,
     timeoutMs: CLICK_PROGRAM_TIMEOUT_MS
   });
   if (result.ok) return;
-  if (result.reason === "rate-limited") {
-    log("warn", `${opts.category} rate-limited: ${result.error ?? ""}`);
-    return;
-  }
-  if (result.reason === "aborted") throw new DaemonClosing(what);
-  const said = result.error ?? result.stderr.trim();
-  throw new Error(
-    `${what} failed (${result.reason}, exit ${result.exitCode ?? "null"})${said === "" ? "" : `: ${said}`}`
+  clickFailed(
+    {
+      reason: result.reason,
+      exitCode: result.exitCode,
+      said: result.error ?? result.stderr.trim()
+    },
+    what,
+    log
   );
 }
 var HANDOFF_POLL_MS = 50;
-async function clickHandoff(launcher, opts, what) {
+async function clickHandoff(launcher, opts, what, log, boundMs) {
   const dir = mkdtempSync(import_node_path31.default.join(tmpdir(), "cc-candybar-handoff-"));
   try {
     const files = {
-      stdout: import_node_path31.default.join(dir, "stdout"),
+      // Unread, and a handed-off browser would write to it for its whole life.
+      stdout: "/dev/null",
       stderr: import_node_path31.default.join(dir, "stderr"),
       status: import_node_path31.default.join(dir, "status")
     };
     const job = launcher.launchJobSync(opts, files);
-    if (!job.ok) throw new Error(`${what} failed (spawn-error): ${job.error}`);
+    if (!job.ok) {
+      clickFailed(
+        { reason: job.reason, exitCode: null, said: job.error },
+        what,
+        log
+      );
+      return;
+    }
     job.release();
-    const deadline = Date.now() + CLICK_PROGRAM_TIMEOUT_MS;
+    const deadline = Date.now() + boundMs;
     for (; ; ) {
+      const alive = jobGroupAlive(job.pid);
       const end = readJobEnd(files.status);
       if (end?.kind === "exit") {
         if (end.code === 0) return;
-        const said = readFileSync(files.stderr, "utf8").trim();
-        throw new Error(
-          `${what} failed (non-zero, exit ${end.code})${said === "" ? "" : `: ${said}`}`
+        clickFailed(
+          {
+            reason: "non-zero",
+            exitCode: end.code,
+            said: readFileSync(files.stderr, "utf8").trim()
+          },
+          what,
+          log
         );
+        return;
       }
+      if (!alive)
+        throw new Error(
+          `${what} failed (lost): the opener ended with no verdict`
+        );
       if (Date.now() >= deadline) return;
       await new Promise((resolve) => setTimeout(resolve, HANDOFF_POLL_MS));
     }
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true, maxRetries: 3 });
   }
 }
 function pbcopy(text4, ctx) {
@@ -77483,7 +77518,9 @@ async function statusLineClick(parts, value, facts, clientGone) {
       args: [click3.url],
       category: "click.open"
     },
-    `opening ${click3.url}`
+    `opening ${click3.url}`,
+    parts.log,
+    CLICK_PROGRAM_TIMEOUT_MS
   );
   return { kind: "ok" };
 }
