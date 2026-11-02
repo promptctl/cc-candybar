@@ -1,3 +1,9 @@
+## [1.178.1](https://github.com/promptctl/cc-candybar/compare/v1.178.0...v1.178.1) (2026-11-01)
+
+### Bug Fixes
+
+* **render:** a cell wider than its line wraps across lines (candybar-isolated-daemon-bfab.pe6) ([#555](https://github.com/promptctl/cc-candybar/issues/555)) ([62b28e2](https://github.com/promptctl/cc-candybar/commit/62b28e2b95ed10f4a7c35fc2dca80ca8550e41e5))
+
 ## [1.178.0](https://github.com/promptctl/cc-candybar/compare/v1.177.2...v1.178.0) (2026-11-01)
 
 ### Features
