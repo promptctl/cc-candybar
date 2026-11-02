@@ -4,15 +4,22 @@
     {
       "version": "pr-560",
       "ref": "refs/pull/560/merge",
-      "sha": "21734a50daec1c83dc60b92f56b7d1b058f2286c",
-      "timestamp": "2026-11-02T10:56:07.111Z",
+      "sha": "eab47103bc416ff760541671560c1dca88dad7fa",
+      "timestamp": "2026-11-02T10:58:26.415Z",
       "commits": [
         {
-          "sha": "21734a50daec1c83dc60b92f56b7d1b058f2286c",
+          "sha": "eab47103bc416ff760541671560c1dca88dad7fa",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T03:55:21-07:00",
-          "message": "Merge 6c31deedb47944c6fda8c2d898a007f4d72c96bc into 040ba694b11dd01c6bce64b56acd016dabbf0578\n"
+          "timestamp": "2026-11-02T10:57:26Z",
+          "message": "Merge 6fb23e5ceac4b397304224649f9057321c401bb2 into 040ba694b11dd01c6bce64b56acd016dabbf0578\n"
+        },
+        {
+          "sha": "6fb23e5ceac4b397304224649f9057321c401bb2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T03:57:14-07:00",
+          "message": "docs(daemon): keep the user-config figure behind the draw reserve; process runs land within it (candybar-launch-q7o7.qjw)\n"
         },
         {
           "sha": "6c31deedb47944c6fda8c2d898a007f4d72c96bc",
