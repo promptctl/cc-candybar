@@ -91,9 +91,10 @@ const RATE_WINDOW_S = 1;
 // system clock being slewed moves the wall against the timer's clock by well
 // under a millisecond across the longest wait, the still period — past the
 // bound, that last term costs one extra draw, never a frame drawn before its
-// change. A timer firing early is not in the bound: `fire` waits it out. A frame is drawn for the instant it was set for
-// within this of the wall, so a frame set for a change shows it however its
-// timer fires, and a wall clock stepped back is followed at the next draw.
+// change. A timer firing early is not in the bound: `fire` waits it out. A
+// frame is drawn for the instant it was set for within this of the wall, so a
+// frame set for a change shows it however its timer fires, and a wall clock
+// stepped back is followed at the next draw.
 const TIMER_RESOLUTION_S = 0.002;
 
 // A subscriber: each frame's bar, which a lane drawing it elsewhere encodes,
