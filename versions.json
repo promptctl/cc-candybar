@@ -4,15 +4,22 @@
     {
       "version": "pr-587",
       "ref": "refs/pull/587/merge",
-      "sha": "e03f1f3d4ceabfb19b2888602d0757040343a08c",
-      "timestamp": "2026-11-02T23:11:35.317Z",
+      "sha": "37e384d81184a2c8a2bd17d823d4d93c5b0c75fc",
+      "timestamp": "2026-11-02T23:19:05.316Z",
       "commits": [
         {
-          "sha": "e03f1f3d4ceabfb19b2888602d0757040343a08c",
+          "sha": "37e384d81184a2c8a2bd17d823d4d93c5b0c75fc",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T23:10:26Z",
-          "message": "Merge 8b56f678268acef36a480cbb448d1140f9e3f9c3 into 9409f66cd2ae1e887b92aeceb049c33b3c75787f\n"
+          "timestamp": "2026-11-02T16:17:28-07:00",
+          "message": "Merge 0167f56f6c8833c8098527543baddd3089fb99a1 into 9409f66cd2ae1e887b92aeceb049c33b3c75787f\n"
+        },
+        {
+          "sha": "0167f56f6c8833c8098527543baddd3089fb99a1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T16:17:08-07:00",
+          "message": "test(rig): the parse cache keys on the registered option domains (candybar-testing-ihvy.4k6)\n"
         },
         {
           "sha": "8b56f678268acef36a480cbb448d1140f9e3f9c3",
