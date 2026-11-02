@@ -159,13 +159,15 @@ export class DaemonLog {
   // by an exit listener after this one — is written as it is logged.
   private exiting = false;
   private exitListener: (() => void) | null = null;
+  // Set by dispose: nothing registers or holds a resource for this log again.
+  private disposed = false;
 
   constructor(private readonly filePath: string) {}
 
   // One line, to the log: the daemon's `DaemonLogger`.
   readonly log = (level: LogLevel, msg: string): void => {
     const line = logLine(level, msg);
-    if (this.exitListener === null) {
+    if (this.exitListener === null && !this.disposed) {
       this.exitListener = () => {
         this.exiting = true;
         this.writeWaitingSync(true, EXIT_WAIT_MS);
@@ -213,13 +215,17 @@ export class DaemonLog {
 
   // The log of a daemon that is done with it: its descriptor and its exit
   // listener go, so a process that builds many logs holds none of the ended
-  // ones. A line logged after still reaches the file, through a fresh open.
+  // ones. A line logged after still reaches the file, through an open its flush
+  // ends, and is not written at the process's exit. A flush under way ends the
+  // descriptor itself: closed from here, its number could go to the next file
+  // opened while a write still holds it.
   dispose(): void {
+    this.disposed = true;
     if (this.exitListener !== null) {
       process.off("exit", this.exitListener);
       this.exitListener = null;
     }
-    this.closeSink();
+    if (!this.flushing) this.closeSink();
   }
 
   private closeSink(): void {
@@ -283,6 +289,7 @@ export class DaemonLog {
       }
     } finally {
       this.flushing = false;
+      if (this.disposed) this.closeSink();
       for (const resolve of this.drainedWaiters.splice(0)) resolve();
     }
   }

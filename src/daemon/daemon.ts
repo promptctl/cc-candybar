@@ -227,8 +227,8 @@ export interface Daemon {
 // [LAW:no-shared-mutable-globals] One daemon is live in a process at a time,
 // because the gates' keyspaces (verbs/state-validators.ts, config-validators.ts)
 // are module state, which an armed daemon's update notice writes. What says so
-// is the live daemon's closing signal, written only by `createDaemon`.
-// candybar-testing-ihvy.42w moves the keyspaces into a value and deletes this.
+// is the live daemon's closing signal, written only by `createDaemon`. The
+// keyspaces held as a value on the daemon make this guard unnecessary.
 let liveDaemon: AbortSignal | null = null;
 
 export function createDaemon(inputs: DaemonInputs): Daemon {

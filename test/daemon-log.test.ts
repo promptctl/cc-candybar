@@ -277,3 +277,54 @@ describe("DaemonLog", () => {
     }
   });
 });
+
+// A log that is done with holds nothing a process that builds many would
+// accumulate: its exit listener and its descriptor.
+describe("a disposed DaemonLog", () => {
+  test("a line logged after still reaches the file, and registers no exit listener", async () => {
+    await withFreshLog(
+      () => {},
+      async (dlog, logFile, drained, log) => {
+        const before = process.listenerCount("exit");
+        log.dispose();
+        dlog("info", "after");
+        await drained();
+        expect(fs.readFileSync(logFile, "utf8")).toMatch(/\[info\] after\n$/);
+        expect(process.listenerCount("exit")).toBe(before);
+      },
+    );
+  });
+
+  test("a flush under way when it is disposed ends the descriptor it opens", async () => {
+    const opened: number[] = [];
+    const realOpen = fs.open;
+    const openSpy = jest
+      .spyOn(fs, "open")
+      .mockImplementation(((...args: unknown[]) => {
+        const cb = args.at(-1) as (err: Error | null, fd: number) => void;
+        (realOpen as (...a: unknown[]) => void)(
+          ...args.slice(0, -1),
+          (err: Error | null, fd: number) => {
+            if (err === null) opened.push(fd);
+            cb(err, fd);
+          },
+        );
+      }) as typeof fs.open);
+    const closeSpy = jest.spyOn(fs, "closeSync");
+    try {
+      await withFreshLog(
+        () => {},
+        async (dlog, _logFile, drained, log) => {
+          dlog("info", "mid-flush");
+          log.dispose();
+          await drained();
+          expect(opened).toHaveLength(1);
+          expect(closeSpy).toHaveBeenCalledWith(opened[0]);
+        },
+      );
+    } finally {
+      openSpy.mockRestore();
+      closeSpy.mockRestore();
+    }
+  });
+});
