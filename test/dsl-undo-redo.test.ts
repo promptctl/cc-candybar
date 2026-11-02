@@ -46,6 +46,7 @@ import type { VerbContext } from "../src/daemon/verbs";
 import { deriveConfigActionValidators } from "../src/daemon/foundations/config-validators";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { instantOf } from "../src/utils/instant";
+import { systemTimekeeper } from "../src/time";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -161,7 +162,7 @@ function buildRuntime(
   const sessionState = shared?.sessionState ?? new SessionState();
   const history = shared?.history ?? durable.historyFor(sessionState);
   durable.seedOrigin(sessionState, sessionId);
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const render = (): Frame =>

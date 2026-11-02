@@ -36,6 +36,7 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { instantOf } from "../src/utils/instant";
 import { lastClickError } from "../src/daemon/click-error";
+import { systemTimekeeper } from "../src/time";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = "s1";
@@ -64,7 +65,7 @@ function buildRuntime(src: string, utilization: number) {
   const config = load(src);
   const sessionState = new SessionState();
   durable.seedOrigin(sessionState, SID);
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   const render = (): Frame =>

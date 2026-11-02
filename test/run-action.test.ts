@@ -185,7 +185,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
   });
   const sessionState = new SessionState();
   const cache = new RenderCache<SessionSource>(
-    { stateDir: stateDir(HOST), locations: locs(), env: HOST.env,
+    { clock: systemTimekeeper, stateDir: stateDir(HOST), locations: locs(), env: HOST.env,
       launcher: processLauncher,
       sessionState,
       watchers,
@@ -339,7 +339,7 @@ describe("a run's declaration", () => {
 
   test("a plugin's run loads: its refreshes under its namespace, its folder the directory it runs in", () => {
     const r = rig();
-    const loaded = loadFromDisk(dir, dir, config(["mine"]), { stateDir: stateDir(HOST), locations: locs(), env: HOST.env,
+    const loaded = loadFromDisk(dir, dir, config(["mine"]), { clock: systemTimekeeper, stateDir: stateDir(HOST), locations: locs(), env: HOST.env,
       launcher: processLauncher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
@@ -365,7 +365,7 @@ describe("a run's declaration", () => {
       "conf/config.json5",
       `{ plugins: ["../p/plugin.json5"], actions: { mine: { run: ["true"], refreshes: ["${STATUS}"] } }, segments: { mine: { template: '{{ action "mine" "m" }}' } }, root: { h: ["mine"] } }`,
     );
-    const loaded = loadFromDisk(dir, dir, file, { stateDir: stateDir(HOST), locations: locs(), env: HOST.env,
+    const loaded = loadFromDisk(dir, dir, file, { clock: systemTimekeeper, stateDir: stateDir(HOST), locations: locs(), env: HOST.env,
       launcher: processLauncher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,

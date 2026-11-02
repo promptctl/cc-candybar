@@ -32,6 +32,7 @@ import {
   type Pending,
   type Reading,
 } from "../utils/outcome.js";
+import type { Timekeeper } from "../time";
 
 // [LAW:types-are-the-program] How the store holds a derived value. A
 // `computed` keeps its answer until what it read changes. A `projection` reads
@@ -81,12 +82,13 @@ class BoxNode implements VarNode {
     readonly name: string,
     readonly type: VarType,
     initial: VarValue | Pending,
+    private readonly clock: Pick<Timekeeper, "now">,
   ) {
     // What a box holds before anything has written it, when nothing may stand
     // in for its first value: an input before its view's first payload.
     if (!unwritten(initial)) assertType(name, type, initial, "initial value");
     this.cell = observable.box(initial, { deep: false });
-    this.lastChangedAt = unwritten(initial) ? null : Date.now();
+    this.lastChangedAt = unwritten(initial) ? null : clock.now();
   }
 
   // [LAW:types-are-the-program] Not written yet is not a value: it is read as
@@ -116,7 +118,7 @@ class BoxNode implements VarNode {
     // that `equals` changed no test.
     if (Object.is(this.cell.get(), value)) return;
     this.cell.set(value);
-    this.lastChangedAt = Date.now();
+    this.lastChangedAt = this.clock.now();
   }
 
   lastUpdatedMs(): number | null {
@@ -313,9 +315,10 @@ class DocumentCell implements DocumentNode {
   constructor(
     readonly name: string,
     initial: Reading<JsonValue>,
+    private readonly clock: Pick<Timekeeper, "now">,
   ) {
     this.cell = observable.box(shaped(initial), { deep: false });
-    this.lastChangedAt = initial.kind === "pending" ? null : Date.now();
+    this.lastChangedAt = initial.kind === "pending" ? null : clock.now();
   }
 
   read(): Reading<JsonValue> {
@@ -330,7 +333,7 @@ class DocumentCell implements DocumentNode {
     // enforce what this line already decided.
     if (sameDocument(this.cell.get(), next)) return;
     this.cell.set(next);
-    this.lastChangedAt = Date.now();
+    this.lastChangedAt = this.clock.now();
   }
 
   lastUpdatedMs(): number | null {
@@ -421,7 +424,12 @@ function assertType(
 // a directory value is one node however many sessions read it.
 
 export class VariableStore {
-  constructor(private readonly parent: VariableStore | null = null) {}
+  // [LAW:one-source-of-truth] `clock` stamps when each box and document last
+  // changed; a child store reads the same one as its parent.
+  constructor(
+    readonly clock: Timekeeper,
+    private readonly parent: VariableStore | null = null,
+  ) {}
 
   // [LAW:no-ambient-temporal-coupling] Which names are declared is itself
   // observable: a reaction that read a name before its declaration (a cache
@@ -433,11 +441,11 @@ export class VariableStore {
   });
 
   defineBox(name: string, type: VarType, initial: VarValue | Pending): void {
-    this.declare(name, new BoxNode(name, type, initial));
+    this.declare(name, new BoxNode(name, type, initial, this.clock));
   }
 
   defineDocument(name: string, initial: Reading<JsonValue>): void {
-    this.declare(name, new DocumentCell(name, initial));
+    this.declare(name, new DocumentCell(name, initial, this.clock));
   }
 
   // A document whose reading the deriver computes from what it reads.

@@ -38,6 +38,7 @@ import { cellWidth } from "../src/render/picker";
 import { effectsOf } from "./helpers/click";
 import { VERB_SET_STATE } from "../src/click/wire";
 import { instantOf } from "../src/utils/instant";
+import { systemTimekeeper } from "../src/time";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = "s1";
@@ -72,7 +73,7 @@ function rig(width: number, userSegments = "") {
     DEFAULT_DSL_CONFIG,
   );
   const sessionState = new SessionState();
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   sessionState.set(SID, EDIT_MODE_KEY, "arrange");

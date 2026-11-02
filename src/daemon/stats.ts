@@ -21,6 +21,7 @@ import type { LaunchCategory } from "../proc/launch";
 import type { LaunchStatsHandle } from "../proc/stats-handle";
 import { PROTOCOL_VERSION } from "./protocol";
 import { PACKAGE_VERSION } from "../version";
+import type { Timekeeper } from "../time";
 
 // Rolling window for "last minute" counts. Keep timestamps for each launch in
 // a ring buffer; eviction happens lazily on read.
@@ -185,12 +186,18 @@ export interface StatsSnapshot {
 }
 
 export class RuntimeStats {
-  readonly startedAt = new Date();
+  readonly startedAt: Date;
   requestsTotal = 0;
   requestsErrored = 0;
   requestsTimedOut = 0;
   inFlight = 0;
   private readonly unknownHookFields = new Set<string>();
+
+  // [LAW:one-source-of-truth] The daemon's clock, which these counters read
+  // like everything else the daemon times.
+  constructor(private readonly clock: Pick<Timekeeper, "now">) {
+    this.startedAt = new Date(clock.now());
+  }
 
   // Whether `field` is the first sight of that unknown hook field in this
   // daemon's life: every request carries it, so it is said once.
@@ -256,7 +263,7 @@ export class RuntimeStats {
   };
 
   private recordRollingNow(): void {
-    const now = Date.now();
+    const now = this.clock.now();
     if (this.rollingTimestamps.length < ROLLING_BUFFER_CAP) {
       this.rollingTimestamps.push(now);
       return;
@@ -284,7 +291,7 @@ export class RuntimeStats {
   }
 
   private snapshotSubprocesses(): StatsSnapshot["subprocesses"] {
-    const cutoff = Date.now() - ROLLING_WINDOW_MS;
+    const cutoff = this.clock.now() - ROLLING_WINDOW_MS;
     let lastMinute = 0;
     for (const ts of this.rollingTimestamps) {
       if (ts >= cutoff) lastMinute++;
@@ -332,7 +339,7 @@ export class RuntimeStats {
   // one reads; comparing against the producer's own output, not a second
   // spelling of the type, means a field added here is checked for there.
   static referenceSnapshot(): StatsSnapshot {
-    return new RuntimeStats().snapshot({
+    return new RuntimeStats({ now: () => 0 }).snapshot({
       gitCache: {
         size: 0,
         held: 0,
@@ -445,7 +452,9 @@ export class RuntimeStats {
       sourceDigest: extras.sourceDigest,
       protocolVersion: PROTOCOL_VERSION,
       startedAt: this.startedAt.toISOString(),
-      uptimeSec: Math.floor((Date.now() - this.startedAt.getTime()) / 1000),
+      uptimeSec: Math.floor(
+        (this.clock.now() - this.startedAt.getTime()) / 1000,
+      ),
       rssBytes: mem.rss,
       heapUsedBytes: mem.heapUsed,
       heapTotalBytes: mem.heapTotal,

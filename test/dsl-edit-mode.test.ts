@@ -67,6 +67,7 @@ import { contrastRatio } from "@promptctl/rich-js";
 import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
 import { menuMember, menuStateKey } from "../src/config/menu-keys";
 import { instantOf } from "../src/utils/instant";
+import { systemTimekeeper } from "../src/time";
 
 // The colours drawn at `text`'s first character, as hex; either is undefined
 // when none is (a cell drawn with no fill has no bg).
@@ -159,7 +160,7 @@ function buildEditRuntime(src: string, sessionId = "s1") {
   const config = parseAndValidate("<test>", src, ALLOWED);
   const sessionState = new SessionState();
   durable.seedOrigin(sessionState, sessionId);
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const basePalette = getThemePalette("textual-dark"!);
@@ -820,7 +821,7 @@ describe("edit chrome is ordinary segment data — no special-cased render path"
   test("padding applies to a chrome segment exactly like a hand-authored one", () => {
     const config = parseAndValidate("<test>", BASE, ALLOWED);
     const sessionState = new SessionState();
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(processLauncher, store, "", sessionState);
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     const basePalette = getThemePalette("textual-dark"!);

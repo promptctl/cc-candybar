@@ -27,6 +27,7 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { POWERLINE } from "./helpers/powerline";
 import { instantOf } from "../src/utils/instant";
+import { systemTimekeeper } from "../src/time";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -51,7 +52,7 @@ function chevronCount(rendered: Pick<Frame, "rows">): number {
 function render(src: string, hookData: Record<string, unknown>): Frame {
   const config = parseAndValidate("<test>", src, ALLOWED);
   const sessionState = new SessionState();
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   return drawPayload(config, compiled, store, registry, hookData, instantOf(new Date()), OPTS).frame;

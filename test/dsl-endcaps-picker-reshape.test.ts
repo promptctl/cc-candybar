@@ -27,6 +27,7 @@ import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { paletteForThemeName, ENDCAPS_SHAPES } from "../src/themes";
 import { globalsFor } from "./helpers/selection";
 import { instantOf } from "../src/utils/instant";
+import { systemTimekeeper } from "../src/time";
 
 const SID = "s-reshape";
 const BASE_THEME = "textual-dark";
@@ -54,7 +55,7 @@ const ALLOWED = new Set([BASE_THEME]);
 function buildRuntime() {
   const config = parseAndValidate("<reshape>", SRC, ALLOWED);
   const sessionState = new SessionState();
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const basePalette = paletteForThemeName(BASE_THEME);

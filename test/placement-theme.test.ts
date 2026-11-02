@@ -48,6 +48,7 @@ import {
 import { placementDraftKey } from "../src/config/edit-chrome";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { instantOf } from "../src/utils/instant";
+import { systemTimekeeper } from "../src/time";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = "s1";
@@ -85,7 +86,7 @@ const decided = (name: string) => ({
 function buildRuntime(src: string, sessionState = new SessionState()) {
   const config = parseAndValidate("<test>", src, ALLOWED);
   durable.seedOrigin(sessionState, SID);
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   let sink = new Map<string, readonly RichText[]>();

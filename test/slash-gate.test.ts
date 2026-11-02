@@ -45,6 +45,7 @@ import {
   fakeUsage,
   requestPayload,
 } from "./helpers/payload-owners";
+import { systemTimekeeper } from "../src/time";
 
 const SID = "slash-gate";
 const OPTS = {
@@ -108,7 +109,7 @@ async function bar(
   );
 
   const sessionState = new SessionState();
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
   const render = (): Frame =>

@@ -37,6 +37,7 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { deriveActionValidators } from "../src/daemon/foundations/state-validators";
 import { resolveStyleSelection } from "../src/themes";
 import { instantOf } from "../src/utils/instant";
+import { systemTimekeeper } from "../src/time";
 
 const SID = "s-looks";
 const THEME = "textual-dark";
@@ -334,7 +335,7 @@ describe('from: "styles" — rendered options and the derived gate share the con
 
   test("the styles() binding renders one option region per declared name", () => {
     const config = parseAndValidate("<looks>", SRC, ALLOWED);
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(
       processLauncher,
       store,
@@ -391,7 +392,7 @@ describe("style click — live whole-bar recolor over the active theme", () => {
   function buildRuntime() {
     const config = parseAndValidate("<looks>", SRC, ALLOWED);
     const sessionState = new SessionState();
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(processLauncher, store, "", sessionState);
     const compiled = registerDslConfig(config, registry, {
       signer: TEST_SIGNER,
@@ -520,7 +521,7 @@ describe("globals.style as an expression — a style chosen by data", () => {
   function buildRuntime(src = SRC) {
     const config = parseAndValidate("<looks-expr>", src, ALLOWED);
     const sessionState = new SessionState();
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(processLauncher, store, "", sessionState);
     const compiled = registerDslConfig(config, registry, {
       signer: TEST_SIGNER,
@@ -741,7 +742,7 @@ describe("globals.style as an expression — a style chosen by data", () => {
       SRC.replace(/style: '\{\{[^']*\}\}',/, `style: '{{ if .ctx.pct }}hot',`),
       ALLOWED,
     );
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(
       processLauncher,
       store,

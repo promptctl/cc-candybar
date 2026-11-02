@@ -41,6 +41,7 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { instantOf } from "../src/utils/instant";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
+import { systemTimekeeper } from "../src/time";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const load = (source: string): ValidatedConfig =>
@@ -258,7 +259,7 @@ const SID = "theme-defaults";
 // as a compile-only caller that resolves nothing.
 function cellBg(source: string): { daemon: string; compileOnly: string } {
   const config = load(source);
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
   const sink = new Map<string, readonly RichText[]>();

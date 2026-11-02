@@ -36,6 +36,7 @@ import {
 } from "../src/themes";
 import type { Instant } from "../src/utils/instant";
 import { parseAndValidate } from "./helpers/parse-and-validate";
+import { systemTimekeeper } from "../src/time";
 
 const START = 1_800_000_000 as Instant;
 const at = (seconds: number): Instant => (START + seconds) as Instant;
@@ -82,7 +83,7 @@ function renderer(
   session = new SessionState(),
   compiled: CompiledConfig = compileDslConfig(compileInputOf(cfg), TEST_SIGNER),
 ) {
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", session);
   declareDslVariables(cfg, registry, "/tmp", EVERY_SCOPE);
   const opts = {

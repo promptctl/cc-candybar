@@ -17,6 +17,7 @@ import { SessionState } from "../src/daemon/session-state";
 import { STYLE_FLOOR, THEME_FLOOR } from "../src/themes";
 import { PRESET_FLOOR } from "../src/config/presets";
 import { instantOf } from "../src/utils/instant";
+import { systemTimekeeper } from "../src/time";
 
 // The first truecolor background a drawn bar paints.
 const bgOf = ({ rows }: Frame): string | undefined =>
@@ -49,7 +50,7 @@ const SRC = `{
 
 test("a session that has never clicked draws the declared preset and style, not the floors", () => {
   const config = parseAndValidate("<omitted>", SRC, new Set([THEME_FLOOR]));
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
   try {
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });

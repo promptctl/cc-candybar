@@ -8,48 +8,49 @@ import {
   typeOf,
 } from "../src/var-system";
 import { ABSENT, failed, ok, PENDING } from "../src/utils/outcome";
+import { systemTimekeeper } from "../src/time";
 
 describe("VariableStore — boxes", () => {
   it("returns the initial value", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     store.defineBox("count", "number", 7);
     expect(store.read("count")).toBe(7);
   });
 
   it("reflects updates via setBox", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     store.defineBox("name", "string", "alice");
     store.setBox("name", "bob");
     expect(store.read("name")).toBe("bob");
   });
 
   it("rejects an initial value of the wrong type", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     expect(() => store.defineBox("count", "number", "seven" as unknown as number))
       .toThrow(/initial value type string does not match declared type number/);
   });
 
   it("rejects setBox with the wrong type", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     store.defineBox("count", "number", 0);
     expect(() => store.setBox("count", "lots" as unknown as number))
       .toThrow(/set value type string does not match declared type number/);
   });
 
   it("rejects setBox on a computed", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     store.defineComputed("answer", "number", () => 42);
     expect(() => store.setBox("answer", 99))
       .toThrow(/is a computed, not a box/);
   });
 
   it("rejects setBox on an unknown name", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     expect(() => store.setBox("ghost", 1)).toThrow(/Unknown variable "ghost"/);
   });
 
   it("rejects duplicate declarations", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     store.defineBox("x", "number", 1);
     expect(() => store.defineBox("x", "number", 2))
       .toThrow(/already declared/);
@@ -60,7 +61,7 @@ describe("VariableStore — boxes", () => {
 
 describe("VariableStore — computed nodes track dependencies", () => {
   it("re-evaluates when an upstream box changes", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     store.defineBox("a", "number", 1);
     store.defineComputed("doubled", "number", (read) => toNumber(read("a")) * 2);
     expect(store.read("doubled")).toBe(2);
@@ -69,7 +70,7 @@ describe("VariableStore — computed nodes track dependencies", () => {
   });
 
   it("propagates invalidation transitively (computed → computed)", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     store.defineBox("a", "number", 1);
     store.defineComputed("b", "number", (read) => toNumber(read("a")) + 10);
     store.defineComputed("c", "number", (read) => toNumber(read("b")) * 2);
@@ -79,7 +80,7 @@ describe("VariableStore — computed nodes track dependencies", () => {
   });
 
   it("only tracks deps actually read by the deriver", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     store.defineBox("flag", "boolean", false);
     store.defineBox("x", "number", 1);
     store.defineBox("y", "number", 2);
@@ -103,7 +104,7 @@ describe("VariableStore — computed nodes track dependencies", () => {
   });
 
   it("batches multiple setBox calls inside runInAction", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     store.defineBox("a", "number", 1);
     store.defineBox("b", "number", 2);
     let evals = 0;
@@ -123,7 +124,7 @@ describe("VariableStore — computed nodes track dependencies", () => {
   });
 
   it("throws at read time when the computed produces the wrong type", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     store.defineBox("seed", "number", 1);
     store.defineComputed("bogus", "string", (read) => toNumber(read("seed")));
     expect(() => store.read("bogus"))
@@ -131,7 +132,7 @@ describe("VariableStore — computed nodes track dependencies", () => {
   });
 
   it("throws when the deriver reads an unknown variable", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     store.defineComputed("oops", "string", (read) => toString(read("missing")));
     expect(() => store.read("oops")).toThrow(/Unknown variable "missing"/);
   });
@@ -139,7 +140,7 @@ describe("VariableStore — computed nodes track dependencies", () => {
 
 describe("VariableStore — introspection", () => {
   it("reports name, kind, and type", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     store.defineBox("seed", "number", 0);
     store.defineComputed("derived", "string", () => "x");
 
@@ -162,7 +163,7 @@ describe("VariableStore — introspection", () => {
   // plain-JS reach-through), so introspection consumers cannot accidentally
   // bypass setBox + runInAction.
   it("getNode returns a wrapper whose mutation surface is unreachable", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     store.defineBox("seed", "number", 7);
     const node = store.getNode("seed");
 
@@ -182,7 +183,7 @@ describe("VariableStore — introspection", () => {
   it("getNode's wrapper read() reflects subsequent setBox", () => {
     // The wrapper is bound to the underlying node, so values change as
     // the store mutates — it isn't a frozen snapshot.
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     store.defineBox("seed", "number", 7);
     const node = store.getNode("seed");
     expect(node.read()).toBe(7);
@@ -277,7 +278,7 @@ describe("VariableStore — the age records a change, not a write", () => {
 
   it("a box nothing has written has no age until its first write", () => {
     jest.setSystemTime(1000);
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     store.defineBox("n", "number", PENDING);
     expect(store.getNode("n").lastUpdatedMs()).toBeNull();
 
@@ -288,7 +289,7 @@ describe("VariableStore — the age records a change, not a write", () => {
 
   it("a scalar write that moves nothing leaves the age alone", () => {
     jest.setSystemTime(1000);
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     store.defineBox("n", "number", 7);
     expect(store.getNode("n").lastUpdatedMs()).toBe(1000);
 
@@ -303,7 +304,7 @@ describe("VariableStore — the age records a change, not a write", () => {
 
   it("a document rescan that parsed the same content leaves the age alone", () => {
     jest.setSystemTime(1000);
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     store.defineDocument("d", ok({ a: 1 }));
     expect(store.getNode("d").lastUpdatedMs()).toBe(1000);
 
@@ -321,7 +322,7 @@ describe("VariableStore — documents", () => {
   const doc = () => ({ a: 1, b: { c: "x" } });
 
   it("round-trips an outcome through defineDocument / readDocument / setDocument", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     store.defineDocument("d", ABSENT);
     expect(store.readDocument("d")).toEqual({ kind: "absent" });
     store.setDocument("d", ok(doc()));
@@ -331,14 +332,14 @@ describe("VariableStore — documents", () => {
   });
 
   it("is a distinct node kind", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     store.defineDocument("d", ok(doc()));
     expect(store.getKind("d")).toBe("document");
     expect(store.names()).toEqual(["d"]);
   });
 
   it("the scalar reads refuse a document by name, pointing at the path form", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     store.defineDocument("d", ok(doc()));
     expect(() => store.read("d")).toThrow(
       /Variable "d" is a document; read its fields by path \(\.d\.<field>\)/,
@@ -347,21 +348,21 @@ describe("VariableStore — documents", () => {
   });
 
   it("the document reads refuse a scalar by name", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     store.defineBox("s", "string", "x");
     expect(() => store.readDocument("s")).toThrow(/"s" is a box, not a document/);
     expect(() => store.setDocument("s", ok(doc()))).toThrow(/is a box, not a document/);
   });
 
   it("a document name cannot be re-declared as anything", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     store.defineDocument("d", ABSENT);
     expect(() => store.defineBox("d", "string", "")).toThrow(/already declared/);
     expect(() => store.defineDocument("d", ABSENT)).toThrow(/already declared/);
   });
 
   it("shapes every ok document on write: null prototypes and sorted keys at every level", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     store.defineDocument("d", ok({ b: { z: 1, y: 2 }, a: [{ q: 1, p: 2 }] }));
     const d = store.readDocument("d");
     if (d.kind !== "ok") throw new Error("expected ok");
@@ -381,7 +382,7 @@ describe("VariableStore — documents", () => {
   });
 
   it("every document is frozen at every level: an in-place edit throws instead of rewriting the store", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     store.defineDocument("d", ok({ b: { z: 1 }, a: [{ q: 1 }, 2] }));
     const d = store.readDocument("d");
     if (d.kind !== "ok") throw new Error("expected ok");
@@ -397,7 +398,7 @@ describe("VariableStore — documents", () => {
   });
 
   it("changeKey is canonical: the same content in another key order is the same key", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     store.defineDocument("d", ok({ a: 1, b: { c: "x", d: 2 } }));
     const before = store.changeKey("d");
     store.setDocument("d", ok({ b: { d: 2, c: "x" }, a: 1 }));
@@ -407,7 +408,7 @@ describe("VariableStore — documents", () => {
   });
 
   it("changeKey is structural over documents and total over node kinds", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     store.defineDocument("d", ok(doc()));
     store.defineBox("n", "number", 7);
     const before = store.changeKey("d");
@@ -425,7 +426,7 @@ describe("VariableStore — documents", () => {
   // "did this document change" that disagree; the content one wins, and now
   // there is only one.
   it("a rescan yielding identical content wakes nobody, and changeKey agrees", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     store.defineDocument("d", ok(doc()));
     let runs = 0;
     const stop = autorun(() => {
@@ -454,7 +455,7 @@ describe("VariableStore — documents", () => {
   // The non-ok arms are values too: a source that keeps failing for the same
   // reason has not changed, and one whose reason changes has.
   it("an unchanged outcome is unchanged whatever its kind", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     store.defineDocument("d", failed("boom"));
     let runs = 0;
     const stop = autorun(() => {
@@ -473,7 +474,7 @@ describe("VariableStore — documents", () => {
   });
 
   it("getNode hands out a document wrapper with no mutation surface and no scalar type", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     store.defineDocument("d", ok(doc()));
     const node = store.getNode("d");
     expect(node.kind).toBe("document");

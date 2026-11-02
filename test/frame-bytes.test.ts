@@ -33,6 +33,7 @@ import { SessionEffects } from "../src/render/effect";
 import type { RenderedLine } from "../src/dsl/node-registry";
 import type { BuildLineOptions } from "../src/render/strip";
 import type { Instant } from "../src/utils/instant";
+import { systemTimekeeper } from "../src/time";
 
 const SID = "s1";
 const START = 1_800_000_000;
@@ -79,7 +80,7 @@ function rig(
     DEFAULT_DSL_CONFIG,
   );
   const sessionState = new SessionState();
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, {
     signer: TEST_SIGNER,

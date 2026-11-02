@@ -47,6 +47,7 @@ import {
   requestPayload,
   settled,
 } from "./helpers/payload-owners";
+import { systemTimekeeper } from "../src/time";
 
 const FIVE_HOURS_MIN = 5 * 60;
 const NOW_MS = 1_700_000_000_000; // fixed instant; NOW_MS / 1000 is whole seconds
@@ -212,7 +213,7 @@ function renderBurnrate(
     "<test>",
     ALLOWED,
   );
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   // The settings menu references `edit.toggle`, so `edit.mode` — a `state` var — is now
   // declared regardless of this file's narrowed `burnrate`-only root; a
   // SessionState is required to declare it (matching every other

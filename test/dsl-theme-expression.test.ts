@@ -46,6 +46,7 @@ import {
 } from "../src/config/loader/edit-mode";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { instantOf } from "../src/utils/instant";
+import { systemTimekeeper } from "../src/time";
 
 const SID = "s-theme-expr";
 // Four visibly different installed themes: the floor, plus three the expression
@@ -101,7 +102,7 @@ interface Runtime {
 function buildRuntime(source = src(RULE)): Runtime {
   const config = parseAndValidate("<theme-expr>", source, ALLOWED);
   const sessionState = new SessionState();
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const warnings: RenderWarning[] = [];
@@ -329,7 +330,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
     // the config's own declared theme — substituting the floor would silently
     // repaint every compile-only render (the demo, `cc-candybar check`, tests).
     const config = parseAndValidate("<theme-default>", src("nord"), ALLOWED);
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(
       processLauncher,
       store,
@@ -359,7 +360,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
 
   test("a session with no picks evaluates a RULE too, rather than falling to the floor", () => {
     const config = parseAndValidate("<theme-default-rule>", src(RULE), ALLOWED);
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(
       processLauncher,
       store,
@@ -426,7 +427,7 @@ describe("globals.palette as an expression — loader", () => {
       src("{{ if ge (int .ctx.pct) 50 }}nord"),
       ALLOWED,
     );
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(
       processLauncher,
       store,
@@ -555,7 +556,7 @@ describe("a rule inside a preset's globals", () => {
     ) => R,
   ): R => {
     const config = parseAndValidate("<theme-expr-preset>", source, ALLOWED);
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
     try {
       return body(config, registry, store);

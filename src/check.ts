@@ -542,7 +542,7 @@ export async function prepareConfig(
   refuseDrops(loaded.dropped);
   const { config } = loaded;
 
-  const store = new VariableStore();
+  const store = new VariableStore(world.clock);
   const registry = new SourceRegistry(
     world.launcher,
     store,
@@ -707,7 +707,7 @@ async function loadRegisterRender(
 ): Promise<Frame> {
   // [LAW:effects-at-boundaries] One instant for every pass, so the passes
   // differ only in the preset they render; one settle window for every wait.
-  const at = instantOf(new Date());
+  const at = instantOf(new Date(world.clock.now()));
   const prepared = await prepareConfig(
     world,
     chain,

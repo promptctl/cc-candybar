@@ -48,6 +48,7 @@ import {
   fakeUsage,
   requestPayload,
 } from "./helpers/payload-owners";
+import { systemTimekeeper } from "../src/time";
 
 // ─── fixtures ────────────────────────────────────────────────────────────────
 
@@ -628,7 +629,7 @@ describe("the bundled activity segment renders the payload", () => {
       parseAndValidate("<default>", JSON.stringify(RAW_DEFAULT_DSL_CONFIG)),
       "activity",
     );
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(
       processLauncher,
       store,

@@ -248,7 +248,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     inputs.daemonLog.log(level, closed ? `after close: ${msg}` : msg);
   // [LAW:one-source-of-truth] one cache instance per daemon process — multiple
   // instances would defeat the share-across-sessions invariant.
-  const stats = new RuntimeStats();
+  const stats = new RuntimeStats(clock);
   // [LAW:single-enforcer] Route all child_process spawns through src/proc/launch:
   // this daemon's launcher meters them into daemon-stats and ends them with it.
   // The tmux restore at exit is the exception: it runs through the process's
@@ -479,6 +479,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const renderWarnings = new RenderWarningRecords();
   const renderCache = new RenderCache<SessionSource, CheckedRenderRequest>(
     {
+      clock,
       launcher,
       stateDir: paths.state,
       locations: locs,

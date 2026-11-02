@@ -23,6 +23,7 @@ import { writeAtomic } from "../src/utils/atomic-write";
 import { until } from "./helpers/until";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
+import { systemTimekeeper } from "../src/time";
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
@@ -78,7 +79,7 @@ function setUp() {
   // The sessions each reload said drew from its entry, in order.
   const reloads: Array<readonly string[]> = [];
   const cache = new RenderCache(
-    { stateDir: stateDir(HOST), locations: locs(), env: HOST.env,
+    { clock: systemTimekeeper, stateDir: stateDir(HOST), locations: locs(), env: HOST.env,
       launcher: processLauncher,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER, gates: bareGates(),

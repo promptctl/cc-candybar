@@ -23,6 +23,7 @@ import { SourceRegistry } from "../../src/var-system/sources";
 import { VariableStore } from "../../src/var-system/store";
 import { TEST_SIGNER } from "./link-signer";
 import { parseAndValidate } from "./parse-and-validate";
+import { systemTimekeeper } from "../../src/time";
 
 const SID = "bar00a1b-2c3d-4e5f-8a7b-8c9d0e1f2a3b";
 
@@ -58,7 +59,7 @@ export function sessionBar(configSource: string, cols: number): SessionBar {
     DEFAULT_DSL_CONFIG,
   );
   const session = new SessionState();
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", session);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/home/tester/code/project" });
   return {

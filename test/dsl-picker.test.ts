@@ -34,6 +34,7 @@ import { stateGate } from "./helpers/gates";
 import { ConfigError } from "../src/config/dsl-loader";
 import { effectsOf } from "./helpers/click";
 import { instantOf } from "../src/utils/instant";
+import { systemTimekeeper } from "../src/time";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const THEMES = listResolvablePaletteNames();
@@ -78,7 +79,7 @@ function pickerConfig(closeOnPick: boolean, paged: boolean): string {
 function buildRuntime(src: string, sessionId = "s1") {
   const config = parseAndValidate("<test>", src, ALLOWED);
   const sessionState = new SessionState();
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const render = (width: number, wrap = true): Frame =>

@@ -26,6 +26,7 @@ import { dropEditChrome } from "./helpers/narrow-to-segment";
 import { linksOf, effectsOf } from "../src/click/read";
 import { VERB_COPY } from "../src/click/wire";
 import { instantOf } from "../src/utils/instant";
+import { systemTimekeeper } from "../src/time";
 
 // Reparse the AUTHORED literal (pre-synthesis) — see
 // test/default-dsl-config.test.ts for why this must be the raw form, not the
@@ -80,7 +81,7 @@ function renderDirRaw(paths: DirPaths): Frame {
     segments: dropEditNs(base.segments),
     root: dirOnlyRoot,
   };
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
   try {
     const compiled = registerDslConfig(parsed, registry, {
@@ -232,7 +233,7 @@ describe("configurability seam: user template override restores full path", () =
         directory: { ...parsed.segments.directory, template: "{{ .current_dir }}" },
       }),
     };
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
     try {
       const compiled = registerDslConfig(overridden, registry, {

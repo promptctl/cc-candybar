@@ -24,6 +24,7 @@ import { registerDslConfig } from "../src/dsl/render";
 import { ConfigError } from "../src/config/dsl-loader";
 import { DOOR_GLYPH } from "../src/config/disclosure";
 import { instantOf } from "../src/utils/instant";
+import { systemTimekeeper } from "../src/time";
 
 const ALLOWED_PALETTES = new Set(["textual-dark"]);
 
@@ -35,7 +36,7 @@ const OPTS = {
 
 function buildRuntime(source: string) {
   const config = parseAndValidate("<test>", source, ALLOWED_PALETTES);
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
   return { config, compiled, store, registry };

@@ -26,7 +26,6 @@ import {
   type DeliveryNotice,
   type FileEvents,
 } from "../daemon/cache/file-events.js";
-import { setInterval, clearInterval } from "timers";
 import {
   computed,
   observable,
@@ -72,6 +71,7 @@ import {
   type RefreshTrigger,
 } from "../utils/refresh-ledger.js";
 import { valueOf } from "../utils/logfmt.js";
+import { timeoutSignal, type Timekeeper } from "../time";
 
 // How long text that is not a document may be a write still in progress
 // before it shows as the failure it is (documentPublisher).
@@ -471,19 +471,22 @@ const derived = (filePath: string): PathsWatch =>
 // variables with that TTL.  Multiple variables at the same interval fire on
 // one timer tick rather than N separate timers.
 class TtlBucketManager {
+  // `stop` clears the bucket's timer.
   private readonly buckets = new Map<
     number,
-    { timer: ReturnType<typeof setInterval>; callbacks: Set<() => void> }
+    { stop: () => void; callbacks: Set<() => void> }
   >();
+
+  constructor(private readonly clock: Pick<Timekeeper, "every">) {}
 
   subscribe(durationMs: number, callback: () => void): () => void {
     let entry = this.buckets.get(durationMs);
     if (!entry) {
       const callbacks = new Set<() => void>();
-      const timer = setInterval(() => {
+      const stop = this.clock.every(durationMs, () => {
         for (const cb of callbacks) cb();
-      }, durationMs);
-      entry = { timer, callbacks };
+      });
+      entry = { stop, callbacks };
       this.buckets.set(durationMs, entry);
     }
     entry.callbacks.add(callback);
@@ -495,13 +498,13 @@ class TtlBucketManager {
     if (!entry) return;
     entry.callbacks.delete(callback);
     if (entry.callbacks.size === 0) {
-      clearInterval(entry.timer);
+      entry.stop();
       this.buckets.delete(durationMs);
     }
   }
 
   dispose(): void {
-    for (const { timer } of this.buckets.values()) clearInterval(timer);
+    for (const { stop } of this.buckets.values()) stop();
     this.buckets.clear();
   }
 
@@ -513,7 +516,7 @@ class TtlBucketManager {
 // ─── Shared metadata ──────────────────────────────────────────────────────────
 
 export interface LastError {
-  readonly timestamp: number; // Date.now() epoch ms
+  readonly timestamp: number; // epoch ms, on the store's clock
   readonly message: string;
 }
 
@@ -645,7 +648,7 @@ export class SourceRegistry {
 
   // Triggers for shell/file cache policies and the time source's tick:
   private readonly watchMgr: PathWatches;
-  private readonly ttlMgr = new TtlBucketManager();
+  private readonly ttlMgr: TtlBucketManager;
   // Collects all cleanup callbacks (TTL unsubscribes, watch unsubscribes,
   // MobX reaction disposers) so dispose() tears everything down in one call.
   private readonly cleanups: Array<() => void> = [];
@@ -746,6 +749,7 @@ export class SourceRegistry {
     private readonly env: Readonly<Record<string, string | undefined>> = {},
   ) {
     this.sessionState = sessionState;
+    this.ttlMgr = new TtlBucketManager(store.clock);
     this.watchMgr = new PathWatches(watchers, fileEvents);
   }
 
@@ -760,7 +764,7 @@ export class SourceRegistry {
   view(): SourceRegistry {
     return new SourceRegistry(
       this.launcher,
-      new VariableStore(this.store),
+      new VariableStore(this.store.clock, this.store),
       this.defaultEmptyValue,
       this.sessionState,
       this,
@@ -1006,12 +1010,12 @@ export class SourceRegistry {
     const fallback: Reading<JsonValue> =
       varDefault === undefined ? PENDING : ok(varDefault);
     this.store.defineDocument(name, fallback);
-    let settling: ReturnType<typeof setTimeout> | undefined;
+    let clearSettling: (() => void) | undefined;
     // Whether the document showing was READ (not the default standing in).
     let showingRead = false;
-    this.cleanups.push(() => clearTimeout(settling));
+    this.cleanups.push(() => clearSettling?.());
     return (raw) => {
-      clearTimeout(settling);
+      clearSettling?.();
       // Blank text is nothing to read — a command that printed nothing, a
       // file only touched — exactly as a missing file is.
       const read: Outcome<string> =
@@ -1028,7 +1032,7 @@ export class SourceRegistry {
         this.store.setDocument(name, next);
       };
       if (torn) {
-        settling = setTimeout(show, TORN_WRITE_SETTLE_MS);
+        clearSettling = this.store.clock.after(TORN_WRITE_SETTLE_MS, show);
       } else {
         show();
       }
@@ -1062,14 +1066,14 @@ export class SourceRegistry {
     // rejection is a bug and stays unhandled — loud.
     const trigger = this.reads.run(name, () => {
       const asked = this.askedBy.get(name) ?? by;
-      const startedAt = Date.now();
+      const startedAt = this.store.clock.now();
       return reader.read().then(
         (read) =>
           refreshes.recorded(
             `where=${valueOf(reader.where)}`,
             asked,
             publish(read),
-            Date.now() - startedAt,
+            this.store.clock.now() - startedAt,
           ),
         (err: unknown) => {
           if (err !== this.abort.signal.reason) throw err;
@@ -1142,7 +1146,7 @@ export class SourceRegistry {
   // passed: empty when all settled. The state a one-shot render awaits so it
   // renders what those sources yielded, never a guessed delay.
   settled(withinMs: number): Promise<readonly string[]> {
-    return this.inFlight(AbortSignal.timeout(withinMs));
+    return this.inFlight(timeoutSignal(this.store.clock, withinMs));
   }
 
   // template: a variable whose value is derived by evaluating a go-template
@@ -1522,7 +1526,10 @@ export class SourceRegistry {
   }
 
   private recordError(name: string, message: string): void {
-    this.lastErrors.set(name, { timestamp: Date.now(), message });
+    this.lastErrors.set(name, {
+      timestamp: this.store.clock.now(),
+      message,
+    });
   }
 
   // The one fold from a policy's own outcome — whether it can fire — to the
@@ -1534,7 +1541,7 @@ export class SourceRegistry {
       if (outcome.kind !== "failed") this.policyFaults.delete(name);
       else if (this.policyFaults.get(name)?.message !== outcome.reason)
         this.policyFaults.set(name, {
-          timestamp: Date.now(),
+          timestamp: this.store.clock.now(),
           message: outcome.reason,
         });
     });

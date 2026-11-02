@@ -25,6 +25,7 @@ import { VERBS } from "../src/daemon/verbs";
 import { testVerbContext, recordRender } from "./helpers/click";
 import { PAYLOAD_INPUTS } from "../src/config/payload-inputs";
 import { instantOf } from "../src/utils/instant";
+import { systemTimekeeper } from "../src/time";
 
 const ALLOWED_PALETTES = new Set(["textual-dark"]);
 
@@ -61,7 +62,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
   function buildRuntime() {
     const config = parseAndValidate("<test>", CONFIG_SRC, ALLOWED_PALETTES);
     const sessionState = new SessionState();
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(processLauncher, store, "", sessionState);
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     const basePalette = getThemePalette("textual-dark"!);
@@ -111,7 +112,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
       ALLOWED_PALETTES,
     );
     const sessionState = new SessionState();
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(processLauncher, store, "", sessionState);
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     // Mirror the daemon's per-render theme resolution. Without this the two
@@ -217,7 +218,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
       ALLOWED_PALETTES,
     );
     const sessionState = new SessionState();
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(processLauncher, store, "", sessionState);
     registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     feedInputs(registry, HOOK_DATA);
@@ -425,7 +426,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const sessionState = new SessionState();
     recordRender(sessionState, SESSION_ID);
     sessionState.set(SESSION_ID, "toolbar-expanded", "1");
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(processLauncher, store, "", sessionState);
     registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     feedInputs(registry, HOOK_DATA);
@@ -540,7 +541,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
       ALLOWED_PALETTES,
     );
     expect(config.variables["session.id"]).toEqual(PAYLOAD_INPUTS["session.id"]);
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     const out = drawPayload(config, compiled, store, registry, { session_id: "s1" }, instantOf(new Date()), {
@@ -572,7 +573,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
       ALLOWED_PALETTES,
     );
     const sessionState = new SessionState();
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(processLauncher, store, "", sessionState);
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     const basePalette = getThemePalette("textual-dark"!);

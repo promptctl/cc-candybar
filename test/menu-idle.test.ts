@@ -42,6 +42,7 @@ import {
 import { MenuIdle } from "../src/daemon/menu-idle";
 import { selectionFor } from "./helpers/selection";
 import { textOf, type Frame, type Row } from "../src/render/frame";
+import { systemTimekeeper } from "../src/time";
 
 const at = (s: number): Instant => s as Instant;
 
@@ -306,7 +307,7 @@ const PAYLOAD = {
 function buildRuntime(src: string) {
   const config = parseAndValidate("<user>", src, ALLOWED, DEFAULT_DSL_CONFIG);
   const sessionState = new SessionState();
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, {
     signer: TEST_SIGNER,

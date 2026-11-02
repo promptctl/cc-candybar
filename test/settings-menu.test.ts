@@ -70,6 +70,7 @@ import type { ActionDecl } from "../src/config/action";
 import { SETTINGS, SETTING_PROJECTIONS } from "../src/config/setting-projections";
 import { walkNodes } from "../src/config/dsl-types";
 import { instantOf } from "../src/utils/instant";
+import { systemTimekeeper } from "../src/time";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -112,7 +113,7 @@ function buildRuntime(
 ) {
   const config = parseAndValidate("<user>", src, ALLOWED, dflt);
   const sessionState = new SessionState();
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   // Each segment's cells from the last render, by name.
@@ -837,7 +838,7 @@ describe("the menu is chrome-exempt", () => {
       config,
       new SourceRegistry(
         processLauncher,
-        new VariableStore(),
+        new VariableStore(systemTimekeeper),
         "",
         new SessionState(),
       ),

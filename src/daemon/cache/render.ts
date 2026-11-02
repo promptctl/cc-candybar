@@ -95,6 +95,7 @@ import {
 } from "../../config/loader/plugins.js";
 import { ownedBy, pluginNs } from "../../config/loader/plugin-scope.js";
 import { projectionsOf } from "../../config/loader/projections.js";
+import type { Timekeeper } from "../../time";
 
 // [LAW:one-source-of-truth] Each cache entry owns the live DSL state for a
 // (projectDir, cwd) tuple: the parsed config, the variable store +
@@ -161,6 +162,8 @@ export const MAX_ENTRIES = 256;
 // the session source (src/daemon/session-source.ts) a view's payload is
 // derived through; they are not part of cache identity or lifecycle.
 export interface RenderDeps<S extends ViewSource = ViewSource> {
+  // The daemon's clock (StateDeps).
+  clock: Timekeeper;
   // Who its sources' programs belong to (StateDeps).
   launcher: Launcher;
   // The daemon's state directory, where the repositories' answers are kept
@@ -215,6 +218,9 @@ export const UNOWNED_STORAGE: PluginStorage = {
 
 // What building one config's state needs.
 export interface StateDeps {
+  // The clock its variables' ages, its sources' timers and the load's own
+  // duration run on: the daemon's.
+  readonly clock: Timekeeper;
   // Who a source's program belongs to.
   readonly launcher: Launcher;
   // The state directory whose answers book a load reads: which repositories'
@@ -923,7 +929,7 @@ export function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
   // them too.
   const warnings: string[] = [];
 
-  const store = new VariableStore();
+  const store = new VariableStore(deps.clock);
   // The sessionState injection makes `kind: "state"` variables read/write the
   // same per-session store the click verbs mutate. `default_empty_value`
   // is honored from globals — it's the fallback used by input/env/etc.
@@ -1058,13 +1064,14 @@ export function settle(
   chain: ConfigChain,
   resolveWarnings: readonly string[],
   attempt: Attempt,
+  clock: Pick<Timekeeper, "monotonic">,
 ): LoadOutcome {
   const common = {
     // [LAW:one-source-of-truth] The files reported are the chain loaded.
     layers: chain.layers.map((l) => l.path),
     home: chain.home,
     repos: frame.repos,
-    ms: Math.round(performance.now() - frame.started),
+    ms: Math.round(clock.monotonic() - frame.started),
   };
   const warning = (own: readonly string[]): string | null =>
     joinWarnings([...frame.advisories, ...resolveWarnings, ...own]);
@@ -1103,14 +1110,16 @@ export function loadChain(
   served: DslRenderState | null = null,
 ): LoadOutcome {
   const resolved = resolveLoad(cwd, chain, deps.storage);
-  if (resolved.kind === "failed") return settle(frame, chain, [], resolved);
+  if (resolved.kind === "failed") {
+    return settle(frame, chain, [], resolved, deps.clock);
+  }
   // [LAW:one-source-of-truth] A memo on load identity, as the compile table
   // is on compile identity.
   const attempt: Attempt =
     served?.loadKey === resolved.key
       ? { kind: "kept", state: served }
       : buildRenderState(resolved, deps);
-  return settle(frame, chain, resolved.warnings, attempt);
+  return settle(frame, chain, resolved.warnings, attempt, deps.clock);
 }
 
 // [LAW:effects-at-boundaries] One attempt at the disk: read the user's
@@ -1127,7 +1136,7 @@ export function loadFromDisk(
   deps: StateDeps,
   served: DslRenderState | null = null,
 ): LoadOutcome {
-  const started = performance.now();
+  const started = deps.clock.monotonic();
   const resolution = resolveDslConfig(
     deps.locations,
     repoConfigs(deps.stateDir).read(),
@@ -1500,7 +1509,8 @@ export class RenderCache<
   // falls back to the state directory, where the daemon's log writes on every
   // request.
   private readonly answersWatch: WatcherHandle;
-  private sweep: ReturnType<typeof setInterval> | null = null;
+  // What clears the hold sweep while one is running.
+  private stopSweep: (() => void) | null = null;
   private closed = false;
   // Every state the map serves or served, until reclaimed.
   private readonly holds = new Map<DslRenderState, StateHold>();
@@ -1910,9 +1920,12 @@ export class RenderCache<
   }
 
   private armSweep(): void {
-    if (this.sweep !== null) return;
-    this.sweep = setInterval(() => this.releaseIdle(), HOLD_SWEEP_MS);
-    this.sweep.unref?.();
+    if (this.stopSweep !== null) return;
+    this.stopSweep = this.deps.clock.every(
+      HOLD_SWEEP_MS,
+      () => this.releaseIdle(),
+      { unref: true },
+    );
   }
 
   // One sweep. Public so a test can run it at an instant it chose.
@@ -1929,9 +1942,9 @@ export class RenderCache<
     // next request reports its own.
     for (const sessionId of this.openFailures.keys())
       if (!this.pins.has(sessionId)) this.openFailures.delete(sessionId);
-    if (this.entries.size === 0 && this.sweep !== null) {
-      clearInterval(this.sweep);
-      this.sweep = null;
+    if (this.entries.size === 0 && this.stopSweep !== null) {
+      this.stopSweep();
+      this.stopSweep = null;
     }
   }
 
@@ -1942,8 +1955,8 @@ export class RenderCache<
   close(): void {
     if (this.closed) return;
     this.closed = true;
-    if (this.sweep !== null) clearInterval(this.sweep);
-    this.sweep = null;
+    this.stopSweep?.();
+    this.stopSweep = null;
     this.answersWatch.release();
     const entries = this.entries.size;
     for (const [key, entry] of this.entries) this.drop(key, entry, "close");

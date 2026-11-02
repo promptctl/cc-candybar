@@ -55,6 +55,7 @@ import {
   requestPayload,
   settled,
 } from "./helpers/payload-owners";
+import { systemTimekeeper } from "../src/time";
 
 // ─── projectTokensPerSecond (pure) ───────────────────────────────────────────
 
@@ -458,7 +459,7 @@ function renderSpeed(payload: Record<string, unknown>): Frame {
     "<test>",
     ALLOWED,
   );
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   // The settings menu references `edit.toggle`, so `edit.mode` — a `state` var — is now
   // declared regardless of this file's narrowed `speed`-only root; a
   // SessionState is required to declare it (matching every other

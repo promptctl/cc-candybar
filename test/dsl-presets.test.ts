@@ -42,6 +42,7 @@ import { PRESET_FLOOR, presetGlobals, presetRoot } from "../src/config/presets";
 import { checkConfig } from "../src/check";
 import { instantOf } from "../src/utils/instant";
 import { daemonGates } from "../src/daemon/update-keys";
+import { systemTimekeeper } from "../src/time";
 
 const SID = "s-presets";
 const THEME = "textual-dark";
@@ -199,7 +200,7 @@ describe("preset compile diagnostics name the authored path", () => {
       const config = parseAndValidate("<presets>", src, ALLOWED);
       const registry = new SourceRegistry(
         processLauncher,
-        new VariableStore(),
+        new VariableStore(systemTimekeeper),
         "",
         new SessionState(),
       );
@@ -300,7 +301,7 @@ describe("preset selection — the arrangement the bar renders", () => {
   function buildRuntime(src: string = SRC) {
     const config = parseAndValidate("<presets>", src, ALLOWED);
     const sessionState = new SessionState();
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(processLauncher, store, "", sessionState);
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     // A click is gated by the config its session renders; record the render so

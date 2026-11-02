@@ -72,7 +72,7 @@ function registryOver(
 // `env` is the environment an `env` source reads: stated by the test that means
 // one, otherwise empty (every variable unset).
 function make(defaultEmptyValue?: string, env: NodeJS.ProcessEnv = {}) {
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   return {
     store,
     registry: registryOver(
@@ -326,7 +326,7 @@ describe("SourceRegistry — input: missing path fallback chain", () => {
 
 describe("SourceRegistry — input: runInAction batching", () => {
   it("updates multiple input boxes in one action so dependents invalidate once", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = registryOver(store);
     let evalCount = 0;
 
@@ -369,7 +369,7 @@ describe("SourceRegistry — input: runInAction batching", () => {
 
 describe("SourceRegistry — input boxes as computed dependencies", () => {
   it("invalidates computeds when input boxes update", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = registryOver(store);
 
     registry.declareInput("cwd", "cwd", "string", "/initial", "computed");
@@ -385,7 +385,7 @@ describe("SourceRegistry — input boxes as computed dependencies", () => {
   });
 
   it("literal box is stable as a computed dependency", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = registryOver(store);
 
     registry.declareLiteral("prefix", "cc-");
@@ -528,7 +528,7 @@ describe("SourceRegistry — shell: basic", () => {
     closing.abort(new Error("the daemon closed"));
     const registry = new SourceRegistry(
       createLauncher({ inherited: process.env,  signal: closing.signal }, systemTimekeeper),
-      new VariableStore(),
+      new VariableStore(systemTimekeeper),
     );
     live.add(registry);
     registry.declareShell("val", "echo x", { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
@@ -714,7 +714,7 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
       const f = path.join(dir, "v");
       fs.writeFileSync(f, "v1");
       const ledger = new RefreshLedger();
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = registryOver(store, "", undefined, null, ledger);
       registry.declareShell("val", `cat ${f}`, {
         cwd: process.cwd(),
@@ -1028,7 +1028,7 @@ describe("SourceRegistry — shell: key: cache policy", () => {
       const { dir, cleanup } = makeTmpDir();
       try {
         const runs = path.join(dir, "runs");
-        const store = new VariableStore();
+        const store = new VariableStore(systemTimekeeper);
         const registry = registryOver(store);
         registry.declareInput("pane", "tmux.pane", "string", undefined, "computed");
         registry.declareShell("val", `echo run >> ${runs}; echo ran`, {
@@ -1061,7 +1061,7 @@ describe("SourceRegistry — shell: key: cache policy", () => {
       const dataFile = path.join(dir, "data");
       fs.writeFileSync(dataFile, "v1");
 
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = registryOver(store);
       // Put a box directly in the store — the key template will read it.
       store.defineBox("trigger", "string", "a");
@@ -1091,7 +1091,7 @@ describe("SourceRegistry — shell: key: cache policy", () => {
       const dataFile = path.join(dir, "data");
       fs.writeFileSync(dataFile, "v1");
 
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = registryOver(store);
       store.defineBox("trigger", "string", "a");
       registry.declareShell("val", `cat ${dataFile}`, {
@@ -1121,7 +1121,7 @@ describe("SourceRegistry — shell: key: cache policy", () => {
       const dataFile = path.join(dir, "data");
       fs.writeFileSync(dataFile, "v1");
 
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = registryOver(store);
       store.defineBox("trigger", "string", "bad");
       registry.declareShell("val", `cat ${dataFile}`, {
@@ -1175,7 +1175,7 @@ describe("SourceRegistry — shell: key: cache policy", () => {
       const dataFile = path.join(dir, "data");
       fs.writeFileSync(dataFile, "v1");
 
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = registryOver(store);
       store.defineBox("trigger", "string", "ok");
       registry.declareShell("val", `cat ${dataFile}`, {
@@ -1213,7 +1213,7 @@ describe("SourceRegistry — shell: key: cache policy", () => {
     try {
       const docFile = path.join(dir, "doc.json");
       fs.writeFileSync(docFile, '{"x":"a"}');
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = registryOver(store);
       registry.declareFile("doc", docFile, {
         parse: { kind: "json", default: undefined },
@@ -1249,7 +1249,7 @@ describe("SourceRegistry — shell: key: cache policy", () => {
       const dataFile = path.join(dir, "data");
       fs.writeFileSync(dataFile, "v1");
 
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = registryOver(store);
       registry.declareShell("val", `cat ${dataFile}`, {
         cwd: process.cwd(),
@@ -1440,7 +1440,7 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
       fs.writeFileSync(watchedFile, "w");
       fs.writeFileSync(f, "v1");
       const events = handDelivery();
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = registryOver(store, "", undefined, null, new RefreshLedger(), events);
       const view = registry.view();
       live.add(view);
@@ -1480,7 +1480,7 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
       fs.writeFileSync(watched, "w");
       fs.writeFileSync(data, "before");
       const events = handDelivery();
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = registryOver(store, "", undefined, null, new RefreshLedger(), events);
       const cache = { kind: "watch_file", path: watched } as const;
       return { watched, data, events, store, registry, cache };
@@ -1632,7 +1632,7 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         dirWatchesClosed: 0,
       };
       const watchers = new WatcherRegistry({ counters, logger: () => {} });
-      const home = registryOver(new VariableStore(), "", undefined, null, new RefreshLedger(), undefined, watchers);
+      const home = registryOver(new VariableStore(systemTimekeeper), "", undefined, null, new RefreshLedger(), undefined, watchers);
       const view = home.view();
       live.add(view);
       home.declareFile("a", f, { parse: TEXT, cache: { kind: "watch_file", path: f } });
@@ -1785,7 +1785,7 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         fs.writeFileSync(state, "v1");
         fs.symlinkSync(state, a);
         const watchers = new WatcherRegistry({ logger: () => {} });
-        const store = new VariableStore();
+        const store = new VariableStore(systemTimekeeper);
         const registry = registryOver(store, undefined, undefined, null, new RefreshLedger(), undefined, watchers);
         registry.declareFile("val", a, { parse: TEXT, cache: { kind: "watch_file", path: a } });
         await ran(registry);
@@ -1959,7 +1959,7 @@ describe("SourceRegistry — template: basic", () => {
     // Magenta on plum: legible in truecolor, lost once both colours round to
     // 256, so the two depths give different answers. The depth is a per-render
     // fact, and a template variable is a cached derivation — it must observe it.
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = registryOver(store);
     registry.declareTemplate("ink", `{{ readableOn "#e72abb" "#2e082f" 4.5 }}`, DERIVED);
     const [fg, bg] = [parseRgbHex("e72abb"), parseRgbHex("2e082f")];
@@ -1977,7 +1977,7 @@ describe("SourceRegistry — template: basic", () => {
   });
 
   it("auto-invalidates when a box dependency changes", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = registryOver(store);
     store.defineBox("name", "string", "Alice");
     registry.declareTemplate("greeting", `Hello, {{ .name }}!`, DERIVED);
@@ -1988,7 +1988,7 @@ describe("SourceRegistry — template: basic", () => {
   });
 
   it("auto-invalidates transitively (template reading a template)", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = registryOver(store);
     store.defineBox("base", "string", "foo");
     registry.declareTemplate("mid", `{{ .base }}-mid`, DERIVED);
@@ -2000,7 +2000,7 @@ describe("SourceRegistry — template: basic", () => {
   });
 
   it("records no last_error on success", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = registryOver(store);
     store.defineBox("x", "string", "ok");
     registry.declareTemplate("t", "{{ .x }}", DERIVED);
@@ -2009,7 +2009,7 @@ describe("SourceRegistry — template: basic", () => {
   });
 
   it("varDefault returned when template evaluation fails (missing variable)", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = registryOver(store);
     registry.declareTemplate("t", "{{ .nonexistent }}", { ...DERIVED, varDefault: "fallback" });
     expect(store.read("t")).toBe("fallback");
@@ -2024,7 +2024,7 @@ describe("SourceRegistry — template: basic", () => {
   // which of the two mechanisms had swallowed it. Tolerance is now stated per
   // variable, by the `default` on the declaration that wants it.
   it("a failed template is NOT absorbed by defaultEmptyValue: the read is the failure", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = registryOver(store, "(none)");
     registry.declareTemplate("t", "{{ .nonexistent }}", DERIVED);
     expect(() => store.read("t")).toThrow(/variable "t"/);
@@ -2035,7 +2035,7 @@ describe("SourceRegistry — template: basic", () => {
   // it (⚠ naming the variable) and to `cc-candybar check` (exit 1) with no
   // co-operation from either — the same contract a non-ok document has.
   it("a template that throws with no default reads as the failure, naming variable and reason", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = registryOver(store);
     registry.declareTemplate("c", '{{ ramp 35 "step" 0 "panel" }}', DERIVED);
     // `ramp` is registered per-segment by the renderer, so a variable template
@@ -2049,7 +2049,7 @@ describe("SourceRegistry — template: basic", () => {
   // records the failure without rejecting the config. Loudness belongs at the
   // read that needs the value.
   it("a throwing template does not make registration throw; its read records the error", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = registryOver(store);
     expect(() => registry.declareTemplate("c", "{{ .nope }}", DERIVED)).not.toThrow();
     expect(() => store.read("c")).toThrow();
@@ -2064,7 +2064,7 @@ describe("SourceRegistry — template: basic", () => {
     try {
       const dataFile = path.join(dir, "data");
       fs.writeFileSync(dataFile, "v1");
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = registryOver(store);
       registry.declareTemplate("broken", "{{ .nope }}", DERIVED);
       expect(() =>
@@ -2084,7 +2084,7 @@ describe("SourceRegistry — template: basic", () => {
 
 describe("SourceRegistry — template: cycle detection", () => {
   it("self-referencing template records a last_error when read", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = registryOver(store);
     registry.declareTemplate("self", "{{ .self }}", DERIVED);
     expect(() => store.read("self")).toThrow();
@@ -2101,7 +2101,7 @@ describe("SourceRegistry — template: cycle detection", () => {
   // pins that — MobX caches the deriver's exception and re-raises the same one,
   // so a second read says the same thing and the store is not left mid-compute.
   it("a self-referencing template reads as the failure, repeatably", () => {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = registryOver(store, "(cycle)");
     registry.declareTemplate("self", "{{ .self }}", DERIVED);
     expect(() => store.read("self")).toThrow(/variable "self"/);
@@ -2179,7 +2179,7 @@ describe("SourceRegistry — depends_on cache policy", () => {
       const dataFile = path.join(dir, "data");
       fs.writeFileSync(dataFile, "v1");
 
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = registryOver(store);
       store.defineBox("trigger", "string", "a");
       registry.declareShell("val", `cat ${dataFile}`, {
@@ -2211,7 +2211,7 @@ describe("SourceRegistry — depends_on cache policy", () => {
       const dataFile = path.join(dir, "data");
       fs.writeFileSync(dataFile, "v1");
 
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = registryOver(store);
       store.defineBox("trigger", "string", "a");
       // The pass reports its own state: `cat` captures the file, `read` marks
@@ -2249,7 +2249,7 @@ describe("SourceRegistry — depends_on cache policy", () => {
       const dataFile = path.join(dir, "data");
       fs.writeFileSync(dataFile, "v1");
 
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = registryOver(store);
       store.defineBox("trigger", "string", "a");
       registry.declareShell("val", `cat ${dataFile}`, {
@@ -2278,7 +2278,7 @@ describe("SourceRegistry — depends_on cache policy", () => {
       const dataFile = path.join(dir, "data");
       fs.writeFileSync(dataFile, "v1");
 
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = registryOver(store);
       store.defineBox("a", "string", "x");
       store.defineBox("b", "string", "y");
@@ -2307,7 +2307,7 @@ describe("SourceRegistry — depends_on cache policy", () => {
       const dataFile = path.join(dir, "data");
       fs.writeFileSync(dataFile, "v1");
 
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = registryOver(store);
       store.defineBox("trigger", "string", "a");
       registry.declareShell("val", `cat ${dataFile}`, {
@@ -2338,7 +2338,7 @@ describe("SourceRegistry — state: read-through to SessionState", () => {
 
   function makeWithState() {
     const sessionState = new SessionState();
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = registryOver(store, "", sessionState);
     // session.id is the conventional source for "which session am I in" —
     // inputs derive from the payload the view is bound to.
@@ -2402,7 +2402,7 @@ describe("SourceRegistry — state: read-through to SessionState", () => {
     // SessionState, declareState refuses rather than silently returning
     // empty — that would be a footgun where renders look fine until a
     // verb fires and "nothing happens."
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = registryOver(store);
     expect(() =>
       registry.declareState("theme", { key: "theme" }),
@@ -2723,7 +2723,7 @@ describe("SourceRegistry — in-flight runs", () => {
     const { dir, cleanup } = makeTmpDir();
     try {
       const gate = shellGate(path.join(dir, "gate"));
-      const store = new VariableStore();
+      const store = new VariableStore(systemTimekeeper);
       const registry = registryOver(store);
       store.defineBox("trigger", "string", "a");
       registry.declareShell("val", `${gate.hold}; echo v`, {

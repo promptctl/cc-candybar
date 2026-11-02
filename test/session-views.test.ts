@@ -61,7 +61,7 @@ function makeCache(
   });
   cleanups.push(() => watchers.closeAll());
   const cache = new RenderCache(
-    { stateDir: stateDir(HOST), locations: locs(), env: HOST.env, launcher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, gates: bareGates(),
+    { clock: systemTimekeeper, stateDir: stateDir(HOST), locations: locs(), env: HOST.env, launcher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, gates: bareGates(),
  fileEvents: NO_FILE_EVENTS,
       sessionState: new SessionState(),
       watchers,

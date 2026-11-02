@@ -39,6 +39,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { ABSENT, PENDING, failed, ok } from "../src/utils/outcome";
 import { drawingAt } from "./helpers/test-engine";
+import { systemTimekeeper } from "../src/time";
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -86,7 +87,7 @@ function buildPopulatedState(): DaemonDslState {
     TEST_CONFIG_SOURCE,
     new Set<string>(), // no palette validation needed — segments don't set one
   );
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, {
     signer: TEST_SIGNER,

@@ -87,7 +87,7 @@ describe("a connection over a stream", () => {
   const standIn = (
     over: Partial<ConnectionDaemon> = {},
   ): ConnectionDaemon & { stats: RuntimeStats } => ({
-    stats: new RuntimeStats(),
+    stats: new RuntimeStats(systemTimekeeper),
     log: () => {},
     clock: systemTimekeeper,
     handle: async () => replyWith(),

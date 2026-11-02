@@ -72,6 +72,7 @@ import {
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { instantOf } from "../src/utils/instant";
 import { menuPageKey } from "../src/config/menu-keys";
+import { systemTimekeeper } from "../src/time";
 
 /** The address of the segment named `name` in a compiled tree, or throw. */
 function addressOf(root: CompiledNode, name: string): Address {
@@ -164,7 +165,7 @@ function ownUrls(rendered: Frame): string[] {
 function buildRuntime(src: string, sessionId = "s1", look?: string) {
   const config = parseAndValidate("<test>", src, ALLOWED);
   const sessionState = new SessionState();
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const basePalette = getThemePalette("textual-dark"!);

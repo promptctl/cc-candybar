@@ -28,6 +28,7 @@ import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
 import { disclosureNest } from "../src/config/disclosure-nest";
 import { closingView } from "../src/daemon/closing-view";
+import { systemTimekeeper } from "../src/time";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = "s1";
@@ -52,7 +53,7 @@ const PAYLOAD = {
 function buildRuntime(src: string) {
   const config = parseAndValidate("<user>", src, ALLOWED, DEFAULT_DSL_CONFIG);
   const sessionState = new SessionState();
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   const sink = new Map<string, readonly RichText[]>();

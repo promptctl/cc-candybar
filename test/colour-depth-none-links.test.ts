@@ -34,6 +34,7 @@ import {
   testVerbContext,
 } from "./helpers/click";
 import { instantOf } from "../src/utils/instant";
+import { systemTimekeeper } from "../src/time";
 
 const SGR = /\x1b\[[0-9;]*m/g;
 
@@ -45,7 +46,7 @@ test("colour depth none keeps every link the bar draws in colour", async () => {
     DEFAULT_DSL_CONFIG,
   );
   const sessionState = new SessionState();
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   recordRender(sessionState, "s1");
   try {

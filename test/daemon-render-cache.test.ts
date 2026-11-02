@@ -67,6 +67,7 @@ import { answerRepo } from "./helpers/repo-approval";
 import { repoConfigsDir, repoConfigsPath } from "../src/daemon/repo-configs";
 import { locations, stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
+import { systemTimekeeper } from "../src/time";
 
 // The machine the caches below load on: this worker's own unless a describe
 // states another for its tests.
@@ -111,7 +112,7 @@ function makeCache(
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
   const cache = new RenderCache(
-    { stateDir: stateDir(host), locations: locations(host), env: host.env,
+    { clock: systemTimekeeper, stateDir: stateDir(host), locations: locations(host), env: host.env,
       launcher: world.launcher,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER, gates: bareGates(),
@@ -1393,7 +1394,7 @@ describe("RenderCache idle sweep", () => {
     const { dir, cleanup } = mkConfigDir();
     const watchers = new WatcherRegistry({ logger: () => {} });
     const cache = new RenderCache(
-      { stateDir: stateDir(host), locations: locations(host), env: host.env,
+      { clock: systemTimekeeper, stateDir: stateDir(host), locations: locations(host), env: host.env,
         launcher: world.launcher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER, gates: bareGates(),
@@ -1445,7 +1446,7 @@ describe("RenderCache idle sweep", () => {
     const { dir, cleanup } = mkConfigDir();
     const watchers = new WatcherRegistry({ logger: () => {} });
     const cache = new RenderCache(
-      { stateDir: stateDir(host), locations: locations(host), env: host.env,
+      { clock: systemTimekeeper, stateDir: stateDir(host), locations: locations(host), env: host.env,
         launcher: world.launcher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER, gates: bareGates(),
@@ -1501,7 +1502,7 @@ describe("RenderCache idle sweep", () => {
       });
     const logs: string[] = [];
     const cache = new RenderCache(
-      { stateDir: stateDir(host), locations: locations(host), env: host.env,
+      { clock: systemTimekeeper, stateDir: stateDir(host), locations: locations(host), env: host.env,
         launcher: world.launcher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER, gates: bareGates(),
@@ -1605,7 +1606,7 @@ describe("RenderCache frames and pins", () => {
     const watchers = new WatcherRegistry({ logger: () => {} });
     const logs: string[] = [];
     const cache = new RenderCache(
-      { stateDir: stateDir(host), locations: locations(host), env: host.env,
+      { clock: systemTimekeeper, stateDir: stateDir(host), locations: locations(host), env: host.env,
         launcher: world.launcher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER, gates: bareGates(),
@@ -1753,7 +1754,7 @@ describe("RenderCache frames and pins", () => {
     const { dir, cleanup } = mkConfigDir();
     let opens = 0;
     const cache = new RenderCache(
-      { stateDir: stateDir(host), locations: locations(host), env: host.env,
+      { clock: systemTimekeeper, stateDir: stateDir(host), locations: locations(host), env: host.env,
         launcher: world.launcher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER, gates: bareGates(),
@@ -1821,7 +1822,7 @@ describe("RenderCache frames and pins", () => {
     const watchers = new WatcherRegistry({ logger: () => {} });
     const { dir, cleanup } = mkConfigDir();
     const cache = new RenderCache(
-      { stateDir: stateDir(host), locations: locations(host), env: host.env,
+      { clock: systemTimekeeper, stateDir: stateDir(host), locations: locations(host), env: host.env,
         launcher: world.launcher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER, gates: bareGates(),
@@ -1859,7 +1860,7 @@ describe("RenderCache frames and pins", () => {
     const second = mkConfigDir();
     let opens = 0;
     const cache = new RenderCache(
-      { stateDir: stateDir(host), locations: locations(host), env: host.env,
+      { clock: systemTimekeeper, stateDir: stateDir(host), locations: locations(host), env: host.env,
         launcher: world.launcher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER, gates: bareGates(),

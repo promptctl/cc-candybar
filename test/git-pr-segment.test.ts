@@ -18,6 +18,7 @@ import { SessionState } from "../src/daemon/session-state";
 import { registerDslConfig } from "../src/dsl/render";
 import { dropEditChrome } from "./helpers/narrow-to-segment";
 import { instantOf } from "../src/utils/instant";
+import { systemTimekeeper } from "../src/time";
 
 // Reparse the AUTHORED literal (pre-synthesis) — see
 // test/default-dsl-config.test.ts for why this must be the raw form, not the
@@ -62,7 +63,7 @@ function renderGitPr(git: Record<string, unknown>): Frame {
       },
     },
   };
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
   try {
     const compiled = registerDslConfig(parsed, registry, { signer: TEST_SIGNER, cwd: "/tmp" });

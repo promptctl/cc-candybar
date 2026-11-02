@@ -52,6 +52,7 @@ import {
   fakeUsage,
   requestPayload,
 } from "./helpers/payload-owners";
+import { systemTimekeeper } from "../src/time";
 
 const EFFECTIVE_GLOBALS: EffectiveGlobals = globalsFor(DEFAULT_DSL_CONFIG);
 
@@ -216,7 +217,7 @@ describe("the bundled host segment", () => {
   );
 
   function render(host: Record<string, unknown>): Frame {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(
       processLauncher,
       store,

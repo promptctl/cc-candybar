@@ -111,6 +111,7 @@ import { instantOf } from "../src/utils/instant";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
+import { systemTimekeeper } from "../src/time";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -549,7 +550,7 @@ function buildLayoutRuntime(src: string, sessionId = "s1") {
   const log: string[] = [];
   const sessionState = new SessionState();
   durable.seedOrigin(sessionState, sessionId);
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const basePalette = getThemePalette("textual-dark"!);
@@ -854,7 +855,7 @@ describe('the reset-layout banner survives quote/backslash preset names', () => 
     );
     // The compile itself (parse every synthesized template) must not throw —
     // an unescaped quote would break the Go-template source.
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     // The banner is edit chrome: visible only with edit mode open AND the
     // preset customized, so the render below opens edit mode for "s1".
     const sessionState = new SessionState();
@@ -909,7 +910,7 @@ describe("a preset root's own top-level `when` hides content, not the menu or ba
   }
 
   function renderGated(config: ReturnType<typeof buildConfig>): string {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const sessionState = new SessionState();
     sessionState.set("s1", EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     // Live output, not names: the subject is whether the CONTENT follows the gate.
@@ -967,7 +968,7 @@ function makeCache(reloads?: ReloadSignal): {
   cleanups.push(() => watchers.closeAll());
   const sessionState = new SessionState();
   const cache = new RenderCache(
-    { stateDir: stateDir(durable.host), locations: locations(durable.host), env: durable.host.env, launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, gates: bareGates(), fileEvents: NO_FILE_EVENTS, sessionState, watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
+    { clock: systemTimekeeper, stateDir: stateDir(durable.host), locations: locations(durable.host), env: durable.host.env, launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, gates: bareGates(), fileEvents: NO_FILE_EVENTS, sessionState, watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
     {
       budgetBytes: () => renderCacheBudget(memoryLimitBytes({})),
       ...(reloads === undefined ? {} : { observers: reloads.observers }),
@@ -1159,7 +1160,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
     const watchers = new WatcherRegistry({ logger: () => {} });
     const sessionState = new SessionState();
     const cache = new RenderCache(
-      { stateDir: stateDir(durable.host), locations: locations(durable.host), env: durable.host.env,
+      { clock: systemTimekeeper, stateDir: stateDir(durable.host), locations: locations(durable.host), env: durable.host.env,
         launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER, gates: bareGates(),

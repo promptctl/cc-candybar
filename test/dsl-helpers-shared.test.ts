@@ -10,6 +10,7 @@ import { registerDslConfig } from "../src/dsl/render";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { SessionState } from "../src/daemon/session-state";
+import { systemTimekeeper } from "../src/time";
 
 // [LAW:verifiable-goals] The 2026-09-03 outage in numbers: the helper preamble
 // re-parsed into every template cost ~30 MB per registered config; the daemon
@@ -37,7 +38,7 @@ function registerStdlib() {
     loadConfig(null, DEFAULT_DSL_CONFIG, NO_PROJECT),
     "<default>",
   );
-  const store = new VariableStore();
+  const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
   return { registry, compiled: registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" }) };
 }

@@ -54,6 +54,7 @@ import { until } from "./helpers/until";
 import { locations, stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { daemonGates } from "../src/daemon/update-keys";
+import { systemTimekeeper } from "../src/time";
 
 const SOURCE = `{ scope: "session", refresh: { watch: true }, read: { file: { json: true } } }`;
 const STATUS = "plugins.p.status";
@@ -151,7 +152,7 @@ function rig(): Rig {
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
   const cache = new RenderCache<SessionSource>(
-    { stateDir: stateDir(host), locations: locations(host), env: host.env,
+    { clock: systemTimekeeper, stateDir: stateDir(host), locations: locations(host), env: host.env,
       launcher: world.launcher,
       sessionState,
       watchers,
@@ -268,7 +269,7 @@ describe("a source's declaration", () => {
   test("the built arm loads, lowered to a session document in the plugin folder's managed storage", () => {
     const r = rig();
     const p = listing(`{ status: ${SOURCE} }`);
-    const loaded = loadFromDisk(dir, dir, p, { stateDir: stateDir(host), locations: locations(host), env: host.env,
+    const loaded = loadFromDisk(dir, dir, p, { clock: systemTimekeeper, stateDir: stateDir(host), locations: locations(host), env: host.env,
       launcher: world.launcher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
@@ -354,7 +355,7 @@ describe("a source's declaration", () => {
       "config.json5",
       `{ plugins: ["./p/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
     );
-    const loaded = loadFromDisk(dir, dir, p, { stateDir: stateDir(host), locations: locations(host), env: host.env,
+    const loaded = loadFromDisk(dir, dir, p, { clock: systemTimekeeper, stateDir: stateDir(host), locations: locations(host), env: host.env,
       launcher: world.launcher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
@@ -383,7 +384,7 @@ describe("a source's declaration", () => {
          segments: { mine: { template: "x{{ .plugins.p.status.home }}" } },
          root: { h: ["mine"] } }`,
     );
-    const loaded = loadFromDisk(dir, dir, p, { stateDir: stateDir(host), locations: locations(host), env: host.env,
+    const loaded = loadFromDisk(dir, dir, p, { clock: systemTimekeeper, stateDir: stateDir(host), locations: locations(host), env: host.env,
       launcher: world.launcher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
@@ -493,7 +494,7 @@ describe("a source's declaration", () => {
       "config.json5",
       `{ plugins: ["./p/plugin.json5", "./q/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
     );
-    const loaded = loadFromDisk(dir, dir, p, { stateDir: stateDir(host), locations: locations(host), env: host.env,
+    const loaded = loadFromDisk(dir, dir, p, { clock: systemTimekeeper, stateDir: stateDir(host), locations: locations(host), env: host.env,
       launcher: world.launcher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
@@ -607,7 +608,7 @@ describe("a session reads its source", () => {
 // The view derives a source's document from its payload, compared by content.
 describe("a source's document", () => {
   function sourceDoc(payload: () => unknown) {
-    const store = new VariableStore();
+    const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(processLauncher, store);
     registry.declareSourceDocument(STATUS);
     registry.bindInputs({
