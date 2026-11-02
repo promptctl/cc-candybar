@@ -1,11 +1,9 @@
 // The daemon as a value: what it holds, built from its inputs, and its one close.
 
-import fs from "node:fs";
-import { linkSignerFromKeyFile } from "./link-key.js";
 import { Runs } from "./runs.js";
 import { inspect } from "node:util";
-import { watchProbeDir, socketPath, stateDir } from "./paths";
-import { dlog } from "./log";
+import type { DaemonPaths } from "./paths";
+import type { DaemonLog } from "./log";
 import type { Request } from "./protocol";
 import type { DaemonParts } from "./daemon-parts.js";
 import { lanesAt, laneClicked, renderFrame, viewLanes } from "./draw-bar.js";
@@ -19,11 +17,16 @@ import {
 import type { CheckedRenderRequest } from "./render-checkpoint.js";
 import type { SessionStorage } from "./session-state";
 import type { HistoryStorage } from "./settings-history";
-import { createLauncher, type Launcher, type Settled } from "../proc/launch";
+import type {
+  LaunchScope,
+  Launcher,
+  Settled,
+  TestableLauncher,
+} from "../proc/launch";
 import type { DaemonLogger } from "../utils/logger";
 import { actsDir } from "./update-act";
 import { makeUpdateWatch } from "./update-notice";
-import { makeBinaryWatch } from "./binary-watch";
+import { makeBinaryWatch, type BundleStat } from "./binary-watch";
 import { stableAttachPreload } from "../install/index.js";
 import { type RenderOrigin } from "../config-hint";
 import { createPayloadProviders } from "./payload-providers";
@@ -37,20 +40,20 @@ import {
 } from "./cache/render";
 import { WatcherRegistry } from "./cache/watchers";
 import { RuntimeStats } from "./stats";
-import { makeLimits, realLimitsDeps } from "./limits";
+import { makeLimits, type LimitsDeps } from "./limits";
 import { SessionState } from "./session-state";
 import { SettingsHistory } from "./settings-history";
 import { NavigationHistory } from "./navigation-history";
 import { stateGate } from "./verbs/state-validators";
 import { closeIdleMenus } from "./verbs";
-import { fileStores, productionEdge } from "../doctor/edge";
+import type { DoctorEdge, DoctorStores } from "../doctor/edge";
 import { ProbeArrivals } from "../doctor/handler-probe";
 import { RenderSightings } from "./render-sightings";
 import { declareLanes } from "./render-payload.js";
 import { sessionSource, type SessionSource } from "./session-source.js";
 import { EffectSessions } from "../render/effect.js";
 import { FEED_PERIODS, FrameFeeds } from "./frame-feed.js";
-import { type Drawing, type LaneSwitches } from "../config/lanes.js";
+import { type Drawing, type Lane, type LaneSwitches } from "../config/lanes.js";
 import {
   LIST_CLIENTS_FORMAT,
   LIST_PANES_FORMAT,
@@ -64,9 +67,9 @@ import { shellWord } from "../shell-word.js";
 import { reaction } from "mobx";
 import { setImmediate } from "node:timers";
 import type { RenderedLine } from "../dsl/node-registry.js";
-import { productionClaudeInputEdge } from "../claude-input/edge.js";
-import { LaneSetups } from "./lane-setup.js";
-import { productionLaneEdge } from "./lane-edge.js";
+import type { ClaudeInputEdge } from "../claude-input/edge.js";
+import { LaneSetups, type LaneEdge } from "./lane-setup.js";
+import type { LinkSigner } from "../click/link-signer.js";
 import { RenderWarningRecords } from "./render-warnings.js";
 import { instantOf, type Instant } from "../utils/instant.js";
 import { JournalTurns } from "./journal-turns.js";
@@ -115,17 +118,57 @@ export interface DaemonStorage {
   readonly history: HistoryStorage;
 }
 
-// What a daemon takes from the process that runs it. Paths are not among them:
-// the log, the repository answers and the post-mortems read src/daemon/paths.ts
-// when they write, so a path passed here would be honoured by half the daemon
-// and the state directory would split with nothing to say so.
-// [LAW:one-source-of-truth] The environment is the one source.
-export interface DaemonInputs {
-  readonly bundle: RunningBundle;
+// [LAW:effects-at-boundaries] Everything a daemon does to the machine, as an
+// input: it names no real one itself, so a daemon is as isolated as the
+// adapters it is handed. src/daemon/production-adapters.ts builds the real
+// ones. An adapter that needs what `createDaemon` builds, as the launcher needs
+// its stats and its closing signal, is a factory over those.
+export interface DaemonAdapters {
+  // The file the daemon's work logs to.
+  readonly daemonLog: DaemonLog;
+  // What every launch of the daemon's work goes through.
+  readonly launcher: (own: Partial<LaunchScope>) => TestableLauncher;
   // Their files, for a daemon that won the socket, which makes it their sole
   // writer. Built over the daemon's log: a write in flight at the close finishes
   // after it, and what it logs says so like any other line of the daemon's work.
   readonly storage: (log: DaemonLogger) => DaemonStorage;
+  // The doctor's stores, which this daemon files.
+  readonly doctorStores: DoctorStores;
+  // The doctor's reads of the machine, over the config load it is handed.
+  readonly doctorEdge: (
+    launcher: Launcher,
+    loadConfig: DoctorEdge["loadConfig"],
+  ) => DoctorEdge;
+  readonly claudeInput: (launcher: Launcher) => ClaudeInputEdge;
+  // What turning an animation lane on or off does to the machine: it is told
+  // which lanes a session's feed follows, and ends its waits with the daemon.
+  readonly laneEdge: (
+    launcher: Launcher,
+    following: (sessionId: string) => ReadonlySet<Lane>,
+    closing: AbortSignal,
+  ) => LaneEdge;
+  // The one signer of every `run` link this daemon draws.
+  readonly linkSigner: LinkSigner;
+  // What the memory backstop reads and writes on the machine.
+  readonly limits: (own: {
+    readonly startedAtMs: number;
+    readonly exit: (code: number) => void;
+    readonly launcher: Launcher;
+    readonly log: DaemonLogger;
+  }) => LimitsDeps;
+  // The registry the update notice asks which release is newest.
+  readonly fetch: typeof fetch;
+  // How the binary watch reads the bundle's mtime.
+  readonly stat: BundleStat;
+}
+
+// What a daemon takes from the process that runs it: where its files are, what
+// it does to the machine, and the numbers it runs by.
+export interface DaemonInputs extends DaemonAdapters {
+  readonly bundle: RunningBundle;
+  // Every path the daemon reads or writes: a daemon aimed at a temporary
+  // directory writes nowhere else.
+  readonly paths: DaemonPaths;
   readonly memoryLimitBytes: number;
   readonly registryUrl: string;
   readonly clock: DaemonClock;
@@ -181,8 +224,10 @@ export interface Daemon {
 }
 
 // [LAW:no-shared-mutable-globals] One daemon is live in a process at a time,
-// because its paths and its log are read from the process's environment. What
-// says so is the live daemon's closing signal, written only by `createDaemon`.
+// because the gates' keyspaces (verbs/state-validators.ts, config-validators.ts)
+// are module state, which an armed daemon's update notice writes. What says so
+// is the live daemon's closing signal, written only by `createDaemon`.
+// candybar-testing-ihvy.42w moves the keyspaces into a value and deletes this.
 let liveDaemon: AbortSignal | null = null;
 
 export function createDaemon(inputs: DaemonInputs): Daemon {
@@ -190,7 +235,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   if (liveDaemon !== null && !liveDaemon.aborted) {
     throw new Error("a daemon is already live in this process");
   }
-  const { bundle, memoryLimitBytes, registryUrl, clock, exit } = inputs;
+  const { bundle, memoryLimitBytes, registryUrl, clock, exit, paths } = inputs;
   const instant = (): Instant => instantOf(clock.date());
   // [LAW:single-enforcer] What ends the daemon's work: every launch through its
   // launcher, and the lane edge's waits.
@@ -203,7 +248,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   let closed = false;
   // [LAW:one-source-of-truth] What this daemon's work logs through.
   const log: DaemonLogger = (level, msg) =>
-    dlog(level, closed ? `after close: ${msg}` : msg);
+    inputs.daemonLog.log(level, closed ? `after close: ${msg}` : msg);
   // [LAW:one-source-of-truth] one cache instance per daemon process — multiple
   // instances would defeat the share-across-sessions invariant.
   const stats = new RuntimeStats();
@@ -213,7 +258,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // one-shot launcher, after the last stats anyone reads.
   // Its work holds this one, so a closed daemon's launches are refused here,
   // whichever daemon is live by then.
-  const launcher = createLauncher({
+  const launcher = inputs.launcher({
     stats: stats.launchStats,
     signal: closing.signal,
     // [LAW:no-silent-failure] Each change in whether what the daemon launches
@@ -240,22 +285,21 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   );
   // Building starts nothing: only the daemon that won the socket arms them, so
   // the page answers the doctor's `serving` with no timer counting its memory.
-  const limits = makeLimits(
-    realLimitsDeps(
-      stats.startedAt.getTime(),
+  const limits = makeLimits({
+    ...inputs.limits({
+      startedAtMs: stats.startedAt.getTime(),
       exit,
-      { launcher, log },
-      {
-        limitBytes: memoryLimitBytes,
-      },
-    ),
-  );
+      launcher,
+      log,
+    }),
+    limitBytes: memoryLimitBytes,
+  });
   const handlerProbes = new ProbeArrivals();
   const renderSightings = new RenderSightings();
   // [LAW:one-source-of-truth] The doctor's stores, under this daemon's state
   // directory: its click files them, and daemon-stats answers what they hold
   // to `cc-candybar doctor`.
-  const doctorStores = fileStores(stateDir());
+  const doctorStores = inputs.doctorStores;
   // [LAW:single-enforcer] The daemon injects its log into both registries so
   // cache + watcher lifecycle events land in daemon.log at the right level.
   // Non-daemon consumers (var-system tests, future library use) take the
@@ -309,7 +353,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   });
   // [LAW:single-enforcer] The one signer of every `run` link this daemon draws
   // and the one that verifies them on the click, over the state directory's key.
-  const linkSigner = linkSignerFromKeyFile();
+  const linkSigner = inputs.linkSigner;
   // [LAW:no-ambient-temporal-coupling] The one owner of every `run` program in
   // flight (src/daemon/runs.ts), closed with the daemon.
   const runs = new Runs({
@@ -324,7 +368,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // off takes (src/daemon/lane-setup.ts), told the switches each of a session's
   // clicks moved, and each request's arrival for the setups owed to it.
   const laneSetups = new LaneSetups({
-    edge: productionLaneEdge(
+    edge: inputs.laneEdge(
       launcher,
       (sessionId) => frameFeeds.following(sessionId),
       closing.signal,
@@ -334,7 +378,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     host: {
       bundle: bundle.path,
       node: bundle.node,
-      socket: socketPath(),
+      socket: paths.socket,
       preload: stableAttachPreload(bundle.path),
     },
     state: sessionState,
@@ -359,11 +403,11 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
           tmux.pane === pane,
       ),
     handler: [
-      `CC_CANDYBAR_SOCKET=${shellWord(socketPath())}`,
+      `CC_CANDYBAR_SOCKET=${shellWord(paths.socket)}`,
       ...[...bundle.node, bundle.path].map(shellWord),
       "url-handle",
     ].join(" "),
-    owner: socketPath(),
+    owner: paths.socket,
     log,
   });
   // Each subscribed session's frames, drawn from its latest render request
@@ -437,6 +481,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const renderCache = new RenderCache<SessionSource, CheckedRenderRequest>(
     {
       launcher,
+      stateDir: paths.state,
       sessionState,
       watchers: watcherRegistry,
       log,
@@ -517,7 +562,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const binaryWatch = makeBinaryWatch({
     targets: bundle.targets,
     intervalMs: BIN_CHECK_INTERVAL_MS,
-    stat: fs.statSync,
+    stat: inputs.stat,
     // The update notice's act rewrites the bundle, and a restart in the middle
     // would start the next daemon from a half-written one: a restart waits for
     // it. A success samples again at once; after a failure the next tick does.
@@ -538,11 +583,11 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     digest: bundle.digest,
     // [LAW:one-source-of-truth] Keyed by the bundle the act rewrites, the one
     // this daemon runs from.
-    actsDir: actsDir(stateDir(), bundle.path),
+    actsDir: actsDir(paths.state, bundle.path),
     intervalMs: BIN_CHECK_INTERVAL_MS,
     releaseIntervalMs: RELEASE_CHECK_INTERVAL_MS,
     registryUrl,
-    fetchImpl: fetch,
+    fetchImpl: inputs.fetch,
     onApplied: () => binaryWatch.checkNow(),
     log,
   });
@@ -554,6 +599,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   });
   const verbCtx = {
     sessionState,
+    stateDir: paths.state,
     journalTurns,
     clickLanded: (sessionId: string) => menuIdle.clicked(sessionId, instant()),
     log,
@@ -565,7 +611,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     // [LAW:no-ambient-temporal-coupling] Reloaded first, as a save does: a
     // doctor click is a verdict on the files as they are now, not on
     // whether the fs watcher has caught up with an edit made a moment ago.
-    doctor: productionEdge(launcher, (origin) => {
+    doctor: inputs.doctorEdge(launcher, (origin) => {
       const at = [origin.projectDir, origin.cwd, origin.target.path] as const;
       renderCache.reload(...at, { kind: "doctor" });
       const entry = renderCache.getOrCreate(...at);
@@ -582,7 +628,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     clients: renderSightings,
     bundle: bundle.path,
     serving: () => limits.serving(),
-    claudeInput: productionClaudeInputEdge(launcher),
+    claudeInput: inputs.claudeInput(launcher),
     history: settingsHistory,
     navigation: navigationHistory,
     // The config a session's last render resolved from — the same entry the
@@ -682,7 +728,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     },
     arm() {
       closing.signal.throwIfAborted();
-      fileEvents.start(watchProbeDir());
+      fileEvents.start(paths.watchProbe);
       binaryWatch.arm();
       updateWatch.arm();
       limits.arm();

@@ -695,12 +695,16 @@ describe("post-mortems", () => {
       expect(realLimitsDeps(0, () => {}, {
         launcher: processLauncher,
         log: () => {},
+        snapshotDir: path.join(root, "absent"),
+        writeLogNow: () => {},
       }).listArtifacts()).toEqual([]);
       fs.writeFileSync(path.join(root, "file"), "");
       process.env.XDG_STATE_HOME = path.join(root, "file");
       expect(() => realLimitsDeps(0, () => {}, {
         launcher: processLauncher,
         log: () => {},
+        snapshotDir: path.join(root, "file"),
+        writeLogNow: () => {},
       }).listArtifacts()).toThrow(/ENOTDIR/);
     } finally {
       if (prev === undefined) delete process.env.XDG_STATE_HOME;

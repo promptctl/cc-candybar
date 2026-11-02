@@ -104,7 +104,7 @@ function makeCache(
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
   const cache = new RenderCache(
-    {
+    { stateDir: stateDir(),
       launcher: processLauncher,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
@@ -1007,7 +1007,7 @@ describe("RenderCache", () => {
     const { cleanups, watchers } = makeCache();
     try {
       const dirs = watchers.watchedDirs();
-      expect(dirs).toContain(realpathSync.native(repoConfigsDir()));
+      expect(dirs).toContain(realpathSync.native(repoConfigsDir(stateDir())));
       expect(dirs).not.toContain(realpathSync.native(stateDir()));
     } finally {
       for (const fn of cleanups) fn();
@@ -1079,7 +1079,7 @@ describe("RenderCache", () => {
         [realpathSync.native(dir)]: "declined",
       });
       await reloads.after(entry, () =>
-        writeFileSync(repoConfigsPath(), declined),
+        writeFileSync(repoConfigsPath(stateDir()), declined),
       );
       expect(entry.configLayers).toEqual([]);
       expect(entry.repos.declined).toEqual([realpathSync.native(dir)]);
@@ -1387,7 +1387,7 @@ describe("RenderCache idle sweep", () => {
     const { dir, cleanup } = mkConfigDir();
     const watchers = new WatcherRegistry({ logger: () => {} });
     const cache = new RenderCache(
-      {
+      { stateDir: stateDir(),
         launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
@@ -1439,7 +1439,7 @@ describe("RenderCache idle sweep", () => {
     const { dir, cleanup } = mkConfigDir();
     const watchers = new WatcherRegistry({ logger: () => {} });
     const cache = new RenderCache(
-      {
+      { stateDir: stateDir(),
         launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
@@ -1495,7 +1495,7 @@ describe("RenderCache idle sweep", () => {
       });
     const logs: string[] = [];
     const cache = new RenderCache(
-      {
+      { stateDir: stateDir(),
         launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
@@ -1599,7 +1599,7 @@ describe("RenderCache frames and pins", () => {
     const watchers = new WatcherRegistry({ logger: () => {} });
     const logs: string[] = [];
     const cache = new RenderCache(
-      {
+      { stateDir: stateDir(),
         launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
@@ -1747,7 +1747,7 @@ describe("RenderCache frames and pins", () => {
     const { dir, cleanup } = mkConfigDir();
     let opens = 0;
     const cache = new RenderCache(
-      {
+      { stateDir: stateDir(),
         launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
@@ -1815,7 +1815,7 @@ describe("RenderCache frames and pins", () => {
     const watchers = new WatcherRegistry({ logger: () => {} });
     const { dir, cleanup } = mkConfigDir();
     const cache = new RenderCache(
-      {
+      { stateDir: stateDir(),
         launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
@@ -1853,7 +1853,7 @@ describe("RenderCache frames and pins", () => {
     const second = mkConfigDir();
     let opens = 0;
     const cache = new RenderCache(
-      {
+      { stateDir: stateDir(),
         launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,

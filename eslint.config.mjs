@@ -17,9 +17,19 @@ const CHILD_PROCESS_PATHS = ["child_process", "node:child_process"].map(
 );
 
 // [LAW:single-enforcer] Names only their owners may import, so what makes a
-// launch or a log line ownerless cannot be reached for by accident. Daemon work
-// holds its daemon's launcher and log: an owner's close is what refuses the one
-// and stamps the other, and neither reaches work that went around them.
+// launch ownerless, or a path ambient, cannot be reached for by accident. Daemon
+// work holds its daemon's launcher: an owner's close is what refuses its
+// launches, and none reaches work that went around it. A daemon is handed its
+// adapters and its paths (src/daemon/production-adapters.ts builds the real
+// ones, src/daemon/server.ts reads the environment's), so `createDaemon` names
+// neither.
+const PATHS = [
+  "**/daemon/paths",
+  "**/daemon/paths.js",
+  "**/paths",
+  "**/paths.js",
+];
+
 const OWNED_IMPORTS = {
   // A process with no daemon, or a daemon's shell before it has one.
   processLauncher: {
@@ -54,15 +64,121 @@ const OWNED_IMPORTS = {
   // The composition root of the one owner that is not the process.
   createLauncher: {
     group: ["**/proc/launch", "**/proc/launch.js"],
-    owners: ["src/daemon/daemon.ts"],
+    owners: ["src/daemon/production-adapters.ts"],
     message: "A Launcher is an owner's: take the one you are handed.",
   },
-  // The process's lines, and the daemon's log built over them.
-  dlog: {
-    group: ["**/log", "**/log.js"],
-    owners: ["src/daemon/daemon.ts", "src/daemon/server.ts"],
-    message: "Daemon work logs through its daemon's log.",
+  // The real adapters a daemon is handed.
+  fileStores: {
+    group: ["**/doctor/edge", "**/doctor/edge.js"],
+    owners: ["src/daemon/production-adapters.ts"],
+    message: "A daemon is handed its adapters (production-adapters.ts).",
   },
+  productionEdge: {
+    group: ["**/doctor/edge", "**/doctor/edge.js"],
+    owners: ["src/daemon/production-adapters.ts", "src/doctor/cli.ts"],
+    message: "A daemon is handed its adapters (production-adapters.ts).",
+  },
+  productionClaudeInputEdge: {
+    group: ["**/claude-input/edge", "**/claude-input/edge.js"],
+    owners: ["src/daemon/production-adapters.ts", "src/daemon/lane-edge.ts"],
+    message: "A daemon is handed its adapters (production-adapters.ts).",
+  },
+  productionLaneEdge: {
+    group: ["**/lane-edge", "**/lane-edge.js"],
+    owners: ["src/daemon/production-adapters.ts"],
+    message: "A daemon is handed its adapters (production-adapters.ts).",
+  },
+  realLimitsDeps: {
+    group: ["**/limits", "**/limits.js"],
+    owners: ["src/daemon/production-adapters.ts"],
+    message: "A daemon is handed its adapters (production-adapters.ts).",
+  },
+  fileStorage: {
+    group: ["**/file-storage", "**/file-storage.js"],
+    owners: ["src/daemon/production-adapters.ts"],
+    message: "A daemon is handed its adapters (production-adapters.ts).",
+  },
+  linkSignerFromKeyFile: {
+    group: ["**/link-key", "**/link-key.js"],
+    owners: [
+      "src/daemon/production-adapters.ts",
+      "src/check.ts",
+      "src/demo/dsl.ts",
+      "src/doctor/cli.ts",
+    ],
+    message: "A daemon is handed its link signer (production-adapters.ts).",
+  },
+  // Where files are, read from the environment by a process's entry point and
+  // handed down. The daemon process reads it once, in server.ts.
+  daemonPaths: {
+    group: PATHS,
+    owners: ["src/daemon/server.ts"],
+    message: "A daemon is handed its paths: take the value you are given.",
+  },
+  stateDir: {
+    group: PATHS,
+    owners: [
+      "src/check.ts",
+      "src/demo/dsl.ts",
+      "src/demo/gallery.ts",
+      "src/doctor/cli.ts",
+    ],
+    message: "A daemon is handed its paths: take the value you are given.",
+  },
+  ...Object.fromEntries(
+    ["socketPath", "defaultSocketPath"].map((name) => [
+      name,
+      {
+        group: PATHS,
+        owners: [
+          "src/frames-cli.ts",
+          "src/bar-pane/index.ts",
+          "src/doctor/handler-probe.ts",
+          "src/daemon/client-transport.ts",
+          "src/daemon/acquire.ts",
+        ],
+        message:
+          "Only a client of the daemon reads its socket from the environment.",
+      },
+    ]),
+  ),
+  ...Object.fromEntries(
+    ["daemonDir", "spawnLockPath", "spawnCooldownPath", "spawnBackoffPath"].map(
+      (name) => [
+        name,
+        {
+          group: PATHS,
+          owners: ["src/daemon/acquire.ts"],
+          message: "Only the client that spawns a daemon reads these.",
+        },
+      ],
+    ),
+  ),
+  // The pricing disk cache is read ahead of its port
+  // (candybar-testing-ihvy.89p), which takes its directory as an input.
+  cacheDir: {
+    group: PATHS,
+    owners: ["src/utils/cache.ts"],
+    message: "A daemon is handed its paths: take the value you are given.",
+  },
+  ...Object.fromEntries(
+    [
+      "configDir",
+      "logPath",
+      "leasePath",
+      "sessionStatePath",
+      "settingsHistoryPath",
+      "daemonRegistryDir",
+      "watchProbeDir",
+    ].map((name) => [
+      name,
+      {
+        group: PATHS,
+        owners: [],
+        message: "A daemon is handed its paths: take the value you are given.",
+      },
+    ]),
+  ),
 };
 
 // A file's whole rule: flat config replaces a rule per file rather than merging
@@ -195,6 +311,32 @@ export default [
         {
           selector: "Identifier[name='runTmux']",
           message: "A path the daemon serves awaits `runTmuxAsync`.",
+        },
+      ],
+    },
+  },
+  // [LAW:effects-at-boundaries] `createDaemon` reaches the machine through its
+  // inputs (DaemonAdapters): neither the network nor the disk is named in it.
+  {
+    files: ["src/daemon/daemon.ts"],
+    rules: {
+      "no-restricted-globals": [
+        "error",
+        { name: "fetch", message: "Take `fetch` from the daemon's inputs." },
+      ],
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "Identifier[name='launchSync']",
+          message: "A path the daemon serves awaits `launch`.",
+        },
+        {
+          selector: "Identifier[name='runTmux']",
+          message: "A path the daemon serves awaits `runTmuxAsync`.",
+        },
+        {
+          selector: "ImportDeclaration[source.value=/^(node:)?fs$/]",
+          message: "Take the disk from the daemon's inputs.",
         },
       ],
     },

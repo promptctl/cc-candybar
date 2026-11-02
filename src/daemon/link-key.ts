@@ -11,19 +11,16 @@ import {
   linkSigner,
   type LinkSigner,
 } from "../click/link-signer.js";
-import { stateDir } from "./paths.js";
 
-export function linkKeyFile(dir: string = stateDir()): string {
+export function linkKeyFile(dir: string): string {
   return path.join(dir, "link.key");
 }
 
 // The signer over the key file, read on first use: importing the daemon, or
-// running a CLI that never draws a `run` link, touches no disk for it. With no
-// file named, the state directory's, resolved at that first use.
-export function linkSignerFromKeyFile(file?: string): LinkSigner {
+// running a CLI that never draws a `run` link, touches no disk for it.
+export function linkSignerFromKeyFile(file: string): LinkSigner {
   let signer: LinkSigner | undefined;
-  const loaded = (): LinkSigner =>
-    (signer ??= readOrCreate(file ?? linkKeyFile()));
+  const loaded = (): LinkSigner => (signer ??= readOrCreate(file));
   return {
     sign: (fields) => loaded().sign(fields),
     verify: (fields, mac) => loaded().verify(fields, mac),

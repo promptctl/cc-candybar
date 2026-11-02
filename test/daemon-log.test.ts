@@ -2,17 +2,16 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { MAX_BYTES, MAX_WAITING_BYTES } from "../src/daemon/log";
+import { DaemonLog, MAX_BYTES, MAX_WAITING_BYTES } from "../src/daemon/log";
 
 // The log sink's contract (src/daemon/log.ts): a line is in the file once the
 // log drains, every line logged before the process exits is in the file, and
 // the file self-rotates at the size boundary, shifting .1→.2→.3 and dropping
 // the oldest.
 //
-// [LAW:locality-or-seam] logPath() reads $XDG_STATE_HOME at call time and the
-// sink's byte counter is module state, so each scenario gets a fresh tmp state
-// dir AND a fresh module instance (jest.resetModules + dynamic import). Nothing
-// here can reach the user's real daemon.log.
+// [LAW:locality-or-seam] A log is built over the file it is given, so each
+// scenario gets a fresh tmp dir and its own log: nothing here can reach the
+// user's real daemon.log.
 
 async function withFreshLog<T>(
   seed: (logFile: string) => void,
@@ -20,31 +19,23 @@ async function withFreshLog<T>(
     dlog: (level: "info" | "warn" | "error", msg: string) => void,
     logFile: string,
     drained: () => Promise<void>,
+    log: DaemonLog,
   ) => Promise<T> | T,
 ): Promise<T> {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-log-"));
-  const prev = process.env.XDG_STATE_HOME;
-  process.env.XDG_STATE_HOME = dir;
+  const log = new DaemonLog(path.join(dir, "cc-candybar", "daemon.log"));
   try {
-    jest.resetModules();
-    const { logPath } = await import("../src/daemon/paths");
-    const logFile = logPath();
+    const logFile = path.join(dir, "cc-candybar", "daemon.log");
     fs.mkdirSync(path.dirname(logFile), { recursive: true });
     seed(logFile);
-    const { dlog, drained } = await import("../src/daemon/log");
-    return await fn(dlog, logFile, drained);
+    return await fn(log.log, logFile, () => log.drained(), log);
   } finally {
-    if (prev === undefined) delete process.env.XDG_STATE_HOME;
-    else process.env.XDG_STATE_HOME = prev;
+    log.dispose();
     fs.rmSync(dir, { recursive: true, force: true });
   }
 }
 
-// Each fresh module instance arms its own exit listener, and this file makes
-// more than Node's default count of them.
-process.setMaxListeners(50);
-
-describe("dlog", () => {
+describe("DaemonLog", () => {
   test("never throws even when stderr, the last channel, fails too", async () => {
     await withFreshLog(
       (logFile) => {
@@ -62,36 +53,6 @@ describe("dlog", () => {
         } finally {
           spy.mockRestore();
         }
-      },
-    );
-  });
-
-  test("never throws when the sink's path cannot even be resolved", async () => {
-    await withFreshLog(
-      () => {},
-      (dlog) => {
-        // With no $XDG_STATE_HOME, logPath() falls back to os.homedir(),
-        // which throws when the process has no resolvable home.
-        const prevXdg = process.env.XDG_STATE_HOME;
-        delete process.env.XDG_STATE_HOME;
-        const home = jest.spyOn(os, "homedir").mockImplementation(() => {
-          throw new Error("ENOENT: no home");
-        });
-        const written: string[] = [];
-        const err = jest
-          .spyOn(process.stderr, "write")
-          .mockImplementation((chunk: string | Uint8Array) => {
-            written.push(String(chunk));
-            return true;
-          });
-        try {
-          expect(() => dlog("error", "uncaughtException: boom")).not.toThrow();
-        } finally {
-          err.mockRestore();
-          home.mockRestore();
-          process.env.XDG_STATE_HOME = prevXdg;
-        }
-        expect(written.join("")).toMatch(/\[error\] uncaughtException: boom\n.*unwritable: ENOENT/);
       },
     );
   });
@@ -208,41 +169,14 @@ describe("dlog", () => {
     );
   });
 
-  // A flush that fails before it ever yields (the path cannot be resolved)
-  // ends as one that did: the next line starts a flush of its own.
-  test("a flush that ends without yielding leaves the next line to flush", async () => {
-    await withFreshLog(
-      () => {},
-      async (dlog, logFile, drained) => {
-        const prevXdg = process.env.XDG_STATE_HOME;
-        delete process.env.XDG_STATE_HOME;
-        const home = jest.spyOn(os, "homedir").mockImplementation(() => {
-          throw new Error("ENOENT: no home");
-        });
-        const err = jest.spyOn(process.stderr, "write").mockImplementation(() => true);
-        try {
-          dlog("error", "unresolvable");
-        } finally {
-          err.mockRestore();
-          home.mockRestore();
-          process.env.XDG_STATE_HOME = prevXdg;
-        }
-        dlog("info", "after");
-        await drained();
-        expect(fs.readFileSync(logFile, "utf8")).toMatch(/\[info\] after\n$/);
-      },
-    );
-  });
-
   // Before a caller blocks the loop on the way to a death that may skip the
   // exit event, what is waiting is in the file at once — and only once.
   test("what is waiting is written at once on request, and not again", async () => {
     await withFreshLog(
       () => {},
-      async (dlog, logFile, drained) => {
-        const { writeWaitingNow } = await import("../src/daemon/log");
+      async (dlog, logFile, drained, log) => {
         for (let i = 0; i < 50; i++) dlog("info", `breach ${i}`);
-        writeWaitingNow();
+        log.writeNow();
         const now = fs.readFileSync(logFile, "utf8");
         expect(now).toContain("[info] breach 49\n");
         await drained();
@@ -297,11 +231,11 @@ describe("dlog", () => {
           "--import",
           "tsx",
           "-e",
-          `import { dlog, drained } from ${JSON.stringify(path.resolve("src/daemon/log.ts"))};` +
-            `dlog("info", "first"); await drained();` +
-            `process.on("exit", () => dlog("warn", "from exit")); process.exit(0);`,
+          `import { DaemonLog } from ${JSON.stringify(path.resolve("src/daemon/log.ts"))};` +
+            `const log = new DaemonLog(${JSON.stringify(path.join(dir, "cc-candybar", "daemon.log"))});` +
+            `log.log("info", "first"); await log.drained();` +
+            `process.on("exit", () => log.log("warn", "from exit")); process.exit(0);`,
         ],
-        { env: { ...process.env, XDG_STATE_HOME: dir } },
       );
       const text = fs.readFileSync(path.join(dir, "cc-candybar", "daemon.log"), "utf8");
       expect(text).toMatch(/\[info\] first\n.*\[warn\] from exit\n$/s);
@@ -322,11 +256,11 @@ describe("dlog", () => {
           "--import",
           "tsx",
           "-e",
-          `import { dlog } from ${JSON.stringify(path.resolve("src/daemon/log.ts"))};` +
-            `for (let i = 0; i < ${lines}; i++) dlog("info", "line " + i + " " + "x".repeat(200));` +
-            `dlog("warn", "death line"); process.exit(0);`,
+          `import { DaemonLog } from ${JSON.stringify(path.resolve("src/daemon/log.ts"))};` +
+            `const log = new DaemonLog(${JSON.stringify(path.join(dir, "cc-candybar", "daemon.log"))});` +
+            `for (let i = 0; i < ${lines}; i++) log.log("info", "line " + i + " " + "x".repeat(200));` +
+            `log.log("warn", "death line"); process.exit(0);`,
         ],
-        { env: { ...process.env, XDG_STATE_HOME: dir } },
       );
       const text = fs.readFileSync(
         path.join(dir, "cc-candybar", "daemon.log"),

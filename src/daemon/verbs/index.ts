@@ -197,6 +197,8 @@ export interface DaemonContext {
   readonly log: (level: "info" | "warn" | "error", msg: string) => void;
   // Who a click's programs belong to.
   readonly launcher: Launcher;
+  // The state directory whose answers book a click reads and records in.
+  readonly stateDir: string;
   // [LAW:effects-at-boundaries] The update notice's act (src/daemon/
   // update-notice.ts), handed in by the daemon: the verb names the effect,
   // the watch that knows what is newer performs it.
@@ -952,7 +954,7 @@ function reloadIfWritten(ctx: Unbound, sid: string, step: Step): void {
   // A session with no recorded render has no cache entry to draw stale.
   const origin = recordedOrigin(ctx, sid);
   if (origin === null) return;
-  const { path } = originHome(origin);
+  const { path } = originHome(ctx.stateDir, origin);
   if (step.some((c) => c.kind === "file" && c.file === path)) {
     ctx.reloadConfig(origin);
   }
@@ -995,9 +997,9 @@ function nestOf(
 
 // [LAW:single-enforcer] The home as the render resolves it, under the same
 // answers: a click's chain leaves out what the bar's leaves out.
-function originHome(origin: RenderOrigin): ConfigHome {
+function originHome(stateDir: string, origin: RenderOrigin): ConfigHome {
   return durableConfig(
-    repoConfigs().read(),
+    repoConfigs(stateDir).read(),
     origin.projectDir,
     origin.cwd,
     origin.target.path,
@@ -1034,7 +1036,7 @@ const setConfig: VerbHandler = async (rawValue, ctx) => {
   }
   const result = gate.validate(key, incoming);
   if (!result.ok) throw new BadVerbArgs(`set-config: ${result.reason}`);
-  const home = originHome(origin);
+  const home = originHome(ctx.stateDir, origin);
   const landing = durableLanding(
     config,
     (k) => ctx.sessionState.get(sid, k),
@@ -1078,7 +1080,7 @@ const stepConfig: VerbHandler = async (rawValue, ctx) => {
         `(have keys: ${gate.listKeys().join(", ")})`,
     );
   }
-  const home = originHome(origin);
+  const home = originHome(ctx.stateDir, origin);
   const landing = durableLanding(
     config,
     (k) => ctx.sessionState.get(sid, k),
@@ -1140,7 +1142,7 @@ const save: VerbHandler = async (value, ctx) => {
     return [d.target, result.value];
   });
   gatePlacements("save", gate, placements);
-  const home = originHome(origin);
+  const home = originHome(ctx.stateDir, origin);
   writeDrafts(editStore(ctx, sid), home, pairs, placements);
   ctx.reloadConfig(origin);
   for (const key of [
@@ -1198,7 +1200,7 @@ const savePreset: VerbHandler = async (value, ctx) => {
     return [d.configKey, result.value];
   });
   gatePlacements("save-preset", gate, snapshot.placements);
-  const home = originHome(origin);
+  const home = originHome(ctx.stateDir, origin);
   const name = writePreset(
     editStore(ctx, sid),
     home,
@@ -1245,7 +1247,7 @@ const saveThemeDefault: VerbHandler = async (value, ctx) => {
       "save-theme-default: the theme is chosen by a rule (globals.palette), so there is no name to save as a theme's default — pick one in the menu first",
     );
   }
-  const home = originHome(origin);
+  const home = originHome(ctx.stateDir, origin);
   writeThemeDefault(editStore(ctx, sid), home, save.theme, save.look);
   ctx.reloadConfig(origin);
   const pick = (key: string) => ctx.sessionState.get(sid, key);
@@ -1274,7 +1276,7 @@ const deletePreset: VerbHandler = async (value, ctx) => {
     );
   }
   const origin = sessionOrigin(ctx, sid);
-  const home = originHome(origin);
+  const home = originHome(ctx.stateDir, origin);
   deletePresetFromFile(editStore(ctx, sid), home, name);
   ctx.reloadConfig(origin);
   const key = SETTINGS.preset.sessionKey;
@@ -1305,7 +1307,7 @@ const resetConfig: VerbHandler = async (value, ctx) => {
       `reset-config: unknown config key "${unknown.join('", "')}" (have: ${known.join(", ")})`,
     );
   }
-  const home = originHome(origin);
+  const home = originHome(ctx.stateDir, origin);
   const layers = keys.map(resetLayers);
   const fileKeys = layers.flatMap((l) => l.fileKeys);
   const sessionKeys = layers.flatMap((l) => l.sessionKeys);
@@ -1392,7 +1394,7 @@ const applyLayoutOp: VerbHandler = async (rawValue, ctx) => {
       `apply-layout-op: "${result.value}" is not a layout op token`,
     );
   }
-  const home = originHome(origin);
+  const home = originHome(ctx.stateDir, origin);
   const placed = applyLayoutOpToFile(editStore(ctx, sid), home, key, op);
   // A removed placement's session state ends with it (endedSessionKeys).
   // Measured on the file as it now reads, and released in the same click, so
@@ -1921,7 +1923,7 @@ const repoConfig: VerbHandler = async (value, ctx) => {
       "the answer's signature does not match what it carries: it was not drawn by this daemon",
     );
   }
-  const filed = recordAnswer(repoConfigs(), dir, answered);
+  const filed = recordAnswer(repoConfigs(ctx.stateDir), dir, answered);
   if (filed.kind === "failed") {
     throw new Error(`${dir} was not ${answered}: ${filed.reason}`);
   }

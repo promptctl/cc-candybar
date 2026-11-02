@@ -67,7 +67,7 @@ const OPTIONAL_FIELDS: Array<[string, "string-list"]> = [
  *
  * Returns the data typed as ClaudeHookData alongside a ValidationReport.
  * Never throws — divergences are reported, not thrown. The daemon decides
- * how to surface them (dlog warn/info).
+ * how to surface them (the daemon's log warn/info).
  *
  * [LAW:no-defensive-null-guards] Validation at the trust boundary is correct.
  * Everywhere else in the codebase, hookData fields are used without guards

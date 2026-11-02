@@ -454,9 +454,9 @@ function writeBackoffStreak(filePath: string, streak: number): void {
 // ownership does (armOwnershipWatch drains it once the mismatch is detected);
 // worst case is one redundant reset in an already-rare race window, not a
 // wrong steady-state outcome.
-export function resetSpawnBackoff(): void {
+export function resetSpawnBackoff(backoffPath: string): void {
   try {
-    fs.unlinkSync(spawnBackoffPath());
+    fs.unlinkSync(backoffPath);
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "ENOENT") {
       process.stderr.write(

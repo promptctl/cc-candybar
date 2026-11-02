@@ -10,6 +10,9 @@ import { VERB_COPY } from "../src/click/wire";
 import { describeLink, effectsOf, HOST_VERBS, linksOf } from "../src/click/read";
 import { createDaemon, SYSTEM_CLOCK } from "../src/daemon/daemon";
 import { memoryLimitBytes } from "../src/daemon/limits";
+import { DaemonLog } from "../src/daemon/log";
+import { daemonPaths } from "../src/daemon/paths";
+import { productionAdapters } from "../src/daemon/production-adapters";
 import { EPHEMERAL_SESSION_STORAGE } from "../src/daemon/session-state";
 import { EPHEMERAL_HISTORY_STORAGE } from "../src/daemon/settings-history";
 import { PROTOCOL_VERSION, type ClickRequest, type ReaderRenderRequest, type Response } from "../src/daemon/protocol";
@@ -63,7 +66,10 @@ seedWorld(onClock(INITIAL_REPO) as RepoState);
 // The daemon the page runs has the limits a daemon has, so the doctor can ask
 // it what it holds; it is never armed, so nothing counts its memory, as no
 // socket was won. Nothing it holds outlives the page.
+const paths = daemonPaths(process.env);
 const pageDaemon = createDaemon({
+  ...productionAdapters(paths, new DaemonLog(paths.log)),
+  paths,
   bundle: {
     entryUrl: "file:///app/dist/index.mjs",
     digest: null,

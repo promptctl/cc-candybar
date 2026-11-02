@@ -39,6 +39,7 @@ import { PACKAGE_VERSION } from "../../../src/version";
 import { hookData } from "../../helpers/daemon-e2e";
 import { linkUrls } from "../../helpers/frame";
 import { buildDaemon, bundleAt, statsOf } from "../../helpers/in-worker-daemon";
+import type { DaemonLog } from "../../../src/daemon/log";
 import { until } from "../../helpers/until";
 
 jest.setTimeout(30_000);
@@ -82,6 +83,7 @@ describe("the daemon is a value", () => {
   let config: string;
   let scratchPath: string | undefined;
   let open: Daemon | null = null;
+  let openLog: DaemonLog | null = null;
 
   const construct = (
     inputs: {
@@ -92,7 +94,7 @@ describe("the daemon is a value", () => {
     } = {},
   ): Daemon => {
     const { session } = inputs;
-    const daemon = buildDaemon({
+    const { daemon, daemonLog } = buildDaemon({
       bundle: bundleAt(
         inputs.checkout ?? path.join(root, "checkout"),
         inputs.digest,
@@ -101,6 +103,7 @@ describe("the daemon is a value", () => {
       ...(session && { storage: () => ({ session }) }),
     });
     open = daemon;
+    openLog = daemonLog;
     return daemon;
   };
 
@@ -182,6 +185,11 @@ describe("the daemon is a value", () => {
 
   afterEach(async () => {
     if (open !== null) await close(open);
+    if (openLog !== null) {
+      await openLog.drained();
+      openLog.dispose();
+      openLog = null;
+    }
     // A live scope would refuse the next test's daemon; this file runs one at a
     // time, so what is left here is the case's own.
     rmSync(sessionStatePath(), { force: true });

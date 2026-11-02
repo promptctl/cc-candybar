@@ -54,6 +54,7 @@ import { viewFacts } from "./helpers/view-facts";
 import { throughout, until } from "./helpers/until";
 import { untilHeard } from "./helpers/reload-signal";
 import { textOf } from "../src/render/frame";
+import { stateDir } from "../src/daemon/paths";
 
 const SOURCE = `{ scope: "session", refresh: { watch: true }, read: { file: { json: true } } }`;
 const STATUS = "plugins.p.status";
@@ -182,7 +183,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
   });
   const sessionState = new SessionState();
   const cache = new RenderCache<SessionSource>(
-    {
+    { stateDir: stateDir(),
       launcher: processLauncher,
       sessionState,
       watchers,
@@ -343,7 +344,7 @@ describe("a run's declaration", () => {
 
   test("a plugin's run loads: its refreshes under its namespace, its folder the directory it runs in", () => {
     const r = rig();
-    const loaded = loadFromDisk(dir, dir, config(["mine"]), {
+    const loaded = loadFromDisk(dir, dir, config(["mine"]), { stateDir: stateDir(),
       launcher: processLauncher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
@@ -369,7 +370,7 @@ describe("a run's declaration", () => {
       "conf/config.json5",
       `{ plugins: ["../p/plugin.json5"], actions: { mine: { run: ["true"], refreshes: ["${STATUS}"] } }, segments: { mine: { template: '{{ action "mine" "m" }}' } }, root: { h: ["mine"] } }`,
     );
-    const loaded = loadFromDisk(dir, dir, file, {
+    const loaded = loadFromDisk(dir, dir, file, { stateDir: stateDir(),
       launcher: processLauncher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,

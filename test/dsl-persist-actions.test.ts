@@ -64,6 +64,7 @@ import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { PRESET_FLOOR, presetGlobals } from "../src/config/presets";
 import { instantOf } from "../src/utils/instant";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
+import { stateDir } from "../src/daemon/paths";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -840,7 +841,7 @@ function makeCache(): {
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
   const cache = new RenderCache(
-    { launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, fileEvents: NO_FILE_EVENTS, sessionState, watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
+    { stateDir: stateDir(), launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, fileEvents: NO_FILE_EVENTS, sessionState, watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
     { budgetBytes: () => renderCacheBudget(memoryLimitBytes({})), observers: reloads.observers },
   );
   cleanups.unshift(() => cache.close());

@@ -32,6 +32,7 @@ import {
   resolveEffectiveGlobals,
 } from "../../src/config/effective-globals";
 import { LANE_NAMES, type LaneSwitches } from "../../src/config/lanes";
+import { stateDir } from "../../src/daemon/paths";
 
 const NO_LANES = Object.fromEntries(
   LANE_NAMES.map((lane) => [lane, false]),
@@ -67,6 +68,7 @@ export function testVerbContext(
   config?: DslConfig,
 ): VerbContext {
   return {
+    stateDir: stateDir(),
     sessionState,
     history,
     navigation: new NavigationHistory(),

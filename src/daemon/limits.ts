@@ -1,8 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import v8 from "node:v8";
-import { daemonDir } from "./paths";
-import { writeWaitingNow } from "./log";
 import { type DaemonLogger } from "../utils/logger";
 import {
   chargeProbe,
@@ -240,8 +238,8 @@ export interface LimitsDeps {
   now: () => number;
   // [LAW:locality-or-seam] The snapshot directory, the log sink, and the
   // writer's identity are injected, not reached for ambiently. Without these,
-  // unit tests of check compute filenames against the real daemonDir() and
-  // emit real dlog lines into the user's production daemon.log — the seam must
+  // unit tests of check compute filenames against the real state directory and
+  // emit real log lines into the user's production daemon.log — the seam must
   // cover every dependency or it isn't a seam.
   pid: number;
   snapshotDir: string;
@@ -503,12 +501,19 @@ export function postMortemsOf(files: readonly string[]): PostMortem[] {
 export function realLimitsDeps(
   startedAtMs: number,
   shutdown: (code: number) => void,
-  owner: { readonly launcher: Launcher; readonly log: DaemonLogger },
+  owner: {
+    readonly launcher: Launcher;
+    readonly log: DaemonLogger;
+    // The daemon's state directory, which its post-mortems are written to.
+    readonly snapshotDir: string;
+    // What the log holds, written before the loop blocks (log.ts).
+    readonly writeLogNow: () => void;
+  },
   overrides: Partial<LimitsDeps> = {},
 ): LimitsDeps {
-  // [LAW:one-source-of-truth] One captured dir backs both the new-snapshot path
-  // and the listing used for rotation, so they can never read different dirs.
-  const dir = daemonDir();
+  // [LAW:one-source-of-truth] One dir backs both the new-snapshot path and the
+  // listing used for rotation, so they can never read different dirs.
+  const dir = owner.snapshotDir;
   return {
     now: () => Date.now(),
     pid: process.pid,
@@ -531,7 +536,7 @@ export function realLimitsDeps(
     writeMemoryReport: (file, text) =>
       fs.writeFileSync(file, text, { mode: 0o600 }),
     writeHeapSnapshot: (file) => v8.writeHeapSnapshot(file),
-    writeLogNow: writeWaitingNow,
+    writeLogNow: owner.writeLogNow,
     // [LAW:no-silent-failure] A directory not yet made holds no breaches;
     // one that cannot be read is said so — never read as "none".
     listArtifacts: () => {

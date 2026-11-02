@@ -22,7 +22,8 @@
 // is not branching — it lets the config's own timed sources (shell, time)
 // populate, exactly as the daemon re-renders on each status-line tick.
 
-import { linkSignerFromKeyFile } from "../daemon/link-key.js";
+import { linkKeyFile, linkSignerFromKeyFile } from "../daemon/link-key.js";
+import { stateDir } from "../daemon/paths.js";
 import { repoGateAt } from "../daemon/repo-configs.js";
 import { repoGateLines } from "../config/loader/repo-gate.js";
 import { UNFOLLOWED_FEEDS } from "../config/lanes.js";
@@ -122,7 +123,7 @@ const sessionState = new SessionState();
 // earns are reported whether or not it goes on to load, as the daemon's strip
 // and `cc-candybar check` report them.
 function loadState(): DslRenderState {
-  const repos = repoGateAt(cwd);
+  const repos = repoGateAt(stateDir(), cwd);
   // The file it was given is named explicitly: no repository supplies it.
   const chain = {
     layers: [homeLayer(configPath)],
@@ -143,7 +144,8 @@ function loadState(): DslRenderState {
       launcher: processLauncher,
       sessionState,
       storage: UNOWNED_STORAGE,
-      signer: linkSignerFromKeyFile(),
+      signer: linkSignerFromKeyFile(linkKeyFile(stateDir())),
+      stateDir: stateDir(),
     },
   );
   if (loaded.warning !== null) warn(loaded.warning);

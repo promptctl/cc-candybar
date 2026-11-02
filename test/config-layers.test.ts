@@ -17,6 +17,7 @@ import {
 import { resolveDslConfig } from "../src/config/loader/discovery";
 import { instantOf } from "../src/utils/instant";
 import { repoConfigs } from "../src/daemon/repo-configs";
+import { stateDir } from "../src/daemon/paths";
 import { answerRepo } from "./helpers/repo-approval";
 import { applyLayoutOp } from "../src/daemon/config-file-store";
 import { walkNodes } from "../src/config/dsl-types";
@@ -62,7 +63,7 @@ const noRecord = { record: () => {}, logger: () => {} };
 
 // The home a click in the project writes, under the answers the bar reads.
 const projectHome = () =>
-  durableConfig(repoConfigs().read(), project, project);
+  durableConfig(repoConfigs(stateDir()).read(), project, project);
 
 test("a project file that places one segment renders over the user's whole config", async () => {
   // `mine` is declared only by the user's file: the project file loads only
@@ -146,7 +147,7 @@ test("the user's file is a layer even when the session's cwd is its directory", 
   const local = path.join(xdgDir, ".cc-candybar.json5");
   fs.writeFileSync(local, `{}`);
   answerRepo(xdgDir);
-  const resolved = resolveDslConfig(repoConfigs().read(), undefined, xdgDir);
+  const resolved = resolveDslConfig(repoConfigs(stateDir()).read(), undefined, xdgDir);
   expect(resolved.kind === "chain" && resolved.layers).toEqual([
     { path: userFile, scope: "plugins" },
     { path: local, scope: "repo" },

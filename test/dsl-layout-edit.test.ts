@@ -110,6 +110,7 @@ import { ReloadSignal, untilHeard } from "./helpers/reload-signal";
 import { viewFacts } from "./helpers/view-facts";
 import { instantOf } from "../src/utils/instant";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
+import { stateDir } from "../src/daemon/paths";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -974,7 +975,7 @@ function makeCache(reloads?: ReloadSignal): {
   cleanups.push(() => watchers.closeAll());
   const sessionState = new SessionState();
   const cache = new RenderCache(
-    { launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, fileEvents: NO_FILE_EVENTS, sessionState, watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
+    { stateDir: stateDir(), launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, fileEvents: NO_FILE_EVENTS, sessionState, watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
     {
       budgetBytes: () => renderCacheBudget(memoryLimitBytes({})),
       ...(reloads === undefined ? {} : { observers: reloads.observers }),
@@ -1166,7 +1167,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
     const watchers = new WatcherRegistry({ logger: () => {} });
     const sessionState = new SessionState();
     const cache = new RenderCache(
-      {
+      { stateDir: stateDir(),
         launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,

@@ -29,7 +29,6 @@ import {
   type DiagnosticMessage,
   type DiagnosticLine,
 } from "../render/diagnostics.js";
-import { stateDir } from "./paths.js";
 
 const REPO_CONFIGS_FILE = "repo-configs.json";
 // The book's own folder: the daemon watches it so a hand edit (removing an
@@ -40,11 +39,11 @@ const REPO_CONFIGS_DIR = "repo-configs";
 
 // [LAW:one-source-of-truth] One book per user, under the state directory:
 // an answer given in one session holds in every other, and after a restart.
-export function repoConfigsDir(dir: string = stateDir()): string {
+export function repoConfigsDir(dir: string): string {
   return path.join(dir, REPO_CONFIGS_DIR);
 }
 
-export function repoConfigsPath(dir: string = stateDir()): string {
+export function repoConfigsPath(dir: string): string {
   return path.join(repoConfigsDir(dir), REPO_CONFIGS_FILE);
 }
 
@@ -54,9 +53,7 @@ export function repoConfigsPath(dir: string = stateDir()): string {
 // into the folder with that answer: nothing is moved, so no answer is lost
 // to a move, and every reader — the daemon, `check`, the demo — reads the
 // same answers.
-export const repoConfigs = (
-  dir: string = stateDir(),
-): StateFile<RepoConfigBook> => {
+export const repoConfigs = (dir: string): StateFile<RepoConfigBook> => {
   const book = stateFile(
     repoConfigsDir(dir),
     REPO_CONFIGS_FILE,
@@ -124,8 +121,8 @@ export function recordAnswer(
 // The gate a one-shot load outside the daemon (the demo, the gallery) runs
 // under. It loads the one file it was named, or none, never a searched chain,
 // so of a repository's it runs only the plugins the project at `cwd` ships.
-export function repoGateAt(cwd: string): RepoGate {
-  return gateRepos(repoConfigs().read(), [], repoProject(cwd));
+export function repoGateAt(stateDir: string, cwd: string): RepoGate {
+  return gateRepos(repoConfigs(stateDir).read(), [], repoProject(cwd));
 }
 
 // [LAW:single-enforcer] What an answer link signs: the session it was drawn

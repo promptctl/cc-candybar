@@ -23,8 +23,9 @@ import {
 } from "../../src/daemon/daemon";
 import { memoryLimitBytes } from "../../src/daemon/limits";
 import { fileStorage } from "../../src/daemon/file-storage";
-import { drained } from "../../src/daemon/log";
-import { logPath, stateDir } from "../../src/daemon/paths";
+import { DaemonLog } from "../../src/daemon/log";
+import { daemonPaths, logPath } from "../../src/daemon/paths";
+import { productionAdapters } from "../../src/daemon/production-adapters";
 import { PROTOCOL_VERSION, sendOne, type Request } from "../../src/daemon/protocol";
 import type { StatsSnapshot } from "../../src/daemon/stats";
 import { reserveUpdateKeys } from "../../src/daemon/update-notice";
@@ -106,6 +107,12 @@ export function heldClock(start: Date = new Date()): HeldClock {
   };
 }
 
+// A daemon with the log it writes to, which the case that built it ends.
+export interface BuiltDaemon {
+  readonly daemon: Daemon;
+  readonly daemonLog: DaemonLog;
+}
+
 // A daemon built as a process builds one, unarmed unless its case arms it: the
 // memory backstop and the bundle watch would end it on the worker's own memory
 // and a bundle that isn't running. Arming also starts file-event delivery, whose
@@ -113,13 +120,17 @@ export function heldClock(start: Date = new Date()): HeldClock {
 // hears a watch only by a delivered event, which is what a watcher case proves.
 // Delivery unstarted is `unmeasured` with nothing missed, and adds no warning
 // (src/daemon/cache/file-events.ts).
-export function buildDaemon(overrides: DaemonOverrides = {}): Daemon {
+export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
   // [LAW:nothing-unseen] Every daemon built in a worker comes through here, so the
   // judge sees each one by the file that built it, as it sees a real daemon.
   recordDaemonStart({ ledger: LEDGER, file: TEST_FILE, route: "harness" });
-  fs.mkdirSync(stateDir(), { recursive: true });
-  return createDaemon({
-    bundle: bundleAt(path.join(stateDir(), "checkout")),
+  // The env a case placed names where the daemon lives, read once here.
+  const paths = overrides.paths ?? daemonPaths(process.env);
+  fs.mkdirSync(paths.state, { recursive: true });
+  const daemonLog = overrides.daemonLog ?? new DaemonLog(paths.log);
+  const daemon = createDaemon({
+    ...productionAdapters(paths, daemonLog),
+    bundle: bundleAt(path.join(paths.state, "checkout")),
     memoryLimitBytes: memoryLimitBytes(process.env),
     // test/setup.ts points it at a closed port.
     registryUrl: process.env.CC_CANDYBAR_REGISTRY_URL!,
@@ -130,11 +141,14 @@ export function buildDaemon(overrides: DaemonOverrides = {}): Daemon {
       throw new Error(`a daemon under test asked to exit ${code}`);
     },
     ...overrides,
+    paths,
+    daemonLog,
     storage: (log) => ({
-      ...fileStorage(log),
+      ...fileStorage(paths, log),
       ...overrides.storage?.(log),
     }),
   });
+  return { daemon, daemonLog };
 }
 
 // A worker's daemon lays out no tmux status line, so nothing is put back.
@@ -207,8 +221,9 @@ export function startDaemon(
   const before = { ...process.env };
   placeEnv(env);
   let daemon: Daemon;
+  let daemonLog: DaemonLog;
   try {
-    daemon = buildDaemon(overrides);
+    ({ daemon, daemonLog } = buildDaemon(overrides));
   } catch (e) {
     // A daemon already live here reads its paths from this env.
     placeEnv(before);
@@ -263,7 +278,8 @@ export function startDaemon(
       await Promise.all(
         servers.map((server) => new Promise((closed) => server.close(closed))),
       );
-      await drained();
+      await daemonLog.drained();
+      daemonLog.dispose();
       releaseUpdateKeys();
       placeEnv(before);
     },

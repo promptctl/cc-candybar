@@ -19,7 +19,7 @@ export type LogLevel = "info" | "warn" | "error";
 
 // [LAW:locality-or-seam] The logging capability daemon components depend on,
 // here below the daemon so a util or segment can take one without importing
-// the daemon ([LAW:one-way-deps]). `dlog` (daemon/log) is the daemon's implementation (writes to daemon.log); consumers that
+// the daemon ([LAW:one-way-deps]). `DaemonLog` (daemon/log) is the daemon's implementation (writes to daemon.log); consumers that
 // inject a different impl (a quiet default in tests) take this shape.
 export type DaemonLogger = (level: LogLevel, msg: string) => void;
 

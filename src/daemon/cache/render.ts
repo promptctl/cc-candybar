@@ -163,6 +163,9 @@ export const MAX_ENTRIES = 256;
 export interface RenderDeps<S extends ViewSource = ViewSource> {
   // Who its sources' programs belong to (StateDeps).
   launcher: Launcher;
+  // The daemon's state directory, where the repositories' answers are kept
+  // (StateDeps).
+  stateDir: string;
   sessionState: SessionStateRW;
   watchers: WatcherRegistry;
   // The owner of every plugin's managed storage, whose folders a state's
@@ -208,6 +211,9 @@ export const UNOWNED_STORAGE: PluginStorage = {
 export interface StateDeps {
   // Who a source's program belongs to.
   readonly launcher: Launcher;
+  // The state directory whose answers book a load reads: which repositories'
+  // plugins it may run.
+  readonly stateDir: string;
   readonly sessionState: SessionStateRW;
   readonly storage: PluginStorage;
   // What signs the `run` links a compile draws.
@@ -1100,7 +1106,7 @@ export function loadFromDisk(
 ): LoadOutcome {
   const started = performance.now();
   const resolution = resolveDslConfig(
-    repoConfigs().read(),
+    repoConfigs(deps.stateDir).read(),
     projectDir,
     cwd,
     configFile,
@@ -1529,8 +1535,8 @@ export class RenderCache<
     this.budgetBytes = opts.budgetBytes;
     this.maxEntries = opts.maxEntries ?? MAX_ENTRIES;
     this.observers = opts.observers ?? {};
-    fs.mkdirSync(repoConfigsDir(), { recursive: true });
-    const { dir, name } = nearestWatchTarget(repoConfigsPath());
+    fs.mkdirSync(repoConfigsDir(deps.stateDir), { recursive: true });
+    const { dir, name } = nearestWatchTarget(repoConfigsPath(deps.stateDir));
     this.answersWatch = deps.watchers.acquire(
       `repo-configs:${dir}/${name}`,
       { dirs: [{ path: dir, filenames: [name] }] },

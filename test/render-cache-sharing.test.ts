@@ -37,6 +37,7 @@ import { parseHandlerUrl } from "../src/install/index";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
+import { stateDir } from "../src/daemon/paths";
 
 // brandon-unfiled-3248.8yp: the render cache held one 9.3 MB state per
 // directory a session rendered from, and released one only past 256 of them,
@@ -63,7 +64,7 @@ function makeCache(budgetBytes: number, maxEntries?: number) {
   cleanups.push(() => watchers.closeAll());
   const sessionState = new SessionState();
   const cache = new RenderCache(
-    { launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
+    { stateDir: stateDir(), launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
  fileEvents: NO_FILE_EVENTS,
       sessionState,
       watchers,
