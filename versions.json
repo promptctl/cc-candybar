@@ -4,15 +4,22 @@
     {
       "version": "pr-586",
       "ref": "refs/pull/586/merge",
-      "sha": "6b409320950f2fc81709a29447e271eda0016129",
-      "timestamp": "2026-11-02T22:12:45.381Z",
+      "sha": "7f95e0df01ea1d02e763bc3f9a348742488d5dc7",
+      "timestamp": "2026-11-02T22:25:04.389Z",
       "commits": [
         {
-          "sha": "6b409320950f2fc81709a29447e271eda0016129",
+          "sha": "7f95e0df01ea1d02e763bc3f9a348742488d5dc7",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T15:11:53-07:00",
-          "message": "Merge 2f47a47505c187d4266e8dc09d6668d8fe37538c into 7517c26c7273173d4e5e09588fd51ac4d21131b4\n"
+          "timestamp": "2026-11-02T22:23:11Z",
+          "message": "Merge d12af98da9ab3d3f46edfff4f686745e41aaa268 into 7517c26c7273173d4e5e09588fd51ac4d21131b4\n"
+        },
+        {
+          "sha": "d12af98da9ab3d3f46edfff4f686745e41aaa268",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T15:22:58-07:00",
+          "message": "refactor(time): the clock lint also bans process.hrtime, process.uptime and node:perf_hooks (candybar-testing-ihvy.aiy)\n"
         },
         {
           "sha": "2f47a47505c187d4266e8dc09d6668d8fe37538c",
