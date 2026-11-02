@@ -4,15 +4,22 @@
     {
       "version": "pr-584",
       "ref": "refs/pull/584/merge",
-      "sha": "ce4d20d14a4384b83658f1abe2cf394ea807a586",
-      "timestamp": "2026-11-02T19:27:20.138Z",
+      "sha": "4ee088ff29ef882f872541b5d7837ca544587e47",
+      "timestamp": "2026-11-02T19:31:26.657Z",
       "commits": [
         {
-          "sha": "ce4d20d14a4384b83658f1abe2cf394ea807a586",
+          "sha": "4ee088ff29ef882f872541b5d7837ca544587e47",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T12:26:02-07:00",
-          "message": "Merge 6d49a1a140a18b1a2ed8cfc562a769eb36b494d0 into cc500459e2346bcb997ea383c9d7c0470b5fe15b\n"
+          "timestamp": "2026-11-02T19:30:20Z",
+          "message": "Merge c1a049d5758343c03dc890cc637bbcb1289e2dd0 into cc500459e2346bcb997ea383c9d7c0470b5fe15b\n"
+        },
+        {
+          "sha": "c1a049d5758343c03dc890cc637bbcb1289e2dd0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T12:30:07-07:00",
+          "message": "fix(test): the last daemon to stop gives the worker's env back; stale comments and memory line follow the gates move (candybar-testing-ihvy.42w)\n"
         },
         {
           "sha": "6d49a1a140a18b1a2ed8cfc562a769eb36b494d0",
