@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-575",
+      "ref": "refs/pull/575/merge",
+      "sha": "a9bd6400d383ba72187ef621630bdc6673beeb05",
+      "timestamp": "2026-11-02T14:44:41.368Z",
+      "commits": [
+        {
+          "sha": "a9bd6400d383ba72187ef621630bdc6673beeb05",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T07:43:21-07:00",
+          "message": "Merge 02d43ae5e2198ca8199b8098899fb78a8e7f33d3 into 685dfc67e4662552cac9a0924249992f5225cbbe\n"
+        },
+        {
+          "sha": "02d43ae5e2198ca8199b8098899fb78a8e7f33d3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T07:43:01-07:00",
+          "message": "fix(render): a client timeout, on the connect or after it, kicks nothing (candybar-launch-q7o7.6wi)\n\nA dead daemon never times out: a missing socket is ENOENT and an unbound one\nECONNREFUSED, both immediate. A timeout therefore means a live listener, and a\nkick's candidate loses the bind to it (socket-lease arbitration). Both runtimes\nnow classify the client's own connect/deadline timeouts as busy, and the\nunreachable-by-construction transient 'timeout' cause is removed.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "685dfc67e4662552cac9a0924249992f5225cbbe",
