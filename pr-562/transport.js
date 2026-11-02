@@ -22968,7 +22968,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.178.2";
+var PACKAGE_VERSION = "1.179.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -52134,12 +52134,6 @@ var PAYLOAD_INPUTS = {
     type: "boolean",
     default: false
   },
-  "location.gitPending": {
-    kind: "input",
-    path: "location.gitPending",
-    type: "boolean",
-    default: false
-  },
   // The repo's browsable web page, transposed from its remote by the daemon.
   // "" is the genuine "no remote a browser can open" (local-only repo, bare
   // path remote) — the quick-action tray's link reads that value, not a flag.
@@ -67256,8 +67250,7 @@ function projectPayload(inputs, draw2, lanes) {
     ...hookData2.location !== void 0 && {
       location: {
         ...hookData2.location,
-        main: posixify(hookData2.location.main) ?? "",
-        gitPending: isPending(git)
+        main: posixify(hookData2.location.main) ?? ""
       }
     },
     ...tmuxPane !== null && {
