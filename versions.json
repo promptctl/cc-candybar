@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "3b03eb3ede4c45763df73f0f81301f74444e40a3",
+      "timestamp": "2026-11-02T23:31:20.690Z",
+      "commits": [
+        {
+          "sha": "3b03eb3ede4c45763df73f0f81301f74444e40a3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T16:30:32-07:00",
+          "message": "fix(bar-pane): a frame overwrites its rows and lands whole, so the pane stops flickering (#558)"
+        }
+      ]
+    },
+    {
       "version": "pr-559",
       "ref": "refs/pull/559/merge",
       "sha": "31e21be388b097318e3649c7f6e31ea9a66ddbc9",
@@ -70,43 +85,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T15:45:47-07:00",
           "message": "test(rig): buildRig assembles a render rig with a default for every field (candybar-testing-ihvy.4k6)\n\nFoundation: test/helpers/rig.ts, its test, colour-256's measurement helpers in their own module, and dsl-groups, dsl-picker and colour-256 on the rig.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-558",
-      "ref": "refs/pull/558/merge",
-      "sha": "d3a2097ea49cd19b3cb7a68cd56b85ef0133a8d3",
-      "timestamp": "2026-11-02T23:23:11.062Z",
-      "commits": [
-        {
-          "sha": "d3a2097ea49cd19b3cb7a68cd56b85ef0133a8d3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T23:21:55Z",
-          "message": "Merge e6169a6de27e35d3e691e93a703cb1d021c25f78 into 9409f66cd2ae1e887b92aeceb049c33b3c75787f\n"
-        },
-        {
-          "sha": "e6169a6de27e35d3e691e93a703cb1d021c25f78",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T03:57:33-06:00",
-          "message": "fix(bar-pane): a frame overwrites its rows and lands whole, so the pane stops flickering\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "9409f66cd2ae1e887b92aeceb049c33b3c75787f",
-      "timestamp": "2026-11-02T22:31:14.564Z",
-      "commits": [
-        {
-          "sha": "9409f66cd2ae1e887b92aeceb049c33b3c75787f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T15:30:31-07:00",
-          "message": "refactor(time): the daemon reads time and schedules work through one Timekeeper (candybar-testing-ihvy.aiy) (#586)\n\n* feat(time): one Timekeeper port with a real clock and a held one, proven by one contract suite (candybar-testing-ihvy.aiy)\n\n* refactor(time): the launcher, log, limits, lane edge, session storage and update watch run on a Timekeeper they are handed (candybar-testing-ihvy.aiy)\n\n* refactor(time): the variable store, render cache and run stats read the daemon's clock (candybar-testing-ihvy.aiy)\n\n* refactor(time): every timer, wall reading and loop turn in src goes through the Timekeeper, and lint keeps it so (candybar-testing-ihvy.aiy)\n\n* refactor(time): a launcher carries the machine's clock for whoever waits on its children, and memory and the plan name the two timekeepers (candybar-testing-ihvy.aiy)\n\n* refactor(time): the clock lint also bans process.hrtime, process.uptime and node:perf_hooks (candybar-testing-ihvy.aiy)"
         }
       ]
     }
