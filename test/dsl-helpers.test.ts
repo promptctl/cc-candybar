@@ -7,9 +7,9 @@
 // key is a no-op (an inherited define emits nothing).
 
 import { drawPayload } from "./helpers/draw-payload";
+import { processLauncher } from "./helpers/host";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { SessionState } from "../src/daemon/session-state";
 

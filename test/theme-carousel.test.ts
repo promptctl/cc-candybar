@@ -15,10 +15,10 @@
 //      plane, the alerts.
 
 import { drawPayload } from "./helpers/draw-payload";
+import { processLauncher } from "./helpers/host";
 import { plainOf, textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linksOf } from "../src/click/read";
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { resolvedStyle } from "../src/render/rich-theme.js";

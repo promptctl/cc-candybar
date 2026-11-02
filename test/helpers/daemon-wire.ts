@@ -8,6 +8,7 @@
 // copies.
 
 import type { ChildProcess } from "node:child_process";
+import { hostOf } from "./host";
 import net from "node:net";
 import path from "node:path";
 
@@ -43,7 +44,7 @@ export function endpointOf(target: DaemonTarget): DaemonEndpoint {
     // An isolated daemon keeps its socket in its state directory
     // (prepareIsolatedDaemonEnv), whose log is the one the daemon itself
     // writes (logPath).
-    log: logPath({ XDG_STATE_HOME: path.dirname(path.dirname(target)) }),
+    log: logPath(hostOf({ XDG_STATE_HOME: path.dirname(path.dirname(target)) })),
     now: Date.now,
   };
 }

@@ -2,8 +2,8 @@
 // what the store does with its answer: a projection is derived again by every
 // read, at the draw in progress; anything else is cached.
 
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
+import { HOST, locs, processLauncher } from "./helpers/host";
 import { projectionsOf } from "../src/config/loader/projections";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { CLOCK_FUNCTIONS } from "../src/template-engine/engine";
@@ -197,7 +197,7 @@ test("the config load line names the load's projections", () => {
   const line = (variables: string, segments = "{}"): string => {
     const file = path.join(dir, "config.json5");
     fs.writeFileSync(file, `{ variables: ${variables}, segments: ${segments} }`);
-    const loaded = loadFromDisk(dir, dir, file, { stateDir: stateDir(), launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, gates: bareGates(),
+    const loaded = loadFromDisk(dir, dir, file, { stateDir: stateDir(HOST), locations: locs(), env: HOST.env, launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, gates: bareGates(),
       sessionState: new SessionState(),
     });
     expect(loaded.error).toBeNull();

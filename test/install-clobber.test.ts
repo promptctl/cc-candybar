@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { HOST } from "./helpers/host";
 import { DOOR_GLYPH } from "../src/config/disclosure";
 import path from "node:path";
 import os from "node:os";
@@ -68,16 +69,16 @@ describe("buildStatusLineCommand", () => {
 describe("install — clobber protection", () => {
   test("fresh install writes the staged bin command", () => {
     const p = tmpSettingsPath();
-    updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, false, p);
+    updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, false, HOST, p);
     expect(readCommand(p)).toBe(buildStatusLineCommand(BIN, []));
   });
 
   test("re-install overwrites our own prior command (version upgrade)", () => {
     const p = tmpSettingsPath();
-    updateClaudeSettings(BIN, ["--style=minimal"], false, p);
+    updateClaudeSettings(BIN, ["--style=minimal"], false, HOST, p);
     expect(readCommand(p)).toContain("--style=minimal");
 
-    updateClaudeSettings(BIN, ["--style=powerline"], false, p);
+    updateClaudeSettings(BIN, ["--style=powerline"], false, HOST, p);
     expect(readCommand(p)).toContain("--style=powerline");
   });
 
@@ -94,7 +95,7 @@ describe("install — clobber protection", () => {
       }),
     );
 
-    updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, false, p);
+    updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, false, HOST, p);
     expect(readCommand(p)).toBe(buildStatusLineCommand(BIN, []));
   });
 
@@ -107,7 +108,7 @@ describe("install — clobber protection", () => {
       JSON.stringify({ statusLine: { type: "command", command: `'${bin}'` } }),
     );
 
-    updateClaudeSettings(bin, DEFAULT_INSTALL_ARGS, false, p);
+    updateClaudeSettings(bin, DEFAULT_INSTALL_ARGS, false, HOST, p);
     expect(readCommand(p)).toBe(bin);
   });
 
@@ -132,7 +133,7 @@ describe("install — clobber protection", () => {
       stderr.push(String(chunk));
       return true;
     };
-    updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, false, p);
+    updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, false, HOST, p);
     process.stderr.write = origWrite;
 
     expect(readCommand(p)).toBe(
@@ -161,7 +162,7 @@ describe("install — clobber protection", () => {
       stderr.push(String(chunk));
       return true;
     };
-    updateClaudeSettings(bareBin, DEFAULT_INSTALL_ARGS, false, p);
+    updateClaudeSettings(bareBin, DEFAULT_INSTALL_ARGS, false, HOST, p);
     process.stderr.write = origWrite;
 
     expect(readCommand(p)).toBe(`${bareBin}-backup --mine`);
@@ -179,7 +180,7 @@ describe("install — clobber protection", () => {
       }),
     );
 
-    updateClaudeSettings(bareBin, DEFAULT_INSTALL_ARGS, false, p);
+    updateClaudeSettings(bareBin, DEFAULT_INSTALL_ARGS, false, HOST, p);
     expect(readCommand(p)).toBe(buildStatusLineCommand(bareBin, []));
   });
 
@@ -196,7 +197,7 @@ describe("install — clobber protection", () => {
       }),
     );
 
-    updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, true, p);
+    updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, true, HOST, p);
     expect(readCommand(p)).toBe(buildStatusLineCommand(BIN, []));
   });
 
@@ -205,7 +206,7 @@ describe("install — clobber protection", () => {
     fs.mkdirSync(path.dirname(p), { recursive: true });
     fs.writeFileSync(p, "{}");
 
-    updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, false, p);
+    updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, false, HOST, p);
     expect(readCommand(p)).toBe(buildStatusLineCommand(BIN, []));
   });
 
@@ -227,7 +228,7 @@ describe("install — clobber protection", () => {
 `;
     fs.writeFileSync(p, before);
 
-    updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, false, p);
+    updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, false, HOST, p);
 
     expect(fs.readFileSync(p, "utf-8")).toBe(
       before.replace(
@@ -246,7 +247,7 @@ describe("install — clobber protection", () => {
       fs.mkdirSync(path.dirname(p), { recursive: true });
       fs.writeFileSync(p, `{ "model": "opus", "statusLine": ${text} }\n`);
 
-      updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, false, p);
+      updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, false, HOST, p);
       expect(JSON.parse(fs.readFileSync(p, "utf-8"))).toEqual({
         model: "opus",
         statusLine: { type: "command", command: buildStatusLineCommand(BIN, []) },
@@ -259,7 +260,7 @@ describe("install — clobber protection", () => {
     fs.mkdirSync(path.dirname(p), { recursive: true });
     fs.writeFileSync(p, JSON.stringify({ someOtherKey: true }));
 
-    updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, false, p);
+    updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, false, HOST, p);
     expect(readCommand(p)).toBe(buildStatusLineCommand(BIN, []));
   });
 });

@@ -4,6 +4,7 @@
 // (test/frame-follow-cases.test.ts).
 
 import { PROTOCOL_VERSION } from "../../src/daemon/protocol";
+import { WORLD } from "../helpers/host";
 import { runFrames } from "../../src/frames-cli";
 import { afterStreamEnd } from "../../src/daemon/frame-follow";
 
@@ -34,7 +35,7 @@ test("a missing or unknown --lane is refused with exit 2, naming the lanes", asy
     });
     const stderr = jest.spyOn(process.stderr, "write").mockImplementation(() => true);
     try {
-      await expect(runFrames(argv, "/opt/cc/dist/index.mjs")).rejects.toThrow("exit 2");
+      await expect(runFrames(argv, "/opt/cc/dist/index.mjs", WORLD)).rejects.toThrow("exit 2");
       expect(String(stderr.mock.calls[0]?.[0])).toMatch(
         /--lane needs one of band, statusline, pane/,
       );
@@ -47,6 +48,6 @@ test("a missing or unknown --lane is refused with exit 2, naming the lanes", asy
 
 test("--session is not a flag of frames: a named session's frames are the native client's follow", async () => {
   await expect(
-    runFrames(["node", "cc-candybar", "frames", "--lane", "band", "--session", "s"], "/opt/cc/dist/index.mjs"),
+    runFrames(["node", "cc-candybar", "frames", "--lane", "band", "--session", "s"], "/opt/cc/dist/index.mjs", WORLD),
   ).rejects.toThrow(/--session/);
 });

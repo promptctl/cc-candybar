@@ -16,6 +16,7 @@ import {
   rmSync,
   utimesSync,
 } from "node:fs";
+import { HOST } from "./helpers/host";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -336,7 +337,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
     // Incremental: append one line per "render", ingesting between each.
     const incPath = join(dir, "inc.jsonl");
     writeFileSync(incPath, "");
-    const incStore = new SessionUsageStore({ sweepIntervalMs: 0 });
+    const incStore = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
     let incInfo;
     try {
       for (const c of contents) {
@@ -351,7 +352,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
     // From-scratch: the same final file read once by a cold store.
     const fullPath = join(dir, "full.jsonl");
     writeFileSync(fullPath, contents.join(""));
-    const freshStore = new SessionUsageStore({ sweepIntervalMs: 0 });
+    const freshStore = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
     let freshInfo;
     try {
       freshInfo = await freshStore.getUsageInfo("FULL", hook("FULL", fullPath));
@@ -385,7 +386,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
     const l2 = line(new Date(), 0.02, 200, 40);
     const l3 = line(new Date(), 0.03, 300, 60);
 
-    const store = new SessionUsageStore({ sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
     try {
       // Prior established.
       writeFileSync(t, l1);
@@ -409,7 +410,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
 
       const fullPath = join(dir, "Rfull.jsonl");
       writeFileSync(fullPath, l1 + l2 + l3);
-      const fresh = new SessionUsageStore({ sweepIntervalMs: 0 });
+      const fresh = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
       try {
         const freshInfo = await fresh.getUsageInfo("Rf", hook("Rf", fullPath));
         if (freshInfo.kind !== "ok") throw new Error("expected ok");
@@ -436,7 +437,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
   // the session's next request.
   test("a newer fold that lands after an older one is still the one stored", async () => {
     const t = join(dir, "N.jsonl");
-    const store = new SessionUsageStore({ sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
     // Hold each of the first two folds until released, so the older lands first.
     const internals = store as unknown as {
       refold: (...args: unknown[]) => Promise<unknown>;
@@ -497,7 +498,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
       }) + "\n",
     );
 
-    const store = new SessionUsageStore({ sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
     try {
       const first = await store.getUsageInfo(sid, hook(sid, mainPath));
       if (first.kind !== "ok") throw new Error("expected ok");
@@ -537,7 +538,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
           },
         }) + "\n",
       );
-      const store = new SessionUsageStore({ sweepIntervalMs: 0 });
+      const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
       try {
         const usage = await store.getUsageInfo("P", hook("P", t));
         const today = await todayInfo(store, 
@@ -563,7 +564,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
   test("a compacted (rewritten smaller) transcript re-folds to the new file's totals", async () => {
     const t = join(dir, "C.jsonl");
     writeFileSync(t, line(new Date(), 0.01) + line(new Date(), 0.02) + line(new Date(), 0.03));
-    const store = new SessionUsageStore({ sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
     try {
       const before = await store.getUsageInfo("C", hook("C", t));
       if (before.kind !== "ok") throw new Error("expected ok");

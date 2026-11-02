@@ -5,13 +5,14 @@
 // [LAW:types-are-the-program] These assert the states the old
 // catch-and-substitute blocks made unrepresentable.
 
-import { processLauncher } from "../src/proc/launch";
 import { execSync } from "node:child_process";
+import { processLauncher } from "./helpers/host";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { GitService } from "../src/segments/git";
+import { createLauncher } from "../src/proc/launch";
 import { ABSENT, ok } from "../src/utils/outcome";
 
 function run(cmd: string, cwd: string): void {
@@ -179,16 +180,18 @@ describe("GitService outcome classification", () => {
       fakeGlobal,
       '[remote "origin"]\n\turl = git@github.com:me/GLOBAL.git\n',
     );
-    const prior = process.env.GIT_CONFIG_GLOBAL;
-    process.env.GIT_CONFIG_GLOBAL = fakeGlobal;
+    // The git the service launches inherits a global config of its own.
+    const shadowed = new GitService(
+      createLauncher({
+        inherited: { ...process.env, GIT_CONFIG_GLOBAL: fakeGlobal },
+      }),
+    );
     try {
-      const remotes = await svc.getRemotesAsync(repo);
+      const remotes = await shadowed.getRemotesAsync(repo);
       expect(remotes).toEqual(
         ok([{ name: "origin", urls: ["git@github.com:me/LOCAL.git"] }]),
       );
     } finally {
-      if (prior === undefined) delete process.env.GIT_CONFIG_GLOBAL;
-      else process.env.GIT_CONFIG_GLOBAL = prior;
       run("git remote remove origin", repo);
     }
   });

@@ -18,7 +18,7 @@ let ending: AbortController;
 let launcher: Launcher;
 beforeEach(() => {
   ending = new AbortController();
-  launcher = createLauncher({ signal: ending.signal });
+  launcher = createLauncher({ inherited: process.env,  signal: ending.signal });
 });
 afterEach(() => ending.abort());
 

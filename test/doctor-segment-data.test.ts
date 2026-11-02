@@ -7,8 +7,8 @@
 // event field, and what a payload or the daemon's stats say — never on how
 // they are computed.
 
-import { processLauncher } from "../src/proc/launch";
 import fs from "node:fs";
+import { processLauncher } from "./helpers/host";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";

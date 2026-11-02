@@ -3,6 +3,8 @@
 // settings file, a clean setup, and a failed check carrying a fix.
 
 import { BUNDLED_GLYPHS } from "./helpers/bundled-glyphs";
+import { HOST, hostOf, worldOf } from "./helpers/host";
+import type { World } from "../src/host";
 import { EMPTY_STORES, healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, healthyDaemonIn, HEALTHY_FACTS, CARRIED, NAMED, STILL, sightedIn, reportedFrame } from "./helpers/doctor-facts";
 import { glyphSighting } from "../src/doctor/checks";
 import { withMark } from "../src/doctor/mark-book";
@@ -332,20 +334,15 @@ describe("doctorPlan", () => {
 // own edge, a real project config in the directory it runs from, and a user
 // config behind it under an isolated XDG home.
 describe("doctorPlan over a real config", () => {
-  const REAL: DoctorEdge = { ...EDGE, loadConfig: loadConfigOnce };
-  let savedXdg: string | undefined;
+  let world: World;
+  const REAL: DoctorEdge = { ...EDGE, loadConfig: (origin) => loadConfigOnce(world, origin) };
   let project: string;
   beforeEach(() => {
-    savedXdg = process.env.XDG_CONFIG_HOME;
-    process.env.XDG_CONFIG_HOME = path.join(dir, "xdg");
+    world = worldOf(hostOf({ ...HOST.env, XDG_CONFIG_HOME: path.join(dir, "xdg") }));
     project = path.join(dir, "project");
     fs.mkdirSync(project);
     // The project's config is the one the doctor reads.
     answerRepo(project);
-  });
-  afterEach(() => {
-    if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME;
-    else process.env.XDG_CONFIG_HOME = savedXdg;
   });
   const projectConfig = (): string => path.join(project, ".cc-candybar.json5");
   const plan = (env: Record<string, string> = {}) =>
@@ -369,14 +366,14 @@ describe("doctorPlan over a real config", () => {
       projectConfig(),
       `{ plugins: ["./p/plugin.json5"], root: { h: ["repo.p.s"] } }`,
     );
-    const load = loadConfigOnce({ projectDir: project, cwd: project, target: { source: "search" } });
+    const load = loadConfigOnce(world, { projectDir: project, cwd: project, target: { source: "search" } });
     expect(load.error).toBeNull();
     expect(Object.keys(load.config.variables)).toContain("repo.p.status");
     // Long enough for a sweep the load started to have unlinked it.
     await new Promise((resolve) => setTimeout(resolve, 200));
     expect(fs.existsSync(old)).toBe(true);
     fs.rmSync(storage, { recursive: true });
-    loadConfigOnce({ projectDir: project, cwd: project, target: { source: "search" } });
+    loadConfigOnce(world, { projectDir: project, cwd: project, target: { source: "search" } });
     expect(fs.existsSync(storage)).toBe(false);
   });
 
@@ -387,7 +384,7 @@ describe("doctorPlan over a real config", () => {
       projectConfig(),
       `{ variables: { v: { kind: "template", template: "{{ if }}" } } }`,
     );
-    const load = loadConfigOnce({ projectDir: project, cwd: project, target: { source: "search" } });
+    const load = loadConfigOnce(world, { projectDir: project, cwd: project, target: { source: "search" } });
     expect(load.error).toBeNull();
     expect(load.warning).toContain(`Variable "v"`);
   });

@@ -7,10 +7,10 @@
 // and the settings menu's own tray, its door open.
 
 import { drawPayload } from "./helpers/draw-payload";
+import { processLauncher } from "./helpers/host";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { parseAndValidate } from "./helpers/parse-and-validate";

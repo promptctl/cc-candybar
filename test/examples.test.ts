@@ -8,16 +8,14 @@
 // fails CI, not a user's status line.
 
 import { drawPayload } from "./helpers/draw-payload";
+import { processLauncher } from "./helpers/host";
+import { NO_PROJECT } from "./helpers/no-project";
 import { textOf } from "../src/render/frame";
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { validateConfig } from "./helpers/parse-and-validate";
-import {
-  loadConfig,
-  NO_PROJECT,
-} from "../src/config/dsl-loader";
+import { loadConfig } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";

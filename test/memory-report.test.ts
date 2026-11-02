@@ -9,8 +9,8 @@
 // and one real darwin probe is run at the end, where the claim genuinely is
 // about this machine.
 
-import { processLauncher } from "../src/proc/launch";
 import os from "node:os";
+import { processLauncher } from "./helpers/host";
 
 import {
   chargeProbe,

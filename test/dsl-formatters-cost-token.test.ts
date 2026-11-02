@@ -14,8 +14,8 @@
 // helper bodies the shipped statusline uses — not a test-local copy.
 
 import { drawPayload } from "./helpers/draw-payload";
+import { processLauncher } from "./helpers/host";
 import { textOf } from "../src/render/frame";
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { SessionState } from "../src/daemon/session-state";
 

@@ -6,8 +6,8 @@
 // assertions are the exact commands tmux would run. The screens are the ones
 // Claude Code 2.1.284 drew in the measurements prompt-screen.ts records.
 import { drawPayload } from "./helpers/draw-payload";
+import { processLauncher } from "./helpers/host";
 import { linkUrls } from "./helpers/frame";
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
 import os from "node:os";
@@ -229,7 +229,7 @@ function runtime(tmux: TmuxHint | null) {
   const ctx = {
     ...testVerbContext(sessionState, undefined, config),
     log: (_level: string, msg: string) => logged.push(msg),
-    claudeInput: productionClaudeInputEdge(createLauncher({})),
+    claudeInput: productionClaudeInputEdge(createLauncher({ inherited: process.env })),
   };
   const urls = linkUrls(raw).filter((u) =>
     effectsOf(u).some((e) => e.verb === VERB_SLASH),
@@ -360,7 +360,7 @@ function tray(tmux: TmuxHint | null, drawnIn: TmuxHint | null = tmux) {
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   const ctx = {
     ...testVerbContext(sessionState, undefined, config),
-    claudeInput: productionClaudeInputEdge(createLauncher({})),
+    claudeInput: productionClaudeInputEdge(createLauncher({ inherited: process.env })),
   };
   // What the daemon's payload carries for that hint (RenderPayload.tmux).
   const payload = {

@@ -1,4 +1,5 @@
 import { textOf } from "../src/render/frame";
+import { processLauncher } from "./helpers/host";
 // The bundled default's threshold colours, pinned as a CONTRACT over palette
 // names — not opaque bytes. block/weekly heat as utilization passes the
 // placement's `warnAt` and `errorAt` settings; burnrate heats as the projected
@@ -21,7 +22,6 @@ import { textOf } from "../src/render/frame";
 import { drawPayload } from "./helpers/draw-payload";
 import { runUnder } from "./helpers/frame";
 import type { Frame } from "../src/render/frame";
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { picked, selectionFor } from "./helpers/selection";
 import {

@@ -21,6 +21,7 @@
 // a bar to its theme.
 
 import { drawPayload } from "../test/helpers/draw-payload";
+import { processLauncher } from "../test/helpers/host";
 import type { Frame } from "../src/render/frame";
 import { backgroundsOf, truecolorOf } from "../test/helpers/frame";
 import { TEST_SIGNER } from "../test/helpers/link-signer";
@@ -48,7 +49,6 @@ import {
   type ShadeName,
   type VariationName,
 } from "../src/themes/decor";
-import { processLauncher } from "../src/proc/launch";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { instantOf } from "../src/utils/instant";

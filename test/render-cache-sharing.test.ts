@@ -1,8 +1,8 @@
 import { drawPayload } from "./helpers/draw-payload";
+import { HOST, locs, processLauncher } from "./helpers/host";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linksOf } from "../src/click/read";
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { retainerPathsTo } from "./helpers/retainer-path";
 import fs from "node:fs";
@@ -65,7 +65,7 @@ function makeCache(budgetBytes: number, maxEntries?: number) {
   cleanups.push(() => watchers.closeAll());
   const sessionState = new SessionState();
   const cache = new RenderCache(
-    { stateDir: stateDir(), launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, gates: bareGates(),
+    { stateDir: stateDir(HOST), locations: locs(), env: HOST.env, launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, gates: bareGates(),
  fileEvents: NO_FILE_EVENTS,
       sessionState,
       watchers,

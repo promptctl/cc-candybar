@@ -29,10 +29,10 @@
 //      special-cased chrome path.
 
 import { drawPayload } from "./helpers/draw-payload";
+import { processLauncher } from "./helpers/host";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linkUrls, runUnder, truecolorOf } from "./helpers/frame";
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { withoutSettingsLinks } from "./helpers/ambient-chrome";
 import { getThemePalette } from "@promptctl/rich-js";
@@ -181,7 +181,7 @@ function buildEditRuntime(src: string, sessionId = "s1") {
       opts(width),
     ).frame;
   const ctx: VerbContext = {
-    ...testVerbContext(sessionState, history),
+    ...testVerbContext(sessionState, history, undefined, durable.host),
     // The config this bar rendered with, which gates every click and which an
     // insertion mints its id against — the daemon's own lookup.
     configFor: () => config,
@@ -573,7 +573,6 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
     // an ordinary `when`; drawDsl (the ONE render path, called verbatim by
     // the daemon and the demo alike) needed zero edits for this feature, and
     // this asserts that structurally rather than by promise.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const fs = require("node:fs") as typeof import("node:fs");
     const src = fs.readFileSync(
       require.resolve("../src/dsl/render.ts"),

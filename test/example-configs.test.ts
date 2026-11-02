@@ -1,4 +1,5 @@
 import type { Frame } from "../src/render/frame";
+import { WORLD } from "./helpers/host";
 // [LAW:verifiable-goals] Every shipped example config under examples/ must
 // survive the full production pipeline: parse → merge-on-default → validate →
 // register → render. A template parse error in an inline override, a dangling
@@ -40,7 +41,7 @@ const exampleFiles = fs
 // Run one example through the shipped check pipeline; the rendered line for
 // content assertions.
 async function renderExample(file: string): Promise<Frame> {
-  return expectClean(file, await checkConfig(daemonGates(), path.join(examplesDir, file)))
+  return expectClean(file, await checkConfig(WORLD, daemonGates(), path.join(examplesDir, file)))
     .rendered;
 }
 
@@ -60,7 +61,7 @@ describe("shipped example configs (examples/*.json5)", () => {
   test.each(exampleFiles)(
     "%s is clean under `cc-candybar check` (exit 0) and renders",
     async (file) => {
-      expectClean(file, await checkConfig(daemonGates(), path.join(examplesDir, file)));
+      expectClean(file, await checkConfig(WORLD, daemonGates(), path.join(examplesDir, file)));
     },
   );
 
@@ -86,7 +87,7 @@ describe("shipped example configs (examples/*.json5)", () => {
         }
         const target = path.join(dir, file);
         const loads = linkUrls(
-          expectClean(file, await checkConfig(daemonGates(), target)).rendered,
+          expectClean(file, await checkConfig(WORLD, daemonGates(), target)).rendered,
         )
           .filter((url) => url.startsWith("cc-candybar://load-config/"))
           .map((url) => decodeURIComponent(url.split("/").pop() ?? ""));
@@ -125,7 +126,7 @@ describe("bundled preset library is clean under `cc-candybar check`", () => {
     'a config picking preset "%s" is clean under check (exit 0) and renders',
     async (preset) => {
       await withPresetConfig(preset, async (p) =>
-        expectClean(`preset "${preset}"`, await checkConfig(daemonGates(), p)),
+        expectClean(`preset "${preset}"`, await checkConfig(WORLD, daemonGates(), p)),
       );
     },
   );

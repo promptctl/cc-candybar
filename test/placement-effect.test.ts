@@ -1,4 +1,5 @@
 import { plainOf, textOf, type Frame, type Run } from "../src/render/frame";
+import { processLauncher } from "./helpers/host";
 import { sameDraw } from "./helpers/frame";
 // [LAW:verifiable-goals] brandon-effects-2gka.bm1: a placement can carry its own
 // effect. Its `effect` setting moves that placement's cells and the seams that
@@ -7,7 +8,6 @@ import { sameDraw } from "./helpers/frame";
 
 import { drawPayload } from "./helpers/draw-payload";
 import { linkUrls } from "./helpers/frame";
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
 

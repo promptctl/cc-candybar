@@ -1,11 +1,11 @@
 import fs from "node:fs";
+import { hostOf, processLauncher } from "./helpers/host";
 import os from "node:os";
 import path from "node:path";
 
 import { DaemonLog, logLines } from "../src/daemon/log";
 import { daemonPaths } from "../src/daemon/paths";
 import { productionAdapters } from "../src/daemon/production-adapters";
-import { processLauncher } from "../src/proc/launch";
 
 // [LAW:effects-at-boundaries] A daemon is aimed by the paths value it is built
 // over (candybar-testing-ihvy.yfv), so one aimed at a temporary directory
@@ -15,7 +15,6 @@ import { processLauncher } from "../src/proc/launch";
 describe("a daemon aimed by its paths value", () => {
   let root: string;
   let ambient: string[];
-  const saved = { ...process.env };
 
   const tree = (dir: string): string[] =>
     fs.readdirSync(dir, { recursive: true, withFileTypes: false }).map(String);
@@ -27,16 +26,19 @@ describe("a daemon aimed by its paths value", () => {
       fs.mkdirSync(dir, { recursive: true });
       return dir;
     });
-    process.env.XDG_STATE_HOME = ambient[0];
-    process.env.XDG_CACHE_HOME = ambient[1];
-    process.env.CC_CANDYBAR_DAEMON_REGISTRY_DIR = ambient[2];
-    process.env.CC_CANDYBAR_SOCKET = path.join(ambient[3]!, "socket");
   });
 
   afterEach(() => {
-    for (const key of Object.keys(process.env)) delete process.env[key];
-    Object.assign(process.env, saved);
     fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  // The environment's layout: nothing is handed a host over it, so a write
+  // that reached its paths is a file in one of the ambient directories.
+  const ambientEnv = (): NodeJS.ProcessEnv => ({
+    XDG_STATE_HOME: ambient[0]!,
+    XDG_CACHE_HOME: ambient[1]!,
+    CC_CANDYBAR_DAEMON_REGISTRY_DIR: ambient[2]!,
+    CC_CANDYBAR_SOCKET: path.join(ambient[3]!, "socket"),
   });
 
   const aimedEnv = (): NodeJS.ProcessEnv => ({
@@ -47,14 +49,20 @@ describe("a daemon aimed by its paths value", () => {
   });
 
   test("every path of the value is under the directories its environment names", () => {
-    const aimed = daemonPaths(aimedEnv());
+    const aimed = daemonPaths(hostOf(aimedEnv()));
     expect(
       Object.values(aimed).filter((p) => !p.startsWith(path.join(root, "aimed"))),
     ).toEqual([]);
   });
 
   test("what its adapters write lands under the value, and the environment's directories stay empty", async () => {
-    const aimed = daemonPaths(aimedEnv());
+    const aimed = daemonPaths(hostOf(aimedEnv()));
+    // The fixture is sound: the ambient layout is the one the directories were made for.
+    expect(
+      Object.values(daemonPaths(hostOf(ambientEnv()))).filter(
+        (p) => !p.startsWith(path.join(root, "ambient")),
+      ),
+    ).toEqual([]);
     const daemonLog = new DaemonLog(aimed.log);
     try {
       const adapters = productionAdapters(aimed, daemonLog);

@@ -1,4 +1,5 @@
 import { logLines as linesOf } from "../../src/daemon/log";
+import { hostOf } from "./host";
 import { logPath } from "../../src/daemon/paths";
 import { valueOf } from "../../src/utils/logfmt";
 import { until } from "./until";
@@ -8,7 +9,7 @@ import { until } from "./until";
 // request is answered. A test reads the log once the lines it waits for are
 // there, never once.
 export function logLines(env: NodeJS.ProcessEnv): string[] {
-  return linesOf(logPath(env));
+  return linesOf(logPath(hostOf(env)));
 }
 
 // The whole log once `holds` is true of it: for a condition over the log

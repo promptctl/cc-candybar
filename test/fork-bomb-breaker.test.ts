@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { hostOf, worldOf, WORLD } from "./helpers/host";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -108,42 +109,36 @@ describe("countLiveEntries (pure fold)", () => {
 // ─── daemonCeiling: env var parsing ──────────────────────────────────────────
 
 describe("daemonCeiling", () => {
-  const ORIGINAL = process.env["CC_CANDYBAR_DAEMON_CEILING"];
-  afterEach(() => {
-    if (ORIGINAL === undefined)
-      delete process.env["CC_CANDYBAR_DAEMON_CEILING"];
-    else process.env["CC_CANDYBAR_DAEMON_CEILING"] = ORIGINAL;
-  });
+  // The environment the test states: this worker's, with the ceiling set or absent.
+  const ceilingEnv = (value?: string): NodeJS.ProcessEnv => {
+    const env = { ...process.env };
+    delete env["CC_CANDYBAR_DAEMON_CEILING"];
+    if (value !== undefined) env["CC_CANDYBAR_DAEMON_CEILING"] = value;
+    return env;
+  };
 
   test("defaults to 16 when unset", async () => {
-    delete process.env["CC_CANDYBAR_DAEMON_CEILING"];
-    expect(daemonCeiling()).toBe(16);
+    expect(daemonCeiling(ceilingEnv())).toBe(16);
   });
 
   test("reads a valid positive override", async () => {
-    process.env["CC_CANDYBAR_DAEMON_CEILING"] = "3";
-    expect(daemonCeiling()).toBe(3);
+    expect(daemonCeiling(ceilingEnv("3"))).toBe(3);
   });
 
   test("falls back to default on garbage (non-numeric)", async () => {
-    process.env["CC_CANDYBAR_DAEMON_CEILING"] = "not-a-number";
-    expect(daemonCeiling()).toBe(16);
+    expect(daemonCeiling(ceilingEnv("not-a-number"))).toBe(16);
   });
 
   test("falls back to default on trailing garbage — a typo must not silently truncate (e.g. '160' fat-fingered as '16o')", async () => {
-    process.env["CC_CANDYBAR_DAEMON_CEILING"] = "16o";
-    expect(daemonCeiling()).toBe(16);
+    expect(daemonCeiling(ceilingEnv("16o"))).toBe(16);
     // Not the truncated 16 — DEFAULT_CEILING also happens to be 16, so pin a
     // value where truncation and the default would visibly disagree.
-    process.env["CC_CANDYBAR_DAEMON_CEILING"] = "32o";
-    expect(daemonCeiling()).toBe(16);
+    expect(daemonCeiling(ceilingEnv("32o"))).toBe(16);
   });
 
   test("falls back to default on zero or negative (a ceiling of 0 would refuse everything)", async () => {
-    process.env["CC_CANDYBAR_DAEMON_CEILING"] = "0";
-    expect(daemonCeiling()).toBe(16);
-    process.env["CC_CANDYBAR_DAEMON_CEILING"] = "-5";
-    expect(daemonCeiling()).toBe(16);
+    expect(daemonCeiling(ceilingEnv("0"))).toBe(16);
+    expect(daemonCeiling(ceilingEnv("-5"))).toBe(16);
   });
 });
 
@@ -234,24 +229,23 @@ describe("listRegistryFiles", () => {
 // test/daemon-socket-safety.test.ts's style: real tmp dirs, a real symlink.
 
 describe("realBreakerDeps ensureDirSafe (registry directory safety)", () => {
-  const ORIGINAL = process.env["CC_CANDYBAR_DAEMON_REGISTRY_DIR"];
-  afterEach(() => {
-    if (ORIGINAL === undefined) {
-      delete process.env["CC_CANDYBAR_DAEMON_REGISTRY_DIR"];
-    } else {
-      process.env["CC_CANDYBAR_DAEMON_REGISTRY_DIR"] = ORIGINAL;
-    }
-  });
+  // The world the test states: this worker's environment with the registry
+  // directory override absent, or set to `override`.
+  const registryWorld = (override?: string) => {
+    const env = { ...process.env };
+    delete env["CC_CANDYBAR_DAEMON_REGISTRY_DIR"];
+    if (override !== undefined) env["CC_CANDYBAR_DAEMON_REGISTRY_DIR"] = override;
+    return worldOf(hostOf(env));
+  };
 
   test("default (unoverridden) registry path refuses a symlinked parent", async () => {
-    delete process.env["CC_CANDYBAR_DAEMON_REGISTRY_DIR"];
     const real = freshDir();
     fs.mkdirSync(real, { mode: 0o700 });
     const link = freshDir();
     fs.symlinkSync(real, link);
     const registryDir = path.join(link, "daemons");
     try {
-      expect(() => realBreakerDeps(null, registryDir).ensureDirSafe(registryDir)).toThrow(
+      expect(() => realBreakerDeps(registryWorld(), null, registryDir).ensureDirSafe(registryDir)).toThrow(
         /symlink/,
       );
     } finally {
@@ -261,13 +255,12 @@ describe("realBreakerDeps ensureDirSafe (registry directory safety)", () => {
   });
 
   test("default (unoverridden) registry path accepts a properly-owned parent", async () => {
-    delete process.env["CC_CANDYBAR_DAEMON_REGISTRY_DIR"];
     const root = freshDir();
     fs.mkdirSync(root, { mode: 0o700 });
     const registryDir = path.join(root, "daemons");
     try {
       expect(() =>
-        realBreakerDeps(null, registryDir).ensureDirSafe(registryDir),
+        realBreakerDeps(registryWorld(), null, registryDir).ensureDirSafe(registryDir),
       ).not.toThrow();
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
@@ -277,12 +270,11 @@ describe("realBreakerDeps ensureDirSafe (registry directory safety)", () => {
   test("overridden registry path checks only the leaf, not its parent (a test tmpdir's parent is not a boundary this breaker owns)", async () => {
     const dir = freshDir();
     fs.mkdirSync(dir, { mode: 0o700 });
-    process.env["CC_CANDYBAR_DAEMON_REGISTRY_DIR"] = dir;
     try {
       // The parent here is os.tmpdir() itself, which on a shared-/tmp
       // platform would fail the two-level check — proving the override path
       // deliberately does not apply it.
-      expect(() => realBreakerDeps(null, dir).ensureDirSafe(dir)).not.toThrow();
+      expect(() => realBreakerDeps(registryWorld(dir), null, dir).ensureDirSafe(dir)).not.toThrow();
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -312,7 +304,7 @@ describe("realBreakerDeps writeEntry (no orphaned tmp file)", () => {
     const tmp = `${filePath}.${identity.pid}.tmp`;
     try {
       expect(() =>
-        realBreakerDeps(null, dir).writeEntry(filePath, identity),
+        realBreakerDeps(WORLD, null, dir).writeEntry(filePath, identity),
       ).toThrow();
       expect(fs.existsSync(tmp)).toBe(false);
     } finally {

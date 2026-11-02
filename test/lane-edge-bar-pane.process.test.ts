@@ -3,12 +3,13 @@
 // leaves no pane `pane off` cannot find, and the user's pane keeps focus.
 
 import { spawnSync } from "node:child_process";
+import { processLauncher } from "./helpers/host";
 import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
 import { productionLaneEdge } from "../src/daemon/lane-edge";
-import { processLauncher, type Launcher } from "../src/proc/launch";
+import { type Launcher } from "../src/proc/launch";
 import type { TmuxHint } from "../src/tmux-hint";
 
 const HAS_TMUX = spawnSync("tmux", ["-V"]).status === 0;

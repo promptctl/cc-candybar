@@ -80,7 +80,7 @@ afterAll(() => fs.rmSync(scratch, { recursive: true, force: true }));
 let launcher: TestableLauncher & OneShotLauncher;
 let ending: AbortController;
 const scoped = (scope: Partial<LaunchScope>): void => {
-  launcher = createOneShotLauncher({ signal: ending.signal, ...scope });
+  launcher = createOneShotLauncher({ inherited: process.env,  signal: ending.signal, ...scope });
 };
 const launch: Launcher["launch"] = (opts) => launcher.launch(opts);
 const launchSync: OneShotLauncher["launchSync"] = (opts) =>
@@ -736,7 +736,7 @@ describe("a launcher's scope", () => {
   it("a closed launcher stays closed while another launches", async () => {
     const closing = new AbortController();
     const closed = makeSpyHandle();
-    const first = createLauncher({
+    const first = createLauncher({ inherited: process.env, 
       stats: closed.handle,
       signal: closing.signal,
     });
@@ -757,7 +757,7 @@ describe("a launcher's scope", () => {
   });
 
   it("a daemon's launcher has no blocking launch to reach", () => {
-    const daemons = createLauncher({});
+    const daemons = createLauncher({ inherited: process.env });
     // @ts-expect-error A Launcher offers no launchSync.
     expect(daemons.launchSync).toBeUndefined();
     expect("launchSync" in daemons).toBe(false);
@@ -770,7 +770,7 @@ describe("a launcher's scope", () => {
       ok: false,
       reason: "rate-limited",
     });
-    const next = createOneShotLauncher({ signal: ending.signal });
+    const next = createOneShotLauncher({ inherited: process.env,  signal: ending.signal });
     expect(next.launchSync(once)).toMatchObject({ ok: true });
   });
 

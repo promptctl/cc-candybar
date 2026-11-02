@@ -7,9 +7,9 @@
 // (candybar-templates-zh8b.ph5) and is not exercised here.
 
 import { drawPayload } from "./helpers/draw-payload";
+import { processLauncher } from "./helpers/host";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { SessionState } from "../src/daemon/session-state";
 

@@ -4,6 +4,7 @@
 // only under Bun (measured live; see the ticket); these pin the decision.
 
 import { execFileSync } from "node:child_process";
+import { HOST } from "./helpers/host";
 import path from "node:path";
 import {
   attachCommandLine,
@@ -176,12 +177,12 @@ describe("the attach preload", () => {
   test("the line --help prints names a preload that outlives an upgrade", () => {
     const root = path.resolve(__dirname, "..");
     // A checkout's own build…
-    expect(stableAttachPreload(path.join(root, "src", "index.ts"))).toBe(
+    expect(stableAttachPreload(path.join(root, "src", "index.ts"), HOST)).toBe(
       path.join(root, "dist", "attach-preload.cjs"),
     );
     // …else the staged runtime, never the package's store path.
     const store = "/u/pnpm/global/.pnpm/@promptctl+cc-candybar@1.0.0/node_modules/@promptctl/cc-candybar/dist/index.mjs";
-    expect(stableAttachPreload(store)).not.toContain("@1.0.0");
-    expect(stableAttachPreload(store).endsWith(path.join("dist", "attach-preload.cjs"))).toBe(true);
+    expect(stableAttachPreload(store, HOST)).not.toContain("@1.0.0");
+    expect(stableAttachPreload(store, HOST).endsWith(path.join("dist", "attach-preload.cjs"))).toBe(true);
   });
 });

@@ -15,9 +15,9 @@
 // the daemon calls. No parallel rig.
 
 import { textOf } from "../src/render/frame";
+import { WORLD, processLauncher } from "./helpers/host";
 import { drawPayload } from "./helpers/draw-payload";
 import type { Frame } from "../src/render/frame";
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import fs from "node:fs";
@@ -473,7 +473,7 @@ describe("cc-candybar check — presets", () => {
   test("a preset naming a nonexistent segment is FATAL, and the message locates it", async () => {
     const outcome = await withConfigFile(
       `{ presets: { wide: { root: { v: ['directory', 'no-such-segment'] } } } }`,
-      (p) => checkConfig(daemonGates(), p),
+      (p) => checkConfig(WORLD, daemonGates(), p),
     );
     expect(outcome.kind).toBe("fatal");
     if (outcome.kind !== "fatal") throw new Error("unreachable");
@@ -486,7 +486,7 @@ describe("cc-candybar check — presets", () => {
   test("a preset staging only real segments is clean", async () => {
     const outcome = await withConfigFile(
       `{ presets: { wide: { root: { v: ['directory'] } } } }`,
-      (p) => checkConfig(daemonGates(), p),
+      (p) => checkConfig(WORLD, daemonGates(), p),
     );
     expect(outcome.kind).toBe("clean");
   });

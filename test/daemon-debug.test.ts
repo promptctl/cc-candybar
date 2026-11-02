@@ -11,8 +11,8 @@
 // a pure function over the DSL state bundle, so tests drive it with
 // constructed state and read the result.
 
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
+import { processLauncher } from "./helpers/host";
 import { feedInputs } from "./helpers/inputs";
 import { SessionState } from "../src/daemon/session-state";
 import { ownDeclNames } from "./helpers/ambient-chrome";
@@ -43,19 +43,16 @@ import { drawingAt } from "./helpers/test-engine";
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
 // [LAW:verifiable-goals] The "unset env var" branch of declareEnv must be
-// exercised deterministically. Relying on `CC_CANDYBAR_DEBUG_TEST_UNSET_VAR_XYZ`
-// being absent in `process.env` was load-bearing on environment state; a CI
-// runner or developer who happens to export it would silently flip the
-// assertion. beforeEach/afterEach (below) own the env contract — they
-// guarantee the variable is unset for every test in this file and restore
-// any prior value on teardown.
+// exercised deterministically. The registry built below is handed no
+// environment, so the variable is absent whatever the machine exports.
 const UNSET_ENV_VAR = "CC_CANDYBAR_DEBUG_TEST_UNSET_VAR_XYZ";
 
 // A minimal DslConfig that exercises every snapshot field:
 //   - literal (no source-side state)
 //   - input (driven by the bound payload, produces a value)
-//   - env (resolved at declare time — UNSET_ENV_VAR is enforced absent so
-//     this records a lastError and uses the per-variable default)
+//   - env (resolved at declare time — UNSET_ENV_VAR is absent from the
+//     registry's environment, so this records a lastError and uses the
+//     per-variable default)
 //   - template (computed node, depends on other vars)
 const TEST_CONFIG_SOURCE = `{
   globals: {},
@@ -81,20 +78,6 @@ const TEST_CONFIG_SOURCE = `{
   },
   root: { h: ['intro', 'plain', { seg: 'intro', id: 'intro2' }] },
 }`;
-
-// [LAW:single-enforcer] env-state is managed at one place — these hooks —
-// not scattered across each test. `declareEnv` reads `process.env` at
-// registerDslConfig call time, so the env state is set *before* buildState
-// is invoked from within each test.
-let savedUnsetEnv: string | undefined;
-beforeEach(() => {
-  savedUnsetEnv = process.env[UNSET_ENV_VAR];
-  delete process.env[UNSET_ENV_VAR];
-});
-afterEach(() => {
-  if (savedUnsetEnv !== undefined) process.env[UNSET_ENV_VAR] = savedUnsetEnv;
-  else delete process.env[UNSET_ENV_VAR];
-});
 
 // Build a populated DaemonDslState from the test config + a known payload.
 function buildPopulatedState(): DaemonDslState {

@@ -7,8 +7,8 @@
 // first draw that read it, and released only by a sweep 2.5 to 5 minutes
 // after the last draw that did.
 
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
+import { HOST, locs, processLauncher } from "./helpers/host";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -115,7 +115,7 @@ test("a preset click that newly places the PR starts its lookup with no draw; sw
     usageStore: { declareToday: () => settledLane(ABSENT) },
   } as unknown as KeyedOwners;
   const cache = new RenderCache(
-    { stateDir: stateDir(), launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, gates: bareGates(),
+    { stateDir: stateDir(HOST), locations: locs(), env: HOST.env, launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, gates: bareGates(),
  fileEvents: NO_FILE_EVENTS,
       sessionState,
       watchers,
@@ -247,7 +247,7 @@ function gitCache() {
     usageStore: { declareToday: () => settledLane(ABSENT) },
   } as unknown as KeyedOwners;
   const cache = new RenderCache(
-    { stateDir: stateDir(), launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, gates: bareGates(),
+    { stateDir: stateDir(HOST), locations: locs(), env: HOST.env, launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, gates: bareGates(),
  fileEvents: NO_FILE_EVENTS,
       sessionState: new SessionState(),
       watchers,

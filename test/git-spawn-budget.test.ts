@@ -9,8 +9,8 @@
 // invented one: this budget is only meaningful for the flags production asks
 // for.
 
-import { processLauncher } from "../src/proc/launch";
 import { execSync } from "node:child_process";
+import { processLauncher } from "./helpers/host";
 import {
   mkdirSync,
   mkdtempSync,

@@ -4,8 +4,8 @@
 // that differs from the one stored; a re-read that finds what is stored moves
 // nothing, so a still source under a fast period wakes no feed.
 
-import { processLauncher } from "../src/proc/launch";
 import fs from "node:fs";
+import { HOST, locs, processLauncher } from "./helpers/host";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -78,7 +78,7 @@ function setUp() {
   // The sessions each reload said drew from its entry, in order.
   const reloads: Array<readonly string[]> = [];
   const cache = new RenderCache(
-    { stateDir: stateDir(),
+    { stateDir: stateDir(HOST), locations: locs(), env: HOST.env,
       launcher: processLauncher,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER, gates: bareGates(),

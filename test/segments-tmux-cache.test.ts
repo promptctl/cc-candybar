@@ -27,14 +27,13 @@ fs.writeFileSync(
   { mode: 0o755 },
 );
 
-const SAVED = {
-  PATH: process.env.PATH,
-  TMUX: process.env.TMUX,
-  TMUX_PANE: process.env.TMUX_PANE,
-};
-const restore = (key: keyof typeof SAVED): void => {
-  if (SAVED[key] === undefined) delete process.env[key];
-  else process.env[key] = SAVED[key];
+// What the daemon's own children inherit: the stub first on PATH, and a shell
+// that sits in some other pane of some other server.
+const INHERITED: NodeJS.ProcessEnv = {
+  ...process.env,
+  PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}`,
+  TMUX: "/daemon/shell.sock,1,0",
+  TMUX_PANE: "%99",
 };
 
 const hint = (socket: string, pane: string): TmuxHint => ({
@@ -58,17 +57,7 @@ const fakeClock = (): void => {
   jest.useFakeTimers({ doNotFake: ["nextTick", "queueMicrotask"] });
 };
 
-beforeAll(() => {
-  process.env.PATH = `${bin}${path.delimiter}${SAVED.PATH ?? ""}`;
-  // The daemon's own shell sits in some other pane of some other server.
-  process.env.TMUX = "/daemon/shell.sock,1,0";
-  process.env.TMUX_PANE = "%99";
-});
-
 afterAll(() => {
-  restore("PATH");
-  restore("TMUX");
-  restore("TMUX_PANE");
   fs.rmSync(bin, { recursive: true, force: true });
 });
 
@@ -81,7 +70,7 @@ beforeEach(() => {
     onEnd: () => {},
     onRefused: () => {},
   };
-  launcher = createLauncher({ stats: handle });
+  launcher = createLauncher({ inherited: INHERITED, stats: handle });
   svc = new TmuxService({ launcher });
   holds = new Holds();
 });

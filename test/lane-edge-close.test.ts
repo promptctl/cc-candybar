@@ -3,7 +3,7 @@
 // no signal is sent from a daemon that is gone.
 
 import { productionLaneEdge } from "../src/daemon/lane-edge";
-import { processLauncher } from "../src/proc/launch";
+import { processLauncher } from "./helpers/host";
 
 describe("the lane edge after its daemon closes", () => {
   const edgeOver = (closing: AbortController) =>

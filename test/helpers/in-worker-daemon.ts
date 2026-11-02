@@ -5,6 +5,7 @@
 // through is daemon-e2e's helpers, which take this in place of a socket path.
 
 import type { TmuxAtExit } from "../../src/daemon/tmux-status";
+import { HOST } from "./host";
 import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
@@ -129,13 +130,14 @@ export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
   // judge sees each one by the file that built it, as it sees a real daemon.
   recordDaemonStart({ ledger: LEDGER, file: TEST_FILE, route: "harness" });
   // The env a case placed names where the daemon lives, read once here.
-  const paths = overrides.paths ?? daemonPaths(process.env);
+  const paths = overrides.paths ?? daemonPaths(HOST);
   fs.mkdirSync(paths.state, { recursive: true });
   const daemonLog = overrides.daemonLog ?? new DaemonLog(paths.log);
   try {
     const daemon = createDaemon({
       ...productionAdapters(paths, daemonLog),
       bundle: bundleAt(path.join(paths.state, "checkout")),
+      host: HOST,
       memoryLimitBytes: memoryLimitBytes(process.env),
       // test/setup.ts points it at a closed port.
       registryUrl: process.env.CC_CANDYBAR_REGISTRY_URL!,

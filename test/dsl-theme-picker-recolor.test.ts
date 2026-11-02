@@ -1,4 +1,5 @@
 import type { Frame } from "../src/render/frame";
+import { processLauncher } from "./helpers/host";
 // [LAW:verifiable-goals] Epic k5a done-gate #1: clicking a theme picker option
 // recolors the WHOLE bar live. The action-surface tests (dsl-actions/dsl-picker)
 // prove the click writes SessionState and the active-marking moves, but they
@@ -22,7 +23,6 @@ import type { Frame } from "../src/render/frame";
 
 import { drawPayload } from "./helpers/draw-payload";
 import { backgroundsOf, boldUrls } from "./helpers/frame";
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
 import type { RichText } from "@promptctl/rich-js";

@@ -33,10 +33,11 @@
 //      store refuses loudly rather than authoring a hollow declaration.
 
 import { drawPayload } from "./helpers/draw-payload";
+import { locations } from "../src/daemon/paths";
+import { HOST, locs, processLauncher } from "./helpers/host";
 import type { Frame } from "../src/render/frame";
 import { linksOf } from "../src/click/read";
 import { linkUrls } from "./helpers/frame";
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
 import { existsSync } from "node:fs";
@@ -297,11 +298,7 @@ function buildRuntime(src: string, sessionId = "s1", dflt?: DslConfig) {
       instantOf(new Date()),
       opts(width),
     ).frame;
-  const ctx: VerbContext = testVerbContext(
-    sessionState,
-    durable.historyFor(sessionState),
-    config,
-  );
+  const ctx: VerbContext = testVerbContext(sessionState, durable.historyFor(sessionState), config, durable.host);
   const click = async (url: string): Promise<void> => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =
@@ -473,7 +470,7 @@ describe("config-file-store: segment-palette placement", () => {
     }`;
     durable.write(text);
     expect(() =>
-      writeValues(store(), { path: durable.configPath, above: [], repo: null, cwd: null }, [["segments.ghost.palette", "nord"]]),
+      writeValues(store(), { path: durable.configPath, above: [], repo: null, cwd: null, locs: locations(durable.host) }, [["segments.ghost.palette", "nord"]]),
     ).toThrow(
       /cannot edit segments\.ghost\.palette: neither the config file nor the bundled default declares segments\.ghost/,
     );
@@ -497,7 +494,7 @@ function makeCache(): {
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
   const cache = new RenderCache(
-    { stateDir: stateDir(), launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, gates: bareGates(), fileEvents: NO_FILE_EVENTS, sessionState, watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
+    { stateDir: stateDir(durable.host), locations: locations(durable.host), env: durable.host.env, launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, gates: bareGates(), fileEvents: NO_FILE_EVENTS, sessionState, watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
     { budgetBytes: () => renderCacheBudget(memoryLimitBytes({})), observers: reloads.observers },
   );
   cleanups.unshift(() => cache.close());
@@ -544,7 +541,7 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
       await reloads.after(entry, () =>
         writeValues(
           store(),
-          { path: durable.configPath, above: [], repo: null, cwd: null },
+          { path: durable.configPath, above: [], repo: null, cwd: null, locs: locations(durable.host) },
           [["segments.sidebar.palette", "nord"]],
         ),
       );
@@ -576,7 +573,7 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
     }`);
     writeValues(
       store(),
-      { path: durable.configPath, above: [], repo: null, cwd: null },
+      { path: durable.configPath, above: [], repo: null, cwd: null, locs: locations(durable.host) },
       [["segments.sidebar.palette", "gruvbox"]],
     );
 
@@ -615,7 +612,7 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
     }`);
     writeValues(
       store(),
-      { path: durable.configPath, above: [], repo: null, cwd: null },
+      { path: durable.configPath, above: [], repo: null, cwd: null, locs: locations(durable.host) },
       [["segments.directory.palette", "nord"]],
     );
 

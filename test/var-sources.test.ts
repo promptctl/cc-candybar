@@ -1,5 +1,5 @@
-import { processLauncher } from "../src/proc/launch";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
+import { processLauncher } from "./helpers/host";
 import { reaction } from "mobx";
 import { ColorDepth, ensureContrast, parseRgbHex } from "@promptctl/rich-js";
 import { feedInputs } from "./helpers/inputs";
@@ -68,9 +68,23 @@ function registryOver(
 }
 
 // Helper: fresh pair so tests are fully isolated.
-function make(defaultEmptyValue?: string) {
+// `env` is the environment an `env` source reads: stated by the test that means
+// one, otherwise empty (every variable unset).
+function make(defaultEmptyValue?: string, env: NodeJS.ProcessEnv = {}) {
   const store = new VariableStore();
-  return { store, registry: registryOver(store, defaultEmptyValue) };
+  return {
+    store,
+    registry: registryOver(
+      store,
+      defaultEmptyValue,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      env,
+    ),
+  };
 }
 
 // ─── literal ─────────────────────────────────────────────────────────────────
@@ -119,21 +133,15 @@ describe("SourceRegistry — literal", () => {
 describe("SourceRegistry — env", () => {
   const VAR = "CC_TEST_VAR_SOURCES";
 
-  afterEach(() => {
-    delete process.env[VAR];
-  });
-
   it("returns the env var value when set", () => {
-    process.env[VAR] = "from-env";
-    const { store, registry } = make();
+    const { store, registry } = make(undefined, { [VAR]: "from-env" });
     registry.declareEnv("myvar", VAR);
     expect(store.read("myvar")).toBe("from-env");
     expect(registry.getLastError("myvar")).toBeUndefined();
   });
 
   it("type is always 'string'", () => {
-    process.env[VAR] = "42";
-    const { store, registry } = make();
+    const { store, registry } = make(undefined, { [VAR]: "42" });
     registry.declareEnv("myvar", VAR);
     expect(store.getType("myvar")).toBe("string");
     expect(store.read("myvar")).toBe("42"); // raw string, not coerced to number
@@ -168,8 +176,7 @@ describe("SourceRegistry — env", () => {
   });
 
   it("does NOT record last_error when env var is present", () => {
-    process.env[VAR] = "present";
-    const { registry } = make();
+    const { registry } = make(undefined, { [VAR]: "present" });
     registry.declareEnv("myvar", VAR);
     expect(registry.getLastError("myvar")).toBeUndefined();
   });
@@ -519,7 +526,7 @@ describe("SourceRegistry — shell: basic", () => {
     const closing = new AbortController();
     closing.abort(new Error("the daemon closed"));
     const registry = new SourceRegistry(
-      createLauncher({ signal: closing.signal }),
+      createLauncher({ inherited: process.env,  signal: closing.signal }),
       new VariableStore(),
     );
     live.add(registry);

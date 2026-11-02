@@ -4,6 +4,7 @@
 // a drop the file already held does not lock the bar's controls.
 
 import fs from "node:fs";
+import { locs } from "./helpers/host";
 import os from "node:os";
 import path from "node:path";
 
@@ -19,7 +20,7 @@ let dir: string;
 const homeWith = (text: string): ConfigHome => {
   const file = path.join(dir, "config.json5");
   fs.writeFileSync(file, text);
-  return { path: file, above: [], repo: null, cwd: null };
+  return { path: file, above: [], repo: null, cwd: null, locs: locs() };
 };
 
 beforeEach(() => {

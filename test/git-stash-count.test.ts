@@ -9,8 +9,8 @@
 // gitdir, which never holds that reflog: a linked worktree would have reported
 // zero stashes, silently, for a repo that has them.
 
-import { processLauncher } from "../src/proc/launch";
 import { execSync } from "node:child_process";
+import { processLauncher } from "./helpers/host";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

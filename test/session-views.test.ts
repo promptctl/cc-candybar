@@ -1,6 +1,6 @@
 import { drawPayload } from "./helpers/draw-payload";
+import { HOST, locs, processLauncher } from "./helpers/host";
 import { textOf } from "../src/render/frame";
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
 import os from "node:os";
@@ -60,7 +60,7 @@ function makeCache(
   });
   cleanups.push(() => watchers.closeAll());
   const cache = new RenderCache(
-    { stateDir: stateDir(), launcher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, gates: bareGates(),
+    { stateDir: stateDir(HOST), locations: locs(), env: HOST.env, launcher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, gates: bareGates(),
  fileEvents: NO_FILE_EVENTS,
       sessionState: new SessionState(),
       watchers,
@@ -493,7 +493,7 @@ test("a config load starts no view's source, and still names a session value tha
     }),
   );
   let shells = 0;
-  const launcher = createLauncher({
+  const launcher = createLauncher({ inherited: process.env, 
     stats: {
       onStart: (c) => {
         if (c === "user-shell") shells++;

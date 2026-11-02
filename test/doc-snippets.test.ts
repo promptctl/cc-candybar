@@ -42,6 +42,8 @@
 // config snippet is an untested claim, which this suite rejects.
 
 import fs from "node:fs";
+import { HOST, hostOf, worldOf } from "./helpers/host";
+import type { World } from "../src/host";
 import os from "node:os";
 import path from "node:path";
 import { checkConfig, checkPlan } from "../src/check";
@@ -180,17 +182,10 @@ afterAll(() => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-// checkConfig's collision scan reads the cwd/XDG candidate paths; pin XDG so a
-// developer's real ~/.config/cc-candybar can never leak a warning into a
-// pass-snippet assertion.
-const SAVED_XDG = process.env.XDG_CONFIG_HOME;
-beforeAll(() => {
-  process.env.XDG_CONFIG_HOME = path.join(os.tmpdir(), "cc-doc-xdg-empty");
-});
-afterAll(() => {
-  if (SAVED_XDG === undefined) delete process.env.XDG_CONFIG_HOME;
-  else process.env.XDG_CONFIG_HOME = SAVED_XDG;
-});
+// checkConfig's collision scan reads the cwd/XDG candidate paths; the world
+// below pins XDG so a developer's real ~/.config/cc-candybar can never leak a
+// warning into a pass-snippet assertion.
+let world: World;
 
 // [LAW:effects-at-boundaries] The stubs reach a `shell` source through the
 // one seam it already has: the reader spawns `/bin/sh -c <command>` with the
@@ -205,6 +200,8 @@ beforeAll(() => {
     fs.writeFileSync(path.join(bin, name), f.body, { mode: 0o755 });
   }
   process.env.PATH = `${bin}${path.delimiter}${SAVED_PATH ?? ""}`;
+  // Built after the PATH write so the stubs reach the launcher's children.
+  world = worldOf(hostOf({ ...HOST.env, XDG_CONFIG_HOME: path.join(os.tmpdir(), "cc-doc-xdg-empty") }));
   for (const f of fences) {
     if (f.snippet.kind !== "file") continue;
     const target = path.join(dir, f.snippet.path);
@@ -225,7 +222,7 @@ afterAll(() => {
 function checkSnippet(f: Fence): ReturnType<typeof checkConfig> {
   const p = path.join(dir, `${path.basename(f.doc)}-L${f.line}.json5`);
   fs.writeFileSync(p, f.body);
-  return checkConfig(daemonGates(), p, dir);
+  return checkConfig(world, daemonGates(), p, dir);
 }
 
 const ofKind =

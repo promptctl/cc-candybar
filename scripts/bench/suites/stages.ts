@@ -8,6 +8,7 @@
 // daemon's scheduling in the way. The tick is `wire`.
 
 import fs from "node:fs";
+import { WORLD, locs } from "../../../test/helpers/host";
 import path from "node:path";
 
 import {
@@ -50,7 +51,7 @@ async function prepared(
 ): Promise<PreparedConfig> {
   const warnings: string[] = [];
   // An example file is explicit: no repository supplies it.
-  const config = await prepareConfig(
+  const config = await prepareConfig(WORLD, 
     layers.map(homeLayer),
     NO_REPO,
     cwd,
@@ -152,7 +153,7 @@ export const STAGES: readonly Benchmark[] = [
       const cwd = scratchDir("ccbn-stage");
       try {
         const ms = await repeat(plan.samples, () => {
-          loadConfigChain(
+          loadConfigChain(locs(), 
             [],
             DEFAULT_DSL_CONFIG,
             { warned: () => {} },

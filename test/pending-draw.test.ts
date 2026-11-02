@@ -8,7 +8,7 @@
 // answering with its default. None of it is a fault: nothing is reported.
 
 import { drawPayload } from "./helpers/draw-payload";
-import { processLauncher } from "../src/proc/launch";
+import { processLauncher } from "./helpers/host";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { SessionState } from "../src/daemon/session-state";
 import { VariableStore } from "../src/var-system/store";

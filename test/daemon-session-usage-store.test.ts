@@ -1,4 +1,5 @@
 import { reaction } from "mobx";
+import { HOST } from "./helpers/host";
 // [LAW:verifiable-goals] The architectural fix (brandon-daemon-memory-leak-5qh):
 // the `today` aggregate is a fold over daemon-owned per-session records, NOT a
 // per-render whole-tree scan. These tests pin that contract.
@@ -106,7 +107,7 @@ describe("SessionUsageStore — session projection", () => {
   test("hit when transcript mtime unchanged, miss when it advances", async () => {
     const t = join(dir, "A.jsonl");
     writeFileSync(t, usageLine("a", new Date(), 0.01));
-    const store = new SessionUsageStore({ sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
     try {
       const hd = hook("A", t);
       await store.getUsageInfo("A", hd);
@@ -132,7 +133,7 @@ describe("SessionUsageStore — session projection", () => {
     const ledger = new RefreshLedger((level, msg) =>
       lines.push(`${level} ${msg}`),
     );
-    const store = new SessionUsageStore({ sweepIntervalMs: 0, ledger });
+    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0, ledger });
     const usage = () => ledger.snapshot().find((r) => r.name === "usage");
     try {
       const t = join(dir, "A.jsonl");
@@ -195,7 +196,7 @@ describe("SessionUsageStore — session projection", () => {
       t,
       usageLine("a1", new Date(), 0.01) + usageLine("a2", new Date(), 0.02),
     );
-    const store = new SessionUsageStore({ sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
     try {
       // hook() carries no cost block → officialCost null → display the
       // transcript total.
@@ -216,7 +217,7 @@ describe("SessionUsageStore — session projection", () => {
       t,
       usageLine("a1", new Date(), 0.01) + usageLine("a2", new Date(), 0.02),
     );
-    const store = new SessionUsageStore({ sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
     try {
       const hd = hook("A", t);
       // Claude's authoritative figure differs from the rate-table sum (0.03).
@@ -241,7 +242,7 @@ describe("SessionUsageStore — session projection", () => {
   });
 
   test("empty sessionId does no work, and a draw of it is what its refresh answered", async () => {
-    const store = new SessionUsageStore({ sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
     try {
       const bare = { session_id: "" } as ClaudeHookData;
       const info = await store.getUsageInfo("", bare);
@@ -284,7 +285,7 @@ describe("SessionUsageStore — session projection", () => {
       }) + "\n",
     );
     const lines: string[] = [];
-    const store = new SessionUsageStore({
+    const store = new SessionUsageStore({ host: HOST, 
       sweepIntervalMs: 0,
       logger: (_level, msg) => lines.push(msg),
     });
@@ -309,7 +310,7 @@ describe("SessionUsageStore — session projection", () => {
     const lastWeek = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     writeFileSync(t, usageLine("a", lastWeek, 0.01));
     const lines: string[] = [];
-    const store = new SessionUsageStore({
+    const store = new SessionUsageStore({ host: HOST, 
       sweepIntervalMs: 0,
       staleAgeMs: 1,
       logger: (_level, msg) => lines.push(msg),
@@ -334,7 +335,7 @@ describe("SessionUsageStore — session projection", () => {
     const at = new Date();
     writeFileSync(t, usageLine("a", at, 0.01));
     const lines: string[] = [];
-    const store = new SessionUsageStore({
+    const store = new SessionUsageStore({ host: HOST, 
       sweepIntervalMs: 0,
       staleAgeMs: 1,
       logger: (_level, msg) => lines.push(msg),
@@ -355,7 +356,7 @@ describe("SessionUsageStore — session projection", () => {
   test("sweepStale holds a stale record with today's work before any `today` is asked", async () => {
     const t = join(dir, "A.jsonl");
     writeFileSync(t, usageLine("a", new Date(), 0.01));
-    const store = new SessionUsageStore({ sweepIntervalMs: 0, staleAgeMs: 1 });
+    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0, staleAgeMs: 1 });
     try {
       await store.getUsageInfo("A", hook("A", t));
       await new Promise((r) => setTimeout(r, 10));
@@ -372,7 +373,7 @@ describe("SessionUsageStore — session projection", () => {
     const lines: string[] = [];
     let now = Date.now();
     const clock = jest.spyOn(Date, "now").mockImplementation(() => now);
-    const store = new SessionUsageStore({
+    const store = new SessionUsageStore({ host: HOST, 
       sweepIntervalMs: 0,
       staleAgeMs: 1,
       logger: (_level, msg) => lines.push(msg),
@@ -406,7 +407,7 @@ describe("SessionUsageStore — session projection", () => {
     writeFileSync(b, usageLine("b", lastWeek, 0.01));
     let now = Date.now();
     const clock = jest.spyOn(Date, "now").mockImplementation(() => now);
-    const store = new SessionUsageStore({
+    const store = new SessionUsageStore({ host: HOST, 
       sweepIntervalMs: 0,
       staleAgeMs: 300,
     });
@@ -432,7 +433,7 @@ describe("SessionUsageStore — session projection", () => {
   // nothing is answered, and a refresh that finds no transcript answers the
   // empty record — two facts a draw must not confuse.
   test("a draw before the session's refresh is not answered; after one it is what the refresh answered", async () => {
-    const store = new SessionUsageStore({ sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
     try {
       const bare = { session_id: "H" } as ClaudeHookData;
       expect(store.usageOf("H", bare)).toBe(PENDING);
@@ -456,7 +457,7 @@ describe("SessionUsageStore — session projection", () => {
     const t = join(dir, "A.jsonl");
     const at = new Date();
     writeFileSync(t, usageLine("a", at, 0.01));
-    const store = new SessionUsageStore({ sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
     try {
       // The session's own refresh has landed, but no scan has.
       await store.getUsageInfo("A", hook("A", t));
@@ -472,14 +473,14 @@ describe("SessionUsageStore — session projection", () => {
   test("K concurrent reads of one (session, mtime) parse once", async () => {
     const t = join(dir, "A.jsonl");
     writeFileSync(t, usageLine("a", new Date(), 0.01));
-    const store = new SessionUsageStore({ sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
     try {
       const hd = hook("A", t);
       const oneParse = await countFsOps(() => store.getUsageInfo("A", hd));
 
       // Fresh store: K concurrent first-reads coalesce onto
       // one flight, so cumulative fs ops stay near a single parse, not K×.
-      const store2 = new SessionUsageStore({ sweepIntervalMs: 0 });
+      const store2 = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
       const kConcurrent = await countFsOps(() =>
         Promise.all(
           Array.from({ length: 8 }, () => store2.getUsageInfo("A", hd)),
@@ -539,7 +540,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
   // directory, whichever other directories have been seen.
   test("a second session's directory is seeded on first sight and keeps its own sum", async () => {
     const other = mkdtempSync(join(tmpdir(), "cc-candybar-store-other-"));
-    const store = new SessionUsageStore({ sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
     try {
       const odir = join(other, "projects", "proj");
       mkdirSync(odir, { recursive: true });
@@ -574,7 +575,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
   });
 
   test("seed aggregates today cost across every session", async () => {
-    const store = new SessionUsageStore({ sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
     try {
       const info = await todayInfo(store, holds, hook("sess-0-0", activePath), root, instantOf(new Date()));
       expect(info.kind).toBe("ok");
@@ -594,7 +595,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
   // together they were two cold parses, and whichever landed second, the
   // request's newer fold among them, was not stored.
   test("a cold request's own session is read once, by the seed", async () => {
-    const store = new SessionUsageStore({ sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
     try {
       await todayInfo(store, holds, hook("sess-0-0", activePath), root, instantOf(new Date()));
       expect(store.getStats()).toMatchObject({ hits: 1, misses: 0 });
@@ -607,7 +608,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
   // seed ingesting more sessions evicted the oldest out of `today` unseen.
   test("today sums every session the seed ingests, however many", async () => {
     const many = mkdtempSync(join(tmpdir(), "cc-candybar-store-many-"));
-    const store = new SessionUsageStore({ sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
     try {
       const SESSIONS = 300;
       const at = new Date();
@@ -639,7 +640,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     const tree = mkdtempSync(join(tmpdir(), "cc-candybar-store-rescan-"));
     const PERIOD_MS = 50;
     const lines: string[] = [];
-    const store = new SessionUsageStore({
+    const store = new SessionUsageStore({ host: HOST, 
       sweepIntervalMs: 0,
       rescan: { okMs: PERIOD_MS, failedMs: PERIOD_MS },
       logger: (level, msg) => lines.push(`${level} ${msg}`),
@@ -716,7 +717,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     const tree = mkdtempSync(join(tmpdir(), "cc-candybar-store-scan-fail-"));
     const lines: string[] = [];
     let failNextScan = true;
-    const store = new SessionUsageStore({
+    const store = new SessionUsageStore({ host: HOST, 
       sweepIntervalMs: 0,
       rescan: { okMs: 60_000, failedMs: 50 },
       logger: (level, msg) => {
@@ -772,7 +773,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     const tree = mkdtempSync(join(tmpdir(), "cc-candybar-store-unread-"));
     const pdir = join(tree, "projects", "proj");
     const headless = join(pdir, "headless.jsonl");
-    const store = new SessionUsageStore({
+    const store = new SessionUsageStore({ host: HOST, 
       sweepIntervalMs: 0,
       rescan: { okMs: 60_000, failedMs: 50 },
     });
@@ -814,7 +815,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     const tree = mkdtempSync(join(tmpdir(), "cc candybar store unlisted-"));
     const locked = join(tree, "projects", "locked");
     const lines: string[] = [];
-    const store = new SessionUsageStore({
+    const store = new SessionUsageStore({ host: HOST, 
       sweepIntervalMs: 0,
       rescan: { okMs: 60_000, failedMs: 60_000 },
       logger: (level, msg) => lines.push(`${level} ${msg}`),
@@ -852,7 +853,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
   test("a projects directory the scan cannot list is today's failure", async () => {
     const tree = mkdtempSync(join(tmpdir(), "cc-candybar-store-noprojects-"));
     const projects = join(tree, "projects");
-    const store = new SessionUsageStore({
+    const store = new SessionUsageStore({ host: HOST, 
       sweepIntervalMs: 0,
       rescan: { okMs: 60_000, failedMs: 60_000 },
     });
@@ -873,7 +874,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
   // `today` is the day sums at the frame's own day: past local midnight, with
   // no record changed and nothing read, it is the new day's — nothing spent.
   test("a frame past midnight reads the new day with no refresh", async () => {
-    const store = new SessionUsageStore({ sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
     try {
       const hd = hook("sess-0-0", activePath);
       const now = new Date();
@@ -899,7 +900,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
   });
 
   test("after the seed, N renders with an unchanged session do ZERO transcript fs work", async () => {
-    const store = new SessionUsageStore({ sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
     try {
       const hd = hook("sess-0-0", activePath);
       const seedOps = await countFsOps(() => todayInfo(store, holds, hd, root, instantOf(new Date())));
@@ -919,7 +920,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
   });
 
   test("a changed session re-parses only itself, not the tree", async () => {
-    const store = new SessionUsageStore({ sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
     try {
       const hd = hook("sess-0-0", activePath);
       const seedOps = await countFsOps(() => todayInfo(store, holds, hd, root, instantOf(new Date())));

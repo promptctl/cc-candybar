@@ -10,6 +10,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { hostOf } from "../../helpers/host";
 import os from "node:os";
 import path from "node:path";
 
@@ -205,7 +206,7 @@ describe("a daemon in this worker", () => {
     const stateHome = process.env.XDG_STATE_HOME;
     daemon = startDaemon(env);
     expect(process.env.XDG_STATE_HOME).toBe(env.XDG_STATE_HOME);
-    expect(daemon.log).toBe(logPath(env));
+    expect(daemon.log).toBe(logPath(hostOf(env)));
     await render(daemon, sid, projectDir);
 
     const subscriber = daemon.connect();

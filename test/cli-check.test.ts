@@ -14,6 +14,8 @@
 // fields).
 
 import fs from "node:fs";
+import { HOST, hostOf, worldOf } from "./helpers/host";
+import type { Host, World } from "../src/host";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -44,20 +46,20 @@ afterAll(() => {
 
 // Default-path resolution reads $XDG_CONFIG_HOME (dslConfigCandidatePaths);
 // pin it per test so the developer's real config can never leak into a
-// verdict. $CC_CANDYBAR_CONFIG is pinned too because one test sets it.
-const SAVED_ENV = {
-  CC_CANDYBAR_CONFIG: process.env.CC_CANDYBAR_CONFIG,
-  XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME,
-};
+// verdict. $CC_CANDYBAR_CONFIG is pinned too because one test sets it. The
+// machine is the worker's own environment with `set` laid over it (undefined
+// removes a variable); nothing is written to `process.env`.
+let host: Host = HOST;
+let world: World;
+function runOn(set: Record<string, string | undefined>): void {
+  const env = { ...host.env, ...set };
+  for (const [k, v] of Object.entries(set)) if (v === undefined) delete env[k];
+  host = hostOf(env);
+  world = worldOf(host);
+}
 beforeEach(() => {
-  delete process.env.CC_CANDYBAR_CONFIG;
-  process.env.XDG_CONFIG_HOME = path.join(dir, "xdg-empty");
-});
-afterAll(() => {
-  for (const [k, v] of Object.entries(SAVED_ENV)) {
-    if (v === undefined) delete process.env[k];
-    else process.env[k] = v;
-  }
+  host = HOST;
+  runOn({ CC_CANDYBAR_CONFIG: undefined, XDG_CONFIG_HOME: path.join(dir, "xdg-empty") });
 });
 
 function write(name: string, contents: string): string {
@@ -78,7 +80,7 @@ describe("checkConfig — explicit target", () => {
       "ok.json5",
       `{ segments: { a: { template: 'a' } }, root: { h: ['a'] } }`,
     );
-    const outcome = await checkConfig(daemonGates(), p, dir);
+    const outcome = await checkConfig(world, daemonGates(), p, dir);
     expect(outcome.kind).toBe("clean");
     if (outcome.kind === "clean") {
       expect(outcome.layers).toEqual([{ path: p, scope: "plugins" }]);
@@ -95,7 +97,7 @@ describe("checkConfig — explicit target", () => {
         root: { h: ['a'] },
       }`,
     );
-    expect(expectFatal(await checkConfig(daemonGates(), p, dir))).toMatch(
+    expect(expectFatal(await checkConfig(world, daemonGates(), p, dir))).toMatch(
       /key "update.dismissed" is written by the daemon's own links/,
     );
   });
@@ -111,7 +113,7 @@ describe("checkConfig — explicit target", () => {
         root: { h: ["a"] },
       }`,
     );
-    const outcome = await checkConfig(daemonGates(), p, dir, SHORT_SETTLE_MS);
+    const outcome = await checkConfig(world, daemonGates(), p, dir, SHORT_SETTLE_MS);
     if (outcome.kind !== "clean")
       throw new Error(`expected clean, got ${outcome.kind}`);
     expect(outcome.warnings).toContain(
@@ -135,7 +137,7 @@ describe("checkConfig — explicit target", () => {
         root: { h: ["a"] },
       }`,
     );
-    const outcome = await checkConfig(daemonGates(), p, dir);
+    const outcome = await checkConfig(world, daemonGates(), p, dir);
     if (outcome.kind !== "clean")
       throw new Error(`expected clean, got ${outcome.kind}`);
     expect(textOf(outcome.rendered)).toContain("yielded");
@@ -164,7 +166,7 @@ describe("checkConfig — explicit target", () => {
         root: { h: ["probe"] },
       }`,
     );
-    const message = expectFatal(await checkConfig(daemonGates(), p, dir));
+    const message = expectFatal(await checkConfig(world, daemonGates(), p, dir));
     const drew = new Map(
       [...message.matchAll(/segment "probe": (\S+) drew (\S+)/g)].map((m) => [m[1]!, m[2]!]),
     );
@@ -190,7 +192,7 @@ describe("checkConfig — explicit target", () => {
 }
 `,
     );
-    const outcome = await checkConfig(daemonGates(), p, dir);
+    const outcome = await checkConfig(world, daemonGates(), p, dir);
     if (outcome.kind !== "clean")
       throw new Error(`expected clean, got ${outcome.kind}`);
     expect(outcome.warnings).toContain(
@@ -211,7 +213,7 @@ describe("checkConfig — explicit target", () => {
 }
 `,
     );
-    const outcome = await checkConfig(daemonGates(), p, dir);
+    const outcome = await checkConfig(world, daemonGates(), p, dir);
     expect(expectFatal(outcome)).toContain("nope");
     if (outcome.kind !== "fatal")
       throw new Error(`expected fatal, got ${outcome.kind}`);
@@ -232,7 +234,7 @@ describe("checkConfig — explicit target", () => {
 }
 `,
     );
-    const outcome = await checkConfig(daemonGates(), p, dir);
+    const outcome = await checkConfig(world, daemonGates(), p, dir);
     expect(expectFatal(outcome)).toContain('Unknown top-level key "bogus"');
     if (outcome.kind !== "fatal")
       throw new Error(`expected fatal, got ${outcome.kind}`);
@@ -254,7 +256,7 @@ describe("checkConfig — explicit target", () => {
         root: { h: ["a"] },
       }`,
     );
-    const outcome = await checkConfig(daemonGates(), p, dir, SHORT_SETTLE_MS);
+    const outcome = await checkConfig(world, daemonGates(), p, dir, SHORT_SETTLE_MS);
     if (outcome.kind !== "clean")
       throw new Error(`expected clean, got ${outcome.kind}`);
     expect(outcome.warnings).toContain(
@@ -265,7 +267,7 @@ describe("checkConfig — explicit target", () => {
 
   it("reports a structurally invalid config with the loader's message", async () => {
     const p = write("bad.json5", `{ segments: { a: { template: 42 } } }`);
-    const message = expectFatal(await checkConfig(daemonGates(), p, dir));
+    const message = expectFatal(await checkConfig(world, daemonGates(), p, dir));
     expect(message).toContain("Invalid config");
     expect(message).toContain("template");
   });
@@ -275,11 +277,11 @@ describe("checkConfig — explicit target", () => {
       "dangling.json5",
       `{ segments: { a: { template: 'a' } }, root: { h: ['a', 'nope'] } }`,
     );
-    expect(expectFatal(await checkConfig(daemonGates(), p, dir))).toContain("nope");
+    expect(expectFatal(await checkConfig(world, daemonGates(), p, dir))).toContain("nope");
   });
 
   it("reports an unreadable file distinctly from an invalid one — never falls through to the bundled default", async () => {
-    const outcome = await checkConfig(daemonGates(), 
+    const outcome = await checkConfig(world, daemonGates(), 
       path.join(dir, "does-not-exist.json5"),
       dir,
     );
@@ -287,7 +289,7 @@ describe("checkConfig — explicit target", () => {
   });
 
   it("reports a directory target as unreadable (usage-shaped, exit 2), not invalid", async () => {
-    const outcome = await checkConfig(daemonGates(), dir, dir);
+    const outcome = await checkConfig(world, daemonGates(), dir, dir);
     expect(outcome.kind).toBe("unreadable");
     expect(checkPlan(outcome).code).toBe(2);
   });
@@ -295,7 +297,7 @@ describe("checkConfig — explicit target", () => {
   // Acceptance (a): a JSON5 syntax error is fatal and names the file.
   it("reports a JSON5 parse error naming the config path", async () => {
     const p = write("syntax.json5", `{ segments: { a: `);
-    const message = expectFatal(await checkConfig(daemonGates(), p, dir));
+    const message = expectFatal(await checkConfig(world, daemonGates(), p, dir));
     expect(message).toContain("syntax.json5");
   });
 
@@ -308,7 +310,7 @@ describe("checkConfig — explicit target", () => {
         root: { h: ['a'] },
       }`,
     );
-    expect(expectFatal(await checkConfig(daemonGates(), p, dir))).toContain('"nope"');
+    expect(expectFatal(await checkConfig(world, daemonGates(), p, dir))).toContain('"nope"');
   });
 
   // Acceptance (c): a user name squatting the reserved namespaces is fatal.
@@ -321,7 +323,7 @@ describe("checkConfig — explicit target", () => {
         root: { h: ['a'] },
       }`,
     );
-    const message = expectFatal(await checkConfig(daemonGates(), p, dir));
+    const message = expectFatal(await checkConfig(world, daemonGates(), p, dir));
     expect(message).toContain('reserved "menus."');
   });
 
@@ -334,7 +336,7 @@ describe("checkConfig — explicit target", () => {
         root: { h: ['a'] },
       }`,
     );
-    const message = expectFatal(await checkConfig(daemonGates(), p, dir));
+    const message = expectFatal(await checkConfig(world, daemonGates(), p, dir));
     expect(message).toContain('reserved "groups."');
   });
 
@@ -350,7 +352,7 @@ describe("checkConfig — explicit target", () => {
         root: { h: ['a'] },
       }`,
     );
-    expect(expectFatal(await checkConfig(daemonGates(), p, dir))).toContain("needs a display");
+    expect(expectFatal(await checkConfig(world, daemonGates(), p, dir))).toContain("needs a display");
   });
 
   it("reports an unknown {{ menu }} dict option with the legal shape", async () => {
@@ -362,7 +364,7 @@ describe("checkConfig — explicit target", () => {
         root: { h: ['a'] },
       }`,
     );
-    const message = expectFatal(await checkConfig(daemonGates(), p, dir));
+    const message = expectFatal(await checkConfig(world, daemonGates(), p, dir));
     expect(message).toContain('unknown {{ menu }} option "closeOnPik"');
   });
 
@@ -389,7 +391,7 @@ describe("checkConfig — explicit target", () => {
         ] },
       }`,
     );
-    expect((await checkConfig(daemonGates(), p, dir)).kind).toBe("clean");
+    expect((await checkConfig(world, daemonGates(), p, dir)).kind).toBe("clean");
   });
 
   // The stage the old `lint` could not reach: register + render. A mistyped
@@ -406,7 +408,7 @@ describe("checkConfig — explicit target", () => {
         root: { h: ['a'] },
       }`,
     );
-    expect((await checkConfig(daemonGates(), p, dir)).kind).toBe("fatal");
+    expect((await checkConfig(world, daemonGates(), p, dir)).kind).toBe("fatal");
   });
 
   // [LAW:no-silent-failure] An evaluation-stage author error (here: a cycle
@@ -423,7 +425,7 @@ describe("checkConfig — explicit target", () => {
         root: { h: ['chip'] },
       }`,
     );
-    const message = expectFatal(await checkConfig(daemonGates(), p, dir));
+    const message = expectFatal(await checkConfig(world, daemonGates(), p, dir));
     expect(message).toContain('segment "chip"');
     expect(message).toContain(
       "cycles 3 members; bind one display per member (3) or one static display, got 2",
@@ -444,7 +446,7 @@ describe("checkConfig — explicit target", () => {
         root: { h: ['x'] },
       }`,
     );
-    const message = expectFatal(await checkConfig(daemonGates(), p, dir));
+    const message = expectFatal(await checkConfig(world, daemonGates(), p, dir));
     expect(message).toContain('segment "x"');
     expect(message).toContain('variable "c"');
   });
@@ -462,7 +464,7 @@ describe("checkConfig — explicit target", () => {
         root: { h: ['x'] },
       }`,
     );
-    expect((await checkConfig(daemonGates(), p, dir)).kind).toBe("clean");
+    expect((await checkConfig(world, daemonGates(), p, dir)).kind).toBe("clean");
   });
 
   // brandon-var-system-7wl9. A shell variable whose cache key throws renders
@@ -477,7 +479,7 @@ describe("checkConfig — explicit target", () => {
         root: { h: ['x'] },
       }`,
     );
-    const message = expectFatal(await checkConfig(daemonGates(), p, dir));
+    const message = expectFatal(await checkConfig(world, daemonGates(), p, dir));
     expect(message).toMatch(
       /1 render error[^\n]*\n {2}variable "stamp": cannot refresh: cache key: .*no key/,
     );
@@ -497,7 +499,7 @@ describe("checkConfig — explicit target", () => {
         root: { h: ['toolbar'] },
       }`,
     );
-    expect(expectFatal(await checkConfig(daemonGates(), p, dir))).toContain(
+    expect(expectFatal(await checkConfig(world, daemonGates(), p, dir))).toContain(
       'segment "toolbar"',
     );
   });
@@ -524,7 +526,7 @@ describe("checkConfig — explicit target", () => {
         root: { h: ['a', 'layoutStatus'] },
       }`,
     );
-    const message = expectFatal(await checkConfig(daemonGates(), p, dir));
+    const message = expectFatal(await checkConfig(world, daemonGates(), p, dir));
     expect(message).toContain('segment "layoutStatus"');
     expect(message).toContain("(under .preset.customized = true)");
   });
@@ -544,7 +546,7 @@ describe("checkConfig — explicit target", () => {
         root: { h: ['chip'] },
       }`,
     );
-    const message = expectFatal(await checkConfig(daemonGates(), p, dir));
+    const message = expectFatal(await checkConfig(world, daemonGates(), p, dir));
     expect(message).toContain("config renders with 1 render error");
     expect(message).not.toContain("(under .preset.customized = true)");
     expect(message.split('segment "chip"').length - 1).toBe(1);
@@ -558,7 +560,7 @@ describe("checkConfig — explicit target", () => {
         root: { h: ['a'] },
       }`,
     );
-    expect((await checkConfig(daemonGates(), p, dir)).kind).toBe("fatal");
+    expect((await checkConfig(world, daemonGates(), p, dir)).kind).toBe("fatal");
   });
 
   it("a globals.palette rule whose result names no installed theme is FATAL, named by slot", async () => {
@@ -574,7 +576,7 @@ describe("checkConfig — explicit target", () => {
         root: { h: ['a'] },
       }`,
     );
-    const message = expectFatal(await checkConfig(daemonGates(), p, dir));
+    const message = expectFatal(await checkConfig(world, daemonGates(), p, dir));
     expect(message).toContain("no-such-theme");
     // Under the rule's own label, naming where it was written — a globals slot
     // is not a segment, and a report calling it one misdirects the reader.
@@ -593,7 +595,7 @@ describe("checkConfig — explicit target", () => {
         root: { h: ['a'] },
       }`,
     );
-    const message = expectFatal(await checkConfig(daemonGates(), p, dir));
+    const message = expectFatal(await checkConfig(world, daemonGates(), p, dir));
     expect(message).toContain(
       'style rule: globals.style rendered "none": the rule failed',
     );
@@ -613,7 +615,7 @@ describe("checkConfig — explicit target", () => {
         root: { h: ['a'] },
       }`,
     );
-    const message = expectFatal(await checkConfig(daemonGates(), p, dir));
+    const message = expectFatal(await checkConfig(world, daemonGates(), p, dir));
     expect(message).toContain(
       "palette rule: presets.ruled.globals.palette rendered",
     );
@@ -635,7 +637,7 @@ describe("checkConfig — explicit target", () => {
         root: { h: ['x'] },
       }`,
     );
-    const message = expectFatal(await checkConfig(daemonGates(), p, dir));
+    const message = expectFatal(await checkConfig(world, daemonGates(), p, dir));
     expect(message).toContain(
       "palette rule: presets.b.globals.palette rendered",
     );
@@ -652,7 +654,7 @@ describe("checkConfig — explicit target", () => {
         root: { h: ['x'] },
       }`,
     );
-    const message = expectFatal(await checkConfig(daemonGates(), p, dir));
+    const message = expectFatal(await checkConfig(world, daemonGates(), p, dir));
     expect(message).toContain(
       'style rule: presets.b.globals.style rendered "none": the rule failed',
     );
@@ -673,7 +675,7 @@ describe("checkConfig — explicit target", () => {
         root: { h: ['x'] },
       }`,
     );
-    const message = expectFatal(await checkConfig(daemonGates(), p, dir));
+    const message = expectFatal(await checkConfig(world, daemonGates(), p, dir));
     expect(message).toContain('segment "broken"');
     expect(message).toContain('preset "b"');
     expect(message).toContain("config renders with 1 render error");
@@ -693,7 +695,7 @@ describe("checkConfig — explicit target", () => {
         root: { h: ['broken'] },
       }`,
     );
-    const message = expectFatal(await checkConfig(daemonGates(), p, dir));
+    const message = expectFatal(await checkConfig(world, daemonGates(), p, dir));
     expect(message).toContain("config renders with 1 render error");
     expect(message).not.toContain("(under");
   });
@@ -716,7 +718,7 @@ describe("checkConfig — explicit target", () => {
         root: { h: ['x'] },
       }`,
     );
-    const message = expectFatal(await checkConfig(daemonGates(), p, dir));
+    const message = expectFatal(await checkConfig(world, daemonGates(), p, dir));
     expect(message).toContain("config renders with 1 render error");
     expect(message).toContain(
       '(under preset "b"; preset "c", .preset.customized = true)',
@@ -736,7 +738,7 @@ describe("checkConfig — explicit target", () => {
         root: { h: ['broken'] },
       }`,
     );
-    const message = expectFatal(await checkConfig(daemonGates(), p, dir));
+    const message = expectFatal(await checkConfig(world, daemonGates(), p, dir));
     expect(message).toContain("config renders with 2 render errors");
     expect(message).toMatch(/^ {2}segment "broken": /m);
     // Nothing the failed gate holds is asked: preset "b" reports the gate
@@ -757,7 +759,7 @@ describe("checkConfig — explicit target", () => {
         root: { h: ['ay'] },
       }`,
     );
-    const outcome = await checkConfig(daemonGates(), p, dir);
+    const outcome = await checkConfig(world, daemonGates(), p, dir);
     expect(outcome.kind).toBe("clean");
     if (outcome.kind !== "clean") return;
     expect(textOf(outcome.rendered)).toContain("BEE");
@@ -773,7 +775,7 @@ describe("checkConfig — explicit target", () => {
         root: { h: ['a'] },
       }`,
     );
-    const outcome = await checkConfig(daemonGates(), p, dir);
+    const outcome = await checkConfig(world, daemonGates(), p, dir);
     expect(outcome.kind).toBe("clean");
   });
 });
@@ -782,7 +784,7 @@ describe("checkConfig — default resolution (the daemon's own chain)", () => {
   it("checks the bundled default when no config file exists anywhere", async () => {
     const emptyCwd = path.join(dir, "empty-cwd");
     fs.mkdirSync(emptyCwd, { recursive: true });
-    const outcome = await checkConfig(daemonGates(), undefined, emptyCwd);
+    const outcome = await checkConfig(world, daemonGates(), undefined, emptyCwd);
     expect(outcome.kind).toBe("clean");
     if (outcome.kind === "clean") {
       expect(outcome.layers).toEqual([]);
@@ -797,7 +799,7 @@ describe("checkConfig — default resolution (the daemon's own chain)", () => {
       `{ segments: { a: { template: 'a' } }, root: { h: ['a'] } }`,
     );
     answerRepo(cwd);
-    const outcome = await checkConfig(daemonGates(), undefined, cwd);
+    const outcome = await checkConfig(world, daemonGates(), undefined, cwd);
     expect(outcome.kind).toBe("clean");
     if (outcome.kind === "clean") expect(outcome.layers).toEqual([{ path: p, scope: "repo" }]);
   });
@@ -813,17 +815,17 @@ describe("checkConfig — default resolution (the daemon's own chain)", () => {
       `{ segments: { a: { template: 'env' } }, root: { h: ['a'] } }`,
     );
     const cwd = path.join(dir, "empty-cwd");
-    process.env.CC_CANDYBAR_CONFIG = p;
+    runOn({ CC_CANDYBAR_CONFIG: p });
     // The resolver itself is blind to the variable...
-    const blind = await checkConfig(daemonGates(), undefined, cwd);
+    const blind = await checkConfig(world, daemonGates(), undefined, cwd);
     expect(blind.kind).toBe("clean");
     if (blind.kind === "clean") expect(blind.layers).toEqual([]);
     // ...the CLI edge lifts it into the target.
-    const viaEnv = await checkConfig(daemonGates(), detectConfigEnv(process.env, cwd), cwd);
+    const viaEnv = await checkConfig(world, daemonGates(), detectConfigEnv(host, cwd), cwd);
     expect(viaEnv.kind).toBe("clean");
     if (viaEnv.kind === "clean") expect(viaEnv.layers).toEqual([{ path: p, scope: "plugins" }]);
-    process.env.CC_CANDYBAR_CONFIG = path.join(dir, "absent.json5");
-    const absent = await checkConfig(daemonGates(), detectConfigEnv(process.env, cwd), cwd);
+    runOn({ CC_CANDYBAR_CONFIG: path.join(dir, "absent.json5") });
+    const absent = await checkConfig(world, daemonGates(), detectConfigEnv(host, cwd), cwd);
     expect(absent.kind).toBe("unreadable");
   });
 
@@ -834,7 +836,7 @@ describe("checkConfig — default resolution (the daemon's own chain)", () => {
       "rel/target.json5",
       `{ segments: { a: { template: 'rel' } }, root: { h: ['a'] } }`,
     );
-    const outcome = await checkConfig(daemonGates(), "target.json5", path.join(dir, "rel"));
+    const outcome = await checkConfig(world, daemonGates(), "target.json5", path.join(dir, "rel"));
     expect(outcome.kind).toBe("clean");
     if (outcome.kind === "clean") expect(outcome.layers).toEqual([{ path: p, scope: "plugins" }]);
   });
@@ -849,7 +851,7 @@ describe("checkConfig — default resolution (the daemon's own chain)", () => {
       "collide/.cc-candybar.json",
       `{ "segments": { "a": { "template": "a" } }, "root": { "h": ["a"] } }`,
     );
-    const outcome = await checkConfig(daemonGates(), undefined, cwd);
+    const outcome = await checkConfig(world, daemonGates(), undefined, cwd);
     expect(outcome.kind).toBe("clean");
     if (outcome.kind === "clean") {
       expect(outcome.warnings.join("\n")).toContain("collision");
@@ -956,7 +958,7 @@ describe("checkPlan — the text/exit-code contract", () => {
 // delivers it), so the composition is observable in-process — everything
 // below the edge is covered through checkConfig.
 describe("checkCommandPlan — the argv edge", () => {
-  const run = (args: string[]) => checkCommandPlan(args);
+  const run = (args: string[]) => checkCommandPlan(args, world);
 
   it("an explicit argument outranks $CC_CANDYBAR_CONFIG; without one the variable is the target", async () => {
     const ok = write(
@@ -964,7 +966,7 @@ describe("checkCommandPlan — the argv edge", () => {
       `{ segments: { a: { template: 'ok' } }, root: { h: ['a'] } }`,
     );
     const bad = write("edge-bad.json5", `{ theme: "dracula" }`);
-    process.env.CC_CANDYBAR_CONFIG = bad;
+    runOn({ CC_CANDYBAR_CONFIG: bad });
 
     const viaArg = await run([ok]);
     expect(viaArg.code).toBe(0);
@@ -989,7 +991,7 @@ describe("checkCommandPlan — the argv edge", () => {
 
     // With no variable either, the empty argument and no argument reach the
     // same searched chain: undefined-from-empty is undefined-from-absent.
-    delete process.env.CC_CANDYBAR_CONFIG;
+    runOn({ CC_CANDYBAR_CONFIG: undefined });
     expect(await run([""])).toEqual(await run([]));
   });
 

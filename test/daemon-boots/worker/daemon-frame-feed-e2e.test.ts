@@ -18,6 +18,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { WORLD } from "../../helpers/host";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -947,7 +948,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     await render(sockPath, "feed-follow", projectDir, {}, args("off"));
     const seen: string[] = [];
     let offs = 0;
-    const follower = followFrames(sockPath, "feed-follow", "band", {
+    const follower = followFrames(WORLD, sockPath, "feed-follow", "band", {
       frame: (resp) => seen.push(String(barText(resp))),
       off: () => offs++,
       fault: (reason) => seen.push(`fault: ${reason}`),

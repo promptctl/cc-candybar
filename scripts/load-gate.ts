@@ -34,6 +34,7 @@
 // baseline's.
 
 import { spawn } from "node:child_process";
+import { hostOf, processLauncher } from "../test/helpers/host";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -52,7 +53,6 @@ import { mb, memoryLimitBytes } from "../src/daemon/limits.js";
 import { logLines } from "../src/daemon/log.js";
 import { logPath } from "../src/daemon/paths.js";
 import { chargeProbe } from "../src/daemon/memory-report.js";
-import { processLauncher } from "../src/proc/launch.js";
 import {
   openFrameStream,
   type StreamEnd,
@@ -387,8 +387,9 @@ const env: NodeJS.ProcessEnv = {
   // The daemon ends with the gate, however the gate ends.
   [PARENT_PID_ENV]: String(process.pid),
 };
-// The client half of the gate reaches the daemon through this process's env.
-process.env.CC_CANDYBAR_SOCKET = socket;
+// The client half of the gate reaches the daemon through the host it is handed:
+// the daemon's own environment, its socket included.
+const host = hostOf(env, { home: dirs.home });
 
 // The daemon as the client spawns it, plus an inspector on a loopback port:
 // the one way to read its live heap is to collect it first.
@@ -508,11 +509,15 @@ function tick(s: Session): void {
     let outcome: string;
     try {
       const rendered = await tryRenderViaDaemon(
+        host,
+        
         hookData(s),
         [BUNDLE],
         s.checkout,
         {
-          ...detectClientHints(terminalEnv, s.checkout, {
+          ...detectClientHints(
+            { env: terminalEnv, home: dirs.home },
+            s.checkout, {
             columns: 160,
             rows: 48,
           }),
@@ -562,7 +567,7 @@ async function menuClick(s: Session, open: boolean): Promise<string> {
     ]),
   );
   try {
-    const clicked = await tryClickViaDaemon(verb, value);
+    const clicked = await tryClickViaDaemon(host, verb, value);
     return clicked.kind === "ok" ? "ok" : failureLabel(clicked);
   } catch (e) {
     // [LAW:no-silent-failure] A click path that throws is a failed click.
@@ -635,7 +640,7 @@ async function sample(started: number): Promise<void> {
   // sample was asked for, not of whatever phase holds once it is answered.
   const at = Date.now() - started;
   const asked = phase;
-  const outcome = await fetchStats();
+  const outcome = await fetchStats(host);
   if (outcome.kind !== "ok") {
     unanswered.push(`${at} ms: ${failureLabel(outcome)}`);
     return;
@@ -721,7 +726,7 @@ async function run(): Promise<{
       throw new Error(`daemon ${daemonExit} before serving`);
     if (Date.now() > bootDeadline)
       throw new Error("daemon did not answer stats within 15 s");
-    const outcome = await fetchStats();
+    const outcome = await fetchStats(host);
     if (outcome.kind === "ok") first = outcome.value;
     else await sleep(50);
   }
@@ -1080,7 +1085,7 @@ async function run(): Promise<{
 // The feed's summary line in `state`, once the daemon has written it.
 async function feedSummary(state: "closed"): Promise<string> {
   for (const giveUp = Date.now() + 10_000; Date.now() < giveUp; ) {
-    const line = logLines(logPath(env)).find(
+    const line = logLines(logPath(host)).find(
       (l) => l.includes("] feed sid=") && l.includes(` ${state} `),
     );
     if (line !== undefined) return line;
@@ -1115,7 +1120,7 @@ function feedPaceCheck(summary: string): Check {
 // order, through one writer, so the window's last events have landed once any
 // line after the window has.
 async function daemonEvents(since: number, until: number): Promise<string[]> {
-  const log = logPath(env);
+  const log = logPath(host);
   const stamped = (): Array<{ at: number; line: string }> =>
     logLines(log).map((line) => ({ at: Date.parse(line.slice(0, 24)), line }));
   let all = stamped();
@@ -1223,7 +1228,7 @@ try {
     // the daemon's state (its log) is the diagnosis.
     remove(dirs.checkouts);
     remove(dirs.claude);
-    console.error(`kept ${root} (daemon log: ${logPath(env)})`);
+    console.error(`kept ${root} (daemon log: ${logPath(host)})`);
   }
 }
 process.exit(passed ? 0 : 1);

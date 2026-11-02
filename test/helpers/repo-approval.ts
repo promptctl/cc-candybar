@@ -4,6 +4,7 @@
 // recording, so no test spells the book's path or shape.
 
 import fs from "node:fs";
+import { hostOf } from "./host";
 import { recordAnswer, repoConfigs } from "../../src/daemon/repo-configs";
 import { stateDir } from "../../src/daemon/paths";
 import type { RepoAnswer } from "../../src/config/loader/repo-gate";
@@ -14,7 +15,7 @@ export function answerRepo(
   env: NodeJS.ProcessEnv = process.env,
 ): void {
   const filed = recordAnswer(
-    repoConfigs(stateDir(env)),
+    repoConfigs(stateDir(hostOf(env))),
     fs.realpathSync.native(dir),
     answer,
   );

@@ -12,9 +12,9 @@
 // default → "—"), never a stale or divide-by-zero number.
 
 import { textOf } from "../src/render/frame";
+import { HOST, processLauncher } from "./helpers/host";
 import { drawPayload } from "./helpers/draw-payload";
 import type { Frame } from "../src/render/frame";
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
@@ -108,7 +108,7 @@ describe("SessionUsageStore.observeSpeed — prior-sample retention", () => {
     const t = join(dir, "S.jsonl");
     writeFileSync(t, usageLine("a", 10, 5));
     utimesSync(t, new Date(1000), new Date(1000));
-    const store = new SessionUsageStore({ sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
     try {
       const first = await store.observeSpeed("S", t, 1_000);
       expect(first.kind).toBe("ok");
@@ -154,7 +154,7 @@ describe("SessionUsageStore.observeSpeed — prior-sample retention", () => {
     const t = join(dir, "C.jsonl");
     writeFileSync(t, usageLine("a", 10, 5));
     utimesSync(t, new Date(1000), new Date(1000));
-    const store = new SessionUsageStore({ sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
     try {
       // Establish a baseline (output 5) at the first transcript state.
       await store.observeSpeed("C", t, 1_000);
@@ -188,7 +188,7 @@ describe("SessionUsageStore.observeSpeed — prior-sample retention", () => {
 
   test("the ring accumulates recent samples oldest→newest; prev is its last", async () => {
     const t = join(dir, "R.jsonl");
-    const store = new SessionUsageStore({ sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
     try {
       // Three growing transcript states, each a distinct mtime ⇒ a new sample.
       let lines = "";
@@ -224,7 +224,7 @@ describe("SessionUsageStore.observeSpeed — prior-sample retention", () => {
     // and the ring must still come back sorted oldest→newest by atMs, not by the
     // order the samples were inserted.
     const t = join(dir, "O.jsonl");
-    const store = new SessionUsageStore({ sweepIntervalMs: 0 });
+    const store = new SessionUsageStore({ host: HOST,  sweepIntervalMs: 0 });
     try {
       writeFileSync(t, usageLine("a", 10, 5));
       utimesSync(t, new Date(1000), new Date(1000));

@@ -19,8 +19,8 @@
 // first fragment instead of the row.
 
 import { drawPayload } from "./helpers/draw-payload";
+import { processLauncher } from "./helpers/host";
 import { plainOf, textOf } from "../src/render/frame";
-import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import {
   DEFAULT_TERMINAL_THEME,

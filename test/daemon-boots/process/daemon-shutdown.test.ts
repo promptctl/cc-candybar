@@ -1,4 +1,5 @@
 import type { ChildProcess } from "node:child_process";
+import { hostOf } from "../../helpers/host";
 import { readFileSync } from "node:fs";
 
 import { effectsUrl, VERB_SET_STATE } from "../../../src/click/wire";
@@ -145,7 +146,7 @@ describe("daemon shutdown contract", () => {
       );
       await killAndWait(daemon, "SIGTERM");
 
-      const saved = JSON.parse(readFileSync(sessionStatePath(env), "utf8"));
+      const saved = JSON.parse(readFileSync(sessionStatePath(hostOf(env)), "utf8"));
       expect(saved[sessionId]).toMatchObject({ padding: "4" });
     } finally {
       daemon?.killTree();

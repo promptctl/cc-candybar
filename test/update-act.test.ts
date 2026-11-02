@@ -4,18 +4,11 @@
 // verdict, once written, is never overwritten.
 
 import fs from "node:fs";
+import { processLauncher } from "./helpers/host";
 import os from "node:os";
 import path from "node:path";
 
-import {
-  endJob,
-  jobGroupAlive,
-  processLauncher,
-  readJobEnd,
-  type JobFiles,
-  type LaunchResult,
-  type Launcher,
-} from "../src/proc/launch";
+import { endJob, jobGroupAlive, readJobEnd, type JobFiles, type LaunchResult, type Launcher } from "../src/proc/launch";
 import {
   actsDir,
   claimAct,

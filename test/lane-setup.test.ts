@@ -791,13 +791,15 @@ describe("the production edge's readers", () => {
   test("the claude CLI runs under the session's directory, never the daemon's", async () => {
     // The session's process environment (src/daemon/session-env.ts) the
     // edge's `claude` spawns with.
-    const daemon = { CLAUDE_CONFIG_DIR: "/daemon/spawner/.claude", PATH: "/usr/bin" };
     const facts = { sessionId: "s1", projectDir: "/p" };
+    // Unset in the overlay, so the daemon's own (whichever shell spawned it)
+    // is removed from what the child inherits.
+    expect(sessionEnv({ ...facts, claudeConfigDir: undefined })).toHaveProperty(
+      "CLAUDE_CONFIG_DIR",
+      undefined,
+    );
     expect(
-      sessionEnv(daemon, { ...facts, claudeConfigDir: undefined }).CLAUDE_CONFIG_DIR,
-    ).toBeUndefined();
-    expect(
-      sessionEnv(daemon, { ...facts, claudeConfigDir: "/u/.claude.zai" }).CLAUDE_CONFIG_DIR,
+      sessionEnv({ ...facts, claudeConfigDir: "/u/.claude.zai" }).CLAUDE_CONFIG_DIR,
     ).toBe("/u/.claude.zai");
   });
 });

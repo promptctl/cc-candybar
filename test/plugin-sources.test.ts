@@ -4,8 +4,9 @@
 // function ran. Every view here is the daemon's own: a render cache over the
 // payload providers, declared by `declareLanes`, drawn from `sessionSource`.
 
-import { processLauncher } from "../src/proc/launch";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
+import { HOST, WORLD, hostOf, worldOf, processLauncher } from "./helpers/host";
+import type { Host, World } from "../src/host";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
 import os from "node:os";
@@ -50,7 +51,7 @@ import { textOf, ansiOf } from "../src/render/frame";
 import { viewFacts } from "./helpers/view-facts";
 import { ReloadSignal } from "./helpers/reload-signal";
 import { until } from "./helpers/until";
-import { stateDir } from "../src/daemon/paths";
+import { locations, stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { daemonGates } from "../src/daemon/update-keys";
 
@@ -59,7 +60,12 @@ const STATUS = "plugins.p.status";
 
 let dir: string;
 let cleanups: Array<() => void>;
+// The machine a test runs on: this worker's own unless its describe states another.
+let host: Host = HOST;
+let world: World = WORLD;
 beforeEach(() => {
+  host = HOST;
+  world = WORLD;
   dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "ccb-sources-")));
   cleanups = [() => fs.rmSync(dir, { recursive: true, force: true })];
 });
@@ -135,7 +141,8 @@ function rig(): Rig {
   };
   const watchers = new WatcherRegistry({ counters, logger: log });
   const providers = createPayloadProviders({
-    launcher: processLauncher,
+    launcher: world.launcher,
+    host,
     watchers,
     fileEvents: new FileEventDelivery({ watchers, logger: log }),
     logger: log,
@@ -144,8 +151,8 @@ function rig(): Rig {
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
   const cache = new RenderCache<SessionSource>(
-    { stateDir: stateDir(),
-      launcher: processLauncher,
+    { stateDir: stateDir(host), locations: locations(host), env: host.env,
+      launcher: world.launcher,
       sessionState,
       watchers,
       storage: providers.managedStorage,
@@ -261,8 +268,8 @@ describe("a source's declaration", () => {
   test("the built arm loads, lowered to a session document in the plugin folder's managed storage", () => {
     const r = rig();
     const p = listing(`{ status: ${SOURCE} }`);
-    const loaded = loadFromDisk(dir, dir, p, { stateDir: stateDir(),
-      launcher: processLauncher,
+    const loaded = loadFromDisk(dir, dir, p, { stateDir: stateDir(host), locations: locations(host), env: host.env,
+      launcher: world.launcher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
       signer: TEST_SIGNER, gates: bareGates(),
@@ -325,7 +332,7 @@ describe("a source's declaration", () => {
     "%s drops the plugin, naming the field and what is built",
     async (_what, source, field) => {
       const message = fatal(
-        await checkConfig(daemonGates(), listing(`{ status: ${source} }`), dir),
+        await checkConfig(world, daemonGates(), listing(`{ status: ${source} }`), dir),
       );
       expect(message).toContain(
         `plugin ${path.join(dir, "p/plugin.json5")} was not loaded`,
@@ -347,8 +354,8 @@ describe("a source's declaration", () => {
       "config.json5",
       `{ plugins: ["./p/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
     );
-    const loaded = loadFromDisk(dir, dir, p, { stateDir: stateDir(),
-      launcher: processLauncher,
+    const loaded = loadFromDisk(dir, dir, p, { stateDir: stateDir(host), locations: locations(host), env: host.env,
+      launcher: world.launcher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
       signer: TEST_SIGNER, gates: bareGates(),
@@ -376,8 +383,8 @@ describe("a source's declaration", () => {
          segments: { mine: { template: "x{{ .plugins.p.status.home }}" } },
          root: { h: ["mine"] } }`,
     );
-    const loaded = loadFromDisk(dir, dir, p, { stateDir: stateDir(),
-      launcher: processLauncher,
+    const loaded = loadFromDisk(dir, dir, p, { stateDir: stateDir(host), locations: locations(host), env: host.env,
+      launcher: world.launcher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
       signer: TEST_SIGNER, gates: bareGates(),
@@ -397,14 +404,14 @@ describe("a source's declaration", () => {
 
   test("a source's name is one identifier", async () => {
     const message = fatal(
-      await checkConfig(daemonGates(), listing(`{ "a.b": ${SOURCE} }`), dir),
+      await checkConfig(world, daemonGates(), listing(`{ "a.b": ${SOURCE} }`), dir),
     );
     expect(message).toContain(`source name "a.b" is not one identifier`);
   });
 
   test("a source and a variable of the same name is a load error naming both", async () => {
     const message = fatal(
-      await checkConfig(daemonGates(), 
+      await checkConfig(world, daemonGates(), 
         listing(
           `{ status: ${SOURCE} }`,
           `variables: { status: { kind: "literal", value: 1 } }`,
@@ -421,7 +428,7 @@ describe("a source's declaration", () => {
   // reading it would be two names for it.
   test("two sources reading the same session file drop the plugin, naming both and the file", async () => {
     const message = fatal(
-      await checkConfig(daemonGates(), 
+      await checkConfig(world, daemonGates(), 
         listing(`{ status: ${SOURCE}, other: ${SOURCE} }`),
         dir,
       ),
@@ -444,7 +451,7 @@ describe("a source's declaration", () => {
       "config.json5",
       `{ plugins: ["./p/plugin.json5", "./q/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine", "plugins.p.s", "plugins.q.s"] } }`,
     );
-    const message = fatal(await checkConfig(daemonGates(), p, dir));
+    const message = fatal(await checkConfig(world, daemonGates(), p, dir));
     expect(message).toContain(
       `plugin ${path.join(dir, "q/plugin.json5")} was not loaded`,
     );
@@ -465,7 +472,7 @@ describe("a source's declaration", () => {
       "config.json5",
       `{ plugins: ["./p/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
     );
-    const message = fatal(await checkConfig(daemonGates(), p, dir));
+    const message = fatal(await checkConfig(world, daemonGates(), p, dir));
     expect(message).toContain(
       `plugin ${path.join(dir, "p/plugin.json5")} was not loaded`,
     );
@@ -486,8 +493,8 @@ describe("a source's declaration", () => {
       "config.json5",
       `{ plugins: ["./p/plugin.json5", "./q/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
     );
-    const loaded = loadFromDisk(dir, dir, p, { stateDir: stateDir(),
-      launcher: processLauncher,
+    const loaded = loadFromDisk(dir, dir, p, { stateDir: stateDir(host), locations: locations(host), env: host.env,
+      launcher: world.launcher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
       signer: TEST_SIGNER, gates: bareGates(),
@@ -506,7 +513,7 @@ describe("a source's declaration", () => {
 // reads absent, as a session's does before its program first writes.
 describe("`cc-candybar check` on a source", () => {
   test("a hasKey-gated segment exits clean, the segment hidden", async () => {
-    const outcome = await checkConfig(daemonGates(), config(["mine", "plugins.p.gated"]), dir);
+    const outcome = await checkConfig(world, daemonGates(), config(["mine", "plugins.p.gated"]), dir);
     if (outcome.kind !== "clean") throw new Error(JSON.stringify(outcome));
     expect(outcome.warnings).toEqual([]);
     expect(textOf(outcome.rendered)).toContain("mine");
@@ -514,7 +521,7 @@ describe("`cc-candybar check` on a source", () => {
   });
 
   test("the same read unguarded exits fatal, naming the missing field", async () => {
-    const outcome = await checkConfig(daemonGates(), config(["mine", "plugins.p.bare"]), dir);
+    const outcome = await checkConfig(world, daemonGates(), config(["mine", "plugins.p.bare"]), dir);
     if (outcome.kind !== "fatal") throw new Error(JSON.stringify(outcome));
     expect(outcome.message).toContain('segment "plugins.p.bare"');
     expect(outcome.message).toContain(
@@ -816,14 +823,9 @@ describe("a storage folder's watch", () => {
 });
 
 describe("an installed plugin's storage", () => {
-  let savedDataHome: string | undefined;
   beforeEach(() => {
-    savedDataHome = process.env.XDG_DATA_HOME;
-    process.env.XDG_DATA_HOME = path.join(dir, "data");
-  });
-  afterEach(() => {
-    if (savedDataHome === undefined) delete process.env.XDG_DATA_HOME;
-    else process.env.XDG_DATA_HOME = savedDataHome;
+    host = hostOf({ ...HOST.env, XDG_DATA_HOME: path.join(dir, "data") });
+    world = worldOf(host);
   });
   const root = (): string => path.join(dir, "data", "cc-candybar", "plugins");
   const placing = (): string =>
@@ -880,7 +882,7 @@ describe("an installed plugin's storage", () => {
     );
     const entry = r.cache.getOrCreate(dir, dir, file);
     const installed = path.join(fs.realpathSync(root()), "p", "session");
-    expect(installFromRepo(repo, root(), "repo")).toEqual([
+    expect(installFromRepo(repo, root(), "repo", host.home)).toEqual([
       { path: path.join(root(), "p", "plugin.json5"), placed: "replaced" },
     ]);
     await until(

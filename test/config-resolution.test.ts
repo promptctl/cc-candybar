@@ -17,6 +17,8 @@ import {
   writeFileSync,
   mkdirSync,
 } from "node:fs";
+import { locations, type Locations } from "../src/daemon/paths";
+import { hostOf } from "./helpers/host";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -59,18 +61,12 @@ function mkdir(): { dir: string; cleanup: () => void } {
   };
 }
 
-// Isolate every test from the user's real XDG home + env var.
-function isolateEnv(xdgHome: string): () => void {
-  const savedXdg = process.env.XDG_CONFIG_HOME;
-  const savedCfg = process.env.CC_CANDYBAR_CONFIG;
-  process.env.XDG_CONFIG_HOME = xdgHome;
-  delete process.env.CC_CANDYBAR_CONFIG;
-  return () => {
-    if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME;
-    else process.env.XDG_CONFIG_HOME = savedXdg;
-    if (savedCfg === undefined) delete process.env.CC_CANDYBAR_CONFIG;
-    else process.env.CC_CANDYBAR_CONFIG = savedCfg;
-  };
+// Isolate every test from the user's real XDG home + env var: the locations a
+// test resolves under are parsed from an environment it states, never from the
+// worker's own.
+function isolated(xdgHome: string, extra: NodeJS.ProcessEnv = {}): Locations {
+  const { XDG_CONFIG_HOME: _x, CC_CANDYBAR_CONFIG: _c, ...rest } = process.env;
+  return locations(hostOf({ ...rest, XDG_CONFIG_HOME: xdgHome, ...extra }));
 }
 
 const VALID_CFG = JSON.stringify({
@@ -85,13 +81,13 @@ const VALID_CFG = JSON.stringify({
 describe("dslConfigCandidatePaths", () => {
   test("emits .json5 and .json for every standard location, .json5 first", () => {
     const { dir, cleanup } = mkdir();
-    const restore = isolateEnv(dir);
+    const L = isolated(dir);
     try {
       const project = join(dir, "proj");
       const cwd = join(dir, "cwd");
       mkdirSync(project);
       mkdirSync(cwd);
-      const candidates = dslConfigCandidatePaths(project, cwd);
+      const candidates = dslConfigCandidatePaths(L, project, cwd);
       // 3 locations × 2 extensions = 6 paths.
       expect(candidates.length).toBe(6);
       // Each location appears as a (.json5, .json) pair in order.
@@ -102,7 +98,6 @@ describe("dslConfigCandidatePaths", () => {
       expect(candidates[4]).toBe(join(dir, "cc-candybar", "config.json5"));
       expect(candidates[5]).toBe(join(dir, "cc-candybar", "config.json"));
     } finally {
-      restore();
       cleanup();
     }
   });
@@ -112,9 +107,9 @@ describe("dslConfigCandidatePaths", () => {
   // or reported them twice would name one location twice.
   test("the same directory as project and cwd yields each path once", () => {
     const { dir, cleanup } = mkdir();
-    const restore = isolateEnv(dir);
+    const L = isolated(dir);
     try {
-      const candidates = dslConfigCandidatePaths(dir, dir);
+      const candidates = dslConfigCandidatePaths(L, dir, dir);
       expect(candidates).toEqual([
         join(dir, ".cc-candybar.json5"),
         join(dir, ".cc-candybar.json"),
@@ -122,23 +117,21 @@ describe("dslConfigCandidatePaths", () => {
         join(dir, "cc-candybar", "config.json"),
       ]);
     } finally {
-      restore();
       cleanup();
     }
   });
 
   test("an explicit configFile collapses precedence to one entry", () => {
     const { dir, cleanup } = mkdir();
-    const restore = isolateEnv(dir);
+    const L = isolated(dir);
     try {
-      const candidates = dslConfigCandidatePaths(
+      const candidates = dslConfigCandidatePaths(L, 
         "/proj",
         "/cwd",
         "/explicit/path/to/config.json",
       );
       expect(candidates).toEqual(["/explicit/path/to/config.json"]);
     } finally {
-      restore();
       cleanup();
     }
   });
@@ -150,17 +143,15 @@ describe("dslConfigCandidatePaths", () => {
   // resolver never reads the variable itself.
   test("the process's own CC_CANDYBAR_CONFIG is not consulted", () => {
     const { dir, cleanup } = mkdir();
-    const restore = isolateEnv(dir);
+    const L = isolated(dir);
     try {
-      process.env.CC_CANDYBAR_CONFIG = "/explicit/path/to/config.json";
-      expect(dslConfigCandidatePaths("/proj", "/cwd")).toEqual(
-        dslConfigCandidatePaths("/proj", "/cwd", undefined),
+            expect(dslConfigCandidatePaths(L, "/proj", "/cwd")).toEqual(
+        dslConfigCandidatePaths(L, "/proj", "/cwd", undefined),
       );
-      expect(dslConfigCandidatePaths("/proj", "/cwd")).not.toContain(
+      expect(dslConfigCandidatePaths(L, "/proj", "/cwd")).not.toContain(
         "/explicit/path/to/config.json",
       );
     } finally {
-      restore();
       cleanup();
     }
   });
@@ -169,7 +160,7 @@ describe("dslConfigCandidatePaths", () => {
 describe("resolveDslConfig", () => {
   test(".json at XDG resolves when no .json5 exists anywhere", () => {
     const { dir, cleanup } = mkdir();
-    const restore = isolateEnv(dir);
+    const L = isolated(dir);
     try {
       const xdgCfgDir = join(dir, "cc-candybar");
       mkdirSync(xdgCfgDir);
@@ -177,7 +168,7 @@ describe("resolveDslConfig", () => {
       writeFileSync(jsonPath, VALID_CFG);
       // No project, no cwd files. The .json at XDG is the only existing
       // candidate; the resolver must find it despite the legacy extension.
-      const resolved = resolveDslConfig(approving(), undefined, dir);
+      const resolved = resolveDslConfig(L, approving(), undefined, dir);
       expect(resolved).toEqual({
         kind: "chain",
         layers: [{ path: jsonPath, scope: "plugins" }],
@@ -186,14 +177,13 @@ describe("resolveDslConfig", () => {
         repos: NOTHING_GATED,
       });
     } finally {
-      restore();
       cleanup();
     }
   });
 
   test(".json5 wins over .json at the same location", () => {
     const { dir, cleanup } = mkdir();
-    const restore = isolateEnv(dir);
+    const L = isolated(dir);
     try {
       const xdgCfgDir = join(dir, "cc-candybar");
       mkdirSync(xdgCfgDir);
@@ -201,7 +191,7 @@ describe("resolveDslConfig", () => {
       const jsonPath = join(xdgCfgDir, "config.json");
       writeFileSync(json5Path, VALID_CFG);
       writeFileSync(jsonPath, VALID_CFG);
-      const resolved = resolveDslConfig(approving(), undefined, dir);
+      const resolved = resolveDslConfig(L, approving(), undefined, dir);
       // Documented format outranks the legacy compatibility tail.
       expect(resolved).toEqual({
         kind: "chain",
@@ -211,14 +201,13 @@ describe("resolveDslConfig", () => {
         repos: NOTHING_GATED,
       });
     } finally {
-      restore();
       cleanup();
     }
   });
 
   test("each location is a layer: project-local .json over XDG .json5", () => {
     const { dir, cleanup } = mkdir();
-    const restore = isolateEnv(dir);
+    const L = isolated(dir);
     try {
       const proj = join(dir, "proj");
       mkdirSync(proj);
@@ -231,7 +220,7 @@ describe("resolveDslConfig", () => {
       writeFileSync(xdgJson5, VALID_CFG);
 
       // Location orders the layers; the user's file stays the home.
-      const resolved = resolveDslConfig(approving(proj), proj, dir);
+      const resolved = resolveDslConfig(L, approving(proj), proj, dir);
       // An approved project's plugin folder is listed, whatever it holds.
       const repo = proj;
       expect(resolved).toEqual({
@@ -248,24 +237,24 @@ describe("resolveDslConfig", () => {
           approved: [realpathSync(proj)],
         },
       });
-      expect(durableConfig(approving(proj), proj, dir)).toEqual({
+      expect(durableConfig(L, approving(proj), proj, dir)).toEqual({
         path: xdgJson5,
         above: [{ path: projJson, scope: "repo" }],
         repo,
         cwd: dir,
+        locs: L,
       });
     } finally {
-      restore();
       cleanup();
     }
   });
 
   test("is an empty chain when no candidate exists — with nothing to say", () => {
     const { dir, cleanup } = mkdir();
-    const restore = isolateEnv(dir);
+    const L = isolated(dir);
     try {
       // No files written anywhere — XDG dir doesn't even exist.
-      const resolved = resolveDslConfig(approving(), undefined, dir);
+      const resolved = resolveDslConfig(L, approving(), undefined, dir);
       const home = join(dir, "cc-candybar", "config.json5");
       expect(resolved).toEqual({
         kind: "chain",
@@ -276,41 +265,41 @@ describe("resolveDslConfig", () => {
       });
       expect(configResolutionNotice(resolved)).toBeNull();
       // A first durable write lands at the XDG tail, documented spelling.
-      expect(durableConfig(approving(), undefined, dir)).toEqual({
+      expect(durableConfig(L, approving(), undefined, dir)).toEqual({
         path: home,
         above: [],
         repo: null,
         cwd: dir,
+        locs: L,
       });
     } finally {
-      restore();
       cleanup();
     }
   });
 
   test("an explicit file that exists is the whole chain, whatever else exists", () => {
     const { dir, cleanup } = mkdir();
-    const restore = isolateEnv(dir);
+    const L = isolated(dir);
     try {
       const named = join(dir, "named.json5");
       const local = join(dir, ".cc-candybar.json5");
       writeFileSync(named, VALID_CFG);
       writeFileSync(local, VALID_CFG);
-      expect(resolveDslConfig(approving(), dir, dir, named)).toEqual({
+      expect(resolveDslConfig(L, approving(), dir, dir, named)).toEqual({
         kind: "chain",
         layers: [{ path: named, scope: "plugins" }],
         home: named,
         unchecked: [],
         repos: NOTHING_GATED,
       });
-      expect(durableConfig(approving(), dir, dir, named)).toEqual({
+      expect(durableConfig(L, approving(), dir, dir, named)).toEqual({
         path: named,
         above: [],
         repo: null,
         cwd: dir,
+        locs: L,
       });
     } finally {
-      restore();
       cleanup();
     }
   });
@@ -322,11 +311,11 @@ describe("resolveDslConfig", () => {
   // NOT consulted (the user named a file; a project-local one is not it).
   test("an explicit file that is absent is `missing`, not `default`", () => {
     const { dir, cleanup } = mkdir();
-    const restore = isolateEnv(dir);
+    const L = isolated(dir);
     try {
       const named = join(dir, "absent.json5");
       writeFileSync(join(dir, ".cc-candybar.json5"), VALID_CFG);
-      const resolved = resolveDslConfig(approving(), dir, dir, named);
+      const resolved = resolveDslConfig(L, approving(), dir, dir, named);
       expect(resolved).toEqual({
         kind: "missing",
         path: named,
@@ -337,14 +326,14 @@ describe("resolveDslConfig", () => {
         `Config file not found: ${named} — rendering the bundled default until it appears`,
       );
       // A durable write creates the file the bar is waiting for.
-      expect(durableConfig(approving(), dir, dir, named)).toEqual({
+      expect(durableConfig(L, approving(), dir, dir, named)).toEqual({
         path: named,
         above: [],
         repo: null,
         cwd: dir,
+        locs: L,
       });
     } finally {
-      restore();
       cleanup();
     }
   });
@@ -358,14 +347,14 @@ describe("resolveDslConfig", () => {
     "an explicit file behind an unsearchable directory is `unreadable`, not `missing`",
     () => {
       const { dir, cleanup } = mkdir();
-      const restore = isolateEnv(dir);
+      const L = isolated(dir);
       const locked = join(dir, "locked");
       mkdirSync(locked);
       const named = join(locked, "named.json5");
       writeFileSync(named, VALID_CFG);
       chmodSync(locked, 0o000);
       try {
-        const resolved = resolveDslConfig(approving(), dir, dir, named);
+        const resolved = resolveDslConfig(L, approving(), dir, dir, named);
         expect(resolved).toEqual({
           kind: "unreadable",
           path: named,
@@ -379,7 +368,6 @@ describe("resolveDslConfig", () => {
         expect(configResolutionNotice(resolved)).toContain(named);
       } finally {
         chmodSync(locked, 0o755);
-        restore();
         cleanup();
       }
     },
@@ -394,7 +382,7 @@ describe("resolveDslConfig", () => {
     "an unsearchable chain location is skipped and named, not fatal",
     () => {
       const { dir, cleanup } = mkdir();
-      const restore = isolateEnv(dir);
+      const L = isolated(dir);
       const locked = join(dir, "locked");
       const cwd = join(dir, "cwd");
       mkdirSync(locked);
@@ -404,7 +392,7 @@ describe("resolveDslConfig", () => {
       writeFileSync(cwdFile, VALID_CFG);
       chmodSync(locked, 0o000);
       try {
-        const resolved = resolveDslConfig(approving(cwd), locked, cwd);
+        const resolved = resolveDslConfig(L, approving(cwd), locked, cwd);
         expect(resolved).toEqual({
           kind: "chain",
           layers: [{ path: cwdFile, scope: "repo" }],
@@ -426,18 +414,17 @@ describe("resolveDslConfig", () => {
         expect(notice).toContain(join(locked, ".cc-candybar.json5"));
         expect(notice).toContain(join(locked, ".cc-candybar.json"));
         expect(notice?.split("\n")).toHaveLength(2);
-        expect(durableConfig(approving(cwd), locked, cwd).above).toEqual([
+        expect(durableConfig(L, approving(cwd), locked, cwd).above).toEqual([
           { path: cwdFile, scope: "repo" },
         ]);
         // The same directory as both project and cwd is still ONE location:
         // two unchecked entries (one per extension), two notice lines.
-        const sameDir = resolveDslConfig(approving(), locked, locked);
+        const sameDir = resolveDslConfig(L, approving(), locked, locked);
         expect(sameDir).toHaveProperty("layers", []);
         expect(sameDir).toHaveProperty("unchecked.length", 2);
         expect(configResolutionNotice(sameDir)?.split("\n")).toHaveLength(2);
       } finally {
         chmodSync(locked, 0o755);
-        restore();
         cleanup();
       }
     },
@@ -447,22 +434,21 @@ describe("resolveDslConfig", () => {
 describe("detectConfigCollisions", () => {
   test("returns null when no duplicates exist", () => {
     const { dir, cleanup } = mkdir();
-    const restore = isolateEnv(dir);
+    const L = isolated(dir);
     try {
       const xdgCfgDir = join(dir, "cc-candybar");
       mkdirSync(xdgCfgDir);
       writeFileSync(join(xdgCfgDir, "config.json5"), VALID_CFG);
       // Only the .json5 exists.
-      expect(detectConfigCollisions(undefined, dir)).toBeNull();
+      expect(detectConfigCollisions(L, undefined, dir)).toBeNull();
     } finally {
-      restore();
       cleanup();
     }
   });
 
   test("returns a warning when both .json5 and .json exist at same location", () => {
     const { dir, cleanup } = mkdir();
-    const restore = isolateEnv(dir);
+    const L = isolated(dir);
     try {
       const xdgCfgDir = join(dir, "cc-candybar");
       mkdirSync(xdgCfgDir);
@@ -471,7 +457,7 @@ describe("detectConfigCollisions", () => {
       writeFileSync(json5, VALID_CFG);
       writeFileSync(json, VALID_CFG);
 
-      const warning = detectConfigCollisions(undefined, dir);
+      const warning = detectConfigCollisions(L, undefined, dir);
       expect(warning).not.toBeNull();
       // Message names both files so the user can locate the duplicate.
       expect(warning).toContain(json5);
@@ -479,14 +465,13 @@ describe("detectConfigCollisions", () => {
       // Stable wording so downstream UI can pattern-match the diagnostic.
       expect(warning).toMatch(/shadows/);
     } finally {
-      restore();
       cleanup();
     }
   });
 
   test("reports collisions at multiple locations independently", () => {
     const { dir, cleanup } = mkdir();
-    const restore = isolateEnv(dir);
+    const L = isolated(dir);
     try {
       const proj = join(dir, "proj");
       mkdirSync(proj);
@@ -499,7 +484,7 @@ describe("detectConfigCollisions", () => {
       writeFileSync(join(xdgCfgDir, "config.json5"), VALID_CFG);
       writeFileSync(join(xdgCfgDir, "config.json"), VALID_CFG);
 
-      const warning = detectConfigCollisions(proj, dir);
+      const warning = detectConfigCollisions(L, proj, dir);
       expect(warning).not.toBeNull();
       // Both location's .json5 + .json should be mentioned.
       expect(warning).toContain(join(proj, ".cc-candybar.json5"));
@@ -507,7 +492,6 @@ describe("detectConfigCollisions", () => {
       expect(warning).toContain(join(xdgCfgDir, "config.json5"));
       expect(warning).toContain(join(xdgCfgDir, "config.json"));
     } finally {
-      restore();
       cleanup();
     }
   });
@@ -520,17 +504,16 @@ describe("detectConfigCollisions", () => {
     "reports nothing for a location it cannot search",
     () => {
       const { dir, cleanup } = mkdir();
-      const restore = isolateEnv(dir);
+      const L = isolated(dir);
       const locked = join(dir, "locked");
       mkdirSync(locked);
       writeFileSync(join(locked, ".cc-candybar.json5"), VALID_CFG);
       writeFileSync(join(locked, ".cc-candybar.json"), VALID_CFG);
       chmodSync(locked, 0o000);
       try {
-        expect(detectConfigCollisions(locked, locked)).toBeNull();
+        expect(detectConfigCollisions(L, locked, locked)).toBeNull();
       } finally {
         chmodSync(locked, 0o755);
-        restore();
         cleanup();
       }
     },
@@ -538,7 +521,7 @@ describe("detectConfigCollisions", () => {
 
   test("ignores cross-location pairs (proj/.json5 + cwd/.json is not a collision)", () => {
     const { dir, cleanup } = mkdir();
-    const restore = isolateEnv(dir);
+    const L = isolated(dir);
     try {
       const proj = join(dir, "proj");
       const cwd = join(dir, "cwd");
@@ -547,19 +530,20 @@ describe("detectConfigCollisions", () => {
       // .json5 at project, .json at cwd — different locations, no collision.
       writeFileSync(join(proj, ".cc-candybar.json5"), VALID_CFG);
       writeFileSync(join(cwd, ".cc-candybar.json"), VALID_CFG);
-      expect(detectConfigCollisions(proj, cwd)).toBeNull();
+      expect(detectConfigCollisions(L, proj, cwd)).toBeNull();
     } finally {
-      restore();
       cleanup();
     }
   });
 });
 
 describe("the layer chain", () => {
+  // The locations the current test resolves under.
+  let L: Locations;
   // A project config in `dir`, a user config under the isolated XDG home.
   function withBoth(run: (project: string, user: string) => void): void {
     const { dir, cleanup } = mkdir();
-    const restore = isolateEnv(dir);
+    L = isolated(dir);
     try {
       const xdgCfgDir = join(dir, "cc-candybar");
       mkdirSync(xdgCfgDir);
@@ -569,12 +553,11 @@ describe("the layer chain", () => {
       writeFileSync(user, VALID_CFG);
       run(dir, user);
     } finally {
-      restore();
       cleanup();
     }
   }
   const layersOf = (projectDir: string, cwd: string, configFile?: string) => {
-    const r = resolveDslConfig(
+    const r = resolveDslConfig(L, 
       approving(projectDir),
       projectDir,
       cwd,
@@ -599,7 +582,7 @@ describe("the layer chain", () => {
         user,
         join(project, ".cc-candybar.json5"),
       ]);
-      expect(detectConfigCollisions(project, project)).not.toBeNull();
+      expect(detectConfigCollisions(L, project, project)).not.toBeNull();
     });
   });
 

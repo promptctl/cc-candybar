@@ -7,7 +7,9 @@
 // `sessionSource`.
 
 import { linkUrls } from "./helpers/frame";
-import { processLauncher, type Launcher } from "../src/proc/launch";
+import { createLauncher } from "../src/proc/launch";
+import { HOST, WORLD, locs, processLauncher } from "./helpers/host";
+import { type Launcher } from "../src/proc/launch";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import fs from "node:fs";
 import os from "node:os";
@@ -174,6 +176,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
   const watchers = new WatcherRegistry({ logger: log });
   const providers = createPayloadProviders({
     launcher: processLauncher,
+    host: HOST,
     watchers,
     fileEvents: new FileEventDelivery({ watchers, logger: log }),
     logger: log,
@@ -181,7 +184,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
   });
   const sessionState = new SessionState();
   const cache = new RenderCache<SessionSource>(
-    { stateDir: stateDir(),
+    { stateDir: stateDir(HOST), locations: locs(), env: HOST.env,
       launcher: processLauncher,
       sessionState,
       watchers,
@@ -316,22 +319,15 @@ function clickContext(r: Rig, view: SessionView<SessionSource>, over: Partial<Ve
 }
 
 // The session's variables as whichever shell spawned the daemon set them.
-function daemonSessionEnv(): void {
-  const names = ["CLAUDE_CODE_SESSION_ID", "CLAUDE_PROJECT_DIR", "CLAUDE_CONFIG_DIR", "TMUX", "TMUX_PANE"];
-  const was = names.map((n) => [n, process.env[n]] as const);
-  Object.assign(process.env, {
+function daemonSessionEnv(): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
     CLAUDE_CODE_SESSION_ID: "daemon-sid",
     CLAUDE_PROJECT_DIR: "/daemon/project",
     CLAUDE_CONFIG_DIR: "/daemon/.claude",
     TMUX: "/tmp/daemon-tmux,1,0",
     TMUX_PANE: "%99",
-  });
-  cleanups.push(() => {
-    for (const [n, v] of was) {
-      if (v === undefined) delete process.env[n];
-      else process.env[n] = v;
-    }
-  });
+  };
 }
 
 describe("a run's declaration", () => {
@@ -342,7 +338,7 @@ describe("a run's declaration", () => {
 
   test("a plugin's run loads: its refreshes under its namespace, its folder the directory it runs in", () => {
     const r = rig();
-    const loaded = loadFromDisk(dir, dir, config(["mine"]), { stateDir: stateDir(),
+    const loaded = loadFromDisk(dir, dir, config(["mine"]), { stateDir: stateDir(HOST), locations: locs(), env: HOST.env,
       launcher: processLauncher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
@@ -368,7 +364,7 @@ describe("a run's declaration", () => {
       "conf/config.json5",
       `{ plugins: ["../p/plugin.json5"], actions: { mine: { run: ["true"], refreshes: ["${STATUS}"] } }, segments: { mine: { template: '{{ action "mine" "m" }}' } }, root: { h: ["mine"] } }`,
     );
-    const loaded = loadFromDisk(dir, dir, file, { stateDir: stateDir(),
+    const loaded = loadFromDisk(dir, dir, file, { stateDir: stateDir(HOST), locations: locs(), env: HOST.env,
       launcher: processLauncher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
@@ -396,7 +392,7 @@ describe("a run's declaration", () => {
       "config.json5",
       `{ plugins: ["./p/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
     );
-    const message = fatal(await checkConfig(daemonGates(), file, dir));
+    const message = fatal(await checkConfig(WORLD, daemonGates(), file, dir));
     expect(message).toContain(`plugin ${path.join(dir, "p/plugin.json5")} was not loaded`);
     expect(message).toContain(said);
     expect(message).toContain("a run refreshes only a declared source");
@@ -407,7 +403,7 @@ describe("a run's declaration", () => {
       "config.json5",
       `{ actions: { mine: { run: ["true"], refreshes: ["status"] } }, segments: { mine: { template: '{{ action "mine" "m" }}' } }, root: { h: ["mine"] } }`,
     );
-    const message = fatal(await checkConfig(daemonGates(), file, dir));
+    const message = fatal(await checkConfig(WORLD, daemonGates(), file, dir));
     expect(message).toContain(`actions.mine refreshes "status", which is not declared`);
   });
 
@@ -422,7 +418,7 @@ describe("a run's declaration", () => {
       "config.json5",
       `{ actions: { mine: ${decl} }, segments: { mine: { template: '{{ action "mine" "m" }}' } }, root: { h: ["mine"] } }`,
     );
-    const message = fatal(await checkConfig(daemonGates(), file, dir));
+    const message = fatal(await checkConfig(WORLD, daemonGates(), file, dir));
     expect(message).toContain(field);
     expect(message).toContain(said);
   });
@@ -597,8 +593,7 @@ describe("a click on a run link", () => {
   });
 
   test("the program runs in its declaring file's directory and sees the session, never the daemon", async () => {
-    daemonSessionEnv();
-    const r = rig();
+    const r = rig(createLauncher({ inherited: daemonSessionEnv() }).launch);
     const { view, link } = await drawnLink(r);
 
     await clickUrl(link.url, clickContext(r, view));
@@ -650,7 +645,7 @@ describe("the run owner", () => {
       sessionId: SESSION,
       action: "act",
       argv: ["/bin/sh", "-c", script],
-      env: sessionEnv(process.env, { sessionId: SID, projectDir: dir, claudeConfigDir: undefined }),
+      envOverlay: sessionEnv({ sessionId: SID, projectDir: dir, claudeConfigDir: undefined }),
       cwd: dir,
       refreshes: [{ name: STATUS, storage: KEY }],
     });
@@ -711,7 +706,7 @@ describe("the run owner", () => {
 });
 
 describe("the session's process environment", () => {
-  test("the daemon's session variables never reach it; the session's own are set from its facts", () => {
+  test("the daemon's session variables never reach it; the session's own are set from its facts", async () => {
     const daemon = {
       PATH: "/usr/bin",
       CLAUDE_CODE_SESSION_ID: "daemon-sid",
@@ -720,18 +715,39 @@ describe("the session's process environment", () => {
       TMUX: "/tmp/tmux-501/default,1,0",
       TMUX_PANE: "%3",
     };
-    expect(sessionEnv(daemon, { sessionId: "s9", projectDir: "/p", claudeConfigDir: "/u/.claude-z" })).toEqual({
+    // What a child gets is the launcher's inherited environment under the
+    // overlay: asked of a real child, `env` prints it.
+    const childSees = async (
+      facts: Parameters<typeof sessionEnv>[0],
+    ): Promise<Record<string, string>> => {
+      const ran = await createLauncher({ inherited: daemon }).launch({
+        bin: "/usr/bin/env",
+        envOverlay: sessionEnv(facts),
+        category: "click.run",
+      });
+      if (!ran.ok) throw new Error(`env failed: ${JSON.stringify(ran)}`);
+      return Object.fromEntries(
+        ran.stdout
+          .trim()
+          .split("\n")
+          .map((line) => [line.slice(0, line.indexOf("=")), line.slice(line.indexOf("=") + 1)]),
+      );
+    };
+    expect(await childSees({ sessionId: "s9", projectDir: "/p", claudeConfigDir: "/u/.claude-z" })).toMatchObject({
       PATH: "/usr/bin",
       CLAUDE_CODE_SESSION_ID: "s9",
       CLAUDE_PROJECT_DIR: "/p",
       CLAUDE_CONFIG_DIR: "/u/.claude-z",
     });
     // The default directory: the variable unset, as Claude Code reads it.
-    expect(sessionEnv(daemon, { sessionId: "s9", projectDir: "/p", claudeConfigDir: undefined })).toEqual({
+    const defaulted = await childSees({ sessionId: "s9", projectDir: "/p", claudeConfigDir: undefined });
+    expect(defaulted).toMatchObject({
       PATH: "/usr/bin",
       CLAUDE_CODE_SESSION_ID: "s9",
       CLAUDE_PROJECT_DIR: "/p",
     });
+    for (const gone of ["CLAUDE_CONFIG_DIR", "TMUX", "TMUX_PANE"])
+      expect(defaulted).not.toHaveProperty(gone);
   });
 });
 

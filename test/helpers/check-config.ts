@@ -5,6 +5,7 @@
 // means.
 
 import fs from "node:fs";
+import { WORLD } from "./host";
 import os from "node:os";
 import path from "node:path";
 
@@ -51,6 +52,6 @@ export function checkText(
   text: string,
 ): Promise<Extract<CheckOutcome, { kind: "clean" }>> {
   return withTempConfig(text, async (p) =>
-    expectClean(label, await checkConfig(daemonGates(), p)),
+    expectClean(label, await checkConfig(WORLD, daemonGates(), p)),
   );
 }
