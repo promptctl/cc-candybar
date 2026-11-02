@@ -4,15 +4,22 @@
     {
       "version": "pr-572",
       "ref": "refs/pull/572/merge",
-      "sha": "303f8c75bddfa713d67b7a2e5d0241c4c364eb08",
-      "timestamp": "2026-11-02T13:23:06.325Z",
+      "sha": "30077b5d255015266dc771d115bd0bc9e97ff971",
+      "timestamp": "2026-11-02T13:27:07.969Z",
       "commits": [
         {
-          "sha": "303f8c75bddfa713d67b7a2e5d0241c4c364eb08",
+          "sha": "30077b5d255015266dc771d115bd0bc9e97ff971",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T06:20:14-07:00",
-          "message": "Merge 97ef73186e67639dc5c8f150ac2a09f0e8a83565 into 6d91c387cf1c1c941185bbc0ee4fc9247e21e41b\n"
+          "timestamp": "2026-11-02T13:26:17Z",
+          "message": "Merge bacf3a74cad0214bcd7a9153cfbbec944b0de84f into 6d91c387cf1c1c941185bbc0ee4fc9247e21e41b\n"
+        },
+        {
+          "sha": "bacf3a74cad0214bcd7a9153cfbbec944b0de84f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T06:25:59-07:00",
+          "message": "fix(lanes): tag the bar pane by the split's own target, not a pane hook (candybar-launch-q7o7.0oo)\n\nPane-level after-split-window hooks fire only on tmux 3.8; earlier versions\naccept and ignore them, so the pane went untagged. A split without -d makes\nthe new pane the queue's current target, which works from tmux 3.0 and leaves\nno hook state to clean up.\n"
         },
         {
           "sha": "97ef73186e67639dc5c8f150ac2a09f0e8a83565",
