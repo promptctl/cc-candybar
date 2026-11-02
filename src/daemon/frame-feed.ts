@@ -647,7 +647,6 @@ export class FrameFeeds<Req> {
   // the instant a caller set is never rebuilt from a second, truncated one;
   // its monotonic due time is what a wake compares against.
   private arm(feed: Feed, due: Instant, wall: Instant): void {
-    if (feed.phase.kind === "due") clearTimeout(feed.phase.timer);
     const delay = Math.max(0, (due - wall) * 1000);
     this.setTimer(feed, due, this.deps.now() + delay, delay);
   }
@@ -658,6 +657,9 @@ export class FrameFeeds<Req> {
     dueMoment: number,
     delay: number,
   ): void {
+    // [LAW:single-enforcer] The one place a feed's timer is replaced, so the
+    // one that was pending is cleared here whoever sets the next.
+    if (feed.phase.kind === "due") clearTimeout(feed.phase.timer);
     feed.phase = {
       kind: "due",
       at: dueMoment,
