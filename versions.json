@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "d1a536cb6c3ddd00dbea84c59587c1dbc6c9a1f9",
+      "timestamp": "2026-11-02T13:48:55.783Z",
+      "commits": [
+        {
+          "sha": "d1a536cb6c3ddd00dbea84c59587c1dbc6c9a1f9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T06:47:54-07:00",
+          "message": "feat(templates): array-form segment templates and segment-scoped partials (#569)\n\n* feat(templates): array-form segment templates and segment-scoped partials (candybar-templates-zh8b.53s)\n\nA segment's `template` may now be an array of strings (joined with no\nseparator) for a long conditional that would otherwise be one unreadable\nline, and a segment may declare `partials`: named sub-templates scoped to\nit, compiled onto their own Defines chained from the shared `helpers`, so\ntwo segments can reuse a partial name with no collision and a partial can\ncall a helper but never another segment's partial. Dispatch is via the\nexisting static `{{ template \"name\" ctx }}` builtin.\n\nThe dynamic `partial` function (a computed name) needs a capability\n(`include`) that exists only on @promptctl/go-template-js's unreleased\nmaster, not its published npm version — split into a follow-up ticket\n(candybar-templates-zh8b.ph5), blocked on that release. Static unused-\npartial detection needs unused.ts to carry per-template segment identity,\nwhich it does not today — split into its own follow-up\n(candybar-templates-zh8b.mfn), not blocked on anything upstream.\n\n* fix(templates): close gaps /code-review high found in partials (candybar-templates-zh8b.53s)\n\n- cross-ref.ts: a partial reusing a global helper's name now a load error,\n  not an uncaught \"redefinition of template\" throw at compile.\n- merge.ts: a segment delta's partials merge by name over the base's, like\n  settings, instead of wholesale-replacing (which silently dropped sibling\n  partials a bundled template still dispatched to).\n- unused.ts, synthesis-inputs.ts: both now walk a segment's partial bodies,\n  so a helper/action/payload-read reachable only through one is no longer\n  invisible to unused-detection or synthesis dependency tracking.\n- menu-synth.ts: {{ menu }} inside a partial is now a load error too, for\n  the same reason it already is inside a helper (the synthesis pass never\n  follows a {{ template }} call into one).\n- plugins.ts: a plugin segment's partials now go through the same\n  self-binding/namespace pipeline (boundToSelf, fragmentTemplates,\n  wrongScopeRefs, the tombstone-standin scan) as template/bg/fg/when.\n- cross-ref.ts: collapsed the \"is this name a helper or this segment's own\n  partial\" decision, previously implemented three times, into one\n  helperKeyPath function both checkActionRefs and checkTemplateRefs call.\n- dsl-types.ts: removed a stale lead/trail mention from the partials doc\n  comment (those aren't SegmentDecl fields).\n\nNew tests pin all of the above in test/dsl-segment-partials.test.ts and\ntest/plugins.test.ts.\n\n* fix(templates): the clock, payload reads, and edit-mode synthesis follow a dispatch into a partial (candybar-templates-zh8b.53s)\n\n/code-review medium found 3 real gaps the first fix pass missed: render.ts's\ninstant-detection basis, render-payload.ts's payload-input closure seed, and\nedit-mode.ts's toggle detector all still enumerated a segment's\ntemplate/bg/fg/when alone, so a clock read, a payload read, or an\n`edit.toggle` reference reachable only through a dispatched partial was\ninvisible to each — the segment's own clock call threw at first draw, a\npayload path never got fetched, and a toggle-only-in-a-partial reference\nproduced a confusing \"unknown action\" error instead of being synthesized.\nAll three now fold `seg.partials` in, the same way cross-ref.ts/\nsynthesis-inputs.ts/menu-synth.ts/unused.ts already do. Also: cross-ref.ts\nand plugins.ts no longer hand-spell the same segment-template-field list\ntwice; plugins.ts now exports it once.\n\n* fix(templates): render.ts's instant-detection field list reuses SEGMENT_TEMPLATE_FIELDS (candybar-templates-zh8b.53s)\n\n/code-review high found the new per-segment loop hand-spelled\n[\"when\",\"bg\",\"fg\",\"template\"] in a different order than the\nSEGMENT_TEMPLATE_FIELDS constant this very PR exported for exactly this\npurpose — nothing would have caught the two drifting apart."
+        },
+        {
+          "sha": "b787b9f3545f3235453a2e26da0093def575bae1",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-02T13:36:04Z",
+          "message": "chore(release): set `package.json` to 1.179.4 [skip ci]\n\n## [1.179.4](https://github.com/promptctl/cc-candybar/compare/v1.179.3...v1.179.4) (2026-11-02)\n\n### Bug Fixes\n\n* **test:** the client-deadline cases state budgets a loaded loop cannot miss (brandon-unfiled-3248.5lkd) ([#571](https://github.com/promptctl/cc-candybar/issues/571)) ([17024dd](https://github.com/promptctl/cc-candybar/commit/17024dd1e5797082d8999dc8ba586f4bf97d1911))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-573",
       "ref": "refs/pull/573/merge",
       "sha": "aa6d2957b8224c07440615ea76e0d2529d2b3b50",
@@ -112,78 +134,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T06:20:01-07:00",
           "message": "fix(lanes): a bar pane is split and tagged in one tmux invocation (candybar-launch-q7o7.0oo)\n\nA daemon closing between the split and its set-option refused the tag,\nleaving a bar pane pane off could not find. A pane-scoped after-split-window\nhook now tags the new pane inside the split's own command queue; a failed\nsplit removes the hook so it cannot tag the user's next split.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-569",
-      "ref": "refs/pull/569/merge",
-      "sha": "98ce480886bd3bbe61611e90db132d733e0a56e2",
-      "timestamp": "2026-11-02T13:42:26.978Z",
-      "commits": [
-        {
-          "sha": "98ce480886bd3bbe61611e90db132d733e0a56e2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T13:41:19Z",
-          "message": "Merge 2843363d15dbc474bf098e561b5ead2de3f8f09c into b787b9f3545f3235453a2e26da0093def575bae1\n"
-        },
-        {
-          "sha": "2843363d15dbc474bf098e561b5ead2de3f8f09c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T06:40:02-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into worktree-candybar-templates-zh8b.53s\n"
-        },
-        {
-          "sha": "4f58be38d686c6a96491b64ad739ef9dc0c111a3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T06:38:53-07:00",
-          "message": "fix(templates): render.ts's instant-detection field list reuses SEGMENT_TEMPLATE_FIELDS (candybar-templates-zh8b.53s)\n\n/code-review high found the new per-segment loop hand-spelled\n[\"when\",\"bg\",\"fg\",\"template\"] in a different order than the\nSEGMENT_TEMPLATE_FIELDS constant this very PR exported for exactly this\npurpose — nothing would have caught the two drifting apart.\n"
-        },
-        {
-          "sha": "e6de879efae2e0236e20c0a47a8b4a256d479e85",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T06:32:56-07:00",
-          "message": "fix(templates): the clock, payload reads, and edit-mode synthesis follow a dispatch into a partial (candybar-templates-zh8b.53s)\n\n/code-review medium found 3 real gaps the first fix pass missed: render.ts's\ninstant-detection basis, render-payload.ts's payload-input closure seed, and\nedit-mode.ts's toggle detector all still enumerated a segment's\ntemplate/bg/fg/when alone, so a clock read, a payload read, or an\n`edit.toggle` reference reachable only through a dispatched partial was\ninvisible to each — the segment's own clock call threw at first draw, a\npayload path never got fetched, and a toggle-only-in-a-partial reference\nproduced a confusing \"unknown action\" error instead of being synthesized.\nAll three now fold `seg.partials` in, the same way cross-ref.ts/\nsynthesis-inputs.ts/menu-synth.ts/unused.ts already do. Also: cross-ref.ts\nand plugins.ts no longer hand-spell the same segment-template-field list\ntwice; plugins.ts now exports it once.\n"
-        },
-        {
-          "sha": "b72c93e5800bea7a1257b3c21253b865287954d4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T06:05:19-07:00",
-          "message": "fix(templates): close gaps /code-review high found in partials (candybar-templates-zh8b.53s)\n\n- cross-ref.ts: a partial reusing a global helper's name now a load error,\n  not an uncaught \"redefinition of template\" throw at compile.\n- merge.ts: a segment delta's partials merge by name over the base's, like\n  settings, instead of wholesale-replacing (which silently dropped sibling\n  partials a bundled template still dispatched to).\n- unused.ts, synthesis-inputs.ts: both now walk a segment's partial bodies,\n  so a helper/action/payload-read reachable only through one is no longer\n  invisible to unused-detection or synthesis dependency tracking.\n- menu-synth.ts: {{ menu }} inside a partial is now a load error too, for\n  the same reason it already is inside a helper (the synthesis pass never\n  follows a {{ template }} call into one).\n- plugins.ts: a plugin segment's partials now go through the same\n  self-binding/namespace pipeline (boundToSelf, fragmentTemplates,\n  wrongScopeRefs, the tombstone-standin scan) as template/bg/fg/when.\n- cross-ref.ts: collapsed the \"is this name a helper or this segment's own\n  partial\" decision, previously implemented three times, into one\n  helperKeyPath function both checkActionRefs and checkTemplateRefs call.\n- dsl-types.ts: removed a stale lead/trail mention from the partials doc\n  comment (those aren't SegmentDecl fields).\n\nNew tests pin all of the above in test/dsl-segment-partials.test.ts and\ntest/plugins.test.ts.\n"
-        },
-        {
-          "sha": "7126b5deb3a49d3fa4770d0faf769ffc53575000",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T05:40:11-07:00",
-          "message": "feat(templates): array-form segment templates and segment-scoped partials (candybar-templates-zh8b.53s)\n\nA segment's `template` may now be an array of strings (joined with no\nseparator) for a long conditional that would otherwise be one unreadable\nline, and a segment may declare `partials`: named sub-templates scoped to\nit, compiled onto their own Defines chained from the shared `helpers`, so\ntwo segments can reuse a partial name with no collision and a partial can\ncall a helper but never another segment's partial. Dispatch is via the\nexisting static `{{ template \"name\" ctx }}` builtin.\n\nThe dynamic `partial` function (a computed name) needs a capability\n(`include`) that exists only on @promptctl/go-template-js's unreleased\nmaster, not its published npm version — split into a follow-up ticket\n(candybar-templates-zh8b.ph5), blocked on that release. Static unused-\npartial detection needs unused.ts to carry per-template segment identity,\nwhich it does not today — split into its own follow-up\n(candybar-templates-zh8b.mfn), not blocked on anything upstream.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "17024dd1e5797082d8999dc8ba586f4bf97d1911",
-      "timestamp": "2026-11-02T13:28:49.236Z",
-      "commits": [
-        {
-          "sha": "17024dd1e5797082d8999dc8ba586f4bf97d1911",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T06:27:46-07:00",
-          "message": "fix(test): the client-deadline cases state budgets a loaded loop cannot miss (brandon-unfiled-3248.5lkd) (#571)\n\nThe stub serves on the jest worker's own loop, so the statusline's 50 ms connect budget\ncould pass before its accept: the stated-budget case read CONNECT_TIMEOUT (1 of 20 runs\nunder CPU load), and the never-answers case passed without the request ever reaching the stub.\ntryRenderViaDaemon takes its budgets as a value, defaulting to the wire facts the statusline\nuses; the cases state wide ones, and the never-answers case asserts it ended at its own\ndeadline (TIMEOUT) having reached the stub."
-        },
-        {
-          "sha": "6d91c387cf1c1c941185bbc0ee4fc9247e21e41b",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-02T13:09:10Z",
-          "message": "chore(release): set `package.json` to 1.179.3 [skip ci]\n\n## [1.179.3](https://github.com/promptctl/cc-candybar/compare/v1.179.2...v1.179.3) (2026-11-02)\n\n### Bug Fixes\n\n* **daemon:** an opener's click hands off, so the browser outlives the 5s bound ([#568](https://github.com/promptctl/cc-candybar/issues/568)) ([1cacad3](https://github.com/promptctl/cc-candybar/commit/1cacad328e17c86fb91323df437230b3957ec6a0))\n* **test:** the click-error e2e holds its unanswered render until the daemon's side has ended (brandon-unfiled-3248.cbyb) ([#570](https://github.com/promptctl/cc-candybar/issues/570)) ([2b55ee9](https://github.com/promptctl/cc-candybar/commit/2b55ee999dbc13d1647e8946ffdb6557934b017a))\n"
         }
       ]
     },
