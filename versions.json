@@ -2,53 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-582",
-      "ref": "refs/pull/582/merge",
-      "sha": "ad0e818c71fcc54b4c265ffece1ee2c7d5c1f71f",
-      "timestamp": "2026-11-02T17:48:08.562Z",
-      "commits": [
-        {
-          "sha": "ad0e818c71fcc54b4c265ffece1ee2c7d5c1f71f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T17:46:58Z",
-          "message": "Merge 9b38005773148821ca17f27d17b6967a2914d11d into fd15d5587077c36e966519a7da89e8f046818222\n"
-        },
-        {
-          "sha": "9b38005773148821ca17f27d17b6967a2914d11d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T10:46:47-07:00",
-          "message": "test(render): the retry loop and the reader share one answered-render pick, matching the session id as the daemon logs it (brandon-unfiled-3248.8c9u)\n"
-        },
-        {
-          "sha": "2dfb3a086b113c93b2b3d207e236f6bce90f011c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T10:45:29-07:00",
-          "message": "test(render): the kept-render pick is a pure function with its own test; comments and memory name the concept (brandon-unfiled-3248.8c9u)\n"
-        },
-        {
-          "sha": "06ddc813db8f6505f0725b194deab99f9e8cfb94",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T10:42:38-07:00",
-          "message": "test(render): renderLines returns the one event per render its client kept (brandon-unfiled-3248.8c9u)\n\nThe retry loop in renderRequest and renderLines now decide with one predicate, so a retried attempt is not read as a render. Also records the heap-snapshot class-name trap in testing.md.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "fd15d5587077c36e966519a7da89e8f046818222",
-      "timestamp": "2026-11-02T17:37:47.664Z",
+      "sha": "ab8efc3e14af20e9b4e8fd57aabe300f8a2c3456",
+      "timestamp": "2026-11-02T18:03:20.885Z",
       "commits": [
         {
-          "sha": "fd15d5587077c36e966519a7da89e8f046818222",
+          "sha": "ab8efc3e14af20e9b4e8fd57aabe300f8a2c3456",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T10:36:57-07:00",
-          "message": "test(render-cache): a compile keeps nothing of a render is asserted from a heap snapshot's strong paths, not from collection (#581)\n\n* test(render-cache): the compile-keeps-nothing case polls collection over turns, and its quarantine line goes (brandon-unfiled-3248.na7i)\n\n* test(render-cache): a still-held store in the compile-keeps-nothing case is named by its path from the heap's roots (brandon-unfiled-3248.na7i)\n\n* test(render-cache): a compile keeps nothing of a render is asserted from a heap snapshot's strong paths, not from collection (brandon-unfiled-3248.na7i)\n\nCollection is the wrong observable: gc() is synchronous, so a count of gc() calls or turns neither explains the CI failure nor tells a holder that lets go later from one that never does. The case now asserts no strong path from the heap's roots reaches a ProbeStore, and a failure prints the path. heap-retainers.mjs gains --strong so a WeakRef's edge is never named as the holder; the helper wraps that tool instead of reading snapshots itself.\n\n* test(render-cache): the held control shares the case's snapshot and class, and heap-retainers traces until its limit is met of paths (brandon-unfiled-3248.na7i)\n\nA control of another class left the case's empty answer unproven for ProbeStore itself, and a second snapshot cost the file seconds. One held ProbeStore is now the path the single snapshot must show. heap-retainers sliced its targets to the limit before tracing them, so under --strong a weak-only target used up the limit and an empty answer meant 'the first few were not held'."
+          "timestamp": "2026-11-02T11:00:57-07:00",
+          "message": "test(render): renderLines returns the one event per render its client kept (#582)\n\n* test(render): renderLines returns the one event per render its client kept (brandon-unfiled-3248.8c9u)\n\nThe retry loop in renderRequest and renderLines now decide with one predicate, so a retried attempt is not read as a render. Also records the heap-snapshot class-name trap in testing.md.\n\n* test(render): the kept-render pick is a pure function with its own test; comments and memory name the concept (brandon-unfiled-3248.8c9u)\n\n* test(render): the retry loop and the reader share one answered-render pick, matching the session id as the daemon logs it (brandon-unfiled-3248.8c9u)"
         }
       ]
     },
