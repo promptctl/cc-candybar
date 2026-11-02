@@ -1,3 +1,9 @@
+## [1.180.0](https://github.com/promptctl/cc-candybar/compare/v1.179.4...v1.180.0) (2026-11-02)
+
+### Features
+
+* **templates:** array-form segment templates and segment-scoped partials ([#569](https://github.com/promptctl/cc-candybar/issues/569)) ([d1a536c](https://github.com/promptctl/cc-candybar/commit/d1a536cb6c3ddd00dbea84c59587c1dbc6c9a1f9))
+
 ## [1.179.4](https://github.com/promptctl/cc-candybar/compare/v1.179.3...v1.179.4) (2026-11-02)
 
 ### Bug Fixes
