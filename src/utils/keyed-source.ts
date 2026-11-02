@@ -15,6 +15,7 @@ import {
   currentOf,
   renew,
   settle,
+  settledLane,
   unread,
   type Lane,
   type Readable,
@@ -98,6 +99,7 @@ interface Entry<I, T> extends Readable<T> {
 export class KeyedSource<I, T> {
   private readonly entries = new Map<string, Entry<I, T>>();
   private readonly refreshes: Refreshes<KeyedTrigger>;
+  private closed = false;
 
   constructor(private readonly spec: KeyedSourceSpec<I, T>) {
     this.refreshes = spec.ledger.declare({
@@ -123,6 +125,10 @@ export class KeyedSource<I, T> {
   // by that refresh — so its caller logs none. A declaration that THROWS is a
   // bug none of those saw, reported by the view's declaration (declareLanes).
   declare(holds: Holds, input: I): Lane<T> {
+    // [LAW:single-enforcer] A closed source builds no entry: one declared
+    // after close (a render that was mid-wait) would be held, and its period
+    // re-arms after every read with no close left to end it.
+    if (this.closed) return settledLane(failed(`${this.spec.name} closed`));
     const key = this.spec.keyOf(input);
     const entry = this.touched(key) ?? this.firstRead(this.created(key, input));
     holds.take(`${this.spec.name}:${key}`, () => this.hold(entry));
@@ -138,6 +144,7 @@ export class KeyedSource<I, T> {
   // one fresh read. A key never read is created for it, and its first read is
   // that resume's.
   supersede(input: I): Resume {
+    if (this.closed) return () => {};
     const key = this.spec.keyOf(input);
     const entry = this.touched(key) ?? this.created(key, input);
     entry.superseding++;
@@ -185,6 +192,7 @@ export class KeyedSource<I, T> {
   // Ends every entry's period: a held entry's period re-arms on every landing,
   // so an owner that is not closed keeps its timers for good.
   close(): void {
+    this.closed = true;
     for (const entry of [...this.entries.values()]) this.drop(entry);
   }
 

@@ -477,8 +477,9 @@ export class GitDataProvider {
   // the effective gitDir is the state + watch identity, and an absent (not a
   // repo) or failed resolution is the answer. [LAW:single-enforcer] A closed
   // provider builds no state: a declaration landing after close (a render
-  // that was mid-wait) would otherwise hold a fresh repo whose period re-arms
-  // after every pass, with no close left to drop it.
+  // that was mid-wait) would otherwise build a repo, and its watch, that
+  // nothing drops, whose period re-arms after every pass while that home
+  // holds it.
   private asked(
     holds: Holds,
     workingDir: string,
