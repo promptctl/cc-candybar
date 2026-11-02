@@ -1,3 +1,9 @@
+## [1.178.2](https://github.com/promptctl/cc-candybar/compare/v1.178.1...v1.178.2) (2026-11-02)
+
+### Bug Fixes
+
+* **daemon:** the draw's reserve holds a draw descheduled on a busy machine (candybar-launch-q7o7.qjw) ([#560](https://github.com/promptctl/cc-candybar/issues/560)) ([ec506aa](https://github.com/promptctl/cc-candybar/commit/ec506aab1199cd0694cb9e8a7cd9996f75b797c1))
+
 ## [1.178.1](https://github.com/promptctl/cc-candybar/compare/v1.178.0...v1.178.1) (2026-11-01)
 
 ### Bug Fixes
