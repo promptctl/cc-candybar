@@ -5,6 +5,7 @@
 
 const path = require("node:path");
 const { EXPIRY_DAYS, ageDays, expired, markedTicket } = require("./quarantine.cjs");
+const { BOOTS_DIR } = require("./tiers.cjs");
 
 // A file's layer is the first directory under test/ that holds it, and `root`
 // for a file directly in test/, the transitional layer the layered plan empties.
@@ -227,6 +228,33 @@ function summarise(records, entries, now) {
   };
 }
 
+/**
+ * [LAW:single-enforcer] The ratchet on the cases that boot the daemon: the cases
+ * of every file under test/daemon-boots/, summed over the records, must equal the
+ * number the ratchet file holds. Equal and not at most, so a move lowers the file
+ * in the same change and a new case has no room to hide in a freed slot. A file
+ * that never ran or errored holds no cases, so it would read as a lowered count;
+ * it is named instead, and a run that lost files fails here as it does in the report.
+ * @param {FileRecord[]} records
+ * @param {number} ratcheted
+ * @returns {{ cases: number, problems: string[] }}
+ */
+function judgeBootCases(records, ratcheted) {
+  const boots = records.filter((record) => record.file.startsWith(`${BOOTS_DIR}/`));
+  const lost = boots
+    .filter((record) => record.outcome === "never-ran" || record.outcome === "errored")
+    .map((record) => `${record.file} ${record.outcome}, so its cases are not counted`);
+  const cases = boots.reduce((sum, record) => sum + (record.outcome === "never-ran" ? 0 : record.count), 0);
+  const ratchetFile = "test/transitional-daemon-boots/ratchet.json";
+  const mismatch =
+    cases > ratcheted
+      ? [`${cases} cases in ${BOOTS_DIR}/, over the ratchet of ${ratcheted}: it only falls, so a case does not join these files. One that boots no daemon belongs in test/unit or the test/ root`]
+      : cases < ratcheted
+        ? [`${cases} cases in ${BOOTS_DIR}/, under the ratchet of ${ratcheted}: lower "cases" in ${ratchetFile} to ${cases}, in the same change that moved them`]
+        : [];
+  return { cases, problems: [...lost, ...mismatch] };
+}
+
 /** @param {number} ms */
 function seconds(ms) {
   return `${(ms / 1000).toFixed(1)} s`;
@@ -279,6 +307,7 @@ function renderSummary({ layers, runs, wallMs, notPassed, quarantine }) {
 
 module.exports = {
   caseName,
+  judgeBootCases,
   layerOf,
   missingRuns,
   neverRan,

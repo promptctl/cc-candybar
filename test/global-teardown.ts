@@ -71,7 +71,7 @@ function reportDaemonStarts(): void {
   const ledger = fs.readFileSync(process.env[LEDGER_ENV]!, "utf8");
   const verdict = judgeDaemonStarts(parseLedger(ledger), HELPER_START_CEILING);
   console.log(
-    `daemon starts: ${verdict.helper} of ${HELPER_START_CEILING} by the helper, ${verdict.client} by a client`,
+    `daemon starts: ${verdict.helper} of ${HELPER_START_CEILING} by the helper, ${verdict.client} by a client, ${verdict.harness} in a worker`,
   );
   if (verdict.problems.length > 0) {
     throw new Error(`process tier:\n${verdict.problems.join("\n")}`);

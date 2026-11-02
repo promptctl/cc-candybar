@@ -279,3 +279,53 @@ describe("the records reporter", () => {
     expect(String(reporter.getLastError())).toMatch(/scheduled 2 files and 1 gave a result/);
   });
 });
+
+// The ratchet on the cases that boot the daemon: the cases under test/daemon-boots/
+// of both booting runs, summed, equal the ratchet file's number.
+describe("the daemon-boot case ratchet", () => {
+  const BOOT = "test/daemon-boots/worker/a.test.ts";
+  const ran = (file: string, count: number) =>
+    records.recordOf(
+      result(file, {
+        testResults: Array.from({ length: count }, (_, i) => ({
+          ancestorTitles: [],
+          title: `case ${i}`,
+          status: "passed",
+          failureMessages: [],
+        })),
+        numPassingTests: count,
+      }),
+      ROOT,
+      "worker",
+    );
+
+  it("counts the cases of every file under the directory, and no other file's", () => {
+    const set = [ran(BOOT, 3), ran("test/daemon-boots/process/b.test.ts", 2), ran("test/unit/c.test.ts", 9)];
+    expect(records.judgeBootCases(set, 5)).toEqual({ cases: 5, problems: [] });
+  });
+
+  it("fails a case beyond the ratchet, and says where it belongs instead", () => {
+    const { cases, problems } = records.judgeBootCases([ran(BOOT, 4)], 3);
+    expect({ cases, problems: problems.length }).toEqual({ cases: 4, problems: 1 });
+    expect(problems[0]).toMatch(/4 cases in test\/daemon-boots\/, over the ratchet of 3.*test\/unit or the test\/ root/);
+  });
+
+  it("fails a move that left the ratchet behind, naming the number to set", () => {
+    const { problems } = records.judgeBootCases([ran(BOOT, 2)], 3);
+    expect(problems).toEqual([expect.stringMatching(/2 cases.*under the ratchet of 3.*to 2/)]);
+  });
+
+  it("names a file that never ran or errored, so a lost file is no lowered count", () => {
+    const lost = { file: BOOT, layer: "daemon-boots", run: "worker", outcome: "never-ran" };
+    const errored = records.recordOf(
+      result("test/daemon-boots/worker/e.test.ts", { testResults: [], numPassingTests: 0, testExecError: { message: "SyntaxError" } }),
+      ROOT,
+      "worker",
+    );
+    const { problems } = records.judgeBootCases([lost, errored, ran("test/daemon-boots/worker/ok.test.ts", 1)], 1);
+    expect(problems).toEqual([
+      `${BOOT} never-ran, so its cases are not counted`,
+      "test/daemon-boots/worker/e.test.ts errored, so its cases are not counted",
+    ]);
+  });
+});

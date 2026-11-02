@@ -1,41 +1,34 @@
-// [LAW:verifiable-goals] What a connection does, over a stream in this jest
-// worker with no socket: the request backstop, a half-close and a hang-up, the
-// exit a reply carries, and a subscriber's frames. A stand-in holds a request
-// open where a real one would answer inside the backstop; the daemon's own
-// handling answers the rest.
+// [LAW:verifiable-goals] What a connection does, over a stream with no socket and
+// no daemon: the request backstop, a half-close and a hang-up, the exit a reply
+// carries, and a subscriber's frames. A stand-in holds a request open where a real
+// one would answer inside the backstop. A connection to a daemon built in the
+// worker is the other half (test/daemon-boots/worker/daemon-built-connection.test.ts).
 
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import { setImmediate } from "node:timers";
 
 import {
   handleConnection,
   type ConnectionDaemon,
-} from "../../../src/daemon/connection";
-import { SYSTEM_CLOCK, type DaemonClock } from "../../../src/daemon/daemon";
-import { NOTHING_DELIVERED } from "../../../src/daemon/draw-bar";
-import type { Subscriber } from "../../../src/daemon/frame-feed";
+} from "../src/daemon/connection";
+import { SYSTEM_CLOCK } from "../src/daemon/daemon";
+import { NOTHING_DELIVERED } from "../src/daemon/draw-bar";
+import type { Subscriber } from "../src/daemon/frame-feed";
 import {
   FRAME_HEADER_BYTES,
   PROTOCOL_VERSION,
   encodeFrame,
-  makeFrameReader,
   sendOne,
   type Request,
   type Response,
-} from "../../../src/daemon/protocol";
-import type { HandledRequest, Reply } from "../../../src/daemon/reply";
-import { REQUEST_TIMEOUT_MS } from "../../../src/daemon/request-deadline";
-import { sessionIdOf } from "../../../src/daemon/session-id";
-import { textOf } from "../../../src/render/frame";
-import { barOf } from "../../helpers/drawn-frame";
-import { RuntimeStats } from "../../../src/daemon/stats";
-import { render, renderBody } from "../../helpers/daemon-e2e";
-import { loggedLines, renderEventsOf } from "../../helpers/daemon-log";
-import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
-import { memoryConnection } from "../../helpers/memory-connection";
-import { until } from "../../helpers/until";
+} from "../src/daemon/protocol";
+import type { HandledRequest, Reply } from "../src/daemon/reply";
+import { REQUEST_TIMEOUT_MS } from "../src/daemon/request-deadline";
+import { sessionIdOf } from "../src/daemon/session-id";
+import { barOf } from "./helpers/drawn-frame";
+import { RuntimeStats } from "../src/daemon/stats";
+import { memoryConnection } from "./helpers/memory-connection";
+import { openedOn, type Opened } from "./helpers/opened-connection";
+import { until } from "./helpers/until";
 
 jest.setTimeout(30_000);
 
@@ -65,35 +58,6 @@ const replyWith = (over: Partial<Reply> = {}): HandledRequest => ({
 // a macrotask: one later, everything sent has landed.
 const settled = (): Promise<void> =>
   new Promise((resolve) => setImmediate(resolve));
-
-interface Opened {
-  readonly client: ReturnType<typeof memoryConnection>["client"];
-  readonly received: Response[];
-  send(req: Request): void;
-  // Whether the daemon's side ended the connection.
-  ended(): boolean;
-}
-
-const openedOn = (client: Opened["client"]): Opened => {
-  const received: Response[] = [];
-  let over = false;
-  client.on(
-    "data",
-    makeFrameReader(
-      (frame) => received.push(frame as Response),
-      (err) => {
-        throw err;
-      },
-    ),
-  );
-  client.on("end", () => (over = true));
-  return {
-    client,
-    received,
-    send: (req) => client.write(encodeFrame(req)),
-    ended: () => over,
-  };
-};
 
 const open = (daemon: ConnectionDaemon): Opened => {
   const { daemonEnd, client } = memoryConnection();
@@ -477,135 +441,5 @@ describe("a connection over a stream", () => {
         "d",
       ]);
     });
-  });
-});
-
-describe("a connection to a daemon built in this worker", () => {
-  let root: string;
-  let projectDir: string;
-  let config: string;
-  let started: InWorkerDaemon | null = null;
-  const exit = jest.fn();
-
-  const start = (clock: DaemonClock = SYSTEM_CLOCK): InWorkerDaemon => {
-    started = startDaemon(process.env, { clock, exit });
-    return started;
-  };
-
-  const renderRequest = (sessionId: string, deadline: number): Request =>
-    ({
-      v: PROTOCOL_VERSION,
-      kind: "render",
-      ...renderBody(sessionId, projectDir, { termCols: 200, termRows: 40 }, [
-        "cc-candybar",
-        "--config",
-        config,
-      ]),
-      deadline,
-    }) as Request;
-
-  const answered = async (opened: Opened): Promise<Response> => {
-    await until(() => opened.received.length > 0, "the connection's answer");
-    return opened.received[0]!;
-  };
-
-  // What a band frame drew. Anything else is named, where a bare read of `band`
-  // would leave the assertion to fail without saying what came back.
-  const drawn = (resp: Response): string => {
-    if (!("band" in resp))
-      throw new Error(`no drawn band: ${JSON.stringify(resp)}`);
-    return resp.band
-      .map((row) => row.map(({ text }) => text).join(""))
-      .join("\n");
-  };
-
-  // [LAW:no-ambient-temporal-coupling] The backstop here is the real one, and a
-  // cold first render on a loaded runner outlasts it, so a render goes through
-  // the helper that asks again on TIMEOUT.
-  const rendered = async (
-    daemon: InWorkerDaemon,
-    sessionId: string,
-  ): Promise<string> =>
-    textOf(
-      await render(
-        daemon,
-        sessionId,
-        projectDir,
-        { termCols: 200, termRows: 40 },
-        ["cc-candybar", "--config", config],
-      ),
-    );
-
-  beforeAll(() => {
-    root = mkdtempSync(path.join(os.tmpdir(), "cc-candybar-connection-"));
-    projectDir = root;
-    config = path.join(root, "bar.json5");
-    writeFileSync(
-      config,
-      `{ globals: { experimentalBand: true, experimentalStatusline: true }, segments: { mark: { template: 'a drawn mark' } }, root: { h: ['mark'] } }`,
-    );
-  });
-
-  afterEach(async () => {
-    await started?.stop();
-    started = null;
-    exit.mockClear();
-  });
-
-  afterAll(() => {
-    rmSync(root, { recursive: true, force: true });
-  });
-
-  test("a render is answered by the daemon's own handling", async () => {
-    expect(await rendered(start(), "connection-render")).toContain(
-      "a drawn mark",
-    );
-  });
-
-  test("a subscribe receives the frames the daemon draws", async () => {
-    const running = start();
-    await rendered(running, "connection-feed");
-
-    const feed = openedOn(running.connect());
-    feed.send({
-      ...SUBSCRIBE,
-      sessionId: "connection-feed",
-      lane: "band",
-    } as Request);
-    expect(drawn(await answered(feed))).toContain("a drawn mark");
-    expect(running.daemon.stats.inFlight).toBe(0);
-    feed.client.destroy();
-  });
-
-  test("a shutdown request reaches the exit the daemon was built with", async () => {
-    const opened = openedOn(start().connect());
-    opened.send({ v: PROTOCOL_VERSION, kind: "shutdown" });
-    await until(() => exit.mock.calls.length > 0, "the daemon's exit");
-    expect(exit).toHaveBeenCalledWith(0);
-    expect(opened.received).toEqual([{ ok: true, output: "" }]);
-  });
-
-  test("how long a render queued reads from its accept on the daemon's clock", async () => {
-    let monotonic = 1_000_000;
-    const at = new Date();
-    const opened = openedOn(
-      start({
-        ...SYSTEM_CLOCK,
-        date: () => at,
-        monotonic: () => monotonic,
-      }).connect(),
-    );
-    monotonic += 500;
-    opened.send(renderRequest("connection-clock", at.getTime() + 2_000));
-
-    // Read off the render's own event: a backstop that answered first abandons
-    // the answer, not the render, and the attempt is logged either way.
-    const [event] = await loggedLines(
-      process.env,
-      (lines) => renderEventsOf(lines, "connection-clock"),
-      (events) => events.length > 0,
-      "the render event of connection-clock",
-    );
-    expect(event).toContain(" queued=500ms ");
   });
 });

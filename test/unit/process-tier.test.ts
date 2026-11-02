@@ -4,8 +4,9 @@ import {
 } from "../helpers/process-tier.cjs";
 
 const TIER = "test/daemon-boots/process/daemon-shutdown.test.ts";
+const WORKER_TIER = "test/daemon-boots/worker/daemon-value.test.ts";
 const OUTSIDE = "test/daemon-effect-e2e.test.ts";
-type Route = "helper" | "client" | "raw";
+type Route = "helper" | "client" | "raw" | "harness";
 
 const start = (file: string | null, route: Route) => ({ file, route });
 const judged = (...starts: ReturnType<typeof start>[]) =>
@@ -13,13 +14,14 @@ const judged = (...starts: ReturnType<typeof start>[]) =>
 
 describe("judgeDaemonStarts", () => {
   test("an empty ledger is a clean verdict that counts zero", () => {
-    expect(judged()).toEqual({ helper: 0, client: 0, problems: [] });
+    expect(judged()).toEqual({ helper: 0, client: 0, harness: 0, problems: [] });
   });
 
   test("the tier may start daemons, up to the ceiling", () => {
     expect(judged(start(TIER, "helper"), start(TIER, "helper"))).toEqual({
       helper: 2,
       client: 0,
+      harness: 0,
       problems: [],
     });
   });
@@ -41,9 +43,32 @@ describe("judgeDaemonStarts", () => {
     }
   });
 
+  test("a daemon built in a worker is allowed under test/daemon-boots/ and counted apart from the ceiling", () => {
+    const harness = (file: string) => start(file, "harness");
+    expect(judged(harness(WORKER_TIER), harness(WORKER_TIER), harness(WORKER_TIER), harness(TIER))).toEqual({
+      helper: 0,
+      client: 0,
+      harness: 4,
+      problems: [],
+    });
+  });
+
+  test("a daemon built in a worker by any other file is named by that file", () => {
+    expect(judged(start(OUTSIDE, "harness")).problems).toEqual([
+      expect.stringContaining(`${OUTSIDE} booted a daemon in the jest worker`),
+    ]);
+    // A unit file and a file at the test/ root are the files a moved case lands in.
+    expect(judged(start("test/unit/moved.test.ts", "harness")).problems).toHaveLength(1);
+  });
+
+  test("an over-ceiling message offers no raise", () => {
+    const { problems } = judged(start(TIER, "helper"), start(TIER, "helper"), start(TIER, "helper"));
+    expect(problems[0]).not.toMatch(/raise/);
+  });
+
   test("a start naming no test file is outside the tier", () => {
     expect(judged(start(null, "raw")).problems).toEqual([
-      expect.stringContaining("carries no test file"),
+      expect.stringContaining("recorded with no test file"),
     ]);
   });
 
@@ -54,7 +79,7 @@ describe("judgeDaemonStarts", () => {
       start(TIER, "client"),
       start(TIER, "client"),
     );
-    expect(verdict).toEqual({ helper: 2, client: 2, problems: [] });
+    expect(verdict).toEqual({ helper: 2, client: 2, harness: 0, problems: [] });
   });
 
   test("a raw start is refused in the tier too", () => {

@@ -64,8 +64,7 @@ const routes = MODULES.flatMap(([surface, name, guarding]) =>
 );
 
 // A row removed from the table takes its guard and its case with it, so the set
-// of modules is pinned here: dropping a surface is a change to two places, as
-// raising HELPER_START_CEILING is.
+// of modules is pinned here: dropping a surface is a change to two places.
 test("the table refuses every module that reaches the machine", () => {
   expect(MODULES.map(([, name]) => name).sort()).toEqual(
     [
