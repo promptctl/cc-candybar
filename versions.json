@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-567",
+      "ref": "refs/pull/567/merge",
+      "sha": "13e3fa965a2dc7327af67e02886afa94765bf3d2",
+      "timestamp": "2026-11-02T12:45:45.790Z",
+      "commits": [
+        {
+          "sha": "13e3fa965a2dc7327af67e02886afa94765bf3d2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T12:42:38Z",
+          "message": "Merge 792ffea10354f2338cb3a1b7ee7694e0c21a30a1 into e9865fa4807325c4bf8e73c86195d8ea246a2775\n"
+        },
+        {
+          "sha": "792ffea10354f2338cb3a1b7ee7694e0c21a30a1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T05:42:20-07:00",
+          "message": "fix(e2e): the sign-off guard sees directories, quoted paths and worktrees; shrink check fails on git errors (candybar-testing-ihvy.7dc)\n"
+        },
+        {
+          "sha": "cf6dcdd324fd3dac6ec2f46340c7dac1f53e3a14",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T05:36:52-07:00",
+          "message": "test(e2e): the cap and the assertion limit are enforced (candybar-testing-ihvy.7dc)\n\nThe sign-off file (.claude/e2e-signoff.json) holds the end-to-end cap and the\nassertion limit. jest.e2e.config.js adds a reporter that fails a run holding\nmore tests than the cap and a setup file that fails a test whose assertion\ncount is not the limit; every other config ignores test/e2e/, so no run\nreaches an end-to-end test without them. Fixtures that break each check, run\nthrough the real config by test/integration/e2e-checks, turn red if a check is\nunplugged. The e2e-signoff hook now refuses an agent's edit to the sign-off,\nthe checks, their tests and fixtures, itself, and any test/e2e/ file that\norigin/main holds, and fails closed.\n\nA workflow check fails CI on a step that reaches a script importing\ndaemonArgs or createDaemon. load-gate.yml is excused on a transitional list\n(test/transitional-daemon-workflows) that a CI step holds to shrinking;\ncandybar-testing-ihvy.4vv deletes the directory.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-570",
       "ref": "refs/pull/570/merge",
       "sha": "dabc35002e184579ece856d6b5d163aefd52f1bf",
@@ -64,28 +93,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T05:39:08-07:00",
           "message": "fix(daemon): an opener's click hands off, so the browser outlives the 5s bound (candybar-launch-q7o7.hx4)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-567",
-      "ref": "refs/pull/567/merge",
-      "sha": "4e585ca14073d83b87fd56d16de14917872d279e",
-      "timestamp": "2026-11-02T12:38:28.513Z",
-      "commits": [
-        {
-          "sha": "4e585ca14073d83b87fd56d16de14917872d279e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T05:37:42-07:00",
-          "message": "Merge cf6dcdd324fd3dac6ec2f46340c7dac1f53e3a14 into e9865fa4807325c4bf8e73c86195d8ea246a2775\n"
-        },
-        {
-          "sha": "cf6dcdd324fd3dac6ec2f46340c7dac1f53e3a14",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T05:36:52-07:00",
-          "message": "test(e2e): the cap and the assertion limit are enforced (candybar-testing-ihvy.7dc)\n\nThe sign-off file (.claude/e2e-signoff.json) holds the end-to-end cap and the\nassertion limit. jest.e2e.config.js adds a reporter that fails a run holding\nmore tests than the cap and a setup file that fails a test whose assertion\ncount is not the limit; every other config ignores test/e2e/, so no run\nreaches an end-to-end test without them. Fixtures that break each check, run\nthrough the real config by test/integration/e2e-checks, turn red if a check is\nunplugged. The e2e-signoff hook now refuses an agent's edit to the sign-off,\nthe checks, their tests and fixtures, itself, and any test/e2e/ file that\norigin/main holds, and fails closed.\n\nA workflow check fails CI on a step that reaches a script importing\ndaemonArgs or createDaemon. load-gate.yml is excused on a transitional list\n(test/transitional-daemon-workflows) that a CI step holds to shrinking;\ncandybar-testing-ihvy.4vv deletes the directory.\n"
         }
       ]
     },
