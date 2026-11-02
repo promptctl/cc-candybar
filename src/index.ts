@@ -12,7 +12,7 @@ import {
   runUrlHandle,
   stableAttachPreload,
 } from "./install";
-import { processLauncher } from "./proc/launch";
+import { oneShotLauncher } from "./proc/launch";
 import { runDaemon } from "./daemon/server";
 import { tryRenderViaDaemon } from "./daemon/client";
 import { daemonStatsPlan } from "./daemon/client-stats";
@@ -75,11 +75,11 @@ function showHelpText(): void {
 type Subcommand = (args: readonly string[]) => Promise<void>;
 const SUBCOMMANDS: Readonly<Record<string, Subcommand>> = {
   install: async (args) => {
-    await runInstall(args, RUNNING_BUNDLE, processLauncher);
+    await runInstall(args, RUNNING_BUNDLE, oneShotLauncher);
     process.exit(0);
   },
   "install-url-handler": async () => {
-    runInstallUrlHandler(RUNNING_BUNDLE, processLauncher);
+    runInstallUrlHandler(RUNNING_BUNDLE, oneShotLauncher);
     process.exit(0);
   },
   "url-handle": async (args) => {

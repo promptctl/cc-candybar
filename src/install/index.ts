@@ -8,7 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { createRequire } from "node:module";
-import type { Launcher } from "../proc/launch";
+import type { OneShotLauncher } from "../proc/launch";
 import { writeAtomic } from "../utils/atomic-write";
 import { tryClickViaDaemon } from "../daemon/client";
 import type { PermanentOutcome } from "../daemon/client-transport";
@@ -315,7 +315,10 @@ function infoPlistPatch(): Array<{ key: string; xml: string }> {
 // Callers establish the macOS precondition ([LAW:single-enforcer] — the
 // subcommand entry checks before any side effect; runInstall reaches here
 // only through its darwin dispatch).
-function installUrlHandlerFrom(stagedDist: string, launcher: Launcher): void {
+function installUrlHandlerFrom(
+  stagedDist: string,
+  launcher: OneShotLauncher,
+): void {
   const bundle = appBundlePath();
   fs.mkdirSync(path.dirname(bundle), { recursive: true });
 
@@ -376,7 +379,10 @@ function installUrlHandlerFrom(stagedDist: string, launcher: Launcher): void {
   );
 }
 
-export function runInstallUrlHandler(bundle: string, launcher: Launcher): void {
+export function runInstallUrlHandler(
+  bundle: string,
+  launcher: OneShotLauncher,
+): void {
   // Precondition before any side effect: on a non-mac this fails with zero
   // files written, not after staging the runtime.
   ensureMacOS();
@@ -510,7 +516,7 @@ function installSuccessMessage(): string {
 export async function runInstall(
   rendererArgs: readonly string[],
   bundle: string,
-  launcher: Launcher,
+  launcher: OneShotLauncher,
 ): Promise<void> {
   const force = rendererArgs.includes("--force");
   const filteredArgs = rendererArgs.filter((a) => a !== "--force");

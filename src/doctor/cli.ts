@@ -13,7 +13,7 @@
 // itself here (handler-probe.ts), the click that asked there — and the fold
 // is one function either way.
 
-import { processLauncher } from "../proc/launch.js";
+import { oneShotLauncher, processLauncher } from "../proc/launch.js";
 import { linkSignerFromKeyFile } from "../daemon/link-key.js";
 import { openSync } from "node:fs";
 import process from "node:process";
@@ -351,7 +351,7 @@ export async function doctorCommandPlan(
     ? { stdout: "", stderr: parsed.message, code: EXIT_USAGE }
     : await doctorPlan(
         productionEdge(processLauncher, loadConfigOnce),
-        productionHandlerProbeEdge(processLauncher),
+        productionHandlerProbeEdge(oneShotLauncher),
         askDaemon,
         process.env,
         process.cwd(),

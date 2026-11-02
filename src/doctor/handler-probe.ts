@@ -19,7 +19,7 @@ import { describeFailure } from "../daemon/client-transport.js";
 import { fetchStats, shapeSkew } from "../daemon/client-stats.js";
 import { defaultSocketPath, socketPath } from "../daemon/paths.js";
 import { handlerCommand, handlerScriptPath } from "../install/index.js";
-import type { LaunchCategory, Launcher } from "../proc/launch.js";
+import type { LaunchCategory, OneShotLauncher } from "../proc/launch.js";
 import type { Asked, HandlerApp, UrlHandlerFacts } from "./checks.js";
 
 const ok = <T>(value: T): Asked<T> => ({ kind: "ok", value });
@@ -172,7 +172,7 @@ export async function probeUrlHandler(
 const SPAWN_MS = 5000;
 
 function run(
-  launcher: Launcher,
+  launcher: OneShotLauncher,
   category: LaunchCategory,
   bin: string,
   args: readonly string[],
@@ -211,7 +211,7 @@ async function daemonView(): Promise<Asked<DaemonView>> {
 }
 
 export function productionHandlerProbeEdge(
-  launcher: Launcher,
+  launcher: OneShotLauncher,
 ): HandlerProbeEdge {
   return {
     platform: process.platform,
