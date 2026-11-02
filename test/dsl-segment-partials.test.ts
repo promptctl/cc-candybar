@@ -293,6 +293,24 @@ describe("candybar-templates-zh8b.53s — segment-scoped partials", () => {
     expect(config.helpers.money).toBeDefined();
   });
 
+  test("a clock read only reachable through a partial is classified instant, not thrown as a cached value's", () => {
+    // [LAW:single-enforcer] Regression for render.ts's instant-detection basis
+    // once walking `config.helpers` alone: a segment's own `template`
+    // dispatches to a partial that calls the clock, so the dispatch's target
+    // is a name only `seg.partials` resolves, not `config.helpers`. Before the
+    // fix this rendered `⚠ error calling now: the clock was read by a value
+    // that keeps its answer` instead of the time.
+    const source = `{
+      segments: {
+        s: { template: '{{ template "clk" . }}', partials: { clk: '{{ now | date "15:04" }}' } },
+      },
+      root: "s",
+    }`;
+    const out = textOf(render(source, {}));
+    expect(out).not.toMatch(/⚠|error calling now/);
+    expect(out).toMatch(/\d{2}:\d{2}/);
+  });
+
   test("a delta's partials merge by name over a bundled base's, like settings", () => {
     const dflt: DslConfig = {
       ...EMPTY_DEFAULT,

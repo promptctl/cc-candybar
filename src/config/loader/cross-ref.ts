@@ -105,6 +105,7 @@ import {
   type TemplateScope,
 } from "./refs.js";
 import { payloadPathOf, valueReadsOf, type ValueRead } from "./value-reads.js";
+import { SEGMENT_TEMPLATE_FIELDS } from "./plugins.js";
 
 // Where a distribution nothing reads sits: on a container nested inside a
 // row, on a bar vertical container whose rows stack further in, or on a body's
@@ -1614,7 +1615,7 @@ export function validateDeclarations(
       { ...templateScope, helpers: segHelpers },
       settings,
     );
-    for (const field of ["template", "bg", "fg", "when"] as const) {
+    for (const field of SEGMENT_TEMPLATE_FIELDS) {
       const tpl = seg[field];
       if (typeof tpl !== "string") continue;
       checkTemplateRefs(ctx, `segments.${segName}.${field}`, tpl, segScope, {

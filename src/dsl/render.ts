@@ -934,9 +934,10 @@ export function compileDslConfig(
   // preset under its gates, so it reads the instant when one of them does:
   // the gates are told first, by the engine's clock functions alone — a gate
   // is drawn outside any segment, where no layout can be asked for.
+  const instantNames = new Set(projections.map(([name]) => name));
   const basis = {
     reads: valueReads({
-      names: new Set(projections.map(([name]) => name)),
+      names: instantNames,
       helpers: config.helpers,
       actions: config.actions,
     }),
@@ -948,17 +949,42 @@ export function compileDslConfig(
   const layoutReadsInstant = gates.some((gate) =>
     gateReadsInstant(sources.get(gate)!),
   );
-  const readsInstant = layoutReadsInstant
-    ? templateInstants({
-        ...basis,
-        clock: new Set([...basis.clock, LAYOUT_PREVIEW]),
-      })
-    : gateReadsInstant;
+  const finalClock = layoutReadsInstant
+    ? new Set([...basis.clock, LAYOUT_PREVIEW])
+    : basis.clock;
+  const readsInstant = templateInstants({ ...basis, clock: finalClock });
   const instant = new Set(
     [...sources].flatMap(([template, source]) =>
       readsInstant(source) ? [template] : [],
     ),
   );
+  // [LAW:one-source-of-truth] `readsInstant` above walks every source against
+  // `config.helpers` alone, so a segment's `{{ template "name" ctx }}` that
+  // dispatches to one of ITS OWN `partials` is walked no further than the
+  // dispatch — the partial's own clock/projection reads are invisible to it,
+  // the same gap b72c93e5 closed in cross-ref.ts/synthesis-inputs.ts/unused.ts
+  // for reachability and unused-declaration checks. A template this misses
+  // throws at its first draw (template-engine/engine.ts, drawInProgress), so
+  // this ADDS to `instant` (merging partials into helpers only grows what a
+  // dispatch can reach, never shrinks it — a collision with a helper name is
+  // already a load-time error) rather than replacing the generic answer.
+  for (const [segName, seg] of Object.entries(config.segments)) {
+    if (seg.partials === undefined) continue;
+    const segReadsInstant = templateInstants({
+      reads: valueReads({
+        names: instantNames,
+        helpers: { ...config.helpers, ...seg.partials },
+        actions: config.actions,
+      }),
+      projections: basis.projections,
+      clock: finalClock,
+    });
+    for (const field of ["when", "bg", "fg", "template"] as const) {
+      const parsed = compiled[segName]![field];
+      if (parsed === undefined) continue;
+      if (segReadsInstant(sources.get(parsed)!)) instant.add(parsed);
+    }
+  }
 
   return {
     segments: compiled,

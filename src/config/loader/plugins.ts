@@ -824,7 +824,12 @@ function mapActionNames(
 }
 
 // The template fields a segment declaration carries.
-const SEGMENT_TEMPLATE_FIELDS = ["template", "bg", "fg", "when"] as const;
+export const SEGMENT_TEMPLATE_FIELDS = [
+  "template",
+  "bg",
+  "fg",
+  "when",
+] as const;
 
 // [LAW:no-silent-failure] A plugin that spells its own name under the scope
 // it did not load in — a repository's `lit` reading `.plugins.lit.data` —
