@@ -22968,7 +22968,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.179.3";
+var PACKAGE_VERSION = "1.179.4";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -75525,7 +75525,7 @@ function compileDslConfig({ config: config2, stateReads, projections }, signer) 
       projections: basis.projections,
       clock: finalClock
     });
-    for (const field of ["when", "bg", "fg", "template"]) {
+    for (const field of SEGMENT_TEMPLATE_FIELDS) {
       const parsed2 = compiled[segName][field];
       if (parsed2 === void 0) continue;
       if (segReadsInstant(sources.get(parsed2))) instant.add(parsed2);
