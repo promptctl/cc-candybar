@@ -346,6 +346,7 @@ const inTurn = (handler: VerbHandler): Verb => ({
 });
 
 import type { JournalTurn, JournalTurns } from "../journal-turns";
+import { CLICK_PROGRAM_TIMEOUT_MS } from "../request-deadline";
 import { BadVerbArgs, DaemonClosing, decodeWire } from "../verb-error";
 import {
   parseSessionId,
@@ -377,10 +378,6 @@ function oneArg(value: string): string {
 }
 
 // ─── Verb handlers ───────────────────────────────────────────────────────────
-
-// How long a program a click launches has before the click fails: a handful of
-// seconds at most for a clipboard or an opener, each of which hands off and exits.
-const CLICK_PROGRAM_TIMEOUT_MS = 5000;
 
 // [LAW:single-enforcer] The one launch a click makes of a program — the
 // clipboard, an editor, a status-line link's opener — so its failure handling

@@ -26,7 +26,11 @@ import {
   type Response,
 } from "../src/daemon/protocol";
 import type { HandledRequest, Reply } from "../src/daemon/reply";
-import { REQUEST_TIMEOUT_MS } from "../src/daemon/request-deadline";
+import {
+  CLICK_PROGRAM_TIMEOUT_MS,
+  CLICK_TIMEOUT_MS,
+  REQUEST_TIMEOUT_MS,
+} from "../src/daemon/request-deadline";
 import { sessionIdOf } from "../src/daemon/session-id";
 import { textOf } from "../src/render/frame";
 import { barOf } from "./helpers/drawn-frame";
@@ -206,6 +210,39 @@ describe("a connection over a stream", () => {
     await settled();
     expect(received).toHaveLength(1);
     expect(delivered).not.toHaveBeenCalled();
+  });
+
+  // A click awaits the program it launches, so it outlives a render's bound
+  // and is answered by its own handler, the effect it had or its failure.
+  test("a click is held to a click's bound, not a render's", async () => {
+    const request = held();
+    const daemon = standIn({ handle: request.handle });
+    const { send, received } = open(daemon);
+    send({ v: PROTOCOL_VERSION, kind: "click", verb: "v", value: "" });
+    await settled();
+
+    jest.advanceTimersByTime(CLICK_TIMEOUT_MS - 1);
+    await settled();
+    expect(received).toEqual([]);
+    expect(request.timedOut()).toBe(false);
+
+    jest.advanceTimersByTime(1);
+    await settled();
+    expect(received).toMatchObject([
+      { code: "TIMEOUT", error: `request exceeded ${CLICK_TIMEOUT_MS}ms` },
+    ]);
+  });
+
+  test("a click a launch holds past a render's bound is answered by its handler", async () => {
+    const request = held();
+    const { send, received } = open(standIn({ handle: request.handle }));
+    send({ v: PROTOCOL_VERSION, kind: "click", verb: "v", value: "" });
+    await settled();
+
+    jest.advanceTimersByTime(CLICK_PROGRAM_TIMEOUT_MS);
+    request.answer(replyWith());
+    await settled();
+    expect(received).toEqual([ANSWER]);
   });
 
   test("a client that half-closes before its answer is answered to no one", async () => {

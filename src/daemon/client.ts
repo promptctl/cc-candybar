@@ -14,17 +14,24 @@ import {
   type ClientHints,
   type Response,
 } from "./protocol";
+import { CLICK_TIMEOUT_MS, REQUEST_TIMEOUT_MS } from "./request-deadline";
 import { PACKAGE_VERSION } from "../version";
-
-const CLICK_BUDGET_MS = 200;
 
 export const RENDER_BUDGETS: RoundTripBudgets = {
   connectMs: CONNECT_TIMEOUT_MS,
   budgetMs: TOTAL_BUDGET_MS,
 };
+const PANE_SESSION_BUDGETS: RoundTripBudgets = {
+  connectMs: CONNECT_TIMEOUT_MS,
+  budgetMs: REQUEST_TIMEOUT_MS,
+};
+// [LAW:one-source-of-truth] A click waits out the daemon's own click bound,
+// and a little past it, so the answer it hears is the daemon's: the effect,
+// its failure, or the daemon's TIMEOUT when it truly is stuck. A shorter wait
+// gives up on a click still running and kicks a live daemon.
 const CLICK_BUDGETS: RoundTripBudgets = {
   connectMs: CONNECT_TIMEOUT_MS,
-  budgetMs: CLICK_BUDGET_MS,
+  budgetMs: CLICK_TIMEOUT_MS + TOTAL_BUDGET_MS,
 };
 
 // The render/click outcome vocabulary, mirrored by the Rust client's outcome
@@ -77,7 +84,7 @@ export function trySessionInPane(
 ): Promise<RoundTripOutcome<string | null>> {
   return requestOutcome(
     () => ({ kind: "pane-session", socket, pane }),
-    CLICK_BUDGETS,
+    PANE_SESSION_BUDGETS,
     (resp) => ("paneSession" in resp ? resp.paneSession : undefined),
   );
 }
