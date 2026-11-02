@@ -47,11 +47,12 @@ function pathOf(arg: unknown): string | null {
 
 const nameOf = (call: string): string => call.split(".").pop() ?? call;
 
-// open and openSync read unless their flags ask for more.
+// open and openSync read unless their flags ask for more. `open(path, callback)`
+// has no flags, and the callback sits where they would.
 function opensForReading(call: string, args: readonly unknown[]): boolean {
   if (nameOf(call) !== "openSync" && nameOf(call) !== "open") return true;
   const flags = args[1];
-  return flags === undefined || flags === "r" || flags === "rs" || flags === "sr";
+  return flags === undefined || typeof flags === "function" || flags === "r" || flags === "rs" || flags === "sr";
 }
 
 // Compared without case: TypeScript probes whether the file system is

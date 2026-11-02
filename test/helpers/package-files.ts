@@ -17,10 +17,17 @@ export function ignoredFrom(listing: string): string[] {
 // git throws, because an empty answer here would read as "nothing is ignored"
 // and let a test read a build.
 export function gitIgnored(root: string): string[] {
-  const out = execFileSync("git", ["ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--directory"], {
-    cwd: root,
-    encoding: "utf8",
-    maxBuffer: 64 * 1024 * 1024,
-  });
-  return ignoredFrom(out);
+  try {
+    const out = execFileSync("git", ["ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--directory"], {
+      cwd: root,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    return ignoredFrom(out);
+  } catch (error) {
+    throw new Error(
+      `the unit refusal asks git which files .gitignore names, so the unit run needs git and a git work tree at ${root}`,
+      { cause: error },
+    );
+  }
 }

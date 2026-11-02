@@ -38,6 +38,8 @@ describe("which file system calls a unit test may make", () => {
     expect(allows(call("fs.openSync", "/work/pkg/a", "w"), ROOT)).toBe(false);
     expect(allows(call("fs.openSync", "/work/pkg/a", "r"), ROOT)).toBe(true);
     expect(allows(call("fs.openSync", "/work/pkg/a"), ROOT)).toBe(true);
+    expect(allows(call("fs.open", "/work/pkg/a", () => undefined), ROOT)).toBe(true);
+    expect(allows(call("fs.open", "/tmp/a", () => undefined), ROOT)).toBe(false);
   });
 
   test("a descriptor operation passes, because its open was judged", () => {
