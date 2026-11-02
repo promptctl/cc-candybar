@@ -1,3 +1,9 @@
+## [1.180.3](https://github.com/promptctl/cc-candybar/compare/v1.180.2...v1.180.3) (2026-11-02)
+
+### Bug Fixes
+
+* **render:** a client timeout is a typed error that carries its phase (candybar-launch-q7o7.04z) ([#577](https://github.com/promptctl/cc-candybar/issues/577)) ([96106ff](https://github.com/promptctl/cc-candybar/commit/96106ff8a15730879c3089b407e2191fe629e15b))
+
 ## [1.180.2](https://github.com/promptctl/cc-candybar/compare/v1.180.1...v1.180.2) (2026-11-02)
 
 ### Bug Fixes
