@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-562",
+      "ref": "refs/pull/562/merge",
+      "sha": "a382e0f45248a72c5de7e41082e1ae194e81305a",
+      "timestamp": "2026-11-02T11:43:02.295Z",
+      "commits": [
+        {
+          "sha": "a382e0f45248a72c5de7e41082e1ae194e81305a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T11:40:56Z",
+          "message": "Merge 9af26079a97d4f1fe9d42bd1ea7fa31c6d4307ec into 9b26334ab54c1c9fbad087ff535c804d167c9ce5\n"
+        },
+        {
+          "sha": "9af26079a97d4f1fe9d42bd1ea7fa31c6d4307ec",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T04:40:23-07:00",
+          "message": "refactor(config): restore the LAW:decomposition marker and dedupe a test fixture\n\nHigh-review fixes on PR #562: the law marker on DIR_TEMPLATE's\ncollapse-then-abbreviate split was dropped when gitPath's logic\nreplaced it; GIT_QUIET_FG's comment is updated to say directory\nshares it too; git-location.test.ts's MAIN/located fixture was\nduplicated across its two describe blocks.\n"
+        },
+        {
+          "sha": "5371cd4c2b742ff84442c8b9844927db69becb97",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T04:23:42-07:00",
+          "message": "fix(layout): directory draws the worktree-aware path, gitaculous stops drawing it\n\nReverses #548's resolution the other way: directory carries the main\ncheckout's path (~-collapsed, fish-abbreviated, with the subpath and a\nlinked worktree's name in a parenthetical) in every bundled preset,\nand gitaculous is the git state alone — it draws nothing until git\nanswers with a branch, instead of filling the gap with the path.\ngit.location and gitPath are now dead and removed; gitExpanded always\nshows the repo name.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-564",
       "ref": "refs/pull/564/merge",
       "sha": "7fe4b019a66622d196e1086fe198e730e4c801c0",
@@ -78,28 +107,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T04:35:02-07:00",
           "message": "feat(site): site:dev serves the live bar and reloads it; the bar gets a font size slider (#517)\n\n* feat(site): site:dev serves the live bar and reloads it on every rebuild\n\n* feat(site): the live bar's font size is a control, and starts larger\n\n* feat(site): the live bar's font size is a slider\n\n* fix(site): the dev server watches the page, binds loopback, and refuses unknown flags; the font size is parsed where it is read\n\nThe page and its font are esbuild entry points copied as they are, so the watch covers an edit to index.html and the plain build and the served build share one path. The server binds 127.0.0.1 (--port picks another). Flags are parsed strictly. A stored font size is parsed at the border (a whole number inside the slider's range, else the default), storage that cannot be used says so on the status line, and the label, preload and term read one size.\n\n* fix(site): a port is parsed strictly and only with --serve; the font size is kept when the drag ends\n\n--port without --serve and an empty --port no longer pass silently. The slider stores its size on change, so a storage failure is reported once per drag. The site tests share one build helper and clean up whatever they make.\n\n* fix(site): more than one output directory is refused"
-        }
-      ]
-    },
-    {
-      "version": "pr-562",
-      "ref": "refs/pull/562/merge",
-      "sha": "7764c30aef1b749b9201dbb31e1a147eb5a17c12",
-      "timestamp": "2026-11-02T11:25:09.064Z",
-      "commits": [
-        {
-          "sha": "7764c30aef1b749b9201dbb31e1a147eb5a17c12",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T04:24:15-07:00",
-          "message": "Merge 5371cd4c2b742ff84442c8b9844927db69becb97 into ecc5a9d77a7c5be79a3a6fd09167de0b8deb838e\n"
-        },
-        {
-          "sha": "5371cd4c2b742ff84442c8b9844927db69becb97",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T04:23:42-07:00",
-          "message": "fix(layout): directory draws the worktree-aware path, gitaculous stops drawing it\n\nReverses #548's resolution the other way: directory carries the main\ncheckout's path (~-collapsed, fish-abbreviated, with the subpath and a\nlinked worktree's name in a parenthetical) in every bundled preset,\nand gitaculous is the git state alone — it draws nothing until git\nanswers with a branch, instead of filling the gap with the path.\ngit.location and gitPath are now dead and removed; gitExpanded always\nshows the repo name.\n"
         }
       ]
     },
