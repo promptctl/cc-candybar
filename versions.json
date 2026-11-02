@@ -2,39 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-561",
-      "ref": "refs/pull/561/merge",
-      "sha": "ce2d4f38a296fbbcc7599a03ebbe9296176f3116",
-      "timestamp": "2026-11-02T11:02:28.796Z",
-      "commits": [
-        {
-          "sha": "ce2d4f38a296fbbcc7599a03ebbe9296176f3116",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T04:01:31-07:00",
-          "message": "Merge c0c5bb17664c0f5f286209fe070e17f3954970b3 into 040ba694b11dd01c6bce64b56acd016dabbf0578\n"
-        },
-        {
-          "sha": "c0c5bb17664c0f5f286209fe070e17f3954970b3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T04:01:14-07:00",
-          "message": "test: delete the menu and colour tests that pin the look (candybar-testing-0x6u.4bt)\n\nThree whole files and nine cases asserted exact shades, tones and bytes of menus\nand turns, so any design change was an edit to them. The seam sweep keeps its\ncoverage in the nightly audit, which now walks every variation.\n"
-        }
-      ]
-    },
-    {
       "version": "pr-560",
       "ref": "refs/pull/560/merge",
-      "sha": "96615bcd514b6172128b71733950c9dd4b4d426d",
-      "timestamp": "2026-11-02T10:59:53.338Z",
+      "sha": "ac5e3319d5f975f1d789fba55db43a2c5e7c5667",
+      "timestamp": "2026-11-02T11:06:59.098Z",
       "commits": [
         {
-          "sha": "96615bcd514b6172128b71733950c9dd4b4d426d",
+          "sha": "ac5e3319d5f975f1d789fba55db43a2c5e7c5667",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T10:58:55Z",
-          "message": "Merge 21bea47b4c76e8c2c8861ec84ff213e823ff51c7 into 040ba694b11dd01c6bce64b56acd016dabbf0578\n"
+          "timestamp": "2026-11-02T11:06:01Z",
+          "message": "Merge 954959d7de4c32d6b6ca5e398367efd7fce85d90 into 040ba694b11dd01c6bce64b56acd016dabbf0578\n"
+        },
+        {
+          "sha": "954959d7de4c32d6b6ca5e398367efd7fce85d90",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T04:05:45-07:00",
+          "message": "test(daemon): the held client's stated budget follows the draw reserve (candybar-launch-q7o7.qjw)\n"
         },
         {
           "sha": "21bea47b4c76e8c2c8861ec84ff213e823ff51c7",
@@ -56,6 +41,28 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T03:55:09-07:00",
           "message": "fix(daemon): the draw's reserve holds a draw descheduled on a busy machine (candybar-launch-q7o7.qjw)\n\nOn CI's runner, its cores shared with the other process-tier suites, a cold\ndraw that does a few ms of work reads up to 48 ms of wall time, failing the\n40 ms reserve. Reproduced locally with every core busy: median 2 ms, p99 48 ms.\nA larger reserve costs only more pending values; a smaller one blanks the bar.\n"
+        }
+      ]
+    },
+    {
+      "version": "pr-561",
+      "ref": "refs/pull/561/merge",
+      "sha": "ce2d4f38a296fbbcc7599a03ebbe9296176f3116",
+      "timestamp": "2026-11-02T11:02:28.796Z",
+      "commits": [
+        {
+          "sha": "ce2d4f38a296fbbcc7599a03ebbe9296176f3116",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T04:01:31-07:00",
+          "message": "Merge c0c5bb17664c0f5f286209fe070e17f3954970b3 into 040ba694b11dd01c6bce64b56acd016dabbf0578\n"
+        },
+        {
+          "sha": "c0c5bb17664c0f5f286209fe070e17f3954970b3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T04:01:14-07:00",
+          "message": "test: delete the menu and colour tests that pin the look (candybar-testing-0x6u.4bt)\n\nThree whole files and nine cases asserted exact shades, tones and bytes of menus\nand turns, so any design change was an edit to them. The seam sweep keeps its\ncoverage in the nightly audit, which now walks every variation.\n"
         }
       ]
     },
