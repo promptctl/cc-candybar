@@ -4,58 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "d9c061c2d616b8719d942bb7129f860c4806fed3",
-      "timestamp": "2026-11-02T11:50:26.409Z",
+      "sha": "3ea62d87dbcde758789947304b189e5463076f6e",
+      "timestamp": "2026-11-02T11:57:28.781Z",
       "commits": [
         {
-          "sha": "d9c061c2d616b8719d942bb7129f860c4806fed3",
+          "sha": "3ea62d87dbcde758789947304b189e5463076f6e",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T04:49:26-07:00",
-          "message": "refactor(launch): Launcher loses launchSync; OneShotLauncher is the only type offering it (#563)\n\n* refactor(launch): Launcher loses launchSync; OneShotLauncher is the only type offering it (candybar-launch-q7o7.4em)\n\nDaemon code holds a Launcher, which has no name for the launch that holds the loop to pipe EOF, so tsc refuses the next one added there. Install, plugin install, the doctor's CLI probe and the at-exit tmux restore take the process's oneShotLauncher, which eslint's owned imports confine to them.\n\n* fix(launch): the daemon's launcher carries no launchSync at runtime; narrow the processLauncher owners (candybar-launch-q7o7.4em)\n\n* docs(launch): comments and the audit doc say what the one-shot split guarantees (candybar-launch-q7o7.4em)"
-        },
-        {
-          "sha": "be9a43395ff17c9488877aa5c950900dd98ce5a3",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-02T11:48:20Z",
-          "message": "chore(release): set `package.json` to 1.179.0 [skip ci]\n\n## [1.179.0](https://github.com/promptctl/cc-candybar/compare/v1.178.2...v1.179.0) (2026-11-02)\n\n### Features\n\n* **site:** site:dev serves the live bar and reloads it; the bar gets a font size slider ([#517](https://github.com/promptctl/cc-candybar/issues/517)) ([9b26334](https://github.com/promptctl/cc-candybar/commit/9b26334ab54c1c9fbad087ff535c804d167c9ce5))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-562",
-      "ref": "refs/pull/562/merge",
-      "sha": "fcd67e5568ce88a0c38e499913a056ab1368c710",
-      "timestamp": "2026-11-02T11:50:21.280Z",
-      "commits": [
-        {
-          "sha": "fcd67e5568ce88a0c38e499913a056ab1368c710",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T11:49:00Z",
-          "message": "Merge 5c7e6ad8411e4947dcc72de5acf9da9e99bdca4b into be9a43395ff17c9488877aa5c950900dd98ce5a3\n"
-        },
-        {
-          "sha": "5c7e6ad8411e4947dcc72de5acf9da9e99bdca4b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T04:48:32-07:00",
-          "message": "chore(config): remove location.gitPending, dead since the gitPath template branch it fed was removed\n\nPR #562 deleted the `.git.location \"path\"` template branch that read\ngitPending; nothing else references it.\n"
-        },
-        {
-          "sha": "9af26079a97d4f1fe9d42bd1ea7fa31c6d4307ec",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T04:40:23-07:00",
-          "message": "refactor(config): restore the LAW:decomposition marker and dedupe a test fixture\n\nHigh-review fixes on PR #562: the law marker on DIR_TEMPLATE's\ncollapse-then-abbreviate split was dropped when gitPath's logic\nreplaced it; GIT_QUIET_FG's comment is updated to say directory\nshares it too; git-location.test.ts's MAIN/located fixture was\nduplicated across its two describe blocks.\n"
-        },
-        {
-          "sha": "5371cd4c2b742ff84442c8b9844927db69becb97",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T04:23:42-07:00",
-          "message": "fix(layout): directory draws the worktree-aware path, gitaculous stops drawing it\n\nReverses #548's resolution the other way: directory carries the main\ncheckout's path (~-collapsed, fish-abbreviated, with the subpath and a\nlinked worktree's name in a parenthetical) in every bundled preset,\nand gitaculous is the git state alone — it draws nothing until git\nanswers with a branch, instead of filling the gap with the path.\ngit.location and gitPath are now dead and removed; gitExpanded always\nshows the repo name.\n"
+          "timestamp": "2026-11-02T04:56:37-07:00",
+          "message": "fix(layout): directory draws the worktree-aware path, gitaculous stops drawing it (#562)\n\n* fix(layout): directory draws the worktree-aware path, gitaculous stops drawing it\n\nReverses #548's resolution the other way: directory carries the main\ncheckout's path (~-collapsed, fish-abbreviated, with the subpath and a\nlinked worktree's name in a parenthetical) in every bundled preset,\nand gitaculous is the git state alone — it draws nothing until git\nanswers with a branch, instead of filling the gap with the path.\ngit.location and gitPath are now dead and removed; gitExpanded always\nshows the repo name.\n\n* refactor(config): restore the LAW:decomposition marker and dedupe a test fixture\n\nHigh-review fixes on PR #562: the law marker on DIR_TEMPLATE's\ncollapse-then-abbreviate split was dropped when gitPath's logic\nreplaced it; GIT_QUIET_FG's comment is updated to say directory\nshares it too; git-location.test.ts's MAIN/located fixture was\nduplicated across its two describe blocks.\n\n* chore(config): remove location.gitPending, dead since the gitPath template branch it fed was removed\n\nPR #562 deleted the `.git.location \"path\"` template branch that read\ngitPending; nothing else references it."
         }
       ]
     },

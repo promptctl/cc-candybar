@@ -52140,12 +52140,6 @@ var PAYLOAD_INPUTS = {
     type: "boolean",
     default: false
   },
-  "location.gitPending": {
-    kind: "input",
-    path: "location.gitPending",
-    type: "boolean",
-    default: false
-  },
   // The repo's browsable web page, transposed from its remote by the daemon.
   // "" is the genuine "no remote a browser can open" (local-only repo, bare
   // path remote) — the quick-action tray's link reads that value, not a flag.
@@ -61949,8 +61943,7 @@ var GIT_INIT = confirmStep(
   { arm: "init", confirm: "init \u2713 confirm" },
   [{ action: "gitInit.run", when: "true" }]
 );
-var DIR_REL = 'trimPrefix "/" (trimPrefix .project_dir .current_dir)';
-var DIR_TEMPLATE = `{{ $dir := .current_dir }}{{ if and (ne .home "") (or (eq .home .current_dir) (hasPrefix (printf "%s/" .home) .current_dir)) }}{{ $dir = printf "~%s" (trimPrefix .home .current_dir) }}{{ else }}{{ if or (eq .project_dir .current_dir) (hasPrefix (printf "%s/" .project_dir) .current_dir) }}{{ $dir = ternary (${DIR_REL}) (basename .project_dir) (ne (${DIR_REL}) "") }}{{ end }}{{ end }}{{ action "copyDir" (abbreviatePath $dir) }}`;
+var DIR_TEMPLATE = '{{ $dir := ternary .location.main .current_dir (ne .location.main "") }}{{ if and (ne .home "") (or (eq .home $dir) (hasPrefix (printf "%s/" .home) $dir)) }}{{ $dir = printf "~%s" (trimPrefix .home $dir) }}{{ end }}{{ $text := printf "%s%s" (abbreviatePath $dir) .location.subpath }}{{ if ne .location.worktree "" }}{{ $text = printf "%s (%s %s)" $text .glyph.worktree .location.worktree }}{{ end }}{{ action "copyDir" $text }}';
 var GIT_QUIET_FG = `{{ ${QUIET_TEXT} }}`;
 var EFFORT_BUBBLE_CONTRAST = 1.08;
 var PERCENT = { min: 0, max: 100, step: 5 };
@@ -62028,7 +62021,7 @@ var RAW_DEFAULT_DSL_CONFIG = {
       kind: "literal",
       value: "? \u{F0143} \u{F0143} \u{F013F} \u{F0DBC}"
     },
-    // What marks a linked worktree in `gitPath`'s parenthetical.
+    // What marks a linked worktree in `directory`'s parenthetical.
     "glyph.worktree": { kind: "literal", value: "\u22AB" },
     ...GIT_INIT.variables,
     version: { kind: "input", path: "version", default: "" },
@@ -62159,9 +62152,6 @@ var RAW_DEFAULT_DSL_CONFIG = {
     // arrow at its right edge (the `gitDetail` action). The default is the form
     // every session starts in: redeclare this variable with
     // `default: "expanded"` to start with the full line.
-    // What names the checkout: "path" for the location, "repo" for the repo
-    // name. A variable, so a segment calling a form needs no new setting.
-    "git.location": { kind: "literal", value: "path" },
     "git.detail": { kind: "state", key: "git-detail", default: "collapsed" },
     // Forge PR/MR — the daemon's git provider resolves the branch's newest PR
     // via gh/glab and projects it here; prState is `open`, `merged` or
@@ -62427,8 +62417,9 @@ var RAW_DEFAULT_DSL_CONFIG = {
   segments: {
     directory: {
       group: "location",
-      description: "The current directory, shortened fish-style \u2014 `~` under home, project-relative inside the project. Click to copy the full path.",
-      template: DIR_TEMPLATE
+      description: "The main checkout's path, shortened fish-style \u2014 `~` under home \u2014 plus the subpath and, in a linked worktree, the worktree's name. Click to copy the full path.",
+      template: DIR_TEMPLATE,
+      fg: GIT_QUIET_FG
     },
     model: {
       group: "model-context",
@@ -62497,10 +62488,11 @@ var RAW_DEFAULT_DSL_CONFIG = {
     gitaculous: {
       group: "git",
       description: "The git state: a summary (branch, ahead/behind, S/U/? flags) that the arrow at its right edge expands to every fact \u2014 repo, in-progress operation, sha, upstream \xB1, stash count, time since the last commit.",
-      // [LAW:dataflow-not-control-flow] The location is a request fact and git
-      // a lane, so the first arm draws the path alone until git answers rather
-      // than letting a pending read blank the whole cell.
-      template: `{{ if and (eq .git.location "path") .location.gitPending }}{{ template "gitPath" . }}{{ else if eq .git.branch "" }}{{ template "gitPath" . }}{{ else }}{{ if eq .git.detail "expanded" }}{{ template "gitExpanded" . }}{{ else }}{{ template "gitCollapsed" . }}{{ end }} {{ action "gitDetail" "\u25B8" "\u25C2" }}{{ end }}{{ if or .location.noRepo ${GIT_INIT.armed} }} ${GIT_INIT.template}{{ end }}`,
+      // [LAW:dataflow-not-control-flow] `directory` is the request fact and
+      // draws unconditionally; this segment is the git lane alone, so it
+      // draws nothing — not even a placeholder — until git answers with a
+      // branch, rather than blanking the whole bar on a pending read.
+      template: `{{ if ne .git.branch "" }}{{ if eq .git.detail "expanded" }}{{ template "gitExpanded" . }}{{ else }}{{ template "gitCollapsed" . }}{{ end }} {{ action "gitDetail" "\u25B8" "\u25C2" }}{{ end }}{{ if or .location.noRepo ${GIT_INIT.armed} }}{{ if ne .git.branch "" }} {{ end }}${GIT_INIT.template}{{ end }}`,
       fg: GIT_QUIET_FG,
       // [LAW:dataflow-not-control-flow] Which optional facts THIS copy shows
       // (brandon-segment-settings-i4n.u36): each is read by its own piece
@@ -63194,8 +63186,8 @@ var RAW_DEFAULT_DSL_CONFIG = {
     // ─── Git forms and pieces ──────────────────────────────────────────────
     // The two forms `gitaculous` switches between, each composed of the pieces
     // below. Override one to change what that form shows.
-    gitCollapsed: '{{ if eq .git.location "path" }}{{ template "gitPath" . }} {{ end }}{{ template "gitBranch" . }}{{ template "gitAheadBehind" . }}{{ template "gitFlags" . }}',
-    gitExpanded: '(git){{ if eq .git.location "path" }} {{ template "gitPath" . }}{{ else }}{{ template "gitRepo" . }}{{ end }}{{ template "gitOperation" . }}{{ template "gitSha" . }}{{ template "gitFlags" . }} {{ template "gitBranch" . }}{{ template "gitUpstream" . }}{{ template "gitStash" . }}{{ template "gitAge" . }}',
+    gitCollapsed: '{{ template "gitBranch" . }}{{ template "gitAheadBehind" . }}{{ template "gitFlags" . }}',
+    gitExpanded: '(git){{ template "gitRepo" . }}{{ template "gitOperation" . }}{{ template "gitSha" . }}{{ template "gitFlags" . }} {{ template "gitBranch" . }}{{ template "gitUpstream" . }}{{ template "gitStash" . }}{{ template "gitAge" . }}',
     // The named parts the two forms compose, each called
     // with the root scope (`{{ template "gitFlags" . }}`). Every optional piece
     // renders ` <fact>` with its OWN leading space, or nothing — only the piece
@@ -63206,12 +63198,6 @@ var RAW_DEFAULT_DSL_CONFIG = {
     // segment of your own that calls it declares the same setting (the loader
     // names that segment, the setting, and the helper when it does not).
     gitBranch: '\u2387 {{ template "gitPaint" (dict "color" .git.color.branch "text" .git.branch) }}',
-    // Worktree-aware location: the main checkout's path, abbreviated, with the
-    // subpath kept whole and the linked worktree named after it. Outside a repo
-    // `.location.main` is "" and the session's directory stands in. It draws
-    // with no leading space, because it starts the bar's form, and reads no
-    // `.git`, so it draws while git is still pending.
-    gitPath: '{{ $dir := ternary .location.main .current_dir (ne .location.main "") }}{{ if and (ne .home "") (or (eq .home $dir) (hasPrefix (printf "%s/" .home) $dir)) }}{{ $dir = printf "~%s" (trimPrefix .home $dir) }}{{ end }}{{ $text := printf "%s%s" (abbreviatePath $dir) .location.subpath }}{{ if ne .location.worktree "" }}{{ $text = printf "%s (%s %s)" $text .glyph.worktree .location.worktree }}{{ end }}{{ action "copyDir" $text }}',
     gitRepo: '{{ if and .settings.repo (ne .git.repoName "") }} {{ .git.repoName }}{{ end }}',
     gitOperation: '{{ if and .settings.operation (ne .git.operation "") }} [{{ .git.operation }}]{{ end }}',
     gitSha: '{{ if and .settings.sha (ne .git.sha "") }} {{ .git.sha }}{{ end }}',
@@ -67270,8 +67256,7 @@ function projectPayload(inputs, draw2, lanes) {
     ...hookData2.location !== void 0 && {
       location: {
         ...hookData2.location,
-        main: posixify(hookData2.location.main) ?? "",
-        gitPending: isPending(git)
+        main: posixify(hookData2.location.main) ?? ""
       }
     },
     ...tmuxPane !== null && {
