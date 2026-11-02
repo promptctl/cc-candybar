@@ -10,23 +10,17 @@
 //   - A file that puts them out of order, or still declares a retired
 //     threshold variable, fails to load and says what to write instead.
 
-import { drawPayload } from "./helpers/draw-payload";
-import { locs, processLauncher } from "./helpers/host";
 import type { Frame } from "../src/render/frame";
 import { backgroundsOf, linkUrls } from "./helpers/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { picked, selectionFor } from "./helpers/selection";
 import { configurePlacement } from "./helpers/configure";
 import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { VariableStore } from "../src/var-system/store";
-import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import { testVerbContext, effectsOf } from "./helpers/click";
-import { parseHandlerUrl } from "../src/install/index";
-import { VERBS, type VerbContext } from "../src/daemon/verbs";
+import { effectsOf } from "./helpers/click";
+import { buildRig } from "./helpers/rig";
+import { VERBS } from "../src/daemon/verbs";
 import {
   configureMember,
   EDIT_MODE_KEY,
@@ -34,9 +28,7 @@ import {
 import { placementDraftKey } from "../src/config/edit-chrome";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
-import { instantOf } from "../src/utils/instant";
 import { lastClickError } from "../src/daemon/click-error";
-import { systemTimekeeper } from "../src/time";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = "s1";
@@ -60,46 +52,31 @@ afterEach(() => {
   durable.dispose();
 });
 
-function buildRuntime(src: string, utilization: number) {
+function thresholdBar(src: string, utilization: number) {
   durable.write(src);
-  const config = load(src);
   const sessionState = new SessionState();
   durable.seedOrigin(sessionState, SID);
-  const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
+  const rig = buildRig({
+    source: src,
+    label: "<test>",
+    base: DEFAULT_DSL_CONFIG,
+    palettes: ALLOWED,
+    sessionState,
+    history: durable.historyFor(sessionState),
+    host: durable.host,
+    rendered: false,
+  });
+  const { config } = rig;
   const render = (): Frame =>
-    drawPayload(
-      config,
-      compiled,
-      store,
-      registry,
-      {
+    rig.draw({
+      payload: {
         session_id: SID,
         project_dir: "/tmp/proj",
         block: { nativeUtilization: utilization, resetsAt: RESETS_AT },
       },
-      instantOf(new Date()),
-      {
-        endcaps: "powerline" as const,
-        colorCompatibility: "truecolor" as const,
-        wrap: true,
-        padding: 0,
-        width: 200,
-      },
-      undefined,
-      selectionFor(config, {}, picked({ theme: THEME })),
-    ).frame;
-  const ctx: VerbContext = {
-    ...testVerbContext(sessionState, durable.historyFor(sessionState), undefined, durable.host),
-    configFor: () => config,
-  };
-  // Through the verb the URL names — `dispatch` included, which is what
-  // turns a refused effect into the bar's transient `click.error`.
-  const click = async (url: string): Promise<void> => {
-    const { verb, value } = parseHandlerUrl(url);
-    await VERBS.get(verb)!(value, ctx);
-  };
+      opts: { width: 200 },
+      selection: selectionFor(config, {}, picked({ theme: THEME })),
+    }).frame;
   // The one stepper link that steps `setting` of `id` by `by`.
   const stepper = (id: string, setting: string, by: number): string => {
     const key = placementDraftKey("default", id, setting);
@@ -111,7 +88,9 @@ function buildRuntime(src: string, utilization: number) {
   };
   const pick = (id: string, setting: string): string | null =>
     sessionState.get(SID, placementDraftKey("default", id, setting));
-  return { sessionState, render, click, stepper, pick };
+  // `rig.click` goes through the verb the URL names — `dispatch` included,
+  // which is what turns a refused effect into the bar's transient `click.error`.
+  return { ...rig, render, stepper, pick };
 }
 
 // The background a palette role is drawn with.
@@ -119,7 +98,7 @@ const roleBg = (role: string): string => getThemePalette(THEME)!.get(role)!.hex;
 
 describe("block's thresholds are settings configure mode steps", () => {
   test("lowering the warning threshold from the bar recolours the cell on the next render", async () => {
-    const rt = buildRuntime(BLOCK_ONLY, 45);
+    const rt = thresholdBar(BLOCK_ONLY, 45);
     configurePlacement(rt.sessionState, SID, "default", "block");
     // 45% sits under the bundled warnAt of 50: calm.
     expect(backgroundsOf(rt.render())).not.toContain(roleBg("warning"));
@@ -130,7 +109,7 @@ describe("block's thresholds are settings configure mode steps", () => {
   });
 
   test("a step that would drop errorAt below warnAt is refused, naming both", async () => {
-    const rt = buildRuntime(BLOCK_ONLY, 10);
+    const rt = thresholdBar(BLOCK_ONLY, 10);
     configurePlacement(rt.sessionState, SID, "default", "block");
     // 80 → 50 in six clicks: equal thresholds are a hard edge, and allowed.
     for (let i = 0; i < 6; i++) await rt.click(rt.stepper("block", "errorAt", -5));
@@ -149,14 +128,11 @@ describe("block's thresholds are settings configure mode steps", () => {
   });
 
   test("a set-state batch holding a descending pair is refused whole", async () => {
-    const rt = buildRuntime(BLOCK_ONLY, 10);
+    const rt = thresholdBar(BLOCK_ONLY, 10);
     const warn = placementDraftKey("default", "block", "warnAt");
     const error = placementDraftKey("default", "block", "errorAt");
     const setState = VERBS.get("set-state")!;
-    const ctx = {
-      ...testVerbContext(rt.sessionState, durable.historyFor(rt.sessionState), undefined, durable.host),
-      configFor: () => load(BLOCK_ONLY),
-    };
+    const ctx = { ...rt.ctx, configFor: () => load(BLOCK_ONLY) };
     await expect(setState(`${SID}/${warn}/70/${error}/60`, ctx),
     ).rejects.toThrow(/"errorAt" \(60\) is below "warnAt" \(70\)/);
     expect(rt.pick("block", "warnAt")).toBeNull();
@@ -169,7 +145,7 @@ describe("block's thresholds are settings configure mode steps", () => {
 
 describe("a stride wider than 1 reaches both ends", () => {
   test("a step past a bound stops on it; only a step from the bound wraps", async () => {
-    const rt = buildRuntime(withRoot("{ v: [ { h: ['session'] } ] }"), 0);
+    const rt = thresholdBar(withRoot("{ v: [ { h: ['session'] } ] }"), 0);
     configurePlacement(rt.sessionState, SID, "default", "session");
     const budget = placementDraftKey("default", "session", "budget");
     rt.sessionState.set(SID, budget, "9998");

@@ -22,43 +22,24 @@
 //   9. Undo refuses loudly when a target changed since the step — a hand
 //      edit or another session's write — and never overwrites it.
 
-import { drawPayload } from "./helpers/draw-payload";
-import { locs, processLauncher } from "./helpers/host";
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
 import { chmodSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { VariableStore } from "../src/var-system/store";
-import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig } from "../src/dsl/render";
 import type { DslConfig } from "../src/config/dsl-types";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError } from "../src/config/dsl-loader";
-import { testVerbContext, effectsOf } from "./helpers/click";
-import { parseHandlerUrl } from "../src/install/index";
-import { VERBS } from "../src/daemon/verbs";
+import { clickUrl, effectsOf } from "./helpers/click";
+import { buildRig } from "./helpers/rig";
 import { SettingsHistory } from "../src/daemon/settings-history";
 import type { VerbContext } from "../src/daemon/verbs";
 import { deriveConfigActionValidators } from "../src/daemon/foundations/config-validators";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
-import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "../src/time";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
-
-function opts(width = Number.POSITIVE_INFINITY) {
-  return {
-    endcaps: "powerline" as const,
-    colorCompatibility: "truecolor" as const,
-    wrap: true,
-    padding: 0,
-    width,
-  };
-}
 
 function ownUrls(rendered: Frame): string[] {
   const urls = linkUrls(rendered);
@@ -152,34 +133,29 @@ let durable: DurableConfig;
 // edits is the tree the bar rendered — exactly the daemon's own situation.
 // `shared` hands two sessions one SessionState and one history, as the daemon
 // has.
-function buildRuntime(
+function undoBar(
   src: string,
   sessionId = "s1",
   shared?: { sessionState: SessionState; history: SettingsHistory },
 ) {
   if (durable.text() === null) durable.write(src);
-  const config = parseAndValidate("<test>", src, ALLOWED);
   const sessionState = shared?.sessionState ?? new SessionState();
   const history = shared?.history ?? durable.historyFor(sessionState);
   durable.seedOrigin(sessionState, sessionId);
-  const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
-  const render = (): Frame =>
-    drawPayload(
-      config,
-      compiled,
-      store,
-      registry,
-      { session_id: sessionId, project_dir: "/tmp/proj" },
-      instantOf(new Date()),
-      opts(),
-    ).frame;
+  const rig = buildRig({
+    source: src,
+    label: "<test>",
+    palettes: ALLOWED,
+    sessionId,
+    sessionState,
+    history,
+    host: durable.host,
+  });
   // The config a click is gated by and a save compares against, re-read from
   // the file on a reload.
-  let current: DslConfig = config;
+  let current: DslConfig = rig.config;
   const ctx: VerbContext = {
-    ...testVerbContext(sessionState, history, undefined, durable.host),
+    ...rig.ctx,
     configFor: () => current,
     reloadConfig: () => {
       current = parseAndValidate("<test>", durable.text()!, ALLOWED);
@@ -187,13 +163,9 @@ function buildRuntime(
   };
   // The whole URL through the verb table, exactly as the daemon's handleClick
   // does — one click, one journal, one step.
-  const click = async (url: string): Promise<void> => {
-    const { verb, value } = parseHandlerUrl(url);
-    const handler = VERBS.get(verb);
-    if (!handler) throw new Error(`no handler for verb "${verb}"`);
-    await handler(value, ctx);
-  };
-  return { config, store, render, click, ctx, sessionState, history };
+  const click = (url: string): Promise<void> => clickUrl(url, ctx);
+  const render = (): Frame => rig.draw().frame;
+  return { ...rig, ctx, click, render, history };
 }
 
 const ACTION_ORDER = [
@@ -234,9 +206,9 @@ const SRC = `{
   presets: {},
 }`;
 
-type Runtime = ReturnType<typeof buildRuntime>;
+type UndoBar = ReturnType<typeof undoBar>;
 
-async function press(runtime: Runtime, action: (typeof ACTION_ORDER)[number]): Promise<void> {
+async function press(runtime: UndoBar, action: (typeof ACTION_ORDER)[number]): Promise<void> {
   await runtime.click(ownUrls(runtime.render())[ACTION_ORDER.indexOf(action)]!);
 }
 
@@ -252,7 +224,7 @@ describe("undo/redo click → the session's settings history", () => {
     (durable.parsed().globals ?? {}) as Record<string, unknown>;
 
   test("a persist write is one step; undo restores the prior text byte-for-byte, redo re-applies it", async () => {
-    const runtime = buildRuntime(SRC);
+    const runtime = undoBar(SRC);
     const original = durable.text()!;
     await press(runtime, "pinDracula");
     expect(globals().palette).toBe("dracula");
@@ -277,7 +249,7 @@ describe("undo/redo click → the session's settings history", () => {
   // brandon-save-undo-bwi.jby's acceptance: one history steps a mix of
   // session picks and file writes, each back to exactly the state before it.
   test("undo and redo step a mix of session picks and file writes, in order", async () => {
-    const runtime = buildRuntime(SRC);
+    const runtime = undoBar(SRC);
     const theme = (): string | null => runtime.sessionState.get("s1", "theme");
     const padding = (): string | null =>
       runtime.sessionState.get("s1", "padding");
@@ -312,7 +284,7 @@ describe("undo/redo click → the session's settings history", () => {
       "pickPadding: { set: 'padding', to: '3' },",
       "pickPadding: { set: 'padding', to: '3' }, pickPadding2: { set: 'padding', to: '5' },",
     );
-    const runtime = buildRuntime(src);
+    const runtime = undoBar(src);
     runtime.sessionState.set("s1", "padding", "2");
     await press(runtime, "pickPadding");
     expect(runtime.sessionState.get("s1", "padding")).toBe("3");
@@ -325,14 +297,14 @@ describe("undo/redo click → the session's settings history", () => {
       "back: { undo: true },",
       "back: { undo: true }, openMenu: { set: 'menus.x', to: 'open' },",
     ).replace('"pickTheme"', '"openMenu"');
-    const runtime = buildRuntime(src);
+    const runtime = undoBar(src);
     await press(runtime, "pickTheme"); // the slot now renders openMenu
     expect(runtime.sessionState.get("s1", "menus.x")).toBe("open");
     expect(runtime.history.depth("s1")).toEqual({ undo: 0, redo: 0, sinceEdit: 0 });
   });
 
   test("a click that changes nothing records no step", async () => {
-    const runtime = buildRuntime(SRC);
+    const runtime = undoBar(SRC);
     await press(runtime, "pinDracula");
     await press(runtime, "pinDracula"); // already dracula — the file does not change
     await press(runtime, "pickTheme");
@@ -341,7 +313,7 @@ describe("undo/redo click → the session's settings history", () => {
   });
 
   test("reset (a delete) is undoable too — one history over every write shape", async () => {
-    const runtime = buildRuntime(SRC);
+    const runtime = undoBar(SRC);
     const original = durable.text()!;
     await press(runtime, "pinDracula");
     const pinned = durable.text()!;
@@ -358,7 +330,7 @@ describe("undo/redo click → the session's settings history", () => {
   });
 
   test("a structural (root) edit undoes through the SAME mechanism — no layout-specific code", async () => {
-    const runtime = buildRuntime(SRC);
+    const runtime = undoBar(SRC);
     const original = durable.text()!;
     await press(runtime, "removeDirectory");
     expect(durable.parsed().root).toEqual({ v: [{ h: ["git"] }, "bar"] });
@@ -368,7 +340,7 @@ describe("undo/redo click → the session's settings history", () => {
   });
 
   test("a save and the session picks it releases are one step, undone together", async () => {
-    const runtime = buildRuntime(SRC);
+    const runtime = undoBar(SRC);
     await press(runtime, "pickTheme");
     await press(runtime, "pickPadding");
     const original = durable.text()!;
@@ -389,7 +361,7 @@ describe("undo/redo click → the session's settings history", () => {
   });
 
   test("undo refuses loudly when the file was hand-edited since, and drops that file's steps so the rest stay steppable", async () => {
-    const runtime = buildRuntime(SRC);
+    const runtime = undoBar(SRC);
     await press(runtime, "pickTheme");
     await press(runtime, "pinDracula");
     const written = durable.text()!;
@@ -415,8 +387,8 @@ describe("undo/redo click → the session's settings history", () => {
   test("another session's write to the same file is never undone from here, and makes this session's earlier file steps refuse", async () => {
     const sessionState = new SessionState();
     const history = durable.historyFor(sessionState);
-    const a = buildRuntime(SRC, "a", { sessionState, history });
-    const b = buildRuntime(SRC, "b", { sessionState, history });
+    const a = undoBar(SRC, "a", { sessionState, history });
+    const b = undoBar(SRC, "b", { sessionState, history });
     await press(a, "pinDracula");
     await press(b, "removeDirectory");
     const afterB = durable.text()!;
@@ -433,17 +405,17 @@ describe("undo/redo click → the session's settings history", () => {
   });
 
   test("undo at the bottom of the stack is a loud no-op, never silent", async () => {
-    const runtime = buildRuntime(SRC);
+    const runtime = undoBar(SRC);
     await expect(press(runtime, "back")).rejects.toThrow(/nothing to undo/);
   });
 
   test("redo at the top of the stack is a loud no-op, never silent", async () => {
-    const runtime = buildRuntime(SRC);
+    const runtime = undoBar(SRC);
     await expect(press(runtime, "fwd")).rejects.toThrow(/nothing to redo/);
   });
 
   test("a fresh change after an undo truncates the abandoned redo path", async () => {
-    const runtime = buildRuntime(SRC);
+    const runtime = undoBar(SRC);
     await press(runtime, "pinDracula");
     await press(runtime, "back");
     expect(durable.history().future).toHaveLength(1);
@@ -454,20 +426,20 @@ describe("undo/redo click → the session's settings history", () => {
   });
 
   test("history survives a restart — a fresh read of the same on-disk files", async () => {
-    const runtime = buildRuntime(SRC);
+    const runtime = undoBar(SRC);
     await press(runtime, "pinDracula");
     await press(runtime, "back");
 
     // "Restart": a brand-new runtime and history, same XDG_STATE_HOME,
     // nothing carried over in memory.
-    const restarted = buildRuntime(SRC);
+    const restarted = undoBar(SRC);
     await expect(press(restarted, "back")).rejects.toThrow(/nothing to undo/);
     await press(restarted, "fwd"); // redo survived the "restart"
     expect(globals().palette).toBe("dracula");
   });
 
   test("the history is bounded — the oldest step drops once 50 are exceeded", async () => {
-    const runtime = buildRuntime(SRC);
+    const runtime = undoBar(SRC);
     for (let i = 0; i < 51; i++) {
       await press(runtime, i % 2 === 0 ? "pinDracula" : "pinNord");
     }
@@ -534,7 +506,7 @@ describe("settings history: a step lands whole, and records only what landed", (
       "back: { undo: true },",
       "back: { undo: true }, pickThenUndo: { do: ['pickTheme', 'back'] },",
     ).replace('"pickPadding"', '"pickThenUndo"');
-    const runtime = buildRuntime(src);
+    const runtime = undoBar(src);
     runtime.sessionState.set("s1", "theme", "gruvbox");
     await press(runtime, "pickPadding"); // the slot now renders pickThenUndo
     expect(runtime.sessionState.get("s1", "theme")).toBe("gruvbox");

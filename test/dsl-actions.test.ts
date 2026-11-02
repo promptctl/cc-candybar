@@ -20,24 +20,18 @@
 //      source; integer bounds; non-zero `by`), resolves `{{ action }}` refs, and
 //      requires session.id for any set action.
 
-import { drawPayload } from "./helpers/draw-payload";
-import { processLauncher } from "./helpers/host";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linkUrls, boldUrls } from "./helpers/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { VariableStore } from "../src/var-system/store";
-import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig } from "../src/dsl/render";
-import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { deriveActionValidators } from "../src/daemon/foundations/state-validators";
 import { bareGates, stateGate } from "./helpers/gates";
 import { ConfigError } from "../src/config/dsl-loader";
 import { registerOptionDomain } from "../src/config/option-domain";
-import { recordRender, testVerbContext, effectsOf } from "./helpers/click";
+import { effectsOf } from "./helpers/click";
+import { buildRig } from "./helpers/rig";
 import { parseHandlerUrl } from "../src/install/index";
 import {
   parseEffects,
@@ -46,23 +40,10 @@ import {
   VERB_OPEN_VSCODE,
 } from "../src/click/wire";
 import { VERBS } from "../src/daemon/verbs";
-import type { VerbContext } from "../src/daemon/verbs";
-import { instantOf } from "../src/utils/instant";
 import { CHECKS } from "../src/doctor/checks";
-import { systemTimekeeper } from "../src/time";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const THEMES = listResolvablePaletteNames();
-
-function opts(width = Number.POSITIVE_INFINITY) {
-  return {
-    endcaps: "powerline" as const,
-    colorCompatibility: "truecolor" as const,
-    wrap: true,
-    padding: 0,
-    width,
-  };
-}
 
 function ownUrls(rendered: Frame): string[] {
   const urls = linkUrls(rendered);
@@ -84,25 +65,12 @@ interface SideEffect {
 // real SessionState, so the gate, the relative-step wrap, and the unset seed are
 // exercised exactly as the daemon runs them; copy/open are recorded as side
 // effects (executing them would launch pbcopy/open).
-function buildRuntime(src: string, sessionId = "s1") {
-  const config = parseAndValidate("<test>", src, ALLOWED);
-  const sessionState = new SessionState();
-  const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
-  const render = (width = Number.POSITIVE_INFINITY): Frame =>
-    drawPayload(
-      config,
-      compiled,
-      store,
-      registry,
-      { session_id: sessionId, project_dir: "/tmp/proj" },
-      instantOf(new Date()),
-      opts(width),
-    ).frame;
+function actionBar(src: string) {
+  const rig = buildRig({ source: src });
+  const { config, store, sessionState } = rig;
+  const render = (): Frame => rig.draw().frame;
   const sideEffects: SideEffect[] = [];
-  recordRender(sessionState, sessionId);
-  const ctx: VerbContext = testVerbContext(sessionState, undefined, config);
+  // The per-effect loop stays: `rig.click` would run copy/open for real.
   const click = async (url: string): Promise<void> => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =
@@ -115,7 +83,7 @@ function buildRuntime(src: string, sessionId = "s1") {
       }
       const handler = VERBS.get(e.verb);
       if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
-      await handler(e.value, ctx); // real set-state / step-state through the gate
+      await handler(e.value, rig.ctx); // real set-state / step-state through the gate
     }
   };
   return { config, store, sessionState, render, click, sideEffects };
@@ -136,7 +104,7 @@ describe("2de.12 — literal set action", () => {
   }`;
 
   test("renders one clickable region whose click sets the literal value", async () => {
-    const { render, click, sessionState } = buildRuntime(SRC);
+    const { render, click, sessionState } = actionBar(SRC);
     const out = render();
     expect(textOf(out)).toContain("vanilla 🍫");
     const urls = ownUrls(out);
@@ -158,7 +126,7 @@ describe("2de.12 — literal set action", () => {
   });
 
   test("marks the region active when the key already holds the literal value", () => {
-    const { render, sessionState } = buildRuntime(SRC);
+    const { render, sessionState } = actionBar(SRC);
     sessionState.set("s1", "flavor", "chocolate");
     const out = render();
     expect(boldUrls(out).map(effectsOf)).toEqual([
@@ -167,7 +135,7 @@ describe("2de.12 — literal set action", () => {
   });
 
   test("a display is drawn content: one its author made bold stays bold while the region is not active", () => {
-    const { render } = buildRuntime(
+    const { render } = actionBar(
       SRC.replace(`{{ action "pick" "🍫" }}`, `{{ action "pick" (bold "🍫") }}`),
     );
     expect(boldUrls(render()).map(effectsOf)).toEqual([
@@ -193,7 +161,7 @@ describe("2de.12 — set on a baseline key derives nothing", () => {
   });
 
   test("the click still passes the baseline theme gate end-to-end", async () => {
-    const { render, click, sessionState } = buildRuntime(SRC);
+    const { render, click, sessionState } = actionBar(SRC);
     const url = ownUrls(render())[0]!;
     await click(url);
     expect(sessionState.get("s1", "theme")).toBe("nord");
@@ -215,7 +183,7 @@ describe("2de.12 — option set action", () => {
   }`;
 
   test("renders one clickable per option, each binding its value into the set", () => {
-    const { render } = buildRuntime(SRC);
+    const { render } = actionBar(SRC);
     const urls = ownUrls(render());
     expect(urls).toHaveLength(THEMES.length);
     expect(urls.map(effectsOf)).toEqual(
@@ -231,7 +199,7 @@ describe("2de.12 — option set action", () => {
   });
 
   test("the bound option clicks pass the derived gate and mutate state", async () => {
-    const { render, click, sessionState } = buildRuntime(SRC);
+    const { render, click, sessionState } = actionBar(SRC);
     const target = THEMES[1]!;
     const url = ownUrls(render()).find((u) =>
       effectsOf(u).some((e) => e.args[2] === target),
@@ -241,7 +209,7 @@ describe("2de.12 — option set action", () => {
   });
 
   test("marks exactly the currently-selected option active", () => {
-    const { render, sessionState } = buildRuntime(SRC);
+    const { render, sessionState } = actionBar(SRC);
     sessionState.set("s1", "sel", THEMES[2]!);
     expect(boldUrls(render()).map(effectsOf)).toEqual([
       [{ verb: "set-state", args: ["s1", "sel", THEMES[2]!] }],
@@ -263,7 +231,7 @@ describe("2de.12 — option set action", () => {
       segments: { bar: { template: '{{ action "choose" "🎨 fancy" "${target}" }}', bg: 'surface', fg: 'foreground' } },
       root: 'bar',
     }`;
-    const { render, click, sessionState } = buildRuntime(src);
+    const { render, click, sessionState } = actionBar(src);
     const out = render();
     expect(textOf(out)).toContain("🎨 fancy");
     const url = ownUrls(out)[0]!;
@@ -298,7 +266,7 @@ describe("71o.1 — inline literal option domain (from: [...])", () => {
   }`;
 
   test("renders one clickable per inline value, needing no registration", () => {
-    const { render } = buildRuntime(SRC);
+    const { render } = actionBar(SRC);
     const urls = ownUrls(render());
     expect(urls.map(effectsOf)).toEqual([
       [{ verb: "set-state", args: ["s1", "sort-order", "asc"] }],
@@ -317,7 +285,7 @@ describe("71o.1 — inline literal option domain (from: [...])", () => {
   });
 
   test("a click on an inline option passes the derived gate and mutates state", async () => {
-    const { render, click, sessionState } = buildRuntime(SRC);
+    const { render, click, sessionState } = actionBar(SRC);
     const url = ownUrls(render()).find((u) =>
       effectsOf(u).some((e) => e.args[2] === "desc"),
     )!;
@@ -326,7 +294,7 @@ describe("71o.1 — inline literal option domain (from: [...])", () => {
   });
 
   test("a value outside the inline domain is rejected loudly at the wire", () => {
-    const { config } = buildRuntime(SRC);
+    const { config } = actionBar(SRC);
     const res = stateGate(config).validate("sort-order", "bogus");
     expect(res.ok).toBe(false);
     if (!res.ok)
@@ -397,7 +365,7 @@ describe("71o.1 — a newly-registered domain needs no engine edits", () => {
           spec: { kind: "allow-list", allowed: ["red", "green", "blue"] },
         },
       ]);
-      const { render, click, sessionState } = buildRuntime(src);
+      const { render, click, sessionState } = actionBar(src);
       const url = ownUrls(render()).find((u) =>
         effectsOf(u).some((e) => e.args[2] === "green"),
       )!;
@@ -433,7 +401,7 @@ describe("2de.12 — bounded set action", () => {
   }`;
 
   test("◀/▶ emit a RELATIVE step-state nudge (key + signed by), no absolute target; display is plain text", () => {
-    const { render } = buildRuntime(SRC);
+    const { render } = actionBar(SRC);
     const out = render();
     expect(textOf(out)).toContain("◀ 14 ▶");
     const urls = ownUrls(out);
@@ -448,7 +416,7 @@ describe("2de.12 — bounded set action", () => {
   // [LAW:one-source-of-truth] Acceptance: the ◀/▶ link is byte-identical across
   // renders at DIFFERENT current values — proof it carries no `current` snapshot.
   test("the step-state link is byte-identical across renders at different current values", () => {
-    const { render, sessionState } = buildRuntime(SRC);
+    const { render, sessionState } = actionBar(SRC);
     const at14 = ownUrls(render());
     sessionState.set("s1", "level", "58");
     const at58 = ownUrls(render());
@@ -459,7 +427,7 @@ describe("2de.12 — bounded set action", () => {
   // Acceptance: N rapid clicks on the SAME link with NO render between move the
   // value by N·step — the idempotency is gone (mirror the live repro harness).
   test("three identical clicks with no render between step +3 (idempotency gone)", async () => {
-    const { render, click, sessionState } = buildRuntime(SRC);
+    const { render, click, sessionState } = actionBar(SRC);
     const up = ownUrls(render())[1]!; // ▶, captured once
     await click(up);
     await click(up);
@@ -468,14 +436,14 @@ describe("2de.12 — bounded set action", () => {
   });
 
   test("the first click seeds from the variable default (14), not from min", async () => {
-    const { render, click, sessionState } = buildRuntime(SRC);
+    const { render, click, sessionState } = actionBar(SRC);
     expect(sessionState.get("s1", "level")).toBeNull(); // unset
     await click(ownUrls(render())[1]!); // ▶ from a never-written key
     expect(sessionState.get("s1", "level")).toBe("16"); // 14+2, NOT 0+2
   });
 
   test("navigation WRAPS past a bound to the other end at apply time", async () => {
-    const { render, click, sessionState } = buildRuntime(SRC);
+    const { render, click, sessionState } = actionBar(SRC);
     sessionState.set("s1", "level", "60"); // max
     await click(ownUrls(render())[1]!); // ▶: 60 +2 wraps to min, not clamped to 60
     expect(sessionState.get("s1", "level")).toBe("0");
@@ -489,7 +457,7 @@ describe("2de.12 — bounded set action", () => {
   });
 
   test("a click steps and the next render shows the new value", async () => {
-    const { render, click } = buildRuntime(SRC);
+    const { render, click } = actionBar(SRC);
     await click(ownUrls(render())[1]!); // ▶: 14 → 16
     expect(textOf(render())).toContain("◀ 16 ▶");
   });
@@ -532,13 +500,13 @@ describe("brandon-menus-bn5.3 I3 — bare set-int action requires a numeric disp
   };
 
   test("a NUMERIC bare display writes the page index (the manual open-at-page pattern)", async () => {
-    const { render, click, sessionState } = buildRuntime(SRC);
+    const { render, click, sessionState } = actionBar(SRC);
     await click(urlWriting(render(), "0"));
     expect(sessionState.get("s1", "theme-page")).toBe("0");
   });
 
   test("a NON-numeric bare display is rejected LOUDLY at the wire (must be an integer)", async () => {
-    const { render, click, sessionState } = buildRuntime(SRC);
+    const { render, click, sessionState } = actionBar(SRC);
     const bad = urlWriting(render(), "▸");
     // The realize path DID emit the click (the display becomes the value); the int
     // gate rejects it at apply time — the verb throws BAD_REQUEST, not a silent no-op.
@@ -548,7 +516,7 @@ describe("brandon-menus-bn5.3 I3 — bare set-int action requires a numeric disp
   });
 
   test("the derived int gate rejects a non-integer directly (clear reason)", () => {
-    const { config } = buildRuntime(SRC);
+    const { config } = actionBar(SRC);
     const res = stateGate(config).validate("theme-page", "▸");
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.reason).toMatch(/must be an integer, got "▸"/);
@@ -578,7 +546,7 @@ describe("2de.12 — copy / open actions derive no gate", () => {
   });
 
   test("copy carries the evaluated template; open carries the evaluated target", async () => {
-    const { render, click, sideEffects } = buildRuntime(SRC);
+    const { render, click, sideEffects } = actionBar(SRC);
     const urls = ownUrls(render());
     expect(urls).toHaveLength(2);
     for (const url of urls) await click(url);
@@ -861,7 +829,7 @@ describe("2de.4 — cycle set action", () => {
   }`;
 
   test("renders the current member's display; the click writes the successor", async () => {
-    const { render, click, sessionState } = buildRuntime(SRC);
+    const { render, click, sessionState } = actionBar(SRC);
     const out = render();
     expect(textOf(out)).toContain("▸ details");
     const urls = ownUrls(out);
@@ -880,7 +848,7 @@ describe("2de.4 — cycle set action", () => {
   });
 
   test("a current value outside the domain counts as the first member", () => {
-    const { render, sessionState } = buildRuntime(SRC);
+    const { render, sessionState } = actionBar(SRC);
     // Bypass the gate to simulate a foreign/legacy stored value.
     sessionState.set("s1", "details-open", "garbage");
     const out = render();
@@ -892,7 +860,7 @@ describe("2de.4 — cycle set action", () => {
 
   test("a single display is static across states (the bare-glyph toggle)", async () => {
     const src = SRC.replace('"▸ details" "▾ details"', '"⊕"');
-    const { render, click, sessionState } = buildRuntime(src);
+    const { render, click, sessionState } = actionBar(src);
     const out = render();
     expect(textOf(out)).toContain("⊕");
     await click(ownUrls(out)[0]!);
@@ -911,7 +879,7 @@ describe("2de.4 — cycle set action", () => {
       segments: { bar: { template: '{{ action "next" "A" "B" }}', bg: 'surface', fg: 'foreground' } },
       root: 'bar',
     }`;
-    const { render } = buildRuntime(src);
+    const { render } = actionBar(src);
     // [LAW:no-silent-failure] Arity errors surface as a visible ⚠ error cell
     // rather than crashing the bar — partial rendering keeps other segments alive.
     const out = textOf(render());
@@ -932,7 +900,7 @@ describe("2de.4 — cycle set action", () => {
       },
       root: { h: ['bar', 'ok'] },
     }`;
-    const { render } = buildRuntime(src);
+    const { render } = actionBar(src);
     const errorRow = textOf(render())
       .split("\n")
       .find((line) => line.includes("unregisteredFn"));
@@ -949,7 +917,7 @@ describe("2de.4 — cycle set action", () => {
       },
       root: { h: ['bar', 'ok'] },
     }`;
-    const { render } = buildRuntime(src);
+    const { render } = actionBar(src);
     const errorRow = textOf(render())
       .split("\n")
       .find((line) => line.includes("FIRST"));
@@ -978,7 +946,7 @@ describe("2de.4 — cycle set action", () => {
       segments: { bar: { template: '{{ action "next" "○" "◐" "●" }}', bg: 'surface', fg: 'foreground' } },
       root: 'bar',
     }`;
-    const { render, click, sessionState } = buildRuntime(src);
+    const { render, click, sessionState } = actionBar(src);
     for (const [display, written] of [
       ["○", "low"],
       ["◐", "high"],
@@ -1017,7 +985,7 @@ describe("2de.4 — cycle set action", () => {
         spec: { kind: "allow-list", allowed: ["closed", "a", "b"] },
       },
     ]);
-    const { render, click, sessionState } = buildRuntime(src);
+    const { render, click, sessionState } = actionBar(src);
     // Open A.
     await click(ownUrls(render())[0]!);
     expect(sessionState.get("s1", "menu")).toBe("a");

@@ -15,18 +15,11 @@
 //   3. It is declared as every `(?)` is: one `declareHelp` call.
 //   4. Width, mechanically, at 80 and 120 columns.
 
-import { drawPayload } from "./helpers/draw-payload";
-import { processLauncher } from "./helpers/host";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { VariableStore } from "../src/var-system/store";
-import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig } from "../src/dsl/render";
-import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { deriveActionValidators } from "../src/daemon/foundations/state-validators";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
@@ -37,17 +30,11 @@ import { HELP_GLYPH_CLOSED } from "../src/config/help";
 import { DISCLOSURE_CLOSED, DISCLOSURE_GLYPH_CLOSE } from "../src/config/disclosure";
 import { EDIT_MODE_HELP, HELP_TEXT, LANE_HELP } from "../src/help-text";
 import { LANE_NAMES } from "../src/config/lanes";
-import {
-  testVerbContext,
-  clickUrl,
-  effectsOf,
-  recordRender,
-} from "./helpers/click";
+import { effectsOf } from "./helpers/click";
+import { buildRig } from "./helpers/rig";
 import type { DslConfig } from "../src/config/dsl-types";
 import { EDIT_LIVE_DISPLAY } from "../src/config/edit-chrome";
 import { ADD_GLYPH, CONFIGURE_GLYPH, REMOVE_GLYPH } from "../src/config/edit-glyphs";
-import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "../src/time";
 
 const SID = "s-help";
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -74,13 +61,15 @@ const PAYLOAD = {
   model: { display_name: "Opus" },
 };
 
-function buildRuntime(src: string = TWO_SEGMENT_ROOT) {
-  const config = parseAndValidate("<user>", src, ALLOWED, DEFAULT_DSL_CONFIG);
-  const sessionState = new SessionState();
-  const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
-  recordRender(sessionState, SID);
+function helpBar(src: string = TWO_SEGMENT_ROOT) {
+  const rig = buildRig({
+    source: src,
+    label: "<user>",
+    base: DEFAULT_DSL_CONFIG,
+    palettes: ALLOWED,
+    sessionId: SID,
+  });
+  const { config, sessionState, click } = rig;
 
   // [LAW:one-source-of-truth] The daemon's own globals resolution, called the
   // way the daemon calls it — so edit mode's staged look (plain joiner, " | "
@@ -92,31 +81,22 @@ function buildRuntime(src: string = TWO_SEGMENT_ROOT) {
       (key) => sessionState.get(SID, key),
       () => false,
     );
-    return drawPayload(
-      config,
-      compiled,
-      store,
-      registry,
-      PAYLOAD,
-      instantOf(new Date()),
-      {
+    return rig.draw({
+      payload: PAYLOAD,
+      opts: {
         endcaps: effective.endcaps,
         separator: effective.separator,
-        colorCompatibility: "truecolor" as const,
+        colorCompatibility: "truecolor",
         wrap: effective.autoWrap,
         padding: effective.padding,
         width,
       },
-      undefined,
       // The selection IS the same `effective` resolution every field above comes
       // from — so the bar cannot be painted from one resolution and labelled
       // from another.
-      effective,
-    ).frame;
+      selection: effective,
+    }).frame;
   };
-
-  const click = async (url: string): Promise<void> =>
-    await clickUrl(url, testVerbContext(sessionState, undefined, config));
 
   // [LAW:behavior-not-structure] Which segments are `(?)` triggers is read off
   // what they RENDER — the help glyph — so the assertions survive any renaming
@@ -159,18 +139,10 @@ function buildRuntime(src: string = TWO_SEGMENT_ROOT) {
   const lines = (width: number): string[] =>
     textOf(render(width)).split("\n");
 
-  return {
-    config,
-    sessionState,
-    render,
-    lines,
-    click,
-    clickWriting,
-    toggleHelp,
-  };
+  return { ...rig, render, lines, clickWriting, toggleHelp };
 }
 
-async function openSettingsMenu(rt: ReturnType<typeof buildRuntime>): Promise<void> {
+async function openSettingsMenu(rt: ReturnType<typeof helpBar>): Promise<void> {
   await rt.clickWriting(rt.render(200), SETTINGS_ANCHOR, "open");
 }
 
@@ -179,7 +151,7 @@ async function openSettingsMenu(rt: ReturnType<typeof buildRuntime>): Promise<vo
 // candybar-settings-ui-aok.1 — a user root deletes every other trigger.
 // Arranging keeps the menu open, and closing it leaves edit mode
 // (brandon-menus-sjhy.9p6), so the edit-mode bar is measured under the menu.
-async function enterEditMode(rt: ReturnType<typeof buildRuntime>): Promise<void> {
+async function enterEditMode(rt: ReturnType<typeof helpBar>): Promise<void> {
   await openSettingsMenu(rt);
   await rt.clickWriting(rt.render(200), EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
 }
@@ -191,7 +163,7 @@ describe("in-bar help IS src/help-text.ts, not a second copy", () => {
   // values from src/help-text.ts — identity, not similarity. If the test needs
   // fuzzy string comparison, the derivation rule has been violated somewhere."
   test("every synthesized help segment's template is an exported help line", () => {
-    const { config } = buildRuntime();
+    const { config } = helpBar();
     const helpTemplates = Object.entries(config.segments)
       .filter(([name]) => /\.help(\.|$)/.test(name) && /\.\d+$/.test(name))
       .map(([, seg]) => seg.template);
@@ -222,7 +194,7 @@ describe("in-bar help IS src/help-text.ts, not a second copy", () => {
 
 describe("edit mode's (?)", () => {
   test("renders closed, opens on click, and closes again", async () => {
-    const rt = buildRuntime();
+    const rt = helpBar();
     await enterEditMode(rt);
 
     const closed = textOf(rt.render(200));
@@ -256,7 +228,7 @@ describe("edit mode's (?)", () => {
   });
 
   test("is absent entirely when edit mode is off", () => {
-    const rt = buildRuntime();
+    const rt = helpBar();
     const out = textOf(rt.render(200));
     expect(out).not.toContain(HELP_GLYPH_CLOSED);
   });
@@ -266,7 +238,7 @@ describe("edit mode's (?)", () => {
 
 describe("the (?) is an ordinary declaration", () => {
   test("each mints a state var, a cycle action and a trigger segment", () => {
-    const { config } = buildRuntime();
+    const { config } = helpBar();
     const helpNames = Object.entries(config.segments)
       .filter(([, seg]) => seg.template.includes(HELP_GLYPH_CLOSED))
       .map(([name]) => name);
@@ -286,7 +258,7 @@ describe("the (?) is an ordinary declaration", () => {
     // [LAW:single-enforcer] It writes session state through the existing
     // `cycle` arm, so its validator is an ordinary allow-list of the two
     // members — nothing bespoke reaches the wire gate.
-    const { config } = buildRuntime();
+    const { config } = helpBar();
     const helpKeys = Object.entries(config.segments)
       .filter(([, seg]) => seg.template.includes(HELP_GLYPH_CLOSED))
       .map(([name]) => name);
@@ -324,7 +296,7 @@ describe.each([
     open,
     corpus,
   ) => {
-    const rt = buildRuntime(twoSegmentRoot(padding));
+    const rt = helpBar(twoSegmentRoot(padding));
     await open(rt);
     const before = rt.lines(width);
     await rt.toggleHelp(rt.render(width));
@@ -355,7 +327,7 @@ describe.each([
   test.each([["edit mode", enterEditMode]] as const)(
     "closed help in %s overflows no line",
     async (_name, open) => {
-    const rt = buildRuntime(twoSegmentRoot(padding));
+    const rt = helpBar(twoSegmentRoot(padding));
     await open(rt);
     const shown = rt.lines(width);
 
@@ -386,12 +358,12 @@ describe.each([
 const WIDE = 200;
 
 // The one line of every assertion below: where did the closed `(?)` land?
-const triggerLines = (rt: ReturnType<typeof buildRuntime>): string[] =>
+const triggerLines = (rt: ReturnType<typeof helpBar>): string[] =>
   rt.lines(WIDE).filter((l) => l.includes(HELP_GLYPH_CLOSED));
 
 describe("a closed (?) rides a row rather than adding one", () => {
   test.each([["edit mode", enterEditMode]] as const)("in %s", async (_name, open) => {
-    const rt = buildRuntime();
+    const rt = helpBar();
     await open(rt);
     const hosts = triggerLines(rt);
 
@@ -447,14 +419,14 @@ describe("edit mode's (?) survives any root shape", () => {
   ];
 
   test.each(shapes)("%s: the trigger renders", async (_name, src) => {
-    const rt = buildRuntime(src);
+    const rt = helpBar(src);
     await enterEditMode(rt);
 
     expect(triggerLines(rt)).toHaveLength(1);
   });
 
   test.each(shapes)("%s: and rides a row (%p)", async (_name, src, rides) => {
-    const rt = buildRuntime(src);
+    const rt = helpBar(src);
     await enterEditMode(rt);
     const [host] = triggerLines(rt);
 

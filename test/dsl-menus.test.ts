@@ -24,13 +24,11 @@
 //   5. Old spellings (positional page/bools/key) and malformed option dicts are
 //      LOAD errors naming the new form — never silently reinterpreted.
 
-import { drawPayload } from "./helpers/draw-payload";
-import { processLauncher } from "./helpers/host";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { picked, selectionFor } from "./helpers/selection";
+import { buildRig } from "./helpers/rig";
 import { ColorDepth } from "@promptctl/rich-js";
 import { ownLinks } from "./helpers/ambient-chrome";
 import {
@@ -40,21 +38,13 @@ import {
 } from "@promptctl/rich-js";
 import type { Palette, Style } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { VariableStore } from "../src/var-system/store";
-import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig } from "../src/dsl/render";
-import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { paletteForThemeName } from "../src/themes/palette-resolvers";
 import { deriveActionValidators } from "../src/daemon/foundations/state-validators";
 import { stateGate } from "./helpers/gates";
 import { ConfigError } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { testVerbContext, effectsOf, recordRender } from "./helpers/click";
-import { parseHandlerUrl } from "../src/install/index";
-import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
-import { VERBS } from "../src/daemon/verbs";
-import type { VerbContext } from "../src/daemon/verbs";
+import { effectsOf } from "./helpers/click";
 import type { RichText } from "@promptctl/rich-js";
 import { PRESET_FLOOR } from "../src/config/presets";
 import { childStep, type CompiledNode } from "../src/dsl/node-registry";
@@ -70,9 +60,7 @@ import {
   type Address,
 } from "../src/themes/decor";
 import { resolvedStyle } from "../src/render/rich-theme.js";
-import { instantOf } from "../src/utils/instant";
 import { menuPageKey } from "../src/config/menu-keys";
-import { systemTimekeeper } from "../src/time";
 
 /** The address of the segment named `name` in a compiled tree, or throw. */
 function addressOf(root: CompiledNode, name: string): Address {
@@ -145,16 +133,6 @@ function expectSwatched(
 // The ground a rendered line is drawn on: its own background.
 const groundOf = (line: RichText): Ground => resolvedStyle(line.style).bgcolor!.value!;
 
-function opts() {
-  return {
-    endcaps: "powerline" as const,
-    colorCompatibility: "truecolor" as const,
-    wrap: true,
-    padding: 0,
-    width: Number.POSITIVE_INFINITY,
-  };
-}
-
 function ownUrls(rendered: Frame): string[] {
   const urls = linkUrls(rendered);
   // The global settings menu and the edit toggle it reaches are on every bar;
@@ -162,59 +140,30 @@ function ownUrls(rendered: Frame): string[] {
   return ownLinks(urls);
 }
 
-function buildRuntime(src: string, sessionId = "s1", look?: string) {
-  const config = parseAndValidate("<test>", src, ALLOWED);
-  const sessionState = new SessionState();
-  const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
-  const basePalette = getThemePalette("textual-dark"!);
+function menuBar(src: string, sessionId = "s1", look?: string) {
+  const rig = buildRig({ source: src, palettes: ALLOWED, sessionId });
+  const palette = getThemePalette("textual-dark");
   const sink = new Map<string, readonly RichText[]>();
   const render = (): Frame =>
-    drawPayload(
-      config,
-      compiled,
-      store,
-      registry,
-      { session_id: sessionId, project_dir: "/tmp/proj" },
-      instantOf(new Date()),
-      opts(),
-      { perSegmentSink: sink },
+    rig.draw({
+      observers: { perSegmentSink: sink },
       // `look` is the session's style pick, resolved as the daemon resolves it.
       // [LAW:no-silent-failure] naming an undeclared style would collapse to the
       // floor, so tests that depend on a style assert its effect.
-      selectionFor(config, {}, picked(look === undefined ? {} : { style: look })),
-    ).frame;
-  recordRender(sessionState, sessionId);
-  const ctx: VerbContext = testVerbContext(sessionState, undefined, config);
-  const click = async (url: string): Promise<void> => {
-    const { verb, value } = parseHandlerUrl(url);
-    const effects =
-      verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
-    for (const e of effects) {
-      const handler = VERBS.get(e.verb);
-      if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
-      await handler(e.value, ctx);
-    }
-  };
+      selection: selectionFor(
+        rig.config,
+        {},
+        picked(look === undefined ? {} : { style: look }),
+      ),
+    }).frame;
   const clickToggle = async (out: Frame, key: string, value: string): Promise<void> => {
     const url = ownUrls(out).find((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
     );
     if (!url) throw new Error(`no toggle writing ${key}=${value} rendered`);
-    await click(url);
+    await rig.click(url);
   };
-  return {
-    config,
-    compiled,
-    store,
-    sessionState,
-    sink,
-    palette: basePalette,
-    render,
-    click,
-    clickToggle,
-  };
+  return { ...rig, sink, palette, render, clickToggle };
 }
 
 // A theme picker menu beside a plain label, in one horizontal row. Identity is
@@ -583,7 +532,7 @@ describe("bn5.6 — old spellings and bad option dicts are migration-pointing LO
     // stale action name is the trigger's visible text, sitting where an arrow
     // belongs. A load-only check would pass just as happily if the display were
     // dropped on the floor [LAW:behavior-not-structure].
-    const rt = buildRuntime(srcFor('{{ menu "applyTheme" "themePage" }}'));
+    const rt = menuBar(srcFor('{{ menu "applyTheme" "themePage" }}'));
     expect(textOf(rt.render())).toContain("themePage");
   });
 
@@ -658,7 +607,7 @@ describe("the options dict and the trigger displays cannot be confused", () => {
     // the display check rather than being read as the options dict. The bar is
     // where the author reads it: drawDsl surfaces a segment's throw as a
     // visible ⚠ diagnostic rather than propagating it.
-    const rt = buildRuntime(srcFor('{{ menu "applyTheme" (list "x") "▾" }}'));
+    const rt = menuBar(srcFor('{{ menu "applyTheme" (list "x") "▾" }}'));
     const out = textOf(rt.render());
     expect(out).toContain("display #1 is not text");
     expect(out).toContain('["x"]'); // the offending value, named
@@ -667,7 +616,7 @@ describe("the options dict and the trigger displays cannot be confused", () => {
 
 describe("toggle round trip + drop stacking", () => {
   test("closed: glyph ▸ inline, no body, single line, neighbor present", () => {
-    const { render } = buildRuntime(MENU_SRC);
+    const { render } = menuBar(MENU_SRC);
     const out = textOf(render());
     expect(out).toContain("🎨 ▸");
     expect(out).toContain("PICK"); // neighbor on the same row
@@ -677,7 +626,7 @@ describe("toggle round trip + drop stacking", () => {
 
   test("click opens: ▾ + body dropped BELOW the row; row 0 keeps the neighbor", async () => {
     const { render, clickToggle, sessionState } =
-      buildRuntime(MENU_SRC);
+      menuBar(MENU_SRC);
     await clickToggle(render(), TKEY, "applyTheme");
     expect(sessionState.get("s1", TKEY)).toBe("applyTheme");
     const lines = textOf(render()).split("\n");
@@ -694,7 +643,7 @@ describe("toggle round trip + drop stacking", () => {
   // The instance-boundary property: a band is one more step on ITS trigger's
   // address, so opening it is invisible to every other segment's colour.
   test("opening a menu changes the colour of no other cell", async () => {
-    const { render, sink, clickToggle } = buildRuntime(MENU_SRC);
+    const { render, sink, clickToggle } = menuBar(MENU_SRC);
     const snapshot = (): Map<string, string> => {
       render();
       return new Map(
@@ -720,7 +669,7 @@ describe("toggle round trip + drop stacking", () => {
   // left by ←/→ before the last close. The page key is derived from identity
   // (menuPageKey), never from a page-action argument.
   test("disclosure click resets the synthesized page cursor to 0 in the same atomic write", () => {
-    const { render } = buildRuntime(MENU_SRC);
+    const { render } = menuBar(MENU_SRC);
     const url = ownUrls(render()).find((u) =>
       effectsOf(u).some((e) => e.args[1] === TKEY),
     );
@@ -736,7 +685,7 @@ describe("toggle round trip + drop stacking", () => {
   // page=-1 idiom (which cannot close a disclosure-keyed menu).
   test("the dropped body's ✕ closes the disclosure (and resets the page)", async () => {
     const { render, click, clickToggle, sessionState } =
-      buildRuntime(MENU_SRC);
+      menuBar(MENU_SRC);
     await clickToggle(render(), TKEY, "applyTheme");
     const open = render();
     expect(textOf(open).split("\n")).toHaveLength(2);
@@ -764,7 +713,7 @@ describe("toggle round trip + drop stacking", () => {
       '{{ menu "applyTheme" "▸" "▾" (dict "closeOnPick" true) }}',
     );
     const { render, click, clickToggle, sessionState } =
-      buildRuntime(src);
+      menuBar(src);
     await clickToggle(render(), TKEY, "applyTheme");
     const open = render();
     const pickUrl = ownUrls(open).find((u) => {
@@ -809,7 +758,7 @@ describe("a {{ menu }} under a style wrapper still drops its body", () => {
     ["link", `{{ link "https://example.com" (${MENU}) }}`],
     ["style", `{{ style "bold red" (${MENU}) }}`],
   ])("%s", (_wrapper, template) => {
-    const { render, sessionState } = buildRuntime(wrapped(template));
+    const { render, sessionState } = menuBar(wrapped(template));
     expect(textOf(render()).split("\n")).toHaveLength(1);
     // `link` replaces the trigger's own URL, so open it the way a click would.
     sessionState.set("s1", TKEY, "applyTheme");
@@ -830,7 +779,7 @@ describe("a segment that throws after its {{ menu }} evaluated", () => {
       `'🎨 {{ menu "applyTheme" "▸" "▾" }}{{ fail "boom" }}'`,
     );
     expect(src).not.toBe(MENU_SRC);
-    const { render, sessionState, compiled } = buildRuntime(src);
+    const { render, sessionState, compiled } = menuBar(src);
     sessionState.set("s1", TKEY, "applyTheme");
     const lines = textOf(render()).split("\n");
     expect(lines).toHaveLength(1);
@@ -860,7 +809,7 @@ const INDEPENDENT_SRC = `{
 describe("independent default (no shared key)", () => {
   test("two menus have distinct keys (and page cursors); both can be open at once", async () => {
     const { config, render, clickToggle } =
-      buildRuntime(INDEPENDENT_SRC);
+      menuBar(INDEPENDENT_SRC);
     // Distinct keys — neither click writes the other's key — and each key
     // brings its own synthesized page cursor.
     expect(config.variables["menus.themeMenu.applyTheme"]).toBeDefined();
@@ -906,7 +855,7 @@ const ACCORDION_SRC = `{
 describe("opt-in accordion (shared key, one open at a time)", () => {
   test("both menus share the key; the gate unions members; ONE shared page cursor; opening one closes the other", async () => {
     const { config, render, clickToggle } =
-      buildRuntime(ACCORDION_SRC);
+      menuBar(ACCORDION_SRC);
     expect(config.actions["menus.pickers.applyTheme"]).toEqual({
       set: "menus.pickers",
       cycle: ["closed", "applyTheme"],
@@ -1002,14 +951,14 @@ describe('the "theme tester" — N menus in one segment', () => {
   });
 
   test("closed: all three glyphs inline with the separators + END on one row", () => {
-    const { render } = buildRuntime(TESTER_SRC);
+    const { render } = menuBar(TESTER_SRC);
     const lines = textOf(render()).split("\n");
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain("TEST ▸ | ▸ | ▸ END"); // mid-segment content stays inline
   });
 
   test("a mid-segment menu keeps content AFTER it on row 0; its body drops below", async () => {
-    const { render, clickToggle } = buildRuntime(TESTER_SRC);
+    const { render, clickToggle } = menuBar(TESTER_SRC);
     // Open only the FIRST menu (mid-segment, followed by ' | ▸ | ▸ END').
     await clickToggle(render(), "menus.tester.applyTheme", "applyTheme");
     const lines = textOf(render()).split("\n");
@@ -1022,7 +971,7 @@ describe('the "theme tester" — N menus in one segment', () => {
   });
 
   test("all three open independently: three bodies stack below one inline row", async () => {
-    const { render, clickToggle } = buildRuntime(TESTER_SRC);
+    const { render, clickToggle } = menuBar(TESTER_SRC);
     await clickToggle(render(), "menus.tester.applyTheme", "applyTheme");
     await clickToggle(render(), "menus.tester.applyEndcaps", "applyEndcaps");
     await clickToggle(render(), "menus.tester.applyTheme2", "applyTheme2");
@@ -1045,7 +994,7 @@ describe("compose substrate (drops stack, single-line rows unchanged)", () => {
   }`;
 
   test("a multi-line child drops its overflow full-width below row 0", () => {
-    const { render } = buildRuntime(TWOLINE_SRC);
+    const { render } = menuBar(TWOLINE_SRC);
     const lines = textOf(render()).split("\n");
     expect(lines).toHaveLength(2);
     expect(lines[0]).toContain("ONE"); // neighbor zipped onto row 0
@@ -1065,7 +1014,7 @@ describe("compose substrate (drops stack, single-line rows unchanged)", () => {
       },
       root: { h: ['a', 'b', 'c'] },
     }`;
-    const { render } = buildRuntime(src);
+    const { render } = menuBar(src);
     const lines = textOf(render()).split("\n");
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain("AAA");
@@ -1084,8 +1033,8 @@ describe("compose substrate (drops stack, single-line rows unchanged)", () => {
 // `{{ menu }}` — the picker DISCLOSURE a real settings surface actually
 // uses — which had never been exercised over an inline `from: [...]`
 // domain. "Zero engine edits" is asserted by construction: this file ships
-// only a JSON5 string (`SRC` below) and calls the same `buildRuntime`/
-// `parseAndValidate`/`registerDslConfig` every other test in this suite
+// only a JSON5 string (`SRC` below) and calls the same `menuBar`
+// (`buildRig`) every other test in this suite
 // calls — no src/ file changes accompany this test.
 
 describe("candybar-config-engine-71o.5 — a brand-new field gets a {{ menu }} via inline domain alone", () => {
@@ -1113,7 +1062,7 @@ describe("candybar-config-engine-71o.5 — a brand-new field gets a {{ menu }} v
   }`;
 
   test("the picker renders one option per inline domain member, once opened", async () => {
-    const { render, click } = buildRuntime(SRC);
+    const { render, click } = menuBar(SRC);
     const closed = render();
     expect(textOf(closed)).not.toContain("buzz");
     expect(textOf(closed)).not.toContain("silent");
@@ -1131,7 +1080,7 @@ describe("candybar-config-engine-71o.5 — a brand-new field gets a {{ menu }} v
   });
 
   test("clicking an option mutates the field through the real gate — the domain's own allow-list, derived with zero engine edits", async () => {
-    const { config, render, click, sessionState } = buildRuntime(SRC);
+    const { config, render, click, sessionState } = menuBar(SRC);
     const toggleUrl = ownUrls(render()).find((u) =>
       effectsOf(u).some((e) => e.args[2] === "applySound"),
     );
@@ -1188,7 +1137,7 @@ describe("aok.4 — group and menu resolve their trigger display by one rule", (
   // A group's synthesized toggle is an {{ action }} over its own two-member
   // cycle, so the two kinds are compared through the states each one renders.
   test("per-state displays: both swap when opened", async () => {
-    const { render, clickToggle } = buildRuntime(BOTH("", `"▸" "▾"`));
+    const { render, clickToggle } = menuBar(BOTH("", `"▸" "▾"`));
     const closed = textOf(render());
     expect(closed).toContain("G ▸");
     expect(closed).toContain("P ▸");
@@ -1203,7 +1152,7 @@ describe("aok.4 — group and menu resolve their trigger display by one rule", (
   // The form edit chrome's `+` uses: one display, shown in both states. A menu
   // could not express this at all before .4 — its glyph was not a binding.
   test("one static display: the menu shows it in both states", async () => {
-    const { render, clickToggle } = buildRuntime(BOTH("", `"+"`));
+    const { render, clickToggle } = menuBar(BOTH("", `"+"`));
     const closed = textOf(render()).split("\n");
     expect(closed.some((l) => l.includes("P +"))).toBe(true);
 
@@ -1249,7 +1198,7 @@ describe("a menu's `distribution` option places its band", () => {
     );
 
   test("`monotonic` places every option cell by monotonic over the whole domain", async () => {
-    const { render, sink, compiled, palette, clickToggle } = buildRuntime(
+    const { render, sink, compiled, palette, clickToggle } = menuBar(
       WITH('"distribution" "monotonic"'),
     );
     render();
@@ -1362,7 +1311,7 @@ describe("a picker over a colour-valued domain paints what picking would apply",
     // The fixture's globals wear `dim`: the names are written in the text of
     // the bar's own (styled) list, while each swatch is its theme unstyled.
     const { render, sink, config, palette, clickToggle } =
-      buildRuntime(BOTH_PICKERS_SRC);
+      menuBar(BOTH_PICKERS_SRC);
     render();
     await clickToggle(render(), TKEY, "applyTheme");
     render();
@@ -1397,7 +1346,7 @@ describe("a picker over a colour-valued domain paints what picking would apply",
 
   test("a theme option's colour is a function of the option ALONE — not its index, count or distribution", async () => {
     const colours = async (dictEntry: string): Promise<Map<string, string>> => {
-      const { render, sink, clickToggle } = buildRuntime(
+      const { render, sink, clickToggle } = menuBar(
         BOTH_PICKERS_SRC.replace(
           '{{ menu "applyTheme" "\u25b8" "\u25be" }}',
           `{{ menu "applyTheme" "\u25b8" "\u25be" (dict ${dictEntry}) }}`,
@@ -1429,7 +1378,7 @@ describe("a picker over a colour-valued domain paints what picking would apply",
 
   test("every style option's swatch is the BASE palette under that style, not the bar's already-styled one", async () => {
     const { render, sink, config, palette, clickToggle } =
-      buildRuntime(BOTH_PICKERS_SRC, "s1", "dim");
+      menuBar(BOTH_PICKERS_SRC, "s1", "dim");
     render();
     await clickToggle(render(), LKEY, "applyStyle");
     render();
@@ -1457,7 +1406,7 @@ describe("a picker over a colour-valued domain paints what picking would apply",
     // style, so "the already-styled palette" below is a palette that differs from
     // the base. Without this the next two expectations are vacuous — which is
     // exactly how they first shipped, passing while the style never arrived.
-    const floor = buildRuntime(BOTH_PICKERS_SRC, "s1", "none");
+    const floor = menuBar(BOTH_PICKERS_SRC, "s1", "none");
     floor.render();
     await floor.clickToggle(floor.render(), LKEY, "applyStyle");
     floor.render();
@@ -1503,7 +1452,7 @@ describe("a picker over a colour-valued domain paints what picking would apply",
       },
       root: { h: ['grid'] },
     }`;
-    const { render, sink, palette } = buildRuntime(PICKER_SRC);
+    const { render, sink, palette } = menuBar(PICKER_SRC);
     render();
     const line = sink.get("grid")![0]!;
     const cells = optionCellsOf(line, [...ALLOWED]);
@@ -1522,7 +1471,7 @@ describe("a picker over a colour-valued domain paints what picking would apply",
 
   test("a picker over a domain that is NOT colour-valued keeps its band placement", async () => {
     const WORDS = ["alpha", "bravo", "charlie", "delta"];
-    const { render, sink, compiled, palette, clickToggle } = buildRuntime(
+    const { render, sink, compiled, palette, clickToggle } = menuBar(
       BOTH_PICKERS_SRC.replace(
         "{ set: 'theme', from: 'themes' }",
         `{ set: 'word', from: ${JSON.stringify(WORDS)} }`,

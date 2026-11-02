@@ -3,27 +3,19 @@
 // each session's idle clock, the close it makes — a click's own journaled
 // write — and the flash on the rendered bar.
 
-import { drawPayload } from "./helpers/draw-payload";
-import { processLauncher } from "./helpers/host";
 import { linkUrls } from "./helpers/frame";
 import { DaemonClosing } from "../src/daemon/verb-error";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import type { RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { VariableStore } from "../src/var-system/store";
-import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig } from "../src/dsl/render";
-import { SessionState } from "../src/daemon/session-state";
 import {
   ANIMATION_SPEED_NAMES,
   listResolvablePaletteNames,
 } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { testVerbContext, effectsOf } from "./helpers/click";
+import { clickUrl, effectsOf } from "./helpers/click";
+import { buildRig } from "./helpers/rig";
 import { parseHandlerUrl } from "../src/install/index";
-import { VERBS, closeIdleMenus, clickSessionOf, type VerbContext } from "../src/daemon/verbs/index";
-import { SESSION_RENDER_ORIGIN_KEY } from "../src/daemon/foundations/session-keys";
-import { encodeRenderOrigin } from "../src/daemon/foundations/render-origin";
+import { closeIdleMenus, clickSessionOf, type VerbContext } from "../src/daemon/verbs/index";
 import { instantOf, type Instant } from "../src/utils/instant";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/door";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
@@ -289,13 +281,6 @@ const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = "s1";
 const TAB = "candybar.tab";
 const PICKERS = "menus.candybar_pickers";
-const OPTS = {
-  endcaps: "powerline" as const,
-  colorCompatibility: "truecolor" as const,
-  wrap: true,
-  padding: 0,
-  width: Number.POSITIVE_INFINITY,
-};
 const PAYLOAD = {
   session_id: SID,
   tmux: { pane: "%0" },
@@ -304,43 +289,32 @@ const PAYLOAD = {
   model: { display_name: "Opus" },
 };
 
-function buildRuntime(src: string) {
-  const config = parseAndValidate("<user>", src, ALLOWED, DEFAULT_DSL_CONFIG);
-  const sessionState = new SessionState();
-  const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, {
-    signer: TEST_SIGNER,
-    cwd: "/tmp/proj",
+// The bar with its menus: the rig keeps the session's render origin, as every
+// session has one before a click, and this file owns which link it clicks and
+// the log its close writes.
+function idleBar(src: string) {
+  const rig = buildRig({
+    source: src,
+    label: "<user>",
+    base: DEFAULT_DSL_CONFIG,
+    palettes: ALLOWED,
+    sessionId: SID,
   });
+  const { config, sessionState } = rig;
   const sink = new Map<string, readonly RichText[]>();
   // A frame drawn at `when`, its session idle since `idleSince`.
   const draw = (when: Instant, idleSince?: Instant) => {
     sink.clear();
-    return drawPayload(
-      config,
-      compiled,
-      store,
-      registry,
-      PAYLOAD,
-      when,
-      OPTS,
-      { perSegmentSink: sink },
-      selectionFor(config, idleSince === undefined ? {} : { idleSince }),
-    ).frame;
+    return rig.draw({
+      payload: PAYLOAD,
+      at: when,
+      observers: { perSegmentSink: sink },
+      selection: selectionFor(config, idleSince === undefined ? {} : { idleSince }),
+    }).frame;
   };
-  sessionState.set(
-    SID,
-    SESSION_RENDER_ORIGIN_KEY,
-    encodeRenderOrigin({
-      projectDir: "/tmp/proj",
-      cwd: "/tmp/proj",
-      target: { source: "search" },
-    }),
-  );
   const logged: string[] = [];
   const ctx: VerbContext = {
-    ...testVerbContext(sessionState),
+    ...rig.ctx,
     configFor: () => config,
     log: (_level, line) => logged.push(line),
   };
@@ -351,7 +325,7 @@ function buildRuntime(src: string) {
     if (!url) throw new Error(`no affordance writing ${key}=${value} rendered`);
     const { verb, value: v } = parseHandlerUrl(url);
     expect(clickSessionOf(verb, v)).toEqual({ ok: true, id: SID });
-    await VERBS.get(verb)!(v, ctx);
+    await clickUrl(url, ctx);
   };
   const held = (key: string): string =>
     sessionState.get(SID, key) ?? disclosureNest(config).defaultOf(key);
@@ -367,7 +341,7 @@ const IDLE = { idleS: 30, timeoutS: 30, stillIdle: () => true, closed: () => {} 
 describe("the close is the write the door's ✕ makes, on a click's own path", () => {
 
   test("edit mode exits with the door, and its savepoint goes with it", async () => {
-    const rt = buildRuntime(BUNDLED);
+    const rt = idleBar(BUNDLED);
     await rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
     await rt.clickWriting(EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     expect(rt.ctx.history.history(SID).savepoint).toBeDefined();
@@ -377,7 +351,7 @@ describe("the close is the write the door's ✕ makes, on a click's own path", (
   });
 
   test("a ✚ library open in edit mode with the door closed closes; edit mode, which drew no menu, stays", async () => {
-    const rt = buildRuntime(`{
+    const rt = idleBar(`{
       segments: { arrange: { template: '{{ action "edit.toggle" "✎" }}' } },
       root: { h: ['directory', 'arrange'] },
     }`);
@@ -396,7 +370,7 @@ describe("the close is the write the door's ✕ makes, on a click's own path", (
   });
 
   test("a toggle that hangs no menu is a view preference, and is left as it is", async () => {
-    const rt = buildRuntime(BUNDLED);
+    const rt = idleBar(BUNDLED);
     await rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
     await rt.clickWriting(EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     await rt.clickWriting(EDIT_LIVE_KEY, "open");
@@ -406,7 +380,7 @@ describe("the close is the write the door's ✕ makes, on a click's own path", (
   });
 
   test("a group open by default is closed, and stays closed", async () => {
-    const rt = buildRuntime(`{ root: { v: [
+    const rt = idleBar(`{ root: { v: [
       { kind: 'group', name: 'more', label: 'more', open: true, children: ['model'] },
       'directory',
     ] } }`);
@@ -417,7 +391,7 @@ describe("the close is the write the door's ✕ makes, on a click's own path", (
   });
 
   test("with nothing open it writes nothing, and says so", async () => {
-    const rt = buildRuntime(BUNDLED);
+    const rt = idleBar(BUNDLED);
     await closeIdleMenus(SID, IDLE, rt.ctx);
     expect(rt.held(SETTINGS_ANCHOR)).toBe(DISCLOSURE_CLOSED);
     expect(rt.logged).toContain(
@@ -434,7 +408,7 @@ describe("the flash on the bar", () => {
   const BEFORE = at(1010);
 
   test("menu rows light while lit; bar rows never do", async () => {
-    const rt = buildRuntime(BUNDLED);
+    const rt = idleBar(BUNDLED);
     await rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
     const calm = rt.draw(LIT);
     const lit = rt.draw(LIT, SINCE);
@@ -455,7 +429,7 @@ describe("the flash on the bar", () => {
   });
 
   test("dark between flashes, and before the flash begins, the bar is as it was", async () => {
-    const rt = buildRuntime(BUNDLED);
+    const rt = idleBar(BUNDLED);
     await rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
     expect(rt.draw(DARK, SINCE).rows).toEqual(rt.draw(DARK).rows);
     const waiting = rt.draw(BEFORE, SINCE);
@@ -472,7 +446,7 @@ describe("the flash on the bar", () => {
   // so its holds are on the host clock however fast the session animates.
   test("the flash begins and turns at the same host instant at every animation speed", async () => {
     for (const speed of ANIMATION_SPEED_NAMES) {
-      const rt = buildRuntime(
+      const rt = idleBar(
         `{ globals: { animationSpeed: "${speed}" }, root: { h: ['directory', 'model'] } }`,
       );
       await rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
@@ -485,7 +459,7 @@ describe("the flash on the bar", () => {
   });
 
   test("a menu the frame first draws, its idle period not begun, can move but says no change", async () => {
-    const rt = buildRuntime(BUNDLED);
+    const rt = idleBar(BUNDLED);
     await rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
     const opened = rt.draw(BEFORE);
     expect(opened.nextChange).toBe(Infinity);
@@ -493,7 +467,7 @@ describe("the flash on the bar", () => {
   });
 
   test("a bar with no menu open draws no menu rows, and never flashes", () => {
-    const rt = buildRuntime(BUNDLED);
+    const rt = idleBar(BUNDLED);
     const frame = rt.draw(LIT, SINCE);
     expect(menuRows(frame)).toBe(0);
     expect(frame.rows).toEqual(rt.draw(LIT).rows);

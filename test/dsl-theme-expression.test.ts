@@ -30,9 +30,10 @@ import { TEST_SIGNER } from "./helpers/link-signer";
 import { picked, selectionFor } from "./helpers/selection";
 import { transposePalette, getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
+import { buildRig } from "./helpers/rig";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, type CompiledConfig, type RenderWarning } from "../src/dsl/render";
+import { registerDslConfig, type RenderWarning } from "../src/dsl/render";
 import { bindRender, renderLook } from "../src/render/action";
 import { lastBinding } from "./helpers/render-binding";
 import { SessionState } from "../src/daemon/session-state";
@@ -91,35 +92,17 @@ interface Painted {
   readonly bg: (segName: string) => string;
 }
 
-interface Runtime {
-  readonly compiled: CompiledConfig;
-  readonly sessionState: SessionState;
-  readonly warnings: readonly RenderWarning[];
-  render(pct: number): Painted;
-  dispose(): void;
-}
-
-function buildRuntime(source = src(RULE)): Runtime {
-  const config = parseAndValidate("<theme-expr>", source, ALLOWED);
-  const sessionState = new SessionState();
-  const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
+// The bar these tests draw: a rig over `source`, drawn at a context percentage,
+// with the render warnings it raised and each segment's own colour read back.
+function themeBar(source = src(RULE)) {
+  const rig = buildRig({ source, label: "<theme-expr>", palettes: ALLOWED, sessionId: SID });
   const warnings: RenderWarning[] = [];
   const sink = new Map<string, readonly RichText[]>();
   const render = (pct: number): Painted => {
-    const frame = drawPayload(
-      config,
-      compiled,
-      store,
-      registry,
-      { session_id: SID, ctx: { pct } },
-      instantOf(new Date()),
-      OPTS,
-      { perSegmentSink: sink, onRenderWarning: (w) => warnings.push(w) },
-      // Resolved as src/daemon/draw-bar.ts resolves it, over the session's picks.
-      selectionFor(config, {}, (key) => sessionState.get(SID, key)),
-    ).frame;
+    const frame = rig.draw({
+      payload: { session_id: SID, ctx: { pct } },
+      observers: { perSegmentSink: sink, onRenderWarning: (w) => warnings.push(w) },
+    }).frame;
     // [LAW:no-ambient-temporal-coupling] Snapshot the sink HERE: drawDsl clears
     // it at the top of the next call, so a colour read deferred past that call
     // would measure a render this Painted never described.
@@ -139,19 +122,13 @@ function buildRuntime(source = src(RULE)): Runtime {
       },
     };
   };
-  return {
-    compiled,
-    sessionState,
-    warnings,
-    render,
-    dispose: () => registry.dispose(),
-  };
+  return { ...rig, warnings, render };
 }
 
 // What the same bar's `plain` cell looks like under that theme chosen BY NAME —
 // the reference every expression result is checked against.
 const byName = (name: string): string => {
-  const { render, dispose } = buildRuntime(src(name));
+  const { render, dispose } = themeBar(src(name));
   try {
     return render(0).bg("plain");
   } finally {
@@ -161,7 +138,7 @@ const byName = (name: string): string => {
 
 describe("globals.palette as an expression — a theme chosen by data", () => {
   test("the expression is evaluated per render, and its result paints the whole bar", () => {
-    const { render, dispose } = buildRuntime();
+    const { render, dispose } = themeBar();
     try {
       // Each band lands on the SAME colour the named theme produces — not merely
       // a different colour from its neighbour.
@@ -176,7 +153,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
   });
 
   test("theme.effective reports what the expression chose, so the label cannot disagree with the bar", () => {
-    const { render, dispose } = buildRuntime();
+    const { render, dispose } = themeBar();
     try {
       expect(textOf(render(90).frame)).toContain("T=dracula");
       expect(textOf(render(10).frame)).toContain("T=nord");
@@ -186,7 +163,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
   });
 
   test("a session pick outranks the expression", () => {
-    const { sessionState, render, dispose } = buildRuntime();
+    const { sessionState, render, dispose } = themeBar();
     try {
       sessionState.set(SID, "theme", "tokyo-night");
       // pct 90 would have chosen dracula; the session pick holds at every value.
@@ -202,7 +179,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
     // occupy the globals rung, so a higher rung deciding leaves no expression to
     // evaluate — even when what it decided IS the floor. A "did it come out as
     // the floor?" test would get this exact case wrong.
-    const { sessionState, render, dispose } = buildRuntime();
+    const { sessionState, render, dispose } = themeBar();
     try {
       sessionState.set(SID, "theme", THEME_FLOOR);
       expect(render(90).bg("plain")).toBe(byName(THEME_FLOOR));
@@ -216,7 +193,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
     // Edit mode draws each placement as its label (`edit.label:<id>:<segment>`),
     // so the staged render is compared with an edit-mode render of the theme.
     const arrangedBg = (source: string): string => {
-      const { render, sessionState, dispose } = buildRuntime(source);
+      const { render, sessionState, dispose } = themeBar(source);
       try {
         sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
         return render(90).bg("edit.label:plain:plain");
@@ -233,7 +210,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
 
   test("the rule composes with a style: the style transposes the rule's own base, once", () => {
     const STYLES = "styles: { none: {}, washed: { chromaScale: 0.2 } },";
-    const { sessionState, render, dispose } = buildRuntime(src(RULE, STYLES));
+    const { sessionState, render, dispose } = themeBar(src(RULE, STYLES));
     try {
       // [LAW:behavior-not-structure] The expectation is built with rich-js
       // `transposePalette` DIRECTLY, never cc-candybar's `transposedPalette` —
@@ -259,7 +236,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
   });
 
   test("a result naming no installed theme renders the floor, says so, and the bar still renders", () => {
-    const rt = buildRuntime(
+    const rt = themeBar(
       src("{{ if ge (int .ctx.pct) 50 }}gruvbux-dark{{ else }}nord{{ end }}"),
     );
     try {
@@ -286,7 +263,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
     // (brandon-unfiled-3248.8ro6, 4e) — refused where it is written, naming
     // the read that closes it, never drawn on a provisional floor.
     expect(() =>
-      buildRuntime(
+      themeBar(
         src('{{ if eq .theme.effective "" }}nord{{ else }}dracula{{ end }}'),
       ),
     ).toThrow(
@@ -298,11 +275,11 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
     // paletteForThemeName THROWS on a name it cannot resolve, so resolving
     // `globals.palette` at registration would fail at LOAD for a config that
     // renders perfectly well. Only a render resolves the theme.
-    expect(() => buildRuntime().dispose()).not.toThrow();
+    expect(() => themeBar().dispose()).not.toThrow();
   });
 
   test("the look a template reads is the render's own, and none outlives it", () => {
-    const rt = buildRuntime();
+    const rt = themeBar();
     try {
       const runtime = rt.compiled.menuRuntime.action;
       const drawn = lastBinding(runtime);

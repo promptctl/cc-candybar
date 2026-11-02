@@ -10,28 +10,18 @@
 // the nav glyphs visible), never the internal pagination shape — driven through
 // the real spine (registerDslConfig + drawDsl) and the real strip serializer.
 
-import { drawPayload } from "./helpers/draw-payload";
-import { processLauncher } from "./helpers/host";
 import { plainOf, textOf } from "../src/render/frame";
 import { sameDraw } from "./helpers/frame";
 import type { Frame } from "../src/render/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { getThemePalette, RichText } from "@promptctl/rich-js";
 import { Style } from "@promptctl/rich-js";
-import { parseAndValidate } from "./helpers/parse-and-validate";
-import { VariableStore } from "../src/var-system/store";
-import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig } from "../src/dsl/render";
 import { drawStripCells, stripChromeCols } from "../src/render/strip";
 import type { Endcaps } from "../src/themes/policy";
-import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { swatch } from "../src/render/swatch";
-import { instantOf } from "../src/utils/instant";
 import { menuPageKey } from "../src/config/menu-keys";
-import { systemTimekeeper } from "../src/time";
+import { buildRig } from "./helpers/rig";
 
-const ALLOWED = new Set(listResolvablePaletteNames());
 const THEMES = listResolvablePaletteNames();
 
 const cw = (s: string): number => new RichText(s).cellLength;
@@ -81,33 +71,11 @@ function pickerConfig(): string {
   }`;
 }
 
-function buildRuntime(
-  style: Endcaps,
-  padding = 0,
-) {
-  const config = parseAndValidate("<test>", pickerConfig(), ALLOWED);
-  const sessionState = new SessionState();
-  const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
-  const basePalette = getThemePalette("textual-dark"!);
+function pickerBar(style: Endcaps, padding = 0) {
+  const rig = buildRig({ source: pickerConfig() });
   const renderPage = (width: number, page: number, wrap = true): Frame => {
-    sessionState.set("s1", "theme-page", String(page));
-    return drawPayload(
-      config,
-      compiled,
-      store,
-      registry,
-      { session_id: "s1", project_dir: "/tmp/proj" },
-      instantOf(new Date()),
-      {
-        endcaps: style,
-        colorCompatibility: "truecolor" as const,
-        wrap,
-        width,
-        padding,
-      },
-    ).frame;
+    rig.sessionState.set("s1", "theme-page", String(page));
+    return rig.draw({ opts: { endcaps: style, wrap, width, padding } }).frame;
   };
   return { renderPage };
 }
@@ -145,7 +113,7 @@ describe("brandon-menu-abg — paged menu fits every page within term.cols", () 
   test.each(SHAPE_ROWS)(
     "every page fits and keeps its nav arrows (%s)",
     (style) => {
-      const { renderPage } = buildRuntime(style);
+      const { renderPage } = pickerBar(style);
       for (let width = FLOOR; width <= 80; width++) {
         // Discover the page count by walking until a page repeats its last item
         // (the cursor clamps past the end). Cap the walk well above any real count.
@@ -173,7 +141,7 @@ describe("brandon-menu-abg — paged menu fits every page within term.cols", () 
   // A page wider than its line, past the floor every page above is held to,
   // wraps: each control stays drawn, with no line past the width.
   test.each(SHAPES)("a page wider than its line keeps every control (%s)", (style) => {
-    const { renderPage } = buildRuntime(style, 1);
+    const { renderPage } = pickerBar(style, 1);
     for (let width = 16; width < FLOOR; width++) {
       const lines = textOf(renderPage(width, 1)).split("\n");
       expect(lines.filter((line) => cw(line) > width)).toEqual([]);
@@ -185,7 +153,7 @@ describe("brandon-menu-abg — paged menu fits every page within term.cols", () 
 
   // Every theme is reachable across the pages (none silently dropped by overflow).
   test.each(SHAPES)("all options are reachable across pages (%s)", (style) => {
-    const { renderPage } = buildRuntime(style);
+    const { renderPage } = pickerBar(style);
     const width = 34;
     const shown = new Set<string>();
     let prev = "";
@@ -209,7 +177,7 @@ describe("brandon-menu-abg — paged menu fits every page within term.cols", () 
   // proof that no-wrap is not implemented as width=Infinity, which would
   // collapse pagination to one infinite page.
   test.each(SHAPES)("pagination is unaffected by wrap:false (%s)", (style) => {
-    const { renderPage } = buildRuntime(style);
+    const { renderPage } = pickerBar(style);
     for (const width of [FLOOR, 34, 60]) {
       for (let p = 0; p < 40; p++) {
         const wrapped = renderPage(width, p, true);
@@ -227,7 +195,7 @@ describe("brandon-menu-abg — paged menu fits every page within term.cols", () 
   // page still fits term.cols at any padding, not just the default.
   test.each(SHAPES)("every page fits at padding 2 (%s)", (style) => {
     const PAD = 2;
-    const { renderPage } = buildRuntime(style, PAD);
+    const { renderPage } = pickerBar(style, PAD);
     for (let width = FLOOR + 2 * PAD; width <= 60; width++) {
       const seen: string[] = [];
       for (let p = 0; p < 40; p++) {
@@ -298,16 +266,8 @@ describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols"
   const THEME_PAGE = menuPageKey(THEME_OPEN);
   const STYLE_PAGE = menuPageKey(ENDCAPS_OPEN);
 
-  function buildMenuRuntime(
-    style: Endcaps,
-    padding = 0,
-  ) {
-    const config = parseAndValidate("<test>", menuRowConfig(), ALLOWED);
-    const sessionState = new SessionState();
-    const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(processLauncher, store, "", sessionState);
-    const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
-    const basePalette = getThemePalette("textual-dark"!);
+  function menuRowBar(style: Endcaps, padding = 0) {
+    const rig = buildRig({ source: menuRowConfig() });
     // openStyle: also open the style menu (its own page cursor) so BOTH bodies
     // drop in one render — the multiple-open-menus-in-one-row case.
     const render = (
@@ -315,27 +275,13 @@ describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols"
       themePage: number,
       openStyle = false,
     ): Frame => {
-      sessionState.set("s1", THEME_OPEN, "applyTheme");
-      sessionState.set("s1", THEME_PAGE, String(themePage));
+      rig.sessionState.set("s1", THEME_OPEN, "applyTheme");
+      rig.sessionState.set("s1", THEME_PAGE, String(themePage));
       if (openStyle) {
-        sessionState.set("s1", ENDCAPS_OPEN, "applyEndcaps");
-        sessionState.set("s1", STYLE_PAGE, "0");
+        rig.sessionState.set("s1", ENDCAPS_OPEN, "applyEndcaps");
+        rig.sessionState.set("s1", STYLE_PAGE, "0");
       }
-      return drawPayload(
-        config,
-        compiled,
-        store,
-        registry,
-        { session_id: "s1", project_dir: "/tmp/proj" },
-        instantOf(new Date()),
-        {
-          endcaps: style,
-          colorCompatibility: "truecolor" as const,
-          wrap: true,
-          width,
-          padding,
-        },
-      ).frame;
+      return rig.draw({ opts: { endcaps: style, width, padding } }).frame;
     };
     return { render };
   }
@@ -347,7 +293,7 @@ describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols"
   test.each(SHAPE_ROWS)(
     "every dropped page fits and keeps its nav arrows (%s)",
     (style) => {
-      const { render } = buildMenuRuntime(style);
+      const { render } = menuRowBar(style);
       for (let width = FLOOR; width <= 80; width++) {
         const bodies: string[] = [];
         for (let p = 0; p < 40; p++) {
@@ -386,7 +332,7 @@ describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols"
   test.each(SHAPE_ROWS)(
     "two open menus in one row each drop full-width and fit (%s)",
     (style) => {
-      const { render } = buildMenuRuntime(style);
+      const { render } = menuRowBar(style);
       for (let width = FLOOR; width <= 80; width++) {
         for (let p = 0; p < 12; p++) {
           const lines = textOf(render(width, p, true)).split("\n");
@@ -405,7 +351,7 @@ describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols"
   // of the reserve), exactly as it does for a standalone picker segment.
   test.each(SHAPES)("dropped pages fit at padding 2 (%s)", (style) => {
     const PAD = 2;
-    const { render } = buildMenuRuntime(style, PAD);
+    const { render } = menuRowBar(style, PAD);
     for (let width = FLOOR + 2 * PAD; width <= 60; width++) {
       for (let p = 0; p < 40; p++) {
         const lines = textOf(render(width, p)).split("\n");

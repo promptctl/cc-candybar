@@ -32,7 +32,7 @@
 //      file nor the bundled default declares cannot be pinned at all — the
 //      store refuses loudly rather than authoring a hollow declaration.
 
-import { drawPayload } from "./helpers/draw-payload";
+import { buildRig } from "./helpers/rig";
 import { locations } from "../src/daemon/paths";
 import { HOST, locs, processLauncher } from "./helpers/host";
 import type { Frame } from "../src/render/frame";
@@ -42,15 +42,8 @@ import { TEST_SIGNER } from "./helpers/link-signer";
 import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
 import { existsSync } from "node:fs";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { VariableStore } from "../src/var-system/store";
-import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import { parseHandlerUrl } from "../src/install/index";
-import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
-import { VERBS } from "../src/daemon/verbs";
-import type { VerbContext } from "../src/daemon/verbs";
 import { deriveConfigActionValidators } from "../src/daemon/foundations/config-validators";
 import { configGate } from "./helpers/gates";
 import { writeValues, type EditStore } from "../src/daemon/config-file-store";
@@ -74,24 +67,12 @@ import { NO_FILE_EVENTS } from "../src/daemon/cache/file-events";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { ReloadSignal } from "./helpers/reload-signal";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
-import { testVerbContext } from "./helpers/click";
-import { instantOf } from "../src/utils/instant";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
-
-function opts(width = Number.POSITIVE_INFINITY) {
-  return {
-    endcaps: "powerline" as const,
-    colorCompatibility: "truecolor" as const,
-    wrap: true,
-    padding: 0,
-    width,
-  };
-}
 
 function ownUrls(rendered: Frame): string[] {
   const urls = linkUrls(rendered);
@@ -281,44 +262,23 @@ let durable: DurableConfig;
 // `dflt` is what the file merges over: the empty default by default, the
 // bundled DEFAULT_DSL_CONFIG when a test's subject is a segment the FILE does
 // not author but the bar still renders (the production cascade).
-function buildRuntime(src: string, sessionId = "s1", dflt?: DslConfig) {
+function persistBar(src: string, sessionId = "s1", dflt?: DslConfig) {
   if (durable.text() === null) durable.write(src);
-  const config = parseAndValidate("<test>", src, ALLOWED, dflt);
+  // The session's render origin is the file's, not the rig's own recorded one.
   const sessionState = new SessionState();
   durable.seedOrigin(sessionState, sessionId);
-  const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, {
-    signer: TEST_SIGNER,
-    cwd: process.cwd(),
+  const rig = buildRig({
+    source: src,
+    base: dflt,
+    sessionId,
+    sessionState,
+    history: durable.historyFor(sessionState),
+    host: durable.host,
+    rendered: false,
   });
   const render = (width = Number.POSITIVE_INFINITY): Frame =>
-    drawPayload(
-      config,
-      compiled,
-      store,
-      registry,
-      { session_id: sessionId, project_dir: "/tmp/proj" },
-      instantOf(new Date()),
-      opts(width),
-    ).frame;
-  const ctx: VerbContext = testVerbContext(
-    sessionState,
-    durable.historyFor(sessionState),
-    config,
-    durable.host,
-  );
-  const click = async (url: string): Promise<void> => {
-    const { verb, value } = parseHandlerUrl(url);
-    const effects =
-      verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
-    for (const e of effects) {
-      const handler = VERBS.get(e.verb);
-      if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
-      await handler(e.value, ctx);
-    }
-  };
-  return { config, store, render, click };
+    rig.draw({ opts: { width } }).frame;
+  return { config: rig.config, store: rig.store, render, click: rig.click };
 }
 
 describe("segment-palette persist action click → the config file", () => {
@@ -353,7 +313,7 @@ describe("segment-palette persist action click → the config file", () => {
   }`;
 
   test("clicking writes palette INTO the file's sidebar declaration, not the whole-bar palette", async () => {
-    const { render, click } = buildRuntime(SRC);
+    const { render, click } = persistBar(SRC);
     const original = durable.text()!;
     const barBefore = fileSegments(durable).bar;
     const applyUrl = ownUrls(render())[0]!;
@@ -382,7 +342,7 @@ describe("segment-palette persist action click → the config file", () => {
   });
 
   test("clicking reset deletes palette from the file's sidebar declaration, leaving its other fields", async () => {
-    const { render, click } = buildRuntime(SRC);
+    const { render, click } = persistBar(SRC);
     const [applyUrl, resetUrl] = ownUrls(render());
     await click(applyUrl!);
     expect(fileSegments(durable).sidebar!.palette).toBe("nord");
@@ -400,7 +360,7 @@ describe("segment-palette persist action click → the config file", () => {
   });
 
   test("reset over a palette the file never authored changes nothing and records nothing", async () => {
-    const { render, click } = buildRuntime(SRC);
+    const { render, click } = persistBar(SRC);
     const original = durable.text()!;
     const resetUrl = ownUrls(render())[1]!;
     await click(resetUrl);
@@ -427,7 +387,7 @@ describe("segment-palette persist action click → the config file", () => {
       },
       root: { h: ['directory', 'bar'] },
     }`;
-    const { render, click } = buildRuntime(
+    const { render, click } = persistBar(
       SRC_BUNDLED,
       "s1",
       DEFAULT_DSL_CONFIG,

@@ -11,20 +11,14 @@
 //     colour of the palette picking them would put on the placement, all on
 //     one ground, and save writes the pick into the placement.
 
-import { drawPayload } from "./helpers/draw-payload";
-import { locs, processLauncher } from "./helpers/host";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linksOf } from "../src/click/read";
 import { linkUrls } from "./helpers/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
 import { configurePlacement } from "./helpers/configure";
 import type { Palette, RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { VariableStore } from "../src/var-system/store";
-import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig } from "../src/dsl/render";
 import { bindRender } from "../src/render/action";
 import { lastBinding } from "./helpers/render-binding";
 import { SessionState } from "../src/daemon/session-state";
@@ -35,9 +29,9 @@ import {
 import { paletteForThemeName } from "../src/themes/palette-resolvers";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { settingsOf } from "../src/config/dsl-types";
-import { testVerbContext, effectsOf } from "./helpers/click";
-import { parseHandlerUrl } from "../src/install/index";
-import { parseEffects, VERB_DISPATCH, VERB_SAVE } from "../src/click/wire";
+import { clickUrl, effectsOf } from "./helpers/click";
+import { buildRig } from "./helpers/rig";
+import { VERB_SAVE } from "../src/click/wire";
 import { VERBS, type VerbContext } from "../src/daemon/verbs";
 import { stateGate } from "./helpers/gates";
 import {
@@ -47,8 +41,6 @@ import {
 } from "../src/config/loader/edit-mode";
 import { placementDraftKey } from "../src/config/edit-chrome";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
-import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "../src/time";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = "s1";
@@ -83,32 +75,25 @@ const decided = (name: string) => ({
   value: paletteForThemeName(name),
 });
 
-function buildRuntime(src: string, sessionState = new SessionState()) {
-  const config = parseAndValidate("<test>", src, ALLOWED);
+function themeBar(src: string) {
+  const sessionState = new SessionState();
   durable.seedOrigin(sessionState, SID);
-  const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
+  const rig = buildRig({
+    source: src,
+    sessionState,
+    history: durable.historyFor(sessionState),
+    host: durable.host,
+    rendered: false,
+  });
+  const { config } = rig;
   let sink = new Map<string, readonly RichText[]>();
   const render = (barTheme = BAR_A): Frame => {
     sink = new Map();
-    return drawPayload(
-      config,
-      compiled,
-      store,
-      registry,
-      { session_id: SID, project_dir: "/tmp/proj" },
-      instantOf(new Date()),
-      {
-        endcaps: "powerline" as const,
-        colorCompatibility: "truecolor" as const,
-        wrap: true,
-        padding: 0,
-        width: 200,
-      },
-      { perSegmentSink: sink },
-      selectionFor(config, { theme: decided(barTheme) }),
-    ).frame;
+    return rig.draw({
+      opts: { width: 200 },
+      observers: { perSegmentSink: sink },
+      selection: selectionFor(config, { theme: decided(barTheme) }),
+    }).frame;
   };
   // The background a placement's cell wears, read by its id.
   const bgOf = (id: string): string => {
@@ -118,19 +103,14 @@ function buildRuntime(src: string, sessionState = new SessionState()) {
   };
   let current = config;
   const ctx: VerbContext = {
-    ...testVerbContext(sessionState, durable.historyFor(sessionState), undefined, durable.host),
+    ...rig.ctx,
     configFor: () => current,
     reloadConfig: () => {
       current = parseAndValidate("<reloaded>", durable.text()!, ALLOWED);
     },
   };
-  const click = async (url: string): Promise<void> => {
-    const { verb, value } = parseHandlerUrl(url);
-    const effects =
-      verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
-    for (const e of effects) await VERBS.get(e.verb)!(e.value, ctx);
-  };
-  return { config, compiled, store, registry, sessionState, render, bgOf, click, ctx };
+  const click = (url: string): Promise<void> => clickUrl(url, ctx);
+  return { ...rig, render, bgOf, click, ctx };
 }
 
 const hex = (palette: Palette, role: "background"): string =>
@@ -154,7 +134,7 @@ describe("the theme domain", () => {
 
 describe("a placement's theme recolours that placement alone", () => {
   test("a pinned placement holds when the bar's theme moves; its sibling follows", () => {
-    const rt = buildRuntime(TWO);
+    const rt = themeBar(TWO);
     const underA = textOf(rt.render(BAR_A));
     const [followA, pinnedA] = [rt.bgOf("tag"), rt.bgOf("pinned")];
     rt.render(BAR_B);
@@ -167,9 +147,9 @@ describe("a placement's theme recolours that placement alone", () => {
   });
 
   test("a pinned placement wears exactly what it would when the bar is that theme", () => {
-    const pinned = buildRuntime(TWO);
+    const pinned = themeBar(TWO);
     pinned.render(BAR_A);
-    const following = buildRuntime(
+    const following = themeBar(
       configWith("{ template: 'x' }", `'tag', { seg: 'tag', id: 'pinned' }`),
     );
     following.render(PIN);
@@ -177,7 +157,7 @@ describe("a placement's theme recolours that placement alone", () => {
   });
 
   test("a definition's palette pins every copy, and a placement's `bar` follows again", () => {
-    const rt = buildRuntime(
+    const rt = themeBar(
       configWith(
         `{ template: 'x', palette: '${PIN}' }`,
         `'tag', { seg: 'tag', id: 'free', settings: { theme: 'bar' } }`,
@@ -240,7 +220,7 @@ describe("load errors", () => {
 describe("configure mode picks a placement's theme", () => {
   test("a pick from the theme picker recolours that placement alone, its options told apart by their swatches, and save writes it", async () => {
     durable.write(TWO);
-    const rt = buildRuntime(TWO);
+    const rt = themeBar(TWO);
     configurePlacement(rt.sessionState, SID, "default", "tag");
     const key = placementDraftKey("default", "tag", "theme");
     // The control is the theme picker, `theme ▀▀▀` (brandon-theme-swatch-
@@ -298,7 +278,7 @@ describe("configure mode picks a placement's theme", () => {
     await rt.click(writing(first!)[0]!);
     rt.sessionState.set(SID, EDIT_MODE_KEY, "closed");
     rt.render(BAR_A);
-    const following = buildRuntime(
+    const following = themeBar(
       configWith("{ template: 'x' }", `'tag', { seg: 'tag', id: 'pinned' }`),
     );
     following.render(first!);
@@ -325,7 +305,7 @@ describe("configure mode over a placement several presets share", () => {
   // what is per preset — the configure member it shows under — must not live
   // on that one declaration, or the last preset synthesized wins it.
   test("configuring it in the floor preset shows its controls", () => {
-    const rt = buildRuntime(`{
+    const rt = themeBar(`{
       variables: {
         'session.id': { kind: 'input', path: 'session_id', default: '' },
       },
@@ -350,7 +330,7 @@ describe("the layout preview while arranging", () => {
   // `{{ layoutPreview }}` reads — taken from the binding that render bound
   // into its compile, which drawDsl drops when the render returns.
   const previewPalette = (
-    rt: ReturnType<typeof buildRuntime>,
+    rt: ReturnType<typeof themeBar>,
     segment: string,
   ): Palette[] => {
     const runtime = rt.compiled.menuRuntime.action;
@@ -366,7 +346,7 @@ describe("the layout preview while arranging", () => {
   };
 
   test("a pinned placement keeps its theme, and an unsaved pick shows", () => {
-    const rt = buildRuntime(TWO);
+    const rt = themeBar(TWO);
     rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     const drawn = previewPalette(rt, "tag");
     expect(drawn).toHaveLength(2);

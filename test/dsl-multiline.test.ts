@@ -11,35 +11,19 @@
 // Internal refactors (hue rotation policy, sink ordering) that preserve these
 // behaviors must not break these tests.
 
-import { drawPayload } from "./helpers/draw-payload";
-import { processLauncher } from "./helpers/host";
 import { textOf } from "../src/render/frame";
+import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
-import { SessionState } from "../src/daemon/session-state";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { VariableStore } from "../src/var-system/store";
-import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig } from "../src/dsl/render";
 import { ConfigError } from "../src/config/dsl-loader";
 import { DOOR_GLYPH } from "../src/config/disclosure";
-import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "../src/time";
+import { buildRig } from "./helpers/rig";
 
 const ALLOWED_PALETTES = new Set(["textual-dark"]);
 
-const OPTS = {
-  endcaps: "powerline" as const,
-  colorCompatibility: "truecolor" as const, wrap: true, padding: 0,
-  width: Number.POSITIVE_INFINITY,
-};
-
-function buildRuntime(source: string) {
-  const config = parseAndValidate("<test>", source, ALLOWED_PALETTES);
-  const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
-  return { config, compiled, store, registry };
+// The frame a source draws for an empty payload.
+function multilineFrame(source: string): Frame {
+  return buildRig({ source, palettes: ALLOWED_PALETTES, cwd: "/tmp" }).draw({ payload: {} }).frame;
 }
 
 describe("drawDsl — multi-line layout", () => {
@@ -50,8 +34,7 @@ describe("drawDsl — multi-line layout", () => {
       segments: { s: { template: ' {{ .x }} ', bg: 'surface', fg: 'foreground' } },
       root: 's',
     }`;
-    const { config, compiled, store, registry } = buildRuntime(source);
-    const out = drawPayload(config, compiled, store, registry, {}, instantOf(new Date()), OPTS).frame;
+    const out = multilineFrame(source);
     expect(textOf(out).includes("\n")).toBe(false);
     expect(textOf(out)).toContain("A");
   });
@@ -69,8 +52,7 @@ describe("drawDsl — multi-line layout", () => {
       },
       root: { v: ['top', 'bot'] },
     }`;
-    const { config, compiled, store, registry } = buildRuntime(source);
-    const out = drawPayload(config, compiled, store, registry, {}, instantOf(new Date()), OPTS).frame;
+    const out = multilineFrame(source);
     const lines = textOf(out).split("\n");
     expect(lines).toHaveLength(2);
     expect(lines[0]!).toContain("TOP");
@@ -97,8 +79,7 @@ describe("drawDsl — multi-line layout", () => {
       },
       root: { v: [{ h: ['sa', 'sb'] }, { h: ['sc', 'sd'] }] },
     }`;
-    const { config, compiled, store, registry } = buildRuntime(source);
-    const out = drawPayload(config, compiled, store, registry, {}, instantOf(new Date()), OPTS).frame;
+    const out = multilineFrame(source);
     const lines = textOf(out).split("\n");
     expect(lines).toHaveLength(2);
     // Row 0: A precedes B
@@ -114,8 +95,7 @@ describe("drawDsl — multi-line layout", () => {
       segments: {},
       root: { v: [] },
     }`;
-    const { config, compiled, store, registry } = buildRuntime(source);
-    const out = drawPayload(config, compiled, store, registry, {}, instantOf(new Date()), OPTS).frame;
+    const out = multilineFrame(source);
     // No row of the author's: one line, the door every bar carries.
     expect(textOf(out).split("\n")).toHaveLength(1);
     expect(textOf(out)).toContain(DOOR_GLYPH);
@@ -152,8 +132,7 @@ describe("drawDsl — multi-line layout", () => {
       },
       root: { v: [{ h: ['sa', 'sb'] }, 'sc'] },
     }`;
-    const { config, compiled, store, registry } = buildRuntime(source);
-    const out = drawPayload(config, compiled, store, registry, {}, instantOf(new Date()), OPTS).frame;
+    const out = multilineFrame(source);
     const lines = textOf(out).split("\n");
     // Row 0 still emits even though `sa` hid — it just contains only B.
     expect(lines).toHaveLength(2);
@@ -173,8 +152,7 @@ describe("drawDsl — multi-line layout", () => {
       segments: { s: { template: '{{ .x }}', bg: 'surface', fg: 'foreground' } },
       root: 's',
     }`;
-    const { config, compiled, store, registry } = buildRuntime(source);
-    const out = drawPayload(config, compiled, store, registry, {}, instantOf(new Date()), OPTS).frame;
+    const out = multilineFrame(source);
     const lines = textOf(out).split("\n");
     expect(lines).toHaveLength(2);
     expect(lines[0]!).toContain("TOP");
@@ -196,8 +174,7 @@ describe("drawDsl — multi-line layout", () => {
       segments: { s: { template: '{{ .x }}', width: 5, bg: 'surface', fg: 'foreground' } },
       root: 's',
     }`;
-    const { config, compiled, store, registry } = buildRuntime(source);
-    const out = drawPayload(config, compiled, store, registry, {}, instantOf(new Date()), OPTS).frame;
+    const out = multilineFrame(source);
     const lines = textOf(out).split("\n");
     expect(lines).toHaveLength(2);
     expect(lines[0]!).toContain("ABCDE");
@@ -220,8 +197,7 @@ describe("drawDsl — multi-line layout", () => {
       },
       root: 's',
     }`;
-    const { config, compiled, store, registry } = buildRuntime(source);
-    const out = drawPayload(config, compiled, store, registry, {}, instantOf(new Date()), OPTS).frame;
+    const out = multilineFrame(source);
     expect(out.rows).toHaveLength(2);
     // Each visual line carries a link to the same URL.
     for (const row of out.rows) {
@@ -243,8 +219,7 @@ describe("drawDsl — multi-line layout", () => {
       },
       root: { v: ['top', 'bot'] },
     }`;
-    const { config, compiled, store, registry } = buildRuntime(source);
-    const out = drawPayload(config, compiled, store, registry, {}, instantOf(new Date()), OPTS).frame;
+    const out = multilineFrame(source);
     const lines = textOf(out).split("\n");
     expect(lines).toHaveLength(2);
     expect(lines[0]!).toContain("TOP");
@@ -271,10 +246,8 @@ describe("drawDsl — multi-line layout", () => {
       root: { h: ['sa', 'sb'] } }`;
     const horizSrc = `{ globals: { palette: 'textual-dark' },${vars}${segs}
       root: { kind: 'container', direction: 'horizontal', children: ['sa', 'sb'] } }`;
-    const hArm = buildRuntime(hArmSrc);
-    const horiz = buildRuntime(horizSrc);
-    const hArmOut = drawPayload(hArm.config, hArm.compiled, hArm.store, hArm.registry, {}, instantOf(new Date()), OPTS).frame;
-    const horizOut = drawPayload(horiz.config, horiz.compiled, horiz.store, horiz.registry, {}, instantOf(new Date()), OPTS).frame;
+    const hArmOut = multilineFrame(hArmSrc);
+    const horizOut = multilineFrame(horizSrc);
     expect(horizOut.rows).toEqual(hArmOut.rows);
     expect(textOf(horizOut).split("\n")).toHaveLength(1);
   });
@@ -302,8 +275,7 @@ describe("drawDsl — multi-line layout", () => {
         ],
       },
     }`;
-    const { config, compiled, store, registry } = buildRuntime(source);
-    const out = drawPayload(config, compiled, store, registry, {}, instantOf(new Date()), OPTS).frame;
+    const out = multilineFrame(source);
     const lines = textOf(out).split("\n");
     expect(lines).toHaveLength(2);
     expect(lines[0]!).toContain("L1");
@@ -331,8 +303,7 @@ describe("drawDsl — multi-line layout", () => {
         'sb',
       ] },
     }`;
-    const { config, compiled, store, registry } = buildRuntime(source);
-    const out = drawPayload(config, compiled, store, registry, {}, instantOf(new Date()), OPTS).frame;
+    const out = multilineFrame(source);
     // The settings door takes its own ungated row above a gated first node.
     const lines = textOf(out)
       .split("\n")
