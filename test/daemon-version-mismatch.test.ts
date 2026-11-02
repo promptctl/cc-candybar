@@ -262,13 +262,6 @@ describe("ClientOutcome typing (kz8.5 chunk 1)", () => {
     ).toBe(true);
     expect(
       kickWorthy({
-        kind: "transient",
-        cause: "timeout",
-        message: "any",
-      }),
-    ).toBe(true);
-    expect(
-      kickWorthy({
         kind: "permanent",
         cause: "version_mismatch",
         clientV: 3,
@@ -580,7 +573,6 @@ describe("planOutcome decides kick vs. no-kick per variant (kz8.5 chunk 1+4)", (
   test("every transient cause kicks and carries a debug message", () => {
     const transientCauses: TransientOutcome["cause"][] = [
       "unreachable",
-      "timeout",
       "io_error",
     ];
     for (const cause of transientCauses) {

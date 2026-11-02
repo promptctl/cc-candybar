@@ -145,7 +145,7 @@ describe("debugPlan — the text/exit-code contract", () => {
   it("an unreachable daemon is a stderr line naming the projection, exit 1", () => {
     const plan = debugPlan(
       "segments",
-      { kind: "transient", cause: "timeout", message: "500ms" },
+      { kind: "transient", cause: "unreachable", message: "ENOENT" },
       false,
     );
     expect(plan.stdout).toBe("");

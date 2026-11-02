@@ -26,13 +26,14 @@ export interface RoundTripBudgets {
 }
 
 // [LAW:types-are-the-program] The outcome carries its own recovery
-// semantics. `transient` failures mean no daemon answered in time —
-// kicking a fresh daemon is the right response. `permanent` failures mean
+// semantics. `transient` failures mean no daemon is listening — kicking a
+// fresh daemon is the right response. `permanent` failures mean
 // the daemon refused our request semantically — kicking does NOT help
 // because the next daemon will refuse the same request the same way. `busy`
-// is the daemon's own TIMEOUT: it answered, so it is up, and the request may
-// still be running in it; whether that warrants a kick is each caller's to
-// say. The caller's branch is no longer uniform: it matches on `kind` and
+// means a daemon is listening and out of time: its own TIMEOUT reply, or our
+// clock running out on the connect or the deadline. A kick cannot cure it —
+// the candidate loses the bind to the live owner (socket-lease.ts) — and the
+// request may still be running in it. The caller's branch is no longer uniform: it matches on `kind` and
 // routes kick vs. show-error off the type, not off a stringified `reason`.
 // This asymmetry was missing in the previous shape and is the root of the
 // 452-corpse spiral (kz8.5).
@@ -42,7 +43,7 @@ export type FailureOutcome = TransientOutcome | BusyOutcome | PermanentOutcome;
 
 export interface TransientOutcome {
   kind: "transient";
-  cause: "unreachable" | "timeout" | "io_error";
+  cause: "unreachable" | "io_error";
   message: string;
 }
 
@@ -202,9 +203,10 @@ export function interpretResponse<T>(
   }
 }
 
-// Exceptions reaching this function come from two distinct classes:
-//   - Connect/IO/timeout failures — transient. A respawn or retry has a
-//     real chance of recovering (daemon dead, socket vanished, slow link).
+// Exceptions reaching this function come from three distinct classes:
+//   - Connect/IO failures — transient. A respawn has a real chance of
+//     recovering (daemon dead, socket vanished).
+//   - Timeouts — busy: a live listener that ran out of time.
 //   - Protocol violations from sendOne's reject path — permanent. The
 //     daemon is alive but produced garbage (oversized frame, JSON parse
 //     failure). Respawning would hit the same response identically; this
@@ -224,14 +226,17 @@ export function interpretResponse<T>(
 // InvalidData/InvalidInput map to Permanent(MalformedResponse), everything
 // else stays transient. The two runtimes agree on the recovery class for
 // every observable wire failure.
-function interpretException(e: unknown): FailureOutcome {
+export function interpretException(e: unknown): FailureOutcome {
   if (e instanceof ProtocolError || e instanceof SyntaxError) {
     const message = e instanceof Error ? e.message : String(e);
     return { kind: "permanent", cause: "malformed_response", message };
   }
   const message = e instanceof Error ? e.message : String(e);
+  // A dead daemon never times out: a missing socket file is ENOENT and an
+  // unbound one ECONNREFUSED, both immediate. So a client timeout means a
+  // listener holds the socket and has not answered in time.
   if (message === "CONNECT_TIMEOUT" || message === "TIMEOUT") {
-    return { kind: "transient", cause: "timeout", message };
+    return { kind: "busy", message };
   }
   if (
     message.includes("ECONNREFUSED") ||
