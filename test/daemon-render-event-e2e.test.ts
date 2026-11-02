@@ -796,7 +796,8 @@ describe("a failed click's error", () => {
       );
       await stub.asked(1);
       // The daemon's side closing with the client's is the one connection
-      // left in flight leaving it.
+      // left in flight leaving it. Only the stub's ask above makes zero mean
+      // "left": before the daemon accepts, nothing is in flight either.
       await until(
         () => daemon.daemon.stats.inFlight === 0,
         "the daemon's side closing with the client's",
