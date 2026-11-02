@@ -1,5 +1,5 @@
 // [LAW:behavior-not-structure] A bar pane the lane edge opens on a real tmux
-// server is tagged from the moment it exists: a daemon closing during the open
+// server names its owner from the moment it exists: a daemon closing during the open
 // leaves no pane `pane off` cannot find, and the user's pane keeps focus.
 
 import { spawnSync } from "node:child_process";
@@ -15,9 +15,18 @@ const HAS_TMUX = spawnSync("tmux", ["-V"]).status === 0;
 
 (HAS_TMUX ? describe : describe.skip)("a bar pane on a real tmux", () => {
   let dir: string;
+  let socket: string;
   let hint: TmuxHint;
+  // The argv's tail is a bar pane's own: `bar-pane <pane>`.
+  const barPane = (): string[] => [
+    "/bin/sh",
+    "-c",
+    "sleep 60",
+    "bar-pane",
+    hint.pane,
+  ];
   const tmux = (...args: string[]): string => {
-    const run = spawnSync("tmux", ["-S", hint.socket, ...args], {
+    const run = spawnSync("tmux", ["-S", socket, ...args], {
       encoding: "utf8",
     });
     if (run.status !== 0) throw new Error(`tmux ${args[0]}: ${run.stderr}`);
@@ -30,11 +39,7 @@ const HAS_TMUX = spawnSync("tmux", ["-V"]).status === 0;
 
   beforeEach(() => {
     dir = mkdtempSync(path.join(os.tmpdir(), "ccb-bar-pane-"));
-    hint = {
-      socket: path.join(dir, "tmux.sock"),
-      pane: "",
-      truecolor: null,
-    } as TmuxHint;
+    socket = path.join(dir, "tmux.sock");
     tmux(
       "-f",
       "/dev/null",
@@ -47,12 +52,12 @@ const HAS_TMUX = spawnSync("tmux", ["-V"]).status === 0;
       "-y",
       "20",
     );
-    hint = { ...hint, pane: panes()[0]! };
+    hint = { socket, pane: panes()[0]!, truecolor: null };
   });
 
   afterEach(() => {
     // The private server's one session: tmux exits with its last.
-    spawnSync("tmux", ["-S", hint.socket, "kill-session", "-t", "bar"]);
+    spawnSync("tmux", ["-S", socket, "kill-session", "-t", "bar"]);
     rmSync(dir, { recursive: true, force: true });
   });
 
@@ -74,7 +79,7 @@ const HAS_TMUX = spawnSync("tmux", ["-V"]).status === 0;
     };
     const edge = productionLaneEdge(launcher, () => new Set(), closing.signal);
 
-    const opened = await edge.openBarPane(hint, ["sleep", "60"], {});
+    const opened = await edge.openBarPane(hint, barPane(), {});
 
     expect(panes()).toContain(opened);
     const tagged = productionLaneEdge(
@@ -104,7 +109,7 @@ const HAS_TMUX = spawnSync("tmux", ["-V"]).status === 0;
       new AbortController().signal,
     );
 
-    await edge.openBarPane(hint, ["sleep", "60"], {});
+    await edge.openBarPane(hint, barPane(), {});
 
     expect(active()).toBe(theirs);
   });
@@ -118,7 +123,7 @@ const HAS_TMUX = spawnSync("tmux", ["-V"]).status === 0;
       new AbortController().signal,
     );
 
-    await expect(edge.openBarPane(hint, ["sleep", "60"], {})).rejects.toThrow(
+    await expect(edge.openBarPane(hint, barPane(), {})).rejects.toThrow(
       /tmux split-window failed/,
     );
     expect(await edge.barPanes(hint)).toEqual([]);

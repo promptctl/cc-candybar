@@ -78,9 +78,6 @@ import { KeyedSerialQueue } from "../utils/keyed-serial-queue.js";
 export const BAND_PLUGIN = "candybar-band@cc-candybar";
 // The native client the band mod starts, beside its folder (mod/README.md).
 const BAND_CLIENT = path.join("bin", "cc-candybar-native");
-// The tmux pane option naming, on a bar pane the daemon opened, the pane whose
-// bar it draws: how the daemon finds its bar panes again to close them.
-export const BAR_PANE_OPTION = "@cc-candybar-bar-pane";
 // How long the session's Claude Code has to exit after SIGTERM before the
 // restart under the attach launcher is given up on.
 export const EXIT_PATIENCE_MS = 15_000;

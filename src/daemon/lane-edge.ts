@@ -21,11 +21,7 @@ import { presence } from "../utils/presence.js";
 import { sessionEnv } from "./session-env.js";
 import { canonical, executableOn, regularFileWith } from "../path-search.js";
 import { launcherNode } from "../attach-preload.js";
-import {
-  BAR_PANE_OPTION,
-  type LaneEdge,
-  type PaneClaude,
-} from "./lane-setup.js";
+import { type LaneEdge, type PaneClaude } from "./lane-setup.js";
 
 const SHELL_BUFFER = "cc-candybar-lane";
 // How often the wait for an exit looks again.
@@ -78,15 +74,19 @@ export function refusalOf(stdout: string): string | null {
   return null;
 }
 
+// [LAW:one-source-of-truth] A bar pane names the pane whose bar it draws in
+// the command it was started with, `… bar-pane <pane>`: the split that creates
+// it records its owner, so no second write can be missed. tmux quotes words
+// it stores (`"%0"`), and only the pane id's own characters are relied on.
 // [LAW:effects-at-boundaries] Pure over tmux's `list-panes -a` in
-// `PANE_TAGS_FORMAT`: the bar panes tagged as drawing `pane`'s bar.
-const PANE_TAGS_FORMAT = `#{pane_id} #{${BAR_PANE_OPTION}}`;
-export function taggedBarPanes(listPanes: string, pane: string): string[] {
-  return listPanes
-    .split("\n")
-    .map((line) => line.trim().split(" "))
-    .filter(([, tag]) => tag === pane)
-    .map(([id]) => id!);
+// `PANE_STARTS_FORMAT`.
+const PANE_STARTS_FORMAT = "#{pane_id} #{pane_start_command}";
+const BAR_PANE_START = /(?:^|\s)bar-pane\s+["'\\]*(%\d+)["']*\s*$/;
+export function barPanesOf(listPanes: string, pane: string): string[] {
+  return listPanes.split("\n").flatMap((line) => {
+    const [id, ...start] = line.trim().split(" ");
+    return BAR_PANE_START.exec(start.join(" "))?.[1] === pane ? [id!] : [];
+  });
 }
 
 // The words a cc-extra attach launcher runs under: the one shipped beside the
@@ -266,30 +266,25 @@ export function productionLaneEdge(
   return {
     claudeInput: productionClaudeInputEdge(launcher),
     barPanes: async (hint) =>
-      taggedBarPanes(
+      barPanesOf(
         await tmux(launcher, hint, [
           "list-panes",
           "-a",
           "-F",
-          PANE_TAGS_FORMAT,
+          PANE_STARTS_FORMAT,
         ]),
         hint.pane,
       ),
     // Two or more words after the options are run as they are, with no shell
     // between (tmux ≥ 3.0), so no path in `argv` needs quoting for one.
-    // [LAW:no-ambient-temporal-coupling] The split and its tag are one tmux
-    // invocation: a daemon closing between two launches refuses the second,
-    // leaving a bar pane no `pane off` finds. A split without `-d` makes the
-    // new pane the queue's current target, so the untargeted `set-option`
-    // tags it; `last-pane` then gives focus back to whichever pane had it.
-    // [LAW:no-ambient-temporal-coupling] exception: the window's last pane is
-    // left as the bar pane. A `-d` split keeps focus untouched but does not
-    // retarget the queue, and a pane tagging itself leaves it untagged while
-    // it starts, which a second `pane on` would duplicate.
+    // [LAW:no-ambient-temporal-coupling] One launch: the split records the
+    // pane's owner in its command (`barPanesOf`), so a daemon closing after it
+    // leaves no bar pane `pane off` cannot find. `-d` leaves focus untouched.
     openBarPane: async (hint, argv, env) =>
       (
         await tmux(launcher, hint, [
           "split-window",
+          "-d",
           "-v",
           "-l",
           "1",
@@ -300,15 +295,6 @@ export function productionLaneEdge(
           "#{pane_id}",
           ...Object.entries(env).flatMap(([k, v]) => ["-e", `${k}=${v}`]),
           ...argv,
-          ";",
-          "set-option",
-          "-p",
-          BAR_PANE_OPTION,
-          hint.pane,
-          ";",
-          "last-pane",
-          "-t",
-          hint.pane,
         ])
       ).trim(),
     closePane: async (hint, pane) =>

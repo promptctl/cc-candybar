@@ -10,7 +10,6 @@ import os from "node:os";
 import path from "node:path";
 import {
   BAND_PLUGIN,
-  BAR_PANE_OPTION,
   ATTACH_PATIENCE_MS,
   EXIT_PATIENCE_MS,
   LANE_SETUP,
@@ -30,7 +29,7 @@ import { attachCommandLine } from "../src/attach-launcher";
 import {
   refusalOf,
   runsAttached,
-  taggedBarPanes,
+  barPanesOf,
 } from "../src/daemon/lane-edge";
 import { draftShown, turnRunning } from "../src/claude-input/prompt-screen";
 import { BadVerbArgs } from "../src/daemon/verb-error";
@@ -754,9 +753,17 @@ describe("startPlace", () => {
 });
 
 describe("the production edge's readers", () => {
-  test("taggedBarPanes names the panes tagged with the session's pane", async () => {
-    expect(taggedBarPanes("%1 \n%9 %7\n%10 %8\n%11 %7\n", "%7")).toEqual(["%9", "%11"]);
-    expect(BAR_PANE_OPTION).toBe("@cc-candybar-bar-pane");
+  test("barPanesOf names the panes started to draw the session's pane's bar", async () => {
+    const listPanes = [
+      "%1 ",
+      '%9 /usr/bin/node /x/cli.js bar-pane "%7"',
+      "%10 node cli.js bar-pane %8",
+      "%11 node cli.js bar-pane %7",
+      "%12 node cli.js bar-pane \\%7",
+      "%13 vim notes",
+      "%14 node cli.js bar-pane %70",
+    ].join("\n");
+    expect(barPanesOf(listPanes, "%7")).toEqual(["%9", "%11", "%12"]);
   });
 
   test("runsAttached reads a cc-attach launcher at or above the foreground job, below the pane", async () => {
