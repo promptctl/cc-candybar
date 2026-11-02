@@ -24,9 +24,11 @@ const FILE_TOOLS = ["Edit", "Write", "MultiEdit", "NotebookEdit"];
 // [LAW:one-source-of-truth] exception: release-pin.mjs's read-only list, copied.
 // That hook runs on import and exports nothing, and its file is under its own
 // pin, so this cannot import it. Running a test reads a guarded file and writes none.
-// `cd`, `ls` and `git add` write no file; staging a file main lacks stays free.
+// `ls` and `git add` write no file; staging a file main lacks stays free.
 const READ_ONLY =
-  /^\s*(?:(?:cat|less|head|tail|grep|rg|ls|cd)\b|git (?:add|diff|log|show|status)\b|(?:pnpm|npx)(?:\s+-\S+)*\s+(?:exec\s+)?(?:jest|test\S*)|node\s+\S*jest\.js\b)/;
+  /^\s*(?:(?:cat|less|head|tail|grep|rg|ls)\b|git (?:add|diff|log|show|status)\b|(?:pnpm|npx)(?:\s+-\S+)*\s+(?:exec\s+)?(?:jest|test\S*)|node\s+\S*jest\.js\b)/;
+// A read-only command that writes anyway: a redirect, or `git diff --output=file`.
+const WRITES_ANYWAY = />|--output/;
 
 // The worktree an agent works in sits under the main checkout, and the hook may be
 // handed the main checkout as its root; a guarded path is the same file in both.
@@ -35,7 +37,7 @@ const WORKTREE_PREFIX = /^\.claude\/worktrees\/[^/]+\//;
 /** A path relative to the project root with forward slashes, or null outside it. */
 function relativeTo(root, file) {
   const rel = path.relative(root, path.resolve(root, file));
-  return rel === "" || rel.startsWith("..") || path.isAbsolute(rel)
+  return rel === "" || rel === ".." || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)
     ? null
     : rel.split(path.sep).join("/").replace(WORKTREE_PREFIX, "");
 }
@@ -52,13 +54,29 @@ function isGuarded(rel) {
  * The paths a Bash command writes or might write: those named by a segment that is
  * not read-only. Tokens split on quotes, parentheses, commas and `=` as well as
  * space, so a path inside `python -c "open('.claude/e2e-signoff.json', 'w')"` is seen.
- * A path built by the shell (`cd` then a relative name, `$VAR`, a glob) is not.
+ * Commands separated by `&`, `;`, `|`, a newline, `$(` or a backtick are judged apart,
+ * and a `cd` moves where the later relative names resolve. A path built by the
+ * shell (`$VAR`, a glob) is not seen, and neither is the shell's cwd from an earlier call.
+ * @returns absolute paths
  */
-function pathsNamedByWrites(command) {
+function pathsNamedByWrites(command, root) {
+  let cwd = root;
   return command
-    .split(/&&|\|\||;|\||\n/)
-    .filter((segment) => !READ_ONLY.test(segment) || segment.includes(">"))
-    .flatMap((segment) => segment.split(/[\s"'`(),=<>]+/));
+    .replace(/\d*>&\d+/g, " ") // a descriptor redirect such as 2>&1 is no separator and no file write
+    .replace(/\$\(|`/g, ";")
+    .split(/&|\||;|\n/)
+    .flatMap((segment) => {
+      const cd = /^\s*cd\s+["']?([^\s"']+)/.exec(segment);
+      if (cd !== null) {
+        cwd = path.resolve(cwd, cd[1]);
+        return [];
+      }
+      if (READ_ONLY.test(segment) && !WRITES_ANYWAY.test(segment)) return [];
+      return segment
+        .split(/[\s"'`(),=<>]+/)
+        .filter((token) => token !== "")
+        .map((token) => path.resolve(cwd, token));
+    });
 }
 
 /**
@@ -69,13 +87,16 @@ function refusalOf({ tool, input, root, mainHolds }) {
   const named = FILE_TOOLS.includes(tool)
     ? [String(input.file_path ?? input.notebook_path ?? "")]
     : tool === "Bash"
-      ? pathsNamedByWrites(String(input.command ?? ""))
+      ? pathsNamedByWrites(String(input.command ?? ""), root)
       : [];
-  const held = named
-    .filter((file) => file !== "")
-    .map((file) => relativeTo(root, file))
-    .filter((rel) => rel !== null && isGuarded(rel))
-    .find((rel) => mainHolds(rel));
+  // Each distinct guarded path is asked of origin/main once: the probe spawns git.
+  const guarded = new Set(
+    named
+      .filter((file) => file !== "")
+      .map((file) => relativeTo(root, file))
+      .filter((rel) => rel !== null && isGuarded(rel)),
+  );
+  const held = [...guarded].find((rel) => mainHolds(rel));
   return held === undefined
     ? null
     : `${held} is held by origin/main and guarded: it sets or checks the end-to-end cap and assertion limit, ` +
