@@ -87,12 +87,11 @@ const RATE_WINDOW_S = 1;
 
 // [LAW:no-ambient-temporal-coupling] How far the wall clock read at a draw may
 // fall short of the instant its timer was set for when nothing is wrong, in
-// seconds: the daemon's wall reading is truncated to the millisecond, a Node
-// timer fires up to a millisecond early against it (libuv sets timers from its
-// cached loop time), and a system clock being slewed moves the wall against the
-// timer's clock by well under a millisecond across the longest wait, the still
-// period — past the bound, that last term costs one extra draw, never a frame
-// drawn before its change. A frame is drawn for the instant it was set for
+// seconds: the daemon's wall reading is truncated to the millisecond, and a
+// system clock being slewed moves the wall against the timer's clock by well
+// under a millisecond across the longest wait, the still period — past the
+// bound, that last term costs one extra draw, never a frame drawn before its
+// change. A timer firing early is not in the bound: `fire` waits it out. A frame is drawn for the instant it was set for
 // within this of the wall, so a frame set for a change shows it however its
 // timer fires, and a wall clock stepped back is followed at the next draw.
 const TIMER_RESOLUTION_S = 0.002;
@@ -649,11 +648,35 @@ export class FrameFeeds<Req> {
   private arm(feed: Feed, due: Instant, wall: Instant): void {
     if (feed.phase.kind === "due") clearTimeout(feed.phase.timer);
     const delay = Math.max(0, (due - wall) * 1000);
+    this.setTimer(feed, due, this.deps.now() + delay, delay);
+  }
+
+  private setTimer(
+    feed: Feed,
+    due: Instant,
+    dueMoment: number,
+    delay: number,
+  ): void {
     feed.phase = {
       kind: "due",
-      at: this.deps.now() + delay,
-      timer: setTimeout(() => this.draw(feed, due), delay),
+      at: dueMoment,
+      timer: setTimeout(() => this.fire(feed, due, dueMoment), delay),
     };
+  }
+
+  // [LAW:no-ambient-temporal-coupling] A timer that fires before its moment on
+  // the monotonic clock waits out the rest instead of drawing. Node starts a
+  // timer from the loop's cached time, so one armed late in a slow callback —
+  // a draw on a busy machine — fires early by as long as that callback had
+  // run, with no bound but the machine's load. Drawn then, its frame is clamped
+  // to within TIMER_RESOLUTION_S of the wall, which falls in the turn before
+  // `due`: that turn drawn twice and the one after it late. The wall clock is
+  // not asked, so a wall stepped back, which leaves the monotonic moment
+  // reached, still draws and is followed by `draw`.
+  private fire(feed: Feed, due: Instant, dueMoment: number): void {
+    const remaining = dueMoment - this.deps.now();
+    if (remaining > 0) this.setTimer(feed, due, dueMoment, remaining);
+    else this.draw(feed, due);
   }
 
   private shown(feed: Feed): boolean {

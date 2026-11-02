@@ -1265,6 +1265,34 @@ describe("a feed draws when its bar next changes", () => {
     expect(beats.length).toBeGreaterThanOrEqual(13);
   });
 
+  // A timer armed late in a slow callback fires early by as long as the
+  // callback had run, which is more than the wall's resolution on a busy
+  // machine. Both clocks read the early moment here, as they do then.
+  test("a timer that fires before its moment waits it out, so no turn is drawn twice", () => {
+    jest.useFakeTimers({ now: 1_000_000_000 });
+    try {
+      const { feeds, note, state } = harness({ motion: "moving", beatMs: 100 });
+      note("s", "bar");
+      const close = feeds.subscribe(
+        "s",
+        sub(() => {}),
+      );
+      jest.advanceTimersByTime(0);
+      state.skewMs = -8;
+      state.wallOffsetS = -0.008;
+      jest.advanceTimersByTime(100);
+      state.skewMs = 0;
+      state.wallOffsetS = 0;
+      jest.advanceTimersByTime(8);
+      close();
+      expect(state.ats.map((at) => Math.floor((at * 1000) / 100))).toEqual([
+        10_000_000, 10_000_001,
+      ]);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   test("a wall clock stepped back is followed at the next draw, not drawn ahead of", async () => {
     const { feeds, note, state } = harness({ motion: "moving", beatMs: 100 });
     note("s", "bar");
