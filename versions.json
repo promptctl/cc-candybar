@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-557",
+      "ref": "refs/pull/557/merge",
+      "sha": "26ab90dc9965dff078519ba305ec9e89ef43c5f5",
+      "timestamp": "2026-11-02T02:01:14.932Z",
+      "commits": [
+        {
+          "sha": "26ab90dc9965dff078519ba305ec9e89ef43c5f5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T19:00:25-07:00",
+          "message": "Merge f9c2b10b127471415dec4c5582d95f7ad21d9372 into ec9fa5454b16e8eff68525c059c5214d0a98a8d5\n"
+        },
+        {
+          "sha": "f9c2b10b127471415dec4c5582d95f7ad21d9372",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T19:00:05-07:00",
+          "message": "docs(testing): the five have no exceptions, and the Load gate stops booting the daemon (candybar-testing-ihvy.84o)\n\nBrandon ruled that the rule has no exceptions, and that the contract and end-to-end sections failed what he asked for. Ticket 42 moves all 15 of the Load gate's checks to the pieces that own them and states what that loses. Ticket 3's check now reads the workflows, because the start judge sees jest only. One assertion is defined, setup checks leave the tests, and the file stat and the log get contracts.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "ec9fa5454b16e8eff68525c059c5214d0a98a8d5",
