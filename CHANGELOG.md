@@ -1,3 +1,9 @@
+## [1.179.0](https://github.com/promptctl/cc-candybar/compare/v1.178.2...v1.179.0) (2026-11-02)
+
+### Features
+
+* **site:** site:dev serves the live bar and reloads it; the bar gets a font size slider ([#517](https://github.com/promptctl/cc-candybar/issues/517)) ([9b26334](https://github.com/promptctl/cc-candybar/commit/9b26334ab54c1c9fbad087ff535c804d167c9ce5))
+
 ## [1.178.2](https://github.com/promptctl/cc-candybar/compare/v1.178.1...v1.178.2) (2026-11-02)
 
 ### Bug Fixes
