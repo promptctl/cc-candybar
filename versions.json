@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-565",
+      "ref": "refs/pull/565/merge",
+      "sha": "29cd2320e89d98e2c2de4bd2fea73339eb349901",
+      "timestamp": "2026-11-02T12:06:57.662Z",
+      "commits": [
+        {
+          "sha": "29cd2320e89d98e2c2de4bd2fea73339eb349901",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T05:06:03-07:00",
+          "message": "Merge 246d7798412bea63b36c9a3b3c75d8d057a38e09 into a60dce7741009c8d2659bbaa435d9b53e15bf727\n"
+        },
+        {
+          "sha": "246d7798412bea63b36c9a3b3c75d8d057a38e09",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T05:05:47-07:00",
+          "message": "fix(daemon): a click is held to a click's bound, so a launching click no longer kicks a live daemon (candybar-launch-q7o7.4yv)\n\nThe connection backstop answered every request TIMEOUT at the render's\n200ms. A click awaits the program it launches (up to 5s), so the client\nheard TIMEOUT, kicked a daemon that was up, and exited 1 while the\nclick's effect still landed. The backstop is now re-armed by request\nkind once the frame is read, and the click client's budget derives from\nthe daemon's click bound.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "a60dce7741009c8d2659bbaa435d9b53e15bf727",
