@@ -35,11 +35,13 @@ alias.timers = alias["node:timers"] = shim("timers.ts");
 // `--port` picks the port (0 for any free one). Any other flag is refused.
 const { values, positionals } = parseArgs({
   allowPositionals: true,
-  options: { serve: { type: "boolean", default: false }, port: { type: "string", default: "8931" } },
+  options: { serve: { type: "boolean", default: false }, port: { type: "string" } },
 });
 const serving = values.serve;
-const port = Number(values.port);
-if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error(`--port must be a port number, not ${values.port}`);
+if (values.port !== undefined && !serving) throw new Error("--port is the dev server's: use it with --serve");
+const portText = values.port ?? "8931";
+if (!/^\d{1,5}$/.test(portText) || Number(portText) > 65535) throw new Error(`--port must be a port number, not "${portText}"`);
+const port = Number(portText);
 // The output directory: site/dist, or the one named as the first positional argument (the test builds into its own).
 const dist = path.resolve(positionals[0] ?? path.join(here, "dist"));
 rmSync(dist, { recursive: true, force: true });

@@ -301,10 +301,11 @@ const showFontSize = () => { $("font-size").textContent = `${term.options.fontSi
 showFontSize();
 fontSlider.addEventListener("input", () => {
   term.options.fontSize = fontSlider.valueAsNumber;
-  rememberFontSize(term.options.fontSize);
   showFontSize();
   refit();
 });
+// Kept when the drag ends, not on every step of it.
+fontSlider.addEventListener("change", () => rememberFontSize(term.options.fontSize));
 document.querySelectorAll("[data-ground]").forEach((b) => b.addEventListener("click", () => {
   term.options.theme = GROUNDS[b.dataset.ground];
   frame.style.setProperty("--ground", GROUNDS[b.dataset.ground].background);
