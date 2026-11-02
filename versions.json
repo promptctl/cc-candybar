@@ -4,15 +4,22 @@
     {
       "version": "pr-579",
       "ref": "refs/pull/579/merge",
-      "sha": "67f938447f3834f8caa74cd5c56334889949098a",
-      "timestamp": "2026-11-02T16:20:47.568Z",
+      "sha": "2a951aad1291a8a4bbd48af202447988ab12b260",
+      "timestamp": "2026-11-02T16:22:33.704Z",
       "commits": [
         {
-          "sha": "67f938447f3834f8caa74cd5c56334889949098a",
+          "sha": "2a951aad1291a8a4bbd48af202447988ab12b260",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T16:19:42Z",
-          "message": "Merge 4a2639a8b9b44f1cc4f0b32261ea12d3e3d609aa into f131b11e8cd2772af9e7476f28873e7473d2a93e\n"
+          "timestamp": "2026-11-02T16:21:37Z",
+          "message": "Merge f2baac59bf67e0e5b88f80aa96354cb4f1a165d4 into f131b11e8cd2772af9e7476f28873e7473d2a93e\n"
+        },
+        {
+          "sha": "f2baac59bf67e0e5b88f80aa96354cb4f1a165d4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T09:21:18-07:00",
+          "message": "docs(testing): the quarantine counts say which runs they add, and the last-failure dates say they count reruns (candybar-testing-ihvy.w13)\n"
         },
         {
           "sha": "4a2639a8b9b44f1cc4f0b32261ea12d3e3d609aa",
