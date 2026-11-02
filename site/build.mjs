@@ -38,6 +38,7 @@ const { values, positionals } = parseArgs({
   options: { serve: { type: "boolean", default: false }, port: { type: "string" } },
 });
 const serving = values.serve;
+if (positionals.length > 1) throw new Error(`one output directory at most, not ${positionals.length}: ${positionals.join(" ")}`);
 if (values.port !== undefined && !serving) throw new Error("--port is the dev server's: use it with --serve");
 const portText = values.port ?? "8931";
 if (!/^\d{1,5}$/.test(portText) || Number(portText) > 65535) throw new Error(`--port must be a port number, not "${portText}"`);

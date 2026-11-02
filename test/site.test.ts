@@ -145,6 +145,7 @@ describe("the dev server", () => {
       [["--serve", "--port", ""], /--port must be a port number/],
       [["--serve", "--port", "65536"], /--port must be a port number/],
       [["--port", "9000"], /use it with --serve/],
+      [["extra"], /one output directory at most/],
     ];
     for (const [args, said] of refused) expect(() => buildSite([...args, out])).toThrow(said);
     expect(fs.existsSync(out)).toBe(false);
