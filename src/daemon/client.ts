@@ -14,17 +14,19 @@ import {
   type ClientHints,
   type Response,
 } from "./protocol";
+import { REQUEST_TIMEOUT_MS } from "./request-deadline";
 import { PACKAGE_VERSION } from "../version";
-
-const CLICK_BUDGET_MS = 200;
 
 export const RENDER_BUDGETS: RoundTripBudgets = {
   connectMs: CONNECT_TIMEOUT_MS,
   budgetMs: TOTAL_BUDGET_MS,
 };
+// [LAW:one-source-of-truth] A click waits past the daemon's own backstop, so
+// a slow click hears the daemon's TIMEOUT (busy, no kick) rather than giving
+// up first and kicking a daemon that is up.
 const CLICK_BUDGETS: RoundTripBudgets = {
   connectMs: CONNECT_TIMEOUT_MS,
-  budgetMs: CLICK_BUDGET_MS,
+  budgetMs: REQUEST_TIMEOUT_MS + TOTAL_BUDGET_MS,
 };
 
 // The render/click outcome vocabulary, mirrored by the Rust client's outcome

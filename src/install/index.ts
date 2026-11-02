@@ -459,7 +459,7 @@ export async function runUrlHandle(rawUrl: string | undefined): Promise<void> {
     process.exit(0);
   }
 
-  if (outcome.kind === "transient" && outcome.cause === "busy") {
+  if (outcome.kind === "busy") {
     // The daemon answered, so it is up and the click may still land in it.
     // Kicking would respawn a live daemon mid-click.
     process.stderr.write(`url-handle: daemon busy (${outcome.message})\n`);

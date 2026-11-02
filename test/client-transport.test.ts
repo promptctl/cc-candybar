@@ -27,19 +27,14 @@ test("the daemon's TIMEOUT reads as busy, not as a client timeout", () => {
     daemonV: PROTOCOL_VERSION,
   } as Response;
   expect(interpretResponse("click", resp, () => undefined)).toEqual({
-    kind: "transient",
-    cause: "busy",
+    kind: "busy",
     message: "request exceeded 200ms",
   });
 });
 
 describe("describeFailure", () => {
   test("a busy daemon carries no spawn hint", () => {
-    const text = describeFailure({
-      kind: "transient",
-      cause: "busy",
-      message: "x",
-    });
+    const text = describeFailure({ kind: "busy", message: "x" });
     expect(text).not.toContain(HINT);
     expect(text).toContain("busy");
   });
