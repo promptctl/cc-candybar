@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-589",
+      "ref": "refs/pull/589/merge",
+      "sha": "358b77e9f02a9426a0abcff72521e0b0d2bdd765",
+      "timestamp": "2026-11-02T23:50:40.252Z",
+      "commits": [
+        {
+          "sha": "358b77e9f02a9426a0abcff72521e0b0d2bdd765",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T23:47:59Z",
+          "message": "Merge 6e291426bbaa06cba6a481ee7c42f231fa8b0866 into e4792ac42dfcce8f3f64975e904729a8bf7ff51b\n"
+        },
+        {
+          "sha": "6e291426bbaa06cba6a481ee7c42f231fa8b0866",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T16:46:32-07:00",
+          "message": "fix(test): the client's answer cases run over a memory connection on a held clock (candybar-testing-ihvy.5q4)\n\nThree stub-daemon cases took the statusline's 50 ms connect and 150 ms total\nbudgets against a net server on the worker's own loop, so a loaded runner read\nCONNECT_TIMEOUT or busy in place of the stub's reply (error-glyph: 1 of 40\nloaded runs). What they prove is a decision, not an effect.\n\nrequestOutcome splits at the connect: exchangeOutcome is the round trip over a\nstream already made, and requestOutcome is the connect plus that call. The\nwire-code cases call renderOutcomeOf; the raw-bytes and glyph cases run\nexchangeOutcome over memoryConnection() with a held clock. No socket, no wall\nclock, no budget left to miss.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-587",
       "ref": "refs/pull/587/merge",
       "sha": "0988af6fdef7dc933b571f5a6d3f918a62ce6e6a",
@@ -55,28 +77,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T15:45:47-07:00",
           "message": "test(rig): buildRig assembles a render rig with a default for every field (candybar-testing-ihvy.4k6)\n\nFoundation: test/helpers/rig.ts, its test, colour-256's measurement helpers in their own module, and dsl-groups, dsl-picker and colour-256 on the rig.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-589",
-      "ref": "refs/pull/589/merge",
-      "sha": "e0b283c52b62b3cc2bf76167f01d33f3395c00dd",
-      "timestamp": "2026-11-02T23:48:16.171Z",
-      "commits": [
-        {
-          "sha": "e0b283c52b62b3cc2bf76167f01d33f3395c00dd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T16:46:59-07:00",
-          "message": "Merge e24a82f95d330d01136bdfa12ffcca42280b1960 into e4792ac42dfcce8f3f64975e904729a8bf7ff51b\n"
-        },
-        {
-          "sha": "e24a82f95d330d01136bdfa12ffcca42280b1960",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T16:46:32-07:00",
-          "message": "fix(test): the client's answer cases run over a memory connection on a held clock (candybar-testing-ihvy.5q4)\n\nThree stub-daemon cases took the statusline's 50 ms connect and 150 ms total\nbudgets against a net server on the worker's own loop, so a loaded runner read\nCONNECT_TIMEOUT or busy in place of the stub's reply (error-glyph: 1 of 40\nloaded runs). What they prove is a decision, not an effect.\n\nrequestOutcome splits at the connect: exchangeOutcome is the round trip over a\nstream already made, and requestOutcome is the connect plus that call. The\nwire-code cases call renderOutcomeOf; the raw-bytes and glyph cases run\nexchangeOutcome over memoryConnection() with a held clock. No socket, no wall\nclock, no budget left to miss.\n"
         }
       ]
     },
