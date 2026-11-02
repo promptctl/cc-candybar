@@ -4,53 +4,53 @@
     {
       "version": "pr-587",
       "ref": "refs/pull/587/merge",
-      "sha": "e5bfdb474691365bb7bfb0a5a6485250626913bf",
-      "timestamp": "2026-11-02T23:32:27.087Z",
+      "sha": "b7e529970f9cdd4bf0c395b05ce0645d45be1772",
+      "timestamp": "2026-11-02T23:34:44.263Z",
       "commits": [
         {
-          "sha": "e5bfdb474691365bb7bfb0a5a6485250626913bf",
+          "sha": "b7e529970f9cdd4bf0c395b05ce0645d45be1772",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T23:31:35Z",
-          "message": "Merge 3d0f809af9ad04ca57f9b734cdd6fbd8a5f72bc4 into 3b03eb3ede4c45763df73f0f81301f74444e40a3\n"
+          "timestamp": "2026-11-02T23:33:55Z",
+          "message": "Merge 578b13becd3e46c022b207117bc84da9c2e2b26b into 3b03eb3ede4c45763df73f0f81301f74444e40a3\n"
         },
         {
-          "sha": "3d0f809af9ad04ca57f9b734cdd6fbd8a5f72bc4",
+          "sha": "578b13becd3e46c022b207117bc84da9c2e2b26b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T16:31:00-07:00",
           "message": "test(rig): a rig records a render origin only when its session has none, so a seeded origin is never overwritten (candybar-testing-ihvy.4k6)\n"
         },
         {
-          "sha": "ba575099feee355fec12c8585db5d16ca0fe94d8",
+          "sha": "24220c324d2ed7b11bc31c903dbc66d76aa98bca",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T16:25:28-07:00",
           "message": "test(rig): the parse cache keys on each registered domain's members, rigs that seed an origin draw as that session, and the testing memory line is true again (candybar-testing-ihvy.4k6)\n"
         },
         {
-          "sha": "0167f56f6c8833c8098527543baddd3089fb99a1",
+          "sha": "cf0c6f1b4058d590ed2dd8ad56cbf2ffd665992a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T16:17:08-07:00",
           "message": "test(rig): the parse cache keys on the registered option domains (candybar-testing-ihvy.4k6)\n"
         },
         {
-          "sha": "8b56f678268acef36a480cbb448d1140f9e3f9c3",
+          "sha": "e66ad45b58eeedf3e4fb2171a685c1d68f7b82f0",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T16:10:11-07:00",
           "message": "test(rig): review fixes — undo-redo keeps its seeded origin, rig records its cwd, configure-mode keeps width 200 (candybar-testing-ihvy.4k6)\n"
         },
         {
-          "sha": "f8282f3611d73a29ffbf1e6231193d7f4242c696",
+          "sha": "6a7d72656c9bccda4e27a935b6ad1245b0c428f5",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T15:54:55-07:00",
           "message": "test(rig): 26 more test files build through buildRig, and buildRuntime is gone (candybar-testing-ihvy.4k6)\n\nEach file keeps its own vocabulary as a thin wrapper over buildRig and no longer repeats the parse, store, registry, compile, draw and click assembly.\n"
         },
         {
-          "sha": "b212d125d8133c93fed883943d42229d4d6e13de",
+          "sha": "0f5575b07650d44ec263762a439c21b2151d9a98",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T15:45:47-07:00",
