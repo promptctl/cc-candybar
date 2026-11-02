@@ -1,3 +1,10 @@
+## [1.179.3](https://github.com/promptctl/cc-candybar/compare/v1.179.2...v1.179.3) (2026-11-02)
+
+### Bug Fixes
+
+* **daemon:** an opener's click hands off, so the browser outlives the 5s bound ([#568](https://github.com/promptctl/cc-candybar/issues/568)) ([1cacad3](https://github.com/promptctl/cc-candybar/commit/1cacad328e17c86fb91323df437230b3957ec6a0))
+* **test:** the click-error e2e holds its unanswered render until the daemon's side has ended (brandon-unfiled-3248.cbyb) ([#570](https://github.com/promptctl/cc-candybar/issues/570)) ([2b55ee9](https://github.com/promptctl/cc-candybar/commit/2b55ee999dbc13d1647e8946ffdb6557934b017a))
+
 ## [1.179.2](https://github.com/promptctl/cc-candybar/compare/v1.179.1...v1.179.2) (2026-11-02)
 
 ### Bug Fixes
