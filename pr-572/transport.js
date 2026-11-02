@@ -83770,7 +83770,11 @@ function productionLaneEdge(launcher, following, closing) {
     // invocation: a daemon closing between two launches refuses the second,
     // leaving a bar pane no `pane off` finds. A split without `-d` makes the
     // new pane the queue's current target, so the untargeted `set-option`
-    // tags it; `select-pane` then gives focus back to the user's pane.
+    // tags it; `last-pane` then gives focus back to whichever pane had it.
+    // [LAW:no-ambient-temporal-coupling] exception: the window's last pane is
+    // left as the bar pane. A `-d` split keeps focus untouched but does not
+    // retarget the queue, and a pane tagging itself leaves it untagged while
+    // it starts, which a second `pane on` would duplicate.
     openBarPane: async (hint, argv2, env2) => (await tmux2(launcher, hint, [
       "split-window",
       "-v",
@@ -83789,7 +83793,7 @@ function productionLaneEdge(launcher, following, closing) {
       BAR_PANE_OPTION,
       hint.pane,
       ";",
-      "select-pane",
+      "last-pane",
       "-t",
       hint.pane
     ])).trim(),
