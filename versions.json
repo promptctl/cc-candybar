@@ -2,53 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-583",
-      "ref": "refs/pull/583/merge",
-      "sha": "d4caa171f8189b502f4c6d7adf3f2f26f51d26cb",
-      "timestamp": "2026-11-02T18:51:36.502Z",
-      "commits": [
-        {
-          "sha": "d4caa171f8189b502f4c6d7adf3f2f26f51d26cb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T11:49:43-07:00",
-          "message": "Merge e6d7fd77a6f1d61b3ee7d6ed83fe2026a8d9a67d into ab8efc3e14af20e9b4e8fd57aabe300f8a2c3456\n"
-        },
-        {
-          "sha": "e6d7fd77a6f1d61b3ee7d6ed83fe2026a8d9a67d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T11:29:10-07:00",
-          "message": "fix(log): a disposed log registers no exit listener and a flush under way ends its own descriptor (candybar-testing-ihvy.yfv)\n\nReview of #583: dispose() with a flush mid-open left the descriptor that\nflush then opened, and a line logged after dispose re-registered the exit\nlistener. dispose now marks the log, defers the close to a flush in flight,\nand a late line is written by a flush that ends its own open.\n"
-        },
-        {
-          "sha": "5e7e8f028a7147910a5195fec2a38712112c0102",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T11:26:09-07:00",
-          "message": "refactor(daemon): DaemonInputs.paths names only what createDaemon reads, and the harness ends every log it opens (candybar-testing-ihvy.yfv)\n\nReview of #583: DaemonPaths drops the unread cache member and DaemonInputs\nnarrows to socket, state and watchProbe; the harness handle reports the log\npath the daemon was built with, a failed build ends the log it opened, and\ndaemon-value ends every log a case opened. The memory lines that gave the\nenv-at-write-time reason for one live daemon and for paths-not-inputs now say\nwhat is true.\n"
-        },
-        {
-          "sha": "589594eddfd271aad5e8610f99d311e3c92635d6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T11:18:25-07:00",
-          "message": "refactor(daemon): createDaemon takes every adapter and every path as an input (candybar-testing-ihvy.yfv)\n\nDaemonInputs gains a DaemonPaths value and DaemonAdapters (log, launcher,\nstorage, doctor stores and edge, Claude input, lane edge, link signer, limits,\nfetch, stat). production-adapters.ts is the one module that names the real\nones; server.ts is the daemon process's one reader of paths.ts, and the page in\nsite/ and the test harness build over the same adapters. The log's module state\nbecomes a DaemonLog built over a path. OWNED_IMPORTS enforces the ownership.\nThe keyspaces and the Foundations row are carved to candybar-testing-ihvy.42w;\npricing's disk cache stays a named reader until its port (89p).\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "ab8efc3e14af20e9b4e8fd57aabe300f8a2c3456",
-      "timestamp": "2026-11-02T18:03:20.885Z",
+      "sha": "cc500459e2346bcb997ea383c9d7c0470b5fe15b",
+      "timestamp": "2026-11-02T18:59:37.680Z",
       "commits": [
         {
-          "sha": "ab8efc3e14af20e9b4e8fd57aabe300f8a2c3456",
+          "sha": "cc500459e2346bcb997ea383c9d7c0470b5fe15b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T11:00:57-07:00",
-          "message": "test(render): renderLines returns the one event per render its client kept (#582)\n\n* test(render): renderLines returns the one event per render its client kept (brandon-unfiled-3248.8c9u)\n\nThe retry loop in renderRequest and renderLines now decide with one predicate, so a retried attempt is not read as a render. Also records the heap-snapshot class-name trap in testing.md.\n\n* test(render): the kept-render pick is a pure function with its own test; comments and memory name the concept (brandon-unfiled-3248.8c9u)\n\n* test(render): the retry loop and the reader share one answered-render pick, matching the session id as the daemon logs it (brandon-unfiled-3248.8c9u)"
+          "timestamp": "2026-11-02T11:58:34-07:00",
+          "message": "refactor(daemon): createDaemon takes every adapter and every path as an input (candybar-testing-ihvy.yfv) (#583)\n\n* refactor(daemon): createDaemon takes every adapter and every path as an input (candybar-testing-ihvy.yfv)\n\nDaemonInputs gains a DaemonPaths value and DaemonAdapters (log, launcher,\nstorage, doctor stores and edge, Claude input, lane edge, link signer, limits,\nfetch, stat). production-adapters.ts is the one module that names the real\nones; server.ts is the daemon process's one reader of paths.ts, and the page in\nsite/ and the test harness build over the same adapters. The log's module state\nbecomes a DaemonLog built over a path. OWNED_IMPORTS enforces the ownership.\nThe keyspaces and the Foundations row are carved to candybar-testing-ihvy.42w;\npricing's disk cache stays a named reader until its port (89p).\n\n* refactor(daemon): DaemonInputs.paths names only what createDaemon reads, and the harness ends every log it opens (candybar-testing-ihvy.yfv)\n\nReview of #583: DaemonPaths drops the unread cache member and DaemonInputs\nnarrows to socket, state and watchProbe; the harness handle reports the log\npath the daemon was built with, a failed build ends the log it opened, and\ndaemon-value ends every log a case opened. The memory lines that gave the\nenv-at-write-time reason for one live daemon and for paths-not-inputs now say\nwhat is true.\n\n* fix(log): a disposed log registers no exit listener and a flush under way ends its own descriptor (candybar-testing-ihvy.yfv)\n\nReview of #583: dispose() with a flush mid-open left the descriptor that\nflush then opened, and a line logged after dispose re-registered the exit\nlistener. dispose now marks the log, defers the close to a flush in flight,\nand a late line is written by a flush that ends its own open."
         }
       ]
     },
