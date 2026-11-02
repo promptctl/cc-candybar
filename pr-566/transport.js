@@ -75878,11 +75878,11 @@ var FrameFeeds = class {
   // the instant a caller set is never rebuilt from a second, truncated one;
   // its monotonic due time is what a wake compares against.
   arm(feed, due, wall) {
-    if (feed.phase.kind === "due") clearTimeout(feed.phase.timer);
     const delay = Math.max(0, (due - wall) * 1e3);
     this.setTimer(feed, due, this.deps.now() + delay, delay);
   }
   setTimer(feed, due, dueMoment, delay) {
+    if (feed.phase.kind === "due") clearTimeout(feed.phase.timer);
     feed.phase = {
       kind: "due",
       at: dueMoment,
