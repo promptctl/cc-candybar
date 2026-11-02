@@ -5,7 +5,7 @@
 //
 //   node scripts/check-boot-ratchet.mjs --runs worker,process
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 
@@ -18,13 +18,17 @@ const runs = runsAt === -1 ? [] : (process.argv[runsAt + 1] ?? "").split(",").fi
 if (runs.length === 0) throw new Error("--runs needs the runs to count, such as --runs worker,process");
 
 const dir = path.resolve(import.meta.dirname, "..", "test-records");
-// [LAW:no-silent-failure] A missing file throws here, naming the run.
-const records = runs.flatMap((run) =>
-  readFileSync(path.join(dir, `${run}.jsonl`), "utf8")
-    .split("\n")
-    .filter((line) => line !== "")
-    .map((line) => JSON.parse(line)),
-);
+// [LAW:no-silent-failure] A run that never reached its tests left no file, and
+// reads as no records, so the throw below names the run and not a path.
+const records = runs.flatMap((run) => {
+  const file = path.join(dir, `${run}.jsonl`);
+  return existsSync(file)
+    ? readFileSync(file, "utf8")
+        .split("\n")
+        .filter((line) => line !== "")
+        .map((line) => JSON.parse(line))
+    : [];
+});
 const missing = missingRuns(records, runs);
 if (missing.length > 0) throw new Error(`no records for ${missing.join(", ")}`);
 

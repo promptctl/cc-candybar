@@ -106,7 +106,7 @@ describe("a daemon in this worker", () => {
     const before = booted().length;
     daemon = startDaemon(env);
     expect(booted().slice(before)).toEqual([{ file, route: "harness" }]);
-    expect(file).toBe("test/daemon-boots/worker/in-worker-daemon.test.ts");
+    expect(expect.getState().testPath?.endsWith(`/${file}`)).toBe(true);
   });
 
   // [LAW:verifiable-goals] An answer carries a failed click's error only once

@@ -24,8 +24,8 @@ function addedEntries(base, head) {
  */
 function risenCounts(base, head) {
   return Object.entries(head)
-    .filter(([key, value]) => !(key in base) || value > base[key])
-    .map(([key, value]) => (key in base ? `${key} ${base[key]} -> ${value}` : `${key} (new, ${value})`));
+    .filter(([key, value]) => !Object.hasOwn(base, key) || value > base[key])
+    .map(([key, value]) => (Object.hasOwn(base, key) ? `${key} ${base[key]} -> ${value}` : `${key} (new, ${value})`));
 }
 
 function git(args) {
