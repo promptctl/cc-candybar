@@ -68,7 +68,7 @@ describe("judgeDaemonStarts", () => {
 
   test("a start naming no test file is outside the tier", () => {
     expect(judged(start(null, "raw")).problems).toEqual([
-      expect.stringContaining("carries no test file"),
+      expect.stringContaining("recorded with no test file"),
     ]);
   });
 

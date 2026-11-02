@@ -14,8 +14,7 @@ const ratchet = require("../transitional-daemon-boots/ratchet.json");
 // [LAW:verifiable-goals] The pin on a run's daemons, over the cases that spawn
 // one through the helper. It is a maximum: a filtered run starts fewer, and a
 // platform can skip a case. It only falls: CI fails a change that raises it
-// above what `main` holds (scripts/check-shrinks.cjs), and ticket
-// candybar-testing-ihvy.4vv deletes it with the ratchet file it lives in.
+// above what `main` holds (scripts/check-shrinks.cjs).
 const HELPER_START_CEILING = ratchet.helperStarts;
 
 const LEDGER_ENV = "CC_CANDYBAR_TEST_DAEMON_LEDGER";
@@ -57,7 +56,7 @@ function parseLedger(ledger) {
 /** @param {DaemonStart} start @returns {string | null} */
 function faultOf({ file, route }) {
   if (file === null) {
-    return "a daemon started by a process that carries no test file, so it was spawned with no env";
+    return "a daemon recorded with no test file: spawned with no env, or built in a worker outside the setup chain that names the file";
   }
   // A harness boot is allowed in either child of the directory: the process tier
   // is the stricter rule, and it asks only about real daemons.

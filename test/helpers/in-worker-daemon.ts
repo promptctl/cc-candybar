@@ -38,7 +38,15 @@ import { LEDGER_ENV, TEST_FILE_ENV, recordDaemonStart } from "./process-tier.cjs
 // the worker's env with the case's own, which holds neither, so both are read
 // once as this module loads, before a case places anything. Both exist by then:
 // global setup made the ledger, and test/setup-after-env.ts named the file.
-const LEDGER = process.env[LEDGER_ENV]!;
+const LEDGER = ledgerPath();
+// [LAW:no-silent-failure] A boot with nowhere to record itself would go unseen.
+function ledgerPath(): string {
+  const ledger = process.env[LEDGER_ENV];
+  if (ledger === undefined) {
+    throw new Error(`${LEDGER_ENV} is unset: a daemon built in a worker records itself in the run's ledger, which global setup makes`);
+  }
+  return ledger;
+}
 const TEST_FILE = process.env[TEST_FILE_ENV] ?? null;
 
 export type DaemonOverrides = Partial<Omit<DaemonInputs, "storage">> & {
