@@ -4,15 +4,22 @@
     {
       "version": "pr-585",
       "ref": "refs/pull/585/merge",
-      "sha": "bdba3566dbe3f685e388264fe1051dac08fd6d24",
-      "timestamp": "2026-11-02T21:07:28.700Z",
+      "sha": "f604dac0de3d8ce8ea2e78a4b84765627b3fd6d0",
+      "timestamp": "2026-11-02T21:14:00.092Z",
       "commits": [
         {
-          "sha": "bdba3566dbe3f685e388264fe1051dac08fd6d24",
+          "sha": "f604dac0de3d8ce8ea2e78a4b84765627b3fd6d0",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T14:06:24-07:00",
-          "message": "Merge 1b331129f0c394763a5df26fea708efd362cee5b into 805df08b803697644135dd02d9fc34fee4b2208a\n"
+          "timestamp": "2026-11-02T21:12:54Z",
+          "message": "Merge 638372d519261755248ee9441fb8baba9caa1d31 into 805df08b803697644135dd02d9fc34fee4b2208a\n"
+        },
+        {
+          "sha": "638372d519261755248ee9441fb8baba9caa1d31",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T14:12:39-07:00",
+          "message": "fix(host): scripts build their world from src, gallery sets the debug switch, stale width comments go (candybar-testing-ihvy.33e)\n"
         },
         {
           "sha": "1b331129f0c394763a5df26fea708efd362cee5b",
