@@ -27,6 +27,7 @@
 import process from "node:process";
 import { createInterface } from "node:readline";
 import { parseArgs } from "node:util";
+import type { World } from "./host";
 import type { ClaudeHookData } from "./utils/claude";
 import { tryRenderViaDaemon } from "./daemon/client";
 import { followFrames, type FrameFollower } from "./daemon/frame-follow";
@@ -67,6 +68,7 @@ export function worthSaying(last: Said, next: Event): boolean {
 export async function runFrames(
   argv: readonly string[],
   bundle: string,
+  world: World,
 ): Promise<void> {
   // argv is the process's: [node, script, "frames", ...flags].
   const { values, tokens } = parseArgs({
@@ -118,19 +120,25 @@ export async function runFrames(
     // The terminal as it is now: a resize between two statusline ticks is in
     // the next one.
     const hints = {
-      ...detectClientHints(process.env, cwd, process.stderr),
+      ...detectClientHints(world.host, cwd, process.stderr),
       client: nodeClientHint("frames", bundle),
     };
-    const outcome = await tryRenderViaDaemon(hook, renderArgs, cwd, hints);
+    const outcome = await tryRenderViaDaemon(
+      world.host,
+      hook,
+      renderArgs,
+      cwd,
+      hints,
+    );
     if (outcome.kind === "ok") return;
     say(describeFailure(outcome));
     // [LAW:single-enforcer] A render's kick is the render policy's to say.
-    if (planOutcome(outcome).kick) obtainDaemonKick();
+    if (planOutcome(outcome).kick) obtainDaemonKick(world);
   };
 
   const subscribe = (id: string): void => {
     follower?.close();
-    follower = followFrames(socketPath(), id, lane, {
+    follower = followFrames(world, socketPath(world.host), id, lane, {
       frame: (resp) =>
         tell({ kind: "frame" }, () => emit(`${JSON.stringify(resp)}\n`)),
       off: (resp) =>

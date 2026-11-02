@@ -5,14 +5,14 @@ import type { ClaudeHookData } from "./utils/claude";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { json } from "node:stream/consumers";
-import { debug } from "./utils/logger";
+import { debug, setDebug } from "./utils/logger";
+import { processWorld } from "./host";
 import {
   runInstall,
   runInstallUrlHandler,
   runUrlHandle,
   stableAttachPreload,
 } from "./install";
-import { oneShotLauncher } from "./proc/launch";
 import { runDaemon } from "./daemon/server";
 import { tryRenderViaDaemon } from "./daemon/client";
 import { daemonStatsPlan } from "./daemon/client-stats";
@@ -42,13 +42,20 @@ import { exitWith } from "./cli-plan";
 // and names a Node client to the doctor.
 const RUNNING_BUNDLE = fileURLToPath(import.meta.url);
 
+// [LAW:effects-at-boundaries] What this process knows of its machine, read once
+// and handed to every subcommand; the debug channel is the one place a switch
+// is set from it.
+const world = processWorld();
+const { host } = world;
+setDebug(Boolean(host.env.CC_CANDYBAR_DEBUG));
+
 const hasFlag = (flags: readonly string[]): boolean =>
   flags.some((f) => process.argv.includes(f));
 
 function showHelpText(): void {
   console.log(HELP_TEXT);
   // The one line of help that names this install: where its preload sits.
-  const preload = stableAttachPreload(RUNNING_BUNDLE);
+  const preload = stableAttachPreload(RUNNING_BUNDLE, host);
   const missing = fs.existsSync(preload)
     ? ""
     : "  (nothing is there yet: run `cc-candybar install` first — in a checkout, `pnpm build`)\n";
@@ -75,35 +82,35 @@ function showHelpText(): void {
 type Subcommand = (args: readonly string[]) => Promise<void>;
 const SUBCOMMANDS: Readonly<Record<string, Subcommand>> = {
   install: async (args) => {
-    await runInstall(args, RUNNING_BUNDLE, oneShotLauncher);
+    await runInstall(args, RUNNING_BUNDLE, world);
     process.exit(0);
   },
   "install-url-handler": async () => {
-    runInstallUrlHandler(RUNNING_BUNDLE, oneShotLauncher);
+    runInstallUrlHandler(RUNNING_BUNDLE, world);
     process.exit(0);
   },
   "url-handle": async (args) => {
-    await runUrlHandle(args[0]);
+    await runUrlHandle(args[0], world);
   },
   // The daemon owns its own lifecycle.
   daemon: async () => {
-    runDaemon();
+    runDaemon(world);
   },
   "daemon-stats": async (args) => {
-    await exitWith(await daemonStatsPlan(args));
+    await exitWith(await daemonStatsPlan(host, args));
   },
   // The stream owns its own lifecycle.
   frames: async () => {
-    await runFrames(process.argv, RUNNING_BUNDLE);
+    await runFrames(process.argv, RUNNING_BUNDLE, world);
   },
   check: async (args) => {
-    await exitWith(await checkCommandPlan(args));
+    await exitWith(await checkCommandPlan(args, world));
   },
   lint: async (args) => {
-    await exitWith(await checkCommandPlan(args));
+    await exitWith(await checkCommandPlan(args, world));
   },
   plugin: async (args) => {
-    process.exit(runPlugin(args));
+    process.exit(runPlugin(args, world));
   },
   schema: async () => {
     await exitWith(schemaPlan());
@@ -112,17 +119,17 @@ const SUBCOMMANDS: Readonly<Record<string, Subcommand>> = {
   // the bar's 🩺 click runs, over this process's own environment (which IS
   // Claude Code's when run from a Claude Code shell).
   doctor: async (args) => {
-    await exitWith(await doctorCommandPlan(args));
+    await exitWith(await doctorCommandPlan(args, world));
   },
   // Runs until the pane closes.
   "bar-pane": async (args) => {
-    process.exit(await runBarPane(args));
+    process.exit(await runBarPane(args, world));
   },
   ...Object.fromEntries(
     DEBUG_WHATS.map((what): [string, Subcommand] => [
       what,
       async (args) => {
-        await exitWith(await debugCommandPlan(what, args));
+        await exitWith(await debugCommandPlan(host, what, args));
       },
     ]),
   ),
@@ -206,13 +213,14 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
     // and an SSH session at the same time, so the answer genuinely differs per
     // request.
     const outcome = await tryRenderViaDaemon(
+      host,
       hookData,
       // The wire's `args` shape (RenderRequest): the client's path, then its
       // flags — so not the node binary in front of them.
       process.argv.slice(1),
       process.cwd(),
       {
-        ...detectClientHints(process.env, process.cwd(), process.stderr),
+        ...detectClientHints(host, process.cwd(), process.stderr),
         client: nodeClientHint("node", RUNNING_BUNDLE),
       },
     );
@@ -228,7 +236,7 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
       debug(plan.debug);
     }
     if (plan.kick) {
-      obtainDaemonKick();
+      obtainDaemonKick(world);
     }
     await exitWith({ stdout: plan.output, stderr: "", code: 0 });
   } catch (error) {

@@ -4,7 +4,6 @@
 // `.cc-candybar/plugins/` (REPO_PLUGIN_DIR), each holding a plugin.json5.
 
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 
 import { DEFAULT_DSL_CONFIG } from "./config/default-dsl-config.js";
@@ -15,7 +14,9 @@ import {
   userPluginRoot,
 } from "./config/loader/plugin-folders.js";
 import { DEFINITION_FILE, pluginDefinition } from "./config/loader/plugins.js";
-import { oneShotLauncher } from "./proc/launch.js";
+import { locations } from "./daemon/paths.js";
+import type { World } from "./host.js";
+import type { OneShotLauncher } from "./proc/launch.js";
 import { canonicalDirectory } from "./utils/watch-target.js";
 import { resolveUserPath } from "./utils/user-path.js";
 
@@ -46,9 +47,10 @@ function shownUrl(url: string): string {
 export function parsePluginSource(
   arg: string,
   cwd: string,
+  home: string,
   isDirectory: (p: string) => boolean,
 ): PluginSource | { readonly error: string } {
-  const dir = resolveUserPath(cwd, arg);
+  const dir = resolveUserPath(cwd, arg, home);
   if (isDirectory(dir)) return { kind: "path", dir };
   if (URL_SCHEME.test(arg) || SCP_LIKE.test(arg))
     return { kind: "git", url: arg, shown: shownUrl(arg) };
@@ -88,12 +90,20 @@ function repoDefinitions(repo: string, source: string): readonly string[] {
 // waiting on a prompt; a credential helper still answers. The variables git
 // names as locating a repository (a hook's GIT_DIR, say) are dropped, so
 // every call acts on the clone. `shown` stands for `url` in messages.
-function cloneRepo(url: string, shown: string, into: string): void {
-  const git = (env: NodeJS.ProcessEnv, ...args: string[]): string => {
-    const run = oneShotLauncher.launchSync({
+function cloneRepo(
+  launcher: OneShotLauncher,
+  url: string,
+  shown: string,
+  into: string,
+): void {
+  const git = (
+    envOverlay: Record<string, string | undefined>,
+    ...args: string[]
+  ): string => {
+    const run = launcher.launchSync({
       bin: "git",
       args,
-      env,
+      envOverlay,
       category: "plugin.git",
     });
     if (!run.ok)
@@ -102,9 +112,11 @@ function cloneRepo(url: string, shown: string, into: string): void {
       );
     return run.stdout;
   };
-  const env: NodeJS.ProcessEnv = { ...process.env, GIT_TERMINAL_PROMPT: "0" };
+  // Overlay: terminal prompts off, and the variables that locate a repository
+  // (named by the tool itself) unset.
+  const env: Record<string, string | undefined> = { GIT_TERMINAL_PROMPT: "0" };
   for (const name of git(env, "rev-parse", "--local-env-vars").split("\n"))
-    delete env[name];
+    env[name] = undefined;
   git(
     env,
     "clone",
@@ -130,14 +142,18 @@ function cloneRepo(url: string, shown: string, into: string): void {
 
 // The source as a directory on disk for as long as `use` runs: a path is
 // itself; a git repo is cloned into a temporary directory, removed after.
-function withRepo<T>(source: PluginSource, use: (repo: string) => T): T {
+function withRepo<T>(
+  { host, launcher }: World,
+  source: PluginSource,
+  use: (repo: string) => T,
+): T {
   switch (source.kind) {
     case "path":
       return use(source.dir);
     case "git": {
-      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-plugin-"));
+      const dir = fs.mkdtempSync(path.join(host.tmp, "cc-candybar-plugin-"));
       try {
-        cloneRepo(source.url, source.shown, path.join(dir, "repo"));
+        cloneRepo(launcher, source.url, source.shown, path.join(dir, "repo"));
         return use(path.join(dir, "repo"));
       } finally {
         fs.rmSync(dir, { recursive: true, force: true });
@@ -208,6 +224,7 @@ export function installFromRepo(
   repo: string,
   root: string,
   source: string,
+  home: string,
 ): ReadonlyArray<{ readonly path: string; readonly placed: Placed }> {
   const definitions = repoDefinitions(repo, source);
   fs.mkdirSync(root, { recursive: true });
@@ -232,6 +249,7 @@ export function installFromRepo(
       ),
       DEFAULT_DSL_CONFIG,
       { root: repo, git: false },
+      home,
     );
     if (problems.length > 0)
       throw new Error(
@@ -271,7 +289,7 @@ const USAGE = "Usage: cc-candybar plugin install <path | owner/repo | git URL>";
 
 // Exit 0 installed, 1 the source or a definition failed, 2 usage or a source
 // naming nothing.
-export function runPlugin(argv: readonly string[]): number {
+export function runPlugin(argv: readonly string[], world: World): number {
   const [verb, arg, ...rest] = argv;
   if (verb !== "install" || arg === undefined || rest.length > 0) {
     console.error(USAGE);
@@ -280,6 +298,7 @@ export function runPlugin(argv: readonly string[]): number {
   const source = parsePluginSource(
     arg,
     process.cwd(),
+    world.host.home,
     (p) => canonicalDirectory(p) !== null,
   );
   if ("error" in source) {
@@ -288,8 +307,13 @@ export function runPlugin(argv: readonly string[]): number {
   }
   try {
     const from = source.kind === "path" ? source.dir : source.shown;
-    const installed = withRepo(source, (repo) =>
-      installFromRepo(repo, userPluginRoot(), from),
+    const installed = withRepo(world, source, (repo) =>
+      installFromRepo(
+        repo,
+        userPluginRoot(locations(world.host)),
+        from,
+        world.host.home,
+      ),
     );
     for (const { path: p, placed } of installed)
       console.log(

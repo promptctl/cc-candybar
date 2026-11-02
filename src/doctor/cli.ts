@@ -13,10 +13,10 @@
 // itself here (handler-probe.ts), the click that asked there — and the fold
 // is one function either way.
 
-import { oneShotLauncher } from "../proc/launch.js";
+import type { World } from "../host.js";
 import { linkKeyFile, linkSignerFromKeyFile } from "../daemon/link-key.js";
 import { daemonGates } from "../daemon/update-keys.js";
-import { stateDir } from "../daemon/paths.js";
+import { locations, stateDir } from "../daemon/paths.js";
 import { openSync } from "node:fs";
 import process from "node:process";
 import { WriteStream } from "node:tty";
@@ -101,14 +101,19 @@ function reportLine({ check, verdict }: CheckReport): string {
 // `loadFromDisk`, run once: it has no cache entry to read, so it builds the
 // state, keeps the outcome, and releases the sources the state started. A
 // load that failed reads the bar a fresh daemon would draw under the error.
-export function loadConfigOnce(origin: RenderOrigin): ConfigLoad {
+export function loadConfigOnce(
+  { host, launcher }: World,
+  origin: RenderOrigin,
+): ConfigLoad {
   const deps = {
-    launcher: oneShotLauncher,
+    launcher,
+    locations: locations(host),
+    env: host.env,
     sessionState: new SessionState(),
     storage: UNOWNED_STORAGE,
-    signer: linkSignerFromKeyFile(linkKeyFile(stateDir())),
+    signer: linkSignerFromKeyFile(linkKeyFile(stateDir(host))),
     gates: daemonGates(),
-    stateDir: stateDir(),
+    stateDir: stateDir(host),
   };
   const loaded = loadFromDisk(
     origin.projectDir,
@@ -235,7 +240,11 @@ export async function doctorPlan(
     // would report, by the client's own detection — over the terminal the
     // command runs in, standing in for the stream Claude Code would hand
     // that client (which the command's own redirects say nothing about).
-    const hints = detectClientHints(env, cwd, measureTerminal());
+    const hints = detectClientHints(
+      { env, home: edge.home },
+      cwd,
+      measureTerminal(),
+    );
     // [LAW:single-enforcer] Whose bars this run judges, decided once: the
     // session it runs in, else every session that drew one recently.
     const scope = scopeOf(env.CLAUDE_CODE_SESSION_ID);
@@ -253,7 +262,7 @@ export async function doctorPlan(
           cwd,
         ),
         cwd,
-        target: cliConfigTarget(configFile, env, cwd),
+        target: cliConfigTarget(configFile, { env, home: edge.home }, cwd),
       },
       // No session: the bar a session started here opens on.
       () => null,
@@ -261,7 +270,7 @@ export async function doctorPlan(
       rateLimitsOf(
         scope,
         answer.rateLimits,
-        claudeConfigDir(hints.claudeConfigDir),
+        claudeConfigDir(hints.claudeConfigDir, edge.home),
       ),
       transcriptsOf(scope, answer.transcripts),
       scope,
@@ -349,15 +358,20 @@ export function parseDoctorArgs(args: readonly string[]): DoctorArgs {
 // the CLI can check the file that session's bar renders.
 export async function doctorCommandPlan(
   args: readonly string[],
+  world: World,
 ): Promise<CliPlan> {
   const parsed = parseDoctorArgs(args);
   return parsed.kind === "usage"
     ? { stdout: "", stderr: parsed.message, code: EXIT_USAGE }
     : await doctorPlan(
-        productionEdge(oneShotLauncher, loadConfigOnce),
-        productionHandlerProbeEdge(oneShotLauncher),
-        askDaemon,
-        process.env,
+        productionEdge(
+          world.launcher,
+          (origin) => loadConfigOnce(world, origin),
+          world.host,
+        ),
+        productionHandlerProbeEdge(world.launcher, world.host),
+        () => askDaemon(world.host),
+        world.host.env,
         process.cwd(),
         commandTerminal,
         parsed.configFile,

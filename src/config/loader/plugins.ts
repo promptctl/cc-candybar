@@ -112,6 +112,8 @@ export interface PluginContext {
   // The checkout the session works in, for a `data: { checkout }` path; null
   // where no session is known.
   readonly checkout: Checkout | null;
+  // The user's home, which a `~` in a listed or data path expands to.
+  readonly home: string;
 }
 
 // The spelling of a drop, shared by the bar's diagnostics and `check`.
@@ -215,9 +217,10 @@ export function listedPlugins(
   refs: readonly string[],
   from: string,
   scope: PluginScope,
+  home: string,
 ): readonly PluginDefinition[] {
   return refs.map((ref) =>
-    pluginDefinition(resolveUserPath(path.dirname(from), ref), scope),
+    pluginDefinition(resolveUserPath(path.dirname(from), ref, home), scope),
   );
 }
 
@@ -604,7 +607,7 @@ function fragmentOf(
   file: string,
   id: PluginId,
   { source, json }: { readonly source: string; readonly json: unknown },
-  { checkout }: PluginContext,
+  { checkout, home }: PluginContext,
 ): RawDslConfig {
   const ns = pluginNs(id);
   const issues: ConfigIssue[] = [];
@@ -634,7 +637,7 @@ function fragmentOf(
   const dataPath =
     json.data === undefined
       ? undefined
-      : dataPathOf(json.data, file, checkout, issues);
+      : dataPathOf(json.data, file, checkout, home, issues);
   const sources =
     json.sources === undefined ? {} : sourcesOf(json.sources, file, issues);
   if (issues.length > 0) return fail();
@@ -1125,10 +1128,11 @@ function dataPathOf(
   data: unknown,
   file: string,
   checkout: Checkout | null,
+  home: string,
   issues: ConfigIssue[],
 ): string | undefined {
   if (typeof data === "string" && data !== "") {
-    return resolveUserPath(path.dirname(file), data);
+    return resolveUserPath(path.dirname(file), data, home);
   }
   if (
     isPlainObject(data) &&

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import type { Host } from "../host.js";
 
 // XDG Base Directory split:
 //   - daemon runtime (pid, log, heap snapshots, spawn.lock) → $XDG_STATE_HOME/cc-candybar
@@ -19,33 +20,28 @@ function xdgEnv(env: NodeJS.ProcessEnv, name: string): string | undefined {
   return v && v.length > 0 ? v : undefined;
 }
 
-// [LAW:effects-at-boundaries] The environment is a parameter with the
-// process's own as its default, so a spawner holding a daemon's env (a test
-// fixture) can name that daemon's files — its log above all — without a second
-// derivation of this layout beside this one.
-export function stateDir(env: NodeJS.ProcessEnv = process.env): string {
+// [LAW:effects-at-boundaries] The host is a parameter with no default, so a
+// spawner holding a daemon's host (a test fixture) can name that daemon's files
+// — its log above all — without a second derivation of this layout beside this
+// one.
+export function stateDir(host: Host): string {
   const base =
-    xdgEnv(env, "XDG_STATE_HOME") ?? path.join(os.homedir(), ".local", "state");
+    xdgEnv(host.env, "XDG_STATE_HOME") ??
+    path.join(host.home, ".local", "state");
   return path.join(base, "cc-candybar");
 }
 
-export function cacheDir(env: NodeJS.ProcessEnv = process.env): string {
+export function cacheDir(host: Host): string {
   const base =
-    xdgEnv(env, "XDG_CACHE_HOME") ?? path.join(os.homedir(), ".cache");
-  return path.join(base, "cc-candybar");
-}
-
-export function configDir(env: NodeJS.ProcessEnv = process.env): string {
-  const base =
-    xdgEnv(env, "XDG_CONFIG_HOME") ?? path.join(os.homedir(), ".config");
+    xdgEnv(host.env, "XDG_CACHE_HOME") ?? path.join(host.home, ".cache");
   return path.join(base, "cc-candybar");
 }
 
 // `daemonDir` kept as the canonical name for the runtime root so existing
 // callers (limits.ts, server.ts) don't need to learn a new term. It now
 // resolves under $XDG_STATE_HOME/cc-candybar instead of ~/.claude/powerline.
-export function daemonDir(env: NodeJS.ProcessEnv = process.env): string {
-  return stateDir(env);
+export function daemonDir(host: Host): string {
+  return stateDir(host);
 }
 
 // [LAW:one-source-of-truth] The socket IS the daemon's identity — same as
@@ -54,8 +50,8 @@ export function daemonDir(env: NodeJS.ProcessEnv = process.env): string {
 // is cleared on reboot, which is fine — the daemon doesn't survive reboots.
 // CC_CANDYBAR_SOCKET is the only explicit override for intentional isolation
 // (tests, dev, multiple intentional instances).
-export function socketPath(env: NodeJS.ProcessEnv = process.env): string {
-  return env.CC_CANDYBAR_SOCKET || defaultSocketPath();
+export function socketPath(host: Host): string {
+  return host.env.CC_CANDYBAR_SOCKET || defaultSocketPath();
 }
 
 // The socket a process with no override reaches — the URL handler app's, which
@@ -151,22 +147,20 @@ export function leasePathFor(sockPath: string): string {
   return `${sockPath}.lease`;
 }
 
-export function leasePath(env: NodeJS.ProcessEnv = process.env): string {
-  return leasePathFor(socketPath(env));
+export function leasePath(host: Host): string {
+  return leasePathFor(socketPath(host));
 }
 
-export function sessionStatePath(env: NodeJS.ProcessEnv = process.env): string {
-  return path.join(stateDir(env), "session-state.json");
+export function sessionStatePath(host: Host): string {
+  return path.join(stateDir(host), "session-state.json");
 }
 
 // [LAW:one-source-of-truth] Each session's undo/redo history over every
 // settings change it made (src/daemon/settings-history.ts). Daemon-owned
 // runtime state, so it sits beside session-state.json — the config files its
 // steps snapshot are the user's, wherever discovery resolved them.
-export function settingsHistoryPath(
-  env: NodeJS.ProcessEnv = process.env,
-): string {
-  return path.join(stateDir(env), "settings-history.json");
+export function settingsHistoryPath(host: Host): string {
+  return path.join(stateDir(host), "settings-history.json");
 }
 
 // [LAW:one-source-of-truth] The fork-bomb breaker's daemon-population registry
@@ -179,10 +173,8 @@ export function settingsHistoryPath(
 // `CC_CANDYBAR_DAEMON_REGISTRY_DIR` is the explicit override, used only by
 // tests of the breaker itself so they don't contend over the machine's real
 // shared registry.
-export function daemonRegistryDir(
-  env: NodeJS.ProcessEnv = process.env,
-): string {
-  const override = env.CC_CANDYBAR_DAEMON_REGISTRY_DIR;
+export function daemonRegistryDir(host: Host): string {
+  const override = host.env.CC_CANDYBAR_DAEMON_REGISTRY_DIR;
   if (override) return override;
   const uid = os.userInfo().uid;
   return path.join("/tmp", `cc-candybar-${uid}`, "daemons");
@@ -192,8 +184,8 @@ export function daemonRegistryDir(
 // the spawn window — never for the daemon's lifetime. The actual one-daemon
 // invariant is enforced by atomic bind() on socketPath() inside the daemon.
 // This file is a thundering-herd optimization, not the load-bearing lock.
-export function spawnLockPath(env: NodeJS.ProcessEnv = process.env): string {
-  return path.join(stateDir(env), "spawn.lock");
+export function spawnLockPath(host: Host): string {
+  return path.join(stateDir(host), "spawn.lock");
 }
 
 // [LAW:one-source-of-truth] The spawn-RATE bound (as distinct from spawn.lock's
@@ -203,10 +195,8 @@ export function spawnLockPath(env: NodeJS.ProcessEnv = process.env): string {
 // and diffed by scripts/check-protocol.mjs — a drift would silently split the
 // rate bound in two.
 const SPAWN_COOLDOWN_FILE = "spawn.cooldown";
-export function spawnCooldownPath(
-  env: NodeJS.ProcessEnv = process.env,
-): string {
-  return path.join(stateDir(env), SPAWN_COOLDOWN_FILE);
+export function spawnCooldownPath(host: Host): string {
+  return path.join(stateDir(host), SPAWN_COOLDOWN_FILE);
 }
 
 // [LAW:one-source-of-truth] Sibling of spawn.cooldown: that file's mtime
@@ -216,18 +206,18 @@ export function spawnCooldownPath(
 // (see effectiveCooldownMs in acquire.ts). Same filename mirrored TS↔Rust,
 // diffed by scripts/check-protocol.mjs.
 const SPAWN_BACKOFF_FILE = "spawn.backoff";
-export function spawnBackoffPath(env: NodeJS.ProcessEnv = process.env): string {
-  return path.join(stateDir(env), SPAWN_BACKOFF_FILE);
+export function spawnBackoffPath(host: Host): string {
+  return path.join(stateDir(host), SPAWN_BACKOFF_FILE);
 }
 
 // The daemon's own folder for testing its file watch: never the state
 // directory itself, where the log writes on every request.
-export function watchProbeDir(env: NodeJS.ProcessEnv = process.env): string {
-  return path.join(stateDir(env), "watch-probe");
+export function watchProbeDir(host: Host): string {
+  return path.join(stateDir(host), "watch-probe");
 }
 
-export function logPath(env: NodeJS.ProcessEnv = process.env): string {
-  return path.join(stateDir(env), "daemon.log");
+export function logPath(host: Host): string {
+  return path.join(stateDir(host), "daemon.log");
 }
 
 // [LAW:effects-at-boundaries] Every path a daemon process touches, read from
@@ -248,16 +238,51 @@ export interface DaemonPaths {
   readonly spawnBackoff: string;
 }
 
-export function daemonPaths(env: NodeJS.ProcessEnv = process.env): DaemonPaths {
+export function daemonPaths(host: Host): DaemonPaths {
   return {
-    socket: socketPath(env),
-    lease: leasePath(env),
-    state: stateDir(env),
-    registry: daemonRegistryDir(env),
-    log: logPath(env),
-    sessionState: sessionStatePath(env),
-    settingsHistory: settingsHistoryPath(env),
-    watchProbe: watchProbeDir(env),
-    spawnBackoff: spawnBackoffPath(env),
+    socket: socketPath(host),
+    lease: leasePath(host),
+    state: stateDir(host),
+    registry: daemonRegistryDir(host),
+    log: logPath(host),
+    sessionState: sessionStatePath(host),
+    settingsHistory: settingsHistoryPath(host),
+    watchProbe: watchProbeDir(host),
+    spawnBackoff: spawnBackoffPath(host),
+  };
+}
+
+// [LAW:one-source-of-truth] Where the user's config and installed plugins live,
+// and the home they default under: the one derivation the config loader, the
+// plugin installer and the doctor share, so an empty `XDG_CONFIG_HOME` means
+// the default in all of them (the XDG rule `xdgEnv` applies to every variable
+// here). Pure over the host, parsed once by the root and handed down.
+export interface Locations {
+  readonly home: string;
+  readonly configHome: string;
+  readonly dataHome: string;
+  // Most-preferred first, as `XDG_DATA_DIRS` orders them.
+  readonly dataDirs: readonly string[];
+}
+
+export function locations(host: Host): Locations {
+  const { env } = host;
+  // The XDG default, and on macOS Homebrew's share/ first: Apple-silicon
+  // Homebrew lives outside `/usr/local` (`$HOMEBREW_PREFIX`, set by its
+  // shellenv, else its default `/opt/homebrew`).
+  const xdgDefault = "/usr/local/share:/usr/share";
+  const defaultDataDirs =
+    process.platform === "darwin"
+      ? `${path.join(xdgEnv(env, "HOMEBREW_PREFIX") ?? "/opt/homebrew", "share")}:${xdgDefault}`
+      : xdgDefault;
+  return {
+    home: host.home,
+    configHome:
+      xdgEnv(env, "XDG_CONFIG_HOME") ?? path.join(host.home, ".config"),
+    dataHome:
+      xdgEnv(env, "XDG_DATA_HOME") ?? path.join(host.home, ".local", "share"),
+    dataDirs: (xdgEnv(env, "XDG_DATA_DIRS") ?? defaultDataDirs)
+      .split(":")
+      .filter((d) => d !== ""),
   };
 }

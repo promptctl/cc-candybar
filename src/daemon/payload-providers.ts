@@ -14,6 +14,7 @@ import { GitDataProvider } from "./cache/git";
 import { SessionUsageStore } from "./cache/session-usage-store";
 import type { WatcherRegistry } from "./cache/watchers";
 import { GitService } from "../segments/git";
+import type { Host } from "../host";
 import type { Launcher } from "../proc/launch";
 import type { FileEvents } from "./cache/file-events";
 import type { DaemonLogger } from "../utils/logger";
@@ -38,6 +39,8 @@ export type PayloadProviders = Omit<RenderPayloadDeps, "lanes">;
 export function createPayloadProviders(opts: {
   // Who the git and tmux reads belong to.
   readonly launcher: Launcher;
+  // The machine the providers read: where transcripts and settings live.
+  readonly host: Host;
   readonly watchers: WatcherRegistry;
   // Whether the OS is delivering file events: the caller's one owner, which
   // only the daemon starts.
@@ -47,6 +50,7 @@ export function createPayloadProviders(opts: {
 }): PayloadProviders {
   const { launcher, logger, ledger } = opts;
   return {
+    home: opts.host.home,
     hostService: new HostService({ logger, ledger }),
     gitProvider: new GitDataProvider({
       inner: new GitService(launcher),
@@ -54,7 +58,7 @@ export function createPayloadProviders(opts: {
       logger,
       ledger,
     }),
-    usageStore: new SessionUsageStore({ logger, ledger }),
+    usageStore: new SessionUsageStore({ host: opts.host, logger, ledger }),
     contextProvider: new ContextProvider({ logger, ledger }),
     metricsProvider: new MetricsProvider({ logger, ledger }),
     activityProvider: new ActivityProvider({ logger, ledger }),

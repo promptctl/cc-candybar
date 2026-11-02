@@ -32,20 +32,3 @@ const RESERVED_CHARS = 2;
 export function applyClaudeCodeReserve(rawCols: number): number {
   return Math.max(1, rawCols - RESERVED_CHARS);
 }
-
-export function getTerminalWidth(termColsHint?: number): number | null {
-  if (termColsHint && termColsHint > 0)
-    return applyClaudeCodeReserve(termColsHint);
-
-  const envColumns = process.env.COLUMNS;
-  if (envColumns) {
-    const parsed = parseInt(envColumns, 10);
-    if (!isNaN(parsed) && parsed > 0) return applyClaudeCodeReserve(parsed);
-  }
-
-  if (process.stderr.columns && process.stderr.columns > 0) {
-    return applyClaudeCodeReserve(process.stderr.columns);
-  }
-
-  return null;
-}

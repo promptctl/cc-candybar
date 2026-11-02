@@ -7,6 +7,8 @@ import {
   type UsageInfo,
   type TokenBreakdown,
 } from "../../segments/session";
+import type { Host } from "../../host";
+import { cacheDir } from "../paths";
 import { PricingService } from "../../segments/pricing";
 import {
   getClaudePaths,
@@ -290,6 +292,7 @@ const EMPTY_FILE_FOLD: FileFold = {
 async function foldFile(
   state: FileFold,
   entries: readonly ParsedEntry[],
+  cacheRoot: string,
 ): Promise<FileFold> {
   // dayKey strings sort lexically == chronologically, so "keep recent" is a
   // string comparison against yesterday's key.
@@ -304,7 +307,8 @@ async function foldFile(
     if (!u) continue;
     count++;
     const priced =
-      entry.costUSD ?? (await PricingService.calculateCostForEntry(entry.raw));
+      entry.costUSD ??
+      (await PricingService.calculateCostForEntry(entry.raw, cacheRoot));
     cost += priced;
     breakdown.input += u.input_tokens || 0;
     breakdown.output += u.output_tokens || 0;
@@ -490,6 +494,9 @@ export class SessionUsageStore {
   // the record (session, speed, today) share it, so it records and logs once.
   private readonly requestFlight = new SingleFlight();
   private readonly staleAgeMs: number;
+  // The machine the store reads: where transcripts live, and where the
+  // pricing table is cached.
+  private readonly host: Host;
   private readonly log: DaemonLogger;
   private readonly renderTally: IngestTally = { hits: 0, misses: 0 };
   private readonly ledger: RefreshLedger;
@@ -499,18 +506,18 @@ export class SessionUsageStore {
   private sweeps = 0;
   private sweepTimer: NodeJS.Timeout | null = null;
 
-  constructor(
-    opts: {
-      staleAgeMs?: number;
-      sweepIntervalMs?: number;
-      rescan?: Every;
-      // [LAW:single-enforcer] One injection point, as on GitDataProvider: the
-      // daemon passes its log; every other consumer keeps the debug-routed
-      // default and never writes daemon.log.
-      logger?: DaemonLogger;
-      ledger?: RefreshLedger;
-    } = {},
-  ) {
+  constructor(opts: {
+    host: Host;
+    staleAgeMs?: number;
+    sweepIntervalMs?: number;
+    rescan?: Every;
+    // [LAW:single-enforcer] One injection point, as on GitDataProvider: the
+    // daemon passes its log; every other consumer keeps the debug-routed
+    // default and never writes daemon.log.
+    logger?: DaemonLogger;
+    ledger?: RefreshLedger;
+  }) {
+    this.host = opts.host;
     this.log = opts.logger ?? quietLogger;
     this.ledger = opts.ledger ?? new RefreshLedger(this.log);
     this.usage = this.ledger.declare({
@@ -698,7 +705,7 @@ export class SessionUsageStore {
     holds: Holds,
     claudeConfigDir: string | undefined,
   ): Lane<DaySums> {
-    const claudePaths = getClaudePaths(claudeConfigDir);
+    const claudePaths = getClaudePaths(claudeConfigDir, this.host.home);
     const scans = this.scans.declare(holds, claudePaths);
     const set = this.daySet(claudePaths);
     return {
@@ -1003,7 +1010,7 @@ export class SessionUsageStore {
         filePath,
         priorFold,
         EMPTY_FILE_FOLD,
-        foldFile,
+        (state, entries) => foldFile(state, entries, cacheDir(this.host)),
       );
       if (read.kind === "failed") return read;
       if (read.kind === "absent") {

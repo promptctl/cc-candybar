@@ -308,7 +308,7 @@ export function productionLaneEdge(
         await launcher.launch({
           bin: "claude",
           args: [...args],
-          env: sessionEnv(process.env, session),
+          envOverlay: sessionEnv(session),
           timeoutMs: 30_000,
           category: "lane.claude",
         }),

@@ -740,6 +740,10 @@ export class SourceRegistry {
     // every directory watch its `watch_file` sources need; a registry outside
     // the daemon keeps its own.
     private readonly watchers: WatcherRegistry = new WatcherRegistry(),
+    // [LAW:one-source-of-truth] The environment an `env` source reads: the
+    // daemon's host, handed in by whatever builds the registry. A registry built
+    // without one reads every variable as unset, and says so on the source.
+    private readonly env: Readonly<Record<string, string | undefined>> = {},
   ) {
     this.sessionState = sessionState;
     this.watchMgr = new PathWatches(watchers, fileEvents);
@@ -763,6 +767,7 @@ export class SourceRegistry {
       this.ledger,
       this.fileEvents,
       this.watchers,
+      this.env,
     );
   }
 
@@ -864,10 +869,10 @@ export class SourceRegistry {
     }
   }
 
-  // env: resolved once at declaration from process.env; box written once, never again.
+  // env: resolved once at declaration from the registry's environment; box written once, never again.
   // type is always 'string' — env vars are text by nature.
   declareEnv(name: string, envVar: string, varDefault?: string): void {
-    const raw = process.env[envVar];
+    const raw = this.env[envVar];
     if (raw !== undefined) {
       this.store.defineBox(name, "string", raw);
       return;

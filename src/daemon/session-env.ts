@@ -1,11 +1,11 @@
-// [LAW:single-enforcer] The one environment a program the daemon runs for a
-// session gets: the daemon's own, less every variable that states a session
-// fact, plus the facts this session knows. The daemon is detached, so its own
+// [LAW:single-enforcer] The one environment change a program the daemon runs for
+// a session gets: the daemon's own environment, less every variable that states
+// a session fact, plus the facts this session knows. The daemon is detached, so its own
 // session variables are whichever shell spawned it, and wrong for every other
 // session (.claude/memory/architecture.md).
 
-// The variables that state a session fact. Each is removed from the daemon's
-// environment, and set again only from the session's own facts.
+// The variables that state a session fact. Each is unset, and set again only
+// from the session's own facts.
 const SESSION_FACT_VARIABLES = [
   "CLAUDE_CODE_SESSION_ID",
   "CLAUDE_PROJECT_DIR",
@@ -26,14 +26,17 @@ export interface SessionFacts {
   readonly claudeConfigDir: string | undefined;
 }
 
+// The overlay on the daemon's inherited environment: every session-fact
+// variable unset (an overlay entry of `undefined` removes it), then the ones
+// this session knows set. The inherited environment is the launcher's, so the
+// daemon's own reaches no program but through this.
 export function sessionEnv(
-  daemonEnv: NodeJS.ProcessEnv,
   facts: SessionFacts,
-): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...daemonEnv };
-  for (const name of SESSION_FACT_VARIABLES) delete env[name];
+): Record<string, string | undefined> {
   return {
-    ...env,
+    ...Object.fromEntries(
+      SESSION_FACT_VARIABLES.map((name) => [name, undefined]),
+    ),
     CLAUDE_CODE_SESSION_ID: facts.sessionId,
     CLAUDE_PROJECT_DIR: facts.projectDir,
     ...(facts.claudeConfigDir !== undefined && {

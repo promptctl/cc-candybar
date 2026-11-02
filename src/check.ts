@@ -27,7 +27,7 @@
 // next render shows what check showed).
 
 import { linkKeyFile, linkSignerFromKeyFile } from "./daemon/link-key.js";
-import { stateDir } from "./daemon/paths.js";
+import { locations, stateDir } from "./daemon/paths.js";
 import { repoConfigs } from "./daemon/repo-configs.js";
 import { repoGateLines } from "./config/loader/repo-gate.js";
 import type { ConfigResolution } from "./config/loader/discovery.js";
@@ -52,7 +52,7 @@ import { autoCompactControls } from "./segments/autocompact.js";
 import type { ValidatedConfig } from "./config/dsl-types.js";
 import { DEFAULT_DSL_CONFIG } from "./config/default-dsl-config.js";
 import { VariableStore } from "./var-system/store.js";
-import { processLauncher } from "./proc/launch";
+import type { World } from "./host";
 import { SourceRegistry } from "./var-system/sources.js";
 import { SessionState } from "./daemon/session-state.js";
 import {
@@ -373,6 +373,7 @@ function searchedLayers(
 // renderer; a verdict command must not report "clean" about a file it never
 // read.)
 export async function checkConfig(
+  world: World,
   // The gates the daemon holds (`daemonGates`), so what `check` refuses is
   // what the daemon's load refuses.
   gates: Gates,
@@ -394,11 +395,13 @@ export async function checkConfig(
   // probe at the argv trust boundary, not a second read: a directory target
   // (`check .`) fails read() with a path-less EISDIR the catch could not
   // attribute, so the not-a-file usage error is decided here.
-  const configPath = explicitConfigPath(cwd, target) ?? null;
+  const configPath = explicitConfigPath(cwd, target, world.host.home) ?? null;
   // [LAW:single-enforcer] The daemon's gate, under the same answers: a
   // repository the bar would not run, `check` names and runs nothing of.
+  const locs = locations(world.host);
   const resolution = resolveDslConfig(
-    repoConfigs(stateDir()).read(),
+    locs,
+    repoConfigs(stateDir(world.host)).read(),
     cwd,
     cwd,
     configPath ?? undefined,
@@ -436,11 +439,12 @@ export async function checkConfig(
   // [LAW:dataflow-not-control-flow] Collision detection runs independent of
   // load success: even if the .json5 fails to parse, the author still wants
   // to know a shadowed .json sibling exists.
-  const collision = detectConfigCollisions(cwd, cwd);
+  const collision = detectConfigCollisions(locs, cwd, cwd);
   if (collision !== null) warnings.push(collision);
 
   try {
     const rendered = await loadRegisterRender(
+      world,
       gates,
       layers,
       { repo: resolution.repos.plugins },
@@ -513,6 +517,7 @@ export type RepoSession = Omit<SessionDirs, "cwd">;
 export const NO_REPO: RepoSession = { repo: null };
 
 export async function prepareConfig(
+  world: World,
   chain: readonly ConfigLayer[],
   repo: RepoSession,
   cwd: string,
@@ -526,6 +531,7 @@ export async function prepareConfig(
   // land before its validation, so a fatal outcome still carries them.
   const layers = chain.map((l) => l.path);
   const loaded = loadConfigChain(
+    locations(world.host),
     chain,
     DEFAULT_DSL_CONFIG,
     { warned: (w) => warnings.push(...w) },
@@ -538,17 +544,22 @@ export async function prepareConfig(
 
   const store = new VariableStore();
   const registry = new SourceRegistry(
-    processLauncher,
+    world.launcher,
     store,
     config.globals.default_empty_value ?? "",
     new SessionState(),
+    null,
+    undefined,
+    undefined,
+    undefined,
+    world.host.env,
   );
   try {
     // [LAW:single-enforcer] check draws `run` links as the daemon does,
     // signed with the one key.
     const compiled = registerDslConfig(config, registry, {
       cwd,
-      signer: linkSignerFromKeyFile(linkKeyFile(stateDir())),
+      signer: linkSignerFromKeyFile(linkKeyFile(stateDir(world.host))),
     });
     warnings.push(...compiled.loadWarnings);
     // A view's inputs are pending until its source answers, and a source
@@ -686,6 +697,7 @@ export async function renderEffective(
 // The verdict: the prepared config rendered under every preset, every render
 // error a failure. Returns the line a fresh session renders.
 async function loadRegisterRender(
+  world: World,
   gates: Gates,
   chain: readonly ConfigLayer[],
   repo: RepoSession,
@@ -697,6 +709,7 @@ async function loadRegisterRender(
   // differ only in the preset they render; one settle window for every wait.
   const at = instantOf(new Date());
   const prepared = await prepareConfig(
+    world,
     chain,
     repo,
     cwd,
@@ -948,6 +961,7 @@ function parseCheckArgs(args: readonly string[]): CheckArgs {
 // its plan carries.
 export async function checkCommandPlan(
   args: readonly string[],
+  world: World,
 ): Promise<CliPlan> {
   const parsed = parseCheckArgs(args);
   const cwd = process.cwd();
@@ -958,8 +972,9 @@ export async function checkCommandPlan(
         // the same argument, already absolute — `checkConfig`'s own
         // resolution, the seam for its direct callers, passes it through.
         await checkConfig(
+          world,
           daemonGates(),
-          cliConfigTarget(parsed.target, process.env, cwd).path,
+          cliConfigTarget(parsed.target, world.host, cwd).path,
           cwd,
         ),
         parsed.render,

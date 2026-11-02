@@ -31,6 +31,10 @@ import type { RenderedLine } from "../dsl/node-registry.js";
 // (src/daemon/daemon.ts) and read by the request handling, which keeps none of
 // its own.
 export interface DaemonParts {
+  // The user's home: the default Claude Code directory is under it.
+  readonly home: string;
+  // The temporary directory a click's handoff writes under.
+  readonly tmp: string;
   readonly clock: DaemonClock;
   readonly launcher: Launcher;
   readonly log: DaemonLogger;

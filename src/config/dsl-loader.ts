@@ -27,6 +27,7 @@
 
 import fs from "node:fs";
 import JSON5 from "json5";
+import type { Locations } from "../daemon/paths.js";
 import {
   type DslConfig,
   type InsertCell,
@@ -193,6 +194,11 @@ export type { DroppedPlugin } from "./loader/plugins.js";
  * [LAW:dataflow-not-control-flow] One function, one branch, same operations
  * each call.
  */
+// No file: the bundled default, under nothing.
+function noFile(dflt: DslConfig): LoadedFile & { config: DslConfig } {
+  return { ...NO_FILE, config: mergeWithDefault(NO_FILE.raw, dflt) };
+}
+
 export function loadConfig(
   path: string | null,
   dflt: DslConfig,
@@ -200,7 +206,7 @@ export function loadConfig(
   allowedPalettes?: ReadonlySet<string>,
 ): LoadedFile & { config: DslConfig } {
   return path === null
-    ? { ...NO_FILE, config: mergeWithDefault(NO_FILE.raw, dflt) }
+    ? noFile(dflt)
     : loadConfigSource(
         path,
         fs.readFileSync(path, "utf-8"),
@@ -227,12 +233,15 @@ export interface LoadContext extends PluginContext {
 
 // A load with no session and nothing beneath the bundled default: a
 // `data: { checkout }` plugin drops, naming why.
-export const NO_PROJECT: LoadContext = {
-  scope: "plugins",
-  repo: null,
-  checkout: null,
-  beneath: { dropped: [], rendering: new Map() },
-};
+export function noProject(home: string): LoadContext {
+  return {
+    scope: "plugins",
+    repo: null,
+    checkout: null,
+    home,
+    beneath: { dropped: [], rendering: new Map() },
+  };
+}
 
 /**
  * loadConfig over text already in hand — the file as it WOULD read, for a
@@ -256,7 +265,7 @@ export function loadConfigSource(
     const layer = applyPlugins(
       // [LAW:one-source-of-truth] The layer's scope, decided where the
       // layer was discovered, rides on every definition it lists.
-      listedPlugins(refs, path, ctx.scope),
+      listedPlugins(refs, path, ctx.scope, ctx.home),
       ctx,
       { config: dflt, rendering: ctx.beneath.rendering },
       (c, plugin, replaces) =>
@@ -343,10 +352,11 @@ export function definitionProblems(
   definitions: readonly PluginDefinition[],
   dflt: DslConfig,
   checkout: Checkout,
+  home: string,
 ): readonly DroppedPlugin[] {
   return applyPlugins(
     definitions,
-    { repo: null, checkout },
+    { repo: null, checkout, home },
     { config: dflt, rendering: new Map() },
     (c, plugin, replaces) =>
       checkPlugin(c, plugin, replaces, "<plugin install>", undefined),
@@ -385,6 +395,7 @@ function statKey(file: string): string {
  * takes.
  */
 export function loadConfigChain(
+  locs: Locations,
   chain: readonly ConfigLayer[],
   dflt: DslConfig,
   trace: ChainTrace,
@@ -397,12 +408,13 @@ export function loadConfigChain(
   const ctx: PluginContext = {
     repo: session.repo,
     checkout: session.cwd === null ? null : checkoutOf(session.cwd),
+    home: locs.home,
   };
   // [LAW:one-source-of-truth] Installed plugins are the layer every file
   // merges over: bundled < installed < the chain's files (and what each
   // lists). A file names an installed plugin's segment exactly as it names a
   // bundled one.
-  const found = installedPlugins(ctx.repo);
+  const found = installedPlugins(locs, ctx.repo);
   const merged = installedLayer(found.definitions, ctx, dflt, allowedPalettes);
   const plugins = {
     ...merged,
@@ -480,7 +492,7 @@ export function loadConfigChain(
       installed,
       ...renderable(
         validateRenderable(
-          loadConfig(null, base, NO_PROJECT),
+          noFile(base),
           rendering,
           "<default>",
           allowedPalettes,

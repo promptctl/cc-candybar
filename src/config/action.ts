@@ -279,7 +279,9 @@ export interface RunAction {
   readonly run: readonly [string, ...string[]];
   readonly env: Readonly<Record<string, string>>;
   readonly refreshes: readonly string[];
-  readonly cwd: string;
+  // The declaring file's directory; null for the bundled config, which has no
+  // file and whose runs go in the user's home (the daemon's `locations`).
+  readonly cwd: string | null;
 }
 
 // [LAW:one-source-of-truth] A run's declaration as its link signs it, spelled

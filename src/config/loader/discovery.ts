@@ -4,8 +4,8 @@
 // which files are candidates. This file changes when the resolution rules change.
 
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
+import type { Locations } from "../../daemon/paths.js";
 import { presence, type Unchecked } from "../../utils/presence.js";
 import { listFolders, REPO_PLUGIN_DIR } from "./plugin-folders.js";
 import { worktreeLink } from "../../utils/git-root.js";
@@ -54,6 +54,7 @@ const CONFIG_EXTENSIONS = ["json5", "json"] as const;
  * here so no consumer probes, watches, or reports one location twice.
  */
 export function dslConfigCandidatePaths(
+  locs: Locations,
   projectDir?: string,
   cwd?: string,
   configFile?: string,
@@ -74,7 +75,7 @@ export function dslConfigCandidatePaths(
       ...CONFIG_EXTENSIONS.map((ext) =>
         path.join(effectiveCwd, `${REPO_CONFIG_BASE}.${ext}`),
       ),
-      ...CONFIG_EXTENSIONS.map((ext) => `${xdgConfigBase()}.${ext}`),
+      ...CONFIG_EXTENSIONS.map((ext) => `${xdgConfigBase(locs)}.${ext}`),
     ]),
   ];
 }
@@ -87,10 +88,8 @@ const REPO_CONFIG_BASE = ".cc-candybar";
 // tail of the precedence chain: `$XDG_CONFIG_HOME/cc-candybar/config`
 // (defaulting to `~/.config/cc-candybar/config`). The candidate enumerator
 // appends each accepted extension; `userHome` appends the documented one.
-function xdgConfigBase(): string {
-  const xdgConfigHome =
-    process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), ".config");
-  return path.join(xdgConfigHome, "cc-candybar", "config");
+function xdgConfigBase(locs: Locations): string {
+  return path.join(locs.configHome, "cc-candybar", "config");
 }
 
 /**
@@ -186,6 +185,7 @@ export type ConfigResolution = { readonly repos: RepoGate } & (
  * resolve here.
  */
 export function resolveDslConfig(
+  locs: Locations,
   answers: RepoAnswers,
   projectDir?: string,
   cwd?: string,
@@ -199,6 +199,7 @@ export function resolveDslConfig(
     { readonly file: string; readonly repo: RepoDir | null }
   >();
   for (const candidate of dslConfigCandidatePaths(
+    locs,
     projectDir,
     cwd,
     configFile,
@@ -223,7 +224,7 @@ export function resolveDslConfig(
       atLocation.set(location, {
         file: candidate,
         repo:
-          configFile !== undefined || isUserFile(candidate)
+          configFile !== undefined || isUserFile(locs, candidate)
             ? null
             : { dir, link: worktreeLink(dir) },
       });
@@ -248,7 +249,7 @@ export function resolveDslConfig(
     return {
       kind: "chain",
       layers,
-      home: userHome(layers),
+      home: userHome(locs, layers),
       unchecked,
       repos,
     };
@@ -266,8 +267,10 @@ export function resolveDslConfig(
 
 // The user's own XDG file, at either extension: the one chain layer no
 // repository can supply.
-function isUserFile(candidate: string): boolean {
-  return CONFIG_EXTENSIONS.some((e) => candidate === `${xdgConfigBase()}.${e}`);
+function isUserFile(locs: Locations, candidate: string): boolean {
+  return CONFIG_EXTENSIONS.some(
+    (e) => candidate === `${xdgConfigBase(locs)}.${e}`,
+  );
 }
 
 // The session's project, or null for none, or one that is not there.
@@ -290,10 +293,10 @@ export function repoProject(
 // The user's file: the XDG layer when the chain holds one, else the file a
 // first-ever write creates there — CONFIG_EXTENSIONS' head, the documented
 // format, the one that wins a same-location tie.
-function userHome(layers: readonly ConfigLayer[]): string {
+function userHome(locs: Locations, layers: readonly ConfigLayer[]): string {
   return (
-    layers.find((l) => isUserFile(l.path))?.path ??
-    `${xdgConfigBase()}.${CONFIG_EXTENSIONS[0]}`
+    layers.find((l) => isUserFile(locs, l.path))?.path ??
+    `${xdgConfigBase(locs)}.${CONFIG_EXTENSIONS[0]}`
   );
 }
 
@@ -321,21 +324,25 @@ export interface ConfigHome {
   // directory their checkout data paths resolve against.
   readonly repo: ApprovedRepo | null;
   readonly cwd: string | null;
+  // Where the installed plugins this chain loads over live.
+  readonly locs: Locations;
 }
 
 export function durableConfig(
+  locs: Locations,
   answers: RepoAnswers,
   projectDir?: string,
   cwd?: string,
   configFile?: string,
 ): ConfigHome {
-  const resolved = resolveDslConfig(answers, projectDir, cwd, configFile);
+  const resolved = resolveDslConfig(locs, answers, projectDir, cwd, configFile);
   const layers = resolved.kind === "chain" ? resolved.layers : [];
   return {
     path: resolved.home,
     above: layers.filter((l) => l.path !== resolved.home),
     repo: resolved.repos.plugins,
     cwd: cwd ?? null,
+    locs,
   };
 }
 
@@ -394,12 +401,13 @@ function noticeLines(resolution: ConfigResolution): readonly string[] {
  * all exist. No special-case branches per extension.
  */
 export function detectConfigCollisions(
+  locs: Locations,
   projectDir?: string,
   cwd?: string,
 ): string | null {
   // The enumerator yields each path once, so an existing member here is a
   // file on disk, never the same candidate seen from two chain positions.
-  const existing = dslConfigCandidatePaths(projectDir, cwd).filter(
+  const existing = dslConfigCandidatePaths(locs, projectDir, cwd).filter(
     (candidate) => presence(candidate) === "present",
   );
   // Group by (dir + base-without-extension). A group with > 1 existing

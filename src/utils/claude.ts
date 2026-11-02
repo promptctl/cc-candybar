@@ -10,7 +10,6 @@ import {
   type WholeLines,
 } from "./transcript-fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
 import { debug } from "./logger";
 import { ok, type Outcome } from "./outcome";
 import {
@@ -113,9 +112,11 @@ export interface ClaudeHookData {
 // [LAW:single-enforcer] The directory is the client's to report
 // (detectClaudeConfigDir, src/claude-settings.ts): this runs in the detached
 // daemon, whose own CLAUDE_CONFIG_DIR answers for whichever session spawned it.
-export function getClaudePaths(detected: string | undefined): string[] {
+export function getClaudePaths(
+  detected: string | undefined,
+  homeDir: string,
+): string[] {
   if (detected !== undefined) return [detected];
-  const homeDir = homedir();
   return [join(homeDir, ".config", "claude"), join(homeDir, ".claude")].filter(
     (dir) => existsSync(dir),
   );

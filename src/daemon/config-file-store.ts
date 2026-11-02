@@ -534,6 +534,7 @@ function loadedOrNull(
 // layer whatever it holds.
 function chainOver(home: ConfigHome, text: string | null): LoadedChain {
   return loadConfigChain(
+    home.locs,
     text !== null ? [homeLayer(home.path), ...home.above] : home.above,
     DEFAULT_DSL_CONFIG,
     { warned: () => {} },

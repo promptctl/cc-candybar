@@ -5,6 +5,7 @@
 // session — the statusline relay (src/index.ts) and the demo — so neither can
 // report a session differently from the other. The Rust client mirrors it.
 
+import type { Host } from "./host";
 import type { ClientHints } from "./daemon/protocol";
 import { detectClaudeConfigDir } from "./claude-settings";
 import { detectConfigEnv } from "./config-hint";
@@ -33,10 +34,11 @@ const SSH_ENV_VARS = ["SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"] as const;
 // Every hint but `client`: what the calling program IS is no fact of its
 // environment, and only a statusline client has one to report.
 export function detectClientHints(
-  env: NodeJS.ProcessEnv,
+  host: Pick<Host, "env" | "home">,
   cwd: string,
   tty: { readonly columns?: number; readonly rows?: number },
 ): Omit<ClientHints, "client"> {
+  const { env } = host;
   return {
     termCols: detectTermExtent(env.COLUMNS, tty.columns),
     // The terminal's height, as the render event reports it.
@@ -51,7 +53,7 @@ export function detectClientHints(
     tmux: detectTmuxHint(env),
     // Conditional like termCols: absent IS "no override", so the daemon
     // resolves the precedence chain. The daemon reads no env of its own.
-    configEnv: detectConfigEnv(env, cwd),
+    configEnv: detectConfigEnv(host, cwd),
     // Conditional too: absent is the default directory. The daemon reads
     // settings.json from THIS session's Claude Code directory.
     claudeConfigDir: detectClaudeConfigDir(env, cwd),

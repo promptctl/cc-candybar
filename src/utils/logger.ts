@@ -3,7 +3,15 @@
 // writer that delivers it itself (a one-shot command's plan), and is empty
 // when the channel is off. The message is a thunk, so what it costs to
 // compose (a byte count over a body) is paid only when the channel is on.
-const debugOn = (): boolean => Boolean(process.env.CC_CANDYBAR_DEBUG);
+// [LAW:no-shared-mutable-globals] The one owner of the switch is this module,
+// and a process main sets it once (src/index.ts, src/demo/*.ts) from its
+// environment. Off until it does: debug text is diagnostics, not behaviour.
+let debugEnabled = false;
+const debugOn = (): boolean => debugEnabled;
+
+export function setDebug(on: boolean): void {
+  debugEnabled = on;
+}
 
 export function debugText(message: () => string): string {
   return debugOn() ? `[DEBUG] ${message()}\n` : "";

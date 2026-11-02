@@ -14,7 +14,6 @@
 // the platform's word, never a guess from the font's name.
 
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { parse as parseToml } from "smol-toml";
 import type { Launcher } from "../proc/launch.js";
@@ -444,8 +443,8 @@ async function alacrittyFont(
   launcher: Launcher,
   env: TerminalEnvHint,
   glyphs: string,
+  home: string,
 ): Promise<Asked<FontInUse>> {
-  const home = os.homedir();
   const config = alacrittyConfigPaths(home, env.XDG_CONFIG_HOME).find((p) =>
     fs.existsSync(p),
   );
@@ -489,12 +488,13 @@ const READERS: Readonly<
       version: string | null,
       env: TerminalEnvHint,
       glyphs: string,
+      home: string,
     ) => Promise<Asked<FontInUse>>
   >
 > = {
   iterm2: itermFont,
-  alacritty: (launcher, _version, env, glyphs) =>
-    alacrittyFont(launcher, env, glyphs),
+  alacritty: (launcher, _version, env, glyphs, home) =>
+    alacrittyFont(launcher, env, glyphs, home),
 };
 
 export function fontInUse(
@@ -505,6 +505,7 @@ export function fontInUse(
   },
   env: TerminalEnvHint,
   glyphs: string,
+  home: string,
 ): Promise<Asked<FontInUse>> {
-  return READERS[terminal.name](launcher, terminal.version, env, glyphs);
+  return READERS[terminal.name](launcher, terminal.version, env, glyphs, home);
 }

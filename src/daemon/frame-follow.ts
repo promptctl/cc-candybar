@@ -6,6 +6,7 @@
 // so turning the toggle on resumes the frames.
 
 import { obtainDaemonKick } from "./acquire";
+import type { World } from "../host";
 import {
   openFrameStream,
   type FrameStream,
@@ -127,6 +128,7 @@ export interface FrameFollower {
 // time, never both: a stream's end schedules the next, and `close` cancels
 // whichever is live.
 export function followFrames(
+  world: World,
   sockPath: string,
   sessionId: string,
   lane: Lane,
@@ -172,7 +174,7 @@ export function followFrames(
             return;
           case "reconnect": {
             follow.fault(next.reason, retryMs);
-            if (next.kick) obtainDaemonKick();
+            if (next.kick) obtainDaemonKick(world);
             const wait = retryMs;
             retryMs = nextRetryMs(retryMs, "fault");
             reopenAfter(wait, true);

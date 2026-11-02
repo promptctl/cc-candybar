@@ -36,7 +36,8 @@ export interface RunRequest {
   readonly sessionId: SessionId;
   readonly action: string;
   readonly argv: readonly [string, ...string[]];
-  readonly env: NodeJS.ProcessEnv;
+  // Set over the owner's launcher's inherited environment.
+  readonly envOverlay: Readonly<Record<string, string | undefined>>;
   readonly cwd: string;
   readonly refreshes: readonly RunRefresh[];
 }
@@ -145,7 +146,7 @@ export class Runs {
         // looked up on PATH.
         bin: program.includes("/") ? path.resolve(run.cwd, program) : program,
         args,
-        env: run.env,
+        envOverlay: run.envOverlay,
         cwd: run.cwd,
         timeoutMs: this.timeoutMs,
         signal: abort.signal,

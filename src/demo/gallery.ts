@@ -25,6 +25,7 @@ import { prepareConfig, renderEffective } from "../check.js";
 import { ansiOf } from "../render/frame.js";
 import { homeLayer } from "../config/dsl-loader.js";
 import { stateDir } from "../daemon/paths.js";
+import { processWorld } from "../host.js";
 import { repoGateAt } from "../daemon/repo-configs.js";
 import { repoGateLines } from "../config/loader/repo-gate.js";
 import { listResolvablePaletteNames } from "../themes/policy.js";
@@ -34,6 +35,9 @@ const THEMES = listResolvablePaletteNames();
 const LABEL = Math.max(...THEMES.map((n) => n.length)) + 2;
 const WIDTH = (process.stdout.columns ?? 200) - LABEL;
 
+// [LAW:effects-at-boundaries] This script is its own process main: it reads the
+// machine once, as src/index.ts does.
+const world = processWorld();
 const warnings: string[] = [];
 // The argv path resolved as `check` resolves its own, so `.config_path` (the
 // demo switcher's sibling links) names the file absolutely.
@@ -42,10 +46,13 @@ const target = process.argv[2];
 // only in the theme they wear.
 const at = instantOf(new Date());
 const named =
-  target === undefined ? undefined : resolveUserPath(process.cwd(), target);
-const repos = repoGateAt(stateDir(), process.cwd());
+  target === undefined
+    ? undefined
+    : resolveUserPath(process.cwd(), target, world.host.home);
+const repos = repoGateAt(stateDir(world.host), process.cwd());
 warnings.push(...repoGateLines(repos));
 const prepared = await prepareConfig(
+  world,
   // The file named is explicit: no repository supplies it.
   named === undefined ? [] : [homeLayer(named)],
   { repo: repos.plugins },

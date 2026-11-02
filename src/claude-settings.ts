@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import os from "node:os";
+
 import path from "node:path";
 import { JSON_DIALECT } from "./config/json5-edit.js";
 import { readTailSync } from "./utils/transcript-fs.js";
@@ -32,8 +32,11 @@ export function detectClaudeConfigDir(
 
 // Claude Code's configuration directory: the one a client detected, else the
 // default, ~/.claude.
-export function claudeConfigDir(detected: string | undefined): string {
-  return detected ?? path.join(os.homedir(), ".claude");
+export function claudeConfigDir(
+  detected: string | undefined,
+  home: string,
+): string {
+  return detected ?? path.join(home, ".claude");
 }
 
 // [LAW:one-source-of-truth] THE location of Claude Code's user settings file

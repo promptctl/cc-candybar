@@ -6,9 +6,9 @@ import {
 import { sourceCheckoutOf } from "../daemon/build-currency.js";
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
 import { createRequire } from "node:module";
-import type { OneShotLauncher } from "../proc/launch";
+import { locations } from "../daemon/paths";
+import type { Host, World } from "../host";
 import { writeAtomic } from "../utils/atomic-write";
 import { tryClickViaDaemon } from "../daemon/client";
 import type {
@@ -55,8 +55,8 @@ function buildStatusLineCommand(
   return [binPath, ...rendererArgs].map(shellWord).join(" ");
 }
 
-function appBundlePath(): string {
-  return path.join(os.homedir(), "Applications", `${APP_NAME}.app`);
+function appBundlePath(host: Host): string {
+  return path.join(host.home, "Applications", `${APP_NAME}.app`);
 }
 
 function ensureMacOS(): void {
@@ -70,36 +70,29 @@ function ensureMacOS(): void {
 // [LAW:one-source-of-truth] The staged runtime lives at ONE stable path per
 // platform, outside any package manager's store — pnpm cache pruning or a
 // version bump can never yank the files the statusline and daemon run from.
-function supportDir(): string {
+function supportDir(host: Host): string {
   if (process.platform === "darwin") {
-    return path.join(
-      os.homedir(),
-      "Library",
-      "Application Support",
-      "CCCandybar",
-    );
+    return path.join(host.home, "Library", "Application Support", "CCCandybar");
   }
-  const xdgData =
-    process.env.XDG_DATA_HOME ?? path.join(os.homedir(), ".local", "share");
-  return path.join(xdgData, "cc-candybar");
+  return path.join(locations(host).dataHome, "cc-candybar");
 }
 
-function stagedBinPath(dir: string = supportDir()): string {
+function stagedBinPath(dir: string): string {
   return path.join(dir, "bin", "cc-candybar");
 }
 
-function stagedDistPath(dir: string = supportDir()): string {
+function stagedDistPath(dir: string): string {
   return path.join(dir, "dist", "index.mjs");
 }
 
 // The attach preload a user can keep typing across upgrades: a checkout's
 // own build, else the staged runtime's — never a package manager's store
 // path, which an upgrade removes.
-export function stableAttachPreload(runningBundle: string): string {
+export function stableAttachPreload(runningBundle: string, host: Host): string {
   const checkout = sourceCheckoutOf(runningBundle);
   return attachPreloadOf(
     checkout === null
-      ? stagedDistPath()
+      ? stagedDistPath(supportDir(host))
       : path.join(checkout, "dist", "index.mjs"),
   );
 }
@@ -228,12 +221,11 @@ export interface StagedRuntime {
 // entry) as adjacent files. Adjacency IS
 // the contract — every entry flavor locates the bundle via ../dist/index.mjs.
 // `sourceDist` is the bundle this process runs, as its entry names it; `dir`
-// is where it is staged — the user's stable path, unless a test names its
-// own (`os.homedir()` reads the process's real HOME, which a test's env does
-// not reach).
+// is where it is staged — the user's stable path (`supportDir`), or a test's
+// own.
 export function runStageRuntime(
   sourceDist: string,
-  dir: string = supportDir(),
+  dir: string,
 ): StagedRuntime {
   if (!fs.existsSync(sourceDist)) {
     throw new Error(
@@ -320,9 +312,9 @@ function infoPlistPatch(): Array<{ key: string; xml: string }> {
 // only through its darwin dispatch).
 function installUrlHandlerFrom(
   stagedDist: string,
-  launcher: OneShotLauncher,
+  { host, launcher }: World,
 ): void {
-  const bundle = appBundlePath();
+  const bundle = appBundlePath(host);
   fs.mkdirSync(path.dirname(bundle), { recursive: true });
 
   // If a previous handler exists, remove it so osacompile can write fresh.
@@ -382,15 +374,12 @@ function installUrlHandlerFrom(
   );
 }
 
-export function runInstallUrlHandler(
-  bundle: string,
-  launcher: OneShotLauncher,
-): void {
+export function runInstallUrlHandler(bundle: string, world: World): void {
   // Precondition before any side effect: on a non-mac this fails with zero
   // files written, not after staging the runtime.
   ensureMacOS();
-  const staged = runStageRuntime(bundle);
-  installUrlHandlerFrom(staged.distPath, launcher);
+  const staged = runStageRuntime(bundle, supportDir(world.host));
+  installUrlHandlerFrom(staged.distPath, world);
 }
 
 interface ParsedUrl {
@@ -441,7 +430,10 @@ export function parseHandlerUrl(
 // VERSION_MISMATCH against a future daemon) exits non-zero with the daemon's
 // error message so the failure is visible — never silently swallowed by a
 // local fallback that would diverge from the daemon's truth.
-export async function runUrlHandle(rawUrl: string | undefined): Promise<void> {
+export async function runUrlHandle(
+  rawUrl: string | undefined,
+  world: World,
+): Promise<void> {
   if (!rawUrl) {
     process.stderr.write("url-handle: missing URL argument.\n");
     process.exit(1);
@@ -457,7 +449,11 @@ export async function runUrlHandle(rawUrl: string | undefined): Promise<void> {
     process.exit(1);
   }
 
-  const outcome = await tryClickViaDaemon(parsed.verb, parsed.value);
+  const outcome = await tryClickViaDaemon(
+    world.host,
+    parsed.verb,
+    parsed.value,
+  );
   if (outcome.kind === "ok") {
     process.exit(0);
   }
@@ -466,7 +462,7 @@ export async function runUrlHandle(rawUrl: string | undefined): Promise<void> {
   // [LAW:dataflow-not-control-flow] Fire-and-forget kick; the user's click
   // is lost (no daemon answered it), but the next click hits a warm daemon.
   // Mirrors the render-path's transient recovery.
-  if (plan.kick) obtainDaemonKick();
+  if (plan.kick) obtainDaemonKick(world);
   process.stderr.write(plan.stderr);
   process.exit(plan.code);
 }
@@ -546,7 +542,7 @@ function installSuccessMessage(): string {
 export async function runInstall(
   rendererArgs: readonly string[],
   bundle: string,
-  launcher: OneShotLauncher,
+  world: World,
 ): Promise<void> {
   const force = rendererArgs.includes("--force");
   const filteredArgs = rendererArgs.filter((a) => a !== "--force");
@@ -554,17 +550,17 @@ export async function runInstall(
   const argsToInstall =
     filteredArgs.length > 0 ? filteredArgs : [...DEFAULT_INSTALL_ARGS];
 
-  const staged = runStageRuntime(bundle);
+  const staged = runStageRuntime(bundle, supportDir(world.host));
 
   if (process.platform === "darwin") {
-    installUrlHandlerFrom(staged.distPath, launcher);
+    installUrlHandlerFrom(staged.distPath, world);
   } else {
     process.stdout.write(
       "Skipping URL handler (cmd-click verbs are macOS-only).\n",
     );
   }
 
-  updateClaudeSettings(staged.binPath, argsToInstall, force);
+  updateClaudeSettings(staged.binPath, argsToInstall, force, world.host);
 
   process.stdout.write(installSuccessMessage());
 
@@ -591,6 +587,7 @@ function updateClaudeSettings(
   binPath: string,
   rendererArgs: readonly string[],
   force: boolean,
+  host: Host,
   overridePath?: string,
 ): void {
   // The CLI runs in the user's own shell, so its CLAUDE_CONFIG_DIR is the one
@@ -598,7 +595,10 @@ function updateClaudeSettings(
   const target =
     overridePath ??
     claudeSettingsPath(
-      claudeConfigDir(detectClaudeConfigDir(process.env, process.cwd())),
+      claudeConfigDir(
+        detectClaudeConfigDir(host.env, process.cwd()),
+        host.home,
+      ),
     );
   fs.mkdirSync(path.dirname(target), { recursive: true });
 
