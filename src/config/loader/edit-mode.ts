@@ -120,7 +120,13 @@ function fileWantsEditMode(out: Readonly<RawDslConfig>): boolean {
     return true;
   }
   for (const seg of Object.values(out.segments ?? {})) {
-    for (const field of [seg.template, seg.bg, seg.fg] as const) {
+    const fields = [
+      seg.template,
+      seg.bg,
+      seg.fg,
+      ...Object.values(seg.partials ?? {}),
+    ];
+    for (const field of fields) {
       if (typeof field === "string" && referencesEditToggle(field)) {
         return true;
       }

@@ -380,6 +380,34 @@ describe("payloadOf — layout-driven provider gating", () => {
     }
   });
 
+  // Regression for render-payload.ts's segmentTemplates, which seeded the
+  // payload-input closure from a segment's template/bg/fg/when alone — a
+  // path read only inside a dispatched `partials` body was never fetched
+  // (candybar-templates-zh8b.53s), the same gap b72c93e5 closed for
+  // unused-declaration and reachability checks.
+  test("a fact read only inside a partial keeps its provider online", () => {
+    const config: DslConfig = {
+      globals: {},
+      variables: SHARED_VARIABLES,
+      segments: {
+        ...SHARED_SEGMENTS,
+        painted: {
+          template: '{{ template "echo" . }}',
+          partials: { echo: "{{ .git.branch }}" },
+        },
+      },
+      root: rootOf("painted"),
+      actions: {},
+      styles: {},
+      presets: {},
+      helpers: {},
+      editGlobals: {},
+      themeDefaults: {},
+    };
+    const needed = buildNeededPrefixes(config, PRESET_FLOOR);
+    expect(needed.has("git.branch")).toBe(true);
+  });
+
   test("a helper handed a dict reads the dict, bringing no root path online", () => {
     const config: DslConfig = {
       globals: {},

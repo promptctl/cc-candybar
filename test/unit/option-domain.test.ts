@@ -1,0 +1,246 @@
+// [LAW:one-source-of-truth] Direct unit coverage of the option-domain registry
+// itself — resolveOptionDomain is the ONE place render/action.ts and
+// daemon/verbs/state-validators.ts resolve a `from` value, so its contract
+// (inline arrays are self-resolving, named domains check per-config overrides
+// before the global registry, unknown names throw naming what IS known,
+// built-ins can never be reclaimed) is pinned here rather than only exercised
+// incidentally through the config pipeline (test/dsl-actions.test.ts covers
+// that end-to-end acceptance).
+
+import { resolveColorSystem } from "@promptctl/rich-js";
+
+import {
+  knownOptionDomainNames,
+  perConfigDomainsFor,
+  registerOptionDomain,
+  resolveOptionDomain,
+} from "../../src/config/option-domain";
+import {
+  paletteForThemeName,
+  transposedPalette,
+} from "../../src/themes/palette-resolvers";
+import {
+  COLOR_COMPATIBILITIES,
+  listResolvablePaletteNames,
+  ENDCAPS_SHAPES,
+} from "../../src/themes/policy";
+
+describe("option-domain registry", () => {
+  test("themes/styles are built-in registrations, not special-cased branches", () => {
+    expect(resolveOptionDomain("themes", new Map()).members).toEqual(
+      listResolvablePaletteNames(),
+    );
+    expect(resolveOptionDomain("endcaps", new Map()).members).toEqual(ENDCAPS_SHAPES);
+  });
+
+  // [LAW:one-source-of-truth] candybar-config-engine-71o.3:
+  // colorCompatibilities must resolve to the EXACT const the loader's own
+  // globals.colorCompatibility field validation checks against
+  // (themes/policy.ts) — a menu drawing from it can never enumerate a value
+  // the loader or the render layer would reject.
+  test("colorCompatibilities is a built-in registration sourced from the loader's own enum", () => {
+    expect(resolveOptionDomain("colorCompatibilities", new Map()).members).toEqual(
+      COLOR_COMPATIBILITIES,
+    );
+  });
+
+  // rich-js's `resolveColorSystem` takes a bare string, so no type holds the
+  // two vocabularies together; a member it does not know throws here instead.
+  test("every colorCompatibility is a depth rich-js can draw at", () => {
+    for (const depth of COLOR_COMPATIBILITIES) {
+      expect(() => resolveColorSystem(depth)).not.toThrow();
+    }
+  });
+
+  test("an inline array IS its own domain — no registry lookup", () => {
+    expect(resolveOptionDomain(["a", "b", "c"], new Map()).members).toEqual([
+      "a",
+      "b",
+      "c",
+    ]);
+  });
+
+  test("a per-config domain (e.g. styles) resolves from the caller's map, not the global registry", () => {
+    const perConfig = new Map([["styles", { members: ["vapor", "none"] }]]);
+    expect(resolveOptionDomain("styles", perConfig).members).toEqual([
+      "vapor",
+      "none",
+    ]);
+  });
+
+  test("a per-config entry takes precedence over a same-named global registration", () => {
+    const dispose = registerOptionDomain("shadowed", () => ["global"]);
+    try {
+      const perConfig = new Map([["shadowed", { members: ["local"] }]]);
+      expect(resolveOptionDomain("shadowed", perConfig).members).toEqual([
+        "local",
+      ]);
+    } finally {
+      dispose();
+    }
+  });
+
+  test("registerOptionDomain adds a resolvable domain and its disposer removes it", () => {
+    const dispose = registerOptionDomain("custom-71o", () => ["x", "y"]);
+    expect(resolveOptionDomain("custom-71o", new Map()).members).toEqual([
+      "x",
+      "y",
+    ]);
+    dispose();
+    expect(() => resolveOptionDomain("custom-71o", new Map())).toThrow(
+      /unknown option domain "custom-71o"/,
+    );
+  });
+
+  test("an unknown domain name throws naming the known set", () => {
+    expect(() => resolveOptionDomain("bogus", new Map())).toThrow(
+      /unknown option domain "bogus" \(have: .*themes.*endcaps.*\)/,
+    );
+  });
+
+  test("a renamed domain name throws pointing at its new name", () => {
+    expect(() => resolveOptionDomain("looks", new Map())).toThrow(
+      /unknown option domain "looks" — it was renamed "styles"; write from: "styles"/,
+    );
+  });
+
+  test("a built-in domain name can never be reclaimed", () => {
+    expect(() => registerOptionDomain("themes", () => ["x"])).toThrow(
+      /already registered.*built-in/,
+    );
+    expect(() => registerOptionDomain("endcaps", () => ["x"])).toThrow(
+      /already registered.*built-in/,
+    );
+  });
+
+  test("registering the same name twice (both non-built-in) throws, without a built-in mention", () => {
+    const dispose = registerOptionDomain("dup-71o", () => ["x"]);
+    try {
+      expect(() => registerOptionDomain("dup-71o", () => ["y"])).toThrow(
+        /already registered/,
+      );
+      expect(() => registerOptionDomain("dup-71o", () => ["y"])).not.toThrow(
+        /built-in/,
+      );
+    } finally {
+      dispose();
+    }
+  });
+
+  test("a disposer is idempotent — calling it twice does not throw or double-remove another registration", () => {
+    const dispose = registerOptionDomain("idempotent-71o", () => ["x"]);
+    dispose();
+    expect(() => dispose()).not.toThrow();
+    // Re-registering after disposal succeeds — the slot is genuinely free.
+    const dispose2 = registerOptionDomain("idempotent-71o", () => ["y"]);
+    expect(resolveOptionDomain("idempotent-71o", new Map()).members).toEqual([
+      "y",
+    ]);
+    dispose2();
+  });
+
+  test("knownOptionDomainNames unions the global registry with per-config overrides", () => {
+    const perConfig = new Map([["styles", { members: ["none"] }]]);
+    const names = knownOptionDomainNames(perConfig);
+    expect(names).toEqual(
+      expect.arrayContaining(["themes", "endcaps", "styles"]),
+    );
+  });
+});
+
+// brandon-picker-31z: a registration carries BOTH facets of its domain — the
+// members, and (when the domain is colour-valued) the palette that picking a
+// member would put in force. They resolve together from one entry, which is what
+// stops a colour-valued domain from existing for the click gate but not the
+// render.
+describe("a colour-valued domain resolves its own painter", () => {
+  const BASE = paletteForThemeName("textual-dark");
+  // The drawn palette differs from the base on purpose, so a painter that
+  // reads the wrong one of the two is caught.
+  const RENDER = { basePalette: BASE, palette: paletteForThemeName("nord") };
+
+  test("`themes` answers with that theme's own palette, through the one name -> Palette enforcer", () => {
+    const { members, paletteOf } = resolveOptionDomain("themes", new Map());
+    expect(paletteOf).toBeDefined();
+    for (const name of members) {
+      // Identity, not just equality: paletteForThemeName memoizes per resolved
+      // name, so the painter must BE that memo rather than a second construction.
+      expect(paletteOf!(name, RENDER)).toBe(paletteForThemeName(name));
+    }
+  });
+
+  test("`themes` ignores the base it is handed — a theme is not an adaptation of anything", () => {
+    const { members, paletteOf } = resolveOptionDomain("themes", new Map());
+    const [first, second] = members as [string, string];
+    const other = paletteForThemeName(second);
+    expect(paletteOf!(first, RENDER)).toBe(
+      paletteOf!(first, { basePalette: other, palette: other }),
+    );
+  });
+
+  test("`styles` answers with the BASE transposed by that style's ThemeKey", () => {
+    const looks = {
+      none: {
+        hueShift: 0,
+        chromaScale: 1,
+        lightnessScale: 1,
+        lightnessShift: 0,
+      },
+      dim: {
+        hueShift: 0,
+        chromaScale: 1,
+        lightnessScale: 0.7,
+        lightnessShift: 0,
+      },
+    };
+    const domains = perConfigDomainsFor({ styles: looks, presets: {} });
+    const { members, paletteOf } = resolveOptionDomain("styles", domains);
+    expect(members).toEqual(["none", "dim"]);
+    expect(paletteOf!("dim", RENDER)).toBe(transposedPalette(BASE, looks.dim));
+    // The identity key is byte-exact through transposePalette's fast path, so
+    // the floor answers with the base itself — the honest "picking this changes
+    // nothing".
+    expect(paletteOf!("none", RENDER)).toBe(transposedPalette(BASE, looks.none));
+  });
+
+  test("`placementThemes` answers `bar` with the palette the bar is DRAWN in, and a theme with its own", () => {
+    const { members, paletteOf } = resolveOptionDomain(
+      "placementThemes",
+      new Map(),
+    );
+    expect(members[0]).toBe("bar");
+    // A placement that follows the bar renders in the base under the style.
+    expect(paletteOf!("bar", RENDER)).toBe(RENDER.palette);
+    expect(paletteOf!("gruvbox", RENDER)).toBe(paletteForThemeName("gruvbox"));
+  });
+
+  test("every domain whose members are not colours has no painter", () => {
+    const domains = perConfigDomainsFor({
+      styles: {},
+      presets: { compact: {} },
+    });
+    for (const name of ["endcaps", "colorCompatibilities"]) {
+      expect(resolveOptionDomain(name, new Map()).paletteOf).toBeUndefined();
+    }
+    expect(resolveOptionDomain("presets", domains).paletteOf).toBeUndefined();
+    // An inline array is its own domain — a bare list of words, so it is
+    // structurally incapable of being colour-valued.
+    expect(resolveOptionDomain(["a", "b"], new Map()).paletteOf).toBeUndefined();
+  });
+
+  test("a custom registration may declare a painter, and the disposer takes it with the domain", () => {
+    const dispose = registerOptionDomain(
+      "painted-31z",
+      () => ["one"],
+      () => BASE,
+    );
+    try {
+      expect(resolveOptionDomain("painted-31z", new Map()).paletteOf!("one", RENDER)).toBe(BASE);
+    } finally {
+      dispose();
+    }
+    expect(() => resolveOptionDomain("painted-31z", new Map())).toThrow(
+      /unknown option domain "painted-31z"/,
+    );
+  });
+});

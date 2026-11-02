@@ -331,6 +331,32 @@ describe("edit mode is in every config", () => {
     });
   });
 
+  // Regression for edit-mode.ts's fileWantsEditMode, which scanned only
+  // template/bg/fg — a toggle reference reachable only through a segment's
+  // own `partials` body never triggered synthesis (candybar-templates-zh8b.53s).
+  test("edit.toggle referenced only inside a partial still triggers synthesis", () => {
+    const config = parseAndValidate(
+      "<test>",
+      `{
+        globals: {},
+        segments: {
+          directory: { template: 'd', bg: 'surface', fg: 'foreground' },
+          trigger: {
+            template: '{{ template "e" . }}',
+            partials: { e: '{{ action "edit.toggle" "e" }}' },
+            bg: 'surface',
+            fg: 'foreground',
+          },
+        },
+        root: { h: ['directory', 'trigger'] },
+        presets: {},
+      }`,
+      ALLOWED,
+    );
+    expect(config.actions[EDIT_TOGGLE_ACTION]).toBeDefined();
+    expect(config.variables[EDIT_MODE_KEY]).toBeDefined();
+  });
+
   test("a user name under the reserved edit. namespace is a load error even when edit mode is unused", () => {
     expect(() =>
       parseAndValidate(

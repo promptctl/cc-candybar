@@ -117,6 +117,7 @@ import {
   templateInstants,
 } from "../config/loader/projections.js";
 import { valueReads } from "../config/loader/value-reads.js";
+import { SEGMENT_TEMPLATE_FIELDS } from "../config/loader/plugins.js";
 import {
   barRoot,
   bandRoot,
@@ -375,19 +376,28 @@ function declareOne(
 // helper surfaces a per-helper diagnostic rather than a confusing error blamed
 // on the first segment that happens to call it; the redefinition check the
 // parser applies against the inherited set is what makes helper names unique.
+// [LAW:locality-or-seam] `inherit` lets a caller chain a second define set
+// onto the first without re-parsing it: candybar-templates-zh8b.53s's
+// per-segment `partials` chain onto the config's one shared `helpers` Defines
+// this way, rather than each segment re-parsing the global helpers block.
+// `errorPath` is the diagnostic namespace ("helpers" or
+// "segments.<name>.partials") so a malformed partial names itself, not a
+// helper of the same name in another segment.
 function compileHelpers(
   engine: Engine<RichText>,
-  helpers: Readonly<Record<string, string>>,
+  bodies: Readonly<Record<string, string>>,
+  errorPath: string,
+  inherit: Defines = Defines.EMPTY,
 ): Defines {
-  let defines = Defines.EMPTY;
-  for (const [name, body] of Object.entries(helpers)) {
+  let defines = inherit;
+  for (const [name, body] of Object.entries(bodies)) {
     try {
       defines = engine
         .parse(`{{ define "${name}" }}${body}{{ end }}`, defines)
         .defines();
     } catch (e) {
       throw new Error(
-        `Template parse error in helpers.${name}: ${(e as Error).message}`,
+        `Template parse error in ${errorPath}.${name}: ${(e as Error).message}`,
         { cause: e },
       );
     }
@@ -712,7 +722,7 @@ export function compileDslConfig(
   // shared AST. One closure, not raw engine.parse scattered across sites, so
   // there is exactly one boundary where helpers come into scope (and one place
   // a helper could fail to be visible). The helpers are parsed ONCE here.
-  const helpers = compileHelpers(engine, config.helpers);
+  const helpers = compileHelpers(engine, config.helpers, "helpers");
   // Every template parsed, with its text: which read the instant is decided
   // once all are parsed (below), since a `{{ layoutPreview }}` reads every
   // layout gate.
@@ -756,7 +766,42 @@ export function compileDslConfig(
     null,
   ) as Record<string, CompiledSegment>;
   for (const [segName, seg] of Object.entries(config.segments)) {
-    const parseField = (src: string, field: string, read = parse) => {
+    // [LAW:one-source-of-truth] A segment's own `partials`, chained onto the
+    // config's shared `helpers` Defines — never the other way, and never
+    // merged into `helpers` itself — so a partial can call any helper, but no
+    // other segment's templates (nor this one's siblings compiled against
+    // plain `helpers`, like a layout node's `when`) can reach it
+    // (candybar-templates-zh8b.53s). Segments that declare no partials parse
+    // against `helpers` unchanged — no new Defines, no new diagnostic
+    // surface for the common case.
+    const segDefines =
+      seg.partials === undefined
+        ? helpers
+        : compileHelpers(
+            engine,
+            seg.partials,
+            `segments.${segName}.partials`,
+            helpers,
+          );
+    const segParse = (src: string): Template<RichText> => {
+      const parsed = engine.parse(src, segDefines);
+      sources.set(parsed, src);
+      return parsed;
+    };
+    // [LAW:one-source-of-truth] `nodeTemplates` (parseShared) is keyed by
+    // source text alone, under the one assumption every entry in it parsed
+    // against the SAME Defines — true of every layout-node `when` and, before
+    // this segment had its own `partials`, of every segment `when` too. A
+    // segment with no partials keeps that assumption (its Defines IS
+    // `helpers`) and stays on the shared cache; one with partials parses
+    // against its own Defines and is never placed in that cache, so it can
+    // never be handed back for a DIFFERENT segment's or node's `when` that
+    // happens to share its source text.
+    const parseField = (
+      src: string,
+      field: string,
+      read = seg.partials === undefined ? parseShared : segParse,
+    ) => {
       try {
         return read(src);
       } catch (e) {
@@ -767,13 +812,10 @@ export function compileDslConfig(
       }
     };
     compiled[segName] = {
-      when:
-        seg.when !== undefined
-          ? parseField(seg.when, "when", parseShared)
-          : undefined,
-      template: parseField(seg.template, "template"),
-      bg: seg.bg !== undefined ? parseField(seg.bg, "bg") : undefined,
-      fg: seg.fg !== undefined ? parseField(seg.fg, "fg") : undefined,
+      when: seg.when !== undefined ? parseField(seg.when, "when") : undefined,
+      template: parseField(seg.template, "template", segParse),
+      bg: seg.bg !== undefined ? parseField(seg.bg, "bg", segParse) : undefined,
+      fg: seg.fg !== undefined ? parseField(seg.fg, "fg", segParse) : undefined,
     };
   }
 
@@ -893,9 +935,10 @@ export function compileDslConfig(
   // preset under its gates, so it reads the instant when one of them does:
   // the gates are told first, by the engine's clock functions alone — a gate
   // is drawn outside any segment, where no layout can be asked for.
+  const instantNames = new Set(projections.map(([name]) => name));
   const basis = {
     reads: valueReads({
-      names: new Set(projections.map(([name]) => name)),
+      names: instantNames,
       helpers: config.helpers,
       actions: config.actions,
     }),
@@ -907,17 +950,42 @@ export function compileDslConfig(
   const layoutReadsInstant = gates.some((gate) =>
     gateReadsInstant(sources.get(gate)!),
   );
-  const readsInstant = layoutReadsInstant
-    ? templateInstants({
-        ...basis,
-        clock: new Set([...basis.clock, LAYOUT_PREVIEW]),
-      })
-    : gateReadsInstant;
+  const finalClock = layoutReadsInstant
+    ? new Set([...basis.clock, LAYOUT_PREVIEW])
+    : basis.clock;
+  const readsInstant = templateInstants({ ...basis, clock: finalClock });
   const instant = new Set(
     [...sources].flatMap(([template, source]) =>
       readsInstant(source) ? [template] : [],
     ),
   );
+  // [LAW:one-source-of-truth] `readsInstant` above walks every source against
+  // `config.helpers` alone, so a segment's `{{ template "name" ctx }}` that
+  // dispatches to one of ITS OWN `partials` is walked no further than the
+  // dispatch — the partial's own clock/projection reads are invisible to it,
+  // the same gap b72c93e5 closed in cross-ref.ts/synthesis-inputs.ts/unused.ts
+  // for reachability and unused-declaration checks. A template this misses
+  // throws at its first draw (template-engine/engine.ts, drawInProgress), so
+  // this ADDS to `instant` (merging partials into helpers only grows what a
+  // dispatch can reach, never shrinks it — a collision with a helper name is
+  // already a load-time error) rather than replacing the generic answer.
+  for (const [segName, seg] of Object.entries(config.segments)) {
+    if (seg.partials === undefined) continue;
+    const segReadsInstant = templateInstants({
+      reads: valueReads({
+        names: instantNames,
+        helpers: { ...config.helpers, ...seg.partials },
+        actions: config.actions,
+      }),
+      projections: basis.projections,
+      clock: finalClock,
+    });
+    for (const field of SEGMENT_TEMPLATE_FIELDS) {
+      const parsed = compiled[segName]![field];
+      if (parsed === undefined) continue;
+      if (segReadsInstant(sources.get(parsed)!)) instant.add(parsed);
+    }
+  }
 
   return {
     segments: compiled,

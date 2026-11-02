@@ -1,0 +1,320 @@
+// [LAW:verifiable-goals] The JSON Schema's contract: accept the configs a user
+// may legitimately write (A-grammar root tree, all variable/action kinds),
+// reject structurally-broken ones. We validate the COMMITTED artifact
+// (schema/cc-candybar.schema.json) — the same file editors load via `$schema`
+// and the package ships — so this test guards the published contract, not just
+// the generator.
+//
+// [LAW:single-enforcer] Schema = shape; lint = meaning. The schema cannot see
+// cross-references or cycles (a JSON Schema structurally can't), so each good
+// config is asserted to pass BOTH schema and the loader, each structural bad to
+// fail BOTH, and one semantically-broken config is asserted to pass the schema
+// yet fail the loader — pinning the boundary between the two layers.
+
+import fs from "node:fs";
+import path from "node:path";
+import JSON5 from "json5";
+import Ajv from "ajv";
+import type { ValidateFunction } from "ajv";
+import { validateConfig } from "../helpers/parse-and-validate";
+import {
+  inheritableSegmentNames,
+  parseDslConfig,
+} from "../../src/config/dsl-loader";
+import { mergeWithDefault } from "../../src/config/loader/merge";
+import { DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
+import { ConfigError } from "../../src/config/loader/diagnostics";
+
+const SCHEMA_PATH = path.resolve(__dirname, "..", "..", "schema", "cc-candybar.schema.json");
+
+let validate: ValidateFunction;
+let namedDeltaTargets: string[];
+
+beforeAll(() => {
+  const schema = JSON.parse(fs.readFileSync(SCHEMA_PATH, "utf-8"));
+  namedDeltaTargets = Object.keys(schema.properties.segments.properties);
+  // strict:false — the generated schema carries `title`/`$id` annotations and
+  // discriminated-by-presence `anyOf`s that ajv's strict mode warns on; none
+  // affect validation outcome.
+  const ajv = new Ajv({ strict: false, allErrors: true });
+  validate = ajv.compile(schema);
+});
+
+// Structurally valid AND semantically valid — schema accepts, loader accepts.
+const GOOD: ReadonlyArray<readonly [string, string]> = [
+  ["empty config", `{}`],
+  [
+    "rows-form root (merges by row name)",
+    `{ segments: { a: { template: 'a' } }, root: { rows: { extra: { h: ['a'] } } } }`,
+  ],
+  [
+    "rows-form root with a bar-level when",
+    `{ segments: { a: { template: 'a' } }, root: { rows: { extra: 'a' }, when: '{{ true }}' } }`,
+  ],
+  ["globals only", `{ globals: { palette: 'dracula', default_separator: ' ' } }`],
+  [
+    "A-grammar multi-row layout (v-arm)",
+    `{
+      segments: { dir: { template: '{{ .cwd }}' }, git: { template: '{{ .git.branch }}' } },
+      variables: { cwd: { kind: 'literal', value: '~' }, 'git.branch': { kind: 'literal', value: 'main' } },
+      root: { v: [{ h: ['dir', 'git'] }, { seg: 'dir', id: 'dir2' }] },
+    }`,
+  ],
+  [
+    "A-grammar conditional row (when on v children)",
+    `{
+      segments: { a: { template: 'a' }, b: { template: 'b' } },
+      root: { v: [{ h: ['a', 'b'] }, { seg: 'a', id: 'a2', when: '{{ true }}' }] },
+    }`,
+  ],
+  [
+    "raw root node grammar",
+    `{
+      segments: { a: { template: 'a' } },
+      root: { kind: 'container', direction: 'horizontal', children: [{ kind: 'segment', name: 'a' }] },
+    }`,
+  ],
+  [
+    "actions + variable kinds",
+    `{
+      segments: { t: { template: '{{ .themePick }} {{ action "open" "▸" }}' } },
+      variables: { themePick: { kind: 'state', key: 'theme', default: 'dracula' } },
+      actions: { open: { set: 'menu', to: '0' }, step: { set: 'hue', min: 0, max: 60, by: 2 } },
+      root: { h: ['t'] },
+    }`,
+  ],
+  [
+    "doctor actions (run, and fix naming its check)",
+    `{
+      segments: { t: { template: '{{ action "run" "🩺" }} {{ action "fix" "[fix]" }}' } },
+      actions: { run: { doctor: 'run' }, fix: { doctor: 'fix', check: 'tmuxTruecolor' } },
+      root: { h: ['t'] },
+    }`,
+  ],
+  [
+    "cycle action (2de.4 toggle form)",
+    `{
+      segments: { t: { template: '{{ action "toggle" "▸" "▾" }}' } },
+      variables: { open: { kind: 'state', key: 'details-open', default: '0' } },
+      actions: { toggle: { set: 'details-open', cycle: ['0', '1'] } },
+      root: { h: ['t'] },
+    }`,
+  ],
+  [
+    "group sugar node (2de.4)",
+    `{
+      segments: { m: { template: 'M' } },
+      root: { kind: 'container', direction: 'vertical', children: [
+        { kind: 'group', name: 'details', label: 'details', open: true, key: 'menu',
+          children: [{ kind: 'segment', name: 'm' }] },
+      ]},
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+    }`,
+  ],
+  // ── Option A shape grammar (2de.15) ─────────────────────────────────────
+  [
+    "A-grammar bare string segment ref",
+    `{ segments: { a: { template: 'a' } }, root: "a" }`,
+  ],
+  [
+    "A-grammar { seg, when }",
+    `{ segments: { a: { template: 'a' } }, root: { seg: "a", when: "{{ true }}" } }`,
+  ],
+  [
+    "A-grammar { h: [...] } horizontal container",
+    `{
+      segments: { a: { template: 'a' }, b: { template: 'b' } },
+      root: { h: ["a", "b"] },
+    }`,
+  ],
+  [
+    "A-grammar { v: [...] } vertical container",
+    `{
+      segments: { a: { template: 'a' }, b: { template: 'b' } },
+      root: { v: ["a", "b"] },
+    }`,
+  ],
+  [
+    "A-grammar nested h-in-v-in-h",
+    `{
+      segments: { a: { template: 'a' }, b: { template: 'b' }, c: { template: 'c' } },
+      root: { h: [{ v: ["a", { h: ["b", "c"] }] }] },
+    }`,
+  ],
+  [
+    "A-grammar when on every node form",
+    `{
+      segments: { a: { template: 'a' }, b: { template: 'b' }, c: { template: 'c' } },
+      root: {
+        v: [
+          { seg: "a", when: "{{ true }}" },
+          { h: ["b", "c"], when: "{{ false }}" },
+          { v: [{ seg: "a", id: "a2" }], when: "{{ true }}" },
+        ],
+      },
+    }`,
+  ],
+  [
+    "A-grammar inside group children (2de.4 + 2de.15 compose)",
+    `{
+      segments: { m: { template: 'M' }, n: { template: 'N' } },
+      root: {
+        kind: 'group', name: 'g', label: 'G',
+        children: [{ h: ["m", "n"] }],
+      },
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+    }`,
+  ],
+  // ── A delta over a bundled segment omits its template (brandon-config-ph5)
+  ["segment delta over a bundled name", `{ segments: { directory: { palette: 'dracula' } } }`],
+  // ── A segment says what it shows (brandon-config-schema-qqg)
+  [
+    "segment describing itself",
+    `{ segments: { a: { template: 'a', description: 'what it shows' } }, root: 'a' }`,
+  ],
+  [
+    "delta re-describing a bundled segment",
+    `{ segments: { directory: { description: 'my own directory cell' } } }`,
+  ],
+];
+
+// Structurally broken — schema rejects, loader rejects.
+const BAD_STRUCTURAL: ReadonlyArray<readonly [string, string]> = [
+  ["unknown top-level key", `{ segmnets: {} }`],
+  ["a new segment without a template", `{ segments: { mine: { palette: 'x' } } }`],
+  ["bad doctor verb", `{ actions: { d: { doctor: 'bogus' } } }`],
+  ["doctor run carrying a check", `{ actions: { d: { doctor: 'run', check: 'tmuxTruecolor' } } }`],
+  ["non-identifier row name", `{ segments: { a: { template: 'a' } }, root: { rows: { 'a-b': 'a' } } }`],
+  ["non-object rows", `{ root: { rows: 'a' } }`],
+  ["non-string template", `{ segments: { a: { template: 42 } } }`],
+  ["non-string description", `{ segments: { a: { template: 'a', description: 42 } } }`],
+  ["bad direction enum", `{ root: { kind: 'container', direction: 'diagonal', children: [] } }`],
+  ["unknown variable kind", `{ variables: { x: { kind: 'bogus' } } }`],
+  ["non-string palette", `{ globals: { palette: 5 } }`],
+  // `layout:` was removed in 2de.19 — schema rejects (unknown key via additionalProperties),
+  // loader rejects (migration error). Both surfaces correctly reject it.
+  ["removed layout key", `{ segments: { a: { template: 'a' } }, layout: [['a', 'b']] }`],
+  // brandon-config-349: removed globals keys — closed out by the schema's
+  // `additionalProperties: false` (never listed, so never completed), refused by
+  // the loader with its pointer, wherever globals are authored.
+  ...["default_bg", "default_fg", "default_truncate_marker", "charset"].flatMap(
+    (key) =>
+      [
+        [`removed globals.${key}`, `{ globals: { ${key}: 'x' } }`],
+        [`removed presets.p.globals.${key}`, `{ presets: { p: { globals: { ${key}: 'x' } } } }`],
+        [`removed editGlobals.${key}`, `{ editGlobals: { ${key}: 'x' } }`],
+      ] as const,
+  ),
+  // A node must carry its mandatory fields — the loader reports a missing
+  // direction/name (→ throws), so the schema must require them too. The empty
+  // object once passed all three arms vacuously; the required-ness closes that,
+  // keeping schema and loader in lockstep.
+  ["bare container node (missing direction/children)", `{ root: { kind: 'container' } }`],
+  ["bare segment node (missing name)", `{ root: { kind: 'segment' } }`],
+  // Schema-checkable cycle shape: type + minItems. (Uniqueness/emptiness/slash
+  // are loader refinements the schema mirrors structurally where JSON Schema
+  // can express them.)
+  [
+    "one-member cycle",
+    `{ segments: { t: { template: '{{ action "a" "x" }}' } }, actions: { a: { set: 'k', cycle: ['solo'] } }, root: { h: ['t'] } }`,
+  ],
+  [
+    "non-array cycle",
+    `{ segments: { t: { template: '{{ action "a" "x" }}' } }, actions: { a: { set: 'k', cycle: 'ab' } }, root: { h: ['t'] } }`,
+  ],
+  [
+    "group node missing label/children",
+    `{ root: { kind: 'group', name: 'g' } }`,
+  ],
+  [
+    "group node with non-identifier name",
+    `{ segments: { m: { template: 'M' } }, root: { kind: 'group', name: 'my-group', label: 'x', children: [{ kind: 'segment', name: 'm' }] } }`,
+  ],
+  [
+    "group node label with embedded newline",
+    `{ segments: { m: { template: 'M' } }, root: { kind: 'group', name: 'g', label: 'line1\\nline2', children: [{ kind: 'segment', name: 'm' }] } }`,
+  ],
+  // ── Option A bad structural (2de.15) ─────────────────────────────────────
+  ["A-grammar both h and v present", `{ root: { h: [], v: [] } }`],
+  ["A-grammar both seg and h present", `{ segments: { a: { template: 'a' } }, root: { seg: 'a', h: ['a'] } }`],
+  ["A-grammar seg missing value (non-string)", `{ root: { seg: 42 } }`],
+  ["A-grammar h with non-array value", `{ root: { h: 'not-an-array' } }`],
+];
+
+function schemaAccepts(source: string): boolean {
+  return validate(JSON5.parse(source)) === true;
+}
+
+// The full loader pipeline (parse → merge-with-default → cross-ref + cycles),
+// run on a source string without touching disk. loadConfig itself takes a path;
+// this mirrors its body so the corpus stays inline.
+function loaderAccepts(source: string): boolean {
+  try {
+    const raw = parseDslConfig(
+      "<test>",
+      source,
+      undefined,
+      inheritableSegmentNames(DEFAULT_DSL_CONFIG),
+    );
+    const merged = mergeWithDefault(raw, DEFAULT_DSL_CONFIG);
+    validateConfig({ config: merged, raw, source }, "<test>");
+    return true;
+  } catch (e) {
+    if (e instanceof ConfigError) return false;
+    throw e;
+  }
+}
+
+describe("config JSON Schema", () => {
+  describe("accepts every good config (schema AND loader)", () => {
+    it.each(GOOD)("%s", (_name, source) => {
+      expect(schemaAccepts(source)).toBe(true);
+      expect(loaderAccepts(source)).toBe(true);
+    });
+  });
+
+  describe("rejects every structurally-bad config (schema AND loader)", () => {
+    it.each(BAD_STRUCTURAL)("%s", (_name, source) => {
+      expect(schemaAccepts(source)).toBe(false);
+      expect(loaderAccepts(source)).toBe(false);
+    });
+  });
+
+  // [LAW:single-enforcer] The boundary: a dangling segment reference is a
+  // CROSS-REFERENCE error the schema structurally cannot catch. It must pass the
+  // schema (shape is fine) and fail the loader (meaning is wrong) — proving the
+  // two layers are complementary, not redundant.
+  it("schema accepts but loader rejects a dangling reference", () => {
+    const source = `{ segments: { a: { template: 'a' } }, root: { h: ['a', 'does-not-exist'] } }`;
+    expect(schemaAccepts(source)).toBe(true);
+    expect(loaderAccepts(source)).toBe(false);
+  });
+
+  // brandon-config-schema-qqg. The description exists FOR an editor's
+  // autocomplete, so its presence in the published artifact is the deliverable,
+  // not an implementation detail — and it must appear on both record shapes,
+  // because a delta over a bundled name is where a user most often wants to say
+  // what their version of that segment shows.
+  it("publishes description on both the segment and the delta shapes", () => {
+    const schema = JSON.parse(fs.readFileSync(SCHEMA_PATH, "utf-8"));
+    for (const def of ["Segment", "SegmentDelta"]) {
+      expect(schema.definitions[def].properties.description).toEqual({
+        type: "string",
+      });
+    }
+  });
+
+  // [LAW:one-source-of-truth] Every delta target the schema names by name is
+  // one the loader accepts a delta for. The bundled default carries synthesized
+  // segments under reserved namespaces (a group's toggle) that the loader
+  // rejects outright — a schema naming one would autocomplete a declaration no
+  // file can write.
+  it("names as a delta target only what the loader accepts as one", () => {
+    expect(namedDeltaTargets.length).toBeGreaterThan(0);
+    for (const name of namedDeltaTargets) {
+      const source = `{ segments: { ${JSON.stringify(name)}: {} } }`;
+      expect(schemaAccepts(source)).toBe(true);
+      expect(loaderAccepts(source)).toBe(true);
+    }
+  });
+});

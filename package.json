@@ -1,6 +1,6 @@
 {
   "name": "@promptctl/cc-candybar",
-  "version": "1.179.4",
+  "version": "1.180.0",
   "description": "Statusline renderer for Claude Code — a JSON5-configurable DSL with daemon-cached data sources, byte-clean palette-aware composition, and OSC8 click verbs.",
   "type": "module",
   "main": "./dist/index.mjs",
@@ -19,13 +19,14 @@
     "start": "node dist/index.mjs",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
-    "test": "jest",
+    "test": "pnpm test:unit && pnpm test:worker && pnpm test:process",
+    "test:unit": "jest --config jest.unit.config.js",
     "test:worker": "jest --config jest.worker.config.js",
     "test:process": "jest --config jest.process.config.js",
     "test:e2e": "jest --config jest.e2e.config.js --passWithNoTests",
     "test:report": "node scripts/test-report.mjs",
-    "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage",
+    "test:watch": "jest --config jest.unit.config.js --watch",
+    "test:coverage": "jest --config jest.unit.config.js --coverage",
     "audit:colour": "jest --config audits/jest.config.js",
     "demo": "tsx src/demo/dsl.ts",
     "gallery": "node --require ./scripts/version-stamp.cjs --import tsx src/demo/gallery.ts",
@@ -109,9 +110,9 @@
     "yaml": "^2.9.1"
   },
   "optionalDependencies": {
-    "@promptctl/cc-candybar-darwin-arm64": "1.179.4",
-    "@promptctl/cc-candybar-darwin-x64": "1.179.4",
-    "@promptctl/cc-candybar-linux-arm64": "1.179.4",
-    "@promptctl/cc-candybar-linux-x64": "1.179.4"
+    "@promptctl/cc-candybar-darwin-arm64": "1.180.0",
+    "@promptctl/cc-candybar-darwin-x64": "1.180.0",
+    "@promptctl/cc-candybar-linux-arm64": "1.180.0",
+    "@promptctl/cc-candybar-linux-x64": "1.180.0"
   }
 }
