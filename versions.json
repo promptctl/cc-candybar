@@ -2,39 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-558",
-      "ref": "refs/pull/558/merge",
-      "sha": "d3a2097ea49cd19b3cb7a68cd56b85ef0133a8d3",
-      "timestamp": "2026-11-02T23:23:11.062Z",
-      "commits": [
-        {
-          "sha": "d3a2097ea49cd19b3cb7a68cd56b85ef0133a8d3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T23:21:55Z",
-          "message": "Merge e6169a6de27e35d3e691e93a703cb1d021c25f78 into 9409f66cd2ae1e887b92aeceb049c33b3c75787f\n"
-        },
-        {
-          "sha": "e6169a6de27e35d3e691e93a703cb1d021c25f78",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T03:57:33-06:00",
-          "message": "fix(bar-pane): a frame overwrites its rows and lands whole, so the pane stops flickering\n"
-        }
-      ]
-    },
-    {
       "version": "pr-587",
       "ref": "refs/pull/587/merge",
-      "sha": "37e384d81184a2c8a2bd17d823d4d93c5b0c75fc",
-      "timestamp": "2026-11-02T23:19:05.316Z",
+      "sha": "5411925edba7f253f949669dd804f3c10e8ea0da",
+      "timestamp": "2026-11-02T23:26:50.090Z",
       "commits": [
         {
-          "sha": "37e384d81184a2c8a2bd17d823d4d93c5b0c75fc",
+          "sha": "5411925edba7f253f949669dd804f3c10e8ea0da",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T16:17:28-07:00",
-          "message": "Merge 0167f56f6c8833c8098527543baddd3089fb99a1 into 9409f66cd2ae1e887b92aeceb049c33b3c75787f\n"
+          "timestamp": "2026-11-02T16:25:49-07:00",
+          "message": "Merge ba575099feee355fec12c8585db5d16ca0fe94d8 into 9409f66cd2ae1e887b92aeceb049c33b3c75787f\n"
+        },
+        {
+          "sha": "ba575099feee355fec12c8585db5d16ca0fe94d8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T16:25:28-07:00",
+          "message": "test(rig): the parse cache keys on each registered domain's members, rigs that seed an origin draw as that session, and the testing memory line is true again (candybar-testing-ihvy.4k6)\n"
         },
         {
           "sha": "0167f56f6c8833c8098527543baddd3089fb99a1",
@@ -63,6 +48,28 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T15:45:47-07:00",
           "message": "test(rig): buildRig assembles a render rig with a default for every field (candybar-testing-ihvy.4k6)\n\nFoundation: test/helpers/rig.ts, its test, colour-256's measurement helpers in their own module, and dsl-groups, dsl-picker and colour-256 on the rig.\n"
+        }
+      ]
+    },
+    {
+      "version": "pr-558",
+      "ref": "refs/pull/558/merge",
+      "sha": "d3a2097ea49cd19b3cb7a68cd56b85ef0133a8d3",
+      "timestamp": "2026-11-02T23:23:11.062Z",
+      "commits": [
+        {
+          "sha": "d3a2097ea49cd19b3cb7a68cd56b85ef0133a8d3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T23:21:55Z",
+          "message": "Merge e6169a6de27e35d3e691e93a703cb1d021c25f78 into 9409f66cd2ae1e887b92aeceb049c33b3c75787f\n"
+        },
+        {
+          "sha": "e6169a6de27e35d3e691e93a703cb1d021c25f78",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T03:57:33-06:00",
+          "message": "fix(bar-pane): a frame overwrites its rows and lands whole, so the pane stops flickering\n"
         }
       ]
     },
