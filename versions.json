@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-583",
+      "ref": "refs/pull/583/merge",
+      "sha": "a00345afd74562034ccd0ae1d1f79830071d6e91",
+      "timestamp": "2026-11-02T18:19:54.721Z",
+      "commits": [
+        {
+          "sha": "a00345afd74562034ccd0ae1d1f79830071d6e91",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T11:18:54-07:00",
+          "message": "Merge 589594eddfd271aad5e8610f99d311e3c92635d6 into ab8efc3e14af20e9b4e8fd57aabe300f8a2c3456\n"
+        },
+        {
+          "sha": "589594eddfd271aad5e8610f99d311e3c92635d6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T11:18:25-07:00",
+          "message": "refactor(daemon): createDaemon takes every adapter and every path as an input (candybar-testing-ihvy.yfv)\n\nDaemonInputs gains a DaemonPaths value and DaemonAdapters (log, launcher,\nstorage, doctor stores and edge, Claude input, lane edge, link signer, limits,\nfetch, stat). production-adapters.ts is the one module that names the real\nones; server.ts is the daemon process's one reader of paths.ts, and the page in\nsite/ and the test harness build over the same adapters. The log's module state\nbecomes a DaemonLog built over a path. OWNED_IMPORTS enforces the ownership.\nThe keyspaces and the Foundations row are carved to candybar-testing-ihvy.42w;\npricing's disk cache stays a named reader until its port (89p).\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "ab8efc3e14af20e9b4e8fd57aabe300f8a2c3456",
