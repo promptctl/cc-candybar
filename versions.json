@@ -4,15 +4,22 @@
     {
       "version": "pr-556",
       "ref": "refs/pull/556/merge",
-      "sha": "cfa6561d9957e0568e28bc01a21ee5d18235d345",
-      "timestamp": "2026-11-01T21:49:53.588Z",
+      "sha": "ab31ae308f155c566c1ab51d6599b49b0e804726",
+      "timestamp": "2026-11-02T00:02:26.644Z",
       "commits": [
         {
-          "sha": "cfa6561d9957e0568e28bc01a21ee5d18235d345",
+          "sha": "ab31ae308f155c566c1ab51d6599b49b0e804726",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T21:48:59Z",
-          "message": "Merge f2ae450ac04ca82f6ac9f713b73314a172833ac5 into 72ffdd27eff3be49dc0520bbd5ff5b02ee53daf2\n"
+          "timestamp": "2026-11-02T00:01:43Z",
+          "message": "Merge 5bbef69e4e14ffad0b6528016f43e600e8922a89 into 72ffdd27eff3be49dc0520bbd5ff5b02ee53daf2\n"
+        },
+        {
+          "sha": "5bbef69e4e14ffad0b6528016f43e600e8922a89",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T17:01:32-07:00",
+          "message": "docs(testing): the review's findings on tiers, the ratchet and the clock (candybar-testing-ihvy.43x)\n\nA second assertion now fails on its PR, tickets 35 and 36 no longer wait on each other, and a packed install proves the new native client. The ratchet equals the case count and sits beside the start ceiling, and ticket 2 moves the cases that reach no boot.\n\nThe contract suite stays on the fake in unit and the adapter in integration, as laws:testing has it, and each file keeps one layer. The poll helper keeps its real sleep, so a file that polls stays out of test/unit until ticket 20.\n"
         },
         {
           "sha": "f2ae450ac04ca82f6ac9f713b73314a172833ac5",
