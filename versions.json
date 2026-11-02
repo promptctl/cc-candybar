@@ -4,15 +4,22 @@
     {
       "version": "pr-574",
       "ref": "refs/pull/574/merge",
-      "sha": "de332b53f98475032e48e2c4d077e7cf34da8618",
-      "timestamp": "2026-11-02T14:28:24.837Z",
+      "sha": "9b008bd6c4a2ae03af37124b18d8b65689644f5d",
+      "timestamp": "2026-11-02T14:32:55.794Z",
       "commits": [
         {
-          "sha": "de332b53f98475032e48e2c4d077e7cf34da8618",
+          "sha": "9b008bd6c4a2ae03af37124b18d8b65689644f5d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T07:27:19-07:00",
-          "message": "Merge 72937bf702cecdbc2dbc9443972df62511e591d7 into 7d58c47f329eb86d364d736a324acf02c5b59295\n"
+          "timestamp": "2026-11-02T14:31:56Z",
+          "message": "Merge c490b86ffa618e527e1beee5db3fd04948c0937b into 7d58c47f329eb86d364d736a324acf02c5b59295\n"
+        },
+        {
+          "sha": "c490b86ffa618e527e1beee5db3fd04948c0937b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T07:31:21-07:00",
+          "message": "docs(render): the Timeout cause is the client's own clock, and the Busy comments say what they mean (candybar-launch-q7o7.g6w)\n"
         },
         {
           "sha": "72937bf702cecdbc2dbc9443972df62511e591d7",
