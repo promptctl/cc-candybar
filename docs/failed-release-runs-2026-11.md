@@ -62,110 +62,110 @@ None of the 100 has a green rerun, since the list holds only final failures, so 
 
 ## The 100 runs
 
-Newest first. `on` is `main` for a push to main and `PR` for a pull request on the branch shown. Run links go to the Actions run.
+Newest first. `on` is `main` for a push to main and `PR` for a pull request on the branch shown. Run links go to the Actions run. `Group` lists every group the run's failing cases fall in; the counts in the groups table are counted from this column, and `Failing` names files, which can differ from the case that failed.
 
-| Run | When (UTC) | On | Failing | Verdict | Cause | Evidence |
-|---|---|---|---|---|---|---|
-| [41464641125](https://github.com/promptctl/cc-candybar/actions/runs/41464641125) | 11-02 14:43 | PR candybar-launch-q7o7.6wi | render-cache-sharing, daemon-value | real | product defect | read |
-| [41463875343](https://github.com/promptctl/cc-candybar/actions/runs/41463875343) | 11-02 14:38 | main | render-cache-sharing | flake | timing | ticketed |
-| [41452103114](https://github.com/promptctl/cc-candybar/actions/runs/41452103114) | 11-02 13:20 | PR 0oo | daemon-value | real | product defect | read |
-| [41433083227](https://github.com/promptctl/cc-candybar/actions/runs/41433083227) | 11-02 10:58 | PR qjw | in-worker-daemon | real | the branch's own change | inferred |
-| [41432893795](https://github.com/promptctl/cc-candybar/actions/runs/41432893795) | 11-02 10:57 | PR qjw | in-worker-daemon, launch-group-end | real | the branch's own change | inferred |
-| [41432632675](https://github.com/promptctl/cc-candybar/actions/runs/41432632675) | 11-02 10:55 | PR qjw | in-worker-daemon | real | the branch's own change | inferred |
-| [41366785790](https://github.com/promptctl/cc-candybar/actions/runs/41366785790) | 11-02 00:22 | PR 43x | draw-reserve.process | flake | timing | ticketed |
-| [41353935100](https://github.com/promptctl/cc-candybar/actions/runs/41353935100) | 11-01 21:49 | PR 43x | draw-reserve.process | flake | timing | ticketed |
-| [41353342314](https://github.com/promptctl/cc-candybar/actions/runs/41353342314) | 11-01 21:41 | PR 43x | daemon-request-limits.process | flake | timing | ticketed |
-| [41351881808](https://github.com/promptctl/cc-candybar/actions/runs/41351881808) | 11-01 21:24 | PR 43x | draw-reserve.process | flake | timing | ticketed |
-| [41351059288](https://github.com/promptctl/cc-candybar/actions/runs/41351059288) | 11-01 21:15 | PR 43x | daemon-value | real | product defect | read |
-| [41336423169](https://github.com/promptctl/cc-candybar/actions/runs/41336423169) | 11-01 18:24 | main | draw-reserve.process | flake | timing | ticketed |
-| [41306454221](https://github.com/promptctl/cc-candybar/actions/runs/41306454221) | 11-01 12:25 | main | draw-reserve.process | flake | timing | ticketed |
-| [41305051149](https://github.com/promptctl/cc-candybar/actions/runs/41305051149) | 11-01 12:08 | PR jqq | draw-reserve.process | flake | timing | ticketed |
-| [41301458328](https://github.com/promptctl/cc-candybar/actions/runs/41301458328) | 11-01 11:20 | PR jqq | process-tier daemon-start ceiling | real | the commit | read |
-| [41296594729](https://github.com/promptctl/cc-candybar/actions/runs/41296594729) | 11-01 10:14 | PR brandon-menus-sjhy.5y2 | dsl-spine | real | the branch's own change | read |
-| [41295757517](https://github.com/promptctl/cc-candybar/actions/runs/41295757517) | 11-01 10:03 | PR brandon-menus-sjhy.5y2 | dsl-spine | real | the branch's own change | read |
-| [41293446779](https://github.com/promptctl/cc-candybar/actions/runs/41293446779) | 11-01 09:30 | main | daemon-prompt-count-e2e | flake | timing | inferred |
-| [41288147258](https://github.com/promptctl/cc-candybar/actions/runs/41288147258) | 11-01 09:16 | PR feat/git-worktree-path | draw-reserve.process | flake | timing | ticketed |
-| [41287830426](https://github.com/promptctl/cc-candybar/actions/runs/41287830426) | 11-01 09:11 | main | frame-feed | real | product defect, timing-triggered | ticketed |
-| [41291848164](https://github.com/promptctl/cc-candybar/actions/runs/41291848164) | 11-01 09:09 | PR gp7 | launch | real | the branch's own change | inferred |
-| [41284518435](https://github.com/promptctl/cc-candybar/actions/runs/41284518435) | 11-01 07:22 | PR rs0 | frame-feed | real | product defect, timing-triggered | ticketed |
-| [41278244898](https://github.com/promptctl/cc-candybar/actions/runs/41278244898) | 11-01 05:46 | PR 71b | site | real | the branch's own change | read |
-| [41277874014](https://github.com/promptctl/cc-candybar/actions/runs/41277874014) | 11-01 05:41 | PR 71b | site | real | the branch's own change | read |
-| [41276583151](https://github.com/promptctl/cc-candybar/actions/runs/41276583151) | 11-01 05:20 | main | Release step: push to main rejected | flake | real external | read |
-| [41275424672](https://github.com/promptctl/cc-candybar/actions/runs/41275424672) | 11-01 05:03 | PR zrb | frame-feed | real | product defect, timing-triggered | ticketed |
-| [41275369908](https://github.com/promptctl/cc-candybar/actions/runs/41275369908) | 11-01 05:02 | PR zrb | draw-reserve.process | flake | timing | ticketed |
-| [41271350436](https://github.com/promptctl/cc-candybar/actions/runs/41271350436) | 11-01 04:00 | PR 425 | frame-feed | real | product defect, timing-triggered | ticketed |
-| [41267354003](https://github.com/promptctl/cc-candybar/actions/runs/41267354003) | 11-01 02:59 | PR 0mz | frame-feed | real | product defect, timing-triggered | ticketed |
-| [41264694866](https://github.com/promptctl/cc-candybar/actions/runs/41264694866) | 11-01 02:19 | PR a5k3 | frame-feed | real | product defect, timing-triggered | ticketed |
-| [41263983705](https://github.com/promptctl/cc-candybar/actions/runs/41263983705) | 11-01 02:09 | PR keo | lint | real | the commit | read |
-| [41263953117](https://github.com/promptctl/cc-candybar/actions/runs/41263953117) | 11-01 02:08 | PR keo | lint | real | the commit | read |
-| [41259456554](https://github.com/promptctl/cc-candybar/actions/runs/41259456554) | 11-01 01:03 | PR 945 | draw-reserve.process | flake | timing | ticketed |
-| [41256389658](https://github.com/promptctl/cc-candybar/actions/runs/41256389658) | 11-01 00:21 | PR 6el | frame-feed | real | product defect, timing-triggered | ticketed |
-| [41254623078](https://github.com/promptctl/cc-candybar/actions/runs/41254623078) | 10-31 23:57 | PR settings-one-list-labelled-options | format (prettier) | real | the commit | read |
-| [41254142119](https://github.com/promptctl/cc-candybar/actions/runs/41254142119) | 10-31 23:49 | PR brandon-menus-sjhy.ju8 | draw-reserve.process | flake | timing | ticketed |
-| [41249819293](https://github.com/promptctl/cc-candybar/actions/runs/41249819293) | 10-31 22:48 | main | doc-snippets | flake | shared state | ticketed |
-| [41236694283](https://github.com/promptctl/cc-candybar/actions/runs/41236694283) | 10-31 19:58 | PR 1ur | daemon-render-event-e2e | flake | timing | ticketed |
-| [41234374953](https://github.com/promptctl/cc-candybar/actions/runs/41234374953) | 10-31 19:28 | PR 1ur | draw-reserve | flake | timing | ticketed |
-| [41229284764](https://github.com/promptctl/cc-candybar/actions/runs/41229284764) | 10-31 18:24 | main | daemon-render-event-e2e | flake | timing | ticketed |
-| [41227534625](https://github.com/promptctl/cc-candybar/actions/runs/41227534625) | 10-31 18:03 | PR snf | var-sources, daemon-render-event-e2e | real | the branch's own change | read |
-| [41217076611](https://github.com/promptctl/cc-candybar/actions/runs/41217076611) | 10-31 15:54 | PR c3x | in-worker-daemon | real | the branch's own change | inferred |
-| [41212082538](https://github.com/promptctl/cc-candybar/actions/runs/41212082538) | 10-31 14:51 | PR spa-any-stream | daemon-log | flake | shared state | ticketed |
-| [41210328239](https://github.com/promptctl/cc-candybar/actions/runs/41210328239) | 10-31 14:29 | PR spa-any-stream | daemon-connection | real | the branch's own change | read |
-| [41157149656](https://github.com/promptctl/cc-candybar/actions/runs/41157149656) | 10-31 01:49 | PR erwl | daemon-render-event-e2e | flake | timing | ticketed |
-| [41152900265](https://github.com/promptctl/cc-candybar/actions/runs/41152900265) | 10-31 00:57 | main | daemon-log | flake | shared state | ticketed |
-| [41151924121](https://github.com/promptctl/cc-candybar/actions/runs/41151924121) | 10-31 00:45 | PR source-checkout-is-install | daemon-log | flake | shared state | ticketed |
-| [41151241156](https://github.com/promptctl/cc-candybar/actions/runs/41151241156) | 10-31 00:38 | PR source-checkout-is-install | metrics | flake | shared state | ticketed |
-| [41148221577](https://github.com/promptctl/cc-candybar/actions/runs/41148221577) | 10-31 00:05 | PR joiners-turn-press-34r | daemon-render-event-e2e | flake | timing | ticketed |
-| [41141087223](https://github.com/promptctl/cc-candybar/actions/runs/41141087223) | 10-30 22:53 | main | frame-feed | real | product defect, timing-triggered | ticketed |
-| [41137830882](https://github.com/promptctl/cc-candybar/actions/runs/41137830882) | 10-30 22:23 | main | draw-reserve | flake | timing | ticketed |
-| [41136622234](https://github.com/promptctl/cc-candybar/actions/runs/41136622234) | 10-30 22:13 | PR speed-10x | update-act | flake | shared state | ticketed |
-| [41136230283](https://github.com/promptctl/cc-candybar/actions/runs/41136230283) | 10-30 22:09 | PR speed-10x | schema drift check | real | the commit | read |
-| [41131118459](https://github.com/promptctl/cc-candybar/actions/runs/41131118459) | 10-30 21:26 | PR site-nav | draw-reserve | flake | timing | ticketed |
-| [41130839528](https://github.com/promptctl/cc-candybar/actions/runs/41130839528) | 10-30 21:24 | PR site-nav | daemon-log | flake | shared state | ticketed |
-| [41130246255](https://github.com/promptctl/cc-candybar/actions/runs/41130246255) | 10-30 21:20 | PR site-nav | daemon-click | flake | shared state | ticketed |
-| [41128901586](https://github.com/promptctl/cc-candybar/actions/runs/41128901586) | 10-30 21:09 | main | daemon-render-event-e2e | flake | timing | ticketed |
-| [41116756762](https://github.com/promptctl/cc-candybar/actions/runs/41116756762) | 10-30 19:37 | PR build-currency-e2e-ci-cuvv | doc-snippets | flake | shared state | ticketed |
-| [41112102509](https://github.com/promptctl/cc-candybar/actions/runs/41112102509) | 10-30 19:03 | main | frame-feed | real | product defect, timing-triggered | ticketed |
-| [41111797434](https://github.com/promptctl/cc-candybar/actions/runs/41111797434) | 10-30 19:01 | PR joiners-depth-window-686 | daemon-render-event-e2e | flake | timing | ticketed |
-| [41109783461](https://github.com/promptctl/cc-candybar/actions/runs/41109783461) | 10-30 18:46 | main | doc-snippets | flake | shared state | ticketed |
-| [41107754379](https://github.com/promptctl/cc-candybar/actions/runs/41107754379) | 10-30 18:32 | PR 8uk | draw-reserve | flake | timing | ticketed |
-| [41106263048](https://github.com/promptctl/cc-candybar/actions/runs/41106263048) | 10-30 18:21 | main | daemon-render-event-e2e | flake | timing | ticketed |
-| [41104093593](https://github.com/promptctl/cc-candybar/actions/runs/41104093593) | 10-30 18:07 | PR chl | daemon-render-event-e2e | flake | timing | ticketed |
-| [41101586015](https://github.com/promptctl/cc-candybar/actions/runs/41101586015) | 10-30 17:47 | PR chl | cli-check, daemon-render-event-e2e, render-cache-sharing | real | the branch's own change | inferred |
-| [41099247732](https://github.com/promptctl/cc-candybar/actions/runs/41099247732) | 10-30 17:29 | PR build-currency-e2e-ci-cuvv | daemon-render-event-e2e, daemon-broken-config-e2e | flake | timing | ticketed |
-| [41091000333](https://github.com/promptctl/cc-candybar/actions/runs/41091000333) | 10-30 16:33 | PR qzx | typecheck | real | the commit | read |
-| [41088149532](https://github.com/promptctl/cc-candybar/actions/runs/41088149532) | 10-30 16:15 | PR act-survives-killed-daemon-linux | daemon-render-event-e2e | flake | timing | ticketed |
-| [41084975455](https://github.com/promptctl/cc-candybar/actions/runs/41084975455) | 10-30 15:54 | PR 0mvx | daemon-build-currency-e2e | flake | timing | ticketed |
-| [41084692088](https://github.com/promptctl/cc-candybar/actions/runs/41084692088) | 10-30 15:52 | PR act-survives-killed-daemon-linux | daemon-build-currency-e2e | flake | timing | ticketed |
-| [41083691137](https://github.com/promptctl/cc-candybar/actions/runs/41083691137) | 10-30 15:45 | main | daemon-build-currency-e2e | flake | timing | ticketed |
-| [41082743517](https://github.com/promptctl/cc-candybar/actions/runs/41082743517) | 10-30 15:39 | main | Release step: push to main rejected | flake | real external | read |
-| [41079120163](https://github.com/promptctl/cc-candybar/actions/runs/41079120163) | 10-30 15:16 | PR qzx | daemon-build-currency-e2e | flake | timing | ticketed |
-| [41078579370](https://github.com/promptctl/cc-candybar/actions/runs/41078579370) | 10-30 15:12 | PR pijr | daemon-git-cache | real | the branch's own change | read |
-| [41077960351](https://github.com/promptctl/cc-candybar/actions/runs/41077960351) | 10-30 15:08 | PR pijr | daemon-git-cache | real | the branch's own change | read |
-| [41077934088](https://github.com/promptctl/cc-candybar/actions/runs/41077934088) | 10-30 15:08 | main | daemon-build-currency-e2e | flake | timing | ticketed |
-| [41077616303](https://github.com/promptctl/cc-candybar/actions/runs/41077616303) | 10-30 15:06 | PR pijr | daemon-git-cache | real | the branch's own change | read |
-| [41075891333](https://github.com/promptctl/cc-candybar/actions/runs/41075891333) | 10-30 14:55 | PR pijr | daemon-git-cache | real | the branch's own change | read |
-| [41074623757](https://github.com/promptctl/cc-candybar/actions/runs/41074623757) | 10-30 14:46 | PR pijr | daemon-git-cache, daemon-build-currency-e2e | real | the branch's own change | read |
-| [41074284933](https://github.com/promptctl/cc-candybar/actions/runs/41074284933) | 10-30 14:44 | PR qzx | doc-snippets | flake | shared state | ticketed |
-| [41072483175](https://github.com/promptctl/cc-candybar/actions/runs/41072483175) | 10-30 14:32 | PR pijr | daemon-git-cache, daemon-build-currency-e2e | real | the branch's own change | read |
-| [41070117938](https://github.com/promptctl/cc-candybar/actions/runs/41070117938) | 10-30 14:14 | PR odm | daemon-build-currency-e2e | flake | timing | ticketed |
-| [41065039660](https://github.com/promptctl/cc-candybar/actions/runs/41065039660) | 10-30 13:39 | PR joiners-bump-0hr | 200 files | real | dependency bump | read |
-| [41062343644](https://github.com/promptctl/cc-candybar/actions/runs/41062343644) | 10-30 13:19 | PR odm | daemon-build-currency-e2e | flake | timing | ticketed |
-| [41061882935](https://github.com/promptctl/cc-candybar/actions/runs/41061882935) | 10-30 13:16 | PR joiners-bump-0hr | 200 files | real | dependency bump | read |
-| [41059089693](https://github.com/promptctl/cc-candybar/actions/runs/41059089693) | 10-30 12:55 | PR sy24 | daemon-render-event-e2e | flake | timing | ticketed |
-| [41053520338](https://github.com/promptctl/cc-candybar/actions/runs/41053520338) | 10-30 12:11 | main | daemon-render-event-e2e | flake | timing | ticketed |
-| [41052519492](https://github.com/promptctl/cc-candybar/actions/runs/41052519492) | 10-30 12:03 | PR z676 | daemon-build-currency-e2e | flake | timing | ticketed |
-| [41051989282](https://github.com/promptctl/cc-candybar/actions/runs/41051989282) | 10-30 11:59 | main | daemon-render-event-e2e, render-cache-sharing | flake | timing | ticketed |
-| [41051613708](https://github.com/promptctl/cc-candybar/actions/runs/41051613708) | 10-30 11:55 | PR 3gg | daemon-render-event-e2e, render-cache-sharing | flake | timing | ticketed |
-| [41049907479](https://github.com/promptctl/cc-candybar/actions/runs/41049907479) | 10-30 11:41 | PR immutable-sleeping-barto | daemon-build-currency-e2e | flake | shared state | ticketed |
-| [41049070569](https://github.com/promptctl/cc-candybar/actions/runs/41049070569) | 10-30 11:34 | PR 3gg | daemon-build-currency-e2e | flake | shared state | ticketed |
-| [41048612146](https://github.com/promptctl/cc-candybar/actions/runs/41048612146) | 10-30 11:30 | PR z676 | daemon-build-currency-e2e | flake | timing | ticketed |
-| [41048515213](https://github.com/promptctl/cc-candybar/actions/runs/41048515213) | 10-30 11:30 | PR z676 | daemon-render-event-e2e | flake | timing | ticketed |
-| [41037650105](https://github.com/promptctl/cc-candybar/actions/runs/41037650105) | 10-30 10:01 | main | daemon-build-currency-e2e | flake | shared state | ticketed |
-| [41034393409](https://github.com/promptctl/cc-candybar/actions/runs/41034393409) | 10-30 09:34 | PR 99v | daemon-build-currency-e2e | flake | shared state | ticketed |
-| [41031942815](https://github.com/promptctl/cc-candybar/actions/runs/41031942815) | 10-30 09:14 | PR y66h | daemon-render-event-e2e, daemon-build-currency-e2e | flake | timing | ticketed |
-| [41031717514](https://github.com/promptctl/cc-candybar/actions/runs/41031717514) | 10-30 09:12 | PR 99v | typecheck | real | the commit | read |
-| [41030124267](https://github.com/promptctl/cc-candybar/actions/runs/41030124267) | 10-30 08:59 | main | render-cache-sharing | flake | timing | ticketed |
-| [41026051000](https://github.com/promptctl/cc-candybar/actions/runs/41026051000) | 10-30 08:22 | PR 0rr5 | plain | real | the branch's own change | read |
+| Run | When (UTC) | On | Failing | Group | Verdict | Cause | Evidence |
+|---|---|---|---|---|---|---|---|
+| [41464641125](https://github.com/promptctl/cc-candybar/actions/runs/41464641125) | 11-02 14:43 | PR candybar-launch-q7o7.6wi | render-cache-sharing, daemon-value | render-cache-sharing gc retention, daemon-value close, timers armed after it | real | product defect | read |
+| [41463875343](https://github.com/promptctl/cc-candybar/actions/runs/41463875343) | 11-02 14:38 | main | render-cache-sharing | render-cache-sharing gc retention | flake | timing | ticketed |
+| [41452103114](https://github.com/promptctl/cc-candybar/actions/runs/41452103114) | 11-02 13:20 | PR 0oo | daemon-value | daemon-value close, timers armed after it | real | product defect | read |
+| [41433083227](https://github.com/promptctl/cc-candybar/actions/runs/41433083227) | 11-02 10:58 | PR qjw | in-worker-daemon | in-worker-daemon stated deadline | real | the branch's own change | inferred |
+| [41432893795](https://github.com/promptctl/cc-candybar/actions/runs/41432893795) | 11-02 10:57 | PR qjw | in-worker-daemon, launch-group-end | in-worker-daemon stated deadline, the branch's own change (inferred) | real | the branch's own change | inferred |
+| [41432632675](https://github.com/promptctl/cc-candybar/actions/runs/41432632675) | 11-02 10:55 | PR qjw | in-worker-daemon | in-worker-daemon stated deadline | real | the branch's own change | inferred |
+| [41366785790](https://github.com/promptctl/cc-candybar/actions/runs/41366785790) | 11-02 00:22 | PR 43x | draw-reserve.process | draw-reserve p99 | flake | timing | ticketed |
+| [41353935100](https://github.com/promptctl/cc-candybar/actions/runs/41353935100) | 11-01 21:49 | PR 43x | draw-reserve.process | draw-reserve p99 | flake | timing | ticketed |
+| [41353342314](https://github.com/promptctl/cc-candybar/actions/runs/41353342314) | 11-01 21:41 | PR 43x | daemon-request-limits.process | render that outlives its timeout writes timedOut=Y | flake | timing | ticketed |
+| [41351881808](https://github.com/promptctl/cc-candybar/actions/runs/41351881808) | 11-01 21:24 | PR 43x | draw-reserve.process | draw-reserve p99 | flake | timing | ticketed |
+| [41351059288](https://github.com/promptctl/cc-candybar/actions/runs/41351059288) | 11-01 21:15 | PR 43x | daemon-value | daemon-value close, timers armed after it | real | product defect | read |
+| [41336423169](https://github.com/promptctl/cc-candybar/actions/runs/41336423169) | 11-01 18:24 | main | draw-reserve.process | draw-reserve p99 | flake | timing | ticketed |
+| [41306454221](https://github.com/promptctl/cc-candybar/actions/runs/41306454221) | 11-01 12:25 | main | draw-reserve.process | draw-reserve p99 | flake | timing | ticketed |
+| [41305051149](https://github.com/promptctl/cc-candybar/actions/runs/41305051149) | 11-01 12:08 | PR jqq | draw-reserve.process | draw-reserve p99 | flake | timing | ticketed |
+| [41301458328](https://github.com/promptctl/cc-candybar/actions/runs/41301458328) | 11-01 11:20 | PR jqq | process-tier daemon-start ceiling | lint, typecheck, format, schema or ratchet | real | the commit | read |
+| [41296594729](https://github.com/promptctl/cc-candybar/actions/runs/41296594729) | 11-01 10:14 | PR brandon-menus-sjhy.5y2 | dsl-spine | the branch's own change | real | the branch's own change | read |
+| [41295757517](https://github.com/promptctl/cc-candybar/actions/runs/41295757517) | 11-01 10:03 | PR brandon-menus-sjhy.5y2 | dsl-spine | the branch's own change | real | the branch's own change | read |
+| [41293446779](https://github.com/promptctl/cc-candybar/actions/runs/41293446779) | 11-01 09:30 | main | daemon-prompt-count-e2e | prompt count: render ended on its deadline | flake | timing | inferred |
+| [41288147258](https://github.com/promptctl/cc-candybar/actions/runs/41288147258) | 11-01 09:16 | PR feat/git-worktree-path | draw-reserve.process | draw-reserve p99 | flake | timing | ticketed |
+| [41287830426](https://github.com/promptctl/cc-candybar/actions/runs/41287830426) | 11-01 09:11 | main | frame-feed | frame-feed one draw per turn | real | product defect, timing-triggered | ticketed |
+| [41291848164](https://github.com/promptctl/cc-candybar/actions/runs/41291848164) | 11-01 09:09 | PR gp7 | launch | the branch's own change (inferred) | real | the branch's own change | inferred |
+| [41284518435](https://github.com/promptctl/cc-candybar/actions/runs/41284518435) | 11-01 07:22 | PR rs0 | frame-feed | frame-feed one draw per turn | real | product defect, timing-triggered | ticketed |
+| [41278244898](https://github.com/promptctl/cc-candybar/actions/runs/41278244898) | 11-01 05:46 | PR 71b | site | the branch's own change | real | the branch's own change | read |
+| [41277874014](https://github.com/promptctl/cc-candybar/actions/runs/41277874014) | 11-01 05:41 | PR 71b | site | the branch's own change | real | the branch's own change | read |
+| [41276583151](https://github.com/promptctl/cc-candybar/actions/runs/41276583151) | 11-01 05:20 | main | Release step: push to main rejected | Release push rejected | flake | real external | read |
+| [41275424672](https://github.com/promptctl/cc-candybar/actions/runs/41275424672) | 11-01 05:03 | PR zrb | frame-feed | frame-feed one draw per turn | real | product defect, timing-triggered | ticketed |
+| [41275369908](https://github.com/promptctl/cc-candybar/actions/runs/41275369908) | 11-01 05:02 | PR zrb | draw-reserve.process | draw-reserve p99 | flake | timing | ticketed |
+| [41271350436](https://github.com/promptctl/cc-candybar/actions/runs/41271350436) | 11-01 04:00 | PR 425 | frame-feed | frame-feed one draw per turn | real | product defect, timing-triggered | ticketed |
+| [41267354003](https://github.com/promptctl/cc-candybar/actions/runs/41267354003) | 11-01 02:59 | PR 0mz | frame-feed | frame-feed one draw per turn | real | product defect, timing-triggered | ticketed |
+| [41264694866](https://github.com/promptctl/cc-candybar/actions/runs/41264694866) | 11-01 02:19 | PR a5k3 | frame-feed | frame-feed one draw per turn | real | product defect, timing-triggered | ticketed |
+| [41263983705](https://github.com/promptctl/cc-candybar/actions/runs/41263983705) | 11-01 02:09 | PR keo | lint | lint, typecheck, format, schema or ratchet | real | the commit | read |
+| [41263953117](https://github.com/promptctl/cc-candybar/actions/runs/41263953117) | 11-01 02:08 | PR keo | lint | lint, typecheck, format, schema or ratchet | real | the commit | read |
+| [41259456554](https://github.com/promptctl/cc-candybar/actions/runs/41259456554) | 11-01 01:03 | PR 945 | draw-reserve.process | draw-reserve p99 | flake | timing | ticketed |
+| [41256389658](https://github.com/promptctl/cc-candybar/actions/runs/41256389658) | 11-01 00:21 | PR 6el | frame-feed | frame-feed one draw per turn | real | product defect, timing-triggered | ticketed |
+| [41254623078](https://github.com/promptctl/cc-candybar/actions/runs/41254623078) | 10-31 23:57 | PR settings-one-list-labelled-options | format (prettier) | lint, typecheck, format, schema or ratchet | real | the commit | read |
+| [41254142119](https://github.com/promptctl/cc-candybar/actions/runs/41254142119) | 10-31 23:49 | PR brandon-menus-sjhy.ju8 | draw-reserve.process | draw-reserve p99 | flake | timing | ticketed |
+| [41249819293](https://github.com/promptctl/cc-candybar/actions/runs/41249819293) | 10-31 22:48 | main | doc-snippets | blank-stack throw from another file | flake | shared state | ticketed |
+| [41236694283](https://github.com/promptctl/cc-candybar/actions/runs/41236694283) | 10-31 19:58 | PR 1ur | daemon-render-event-e2e | render that outlives its timeout writes timedOut=Y | flake | timing | ticketed |
+| [41234374953](https://github.com/promptctl/cc-candybar/actions/runs/41234374953) | 10-31 19:28 | PR 1ur | draw-reserve | draw-reserve p99 | flake | timing | ticketed |
+| [41229284764](https://github.com/promptctl/cc-candybar/actions/runs/41229284764) | 10-31 18:24 | main | daemon-render-event-e2e | render-event clickError owed/over | flake | timing | ticketed |
+| [41227534625](https://github.com/promptctl/cc-candybar/actions/runs/41227534625) | 10-31 18:03 | PR snf | var-sources, daemon-render-event-e2e | the branch's own change, render-event clickError owed/over | real | the branch's own change | read |
+| [41217076611](https://github.com/promptctl/cc-candybar/actions/runs/41217076611) | 10-31 15:54 | PR c3x | in-worker-daemon | the branch's own change (inferred) | real | the branch's own change | inferred |
+| [41212082538](https://github.com/promptctl/cc-candybar/actions/runs/41212082538) | 10-31 14:51 | PR spa-any-stream | daemon-log | blank-stack throw from another file | flake | shared state | ticketed |
+| [41210328239](https://github.com/promptctl/cc-candybar/actions/runs/41210328239) | 10-31 14:29 | PR spa-any-stream | daemon-connection | the branch's own change | real | the branch's own change | read |
+| [41157149656](https://github.com/promptctl/cc-candybar/actions/runs/41157149656) | 10-31 01:49 | PR erwl | daemon-render-event-e2e | render-event clickError owed/over | flake | timing | ticketed |
+| [41152900265](https://github.com/promptctl/cc-candybar/actions/runs/41152900265) | 10-31 00:57 | main | daemon-log | blank-stack throw from another file | flake | shared state | ticketed |
+| [41151924121](https://github.com/promptctl/cc-candybar/actions/runs/41151924121) | 10-31 00:45 | PR source-checkout-is-install | daemon-log | blank-stack throw from another file | flake | shared state | ticketed |
+| [41151241156](https://github.com/promptctl/cc-candybar/actions/runs/41151241156) | 10-31 00:38 | PR source-checkout-is-install | metrics | blank-stack throw from another file | flake | shared state | ticketed |
+| [41148221577](https://github.com/promptctl/cc-candybar/actions/runs/41148221577) | 10-31 00:05 | PR joiners-turn-press-34r | daemon-render-event-e2e | render-event clickError owed/over | flake | timing | ticketed |
+| [41141087223](https://github.com/promptctl/cc-candybar/actions/runs/41141087223) | 10-30 22:53 | main | frame-feed | frame-feed one draw per turn | real | product defect, timing-triggered | ticketed |
+| [41137830882](https://github.com/promptctl/cc-candybar/actions/runs/41137830882) | 10-30 22:23 | main | draw-reserve | draw-reserve p99 | flake | timing | ticketed |
+| [41136622234](https://github.com/promptctl/cc-candybar/actions/runs/41136622234) | 10-30 22:13 | PR speed-10x | update-act | blank-stack throw from another file | flake | shared state | ticketed |
+| [41136230283](https://github.com/promptctl/cc-candybar/actions/runs/41136230283) | 10-30 22:09 | PR speed-10x | schema drift check | lint, typecheck, format, schema or ratchet | real | the commit | read |
+| [41131118459](https://github.com/promptctl/cc-candybar/actions/runs/41131118459) | 10-30 21:26 | PR site-nav | draw-reserve | draw-reserve p99 | flake | timing | ticketed |
+| [41130839528](https://github.com/promptctl/cc-candybar/actions/runs/41130839528) | 10-30 21:24 | PR site-nav | daemon-log | blank-stack throw from another file | flake | shared state | ticketed |
+| [41130246255](https://github.com/promptctl/cc-candybar/actions/runs/41130246255) | 10-30 21:20 | PR site-nav | daemon-click | blank-stack throw from another file | flake | shared state | ticketed |
+| [41128901586](https://github.com/promptctl/cc-candybar/actions/runs/41128901586) | 10-30 21:09 | main | daemon-render-event-e2e | render-event clickError owed/over | flake | timing | ticketed |
+| [41116756762](https://github.com/promptctl/cc-candybar/actions/runs/41116756762) | 10-30 19:37 | PR build-currency-e2e-ci-cuvv | doc-snippets | blank-stack throw from another file | flake | shared state | ticketed |
+| [41112102509](https://github.com/promptctl/cc-candybar/actions/runs/41112102509) | 10-30 19:03 | main | frame-feed | frame-feed one draw per turn | real | product defect, timing-triggered | ticketed |
+| [41111797434](https://github.com/promptctl/cc-candybar/actions/runs/41111797434) | 10-30 19:01 | PR joiners-depth-window-686 | daemon-render-event-e2e | render-event clickError owed/over | flake | timing | ticketed |
+| [41109783461](https://github.com/promptctl/cc-candybar/actions/runs/41109783461) | 10-30 18:46 | main | doc-snippets | blank-stack throw from another file | flake | shared state | ticketed |
+| [41107754379](https://github.com/promptctl/cc-candybar/actions/runs/41107754379) | 10-30 18:32 | PR 8uk | draw-reserve | draw-reserve p99 | flake | timing | ticketed |
+| [41106263048](https://github.com/promptctl/cc-candybar/actions/runs/41106263048) | 10-30 18:21 | main | daemon-render-event-e2e | render-event clickError owed/over | flake | timing | ticketed |
+| [41104093593](https://github.com/promptctl/cc-candybar/actions/runs/41104093593) | 10-30 18:07 | PR chl | daemon-render-event-e2e | render-event clickError owed/over | flake | timing | ticketed |
+| [41101586015](https://github.com/promptctl/cc-candybar/actions/runs/41101586015) | 10-30 17:47 | PR chl | cli-check, daemon-render-event-e2e, render-cache-sharing | the branch's own change (inferred), render-event clickError owed/over, render-cache-sharing gc retention | real | the branch's own change | inferred |
+| [41099247732](https://github.com/promptctl/cc-candybar/actions/runs/41099247732) | 10-30 17:29 | PR build-currency-e2e-ci-cuvv | daemon-render-event-e2e, daemon-broken-config-e2e | render-event clickError owed/over, blank-stack throw from another file | flake | timing | ticketed |
+| [41091000333](https://github.com/promptctl/cc-candybar/actions/runs/41091000333) | 10-30 16:33 | PR qzx | typecheck | lint, typecheck, format, schema or ratchet | real | the commit | read |
+| [41088149532](https://github.com/promptctl/cc-candybar/actions/runs/41088149532) | 10-30 16:15 | PR act-survives-killed-daemon-linux | daemon-render-event-e2e | render-event clickError owed/over | flake | timing | ticketed |
+| [41084975455](https://github.com/promptctl/cc-candybar/actions/runs/41084975455) | 10-30 15:54 | PR 0mvx | daemon-build-currency-e2e | build-currency SIGKILLed mid-act | flake | timing | ticketed |
+| [41084692088](https://github.com/promptctl/cc-candybar/actions/runs/41084692088) | 10-30 15:52 | PR act-survives-killed-daemon-linux | daemon-build-currency-e2e | build-currency SIGKILLed mid-act | flake | timing | ticketed |
+| [41083691137](https://github.com/promptctl/cc-candybar/actions/runs/41083691137) | 10-30 15:45 | main | daemon-build-currency-e2e | build-currency SIGKILLed mid-act | flake | timing | ticketed |
+| [41082743517](https://github.com/promptctl/cc-candybar/actions/runs/41082743517) | 10-30 15:39 | main | Release step: push to main rejected | Release push rejected | flake | real external | read |
+| [41079120163](https://github.com/promptctl/cc-candybar/actions/runs/41079120163) | 10-30 15:16 | PR qzx | daemon-build-currency-e2e | build-currency SIGKILLed mid-act | flake | timing | ticketed |
+| [41078579370](https://github.com/promptctl/cc-candybar/actions/runs/41078579370) | 10-30 15:12 | PR pijr | daemon-git-cache | daemon-git-cache while its branch was being written | real | the branch's own change | read |
+| [41077960351](https://github.com/promptctl/cc-candybar/actions/runs/41077960351) | 10-30 15:08 | PR pijr | daemon-git-cache | daemon-git-cache while its branch was being written | real | the branch's own change | read |
+| [41077934088](https://github.com/promptctl/cc-candybar/actions/runs/41077934088) | 10-30 15:08 | main | daemon-build-currency-e2e | build-currency SIGKILLed mid-act | flake | timing | ticketed |
+| [41077616303](https://github.com/promptctl/cc-candybar/actions/runs/41077616303) | 10-30 15:06 | PR pijr | daemon-git-cache | daemon-git-cache while its branch was being written | real | the branch's own change | read |
+| [41075891333](https://github.com/promptctl/cc-candybar/actions/runs/41075891333) | 10-30 14:55 | PR pijr | daemon-git-cache | daemon-git-cache while its branch was being written | real | the branch's own change | read |
+| [41074623757](https://github.com/promptctl/cc-candybar/actions/runs/41074623757) | 10-30 14:46 | PR pijr | daemon-git-cache, daemon-build-currency-e2e | daemon-git-cache while its branch was being written, build-currency SIGKILLed mid-act | real | the branch's own change | read |
+| [41074284933](https://github.com/promptctl/cc-candybar/actions/runs/41074284933) | 10-30 14:44 | PR qzx | doc-snippets | blank-stack throw from another file | flake | shared state | ticketed |
+| [41072483175](https://github.com/promptctl/cc-candybar/actions/runs/41072483175) | 10-30 14:32 | PR pijr | daemon-git-cache, daemon-build-currency-e2e | daemon-git-cache while its branch was being written, build-currency SIGKILLed mid-act | real | the branch's own change | read |
+| [41070117938](https://github.com/promptctl/cc-candybar/actions/runs/41070117938) | 10-30 14:14 | PR odm | daemon-build-currency-e2e | build-currency SIGKILLed mid-act | flake | timing | ticketed |
+| [41065039660](https://github.com/promptctl/cc-candybar/actions/runs/41065039660) | 10-30 13:39 | PR joiners-bump-0hr | 200 files | dependency bump | real | dependency bump | read |
+| [41062343644](https://github.com/promptctl/cc-candybar/actions/runs/41062343644) | 10-30 13:19 | PR odm | daemon-build-currency-e2e | build-currency SIGKILLed mid-act | flake | timing | ticketed |
+| [41061882935](https://github.com/promptctl/cc-candybar/actions/runs/41061882935) | 10-30 13:16 | PR joiners-bump-0hr | 200 files | dependency bump | real | dependency bump | read |
+| [41059089693](https://github.com/promptctl/cc-candybar/actions/runs/41059089693) | 10-30 12:55 | PR sy24 | daemon-render-event-e2e | render-event clickError owed/over | flake | timing | ticketed |
+| [41053520338](https://github.com/promptctl/cc-candybar/actions/runs/41053520338) | 10-30 12:11 | main | daemon-render-event-e2e | render-event clickError owed/over | flake | timing | ticketed |
+| [41052519492](https://github.com/promptctl/cc-candybar/actions/runs/41052519492) | 10-30 12:03 | PR z676 | daemon-build-currency-e2e | build-currency SIGKILLed mid-act | flake | timing | ticketed |
+| [41051989282](https://github.com/promptctl/cc-candybar/actions/runs/41051989282) | 10-30 11:59 | main | daemon-render-event-e2e, render-cache-sharing | render-event clickError owed/over, render-cache-sharing gc retention | flake | timing | ticketed |
+| [41051613708](https://github.com/promptctl/cc-candybar/actions/runs/41051613708) | 10-30 11:55 | PR 3gg | daemon-render-event-e2e, render-cache-sharing | render-event clickError owed/over, render-cache-sharing gc retention | flake | timing | ticketed |
+| [41049907479](https://github.com/promptctl/cc-candybar/actions/runs/41049907479) | 10-30 11:41 | PR immutable-sleeping-barto | daemon-build-currency-e2e | blank-stack throw from another file | flake | shared state | ticketed |
+| [41049070569](https://github.com/promptctl/cc-candybar/actions/runs/41049070569) | 10-30 11:34 | PR 3gg | daemon-build-currency-e2e | blank-stack throw from another file | flake | shared state | ticketed |
+| [41048612146](https://github.com/promptctl/cc-candybar/actions/runs/41048612146) | 10-30 11:30 | PR z676 | daemon-build-currency-e2e | build-currency SIGKILLed mid-act | flake | timing | ticketed |
+| [41048515213](https://github.com/promptctl/cc-candybar/actions/runs/41048515213) | 10-30 11:30 | PR z676 | daemon-render-event-e2e | render-event clickError owed/over | flake | timing | ticketed |
+| [41037650105](https://github.com/promptctl/cc-candybar/actions/runs/41037650105) | 10-30 10:01 | main | daemon-build-currency-e2e | blank-stack throw from another file | flake | shared state | ticketed |
+| [41034393409](https://github.com/promptctl/cc-candybar/actions/runs/41034393409) | 10-30 09:34 | PR 99v | daemon-build-currency-e2e | blank-stack throw from another file | flake | shared state | ticketed |
+| [41031942815](https://github.com/promptctl/cc-candybar/actions/runs/41031942815) | 10-30 09:14 | PR y66h | daemon-render-event-e2e, daemon-build-currency-e2e | render-event clickError owed/over, blank-stack throw from another file | flake | timing | ticketed |
+| [41031717514](https://github.com/promptctl/cc-candybar/actions/runs/41031717514) | 10-30 09:12 | PR 99v | typecheck | lint, typecheck, format, schema or ratchet | real | the commit | read |
+| [41030124267](https://github.com/promptctl/cc-candybar/actions/runs/41030124267) | 10-30 08:59 | main | render-cache-sharing | render-cache-sharing gc retention | flake | timing | ticketed |
+| [41026051000](https://github.com/promptctl/cc-candybar/actions/runs/41026051000) | 10-30 08:22 | PR 0rr5 | plain | the branch's own change | real | the branch's own change | read |
 
 ## The 22 runs that passed on rerun
 
