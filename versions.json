@@ -4,15 +4,22 @@
     {
       "version": "pr-578",
       "ref": "refs/pull/578/merge",
-      "sha": "4ae3ac18a4ca86c3068b906119ba230326fa1df8",
-      "timestamp": "2026-11-02T15:36:01.450Z",
+      "sha": "d89671554785820e7d757453a6c93e7bcacccdf5",
+      "timestamp": "2026-11-02T15:41:57.856Z",
       "commits": [
         {
-          "sha": "4ae3ac18a4ca86c3068b906119ba230326fa1df8",
+          "sha": "d89671554785820e7d757453a6c93e7bcacccdf5",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T15:35:19Z",
-          "message": "Merge c98807ab340761deb694e3f8f2189b1418c6a9f4 into 7e8ae4a5476db0139bc294069ca8a1e4cf5e3085\n"
+          "timestamp": "2026-11-02T15:40:50Z",
+          "message": "Merge 6f1023523582322936b1ac6e35edbe5cc2b57e6d into 7e8ae4a5476db0139bc294069ca8a1e4cf5e3085\n"
+        },
+        {
+          "sha": "6f1023523582322936b1ac6e35edbe5cc2b57e6d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T08:40:38-07:00",
+          "message": "test: review fixes — a run with no records is named, not a raw ENOENT; the shrink check reads own keys; the ledger test no longer pins its own path (candybar-testing-ihvy.icq)\n"
         },
         {
           "sha": "c98807ab340761deb694e3f8f2189b1418c6a9f4",
