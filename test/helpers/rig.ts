@@ -34,6 +34,7 @@ import {
   type RenderSelection,
 } from "../../src/dsl/render";
 import type { LinkSigner } from "../../src/click/link-signer";
+import { SESSION_RENDER_ORIGIN_KEY } from "../../src/daemon/foundations/session-keys";
 import type { VerbContext } from "../../src/daemon/verbs";
 import type { SettingsHistory } from "../../src/daemon/settings-history";
 import type { Host } from "../../src/host";
@@ -84,11 +85,6 @@ export interface RigInit {
   readonly history?: SettingsHistory;
   readonly host?: Host;
   readonly signer?: LinkSigner;
-  /**
-   * Whether the session has rendered, as it always has before a click: a click
-   * resolves the config its session's last render recorded.
-   */
-  readonly rendered?: boolean;
 }
 
 export interface DrawInit {
@@ -232,7 +228,11 @@ export function buildRig(init: RigInit = {}): Rig {
     ...registered.compiled,
     loadWarnings: registered.loadWarnings,
   };
-  if (init.rendered ?? true) recordRender(sessionState, sessionId, cwd);
+  // A click resolves the config its session's last render recorded, so a rig
+  // records one unless the caller's session state already holds an origin.
+  if (sessionState.get(sessionId, SESSION_RENDER_ORIGIN_KEY) === null) {
+    recordRender(sessionState, sessionId, cwd);
+  }
   const ctx = testVerbContext(sessionState, init.history, config, init.host);
   return {
     config,

@@ -274,7 +274,6 @@ function persistBar(src: string, sessionId = "s1", dflt?: DslConfig) {
     sessionState,
     history: durable.historyFor(sessionState),
     host: durable.host,
-    rendered: false,
   });
   const render = (width = Number.POSITIVE_INFINITY): Frame =>
     rig.draw({ opts: { width } }).frame;

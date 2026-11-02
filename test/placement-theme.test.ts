@@ -84,7 +84,6 @@ function themeBar(src: string) {
     sessionState,
     history: durable.historyFor(sessionState),
     host: durable.host,
-    rendered: false,
   });
   const { config } = rig;
   let sink = new Map<string, readonly RichText[]>();

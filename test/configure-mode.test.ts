@@ -109,7 +109,6 @@ function configureBar(src: string, preset?: string) {
     sessionState,
     history: durable.historyFor(sessionState),
     host: durable.host,
-    rendered: false,
   });
   const { config } = rig;
   const render = (): Frame =>

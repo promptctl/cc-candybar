@@ -65,7 +65,6 @@ function thresholdBar(src: string, utilization: number) {
     sessionState,
     history: durable.historyFor(sessionState),
     host: durable.host,
-    rendered: false,
   });
   const { config } = rig;
   const render = (): Frame =>
