@@ -1,3 +1,9 @@
+## [1.184.0](https://github.com/promptctl/cc-candybar/compare/v1.183.1...v1.184.0) (2026-11-03)
+
+### Features
+
+* **bench:** a click's whole time, Launch Services included, is measured for the applet and the forwarder (candybar-url-handler-uy01.05x) ([#603](https://github.com/promptctl/cc-candybar/issues/603)) ([ab5468d](https://github.com/promptctl/cc-candybar/commit/ab5468dce0ade1b535714d8a83a1647cdb840481))
+
 ## [1.183.1](https://github.com/promptctl/cc-candybar/compare/v1.183.0...v1.183.1) (2026-11-03)
 
 ### Bug Fixes
