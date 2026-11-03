@@ -4,15 +4,22 @@
     {
       "version": "pr-614",
       "ref": "refs/pull/614/merge",
-      "sha": "7e7429c99f09060f87b18d21af84ad4c3395af3f",
-      "timestamp": "2026-11-03T14:56:58.425Z",
+      "sha": "ebc3fa86cd17f96654c881c8b0d44785c67d5587",
+      "timestamp": "2026-11-03T15:02:10.306Z",
       "commits": [
         {
-          "sha": "7e7429c99f09060f87b18d21af84ad4c3395af3f",
+          "sha": "ebc3fa86cd17f96654c881c8b0d44785c67d5587",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T07:56:01-07:00",
-          "message": "Merge 686d45fbb52a0d94ac995c15b50d56c7b482f870 into 8067e9a72297c93efa9dd1063cfd8f2ca5ced0c1\n"
+          "timestamp": "2026-11-03T15:00:59Z",
+          "message": "Merge 7169833bdde5f79bcac7febf441f41ddfbdebca0 into 8067e9a72297c93efa9dd1063cfd8f2ca5ced0c1\n"
+        },
+        {
+          "sha": "7169833bdde5f79bcac7febf441f41ddfbdebca0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T08:00:44-07:00",
+          "message": "test(sources): two views keyed on one drawn depth share one run (candybar-gather-renderer-76bb.6pj.5dx)\n"
         },
         {
           "sha": "686d45fbb52a0d94ac995c15b50d56c7b482f870",
