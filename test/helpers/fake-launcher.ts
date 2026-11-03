@@ -12,6 +12,7 @@ import {
   type Spawn,
 } from "../../src/proc/spawner-fake";
 import { systemTimekeeper, type Timekeeper } from "../../src/time";
+import { SourceRuns } from "../../src/var-system/source-runs";
 
 export interface FakeLauncher {
   readonly launcher: TestableLauncher & OneShotLauncher;
@@ -65,3 +66,8 @@ export function fakeLauncher(
 export const unscriptedLauncher: FakeLauncher["launcher"] = fakeLauncher(
   systemTimekeeper,
 ).launcher;
+
+// A source-runs owner over the unscripted launcher, for a registry whose
+// sources never run: one per registry, so no test's holds reach another's.
+export const unscriptedRuns = (): SourceRuns =>
+  new SourceRuns({ launcher: unscriptedLauncher, clock: systemTimekeeper });

@@ -20,7 +20,9 @@ Each session view declares the keys its preset reads, using the keys its request
 
 ## Where a variable lives
 
-Variables that read anything per session live in each session's view: inputs, state, templates, time, and shell or file sources keyed on those. Everything else lives in the directory's store and runs once, however many sessions render there.
+Variables that read anything per session live in each session's view: inputs, state, templates, time, and shell or file sources keyed on those. Everything else lives in the directory's store, however many sessions render there.
+
+A shell or file source's run belongs to neither: its identity is a digest of what the run needs (the read, the parser, the normalised policy, the hash of the key's value) and nothing the renderer owns, and one daemon-wide owner runs each identity once for every declaration that holds it. The registry holds entries and publishes an answered reading into its node; a pending one is never written, which is what keeps a moved key's old value on the bar until the new run lands. An entry nobody holds is dropped at once, so a key value nobody reads never runs, and the last holder's dispose aborts a program still out. A ttl period measures from the last landed read, as every source's does, so a run that timed out waits a whole period from its failure.
 
 ## Git
 

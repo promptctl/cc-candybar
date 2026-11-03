@@ -23,7 +23,6 @@ import {
   RenderCache,
   type SessionView,
 } from "../src/daemon/cache/render";
-import { NO_FILE_EVENTS } from "../src/daemon/cache/file-events";
 import { declareLanes, renderOptionsOf } from "../src/daemon/render-payload";
 import {
   sessionSource,
@@ -64,6 +63,7 @@ import { bareGates } from "./helpers/gates";
 import { daemonGates } from "../src/daemon/update-keys";
 import { systemTimekeeper } from "../src/time";
 import { pendingOf } from "../src/utils/outcome";
+import { SourceRuns } from "../src/var-system/source-runs";
 
 const SOURCE = `{ scope: "session", refresh: { watch: true }, read: { file: { json: true } } }`;
 const STATUS = "plugins.p.status";
@@ -213,13 +213,12 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
       stateDir: stateDir(HOST),
       locations: locs(),
       env: HOST.env,
-      launcher: processLauncher,
+      runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       sessionState,
       watchers,
       storage: providers.managedStorage,
       signer: TEST_SIGNER,
       gates: bareGates(),
-      fileEvents: NO_FILE_EVENTS,
       log,
       declare: (holds, facts, closure, sources) =>
         declareLanes(providers, holds, facts, closure, sources),
@@ -403,7 +402,7 @@ describe("a run's declaration", () => {
       stateDir: stateDir(HOST),
       locations: locs(),
       env: HOST.env,
-      launcher: processLauncher,
+      runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
       signer: TEST_SIGNER,
@@ -434,7 +433,7 @@ describe("a run's declaration", () => {
       stateDir: stateDir(HOST),
       locations: locs(),
       env: HOST.env,
-      launcher: processLauncher,
+      runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
       signer: TEST_SIGNER,

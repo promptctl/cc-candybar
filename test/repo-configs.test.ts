@@ -41,6 +41,7 @@ import { answerRepo } from "./helpers/repo-approval";
 import { locations, stateDir } from "../src/daemon/paths";
 import { daemonGates } from "../src/daemon/update-keys";
 import { systemTimekeeper } from "../src/time";
+import { SourceRuns } from "../src/var-system/source-runs";
 
 let root: string;
 let project: string;
@@ -150,7 +151,7 @@ describe("the gate over a project's plugins", () => {
     write(".cc-candybar/plugins/deploy/plugin.json5", PLUGIN);
     const deps = {
       clock: systemTimekeeper,
-      launcher: world.launcher,
+      runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
       sessionState: new SessionState(),
       storage: UNOWNED_STORAGE,
       signer: linkSigner(Buffer.alloc(32)),

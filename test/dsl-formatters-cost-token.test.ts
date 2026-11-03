@@ -14,7 +14,7 @@
 // helper bodies the shipped statusline uses — not a test-local copy.
 
 import { drawPayload } from "./helpers/draw-payload";
-import { unscriptedLauncher } from "./helpers/fake-launcher";
+import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { SessionState } from "../src/daemon/session-state";
@@ -64,7 +64,7 @@ function render(call: string, payload: Record<string, number>): string {
     "<test>",
   ) as ValidatedConfig;
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedLauncher, store, "", new SessionState());
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
   const out = drawPayload(
     config,

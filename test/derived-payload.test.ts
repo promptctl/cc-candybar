@@ -26,6 +26,7 @@ import { SessionState } from "../src/daemon/session-state";
 import { SourceRegistry, VariableStore } from "../src/var-system";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
+import { SourceRuns } from "../src/var-system/source-runs";
 
 const AT = instantOf(new Date(2026, 9, 25, 12, 0, 0));
 const RUN_WITHIN_MS = 5_000;
@@ -46,7 +47,7 @@ function viewOver(
   runs: string,
 ) {
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
+  const registry = new SourceRegistry(new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }), store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: os.tmpdir() });
   const answer = observable.box(payload, { deep: false });
   const selections = resolveEffectiveGlobals(

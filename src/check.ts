@@ -55,6 +55,7 @@ import { VariableStore } from "./var-system/store.js";
 import type { World } from "./host";
 import { timeoutSignal } from "./time";
 import { SourceRegistry } from "./var-system/sources.js";
+import { SourceRuns } from "./var-system/source-runs.js";
 import { SessionState } from "./daemon/session-state.js";
 import {
   bindPayload,
@@ -544,15 +545,14 @@ export async function prepareConfig(
   const { config } = loaded;
 
   const store = new VariableStore(world.clock);
+  // [LAW:single-enforcer] A one-shot's own owner of its sources' runs: no
+  // daemon shares them, and the check disposes the registry that holds them.
   const registry = new SourceRegistry(
-    world.launcher,
+    new SourceRuns({ launcher: world.launcher, clock: world.clock }),
     store,
     config.globals.default_empty_value ?? "",
     new SessionState(),
     null,
-    undefined,
-    undefined,
-    undefined,
     world.host.env,
   );
   try {

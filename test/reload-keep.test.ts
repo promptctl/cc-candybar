@@ -10,7 +10,6 @@ import {
   type LoadCause,
   type Settled,
 } from "../src/daemon/cache/render";
-import { NO_FILE_EVENTS } from "../src/daemon/cache/file-events";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { SessionState } from "../src/daemon/session-state";
 import { TEST_SIGNER } from "./helpers/link-signer";
@@ -20,6 +19,7 @@ import { fakeWatches } from "./helpers/fake-watches";
 import { locations, stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
+import { SourceRuns } from "../src/var-system/source-runs";
 
 // [LAW:behavior-not-structure] A reload keeps the state it serves exactly when
 // what it read from disk is what that state was built from, read through
@@ -64,11 +64,10 @@ function rig() {
       stateDir: stateDir(host),
       locations: locations(host),
       env: host.env,
-      launcher: world.launcher,
+      runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
-      fileEvents: NO_FILE_EVENTS,
       sessionState: new SessionState(),
       watchers,
       source: SOURCES_NOTHING,

@@ -128,8 +128,12 @@ describe("drawing a frame only reads", () => {
         return by;
       });
       for (const m of moved) expect(m).toMatch(/:period$/u);
-      const shell = after.sources.records.find((r) => r.name === "var.counted");
-      expect(shell).toMatchObject({ scope: "directory" });
+      // The shell's runs are the daemon's one shell record (one per read
+      // kind), and this config declares the one shell source.
+      const shell = after.sources.records.find(
+        (r) => r.name === "source.shell",
+      );
+      expect(shell).toMatchObject({ scope: "daemon" });
       expect(refreshesOf(shell!)).toBe(ranAt());
     } finally {
       (stream as FrameStream | null)?.close();

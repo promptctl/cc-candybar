@@ -21,7 +21,7 @@
 //     the anchor of the chain.
 
 import { drawPayload } from "./helpers/draw-payload";
-import { unscriptedLauncher } from "./helpers/fake-launcher";
+import { unscriptedRuns } from "./helpers/fake-launcher";
 import type { Frame } from "../src/render/frame";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { ColorDepth, type ColorRgba } from "@promptctl/rich-js";
@@ -188,7 +188,7 @@ function build(src: string, withDefault = false) {
   );
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedLauncher, store, "", sessionState);
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   const palette = getThemePalette(THEME);
   const sink = new Map<string, readonly RichText[]>();

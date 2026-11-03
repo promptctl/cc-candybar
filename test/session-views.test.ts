@@ -13,7 +13,6 @@ import {
   type Declare,
   type SessionView,
 } from "../src/daemon/cache/render";
-import { NO_FILE_EVENTS } from "../src/daemon/cache/file-events";
 import type { ViewFacts } from "../src/daemon/render-payload";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { SessionState } from "../src/daemon/session-state";
@@ -27,6 +26,7 @@ import { answerRepo } from "./helpers/repo-approval";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
+import { SourceRuns } from "../src/var-system/source-runs";
 
 // brandon-unfiled-3248.8ro6, step 2: each value lives where its scope says. A
 // directory's store holds the sources no session value reaches; each session
@@ -75,11 +75,10 @@ function makeCache(
       stateDir: stateDir(HOST),
       locations: locs(),
       env: HOST.env,
-      launcher,
+      runs: new SourceRuns({ launcher: launcher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
-      fileEvents: NO_FILE_EVENTS,
       sessionState: new SessionState(),
       watchers,
       source: SOURCES_NOTHING,

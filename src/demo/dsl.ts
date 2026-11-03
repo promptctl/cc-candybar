@@ -71,6 +71,7 @@ import type { RenderedLine } from "../dsl/node-registry.js";
 import type { ClaudeHookData } from "../utils/claude.js";
 import { debug, setDebug } from "../utils/logger.js";
 import { instantOf } from "../utils/instant.js";
+import { SourceRuns } from "../var-system/source-runs.js";
 
 const FRAMES = 4;
 const FRAME_INTERVAL_MS = 450;
@@ -150,7 +151,7 @@ function loadState(): DslRenderState {
     chain,
     {
       clock: world.clock,
-      launcher: world.launcher,
+      runs: new SourceRuns({ launcher: world.launcher, clock: world.clock }),
       locations: locs,
       env: host.env,
       sessionState,

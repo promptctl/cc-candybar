@@ -4,7 +4,7 @@
 
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { HOST, locs } from "./helpers/host";
-import { unscriptedLauncher } from "./helpers/fake-launcher";
+import { unscriptedLauncher, unscriptedRuns } from "./helpers/fake-launcher";
 import { projectionsOf } from "../src/config/loader/projections";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { CLOCK_FUNCTIONS } from "../src/template-engine/engine";
@@ -25,6 +25,7 @@ import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
+import { SourceRuns } from "../src/var-system/source-runs";
 
 const config = (variables: string, helpers = "{}") =>
   parseAndValidate(
@@ -87,7 +88,7 @@ test("a date function of its arguments alone reads no clock", () => {
   }`);
   expect([...own(projectionsOf(cfg)).keys()]).toEqual([]);
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedLauncher, store);
+  const registry = new SourceRegistry(unscriptedRuns(), store);
   try {
     declareDslVariables(cfg, registry, process.cwd(), EVERY_SCOPE);
     // Read with no draw bound: neither reaches the clock.
@@ -104,7 +105,7 @@ test("a value reaching the instant by a name it does not spell is refused, never
     hidden: { kind: "template", template: '{{ index . "clock" }}' },
   }`);
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedLauncher, store);
+  const registry = new SourceRegistry(unscriptedRuns(), store);
   try {
     declareDslVariables(cfg, registry, process.cwd(), EVERY_SCOPE);
     // The fold cannot see the read, so `hidden` keeps its answer.
@@ -124,7 +125,7 @@ test("a value that keeps its answer is told why, drawn or not", () => {
     hidden: { kind: "template", template: '{{ index . "clock" }}' },
   }`);
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedLauncher, store);
+  const registry = new SourceRegistry(unscriptedRuns(), store);
   try {
     declareDslVariables(cfg, registry, process.cwd(), EVERY_SCOPE);
     expect(() => store.read("hidden")).toThrow(
@@ -167,7 +168,7 @@ test("a projection is derived at each draw; a derived template is cached", () =>
     shown: { kind: "template", template: "{{ .label }}" },
   }`);
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedLauncher, store);
+  const registry = new SourceRegistry(unscriptedRuns(), store);
   try {
     // The synthesized menu's `state` variables need a SessionState this
     // registry has not got; this test's own variables declare.
@@ -199,7 +200,7 @@ test("the config load line names the load's projections", () => {
   const line = (variables: string, segments = "{}"): string => {
     const file = path.join(dir, "config.json5");
     fs.writeFileSync(file, `{ variables: ${variables}, segments: ${segments} }`);
-    const loaded = loadFromDisk(dir, dir, file, { clock: systemTimekeeper, stateDir: stateDir(HOST), locations: locs(), env: HOST.env, launcher: unscriptedLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, gates: bareGates(),
+    const loaded = loadFromDisk(dir, dir, file, { clock: systemTimekeeper, stateDir: stateDir(HOST), locations: locs(), env: HOST.env, runs: new SourceRuns({ launcher: unscriptedLauncher, clock: systemTimekeeper }), storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, gates: bareGates(),
       sessionState: new SessionState(),
     });
     expect(loaded.error).toBeNull();

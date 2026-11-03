@@ -4,7 +4,7 @@
 // (`resolveEffectiveGlobals`), not the preset and style floors.
 
 import { drawPayload } from "./helpers/draw-payload";
-import { unscriptedLauncher } from "./helpers/fake-launcher";
+import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { TEST_SIGNER } from "./helpers/link-signer";
@@ -51,7 +51,7 @@ const SRC = `{
 test("a session that has never clicked draws the declared preset and style, not the floors", () => {
   const config = parseAndValidate("<omitted>", SRC, new Set([THEME_FLOOR]));
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedLauncher, store, "", new SessionState());
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState());
   try {
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     const at = instantOf(new Date());

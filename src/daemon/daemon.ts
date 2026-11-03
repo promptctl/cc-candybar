@@ -37,6 +37,7 @@ import { createPayloadProviders } from "./payload-providers";
 import { FileEventDelivery } from "./cache/file-events";
 import type { Monotonic, Timekeeper } from "../time";
 import { RefreshLedger } from "../utils/refresh-ledger";
+import { SourceRuns } from "../var-system/source-runs";
 import {
   configLoadedLine,
   RenderCache,
@@ -336,6 +337,18 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     logger: log,
     clock,
   });
+  // [LAW:single-enforcer] The daemon's one owner of every declared source's
+  // runs: every config's `shell` and `file` sources hold entries of it, so
+  // one identity is one program however many sessions, directories or
+  // configs declare it.
+  const sourceRuns = new SourceRuns({
+    launcher,
+    clock,
+    logger: log,
+    ledger: refreshLedger,
+    watchers: watcherRegistry,
+    fileEvents,
+  });
   const payloadProviders = createPayloadProviders({
     launcher,
     host,
@@ -506,7 +519,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const renderCache = new RenderCache<SessionSource, CheckedRenderRequest>(
     {
       clock,
-      launcher,
+      runs: sourceRuns,
       stateDir: paths.state,
       locations: locs,
       env: host.env,
@@ -516,10 +529,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       storage: managedStorage,
       signer: linkSigner,
       gates,
-      ledger: refreshLedger,
-      // [LAW:single-enforcer] The one delivery owner, whose OS stream a
-      // `watch_file` source's watch rides.
-      fileEvents,
       declare: (holds, facts, closure, sources) =>
         declareLanes(payloadProviders, holds, facts, closure, sources),
       // [LAW:single-enforcer] What every session's view draws from: its payload
@@ -803,6 +812,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         ["tmuxService close", () => tmuxService.close()],
         ["hostService close", () => hostService.close()],
         ["runs close", () => runs.close()],
+        // After the render cache: its states' registries release their holds
+        // first, so this close drops nothing a registry still reads.
+        ["sourceRuns close", () => sourceRuns.close()],
         ["managedStorage close", () => managedStorage.close()],
         ["fileEvents close", () => fileEvents.close()],
         ["watcherRegistry close", () => watcherRegistry.closeAll()],

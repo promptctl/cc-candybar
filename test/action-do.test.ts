@@ -4,7 +4,7 @@
 // from the config, so "the gate admits it" is measured, not assumed.
 
 import { drawPayload } from "./helpers/draw-payload";
-import { unscriptedLauncher } from "./helpers/fake-launcher";
+import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
 import { TEST_SIGNER } from "./helpers/link-signer";
@@ -53,7 +53,7 @@ function runtime(src: string) {
   const cfg = parseAndValidate("<user>", src, ALLOWED, DEFAULT_DSL_CONFIG);
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedLauncher, store, "", sessionState);
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
   const compiled = registerDslConfig(cfg, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   recordRender(sessionState, "s1");
   return {

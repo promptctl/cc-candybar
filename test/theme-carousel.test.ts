@@ -15,7 +15,7 @@
 //      plane, the alerts.
 
 import { drawPayload } from "./helpers/draw-payload";
-import { unscriptedLauncher } from "./helpers/fake-launcher";
+import { unscriptedRuns } from "./helpers/fake-launcher";
 import { plainOf, textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linksOf } from "../src/click/read";
@@ -93,7 +93,7 @@ function rig(
   );
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedLauncher, store, "", sessionState);
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
   recordRender(sessionState, SID);
   const ctx = testVerbContext(sessionState, undefined, config);
@@ -718,7 +718,7 @@ function previewLabels(rendered: Frame): string[][] {
 describe("the preset control's list carries the layout beneath it", () => {
   test("every bundled preset's rows, from its resolved root", () => {
     const config = parseAndValidate("<user>", "{}", ALLOWED, DEFAULT_DSL_CONFIG);
-    const registry = new SourceRegistry(unscriptedLauncher, new VariableStore(systemTimekeeper), "");
+    const registry = new SourceRegistry(unscriptedRuns(), new VariableStore(systemTimekeeper), "");
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
     // Every segment but edit mode's chrome, which edit mode alone shows.
     const content = (node: CompiledNode): boolean =>

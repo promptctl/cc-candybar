@@ -1,6 +1,6 @@
 import { drawPayload } from "./helpers/draw-payload";
 import { HOST, locs } from "./helpers/host";
-import { unscriptedLauncher } from "./helpers/fake-launcher";
+import { unscriptedLauncher, unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linksOf } from "../src/click/read";
@@ -21,7 +21,6 @@ import {
   VIEW_BYTES,
   type SessionView,
 } from "../src/daemon/cache/render";
-import { NO_FILE_EVENTS } from "../src/daemon/cache/file-events";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { SessionState } from "../src/daemon/session-state";
 import {
@@ -47,6 +46,7 @@ import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
+import { SourceRuns } from "../src/var-system/source-runs";
 
 // brandon-unfiled-3248.8yp: the render cache held one 9.3 MB state per
 // directory a session rendered from, and released one only past 256 of them,
@@ -86,11 +86,10 @@ function makeCache(budgetBytes: number, maxEntries?: number) {
       stateDir: stateDir(HOST),
       locations: locs(),
       env: HOST.env,
-      launcher: unscriptedLauncher,
+      runs: new SourceRuns({ launcher: unscriptedLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
-      fileEvents: NO_FILE_EVENTS,
       sessionState,
       watchers,
       source: SOURCES_NOTHING,
@@ -162,8 +161,7 @@ const drawAlone = (
   compiled: CompiledConfig,
 ): VariableStore => {
   const store = new ProbeStore(systemTimekeeper);
-  const registry = new SourceRegistry(
-    unscriptedLauncher,
+  const registry = new SourceRegistry(unscriptedRuns(),
     store,
     "",
     new SessionState(),

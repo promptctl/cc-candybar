@@ -12,7 +12,7 @@
 // constructed state and read the result.
 
 import { TEST_SIGNER } from "./helpers/link-signer";
-import { unscriptedLauncher } from "./helpers/fake-launcher";
+import { unscriptedRuns } from "./helpers/fake-launcher";
 import { feedInputs } from "./helpers/inputs";
 import { SessionState } from "../src/daemon/session-state";
 import { ownDeclNames } from "./helpers/ambient-chrome";
@@ -88,8 +88,7 @@ function buildPopulatedState(): DaemonDslState {
     new Set<string>(), // no palette validation needed — segments don't set one
   );
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(
-    unscriptedLauncher,
+  const registry = new SourceRegistry(unscriptedRuns(),
     store,
     "",
     new SessionState(),
