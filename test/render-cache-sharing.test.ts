@@ -407,7 +407,7 @@ test("a compile's clock is the draw's: read outside one, it refuses", () => {
 // laid under. Kept, an evicted entry's store would stay on the heap for as
 // long as any other entry carried the compile, charged to no one.
 const heldStores: object[] = [];
-test("a compile keeps nothing of a render once it returns", () => {
+test("a compile keeps nothing of a render once it returns", async () => {
   const config = parseAndValidate("<test>", carouselConfig("mode", "alpha"));
   const compiled = compileDslConfig(compileInputOf(config), TEST_SIGNER);
   // [LAW:verifiable-goals] Reachability is read off a heap snapshot, which
@@ -417,9 +417,17 @@ test("a compile keeps nothing of a render once it returns", () => {
   // store is one this reader could have failed to give, whatever happens to
   // the class's name. The drawn store's result is dropped here, so a second
   // path is a holder the draw left behind, printed from the heap's roots.
+  // The snapshot is read a macrotask after
+  // the draw, not inside it: a handle a native call made while the draw ran
+  // lives as long as the scope the draw's macrotask runs in, and the heap shows
+  // it as a `(Handle scope)` root reaching a closure's context and the store
+  // with it. That root is gone once the macrotask ends and says nothing about
+  // what the compile keeps, so a snapshot in the draw's own macrotask fails
+  // on whether such a handle was made.
   heldStores.push(new ProbeStore(systemTimekeeper));
   try {
     drawAlone(config, compiled);
+    await new Promise((resolve) => setImmediate(resolve));
     expect(retainerPathsTo("ProbeStore")).toHaveLength(1);
   } finally {
     heldStores.length = 0;
