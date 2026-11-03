@@ -1,3 +1,9 @@
+## [1.186.0](https://github.com/promptctl/cc-candybar/compare/v1.185.1...v1.186.0) (2026-11-03)
+
+### Features
+
+* **facts:** one SessionFacts per session, assembled from today's providers and restamped (candybar-gather-renderer-76bb.6pj.af6) ([#611](https://github.com/promptctl/cc-candybar/issues/611)) ([a7b85c9](https://github.com/promptctl/cc-candybar/commit/a7b85c98a60c7c9bc6196f726311fc6a6650e438))
+
 ## [1.185.1](https://github.com/promptctl/cc-candybar/compare/v1.185.0...v1.185.1) (2026-11-03)
 
 ### Bug Fixes
