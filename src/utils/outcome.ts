@@ -40,6 +40,12 @@ export function ok<T>(value: T): Ok<T> {
 
 export const ABSENT: Outcome<never> = { kind: "absent" };
 
+// [LAW:types-are-the-program] What a one-shot sample can be: not taken yet, or
+// taken. A holder of a sample that can neither find nothing nor fail (the
+// update watch's build and release, whose failures are values of the sample
+// itself) has no `absent` or `failed` to guard.
+export type Sampled<T> = Pending | Ok<T>;
+
 export type Failed = Extract<Outcome<never>, { kind: "failed" }>;
 
 export function failed(reason: string, failedAt: FailedAt): Failed {

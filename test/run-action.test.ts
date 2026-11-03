@@ -63,6 +63,7 @@ import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { daemonGates } from "../src/daemon/update-keys";
 import { systemTimekeeper } from "../src/time";
+import { pendingOf } from "../src/utils/outcome";
 
 const SOURCE = `{ scope: "session", refresh: { watch: true }, read: { file: { json: true } } }`;
 const STATUS = "plugins.p.status";
@@ -225,6 +226,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
       source: sessionSource({
         providers,
         sessionState,
+        update: () => pendingOf("unread"),
         history: () => EMPTY_HISTORY_DEPTH,
         navigation: () => 0,
       }),

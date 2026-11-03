@@ -11,13 +11,20 @@
 // over the payload re-runs in the turn a fact it reads moves — a request's
 // arrival, a lane's landing, a click — and never inside a draw.
 
+import { observable, reaction, runInAction } from "mobx";
 import type { EffectiveGlobals } from "../config/effective-globals.js";
 import { resolveEffectiveGlobals } from "../config/effective-globals.js";
 import type { ValidatedConfig } from "../config/dsl-types.js";
 import type { ViewSource } from "../dsl/view-source.js";
 import type { SourceOf } from "./cache/render.js";
+import type { Fact } from "../facts/fact.js";
+import type { SessionFacts, UpdateNotice } from "../facts/session-facts.js";
+import { instantAt } from "../utils/instant.js";
+import { assembleFacts } from "./facts-assembly.js";
 import {
-  payloadOf,
+  projectPayload,
+  readingsOf,
+  type PayloadInputs,
   type RenderPayloadDeps,
   type ViewPayload,
 } from "./render-payload.js";
@@ -32,6 +39,9 @@ import { settingCounts } from "./setting-drafts.js";
 export interface SessionSource extends ViewSource {
   readonly payload: () => ViewPayload;
   readonly effective: () => EffectiveGlobals;
+  // The session's facts document (src/facts/session-facts.ts), restamped in
+  // the turn an owner's reading moves; the view's source is its one holder.
+  readonly facts: () => SessionFacts;
 }
 
 export interface SessionSourceDeps {
@@ -39,6 +49,9 @@ export interface SessionSourceDeps {
   // does not log.
   readonly providers: Omit<RenderPayloadDeps, "lanes">;
   readonly sessionState: SessionStateReader;
+  // The daemon's one update fact, stamped by its watch
+  // (src/daemon/update-notice.ts): every session's document carries it.
+  readonly update: () => Fact<UpdateNotice>;
   // The session's undo/redo depth — SettingsHistory.depth in the daemon.
   readonly history: (sessionId: string) => HistoryDepth;
   // The session's back depth, measured against the gate of the config its
@@ -49,7 +62,7 @@ export interface SessionSourceDeps {
 export function sessionSource(
   deps: SessionSourceDeps,
 ): SourceOf<SessionSource> {
-  return ({ sessionId, state, store, declared }) => {
+  return ({ sessionId, state, store, declared, onDispose }) => {
     const pick = (key: string): string | null =>
       deps.sessionState.get(sessionId, key);
     // [LAW:one-source-of-truth] Every globals field resolved once per change
@@ -62,17 +75,29 @@ export function sessionSource(
         state.authoredRoots.has(preset),
       ),
     );
-    const payload = store.derive("session.payload", "computed", () => {
-      const { facts, lanes } = declared();
-      const globals = effective.read();
-      return payloadOf(
-        {
+    const inputs = store.derive(
+      "session.inputs",
+      "computed",
+      (): PayloadInputs => {
+        const { facts, lanes } = declared();
+        return {
           hookData: facts.hookData,
           cwd: facts.cwd,
           hints: facts.hints,
-          neededInputPaths: state.neededInputPaths(globals.preset),
+          neededInputPaths: state.neededInputPaths(effective.read().preset),
           deps: { ...deps.providers, lanes: () => lanes },
-        },
+        };
+      },
+    );
+    // [LAW:one-source-of-truth] What the session's owners hold now, read once:
+    // the payload and the facts document are both folds of this.
+    const readings = store.derive("session.readings", "computed", () =>
+      readingsOf(inputs.read(), state.sources),
+    );
+    const payload = store.derive("session.payload", "computed", () => {
+      const globals = effective.read();
+      return projectPayload(
+        inputs.read(),
         {
           effective: globals,
           configFacts: {
@@ -82,11 +107,55 @@ export function sessionSource(
           history: deps.history(sessionId),
           back: deps.navigation(sessionId, state.config),
         },
+        readings.read().lanes,
       );
     });
+    // [LAW:no-ambient-temporal-coupling] The document is stamped in a
+    // reaction's effect, not a derivation: a stamp is the turn's instant, and
+    // a computed that read the clock and its own prior answer would answer by
+    // when it ran. It is total from its first read, every field pending until
+    // an owner answers.
+    const clock = deps.providers.clock;
+    const document = observable.box<SessionFacts>(
+      assembleFacts(
+        undefined,
+        sessionId,
+        readings.read(),
+        deps.update(),
+        instantAt(clock),
+      ),
+      { deep: false },
+    );
+    onDispose(
+      reaction(
+        () => ({ readings: readings.read(), update: deps.update() }),
+        ({ readings: moved, update }) =>
+          runInAction(() =>
+            document.set(
+              assembleFacts(
+                document.get(),
+                sessionId,
+                moved,
+                update,
+                instantAt(clock),
+              ),
+            ),
+          ),
+        {
+          // [LAW:no-silent-failure] A throw here reaches only the console
+          // MobX prints to, which nobody reads in a detached daemon.
+          onError: (e) =>
+            deps.providers.log(
+              "error",
+              `session facts threw sid=${JSON.stringify(sessionId)}: ${String(e)}`,
+            ),
+        },
+      ),
+    );
     return {
       payload: () => payload.read(),
       effective: () => effective.read(),
+      facts: () => document.get(),
       selections: () => effective.read(),
     };
   };

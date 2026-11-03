@@ -7,18 +7,22 @@
 // refresh threw would read as not answered yet for good.
 
 import { observable, runInAction } from "mobx";
-import { failed, type Outcome } from "../utils/outcome.js";
+import { failed, type Failed } from "../utils/outcome.js";
 
-// The lanes a request's own arrival refreshes (refreshPayload).
-export type RefreshLane =
-  | "session"
-  | "today"
-  | "context"
-  | "metrics"
-  | "activity"
-  | "cache"
-  | "speed"
-  | "autocompact";
+// The lanes a request's own arrival refreshes (refreshPayload). [LAW:one-source-of-truth]
+// The list is the one declaration: the type derives from it, and a facts
+// document's diagnostics walk it in this order.
+export const REFRESH_LANES = [
+  "session",
+  "today",
+  "context",
+  "metrics",
+  "activity",
+  "cache",
+  "speed",
+  "autocompact",
+] as const;
+export type RefreshLane = (typeof REFRESH_LANES)[number];
 
 export class RefreshFaults {
   private readonly bySession = observable.map<
@@ -27,7 +31,7 @@ export class RefreshFaults {
   >(undefined, { deep: false });
 
   // The lane's failure while its last refresh threw; none once one ran clean.
-  of(sessionId: string, lane: RefreshLane): Outcome<never> | undefined {
+  of(sessionId: string, lane: RefreshLane): Failed | undefined {
     const reason = this.bySession.get(sessionId)?.get(lane);
     return reason === undefined ? undefined : failed(reason, "read");
   }

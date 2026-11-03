@@ -13,10 +13,10 @@
 // <date> < src/x.ts <date>", a hint naming `just deploy`) that the user read
 // as a puzzle — the ticket's verbatim verdict.
 //
-// [LAW:effects-at-boundaries] `updateOf` / `updateNotice` are pure: (facts,
-// act state, session context) → diagnostic channels. The watch below is the
-// edge: the clocks, the registry fetch, the act's record, the validator
-// registrations.
+// [LAW:effects-at-boundaries] `updateReading` / `updateNotice` are pure:
+// (currency samples) → the update's reading, and (update, act state, session
+// context) → diagnostic channels. The watch below is the edge: the clocks, the
+// registry fetch, the act's record, the validator registrations.
 
 import {
   effectsUrl,
@@ -57,6 +57,18 @@ import {
   type ActState,
 } from "./update-act";
 import type { ProcessProbe } from "./process-fingerprint";
+import { runInAction } from "mobx";
+import { restamp } from "../facts/fact";
+import type { UpdateFact } from "./update-fact";
+import { instantAt } from "../utils/instant";
+import {
+  ABSENT,
+  failed,
+  ok,
+  pendingOf,
+  type Reading,
+  type Sampled,
+} from "../utils/outcome";
 import { KeyedSerialQueue } from "../utils/keyed-serial-queue";
 import { changeLogger, type LogLevel } from "../utils/logger";
 import { BadVerbArgs, DaemonClosing } from "./verb-error";
@@ -216,38 +228,53 @@ export function updateNotice(
   ];
 }
 
-// [LAW:dataflow-not-control-flow] The two currency facts folded into one
-// Update. A checkout answers with its build; the release check only means
-// something for a published install (a checkout's package.json version is
-// whatever `main` says, not what is running), so `release` is consulted only
-// under the not-source-checkout arm — that discriminator is the domain's own.
-export function updateOf(
-  build: BuildCurrency,
-  release: Currency | null,
-): Update | null {
-  if (build.kind === "stale") {
-    return {
-      kind: "source",
-      root: build.root,
-      newer: build.source,
-      running: build.running,
-    };
+// [LAW:dataflow-not-control-flow] The two currency samples folded into the one
+// reading of "is something newer": a checkout answers with its build; the
+// release check only means something for a published install (a checkout's
+// package.json version is whatever `main` says, not what is running), so the
+// release is consulted only under the not-source-checkout arm — that
+// discriminator is the domain's own. A sample not taken yet is pending, one
+// that could not be assessed is a failed read, and nothing newer is absent.
+export function updateReading(
+  build: Sampled<BuildCurrency>,
+  release: Sampled<Currency>,
+): Reading<Update> {
+  if (build.kind === "pending") return build;
+  const b = build.value;
+  switch (b.kind) {
+    case "stale":
+      return ok({
+        kind: "source",
+        root: b.root,
+        newer: b.source,
+        running: b.running,
+      });
+    case "current":
+      return ABSENT;
+    case "unchecked":
+      return failed(`build: unchecked: ${b.reason}`, "read");
+    case "not-source-checkout":
+      return releaseReading(release);
   }
-  if (
-    build.kind === "not-source-checkout" &&
-    release !== null &&
-    release.kind === "stale"
-  ) {
-    return {
-      kind: "release",
-      newer: release.latest,
-      running: release.installed,
-    };
+}
+
+function releaseReading(release: Sampled<Currency>): Reading<Update> {
+  if (release.kind === "pending") return release;
+  const c = release.value;
+  switch (c.kind) {
+    case "stale":
+      return ok({ kind: "release", newer: c.latest, running: c.installed });
+    case "current":
+    case "ahead":
+      return ABSENT;
+    case "unchecked":
+      return failed(`release: unchecked: ${c.reason}`, "read");
   }
-  return null;
 }
 
 export interface UpdateWatchOptions {
+  // The fact the watch publishes each sample into.
+  readonly fact: UpdateFact;
   // The daemon's clock: the act's deadline and the watch's timers run on it.
   readonly clock: Timekeeper;
   // Who the act's job belongs to.
@@ -345,6 +372,7 @@ function describeRelease(c: Currency): [LogLevel, string] {
 // gates themselves (`daemonGates`), where a daemon is built with them.
 export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   const {
+    fact,
     clock,
     launcher,
     probe,
@@ -359,10 +387,11 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
     onApplied,
     log,
   } = opts;
-  // [LAW:no-ambient-temporal-coupling] Before the first sample the build is
-  // honestly unchecked — a notice asked for before arm() renders nothing.
-  let build: BuildCurrency = { kind: "unchecked", reason: "not sampled yet" };
-  let release: Currency | null = null;
+  // [LAW:no-ambient-temporal-coupling] Before a sample is taken it is pending,
+  // not a build or a release that failed — a notice asked for before arm()
+  // renders nothing.
+  let build: Sampled<BuildCurrency> = pendingOf("unread");
+  let release: Sampled<Currency> = pendingOf("unread");
   // [LAW:single-enforcer] A `ps` the close aborted says nothing about the job,
   // so no caller gets to judge it.
   const readStart = async (pid: number) => {
@@ -399,8 +428,12 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
     armed.push(clock.every(ms, run, { unref: true }));
   };
 
-  const current = (): Update | null =>
-    closed ? null : updateOf(build, release);
+  // The update as the fact says it, so the notice, the gate and the apply verb
+  // read the one fold every session's document carries.
+  const current = (): Update | null => {
+    const held = fact.get();
+    return held.kind === "ok" ? held.value : null;
+  };
 
   // The dismiss gate follows the identity: dispose the old allow-list, register
   // the new one, none when nothing is newer.
@@ -418,10 +451,23 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
           };
   }
 
-  function sampleBuild(): void {
-    build = assessBuild(entryUrl, () => bundleStamp(digest));
-    logBuild(describeBuild(build));
+  // [LAW:single-enforcer] The one writer of the fact: what the samples say now,
+  // stamped at this turn, and the gate that follows the fact's identity. A
+  // closed watch knows of no update, so a poll landing after the close
+  // publishes that.
+  function publish(): void {
+    const reading = closed ? ABSENT : updateReading(build, release);
+    const next = restamp(fact.get(), reading, instantAt(clock));
+    runInAction(() => fact.set(next));
     syncGate();
+  }
+
+  function sampleBuild(): BuildCurrency {
+    const sampled = assessBuild(entryUrl, () => bundleStamp(digest));
+    build = ok(sampled);
+    logBuild(describeBuild(sampled));
+    publish();
+    return sampled;
   }
 
   async function pollRelease(): Promise<void> {
@@ -431,9 +477,10 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
       registryUrl,
       clock,
     );
-    release = assessCurrency(PACKAGE_VERSION, latest);
-    logRelease(describeRelease(release));
-    syncGate();
+    const assessed = assessCurrency(PACKAGE_VERSION, latest);
+    release = ok(assessed);
+    logRelease(describeRelease(assessed));
+    publish();
   }
 
   // [LAW:single-enforcer] The one edge every touch of the act files passes
@@ -508,20 +555,20 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
 
   return {
     arm() {
-      sampleBuild();
+      const sampled = sampleBuild();
       every(sampleBuild, intervalMs);
       armed.push(() => clearTick?.());
       void tick();
       // The registry is a question only a published install asks: a checkout
       // rebuilds from the source beside it, whatever npm has.
-      if (build.kind === "not-source-checkout") {
+      if (sampled.kind === "not-source-checkout") {
         void pollRelease();
         every(() => void pollRelease(), releaseIntervalMs);
       }
     },
     close() {
       closed = true;
-      syncGate();
+      publish();
       armed.forEach((release) => release());
     },
     notice: (ctx) => updateNotice(current(), seen ?? IDLE, ctx),

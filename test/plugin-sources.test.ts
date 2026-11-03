@@ -4,6 +4,7 @@
 // function ran. Every view here is the daemon's own: a render cache over the
 // payload providers, declared by `declareLanes`, drawn from `sessionSource`.
 
+import { reaction, runInAction } from "mobx";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import { HOST, WORLD, hostOf, worldOf, processLauncher } from "./helpers/host";
 import type { Host, World } from "../src/host";
@@ -36,6 +37,9 @@ import {
   type SessionSource,
 } from "../src/daemon/session-source";
 import { SessionState } from "../src/daemon/session-state";
+import { newUpdateFact, type UpdateFact } from "../src/daemon/update-fact";
+import type { Update } from "../src/daemon/update-notice";
+import { restamp } from "../src/facts/fact";
 import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import { drawDsl } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
@@ -122,6 +126,8 @@ interface Rig {
   readonly providers: ReturnType<typeof createPayloadProviders>;
   readonly counters: WatcherCounters;
   readonly sessionState: SessionState;
+  // What the views' documents carry as the daemon's update.
+  readonly updateFact: UpdateFact;
   readonly reloads: ReloadSignal;
   readonly lines: string[];
 }
@@ -159,6 +165,7 @@ function rig(): Rig {
     ledger: new RefreshLedger(log),
   });
   const sessionState = new SessionState();
+  const updateFact = newUpdateFact();
   const reloads = new ReloadSignal();
   const cache = new RenderCache<SessionSource>(
     {
@@ -179,6 +186,7 @@ function rig(): Rig {
       source: sessionSource({
         providers,
         sessionState,
+        update: () => updateFact.get(),
         history: () => EMPTY_HISTORY_DEPTH,
         navigation: () => 0,
       }),
@@ -193,7 +201,15 @@ function rig(): Rig {
     providers.managedStorage.close();
     watchers.closeAll();
   });
-  return { cache, providers, counters, sessionState, reloads, lines };
+  return {
+    cache,
+    providers,
+    counters,
+    sessionState,
+    updateFact,
+    reloads,
+    lines,
+  };
 }
 
 // One frame of the session's view, as the daemon draws one: its payload as
@@ -780,6 +796,126 @@ describe("the view declares the sources its preset reads", () => {
       sources: "4",
       sourcesPending: "plugins.b.s:unread,plugins.d.s:superseded",
     });
+  });
+});
+
+// [LAW:behavior-not-structure] The document a session's view holds
+// (src/facts/session-facts.ts), read from the view's source as the renderer
+// will: total, restamped in the turn an owner's reading moves, and one update
+// for every session.
+describe("a session's facts document", () => {
+  const BUILTINS = [
+    "activity",
+    "autocompact",
+    "cache",
+    "context",
+    "git",
+    "hostName",
+    "hostUser",
+    "metrics",
+    "pr",
+    "session",
+    "speed",
+    "tmux",
+    "today",
+  ];
+  const NEWER = restamp(
+    undefined,
+    ok<Update>({ kind: "release", newer: [9, 0, 0], running: [1, 0, 0] }),
+    instantOf(new Date(1_700_000_000_000)),
+  );
+
+  test("is total as the view opens; a declared source its preset does not read is pending, not missing", () => {
+    const r = rig();
+    const view = viewOf(r, config(["mine"]));
+    const doc = view.source.facts();
+    expect(Object.keys(doc.builtins).sort()).toEqual(BUILTINS);
+    expect(doc.sources).toEqual({ [STATUS]: pendingOf("unread") });
+    expect(doc.session).toBe("s1");
+  });
+
+  test("a read source carries its reading, and the program's write moves it", async () => {
+    const r = rig();
+    const view = viewOf(r, config(["mine", "plugins.p.gated"]));
+    await answered(view);
+    await until(
+      () => view.source.facts().sources[STATUS]?.kind === "absent",
+      "the source's first answer in the document",
+    );
+    await writeUntilShown(
+      () => programWrites(storageOf(), "s1", { home: "/h/one" }),
+      () => view.source.facts().sources[STATUS]?.kind === "ok",
+      "the program's write in the document",
+    );
+    expect(view.source.facts().sources[STATUS]).toMatchObject({
+      kind: "ok",
+      value: { home: "/h/one" },
+    });
+  });
+
+  test("an update moving reaches every open view's document and restamps nothing else", () => {
+    const r = rig();
+    const file = config(["mine"]);
+    const a = viewOf(r, file, "s-a");
+    const b = viewOf(r, file, "s-b");
+    const before = [a.source.facts(), b.source.facts()];
+    expect(before.map((d) => d.update)).toEqual([
+      pendingOf("unread"),
+      pendingOf("unread"),
+    ]);
+
+    runInAction(() => r.updateFact.set(NEWER));
+
+    const after = [a.source.facts(), b.source.facts()];
+    for (const [i, doc] of after.entries()) {
+      expect(doc.update).toBe(NEWER);
+      expect(doc.seq).toBe(before[i]!.seq + 1);
+      for (const key of BUILTINS) {
+        expect(doc.builtins[key as keyof typeof doc.builtins]).toBe(
+          before[i]!.builtins[key as keyof typeof doc.builtins],
+        );
+      }
+    }
+  });
+
+  test("an update that did not move leaves the document, and what watches it, alone", () => {
+    const r = rig();
+    const view = viewOf(r, config(["mine"]));
+    runInAction(() => r.updateFact.set(NEWER));
+    const held = view.source.facts();
+    let woken = 0;
+    const stop = reaction(
+      () => view.source.facts(),
+      () => woken++,
+    );
+    runInAction(() => r.updateFact.set(NEWER));
+    stop();
+    expect(view.source.facts()).toBe(held);
+    expect(woken).toBe(0);
+  });
+
+  test("stops with the view: once its state is released and the cache closed, its document hears no more", () => {
+    const r = rig();
+    const hold = r.cache.holdSession(
+      dir,
+      dir,
+      config(["mine"]),
+      viewFacts(dir, "s1"),
+    );
+    const view = hold.view;
+    runInAction(() => r.updateFact.set(NEWER));
+    expect(view.source.facts().update).toBe(NEWER);
+    const held = view.source.facts();
+
+    // A render holding the state keeps the view alive, and its document live.
+    hold[Symbol.dispose]();
+    r.cache.close();
+    runInAction(() =>
+      r.updateFact.set(
+        restamp(NEWER, ABSENT, instantOf(new Date(1_700_000_100_000))),
+      ),
+    );
+    expect(view.source.facts()).toBe(held);
   });
 });
 

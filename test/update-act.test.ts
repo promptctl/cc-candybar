@@ -24,6 +24,7 @@ import {
   type StartTimeRead,
 } from "../src/daemon/process-fingerprint";
 import { makeUpdateWatch } from "../src/daemon/update-notice";
+import { newUpdateFact } from "../src/daemon/update-fact";
 import { daemonGates, UPDATE_DISMISSED_KEY } from "../src/daemon/update-keys";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { makeBinaryWatch } from "../src/daemon/binary-watch";
@@ -553,6 +554,7 @@ describe("claimAct: one act per bundle", () => {
     fs.writeFileSync(path.join(dir, "1", "record.json"), "{ torn");
     const logged: string[] = [];
     const watch = makeUpdateWatch({
+      fact: newUpdateFact(),
       clock: systemTimekeeper,
       launcher: processLauncher,
       probe: processProbe,
@@ -584,6 +586,7 @@ describe("claimAct: one act per bundle", () => {
     let answer!: (latest: Response) => void;
     const gates = daemonGates();
     const watch = makeUpdateWatch({
+      fact: newUpdateFact(),
       clock: systemTimekeeper,
       launcher: processLauncher,
       probe: processProbe,
@@ -617,6 +620,48 @@ describe("claimAct: one act per bundle", () => {
     expect(
       watch.notice({ sessionId: "s", dismissed: null, enabled: true }),
     ).toEqual([]);
+  });
+
+  // [LAW:one-source-of-truth] The update is one fact for the daemon, stamped by
+  // the watch that owns it: pending until sampled, pending while the registry
+  // has not answered, the release once it has, and nothing once closed.
+  test("the watch publishes its fact: pending, then the release, then nothing at close", async () => {
+    let answer!: (latest: Response) => void;
+    const fact = newUpdateFact();
+    const watch = makeUpdateWatch({
+      fact,
+      clock: systemTimekeeper,
+      launcher: processLauncher,
+      probe: processProbe,
+      digest: null,
+      entryUrl: "file:///some/bundle/index.mjs",
+      actsDir: dirOf(),
+      intervalMs: 60_000,
+      releaseIntervalMs: 60_000,
+      registryUrl: "http://127.0.0.1:1",
+      fetchImpl: () => new Promise((resolve) => (answer = resolve)),
+      gates: daemonGates(),
+      onApplied: () => {},
+      log: () => {},
+    });
+    expect(fact.get()).toEqual({ kind: "pending", why: "unread" });
+
+    // An install, whose registry has not answered: still pending, not "nothing
+    // newer".
+    watch.arm();
+    expect(fact.get()).toEqual({ kind: "pending", why: "unread" });
+
+    answer(new Response(JSON.stringify({ latest: "999.0.0" })));
+    await until(() => fact.get().kind === "ok", "the newer release");
+    const newer = fact.get();
+    expect(newer).toMatchObject({
+      kind: "ok",
+      value: { kind: "release", newer: [999, 0, 0] },
+    });
+
+    watch.close();
+    expect(fact.get()).toMatchObject({ kind: "absent" });
+    expect(fact.get()).not.toBe(newer);
   });
 
   test("acts are kept per bundle", async () => {
@@ -686,6 +731,7 @@ describe("the update watch: one turn at a time on the act files", () => {
       },
     };
     const watch = makeUpdateWatch({
+      fact: newUpdateFact(),
       clock: systemTimekeeper,
       launcher,
       probe: systemProbe(launcher),
@@ -823,6 +869,7 @@ describe("the update watch: one turn at a time on the act files", () => {
       log: () => {},
     });
     const watch = makeUpdateWatch({
+      fact: newUpdateFact(),
       clock: systemTimekeeper,
       launcher: processLauncher,
       probe: processProbe,

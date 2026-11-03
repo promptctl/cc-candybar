@@ -62,6 +62,7 @@ import {
 import { sessionIdOf } from "../daemon/session-id.js";
 import { sessionSource } from "../daemon/session-source.js";
 import { SessionState } from "../daemon/session-state.js";
+import { newUpdateFact } from "../daemon/update-fact.js";
 import { EMPTY_HISTORY_DEPTH } from "../daemon/settings-history.js";
 import { drawDsl } from "../dsl/render.js";
 import { SessionEffects } from "../render/effect.js";
@@ -174,6 +175,9 @@ async function renderFrames(): Promise<void> {
     state.registry.dispose();
     throw e;
   }
+  // The demo runs no update watch: its facts document carries an update nothing
+  // has sampled.
+  const updateFact = newUpdateFact();
   // The session's view of the state, as the daemon opens one per session,
   // declared with the one request the demo's frames draw by.
   const view = openView(
@@ -187,6 +191,7 @@ async function renderFrames(): Promise<void> {
       source: sessionSource({
         providers,
         sessionState,
+        update: () => updateFact.get(),
         history: () => EMPTY_HISTORY_DEPTH,
         navigation: () => 0,
       }),

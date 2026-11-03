@@ -28,6 +28,7 @@ import type { DaemonLogger } from "../utils/logger";
 import { actsDir } from "./update-act";
 import type { Gates } from "./foundations/gates";
 import { makeUpdateWatch } from "./update-notice";
+import { newUpdateFact } from "./update-fact";
 import type { ProcessProbe } from "./process-fingerprint";
 import { makeBinaryWatch, type BundleStat } from "./binary-watch";
 import { stableAttachPreload } from "../install/index.js";
@@ -498,6 +499,10 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // [LAW:single-enforcer] What each session's renderers could not honour, as
   // their frames recorded it (src/daemon/render-warnings.ts).
   const renderWarnings = new RenderWarningRecords();
+  // [LAW:one-source-of-truth] The daemon's one update fact: the update watch
+  // writes it and every session's facts document reads it, so the box exists
+  // before either.
+  const updateFact = newUpdateFact();
   const renderCache = new RenderCache<SessionSource, CheckedRenderRequest>(
     {
       clock,
@@ -524,6 +529,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         // through the one ledger, so a view's payload logs none of them.
         providers: payloadProviders,
         sessionState,
+        update: () => updateFact.get(),
         history: (sessionId) => settingsHistory.depth(sessionId),
         // Measured against the gate of the config the view draws with.
         navigation: (sessionId, config) =>
@@ -607,6 +613,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // clicks (src/daemon/update-notice.ts). The notice is a diagnostic channel of
   // its own, folded between the error and warning channels.
   const updateWatch = makeUpdateWatch({
+    fact: updateFact,
     clock,
     launcher,
     probe,
