@@ -7,6 +7,7 @@ import fs from "node:fs";
 import { productionClaudeInputEdge } from "../claude-input/edge.js";
 import { fileStores, productionEdge } from "../doctor/edge";
 import { systemLauncher } from "../proc/system-launcher";
+import { systemProbe } from "./process-fingerprint";
 import type { Timekeeper } from "../time";
 import type { DaemonAdapters } from "./daemon.js";
 import { fileStorage } from "./file-storage";
@@ -33,8 +34,15 @@ export function productionAdapters(
     doctorStores: fileStores(paths.state),
     doctorEdge: productionEdge,
     claudeInput: productionClaudeInputEdge,
+    probe: systemProbe,
     laneEdge: (launcher, following, closing) =>
-      productionLaneEdge(launcher, following, closing, machine),
+      productionLaneEdge(
+        launcher,
+        following,
+        closing,
+        machine,
+        systemProbe(launcher),
+      ),
     linkSigner: linkSignerFromKeyFile(linkKeyFile(paths.state)),
     limits: ({ startedAtMs, exit, launcher, log }) =>
       realLimitsDeps(startedAtMs, exit, {

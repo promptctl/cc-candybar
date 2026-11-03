@@ -16,7 +16,7 @@ import {
   productionClaudeInputEdge,
 } from "../claude-input/edge.js";
 import { lineage, processTable } from "../proc/process-table.js";
-import { pidAlive } from "./parent-watchdog.js";
+import type { ProcessProbe } from "./process-fingerprint.js";
 import { presence } from "../utils/presence.js";
 import { sessionEnv } from "./session-env.js";
 import { canonical, executableOn, regularFileWith } from "../path-search.js";
@@ -261,6 +261,7 @@ export function productionLaneEdge(
   following: (sessionId: string) => ReadonlySet<Lane>,
   closing: AbortSignal,
   clock: Timekeeper,
+  probe: Pick<ProcessProbe, "alive">,
 ): LaneEdge {
   const wait = (ms: number): Promise<void> => sleep(clock, ms, closing);
   return {
@@ -394,7 +395,7 @@ export function productionLaneEdge(
     },
     exited: async (pid, withinMs) => {
       const until = clock.now() + withinMs;
-      while (pidAlive(pid)) {
+      while (probe.alive(pid)) {
         if (clock.now() > until) return false;
         await wait(EXIT_POLL_MS);
       }

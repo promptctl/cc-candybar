@@ -96,9 +96,33 @@ export async function readStartTime(
   return { kind: "unavailable", detail };
 }
 
-export interface LivenessDeps {
-  readStartTime: (pid: number) => Promise<StartTimeRead>;
-  pidAlive: (pid: number) => boolean;
+// [LAW:effects-at-boundaries] What the daemon asks of the machine's process
+// table about one pid: is a process there, and when did it start. Everything
+// that decides from these (the liveness fold below, the lease, the watchdog)
+// takes a probe, so a test names the processes it means instead of starting
+// them. This is not src/proc/process-table.ts, which reads the whole `ps -A`
+// listing for descent; this answers about a pid's identity.
+export interface ProcessProbe {
+  // [LAW:no-silent-failure] ESRCH: the process is gone. EPERM: a live process
+  // we don't own (the pid was reused by another user), taken as alive so a
+  // reused pid can never make us act on a process whose real owner still runs.
+  alive(pid: number): boolean;
+  startTime(pid: number): Promise<StartTimeRead>;
+}
+
+// The machine's own process table, read through the owner's launcher.
+export function systemProbe(launcher: Pick<Launcher, "launch">): ProcessProbe {
+  return {
+    alive: (pid) => {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch (e) {
+        return (e as NodeJS.ErrnoException).code === "EPERM";
+      }
+    },
+    startTime: (pid) => readStartTime(pid, launcher.launch),
+  };
 }
 
 // [LAW:dataflow-not-control-flow] The liveness verdict is a pure fold over the
@@ -121,15 +145,15 @@ export interface LivenessDeps {
 export async function sameLiveProcess(
   pid: number,
   leaseToken: string | null,
-  deps: LivenessDeps,
+  probe: ProcessProbe,
 ): Promise<boolean> {
-  if (leaseToken === null) return deps.pidAlive(pid);
-  const read = await deps.readStartTime(pid);
+  if (leaseToken === null) return probe.alive(pid);
+  const read = await probe.startTime(pid);
   switch (read.kind) {
     case "start":
       return read.token === leaseToken;
     case "unavailable":
-      return deps.pidAlive(pid);
+      return probe.alive(pid);
   }
 }
 

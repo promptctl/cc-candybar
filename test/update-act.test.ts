@@ -4,7 +4,7 @@
 // verdict, once written, is never overwritten.
 
 import fs from "node:fs";
-import { processLauncher } from "./helpers/host";
+import { processLauncher, processProbe } from "./helpers/host";
 import os from "node:os";
 import path from "node:path";
 
@@ -20,6 +20,7 @@ import {
 } from "../src/daemon/update-act";
 import {
   readStartTime,
+  systemProbe,
   type StartTimeRead,
 } from "../src/daemon/process-fingerprint";
 import { makeUpdateWatch } from "../src/daemon/update-notice";
@@ -554,6 +555,7 @@ describe("claimAct: one act per bundle", () => {
     const watch = makeUpdateWatch({
       clock: systemTimekeeper,
       launcher: processLauncher,
+      probe: processProbe,
       digest: null,
       entryUrl: "file:///some/bundle/index.mjs",
       actsDir: dir,
@@ -584,6 +586,7 @@ describe("claimAct: one act per bundle", () => {
     const watch = makeUpdateWatch({
       clock: systemTimekeeper,
       launcher: processLauncher,
+      probe: processProbe,
       digest: null,
       entryUrl: "file:///some/bundle/index.mjs",
       actsDir: dirOf(),
@@ -685,6 +688,7 @@ describe("the update watch: one turn at a time on the act files", () => {
     const watch = makeUpdateWatch({
       clock: systemTimekeeper,
       launcher,
+      probe: systemProbe(launcher),
       digest: null,
       entryUrl: "file:///some/bundle/index.mjs",
       actsDir: dir,
@@ -821,6 +825,7 @@ describe("the update watch: one turn at a time on the act files", () => {
     const watch = makeUpdateWatch({
       clock: systemTimekeeper,
       launcher: processLauncher,
+      probe: processProbe,
       digest: null,
       entryUrl: "file:///some/bundle/index.mjs",
       actsDir: dir,

@@ -3,7 +3,7 @@
 // leaves no pane `pane off` cannot find, and the user's pane keeps focus.
 
 import { spawnSync } from "node:child_process";
-import { processLauncher } from "./helpers/host";
+import { processLauncher, processProbe } from "./helpers/host";
 import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -79,7 +79,7 @@ const HAS_TMUX = spawnSync("tmux", ["-V"]).status === 0;
         return result;
       },
     };
-    const edge = productionLaneEdge(launcher, () => new Set(), closing.signal, systemTimekeeper);
+    const edge = productionLaneEdge(launcher, () => new Set(), closing.signal, systemTimekeeper, processProbe);
 
     const opened = await edge.openBarPane(hint, barPane(), {});
 
@@ -87,7 +87,7 @@ const HAS_TMUX = spawnSync("tmux", ["-V"]).status === 0;
     const tagged = productionLaneEdge(
       processLauncher,
       () => new Set(),
-      new AbortController().signal, systemTimekeeper
+      new AbortController().signal, systemTimekeeper, processProbe
     );
     expect(await tagged.barPanes(hint)).toEqual([opened]);
     expect(active()).toBe(hint.pane);
@@ -108,7 +108,7 @@ const HAS_TMUX = spawnSync("tmux", ["-V"]).status === 0;
     const edge = productionLaneEdge(
       processLauncher,
       () => new Set(),
-      new AbortController().signal, systemTimekeeper
+      new AbortController().signal, systemTimekeeper, processProbe
     );
 
     await edge.openBarPane(hint, barPane(), {});
@@ -122,7 +122,7 @@ const HAS_TMUX = spawnSync("tmux", ["-V"]).status === 0;
     const edge = productionLaneEdge(
       processLauncher,
       () => new Set(),
-      new AbortController().signal, systemTimekeeper
+      new AbortController().signal, systemTimekeeper, processProbe
     );
 
     await expect(edge.openBarPane(hint, barPane(), {})).rejects.toThrow(

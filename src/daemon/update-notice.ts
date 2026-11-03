@@ -56,7 +56,7 @@ import {
   type ActFacts,
   type ActState,
 } from "./update-act";
-import { readStartTime } from "./process-fingerprint";
+import type { ProcessProbe } from "./process-fingerprint";
 import { KeyedSerialQueue } from "../utils/keyed-serial-queue";
 import { changeLogger, type LogLevel } from "../utils/logger";
 import { BadVerbArgs, DaemonClosing } from "./verb-error";
@@ -250,8 +250,10 @@ export function updateOf(
 export interface UpdateWatchOptions {
   // The daemon's clock: the act's deadline and the watch's timers run on it.
   readonly clock: Timekeeper;
-  // Who the act's job and its `ps` belong to.
+  // Who the act's job belongs to.
   readonly launcher: Launcher;
+  // Where a job's leader start time is read.
+  readonly probe: Pick<ProcessProbe, "startTime">;
   // The daemon's `import.meta.url` — the bundle whose checkout is assessed.
   readonly entryUrl: string;
   // The digest that bundle was stamped with, which the checkout is assessed
@@ -345,6 +347,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   const {
     clock,
     launcher,
+    probe,
     entryUrl,
     digest,
     actsDir,
@@ -363,7 +366,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   // [LAW:single-enforcer] A `ps` the close aborted says nothing about the job,
   // so no caller gets to judge it.
   const readStart = async (pid: number) => {
-    const read = await readStartTime(pid, launcher.launch);
+    const read = await probe.startTime(pid);
     if (closed) throw new DaemonClosing("apply-update");
     return read;
   };

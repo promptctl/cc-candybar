@@ -5,7 +5,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { pidAlive } from "../../src/daemon/parent-watchdog";
+import { processProbe } from "../helpers/host";
 import { systemLauncher } from "../../src/proc/system-launcher";
 import { until } from "../helpers/until";
 import { systemTimekeeper } from "../../src/time";
@@ -47,7 +47,7 @@ describe("a launcher settles", () => {
       reason: "aborted",
       signal: "SIGKILL",
     });
-    expect(pidAlive(lifeline)).toBe(false);
+    expect(processProbe.alive(lifeline)).toBe(false);
   });
 
   test("with what a killed child wrote while the loop was busy", async () => {
@@ -95,7 +95,7 @@ describe("a launcher settles", () => {
     closing.abort(new Error("closed"));
     await launcher.settled();
     await expect(run).resolves.toMatchObject({ reason: "aborted" });
-    expect(pidAlive(escaped)).toBe(true);
+    expect(processProbe.alive(escaped)).toBe(true);
     process.kill(escaped, "SIGKILL");
   });
 

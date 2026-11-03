@@ -3,7 +3,6 @@ import { spawn } from "node:child_process";
 import {
   anchorFromEnv,
   armParentWatchdog,
-  pidAlive,
   PARENT_PID_ENV,
 } from "../src/daemon/parent-watchdog";
 import { systemTimekeeper } from "../src/time";
@@ -44,7 +43,7 @@ describe("armParentWatchdog", () => {
     const onOrphaned = jest.fn();
     const handle = armParentWatchdog({ clock: systemTimekeeper,
       anchor: { kind: "outlives-nobody" },
-      isAlive: () => false,
+      probe: { alive: () => false },
       onOrphaned,
     });
     jest.advanceTimersByTime(10_000);
@@ -56,7 +55,7 @@ describe("armParentWatchdog", () => {
     const onOrphaned = jest.fn();
     armParentWatchdog({ clock: systemTimekeeper,
       anchor: { kind: "anchored", pid: 999 },
-      isAlive: () => true,
+      probe: { alive: () => true },
       onOrphaned,
       intervalMs: 100,
     });
@@ -68,7 +67,7 @@ describe("armParentWatchdog", () => {
     const onOrphaned = jest.fn();
     armParentWatchdog({ clock: systemTimekeeper,
       anchor: { kind: "anchored", pid: 4242 },
-      isAlive: () => false,
+      probe: { alive: () => false },
       onOrphaned,
       intervalMs: 100,
     });
@@ -80,35 +79,12 @@ describe("armParentWatchdog", () => {
     const onOrphaned = jest.fn();
     const handle = armParentWatchdog({ clock: systemTimekeeper,
       anchor: { kind: "anchored", pid: 4242 },
-      isAlive: () => false,
+      probe: { alive: () => false },
       onOrphaned,
       intervalMs: 100,
     });
     handle.disarm();
     jest.advanceTimersByTime(10_000);
     expect(onOrphaned).not.toHaveBeenCalled();
-  });
-});
-
-describe("pidAlive", () => {
-  test("this process is alive", () => {
-    expect(pidAlive(process.pid)).toBe(true);
-  });
-
-  test("an exited process is not alive", async () => {
-    const child = spawn(process.execPath, ["-e", "0"], { stdio: "ignore" });
-    await new Promise<void>((resolve) => child.once("exit", () => resolve()));
-    expect(pidAlive(child.pid!)).toBe(false);
-  });
-
-  // [LAW:behavior-not-structure] Covers the EPERM branch (a live pid we may
-  // not signal counts as alive — a reused pid must never read "dead" just
-  // because it now belongs to another user). pid 1 is root-owned, so
-  // kill(1,0) is EPERM for the non-root user this suite's CI runs as; either
-  // way (EPERM or, running as root, a genuine successful signal) the pid IS
-  // alive, so the assertion holds regardless — the behavior under test, not
-  // which syscall path produced it.
-  test("a live pid we may not signal (EPERM) counts as alive", () => {
-    expect(pidAlive(1)).toBe(true);
   });
 });

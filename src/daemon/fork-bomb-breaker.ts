@@ -3,12 +3,11 @@ import path from "node:path";
 
 import { ensureOwnedPrivateDir } from "./paths";
 import {
-  readStartTime,
   sameLiveProcess,
+  systemProbe,
   type ProcessIdentity,
 } from "./process-fingerprint";
 import type { World } from "../host";
-import { pidAlive } from "./parent-watchdog";
 
 // ─── Daemon-side fork-bomb circuit breaker ───────────────────────────────────
 //
@@ -296,10 +295,7 @@ export function realBreakerDeps(
     pid: process.pid,
     startTime: myStartTime,
     isSameLiveProcess: (pid, startTime) =>
-      sameLiveProcess(pid, startTime, {
-        readStartTime: (candidate) => readStartTime(candidate, launcher.launch),
-        pidAlive,
-      }),
+      sameLiveProcess(pid, startTime, systemProbe(launcher)),
     listFiles: listRegistryFiles,
     readEntry: readRegistryEntry,
     removeFile: (filePath) => {
