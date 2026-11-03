@@ -51,6 +51,9 @@ import { StringDecoder } from "node:string_decoder";
 import { types } from "node:util";
 import type { ChildProcess, StdioOptions } from "node:child_process";
 import type { Timekeeper } from "../time";
+import type { Drawing } from "../config/lanes";
+import { eventHoldAt, type HeldEvent } from "../utils/event-hold";
+import { instantOf, type Instant } from "../utils/instant";
 
 import type { DrainEnd, LaunchStatsHandle } from "./stats-handle";
 
@@ -269,7 +272,9 @@ export type LaunchResult =
       // uid), so the child is NOT reaped; `error` carries the errno.
       // "output-limit" means a stream passed MAX_CAPTURED_BYTES: the child was
       // terminated and `stdout`/`stderr` hold the first MAX_CAPTURED_BYTES of
-      // it, so a truncated capture is never an `ok` one.
+      // it, so a truncated capture is never an `ok` one. "pipe-error" means
+      // a stream failed to read while the launch ran: the child was
+      // terminated, for the same reason, and `error` carries the stream's.
       reason:
         | "timeout"
         | "aborted"
@@ -278,7 +283,8 @@ export type LaunchResult =
         | "non-zero"
         | "rate-limited"
         | "signal-refused"
-        | "output-limit";
+        | "output-limit"
+        | "pipe-error";
       stdout: string;
       stderr: string;
       exitCode: number | null;
@@ -325,10 +331,11 @@ export interface LaunchScope {
   readonly inherited: NodeJS.ProcessEnv;
   // Meters every launch into the owner's stats. Null pays no metering cost.
   readonly stats: LaunchStatsHandle | null;
-  // Hears each change in why the lifeline is down (`fault`, below). The daemon
-  // logs it and redraws its feeds, so its warning comes and goes on pushed
-  // frames too.
-  readonly observeLifeline: (fault: string | null) => void;
+  // Hears each change in the launcher's warnings: why the lifeline is down
+  // (`fault`, below), and each pipe event. The daemon logs it and redraws its
+  // feeds, so a warning comes on pushed frames too; one going needs no call,
+  // since every render reads the hold against its own instant.
+  readonly observeWarnings: (change: WarningChange) => void;
   // [LAW:single-enforcer] The one checkpoint for "nothing launches after the
   // owner closed": every spawn crosses this module, so a launch in flight is
   // terminated and a later one refused, whichever part of the owner's work it
@@ -367,6 +374,13 @@ interface LaunchState {
   // lifeline runs, or before one is needed. Its observer hears each change, and
   // the daemon shows it as a standing warning.
   fault: string | null;
+  // [LAW:one-source-of-truth] The latest pipe event after a settle — a drain
+  // cut at the bound, or a held pipe that failed — and what it says, read by
+  // every render through the event hold. Null before the first.
+  pipeEvent: PipeEvent | null;
+  // What the record says: each kind and category since an answer last carried
+  // one, so a second event before anyone saw the first adds to it.
+  readonly pipeCounts: Map<string, number>;
   // What has not ended: each launch in flight and each lifeline.
   readonly ending: Set<Promise<unknown>>;
   // [LAW:no-silent-failure] Launches the OS would not let this launcher end,
@@ -464,7 +478,7 @@ interface Lifeline {
 function setFault(state: LaunchState, next: string | null): void {
   if (next === state.fault) return;
   state.fault = next;
-  state.scope.observeLifeline(next);
+  state.scope.observeWarnings({ kind: "lifeline", fault: next });
 }
 
 function lose(state: LaunchState, line: ChildProcess, reason: string): void {
@@ -480,15 +494,92 @@ export interface LifelineWarning {
   readonly message: string;
 }
 
-function lifelineWarnings(state: LaunchState): LifelineWarning[] {
-  return state.fault === null
-    ? []
-    : [
-        {
-          kind: "lifeline",
-          message: `programs launched now would outlive their launcher if it died: its launch lifeline ${state.fault}, and the next launch starts another`,
-        },
-      ];
+// [LAW:no-silent-failure] What a pipe that outlived its launch met: a drain
+// cut at the bound (its holder's writes fail from then on, often fatally), a
+// drain that failed to read, or a held input that failed to write.
+type PipeEventKind = "cut" | "read-error" | "write-error";
+
+export interface PipeEvent extends HeldEvent {
+  readonly text: string;
+}
+
+export interface LaunchPipesWarning {
+  readonly kind: "launch-pipes";
+  readonly message: string;
+  // The record the warning shows, which an answer carrying it marks answered.
+  readonly event: PipeEvent;
+}
+
+export type LauncherWarning = LifelineWarning | LaunchPipesWarning;
+
+export type WarningChange =
+  | { readonly kind: "lifeline"; readonly fault: string | null }
+  | { readonly kind: "launch-pipes"; readonly text: string };
+
+// Seconds every render shows a pipe event: long enough to read on a bar that
+// redraws only on events. That it is seen at all is the owed half of the hold.
+export const PIPE_EVENT_HOLD_S = 60;
+
+const lifelineMessage = (fault: string): string =>
+  `programs launched now would outlive their launcher if it died: its launch lifeline ${fault}, and the next launch starts another`;
+
+// A function, not a table: the bound is declared further down this module.
+const pipeEventWords = (kind: PipeEventKind): string =>
+  kind === "cut"
+    ? `output cut at the ${MAX_CAPTURED_BYTES}-byte bound, so the program holding it now fails its writes`
+    : kind === "read-error"
+      ? "output failed to read"
+      : "input failed to write";
+
+function pipeEvent(
+  state: LaunchState,
+  kind: PipeEventKind,
+  category: LaunchCategory,
+): void {
+  const key = `${kind}\0${category}`;
+  state.pipeCounts.set(key, (state.pipeCounts.get(key) ?? 0) + 1);
+  const said = [...state.pipeCounts].map(([at, n]) => {
+    const [k, c] = at.split("\0") as [PipeEventKind, LaunchCategory];
+    return `${n}× ${c} ${pipeEventWords(k)}`;
+  });
+  const text = `a launched program's pipe outlived its launch: ${said.join("; ")}`;
+  state.pipeEvent = {
+    text,
+    at: instantOf(new Date(state.scope.clock.now())),
+    answered: false,
+  };
+  state.scope.observeWarnings({ kind: "launch-pipes", text });
+}
+
+// [LAW:single-enforcer] The one write after a pipe event: an answer carrying
+// `event` reached its client. A newer event since is left unmarked.
+function answeredPipeEvent(state: LaunchState, event: PipeEvent): void {
+  const last = state.pipeEvent;
+  if (last === null || last.answered) return;
+  if (last.at !== event.at || last.text !== event.text) return;
+  state.pipeEvent = { ...last, answered: true };
+  state.pipeCounts.clear();
+}
+
+// What the launcher warns a render at `at`: the lifeline's fault while it
+// stands, and the latest pipe event while the event hold shows it.
+function launcherWarnings(
+  state: LaunchState,
+  at: Instant,
+  render: Drawing["by"],
+): LauncherWarning[] {
+  const event = state.pipeEvent;
+  const shown =
+    event !== null &&
+    eventHoldAt(event, PIPE_EVENT_HOLD_S, at, render) !== "over";
+  return [
+    ...(state.fault === null
+      ? []
+      : [{ kind: "lifeline" as const, message: lifelineMessage(state.fault) }]),
+    ...(shown
+      ? [{ kind: "launch-pipes" as const, message: event.text, event }]
+      : []),
+  ];
 }
 
 // Leads its own group, so nothing aimed at the launcher's group reaches it, and
@@ -560,7 +651,7 @@ function endLifeline(state: LaunchState): void {
 
 // A termination the launcher itself initiated — carried as data because the
 // OS reports only the signal, never why it was sent.
-type Terminated = "timeout" | "aborted" | "output-limit";
+type Terminated = "timeout" | "aborted" | "output-limit" | "pipe-error";
 
 // The most a waited launch keeps of each of its streams. A string cannot grow
 // without end (V8 throws past ~512 MiB), and a child that writes without end
@@ -611,11 +702,18 @@ interface Captured {
   drain(): void;
 }
 
+// What ends a launch from its own streams: one passing the bound, or one
+// failing to read.
+interface CaptureEnds {
+  full(): void;
+  failed(err: Error): void;
+}
+
 function capture(
   state: LaunchState,
   category: LaunchCategory,
   stream: Readable | null,
-  full: () => void,
+  ends: CaptureEnds,
 ): Captured {
   const { stats } = state.scope;
   const decoder = new StringDecoder("utf8");
@@ -625,13 +723,19 @@ function capture(
   // used its whole bound leaves a surviving descendant the same room as any.
   let dropped = 0;
   // Released at settle, so a drain holds nothing of the launch's result.
-  let onFull: (() => void) | null = full;
+  let onEnd: CaptureEnds | null = ends;
   let end: DrainEnd = "closed";
   // [LAW:no-silent-failure] A pipe's read error, before settle or after, is
-  // counted where it happens, never thrown into the launcher's loop.
-  stream?.on("error", () => stats?.onPipeError(category));
+  // counted where it happens, never thrown into the launcher's loop. Before
+  // settle it ends the launch, so its truncated capture is never an `ok` one;
+  // after, it is a pipe event the bar shows.
+  stream?.on("error", (err) => {
+    stats?.onPipeError(category);
+    if (onEnd === null) pipeEvent(state, "read-error", category);
+    else onEnd.failed(err);
+  });
   stream?.on("data", (chunk: Buffer) => {
-    if (onFull === null) {
+    if (onEnd === null) {
       dropped += chunk.length;
       stats?.onDrainRead(category, chunk.length);
       if (dropped <= MAX_CAPTURED_BYTES) return;
@@ -641,17 +745,18 @@ function capture(
       // cut, so its writes fail from here on, and the drain's close says so.
       end = "cut";
       stream.destroy();
+      pipeEvent(state, "cut", category);
       return;
     }
     const room = Math.max(0, MAX_CAPTURED_BYTES - bytes);
     text += decoder.write(chunk.subarray(0, room));
     bytes += chunk.length;
-    if (bytes > MAX_CAPTURED_BYTES) onFull();
+    if (bytes > MAX_CAPTURED_BYTES) onEnd.full();
   });
   return {
     take: () => {
-      if (onFull === null) return "";
-      onFull = null;
+      if (onEnd === null) return "";
+      onEnd = null;
       const whole = text + decoder.end();
       text = "";
       return whole;
@@ -694,6 +799,18 @@ function hold(
 
 // An input is written, never cut, so it always ends "closed".
 const inputEnd = (): DrainEnd => "closed";
+
+// [LAW:no-silent-failure] A held input's write error comes after the launch's
+// verdict, so unlike one during the launch (`feed`) it is a pipe event: what
+// the descendant reading it was handed stopped short.
+function holdInput(
+  state: LaunchState,
+  category: LaunchCategory,
+  input: Writable,
+): void {
+  input.on("error", () => pipeEvent(state, "write-error", category));
+  hold(state, category, input, inputEnd);
+}
 
 // At module scope, so a held input's listener holds nothing of the launch.
 function feed(input: Writable, text: string | Buffer | undefined): void {
@@ -747,9 +864,17 @@ async function launchWaited(
     const input = child.stdin;
     child.stdin = null;
 
-    const full = () => terminate("output-limit");
-    const stdout = capture(state, opts.category, child.stdout, full);
-    const stderr = capture(state, opts.category, child.stderr, full);
+    // The first stream to fail says why; a later one changes nothing.
+    let pipeError: string | null = null;
+    const ends: CaptureEnds = {
+      full: () => terminate("output-limit"),
+      failed: (err) => {
+        pipeError ??= err.message;
+        terminate("pipe-error");
+      },
+    };
+    const stdout = capture(state, opts.category, child.stdout, ends);
+    const stderr = capture(state, opts.category, child.stderr, ends);
     const output = () => ({ stdout: stdout.take(), stderr: stderr.take() });
     let settled = false;
     // What clears each timer the launch has armed.
@@ -786,7 +911,7 @@ async function launchWaited(
       stderr.drain();
       // Input still being written at settle is held with the drains.
       if (input !== null && !input.destroyed && !input.writableFinished)
-        hold(state, opts.category, input, inputEnd);
+        holdInput(state, opts.category, input);
       deliver();
     };
     const settle = (r: LaunchResult) => finish(() => resolve(r));
@@ -898,7 +1023,9 @@ async function launchWaited(
           signal,
           ...(terminated === "output-limit"
             ? { error: OUTPUT_LIMIT_ERROR }
-            : {}),
+            : terminated === "pipe-error"
+              ? { error: `a pipe failed to read: ${pipeError}` }
+              : {}),
         });
         return;
       }
@@ -1310,7 +1437,10 @@ export interface Launcher {
   launch(opts: AsyncLaunchOpts): Promise<LaunchResult>;
   launchDetachedSync(opts: LaunchOpts): LaunchResult;
   launchJobSync(opts: LaunchOpts, files: JobFiles): JobLaunch;
-  lifelineWarnings(): LifelineWarning[];
+  // What the launcher warns a render drawn at `at` for `render`.
+  launcherWarnings(at: Instant, render: Drawing["by"]): LauncherWarning[];
+  // An answer carrying `event` reached its client.
+  answeredPipeEvent(event: PipeEvent): void;
 }
 
 // [LAW:types-are-the-program] The launch that holds its caller's loop until the
@@ -1381,7 +1511,8 @@ function launcherWithState(
     launch: (opts) => track(state, launchWaited(state, opts)),
     launchDetachedSync: (opts) => launchOrphan(state, opts),
     launchJobSync: (opts, files) => launchJob(state, opts, files),
-    lifelineWarnings: () => lifelineWarnings(state),
+    launcherWarnings: (at, render) => launcherWarnings(state, at, render),
+    answeredPipeEvent: (event) => answeredPipeEvent(state, event),
     settled: async () => {
       await Promise.all(state.ending);
       return { unreaped: [...state.unreaped.values()] };
@@ -1401,10 +1532,15 @@ function launcherWithState(
     scope: {
       stats: null,
       // A launcher with nobody to tell says the warning on stderr.
-      observeLifeline: () =>
-        launcher
-          .lifelineWarnings()
-          .forEach((w) => process.emitWarning(w.message)),
+      observeWarnings: (change) => {
+        const message =
+          change.kind === "launch-pipes"
+            ? change.text
+            : change.fault === null
+              ? null
+              : lifelineMessage(change.fault);
+        if (message !== null) process.emitWarning(message);
+      },
       signal: new AbortController().signal,
       ...owner,
       clock,
@@ -1414,6 +1550,8 @@ function launcherWithState(
     liveGroups: new Set(),
     lifeline: null,
     fault: null,
+    pipeEvent: null,
+    pipeCounts: new Map(),
     ending: new Set(),
     unreaped: new Map(),
     drains: new Set(),

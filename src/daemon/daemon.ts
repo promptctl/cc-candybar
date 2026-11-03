@@ -260,15 +260,17 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     stats: stats.launchStats,
     signal: closing.signal,
     // [LAW:no-silent-failure] Each change in whether what the daemon launches
-    // dies with it is said in daemon.log, and every feed redraws, so its warning
-    // comes and goes on frames too.
-    observeLifeline: (fault) => {
-      log(
-        fault === null ? "info" : "warn",
-        fault === null
-          ? "launch lifeline running again"
-          : `launch lifeline ${fault}; the next launch starts another`,
-      );
+    // dies with it, and each pipe event, is said in daemon.log, and every feed
+    // redraws, so its warning comes on frames too.
+    observeWarnings: (change) => {
+      if (change.kind === "launch-pipes") log("warn", change.text);
+      else
+        log(
+          change.fault === null ? "info" : "warn",
+          change.fault === null
+            ? "launch lifeline running again"
+            : `launch lifeline ${change.fault}; the next launch starts another`,
+        );
       frameFeeds.wakeWhere("data", () => true);
     },
   });

@@ -16,6 +16,7 @@
 import type { SessionStateReader, SessionStateRW } from "./session-state.js";
 import type { Instant } from "../utils/instant.js";
 import type { Drawing } from "../config/lanes.js";
+import { eventHoldAt } from "../utils/event-hold.js";
 
 const KEY = "click.error";
 
@@ -78,23 +79,18 @@ export function lastClickError(
   return raw === null ? null : recordOf(raw);
 }
 
-// [LAW:single-enforcer] The one rule for whether a render shows a click's
-// errors: its instant is before the hold ends, or it is a request and no
-// answer has carried them yet.
+// Whether a render shows the session's click errors, by the daemon's one rule
+// for an event-shaped error (src/utils/event-hold.ts).
 export function clickErrorAt(
   state: SessionStateReader,
   sessionId: string,
   at: Instant,
-  // A request answers a client, a frame a feed draws does not, so only a
-  // request is owed the errors past the hold.
   render: Drawing["by"],
 ): ClickErrorHold {
   const last = lastClickError(state, sessionId);
   if (last === null) return { kind: "none" };
-  if (at < last.at + CLICK_ERROR_HOLD_S) return { kind: "held", error: last };
-  return render === "request" && !last.answered
-    ? { kind: "owed", error: last }
-    : { kind: "over" };
+  const kind = eventHoldAt(last, CLICK_ERROR_HOLD_S, at, render);
+  return kind === "over" ? { kind } : { kind, error: last };
 }
 
 function recordOf(raw: string): ClickErrorRecord | null {

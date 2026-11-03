@@ -18,6 +18,7 @@ import {
 import type { LaunchStatsHandle } from "../../src/proc/stats-handle";
 import { until } from "../helpers/until";
 import { systemTimekeeper } from "../../src/time";
+import { instantOf } from "../../src/utils/instant";
 
 function makeSpyHandle(): {
   handle: LaunchStatsHandle;
@@ -95,7 +96,11 @@ const launchDetachedSync: Launcher["launchDetachedSync"] = (opts) =>
   launcher.launchDetachedSync(opts);
 const launchJobSync: Launcher["launchJobSync"] = (opts, files) =>
   launcher.launchJobSync(opts, files);
-const lifelineWarnings = () => launcher.lifelineWarnings();
+// The lifeline's warning stands whatever the instant, so any render reads it.
+const lifelineWarnings = () =>
+  launcher
+    .launcherWarnings(instantOf(new Date()), "request")
+    .filter((w) => w.kind === "lifeline");
 const lifeline = () => launcher.__lifelineForTest();
 
 beforeEach(() => {
@@ -131,6 +136,32 @@ describe("launch (async)", () => {
       category: "user-shell",
     });
     expect(r).toMatchObject({ ok: true, stdout: "€", stderr: "€" });
+  });
+
+  it("is a failure when a stream fails to read mid-run, never a truncated ok", async () => {
+    // The OS seam: the launcher's own spawn, whose stdout the test fails once
+    // the child is running.
+    const cp = require("node:child_process") as typeof import("node:child_process");
+    const realSpawn = cp.spawn;
+    const spy = jest.spyOn(cp, "spawn").mockImplementation(((...args: Parameters<typeof cp.spawn>) => {
+      const child = realSpawn(...args);
+      child.stdout?.once("data", () => child.stdout?.destroy(new Error("EIO: i/o error, read")));
+      return child;
+    }) as typeof cp.spawn);
+    try {
+      const r = await launch({
+        bin: process.execPath,
+        args: ["-e", "process.stdout.write('x'); setInterval(() => {}, 1000);"],
+        category: "user-shell",
+      });
+      expect(r).toMatchObject({
+        ok: false,
+        reason: "pipe-error",
+        error: "a pipe failed to read: EIO: i/o error, read",
+      });
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   describe.each(["stdout", "stderr"] as const)("a child writing without end to %s", (stream) => {
@@ -749,7 +780,11 @@ describe("the lifeline", () => {
   let heard: Array<string | null>;
   beforeEach(() => {
     heard = [];
-    scoped({ observeLifeline: (fault) => heard.push(fault) });
+    scoped({
+      observeWarnings: (change) => {
+        if (change.kind === "lifeline") heard.push(change.fault);
+      },
+    });
   });
 
   it("ends every group in flight when the launcher's pipe closes", async () => {
@@ -1002,7 +1037,9 @@ describe("a launcher's scope", () => {
     const closing = new AbortController();
     scoped({
       signal: closing.signal,
-      observeLifeline: (fault) => heard.push(fault),
+      observeWarnings: (change) => {
+        if (change.kind === "lifeline") heard.push(change.fault);
+      },
     });
     await launch({ bin: "/bin/echo", category: "user-shell" });
     const { pid } = lifeline();

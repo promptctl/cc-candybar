@@ -8,7 +8,7 @@ import {
   fileEventsWarnings,
   type FileEventsWarning,
 } from "./cache/file-events";
-import type { LifelineWarning } from "../proc/launch";
+import type { LauncherWarning, PipeEvent } from "../proc/launch";
 import type { CheckedRenderRequest } from "./render-checkpoint.js";
 import { UPDATE_DISMISSED_KEY } from "./update-keys";
 import { type RenderOrigin } from "../config-hint";
@@ -445,6 +445,9 @@ export function drawRender(
   evaluated: number;
   cellBreaks: number;
   clickShown: ClickErrorRecord | null;
+  // The launcher's pipe event this draw showed, which an answer carrying it
+  // marks answered.
+  pipeShown: PipeEvent | null;
   // Records what the frame's copy clicks copy, once it reached its client.
   delivered: () => void;
   // Which animation lanes the session's settings switch on, as drawn.
@@ -544,9 +547,14 @@ export function drawRender(
   // A stall is no reason of this watch's: it has the bar's own row.
   const configWatch =
     entry.watch === null ? null : watchFault("config watch", entry.watch, null);
+  // [LAW:no-ambient-temporal-coupling] The launcher's at this draw's instant
+  // and for whom it draws, by the same event hold as the click error.
+  const launched = launcher.launcherWarnings(at, drawing.by);
+  const pipeShown =
+    launched.find((w) => w.kind === "launch-pipes")?.event ?? null;
   const standing: readonly StandingWarning[] = [
     ...fileEventsWarnings(fileEvents.delivery()),
-    ...launcher.lifelineWarnings(),
+    ...launched,
     ...(configWatch === null
       ? []
       : [{ kind: "config-watch" as const, message: configWatch }]),
@@ -727,6 +735,7 @@ export function drawRender(
       case "load":
       case "config-watch":
       case "lifeline":
+      case "launch-pipes":
       case "when":
         return w.kind;
     }
@@ -783,6 +792,7 @@ export function drawRender(
     evaluated,
     cellBreaks,
     clickShown,
+    pipeShown,
     delivered,
     lanes,
   };
@@ -803,7 +813,7 @@ interface ConfigWatchWarning {
 // What stands before a draw, whatever the draw then meets.
 type StandingWarning =
   | FileEventsWarning
-  | LifelineWarning
+  | LauncherWarning
   | ConfigWatchWarning
   | LoadWarning;
 
@@ -856,6 +866,7 @@ interface RequestAnswer {
   resp: Response;
   motion: DrawnMotion;
   clickShown: ClickErrorRecord | null;
+  pipeShown: PipeEvent | null;
   // Records what the answer's copy clicks copy, once it reached its client.
   delivered: () => void;
 }
@@ -988,7 +999,7 @@ async function drawAnswer(
     ended,
     refreshed: refreshedFact(refreshed),
   });
-  const { drawn, clickShown, delivered, lanes } = drawRender(
+  const { drawn, clickShown, pipeShown, delivered, lanes } = drawRender(
     parts,
     setup,
     ANSWERING,
@@ -1013,6 +1024,7 @@ async function drawAnswer(
     resp,
     motion: drawn.body.motion,
     clickShown,
+    pipeShown,
     delivered,
   };
 }

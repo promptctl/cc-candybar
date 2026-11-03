@@ -92,6 +92,7 @@ function outcomeOf(result: LaunchResult): RunOutcome {
     case "spawn-error":
     case "rate-limited":
     case "signal-refused":
+    case "pipe-error":
       return "launch";
     case "output-limit":
       return "output-limit";
