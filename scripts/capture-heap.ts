@@ -65,9 +65,10 @@ if (
   !Number.isInteger(SESSIONS) ||
   SESSIONS < 1 ||
   !Number.isInteger(TURNS) ||
-  TURNS < 1
+  TURNS < 0
 ) {
-  throw new Error(`--sessions and --turns must be positive integers`);
+  // Zero turns is a real measurement: sessions with no history.
+  throw new Error(`--sessions must be a positive integer and --turns a non-negative one`);
 }
 
 const COLUMNS = 160;
@@ -156,7 +157,11 @@ try {
   let snapshot: string | undefined;
   let lastSize = -1;
   while (snapshot === undefined) {
-    const found = fs.readdirSync(OUT).find((f) => f.endsWith(".heapsnapshot"));
+    // Named for the pid that wrote it: the daemon's snapshot, whatever else
+    // the world runs.
+    const found = fs
+      .readdirSync(OUT)
+      .find((f) => f.endsWith(".heapsnapshot") && f.includes(`.${pid}.`));
     const size = found === undefined ? -1 : fs.statSync(path.join(OUT, found)).size;
     if (
       found !== undefined &&

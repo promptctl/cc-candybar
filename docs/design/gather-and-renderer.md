@@ -104,7 +104,7 @@ Steps 1 to 4 are the real work and are inside one process. Step 5 is a transport
 ## 11. What I would ask you to decide
 
 - **The version-addressed Gather's residual risk** in §3: accept the one-build exposure, or require that only the main renderer's bundle may start a Gather. I recommend accepting it; the alternative is a mode.
-- **Two Node baselines.** Decided: Gather is a Node process. A second Node process is unacceptable only if its idle charge passes a tenth of the daemon's limit (102 MB), or if the state both processes would hold passes a tenth of the daemon's charge at 100 sessions. Measured on today's daemon it is about 55 to 65 MB idle, and the state both would hold is about 5% (`pnpm load-gate` for the charge at each population, `scripts/capture-heap.ts` for the heap and the differential between configs). A Rust Gather stays a separate proposal that nothing here waits on.
+- **Two Node baselines.** Decided: Gather is a Node process. A second Node process is unacceptable only if its idle charge passes a tenth of the daemon's limit (102 MB), or if the state both processes would hold passes a tenth of the daemon's charge at 100 sessions. Measured on today's daemon it is about 55 to 65 MB idle, and the state both would hold is about 5% (`pnpm load-gate` for the charge at each population, `scripts/capture-heap.ts`, macOS only, for the heap and the differential between configs). A Rust Gather stays a separate proposal that nothing here waits on.
 
 ---
 
