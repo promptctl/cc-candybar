@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-596",
+      "ref": "refs/pull/596/merge",
+      "sha": "83e97e1688626b79dd10431231b6579d8e254bc3",
+      "timestamp": "2026-11-03T01:50:17.240Z",
+      "commits": [
+        {
+          "sha": "83e97e1688626b79dd10431231b6579d8e254bc3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T18:49:19-07:00",
+          "message": "Merge 208a11fcff5572415949f536cb427df95a81e84d into e7ee7542655b493942757800b257dc4accd601f1\n"
+        },
+        {
+          "sha": "208a11fcff5572415949f536cb427df95a81e84d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T18:48:56-07:00",
+          "message": "fix(test): the frame-feed cases run on one held clock, so no draw count reads real time (candybar-testing-0x6u.fs0)\n\nEvery case in test/frame-feed.test.ts built its feed on the system clock, a\nper-describe jest fake, or a busy-wait, so a stalled CI loop skipped a turn\nand failed an exact draw count. The harness now owns a heldClock and returns\nit; a case moves time with clock.advance, and a render that takes renderMs\nburns that much of the clock (new HeldClock.burn), so a render slower than its\nperiod runs back to back instead of looping at one held moment. HeldClock also\ngains pending() and never moves time back after a burn. Loose bounds that only\na loaded box needed are the exact counts the periods give.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-595",
       "ref": "refs/pull/595/merge",
       "sha": "7c214f1bc9ec021e3f2efbdbd95c8948e9d4b728",
