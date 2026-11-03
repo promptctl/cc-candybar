@@ -17,7 +17,7 @@
 // validate, resolveEffectiveGlobals, registerDslConfig + drawDsl.
 
 import { drawPayload } from "./helpers/draw-payload";
-import { processLauncher } from "./helpers/host";
+import { unscriptedLauncher } from "./helpers/fake-launcher";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import type { RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -260,7 +260,7 @@ const SID = "theme-defaults";
 function cellBg(source: string): { daemon: string; compileOnly: string } {
   const config = load(source);
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
+  const registry = new SourceRegistry(unscriptedLauncher, store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
   const sink = new Map<string, readonly RichText[]>();
   const bg = (): string => {

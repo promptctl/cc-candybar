@@ -8,7 +8,8 @@
 // answering with its default. None of it is a fault: nothing is reported.
 
 import { drawPayload } from "./helpers/draw-payload";
-import { processLauncher } from "./helpers/host";
+import { fakeLauncher } from "./helpers/fake-launcher";
+import { heldClock } from "./helpers/held-clock";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { SessionState } from "../src/daemon/session-state";
 import { VariableStore } from "../src/var-system/store";
@@ -25,7 +26,7 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { lastBinding } from "./helpers/render-binding";
 import { selectionFor } from "./helpers/selection";
 import { textOf, ansiOf, type Frame } from "../src/render/frame";
-import { systemTimekeeper } from "../src/time";
+import { exits, hangs, runsFor, shell } from "../src/proc/spawner-fake";
 
 const AT = 1_800_000_000 as Instant;
 
@@ -51,17 +52,36 @@ interface Drawn {
   readonly warnings: readonly RenderWarning[];
 }
 
+// A stream finishes its work on the next-tick queue, which a chain of resolved
+// promises never leaves room for, so each turn waits on that queue itself.
+const turns = async (): Promise<void> => {
+  for (let i = 0; i < 5; i++) {
+    await new Promise<void>((resolve) => process.nextTick(resolve));
+  }
+};
+
 function renderer(cfg: ValidatedConfig) {
   const compiled = compileDslConfig(compileInputOf(cfg), TEST_SIGNER);
-  const store = new VariableStore(systemTimekeeper);
+  const clock = heldClock(new Date(AT * 1000));
+  const { launcher, spawner } = fakeLauncher(clock);
+  // The two commands the configs here run: one never answers, one answers empty
+  // after a moment.
+  spawner.program(shell("sleep 60"), hangs());
+  spawner.program(shell("sleep 0.2; printf ''"), runsFor(200, exits(0)));
+  const store = new VariableStore(clock);
   const session = new SessionState();
-  const registry = new SourceRegistry(processLauncher, store, "", session);
+  const registry = new SourceRegistry(launcher, store, "", session);
   declareDslVariables(cfg, registry, "/tmp", EVERY_SCOPE);
   const drawn = lastBinding(compiled.menuRuntime.action);
   return {
     store,
     registry,
     session,
+    // Lets the clock pass, and the children it ends report.
+    pass: async (ms: number) => {
+      clock.advance(ms);
+      await turns();
+    },
     // The base palette the latest frame wore.
     palette: () => drawn().look!.basePalette,
     answer: (value: JsonValue) => store.setDocument("doc", ok(value)),
@@ -353,7 +373,9 @@ describe("a json source with no default", () => {
     );
     try {
       expect(cellBetween(on.draw().text, "L", "R")).toBe(`  ${LOADING_GLYPH}  `);
-      expect(await on.registry.settled(5000)).toEqual([]);
+      const waiting = on.registry.settled(5000);
+      await on.pass(200);
+      expect(await waiting).toEqual([]);
       const { text, errors, frame } = on.draw();
       // Absent is a missing field (src/template-engine/scope.ts).
       expect(text).toContain('⚠ value: field "doc.label" not found on receiver');

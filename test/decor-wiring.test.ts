@@ -15,7 +15,7 @@
 //     one transposed palette every unpinned segment colours from.
 
 import { drawPayload } from "./helpers/draw-payload";
-import { processLauncher } from "./helpers/host";
+import { unscriptedLauncher } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { TEST_SIGNER } from "./helpers/link-signer";
@@ -92,7 +92,7 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
   const config = parseAndValidate("<test>", src, ALLOWED, dflt);
   const store = new VariableStore(systemTimekeeper);
   const sessionState = new SessionState();
-  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
+  const registry = new SourceRegistry(unscriptedLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const sink = new Map<string, readonly RichText[]>();
   const render = (payload: object = {}, variation?: VariationName, shade?: ShadeName): Frame =>

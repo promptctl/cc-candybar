@@ -1,5 +1,6 @@
 import fs from "node:fs";
-import { hostOf, processLauncher } from "./helpers/host";
+import { hostOf } from "./helpers/host";
+import { unscriptedLauncher } from "./helpers/fake-launcher";
 import os from "node:os";
 import path from "node:path";
 
@@ -85,7 +86,7 @@ describe("a daemon aimed by its paths value", () => {
       const limits = adapters.limits({
         startedAtMs: 0,
         exit: () => {},
-        launcher: processLauncher,
+        launcher: unscriptedLauncher,
         log: () => {},
       });
       limits.writeMemoryReport(path.join(limits.snapshotDir, "report.txt"), "r");

@@ -1,5 +1,5 @@
 import { textOf } from "../src/render/frame";
-import { processLauncher } from "./helpers/host";
+import { unscriptedLauncher } from "./helpers/fake-launcher";
 // The bundled default's threshold colours, pinned as a CONTRACT over palette
 // names — not opaque bytes. block/weekly heat as utilization passes the
 // placement's `warnAt` and `errorAt` settings; burnrate heats as the projected
@@ -220,7 +220,7 @@ function renderOne(
     : narrowed.segments;
   const one = { ...narrowed, segments };
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
+  const registry = new SourceRegistry(unscriptedLauncher, store, "", new SessionState());
   try {
     const compiled = registerDslConfig(one, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     return drawPayload(

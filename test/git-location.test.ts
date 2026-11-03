@@ -2,7 +2,7 @@
 // checkout, and what `directory` draws from it. `gitaculous` reads the same
 // payload fields only to decide whether it has a branch to show at all.
 import { drawPayload } from "./helpers/draw-payload";
-import { processLauncher } from "./helpers/host";
+import { unscriptedLauncher } from "./helpers/fake-launcher";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -67,7 +67,7 @@ function drawAll(
     DEFAULT_DSL_CONFIG,
   );
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
+  const registry = new SourceRegistry(unscriptedLauncher, store, "", new SessionState());
   const sink = new Map<string, readonly RichText[]>();
   try {
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });

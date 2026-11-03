@@ -22,7 +22,8 @@
 
 import { drawPayload } from "./helpers/draw-payload";
 import { locations } from "../src/daemon/paths";
-import { HOST, locs, processLauncher } from "./helpers/host";
+import { HOST, locs } from "./helpers/host";
+import { unscriptedLauncher } from "./helpers/fake-launcher";
 import type { Frame } from "../src/render/frame";
 import { linkUrls, boldUrls } from "./helpers/frame";
 import { TEST_SIGNER } from "./helpers/link-signer";
@@ -418,7 +419,7 @@ function buildPersistRuntime(
   const sessionState = new SessionState();
   durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
+  const registry = new SourceRegistry(unscriptedLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, {
     signer: TEST_SIGNER,
     cwd: process.cwd(),
@@ -575,7 +576,7 @@ describe("persist action click → the config file", () => {
     durable.seedOrigin(sessionState, "s1");
     const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(
-      processLauncher,
+      unscriptedLauncher,
       store,
       "",
       sessionState,
@@ -873,7 +874,7 @@ function makeCache(): {
       stateDir: stateDir(durable.host),
       locations: locations(durable.host),
       env: durable.host.env,
-      launcher: processLauncher,
+      launcher: unscriptedLauncher,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),

@@ -11,7 +11,7 @@
 //     control from the same generator, with its option domain and its gate.
 
 import { drawPayload } from "./helpers/draw-payload";
-import { processLauncher } from "./helpers/host";
+import { unscriptedLauncher } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
 import { TEST_SIGNER } from "./helpers/link-signer";
@@ -224,7 +224,7 @@ describe("a global the menu has never seen gets its control from the generator",
     );
     const sessionState = new SessionState();
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(processLauncher, store, "", sessionState);
+    const registry = new SourceRegistry(unscriptedLauncher, store, "", sessionState);
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
     const render = () =>
       drawPayload(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS).frame;

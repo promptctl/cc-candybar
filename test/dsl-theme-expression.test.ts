@@ -1,5 +1,5 @@
 import type { Frame } from "../src/render/frame";
-import { processLauncher } from "./helpers/host";
+import { unscriptedLauncher } from "./helpers/fake-launcher";
 // [LAW:verifiable-goals] brandon-themes-dzl done-gates: (1) `globals.palette`
 // accepts a TEMPLATE, evaluated per render, so the bar's theme can follow data;
 // (2) precedence comes out IDENTICAL to the style's — staged over session over the
@@ -309,7 +309,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
     const config = parseAndValidate("<theme-default>", src("nord"), ALLOWED);
     const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(
-      processLauncher,
+      unscriptedLauncher,
       store,
       "",
       new SessionState(),
@@ -339,7 +339,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
     const config = parseAndValidate("<theme-default-rule>", src(RULE), ALLOWED);
     const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(
-      processLauncher,
+      unscriptedLauncher,
       store,
       "",
       new SessionState(),
@@ -406,7 +406,7 @@ describe("globals.palette as an expression — loader", () => {
     );
     const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(
-      processLauncher,
+      unscriptedLauncher,
       store,
       "",
       new SessionState(),
@@ -534,7 +534,7 @@ describe("a rule inside a preset's globals", () => {
   ): R => {
     const config = parseAndValidate("<theme-expr-preset>", source, ALLOWED);
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
+    const registry = new SourceRegistry(unscriptedLauncher, store, "", new SessionState());
     try {
       return body(config, registry, store);
     } finally {

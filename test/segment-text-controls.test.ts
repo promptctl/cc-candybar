@@ -7,7 +7,7 @@
 // takes that path on the production render.
 
 import { drawPayload } from "./helpers/draw-payload";
-import { processLauncher } from "./helpers/host";
+import { unscriptedLauncher } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { TEST_SIGNER } from "./helpers/link-signer";
@@ -40,7 +40,7 @@ const CONFIG = parseAndValidate(
 
 function render(s: string): Frame {
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
+  const registry = new SourceRegistry(unscriptedLauncher, store, "", new SessionState());
   try {
     const compiled = registerDslConfig(CONFIG, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
     return drawPayload(CONFIG, compiled, store, registry, { s }, instantOf(new Date()), OPTS).frame;

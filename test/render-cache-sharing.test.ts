@@ -1,5 +1,6 @@
 import { drawPayload } from "./helpers/draw-payload";
-import { HOST, locs, processLauncher } from "./helpers/host";
+import { HOST, locs } from "./helpers/host";
+import { unscriptedLauncher } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linksOf } from "../src/click/read";
@@ -85,7 +86,7 @@ function makeCache(budgetBytes: number, maxEntries?: number) {
       stateDir: stateDir(HOST),
       locations: locs(),
       env: HOST.env,
-      launcher: processLauncher,
+      launcher: unscriptedLauncher,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
@@ -162,7 +163,7 @@ const drawAlone = (
 ): VariableStore => {
   const store = new ProbeStore(systemTimekeeper);
   const registry = new SourceRegistry(
-    processLauncher,
+    unscriptedLauncher,
     store,
     "",
     new SessionState(),

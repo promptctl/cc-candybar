@@ -19,7 +19,7 @@
 // first fragment instead of the row.
 
 import { drawPayload } from "./helpers/draw-payload";
-import { processLauncher } from "./helpers/host";
+import { unscriptedLauncher } from "./helpers/fake-launcher";
 import { plainOf, textOf } from "../src/render/frame";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import {
@@ -404,7 +404,7 @@ describe("a fill segment fills wherever the walk places it", () => {
     );
     const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(
-      processLauncher,
+      unscriptedLauncher,
       store,
       "",
       new SessionState(),

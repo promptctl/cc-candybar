@@ -18,7 +18,7 @@
 // broke the second, so closure needs its own guard.
 
 import { drawPayload } from "./helpers/draw-payload";
-import { processLauncher } from "./helpers/host";
+import { unscriptedLauncher } from "./helpers/fake-launcher";
 import { ansiOf, type Frame } from "../src/render/frame";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -70,7 +70,7 @@ function render(src: string, opts: BuildLineOptions): Frame {
   const config = parseAndValidate("<test>", src, ALLOWED);
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
+  const registry = new SourceRegistry(unscriptedLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   return drawPayload(config, compiled, store, registry, {}, instantOf(new Date()), opts).frame;
 }

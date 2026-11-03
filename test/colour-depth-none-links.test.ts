@@ -5,7 +5,7 @@
 // tab still reads as open.
 
 import { drawPayload } from "./helpers/draw-payload";
-import { processLauncher } from "./helpers/host";
+import { unscriptedLauncher } from "./helpers/fake-launcher";
 import { ansiOf, textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
@@ -47,7 +47,7 @@ test("colour depth none keeps every link the bar draws in colour", async () => {
   );
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
+  const registry = new SourceRegistry(unscriptedLauncher, store, "", sessionState);
   recordRender(sessionState, "s1");
   try {
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });

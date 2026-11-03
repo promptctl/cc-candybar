@@ -7,7 +7,7 @@
 // and the settings menu's own tray, its door open.
 
 import { drawPayload } from "./helpers/draw-payload";
-import { processLauncher } from "./helpers/host";
+import { unscriptedLauncher } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
@@ -110,7 +110,7 @@ async function bar(
 
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
+  const registry = new SourceRegistry(unscriptedLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
   const render = (): Frame =>
     drawPayload(

@@ -1,6 +1,7 @@
 import { textOf } from "../src/render/frame";
 import { locations } from "../src/daemon/paths";
-import { HOST, locs, processLauncher } from "./helpers/host";
+import { HOST, locs } from "./helpers/host";
+import { unscriptedLauncher } from "./helpers/fake-launcher";
 // [LAW:verifiable-goals] brandon-layout-edit-2gc.1 done-gates, driven through
 // the real spine (mirroring dsl-persist-actions.test.ts's model one arm
 // over), re-aimed at the config FILE as the one durable store
@@ -553,7 +554,7 @@ function buildLayoutRuntime(src: string, sessionId = "s1") {
   const sessionState = new SessionState();
   durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
+  const registry = new SourceRegistry(unscriptedLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, {
     signer: TEST_SIGNER,
     cwd: process.cwd(),
@@ -893,7 +894,7 @@ describe("the reset-layout banner survives quote/backslash preset names", () => 
     const sessionState = new SessionState();
     sessionState.set("s1", EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     const registry = new SourceRegistry(
-      processLauncher,
+      unscriptedLauncher,
       store,
       "",
       sessionState,
@@ -956,7 +957,7 @@ describe("a preset root's own top-level `when` hides content, not the menu or ba
     // Live output, not names: the subject is whether the CONTENT follows the gate.
     sessionState.set("s1", EDIT_LIVE_KEY, "open");
     const registry = new SourceRegistry(
-      processLauncher,
+      unscriptedLauncher,
       store,
       "",
       sessionState,
@@ -1031,7 +1032,7 @@ function makeCache(reloads?: ReloadSignal): {
       stateDir: stateDir(durable.host),
       locations: locations(durable.host),
       env: durable.host.env,
-      launcher: processLauncher,
+      launcher: unscriptedLauncher,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
@@ -1251,7 +1252,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         stateDir: stateDir(durable.host),
         locations: locations(durable.host),
         env: durable.host.env,
-        launcher: processLauncher,
+        launcher: unscriptedLauncher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         gates: bareGates(),

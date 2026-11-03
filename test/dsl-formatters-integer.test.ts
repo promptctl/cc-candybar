@@ -21,7 +21,7 @@
 // pinned separately below.
 
 import { drawPayload } from "./helpers/draw-payload";
-import { processLauncher } from "./helpers/host";
+import { unscriptedLauncher } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { SessionState } from "../src/daemon/session-state";
@@ -61,7 +61,7 @@ function render(n: number): string {
     "<test>",
   ) as ValidatedConfig;
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
+  const registry = new SourceRegistry(unscriptedLauncher, store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
   const out = drawPayload(
     config,

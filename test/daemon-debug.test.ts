@@ -12,7 +12,7 @@
 // constructed state and read the result.
 
 import { TEST_SIGNER } from "./helpers/link-signer";
-import { processLauncher } from "./helpers/host";
+import { unscriptedLauncher } from "./helpers/fake-launcher";
 import { feedInputs } from "./helpers/inputs";
 import { SessionState } from "../src/daemon/session-state";
 import { ownDeclNames } from "./helpers/ambient-chrome";
@@ -88,7 +88,7 @@ function buildPopulatedState(): DaemonDslState {
     new Set<string>(), // no palette validation needed — segments don't set one
   );
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
+  const registry = new SourceRegistry(unscriptedLauncher, store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, {
     signer: TEST_SIGNER,
     cwd: process.cwd(),

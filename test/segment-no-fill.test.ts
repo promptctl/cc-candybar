@@ -9,7 +9,7 @@
 //     text on its own ground, the one pair known to read there.
 
 import { drawPayload } from "./helpers/draw-payload";
-import { processLauncher } from "./helpers/host";
+import { unscriptedLauncher } from "./helpers/fake-launcher";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { getThemePalette, resolveColorRef } from "@promptctl/rich-js";
 import type { RichText } from "@promptctl/rich-js";
@@ -46,7 +46,7 @@ function render() {
     new Set(listResolvablePaletteNames()),
   );
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
+  const registry = new SourceRegistry(unscriptedLauncher, store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const sink = new Map<string, readonly RichText[]>();
   const out = drawPayload(

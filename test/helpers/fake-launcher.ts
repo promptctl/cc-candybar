@@ -11,7 +11,7 @@ import {
   type FakeSpawner,
   type Spawn,
 } from "../../src/proc/spawner-fake";
-import type { Timekeeper } from "../../src/time";
+import { systemTimekeeper, type Timekeeper } from "../../src/time";
 
 export interface FakeLauncher {
   readonly launcher: TestableLauncher & OneShotLauncher;
@@ -50,3 +50,10 @@ export function fakeLauncher(
     started: () => spawner.spawned.filter((s) => !isLifeline(s)),
   };
 }
+
+// A launcher for a test whose subject takes one and means to launch nothing: any
+// launch fails as a missing program does, loudly, so a test that starts to
+// spawn must say what it spawns.
+export const unscriptedLauncher: FakeLauncher["launcher"] = fakeLauncher(
+  systemTimekeeper,
+).launcher;

@@ -1,5 +1,5 @@
 import { TEST_SIGNER } from "./helpers/link-signer";
-import { processLauncher } from "./helpers/host";
+import { unscriptedLauncher } from "./helpers/fake-launcher";
 import { NO_PROJECT } from "./helpers/no-project";
 import v8 from "node:v8";
 import vm from "node:vm";
@@ -39,7 +39,7 @@ function registerStdlib() {
     "<default>",
   );
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
+  const registry = new SourceRegistry(unscriptedLauncher, store, "", new SessionState());
   return { registry, compiled: registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" }) };
 }
 
