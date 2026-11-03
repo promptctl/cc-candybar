@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-559",
+      "ref": "refs/pull/559/merge",
+      "sha": "bd9045f864cf73f30bb852b4178da311b06291a9",
+      "timestamp": "2026-11-03T00:03:43.233Z",
+      "commits": [
+        {
+          "sha": "bd9045f864cf73f30bb852b4178da311b06291a9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T00:02:30Z",
+          "message": "Merge 8abe84c6f97566f46cd8e10f29fa1410781f523e into c566bb07016fbae3ad97df6abf6cc28e94fc129b\n"
+        },
+        {
+          "sha": "8abe84c6f97566f46cd8e10f29fa1410781f523e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T20:15:07-07:00",
+          "message": "docs(design): the isolated daemon, tmux events and browser surface designs\n\nGoals, architecture, contracts and one document per area, with the surveys and probes behind them. The Frame is recorded as built, and the browser surface is un-parked.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-589",
       "ref": "refs/pull/589/merge",
       "sha": "b07777110b9ffafa8a5c9b9fb229efd523590690",
@@ -100,28 +122,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-02T23:40:38Z",
           "message": "chore(release): set `package.json` to 1.180.4 [skip ci]\n\n## [1.180.4](https://github.com/promptctl/cc-candybar/compare/v1.180.3...v1.180.4) (2026-11-02)\n\n### Bug Fixes\n\n* **bar-pane:** a frame overwrites its rows and lands whole, so the pane stops flickering ([#558](https://github.com/promptctl/cc-candybar/issues/558)) ([3b03eb3](https://github.com/promptctl/cc-candybar/commit/3b03eb3ede4c45763df73f0f81301f74444e40a3))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-559",
-      "ref": "refs/pull/559/merge",
-      "sha": "7e9d2d87fa09e6ce789892aaaacdd42bd9b33b2e",
-      "timestamp": "2026-11-02T23:50:43.295Z",
-      "commits": [
-        {
-          "sha": "7e9d2d87fa09e6ce789892aaaacdd42bd9b33b2e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T23:48:37Z",
-          "message": "Merge bc5579aeb38f15ff24f20d900cc5a65bdc0de098 into e4792ac42dfcce8f3f64975e904729a8bf7ff51b\n"
-        },
-        {
-          "sha": "bc5579aeb38f15ff24f20d900cc5a65bdc0de098",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T20:15:07-07:00",
-          "message": "docs(design): the isolated daemon, tmux events and browser surface designs\n\nGoals, architecture, contracts and one document per area, with the surveys and probes behind them. The Frame is recorded as built, and the browser surface is un-parked.\n"
         }
       ]
     }
