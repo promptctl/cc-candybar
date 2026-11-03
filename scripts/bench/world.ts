@@ -141,9 +141,10 @@ case "$*" in
 esac
 `;
 
-// `daemonEnv` is added to the daemon's environment and nothing else's: a
-// measurement that has to ask the daemon for something (a heap snapshot on a
-// signal) names it here, so the world stays closed by default.
+// `daemonEnv` is merged into the world's one environment, which the daemon and
+// the clients that ask it both see: a measurement that has to ask the daemon
+// for something (a heap snapshot on a signal) names it here, so the world
+// stays closed by default. It names variables the clients do not read.
 export async function startWorld(
   config = "{}\n",
   daemonEnv: NodeJS.ProcessEnv = {},

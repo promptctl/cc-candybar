@@ -56,8 +56,17 @@ const { values } = parseArgs({
 });
 const SESSIONS = Number(values.sessions);
 const TURNS = Number(values.turns);
-const OUT = path.resolve(values.out!);
-if (!Number.isInteger(SESSIONS) || SESSIONS < 1 || !Number.isInteger(TURNS)) {
+if (process.platform !== "darwin") {
+  // The charge is read from `footprint`, which only macOS has; on Linux the
+  // charge is RSS and nothing here reads it.
+  throw new Error(`capture-heap reads /usr/bin/footprint and runs on macOS only`);
+}
+if (
+  !Number.isInteger(SESSIONS) ||
+  SESSIONS < 1 ||
+  !Number.isInteger(TURNS) ||
+  TURNS < 1
+) {
   throw new Error(`--sessions and --turns must be positive integers`);
 }
 
@@ -73,7 +82,10 @@ const STAGES = [0, 1, 10, SESSIONS].filter(
 // How long the daemon is given to write a snapshot of a heap this size.
 const SNAPSHOT_WAIT_MS = 120_000;
 
-fs.mkdirSync(OUT, { recursive: true });
+// A directory of this run's own: a snapshot found in it is this run's, never
+// a previous run's left under the same --out.
+fs.mkdirSync(path.resolve(values.out!), { recursive: true });
+const OUT = fs.mkdtempSync(path.join(path.resolve(values.out!), "run-"));
 
 // `footprint -p` prints the process's whole table, categories included; the
 // charge is its phys_footprint line. Kept whole so the native share (what a
@@ -86,6 +98,17 @@ function footprint(pid: number): { physFootprintMb: number; table: string } {
   if (m === null) throw new Error(`footprint printed no phys_footprint line`);
   const unit = { KB: 1 / 1024, MB: 1, GB: 1024 }[m[2] as "KB" | "MB" | "GB"];
   return { physFootprintMb: Number(m[1]) * unit, table };
+}
+
+function endsWithBrace(file: string, size: number): boolean {
+  const fd = fs.openSync(file, "r");
+  try {
+    const tail = Buffer.alloc(Math.min(size, 16));
+    fs.readSync(fd, tail, 0, tail.length, size - tail.length);
+    return tail.toString("utf8").trimEnd().endsWith("}");
+  } finally {
+    fs.closeSync(fd);
+  }
 }
 
 const world = await startWorld(
@@ -129,13 +152,18 @@ try {
   process.kill(pid, "SIGUSR2");
   const deadline = Date.now() + SNAPSHOT_WAIT_MS;
   // V8 streams the file under its final name, so a file is whole when its
-  // size has stopped moving.
+  // size has stopped moving and it ends with the JSON's closing brace.
   let snapshot: string | undefined;
   let lastSize = -1;
   while (snapshot === undefined) {
     const found = fs.readdirSync(OUT).find((f) => f.endsWith(".heapsnapshot"));
     const size = found === undefined ? -1 : fs.statSync(path.join(OUT, found)).size;
-    if (found !== undefined && size > 0 && size === lastSize) {
+    if (
+      found !== undefined &&
+      size > 0 &&
+      size === lastSize &&
+      endsWithBrace(path.join(OUT, found), size)
+    ) {
       snapshot = path.join(OUT, found);
     } else {
       lastSize = size;
