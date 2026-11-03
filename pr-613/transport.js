@@ -23796,7 +23796,7 @@ init_globals();
 
 // src/daemon/verbs/index.ts
 init_globals();
-var import_node_path32 = __toESM(require_path_browserify(), 1);
+var import_node_path30 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/click-error.ts
 init_globals();
@@ -65400,7 +65400,7 @@ var barsOf = (scope, sightings) => inScope(scope, sightings).map(
 // src/doctor/edge.ts
 init_globals();
 init_os();
-var import_node_path28 = __toESM(require_path_browserify(), 1);
+var import_node_path25 = __toESM(require_path_browserify(), 1);
 
 // src/proc/process-table.ts
 init_globals();
@@ -66286,7 +66286,7 @@ init_globals();
 
 // src/daemon/render-payload.ts
 init_globals();
-var import_node_path24 = __toESM(require_path_browserify(), 1);
+var import_node_path20 = __toESM(require_path_browserify(), 1);
 
 // src/utils/terminal-width.ts
 init_globals();
@@ -66358,1216 +66358,8 @@ function settledLane(outcome) {
   return { current: () => outcome };
 }
 
-// src/daemon/cache/session-usage-store.ts
+// src/daemon/cache/today-facts.ts
 init_globals();
-var import_node_path23 = __toESM(require_path_browserify(), 1);
-
-// src/daemon/paths.ts
-init_globals();
-init_os();
-var import_node_path20 = __toESM(require_path_browserify(), 1);
-function xdgEnv(env2, name) {
-  const v = env2[name];
-  return v && v.length > 0 ? v : void 0;
-}
-function stateDir(host) {
-  const base = xdgEnv(host.env, "XDG_STATE_HOME") ?? import_node_path20.default.join(host.home, ".local", "state");
-  return import_node_path20.default.join(base, "cc-candybar");
-}
-function cacheDir(host) {
-  const base = xdgEnv(host.env, "XDG_CACHE_HOME") ?? import_node_path20.default.join(host.home, ".cache");
-  return import_node_path20.default.join(base, "cc-candybar");
-}
-function socketPath(host) {
-  return host.env.CC_CANDYBAR_SOCKET || defaultSocketPath();
-}
-function defaultSocketPath() {
-  const uid = os_default.userInfo().uid;
-  return import_node_path20.default.join("/tmp", `cc-candybar-${uid}`, "socket");
-}
-function leasePathFor(sockPath) {
-  return `${sockPath}.lease`;
-}
-function leasePath(host) {
-  return leasePathFor(socketPath(host));
-}
-function sessionStatePath(host) {
-  return import_node_path20.default.join(stateDir(host), "session-state.json");
-}
-function settingsHistoryPath(host) {
-  return import_node_path20.default.join(stateDir(host), "settings-history.json");
-}
-function daemonRegistryDir(host) {
-  const override = host.env.CC_CANDYBAR_DAEMON_REGISTRY_DIR;
-  if (override) return override;
-  const uid = os_default.userInfo().uid;
-  return import_node_path20.default.join("/tmp", `cc-candybar-${uid}`, "daemons");
-}
-var SPAWN_BACKOFF_FILE = "spawn.backoff";
-function spawnBackoffPath(host) {
-  return import_node_path20.default.join(stateDir(host), SPAWN_BACKOFF_FILE);
-}
-function watchProbeDir(host) {
-  return import_node_path20.default.join(stateDir(host), "watch-probe");
-}
-function logPath(host) {
-  return import_node_path20.default.join(stateDir(host), "daemon.log");
-}
-function daemonPaths(host) {
-  return {
-    socket: socketPath(host),
-    lease: leasePath(host),
-    state: stateDir(host),
-    registry: daemonRegistryDir(host),
-    log: logPath(host),
-    sessionState: sessionStatePath(host),
-    settingsHistory: settingsHistoryPath(host),
-    watchProbe: watchProbeDir(host),
-    spawnBackoff: spawnBackoffPath(host)
-  };
-}
-function locations(host) {
-  const { env: env2 } = host;
-  const xdgDefault = "/usr/local/share:/usr/share";
-  const defaultDataDirs = process_default.platform === "darwin" ? `${import_node_path20.default.join(xdgEnv(env2, "HOMEBREW_PREFIX") ?? "/opt/homebrew", "share")}:${xdgDefault}` : xdgDefault;
-  return {
-    home: host.home,
-    configHome: xdgEnv(env2, "XDG_CONFIG_HOME") ?? import_node_path20.default.join(host.home, ".config"),
-    dataHome: xdgEnv(env2, "XDG_DATA_HOME") ?? import_node_path20.default.join(host.home, ".local", "share"),
-    dataDirs: (xdgEnv(env2, "XDG_DATA_DIRS") ?? defaultDataDirs).split(":").filter((d) => d !== "")
-  };
-}
-
-// src/segments/pricing.ts
-init_globals();
-init_url();
-
-// src/utils/cache.ts
-init_globals();
-var import_node_path21 = __toESM(require_path_browserify(), 1);
-var CacheManager = class {
-  // [LAW:one-source-of-truth] Every method takes the cache's root directory
-  // (the host's `cacheDir`), so the layout under it is derived here alone.
-  static usageDir(root) {
-    return import_node_path21.default.join(root, "usage");
-  }
-  static locksDir(root) {
-    return import_node_path21.default.join(root, "locks");
-  }
-  static isLocked(root, name) {
-    const lockFile = import_node_path21.default.join(this.locksDir(root), name);
-    if (!fs_default.existsSync(lockFile)) {
-      return false;
-    }
-    try {
-      const lockContent = fs_default.readFileSync(lockFile, "utf-8");
-      const pid2 = parseInt(lockContent.trim(), 10);
-      if (isNaN(pid2)) {
-        debug(`Invalid PID in lock file ${name}, removing stale lock`);
-        fs_default.unlinkSync(lockFile);
-        return false;
-      }
-      try {
-        process_default.kill(pid2, 0);
-        return true;
-      } catch (error) {
-        if (error.code === "ESRCH") {
-          debug(`Removing stale lock file ${name} for dead process ${pid2}`);
-          fs_default.unlinkSync(lockFile);
-          return false;
-        }
-        debug(`Error checking process ${pid2} for lock ${name}:`, error);
-        return true;
-      }
-    } catch (error) {
-      debug(`Error reading lock file ${name}:`, error);
-      return true;
-    }
-  }
-  static async acquireLock(root, clock, name, timeout = 5e3) {
-    const RETRY_DELAY_MS = 50;
-    const FILE_CREATE_FLAG = "wx";
-    await this.ensureCacheDirectories(root);
-    const lockFile = import_node_path21.default.join(this.locksDir(root), name);
-    const startTime = clock.monotonic();
-    const lockContent = String(process_default.pid);
-    while (clock.monotonic() - startTime < timeout) {
-      try {
-        await fs_default.promises.writeFile(lockFile, lockContent, {
-          flag: FILE_CREATE_FLAG
-        });
-        debug(`Lock acquired for ${name}`);
-        return true;
-      } catch (error) {
-        if (error.code === "EEXIST") {
-          await sleep(clock, RETRY_DELAY_MS);
-        } else {
-          throw error;
-        }
-      }
-    }
-    debug(`Failed to acquire lock for ${name} within ${timeout}ms`);
-    return false;
-  }
-  static async releaseLock(root, name) {
-    const lockFile = import_node_path21.default.join(this.locksDir(root), name);
-    try {
-      await fs_default.promises.unlink(lockFile);
-      debug(`Lock released for ${name}`);
-    } catch (error) {
-      if (error.code !== "ENOENT") {
-        debug(`Error releasing lock for ${name}:`, error);
-      }
-    }
-  }
-  static async ensureCacheDirectories(root) {
-    try {
-      await Promise.all([
-        fs_default.promises.mkdir(root, { recursive: true }),
-        fs_default.promises.mkdir(this.usageDir(root), { recursive: true }),
-        fs_default.promises.mkdir(this.locksDir(root), { recursive: true })
-      ]);
-    } catch (error) {
-      debug("Failed to create cache directories:", error);
-    }
-  }
-  static createProjectHash(projectPath) {
-    return createHash("md5").update(projectPath).digest("hex").substring(0, 8);
-  }
-  static async getUsageCache(root, clock, cacheType, latestMtime) {
-    const MAX_RETRIES = 3;
-    const RETRY_DELAY_MS = 75;
-    const FILE_ENCODING = "utf-8";
-    await this.ensureCacheDirectories(root);
-    const cachePath = import_node_path21.default.join(this.usageDir(root), `${cacheType}.json`);
-    const lockName = `${cacheType}.usage.lock`;
-    for (let attempt4 = 0; attempt4 < MAX_RETRIES; attempt4++) {
-      const isCurrentlyLocked = this.isLocked(root, lockName);
-      if (isCurrentlyLocked) {
-        debug(`Cache for ${cacheType} is locked, waiting...`);
-        await sleep(clock, RETRY_DELAY_MS);
-        continue;
-      }
-      try {
-        const content = await fs_default.promises.readFile(cachePath, FILE_ENCODING);
-        const cached = JSON.parse(content);
-        const cacheIsValid = !latestMtime || cached.timestamp >= latestMtime;
-        if (cacheIsValid) {
-          debug(`[CACHE-HIT] ${cacheType} disk cache: found`);
-          return this.deserializeDates(cached.data);
-        } else {
-          debug(
-            `${cacheType} cache outdated: cache=${cached.timestamp}, latest=${latestMtime}`
-          );
-          return null;
-        }
-      } catch (error) {
-        if (error.code === "ENOENT") {
-          debug(`No shared ${cacheType} usage cache found`);
-          return null;
-        }
-        const attemptNumber = attempt4 + 1;
-        debug(
-          `Attempt ${attemptNumber} failed to read ${cacheType} cache: ${error.message}. Retrying...`
-        );
-        await sleep(clock, RETRY_DELAY_MS);
-      }
-    }
-    debug(`Failed to read ${cacheType} cache after ${MAX_RETRIES} attempts.`);
-    return null;
-  }
-  static deserializeDates(data) {
-    if (Array.isArray(data)) {
-      return data.map((entry) => ({
-        ...entry,
-        timestamp: new Date(entry.timestamp)
-      }));
-    }
-    return data;
-  }
-  static async setUsageCache(root, clock, cacheType, data, latestMtime) {
-    const lockName = `${cacheType}.usage.lock`;
-    const lockAcquired = await this.acquireLock(root, clock, lockName);
-    if (!lockAcquired) {
-      debug(`Could not acquire lock to set usage cache for ${cacheType}`);
-      return;
-    }
-    try {
-      await this.ensureCacheDirectories(root);
-      const cachePath = import_node_path21.default.join(this.usageDir(root), `${cacheType}.json`);
-      const cacheTimestamp = latestMtime || clock.now();
-      const cacheEntry = {
-        data,
-        timestamp: cacheTimestamp
-      };
-      const cacheContent = JSON.stringify(cacheEntry);
-      await fs_default.promises.writeFile(cachePath, cacheContent, "utf-8");
-      debug(`[CACHE-SET] ${cacheType} disk cache stored`);
-    } catch (error) {
-      debug(`Failed to save ${cacheType} usage cache:`, error);
-    } finally {
-      await this.releaseLock(root, lockName);
-    }
-  }
-};
-
-// src/segments/pricing.ts
-var OFFLINE_PRICING_DATA = {
-  "claude-haiku-4-5-20251001": {
-    name: "Claude Haiku 4.5",
-    input: 1,
-    output: 5,
-    cache_write_5m: 1.25,
-    cache_write_1h: 2,
-    cache_read: 0.1
-  },
-  "claude-haiku-4-5": {
-    name: "Claude Haiku 4.5",
-    input: 1,
-    output: 5,
-    cache_write_5m: 1.25,
-    cache_write_1h: 2,
-    cache_read: 0.1
-  },
-  "claude-opus-4-20250514": {
-    name: "Claude Opus 4",
-    input: 15,
-    output: 75,
-    cache_write_5m: 18.75,
-    cache_write_1h: 30,
-    cache_read: 1.5
-  },
-  "claude-opus-4-1": {
-    name: "Claude Opus 4.1",
-    input: 15,
-    output: 75,
-    cache_write_5m: 18.75,
-    cache_write_1h: 30,
-    cache_read: 1.5
-  },
-  "claude-opus-4-1-20250805": {
-    name: "Claude Opus 4.1",
-    input: 15,
-    output: 75,
-    cache_write_5m: 18.75,
-    cache_write_1h: 30,
-    cache_read: 1.5
-  },
-  "claude-sonnet-4-20250514": {
-    name: "Claude Sonnet 4",
-    input: 3,
-    output: 15,
-    cache_write_5m: 3.75,
-    cache_write_1h: 6,
-    cache_read: 0.3
-  },
-  "claude-4-opus-20250514": {
-    name: "Claude 4 Opus",
-    input: 15,
-    output: 75,
-    cache_write_5m: 18.75,
-    cache_write_1h: 30,
-    cache_read: 1.5
-  },
-  "claude-4-sonnet-20250514": {
-    name: "Claude 4 Sonnet",
-    input: 3,
-    output: 15,
-    cache_write_5m: 3.75,
-    cache_write_1h: 6,
-    cache_read: 0.3
-  },
-  "claude-sonnet-4-5": {
-    name: "Claude Sonnet 4.5",
-    input: 3,
-    output: 15,
-    cache_write_5m: 3.75,
-    cache_write_1h: 6,
-    cache_read: 0.3
-  },
-  "claude-sonnet-4-5-20250929": {
-    name: "Claude Sonnet 4.5",
-    input: 3,
-    output: 15,
-    cache_write_5m: 3.75,
-    cache_write_1h: 6,
-    cache_read: 0.3
-  },
-  "claude-opus-4-5": {
-    name: "Claude Opus 4.5",
-    input: 5,
-    output: 25,
-    cache_write_5m: 6.25,
-    cache_write_1h: 10,
-    cache_read: 0.5
-  },
-  "claude-opus-4-5-20251101": {
-    name: "Claude Opus 4.5",
-    input: 5,
-    output: 25,
-    cache_write_5m: 6.25,
-    cache_write_1h: 10,
-    cache_read: 0.5
-  },
-  "claude-opus-4-6": {
-    name: "Claude Opus 4.6",
-    input: 5,
-    output: 25,
-    cache_write_5m: 6.25,
-    cache_write_1h: 10,
-    cache_read: 0.5
-  },
-  "claude-opus-4-6-20260205": {
-    name: "Claude Opus 4.6",
-    input: 5,
-    output: 25,
-    cache_write_5m: 6.25,
-    cache_write_1h: 10,
-    cache_read: 0.5
-  },
-  "claude-sonnet-4-6": {
-    name: "Claude Sonnet 4.6",
-    input: 3,
-    output: 15,
-    cache_write_5m: 3.75,
-    cache_write_1h: 6,
-    cache_read: 0.3
-  }
-};
-var PricingService = class {
-  static executionCache = null;
-  static modelPricingCache = /* @__PURE__ */ new Map();
-  static GITHUB_PRICING_URL = "https://raw.githubusercontent.com/promptctl/cc-candybar/main/pricing.json";
-  static async loadDiskCache(cacheRoot, clock) {
-    const TTL_24H = 24 * 60 * 60 * 1e3;
-    const minValidTime = clock.now() - TTL_24H;
-    return await CacheManager.getUsageCache(
-      cacheRoot,
-      clock,
-      "pricing",
-      minValidTime
-    );
-  }
-  static async saveDiskCache(cacheRoot, clock, data) {
-    await CacheManager.setUsageCache(cacheRoot, clock, "pricing", data);
-  }
-  static async fetchPricingData() {
-    return new Promise((resolve) => {
-      const parsedUrl = new U(this.GITHUB_PRICING_URL);
-      const request2 = get2(
-        {
-          hostname: parsedUrl.hostname,
-          path: parsedUrl.pathname,
-          headers: {
-            "User-Agent": "cc-candybar",
-            "Cache-Control": "no-cache"
-          },
-          timeout: 5e3
-        },
-        (response) => {
-          if (response.statusCode !== 200) {
-            debug(`HTTP ${response.statusCode}: ${response.statusMessage}`);
-            resolve(null);
-            return;
-          }
-          let data = "";
-          let size = 0;
-          const MAX_SIZE = 1024 * 1024;
-          response.setEncoding("utf8");
-          response.on("data", (chunk3) => {
-            size += import_buffer.Buffer.byteLength(chunk3);
-            if (size > MAX_SIZE) {
-              debug("Response too large");
-              request2.destroy();
-              resolve(null);
-              return;
-            }
-            data += chunk3;
-          });
-          response.on("end", () => {
-            try {
-              const json2 = JSON.parse(data);
-              const dataObj = json2;
-              const meta = dataObj._meta;
-              const pricingData = {};
-              for (const [key, value] of Object.entries(dataObj)) {
-                if (key !== "_meta") {
-                  pricingData[key] = value;
-                }
-              }
-              if (this.validatePricingData(pricingData)) {
-                debug(
-                  `Fetched fresh pricing from GitHub for ${Object.keys(pricingData).length} models`
-                );
-                debug(`Pricing last updated: ${meta?.updated || "unknown"}`);
-                resolve(pricingData);
-              } else {
-                debug("Invalid pricing data structure");
-                resolve(null);
-              }
-            } catch (error) {
-              debug("Failed to parse JSON:", error);
-              resolve(null);
-            }
-          });
-          response.on("error", (error) => {
-            debug("Response error:", error);
-            resolve(null);
-          });
-        }
-      );
-      request2.on("error", (error) => {
-        debug("Request error:", error);
-        resolve(null);
-      });
-      request2.on("timeout", () => {
-        debug("Request timeout");
-        request2.destroy();
-        resolve(null);
-      });
-      request2.end();
-    });
-  }
-  static async getCurrentPricing(cacheRoot, clock) {
-    if (this.executionCache !== null) {
-      debug(
-        `[CACHE-HIT] Pricing execution cache: ${Object.keys(this.executionCache).length} models`
-      );
-      return this.executionCache;
-    }
-    const diskCached = await this.loadDiskCache(cacheRoot, clock);
-    if (diskCached) {
-      debug(
-        `[CACHE-HIT] Pricing disk cache: ${Object.keys(diskCached).length} models`
-      );
-      this.executionCache = diskCached;
-      debug(
-        `[CACHE-SET] Pricing execution cache stored: ${Object.keys(diskCached).length} models`
-      );
-      return diskCached;
-    }
-    const freshData = await this.fetchPricingData();
-    if (freshData) {
-      await this.saveDiskCache(cacheRoot, clock, freshData);
-      debug(
-        `[CACHE-SET] Pricing disk cache stored: ${Object.keys(freshData).length} models`
-      );
-      this.executionCache = freshData;
-      debug(
-        `[CACHE-SET] Pricing execution cache stored: ${Object.keys(freshData).length} models`
-      );
-      return freshData;
-    }
-    debug(
-      `[CACHE-FALLBACK] Using offline pricing data: ${Object.keys(OFFLINE_PRICING_DATA).length} models`
-    );
-    this.executionCache = OFFLINE_PRICING_DATA;
-    debug(
-      `[CACHE-SET] Pricing execution cache stored: ${Object.keys(OFFLINE_PRICING_DATA).length} models`
-    );
-    return OFFLINE_PRICING_DATA;
-  }
-  static validatePricingData(data) {
-    if (!data || typeof data !== "object") return false;
-    for (const [, value] of Object.entries(data)) {
-      if (!value || typeof value !== "object") return false;
-      const pricing = value;
-      if (typeof pricing.input !== "number" || typeof pricing.output !== "number" || typeof pricing.cache_read !== "number") {
-        return false;
-      }
-    }
-    return true;
-  }
-  static async getModelPricing(modelId, cacheRoot, clock) {
-    if (this.modelPricingCache.has(modelId)) {
-      debug(`[CACHE-HIT] Model pricing cache: ${modelId}`);
-      return this.modelPricingCache.get(modelId);
-    }
-    const allPricing = await this.getCurrentPricing(cacheRoot, clock);
-    let pricing;
-    if (allPricing[modelId]) {
-      pricing = allPricing[modelId];
-    } else {
-      pricing = this.fuzzyMatchModel(modelId, allPricing);
-    }
-    this.modelPricingCache.set(modelId, pricing);
-    debug(`[CACHE-SET] Model pricing cache: ${modelId}`);
-    return pricing;
-  }
-  static fuzzyMatchModel(modelId, allPricing) {
-    const lowerModelId = modelId.toLowerCase();
-    for (const [key, pricing] of Object.entries(allPricing)) {
-      if (key.toLowerCase() === lowerModelId) {
-        return pricing;
-      }
-    }
-    const patterns = [
-      {
-        pattern: ["opus-4-6", "claude-opus-4-6"],
-        fallback: "claude-opus-4-6-20260205"
-      },
-      {
-        pattern: ["opus-4-5", "claude-opus-4-5"],
-        fallback: "claude-opus-4-5-20251101"
-      },
-      {
-        pattern: ["opus-4-1", "claude-opus-4-1"],
-        fallback: "claude-opus-4-1-20250805"
-      },
-      {
-        pattern: ["opus-4", "claude-opus-4"],
-        fallback: "claude-opus-4-20250514"
-      },
-      {
-        pattern: ["sonnet-4-6", "sonnet-4.6", "claude-sonnet-4-6"],
-        fallback: "claude-sonnet-4-6"
-      },
-      {
-        pattern: ["sonnet-4.5", "4-5-sonnet", "sonnet-4-5"],
-        fallback: "claude-sonnet-4-5-20250929"
-      },
-      {
-        pattern: ["sonnet-4", "claude-sonnet-4"],
-        fallback: "claude-sonnet-4-20250514"
-      },
-      {
-        pattern: ["haiku-4.5", "4-5-haiku", "haiku-4-5"],
-        fallback: "claude-haiku-4-5-20251001"
-      },
-      { pattern: ["haiku"], fallback: "claude-haiku-4-5-20251001" },
-      { pattern: ["opus"], fallback: "claude-opus-4-20250514" },
-      { pattern: ["sonnet"], fallback: "claude-sonnet-4-5-20250929" }
-    ];
-    for (const { pattern: pattern2, fallback } of patterns) {
-      if (pattern2.some((p2) => lowerModelId.includes(p2))) {
-        if (allPricing[fallback]) {
-          return allPricing[fallback];
-        }
-      }
-    }
-    return allPricing["claude-sonnet-4-5-20250929"] || {
-      name: `${modelId} (Unknown Model)`,
-      input: 3,
-      cache_write_5m: 3.75,
-      cache_write_1h: 6,
-      cache_read: 0.3,
-      output: 15
-    };
-  }
-  static async calculateCostForEntry(entry, cacheRoot, clock) {
-    const usage = entry.message?.usage;
-    if (!usage) {
-      return 0;
-    }
-    const modelId = this.extractModelId(entry);
-    const pricing = await this.getModelPricing(modelId, cacheRoot, clock);
-    const inputTokens = usage.input_tokens || 0;
-    const outputTokens = usage.output_tokens || 0;
-    const cacheCreationTokens = usage.cache_creation_input_tokens || 0;
-    const cacheReadTokens = usage.cache_read_input_tokens || 0;
-    const inputCost = inputTokens / 1e6 * pricing.input;
-    const outputCost = outputTokens / 1e6 * pricing.output;
-    const cacheReadCost = cacheReadTokens / 1e6 * pricing.cache_read;
-    const cacheCreationCost = cacheCreationTokens / 1e6 * pricing.cache_write_5m;
-    return inputCost + outputCost + cacheCreationCost + cacheReadCost;
-  }
-  static extractModelId(entry) {
-    if (entry.model && typeof entry.model === "string") {
-      return entry.model;
-    }
-    const message = entry.message;
-    if (message?.model) {
-      const model = message.model;
-      if (typeof model === "string") {
-        return model;
-      }
-      const modelObj = model;
-      return (typeof modelObj?.id === "string" ? modelObj.id : null) || "claude-sonnet-4-5-20250929";
-    }
-    if (entry.model_id && typeof entry.model_id === "string") {
-      return entry.model_id;
-    }
-    return "claude-sonnet-4-5-20250929";
-  }
-};
-
-// src/utils/claude.ts
-init_globals();
-var import_node_path22 = __toESM(require_path_browserify(), 1);
-
-// src/utils/transcript-activity.ts
-init_globals();
-var COMMAND_NAME = /<command-name>\s*([^<\s][^<]*?)\s*<\/command-name>/;
-function slashCommand(text4) {
-  if (typeof text4 !== "string") return void 0;
-  return COMMAND_NAME.exec(text4)?.[1];
-}
-function todoItems(input) {
-  const todos2 = input?.todos;
-  if (!Array.isArray(todos2)) return void 0;
-  const items = [];
-  for (const raw of todos2) {
-    if (typeof raw !== "object" || raw === null) continue;
-    const { content, activeForm, status } = raw;
-    const active2 = status === "in_progress";
-    const text4 = active2 && typeof activeForm === "string" ? activeForm : content;
-    if (typeof text4 !== "string") continue;
-    items.push({ text: text4, active: active2, done: status === "completed" });
-  }
-  return items;
-}
-function turnText(content) {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  const block = content.find(
-    (b) => typeof b === "object" && b !== null && b.type === "text" && typeof b.text === "string"
-  );
-  return block?.text ?? "";
-}
-function entryActivity(parsed2, userEntry) {
-  const msg = parsed2.message;
-  const content = msg?.content;
-  const started2 = [];
-  const finished = [];
-  let todos2;
-  if (Array.isArray(content)) {
-    for (const block of content) {
-      if (typeof block !== "object" || block === null) continue;
-      const b = block;
-      switch (b.type) {
-        case "tool_use": {
-          const { id: id2, name } = b;
-          if (typeof id2 !== "string" || typeof name !== "string") break;
-          started2.push({ id: id2, name });
-          if (name === "TodoWrite") todos2 = todoItems(b.input) ?? todos2;
-          break;
-        }
-        case "tool_result": {
-          const id2 = b.tool_use_id;
-          if (typeof id2 === "string") finished.push(id2);
-          break;
-        }
-        default:
-          break;
-      }
-    }
-  }
-  const command = userEntry === "prompt" ? slashCommand(turnText(content)) : void 0;
-  if (started2.length === 0 && finished.length === 0 && todos2 === void 0 && command === void 0) {
-    return void 0;
-  }
-  return {
-    ...started2.length > 0 && { started: started2 },
-    ...finished.length > 0 && { finished },
-    ...todos2 !== void 0 && { todos: todos2 },
-    ...command !== void 0 && { command }
-  };
-}
-
-// src/utils/claude.ts
-function getClaudePaths(detected, homeDir) {
-  if (detected !== void 0) return [detected];
-  return [(0, import_node_path22.join)(homeDir, ".config", "claude"), (0, import_node_path22.join)(homeDir, ".claude")].filter(
-    (dir) => existsSync(dir)
-  );
-}
-async function findProjectPaths(claudePaths) {
-  const projectPaths = [];
-  for (const claudePath of claudePaths) {
-    const projectsDir = (0, import_node_path22.join)(claudePath, "projects");
-    const entries = await unlessGone(
-      readdir2(projectsDir, { withFileTypes: true })
-    );
-    for (const entry of entries ?? []) {
-      if (entry.isDirectory()) projectPaths.push((0, import_node_path22.join)(projectsDir, entry.name));
-    }
-  }
-  return projectPaths;
-}
-async function unlessGone(read2) {
-  try {
-    return await read2;
-  } catch (e) {
-    if (e.code === "ENOENT") return void 0;
-    throw e;
-  }
-}
-async function findAgentTranscripts(sessionId2, projectPath, verified) {
-  const paths2 = [];
-  let longLines = [];
-  const subagentsDir = (0, import_node_path22.join)(projectPath, sessionId2, "subagents");
-  try {
-    const files = await readdir2(subagentsDir);
-    const agentFileNames = files.filter(
-      (f) => f.startsWith("agent-") && f.endsWith(".jsonl")
-    );
-    for (const fileName2 of agentFileNames) {
-      const filePath2 = (0, import_node_path22.join)(subagentsDir, fileName2);
-      if (verified?.has(filePath2)) {
-        paths2.push(filePath2);
-        continue;
-      }
-      const read2 = await readAppended(filePath2, void 0, void 0);
-      if (read2.kind !== "ok") {
-        debug(`Failed to check agent file ${filePath2}`);
-        continue;
-      }
-      longLines = longLinesWith(longLines, filePath2, read2.value);
-      const line = jsonLine(
-        decodeLines(
-          read2.value,
-          (b) => b.subarray(0, Math.max(0, b.indexOf(10))).toString("utf-8")
-        )
-      );
-      if (line.kind === "object" && line.value.sessionId === sessionId2) {
-        paths2.push(filePath2);
-      }
-    }
-  } catch (error) {
-    debug(`Failed to read subagents directory ${subagentsDir}:`, error);
-  }
-  return { paths: paths2, longLines };
-}
-function userEntryOf(parsed2) {
-  const msg = parsed2.message;
-  const messageType = parsed2.type || msg?.role || msg?.type;
-  if (messageType !== "user") return void 0;
-  if (firstBlockType(msg) === "tool_result") return "tool-result";
-  const origin = typeof parsed2.origin === "object" && parsed2.origin !== null ? parsed2.origin.kind : void 0;
-  if (origin !== void 0 && origin !== "human") return "turn";
-  const text4 = turnText(msg?.content).trimStart();
-  if (text4.startsWith("[Request interrupted by user")) return "interrupt";
-  return parsed2.isMeta === true || parsed2.isCompactSummary === true || CLAUDE_CODE_TEXT.test(text4) ? "claude-code" : "prompt";
-}
-var CLAUDE_CODE_TEXT = /^<(?:command-name|local-command-std(?:out|err)|bash-(?:input|stdout|stderr))>/;
-function firstBlockType(msg) {
-  const content = msg?.content;
-  return Array.isArray(content) && typeof content[0] === "object" && content[0] ? content[0].type : void 0;
-}
-function makeEntry(parsed2) {
-  if (!parsed2.timestamp) return null;
-  const msg = parsed2.message;
-  const usage = msg?.usage;
-  const userEntry = userEntryOf(parsed2);
-  return {
-    timestamp: new Date(parsed2.timestamp),
-    type: typeof parsed2.type === "string" ? parsed2.type : void 0,
-    message: msg ? {
-      id: typeof msg.id === "string" ? msg.id : void 0,
-      model: typeof msg.model === "string" ? msg.model : void 0,
-      usage,
-      role: typeof msg.role === "string" ? msg.role : void 0,
-      type: typeof msg.type === "string" ? msg.type : void 0
-    } : void 0,
-    costUSD: typeof parsed2.costUSD === "number" ? parsed2.costUSD : void 0,
-    isSidechain: parsed2.isSidechain === true,
-    userEntry,
-    activity: entryActivity(parsed2, userEntry),
-    raw: {
-      model: typeof parsed2.model === "string" ? parsed2.model : void 0,
-      message: msg ? {
-        id: typeof msg.id === "string" ? msg.id : void 0,
-        model: typeof msg.model === "string" ? msg.model : void 0,
-        usage
-      } : void 0,
-      requestId: typeof parsed2.requestId === "string" ? parsed2.requestId : void 0
-    }
-  };
-}
-function jsonLine(line) {
-  const trimmed = line.trim();
-  if (!trimmed) return { kind: "blank" };
-  try {
-    const value = JSON.parse(trimmed);
-    return typeof value === "object" && value !== null && !Array.isArray(value) ? { kind: "object", value } : { kind: "unparsed", reason: "not a JSON object" };
-  } catch (parseError) {
-    return { kind: "unparsed", reason: String(parseError) };
-  }
-}
-function entryOf3(line) {
-  const read2 = jsonLine(line);
-  if (read2.kind === "unparsed") {
-    debug(`Failed to parse JSONL line: ${read2.reason}`);
-    return null;
-  }
-  if (read2.kind === "blank") return null;
-  try {
-    return makeEntry(read2.value);
-  } catch (projectionError) {
-    debug(`Failed to project JSONL line: ${projectionError}`);
-    return null;
-  }
-}
-function parseJsonlLines(text4) {
-  const entries = [];
-  for (const line of text4.split("\n")) {
-    const entry = entryOf3(line);
-    if (entry) entries.push(entry);
-  }
-  return entries;
-}
-function longLinesWith(longLines, path42, read2) {
-  return read2.longLine === 0 ? longLines : [...longLines, { path: path42, offset: read2.start, bytes: read2.longLine }];
-}
-function longLineLog(longLines) {
-  return longLines.map(
-    (l) => `transcript long line path=${JSON.stringify(l.path)} offset=${l.offset} bytes=${l.bytes}`
-  );
-}
-async function foldAppended(filePath2, prior, empty2, step4) {
-  let longLines = [];
-  let cursor = prior?.cursor;
-  let value = prior?.value ?? empty2;
-  let end;
-  for (; ; ) {
-    const read2 = await readAppended(
-      filePath2,
-      cursor === void 0 ? void 0 : { offset: cursor.offset, ino: cursor.ino },
-      end?.size
-    );
-    if (read2.kind !== "ok") return read2;
-    const window2 = read2.value;
-    if (window2.reset) value = empty2;
-    longLines = longLinesWith(window2.reset ? [] : longLines, filePath2, window2);
-    if (end === void 0 || window2.reset) {
-      end = { size: window2.size, stamp: window2.stamp };
-    }
-    const next = window2.start + window2.lines.length;
-    value = await step4(
-      value,
-      decodeLines(window2, (b) => parseJsonlLines(b.toString("utf-8")))
-    );
-    cursor = {
-      offset: next,
-      stamp: end.stamp,
-      ino: window2.ino
-    };
-    if (window2.atEnd) return ok({ folded: { cursor, value }, longLines });
-  }
-}
-
-// src/utils/single-flight.ts
-init_globals();
-var SingleFlight = class {
-  inflight = /* @__PURE__ */ new Map();
-  run(key, factory) {
-    return this.inflight.get(key) ?? this.start(key, factory);
-  }
-  start(key, factory) {
-    const promise = factory();
-    this.inflight.set(key, promise);
-    const deregister = () => {
-      if (this.inflight.get(key) === promise) this.inflight.delete(key);
-    };
-    promise.then(deregister, deregister);
-    return promise;
-  }
-  // Number of computations currently in flight — a read-only observability
-  // surface for tests asserting the coalescing contract (one in-flight entry
-  // per key). Never read as control flow.
-  get size() {
-    return this.inflight.size;
-  }
-};
-
-// src/utils/keyed-source.ts
-init_globals();
-
-// src/utils/period.ts
-init_globals();
-function periodOf(every, outcome) {
-  return outcome.kind === "failed" ? every.failedMs : every.okMs;
-}
-function backedOffMs(every, failures, ceilingMs) {
-  return failures === 0 ? every.okMs : Math.min(every.failedMs * 2 ** (failures - 1), ceilingMs);
-}
-var Period = class {
-  constructor(tick, clock) {
-    this.tick = tick;
-    this.clock = clock;
-  }
-  tick;
-  clock;
-  stop = null;
-  state = "released";
-  last = null;
-  // A read landed at the monotonic reading `at` (now, unless the owner is resuming an answer it
-  // kept from earlier). `periodMs` is chosen by the caller from the read's
-  // outcome (a failed PR lookup is retried sooner than a found one).
-  landed(periodMs, at = this.clock.monotonic()) {
-    this.last = { at, periodMs };
-    this.schedule();
-  }
-  hold(held) {
-    if (this.state === "disposed") return;
-    const next = held ? "held" : "released";
-    if (next === this.state) return;
-    this.state = next;
-    this.schedule();
-  }
-  dispose() {
-    this.state = "disposed";
-    this.cancel();
-  }
-  schedule() {
-    this.cancel();
-    if (this.state !== "held" || this.last === null) return;
-    const wait = Math.max(
-      0,
-      this.last.at + this.last.periodMs - this.clock.monotonic()
-    );
-    this.stop = this.clock.after(
-      wait,
-      () => {
-        this.stop = null;
-        this.tick();
-      },
-      { unref: true }
-    );
-  }
-  cancel() {
-    this.stop?.();
-    this.stop = null;
-  }
-};
-
-// src/utils/keyed-source.ts
-var KeyedSource = class {
-  constructor(spec) {
-    this.spec = spec;
-    this.refreshes = spec.ledger.declare({
-      name: spec.name,
-      scope: spec.scope,
-      // [LAW:types-are-the-program] exception: a source with no period
-      // declares no tick, but its handle is typed for every keyed trigger;
-      // only the absent period keeps it from recording one.
-      refresh: spec.every === null ? ["first", "change", "supersede"] : ["first", "period", "change", "supersede"]
-    });
-  }
-  spec;
-  entries = /* @__PURE__ */ new Map();
-  refreshes;
-  closed = false;
-  // [LAW:single-enforcer] The one way into an entry: `holds` takes it — the
-  // home holds it until a declaration of the home's takes it no more, or the
-  // home is disposed, which keeps the entry for its next hold — and the lane
-  // reads it as it stands, never awaited and taking nothing. A key never read
-  // is created pending and read once, its first refresh.
-  //
-  // [LAW:no-silent-failure] The owner logs its own failures — each refresh's
-  // by that refresh — so its caller logs none. A declaration that THROWS is a
-  // bug none of those saw, reported by the view's declaration (declareLanes).
-  declare(holds2, input) {
-    if (this.closed)
-      return settledLane(failed(`${this.spec.name} closed`, "read"));
-    const key = this.spec.keyOf(input);
-    const entry = this.touched(key) ?? this.firstRead(this.created(key, input));
-    holds2.take(`${this.spec.name}:${key}`, () => this.hold(entry));
-    return { current: () => currentOf(entry) };
-  }
-  // [LAW:one-source-of-truth] The one supersede rule (SOURCES-AND-FRAMES.md):
-  // the daemon itself is changing what this key reads (a click's move). The
-  // value is pending (`superseded`) and the read in flight is abandoned, so no
-  // draw after the click shows the value from before it. Every trigger of the
-  // key is held back until every supersede of it has resumed, so no read
-  // during the move stores the world from before it; the last resume starts
-  // one fresh read. A key never read is created for it, and its first read is
-  // that resume's.
-  supersede(input) {
-    if (this.closed) return () => {
-    };
-    const key = this.spec.keyOf(input);
-    const entry = this.touched(key) ?? this.created(key, input);
-    entry.superseding++;
-    renew(entry, "superseded");
-    entry.flight = null;
-    entry.changed = false;
-    this.evict();
-    let resumed = false;
-    return () => {
-      if (resumed) return;
-      resumed = true;
-      entry.superseding--;
-      if (this.entries.get(entry.key) === entry)
-        this.refresh(entry, "supersede");
-    };
-  }
-  // The world changed under every held entry `affected` names (a watched file
-  // was written): each is read again, after the read in flight when one is
-  // out. An entry nobody holds is read when a hold returns to it.
-  changed(affected) {
-    for (const entry of this.entries.values()) {
-      if (entry.holders > 0 && affected(entry.input)) {
-        this.refresh(entry, "change");
-      }
-    }
-  }
-  // Whether some home holds an entry `match` names now.
-  isHeld(match) {
-    for (const entry of this.entries.values()) {
-      if (entry.holders > 0 && match(entry.input)) return true;
-    }
-    return false;
-  }
-  stats() {
-    let held = 0;
-    for (const entry of this.entries.values()) if (entry.holders > 0) held++;
-    const { refreshes, failures, lastMs } = this.refreshes.record();
-    return { entries: this.entries.size, held, refreshes, failures, lastMs };
-  }
-  // Ends every entry's period: a held entry's period re-arms on every landing,
-  // so an owner that is not closed keeps its timers for good.
-  close() {
-    this.closed = true;
-    for (const entry of [...this.entries.values()]) this.drop(entry);
-  }
-  // LRU touch: re-inserting moves the entry to the newest end.
-  touched(key) {
-    const entry = this.entries.get(key);
-    if (entry === void 0) return void 0;
-    this.entries.delete(key);
-    this.entries.set(key, entry);
-    return entry;
-  }
-  // In place before any read, so a read's answer finds its entry stored.
-  created(key, input) {
-    const entry = {
-      key,
-      input,
-      reading: unread(),
-      holders: 0,
-      flight: null,
-      changed: false,
-      superseding: 0,
-      revisit: revisitOf(this.spec.every, this.spec.clock, {
-        period: () => this.refresh(entry, "period"),
-        holdReturned: () => this.refresh(entry, "change")
-      })
-    };
-    this.entries.set(key, entry);
-    return entry;
-  }
-  firstRead(entry) {
-    this.refresh(entry, "first");
-    return entry;
-  }
-  refresh(entry, by) {
-    if (entry.superseding > 0) return;
-    if (entry.flight !== null) {
-      entry.changed ||= by === "change";
-      return;
-    }
-    const flight = {};
-    entry.flight = flight;
-    const startedAt = this.spec.clock.monotonic();
-    void attempt3(() => this.spec.read(entry.input)).then((outcome) => {
-      const stored = entry.flight === flight;
-      try {
-        this.refreshes.recorded(
-          `${this.spec.fields(entry.input)} stored=${stored ? "Y" : "N"}`,
-          by,
-          outcome,
-          elapsedMs(this.spec.clock, startedAt)
-        );
-      } finally {
-        if (stored) this.store(entry, outcome);
-      }
-    }).catch((e) => {
-      this.spec.logger(
-        "error",
-        `${this.spec.name} refresh threw (${this.spec.fields(entry.input)}): ${String(e)}`
-      );
-    });
-  }
-  store(entry, outcome) {
-    entry.flight = null;
-    try {
-      settle(entry, outcome);
-    } finally {
-      entry.revisit.landed(outcome);
-      if (entry.changed) {
-        entry.changed = false;
-        this.refresh(entry, "change");
-      }
-    }
-  }
-  hold(entry) {
-    entry.holders++;
-    entry.revisit.hold(true);
-    this.evict();
-    return () => {
-      entry.holders--;
-      entry.revisit.hold(entry.holders > 0);
-    };
-  }
-  // A held entry is never evicted, so held entries are bounded by their
-  // holders (the render cache's budget).
-  // [LAW:single-enforcer] Run by every claim that can add an entry (a hold, a
-  // supersede). An entry mid-supersede is kept like a held one: dropped, a
-  // hold returning during the move would read the world from before it.
-  evict() {
-    for (const entry of [...this.entries.values()]) {
-      if (this.entries.size <= this.spec.maxEntries) return;
-      if (entry.holders === 0 && entry.superseding === 0) this.drop(entry);
-    }
-  }
-  drop(entry) {
-    this.entries.delete(entry.key);
-    entry.flight = null;
-    entry.revisit.dispose();
-    answerPending(entry, failed(`${this.spec.name} entry dropped`, "read"));
-  }
-};
-function revisitOf(every, clock, read2) {
-  if (every === null) return new HoldReturn(read2.holdReturned);
-  const period = new Period(read2.period, clock);
-  return {
-    landed: (outcome) => period.landed(periodOf(every, outcome)),
-    hold: (held) => period.hold(held),
-    dispose: () => period.dispose()
-  };
-}
-var HoldReturn = class {
-  constructor(reread) {
-    this.reread = reread;
-  }
-  reread;
-  state = "released";
-  answered = false;
-  landed() {
-    this.answered = true;
-  }
-  hold(held) {
-    if (this.state === "disposed") return;
-    const returned2 = held && this.state === "released" && this.answered;
-    this.state = held ? "held" : "released";
-    if (returned2) this.reread();
-  }
-  dispose() {
-    this.state = "disposed";
-  }
-};
-function attempt3(read2) {
-  const threw2 = (e) => failed(`read threw: ${String(e)}`, "read");
-  try {
-    return read2().catch(threw2);
-  } catch (e) {
-    return Promise.resolve(threw2(e));
-  }
-}
-
-// src/daemon/cache/session-usage-store.ts
-var SPEED_RING_CAPACITY = 64;
-function speedSampleOf(breakdown, atMs) {
-  const input = breakdown ? breakdown.input + breakdown.cacheCreation + breakdown.cacheRead : 0;
-  const output = breakdown ? breakdown.output : 0;
-  return { input, output, total: input + output, atMs };
-}
-var DEFAULT_STALE_AGE_MS = 24 * 60 * 60 * 1e3;
-var DEFAULT_SWEEP_INTERVAL_MS = 5 * 60 * 1e3;
-var DEFAULT_RESCAN = { okMs: 60 * 1e3, failedMs: 10 * 1e3 };
-var MAX_UNHELD_SCANS = 8;
-var SEED_CONCURRENCY = 8;
 var EMPTY_DAY = {
   cost: 0,
   input: 0,
@@ -67575,63 +66367,6 @@ var EMPTY_DAY = {
   cacheCreation: 0,
   cacheRead: 0
 };
-var EMPTY_SESSION_INFO = {
-  cost: null,
-  calculatedCost: null,
-  officialCost: null,
-  tokens: null,
-  tokenBreakdown: null
-};
-function dayKey(date2) {
-  const year = date2.getFullYear();
-  const month = String(date2.getMonth() + 1).padStart(2, "0");
-  const day = String(date2.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-function seedCutoffMs(now2) {
-  const d = new Date(now2);
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() - 1);
-  return d.getTime();
-}
-function emptyBreakdown() {
-  return { input: 0, output: 0, cacheCreation: 0, cacheRead: 0 };
-}
-var EMPTY_FILE_FOLD = {
-  entries: 0,
-  cost: 0,
-  breakdown: emptyBreakdown(),
-  days: /* @__PURE__ */ new Map()
-};
-async function foldFile(state, entries, cacheRoot, clock) {
-  const keep2 = dayKey(new Date(seedCutoffMs(clock.now())));
-  let count = state.entries;
-  let cost = state.cost;
-  const breakdown = { ...state.breakdown };
-  const days = /* @__PURE__ */ new Map();
-  for (const [k, v] of state.days) if (k >= keep2) days.set(k, { ...v });
-  for (const entry of entries) {
-    const u = entry.message?.usage;
-    if (!u) continue;
-    count++;
-    const priced = entry.costUSD ?? await PricingService.calculateCostForEntry(entry.raw, cacheRoot, clock);
-    cost += priced;
-    breakdown.input += u.input_tokens || 0;
-    breakdown.output += u.output_tokens || 0;
-    breakdown.cacheCreation += u.cache_creation_input_tokens || 0;
-    breakdown.cacheRead += u.cache_read_input_tokens || 0;
-    const key = dayKey(new Date(entry.timestamp));
-    if (key < keep2) continue;
-    const d = days.get(key) ?? { ...EMPTY_DAY };
-    d.cost += priced;
-    d.input += u.input_tokens || 0;
-    d.output += u.output_tokens || 0;
-    d.cacheCreation += u.cache_creation_input_tokens || 0;
-    d.cacheRead += u.cache_read_input_tokens || 0;
-    days.set(key, d);
-  }
-  return { entries: count, cost, breakdown, days };
-}
 function addDay(into, d) {
   into.cost += d.cost;
   into.input += d.input;
@@ -67639,48 +66374,20 @@ function addDay(into, d) {
   into.cacheCreation += d.cacheCreation;
   into.cacheRead += d.cacheRead;
 }
-function mergeFolds(files) {
-  let count = 0;
-  let cost = 0;
-  const bd = emptyBreakdown();
-  const days = /* @__PURE__ */ new Map();
-  for (const { value: f } of files.values()) {
-    count += f.entries;
-    cost += f.cost;
-    bd.input += f.breakdown.input;
-    bd.output += f.breakdown.output;
-    bd.cacheCreation += f.breakdown.cacheCreation;
-    bd.cacheRead += f.breakdown.cacheRead;
-    for (const [k, v] of f.days) {
-      const d = days.get(k) ?? { ...EMPTY_DAY };
-      addDay(d, v);
-      days.set(k, d);
-    }
-  }
-  if (count === 0) return { sessionInfo: EMPTY_SESSION_INFO, days };
-  const tokens = bd.input + bd.output + bd.cacheCreation + bd.cacheRead;
-  return {
-    sessionInfo: {
-      cost,
-      calculatedCost: cost,
-      officialCost: null,
-      tokens,
-      tokenBreakdown: bd
-    },
-    days
-  };
-}
-function under(path42, roots) {
-  return path42 !== void 0 && roots.some((root) => path42.startsWith(root));
+function dayKey(date2) {
+  const year = date2.getFullYear();
+  const month = String(date2.getMonth() + 1).padStart(2, "0");
+  const day = String(date2.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 function projectToday(facts, at) {
   const today = dayKey(dateOf(at));
-  const total = { ...EMPTY_DAY };
   const inSet = facts.sums[today];
-  if (inSet !== void 0) addDay(total, inSet);
-  const own2 = facts.session === null || under(facts.session.transcriptPath ?? void 0, facts.roots) ? void 0 : facts.session.days[today];
-  if (own2 !== void 0) addDay(total, own2);
+  const own2 = facts.own[today];
   if (inSet === void 0 && own2 === void 0) return ABSENT2;
+  const total = { ...EMPTY_DAY };
+  if (inSet !== void 0) addDay(total, inSet);
+  if (own2 !== void 0) addDay(total, own2);
   return ok({
     cost: total.cost,
     tokens: total.input + total.output + total.cacheCreation + total.cacheRead,
@@ -67693,543 +66400,6 @@ function projectToday(facts, at) {
     date: today
   });
 }
-function daySumsOver(slots, roots) {
-  const sums = /* @__PURE__ */ new Map();
-  for (const { record: record2 } of slots) {
-    if (record2 === void 0 || !under(record2.transcriptPath, roots)) continue;
-    for (const [day, d] of record2.days) {
-      const sum = sums.get(day) ?? { ...EMPTY_DAY };
-      addDay(sum, d);
-      sums.set(day, sum);
-    }
-  }
-  return Object.fromEntries(sums);
-}
-async function mapPool(items, limit, fn) {
-  let cursor = 0;
-  const worker = async () => {
-    while (cursor < items.length) {
-      const item = items[cursor++];
-      await fn(item);
-    }
-  };
-  const width = Math.min(limit, items.length);
-  await Promise.all(Array.from({ length: width }, worker));
-}
-function usageOver(base, hookData2) {
-  const officialCost = hookData2?.cost?.total_cost_usd ?? null;
-  return {
-    session: { ...base, cost: officialCost ?? base.cost, officialCost }
-  };
-}
-function answer(box, value) {
-  runInAction(() => box.set(value));
-}
-var SessionUsageStore = class {
-  // No count cap: `today` is a fold over every record, so a cap smaller than
-  // the day's sessions would drop work from it unseen. A record is a few
-  // scalars per file and retained day, and `sweepStale` bounds the map to the
-  // sessions seen within `staleAgeMs` plus those holding work done today.
-  // Observable, shallowly: a slot replaced is the change the day sums read.
-  sessions = observable.map(void 0, {
-    deep: false
-  });
-  // [LAW:one-source-of-truth] Coalesces concurrent MISSES for the same
-  // (session, observed stamp) onto one parse; cleared on settle (a coalescer,
-  // not a cache — the records map IS the cache).
-  flight = new SingleFlight();
-  // [LAW:single-enforcer] The one owner of when a directory set is scanned:
-  // its first read is the seed, and its period, which runs only while a home
-  // holds the set, is the rescan. Keyed by the directories themselves, so a
-  // default that resolves to one directory shares a scan with that directory
-  // named outright. Its answer is `today`'s, a failed scan included.
-  scans;
-  // Each directory set's day sums, derived from the records, kept for the
-  // store's life: there are as few as the Claude Code directories rendered
-  // from, and each reads only this store's own map.
-  daySets = /* @__PURE__ */ new Map();
-  // [LAW:no-ambient-temporal-coupling] Explicit owner of observe/commit ordering
-  // for the speed sample. Concurrent renders observing the SAME transcript state
-  // (key = `${sessionId}:${mtime}`) share ONE observation and commit the baseline
-  // exactly once — so they return the same prev+cur and render identical,
-  // deterministic throughput instead of the second clobbering the first.
-  speedFlight = new SingleFlight();
-  // [LAW:single-enforcer] A request's refresh of a session is one unit of
-  // work per (session, observed stamp): the lanes of one request that read
-  // the record (session, speed, today) share it, so it records and logs once.
-  requestFlight = new SingleFlight();
-  staleAgeMs;
-  // The machine the store reads: where transcripts live, and where the
-  // pricing table is cached.
-  host;
-  log;
-  renderTally = { hits: 0, misses: 0 };
-  ledger;
-  // The session record's refresh, which its statusline request makes; a
-  // rescan's reads are its `today` scan's.
-  usage;
-  sweeps = 0;
-  stopSweep = null;
-  closed = false;
-  clock;
-  constructor(opts) {
-    this.host = opts.host;
-    this.clock = opts.clock;
-    this.log = opts.logger ?? quietLogger;
-    this.ledger = opts.ledger ?? new RefreshLedger(this.log);
-    this.usage = this.ledger.declare({
-      name: "usage",
-      scope: "session",
-      refresh: ["request"]
-    });
-    this.staleAgeMs = opts.staleAgeMs ?? DEFAULT_STALE_AGE_MS;
-    this.scans = new KeyedSource({
-      name: "today",
-      scope: "configDir",
-      keyOf: (paths2) => paths2.join("\0"),
-      fields: (paths2) => `dirs=${valueOf(paths2.join(","))}`,
-      read: (paths2) => this.scan(paths2),
-      every: opts.rescan ?? DEFAULT_RESCAN,
-      maxEntries: MAX_UNHELD_SCANS,
-      logger: this.log,
-      ledger: this.ledger,
-      clock: this.clock
-    });
-    const interval = opts.sweepIntervalMs ?? DEFAULT_SWEEP_INTERVAL_MS;
-    if (interval > 0) {
-      this.stopSweep = this.clock.every(interval, () => this.sweepStale(), {
-        unref: true
-      });
-    }
-  }
-  getStats() {
-    return {
-      size: this.sessions.size,
-      hits: this.renderTally.hits,
-      misses: this.renderTally.misses,
-      sweeps: this.sweeps
-    };
-  }
-  // The scans as a source: the directory sets kept, those a home holds, the
-  // seeds (`first`) and rescans (`period`), and how many failed.
-  scanStats() {
-    return this.scans.stats();
-  }
-  // The `session` projection: whole-session totals for the active session.
-  // [LAW:no-silent-failure] A failed transcript parse flows out as `failed`
-  // (the payload boundary logs it); an unknown/empty session is the all-null
-  // SessionInfo whose fields the boundary drops per-field — top-level
-  // `absent` is reserved for ingest, since the native officialCost overlay
-  // applies even with no record.
-  getUsageInfo(sessionId2, hookData2) {
-    return this.request(sessionId2, hookData2?.transcript_path).usage(hookData2);
-  }
-  // [LAW:no-ambient-temporal-coupling] One statusline request's refresh of
-  // its session, as a value: the request's session, speed and today lanes
-  // read the one refresh it starts, whichever asks first and whenever the
-  // others land, so it reads, records and logs once per request.
-  request(sessionId2, transcriptPath) {
-    let refresh = null;
-    const once2 = () => {
-      if (refresh !== null) return refresh;
-      const stamp2 = statStamp(transcriptPath);
-      refresh = {
-        stamp: stamp2,
-        record: this.refreshed(sessionId2, transcriptPath, stamp2)
-      };
-      return refresh;
-    };
-    return {
-      usage: async (hookData2) => {
-        const record2 = await once2().record;
-        if (record2.kind === "failed") return record2;
-        return ok(
-          usageOver(
-            record2.kind === "ok" ? record2.value.sessionInfo : EMPTY_SESSION_INFO,
-            hookData2
-          )
-        );
-      },
-      speed: (nowMs) => this.observed(sessionId2, once2, nowMs),
-      // [LAW:no-ambient-temporal-coupling] `today` sums the session's own
-      // record, so it waits for the request's one refresh of it and for
-      // nothing else: the directory set's scan is no part of the request,
-      // since the day sums are pending until it lands and land through the
-      // observable they are read from.
-      today: async () => {
-        await once2().record;
-      }
-    };
-  }
-  // The `session` projection as the session's last refresh left it, for a
-  // draw: no I/O, no fold. A session no refresh has answered (or one the sweep
-  // dropped) is not answered yet; one whose refresh found no transcript is the
-  // empty record its refresh answers for it.
-  usageOf(sessionId2, hookData2) {
-    const slot = this.sessions.get(sessionId2);
-    if (slot === void 0) return pendingOf("unread");
-    const failure = slot.failure.get();
-    if (failure !== null) return failed(failure, "read");
-    return ok(
-      usageOver(slot.record?.sessionInfo ?? EMPTY_SESSION_INFO, hookData2)
-    );
-  }
-  // A request's ingest of its own session, whose outcome the session's slot
-  // keeps for the draws until the next one.
-  refreshed(sessionId2, transcriptPath, stamp2) {
-    return this.requestFlight.run(`${sessionId2}:${stamp2}`, async () => {
-      const tally = { hits: 0, misses: 0 };
-      const startedAt = this.clock.monotonic();
-      const record2 = await this.ingest(sessionId2, transcriptPath, tally, stamp2);
-      this.renderTally.hits += tally.hits;
-      this.renderTally.misses += tally.misses;
-      if (tally.misses > 0) {
-        this.usage.recorded(
-          `sid=${valueOf(sessionId2)}`,
-          "request",
-          record2,
-          elapsedMs(this.clock, startedAt)
-        );
-      }
-      answer(
-        this.hold(sessionId2).failure,
-        record2.kind === "failed" ? record2.reason : null
-      );
-      return record2;
-    });
-  }
-  // The `today` projection: cross-session sum of every record's today bucket.
-  // [LAW:no-silent-failure] A failed scan or a failed active-session ingest
-  // makes the whole projection `failed` — a total silently missing today's
-  // main work would be a confident wrong number, worse than a loud gap.
-  //
-  // `claudeConfigDir` is the rendering session's `claudeConfigDir` hint, and
-  // the sum is that session plus every session whose transcript lives in THAT
-  // directory — the daemon's own env names none.
-  // [LAW:no-ambient-temporal-coupling] Whose `today` a record is in is read
-  // off where its transcript lives: a sum over every directory seen so far, or
-  // over the sessions that had asked, would move with which other sessions
-  // happened to have rendered.
-  //
-  // A request's refresh of `today`: the active session's own record, so
-  // `today` keeps up with the cost it was sent with. The directory set's
-  // scan is not waited for (`declareToday`).
-  refreshToday(hookData2) {
-    return this.request(
-      hookData2?.session_id ?? "",
-      hookData2?.transcript_path
-    ).today();
-  }
-  // [LAW:single-enforcer] A view's declaration of `today` (declareLanes in
-  // src/daemon/render-payload.ts): the directory set's scans, held, so a set
-  // no scan has answered starts its first one now — before the request or the
-  // frame that reads it. The lane answers the set's day sums once a scan has
-  // answered; which day of them is the draw's (`projectToday`).
-  declareToday(holds2, claudeConfigDir2) {
-    if (this.closed) return settledLane(failed("usage store closed", "read"));
-    const claudePaths = getClaudePaths(claudeConfigDir2, this.host.home);
-    const scans = this.scans.declare(holds2, claudePaths);
-    const set2 = this.daySet(claudePaths);
-    return {
-      current: () => {
-        const scan = scans.current();
-        return scan.kind === "ok" ? ok({ roots: set2.roots, sums: set2.sums.read() }) : scan;
-      }
-    };
-  }
-  // The rendering session's own days as the records stand, for the `today`
-  // fact: no I/O, no fold. [LAW:no-silent-failure] The session's last ingest
-  // failing is this read failing, so the fact fails with it and the draw shows
-  // a gap, never a total silently missing the session's own work. A session
-  // with no record has no days of its own.
-  daysOf(sessionId2) {
-    const slot = this.sessions.get(sessionId2);
-    if (slot === void 0) return ABSENT2;
-    const failure = slot.failure.get();
-    if (failure !== null) return failed(failure, "read");
-    const record2 = slot.record;
-    if (record2 === void 0) return ABSENT2;
-    return ok({
-      transcriptPath: record2.transcriptPath ?? null,
-      days: Object.fromEntries(record2.days)
-    });
-  }
-  // Take one tok/s observation of the active session: ingest its current
-  // cumulative counts, return the prior sample alongside, and record this one as
-  // the new baseline. [LAW:no-silent-failure] A failed transcript parse flows out
-  // as `failed` (the boundary logs it and the segment reads "—"); an unknown
-  // session yields a zero-count sample, so a first-ever render establishes a
-  // baseline without fabricating a rate. `nowMs` is the caller's single-enforcer
-  // clock instant — the store never reads the clock for tok/s timing itself.
-  observeSpeed(sessionId2, transcriptPath, nowMs) {
-    return this.request(sessionId2, transcriptPath).speed(nowMs);
-  }
-  // A request's speed sample, over the request's one refresh of the session.
-  async observed(sessionId2, refresh, nowMs) {
-    if (!sessionId2) return ABSENT2;
-    const { stamp: stamp2, record: refreshed } = refresh();
-    return this.speedFlight.run(`${sessionId2}:${stamp2}`, async () => {
-      const record2 = await refreshed;
-      if (record2.kind === "failed") {
-        answer(this.hold(sessionId2).speed, record2);
-        return record2;
-      }
-      const breakdown = record2.kind === "ok" ? record2.value.sessionInfo.tokenBreakdown : null;
-      const cur = speedSampleOf(breakdown, nowMs);
-      const { ring } = this.hold(sessionId2);
-      let prev;
-      for (const s of ring) {
-        if (s.atMs < cur.atMs && (prev === void 0 || s.atMs > prev.atMs)) {
-          prev = s;
-        }
-      }
-      ring.push(cur);
-      ring.sort((a, b) => a.atMs - b.atMs);
-      if (ring.length > SPEED_RING_CAPACITY) ring.shift();
-      const observed = ok({
-        ...prev !== void 0 && { prev },
-        cur,
-        samples: [...ring]
-      });
-      answer(this.hold(sessionId2).speed, observed);
-      return observed;
-    });
-  }
-  // The session's speed as its last request observed it, for a draw: a frame
-  // takes no sample, so how often the bar is drawn moves no rate.
-  speedOf(sessionId2) {
-    if (!sessionId2) return ABSENT2;
-    return this.sessions.get(sessionId2)?.speed.get() ?? pendingOf("unread");
-  }
-  // stamp-gated, coalesced re-parse of ONE session. `ok` is its record,
-  // `absent` is an unknown empty session (or no sessionId), `failed` is a
-  // transcript that exists but couldn't be parsed — NOT cached (only ok
-  // records are stored; the next render retries, same rule as the git
-  // cache). This is the single write-path of a slot's record.
-  async ingest(sessionId2, transcriptPath, tally, stamp2) {
-    if (!sessionId2) return ABSENT2;
-    const existing = this.see(sessionId2)?.record;
-    if (existing && stamp2 !== "" && existing.transcriptStamp === stamp2) {
-      tally.hits++;
-      return ok(existing);
-    }
-    if (!transcriptPath) return existing ? ok(existing) : ABSENT2;
-    tally.misses++;
-    let refolded;
-    try {
-      refolded = await this.flight.run(`${sessionId2}:${stamp2}`, async () => {
-        const prior2 = this.sessions.get(sessionId2)?.record;
-        return {
-          prior: prior2,
-          outcome: await this.refold(sessionId2, transcriptPath, prior2)
-        };
-      });
-    } catch (error) {
-      return failed(
-        `usage refold (${sessionId2}): ${error instanceof Error ? error.message : String(error)}`,
-        "read"
-      );
-    }
-    const { prior, outcome } = refolded;
-    if (outcome.kind !== "ok") return outcome;
-    const record2 = {
-      files: outcome.value.files,
-      sessionInfo: outcome.value.sessionInfo,
-      days: outcome.value.days,
-      transcriptStamp: outcome.value.mainStamp,
-      transcriptPath
-    };
-    const landed = this.sessions.get(sessionId2)?.record;
-    if (landed === prior) {
-      this.stored(sessionId2, record2);
-      return ok(record2);
-    }
-    if (landed === void 0) return ok(record2);
-    return this.ingest(sessionId2, transcriptPath, tally, stamp2);
-  }
-  // [LAW:single-enforcer] The one write of a slot's record: the slot is
-  // replaced in the observable map, which is the change the day sums derive
-  // from.
-  stored(sessionId2, record2) {
-    const slot = this.hold(sessionId2);
-    runInAction(() => this.sessions.set(sessionId2, { ...slot, record: record2 }));
-  }
-  // The one write of `lastSeenAt`: the session's slot, refreshed as seen, or
-  // undefined while the store holds nothing for it — asking stores nothing.
-  see(sessionId2) {
-    const slot = this.sessions.get(sessionId2);
-    if (slot) slot.lastSeenAt = this.clock.now();
-    return slot;
-  }
-  // The slot something is about to be stored in, created on the first store.
-  hold(sessionId2) {
-    const seen = this.see(sessionId2);
-    if (seen) return seen;
-    const slot = {
-      lastSeenAt: this.clock.now(),
-      record: void 0,
-      ring: [],
-      failure: observable.box(null),
-      speed: observable.box(void 0, {
-        deep: false
-      })
-    };
-    runInAction(() => this.sessions.set(sessionId2, slot));
-    return slot;
-  }
-  // A directory set's day sums, derived on first ask and kept with the store.
-  daySet(claudePaths) {
-    const key = claudePaths.join("\0");
-    const known = this.daySets.get(key);
-    if (known !== void 0) return known;
-    const roots = claudePaths.map((dir) => (0, import_node_path23.join)(dir, "projects") + import_node_path23.sep);
-    const set2 = {
-      roots,
-      sums: new Kept(
-        `today over ${claudePaths.join(",")}`,
-        () => daySumsOver(this.sessions.values(), roots)
-      )
-    };
-    this.daySets.set(key, set2);
-    return set2;
-  }
-  // [LAW:dataflow-not-control-flow] Re-fold ONLY the bytes appended since the
-  // prior record — the transcript (and each agent sidechain) is append-only, so
-  // per-render work is O(new bytes), not O(file). The whole-file case (cold
-  // record, or a first-ever read) is the same path with an empty prior: the
-  // reader yields the whole file from offset 0. A `failed` read on any file
-  // fails the fold (the boundary logs it); an `absent` file (not yet written /
-  // agent removed) keeps its prior fold and contributes nothing new.
-  async refold(sessionId2, transcriptPath, prior) {
-    const agents = await findAgentTranscripts(
-      sessionId2,
-      (0, import_node_path23.dirname)(transcriptPath),
-      prior === void 0 ? void 0 : new Set(prior.files.keys())
-    );
-    for (const line of longLineLog(agents.longLines)) this.log("info", line);
-    const newFiles = /* @__PURE__ */ new Map();
-    let mainStamp = "";
-    for (const filePath2 of [transcriptPath, ...agents.paths]) {
-      const priorFold = prior?.files.get(filePath2);
-      const read2 = await foldAppended(
-        filePath2,
-        priorFold,
-        EMPTY_FILE_FOLD,
-        (state, entries) => foldFile(state, entries, cacheDir(this.host), this.clock)
-      );
-      if (read2.kind === "failed") return read2;
-      if (read2.kind === "absent") {
-        if (priorFold) newFiles.set(filePath2, priorFold);
-        continue;
-      }
-      const { folded: folded2, longLines } = read2.value;
-      for (const line of longLineLog(longLines)) this.log("info", line);
-      newFiles.set(filePath2, folded2);
-      if (filePath2 === transcriptPath) mainStamp = folded2.cursor.stamp;
-    }
-    return ok({ files: newFiles, ...mergeFolds(newFiles), mainStamp });
-  }
-  // The one whole-tree scan of a directory set — its seed, or a rescan:
-  // ingest every session whose transcript was touched recently enough to hold
-  // a today entry. A rescan is the same scan over warm records, so it costs a
-  // stat per transcript plus the bytes appended since the last one.
-  // [LAW:no-silent-failure] A scan that throws, or that could not read a
-  // session it found, answers as failed, which is `today`'s failure until a
-  // scan lands — never a sum silently missing the sessions it did not reach.
-  // Only a file or directory gone between the listing and its read (ENOENT) is
-  // absence.
-  async scan(claudePaths) {
-    try {
-      const cutoff = seedCutoffMs(this.clock.now());
-      const projectPaths = await findProjectPaths(claudePaths);
-      const candidates = [];
-      for (const dir of projectPaths) {
-        const files = await unlessGone(readdir2(dir));
-        for (const file of files ?? []) {
-          if (!file.endsWith(".jsonl")) continue;
-          const filePath2 = (0, import_node_path23.join)(dir, file);
-          const st = await unlessGone(stat2(filePath2));
-          if (st === void 0 || st.mtimeMs < cutoff) continue;
-          candidates.push({
-            sessionId: file.slice(0, -".jsonl".length),
-            path: filePath2,
-            stamp: stampOf(st)
-          });
-        }
-      }
-      const failures = [];
-      const tally = { hits: 0, misses: 0 };
-      await mapPool(candidates, SEED_CONCURRENCY, async (c) => {
-        const outcome = await this.ingest(c.sessionId, c.path, tally, c.stamp);
-        if (outcome.kind === "failed") {
-          failures.push(outcome.reason);
-          this.log("warn", `usageStore scan: ${outcome.reason}`);
-        }
-      });
-      this.log(
-        "info",
-        `usageStore scan dirs=${valueOf(claudePaths.join(","))} sessions=${candidates.length} read=${tally.misses} failed=${failures.length}`
-      );
-      if (failures.length > 0) {
-        return failed(
-          `usage scan: ${failures.length} of ${candidates.length} sessions could not be read \u2014 ${failures[0]}`,
-          "read"
-        );
-      }
-      return ok({ sessions: candidates.length, read: tally.misses });
-    } catch (error) {
-      return failed(
-        `usage scan: ${error instanceof Error ? error.message : String(error)}`,
-        "read"
-      );
-    }
-  }
-  // Public for tests; called periodically from the timer. Drops what nothing
-  // reads any more: a session unseen for `staleAgeMs` holding no bucket for
-  // today. A stale record holding one is `held`, since `today` sums it — a
-  // session whose transcript the scans have stopped visiting is seen no more,
-  // and a day can run past `staleAgeMs` (a 25-hour DST day).
-  // [LAW:one-source-of-truth] Today is the day of the sweep's own `now`: the
-  // wall clock a frame's instant and the scan's cutoff read too.
-  sweepStale() {
-    const now2 = this.clock.now();
-    const today = dayKey(new Date(now2));
-    let dropped = 0;
-    let held = 0;
-    let noRecord = 0;
-    runInAction(() => {
-      for (const [sid, { lastSeenAt, record: record2 }] of [...this.sessions]) {
-        if (now2 - lastSeenAt <= this.staleAgeMs) continue;
-        if (record2?.days.has(today)) {
-          held++;
-          continue;
-        }
-        this.sessions.delete(sid);
-        dropped++;
-        if (record2 === void 0) noRecord++;
-      }
-    });
-    if (dropped > 0) this.sweeps++;
-    if (dropped > 0 || held > 0) {
-      this.log(
-        "info",
-        `usageStore sweep dropped=${dropped} noRecord=${noRecord} held=${held}`
-      );
-    }
-    return dropped;
-  }
-  close() {
-    this.closed = true;
-    this.stopSweep?.();
-    this.stopSweep = null;
-    this.scans.close();
-    runInAction(() => {
-      for (const { sums } of this.daySets.values()) sums.release();
-      this.sessions.clear();
-    });
-    this.daySets.clear();
-  }
-};
 
 // src/claude-resume.ts
 init_globals();
@@ -68736,9 +66906,9 @@ function readingsOf(inputs, declared) {
 function todayReading(lane, faults, usage, sessionId2) {
   const set2 = faults.of(sessionId2, "today") ?? lane.current();
   if (set2.kind !== "ok") return set2;
-  const own2 = usage.daysOf(sessionId2);
+  const own2 = usage.daysOutside(sessionId2, set2.value.roots);
   if (own2.kind === "failed") return own2;
-  return ok({ ...set2.value, session: own2.kind === "ok" ? own2.value : null });
+  return ok({ sums: set2.value.sums, own: own2.kind === "ok" ? own2.value : {} });
 }
 function waitsOf(lanes) {
   return [
@@ -68997,7 +67167,7 @@ function pickNonNull(src) {
 }
 function posixify(s) {
   if (s === void 0 || s.length === 0) return s;
-  if (import_node_path24.default.sep !== "\\") return s;
+  if (import_node_path20.default.sep !== "\\") return s;
   return s.replace(/\\/g, "/");
 }
 function projectGitInfo(outcome, pending2) {
@@ -69098,9 +67268,264 @@ function dataNeeds(config2, preset) {
   };
 }
 
+// src/utils/claude.ts
+init_globals();
+var import_node_path21 = __toESM(require_path_browserify(), 1);
+
+// src/utils/transcript-activity.ts
+init_globals();
+var COMMAND_NAME = /<command-name>\s*([^<\s][^<]*?)\s*<\/command-name>/;
+function slashCommand(text4) {
+  if (typeof text4 !== "string") return void 0;
+  return COMMAND_NAME.exec(text4)?.[1];
+}
+function todoItems(input) {
+  const todos2 = input?.todos;
+  if (!Array.isArray(todos2)) return void 0;
+  const items = [];
+  for (const raw of todos2) {
+    if (typeof raw !== "object" || raw === null) continue;
+    const { content, activeForm, status } = raw;
+    const active2 = status === "in_progress";
+    const text4 = active2 && typeof activeForm === "string" ? activeForm : content;
+    if (typeof text4 !== "string") continue;
+    items.push({ text: text4, active: active2, done: status === "completed" });
+  }
+  return items;
+}
+function turnText(content) {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  const block = content.find(
+    (b) => typeof b === "object" && b !== null && b.type === "text" && typeof b.text === "string"
+  );
+  return block?.text ?? "";
+}
+function entryActivity(parsed2, userEntry) {
+  const msg = parsed2.message;
+  const content = msg?.content;
+  const started2 = [];
+  const finished = [];
+  let todos2;
+  if (Array.isArray(content)) {
+    for (const block of content) {
+      if (typeof block !== "object" || block === null) continue;
+      const b = block;
+      switch (b.type) {
+        case "tool_use": {
+          const { id: id2, name } = b;
+          if (typeof id2 !== "string" || typeof name !== "string") break;
+          started2.push({ id: id2, name });
+          if (name === "TodoWrite") todos2 = todoItems(b.input) ?? todos2;
+          break;
+        }
+        case "tool_result": {
+          const id2 = b.tool_use_id;
+          if (typeof id2 === "string") finished.push(id2);
+          break;
+        }
+        default:
+          break;
+      }
+    }
+  }
+  const command = userEntry === "prompt" ? slashCommand(turnText(content)) : void 0;
+  if (started2.length === 0 && finished.length === 0 && todos2 === void 0 && command === void 0) {
+    return void 0;
+  }
+  return {
+    ...started2.length > 0 && { started: started2 },
+    ...finished.length > 0 && { finished },
+    ...todos2 !== void 0 && { todos: todos2 },
+    ...command !== void 0 && { command }
+  };
+}
+
+// src/utils/claude.ts
+function getClaudePaths(detected, homeDir) {
+  if (detected !== void 0) return [detected];
+  return [(0, import_node_path21.join)(homeDir, ".config", "claude"), (0, import_node_path21.join)(homeDir, ".claude")].filter(
+    (dir) => existsSync(dir)
+  );
+}
+async function findProjectPaths(claudePaths) {
+  const projectPaths = [];
+  for (const claudePath of claudePaths) {
+    const projectsDir = (0, import_node_path21.join)(claudePath, "projects");
+    const entries = await unlessGone(
+      readdir2(projectsDir, { withFileTypes: true })
+    );
+    for (const entry of entries ?? []) {
+      if (entry.isDirectory()) projectPaths.push((0, import_node_path21.join)(projectsDir, entry.name));
+    }
+  }
+  return projectPaths;
+}
+async function unlessGone(read2) {
+  try {
+    return await read2;
+  } catch (e) {
+    if (e.code === "ENOENT") return void 0;
+    throw e;
+  }
+}
+async function findAgentTranscripts(sessionId2, projectPath, verified) {
+  const paths2 = [];
+  let longLines = [];
+  const subagentsDir = (0, import_node_path21.join)(projectPath, sessionId2, "subagents");
+  try {
+    const files = await readdir2(subagentsDir);
+    const agentFileNames = files.filter(
+      (f) => f.startsWith("agent-") && f.endsWith(".jsonl")
+    );
+    for (const fileName2 of agentFileNames) {
+      const filePath2 = (0, import_node_path21.join)(subagentsDir, fileName2);
+      if (verified?.has(filePath2)) {
+        paths2.push(filePath2);
+        continue;
+      }
+      const read2 = await readAppended(filePath2, void 0, void 0);
+      if (read2.kind !== "ok") {
+        debug(`Failed to check agent file ${filePath2}`);
+        continue;
+      }
+      longLines = longLinesWith(longLines, filePath2, read2.value);
+      const line = jsonLine(
+        decodeLines(
+          read2.value,
+          (b) => b.subarray(0, Math.max(0, b.indexOf(10))).toString("utf-8")
+        )
+      );
+      if (line.kind === "object" && line.value.sessionId === sessionId2) {
+        paths2.push(filePath2);
+      }
+    }
+  } catch (error) {
+    debug(`Failed to read subagents directory ${subagentsDir}:`, error);
+  }
+  return { paths: paths2, longLines };
+}
+function userEntryOf(parsed2) {
+  const msg = parsed2.message;
+  const messageType = parsed2.type || msg?.role || msg?.type;
+  if (messageType !== "user") return void 0;
+  if (firstBlockType(msg) === "tool_result") return "tool-result";
+  const origin = typeof parsed2.origin === "object" && parsed2.origin !== null ? parsed2.origin.kind : void 0;
+  if (origin !== void 0 && origin !== "human") return "turn";
+  const text4 = turnText(msg?.content).trimStart();
+  if (text4.startsWith("[Request interrupted by user")) return "interrupt";
+  return parsed2.isMeta === true || parsed2.isCompactSummary === true || CLAUDE_CODE_TEXT.test(text4) ? "claude-code" : "prompt";
+}
+var CLAUDE_CODE_TEXT = /^<(?:command-name|local-command-std(?:out|err)|bash-(?:input|stdout|stderr))>/;
+function firstBlockType(msg) {
+  const content = msg?.content;
+  return Array.isArray(content) && typeof content[0] === "object" && content[0] ? content[0].type : void 0;
+}
+function makeEntry(parsed2) {
+  if (!parsed2.timestamp) return null;
+  const msg = parsed2.message;
+  const usage = msg?.usage;
+  const userEntry = userEntryOf(parsed2);
+  return {
+    timestamp: new Date(parsed2.timestamp),
+    type: typeof parsed2.type === "string" ? parsed2.type : void 0,
+    message: msg ? {
+      id: typeof msg.id === "string" ? msg.id : void 0,
+      model: typeof msg.model === "string" ? msg.model : void 0,
+      usage,
+      role: typeof msg.role === "string" ? msg.role : void 0,
+      type: typeof msg.type === "string" ? msg.type : void 0
+    } : void 0,
+    costUSD: typeof parsed2.costUSD === "number" ? parsed2.costUSD : void 0,
+    isSidechain: parsed2.isSidechain === true,
+    userEntry,
+    activity: entryActivity(parsed2, userEntry),
+    raw: {
+      model: typeof parsed2.model === "string" ? parsed2.model : void 0,
+      message: msg ? {
+        id: typeof msg.id === "string" ? msg.id : void 0,
+        model: typeof msg.model === "string" ? msg.model : void 0,
+        usage
+      } : void 0,
+      requestId: typeof parsed2.requestId === "string" ? parsed2.requestId : void 0
+    }
+  };
+}
+function jsonLine(line) {
+  const trimmed = line.trim();
+  if (!trimmed) return { kind: "blank" };
+  try {
+    const value = JSON.parse(trimmed);
+    return typeof value === "object" && value !== null && !Array.isArray(value) ? { kind: "object", value } : { kind: "unparsed", reason: "not a JSON object" };
+  } catch (parseError) {
+    return { kind: "unparsed", reason: String(parseError) };
+  }
+}
+function entryOf3(line) {
+  const read2 = jsonLine(line);
+  if (read2.kind === "unparsed") {
+    debug(`Failed to parse JSONL line: ${read2.reason}`);
+    return null;
+  }
+  if (read2.kind === "blank") return null;
+  try {
+    return makeEntry(read2.value);
+  } catch (projectionError) {
+    debug(`Failed to project JSONL line: ${projectionError}`);
+    return null;
+  }
+}
+function parseJsonlLines(text4) {
+  const entries = [];
+  for (const line of text4.split("\n")) {
+    const entry = entryOf3(line);
+    if (entry) entries.push(entry);
+  }
+  return entries;
+}
+function longLinesWith(longLines, path42, read2) {
+  return read2.longLine === 0 ? longLines : [...longLines, { path: path42, offset: read2.start, bytes: read2.longLine }];
+}
+function longLineLog(longLines) {
+  return longLines.map(
+    (l) => `transcript long line path=${JSON.stringify(l.path)} offset=${l.offset} bytes=${l.bytes}`
+  );
+}
+async function foldAppended(filePath2, prior, empty2, step4) {
+  let longLines = [];
+  let cursor = prior?.cursor;
+  let value = prior?.value ?? empty2;
+  let end;
+  for (; ; ) {
+    const read2 = await readAppended(
+      filePath2,
+      cursor === void 0 ? void 0 : { offset: cursor.offset, ino: cursor.ino },
+      end?.size
+    );
+    if (read2.kind !== "ok") return read2;
+    const window2 = read2.value;
+    if (window2.reset) value = empty2;
+    longLines = longLinesWith(window2.reset ? [] : longLines, filePath2, window2);
+    if (end === void 0 || window2.reset) {
+      end = { size: window2.size, stamp: window2.stamp };
+    }
+    const next = window2.start + window2.lines.length;
+    value = await step4(
+      value,
+      decodeLines(window2, (b) => parseJsonlLines(b.toString("utf-8")))
+    );
+    cursor = {
+      offset: next,
+      stamp: end.stamp,
+      ino: window2.ino
+    };
+    if (window2.atEnd) return ok({ folded: { cursor, value }, longLines });
+  }
+}
+
 // src/doctor/font-edge.ts
 init_globals();
-var import_node_path25 = __toESM(require_path_browserify(), 1);
+var import_node_path22 = __toESM(require_path_browserify(), 1);
 
 // node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/index.js
 init_globals();
@@ -70073,12 +68498,12 @@ function coverage(launcher, ref, glyphs) {
   return process_default.platform === "darwin" ? macCoverage(launcher, ref, glyphs) : fcCoverage(launcher, ref.name, glyphs);
 }
 function alacrittyConfigPaths(home, xdgConfigHome) {
-  const xdg = xdgConfigHome || import_node_path25.default.join(home, ".config");
+  const xdg = xdgConfigHome || import_node_path22.default.join(home, ".config");
   return [
-    import_node_path25.default.join(xdg, "alacritty", "alacritty.toml"),
-    import_node_path25.default.join(xdg, "alacritty.toml"),
-    import_node_path25.default.join(home, ".config", "alacritty", "alacritty.toml"),
-    import_node_path25.default.join(home, ".alacritty.toml")
+    import_node_path22.default.join(xdg, "alacritty", "alacritty.toml"),
+    import_node_path22.default.join(xdg, "alacritty.toml"),
+    import_node_path22.default.join(home, ".config", "alacritty", "alacritty.toml"),
+    import_node_path22.default.join(home, ".alacritty.toml")
   ];
 }
 function alacrittyDefaultFamily(platform3) {
@@ -70120,7 +68545,7 @@ function alacrittyFamilyIn(file, home, depth) {
   if (depth === 5) return { kind: "ok", value: null };
   let found2 = null;
   for (const imported of own2.imports) {
-    const target = imported.startsWith("~/") ? import_node_path25.default.join(home, imported.slice(2)) : import_node_path25.default.resolve(import_node_path25.default.dirname(file), imported);
+    const target = imported.startsWith("~/") ? import_node_path22.default.join(home, imported.slice(2)) : import_node_path22.default.resolve(import_node_path22.default.dirname(file), imported);
     if (!fs_default.existsSync(target)) continue;
     const inner = alacrittyFamilyIn(target, home, depth + 1);
     if (inner.kind === "failed") return inner;
@@ -70162,23 +68587,23 @@ function fontInUse(launcher, terminal, env2, glyphs, home) {
 
 // src/daemon/build-currency.ts
 init_globals();
-var import_node_path27 = __toESM(require_path_browserify(), 1);
+var import_node_path24 = __toESM(require_path_browserify(), 1);
 init_url();
 
 // src/source-digest.ts
 init_globals();
-var import_node_path26 = __toESM(require_path_browserify(), 1);
+var import_node_path23 = __toESM(require_path_browserify(), 1);
 var isSourceEntry = (name) => !name.startsWith(".") && !name.endsWith("~");
 function entryBytes(p2, st) {
   return st.isSymbolicLink() ? import_buffer.Buffer.from(fs_default.readlinkSync(p2)) : fs_default.readFileSync(p2);
 }
 function sourceEntries(root, dir, keep2 = isSourceEntry) {
   return fs_default.readdirSync(dir).filter(keep2).sort().flatMap((name) => {
-    const p2 = import_node_path26.default.join(dir, name);
+    const p2 = import_node_path23.default.join(dir, name);
     const st = fs_default.lstatSync(p2, { throwIfNoEntry: false });
     if (st === void 0) return [];
     if (st.isDirectory()) return sourceEntries(root, p2);
-    const rel = import_node_path26.default.relative(root, p2).split(import_node_path26.default.sep).join("/");
+    const rel = import_node_path23.default.relative(root, p2).split(import_node_path23.default.sep).join("/");
     return [[rel, entryBytes(p2, st)]];
   });
 }
@@ -70216,8 +68641,8 @@ var PACKAGE_VERSION = "1.186.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
-  const root = import_node_path27.default.dirname(import_node_path27.default.dirname(bundlePath));
-  return fs_default.existsSync(import_node_path27.default.join(root, "src")) ? root : null;
+  const root = import_node_path24.default.dirname(import_node_path24.default.dirname(bundlePath));
+  return fs_default.existsSync(import_node_path24.default.join(root, "src")) ? root : null;
 }
 function bundleStamp(digest2) {
   if (digest2 === null) {
@@ -70229,11 +68654,11 @@ function bundleStamp(digest2) {
 }
 function checkoutVersion(root) {
   const raw = JSON.parse(
-    fs_default.readFileSync(import_node_path27.default.join(root, "package.json"), "utf8")
+    fs_default.readFileSync(import_node_path24.default.join(root, "package.json"), "utf8")
   );
   const version = typeof raw === "object" && raw !== null ? raw.version : void 0;
   if (typeof version !== "string") {
-    throw new Error(`${import_node_path27.default.join(root, "package.json")} has no version string`);
+    throw new Error(`${import_node_path24.default.join(root, "package.json")} has no version string`);
   }
   return version;
 }
@@ -70242,7 +68667,7 @@ function assessBuild(entryUrl, runningStamp) {
     const root = sourceCheckoutOf(fileURLToPath(entryUrl));
     if (root === null) return { kind: "not-source-checkout" };
     const running = runningStamp();
-    const digest2 = sourceDigest(import_node_path27.default.join(root, "src"));
+    const digest2 = sourceDigest(import_node_path24.default.join(root, "src"));
     if (digest2 === running.digest)
       return { kind: "current", root, stamp: running };
     return {
@@ -70314,7 +68739,7 @@ function installFacts(edge, daemonBundle, clients) {
         bundle: bundle.value,
         checkout: root === null ? null : {
           root,
-          rustSource: edge.digest(import_node_path28.default.join(root, "rust-client"))
+          rustSource: edge.digest(import_node_path25.default.join(root, "rust-client"))
         }
       },
       nativeShipped: edge.nativeShipped,
@@ -70434,7 +68859,7 @@ function ownsEntry(entry) {
     return false;
   }
   const root = DAEMON_ENTRY.exec(real)?.[1];
-  return root !== void 0 && fs_default.existsSync(import_node_path28.default.join(root, "bin", "cc-candybar"));
+  return root !== void 0 && fs_default.existsSync(import_node_path25.default.join(root, "bin", "cc-candybar"));
 }
 async function daemons(launcher) {
   const run3 = await launcher.launch({
@@ -70813,6 +69238,82 @@ init_globals();
 // src/daemon/client-transport.ts
 init_globals();
 
+// src/daemon/paths.ts
+init_globals();
+init_os();
+var import_node_path26 = __toESM(require_path_browserify(), 1);
+function xdgEnv(env2, name) {
+  const v = env2[name];
+  return v && v.length > 0 ? v : void 0;
+}
+function stateDir(host) {
+  const base = xdgEnv(host.env, "XDG_STATE_HOME") ?? import_node_path26.default.join(host.home, ".local", "state");
+  return import_node_path26.default.join(base, "cc-candybar");
+}
+function cacheDir(host) {
+  const base = xdgEnv(host.env, "XDG_CACHE_HOME") ?? import_node_path26.default.join(host.home, ".cache");
+  return import_node_path26.default.join(base, "cc-candybar");
+}
+function socketPath(host) {
+  return host.env.CC_CANDYBAR_SOCKET || defaultSocketPath();
+}
+function defaultSocketPath() {
+  const uid = os_default.userInfo().uid;
+  return import_node_path26.default.join("/tmp", `cc-candybar-${uid}`, "socket");
+}
+function leasePathFor(sockPath) {
+  return `${sockPath}.lease`;
+}
+function leasePath(host) {
+  return leasePathFor(socketPath(host));
+}
+function sessionStatePath(host) {
+  return import_node_path26.default.join(stateDir(host), "session-state.json");
+}
+function settingsHistoryPath(host) {
+  return import_node_path26.default.join(stateDir(host), "settings-history.json");
+}
+function daemonRegistryDir(host) {
+  const override = host.env.CC_CANDYBAR_DAEMON_REGISTRY_DIR;
+  if (override) return override;
+  const uid = os_default.userInfo().uid;
+  return import_node_path26.default.join("/tmp", `cc-candybar-${uid}`, "daemons");
+}
+var SPAWN_BACKOFF_FILE = "spawn.backoff";
+function spawnBackoffPath(host) {
+  return import_node_path26.default.join(stateDir(host), SPAWN_BACKOFF_FILE);
+}
+function watchProbeDir(host) {
+  return import_node_path26.default.join(stateDir(host), "watch-probe");
+}
+function logPath(host) {
+  return import_node_path26.default.join(stateDir(host), "daemon.log");
+}
+function daemonPaths(host) {
+  return {
+    socket: socketPath(host),
+    lease: leasePath(host),
+    state: stateDir(host),
+    registry: daemonRegistryDir(host),
+    log: logPath(host),
+    sessionState: sessionStatePath(host),
+    settingsHistory: settingsHistoryPath(host),
+    watchProbe: watchProbeDir(host),
+    spawnBackoff: spawnBackoffPath(host)
+  };
+}
+function locations(host) {
+  const { env: env2 } = host;
+  const xdgDefault = "/usr/local/share:/usr/share";
+  const defaultDataDirs = process_default.platform === "darwin" ? `${import_node_path26.default.join(xdgEnv(env2, "HOMEBREW_PREFIX") ?? "/opt/homebrew", "share")}:${xdgDefault}` : xdgDefault;
+  return {
+    home: host.home,
+    configHome: xdgEnv(env2, "XDG_CONFIG_HOME") ?? import_node_path26.default.join(host.home, ".config"),
+    dataHome: xdgEnv(env2, "XDG_DATA_HOME") ?? import_node_path26.default.join(host.home, ".local", "share"),
+    dataDirs: (xdgEnv(env2, "XDG_DATA_DIRS") ?? defaultDataDirs).split(":").filter((d) => d !== "")
+  };
+}
+
 // src/daemon/client-stats.ts
 init_globals();
 
@@ -71126,17 +69627,17 @@ init_globals();
 
 // src/attach-launcher.ts
 init_globals();
-var import_node_path29 = __toESM(require_path_browserify(), 1);
+var import_node_path27 = __toESM(require_path_browserify(), 1);
 var ATTACH_DIR = "cc-extra";
 function attachLauncherOf(bundle) {
-  return import_node_path29.default.join(import_node_path29.default.dirname(bundle), ATTACH_DIR, "src", "bun-attach.js");
+  return import_node_path27.default.join(import_node_path27.default.dirname(bundle), ATTACH_DIR, "src", "bun-attach.js");
 }
 function moduleGraphReaderOf(launcher) {
-  return import_node_path29.default.join(import_node_path29.default.dirname(launcher), "bun-graph.js");
+  return import_node_path27.default.join(import_node_path27.default.dirname(launcher), "bun-graph.js");
 }
 var ATTACH_PRELOAD = "attach-preload.cjs";
 function attachPreloadOf(bundle) {
-  return import_node_path29.default.join(import_node_path29.default.dirname(bundle), ATTACH_PRELOAD);
+  return import_node_path27.default.join(import_node_path27.default.dirname(bundle), ATTACH_PRELOAD);
 }
 var PRELOAD_VARIABLE = "BUN_OPTIONS";
 function attachCommandLine(preload, command) {
@@ -71150,7 +69651,7 @@ function attachCommandLine(preload, command) {
 }
 
 // src/install/index.ts
-var import_node_path31 = __toESM(require_path_browserify(), 1);
+var import_node_path29 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/client.ts
 init_globals();
@@ -71180,7 +69681,7 @@ var CLICK_BUDGETS = {
 
 // src/daemon/acquire.ts
 init_globals();
-var import_node_path30 = __toESM(require_path_browserify(), 1);
+var import_node_path28 = __toESM(require_path_browserify(), 1);
 init_process();
 
 // src/install/currency.ts
@@ -71259,17 +69760,17 @@ function assessCurrency(stamp2, latest) {
 // src/install/index.ts
 function supportDir(host) {
   if (process_default.platform === "darwin") {
-    return import_node_path31.default.join(host.home, "Library", "Application Support", "CCCandybar");
+    return import_node_path29.default.join(host.home, "Library", "Application Support", "CCCandybar");
   }
-  return import_node_path31.default.join(locations(host).dataHome, "cc-candybar");
+  return import_node_path29.default.join(locations(host).dataHome, "cc-candybar");
 }
 function stagedDistPath(dir) {
-  return import_node_path31.default.join(dir, "dist", "index.mjs");
+  return import_node_path29.default.join(dir, "dist", "index.mjs");
 }
 function stableAttachPreload(runningBundle, host) {
   const checkout = sourceCheckoutOf(runningBundle);
   return attachPreloadOf(
-    checkout === null ? stagedDistPath(supportDir(host)) : import_node_path31.default.join(checkout, "dist", "index.mjs")
+    checkout === null ? stagedDistPath(supportDir(host)) : import_node_path29.default.join(checkout, "dist", "index.mjs")
   );
 }
 
@@ -71468,13 +69969,13 @@ async function clickLaunch(launcher, opts, what, log) {
 }
 var HANDOFF_POLL_MS = 50;
 async function clickHandoff(launcher, opts, what, log, boundMs, tmp) {
-  const dir = mkdtempSync(import_node_path32.default.join(tmp, "cc-candybar-handoff-"));
+  const dir = mkdtempSync(import_node_path30.default.join(tmp, "cc-candybar-handoff-"));
   try {
     const files = {
       // Unread, and a handed-off browser would write to it for its whole life.
       stdout: "/dev/null",
-      stderr: import_node_path32.default.join(dir, "stderr"),
-      status: import_node_path32.default.join(dir, "status")
+      stderr: import_node_path30.default.join(dir, "stderr"),
+      status: import_node_path30.default.join(dir, "status")
     };
     const job = launcher.launchJobSync(opts, files);
     if (!job.ok) {
@@ -72764,7 +71265,7 @@ init_globals();
 
 // src/daemon/runs.ts
 init_globals();
-var import_node_path33 = __toESM(require_path_browserify(), 1);
+var import_node_path31 = __toESM(require_path_browserify(), 1);
 var RUN_TIMEOUT_MS = 1e4;
 function outcomeOf(result) {
   if (result.ok) return "ok";
@@ -72825,7 +71326,7 @@ var Runs = class {
       // [LAW:types-are-the-program] A relative program path is the
       // declaring file's, as the directory it runs in is; a bare name is
       // looked up on PATH.
-      bin: program.includes("/") ? import_node_path33.default.resolve(run3.cwd, program) : program,
+      bin: program.includes("/") ? import_node_path31.default.resolve(run3.cwd, program) : program,
       args,
       envOverlay: run3.envOverlay,
       cwd: run3.cwd,
@@ -72882,7 +71383,7 @@ var Runs = class {
 
 // src/daemon/draw-bar.ts
 init_globals();
-var import_node_path34 = __toESM(require_path_browserify(), 1);
+var import_node_path32 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/update-keys.ts
 init_globals();
@@ -77678,7 +76179,7 @@ function setUpRender(parts, arrived3, at, facts) {
     ...arrived3,
     hookData: {
       ...arrived3.hookData,
-      ...dir !== void 0 && import_node_path34.default.isAbsolute(dir) && { location: checkoutLocation(dir) }
+      ...dir !== void 0 && import_node_path32.default.isAbsolute(dir) && { location: checkoutLocation(dir) }
     }
   };
   const sessionId2 = req.sessionId;
@@ -78119,7 +76620,7 @@ init_process();
 
 // src/daemon/render-checkpoint.ts
 init_globals();
-var import_node_path35 = __toESM(require_path_browserify(), 1);
+var import_node_path33 = __toESM(require_path_browserify(), 1);
 
 // src/utils/schema-validator.ts
 init_globals();
@@ -78263,7 +76764,7 @@ function checkRenderRequest(req, stats, log, home) {
   if (!sessionId2.ok) {
     wireProblems.push(`field 'session_id' ${sessionId2.problem}`);
   }
-  if (typeof req.cwd !== "string" || !(0, import_node_path35.isAbsolute)(req.cwd)) {
+  if (typeof req.cwd !== "string" || !(0, import_node_path33.isAbsolute)(req.cwd)) {
     wireProblems.push(
       `request 'cwd' is not an absolute path: ${JSON.stringify(req.cwd)}`
     );
@@ -79003,10 +77504,10 @@ var refusedRender = (problems) => ({
 // src/daemon/update-act.ts
 init_globals();
 init_os();
-var import_node_path36 = __toESM(require_path_browserify(), 1);
+var import_node_path34 = __toESM(require_path_browserify(), 1);
 function actsDir(stateDir2, entryPath) {
   const key = createHash("sha256").update(entryPath).digest("hex").slice(0, 16);
-  return import_node_path36.default.join(stateDir2, "update-act", key);
+  return import_node_path34.default.join(stateDir2, "update-act", key);
 }
 var IDLE = { kind: "idle" };
 function judgeAct(facts) {
@@ -79026,11 +77527,11 @@ function judgeAct(facts) {
   return { kind: "failed", act, identity: record2.identity, reason };
 }
 var filesOf = (actDir) => ({
-  stdout: import_node_path36.default.join(actDir, "stdout"),
-  stderr: import_node_path36.default.join(actDir, "stderr"),
-  status: import_node_path36.default.join(actDir, "status")
+  stdout: import_node_path34.default.join(actDir, "stdout"),
+  stderr: import_node_path34.default.join(actDir, "stderr"),
+  status: import_node_path34.default.join(actDir, "status")
 });
-var recordOf2 = (actDir) => import_node_path36.default.join(actDir, "record.json");
+var recordOf2 = (actDir) => import_node_path34.default.join(actDir, "record.json");
 function actNumbers(dir) {
   let names;
   try {
@@ -79054,9 +77555,9 @@ function lastLineOf(file) {
   }
 }
 function removeAct(dir, act) {
-  const leaving = import_node_path36.default.join(dir, `.removed-${act}-${process_default.pid}`);
+  const leaving = import_node_path34.default.join(dir, `.removed-${act}-${process_default.pid}`);
   try {
-    fs_default.renameSync(import_node_path36.default.join(dir, String(act)), leaving);
+    fs_default.renameSync(import_node_path34.default.join(dir, String(act)), leaving);
   } catch (err) {
     if (err.code === "ENOENT") return;
     throw err;
@@ -79081,7 +77582,7 @@ var sameJob = (a, b) => a.pid === b.pid && a.startTime === b.startTime;
 function makeActReader(dir, read2, jobs, clock) {
   let known = null;
   async function factsOf2(act) {
-    const actDir = import_node_path36.default.join(dir, String(act));
+    const actDir = import_node_path34.default.join(dir, String(act));
     const record2 = readRecord(actDir);
     if (record2 === null) return null;
     if (known === null || !sameJob(known.record, record2)) {
@@ -79109,7 +77610,7 @@ function makeActReader(dir, read2, jobs, clock) {
         if (act === void 0) return null;
         if (act === vanished) {
           throw new Error(
-            `${import_node_path36.default.join(dir, String(act))}: an act with no record`
+            `${import_node_path34.default.join(dir, String(act))}: an act with no record`
           );
         }
         const facts = await factsOf2(act);
@@ -79121,7 +77622,7 @@ function makeActReader(dir, read2, jobs, clock) {
 }
 function stakeClaim(dir, actDir, record2) {
   fs_default.mkdirSync(dir, { recursive: true });
-  const staging = fs_default.mkdtempSync(import_node_path36.default.join(dir, ".claim-"));
+  const staging = fs_default.mkdtempSync(import_node_path34.default.join(dir, ".claim-"));
   try {
     fs_default.writeFileSync(recordOf2(staging), JSON.stringify(record2));
     fs_default.renameSync(staging, actDir);
@@ -79136,7 +77637,7 @@ function stakeClaim(dir, actDir, record2) {
 }
 async function claimAct(launcher, dir, after, identity2, command, timeoutMs, now2, read2) {
   const act = (after ?? 0) + 1;
-  const actDir = import_node_path36.default.join(dir, String(act));
+  const actDir = import_node_path34.default.join(dir, String(act));
   const job = launcher.launchJobSync(command, filesOf(actDir));
   if (!job.ok) throw new Error(`apply-update: ${job.error}`);
   let stood = false;
@@ -79169,7 +77670,7 @@ var CLAIMED_FIRST = {
   reason: "another act claimed this bundle first"
 };
 function endOverdue(dir, facts, jobs) {
-  const status = filesOf(import_node_path36.default.join(dir, String(facts.act))).status;
+  const status = filesOf(import_node_path34.default.join(dir, String(facts.act))).status;
   return jobs.endJob(facts.record.pid, status, { kind: "timeout" });
 }
 
@@ -79638,7 +78139,67 @@ init_globals();
 
 // src/daemon/cache/git.ts
 init_globals();
-var import_node_path37 = __toESM(require_path_browserify(), 1);
+var import_node_path35 = __toESM(require_path_browserify(), 1);
+
+// src/utils/period.ts
+init_globals();
+function periodOf(every, outcome) {
+  return outcome.kind === "failed" ? every.failedMs : every.okMs;
+}
+function backedOffMs(every, failures, ceilingMs) {
+  return failures === 0 ? every.okMs : Math.min(every.failedMs * 2 ** (failures - 1), ceilingMs);
+}
+var Period = class {
+  constructor(tick, clock) {
+    this.tick = tick;
+    this.clock = clock;
+  }
+  tick;
+  clock;
+  stop = null;
+  state = "released";
+  last = null;
+  // A read landed at the monotonic reading `at` (now, unless the owner is resuming an answer it
+  // kept from earlier). `periodMs` is chosen by the caller from the read's
+  // outcome (a failed PR lookup is retried sooner than a found one).
+  landed(periodMs, at = this.clock.monotonic()) {
+    this.last = { at, periodMs };
+    this.schedule();
+  }
+  hold(held) {
+    if (this.state === "disposed") return;
+    const next = held ? "held" : "released";
+    if (next === this.state) return;
+    this.state = next;
+    this.schedule();
+  }
+  dispose() {
+    this.state = "disposed";
+    this.cancel();
+  }
+  schedule() {
+    this.cancel();
+    if (this.state !== "held" || this.last === null) return;
+    const wait = Math.max(
+      0,
+      this.last.at + this.last.periodMs - this.clock.monotonic()
+    );
+    this.stop = this.clock.after(
+      wait,
+      () => {
+        this.stop = null;
+        this.tick();
+      },
+      { unref: true }
+    );
+  }
+  cancel() {
+    this.stop?.();
+    this.stop = null;
+  }
+};
+
+// src/daemon/cache/git.ts
 var GIT_PERIOD_MS = 3e4;
 var RESOLUTION_TTL_MS = 3e4;
 var DEFAULT_MAX_REPOS = 64;
@@ -79666,7 +78227,7 @@ function optionsKey(options) {
 function watchSpec(root, gitDir, commonDir) {
   const dirs = [
     { path: gitDir, filenames: ["HEAD", "index"] },
-    { path: import_node_path37.default.join(commonDir, "refs", "heads"), recursive: true }
+    { path: import_node_path35.default.join(commonDir, "refs", "heads"), recursive: true }
   ];
   const bounds = dirs.map((d) => boundOf(d.path));
   const named3 = dirs.map((d, i) => `${d.path}@${boundKey(bounds[i])}`);
@@ -80167,6 +78728,1448 @@ var GitDataProvider = class {
     this.repos.clear();
     this.resolutions.clear();
     if (this.ownsWatchers) this.watchers.closeAll();
+  }
+};
+
+// src/daemon/cache/session-usage-store.ts
+init_globals();
+var import_node_path37 = __toESM(require_path_browserify(), 1);
+
+// src/segments/pricing.ts
+init_globals();
+init_url();
+
+// src/utils/cache.ts
+init_globals();
+var import_node_path36 = __toESM(require_path_browserify(), 1);
+var CacheManager = class {
+  // [LAW:one-source-of-truth] Every method takes the cache's root directory
+  // (the host's `cacheDir`), so the layout under it is derived here alone.
+  static usageDir(root) {
+    return import_node_path36.default.join(root, "usage");
+  }
+  static locksDir(root) {
+    return import_node_path36.default.join(root, "locks");
+  }
+  static isLocked(root, name) {
+    const lockFile = import_node_path36.default.join(this.locksDir(root), name);
+    if (!fs_default.existsSync(lockFile)) {
+      return false;
+    }
+    try {
+      const lockContent = fs_default.readFileSync(lockFile, "utf-8");
+      const pid2 = parseInt(lockContent.trim(), 10);
+      if (isNaN(pid2)) {
+        debug(`Invalid PID in lock file ${name}, removing stale lock`);
+        fs_default.unlinkSync(lockFile);
+        return false;
+      }
+      try {
+        process_default.kill(pid2, 0);
+        return true;
+      } catch (error) {
+        if (error.code === "ESRCH") {
+          debug(`Removing stale lock file ${name} for dead process ${pid2}`);
+          fs_default.unlinkSync(lockFile);
+          return false;
+        }
+        debug(`Error checking process ${pid2} for lock ${name}:`, error);
+        return true;
+      }
+    } catch (error) {
+      debug(`Error reading lock file ${name}:`, error);
+      return true;
+    }
+  }
+  static async acquireLock(root, clock, name, timeout = 5e3) {
+    const RETRY_DELAY_MS = 50;
+    const FILE_CREATE_FLAG = "wx";
+    await this.ensureCacheDirectories(root);
+    const lockFile = import_node_path36.default.join(this.locksDir(root), name);
+    const startTime = clock.monotonic();
+    const lockContent = String(process_default.pid);
+    while (clock.monotonic() - startTime < timeout) {
+      try {
+        await fs_default.promises.writeFile(lockFile, lockContent, {
+          flag: FILE_CREATE_FLAG
+        });
+        debug(`Lock acquired for ${name}`);
+        return true;
+      } catch (error) {
+        if (error.code === "EEXIST") {
+          await sleep(clock, RETRY_DELAY_MS);
+        } else {
+          throw error;
+        }
+      }
+    }
+    debug(`Failed to acquire lock for ${name} within ${timeout}ms`);
+    return false;
+  }
+  static async releaseLock(root, name) {
+    const lockFile = import_node_path36.default.join(this.locksDir(root), name);
+    try {
+      await fs_default.promises.unlink(lockFile);
+      debug(`Lock released for ${name}`);
+    } catch (error) {
+      if (error.code !== "ENOENT") {
+        debug(`Error releasing lock for ${name}:`, error);
+      }
+    }
+  }
+  static async ensureCacheDirectories(root) {
+    try {
+      await Promise.all([
+        fs_default.promises.mkdir(root, { recursive: true }),
+        fs_default.promises.mkdir(this.usageDir(root), { recursive: true }),
+        fs_default.promises.mkdir(this.locksDir(root), { recursive: true })
+      ]);
+    } catch (error) {
+      debug("Failed to create cache directories:", error);
+    }
+  }
+  static createProjectHash(projectPath) {
+    return createHash("md5").update(projectPath).digest("hex").substring(0, 8);
+  }
+  static async getUsageCache(root, clock, cacheType, latestMtime) {
+    const MAX_RETRIES = 3;
+    const RETRY_DELAY_MS = 75;
+    const FILE_ENCODING = "utf-8";
+    await this.ensureCacheDirectories(root);
+    const cachePath = import_node_path36.default.join(this.usageDir(root), `${cacheType}.json`);
+    const lockName = `${cacheType}.usage.lock`;
+    for (let attempt4 = 0; attempt4 < MAX_RETRIES; attempt4++) {
+      const isCurrentlyLocked = this.isLocked(root, lockName);
+      if (isCurrentlyLocked) {
+        debug(`Cache for ${cacheType} is locked, waiting...`);
+        await sleep(clock, RETRY_DELAY_MS);
+        continue;
+      }
+      try {
+        const content = await fs_default.promises.readFile(cachePath, FILE_ENCODING);
+        const cached = JSON.parse(content);
+        const cacheIsValid = !latestMtime || cached.timestamp >= latestMtime;
+        if (cacheIsValid) {
+          debug(`[CACHE-HIT] ${cacheType} disk cache: found`);
+          return this.deserializeDates(cached.data);
+        } else {
+          debug(
+            `${cacheType} cache outdated: cache=${cached.timestamp}, latest=${latestMtime}`
+          );
+          return null;
+        }
+      } catch (error) {
+        if (error.code === "ENOENT") {
+          debug(`No shared ${cacheType} usage cache found`);
+          return null;
+        }
+        const attemptNumber = attempt4 + 1;
+        debug(
+          `Attempt ${attemptNumber} failed to read ${cacheType} cache: ${error.message}. Retrying...`
+        );
+        await sleep(clock, RETRY_DELAY_MS);
+      }
+    }
+    debug(`Failed to read ${cacheType} cache after ${MAX_RETRIES} attempts.`);
+    return null;
+  }
+  static deserializeDates(data) {
+    if (Array.isArray(data)) {
+      return data.map((entry) => ({
+        ...entry,
+        timestamp: new Date(entry.timestamp)
+      }));
+    }
+    return data;
+  }
+  static async setUsageCache(root, clock, cacheType, data, latestMtime) {
+    const lockName = `${cacheType}.usage.lock`;
+    const lockAcquired = await this.acquireLock(root, clock, lockName);
+    if (!lockAcquired) {
+      debug(`Could not acquire lock to set usage cache for ${cacheType}`);
+      return;
+    }
+    try {
+      await this.ensureCacheDirectories(root);
+      const cachePath = import_node_path36.default.join(this.usageDir(root), `${cacheType}.json`);
+      const cacheTimestamp = latestMtime || clock.now();
+      const cacheEntry = {
+        data,
+        timestamp: cacheTimestamp
+      };
+      const cacheContent = JSON.stringify(cacheEntry);
+      await fs_default.promises.writeFile(cachePath, cacheContent, "utf-8");
+      debug(`[CACHE-SET] ${cacheType} disk cache stored`);
+    } catch (error) {
+      debug(`Failed to save ${cacheType} usage cache:`, error);
+    } finally {
+      await this.releaseLock(root, lockName);
+    }
+  }
+};
+
+// src/segments/pricing.ts
+var OFFLINE_PRICING_DATA = {
+  "claude-haiku-4-5-20251001": {
+    name: "Claude Haiku 4.5",
+    input: 1,
+    output: 5,
+    cache_write_5m: 1.25,
+    cache_write_1h: 2,
+    cache_read: 0.1
+  },
+  "claude-haiku-4-5": {
+    name: "Claude Haiku 4.5",
+    input: 1,
+    output: 5,
+    cache_write_5m: 1.25,
+    cache_write_1h: 2,
+    cache_read: 0.1
+  },
+  "claude-opus-4-20250514": {
+    name: "Claude Opus 4",
+    input: 15,
+    output: 75,
+    cache_write_5m: 18.75,
+    cache_write_1h: 30,
+    cache_read: 1.5
+  },
+  "claude-opus-4-1": {
+    name: "Claude Opus 4.1",
+    input: 15,
+    output: 75,
+    cache_write_5m: 18.75,
+    cache_write_1h: 30,
+    cache_read: 1.5
+  },
+  "claude-opus-4-1-20250805": {
+    name: "Claude Opus 4.1",
+    input: 15,
+    output: 75,
+    cache_write_5m: 18.75,
+    cache_write_1h: 30,
+    cache_read: 1.5
+  },
+  "claude-sonnet-4-20250514": {
+    name: "Claude Sonnet 4",
+    input: 3,
+    output: 15,
+    cache_write_5m: 3.75,
+    cache_write_1h: 6,
+    cache_read: 0.3
+  },
+  "claude-4-opus-20250514": {
+    name: "Claude 4 Opus",
+    input: 15,
+    output: 75,
+    cache_write_5m: 18.75,
+    cache_write_1h: 30,
+    cache_read: 1.5
+  },
+  "claude-4-sonnet-20250514": {
+    name: "Claude 4 Sonnet",
+    input: 3,
+    output: 15,
+    cache_write_5m: 3.75,
+    cache_write_1h: 6,
+    cache_read: 0.3
+  },
+  "claude-sonnet-4-5": {
+    name: "Claude Sonnet 4.5",
+    input: 3,
+    output: 15,
+    cache_write_5m: 3.75,
+    cache_write_1h: 6,
+    cache_read: 0.3
+  },
+  "claude-sonnet-4-5-20250929": {
+    name: "Claude Sonnet 4.5",
+    input: 3,
+    output: 15,
+    cache_write_5m: 3.75,
+    cache_write_1h: 6,
+    cache_read: 0.3
+  },
+  "claude-opus-4-5": {
+    name: "Claude Opus 4.5",
+    input: 5,
+    output: 25,
+    cache_write_5m: 6.25,
+    cache_write_1h: 10,
+    cache_read: 0.5
+  },
+  "claude-opus-4-5-20251101": {
+    name: "Claude Opus 4.5",
+    input: 5,
+    output: 25,
+    cache_write_5m: 6.25,
+    cache_write_1h: 10,
+    cache_read: 0.5
+  },
+  "claude-opus-4-6": {
+    name: "Claude Opus 4.6",
+    input: 5,
+    output: 25,
+    cache_write_5m: 6.25,
+    cache_write_1h: 10,
+    cache_read: 0.5
+  },
+  "claude-opus-4-6-20260205": {
+    name: "Claude Opus 4.6",
+    input: 5,
+    output: 25,
+    cache_write_5m: 6.25,
+    cache_write_1h: 10,
+    cache_read: 0.5
+  },
+  "claude-sonnet-4-6": {
+    name: "Claude Sonnet 4.6",
+    input: 3,
+    output: 15,
+    cache_write_5m: 3.75,
+    cache_write_1h: 6,
+    cache_read: 0.3
+  }
+};
+var PricingService = class {
+  static executionCache = null;
+  static modelPricingCache = /* @__PURE__ */ new Map();
+  static GITHUB_PRICING_URL = "https://raw.githubusercontent.com/promptctl/cc-candybar/main/pricing.json";
+  static async loadDiskCache(cacheRoot, clock) {
+    const TTL_24H = 24 * 60 * 60 * 1e3;
+    const minValidTime = clock.now() - TTL_24H;
+    return await CacheManager.getUsageCache(
+      cacheRoot,
+      clock,
+      "pricing",
+      minValidTime
+    );
+  }
+  static async saveDiskCache(cacheRoot, clock, data) {
+    await CacheManager.setUsageCache(cacheRoot, clock, "pricing", data);
+  }
+  static async fetchPricingData() {
+    return new Promise((resolve) => {
+      const parsedUrl = new U(this.GITHUB_PRICING_URL);
+      const request2 = get2(
+        {
+          hostname: parsedUrl.hostname,
+          path: parsedUrl.pathname,
+          headers: {
+            "User-Agent": "cc-candybar",
+            "Cache-Control": "no-cache"
+          },
+          timeout: 5e3
+        },
+        (response) => {
+          if (response.statusCode !== 200) {
+            debug(`HTTP ${response.statusCode}: ${response.statusMessage}`);
+            resolve(null);
+            return;
+          }
+          let data = "";
+          let size = 0;
+          const MAX_SIZE = 1024 * 1024;
+          response.setEncoding("utf8");
+          response.on("data", (chunk3) => {
+            size += import_buffer.Buffer.byteLength(chunk3);
+            if (size > MAX_SIZE) {
+              debug("Response too large");
+              request2.destroy();
+              resolve(null);
+              return;
+            }
+            data += chunk3;
+          });
+          response.on("end", () => {
+            try {
+              const json2 = JSON.parse(data);
+              const dataObj = json2;
+              const meta = dataObj._meta;
+              const pricingData = {};
+              for (const [key, value] of Object.entries(dataObj)) {
+                if (key !== "_meta") {
+                  pricingData[key] = value;
+                }
+              }
+              if (this.validatePricingData(pricingData)) {
+                debug(
+                  `Fetched fresh pricing from GitHub for ${Object.keys(pricingData).length} models`
+                );
+                debug(`Pricing last updated: ${meta?.updated || "unknown"}`);
+                resolve(pricingData);
+              } else {
+                debug("Invalid pricing data structure");
+                resolve(null);
+              }
+            } catch (error) {
+              debug("Failed to parse JSON:", error);
+              resolve(null);
+            }
+          });
+          response.on("error", (error) => {
+            debug("Response error:", error);
+            resolve(null);
+          });
+        }
+      );
+      request2.on("error", (error) => {
+        debug("Request error:", error);
+        resolve(null);
+      });
+      request2.on("timeout", () => {
+        debug("Request timeout");
+        request2.destroy();
+        resolve(null);
+      });
+      request2.end();
+    });
+  }
+  static async getCurrentPricing(cacheRoot, clock) {
+    if (this.executionCache !== null) {
+      debug(
+        `[CACHE-HIT] Pricing execution cache: ${Object.keys(this.executionCache).length} models`
+      );
+      return this.executionCache;
+    }
+    const diskCached = await this.loadDiskCache(cacheRoot, clock);
+    if (diskCached) {
+      debug(
+        `[CACHE-HIT] Pricing disk cache: ${Object.keys(diskCached).length} models`
+      );
+      this.executionCache = diskCached;
+      debug(
+        `[CACHE-SET] Pricing execution cache stored: ${Object.keys(diskCached).length} models`
+      );
+      return diskCached;
+    }
+    const freshData = await this.fetchPricingData();
+    if (freshData) {
+      await this.saveDiskCache(cacheRoot, clock, freshData);
+      debug(
+        `[CACHE-SET] Pricing disk cache stored: ${Object.keys(freshData).length} models`
+      );
+      this.executionCache = freshData;
+      debug(
+        `[CACHE-SET] Pricing execution cache stored: ${Object.keys(freshData).length} models`
+      );
+      return freshData;
+    }
+    debug(
+      `[CACHE-FALLBACK] Using offline pricing data: ${Object.keys(OFFLINE_PRICING_DATA).length} models`
+    );
+    this.executionCache = OFFLINE_PRICING_DATA;
+    debug(
+      `[CACHE-SET] Pricing execution cache stored: ${Object.keys(OFFLINE_PRICING_DATA).length} models`
+    );
+    return OFFLINE_PRICING_DATA;
+  }
+  static validatePricingData(data) {
+    if (!data || typeof data !== "object") return false;
+    for (const [, value] of Object.entries(data)) {
+      if (!value || typeof value !== "object") return false;
+      const pricing = value;
+      if (typeof pricing.input !== "number" || typeof pricing.output !== "number" || typeof pricing.cache_read !== "number") {
+        return false;
+      }
+    }
+    return true;
+  }
+  static async getModelPricing(modelId, cacheRoot, clock) {
+    if (this.modelPricingCache.has(modelId)) {
+      debug(`[CACHE-HIT] Model pricing cache: ${modelId}`);
+      return this.modelPricingCache.get(modelId);
+    }
+    const allPricing = await this.getCurrentPricing(cacheRoot, clock);
+    let pricing;
+    if (allPricing[modelId]) {
+      pricing = allPricing[modelId];
+    } else {
+      pricing = this.fuzzyMatchModel(modelId, allPricing);
+    }
+    this.modelPricingCache.set(modelId, pricing);
+    debug(`[CACHE-SET] Model pricing cache: ${modelId}`);
+    return pricing;
+  }
+  static fuzzyMatchModel(modelId, allPricing) {
+    const lowerModelId = modelId.toLowerCase();
+    for (const [key, pricing] of Object.entries(allPricing)) {
+      if (key.toLowerCase() === lowerModelId) {
+        return pricing;
+      }
+    }
+    const patterns = [
+      {
+        pattern: ["opus-4-6", "claude-opus-4-6"],
+        fallback: "claude-opus-4-6-20260205"
+      },
+      {
+        pattern: ["opus-4-5", "claude-opus-4-5"],
+        fallback: "claude-opus-4-5-20251101"
+      },
+      {
+        pattern: ["opus-4-1", "claude-opus-4-1"],
+        fallback: "claude-opus-4-1-20250805"
+      },
+      {
+        pattern: ["opus-4", "claude-opus-4"],
+        fallback: "claude-opus-4-20250514"
+      },
+      {
+        pattern: ["sonnet-4-6", "sonnet-4.6", "claude-sonnet-4-6"],
+        fallback: "claude-sonnet-4-6"
+      },
+      {
+        pattern: ["sonnet-4.5", "4-5-sonnet", "sonnet-4-5"],
+        fallback: "claude-sonnet-4-5-20250929"
+      },
+      {
+        pattern: ["sonnet-4", "claude-sonnet-4"],
+        fallback: "claude-sonnet-4-20250514"
+      },
+      {
+        pattern: ["haiku-4.5", "4-5-haiku", "haiku-4-5"],
+        fallback: "claude-haiku-4-5-20251001"
+      },
+      { pattern: ["haiku"], fallback: "claude-haiku-4-5-20251001" },
+      { pattern: ["opus"], fallback: "claude-opus-4-20250514" },
+      { pattern: ["sonnet"], fallback: "claude-sonnet-4-5-20250929" }
+    ];
+    for (const { pattern: pattern2, fallback } of patterns) {
+      if (pattern2.some((p2) => lowerModelId.includes(p2))) {
+        if (allPricing[fallback]) {
+          return allPricing[fallback];
+        }
+      }
+    }
+    return allPricing["claude-sonnet-4-5-20250929"] || {
+      name: `${modelId} (Unknown Model)`,
+      input: 3,
+      cache_write_5m: 3.75,
+      cache_write_1h: 6,
+      cache_read: 0.3,
+      output: 15
+    };
+  }
+  static async calculateCostForEntry(entry, cacheRoot, clock) {
+    const usage = entry.message?.usage;
+    if (!usage) {
+      return 0;
+    }
+    const modelId = this.extractModelId(entry);
+    const pricing = await this.getModelPricing(modelId, cacheRoot, clock);
+    const inputTokens = usage.input_tokens || 0;
+    const outputTokens = usage.output_tokens || 0;
+    const cacheCreationTokens = usage.cache_creation_input_tokens || 0;
+    const cacheReadTokens = usage.cache_read_input_tokens || 0;
+    const inputCost = inputTokens / 1e6 * pricing.input;
+    const outputCost = outputTokens / 1e6 * pricing.output;
+    const cacheReadCost = cacheReadTokens / 1e6 * pricing.cache_read;
+    const cacheCreationCost = cacheCreationTokens / 1e6 * pricing.cache_write_5m;
+    return inputCost + outputCost + cacheCreationCost + cacheReadCost;
+  }
+  static extractModelId(entry) {
+    if (entry.model && typeof entry.model === "string") {
+      return entry.model;
+    }
+    const message = entry.message;
+    if (message?.model) {
+      const model = message.model;
+      if (typeof model === "string") {
+        return model;
+      }
+      const modelObj = model;
+      return (typeof modelObj?.id === "string" ? modelObj.id : null) || "claude-sonnet-4-5-20250929";
+    }
+    if (entry.model_id && typeof entry.model_id === "string") {
+      return entry.model_id;
+    }
+    return "claude-sonnet-4-5-20250929";
+  }
+};
+
+// src/utils/single-flight.ts
+init_globals();
+var SingleFlight = class {
+  inflight = /* @__PURE__ */ new Map();
+  run(key, factory) {
+    return this.inflight.get(key) ?? this.start(key, factory);
+  }
+  start(key, factory) {
+    const promise = factory();
+    this.inflight.set(key, promise);
+    const deregister = () => {
+      if (this.inflight.get(key) === promise) this.inflight.delete(key);
+    };
+    promise.then(deregister, deregister);
+    return promise;
+  }
+  // Number of computations currently in flight — a read-only observability
+  // surface for tests asserting the coalescing contract (one in-flight entry
+  // per key). Never read as control flow.
+  get size() {
+    return this.inflight.size;
+  }
+};
+
+// src/utils/keyed-source.ts
+init_globals();
+var KeyedSource = class {
+  constructor(spec) {
+    this.spec = spec;
+    this.refreshes = spec.ledger.declare({
+      name: spec.name,
+      scope: spec.scope,
+      // [LAW:types-are-the-program] exception: a source with no period
+      // declares no tick, but its handle is typed for every keyed trigger;
+      // only the absent period keeps it from recording one.
+      refresh: spec.every === null ? ["first", "change", "supersede"] : ["first", "period", "change", "supersede"]
+    });
+  }
+  spec;
+  entries = /* @__PURE__ */ new Map();
+  refreshes;
+  closed = false;
+  // [LAW:single-enforcer] The one way into an entry: `holds` takes it — the
+  // home holds it until a declaration of the home's takes it no more, or the
+  // home is disposed, which keeps the entry for its next hold — and the lane
+  // reads it as it stands, never awaited and taking nothing. A key never read
+  // is created pending and read once, its first refresh.
+  //
+  // [LAW:no-silent-failure] The owner logs its own failures — each refresh's
+  // by that refresh — so its caller logs none. A declaration that THROWS is a
+  // bug none of those saw, reported by the view's declaration (declareLanes).
+  declare(holds2, input) {
+    if (this.closed)
+      return settledLane(failed(`${this.spec.name} closed`, "read"));
+    const key = this.spec.keyOf(input);
+    const entry = this.touched(key) ?? this.firstRead(this.created(key, input));
+    holds2.take(`${this.spec.name}:${key}`, () => this.hold(entry));
+    return { current: () => currentOf(entry) };
+  }
+  // [LAW:one-source-of-truth] The one supersede rule (SOURCES-AND-FRAMES.md):
+  // the daemon itself is changing what this key reads (a click's move). The
+  // value is pending (`superseded`) and the read in flight is abandoned, so no
+  // draw after the click shows the value from before it. Every trigger of the
+  // key is held back until every supersede of it has resumed, so no read
+  // during the move stores the world from before it; the last resume starts
+  // one fresh read. A key never read is created for it, and its first read is
+  // that resume's.
+  supersede(input) {
+    if (this.closed) return () => {
+    };
+    const key = this.spec.keyOf(input);
+    const entry = this.touched(key) ?? this.created(key, input);
+    entry.superseding++;
+    renew(entry, "superseded");
+    entry.flight = null;
+    entry.changed = false;
+    this.evict();
+    let resumed = false;
+    return () => {
+      if (resumed) return;
+      resumed = true;
+      entry.superseding--;
+      if (this.entries.get(entry.key) === entry)
+        this.refresh(entry, "supersede");
+    };
+  }
+  // The world changed under every held entry `affected` names (a watched file
+  // was written): each is read again, after the read in flight when one is
+  // out. An entry nobody holds is read when a hold returns to it.
+  changed(affected) {
+    for (const entry of this.entries.values()) {
+      if (entry.holders > 0 && affected(entry.input)) {
+        this.refresh(entry, "change");
+      }
+    }
+  }
+  // Whether some home holds an entry `match` names now.
+  isHeld(match) {
+    for (const entry of this.entries.values()) {
+      if (entry.holders > 0 && match(entry.input)) return true;
+    }
+    return false;
+  }
+  stats() {
+    let held = 0;
+    for (const entry of this.entries.values()) if (entry.holders > 0) held++;
+    const { refreshes, failures, lastMs } = this.refreshes.record();
+    return { entries: this.entries.size, held, refreshes, failures, lastMs };
+  }
+  // Ends every entry's period: a held entry's period re-arms on every landing,
+  // so an owner that is not closed keeps its timers for good.
+  close() {
+    this.closed = true;
+    for (const entry of [...this.entries.values()]) this.drop(entry);
+  }
+  // LRU touch: re-inserting moves the entry to the newest end.
+  touched(key) {
+    const entry = this.entries.get(key);
+    if (entry === void 0) return void 0;
+    this.entries.delete(key);
+    this.entries.set(key, entry);
+    return entry;
+  }
+  // In place before any read, so a read's answer finds its entry stored.
+  created(key, input) {
+    const entry = {
+      key,
+      input,
+      reading: unread(),
+      holders: 0,
+      flight: null,
+      changed: false,
+      superseding: 0,
+      revisit: revisitOf(this.spec.every, this.spec.clock, {
+        period: () => this.refresh(entry, "period"),
+        holdReturned: () => this.refresh(entry, "change")
+      })
+    };
+    this.entries.set(key, entry);
+    return entry;
+  }
+  firstRead(entry) {
+    this.refresh(entry, "first");
+    return entry;
+  }
+  refresh(entry, by) {
+    if (entry.superseding > 0) return;
+    if (entry.flight !== null) {
+      entry.changed ||= by === "change";
+      return;
+    }
+    const flight = {};
+    entry.flight = flight;
+    const startedAt = this.spec.clock.monotonic();
+    void attempt3(() => this.spec.read(entry.input)).then((outcome) => {
+      const stored = entry.flight === flight;
+      try {
+        this.refreshes.recorded(
+          `${this.spec.fields(entry.input)} stored=${stored ? "Y" : "N"}`,
+          by,
+          outcome,
+          elapsedMs(this.spec.clock, startedAt)
+        );
+      } finally {
+        if (stored) this.store(entry, outcome);
+      }
+    }).catch((e) => {
+      this.spec.logger(
+        "error",
+        `${this.spec.name} refresh threw (${this.spec.fields(entry.input)}): ${String(e)}`
+      );
+    });
+  }
+  store(entry, outcome) {
+    entry.flight = null;
+    try {
+      settle(entry, outcome);
+    } finally {
+      entry.revisit.landed(outcome);
+      if (entry.changed) {
+        entry.changed = false;
+        this.refresh(entry, "change");
+      }
+    }
+  }
+  hold(entry) {
+    entry.holders++;
+    entry.revisit.hold(true);
+    this.evict();
+    return () => {
+      entry.holders--;
+      entry.revisit.hold(entry.holders > 0);
+    };
+  }
+  // A held entry is never evicted, so held entries are bounded by their
+  // holders (the render cache's budget).
+  // [LAW:single-enforcer] Run by every claim that can add an entry (a hold, a
+  // supersede). An entry mid-supersede is kept like a held one: dropped, a
+  // hold returning during the move would read the world from before it.
+  evict() {
+    for (const entry of [...this.entries.values()]) {
+      if (this.entries.size <= this.spec.maxEntries) return;
+      if (entry.holders === 0 && entry.superseding === 0) this.drop(entry);
+    }
+  }
+  drop(entry) {
+    this.entries.delete(entry.key);
+    entry.flight = null;
+    entry.revisit.dispose();
+    answerPending(entry, failed(`${this.spec.name} entry dropped`, "read"));
+  }
+};
+function revisitOf(every, clock, read2) {
+  if (every === null) return new HoldReturn(read2.holdReturned);
+  const period = new Period(read2.period, clock);
+  return {
+    landed: (outcome) => period.landed(periodOf(every, outcome)),
+    hold: (held) => period.hold(held),
+    dispose: () => period.dispose()
+  };
+}
+var HoldReturn = class {
+  constructor(reread) {
+    this.reread = reread;
+  }
+  reread;
+  state = "released";
+  answered = false;
+  landed() {
+    this.answered = true;
+  }
+  hold(held) {
+    if (this.state === "disposed") return;
+    const returned2 = held && this.state === "released" && this.answered;
+    this.state = held ? "held" : "released";
+    if (returned2) this.reread();
+  }
+  dispose() {
+    this.state = "disposed";
+  }
+};
+function attempt3(read2) {
+  const threw2 = (e) => failed(`read threw: ${String(e)}`, "read");
+  try {
+    return read2().catch(threw2);
+  } catch (e) {
+    return Promise.resolve(threw2(e));
+  }
+}
+
+// src/daemon/cache/session-usage-store.ts
+var SPEED_RING_CAPACITY = 64;
+function speedSampleOf(breakdown, atMs) {
+  const input = breakdown ? breakdown.input + breakdown.cacheCreation + breakdown.cacheRead : 0;
+  const output = breakdown ? breakdown.output : 0;
+  return { input, output, total: input + output, atMs };
+}
+var DEFAULT_STALE_AGE_MS = 24 * 60 * 60 * 1e3;
+var DEFAULT_SWEEP_INTERVAL_MS = 5 * 60 * 1e3;
+var DEFAULT_RESCAN = { okMs: 60 * 1e3, failedMs: 10 * 1e3 };
+var MAX_UNHELD_SCANS = 8;
+var SEED_CONCURRENCY = 8;
+var EMPTY_SESSION_INFO = {
+  cost: null,
+  calculatedCost: null,
+  officialCost: null,
+  tokens: null,
+  tokenBreakdown: null
+};
+function seedCutoffMs(now2) {
+  const d = new Date(now2);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - 1);
+  return d.getTime();
+}
+function emptyBreakdown() {
+  return { input: 0, output: 0, cacheCreation: 0, cacheRead: 0 };
+}
+var EMPTY_FILE_FOLD = {
+  entries: 0,
+  cost: 0,
+  breakdown: emptyBreakdown(),
+  days: /* @__PURE__ */ new Map()
+};
+async function foldFile(state, entries, cacheRoot, clock) {
+  const keep2 = dayKey(new Date(seedCutoffMs(clock.now())));
+  let count = state.entries;
+  let cost = state.cost;
+  const breakdown = { ...state.breakdown };
+  const days = /* @__PURE__ */ new Map();
+  for (const [k, v] of state.days) if (k >= keep2) days.set(k, { ...v });
+  for (const entry of entries) {
+    const u = entry.message?.usage;
+    if (!u) continue;
+    count++;
+    const priced = entry.costUSD ?? await PricingService.calculateCostForEntry(entry.raw, cacheRoot, clock);
+    cost += priced;
+    breakdown.input += u.input_tokens || 0;
+    breakdown.output += u.output_tokens || 0;
+    breakdown.cacheCreation += u.cache_creation_input_tokens || 0;
+    breakdown.cacheRead += u.cache_read_input_tokens || 0;
+    const key = dayKey(new Date(entry.timestamp));
+    if (key < keep2) continue;
+    const d = days.get(key) ?? { ...EMPTY_DAY };
+    d.cost += priced;
+    d.input += u.input_tokens || 0;
+    d.output += u.output_tokens || 0;
+    d.cacheCreation += u.cache_creation_input_tokens || 0;
+    d.cacheRead += u.cache_read_input_tokens || 0;
+    days.set(key, d);
+  }
+  return { entries: count, cost, breakdown, days };
+}
+function mergeFolds(files) {
+  let count = 0;
+  let cost = 0;
+  const bd = emptyBreakdown();
+  const days = /* @__PURE__ */ new Map();
+  for (const { value: f } of files.values()) {
+    count += f.entries;
+    cost += f.cost;
+    bd.input += f.breakdown.input;
+    bd.output += f.breakdown.output;
+    bd.cacheCreation += f.breakdown.cacheCreation;
+    bd.cacheRead += f.breakdown.cacheRead;
+    for (const [k, v] of f.days) {
+      const d = days.get(k) ?? { ...EMPTY_DAY };
+      addDay(d, v);
+      days.set(k, d);
+    }
+  }
+  if (count === 0) return { sessionInfo: EMPTY_SESSION_INFO, days };
+  const tokens = bd.input + bd.output + bd.cacheCreation + bd.cacheRead;
+  return {
+    sessionInfo: {
+      cost,
+      calculatedCost: cost,
+      officialCost: null,
+      tokens,
+      tokenBreakdown: bd
+    },
+    days
+  };
+}
+function under(path42, roots) {
+  return path42 !== void 0 && roots.some((root) => path42.startsWith(root));
+}
+function daySumsOver(slots, roots) {
+  const sums = /* @__PURE__ */ new Map();
+  for (const { record: record2 } of slots) {
+    if (record2 === void 0 || !under(record2.transcriptPath, roots)) continue;
+    for (const [day, d] of record2.days) {
+      const sum = sums.get(day) ?? { ...EMPTY_DAY };
+      addDay(sum, d);
+      sums.set(day, sum);
+    }
+  }
+  return Object.fromEntries(sums);
+}
+async function mapPool(items, limit, fn) {
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < items.length) {
+      const item = items[cursor++];
+      await fn(item);
+    }
+  };
+  const width = Math.min(limit, items.length);
+  await Promise.all(Array.from({ length: width }, worker));
+}
+function usageOver(base, hookData2) {
+  const officialCost = hookData2?.cost?.total_cost_usd ?? null;
+  return {
+    session: { ...base, cost: officialCost ?? base.cost, officialCost }
+  };
+}
+function answer(box, value) {
+  runInAction(() => box.set(value));
+}
+var SessionUsageStore = class {
+  // No count cap: `today` is a fold over every record, so a cap smaller than
+  // the day's sessions would drop work from it unseen. A record is a few
+  // scalars per file and retained day, and `sweepStale` bounds the map to the
+  // sessions seen within `staleAgeMs` plus those holding work done today.
+  // Observable, shallowly: a slot replaced is the change the day sums read.
+  sessions = observable.map(void 0, {
+    deep: false
+  });
+  // [LAW:one-source-of-truth] Coalesces concurrent MISSES for the same
+  // (session, observed stamp) onto one parse; cleared on settle (a coalescer,
+  // not a cache — the records map IS the cache).
+  flight = new SingleFlight();
+  // [LAW:single-enforcer] The one owner of when a directory set is scanned:
+  // its first read is the seed, and its period, which runs only while a home
+  // holds the set, is the rescan. Keyed by the directories themselves, so a
+  // default that resolves to one directory shares a scan with that directory
+  // named outright. Its answer is `today`'s, a failed scan included.
+  scans;
+  // Each directory set's day sums, derived from the records, kept for the
+  // store's life: there are as few as the Claude Code directories rendered
+  // from, and each reads only this store's own map.
+  daySets = /* @__PURE__ */ new Map();
+  // [LAW:no-ambient-temporal-coupling] Explicit owner of observe/commit ordering
+  // for the speed sample. Concurrent renders observing the SAME transcript state
+  // (key = `${sessionId}:${mtime}`) share ONE observation and commit the baseline
+  // exactly once — so they return the same prev+cur and render identical,
+  // deterministic throughput instead of the second clobbering the first.
+  speedFlight = new SingleFlight();
+  // [LAW:single-enforcer] A request's refresh of a session is one unit of
+  // work per (session, observed stamp): the lanes of one request that read
+  // the record (session, speed, today) share it, so it records and logs once.
+  requestFlight = new SingleFlight();
+  staleAgeMs;
+  // The machine the store reads: where transcripts live, and where the
+  // pricing table is cached.
+  host;
+  log;
+  renderTally = { hits: 0, misses: 0 };
+  ledger;
+  // The session record's refresh, which its statusline request makes; a
+  // rescan's reads are its `today` scan's.
+  usage;
+  sweeps = 0;
+  stopSweep = null;
+  closed = false;
+  clock;
+  constructor(opts) {
+    this.host = opts.host;
+    this.clock = opts.clock;
+    this.log = opts.logger ?? quietLogger;
+    this.ledger = opts.ledger ?? new RefreshLedger(this.log);
+    this.usage = this.ledger.declare({
+      name: "usage",
+      scope: "session",
+      refresh: ["request"]
+    });
+    this.staleAgeMs = opts.staleAgeMs ?? DEFAULT_STALE_AGE_MS;
+    this.scans = new KeyedSource({
+      name: "today",
+      scope: "configDir",
+      keyOf: (paths2) => paths2.join("\0"),
+      fields: (paths2) => `dirs=${valueOf(paths2.join(","))}`,
+      read: (paths2) => this.scan(paths2),
+      every: opts.rescan ?? DEFAULT_RESCAN,
+      maxEntries: MAX_UNHELD_SCANS,
+      logger: this.log,
+      ledger: this.ledger,
+      clock: this.clock
+    });
+    const interval = opts.sweepIntervalMs ?? DEFAULT_SWEEP_INTERVAL_MS;
+    if (interval > 0) {
+      this.stopSweep = this.clock.every(interval, () => this.sweepStale(), {
+        unref: true
+      });
+    }
+  }
+  getStats() {
+    return {
+      size: this.sessions.size,
+      hits: this.renderTally.hits,
+      misses: this.renderTally.misses,
+      sweeps: this.sweeps
+    };
+  }
+  // The scans as a source: the directory sets kept, those a home holds, the
+  // seeds (`first`) and rescans (`period`), and how many failed.
+  scanStats() {
+    return this.scans.stats();
+  }
+  // The `session` projection: whole-session totals for the active session.
+  // [LAW:no-silent-failure] A failed transcript parse flows out as `failed`
+  // (the payload boundary logs it); an unknown/empty session is the all-null
+  // SessionInfo whose fields the boundary drops per-field — top-level
+  // `absent` is reserved for ingest, since the native officialCost overlay
+  // applies even with no record.
+  getUsageInfo(sessionId2, hookData2) {
+    return this.request(sessionId2, hookData2?.transcript_path).usage(hookData2);
+  }
+  // [LAW:no-ambient-temporal-coupling] One statusline request's refresh of
+  // its session, as a value: the request's session, speed and today lanes
+  // read the one refresh it starts, whichever asks first and whenever the
+  // others land, so it reads, records and logs once per request.
+  request(sessionId2, transcriptPath) {
+    let refresh = null;
+    const once2 = () => {
+      if (refresh !== null) return refresh;
+      const stamp2 = statStamp(transcriptPath);
+      refresh = {
+        stamp: stamp2,
+        record: this.refreshed(sessionId2, transcriptPath, stamp2)
+      };
+      return refresh;
+    };
+    return {
+      usage: async (hookData2) => {
+        const record2 = await once2().record;
+        if (record2.kind === "failed") return record2;
+        return ok(
+          usageOver(
+            record2.kind === "ok" ? record2.value.sessionInfo : EMPTY_SESSION_INFO,
+            hookData2
+          )
+        );
+      },
+      speed: (nowMs) => this.observed(sessionId2, once2, nowMs),
+      // [LAW:no-ambient-temporal-coupling] `today` sums the session's own
+      // record, so it waits for the request's one refresh of it and for
+      // nothing else: the directory set's scan is no part of the request,
+      // since the day sums are pending until it lands and land through the
+      // observable they are read from.
+      today: async () => {
+        await once2().record;
+      }
+    };
+  }
+  // The `session` projection as the session's last refresh left it, for a
+  // draw: no I/O, no fold. A session no refresh has answered (or one the sweep
+  // dropped) is not answered yet; one whose refresh found no transcript is the
+  // empty record its refresh answers for it.
+  usageOf(sessionId2, hookData2) {
+    const slot = this.sessions.get(sessionId2);
+    if (slot === void 0) return pendingOf("unread");
+    const failure = slot.failure.get();
+    if (failure !== null) return failed(failure, "read");
+    return ok(
+      usageOver(slot.record?.sessionInfo ?? EMPTY_SESSION_INFO, hookData2)
+    );
+  }
+  // A request's ingest of its own session, whose outcome the session's slot
+  // keeps for the draws until the next one.
+  refreshed(sessionId2, transcriptPath, stamp2) {
+    return this.requestFlight.run(`${sessionId2}:${stamp2}`, async () => {
+      const tally = { hits: 0, misses: 0 };
+      const startedAt = this.clock.monotonic();
+      const record2 = await this.ingest(sessionId2, transcriptPath, tally, stamp2);
+      this.renderTally.hits += tally.hits;
+      this.renderTally.misses += tally.misses;
+      if (tally.misses > 0) {
+        this.usage.recorded(
+          `sid=${valueOf(sessionId2)}`,
+          "request",
+          record2,
+          elapsedMs(this.clock, startedAt)
+        );
+      }
+      answer(
+        this.hold(sessionId2).failure,
+        record2.kind === "failed" ? record2.reason : null
+      );
+      return record2;
+    });
+  }
+  // The `today` projection: cross-session sum of every record's today bucket.
+  // [LAW:no-silent-failure] A failed scan or a failed active-session ingest
+  // makes the whole projection `failed` — a total silently missing today's
+  // main work would be a confident wrong number, worse than a loud gap.
+  //
+  // `claudeConfigDir` is the rendering session's `claudeConfigDir` hint, and
+  // the sum is that session plus every session whose transcript lives in THAT
+  // directory — the daemon's own env names none.
+  // [LAW:no-ambient-temporal-coupling] Whose `today` a record is in is read
+  // off where its transcript lives: a sum over every directory seen so far, or
+  // over the sessions that had asked, would move with which other sessions
+  // happened to have rendered.
+  //
+  // A request's refresh of `today`: the active session's own record, so
+  // `today` keeps up with the cost it was sent with. The directory set's
+  // scan is not waited for (`declareToday`).
+  refreshToday(hookData2) {
+    return this.request(
+      hookData2?.session_id ?? "",
+      hookData2?.transcript_path
+    ).today();
+  }
+  // [LAW:single-enforcer] A view's declaration of `today` (declareLanes in
+  // src/daemon/render-payload.ts): the directory set's scans, held, so a set
+  // no scan has answered starts its first one now — before the request or the
+  // frame that reads it. The lane answers the set's day sums once a scan has
+  // answered; which day of them is the draw's (`projectToday`).
+  declareToday(holds2, claudeConfigDir2) {
+    if (this.closed) return settledLane(failed("usage store closed", "read"));
+    const claudePaths = getClaudePaths(claudeConfigDir2, this.host.home);
+    const scans = this.scans.declare(holds2, claudePaths);
+    const set2 = this.daySet(claudePaths);
+    return {
+      current: () => {
+        const scan = scans.current();
+        return scan.kind === "ok" ? ok({ roots: set2.roots, sums: set2.sums.read() }) : scan;
+      }
+    };
+  }
+  // The rendering session's own days the set's sums do not hold, as the
+  // records stand, for the `today` fact: no I/O, no fold. A record under the
+  // set's roots is in its sums already, so it has none beyond them.
+  // [LAW:no-silent-failure] The session's last ingest failing is this read
+  // failing, so the fact fails with it and the draw shows a gap, never a total
+  // silently missing the session's own work.
+  daysOutside(sessionId2, roots) {
+    const slot = this.sessions.get(sessionId2);
+    if (slot === void 0) return ABSENT2;
+    const failure = slot.failure.get();
+    if (failure !== null) return failed(failure, "read");
+    const record2 = slot.record;
+    if (record2 === void 0 || under(record2.transcriptPath, roots)) {
+      return ABSENT2;
+    }
+    return ok(Object.fromEntries(record2.days));
+  }
+  // Take one tok/s observation of the active session: ingest its current
+  // cumulative counts, return the prior sample alongside, and record this one as
+  // the new baseline. [LAW:no-silent-failure] A failed transcript parse flows out
+  // as `failed` (the boundary logs it and the segment reads "—"); an unknown
+  // session yields a zero-count sample, so a first-ever render establishes a
+  // baseline without fabricating a rate. `nowMs` is the caller's single-enforcer
+  // clock instant — the store never reads the clock for tok/s timing itself.
+  observeSpeed(sessionId2, transcriptPath, nowMs) {
+    return this.request(sessionId2, transcriptPath).speed(nowMs);
+  }
+  // A request's speed sample, over the request's one refresh of the session.
+  async observed(sessionId2, refresh, nowMs) {
+    if (!sessionId2) return ABSENT2;
+    const { stamp: stamp2, record: refreshed } = refresh();
+    return this.speedFlight.run(`${sessionId2}:${stamp2}`, async () => {
+      const record2 = await refreshed;
+      if (record2.kind === "failed") {
+        answer(this.hold(sessionId2).speed, record2);
+        return record2;
+      }
+      const breakdown = record2.kind === "ok" ? record2.value.sessionInfo.tokenBreakdown : null;
+      const cur = speedSampleOf(breakdown, nowMs);
+      const { ring } = this.hold(sessionId2);
+      let prev;
+      for (const s of ring) {
+        if (s.atMs < cur.atMs && (prev === void 0 || s.atMs > prev.atMs)) {
+          prev = s;
+        }
+      }
+      ring.push(cur);
+      ring.sort((a, b) => a.atMs - b.atMs);
+      if (ring.length > SPEED_RING_CAPACITY) ring.shift();
+      const observed = ok({
+        ...prev !== void 0 && { prev },
+        cur,
+        samples: [...ring]
+      });
+      answer(this.hold(sessionId2).speed, observed);
+      return observed;
+    });
+  }
+  // The session's speed as its last request observed it, for a draw: a frame
+  // takes no sample, so how often the bar is drawn moves no rate.
+  speedOf(sessionId2) {
+    if (!sessionId2) return ABSENT2;
+    return this.sessions.get(sessionId2)?.speed.get() ?? pendingOf("unread");
+  }
+  // stamp-gated, coalesced re-parse of ONE session. `ok` is its record,
+  // `absent` is an unknown empty session (or no sessionId), `failed` is a
+  // transcript that exists but couldn't be parsed — NOT cached (only ok
+  // records are stored; the next render retries, same rule as the git
+  // cache). This is the single write-path of a slot's record.
+  async ingest(sessionId2, transcriptPath, tally, stamp2) {
+    if (!sessionId2) return ABSENT2;
+    const existing = this.see(sessionId2)?.record;
+    if (existing && stamp2 !== "" && existing.transcriptStamp === stamp2) {
+      tally.hits++;
+      return ok(existing);
+    }
+    if (!transcriptPath) return existing ? ok(existing) : ABSENT2;
+    tally.misses++;
+    let refolded;
+    try {
+      refolded = await this.flight.run(`${sessionId2}:${stamp2}`, async () => {
+        const prior2 = this.sessions.get(sessionId2)?.record;
+        return {
+          prior: prior2,
+          outcome: await this.refold(sessionId2, transcriptPath, prior2)
+        };
+      });
+    } catch (error) {
+      return failed(
+        `usage refold (${sessionId2}): ${error instanceof Error ? error.message : String(error)}`,
+        "read"
+      );
+    }
+    const { prior, outcome } = refolded;
+    if (outcome.kind !== "ok") return outcome;
+    const record2 = {
+      files: outcome.value.files,
+      sessionInfo: outcome.value.sessionInfo,
+      days: outcome.value.days,
+      transcriptStamp: outcome.value.mainStamp,
+      transcriptPath
+    };
+    const landed = this.sessions.get(sessionId2)?.record;
+    if (landed === prior) {
+      this.stored(sessionId2, record2);
+      return ok(record2);
+    }
+    if (landed === void 0) return ok(record2);
+    return this.ingest(sessionId2, transcriptPath, tally, stamp2);
+  }
+  // [LAW:single-enforcer] The one write of a slot's record: the slot is
+  // replaced in the observable map, which is the change the day sums derive
+  // from.
+  stored(sessionId2, record2) {
+    const slot = this.hold(sessionId2);
+    runInAction(() => this.sessions.set(sessionId2, { ...slot, record: record2 }));
+  }
+  // The one write of `lastSeenAt`: the session's slot, refreshed as seen, or
+  // undefined while the store holds nothing for it — asking stores nothing.
+  see(sessionId2) {
+    const slot = this.sessions.get(sessionId2);
+    if (slot) slot.lastSeenAt = this.clock.now();
+    return slot;
+  }
+  // The slot something is about to be stored in, created on the first store.
+  hold(sessionId2) {
+    const seen = this.see(sessionId2);
+    if (seen) return seen;
+    const slot = {
+      lastSeenAt: this.clock.now(),
+      record: void 0,
+      ring: [],
+      failure: observable.box(null),
+      speed: observable.box(void 0, {
+        deep: false
+      })
+    };
+    runInAction(() => this.sessions.set(sessionId2, slot));
+    return slot;
+  }
+  // A directory set's day sums, derived on first ask and kept with the store.
+  daySet(claudePaths) {
+    const key = claudePaths.join("\0");
+    const known = this.daySets.get(key);
+    if (known !== void 0) return known;
+    const roots = claudePaths.map((dir) => (0, import_node_path37.join)(dir, "projects") + import_node_path37.sep);
+    const set2 = {
+      roots,
+      sums: new Kept(
+        `today over ${claudePaths.join(",")}`,
+        () => daySumsOver(this.sessions.values(), roots)
+      )
+    };
+    this.daySets.set(key, set2);
+    return set2;
+  }
+  // [LAW:dataflow-not-control-flow] Re-fold ONLY the bytes appended since the
+  // prior record — the transcript (and each agent sidechain) is append-only, so
+  // per-render work is O(new bytes), not O(file). The whole-file case (cold
+  // record, or a first-ever read) is the same path with an empty prior: the
+  // reader yields the whole file from offset 0. A `failed` read on any file
+  // fails the fold (the boundary logs it); an `absent` file (not yet written /
+  // agent removed) keeps its prior fold and contributes nothing new.
+  async refold(sessionId2, transcriptPath, prior) {
+    const agents = await findAgentTranscripts(
+      sessionId2,
+      (0, import_node_path37.dirname)(transcriptPath),
+      prior === void 0 ? void 0 : new Set(prior.files.keys())
+    );
+    for (const line of longLineLog(agents.longLines)) this.log("info", line);
+    const newFiles = /* @__PURE__ */ new Map();
+    let mainStamp = "";
+    for (const filePath2 of [transcriptPath, ...agents.paths]) {
+      const priorFold = prior?.files.get(filePath2);
+      const read2 = await foldAppended(
+        filePath2,
+        priorFold,
+        EMPTY_FILE_FOLD,
+        (state, entries) => foldFile(state, entries, cacheDir(this.host), this.clock)
+      );
+      if (read2.kind === "failed") return read2;
+      if (read2.kind === "absent") {
+        if (priorFold) newFiles.set(filePath2, priorFold);
+        continue;
+      }
+      const { folded: folded2, longLines } = read2.value;
+      for (const line of longLineLog(longLines)) this.log("info", line);
+      newFiles.set(filePath2, folded2);
+      if (filePath2 === transcriptPath) mainStamp = folded2.cursor.stamp;
+    }
+    return ok({ files: newFiles, ...mergeFolds(newFiles), mainStamp });
+  }
+  // The one whole-tree scan of a directory set — its seed, or a rescan:
+  // ingest every session whose transcript was touched recently enough to hold
+  // a today entry. A rescan is the same scan over warm records, so it costs a
+  // stat per transcript plus the bytes appended since the last one.
+  // [LAW:no-silent-failure] A scan that throws, or that could not read a
+  // session it found, answers as failed, which is `today`'s failure until a
+  // scan lands — never a sum silently missing the sessions it did not reach.
+  // Only a file or directory gone between the listing and its read (ENOENT) is
+  // absence.
+  async scan(claudePaths) {
+    try {
+      const cutoff = seedCutoffMs(this.clock.now());
+      const projectPaths = await findProjectPaths(claudePaths);
+      const candidates = [];
+      for (const dir of projectPaths) {
+        const files = await unlessGone(readdir2(dir));
+        for (const file of files ?? []) {
+          if (!file.endsWith(".jsonl")) continue;
+          const filePath2 = (0, import_node_path37.join)(dir, file);
+          const st = await unlessGone(stat2(filePath2));
+          if (st === void 0 || st.mtimeMs < cutoff) continue;
+          candidates.push({
+            sessionId: file.slice(0, -".jsonl".length),
+            path: filePath2,
+            stamp: stampOf(st)
+          });
+        }
+      }
+      const failures = [];
+      const tally = { hits: 0, misses: 0 };
+      await mapPool(candidates, SEED_CONCURRENCY, async (c) => {
+        const outcome = await this.ingest(c.sessionId, c.path, tally, c.stamp);
+        if (outcome.kind === "failed") {
+          failures.push(outcome.reason);
+          this.log("warn", `usageStore scan: ${outcome.reason}`);
+        }
+      });
+      this.log(
+        "info",
+        `usageStore scan dirs=${valueOf(claudePaths.join(","))} sessions=${candidates.length} read=${tally.misses} failed=${failures.length}`
+      );
+      if (failures.length > 0) {
+        return failed(
+          `usage scan: ${failures.length} of ${candidates.length} sessions could not be read \u2014 ${failures[0]}`,
+          "read"
+        );
+      }
+      return ok({ sessions: candidates.length, read: tally.misses });
+    } catch (error) {
+      return failed(
+        `usage scan: ${error instanceof Error ? error.message : String(error)}`,
+        "read"
+      );
+    }
+  }
+  // Public for tests; called periodically from the timer. Drops what nothing
+  // reads any more: a session unseen for `staleAgeMs` holding no bucket for
+  // today. A stale record holding one is `held`, since `today` sums it — a
+  // session whose transcript the scans have stopped visiting is seen no more,
+  // and a day can run past `staleAgeMs` (a 25-hour DST day).
+  // [LAW:one-source-of-truth] Today is the day of the sweep's own `now`: the
+  // wall clock a frame's instant and the scan's cutoff read too.
+  sweepStale() {
+    const now2 = this.clock.now();
+    const today = dayKey(new Date(now2));
+    let dropped = 0;
+    let held = 0;
+    let noRecord = 0;
+    runInAction(() => {
+      for (const [sid, { lastSeenAt, record: record2 }] of [...this.sessions]) {
+        if (now2 - lastSeenAt <= this.staleAgeMs) continue;
+        if (record2?.days.has(today)) {
+          held++;
+          continue;
+        }
+        this.sessions.delete(sid);
+        dropped++;
+        if (record2 === void 0) noRecord++;
+      }
+    });
+    if (dropped > 0) this.sweeps++;
+    if (dropped > 0 || held > 0) {
+      this.log(
+        "info",
+        `usageStore sweep dropped=${dropped} noRecord=${noRecord} held=${held}`
+      );
+    }
+    return dropped;
+  }
+  close() {
+    this.closed = true;
+    this.stopSweep?.();
+    this.stopSweep = null;
+    this.scans.close();
+    runInAction(() => {
+      for (const { sums } of this.daySets.values()) sums.release();
+      this.sessions.clear();
+    });
+    this.daySets.clear();
   }
 };
 
