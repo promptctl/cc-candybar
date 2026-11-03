@@ -13,7 +13,8 @@ export interface HeldClock extends Timekeeper {
   // Time a synchronous piece of work uses: moves time forward without firing
   // any timer, so what fell due while it ran waits for the next `advance`, as
   // it waits for the loop in a real process. A timer due during the burn runs
-  // at the burned moment, late, as a real one does.
+  // at the burned moment, late, as a real one does; a repeating one runs once,
+  // not once per period it missed.
   burn(ms: number): void;
   // How many timers are armed: a cancelled or fired one-shot is not.
   pending(): number;
@@ -27,8 +28,9 @@ export interface HeldClock extends Timekeeper {
 // project, which refuses the real clock, can still build one.
 export function heldClock(start: Date): HeldClock {
   let elapsed = 0;
-  // A repeating timer keeps its record and moves `at` by its period each time it
-  // fires; a one-shot leaves the set.
+  // A repeating timer keeps its record and re-arms a period from where it fired,
+  // as an interval does after a blocked loop: one late run, not one per missed
+  // period. A one-shot leaves the set.
   const timers = new Set<{ at: number; fire: () => void; period?: number }>();
   const nextDue = (end: number) =>
     [...timers].filter((t) => t.at <= end).sort((a, b) => a.at - b.at)[0];
@@ -41,11 +43,21 @@ export function heldClock(start: Date): HeldClock {
       if (due.period === undefined) {
         timers.delete(due);
       } else {
-        due.at += due.period;
+        due.at = elapsed + due.period;
       }
       due.fire();
     }
     elapsed = Math.max(elapsed, end);
+  };
+  // [LAW:single-enforcer] Time only moves forward by a number: a negative or
+  // NaN span would leave every later comparison false and every timer silent.
+  const span = (ms: number): number => {
+    if (!(ms >= 0 && Number.isFinite(ms))) {
+      throw new RangeError(
+        `a held clock moves by a finite span of 0 or more, got ${ms}`,
+      );
+    }
+    return ms;
   };
   const arm = (ms: number, fire: () => void, period?: number) => {
     const timer = { at: elapsed + ms, fire, period };
@@ -59,9 +71,9 @@ export function heldClock(start: Date): HeldClock {
     after: (ms, fire) => arm(ms, fire),
     every: (ms, fire) => arm(Math.max(1, ms), fire, Math.max(1, ms)),
     defer: (fire) => arm(0, fire),
-    advance: (ms) => fireThrough(elapsed + ms),
+    advance: (ms) => fireThrough(elapsed + span(ms)),
     burn: (ms) => {
-      elapsed += ms;
+      elapsed += span(ms);
     },
     pending: () => timers.size,
     pinMtime: (file) => {

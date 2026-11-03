@@ -73,6 +73,25 @@ describe("the held clock", () => {
     expect(clock.monotonic()).toBe(180);
   });
 
+  test("a repeating timer a burn passed runs once, late, then a period on", () => {
+    const clock = heldClock(new Date(1_000_000));
+    const at: number[] = [];
+    clock.every(20, () => at.push(clock.monotonic()));
+    clock.burn(70);
+    clock.advance(30);
+    expect(at).toEqual([70, 90]);
+  });
+
+  test.each([-1, Number.NaN, Number.POSITIVE_INFINITY])(
+    "a span of %s is refused, so time cannot run back or stop firing",
+    (ms) => {
+      const clock = heldClock(new Date(1_000_000));
+      expect(() => clock.advance(ms)).toThrow(RangeError);
+      expect(() => clock.burn(ms)).toThrow(RangeError);
+      expect(clock.monotonic()).toBe(0);
+    },
+  );
+
   test("counts the timers armed, not those fired or cancelled", () => {
     const clock = heldClock(new Date(1_000_000));
     expect(clock.pending()).toBe(0);

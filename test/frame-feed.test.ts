@@ -39,9 +39,12 @@ const START_MS = 1_700_000_000_000;
 // A timer waits whole milliseconds, as Node's do: the feed hands `after` the
 // fractional wait to a frame's moment, which the held clock would otherwise
 // keep to the last digit, so a draw due at 70 ms could fall at 70.0000001 and
-// miss a window that ends there. A wait that is more than nothing is at least
-// one millisecond, so a timer that fires a hair early and waits out the rest
-// still moves time forward.
+// miss a window that ends there. Node truncates; this rounds to the nearest,
+// so float noise in the arithmetic (69.9999999) cannot cost a millisecond the
+// feed meant to wait. A wait that is more than nothing is at least one
+// millisecond, so a timer that fires a hair early and waits out the rest still
+// moves time forward. Nothing stays nothing, where Node would take a
+// millisecond: the cases draw a frame set for now at the instant it is set.
 const wholeMs = (ms: number): number =>
   ms > 0 ? Math.max(1, Math.round(ms)) : 0;
 
