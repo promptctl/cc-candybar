@@ -1334,14 +1334,14 @@ var require_buffer = __commonJS({
       } else {
         if (byteOffset + valLength > arrLength) byteOffset = arrLength - valLength;
         for (i = byteOffset; i >= 0; i--) {
-          let found = true;
+          let found2 = true;
           for (let j = 0; j < valLength; j++) {
             if (read2(arr, i + j) !== read2(val, j)) {
-              found = false;
+              found2 = false;
               break;
             }
           }
-          if (found) return i;
+          if (found2) return i;
         }
       }
       return -1;
@@ -24949,8 +24949,8 @@ var ColorTable = class {
   matchWhere(value, accept) {
     const dist = this.colors.map((c) => rgbDistance(c, value));
     const nearestFirst = [...dist.keys()].sort((a, b) => dist[a] - dist[b]);
-    const found = nearestFirst.find((i) => accept(this.colors[i], this.firstIndex + i));
-    return found === void 0 ? void 0 : this.firstIndex + found;
+    const found2 = nearestFirst.find((i) => accept(this.colors[i], this.firstIndex + i));
+    return found2 === void 0 ? void 0 : this.firstIndex + found2;
   }
 };
 var ColorDepth;
@@ -35468,9 +35468,9 @@ function wheel(curve, z) {
       };
       const write = (color, bound, place) => {
         const key = `${keyOf2(color, bound)} ${place.row}:${place.centre}`;
-        const found = written2.get(key) ?? choose(color, bound, place);
-        written2.set(key, found);
-        return found;
+        const found2 = written2.get(key) ?? choose(color, bound, place);
+        written2.set(key, found2);
+        return found2;
       };
       return (shown, cell3) => {
         const mine = { fg: own2(cell3.terminal.fg, shown.fg), bg: own2(cell3.terminal.bg, shown.bg) };
@@ -36750,12 +36750,12 @@ function mapVariableTemplates(v, f) {
   } : body;
 }
 function variableTemplates(v) {
-  const found = [];
+  const found2 = [];
   mapVariableTemplates(v, (template, field) => {
-    found.push([field, template]);
+    found2.push([field, template]);
     return template;
   });
-  return found;
+  return found2;
 }
 var MISSING_DATA = ["fail", "ignore"];
 function missingDataOf(seg2) {
@@ -37425,12 +37425,12 @@ function keyLine(source, document, pathParts) {
   let foundCursor;
   for (const part of pathParts) {
     if (part === "" || /^\d+$/.test(part)) continue;
-    const found = findKeyOccurrence(source, cursor, part);
-    if (found === -1) {
+    const found2 = findKeyOccurrence(source, cursor, part);
+    if (found2 === -1) {
       return foundCursor !== void 0 ? lineFromOffset(source, foundCursor) : void 0;
     }
-    cursor = found;
-    foundCursor = found;
+    cursor = found2;
+    foundCursor = found2;
   }
   return foundCursor !== void 0 ? lineFromOffset(source, foundCursor) : void 0;
 }
@@ -38763,13 +38763,13 @@ function beside(node, anchor, cell3, relation) {
   return null;
 }
 function besideInBody(node, anchor, cell3, relation) {
-  let found = false;
+  let found2 = false;
   const next = mapOpens(node, (body) => {
     const placed2 = beside(body, anchor, cell3, relation);
-    found = placed2 !== null;
+    found2 = placed2 !== null;
     return placed2 ?? body;
   });
-  return found ? next : null;
+  return found2 ? next : null;
 }
 function restages(fragment) {
   if (!isRowsFragment(fragment)) return true;
@@ -38987,6 +38987,86 @@ function overlayByName(base, over) {
 
 // src/config/loader/variables.ts
 init_globals();
+
+// src/var-system/types.ts
+init_globals();
+function isJsonValue(value) {
+  if (value === null) return true;
+  switch (typeof value) {
+    case "string":
+    case "boolean":
+      return true;
+    case "number":
+      return Number.isFinite(value);
+    case "object": {
+      if (Array.isArray(value)) return value.every(isJsonValue);
+      const proto = Object.getPrototypeOf(value);
+      return (proto === Object.prototype || proto === null) && Object.values(value).every(isJsonValue);
+    }
+    default:
+      return false;
+  }
+}
+function toDocument(value) {
+  if (Array.isArray(value)) return Object.freeze(value.map(toDocument));
+  if (value !== null && typeof value === "object") {
+    const out = /* @__PURE__ */ Object.create(null);
+    const entries = Object.entries(value).sort(
+      ([a], [b]) => a < b ? -1 : a > b ? 1 : 0
+    );
+    for (const [key, v] of entries) out[key] = toDocument(v);
+    return Object.freeze(out);
+  }
+  return value;
+}
+function typeOf(v) {
+  const t2 = typeof v;
+  if (t2 === "string" || t2 === "number" || t2 === "boolean") return t2;
+  throw new TypeError(
+    `Variable values must be string|number|boolean (got ${t2})`
+  );
+}
+function toString(v) {
+  return typeof v === "string" ? v : String(v);
+}
+function toNumber(v) {
+  if (typeof v === "number") return v;
+  if (typeof v === "boolean") return v ? 1 : 0;
+  const trimmed = v.trim();
+  if (trimmed === "") {
+    throw new TypeError(`Cannot cast empty string to number`);
+  }
+  const n = Number(trimmed);
+  if (!Number.isFinite(n)) {
+    throw new TypeError(`Cannot cast ${JSON.stringify(v)} to number`);
+  }
+  return n;
+}
+function toBool(v) {
+  if (typeof v === "boolean") return v;
+  if (typeof v === "number") {
+    if (v === 0 || v === 1) return v === 1;
+    throw new TypeError(
+      `Cannot cast number ${v} to bool (only 0 and 1 are accepted)`
+    );
+  }
+  if (v === "true") return true;
+  if (v === "false") return false;
+  throw new TypeError(
+    `Cannot cast ${JSON.stringify(v)} to bool (expected "true" or "false")`
+  );
+}
+var PendingValueError = class extends Error {
+  constructor(variable, message) {
+    super(message);
+    this.variable = variable;
+  }
+  variable;
+};
+function readPending(e) {
+  if (e instanceof PendingValueError) return e;
+  return e instanceof Error && e.cause !== void 0 ? readPending(e.cause) : void 0;
+}
 
 // src/config/loader/cache.ts
 init_globals();
@@ -39304,23 +39384,6 @@ function jsonDefault(ctx, path42, value) {
 }
 function isSourceDefault(value) {
   return value !== null && isJsonValue(value);
-}
-function isJsonValue(value) {
-  if (value === null) return true;
-  switch (typeof value) {
-    case "string":
-    case "boolean":
-      return true;
-    case "number":
-      return Number.isFinite(value);
-    case "object": {
-      if (Array.isArray(value)) return value.every(isJsonValue);
-      const proto = Object.getPrototypeOf(value);
-      return (proto === Object.prototype || proto === null) && Object.values(value).every(isJsonValue);
-    }
-    default:
-      return false;
-  }
 }
 var LITERAL_FIELDS = {
   value: literalValueSpec(),
@@ -45685,12 +45748,12 @@ function runDeclaration(a) {
   return JSON.stringify([a.run, Object.entries(a.env), a.cwd, a.refreshes]);
 }
 function* actionTemplates(a) {
-  const found = [];
+  const found2 = [];
   mapActionTemplates(a, (source, field) => {
-    found.push([field, source]);
+    found2.push([field, source]);
     return source;
   });
-  yield* found;
+  yield* found2;
 }
 function mapActionTemplates(a, f) {
   if ("copy" in a) return { ...a, copy: f(a.copy, "copy") };
@@ -50792,7 +50855,7 @@ function initObservable(cb) {
     untrackedEnd(derivation);
   }
 }
-var toString = objectPrototype.toString;
+var toString2 = objectPrototype.toString;
 function deepEqual2(a, b, depth = -1) {
   return eq(a, b, depth);
 }
@@ -50810,8 +50873,8 @@ function eq(a, b, depth, aStack, bStack) {
   if (type3 !== "function" && type3 !== "object" && typeof b != "object") {
     return false;
   }
-  const className = toString.call(a);
-  if (className !== toString.call(b)) {
+  const className = toString2.call(a);
+  if (className !== toString2.call(b)) {
     return false;
   }
   switch (className) {
@@ -50936,69 +50999,6 @@ if (__MOBX_DEV__ && typeof __MOBX_DEVTOOLS_GLOBAL_HOOK__ === "object") {
   });
 }
 
-// src/var-system/types.ts
-init_globals();
-function toDocument(value) {
-  if (Array.isArray(value)) return Object.freeze(value.map(toDocument));
-  if (value !== null && typeof value === "object") {
-    const out = /* @__PURE__ */ Object.create(null);
-    const entries = Object.entries(value).sort(
-      ([a], [b]) => a < b ? -1 : a > b ? 1 : 0
-    );
-    for (const [key, v] of entries) out[key] = toDocument(v);
-    return Object.freeze(out);
-  }
-  return value;
-}
-function typeOf(v) {
-  const t2 = typeof v;
-  if (t2 === "string" || t2 === "number" || t2 === "boolean") return t2;
-  throw new TypeError(
-    `Variable values must be string|number|boolean (got ${t2})`
-  );
-}
-function toString2(v) {
-  return typeof v === "string" ? v : String(v);
-}
-function toNumber(v) {
-  if (typeof v === "number") return v;
-  if (typeof v === "boolean") return v ? 1 : 0;
-  const trimmed = v.trim();
-  if (trimmed === "") {
-    throw new TypeError(`Cannot cast empty string to number`);
-  }
-  const n = Number(trimmed);
-  if (!Number.isFinite(n)) {
-    throw new TypeError(`Cannot cast ${JSON.stringify(v)} to number`);
-  }
-  return n;
-}
-function toBool(v) {
-  if (typeof v === "boolean") return v;
-  if (typeof v === "number") {
-    if (v === 0 || v === 1) return v === 1;
-    throw new TypeError(
-      `Cannot cast number ${v} to bool (only 0 and 1 are accepted)`
-    );
-  }
-  if (v === "true") return true;
-  if (v === "false") return false;
-  throw new TypeError(
-    `Cannot cast ${JSON.stringify(v)} to bool (expected "true" or "false")`
-  );
-}
-var PendingValueError = class extends Error {
-  constructor(variable, message) {
-    super(message);
-    this.variable = variable;
-  }
-  variable;
-};
-function readPending(e) {
-  if (e instanceof PendingValueError) return e;
-  return e instanceof Error && e.cause !== void 0 ? readPending(e.cause) : void 0;
-}
-
 // src/var-system/store.ts
 init_globals();
 
@@ -51008,19 +51008,25 @@ function ok(value) {
   return { kind: "ok", value };
 }
 var ABSENT2 = { kind: "absent" };
-function failed(reason) {
-  return { kind: "failed", reason };
+function failed(reason, failedAt) {
+  return { kind: "failed", reason, failedAt };
 }
 function orElse(outcome, fallback) {
   return outcome?.kind === "ok" ? outcome.value : fallback;
 }
-var PENDING = { kind: "pending" };
+var PENDINGS = {
+  unread: Object.freeze({ kind: "pending", why: "unread" }),
+  superseded: Object.freeze({ kind: "pending", why: "superseded" })
+};
+function pendingOf(why2) {
+  return PENDINGS[why2];
+}
 function isPending(value) {
-  return value === PENDING;
+  return typeof value === "object" && value !== null && value.kind === "pending";
 }
 
 // src/var-system/store.ts
-var unwritten = (value) => value === PENDING;
+var unwritten = (value) => isPending(value);
 var BoxNode = class {
   constructor(name, type3, initial2, clock) {
     this.name = name;
@@ -51057,11 +51063,11 @@ var BoxNode = class {
     }
     return value;
   }
-  // A box written PENDING is not answered yet again: what its payload holds
+  // A box written pending is not answered yet again: what its payload holds
   // is a source that has not answered (src/daemon/render-payload.ts).
   set(value) {
     if (!unwritten(value)) assertType(this.name, this.type, value, "set value");
-    if (Object.is(this.cell.get(), value)) return;
+    if (compareStructural(this.cell.get(), value)) return;
     this.cell.set(value);
     this.lastChangedAt = this.clock.now();
   }
@@ -51351,12 +51357,12 @@ var VariableStore = class {
     const node = this.requireNode(name);
     if (node.kind === "document") {
       const doc = node.read();
-      return doc.kind === "pending" ? PENDING : ok(documentKey(doc));
+      return doc.kind === "pending" ? doc : ok(documentKey(doc));
     }
     try {
       return ok(String(node.read()));
     } catch (e) {
-      return readPending(e) !== void 0 ? PENDING : ok(` failed:${e instanceof Error ? e.message : String(e)}`);
+      return readPending(e) !== void 0 ? pendingOf("unread") : ok(` failed:${e instanceof Error ? e.message : String(e)}`);
     }
   }
   // [LAW:types-are-the-program] Introspection (src/daemon/debug.ts) needs
@@ -51941,7 +51947,7 @@ function ccCandybarFuncs() {
       arity: { kind: "exact" }
     },
     string: {
-      fn: (v) => toString2(v),
+      fn: (v) => toString(v),
       argTypes: ["value"],
       arity: { kind: "exact" }
     },
@@ -52311,14 +52317,14 @@ function regexParser(regex) {
   return (text4) => {
     const m = regex.exec(text4);
     const group = m?.[1];
-    return group === void 0 ? failed("regex no-match") : ok(group.replace(LINE_BREAK, " "));
+    return group === void 0 ? failed("regex no-match", "parse") : ok(group.replace(LINE_BREAK, " "));
   };
 }
 var jsonParser = (text4) => {
   try {
     return ok(JSON.parse(text4));
   } catch (e) {
-    return failed(`JSON parse failed: ${e.message}`);
+    return failed(`JSON parse failed: ${e.message}`, "parse");
   }
 };
 
@@ -52506,7 +52512,7 @@ function shellReader(launcher, command, cwd2, signal) {
         throw signal.reason;
       if (r.ok) return ok(r.stdout);
       const why2 = r.reason === "non-zero" ? `exited with code ${r.exitCode}` : [r.reason, r.error].filter((s) => s !== void 0).join(": ");
-      return failed(`shell "${command}" ${why2} in ${cwd2}`);
+      return failed(`shell "${command}" ${why2} in ${cwd2}`, "read");
     }
   };
 }
@@ -52521,7 +52527,7 @@ function fileReader(filePath2, readMode, signal) {
         );
       } catch {
         if (signal.aborted) throw signal.reason;
-        return failed(`file unreadable: ${filePath2}`);
+        return failed(`file unreadable: ${filePath2}`, "read");
       }
     }
   };
@@ -52529,7 +52535,7 @@ function fileReader(filePath2, readMode, signal) {
 function parsed(read2, parser, where) {
   if (read2.kind !== "ok") return read2;
   const out = parser(read2.value);
-  return out.kind === "failed" ? failed(`${out.reason} in ${where}`) : out;
+  return out.kind === "failed" ? failed(`${out.reason} in ${where}`, out.failedAt) : out;
 }
 function refreshOf(policy) {
   switch (policy.kind) {
@@ -52697,7 +52703,7 @@ var TtlBucketManager = class {
   }
 };
 var UNBOUND = {
-  read: () => PENDING,
+  read: () => pendingOf("unread"),
   drawnAt: () => {
     throw new PendingValueError(
       "colorCompatibility.effective",
@@ -52705,20 +52711,25 @@ var UNBOUND = {
     );
   }
 };
+var found = (value) => ({ kind: "found", value });
 function resolvePath(obj, path42) {
   let cur = obj;
+  let inDocument = false;
   for (const part of path42.split(".")) {
-    if (cur === PENDING) return PENDING;
-    if (cur == null || typeof cur !== "object") return void 0;
+    if (!inDocument && isPending(cur)) return cur;
+    if (cur == null || typeof cur !== "object") return found(void 0);
+    inDocument ||= part === "value" && cur.kind === "ok";
     cur = cur[part];
   }
-  return cur;
+  return !inDocument && isPending(cur) ? cur : found(cur);
 }
-function sourceReading(name, raw) {
-  if (raw === PENDING) return PENDING;
+function sourceReading(name, resolved) {
+  if (resolved.kind === "pending") return resolved;
+  const raw = resolved.value;
   if (raw === void 0) {
     return failed(
-      `variable "${name}": the view's payload has no "${name}": its declaration did not take the source the preset reads`
+      `variable "${name}": the view's payload has no "${name}": its declaration did not take the source the preset reads`,
+      "read"
     );
   }
   const kind = typeof raw === "object" && raw !== null ? raw.kind : void 0;
@@ -52729,7 +52740,8 @@ function sourceReading(name, raw) {
       return raw;
     default:
       return failed(
-        `variable "${name}": the view's payload holds no source reading at "${name}"`
+        `variable "${name}": the view's payload holds no source reading at "${name}"`,
+        "read"
       );
   }
 }
@@ -52739,7 +52751,7 @@ function coerceToType(raw, type3) {
       `Expected string|number|boolean from payload, got ${typeof raw}`
     );
   }
-  if (type3 === "string") return toString2(raw);
+  if (type3 === "string") return toString(raw);
   if (type3 === "number") return toNumber(raw);
   return toBool(raw);
 }
@@ -52894,7 +52906,7 @@ var SourceRegistry = class _SourceRegistry {
   }
   // A document that is a known failure for as long as it is declared.
   declareFailedDocument(name, reason) {
-    this.store.defineDocument(name, failed(reason));
+    this.store.defineDocument(name, failed(reason, "parse"));
   }
   // A plugin's source: a document derived from the reading its view's payload
   // carries at the source's own name — ok, absent or failed as the storage
@@ -52931,14 +52943,15 @@ var SourceRegistry = class _SourceRegistry {
   // [LAW:single-enforcer] The one reading of an input: its path's value cast
   // to its type, else the fallback chain with the failure recorded.
   inputAt(name, path42, type3, varDefault) {
-    const raw = this.inputs.get().read(path42);
-    if (raw === PENDING) {
+    const resolved = this.inputs.get().read(path42);
+    if (resolved.kind === "pending") {
       this.lastErrors.delete(name);
       throw new PendingValueError(
         name,
         `variable "${name}" has no value yet: its source has not answered`
       );
     }
+    const raw = resolved.value;
     if (raw === void 0) {
       return this.fallbackOf(
         name,
@@ -53061,7 +53074,7 @@ var SourceRegistry = class _SourceRegistry {
   // re-reads and supersedes it. A writer that is truly broken shows ⚠ after
   // that settle; a document that was never good shows it at once.
   documentPublisher(name, varDefault, where) {
-    const fallback = varDefault === void 0 ? PENDING : ok(varDefault);
+    const fallback = varDefault === void 0 ? pendingOf("unread") : ok(varDefault);
     this.store.defineDocument(name, fallback);
     let clearSettling;
     let showingRead = false;
@@ -53326,7 +53339,7 @@ var SourceRegistry = class _SourceRegistry {
           () => update("re-read", "change"),
           (fault) => this.notePolicy(
             name,
-            fault === null ? ok(void 0) : failed(fault)
+            fault === null ? ok(void 0) : failed(fault, "read")
           )
         );
         this.cleanups.push(unsub);
@@ -53342,8 +53355,9 @@ var SourceRegistry = class _SourceRegistry {
                 parsedKey.evaluate(buildScope(this.store)).map((f) => f.plain).join("")
               );
             } catch (e) {
-              return readPending(e) !== void 0 ? PENDING : failed(
-                `cache key: ${e instanceof Error ? e.message : String(e)}`
+              return readPending(e) !== void 0 ? pendingOf("unread") : failed(
+                `cache key: ${e instanceof Error ? e.message : String(e)}`,
+                "read"
               );
             }
           },
@@ -53356,7 +53370,7 @@ var SourceRegistry = class _SourceRegistry {
           name,
           () => {
             const keys2 = policy.varNames.map((n) => this.store.changeKey(n));
-            return keys2.every((key) => key.kind === "ok") ? ok(keys2.map((key) => key.value).join(",")) : PENDING;
+            return keys2.every((key) => key.kind === "ok") ? ok(keys2.map((key) => key.value).join(",")) : pendingOf("unread");
           },
           firstThenChange(update)
         );
@@ -55060,7 +55074,8 @@ async function readWholeLines(path42, prior, until2, window2) {
   } catch (e) {
     if (e.code === "ENOENT") return ABSENT2;
     return failed(
-      `readAppended ${path42}: ${e instanceof Error ? e.message : String(e)}`
+      `readAppended ${path42}: ${e instanceof Error ? e.message : String(e)}`,
+      "read"
     );
   } finally {
     await fh?.close().catch((e) => {
@@ -55098,7 +55113,8 @@ async function readTail(path42, maxBytes) {
     } catch (e) {
       if (e.code === "ENOENT") return ABSENT2;
       return failed(
-        `readTail ${path42}: ${e instanceof Error ? e.message : String(e)}`
+        `readTail ${path42}: ${e instanceof Error ? e.message : String(e)}`,
+        "read"
       );
     } finally {
       await fh?.close().catch((e) => {
@@ -55116,11 +55132,11 @@ function readTailSync(path42, maxBytes) {
   } catch (e) {
     const { code } = e;
     if (code === "ENOENT" || code === "ENOTDIR") return ABSENT2;
-    return failed(e instanceof Error ? e.message : String(e));
+    return failed(e instanceof Error ? e.message : String(e), "read");
   }
   try {
     const stat3 = fstatSync(fd, { bigint: true });
-    if (!stat3.isFile()) return failed("not a regular file");
+    if (!stat3.isFile()) return failed("not a regular file", "read");
     const size = Number(stat3.size);
     const start = Math.max(0, size - maxBytes);
     const buf = import_buffer.Buffer.alloc(size - start);
@@ -55136,7 +55152,7 @@ function readTailSync(path42, maxBytes) {
       file: `${stat3.dev}:${stat3.ino}`
     });
   } catch (e) {
-    return failed(e instanceof Error ? e.message : String(e));
+    return failed(e instanceof Error ? e.message : String(e), "read");
   } finally {
     try {
       closeSync(fd);
@@ -55171,8 +55187,19 @@ var cannotRead = (settingsPath, e) => new Error(`cannot read ${settingsPath}: ${
 function readClaudeSettingsText(settingsPath) {
   return readSettingsFile(settingsPath)?.text ?? "";
 }
-function readClaudeSettings(settingsPath) {
-  return parseSettings(settingsPath, readClaudeSettingsText(settingsPath));
+function readClaudeSettingsOutcome(settingsPath) {
+  const reason = (e) => e instanceof Error ? e.message : String(e);
+  let text4;
+  try {
+    text4 = readClaudeSettingsText(settingsPath);
+  } catch (e) {
+    return failed(reason(e), "read");
+  }
+  try {
+    return ok(parseSettings(settingsPath, text4));
+  } catch (e) {
+    return failed(reason(e), "parse");
+  }
 }
 function parseSettings(settingsPath, text4) {
   let parsed2;
@@ -55619,10 +55646,10 @@ function postMortemsOf(files) {
     byIdentity.set(identity2, { ...byIdentity.get(identity2), [kind]: file });
   }
   const kinds = Object.keys(BREACH_ARTIFACTS);
-  return [...byIdentity].sort(([a], [b]) => laterIdentity(a, b) ? -1 : 1).map(([identity2, found]) => ({
+  return [...byIdentity].sort(([a], [b]) => laterIdentity(a, b) ? -1 : 1).map(([identity2, found2]) => ({
     identity: identity2,
     artifacts: Object.fromEntries(
-      kinds.flatMap((k) => found[k] === void 0 ? [] : [[k, found[k]]])
+      kinds.flatMap((k) => found2[k] === void 0 ? [] : [[k, found2[k]]])
     )
   }));
 }
@@ -56711,7 +56738,7 @@ function nerdFontFields(facts, marks) {
   if (facts.kind === "none") return "glyphs=- terminal=- font=- mark=-";
   const { glyphs, terminal } = facts;
   const codes = [...glyphs].map((g) => g.codePointAt(0).toString(16));
-  const found = (() => {
+  const found2 = (() => {
     switch (terminal.kind) {
       case "unreported":
       case "unasked":
@@ -56734,7 +56761,7 @@ function nerdFontFields(facts, marks) {
   })();
   const sighting = glyphSighting(facts);
   const mark = marks.kind === "failed" ? "unread" : sighting === void 0 ? "-" : marks.value[NERD_FONT_CHECK]?.[sighting.id] ?? "-";
-  return `glyphs=${codes.join(",")} terminal=${found} font=${font} mark=${mark}`;
+  return `glyphs=${codes.join(",")} terminal=${found2} font=${font} mark=${mark}`;
 }
 function rowReason(reason, more = []) {
   return more.length === 0 ? reason : `${reason} (+${more.length} more \u2014 run \`cc-candybar doctor\`)`;
@@ -56847,16 +56874,13 @@ var AUTOCOMPACT_WINDOWS = Array.from(
 var LEAST = AUTOCOMPACT_WINDOWS[0];
 var MOST = AUTOCOMPACT_WINDOWS[AUTOCOMPACT_WINDOWS.length - 1];
 function readAutoCompactWindow(settingsPath) {
-  let settings;
-  try {
-    settings = readClaudeSettings(settingsPath);
-  } catch (e) {
-    return failed(e instanceof Error ? e.message : String(e));
-  }
-  const window2 = settings.autoCompactWindow;
+  const read2 = readClaudeSettingsOutcome(settingsPath);
+  if (read2.kind !== "ok") return read2;
+  const window2 = read2.value.autoCompactWindow;
   if (window2 === void 0) return ok("auto");
   return typeof window2 === "number" && Number.isInteger(window2) && window2 >= LEAST && window2 <= MOST ? ok(window2) : failed(
-    `${settingsPath}: autoCompactWindow is ${JSON.stringify(window2)}, not a window /autocompact accepts (${LEAST}\u2013${MOST} tokens)`
+    `${settingsPath}: autoCompactWindow is ${JSON.stringify(window2)}, not a window /autocompact accepts (${LEAST}\u2013${MOST} tokens)`,
+    "parse"
   );
 }
 function autoCompactControls(window2, contextWindow) {
@@ -60785,7 +60809,7 @@ function probe(read2) {
   try {
     return ok(read2());
   } catch (e) {
-    return e.code === "ENOENT" ? ABSENT2 : failed(e.message);
+    return e.code === "ENOENT" ? ABSENT2 : failed(e.message, "read");
   }
 }
 var realDir = (p2) => probe(() => fs_default.realpathSync.native(p2));
@@ -60794,7 +60818,7 @@ function gitDirNamed(root) {
   const text4 = probe(() => fs_default.readFileSync(import_node_path13.default.join(root, ".git"), "utf-8"));
   if (text4.kind !== "ok") return text4;
   const named3 = text4.value.match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
-  return named3 === void 0 ? failed(`${import_node_path13.default.join(root, ".git")} names no gitdir`) : ok(import_node_path13.default.resolve(root, named3));
+  return named3 === void 0 ? failed(`${import_node_path13.default.join(root, ".git")} names no gitdir`, "parse") : ok(import_node_path13.default.resolve(root, named3));
 }
 function commonDirOf(gitDir) {
   const text4 = probe(
@@ -60802,7 +60826,7 @@ function commonDirOf(gitDir) {
   );
   if (text4.kind !== "ok") return text4;
   const common = text4.value.trim();
-  return common === "" ? failed(`${import_node_path13.default.join(gitDir, "commondir")} is empty`) : ok(import_node_path13.default.resolve(gitDir, common));
+  return common === "" ? failed(`${import_node_path13.default.join(gitDir, "commondir")} is empty`, "parse") : ok(import_node_path13.default.resolve(gitDir, common));
 }
 var UNLINKED = { kind: "unlinked" };
 var unproven = (reason) => ({
@@ -60990,13 +61014,13 @@ function resolveDslConfig(locs, answers, projectDir, cwd2, configFile) {
       });
     }
   }
-  const found = [...atLocation.values()];
+  const found2 = [...atLocation.values()];
   const repos = gateRepos(
     answers,
-    found.flatMap((f) => f.repo === null ? [] : [f.repo]),
+    found2.flatMap((f) => f.repo === null ? [] : [f.repo]),
     repoProject(projectDir)
   );
-  const kept = found.filter((f) => f.repo === null || repos.approved.includes(f.repo.dir)).reverse();
+  const kept = found2.filter((f) => f.repo === null || repos.approved.includes(f.repo.dir)).reverse();
   const layers = kept.map(
     (f) => ({
       path: f.file,
@@ -61167,14 +61191,14 @@ function loadConfigChain(locs, chain2, dflt, trace, session, read2 = (p2) => fs_
     checkout: session.cwd === null ? null : checkoutOf(session.cwd),
     home: locs.home
   };
-  const found = installedPlugins(locs, ctx.repo);
-  const merged = installedLayer(found.definitions, ctx, dflt, allowedPalettes);
+  const found2 = installedPlugins(locs, ctx.repo);
+  const merged = installedLayer(found2.definitions, ctx, dflt, allowedPalettes);
   const plugins2 = {
     ...merged,
-    dropped: [...merged.dropped, ...found.strays]
+    dropped: [...merged.dropped, ...found2.strays]
   };
   trace.warned(
-    found.unchecked.map(
+    found2.unchecked.map(
       (u) => `Plugin folder could not be listed: ${u.path} \u2014 ${u.error}`
     )
   );
@@ -61212,7 +61236,7 @@ function loadConfigChain(locs, chain2, dflt, trace, session, read2 = (p2) => fs_
   const rendering = layers.at(-1)?.plugins.rendering ?? plugins2.rendering;
   const installed = {
     checkout: ctx.checkout,
-    roots: found.roots,
+    roots: found2.roots,
     loaded: plugins2.loaded,
     dropped: surfaced,
     unreached,
@@ -63361,9 +63385,9 @@ function buildDisclosureNest(config2) {
     const memo = menus.get(id2);
     if (memo !== void 0) return memo;
     const template = config2.segments[node.name]?.template;
-    const found = template === void 0 ? [] : hostedMenus(template, placementId(node));
-    menus.set(id2, found);
-    return found;
+    const found2 = template === void 0 ? [] : hostedMenus(template, placementId(node));
+    menus.set(id2, found2);
+    return found2;
   };
   const triggeredBy = (node) => [
     ...node.opens === void 0 ? [] : [node.opens.ref],
@@ -63417,17 +63441,17 @@ function buildDisclosureNest(config2) {
   const closure = (parent) => {
     const memo = closures.get(idOf2(parent));
     if (memo !== void 0) return memo;
-    const found = /* @__PURE__ */ new Map();
+    const found2 = /* @__PURE__ */ new Map();
     const visit = (d) => {
       for (const [id2, child] of inside.get(idOf2(d)) ?? []) {
-        if (found.has(id2)) continue;
-        found.set(id2, child);
+        if (found2.has(id2)) continue;
+        found2.set(id2, child);
         visit(child);
       }
     };
     visit(parent);
     const within4 = /* @__PURE__ */ new Map();
-    for (const { key, member } of found.values()) {
+    for (const { key, member } of found2.values()) {
       within4.set(key, (within4.get(key) ?? /* @__PURE__ */ new Set()).add(member));
     }
     const keys2 = [...within4].map(([key, held]) => ({
@@ -65110,11 +65134,11 @@ function recordAnswer(store, dir, answer2) {
     const others = Object.keys(book).filter((d) => d !== dir).map((d) => ({ d, found: presence(d) }));
     recorded = {
       superseded: others.filter(
-        ({ d, found }) => found === "present" && answerDir({ dir: d, link: worktreeLink(d) }) === dir
+        ({ d, found: found2 }) => found2 === "present" && answerDir({ dir: d, link: worktreeLink(d) }) === dir
       ).map(({ d }) => d),
-      absent: others.filter(({ found }) => found === "absent").map(({ d }) => d),
+      absent: others.filter(({ found: found2 }) => found2 === "absent").map(({ d }) => d),
       unchecked: others.flatMap(
-        ({ found }) => typeof found === "object" ? [found] : []
+        ({ found: found2 }) => typeof found2 === "object" ? [found2] : []
       )
     };
     return withAnswer(book, dir, answer2, recorded.superseded);
@@ -65430,7 +65454,8 @@ function trackingOf(upstream, aheadBehind) {
 }
 function prOfHead(pr, head) {
   if (pr.kind !== "ok" || pr.value.state === "open") return pr;
-  if (head.kind === "failed") return failed(`HEAD: ${head.reason}`);
+  if (head.kind === "failed")
+    return failed(`HEAD: ${head.reason}`, head.failedAt);
   return head.kind === "ok" && head.value === pr.value.head ? pr : { kind: "earlier", value: pr.value };
 }
 var GITHUB_PR_STATES = {
@@ -65445,7 +65470,7 @@ var GITLAB_MR_STATES = {
   closed: "closed"
 };
 function prStateOf(cli, states, word) {
-  return Object.hasOwn(states, word) ? ok(states[word]) : failed(`${cli}: unknown state ${JSON.stringify(word)}`);
+  return Object.hasOwn(states, word) ? ok(states[word]) : failed(`${cli}: unknown state ${JSON.stringify(word)}`, "parse");
 }
 var READ_FIELD_NAMES = {
   aheadBehind: "aheadBehind",
@@ -65470,7 +65495,7 @@ function classify(label2, result, nonZero) {
   if (result.reason === "non-zero" && nonZero === "absent") return ABSENT2;
   if (result.reason === "non-zero" && nonZero === result.exitCode)
     return ABSENT2;
-  return failed(launchFailure(label2, result));
+  return failed(launchFailure(label2, result), "read");
 }
 function launchFailure(label2, result) {
   const detail = [
@@ -65602,7 +65627,7 @@ function classifyForgePr(label2, result, noPrPattern, parse3) {
     result.exitCode != null ? `exit ${result.exitCode}` : null,
     result.error ?? firstLine2(result.stderr)
   ].filter(Boolean).join(", ");
-  return failed(`${label2}: ${detail}`);
+  return failed(`${label2}: ${detail}`, "read");
 }
 function isRecord2(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -65668,13 +65693,15 @@ function parseGithubPr(stdout2) {
     json2 = JSON.parse(stdout2);
   } catch (e) {
     return failed(
-      `gh pr view: unparseable JSON (${e instanceof Error ? e.message : String(e)})`
+      `gh pr view: unparseable JSON (${e instanceof Error ? e.message : String(e)})`,
+      "parse"
     );
   }
-  if (!isRecord2(json2)) return failed("gh pr view: JSON is not an object");
+  if (!isRecord2(json2))
+    return failed("gh pr view: JSON is not an object", "parse");
   const { number, state, url, headRefOid: head } = json2;
   if (typeof number !== "number" || typeof state !== "string" || typeof url !== "string" || typeof head !== "string") {
-    return failed("gh pr view: missing number/state/url/headRefOid");
+    return failed("gh pr view: missing number/state/url/headRefOid", "parse");
   }
   const prState = prStateOf("gh pr view", GITHUB_PR_STATES, state);
   return prState.kind === "ok" ? ok({ number, state: prState.value, url, head }) : prState;
@@ -65685,16 +65712,18 @@ function parseGitlabMr(stdout2) {
     json2 = JSON.parse(stdout2);
   } catch (e) {
     return failed(
-      `glab mr view: unparseable JSON (${e instanceof Error ? e.message : String(e)})`
+      `glab mr view: unparseable JSON (${e instanceof Error ? e.message : String(e)})`,
+      "parse"
     );
   }
-  if (!isRecord2(json2)) return failed("glab mr view: JSON is not an object");
+  if (!isRecord2(json2))
+    return failed("glab mr view: JSON is not an object", "parse");
   const iid = json2.iid;
   const state = json2.state;
   const url = json2.web_url;
   const head = json2.sha;
   if (typeof iid !== "number" || typeof state !== "string" || typeof url !== "string" || typeof head !== "string") {
-    return failed("glab mr view: missing iid/state/web_url/sha");
+    return failed("glab mr view: missing iid/state/web_url/sha", "parse");
   }
   const mrState = prStateOf("glab mr view", GITLAB_MR_STATES, state);
   return mrState.kind === "ok" ? ok({ number: iid, state: mrState.value, url, head }) : mrState;
@@ -65812,7 +65841,10 @@ var GitService = class {
     try {
       return await this.computeGitInfo(workingDir, options, projectDir);
     } catch (e) {
-      return failed(`git: ${e instanceof Error ? e.message : String(e)}`);
+      return failed(
+        `git: ${e instanceof Error ? e.message : String(e)}`,
+        "read"
+      );
     }
   }
   async computeGitInfo(workingDir, options = {}, projectDir) {
@@ -65888,7 +65920,8 @@ var GitService = class {
       return ABSENT2;
     } catch (e) {
       return failed(
-        `git operation probe: ${e instanceof Error ? e.message : String(e)}`
+        `git operation probe: ${e instanceof Error ? e.message : String(e)}`,
+        "read"
       );
     }
   }
@@ -65992,7 +66025,7 @@ var GitService = class {
     if (r.kind !== "ok") return r;
     const committedAt = parseInt(r.value, 10);
     if (Number.isNaN(committedAt)) {
-      return failed(`git log -1: unparseable timestamp "${r.value}"`);
+      return failed(`git log -1: unparseable timestamp "${r.value}"`, "parse");
     }
     return ok(committedAt);
   }
@@ -66033,7 +66066,8 @@ var GitService = class {
     } catch (e) {
       if (e.code === "ENOENT") return ok(0);
       return failed(
-        `git stash reflog ${reflog}: ${e instanceof Error ? e.message : String(e)}`
+        `git stash reflog ${reflog}: ${e instanceof Error ? e.message : String(e)}`,
+        "read"
       );
     }
     const entries = text4.trim();
@@ -66269,14 +66303,13 @@ function pending(why2) {
 }
 function settle(source, outcome) {
   const prior = source.reading.get();
-  if (prior.kind === "read" && compareStructural(prior.outcome, outcome))
-    return;
-  runInAction(() => source.reading.set({ kind: "read", outcome }));
+  if (prior.kind !== "pending" && compareStructural(prior, outcome)) return;
+  runInAction(() => source.reading.set(outcome));
   if (prior.kind === "pending") prior.land();
 }
 function renew(source, why2) {
   const prior = source.reading.get();
-  if (prior.kind === "read") {
+  if (prior.kind !== "pending") {
     runInAction(() => source.reading.set(pending(why2)));
   } else if (prior.why !== why2 && why2 === "unread") {
     runInAction(() => source.reading.set({ ...prior, why: why2 }));
@@ -66289,8 +66322,7 @@ function isWaiting(current) {
   return typeof current === "object" && current !== null && current.kind === "pending";
 }
 function currentOf(source) {
-  const reading = source.reading.get();
-  return reading.kind === "read" ? reading.outcome : reading;
+  return source.reading.get();
 }
 async function answered(read2) {
   for (; ; ) {
@@ -66677,7 +66709,7 @@ function declareLanes(owners, holds2, facts, closure, sources) {
       return take();
     } catch (e) {
       faults.push(`${lane}: ${inspect(e)}`);
-      return settledLane(failed(`${lane}: ${String(e)}`));
+      return settledLane(failed(`${lane}: ${String(e)}`, "read"));
     }
   };
   const lanes = {
@@ -66738,7 +66770,7 @@ function readLanes(inputs) {
       return value();
     } catch (e) {
       deps.log("error", `${lane} read threw: ${inspect(e)}`);
-      return failed(`${lane}: ${String(e)}`);
+      return failed(`${lane}: ${String(e)}`, "read");
     }
   };
   return {
@@ -66797,6 +66829,10 @@ function waitsOf(lanes) {
     (lane) => lane.kind === "pending" && lane.why === "unread" ? [lane.landed] : []
   );
 }
+function firstPending(...lanes) {
+  const lane = lanes.find((l) => l?.kind === "pending");
+  return lane?.kind === "pending" ? pendingOf(lane.why) : void 0;
+}
 function projectPayload(inputs, draw2, lanes) {
   const { hookData: hookData2, hints } = inputs;
   const { effective, configFacts: configFacts2 } = draw2;
@@ -66805,7 +66841,7 @@ function projectPayload(inputs, draw2, lanes) {
   const over = (reading, project) => {
     switch (reading.kind) {
       case "pending":
-        return PENDING;
+        return pendingOf(reading.why);
       case "failed":
       case "absent":
         return void 0;
@@ -66815,17 +66851,14 @@ function projectPayload(inputs, draw2, lanes) {
   };
   const valueOf3 = (reading) => reading.kind === "ok" ? reading.value : void 0;
   const tmuxPane = hints.tmux ?? null;
-  const git = lanes.git.kind === "pending" ? PENDING : projectGitInfo(lanes.git, () => PENDING);
-  const tmuxValue = lanes.tmuxSession.kind === "pending" ? PENDING : valueOf3(lanes.tmuxSession);
-  const hostName = lanes.hostName.kind === "pending" ? PENDING : valueOf3(lanes.hostName);
-  const hostUser = lanes.hostUser.kind === "pending" ? PENDING : valueOf3(lanes.hostUser);
-  const autoCompactValue = lanes.autoCompact.kind === "pending" || want.autocompact && lanes.context.kind === "pending" ? PENDING : projectAutoCompact(
-    lanes.autoCompact,
-    valueOf3(lanes.context)?.maxTokens
-  );
+  const git = lanes.git.kind === "pending" ? pendingOf(lanes.git.why) : projectGitInfo(lanes.git, pendingOf);
+  const tmuxValue = lanes.tmuxSession.kind === "pending" ? pendingOf(lanes.tmuxSession.why) : valueOf3(lanes.tmuxSession);
+  const hostName = lanes.hostName.kind === "pending" ? pendingOf(lanes.hostName.why) : valueOf3(lanes.hostName);
+  const hostUser = lanes.hostUser.kind === "pending" ? pendingOf(lanes.hostUser.why) : valueOf3(lanes.hostUser);
+  const autoCompactValue = firstPending(want.autocompact ? lanes.context : void 0) ?? projectAutoCompact(lanes.autoCompact, valueOf3(lanes.context)?.maxTokens);
   const fiveHour = hookData2.rate_limits?.five_hour;
   const sevenDay = hookData2.rate_limits?.seven_day;
-  const burn = !want.burn ? void 0 : lanes.usage.kind === "pending" || lanes.metrics.kind === "pending" ? PENDING : burnOf(
+  const burn = !want.burn ? void 0 : firstPending(lanes.usage, lanes.metrics) ?? burnOf(
     valueOf3(lanes.usage)?.session.cost,
     valueOf3(lanes.metrics)?.sessionDuration
   );
@@ -66932,7 +66965,7 @@ function projectPayload(inputs, draw2, lanes) {
     // drawn by the template reading it.
     ...projectSources(lanes.sources.keys(), (name) => {
       const reading = lanes.sources.get(name);
-      return reading.kind === "pending" ? PENDING : reading;
+      return reading.kind === "pending" ? pendingOf(reading.why) : reading;
     })
   };
   return payload;
@@ -66980,7 +67013,7 @@ function todayOf({
 }, lane, hookData2, at) {
   if (faults.of(hookData2.session_id, "today") !== void 0) return void 0;
   const set2 = lane.current();
-  if (set2.kind === "pending") return PENDING;
+  if (set2.kind === "pending") return pendingOf(set2.why);
   if (set2.kind !== "ok") return void 0;
   const read2 = () => {
     try {
@@ -66991,7 +67024,7 @@ function todayOf({
     }
   };
   const today = read2();
-  if (today.kind === "pending") return PENDING;
+  if (today.kind === "pending") return pendingOf(today.why);
   return today.kind === "ok" ? { cost: today.value.cost, tokens: today.value.tokens } : void 0;
 }
 async function settlePayload(inputs, at, refreshed) {
@@ -67008,6 +67041,8 @@ async function settlePayload(inputs, at, refreshed) {
 }
 function projectAutoCompact(outcome, contextWindow) {
   switch (outcome.kind) {
+    case "pending":
+      return pendingOf(outcome.why);
     case "absent":
       return void 0;
     case "failed":
@@ -67078,7 +67113,7 @@ function projectGitInfo(outcome, pending2) {
   let prFields = {};
   switch (pr?.kind) {
     case "pending": {
-      const p2 = pending2("git.pr");
+      const p2 = pending2(pr.why);
       prFields = {
         prNumber: p2,
         prState: p2,
@@ -68434,15 +68469,15 @@ function alacrittyFamilyIn(file, home, depth) {
   if (own2.family !== null)
     return { kind: "ok", value: { family: own2.family, from: file } };
   if (depth === 5) return { kind: "ok", value: null };
-  let found = null;
+  let found2 = null;
   for (const imported of own2.imports) {
     const target = imported.startsWith("~/") ? import_node_path22.default.join(home, imported.slice(2)) : import_node_path22.default.resolve(import_node_path22.default.dirname(file), imported);
     if (!fs_default.existsSync(target)) continue;
     const inner = alacrittyFamilyIn(target, home, depth + 1);
     if (inner.kind === "failed") return inner;
-    found = inner.value ?? found;
+    found2 = inner.value ?? found2;
   }
-  return { kind: "ok", value: found };
+  return { kind: "ok", value: found2 };
 }
 async function alacrittyFont(launcher, env2, glyphs, home) {
   const config2 = alacrittyConfigPaths(home, env2.XDG_CONFIG_HOME).find(
@@ -68725,13 +68760,13 @@ async function remoteLogin(launcher, pid2) {
 }
 var DAEMON_ENTRY = /^(.*)\/(?:dist\/index\.mjs|src\/index\.ts|bin\/cc-candybar)$/;
 function daemonProcesses(table, ownsEntry2) {
-  const found = [];
+  const found2 = [];
   for (const line of table.split("\n")) {
     const m = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\w{3} \w{3}\s+\d+ [\d:]{8} \d{4})\s+.* (\/.*) daemon$/.exec(
       line
     );
     if (m === null || !ownsEntry2(m[5])) continue;
-    found.push({
+    found2.push({
       pid: Number(m[1]),
       ppid: Number(m[2]),
       rss: Number(m[3]) * 1024,
@@ -68740,7 +68775,7 @@ function daemonProcesses(table, ownsEntry2) {
       started: `${m[4].replace(/\s+/g, " ")} UTC`
     });
   }
-  return found.filter((p2) => !found.some((child) => child.ppid === p2.pid));
+  return found2.filter((p2) => !found2.some((child) => child.ppid === p2.pid));
 }
 function ownsEntry(entry) {
   let real;
@@ -69582,7 +69617,8 @@ function parseReleaseVersion(text4) {
   const m = RELEASE_VERSION.exec(text4);
   return m ? { kind: "ok", value: [Number(m[1]), Number(m[2]), Number(m[3])] } : {
     kind: "failed",
-    reason: `"${text4}" is not a release version (expected MAJOR.MINOR.PATCH)`
+    reason: `"${text4}" is not a release version (expected MAJOR.MINOR.PATCH)`,
+    failedAt: "parse"
   };
 }
 function formatVersion(v) {
@@ -69601,7 +69637,7 @@ async function fetchLatestVersion(packageName, fetchImpl, registryUrl, clock) {
       signal: timeoutSignal(clock, REGISTRY_TIMEOUT_MS)
     });
     if (!res.ok) {
-      return failed(`registry responded ${res.status} for ${url}`);
+      return failed(`registry responded ${res.status} for ${url}`, "read");
     }
     const tags = await res.json();
     if (typeof tags.latest !== "string") {
@@ -69609,7 +69645,7 @@ async function fetchLatestVersion(packageName, fetchImpl, registryUrl, clock) {
     }
     return parseReleaseVersion(tags.latest);
   } catch (err) {
-    return failed(err instanceof Error ? err.message : String(err));
+    return failed(err instanceof Error ? err.message : String(err), "read");
   }
 }
 function assessCurrency(stamp2, latest) {
@@ -72198,7 +72234,7 @@ function parseActionTemplate(parse3, src, name) {
   }
 }
 function readVar(store, name) {
-  return store.has(name) ? toString2(store.read(name)) : "";
+  return store.has(name) ? toString(store.read(name)) : "";
 }
 function evalTemplate(tpl, scope) {
   return tpl.evaluate(scope).map((f) => f.plain).join("");
@@ -74241,7 +74277,7 @@ var ViewParts = class {
     this.scope = buildScope(store);
     this.depth = store.derive("drawn depth", "computed", () => {
       const said = this.inputAt(COLOR_PATH);
-      return typeof said === "string" && isColorCompatibility(said) ? said : COLOR_FLOOR;
+      return said.kind === "found" && typeof said.value === "string" && isColorCompatibility(said.value) ? said.value : COLOR_FLOOR;
     });
     const drawn = observable(UNDRAWN, void 0, { deep: false });
     this.facts = drawn;
@@ -74350,7 +74386,7 @@ var ViewParts = class {
   // the draw in progress, every other the view's payload.
   inputAt(path42) {
     const slot = slotAt(path42);
-    if (slot !== void 0) return this.slotName(slot);
+    if (slot !== void 0) return found(this.slotName(slot));
     if (drawProjectionAt(path42) !== void 0)
       return resolvePath(this.projected, path42);
     return resolvePath(this.view.get().payload(), path42);
@@ -76844,12 +76880,12 @@ function orderedSegmentNames(config2) {
   return out;
 }
 function extractReferencedVars(template, helpers, declared) {
-  const found = new Set(
+  const found2 = new Set(
     [...templateReads(template, helpers).keys()].flatMap(
       (path42) => variableRead(path42, declared)
     )
   );
-  return Array.from(found).sort();
+  return Array.from(found2).sort();
 }
 function introspectConfig(state) {
   if (state === null) return null;
@@ -77919,7 +77955,7 @@ function mtimeOf(path42, stat3) {
     return ok(stat3(path42).mtimeMs);
   } catch (e) {
     const code = e.code;
-    return code === "ENOENT" || code === "ENOTDIR" ? ABSENT2 : failed(e.message);
+    return code === "ENOENT" || code === "ENOTDIR" ? ABSENT2 : failed(e.message, "read");
   }
 }
 function sameStamp(a, b) {
@@ -78088,7 +78124,10 @@ function owe(pr) {
 }
 function unkeyedPr(pr, failures) {
   if (pr.missed && pr.reading.get().kind === "pending") {
-    settle(pr, failures.size > 0 ? failed([...failures].join("; ")) : ABSENT2);
+    settle(
+      pr,
+      failures.size > 0 ? failed([...failures].join("; "), "read") : ABSENT2
+    );
   }
   return "unkeyed";
 }
@@ -78097,9 +78136,9 @@ function composed(value, pr) {
   if (pr === null || info.kind !== "ok") return info;
   return ok({ ...info.value, pullRequest: currentOf(pr) });
 }
-var CLOSED = failed("git cache closed");
+var CLOSED = failed("git cache closed", "read");
 function threw(label2) {
-  return (e) => failed(`${label2} threw: ${String(e)}`);
+  return (e) => failed(`${label2} threw: ${String(e)}`, "read");
 }
 var GitDataProvider = class {
   repos = /* @__PURE__ */ new Map();
@@ -78187,7 +78226,7 @@ var GitDataProvider = class {
     try {
       known = this.inner.resolveEffectiveGitDir(workingDir, projectDir);
     } catch (e) {
-      known = failed(`resolver threw: ${String(e)}`);
+      known = failed(`resolver threw: ${String(e)}`, "read");
     }
     this.resolutions.set(key, { known, computedAt: now2 });
     if (known.kind === "failed") {
@@ -78441,7 +78480,7 @@ var GitDataProvider = class {
     this.gitRefreshes.recorded(
       `${state.root} asked=${asked2.join(",") || "-"} values=${values2.length} pr=${prMove} watch=${followed.move}`,
       triggerOf(asked2),
-      failures.size === 0 ? ok(null) : failed([...failures].join("; ")),
+      failures.size === 0 ? ok(null) : failed([...failures].join("; "), "read"),
       elapsedMs(this.clock, startedAt)
     );
   }
@@ -78532,7 +78571,7 @@ var GitDataProvider = class {
     return done2;
   }
   drop(state) {
-    const gone = failed(`git state dropped: ${state.root}`);
+    const gone = failed(`git state dropped: ${state.root}`, "read");
     for (const value of state.values.values()) answerPending(value, gone);
     if (state.pr !== null) answerPending(state.pr, gone);
     this.repos.delete(state.root);
@@ -79169,7 +79208,8 @@ var KeyedSource = class {
   // by that refresh — so its caller logs none. A declaration that THROWS is a
   // bug none of those saw, reported by the view's declaration (declareLanes).
   declare(holds2, input) {
-    if (this.closed) return settledLane(failed(`${this.spec.name} closed`));
+    if (this.closed)
+      return settledLane(failed(`${this.spec.name} closed`, "read"));
     const key = this.spec.keyOf(input);
     const entry = this.touched(key) ?? this.firstRead(this.created(key, input));
     holds2.take(`${this.spec.name}:${key}`, () => this.hold(entry));
@@ -79325,7 +79365,7 @@ var KeyedSource = class {
     this.entries.delete(entry.key);
     entry.flight = null;
     entry.revisit.dispose();
-    answerPending(entry, failed(`${this.spec.name} entry dropped`));
+    answerPending(entry, failed(`${this.spec.name} entry dropped`, "read"));
   }
 };
 function revisitOf(every, clock, read2) {
@@ -79358,7 +79398,7 @@ var HoldReturn = class {
   }
 };
 function attempt3(read2) {
-  const threw2 = (e) => failed(`read threw: ${String(e)}`);
+  const threw2 = (e) => failed(`read threw: ${String(e)}`, "read");
   try {
     return read2().catch(threw2);
   } catch (e) {
@@ -79493,7 +79533,7 @@ function daySumsOver(slots, roots) {
       sums.set(day, sum);
     }
   }
-  return sums;
+  return Object.fromEntries(sums);
 }
 async function mapPool(items, limit, fn) {
   let cursor = 0;
@@ -79658,9 +79698,9 @@ var SessionUsageStore = class {
   // empty record its refresh answers for it.
   usageOf(sessionId2, hookData2) {
     const slot = this.sessions.get(sessionId2);
-    if (slot === void 0) return PENDING;
+    if (slot === void 0) return pendingOf("unread");
     const failure = slot.failure.get();
-    if (failure !== null) return failed(failure);
+    if (failure !== null) return failed(failure, "read");
     return ok(
       usageOver(slot.record?.sessionInfo ?? EMPTY_SESSION_INFO, hookData2)
     );
@@ -79718,7 +79758,7 @@ var SessionUsageStore = class {
   // frame that reads it. The lane answers the set's day sums once a scan has
   // answered; which day of them is the draw's (`todayAt`).
   declareToday(holds2, claudeConfigDir2) {
-    if (this.closed) return settledLane(failed("usage store closed"));
+    if (this.closed) return settledLane(failed("usage store closed", "read"));
     const claudePaths = getClaudePaths(claudeConfigDir2, this.host.home);
     const scans = this.scans.declare(holds2, claudePaths);
     const set2 = this.daySet(claudePaths);
@@ -79736,10 +79776,10 @@ var SessionUsageStore = class {
   todayAt(set2, hookData2, at) {
     const active2 = this.sessions.get(hookData2?.session_id ?? "");
     const failure = active2?.failure.get() ?? null;
-    if (failure !== null) return failed(failure);
+    if (failure !== null) return failed(failure, "read");
     const today = dayKey(dateOf(at));
     const total = { ...EMPTY_DAY };
-    const inSet = set2.sums.get(today);
+    const inSet = set2.sums[today];
     if (inSet !== void 0) addDay(total, inSet);
     const own2 = under(active2?.record?.transcriptPath, set2.roots) ? void 0 : active2?.record?.days.get(today);
     if (own2 !== void 0) addDay(total, own2);
@@ -79801,7 +79841,7 @@ var SessionUsageStore = class {
   // takes no sample, so how often the bar is drawn moves no rate.
   speedOf(sessionId2) {
     if (!sessionId2) return ABSENT2;
-    return this.sessions.get(sessionId2)?.speed.get() ?? PENDING;
+    return this.sessions.get(sessionId2)?.speed.get() ?? pendingOf("unread");
   }
   // stamp-gated, coalesced re-parse of ONE session. `ok` is its record,
   // `absent` is an unknown empty session (or no sessionId), `failed` is a
@@ -79828,7 +79868,8 @@ var SessionUsageStore = class {
       });
     } catch (error) {
       return failed(
-        `usage refold (${sessionId2}): ${error instanceof Error ? error.message : String(error)}`
+        `usage refold (${sessionId2}): ${error instanceof Error ? error.message : String(error)}`,
+        "read"
       );
     }
     const { prior, outcome } = refolded;
@@ -79973,13 +80014,15 @@ var SessionUsageStore = class {
       );
       if (failures.length > 0) {
         return failed(
-          `usage scan: ${failures.length} of ${candidates.length} sessions could not be read \u2014 ${failures[0]}`
+          `usage scan: ${failures.length} of ${candidates.length} sessions could not be read \u2014 ${failures[0]}`,
+          "read"
         );
       }
       return ok({ sessions: candidates.length, read: tally.misses });
     } catch (error) {
       return failed(
-        `usage scan: ${error instanceof Error ? error.message : String(error)}`
+        `usage scan: ${error instanceof Error ? error.message : String(error)}`,
+        "read"
       );
     }
   }
@@ -80133,7 +80176,7 @@ var TranscriptFold = class {
   // What the session's last read answered, as it stands: never read is
   // pending, its first read the next request's.
   answer(sessionId2) {
-    return this.sessions.get(sessionId2)?.answer ?? PENDING;
+    return this.sessions.get(sessionId2)?.answer ?? pendingOf("unread");
   }
   store(sessionId2, folded2, answer2) {
     this.sessions.set(sessionId2, { folded: folded2, answer: answer2 });
@@ -80250,7 +80293,7 @@ var ContextProvider = class {
   // [LAW:one-source-of-truth] The one projection of the fold's answer.
   contextFrom(read2, contextLimit) {
     if (read2.kind === "failed") {
-      return failed(`context transcript: ${read2.reason}`);
+      return failed(`context transcript: ${read2.reason}`, read2.failedAt);
     }
     const totalTokens = read2.value;
     if (totalTokens === void 0) {
@@ -80347,7 +80390,7 @@ var MetricsProvider = class {
 };
 function metricsFrom(sessionId2, cost, folded2) {
   if (folded2.kind === "failed") {
-    return failed(`metrics (${sessionId2}): ${folded2.reason}`);
+    return failed(`metrics (${sessionId2}): ${folded2.reason}`, folded2.failedAt);
   }
   return ok({
     responseTime: cost.total_api_duration_ms / 1e3,
@@ -80461,7 +80504,7 @@ var ActivityProvider = class {
   }
 };
 function activityFrom(sessionId2, folded2) {
-  return folded2.kind === "failed" ? failed(`activity (${sessionId2}): ${folded2.reason}`) : ok(report(folded2.value));
+  return folded2.kind === "failed" ? failed(`activity (${sessionId2}): ${folded2.reason}`, folded2.failedAt) : ok(report(folded2.value));
 }
 
 // src/segments/tmux.ts
@@ -80514,7 +80557,7 @@ async function askSessionName(launcher, hint) {
     hint.pane,
     "#S"
   ]);
-  if (run3.kind !== "ok") return failed(run3.reason);
+  if (run3.kind !== "ok") return failed(run3.reason, "read");
   const name = run3.stdout.trim();
   return name ? ok(name) : ABSENT2;
 }
@@ -80533,7 +80576,7 @@ function syscall(field, read2) {
     const value = read2();
     return Promise.resolve(value === "" ? ABSENT2 : ok(value));
   } catch (e) {
-    return Promise.resolve(failed(`host.${field}: ${String(e)}`));
+    return Promise.resolve(failed(`host.${field}: ${String(e)}`, "read"));
   }
 }
 var HostService = class {
@@ -80617,7 +80660,7 @@ var AutoCompactProvider = class {
   // The window as the last request left it, for a draw: the file is not
   // touched.
   stored(settingsPath) {
-    return this.known.get(settingsPath)?.outcome ?? PENDING;
+    return this.known.get(settingsPath)?.outcome ?? pendingOf("unread");
   }
   getStats() {
     const { refreshes, failures, lastMs } = this.refreshes.record();
@@ -80683,7 +80726,7 @@ var CacheExpiryProvider = class {
   }
   // The expiry as the session's last refresh left it, for a draw.
   expiryOf(sessionId2) {
-    return this.known.get(sessionId2)?.outcome ?? PENDING;
+    return this.known.get(sessionId2)?.outcome ?? pendingOf("unread");
   }
   getStats() {
     const { refreshes, failures, lastMs } = this.refreshes.record();
@@ -80736,7 +80779,7 @@ var RefreshFaults = class {
   // The lane's failure while its last refresh threw; none once one ran clean.
   of(sessionId2, lane) {
     const reason = this.bySession.get(sessionId2)?.get(lane);
-    return reason === void 0 ? void 0 : failed(reason);
+    return reason === void 0 ? void 0 : failed(reason, "read");
   }
   // What the lane's refresh just did: threw `reason`, or ran clean (null).
   refreshed(sessionId2, lane, reason) {
@@ -81050,18 +81093,18 @@ var ManagedStorage = class {
   }
   async read(f) {
     const fault = this.standing(f.storage);
-    if (fault !== null) return failed(fault);
+    if (fault !== null) return failed(fault, "read");
     const file = fileOf(f);
     let text4;
     try {
       text4 = await fs_default.promises.readFile(file, "utf8");
     } catch (e) {
       const err = e;
-      return err.code === "ENOENT" ? ABSENT2 : failed(`${file}: ${err.message}`);
+      return err.code === "ENOENT" ? ABSENT2 : failed(`${file}: ${err.message}`, "read");
     }
     if (text4.trim() === "") return ABSENT2;
     const parsed2 = jsonParser(text4);
-    return parsed2.kind === "failed" ? failed(`${file}: ${parsed2.reason}`) : parsed2;
+    return parsed2.kind === "failed" ? failed(`${file}: ${parsed2.reason}`, parsed2.failedAt) : parsed2;
   }
   // Removes every `*.json` file nobody has written for 30 days, unless a
   // session holds it now. One event per sweep.
@@ -81689,9 +81732,10 @@ function openView(state, cwd2, facts, { sessionState, declare, source: sourceOf,
         "error",
         `session view declaration threw sid=${JSON.stringify(sessionId2)}: ${String(e)}`
       );
-      return settledLanes(failed(`view declaration threw: ${String(e)}`), [
-        ...state.sources.keys()
-      ]);
+      return settledLanes(
+        failed(`view declaration threw: ${String(e)}`, "read"),
+        [...state.sources.keys()]
+      );
     }
   };
   const declaration = (facts2, preset) => ({
@@ -82971,8 +83015,8 @@ function restorePlan(session, prior, answers) {
 var BOUND = /^bind-key\s+(?:-r\s+)?(?:-N\s+(?:"(?:[^"\\]|\\.)*"|\S+)\s+)?-T\s+root\s+MouseDown1Status\s+(.+)$/m;
 var ROOT_KEYS = [["list-keys", "-T", "root"]];
 function boundOf2(listKeys) {
-  const found = BOUND.exec(listKeys);
-  return found === null ? null : { line: found[0], command: found[1] };
+  const found2 = BOUND.exec(listKeys);
+  return found2 === null ? null : { line: found2[0], command: found2[1] };
 }
 var CLICK_URL = `cc-candybar://${VERB_TMUX_STATUS_CLICK}/`;
 var clickUrl = (socket) => `${CLICK_URL}${encodeSegments([socket])}/#{s/%//:pane_id}/#{q:mouse_status_range}`;
@@ -83240,14 +83284,14 @@ var TmuxStatusLines = class {
         const [session, prior, wrote = ""] = line.split("	");
         if (session === void 0 || prior === void 0 || prior === "")
           continue;
-        const found = leftBehind(prior, wrote, this.deps.owner);
-        if (found.kind === "ours")
+        const found2 = leftBehind(prior, wrote, this.deps.owner);
+        if (found2.kind === "ours")
           server.layouts.set(session, {
-            prior: found.prior,
+            prior: found2.prior,
             rows: [],
-            status: found.status
+            status: found2.status
           });
-        else this.leave(socket, server, session, found.why);
+        else this.leave(socket, server, session, found2.why);
       }
     }
     const answers = await this.ask(socket, [showGlobal(BINDING_OPTION)]);

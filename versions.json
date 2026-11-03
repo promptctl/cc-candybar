@@ -2,60 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-609",
-      "ref": "refs/pull/609/merge",
-      "sha": "8749b6d62825ccb9f0ada8255f7e779e6045a4be",
-      "timestamp": "2026-11-03T10:57:39.342Z",
-      "commits": [
-        {
-          "sha": "8749b6d62825ccb9f0ada8255f7e779e6045a4be",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T10:56:47Z",
-          "message": "Merge 436ef53efe810942f35298f785eb654c6bf64116 into 00161160468582e48082f373f82dcbae3d28bf6a\n"
-        },
-        {
-          "sha": "436ef53efe810942f35298f785eb654c6bf64116",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T03:56:35-07:00",
-          "message": "refactor(facts): fold failures keep their phase, Asked and the settings reader have one home (candybar-gather-renderer-76bb.6pj.cna)\n"
-        },
-        {
-          "sha": "229eac10740b30581c272e3deceb40461d72f141",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T03:45:14-07:00",
-          "message": "feat(facts): Fact<T> and SessionFacts, the seam's type (candybar-gather-renderer-76bb.6pj.cna)\n\nA fact is a Reading with an instant on each answered arm; restamp is the one\nplace that instant is defined (the moment an answer first differed), so no owner\nstores a time. SessionFacts is the spec's document over the value types the\nowners already produce, and the compiler refuses any field JSON would corrupt:\nthe day sums are a record, and the git fact is the read before the PR is\ncomposed onto it. parseFact is the one door a fact arrives by from outside.\n"
-        },
-        {
-          "sha": "597d9f95151979455d547154360343bb1920effb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T03:35:51-07:00",
-          "message": "refactor(outcome): pending is a value recognised by its discriminator (candybar-gather-renderer-76bb.6pj.cna)\n\nPENDING, the identity-compared singleton, is gone. A pending reading is a plain\n{kind, why} that survives JSON, and the owners' held form is flat: a Reading\nwhose pending arm also carries the landing a waiter awaits. A path walk stops\ntesting for pending inside a source's document, so a file that spells pending\nis a value. One structural comparison decides a box write.\n"
-        },
-        {
-          "sha": "38959f98153ac708b7bfe2edeb5a2b9b832c06f4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T03:10:51-07:00",
-          "message": "refactor(outcome): a failed outcome names the phase it failed in (candybar-gather-renderer-76bb.6pj.cna)\n\nfailed(reason, failedAt) takes read | parse as a required argument, so every\nproducer states the phase it knows and the compiler finds the ones that did\nnot. The settings reader splits the two phases it used to throw as one.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "00161160468582e48082f373f82dcbae3d28bf6a",
-      "timestamp": "2026-11-03T09:27:00.716Z",
+      "sha": "9d75378da3169d188c0f6bca1bf8f0e57e2dcb88",
+      "timestamp": "2026-11-03T11:05:15.993Z",
       "commits": [
         {
-          "sha": "00161160468582e48082f373f82dcbae3d28bf6a",
+          "sha": "9d75378da3169d188c0f6bca1bf8f0e57e2dcb88",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T02:26:11-07:00",
-          "message": "docs(design): measured memory settles Gather as Node and sets the two ceilings (candybar-gather-renderer-76bb.5d1) (#608)\n\n* docs(design): measured memory settles Gather as Node and sets the two ceilings (candybar-gather-renderer-76bb.5d1)\n\nMeasured on macOS, charge = phys_footprint through the backstop's probe.\n\n- A bare idle node is 12 MB; the bundle with no sessions 55-65 MB; the load\n  gate's daemon charges 68 / 103 / 389-397 MB at 1 / 10 / 100 sessions\n  (3.3 MB per session). Gather's idle floor passes the 102 MB line (10% of the\n  limit) with 37+ MB to spare.\n- A session's source values live in the variable store the render cache's view\n  holds, so the split moves a minority of a session's cost: about 0.46 MB of\n  2.4 MB of collected heap per session is what the config gates (258 vs 212 MB\n  at 100 sessions, two runs each). The state both processes would hold is\n  about 5% of the daemon's charge at 100 sessions against a 10% line.\n- Gather 448 MB and renderer 896 MB: the charge at 100 sessions times the\n  2.6 headroom the single daemon's default carries, rounded up to 64 MB. The\n  renderer's is set by its render cache (587 MB accounted at 100 sessions\n  needs a limit of 868 MB), not by what moved out.\n\nThe ceilings are recorded in spec section 15 and added to limits.ts by the\ntickets that read them. scripts/capture-heap.ts drives the daemon at N\nsessions under a chosen config and writes a heap snapshot by signal;\nstartWorld takes extra daemon environment for it.\n\n* fix(capture-heap): a run's snapshot is its own, whole, and on macOS; the doc names which rule binds each ceiling (candybar-gather-renderer-76bb.5d1)\n\n* fix(capture-heap): the snapshot is the daemon's by pid, and zero turns is a valid baseline (candybar-gather-renderer-76bb.5d1)"
+          "timestamp": "2026-11-03T04:04:20-07:00",
+          "message": "feat(facts): Fact<T> and SessionFacts, the seam's type (candybar-gather-renderer-76bb.6pj.cna) (#609)\n\n* refactor(outcome): a failed outcome names the phase it failed in (candybar-gather-renderer-76bb.6pj.cna)\n\nfailed(reason, failedAt) takes read | parse as a required argument, so every\nproducer states the phase it knows and the compiler finds the ones that did\nnot. The settings reader splits the two phases it used to throw as one.\n\n* refactor(outcome): pending is a value recognised by its discriminator (candybar-gather-renderer-76bb.6pj.cna)\n\nPENDING, the identity-compared singleton, is gone. A pending reading is a plain\n{kind, why} that survives JSON, and the owners' held form is flat: a Reading\nwhose pending arm also carries the landing a waiter awaits. A path walk stops\ntesting for pending inside a source's document, so a file that spells pending\nis a value. One structural comparison decides a box write.\n\n* feat(facts): Fact<T> and SessionFacts, the seam's type (candybar-gather-renderer-76bb.6pj.cna)\n\nA fact is a Reading with an instant on each answered arm; restamp is the one\nplace that instant is defined (the moment an answer first differed), so no owner\nstores a time. SessionFacts is the spec's document over the value types the\nowners already produce, and the compiler refuses any field JSON would corrupt:\nthe day sums are a record, and the git fact is the read before the PR is\ncomposed onto it. parseFact is the one door a fact arrives by from outside.\n\n* refactor(facts): fold failures keep their phase, Asked and the settings reader have one home (candybar-gather-renderer-76bb.6pj.cna)"
         }
       ]
     }
