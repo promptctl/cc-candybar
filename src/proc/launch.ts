@@ -46,7 +46,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import type { Socket } from "node:net";
-import type { Readable } from "node:stream";
+import type { Readable, Writable } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
 import { types } from "node:util";
 import type { ChildProcess, StdioOptions } from "node:child_process";
@@ -374,7 +374,7 @@ interface LaunchState {
   readonly unreaped: Map<ChildProcess, LaunchCategory>;
   // [LAW:single-enforcer] Pipes that outlived their launch, while they stay
   // open: the one place that holds, bounds and meters them.
-  readonly drains: Set<Readable>;
+  readonly drains: Set<Readable | Writable>;
 }
 
 // [LAW:no-ambient-temporal-coupling] `ending` is the one record of whether what
@@ -662,20 +662,46 @@ function capture(
     // metered in one place while it does.
     drain: () => {
       if (stream === null || stream.destroyed || stream.readableEnded) return;
-      // Nothing reads a closed launcher's drains, so their fds go with it.
-      if (state.scope.signal.aborted) {
-        stream.destroy();
-        return;
-      }
-      stream.once("close", () => {
-        state.drains.delete(stream);
-        stats?.onDrainClose(category, end);
-      });
-      (stream as Socket).unref();
-      state.drains.add(stream);
-      stats?.onDrainOpen(category);
+      hold(state, category, stream, () => end);
     },
   };
+}
+
+// [LAW:single-enforcer] A pipe still open after settle, in either direction,
+// is held, unref'd and metered here, and goes with a closed launcher. Its
+// listeners hold the pipe and `end`, so `end` must be built outside the launch
+// too, or the held pipe pins the launch's scope for its reader's life.
+function hold(
+  state: LaunchState,
+  category: LaunchCategory,
+  pipe: Readable | Writable,
+  end: () => DrainEnd,
+): void {
+  const { stats } = state.scope;
+  // Nothing reads a closed launcher's drains, so their fds go with it.
+  if (state.scope.signal.aborted) {
+    pipe.destroy();
+    return;
+  }
+  pipe.once("close", () => {
+    state.drains.delete(pipe);
+    stats?.onDrainClose(category, end());
+  });
+  (pipe as Socket).unref();
+  state.drains.add(pipe);
+  stats?.onDrainOpen(category);
+}
+
+// An input is written, never cut, so it always ends "closed".
+const inputEnd = (): DrainEnd => "closed";
+
+// At module scope, so a held input's listener holds nothing of the launch.
+function feed(input: Writable, text: string | Buffer | undefined): void {
+  // [LAW:no-silent-failure] exception: a reader may stop reading and still
+  // succeed (`head -1`), so its exit is the verdict, and the failed write says
+  // nothing that exit does not.
+  input.on("error", () => {});
+  input.end(text);
 }
 
 async function launchWaited(
@@ -715,6 +741,11 @@ async function launchWaited(
     const group = child.pid;
     if (group !== undefined) guard(state, group);
     const exited = new Promise((end) => child.once("exit", end));
+    // Node destroys a child's stdin when the child itself exits, dropping input
+    // a descendant still reads (`(cat > f) <&0 &`). The launch owns the pipe
+    // instead, so it closes when its last reader does.
+    const input = child.stdin;
+    child.stdin = null;
 
     const full = () => terminate("output-limit");
     const stdout = capture(state, opts.category, child.stdout, full);
@@ -753,6 +784,9 @@ async function launchWaited(
       child.off("error", onError);
       stdout.drain();
       stderr.drain();
+      // Input still being written at settle is held with the drains.
+      if (input !== null && !input.destroyed && !input.writableFinished)
+        hold(state, opts.category, input, inputEnd);
       deliver();
     };
     const settle = (r: LaunchResult) => finish(() => resolve(r));
@@ -890,11 +924,7 @@ async function launchWaited(
     opts.signal?.addEventListener("abort", onAbort, { once: true });
     state.inFlight.add(onAbort);
 
-    // [LAW:no-silent-failure] exception: a child may stop reading and still
-    // succeed (`head -1`), so its exit is the verdict, and the failed write
-    // says nothing that exit does not.
-    child.stdin?.on("error", () => {});
-    child.stdin?.end(opts.stdinInput);
+    if (input !== null) feed(input, opts.stdinInput);
   });
 }
 
