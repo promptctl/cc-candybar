@@ -13,10 +13,10 @@
 // <date> < src/x.ts <date>", a hint naming `just deploy`) that the user read
 // as a puzzle — the ticket's verbatim verdict.
 //
-// [LAW:effects-at-boundaries] `updateOf` / `updateNotice` are pure: (facts,
-// act state, session context) → diagnostic channels. The watch below is the
-// edge: the clocks, the registry fetch, the act's record, the validator
-// registrations.
+// [LAW:effects-at-boundaries] `updateReading` / `updateNotice` are pure:
+// (currency samples) → the update's reading, and (update, act state, session
+// context) → diagnostic channels. The watch below is the edge: the clocks, the
+// registry fetch, the act's record, the validator registrations.
 
 import {
   effectsUrl,

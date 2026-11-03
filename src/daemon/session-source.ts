@@ -75,25 +75,29 @@ export function sessionSource(
         state.authoredRoots.has(preset),
       ),
     );
-    const inputsOf = (): PayloadInputs => {
-      const { facts, lanes } = declared();
-      return {
-        hookData: facts.hookData,
-        cwd: facts.cwd,
-        hints: facts.hints,
-        neededInputPaths: state.neededInputPaths(effective.read().preset),
-        deps: { ...deps.providers, lanes: () => lanes },
-      };
-    };
+    const inputs = store.derive(
+      "session.inputs",
+      "computed",
+      (): PayloadInputs => {
+        const { facts, lanes } = declared();
+        return {
+          hookData: facts.hookData,
+          cwd: facts.cwd,
+          hints: facts.hints,
+          neededInputPaths: state.neededInputPaths(effective.read().preset),
+          deps: { ...deps.providers, lanes: () => lanes },
+        };
+      },
+    );
     // [LAW:one-source-of-truth] What the session's owners hold now, read once:
     // the payload and the facts document are both folds of this.
     const readings = store.derive("session.readings", "computed", () =>
-      readingsOf(inputsOf(), state.sources),
+      readingsOf(inputs.read(), state.sources),
     );
     const payload = store.derive("session.payload", "computed", () => {
       const globals = effective.read();
       return projectPayload(
-        inputsOf(),
+        inputs.read(),
         {
           effective: globals,
           configFacts: {

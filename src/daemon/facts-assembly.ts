@@ -44,6 +44,15 @@ function prOf(git: Reading<GitInfo>): Reading<PullRequest> {
   }
 }
 
+// The same keys, each holding the very fact it held.
+const sameFacts = <T extends object>(now: T, held: T): boolean => {
+  const entries = Object.entries(now);
+  return (
+    entries.length === Object.keys(held).length &&
+    entries.every(([key, fact]) => Object.is(fact, Reflect.get(held, key)))
+  );
+};
+
 function gitFactsOf({ pullRequest: _pullRequest, ...git }: GitInfo): GitFacts {
   return git;
 }
@@ -102,14 +111,19 @@ export function assembleFacts(
   );
 
   const parts = { builtins, sources, update, diagnostics: readings.faults };
+  // [LAW:single-enforcer] `restamp` is the one judge of whether a fact moved,
+  // and it returns the prior fact itself when not, so the document is
+  // unmoved when every fact is the prior's own. The builtins and sources are
+  // compared by that identity, never walked again (a source's value can be
+  // large JSON); the update and diagnostics are small and not restamped here.
   if (
     prior !== undefined &&
-    compareStructural(parts, {
-      builtins: prior.builtins,
-      sources: prior.sources,
-      update: prior.update,
-      diagnostics: prior.diagnostics,
-    })
+    sameFacts(builtins, prior.builtins) &&
+    sameFacts(sources, prior.sources) &&
+    compareStructural(
+      { update, diagnostics: readings.faults },
+      { update: prior.update, diagnostics: prior.diagnostics },
+    )
   ) {
     return prior;
   }

@@ -1438,7 +1438,7 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
     state,
     store: registry.variableStore,
     declared: () => declared.get(),
-    onDispose: (stop) => sourceStops.push(stop),
+    onDispose: (stopSource) => sourceStops.push(stopSource),
   });
   bindView(state.compiled, registry.variableStore, registry, source);
   // [LAW:single-enforcer] The view's one say that what it draws from moved:
