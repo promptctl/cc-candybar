@@ -59,7 +59,8 @@ type Motion = "moving" | "unseen" | "still";
 // wall clock and say so, as a template's `frames` does: each frame shows the
 // beat it was drawn in and next changes at the next one. The wall clock the
 // feed reads is the real one, moved by `wallOffsetS` and read short by
-// `shortMs` (a reading truncated to the millisecond, a timer fired early).
+// the next of `shortsMs` in turn, read by read (a reading truncated to the
+// millisecond, a timer fired early).
 function harness(opts: {
   motion: Motion;
   renderMs?: number;
@@ -99,7 +100,8 @@ function harness(opts: {
     // The instant each render was drawn for, in order.
     ats: [] as Instant[],
     wallOffsetS: 0,
-    shortMs: 0,
+    shortsMs: [0],
+    reads: 0,
   };
   const frameOf = (req: string, at: Instant): FeedFrame => {
     if (opts.fails === true) return failedFrame(req);
@@ -161,7 +163,9 @@ function harness(opts: {
       after: systemTimekeeper.after,
     },
     instant: () =>
-      ((Date.now() - state.shortMs) / 1000 + state.wallOffsetS) as Instant,
+      ((Date.now() - state.shortsMs[state.reads++ % state.shortsMs.length]!) /
+        1000 +
+        state.wallOffsetS) as Instant,
     log: (_level, line) => log.push(line),
   });
   const note = (
@@ -1260,18 +1264,19 @@ describe("a feed draws when its bar next changes", () => {
       expect(state.renders).toBe(3);
     });
 
-    // Offset 0.3 ms long and truncated by each of these, the wall reads
-    // 0.3 ms long, 0.7 ms short and 1.7 ms short.
-    test.each([0, 1, 2])(
-      "a frame set for a turn is drawn for it, however short the wall reading falls (%i ms truncated), and each turn costs one draw",
-      (shortMs) => {
+    // Offset 0.3 ms long and short by 0, 1 or 2 ms, the wall reads 0.3 ms
+    // long, 0.7 ms short or 1.7 ms short: each alone for a whole run, and
+    // in turn so that one reading disagrees with the next.
+    test.each([[[0]], [[1]], [[2]], [[0, 2, 1]], [[2, 0, 1, 1]]])(
+      "a frame set for a turn is drawn for it, the wall read short within the timer's resolution (short by %j ms), and each turn costs one draw",
+      (shortsMs: number[]) => {
         const RUN_MS = 1550;
         const { feeds, note, state } = harness({
           motion: "moving",
           beatMs: 100,
         });
         state.wallOffsetS = 0.0003;
-        state.shortMs = shortMs;
+        state.shortsMs = shortsMs;
         note("s", "bar");
         const close = feeds.subscribe(
           "s",
@@ -1284,7 +1289,10 @@ describe("a feed draws when its bar next changes", () => {
         // the instant before its turn, so never twice in one, and none
         // skipped, from the turn the wall reads at subscribing to the last.
         expect(beats).toEqual(beats.map((_, i) => beats[0]! + i));
-        expect(beats[0]).toBe(beatAt(START_MS + 0.3 - shortMs));
+        // The first is for a turn the wall read at subscribing, short or not.
+        expect(
+          shortsMs.map((short) => beatAt(START_MS + 0.3 - short)),
+        ).toContain(beats[0]);
         expect(beats.at(-1)).toBe(beatAt(START_MS + RUN_MS));
       },
     );
@@ -1346,26 +1354,25 @@ describe("a feed draws when its bar next changes", () => {
       close();
       expect(jest.getTimerCount()).toBe(0);
     });
-  });
 
-  test("a wall clock stepped back is followed at the next draw, not drawn ahead of", async () => {
-    const { feeds, note, state } = harness({ motion: "moving", beatMs: 100 });
-    note("s", "bar");
-    const close = feeds.subscribe(
-      "s",
-      sub(() => {}),
-    );
-    await sleep(250);
-    state.wallOffsetS = -10;
-    const before = state.renders;
-    await sleep(1200);
-    close();
-    const after = state.ats.slice(before);
-    expect(after.length).toBeGreaterThan(0);
-    // Drawn within the timer's resolution of the stepped wall, never 10 s
-    // ahead of it.
-    for (const at of after)
-      expect(at - (Date.now() / 1000 - 10)).toBeLessThan(0.01);
+    test("a wall clock stepped back is followed at the next draw, not drawn ahead of", () => {
+      const { feeds, note, state } = harness({ motion: "moving", beatMs: 100 });
+      note("s", "bar");
+      const close = feeds.subscribe(
+        "s",
+        sub(() => {}),
+      );
+      jest.advanceTimersByTime(250);
+      state.wallOffsetS = -10;
+      const before = state.renders;
+      jest.advanceTimersByTime(1200);
+      close();
+      const after = beatsOf(state.ats.slice(before));
+      // Once the wall steps back, a turn of the stepped wall at a time,
+      // ending on the turn it reads at the last, never 10 s ahead of it.
+      expect(after).toEqual(after.map((_, i) => after[0]! + i));
+      expect(after.at(-1)).toBe(beatAt(START_MS + 1450 - 10_000));
+    });
   });
 });
 
