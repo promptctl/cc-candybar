@@ -52680,16 +52680,10 @@ var KeyedSource = class {
         this.refreshes.abandoned(fields2, by, ms);
         return;
       }
-      const stored = entry.flight === flight;
       try {
-        this.refreshes.recorded(
-          `${fields2} stored=${stored ? "Y" : "N"}`,
-          by,
-          outcome,
-          ms
-        );
+        this.refreshes.recorded(fields2, by, outcome, ms);
       } finally {
-        if (stored) this.store(entry, outcome);
+        this.store(entry, outcome);
       }
     }).catch((e) => {
       this.spec.logger(
@@ -52916,6 +52910,21 @@ function crateDigest(crateDir) {
 var SHORT_DIGEST_LENGTH = 7;
 var shortDigest = (digest2) => digest2.slice(0, SHORT_DIGEST_LENGTH);
 
+// src/utils/plain.ts
+init_globals();
+function digestOf2(value) {
+  return createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex");
+}
+function canonical(value) {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (typeof value === "object" && value !== null) {
+    return Object.fromEntries(
+      Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([k, v]) => [k, canonical(v)])
+    );
+  }
+  return value;
+}
+
 // src/var-system/parse.ts
 init_globals();
 var LINE_BREAK = /\r\n|\r|\n/g;
@@ -52937,18 +52946,7 @@ var jsonParser = (text4) => {
 
 // src/var-system/source-runs.ts
 var SHELL_READ_TIMEOUT_MS = 1e4;
-function digestOf2(identity2) {
-  return crypto_default.createHash("sha256").update(JSON.stringify(canonical(identity2))).digest("hex");
-}
-function canonical(value) {
-  if (Array.isArray(value)) return value.map(canonical);
-  if (typeof value === "object" && value !== null) {
-    return Object.fromEntries(
-      Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([k, v]) => [k, canonical(v)])
-    );
-  }
-  return value;
-}
+var digestOf3 = (identity2) => digestOf2(identity2);
 function keyHashOf(value) {
   return crypto_default.createHash("sha256").update(value).digest("hex");
 }
@@ -52980,9 +52978,10 @@ function fileReader(filePath2, readMode, signal) {
         return ok(
           readMode === "first-line" ? raw.split(/\r?\n/)[0] ?? "" : raw
         );
-      } catch {
+      } catch (e) {
+        const code = e.code ?? String(e);
         return failed(
-          signal.aborted ? `file read aborted: ${String(signal.reason)}` : `file unreadable: ${filePath2}`,
+          signal.aborted ? `file read aborted: ${String(signal.reason)}` : `file unreadable (${code}): ${filePath2}`,
           "read"
         );
       }
@@ -53138,8 +53137,8 @@ var SourceRuns = class {
     const source = (kind) => new KeyedSource({
       name: `source.${kind}`,
       scope: "daemon",
-      keyOf: digestOf2,
-      fields: (identity2, holders) => `digest=${shortDigest(digestOf2(identity2))} where=${valueOf(whereOf(identity2.read))} sharedBy=${holders}`,
+      keyOf: digestOf3,
+      fields: (identity2, holders) => `digest=${shortDigest(digestOf3(identity2))} where=${valueOf(whereOf(identity2.read))} sharedBy=${holders}`,
       // [LAW:single-enforcer] THE run: read → parse. Shell and file are two
       // readers through this one function; text/regex/json are three
       // parsers through it.
@@ -53154,7 +53153,7 @@ var SourceRuns = class {
       every: ({ refresh }) => refresh.kind === "ttl" ? { okMs: refresh.durationMs, failedMs: refresh.durationMs } : null,
       watch: (identity2, changed) => {
         if (identity2.refresh.kind !== "watch_file") return NO_WATCH();
-        const digest2 = digestOf2(identity2);
+        const digest2 = digestOf3(identity2);
         const unsubscribe = this.watchMgr.subscribe(
           identity2.refresh.path,
           changed,
@@ -53179,7 +53178,7 @@ var SourceRuns = class {
   // the identity's digest, created and read once on its first hold, and the
   // lane reads it as it stands.
   declare(holds2, identity2) {
-    const digest2 = digestOf2(identity2);
+    const digest2 = digestOf3(identity2);
     const lane = this.byKind[identity2.read.kind].declare(holds2, identity2);
     return {
       digest: digest2,
@@ -81519,12 +81518,6 @@ function unusedDeclarations(raw, config2, inserted) {
   ];
 }
 
-// src/utils/plain.ts
-init_globals();
-function digestOf3(value) {
-  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
-}
-
 // src/daemon/cache/render.ts
 var ENTRY_BYTES = 3 * 1024 * 1024;
 var COMPILE_BYTES = 10 * 1024 * 1024;
@@ -81644,7 +81637,7 @@ function plugins(p2) {
 }
 function loadKey(inputs) {
   const { loaded, chain: chain2 } = inputs;
-  return digestOf3({
+  return digestOf2({
     cwd: inputs.cwd,
     chain: {
       layers: chain2.layers,

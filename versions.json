@@ -4,15 +4,22 @@
     {
       "version": "pr-614",
       "ref": "refs/pull/614/merge",
-      "sha": "72cf7363ba5a611cfc1f7929df6886428a16afe7",
-      "timestamp": "2026-11-03T15:26:15.581Z",
+      "sha": "9d46f4b4cdf831153f958cdd48f952a00c16bcf2",
+      "timestamp": "2026-11-03T15:49:30.988Z",
       "commits": [
         {
-          "sha": "72cf7363ba5a611cfc1f7929df6886428a16afe7",
+          "sha": "9d46f4b4cdf831153f958cdd48f952a00c16bcf2",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T15:25:11Z",
-          "message": "Merge 2fea65a2d1e405e52f0b1818e54c18aeac3e0f6d into 8067e9a72297c93efa9dd1063cfd8f2ca5ced0c1\n"
+          "timestamp": "2026-11-03T15:47:59Z",
+          "message": "Merge a9612f6ab46476993b6f79858c2ad72c20fabddb into 8067e9a72297c93efa9dd1063cfd8f2ca5ced0c1\n"
+        },
+        {
+          "sha": "a9612f6ab46476993b6f79858c2ad72c20fabddb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T08:47:38-07:00",
+          "message": "fix(sources): medium-pass fixes — one-shot owners close their runs, one canonical digest, errno on unreadable file (candybar-gather-renderer-76bb.6pj.5dx)\n"
         },
         {
           "sha": "2fea65a2d1e405e52f0b1818e54c18aeac3e0f6d",
