@@ -1,3 +1,9 @@
+## [1.180.9](https://github.com/promptctl/cc-candybar/compare/v1.180.8...v1.180.9) (2026-11-03)
+
+### Bug Fixes
+
+* **test:** the frame-feed cases run on one held clock (candybar-testing-0x6u.fs0) ([#596](https://github.com/promptctl/cc-candybar/issues/596)) ([669df92](https://github.com/promptctl/cc-candybar/commit/669df9209449d3ac4080a21d3a7144477fa78a73))
+
 ## [1.180.8](https://github.com/promptctl/cc-candybar/compare/v1.180.7...v1.180.8) (2026-11-03)
 
 ### Bug Fixes
