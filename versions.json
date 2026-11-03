@@ -4,15 +4,22 @@
     {
       "version": "pr-599",
       "ref": "refs/pull/599/merge",
-      "sha": "d64976fa7b097a73992ad2a3ab4262bbe87a3c02",
-      "timestamp": "2026-11-03T03:15:21.388Z",
+      "sha": "bd592eeeb89b5c4bd84f89e7a194e90156613df6",
+      "timestamp": "2026-11-03T03:16:41.646Z",
       "commits": [
         {
-          "sha": "d64976fa7b097a73992ad2a3ab4262bbe87a3c02",
+          "sha": "bd592eeeb89b5c4bd84f89e7a194e90156613df6",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T03:14:28Z",
-          "message": "Merge 69cd5e888130a949da9e0cb7828c6228354d8a12 into 587196cbaa9d6ccd67cf50cb1c7598a88730d3b6\n"
+          "timestamp": "2026-11-03T03:15:04Z",
+          "message": "Merge 2b9b46da24ef7e2159e34299579ae17e8b196415 into 587196cbaa9d6ccd67cf50cb1c7598a88730d3b6\n"
+        },
+        {
+          "sha": "2b9b46da24ef7e2159e34299579ae17e8b196415",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T20:14:51-07:00",
+          "message": "docs(memory): the heap-snapshot yield line holds the trap, the helper holds the mechanism (candybar-testing-0x6u.ed2)\n"
         },
         {
           "sha": "69cd5e888130a949da9e0cb7828c6228354d8a12",
