@@ -114,7 +114,7 @@ Part I is the shape. This part sets every seam to the point where a ticket can b
 
 ## 12. `SessionFacts`
 
-One document per session. Every field exists on every document. A field that is not yet known is a `Reading` in the pending arm; a field that was read and found nothing is `absent`; a field whose read failed carries its reason. The existing structural `Reading<T>` in `src/utils/reading.ts` is already this shape minus the promise; the wire form drops the promise and keeps the discriminator. The identity-compared `PENDING` singleton in `src/utils/outcome.ts` is retired, and every site that compares or defaults on it switches to `kind === "pending"`. Today that is nine files (`grep PENDING src`): the variable store and sources, the payload, the usage store, the render cache, the transcript fold and the autocompact and cache providers, as well as `outcome.ts` itself. A site left on identity would read a deserialised pending as a value and draw a default with a `last_error`. [LAW:types-are-the-program] [LAW:one-source-of-truth]
+One document per session. Every field exists on every document. A field that is not yet known is a `Reading` in the pending arm; a field that was read and found nothing is `absent`; a field whose read failed carries its reason. `Reading<T>` in `src/utils/outcome.ts` is this shape without the instant, and the owners hold it as `Held<T>` in `src/utils/reading.ts`, whose pending arm also carries the landing a waiter awaits; a fact is a `Reading` with `at` on each answered arm, stamped by `restamp` (`src/facts/fact.ts`) when the document is assembled, so no owner stores a time. The identity-compared `PENDING` singleton is retired: pending is a plain `{ kind, why }` recognised by its discriminator, because a site left on identity would read a deserialised pending as a value and draw a default with a `last_error`. A source's own document can spell the same thing, so a path walk stops testing for pending once it steps into an `ok` reading's `value`. [LAW:types-are-the-program] [LAW:one-source-of-truth]
 
 ```ts
 type Fact<T> =
@@ -139,13 +139,16 @@ interface SessionFacts {
     readonly git: Fact<GitFacts>;           // branch, dirty, ahead/behind, remotes, committedAt
     readonly pr: Fact<PullRequest>;         // its own fact, because its cost is its own
     readonly tmux: Fact<TmuxFacts>;         // session name for the pane, and the server's shown set
-    readonly host: Fact<HostFacts>;         // name, user
+    readonly hostName: Fact<string>;        // read apart from the user and failing apart from it
+    readonly hostUser: Fact<string>;
   };
   readonly sources: Readonly<Record<SourceId, Fact<SourceValue>>>;  // declared shell/file/plugin
   readonly update: Fact<UpdateNotice>;      // the release check; a Gather fact because it reads the network
   readonly diagnostics: readonly FactsDiagnostic[];  // Gather's own faults for this session
 }
 ```
+
+In code the value types keep the names their owners already give them (`UsageInfo`, `ContextInfo`, `MetricsInfo`, `ActivityInfo`, `SpeedObservation`, `AutoCompactWindow`, a plain `number` for the cache expiry), `today`'s day sums are a record and not a `Map` because the document crosses as JSON, and `git` is the read before the PR is composed onto it (`src/facts/session-facts.ts`).
 
 What stays out, because it is the renderer's: the hook's instantaneous fields (model, cost, context window, cwd as of the tick), client hints (width, depth, terminal, ssh), settings and their history depth, picks, config facts, `feeds`, `drawing`, the menu. The payload a template reads is `payloadOf(facts, hook, hints, rendererState)` and is composed in the renderer, as today. `block` and `weekly` come from the hook and never cross.
 

@@ -19,7 +19,7 @@ import {
   type TimeVarDecl,
   type AuthoredVariableDecl,
 } from "../dsl-types.js";
-import type { JsonValue } from "../../var-system/types.js";
+import { isJsonValue } from "../../var-system/types.js";
 import { findKeyLine } from "./diagnostics.js";
 import {
   armFacets,
@@ -274,27 +274,6 @@ function jsonDefault(
 // which JSON does not), a programmatic config's are whatever TS let through.
 function isSourceDefault(value: unknown): value is SourceDefault {
   return value !== null && isJsonValue(value);
-}
-
-function isJsonValue(value: unknown): value is JsonValue {
-  if (value === null) return true;
-  switch (typeof value) {
-    case "string":
-    case "boolean":
-      return true;
-    case "number":
-      return Number.isFinite(value);
-    case "object": {
-      if (Array.isArray(value)) return value.every(isJsonValue);
-      const proto: unknown = Object.getPrototypeOf(value);
-      return (
-        (proto === Object.prototype || proto === null) &&
-        Object.values(value as Record<string, unknown>).every(isJsonValue)
-      );
-    }
-    default:
-      return false;
-  }
 }
 
 // [LAW:dataflow-not-control-flow] Each arm's field set is DATA over the member's

@@ -393,7 +393,7 @@ function under(path: string | undefined, roots: readonly string[]): boolean {
 function daySumsOver(
   slots: Iterable<SessionSlot>,
   roots: readonly string[],
-): ReadonlyMap<string, DayUsage> {
+): Readonly<Record<string, DayUsage>> {
   const sums = new Map<string, DayUsage>();
   for (const { record } of slots) {
     if (record === undefined || !under(record.transcriptPath, roots)) continue;
@@ -403,14 +403,16 @@ function daySumsOver(
       sums.set(day, sum);
     }
   }
-  return sums;
+  // [LAW:types-are-the-program] A record, not a Map: the day sums are a fact
+  // that crosses a process as JSON (src/facts/session-facts.ts).
+  return Object.fromEntries(sums);
 }
 
 // A directory set's `today` state beside its scan: its roots, and its day
 // sums derived from the records.
 interface DaySet {
   readonly roots: readonly string[];
-  readonly sums: Kept<ReadonlyMap<string, DayUsage>>;
+  readonly sums: Kept<Readonly<Record<string, DayUsage>>>;
 }
 
 // What `today`'s lane answers: the set's roots and its day sums as they
@@ -418,7 +420,7 @@ interface DaySet {
 // record lands, as it does for every other lane.
 export interface DaySums {
   readonly roots: readonly string[];
-  readonly sums: ReadonlyMap<string, DayUsage>;
+  readonly sums: Readonly<Record<string, DayUsage>>;
 }
 
 // Bounded-concurrency fan-out for the seed: at most `limit` parses in flight.
@@ -749,7 +751,7 @@ export class SessionUsageStore {
 
     const today = dayKey(dateOf(at));
     const total: DayUsage = { ...EMPTY_DAY };
-    const inSet = set.sums.get(today);
+    const inSet = set.sums[today];
     if (inSet !== undefined) addDay(total, inSet);
     // The rendering session counts wherever its transcript lives; under the
     // set's roots it is already in the sums.

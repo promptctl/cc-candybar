@@ -3,7 +3,7 @@
 // triggers (`settlePayload`) and draws from what that left; the view's payload
 // (`payloadOf`), which every frame draws, reads every owner's stored value as
 // it stands — no I/O, no refresh, no instant — and a value not answered yet
-// crosses as pendingOf("unread"), which the draw takes as its loading cell. What moves
+// crosses as pending, which the draw takes as its loading cell. What moves
 // with the instant (`today`, the feeds) is the draw's own projection.
 //
 // [LAW:behavior-not-structure] Each owner is a fake over a counted reader
