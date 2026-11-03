@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-613",
+      "ref": "refs/pull/613/merge",
+      "sha": "b28514a8c03e8f9f5c74d7846e09b9870f53fe59",
+      "timestamp": "2026-11-03T14:21:35.075Z",
+      "commits": [
+        {
+          "sha": "b28514a8c03e8f9f5c74d7846e09b9870f53fe59",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T14:20:48Z",
+          "message": "Merge bfaaa609df879d6d176a82b4e6da4cdec397a519 into 4a53ad24cd95fa2ed074025955271337c3bf3653\n"
+        },
+        {
+          "sha": "bfaaa609df879d6d176a82b4e6da4cdec397a519",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T07:20:37-07:00",
+          "message": "refactor(facts): the today read goes through the readings' one read (candybar-gather-renderer-76bb.6pj.ktv)\n\nEvery other owner read in the readings is behind one wrapper that answers the\nrefresh's fault first and turns a throw into that lane's failure, logged. The\ntoday fact was the one read outside it, with its own copy of the fault check.\nIt now goes through the wrapper, so a throw costs the today cells and not the\nbar, and the fault is judged in one place.\n\nThe tests read today the way the draw does (through the readings), and the two\npaths the wrapper owns for today are pinned in the frame payload tests.\n"
+        },
+        {
+          "sha": "8eb9bb34361b26d51a2adafdd6b9288925936404",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T07:17:29-07:00",
+          "message": "refactor(facts): the today projection leaves the store, and the fact holds only days the sums lack (candybar-gather-renderer-76bb.6pj.ktv)\n\nThe projection, its types and the day arithmetic are pure, and sat in the\nmodule that owns pricing, transcript reads and observables; check and the\ndraw now value-import a small module of their own.\n\nThe session's days enter the fact only when its transcript lies outside the\nset's projects, decided by the store's read (daysOutside), so the projection\nloses its roots branch and a session under the roots no longer moves the\ndocument on every ingest.\n\nA one-day sums constructor replaces the two hand-built copies, and the\ndocument test spells its expected today fact instead of calling the\nproduction reading.\n"
+        },
+        {
+          "sha": "f7fe34974b133653dea928cd26bd8d4cf8121d88",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T07:09:54-07:00",
+          "message": "feat(facts): the draw's today and sources count are read from the document (candybar-gather-renderer-76bb.6pj.ktv)\n\nThe today fact now carries everything the draw's day projection reads: the\ndirectory's day sums and the rendering session's own days, with the session's\ningest failure as the fact failing. projectToday is a pure function of that\nfact and the draw's instant, so todayOf takes no store, lane or ledger, and\nthe draw and the demo read the view's document. The render event's source\ncounts read the document's sources too. check projects a fixture fact through\nthe same todayOf, so CHECK_TODAY is gone.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "4a53ad24cd95fa2ed074025955271337c3bf3653",
@@ -20,35 +56,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-03T13:16:48Z",
           "message": "chore(release): set `package.json` to 1.186.0 [skip ci]\n\n## [1.186.0](https://github.com/promptctl/cc-candybar/compare/v1.185.1...v1.186.0) (2026-11-03)\n\n### Features\n\n* **facts:** one SessionFacts per session, assembled from today's providers and restamped (candybar-gather-renderer-76bb.6pj.af6) ([#611](https://github.com/promptctl/cc-candybar/issues/611)) ([a7b85c9](https://github.com/promptctl/cc-candybar/commit/a7b85c98a60c7c9bc6196f726311fc6a6650e438))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-613",
-      "ref": "refs/pull/613/merge",
-      "sha": "4da822bda82a1b30b99a3a7e3607e27c944909d4",
-      "timestamp": "2026-11-03T14:18:49.270Z",
-      "commits": [
-        {
-          "sha": "4da822bda82a1b30b99a3a7e3607e27c944909d4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T14:17:43Z",
-          "message": "Merge 8eb9bb34361b26d51a2adafdd6b9288925936404 into d05718f5dc3d1b63c32060d3455f649c9af05c8a\n"
-        },
-        {
-          "sha": "8eb9bb34361b26d51a2adafdd6b9288925936404",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T07:17:29-07:00",
-          "message": "refactor(facts): the today projection leaves the store, and the fact holds only days the sums lack (candybar-gather-renderer-76bb.6pj.ktv)\n\nThe projection, its types and the day arithmetic are pure, and sat in the\nmodule that owns pricing, transcript reads and observables; check and the\ndraw now value-import a small module of their own.\n\nThe session's days enter the fact only when its transcript lies outside the\nset's projects, decided by the store's read (daysOutside), so the projection\nloses its roots branch and a session under the roots no longer moves the\ndocument on every ingest.\n\nA one-day sums constructor replaces the two hand-built copies, and the\ndocument test spells its expected today fact instead of calling the\nproduction reading.\n"
-        },
-        {
-          "sha": "f7fe34974b133653dea928cd26bd8d4cf8121d88",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T07:09:54-07:00",
-          "message": "feat(facts): the draw's today and sources count are read from the document (candybar-gather-renderer-76bb.6pj.ktv)\n\nThe today fact now carries everything the draw's day projection reads: the\ndirectory's day sums and the rendering session's own days, with the session's\ningest failure as the fact failing. projectToday is a pure function of that\nfact and the draw's instant, so todayOf takes no store, lane or ledger, and\nthe draw and the demo read the view's document. The render event's source\ncounts read the document's sources too. check projects a fixture fact through\nthe same todayOf, so CHECK_TODAY is gone.\n"
         }
       ]
     }
