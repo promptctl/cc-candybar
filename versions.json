@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-600",
+      "ref": "refs/pull/600/merge",
+      "sha": "2cddbc6ed62f34268f642b7367aad01d5c2f8b62",
+      "timestamp": "2026-11-03T03:28:12.478Z",
+      "commits": [
+        {
+          "sha": "2cddbc6ed62f34268f642b7367aad01d5c2f8b62",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T20:27:20-07:00",
+          "message": "Merge 547f082046faa9abe354a2d08ca3bb1fb23ba7dd into c72e51e1f062fa43bd02971e664d42e7d701432a\n"
+        },
+        {
+          "sha": "547f082046faa9abe354a2d08ca3bb1fb23ba7dd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T20:27:10-07:00",
+          "message": "feat(url-handler): a click the forwarder could not deliver tells the user (candybar-daemon-health-ajx0.c3x)\n\nThe forwarder's one visible failure, a frame it could not write, is now\nalso a macOS user notification whose body is the observed error (the\nconnect failure, or the bounded write wait), never a diagnosis. The\ndelivered arm is untouched, so a slow click that landed cannot look lost.\nAuthorization is requested on every lost click (idempotent, no state);\na denied or failed post is logged under the app's subsystem.\n\nThe app is frontmost when it posts, because Launch Services activates it\nto deliver the click, and macOS hides a frontmost app's notifications\nunless its delegate presents them; the delegate asks for the banner.\n\nDecided on the ticket: no launcher beside the socket, the forwarder\nnever starts a daemon.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "c72e51e1f062fa43bd02971e664d42e7d701432a",
