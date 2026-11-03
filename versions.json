@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-597",
+      "ref": "refs/pull/597/merge",
+      "sha": "bcf15e9964782c1a227635c20e52cc3c572afc4b",
+      "timestamp": "2026-11-03T02:13:40.037Z",
+      "commits": [
+        {
+          "sha": "bcf15e9964782c1a227635c20e52cc3c572afc4b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T19:12:24-07:00",
+          "message": "Merge 588dc506690556046b902034aa3f441e307345dd into 669df9209449d3ac4080a21d3a7144477fa78a73\n"
+        },
+        {
+          "sha": "588dc506690556046b902034aa3f441e307345dd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T19:12:06-07:00",
+          "message": "fix(test): a render is held past the request backstop by a pipe the test writes, not by a compile's speed (candybar-testing-0x6u.8vd)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "669df9209449d3ac4080a21d3a7144477fa78a73",
