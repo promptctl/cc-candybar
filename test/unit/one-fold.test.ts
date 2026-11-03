@@ -190,6 +190,20 @@ describe("a segment's input paths follow every edge the draw does", () => {
     }`);
     expect(needed.has("fixture.dir")).toBe(true);
   });
+  // The doctor names a segment that needs the forge by its closure holding a
+  // PR path, so a whole-namespace read must reach the namespace's children.
+  test("a read of a whole namespace reaches every declared path under it", () => {
+    const needed = closureOf(`{
+      variables: {
+        "git.branch": { kind: "input", path: "git.branch", default: "" },
+        "git.prState": { kind: "input", path: "git.prState", default: "" },
+      },
+      segments: { s: { template: "{{ toJson .git }}" } },
+      root: { h: ["s"] },
+    }`);
+    expect(needed.has("git.branch")).toBe(true);
+    expect(needed.has("git.prState")).toBe(true);
+  });
   // A path read only inside a dispatched `partials` body was once never
   // reached (candybar-templates-zh8b.53s).
   test("an input read only inside a partial", () => {

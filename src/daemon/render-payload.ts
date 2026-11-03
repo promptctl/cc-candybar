@@ -1122,9 +1122,9 @@ export function todayReading(
 // key has never answered, except the two whose first answer is slow and
 // external: today's day sums (a scan of every transcript under the Claude Code
 // directory) and the branch's PR (a forge's network call). A first bar that
-// waited on them would be as slow as the slowest, and a bar with every
-// built-in placed always reads both, so they draw pending and land through
-// the observables their owners store them in. A lane the daemon itself
+// waited on them would be as slow as the slowest, and every session reads
+// both, so they draw pending and land through the observables their owners
+// store them in. A lane the daemon itself
 // superseded (a click's move) is not waited on either: it draws its loading
 // cell, and its landing reaches the next frame.
 function waitsOf(lanes: DeclaredLanes): Array<Promise<void>> {
