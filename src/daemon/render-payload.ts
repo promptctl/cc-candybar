@@ -1247,7 +1247,7 @@ export function declareLanes(
       return take();
     } catch (e) {
       faults.push(`${lane}: ${inspect(e)}`);
-      return settledLane(failed(`${lane}: ${String(e)}`));
+      return settledLane(failed(`${lane}: ${String(e)}`, "read"));
     }
   };
   const lanes: DeclaredLanes = {
@@ -1308,7 +1308,7 @@ function readLanes(inputs: PayloadInputs): Lanes {
       return value();
     } catch (e) {
       deps.log("error", `${lane} read threw: ${inspect(e)}`);
-      return failed(`${lane}: ${String(e)}`);
+      return failed(`${lane}: ${String(e)}`, "read");
     }
   };
   return {

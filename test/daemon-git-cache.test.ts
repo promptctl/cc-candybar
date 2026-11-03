@@ -104,7 +104,7 @@ class StubGitService extends GitService {
     this.resolveCalls.push({ workingDir, projectDir });
     if (this.resolveThrows) throw new Error("resolver bug");
     if (this.resolveFailure !== null) {
-      return { kind: "failed", reason: this.resolveFailure };
+      return { kind: "failed", reason: this.resolveFailure, failedAt: "read" };
     }
     const key = projectDir ? `${workingDir}|${projectDir}` : workingDir;
     if (key in this.effectiveDirByKey) {
@@ -133,7 +133,7 @@ class StubGitService extends GitService {
     const failure = this.infoFailure;
     const info = this.stubInfo;
     if (this.infoGate) await this.infoGate.promise;
-    return failure !== null ? failed(failure) : ok(info);
+    return failure !== null ? failed(failure, "read") : ok(info);
   }
 }
 
@@ -773,7 +773,7 @@ describe("GitDataProvider refreshes on its own triggers", () => {
     svc.close();
 
     const lane = svc.declare(holds, "/repo", {});
-    expect(lane.current()).toEqual(failed("git cache closed"));
+    expect(lane.current()).toEqual(failed("git cache closed", "read"));
     expect(svc.getStats()).toMatchObject({ size: 0, held: 0 });
     expect(jest.getTimerCount()).toBe(0);
     await jest.advanceTimersByTimeAsync(100);
@@ -848,7 +848,7 @@ describe("GitDataProvider refreshes on its own triggers", () => {
     inner.repoRootByDir = { "/repo": "/repo" };
     inner.stubInfo = {
       ...inner.stubInfo,
-      stashCount: failed("git stash list: timeout"),
+      stashCount: failed("git stash list: timeout", "read"),
     };
 
     for (let i = 0; i < 3; i++) await gitOf(svc, holds, "/repo", {});
@@ -860,7 +860,7 @@ describe("GitDataProvider refreshes on its own triggers", () => {
     inner.repoRootByDir = { "/repo": "/repo" };
     inner.stubInfo = {
       ...inner.stubInfo,
-      head: failed("git rev-parse: timeout"),
+      head: failed("git rev-parse: timeout", "read"),
     };
 
     await gitOf(svc, holds, "/repo", {});
@@ -1003,11 +1003,11 @@ describe("GitDataProvider gitDir resolution cache", () => {
 
     for (let i = 0; i < 2; i++) {
       expect(await gitOf(svc, holds, "/boom", {})).toEqual(
-        failed("resolver threw: Error: resolver bug"),
+        failed("resolver threw: Error: resolver bug", "read"),
       );
     }
     expect(svc.declare(holds, "/boom").current()).toEqual(
-      failed("resolver threw: Error: resolver bug"),
+      failed("resolver threw: Error: resolver bug", "read"),
     );
 
     expect(inner.resolveCalls).toHaveLength(1);
@@ -1024,7 +1024,7 @@ describe("GitDataProvider gitDir resolution cache", () => {
 
     svc.close();
     expect(await gitOf(svc, holds, "/nowhere", {})).toEqual(
-      failed("git cache closed"),
+      failed("git cache closed", "read"),
     );
     expect(inner.resolveCalls).toHaveLength(1);
   });
@@ -1094,7 +1094,11 @@ describe("GitDataProvider PR source", () => {
   test("a failed forge lookup is attached as failed (surfaced, not dropped) and logged once", async () => {
     const { svc, inner, logs, holds } = makeCache();
     inner.repoRootByDir = { "/repo": "/repo" };
-    inner.stubPr = { kind: "failed", reason: "gh pr view: non-zero, HTTP 401" };
+    inner.stubPr = {
+      kind: "failed",
+      reason: "gh pr view: non-zero, HTTP 401",
+      failedAt: "read",
+    };
 
     for (let i = 0; i < 3; i++) {
       const out = await gitOf(svc, holds, "/repo", {
@@ -1104,6 +1108,7 @@ describe("GitDataProvider PR source", () => {
       if (out.kind !== "ok") return;
       expect(out.value.pullRequest).toEqual({
         kind: "failed",
+        failedAt: "read",
         reason: "gh pr view: non-zero, HTTP 401",
       });
     }
@@ -1130,13 +1135,18 @@ describe("GitDataProvider PR source", () => {
   test("failed remote read → PR failed (surfaced); no forge call", async () => {
     const { svc, inner, holds } = makeCache();
     inner.repoRootByDir = { "/repo": "/repo" };
-    inner.stubRemote = { kind: "failed", reason: "git config: timeout" };
+    inner.stubRemote = {
+      kind: "failed",
+      reason: "git config: timeout",
+      failedAt: "read",
+    };
 
     const out = await gitOf(svc, holds, "/repo", { showPullRequest: true });
     expect(out.kind).toBe("ok");
     if (out.kind !== "ok") return;
     expect(out.value.pullRequest).toEqual({
       kind: "failed",
+      failedAt: "read",
       reason: "git config: timeout",
     });
     expect(inner.prCalls).toHaveLength(0);
@@ -1158,7 +1168,7 @@ describe("GitDataProvider PR source", () => {
     jest.useFakeTimers();
     const { svc, inner, holds } = makeCache();
     inner.repoRootByDir = { "/repo": "/repo" };
-    inner.stubPr = { kind: "failed", reason: "gh: network" };
+    inner.stubPr = { kind: "failed", reason: "gh: network", failedAt: "read" };
 
     await gitOf(svc, holds, "/repo", { showPullRequest: true });
     expect(inner.prCalls).toHaveLength(1);
@@ -1203,7 +1213,7 @@ describe("GitDataProvider owns its failures and its PR's timing", () => {
 
     for (let i = 0; i < 3; i++) {
       expect(await gitOf(svc, holds, "/slow", {})).toEqual(
-        failed("git rev-parse: timeout"),
+        failed("git rev-parse: timeout", "read"),
       );
     }
     svc.declare(new Holds(), "/slow").current();
@@ -1383,7 +1393,7 @@ describe("GitDataProvider PR keys, drops and refresh events", () => {
     const read = gitOf(svc, holds, "/repo", {});
     await tick();
     svc.close();
-    expect(await read).toEqual(failed("git state dropped: /repo"));
+    expect(await read).toEqual(failed("git state dropped: /repo", "read"));
     inner.infoGate.resolve();
   });
 

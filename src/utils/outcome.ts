@@ -1,3 +1,10 @@
+// [LAW:types-are-the-program] The phase a failed read stopped in: `read` got no
+// bytes (spawn, timeout, unreadable file, unreachable forge); `parse` got bytes
+// that were not the shape the producer parses them to. A fact carries it to the
+// renderer, where "the file is gone" and "the file is malformed" are different
+// repairs. There is no default: each producer states the phase it knows.
+export type FailedAt = "read" | "parse";
+
 // [LAW:types-are-the-program] The provider-outcome vocabulary: a data fetch
 // either produced a value, found that the domain genuinely has none (no
 // upstream configured, no transcript yet), or failed to get an answer at all
@@ -12,7 +19,11 @@
 export type Outcome<T> =
   | { readonly kind: "ok"; readonly value: T }
   | { readonly kind: "absent" }
-  | { readonly kind: "failed"; readonly reason: string };
+  | {
+      readonly kind: "failed";
+      readonly reason: string;
+      readonly failedAt: FailedAt;
+    };
 
 export type Ok<T> = Extract<Outcome<T>, { kind: "ok" }>;
 
@@ -22,8 +33,8 @@ export function ok<T>(value: T): Ok<T> {
 
 export const ABSENT: Outcome<never> = { kind: "absent" };
 
-export function failed(reason: string): Outcome<never> {
-  return { kind: "failed", reason };
+export function failed(reason: string, failedAt: FailedAt): Outcome<never> {
+  return { kind: "failed", reason, failedAt };
 }
 
 // [LAW:dataflow-not-control-flow] Total fold for consumers that only need a

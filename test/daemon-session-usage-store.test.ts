@@ -894,6 +894,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
       const first = await todayInfo(store, holds, hd, tree, instantOf(noon));
       expect(first).toEqual({
         kind: "failed",
+        failedAt: "read",
         reason: "usage scan: scan broke",
       });
       expect(todayNow(store, holds, hd, tree, instantOf(noon))).toEqual(first);
@@ -1148,7 +1149,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     });
     store.close();
     expect(store.declareToday(new Holds(), undefined).current()).toEqual(
-      failed("usage store closed"),
+      failed("usage store closed", "read"),
     );
   });
 });

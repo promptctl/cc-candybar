@@ -23,13 +23,13 @@ test("a read that found what is stored, by structure, moves nothing derived from
   settle(source, ok({ branch: "main", ahead: 1 }));
   expect(moves).toEqual(["read"]);
   settle(source, ok({ branch: "main", ahead: 2 }));
-  settle(source, failed("git exited 128"));
-  settle(source, failed("git exited 128"));
+  settle(source, failed("git exited 128", "read"));
+  settle(source, failed("git exited 128", "read"));
   expect(moves).toEqual(["read", "read", "read"]);
   // A renewed value is pending, and the read after it lands even when it
   // found what was stored before.
   renew(source, "unread");
-  settle(source, failed("git exited 128"));
+  settle(source, failed("git exited 128", "read"));
   expect(moves).toEqual(["read", "read", "read", "pending", "read"]);
   stop();
 });

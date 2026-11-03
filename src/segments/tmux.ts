@@ -88,7 +88,7 @@ async function askSessionName(
     hint.pane,
     "#S",
   ]);
-  if (run.kind !== "ok") return failed(run.reason);
+  if (run.kind !== "ok") return failed(run.reason, "read");
   const name = run.stdout.trim();
   return name ? ok(name) : ABSENT;
 }

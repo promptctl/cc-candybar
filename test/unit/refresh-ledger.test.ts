@@ -33,7 +33,7 @@ describe("RefreshLedger", () => {
     ]);
 
     git.recorded("/repo", "first", ok(null), 4);
-    git.recorded("/repo", "period", failed("boom"), 9);
+    git.recorded("/repo", "period", failed("boom", "read"), 9);
     expect(ledger.snapshot()).toEqual([
       {
         name: "git",
@@ -116,7 +116,7 @@ describe("RefreshLedger", () => {
       refresh: ["period"],
     });
     usage.recorded("sid=s", "request", ok(null), 2);
-    usage.recorded("sid=s", "request", failed("parse error"), 3);
+    usage.recorded("sid=s", "request", failed("parse error", "read"), 3);
     tmux.recorded("pane=%1", "period", ok(null), 5);
 
     expect(lines).toEqual([

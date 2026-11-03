@@ -290,7 +290,10 @@ function owe(pr: PrSource): void {
 // current keeps its answer, and a lookup in flight lands as it would.
 function unkeyedPr(pr: PrSource, failures: ReadonlySet<string>): PrMove {
   if (pr.missed && pr.reading.get().kind === "pending") {
-    settle(pr, failures.size > 0 ? failed([...failures].join("; ")) : ABSENT);
+    settle(
+      pr,
+      failures.size > 0 ? failed([...failures].join("; "), "read") : ABSENT,
+    );
   }
   return "unkeyed";
 }
@@ -304,10 +307,10 @@ function composed(value: GitValue, pr: PrSource | null): Current<GitInfo> {
   return ok({ ...info.value, pullRequest: currentOf(pr) });
 }
 
-const CLOSED = failed("git cache closed");
+const CLOSED = failed("git cache closed", "read");
 
 function threw(label: string): (e: unknown) => Outcome<never> {
-  return (e) => failed(`${label} threw: ${String(e)}`);
+  return (e) => failed(`${label} threw: ${String(e)}`, "read");
 }
 
 export class GitDataProvider {
@@ -424,7 +427,7 @@ export class GitDataProvider {
     try {
       known = this.inner.resolveEffectiveGitDir(workingDir, projectDir);
     } catch (e) {
-      known = failed(`resolver threw: ${String(e)}`);
+      known = failed(`resolver threw: ${String(e)}`, "read");
     }
     this.resolutions.set(key, { known, computedAt: now });
     // A failed answer is logged once, by the resolution that made it: it is
@@ -754,7 +757,7 @@ export class GitDataProvider {
     this.gitRefreshes.recorded(
       `${state.root} asked=${asked.join(",") || "-"} values=${values.length} pr=${prMove} watch=${followed.move}`,
       triggerOf(asked),
-      failures.size === 0 ? ok(null) : failed([...failures].join("; ")),
+      failures.size === 0 ? ok(null) : failed([...failures].join("; "), "read"),
       elapsedMs(this.clock, startedAt),
     );
   }
@@ -867,7 +870,7 @@ export class GitDataProvider {
   private drop(state: RepoState): void {
     // [LAW:no-silent-failure] A reader waiting on a first value of a dropped
     // state is answered, never left waiting on a pass that will store nothing.
-    const gone = failed(`git state dropped: ${state.root}`);
+    const gone = failed(`git state dropped: ${state.root}`, "read");
     for (const value of state.values.values()) answerPending(value, gone);
     if (state.pr !== null) answerPending(state.pr, gone);
     this.repos.delete(state.root);

@@ -1389,9 +1389,10 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
         "error",
         `session view declaration threw sid=${JSON.stringify(sessionId)}: ${String(e)}`,
       );
-      return settledLanes(failed(`view declaration threw: ${String(e)}`), [
-        ...state.sources.keys(),
-      ]);
+      return settledLanes(
+        failed(`view declaration threw: ${String(e)}`, "read"),
+        [...state.sources.keys()],
+      );
     }
   };
   // [LAW:no-ambient-temporal-coupling] The opening declaration, and each

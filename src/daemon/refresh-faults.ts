@@ -29,7 +29,7 @@ export class RefreshFaults {
   // The lane's failure while its last refresh threw; none once one ran clean.
   of(sessionId: string, lane: RefreshLane): Outcome<never> | undefined {
     const reason = this.bySession.get(sessionId)?.get(lane);
-    return reason === undefined ? undefined : failed(reason);
+    return reason === undefined ? undefined : failed(reason, "read");
   }
 
   // What the lane's refresh just did: threw `reason`, or ran clean (null).

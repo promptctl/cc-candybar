@@ -195,6 +195,6 @@ function activityFrom(
   folded: FoldOutcome<ActivityState>,
 ): Outcome<ActivityInfo> {
   return folded.kind === "failed"
-    ? failed(`activity (${sessionId}): ${folded.reason}`)
+    ? failed(`activity (${sessionId}): ${folded.reason}`, "read")
     : ok(report(folded.value));
 }

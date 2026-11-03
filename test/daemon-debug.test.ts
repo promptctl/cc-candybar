@@ -88,7 +88,12 @@ function buildPopulatedState(): DaemonDslState {
     new Set<string>(), // no palette validation needed — segments don't set one
   );
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedLauncher, store, "", new SessionState());
+  const registry = new SourceRegistry(
+    unscriptedLauncher,
+    store,
+    "",
+    new SessionState(),
+  );
   const compiled = registerDslConfig(config, registry, {
     signer: TEST_SIGNER,
     cwd: process.cwd(),
@@ -252,7 +257,10 @@ describe("introspectVars — documents", () => {
     state.store.defineDocument("doc.ok", ok({ b: 2, a: { c: 1 } }));
     state.store.defineDocument("doc.pending", PENDING);
     state.store.defineDocument("doc.absent", ABSENT);
-    state.store.defineDocument("doc.failed", failed("JSON parse failed: x"));
+    state.store.defineDocument(
+      "doc.failed",
+      failed("JSON parse failed: x", "read"),
+    );
     const byName = new Map(introspectVars(state).map((v) => [v.name, v]));
     expect(byName.get("doc.ok")).toMatchObject({
       type: "document",
@@ -358,13 +366,15 @@ describe("extractReferencedVars", () => {
   });
 
   test("ignores refs that do not match any declared name", () => {
-    expect(extractReferencedVars("{{ .undeclared }}", {}, declared)).toEqual([]);
+    expect(extractReferencedVars("{{ .undeclared }}", {}, declared)).toEqual(
+      [],
+    );
   });
 
   test("ignores '.' inside text outside actions", () => {
-    expect(extractReferencedVars("static .greeting text", {}, declared)).toEqual(
-      [],
-    );
+    expect(
+      extractReferencedVars("static .greeting text", {}, declared),
+    ).toEqual([]);
   });
 
   test("dedups and sorts findings", () => {
@@ -379,15 +389,15 @@ describe("extractReferencedVars", () => {
 
   test("credits ancestor when ref goes deeper than declared", () => {
     // `.session.id.extra` should still credit `session.id`.
-    expect(extractReferencedVars("{{ .session.id.extra }}", {}, declared)).toEqual([
-      "session.id",
-    ]);
+    expect(
+      extractReferencedVars("{{ .session.id.extra }}", {}, declared),
+    ).toEqual(["session.id"]);
   });
 
   test("handles pipeline forms", () => {
-    expect(extractReferencedVars("{{ .greeting | upper }}", {}, declared)).toEqual([
-      "greeting",
-    ]);
+    expect(
+      extractReferencedVars("{{ .greeting | upper }}", {}, declared),
+    ).toEqual(["greeting"]);
   });
 
   // [LAW:single-enforcer] String literals must NOT produce false positives.
@@ -397,16 +407,16 @@ describe("extractReferencedVars", () => {
   // name does not get falsely credited as a real reference.
   test("ignores dotted refs inside string literals", () => {
     // `.greeting` appears inside a string literal — must NOT be reported.
-    expect(extractReferencedVars(`{{ printf ".greeting" }}`, {}, declared)).toEqual(
-      [],
-    );
+    expect(
+      extractReferencedVars(`{{ printf ".greeting" }}`, {}, declared),
+    ).toEqual([]);
     // Same with single-quoted and backtick literals.
-    expect(extractReferencedVars(`{{ printf '.greeting' }}`, {}, declared)).toEqual(
-      [],
-    );
-    expect(extractReferencedVars("{{ printf `.greeting` }}", {}, declared)).toEqual(
-      [],
-    );
+    expect(
+      extractReferencedVars(`{{ printf '.greeting' }}`, {}, declared),
+    ).toEqual([]);
+    expect(
+      extractReferencedVars("{{ printf `.greeting` }}", {}, declared),
+    ).toEqual([]);
   });
 
   test("real ref outside a string literal still wins", () => {
@@ -430,15 +440,17 @@ describe("introspectConfig with populated state", () => {
     const state = buildPopulatedState();
     const config = introspectConfig(state);
     expect(config).not.toBeNull();
-    expect(config?.root).toEqual(rootOf({
-      kind: "container",
-      direction: "horizontal",
-      children: [
-        { kind: "segment", name: "intro" },
-        { kind: "segment", name: "plain" },
-        { kind: "segment", name: "intro", id: "intro2" },
-      ],
-    }));
+    expect(config?.root).toEqual(
+      rootOf({
+        kind: "container",
+        direction: "horizontal",
+        children: [
+          { kind: "segment", name: "intro" },
+          { kind: "segment", name: "plain" },
+          { kind: "segment", name: "intro", id: "intro2" },
+        ],
+      }),
+    );
     expect(ownDeclNames(Object.keys(config?.variables ?? {})).sort()).toEqual([
       "derived",
       "greeting",
@@ -456,15 +468,17 @@ describe("introspectConfig with populated state", () => {
     const state = buildPopulatedState();
     const config = introspectConfig(state);
     const wireShape = JSON.parse(JSON.stringify(config));
-    expect(wireShape.root).toEqual(rootOf({
-      kind: "container",
-      direction: "horizontal",
-      children: [
-        { kind: "segment", name: "intro" },
-        { kind: "segment", name: "plain" },
-        { kind: "segment", name: "intro", id: "intro2" },
-      ],
-    }));
+    expect(wireShape.root).toEqual(
+      rootOf({
+        kind: "container",
+        direction: "horizontal",
+        children: [
+          { kind: "segment", name: "intro" },
+          { kind: "segment", name: "plain" },
+          { kind: "segment", name: "intro", id: "intro2" },
+        ],
+      }),
+    );
     expect(wireShape.variables.greeting.kind).toBe("literal");
     expect(wireShape.segments.intro.template).toBe(
       "{{ .greeting }} {{ .session.id }}",

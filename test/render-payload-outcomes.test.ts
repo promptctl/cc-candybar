@@ -21,7 +21,13 @@ import { globalsFor } from "./helpers/selection";
 import { VALUED_FIELDS } from "../src/config/globals-fields";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { GitInfo, GitInfoOptions, PrState } from "../src/segments/git";
-import { ABSENT, PENDING, failed, ok, type Outcome } from "../src/utils/outcome";
+import {
+  ABSENT,
+  PENDING,
+  failed,
+  ok,
+  type Outcome,
+} from "../src/utils/outcome";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf } from "../src/utils/instant";
 import type { Current } from "../src/utils/reading";
@@ -101,7 +107,7 @@ describe("payloadOf — git outcome lane", () => {
   test("whole-fetch failure: no git key, and the payload logs nothing", async () => {
     const logs: LogEntry[] = [];
     const deps = depsWith(
-      failed("git status --porcelain=v2 --branch: timeout"),
+      failed("git status --porcelain=v2 --branch: timeout", "read"),
       logs,
     );
 
@@ -148,7 +154,7 @@ describe("payloadOf — git outcome lane", () => {
         aheadBehind: ok({ ahead: 1, behind: 2 }),
         head: ok("c0ffee"),
         sha: ok("abc1234"),
-        stashCount: failed("git stash list: timeout, exit null"),
+        stashCount: failed("git stash list: timeout, exit null", "read"),
         upstream: ABSENT,
       }),
       logs,
@@ -204,14 +210,14 @@ describe("payloadOf — git outcome lane", () => {
         settled(
           (
             await requestPayload(
-          hookData("/no/such/transcript.jsonl"),
-          instantOf(new Date((committedAt + secondsLater) * 1000)),
-          deps,
-          undefined,
-          new Set(["git.committedAt"]),
-          EFFECTIVE_GLOBALS,
-          NO_HINTS,
-          NO_CONFIG_FILE,
+              hookData("/no/such/transcript.jsonl"),
+              instantOf(new Date((committedAt + secondsLater) * 1000)),
+              deps,
+              undefined,
+              new Set(["git.committedAt"]),
+              EFFECTIVE_GLOBALS,
+              NO_HINTS,
+              NO_CONFIG_FILE,
             )
           ).git,
         ) as { committedAt?: number } | undefined
@@ -332,9 +338,11 @@ describe("payloadOf — migrated lanes share the outcome contract", () => {
     const logs: LogEntry[] = [];
     const deps = depsWith(ABSENT, logs, {
       contextProvider: fakeContext(async () =>
-        failed("context transcript: EACCES"),
+        failed("context transcript: EACCES", "read"),
       ),
-      metricsProvider: fakeMetrics(async () => failed("metrics (s): boom")),
+      metricsProvider: fakeMetrics(async () =>
+        failed("metrics (s): boom", "read"),
+      ),
     });
 
     const payload = await requestPayload(
@@ -395,7 +403,7 @@ describe("payloadOf — migrated lanes share the outcome contract", () => {
       contextProvider: fakeContext(async () => {
         throw new Error("stub bug");
       }),
-      tmuxService: fakeTmux(async () => failed("no server")),
+      tmuxService: fakeTmux(async () => failed("no server", "read")),
     });
 
     const payload = await requestPayload(
@@ -669,7 +677,7 @@ describe("payloadOf — git PR projection", () => {
         status: "clean",
         aheadBehind: ABSENT,
         head: ok("c0ffee"),
-        pullRequest: failed("gh pr view: non-zero, exit 1, HTTP 401"),
+        pullRequest: failed("gh pr view: non-zero, exit 1, HTTP 401", "read"),
       }),
       logs,
     );
@@ -685,7 +693,9 @@ describe("payloadOf — git PR projection", () => {
       NO_CONFIG_FILE,
     );
 
-    expect(settled(payload.git)!.prError).toBe("gh pr view: non-zero, exit 1, HTTP 401");
+    expect(settled(payload.git)!.prError).toBe(
+      "gh pr view: non-zero, exit 1, HTTP 401",
+    );
     expect("prNumber" in payload.git!).toBe(false);
     expect("prUrl" in payload.git!).toBe(false);
     expect(logs).toEqual([]);
@@ -829,7 +839,7 @@ describe("payloadOf — autocompact lane", () => {
   test("a refused read: the reason in the payload, and no log of it from the render", async () => {
     const logs: LogEntry[] = [];
     const { payload } = await run(
-      failed("cannot read /c/settings.json: nope"),
+      failed("cannot read /c/settings.json: nope", "read"),
       {},
       logs,
     );
@@ -963,7 +973,11 @@ describe("settlePayload — what a request waits on", () => {
     // once. Any lane stands in: the wait asks why a lane is pending, never
     // which lane it is, and the owners that supersede pin their own state
     // (keyed-source, managed-storage and run-action tests).
-    current = { kind: "pending", why: "superseded", landed: new Promise(() => {}) };
+    current = {
+      kind: "pending",
+      why: "superseded",
+      landed: new Promise(() => {}),
+    };
     expect((await request()).tmux).toEqual({ pane: "%7", session: PENDING });
   });
 });

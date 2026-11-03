@@ -363,6 +363,7 @@ describe("ManagedStorage watches", () => {
     const lane = r.storage.declare(new Holds(), key, A);
     expect(await answered(lane)).toEqual({
       kind: "failed",
+      failedAt: "read",
       reason: expect.stringMatching(
         new RegExp(
           `^cannot refresh: ${r.folder} could not be created or read: ENOTDIR: .*; reload the config or restart the daemon$`,
@@ -440,6 +441,7 @@ describe("ManagedStorage watches", () => {
     const lane = r0.storage.declare(new Holds(), key, A);
     expect(await answered(lane)).toEqual({
       kind: "failed",
+      failedAt: "read",
       reason: `cannot refresh: ${r0.folder} EMFILE: too many open files, watch '${r0.folder}'; reload the config or restart the daemon`,
     });
     expect(r0.counters.watchRefusals).toBe(1);
@@ -469,6 +471,7 @@ describe("ManagedStorage watches", () => {
     await until(() => lane.current().kind === "failed", "the fault");
     expect(lane.current()).toEqual({
       kind: "failed",
+      failedAt: "read",
       reason: `cannot refresh: ${r.folder} ${r.folder}: EIO: i/o error; reload the config or restart the daemon`,
     });
     expect(r.counters.watchErrors).toBe(1);
@@ -525,10 +528,12 @@ describe("ManagedStorage under the daemon's file-event delivery", () => {
     const other = r.storage.declare(new Holds(), key, B);
     expect(lane.current()).toEqual({
       kind: "failed",
+      failedAt: "read",
       reason: stallReason(r.folder),
     });
     expect(await answered(other)).toEqual({
       kind: "failed",
+      failedAt: "read",
       reason: stallReason(r.folder),
     });
     // A stall is not a loss: the generation is still the right one.
@@ -587,6 +592,7 @@ describe("ManagedStorage under the daemon's file-event delivery", () => {
     );
     expect(lane.current()).toEqual({
       kind: "failed",
+      failedAt: "read",
       reason: `cannot refresh: ${r.folder} ${r.folder}: EIO: i/o error; reload the config or restart the daemon`,
     });
     expect(r.storage.stats()).toMatchObject({
@@ -649,6 +655,7 @@ describe("ManagedStorage under the daemon's file-event delivery", () => {
     await quiet();
     expect(lane.current()).toEqual({
       kind: "failed",
+      failedAt: "read",
       reason: stallReason(r.folder),
     });
   });

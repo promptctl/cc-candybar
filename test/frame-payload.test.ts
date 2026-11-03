@@ -120,7 +120,12 @@ function counted(pr?: unknown) {
     ...owners,
     lanes: declaredLanes(
       owners,
-      { sessionId: sessionIdOf(HOOK.session_id), hookData: HOOK, cwd: undefined, hints: HINTS },
+      {
+        sessionId: sessionIdOf(HOOK.session_id),
+        hookData: HOOK,
+        cwd: undefined,
+        hints: HINTS,
+      },
       EVERY_LANE,
     ),
   } as unknown as RenderPayloadDeps;
@@ -137,8 +142,7 @@ function counted(pr?: unknown) {
     return payloadOf(inputs(), DRAW);
   };
   // `today` as a draw at `at` projects it.
-  const today = (at = AT) =>
-    todayOf(deps, deps.lanes().today, HOOK, at);
+  const today = (at = AT) => todayOf(deps, deps.lanes().today, HOOK, at);
   return { reads, inputs, request, today, deps, logs };
 }
 
@@ -281,6 +285,7 @@ describe("a frame's payload", () => {
     deps.contextProvider.contextOf = () => ({
       kind: "failed",
       reason: "context: no window",
+      failedAt: "read",
     });
     const before = logs.length;
     expect(payloadOf(inputs(), DRAW).context).toBeUndefined();

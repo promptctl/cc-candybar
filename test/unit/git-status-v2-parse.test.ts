@@ -186,7 +186,8 @@ describe("parseStatusV2", () => {
 // Captured from real runs: a pushed branch, the same branch after its remote
 // branch was deleted and pruned, and a branch never pushed.
 describe("trackingOf", () => {
-  const head = "# branch.oid 96d85fdaa67b59fa217e5a594f1af4e39a44b65b\n# branch.head feat";
+  const head =
+    "# branch.oid 96d85fdaa67b59fa217e5a594f1af4e39a44b65b\n# branch.head feat";
   test.each([
     ["tracked", `${head}\n# branch.upstream origin/feat\n# branch.ab +0 -0`],
     ["gone", `${head}\n# branch.upstream origin/feat`],
@@ -197,7 +198,7 @@ describe("trackingOf", () => {
   });
 
   test("an upstream that could not be read is not a tracking state", () => {
-    const f = failed("git: boom");
+    const f = failed("git: boom", "read");
     expect(trackingOf(f, ABSENT)).toEqual(f);
     expect(trackingOf(ok("origin/feat"), f)).toEqual(f);
   });

@@ -47,7 +47,7 @@ export function regexParser(regex: RegExp): Parser<string> {
     const m = regex.exec(text);
     const group = m?.[1];
     return group === undefined
-      ? failed("regex no-match")
+      ? failed("regex no-match", "parse")
       : ok(group.replace(LINE_BREAK, " "));
   };
 }
@@ -58,6 +58,6 @@ export const jsonParser: Parser<JsonValue> = (text) => {
   try {
     return ok(JSON.parse(text) as JsonValue);
   } catch (e) {
-    return failed(`JSON parse failed: ${(e as Error).message}`);
+    return failed(`JSON parse failed: ${(e as Error).message}`, "parse");
   }
 };

@@ -51,7 +51,7 @@ function probe<T>(read: () => T): Outcome<T> {
   } catch (e) {
     return (e as NodeJS.ErrnoException).code === "ENOENT"
       ? ABSENT
-      : failed((e as Error).message);
+      : failed((e as Error).message, "read");
   }
 }
 
@@ -73,7 +73,7 @@ export function gitDirNamed(root: string): Outcome<string> {
   if (text.kind !== "ok") return text;
   const named = text.value.match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
   return named === undefined
-    ? failed(`${path.join(root, ".git")} names no gitdir`)
+    ? failed(`${path.join(root, ".git")} names no gitdir`, "parse")
     : ok(path.resolve(root, named));
 }
 
@@ -87,7 +87,7 @@ export function commonDirOf(gitDir: string): Outcome<string> {
   if (text.kind !== "ok") return text;
   const common = text.value.trim();
   return common === ""
-    ? failed(`${path.join(gitDir, "commondir")} is empty`)
+    ? failed(`${path.join(gitDir, "commondir")} is empty`, "parse")
     : ok(path.resolve(gitDir, common));
 }
 

@@ -96,7 +96,9 @@ describe("readTranscriptWindow", () => {
   test("a path that cannot be read as a file fails with the reason", () => {
     const outcome = readTranscriptWindow(dir);
     expect(outcome.kind).toBe("failed");
-    expect(outcome.kind === "failed" && outcome.reason).toBe("not a regular file");
+    expect(outcome.kind === "failed" && outcome.reason).toBe(
+      "not a regular file",
+    );
   });
 
   test("a file reads whole", () => {
@@ -124,6 +126,7 @@ describe("readTranscriptWindow", () => {
     execFileSync("mkfifo", [fifo]);
     expect(readTranscriptWindow(fifo)).toEqual({
       kind: "failed",
+      failedAt: "read",
       reason: "not a regular file",
     });
   });
@@ -153,13 +156,17 @@ describe("the session data row", () => {
   });
 
   test("no transcript before Claude Code has answered is no finding", () => {
-    expect(probe({ kind: "ok", value: [read(false, { kind: "absent" })] })).toEqual({
+    expect(
+      probe({ kind: "ok", value: [read(false, { kind: "absent" })] }),
+    ).toEqual({
       ok: true,
     });
   });
 
   test("no transcript once Claude Code has answered fails, naming it", () => {
-    expect(probe({ kind: "ok", value: [read(true, { kind: "absent" })] })).toEqual({
+    expect(
+      probe({ kind: "ok", value: [read(true, { kind: "absent" })] }),
+    ).toEqual({
       ok: false,
       reason:
         "the transcript /t/s.jsonl does not exist, though Claude Code has answered in its session — the bar's session cost, metrics and activity read nothing",
@@ -171,11 +178,18 @@ describe("the session data row", () => {
     expect(
       probe({
         kind: "ok",
-        value: [read(false, { kind: "failed", reason: "EACCES: permission denied" })],
+        value: [
+          read(false, {
+            kind: "failed",
+            reason: "EACCES: permission denied",
+            failedAt: "read",
+          }),
+        ],
       }),
     ).toEqual({
       ok: false,
-      reason: "the transcript /t/s.jsonl cannot be read: EACCES: permission denied",
+      reason:
+        "the transcript /t/s.jsonl cannot be read: EACCES: permission denied",
       more: [],
     });
   });
@@ -186,7 +200,11 @@ describe("the session data row", () => {
         kind: "ok",
         value: [
           read(true, window({ lines: 9, unparsed: 2, whole: true })),
-          read(true, window({ lines: 9, unparsed: 1, whole: false }), "/t/b.jsonl"),
+          read(
+            true,
+            window({ lines: 9, unparsed: 1, whole: false }),
+            "/t/b.jsonl",
+          ),
         ],
       }),
     ).toEqual({
@@ -201,7 +219,9 @@ describe("the session data row", () => {
 
   test("no render to name a transcript fails, worded for what asked", () => {
     const none = { kind: "ok", value: [] } as const;
-    expect(probe(none, { kind: "clicked", sessionId: "s1", via: "link" })).toMatchObject({
+    expect(
+      probe(none, { kind: "clicked", sessionId: "s1", via: "link" }),
+    ).toMatchObject({
       ok: false,
       reason: expect.stringMatching(
         /^this daemon holds no render of this bar .*so which transcript it reads is unknown/,
@@ -261,7 +281,14 @@ describe("the CLI's transcripts", () => {
   test("a daemon from before transcripts are recorded fails, saying to restart it", () => {
     expect(
       parseTranscriptSightings(
-        stats([{ client: null, rateLimits: "carried", claudeConfigDir: "/c", ago: 1 }]),
+        stats([
+          {
+            client: null,
+            rateLimits: "carried",
+            claudeConfigDir: "/c",
+            ago: 1,
+          },
+        ]),
       ),
     ).toEqual({
       kind: "failed",
@@ -275,10 +302,17 @@ describe("the CLI's transcripts", () => {
     const parsed = parseTranscriptSightings(
       stats([
         { transcript: t, sessionId: "s1", ago: 1 },
-        { transcript: { path: "/old.jsonl", answered: true }, sessionId: "s2", ago: RECENT_CLIENT_S + 1 },
+        {
+          transcript: { path: "/old.jsonl", answered: true },
+          sessionId: "s2",
+          ago: RECENT_CLIENT_S + 1,
+        },
       ]),
     );
-    expect(transcriptsOf({ kind: "recent" }, parsed)).toEqual({ kind: "ok", value: [t] });
+    expect(transcriptsOf({ kind: "recent" }, parsed)).toEqual({
+      kind: "ok",
+      value: [t],
+    });
     // In a session's shell, that session's alone, however long ago.
     expect(transcriptsOf({ kind: "shell", sessionId: "s2" }, parsed)).toEqual({
       kind: "ok",
@@ -295,7 +329,7 @@ test("the doctor's event counts the transcripts by what reading found", () => {
         read(true, window({ lines: 9, unparsed: 2, whole: true })),
         read(true, window({ lines: 9, unparsed: 1, whole: false })),
         read(false, { kind: "absent" }),
-        read(true, { kind: "failed", reason: "EIO" }),
+        read(true, { kind: "failed", reason: "EIO", failedAt: "read" }),
       ],
     }),
   ).toBe("transcripts=2/1/1 unparsed=3");

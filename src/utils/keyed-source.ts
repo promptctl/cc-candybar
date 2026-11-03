@@ -128,7 +128,8 @@ export class KeyedSource<I, T> {
     // [LAW:single-enforcer] A closed source builds no entry: one declared
     // after close (a render that was mid-wait) would be held, and its period
     // re-arms after every read with no close left to end it.
-    if (this.closed) return settledLane(failed(`${this.spec.name} closed`));
+    if (this.closed)
+      return settledLane(failed(`${this.spec.name} closed`, "read"));
     const key = this.spec.keyOf(input);
     const entry = this.touched(key) ?? this.firstRead(this.created(key, input));
     holds.take(`${this.spec.name}:${key}`, () => this.hold(entry));
@@ -309,7 +310,7 @@ export class KeyedSource<I, T> {
     this.entries.delete(entry.key);
     entry.flight = null;
     entry.revisit.dispose();
-    answerPending(entry, failed(`${this.spec.name} entry dropped`));
+    answerPending(entry, failed(`${this.spec.name} entry dropped`, "read"));
   }
 }
 
@@ -368,7 +369,8 @@ class HoldReturn implements Revisit {
 // owner reports as the read's failure: the refresh still lands, so the entry
 // is visited again rather than stalled.
 function attempt<T>(read: () => Promise<Outcome<T>>): Promise<Outcome<T>> {
-  const threw = (e: unknown): Outcome<T> => failed(`read threw: ${String(e)}`);
+  const threw = (e: unknown): Outcome<T> =>
+    failed(`read threw: ${String(e)}`, "read");
   try {
     return read().catch(threw);
   } catch (e) {

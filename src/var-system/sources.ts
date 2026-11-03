@@ -233,7 +233,7 @@ function shellReader(
         r.reason === "non-zero"
           ? `exited with code ${r.exitCode}`
           : [r.reason, r.error].filter((s) => s !== undefined).join(": ");
-      return failed(`shell "${command}" ${why} in ${cwd}`);
+      return failed(`shell "${command}" ${why} in ${cwd}`, "read");
     },
   };
 }
@@ -253,7 +253,7 @@ function fileReader(
         );
       } catch {
         if (signal.aborted) throw signal.reason;
-        return failed(`file unreadable: ${filePath}`);
+        return failed(`file unreadable: ${filePath}`, "read");
       }
     },
   };
@@ -268,7 +268,9 @@ function parsed<V>(
 ): Outcome<V> {
   if (read.kind !== "ok") return read;
   const out = parser(read.value);
-  return out.kind === "failed" ? failed(`${out.reason} in ${where}`) : out;
+  return out.kind === "failed"
+    ? failed(`${out.reason} in ${where}`, out.failedAt)
+    : out;
 }
 
 // The publish half of a source, closed over its store node: takes what the
@@ -578,6 +580,7 @@ function sourceReading(name: string, raw: unknown): Reading<JsonValue> {
   if (raw === undefined) {
     return failed(
       `variable "${name}": the view's payload has no "${name}": its declaration did not take the source the preset reads`,
+      "read",
     );
   }
   const kind =
@@ -592,6 +595,7 @@ function sourceReading(name: string, raw: unknown): Reading<JsonValue> {
     default:
       return failed(
         `variable "${name}": the view's payload holds no source reading at "${name}"`,
+        "read",
       );
   }
 }
@@ -797,7 +801,7 @@ export class SourceRegistry {
 
   // A document that is a known failure for as long as it is declared.
   declareFailedDocument(name: string, reason: string): void {
-    this.store.defineDocument(name, failed(reason));
+    this.store.defineDocument(name, failed(reason, "parse"));
   }
 
   // A plugin's source: a document derived from the reading its view's payload
@@ -1414,7 +1418,7 @@ export class SourceRegistry {
           (fault) =>
             this.notePolicy(
               name,
-              fault === null ? ok(undefined) : failed(fault),
+              fault === null ? ok(undefined) : failed(fault, "read"),
             ),
         );
         this.cleanups.push(unsub);
@@ -1447,6 +1451,7 @@ export class SourceRegistry {
                 ? PENDING
                 : failed(
                     `cache key: ${e instanceof Error ? e.message : String(e)}`,
+                    "read",
                   );
             }
           },

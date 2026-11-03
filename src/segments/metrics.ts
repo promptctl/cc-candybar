@@ -163,7 +163,7 @@ function metricsFrom(
   folded: FoldOutcome<MetricsState>,
 ): Outcome<MetricsInfo> {
   if (folded.kind === "failed") {
-    return failed(`metrics (${sessionId}): ${folded.reason}`);
+    return failed(`metrics (${sessionId}): ${folded.reason}`, "read");
   }
   return ok({
     responseTime: cost.total_api_duration_ms / 1000,

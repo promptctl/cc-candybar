@@ -703,6 +703,7 @@ describe("a source's document", () => {
       expect(sourceDoc(() => ({ plugins: { p: { status: held } } }))()).toEqual(
         {
           kind: "failed",
+          failedAt: "read",
           reason: `variable "${STATUS}": the view's payload holds no source reading at "${STATUS}"`,
         },
       );
@@ -712,6 +713,7 @@ describe("a source's document", () => {
   test("a payload without it reads failed, naming the variable: the declaration did not take it", () => {
     expect(sourceDoc(() => ({ plugins: {} }))()).toEqual({
       kind: "failed",
+      failedAt: "read",
       reason: `variable "${STATUS}": the view's payload has no "${STATUS}": its declaration did not take the source the preset reads`,
     });
   });

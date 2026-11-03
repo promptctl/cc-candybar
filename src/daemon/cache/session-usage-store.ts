@@ -642,7 +642,7 @@ export class SessionUsageStore {
     const slot = this.sessions.get(sessionId);
     if (slot === undefined) return PENDING;
     const failure = slot.failure.get();
-    if (failure !== null) return failed(failure);
+    if (failure !== null) return failed(failure, "read");
     return ok(
       usageOver(slot.record?.sessionInfo ?? EMPTY_SESSION_INFO, hookData),
     );
@@ -720,7 +720,7 @@ export class SessionUsageStore {
   ): Lane<DaySums> {
     // [LAW:single-enforcer] A closed store builds no day set: a set built
     // after close is one close never releases.
-    if (this.closed) return settledLane(failed("usage store closed"));
+    if (this.closed) return settledLane(failed("usage store closed", "read"));
     const claudePaths = getClaudePaths(claudeConfigDir, this.host.home);
     const scans = this.scans.declare(holds, claudePaths);
     const set = this.daySet(claudePaths);
@@ -745,7 +745,7 @@ export class SessionUsageStore {
   ): Outcome<TodayInfo> {
     const active = this.sessions.get(hookData?.session_id ?? "");
     const failure = active?.failure.get() ?? null;
-    if (failure !== null) return failed(failure);
+    if (failure !== null) return failed(failure, "read");
 
     const today = dayKey(dateOf(at));
     const total: DayUsage = { ...EMPTY_DAY };
@@ -912,6 +912,7 @@ export class SessionUsageStore {
     } catch (error) {
       return failed(
         `usage refold (${sessionId}): ${error instanceof Error ? error.message : String(error)}`,
+        "read",
       );
     }
     const { prior, outcome } = refolded;
@@ -1104,12 +1105,14 @@ export class SessionUsageStore {
       if (failures.length > 0) {
         return failed(
           `usage scan: ${failures.length} of ${candidates.length} sessions could not be read — ${failures[0]}`,
+          "read",
         );
       }
       return ok({ sessions: candidates.length, read: tally.misses });
     } catch (error) {
       return failed(
         `usage scan: ${error instanceof Error ? error.message : String(error)}`,
+        "read",
       );
     }
   }
