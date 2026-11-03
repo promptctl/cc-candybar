@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-600",
+      "ref": "refs/pull/600/merge",
+      "sha": "6981e78eca20b16a01bbd65c59071fbfea88e514",
+      "timestamp": "2026-11-03T03:39:31.998Z",
+      "commits": [
+        {
+          "sha": "6981e78eca20b16a01bbd65c59071fbfea88e514",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T03:38:00Z",
+          "message": "Merge 5221f7987d469b96e1795025c9f929cb78f7aff4 into 100e4fe743b7d0f668a46455fd011db361031ccb\n"
+        },
+        {
+          "sha": "5221f7987d469b96e1795025c9f929cb78f7aff4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T20:37:40-07:00",
+          "message": "fix(url-handler): the lost-click notice is one entry that stays listed, under the product's name\n\nHigh review of PR #600. The notice keeps a Notification Center entry after\nthe banner expires, a run of lost clicks replaces one notice instead of\nstacking copies, and the authorization prompt names cc-candybar via\nCFBundleDisplayName instead of the bundle name. The authorization comment\nstates only what the API documents, and the single-enforcer marker sits\nin the sentence it governs.\n"
+        },
+        {
+          "sha": "eb1c574d0bc7298ce2d8d78da87560e82027ccd9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T20:27:10-07:00",
+          "message": "feat(url-handler): a click the forwarder could not deliver tells the user (candybar-daemon-health-ajx0.c3x)\n\nThe forwarder's one visible failure, a frame it could not write, is now\nalso a macOS user notification whose body is the observed error (the\nconnect failure, or the bounded write wait), never a diagnosis. The\ndelivered arm is untouched, so a slow click that landed cannot look lost.\nAuthorization is requested on every lost click (idempotent, no state);\na denied or failed post is logged under the app's subsystem.\n\nThe app is frontmost when it posts, because Launch Services activates it\nto deliver the click, and macOS hides a frontmost app's notifications\nunless its delegate presents them; the delegate asks for the banner.\n\nDecided on the ticket: no launcher beside the socket, the forwarder\nnever starts a daemon.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "100e4fe743b7d0f668a46455fd011db361031ccb",
@@ -13,28 +42,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T20:35:59-07:00",
           "message": "fix(launch): a launch's input outlives its direct child for the descendants that read it (candybar-testing-0x6u.3zo) (#598)\n\n* fix(launch): a launch's input outlives its direct child for the descendants that read it (candybar-testing-0x6u.3zo)\n\n* fix(launch): a held input shares the drains' one hold, metered and free of the launch's scope (candybar-testing-0x6u.3zo)\n\n* fix(launch): feed takes the input's Buffer form too (candybar-testing-0x6u.3zo)\n\n* fix(launch): a held input's end is built outside the launch, and its tests count the input (candybar-testing-0x6u.3zo)\n\n* fix(launch): the input's exception marks the swallowed error, and the close test holds its input unread (candybar-testing-0x6u.3zo)\n\n* fix(test): the descendant reads its input through an fd dash leaves alone (candybar-testing-0x6u.3zo)"
-        }
-      ]
-    },
-    {
-      "version": "pr-600",
-      "ref": "refs/pull/600/merge",
-      "sha": "15917031781f066368f2c220d49a19c1e7ced68b",
-      "timestamp": "2026-11-03T03:29:46.020Z",
-      "commits": [
-        {
-          "sha": "15917031781f066368f2c220d49a19c1e7ced68b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T03:28:54Z",
-          "message": "Merge eb1c574d0bc7298ce2d8d78da87560e82027ccd9 into c72e51e1f062fa43bd02971e664d42e7d701432a\n"
-        },
-        {
-          "sha": "eb1c574d0bc7298ce2d8d78da87560e82027ccd9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T20:27:10-07:00",
-          "message": "feat(url-handler): a click the forwarder could not deliver tells the user (candybar-daemon-health-ajx0.c3x)\n\nThe forwarder's one visible failure, a frame it could not write, is now\nalso a macOS user notification whose body is the observed error (the\nconnect failure, or the bounded write wait), never a diagnosis. The\ndelivered arm is untouched, so a slow click that landed cannot look lost.\nAuthorization is requested on every lost click (idempotent, no state);\na denied or failed post is logged under the app's subsystem.\n\nThe app is frontmost when it posts, because Launch Services activates it\nto deliver the click, and macOS hides a frontmost app's notifications\nunless its delegate presents them; the delegate asks for the banner.\n\nDecided on the ticket: no launcher beside the socket, the forwarder\nnever starts a daemon.\n"
         }
       ]
     }

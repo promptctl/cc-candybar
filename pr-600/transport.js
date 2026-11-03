@@ -23152,19 +23152,29 @@ function capture(state, category, stream, full) {
     // metered in one place while it does.
     drain: () => {
       if (stream === null || stream.destroyed || stream.readableEnded) return;
-      if (state.scope.signal.aborted) {
-        stream.destroy();
-        return;
-      }
-      stream.once("close", () => {
-        state.drains.delete(stream);
-        stats?.onDrainClose(category, end);
-      });
-      stream.unref();
-      state.drains.add(stream);
-      stats?.onDrainOpen(category);
+      hold(state, category, stream, () => end);
     }
   };
+}
+function hold(state, category, pipe, end) {
+  const { stats } = state.scope;
+  if (state.scope.signal.aborted) {
+    pipe.destroy();
+    return;
+  }
+  pipe.once("close", () => {
+    state.drains.delete(pipe);
+    stats?.onDrainClose(category, end());
+  });
+  pipe.unref();
+  state.drains.add(pipe);
+  stats?.onDrainOpen(category);
+}
+var inputEnd = () => "closed";
+function feed(input, text4) {
+  input.on("error", () => {
+  });
+  input.end(text4);
 }
 async function launchWaited(state, opts) {
   const { stats, clock } = state.scope;
@@ -23197,6 +23207,8 @@ async function launchWaited(state, opts) {
     const group = child.pid;
     if (group !== void 0) guard(state, group);
     const exited = new Promise((end) => child.once("exit", end));
+    const input = child.stdin;
+    child.stdin = null;
     const full = () => terminate("output-limit");
     const stdout2 = capture(state, opts.category, child.stdout, full);
     const stderr2 = capture(state, opts.category, child.stderr, full);
@@ -23224,6 +23236,8 @@ async function launchWaited(state, opts) {
       child.off("error", onError);
       stdout2.drain();
       stderr2.drain();
+      if (input !== null && !input.destroyed && !input.writableFinished)
+        hold(state, opts.category, input, inputEnd);
       deliver();
     };
     const settle3 = (r) => finish(() => resolve(r));
@@ -23322,9 +23336,7 @@ async function launchWaited(state, opts) {
     }
     opts.signal?.addEventListener("abort", onAbort, { once: true });
     state.inFlight.add(onAbort);
-    child.stdin?.on("error", () => {
-    });
-    child.stdin?.end(opts.stdinInput);
+    if (input !== null) feed(input, opts.stdinInput);
   });
 }
 function launchBlocking(state, opts) {
@@ -30910,13 +30922,13 @@ function firstReaching(near, reached) {
 function beat(holds2) {
   if (holds2.length === 0)
     throw new RangeError("a beat needs at least one hold");
-  holds2.forEach((hold, i) => positiveSeconds(`beat hold ${i}`, hold));
-  const period = holds2.reduce((sum, hold) => sum + hold, 0);
+  holds2.forEach((hold2, i) => positiveSeconds(`beat hold ${i}`, hold2));
+  const period = holds2.reduce((sum, hold2) => sum + hold2, 0);
   const starts = [];
   let elapsed = 0;
-  for (const hold of holds2) {
+  for (const hold2 of holds2) {
     starts.push(elapsed);
-    elapsed += hold;
+    elapsed += hold2;
   }
   const own2 = [...holds2];
   const index = (into) => {
@@ -31087,15 +31099,15 @@ var Style = class _Style {
    */
   hold;
   constructor(options = {}) {
-    const hold = options.hold ?? NEVER_CHANGES;
-    const { lastChange, nextChange } = hold;
+    const hold2 = options.hold ?? NEVER_CHANGES;
+    const { lastChange, nextChange } = hold2;
     if (!(nextChange > Number.NEGATIVE_INFINITY)) {
       throw new RangeError(`Style nextChange must be a time in seconds or Infinity, got ${nextChange}`);
     }
     if (!(lastChange < Number.POSITIVE_INFINITY)) {
       throw new RangeError(`Style lastChange must be a time in seconds or -Infinity, got ${lastChange}`);
     }
-    this.hold = hold;
+    this.hold = hold2;
     this.color = resolveColor(options.color);
     this.bgcolor = resolveBackground(options.bgcolor);
     this.bold = options.bold;
@@ -32334,11 +32346,11 @@ function shownAt(animation, t2, motion) {
 function holdOf(shown, t2) {
   return { lastChange: shown.drawn.lastChange(t2), nextChange: shown.nextChange };
 }
-function stamp(hold) {
-  return new Style({ hold });
+function stamp(hold2) {
+  return new Style({ hold: hold2 });
 }
-function stampFrame(segments, hold) {
-  return Segment.applyStyle(segments, stamp(hold));
+function stampFrame(segments, hold2) {
+  return Segment.applyStyle(segments, stamp(hold2));
 }
 function frameTimeOf(options) {
   return options.frame?.time ?? 0;
@@ -32351,9 +32363,9 @@ function drawable2(value) {
 function* placed(animation, options, draw2) {
   const t2 = frameTimeOf(options);
   const shown = shownAt(animation, t2, options);
-  const hold = holdOf(shown, t2);
-  options.onHold?.(hold);
-  yield* stampFrame(draw2(shown.value), hold);
+  const hold2 = holdOf(shown, t2);
+  options.onHold?.(hold2);
+  yield* stampFrame(draw2(shown.value), hold2);
 }
 function placedRender(animation, options) {
   return placed(animation, options, (value) => render(drawable2(value), options));
@@ -34430,8 +34442,8 @@ var Effected = class _Effected {
   }
   /** Drawn at the frame's time, its cells stamped with the effect's exact hold there. */
   render(options) {
-    const { segments, hold } = this.at(frameTimeOf(options)).moved(options);
-    return stampFrame(segments, hold);
+    const { segments, hold: hold2 } = this.at(frameTimeOf(options)).moved(options);
+    return stampFrame(segments, hold2);
   }
   measure(options) {
     return Measurement.get(options, this.renderable);
@@ -56899,7 +56911,7 @@ var HELP = Object.fromEntries(
 );
 var SPINNER = ["\u280B", "\u2819", "\u2839", "\u2838", "\u283C", "\u2834", "\u2826", "\u2827", "\u2807", "\u280F"];
 var laneReadout = (lane) => {
-  const feed = (field) => `.${laneFeedVar(lane, field)}`;
+  const feed2 = (field) => `.${laneFeedVar(lane, field)}`;
   const spinner = SPINNER.map((glyph) => `${1 / MOVING_FPS} "${glyph}"`).join(
     " "
   );
@@ -56907,7 +56919,7 @@ var laneReadout = (lane) => {
     // [LAW:dataflow-not-control-flow] One test for every switch, a flag's or
     // the renderer's: the setting's value against the one that turns the lane
     // on, each spelled as a template literal of its own type.
-    `{{ if eq .${SETTINGS[LANES[lane].switch.setting].effectiveVar} ${JSON.stringify(LANES[lane].switch.on)} }} {{ if ${feed("subscribers")} }}{{ realtimeFrames ${spinner} }} {{ ${feed("fps")} }} fps{{ if not ${feed("shown")} }} \xB7 off screen{{ end }}{{ else }}no subscriber{{ end }}{{ end }}`
+    `{{ if eq .${SETTINGS[LANES[lane].switch.setting].effectiveVar} ${JSON.stringify(LANES[lane].switch.on)} }} {{ if ${feed2("subscribers")} }}{{ realtimeFrames ${spinner} }} {{ ${feed2("fps")} }} fps{{ if not ${feed2("shown")} }} \xB7 off screen{{ end }}{{ else }}no subscriber{{ end }}{{ end }}`
   );
 };
 var DIAGNOSTICS_INDICATOR = `{{ if .diagnostics.label }} {{ bg .diagnostics.bg (fg .diagnostics.fg (action "${DIAGNOSTICS_VIEWING}" .diagnostics.label .diagnostics.open)) }}{{ end }}`;
@@ -75391,9 +75403,9 @@ var FrameFeeds = class {
       if (this.requests.size <= MAX_REQUESTS) break;
       if (!this.feeds.has(oldest)) this.requests.delete(oldest);
     }
-    const feed = this.feeds.get(sessionId2);
-    if (feed === void 0) return;
-    feed.noted++;
+    const feed2 = this.feeds.get(sessionId2);
+    if (feed2 === void 0) return;
+    feed2.noted++;
   }
   // [LAW:single-enforcer] The one gate on the lanes: a subscription whose
   // lane the session's settings switch off is refused here before any feed
@@ -75407,16 +75419,16 @@ var FrameFeeds = class {
       };
     }
     const held = this.feeds.get(sessionId2);
-    const feed = held ?? this.open(sessionId2);
-    feed.followers.set(sub2, null);
-    if (!feed.rates.has(sub2.lane)) feed.rates.set(sub2.lane, []);
-    if (held !== void 0) this.send(feed, sub2);
-    this.hasten(feed);
+    const feed2 = held ?? this.open(sessionId2);
+    feed2.followers.set(sub2, null);
+    if (!feed2.rates.has(sub2.lane)) feed2.rates.set(sub2.lane, []);
+    if (held !== void 0) this.send(feed2, sub2);
+    this.hasten(feed2);
     this.deps.log(
       "info",
-      `feed sid=${JSON.stringify(sessionId2)} subscribed lane=${sub2.lane} subscribers=${feed.followers.size} view=${lanes === null ? "N" : "Y"}`
+      `feed sid=${JSON.stringify(sessionId2)} subscribed lane=${sub2.lane} subscribers=${feed2.followers.size} view=${lanes === null ? "N" : "Y"}`
     );
-    return () => this.unsubscribe(feed, sub2);
+    return () => this.unsubscribe(feed2, sub2);
   }
   // The lanes whose subscribers follow the session's frames and draw them now.
   following(sessionId2) {
@@ -75427,10 +75439,10 @@ var FrameFeeds = class {
   // Something the session's bar shows changed, for `cause`: its next frame,
   // if anyone is watching it, is drawn as soon as the feed's spacing allows.
   wake(sessionId2, cause) {
-    const feed = this.feeds.get(sessionId2);
-    if (feed === void 0) return;
-    feed.woke[cause]++;
-    if (!this.hasten(feed)) feed.coalesced++;
+    const feed2 = this.feeds.get(sessionId2);
+    if (feed2 === void 0) return;
+    feed2.woke[cause]++;
+    if (!this.hasten(feed2)) feed2.coalesced++;
   }
   // Wake, for `cause`, every watched session whose latest request `match`
   // accepts.
@@ -75470,15 +75482,15 @@ var FrameFeeds = class {
   // frames before it and its own instant: like every value relative to now,
   // it is the draw's, and it changes nothing the feed wakes on.
   feedsOf(sessionId2, at) {
-    const feed = this.feeds.get(sessionId2);
-    if (feed === void 0) return UNFOLLOWED_FEEDS;
+    const feed2 = this.feeds.get(sessionId2);
+    if (feed2 === void 0) return UNFOLLOWED_FEEDS;
     const since = at - RATE_WINDOW_S;
-    const shown = this.shown(feed);
+    const shown = this.shown(feed2);
     return perLane((lane) => {
-      const rate = feed.rates.get(lane);
+      const rate = feed2.rates.get(lane);
       if (rate === void 0) return UNFOLLOWED;
       let subscribers = 0;
-      for (const sub2 of feed.followers.keys())
+      for (const sub2 of feed2.followers.keys())
         if (sub2.lane === lane) subscribers++;
       let fps = 0;
       for (const sent of rate) if (sent > since && sent <= at) fps++;
@@ -75487,7 +75499,7 @@ var FrameFeeds = class {
   }
   getStats() {
     let subscribers = 0;
-    for (const feed of this.feeds.values()) subscribers += feed.followers.size;
+    for (const feed2 of this.feeds.values()) subscribers += feed2.followers.size;
     return {
       feeds: this.feeds.size,
       subscribers,
@@ -75500,7 +75512,7 @@ var FrameFeeds = class {
   }
   open(sessionId2) {
     const now2 = this.deps.clock.monotonic();
-    const feed = {
+    const feed2 = {
       sessionId: sessionId2,
       followers: /* @__PURE__ */ new Map(),
       rates: /* @__PURE__ */ new Map(),
@@ -75526,33 +75538,33 @@ var FrameFeeds = class {
       summarizedAt: now2,
       refreshesAtOpen: this.deps.refreshes()
     };
-    this.feeds.set(sessionId2, feed);
+    this.feeds.set(sessionId2, feed2);
     this.stopWatching ??= this.deps.watching();
-    return feed;
+    return feed2;
   }
   // The daemon's close: every feed ends as its last subscriber's leaving ends
   // it, and the pane follow with the last of them.
   close() {
-    for (const feed of [...this.feeds.values()])
-      for (const sub2 of [...feed.followers.keys()]) this.unsubscribe(feed, sub2);
+    for (const feed2 of [...this.feeds.values()])
+      for (const sub2 of [...feed2.followers.keys()]) this.unsubscribe(feed2, sub2);
   }
-  unsubscribe(feed, sub2) {
-    if (!feed.followers.delete(sub2)) return;
-    if (![...feed.followers.keys()].some((s) => s.lane === sub2.lane))
-      feed.rates.delete(sub2.lane);
-    if (feed.followers.size > 0) {
-      this.hasten(feed);
+  unsubscribe(feed2, sub2) {
+    if (!feed2.followers.delete(sub2)) return;
+    if (![...feed2.followers.keys()].some((s) => s.lane === sub2.lane))
+      feed2.rates.delete(sub2.lane);
+    if (feed2.followers.size > 0) {
+      this.hasten(feed2);
       return;
     }
-    if (feed.phase.kind === "due") feed.phase.clear();
-    feed.unwatch();
-    feed.unpin();
-    this.feeds.delete(feed.sessionId);
+    if (feed2.phase.kind === "due") feed2.phase.clear();
+    feed2.unwatch();
+    feed2.unpin();
+    this.feeds.delete(feed2.sessionId);
     if (this.feeds.size === 0) {
       this.stopWatching?.();
       this.stopWatching = null;
     }
-    this.summarize(feed, "closed");
+    this.summarize(feed2, "closed");
   }
   // [LAW:single-enforcer] The one fault path of a feed's frame step: a throw
   // anywhere in it — the render adapter, the lane gate, a subscriber's sink —
@@ -75564,8 +75576,8 @@ var FrameFeeds = class {
   // frame set for a change shows it however early its timer fires, and none is
   // ever drawn further ahead of the wall than that, so nothing carries from
   // one frame to the next. Its moment on the monotonic clock is that instant's.
-  draw(feed, due) {
-    feed.phase = { kind: "drawing" };
+  draw(feed2, due) {
+    feed2.phase = { kind: "drawing" };
     const started2 = this.deps.clock.monotonic();
     const wall = this.deps.instant();
     const at = Math.min(
@@ -75574,42 +75586,42 @@ var FrameFeeds = class {
     );
     const moment2 = started2 + (at - wall) * 1e3;
     try {
-      this.step(feed, started2, moment2, at);
+      this.step(feed2, started2, moment2, at);
     } catch (error) {
-      feed.lastStart = moment2;
+      feed2.lastStart = moment2;
       this.deps.log(
         "error",
-        `feed sid=${JSON.stringify(feed.sessionId)} threw: ${inspect(error)}`
+        `feed sid=${JSON.stringify(feed2.sessionId)} threw: ${inspect(error)}`
       );
-      if (this.feeds.get(feed.sessionId) !== feed) return;
-      this.schedule(feed, null, at);
+      if (this.feeds.get(feed2.sessionId) !== feed2) return;
+      this.schedule(feed2, null, at);
     }
   }
-  step(feed, started2, moment2, at) {
+  step(feed2, started2, moment2, at) {
     const frame2 = this.deps.render(
-      feed.sessionId,
-      paceOf(this.spacingOf(feed)),
+      feed2.sessionId,
+      paceOf(this.spacingOf(feed2)),
       at
     );
     if (frame2 === null) {
-      feed.noView++;
-      feed.phase = { kind: "waiting" };
+      feed2.noView++;
+      feed2.phase = { kind: "waiting" };
       return;
     }
-    feed.lastStart = moment2;
+    feed2.lastStart = moment2;
     const finished = this.deps.clock.monotonic();
     this.drawn++;
-    feed.drawn++;
-    feed.drawMs += finished - started2;
-    feed.evaluated += frame2.evaluated;
-    feed.cellBreaks += frame2.cellBreaks;
-    if (this.feeds.get(feed.sessionId) !== feed) return;
-    this.countFailure(feed, frame2);
-    this.push(feed, frame2, at);
-    if (this.feeds.get(feed.sessionId) !== feed) return;
-    if (finished - feed.summarizedAt >= SUMMARY_EVERY_MS)
-      this.summarize(feed, "running");
-    this.schedule(feed, frame2, at);
+    feed2.drawn++;
+    feed2.drawMs += finished - started2;
+    feed2.evaluated += frame2.evaluated;
+    feed2.cellBreaks += frame2.cellBreaks;
+    if (this.feeds.get(feed2.sessionId) !== feed2) return;
+    this.countFailure(feed2, frame2);
+    this.push(feed2, frame2, at);
+    if (this.feeds.get(feed2.sessionId) !== feed2) return;
+    if (finished - feed2.summarizedAt >= SUMMARY_EVERY_MS)
+      this.summarize(feed2, "running");
+    this.schedule(feed2, frame2, at);
   }
   // [LAW:no-ambient-temporal-coupling] The next frame is due when the bar
   // next changes, measured from the instant this one was drawn for — no
@@ -75620,22 +75632,22 @@ var FrameFeeds = class {
   // costs. A frame step that faulted is followed as a still frame is.
   // [LAW:dataflow-not-control-flow] One clamp over values: a still bar's
   // next change is Infinity, and an unseen bar's spacing is the still period.
-  schedule(feed, frame2, at) {
+  schedule(feed2, frame2, at) {
     const { moving, still } = this.deps.periods;
     const until2 = ((frame2?.bar.nextChange ?? Infinity) - at) * 1e3;
     const shownPeriod = Math.min(Math.max(until2, moving), still);
-    const shown = this.shown(feed);
-    if (shownPeriod < still && shown) feed.moving++;
-    if (shownPeriod < still && !shown) feed.unseen++;
+    const shown = this.shown(feed2);
+    if (shownPeriod < still && shown) feed2.moving++;
+    if (shownPeriod < still && !shown) feed2.unseen++;
     const period = shown ? shownPeriod : still;
-    this.arm(feed, at + period / 1e3, this.deps.instant());
+    this.arm(feed2, at + period / 1e3, this.deps.instant());
   }
   // [LAW:single-enforcer] The one bound on how close a feed's frames are: the
   // moving period while its bar is on a screen, the still period while it is
   // not. No cause of a wake sets the rate, so an unseen feed draws at most
   // once a still period however often it is woken.
-  spacingOf(feed) {
-    return this.shown(feed) ? this.deps.periods.moving : this.deps.periods.still;
+  spacingOf(feed2) {
+    return this.shown(feed2) ? this.deps.periods.moving : this.deps.periods.still;
   }
   // [LAW:single-enforcer] The one way a feed's next frame is brought forward:
   // to the earliest its spacing allows after the last frame was drawn for,
@@ -75645,14 +75657,14 @@ var FrameFeeds = class {
   // [LAW:no-ambient-temporal-coupling] A frame is drawn in one synchronous
   // turn and opens nothing, so a wake while it draws is the draw's own, and
   // the frame reads what that moved: it is coalesced into that frame.
-  hasten(feed) {
-    const { phase } = feed;
+  hasten(feed2) {
+    const { phase } = feed2;
     if (phase.kind === "drawing") return false;
     const now2 = this.deps.clock.monotonic();
-    const at = Math.max(now2, feed.lastStart + this.spacingOf(feed));
+    const at = Math.max(now2, feed2.lastStart + this.spacingOf(feed2));
     if (phase.kind === "due" && phase.at <= at) return false;
     const wall = this.deps.instant();
-    this.arm(feed, wall + (at - now2) / 1e3, wall);
+    this.arm(feed2, wall + (at - now2) / 1e3, wall);
     return true;
   }
   // [LAW:single-enforcer] The feed's one timer, set to draw its next frame for
@@ -75660,18 +75672,18 @@ var FrameFeeds = class {
   // that is. Its wait is measured from `wall`, the caller's own reading, so
   // the instant a caller set is never rebuilt from a second, truncated one;
   // its monotonic due time is what a wake compares against.
-  arm(feed, due, wall) {
+  arm(feed2, due, wall) {
     const delay = Math.max(0, (due - wall) * 1e3);
-    this.setTimer(feed, due, this.deps.clock.monotonic() + delay, delay);
+    this.setTimer(feed2, due, this.deps.clock.monotonic() + delay, delay);
   }
-  setTimer(feed, due, dueMoment, delay) {
-    if (feed.phase.kind === "due") feed.phase.clear();
-    feed.phase = {
+  setTimer(feed2, due, dueMoment, delay) {
+    if (feed2.phase.kind === "due") feed2.phase.clear();
+    feed2.phase = {
       kind: "due",
       at: dueMoment,
       clear: this.deps.clock.after(
         delay,
-        () => this.fire(feed, due, dueMoment)
+        () => this.fire(feed2, due, dueMoment)
       )
     };
   }
@@ -75684,53 +75696,53 @@ var FrameFeeds = class {
   // `due`: that turn drawn twice and the one after it late. The wall clock is
   // not asked, so a wall stepped back, which leaves the monotonic moment
   // reached, still draws and is followed by `draw`.
-  fire(feed, due, dueMoment) {
+  fire(feed2, due, dueMoment) {
     const remaining = dueMoment - this.deps.clock.monotonic();
-    if (remaining > 0) this.setTimer(feed, due, dueMoment, remaining);
-    else this.draw(feed, due);
+    if (remaining > 0) this.setTimer(feed2, due, dueMoment, remaining);
+    else this.draw(feed2, due);
   }
-  shown(feed) {
-    const noted = this.requests.get(feed.sessionId);
+  shown(feed2) {
+    const noted = this.requests.get(feed2.sessionId);
     return noted === void 0 || this.deps.shown(noted.req);
   }
-  countFailure(feed, frame2) {
-    if (frame2.failure !== null) feed.failed++;
+  countFailure(feed2, frame2) {
+    if (frame2.failure !== null) feed2.failed++;
   }
-  push(feed, frame2, at) {
-    const lanes = this.deps.lanes(feed.sessionId);
+  push(feed2, frame2, at) {
+    const lanes = this.deps.lanes(feed2.sessionId);
     if (lanes !== null) {
-      for (const sub2 of [...feed.followers.keys()]) {
+      for (const sub2 of [...feed2.followers.keys()]) {
         if (lanes[sub2.lane]) continue;
-        this.unsubscribe(feed, sub2);
-        this.refuse(feed.sessionId, sub2);
+        this.unsubscribe(feed2, sub2);
+        this.refuse(feed2.sessionId, sub2);
       }
     }
-    if (feed.followers.size === 0) return;
+    if (feed2.followers.size === 0) return;
     frame2.delivered();
     const answers = {
       resp: JSON.stringify(frame2.resp),
       statusline: JSON.stringify(frame2.statusline)
     };
-    if (feed.last?.answers.resp === answers.resp && feed.last.answers.statusline === answers.statusline)
+    if (feed2.last?.answers.resp === answers.resp && feed2.last.answers.statusline === answers.statusline)
       return;
-    const before = feed.last?.answers ?? null;
-    feed.last = { bar: frame2.bar, answers };
+    const before = feed2.last?.answers ?? null;
+    feed2.last = { bar: frame2.bar, answers };
     this.pushed++;
-    feed.pushed++;
+    feed2.pushed++;
     if (frame2.failure !== null)
       this.deps.log(frame2.failure.level, frame2.failure.line);
-    for (const [lane, rate] of feed.rates)
+    for (const [lane, rate] of feed2.rates)
       if (before === null || answerOf3(before, lane) !== answerOf3(answers, lane))
         noteSent(rate, at);
-    for (const sub2 of feed.followers.keys()) this.send(feed, sub2);
+    for (const sub2 of feed2.followers.keys()) this.send(feed2, sub2);
   }
   // The last frame's answer for `sub`'s lane, unless it was sent that already.
-  send(feed, sub2) {
-    if (feed.last === null) return;
-    const json2 = answerOf3(feed.last.answers, sub2.lane);
-    if (feed.followers.get(sub2) === json2) return;
-    sub2.frame(feed.last.bar, json2);
-    feed.followers.set(sub2, json2);
+  send(feed2, sub2) {
+    if (feed2.last === null) return;
+    const json2 = answerOf3(feed2.last.answers, sub2.lane);
+    if (feed2.followers.get(sub2) === json2) return;
+    sub2.frame(feed2.last.bar, json2);
+    feed2.followers.set(sub2, json2);
   }
   // A subscription its lane's toggle refuses, told why.
   refuse(sessionId2, sub2) {
@@ -75753,19 +75765,19 @@ var FrameFeeds = class {
   // `daemonRefreshed=` is every refresh the daemon made while the feed ran,
   // whichever session's: a frame refreshes nothing, so it bounds what the
   // feed's `drawn=` frames could have read fresh, and is never their own.
-  summarize(feed, state) {
+  summarize(feed2, state) {
     const now2 = this.deps.clock.monotonic();
     const refreshes = this.deps.refreshes();
-    const seconds = (now2 - feed.since) / 1e3;
-    const achieved = seconds === 0 ? "-" : `${(feed.drawn / seconds).toFixed(1)}fps`;
+    const seconds = (now2 - feed2.since) / 1e3;
+    const achieved = seconds === 0 ? "-" : `${(feed2.drawn / seconds).toFixed(1)}fps`;
     const refreshed = REFRESH_TRIGGERS.map(
-      (by) => `${by}:${refreshes[by] - feed.refreshesAtOpen[by]}`
+      (by) => `${by}:${refreshes[by] - feed2.refreshesAtOpen[by]}`
     ).join(",");
     this.deps.log(
       "info",
-      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.followers.size} lanes=${[...feed.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed.drawn} noted=${feed.noted} noView=${feed.noView} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} pushed=${feed.pushed} ceiling=${paceOf(this.spacingOf(feed))}fps achieved=${achieved} evaluated=${feed.evaluated} cellBreaks=${feed.cellBreaks} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed.woke[cause]}`).join(",")} coalesced=${feed.coalesced} daemonRefreshed=${refreshed} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`
+      `feed sid=${JSON.stringify(feed2.sessionId)} ${state} subscribers=${feed2.followers.size} lanes=${[...feed2.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed2.drawn} noted=${feed2.noted} noView=${feed2.noView} moving=${feed2.moving} unseen=${feed2.unseen} failed=${feed2.failed} pushed=${feed2.pushed} ceiling=${paceOf(this.spacingOf(feed2))}fps achieved=${achieved} evaluated=${feed2.evaluated} cellBreaks=${feed2.cellBreaks} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed2.woke[cause]}`).join(",")} coalesced=${feed2.coalesced} daemonRefreshed=${refreshed} meanDraw=${feed2.drawn === 0 ? "-" : (feed2.drawMs / feed2.drawn).toFixed(2)}ms`
     );
-    feed.summarizedAt = now2;
+    feed2.summarizedAt = now2;
   }
 };
 
@@ -75909,10 +75921,10 @@ function viewLanes(parts, sessionId2) {
   var _stack = [];
   try {
     const { renderCache } = parts;
-    const hold = __using(_stack, renderCache.holdView(sessionId2));
-    return hold === null ? null : laneSwitches(
-      hold.view.source.effective(),
-      inTmux(hold.view.facts().hints.tmux)
+    const hold2 = __using(_stack, renderCache.holdView(sessionId2));
+    return hold2 === null ? null : laneSwitches(
+      hold2.view.source.effective(),
+      inTmux(hold2.view.facts().hints.tmux)
     );
   } catch (_) {
     var _error = _, _hasError = true;
@@ -75924,14 +75936,14 @@ function lanesAt(parts, origin, sessionId2) {
   var _stack = [];
   try {
     const { renderCache, frameFeeds } = parts;
-    const hold = __using(_stack, renderCache.hold(
+    const hold2 = __using(_stack, renderCache.hold(
       origin.projectDir,
       origin.cwd,
       origin.target.path
     ));
     const latest = frameFeeds.latest(sessionId2);
     return laneSwitches(
-      sessionGlobals2(parts, sessionId2, hold.state),
+      sessionGlobals2(parts, sessionId2, hold2.state),
       latest === null || inTmux(latest.hints.tmux)
     );
   } catch (_) {
@@ -75976,36 +75988,36 @@ function setUpRender(parts, arrived3, at, facts) {
   const hintsError = requestFacts(req, at, facts);
   noteFacts(facts, { encoding: req.encoding });
   const origin = sessionRenderOrigin(req.requested, sessionState, sessionId2);
-  const hold = renderCache.holdSession(
+  const hold2 = renderCache.holdSession(
     origin.projectDir,
     origin.cwd,
     origin.target.path,
     req
   );
-  return setUpDraw(parts, hold, req, hintsError, at, facts);
+  return setUpDraw(parts, hold2, req, hintsError, at, facts);
 }
 function setUpFrame(parts, sessionId2, at, facts) {
   const { renderCache } = parts;
-  const hold = renderCache.holdView(sessionId2);
-  if (hold === null) {
+  const hold2 = renderCache.holdView(sessionId2);
+  if (hold2 === null) {
     const failed2 = renderCache.openFailure(sessionId2);
     if (failed2 !== null) throw failed2.error;
     return null;
   }
-  const req = hold.view.facts();
+  const req = hold2.view.facts();
   let hintsError;
   try {
     hintsError = requestFacts(req, at, facts);
   } catch (e) {
-    hold[Symbol.dispose]();
+    hold2[Symbol.dispose]();
     throw e;
   }
-  return setUpDraw(parts, hold, req, hintsError, at, facts);
+  return setUpDraw(parts, hold2, req, hintsError, at, facts);
 }
-function setUpDraw(parts, hold, req, hintsError, at, facts) {
+function setUpDraw(parts, hold2, req, hintsError, at, facts) {
   const { payloadProviders } = parts;
   try {
-    const { entry, state, view } = hold;
+    const { entry, state, view } = hold2;
     const { sessionId: sessionId2, hints } = req;
     const effective = view.source.effective();
     const payloadInputs = {
@@ -76030,10 +76042,10 @@ function setUpDraw(parts, hold, req, hintsError, at, facts) {
       view,
       hintsError,
       payloadInputs,
-      [Symbol.dispose]: () => hold[Symbol.dispose]()
+      [Symbol.dispose]: () => hold2[Symbol.dispose]()
     };
   } catch (e) {
-    hold[Symbol.dispose]();
+    hold2[Symbol.dispose]();
     throw e;
   }
 }
@@ -81806,8 +81818,8 @@ var RenderCache = class {
   }
   // The hold on `entry`'s state that `hold` and `holdView` hand out.
   holdState(entry, state) {
-    const hold = this.holdOf(state);
-    hold.holders++;
+    const hold2 = this.holdOf(state);
+    hold2.holders++;
     this.armSweep();
     let released = false;
     return {
@@ -81816,8 +81828,8 @@ var RenderCache = class {
       [Symbol.dispose]: () => {
         if (released) throw new Error("render-cache hold released twice");
         released = true;
-        hold.holders--;
-        this.reclaim(state, hold);
+        hold2.holders--;
+        this.reclaim(state, hold2);
       }
     };
   }
@@ -82055,9 +82067,9 @@ var RenderCache = class {
   get stats() {
     let held = 0;
     let retired = 0;
-    for (const hold of this.holds.values()) {
-      if (hold.holders > 0) held++;
-      if (hold.retired !== null) retired++;
+    for (const hold2 of this.holds.values()) {
+      if (hold2.holders > 0) held++;
+      if (hold2.retired !== null) retired++;
     }
     let retiredViews = 0;
     for (const lease of this.viewHolds.values()) {
@@ -82116,9 +82128,9 @@ var RenderCache = class {
       );
   }
   holdOf(state) {
-    const hold = this.holds.get(state);
-    if (hold === void 0) throw new Error("render-cache state never served");
-    return hold;
+    const hold2 = this.holds.get(state);
+    if (hold2 === void 0) throw new Error("render-cache state never served");
+    return hold2;
   }
   // The cache stopped serving `state`: it left the map, or a reload
   // replaced it with `successor`. Its teardown is due — now, or at its last
@@ -82144,18 +82156,18 @@ var RenderCache = class {
       }
       this.retireView(view, reason);
     }
-    const hold = this.holdOf(state);
-    hold.retired = { reason, held: hold.holders };
-    this.reclaim(state, hold);
+    const hold2 = this.holdOf(state);
+    hold2.retired = { reason, held: hold2.holders };
+    this.reclaim(state, hold2);
   }
   // [LAW:single-enforcer] The one place a state is disposed: once it is
   // retired AND unheld, from whichever of the two transitions came last. The
   // registry owns timers, fs watchers and MobX reactions — dropping it
   // without dispose leaks every handle the config declared.
-  reclaim(state, hold) {
-    if (hold.retired === null || hold.holders > 0) return;
+  reclaim(state, hold2) {
+    if (hold2.retired === null || hold2.holders > 0) return;
     this.holds.delete(state);
-    this.log("info", configDisposeLine(hold.retired, state.registry.dispose()));
+    this.log("info", configDisposeLine(hold2.retired, state.registry.dispose()));
     if (![...this.holds.keys()].some((s) => s.compileKey === state.compileKey))
       this.compiles.delete(state.compileKey);
   }
