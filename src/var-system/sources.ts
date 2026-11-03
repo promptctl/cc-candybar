@@ -51,8 +51,11 @@ import {
   failed,
   orElse,
   ABSENT,
-  PENDING,
+  isPending,
+  pendingOf,
   type Outcome,
+  type PayloadNode,
+  type Pending,
   type Reading,
 } from "../utils/outcome.js";
 import {
@@ -532,12 +535,12 @@ export interface Published {
 }
 
 // [LAW:types-are-the-program] What a view's inputs are derived from: the value
-// at each payload path as it stands — PENDING while its source has not
+// at each payload path as it stands — pending while its source has not
 // answered — and the depth the view's renders draw at, which every contrast
 // floor reads. A read is tracked, so an input moves in the turn its value
 // does, and nothing else moves it.
 export interface InputSource {
-  read(path: string): unknown;
+  read(path: string): Resolved;
   drawnAt(): ColorDepth;
 }
 
@@ -546,7 +549,7 @@ export interface InputSource {
 // and its depth neither, so a key measuring a floor waits for the view's
 // rather than running once at a depth no draw is at.
 const UNBOUND: InputSource = {
-  read: () => PENDING,
+  read: () => pendingOf("unread"),
   drawnAt: () => {
     throw new PendingValueError(
       "colorCompatibility.effective",
@@ -557,26 +560,43 @@ const UNBOUND: InputSource = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+// [LAW:parse-dont-validate] What a path through a payload found: a source that
+// has not answered, or a value. The value is wrapped so a source's own JSON,
+// which can spell anything, is never mistaken for the daemon's pending.
+export type Resolved =
+  | Pending
+  | { readonly kind: "found"; readonly value: unknown };
+
+export const found = (value: unknown): Resolved => ({ kind: "found", value });
+
 // Recursively resolves a dotted path through a plain object.
-// Returns undefined if any segment is absent or the traversed value is not an
-// object. [LAW:types-are-the-program] A PENDING node is a source that has not
-// answered yet, so every path through it is pending too: one `git: PENDING`
+// Finds undefined if any segment is absent or the traversed value is not an
+// object. [LAW:types-are-the-program] A pending node is a source that has not
+// answered yet, so every path through it is pending too: one `git: pending`
 // is every `git.*` input not answered, never each one's default.
-export function resolvePath(obj: unknown, path: string): unknown {
-  let cur: unknown = obj;
+//
+// A source's `ok` reading holds its document under `value`, and a document is
+// the user's JSON: from there down nothing is tested for pending, because a
+// file that says `{"kind":"pending"}` is a value.
+export function resolvePath(obj: unknown, path: string): Resolved {
+  let cur = obj as PayloadNode;
+  let inDocument = false;
   for (const part of path.split(".")) {
-    if (cur === PENDING) return PENDING;
-    if (cur == null || typeof cur !== "object") return undefined;
-    cur = (cur as Record<string, unknown>)[part];
+    if (!inDocument && isPending(cur)) return cur;
+    if (cur == null || typeof cur !== "object") return found(undefined);
+    inDocument ||=
+      part === "value" && (cur as { kind?: unknown }).kind === "ok";
+    cur = (cur as Record<string, PayloadNode>)[part];
   }
-  return cur;
+  return !inDocument && isPending(cur) ? cur : found(cur);
 }
 
 // [LAW:parse-dont-validate] What a view's payload holds at a source's name,
-// as the document's reading: the source's own outcome, PENDING while it has
+// as the document's reading: the source's own outcome, pending while it has
 // not answered, and a failure for anything else.
-function sourceReading(name: string, raw: unknown): Reading<JsonValue> {
-  if (raw === PENDING) return PENDING;
+function sourceReading(name: string, resolved: Resolved): Reading<JsonValue> {
+  if (resolved.kind === "pending") return resolved;
+  const raw = resolved.value;
   if (raw === undefined) {
     return failed(
       `variable "${name}": the view's payload has no "${name}": its declaration did not take the source the preset reads`,
@@ -849,8 +869,8 @@ export class SourceRegistry {
     type: VarType,
     varDefault: VarValue | undefined,
   ): VarValue {
-    const raw = this.inputs.get().read(path);
-    if (raw === PENDING) {
+    const resolved = this.inputs.get().read(path);
+    if (resolved.kind === "pending") {
       // Not answered yet is no failure: an earlier read's error no longer
       // stands for it.
       this.lastErrors.delete(name);
@@ -859,6 +879,7 @@ export class SourceRegistry {
         `variable "${name}" has no value yet: its source has not answered`,
       );
     }
+    const raw = resolved.value;
     if (raw === undefined) {
       return this.fallbackOf(
         name,
@@ -1016,7 +1037,7 @@ export class SourceRegistry {
     // What the node holds before its first scan, and — with a default — what
     // stands in for a run that had nothing to read.
     const fallback: Reading<JsonValue> =
-      varDefault === undefined ? PENDING : ok(varDefault);
+      varDefault === undefined ? pendingOf("unread") : ok(varDefault);
     this.store.defineDocument(name, fallback);
     let clearSettling: (() => void) | undefined;
     // Whether the document showing was READ (not the default standing in).
@@ -1448,7 +1469,7 @@ export class SourceRegistry {
               );
             } catch (e) {
               return readPending(e) !== undefined
-                ? PENDING
+                ? pendingOf("unread")
                 : failed(
                     `cache key: ${e instanceof Error ? e.message : String(e)}`,
                     "read",
@@ -1470,7 +1491,7 @@ export class SourceRegistry {
             const keys = policy.varNames.map((n) => this.store.changeKey(n));
             return keys.every((key) => key.kind === "ok")
               ? ok(keys.map((key) => key.value).join(","))
-              : PENDING;
+              : pendingOf("unread");
           },
           firstThenChange(update),
         );

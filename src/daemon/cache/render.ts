@@ -88,7 +88,7 @@ import { valueOf } from "../../utils/logfmt.js";
 import type { Locations } from "../paths.js";
 import { digestOf, type Projection } from "../../utils/plain.js";
 import { Holds } from "../../utils/holds.js";
-import { ABSENT, failed, PENDING } from "../../utils/outcome.js";
+import { ABSENT, failed, pendingOf } from "../../utils/outcome.js";
 import {
   pluginDataVar,
   type PluginDefinition,
@@ -1307,7 +1307,7 @@ export type SourceOf<S extends ViewSource> = (view: SourcedView) => S;
 // binds a payload of its own.
 export const SOURCES_NOTHING: SourceOf<ViewSource> = ({ state }) =>
   fixedSource(
-    PENDING,
+    pendingOf("unread"),
     resolveEffectiveGlobals(
       state.config,
       () => null,

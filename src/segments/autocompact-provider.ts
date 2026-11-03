@@ -8,7 +8,7 @@ import { RefreshLedger, type Refreshes } from "../utils/refresh-ledger.js";
 import type { SourceStats } from "../utils/keyed-source.js";
 import { quietLogger, type DaemonLogger } from "../utils/logger.js";
 import { valueOf } from "../utils/logfmt.js";
-import { PENDING, type Outcome, type Reading } from "../utils/outcome.js";
+import { pendingOf, type Outcome, type Reading } from "../utils/outcome.js";
 import { stampOf } from "../utils/transcript-fs.js";
 import { elapsedMs, type Timekeeper } from "../time.js";
 
@@ -69,7 +69,7 @@ export class AutoCompactProvider {
   // The window as the last request left it, for a draw: the file is not
   // touched.
   stored(settingsPath: string): Reading<AutoCompactWindow> {
-    return this.known.get(settingsPath)?.outcome ?? PENDING;
+    return this.known.get(settingsPath)?.outcome ?? pendingOf("unread");
   }
 
   getStats(): SourceStats {

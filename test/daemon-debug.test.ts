@@ -37,7 +37,7 @@ import { rootOf } from "../src/config/root";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
-import { ABSENT, PENDING, failed, ok } from "../src/utils/outcome";
+import { ABSENT, pendingOf, failed, ok } from "../src/utils/outcome";
 import { drawingAt } from "./helpers/test-engine";
 import { systemTimekeeper } from "../src/time";
 
@@ -255,7 +255,7 @@ describe("introspectVars — documents", () => {
   test("a document snapshots as its canonical JSON text, or the state a template read would surface", () => {
     const state = buildPopulatedState();
     state.store.defineDocument("doc.ok", ok({ b: 2, a: { c: 1 } }));
-    state.store.defineDocument("doc.pending", PENDING);
+    state.store.defineDocument("doc.pending", pendingOf("unread"));
     state.store.defineDocument("doc.absent", ABSENT);
     state.store.defineDocument(
       "doc.failed",

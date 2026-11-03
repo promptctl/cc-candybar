@@ -25,7 +25,7 @@ import { SessionState } from "../src/daemon/session-state";
 import { systemLauncher } from "../src/proc/system-launcher";
 import { MAX_CAPTURED_BYTES } from "../src/proc/launch";
 import { readPending } from "../src/var-system/types";
-import { PENDING } from "../src/utils/outcome";
+import { pendingOf } from "../src/utils/outcome";
 import { drawingAt } from "./helpers/test-engine";
 import { buildScope } from "../src/template-engine/scope";
 import { systemTimekeeper } from "../src/time";
@@ -197,7 +197,7 @@ describe("SourceRegistry — input: before its first payload", () => {
     // An input is derived: its error is recorded when it is read.
     expect(store.read("count")).toBe(0);
     expect(registry.getLastError("count")).toBeDefined();
-    feedInputs(registry, { count: PENDING });
+    feedInputs(registry, { count: pendingOf("unread") });
     expect(() => store.read("count")).toThrow(/no value yet/);
     expect(registry.getLastError("count")).toBeUndefined();
   });
@@ -216,7 +216,7 @@ describe("SourceRegistry — input: before its first payload", () => {
       }
       expect(readPending(thrown)?.variable).toBe(name);
     }
-    expect(store.changeKey("cwd")).toEqual(PENDING);
+    expect(store.changeKey("cwd")).toEqual(pendingOf("unread"));
     expect(registry.getLastError("cwd")).toBeUndefined();
     feedInputs(registry, {});
     expect(store.read("cwd")).toBe("/default");
@@ -2895,7 +2895,7 @@ describe("SourceRegistry — parse seam", () => {
       parse: json(),
       cache: { kind: "never" },
     });
-    expect(store.readDocument("doc")).toEqual({ kind: "pending" });
+    expect(store.readDocument("doc")).toEqual(pendingOf("unread"));
     expect(() => doc(store, "doc")).toThrow(
       'variable "doc" has no value yet: its source has not completed a scan',
     );

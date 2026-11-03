@@ -25,7 +25,7 @@ import { ObservableLru } from "../utils/observable-lru.js";
 import {
   ABSENT,
   ok,
-  PENDING,
+  pendingOf,
   type Outcome,
   type Reading,
 } from "../utils/outcome.js";
@@ -146,7 +146,7 @@ export class CacheExpiryProvider {
 
   // The expiry as the session's last refresh left it, for a draw.
   expiryOf(sessionId: string): Reading<number> {
-    return this.known.get(sessionId)?.outcome ?? PENDING;
+    return this.known.get(sessionId)?.outcome ?? pendingOf("unread");
   }
 
   getStats(): SourceStats {

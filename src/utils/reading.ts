@@ -5,43 +5,37 @@ import {
   type IObservableValue,
 } from "mobx";
 import type { Timekeeper } from "../time";
-import type { Outcome } from "./outcome";
+import type { Outcome, Pending, PendingWhy } from "./outcome";
+
+// What a waiter awaits: the read that will answer a pending value.
+export interface Landing {
+  readonly landed: Promise<void>;
+  readonly land: () => void;
+}
 
 // [LAW:types-are-the-program] What a source holds for one key: nothing yet,
-// or the latest outcome (brandon-unfiled-3248.8ro6, step 1). `pending` carries
-// the promise its read resolves, so a reader that must wait for a value waits
-// on the read itself, never on a poll. Every owner of a shared source (git's
-// repos, tmux's panes, plugins' session files) holds its values in this one shape.
-export type Reading<T> =
-  | {
-      readonly kind: "pending";
-      readonly why: PendingWhy;
-      readonly landed: Promise<void>;
-      readonly land: () => void;
-    }
-  | { readonly kind: "read"; readonly outcome: Outcome<T> };
-
-// [LAW:types-are-the-program] Why a value is not answered yet: `unread`, a key
-// never answered (a first read, a new key); `superseded`, a key whose value the
-// daemon itself made stale (a click that moved it). A request waits only for
-// first answers: a superseded value may take as long as the program the click
-// ran, so it draws its loading cell, and its landing reaches the next frame.
-export type PendingWhy = "unread" | "superseded";
+// or the latest outcome (brandon-unfiled-3248.8ro6, step 1). It is a `Reading`
+// of src/utils/outcome.ts whose pending arm also carries the promise its read
+// resolves, so a reader that must wait for a value waits on the read itself,
+// never on a poll. Every owner of a shared source (the repos, panes and
+// session files) holds its values in this one shape; dropping the landing
+// leaves the plain `Pending` a facts document carries.
+export type Held<T> = (Pending & Landing) | Outcome<T>;
 
 // [LAW:no-ambient-temporal-coupling] A source's stored value, observable, so a
 // derivation over it — a view's payload (brandon-unfiled-3248.8ro6, step 4) —
 // is recomputed in the turn the value lands, never read stale. Only `settle`
 // and `renew` write it.
 export interface Readable<T> {
-  readonly reading: IObservableValue<Reading<T>>;
+  readonly reading: IObservableValue<Held<T>>;
 }
 
 // A source's stored value before its first read.
-export function unread<T>(): IObservableValue<Reading<T>> {
-  return observable.box<Reading<T>>(pending("unread"), { deep: false });
+export function unread<T>(): IObservableValue<Held<T>> {
+  return observable.box<Held<T>>(pending("unread"), { deep: false });
 }
 
-export function pending<T>(why: PendingWhy): Reading<T> {
+export function pending(why: PendingWhy): Pending & Landing {
   let land!: () => void;
   const landed = new Promise<void>((resolve) => {
     land = resolve;
@@ -54,9 +48,8 @@ export function pending<T>(why: PendingWhy): Reading<T> {
 // wakes (brandon-unfiled-3248.8ro6, step 4e). A pending value always lands.
 export function settle<T>(source: Readable<T>, outcome: Outcome<T>): void {
   const prior = source.reading.get();
-  if (prior.kind === "read" && compareStructural(prior.outcome, outcome))
-    return;
-  runInAction(() => source.reading.set({ kind: "read", outcome }));
+  if (prior.kind !== "pending" && compareStructural(prior, outcome)) return;
+  runInAction(() => source.reading.set(outcome));
   if (prior.kind === "pending") prior.land();
 }
 
@@ -66,7 +59,7 @@ export function settle<T>(source: Readable<T>, outcome: Outcome<T>): void {
 // answered stays `unread` whatever made it pending again.
 export function renew<T>(source: Readable<T>, why: PendingWhy): void {
   const prior = source.reading.get();
-  if (prior.kind === "read") {
+  if (prior.kind !== "pending") {
     runInAction(() => source.reading.set(pending(why)));
   } else if (prior.why !== why && why === "unread") {
     runInAction(() => source.reading.set({ ...prior, why }));
@@ -89,9 +82,7 @@ export function answerPending<T>(
 export type Current<T> = Outcome<T> | Waiting;
 
 // Not answered yet, why, and the landing to wait for.
-export interface Waiting {
-  readonly kind: "pending";
-  readonly why: PendingWhy;
+export interface Waiting extends Pending {
   readonly landed: Promise<void>;
 }
 
@@ -104,8 +95,7 @@ function isWaiting<A>(current: A | Waiting): current is Waiting {
 }
 
 export function currentOf<T>(source: Readable<T>): Current<T> {
-  const reading = source.reading.get();
-  return reading.kind === "read" ? reading.outcome : reading;
+  return source.reading.get();
 }
 
 // [LAW:one-source-of-truth] The one wait for an answer: the read itself, asked

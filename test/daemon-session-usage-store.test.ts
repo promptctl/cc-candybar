@@ -36,7 +36,7 @@ import { RefreshLedger } from "../src/utils/refresh-ledger";
 import type { ClaudeHookData } from "../src/utils/claude";
 import { Holds } from "../src/utils/holds";
 import { instantOf } from "../src/utils/instant";
-import { ABSENT, PENDING, failed } from "../src/utils/outcome";
+import { ABSENT, pendingOf, failed } from "../src/utils/outcome";
 import { FOLD_WINDOW_BYTES } from "../src/utils/transcript-fs";
 import { until } from "./helpers/until";
 import { todayInfo, todayNow } from "./helpers/today";
@@ -484,7 +484,7 @@ describe("SessionUsageStore — session projection", () => {
     });
     try {
       const bare = { session_id: "H" } as ClaudeHookData;
-      expect(store.usageOf("H", bare)).toBe(PENDING);
+      expect(store.usageOf("H", bare)).toEqual(pendingOf("unread"));
       const answered = await store.getUsageInfo("H", bare);
       expect(answered.kind).toBe("ok");
       expect(store.usageOf("H", bare)).toEqual(answered);
@@ -514,7 +514,7 @@ describe("SessionUsageStore — session projection", () => {
       // The session's own refresh has landed, but no scan has.
       await store.getUsageInfo("A", hook("A", t));
       expect(todayNow(store, holds, hook("A", t), dir, instantOf(at))).toBe(
-        PENDING,
+        pendingOf("unread"),
       );
       const today = await todayInfo(
         store,

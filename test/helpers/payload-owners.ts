@@ -29,9 +29,12 @@ import type { AutoCompactWindow } from "../../src/segments/autocompact";
 import type { Instant } from "../../src/utils/instant";
 import {
   ABSENT,
+  isPending,
   ok,
-  PENDING,
+  pendingOf,
   type Outcome,
+  type PayloadNode,
+  type Pending,
   type Reading,
 } from "../../src/utils/outcome";
 import { settledLane, type Current, type Lane } from "../../src/utils/reading";
@@ -93,7 +96,8 @@ function refreshed<T>() {
       stored.set(sessionId, outcome);
       return outcome;
     },
-    read: (sessionId: string): Reading<T> => stored.get(sessionId) ?? PENDING,
+    read: (sessionId: string): Reading<T> =>
+      stored.get(sessionId) ?? pendingOf("unread"),
   };
 }
 
@@ -198,7 +202,7 @@ export function fakeUsage(
       todayRefreshed.has(hookData?.session_id ?? "")
         ? ((readers.today?.(hookData, set.claudeConfigDir, at) ??
             ABSENT) as Outcome<TodayInfo>)
-        : PENDING,
+        : pendingOf("unread"),
     observeSpeed,
     speedOf: (sessionId: string): Reading<SpeedObservation> =>
       speed.read(sessionId),
@@ -261,7 +265,7 @@ export function fakeAutoCompact(
       return outcome;
     },
     stored: (settingsPath: string): Reading<AutoCompactWindow> =>
-      stored.get(settingsPath) ?? PENDING,
+      stored.get(settingsPath) ?? pendingOf("unread"),
   };
 }
 
@@ -333,9 +337,9 @@ export async function requestPayload(
 
 // A field of a request's payload, which its wait answered: a request draws
 // once every lane it waits on has landed, so one still pending is a bug.
-export function settled<T>(value: T | typeof PENDING): T {
-  if (value === PENDING) throw new Error("pending after the request settled");
-  return value as T;
+export function settled<T extends PayloadNode>(value: T | Pending): T {
+  if (isPending(value)) throw new Error("pending after the request settled");
+  return value;
 }
 
 // The lanes a view declared at `facts` over `owners` and every lane read, for

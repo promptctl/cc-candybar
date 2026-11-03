@@ -28,7 +28,12 @@ import type {
 } from "@promptctl/rich-js";
 import type { Template } from "@promptctl/go-template-js";
 import type { Derived, VariableStore } from "../var-system/store.js";
-import { resolvePath, type SourceRegistry } from "../var-system/sources.js";
+import {
+  found,
+  resolvePath,
+  type Resolved,
+  type SourceRegistry,
+} from "../var-system/sources.js";
 import { buildScope, placementScope } from "../template-engine/scope.js";
 import { is, sameBy } from "../utils/same.js";
 import { gateOf, resolveSegmentColors } from "../template-engine/index.js";
@@ -247,8 +252,10 @@ export class ViewParts {
     // never when a source is rebound with the same one.
     this.depth = store.derive("drawn depth", "computed", () => {
       const said = this.inputAt(COLOR_PATH);
-      return typeof said === "string" && isColorCompatibility(said)
-        ? said
+      return said.kind === "found" &&
+        typeof said.value === "string" &&
+        isColorCompatibility(said.value)
+        ? said.value
         : COLOR_FLOOR;
     });
     const drawn = observable(UNDRAWN, undefined, { deep: false });
@@ -332,9 +339,9 @@ export class ViewParts {
   // [LAW:dataflow-not-control-flow] The value at a payload path, by who
   // answers it: a selection's `.effective` its slot, a field of the instant
   // the draw in progress, every other the view's payload.
-  private inputAt(path: string): unknown {
+  private inputAt(path: string): Resolved {
     const slot = slotAt(path);
-    if (slot !== undefined) return this.slotName(slot);
+    if (slot !== undefined) return found(this.slotName(slot));
     if (drawProjectionAt(path) !== undefined)
       return resolvePath(this.projected, path);
     return resolvePath(this.view.get().payload(), path);

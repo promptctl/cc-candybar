@@ -7,7 +7,7 @@ import {
   toBool,
   typeOf,
 } from "../src/var-system";
-import { ABSENT, failed, ok, PENDING } from "../src/utils/outcome";
+import { ABSENT, failed, ok, pendingOf } from "../src/utils/outcome";
 import { systemTimekeeper } from "../src/time";
 
 describe("VariableStore — boxes", () => {
@@ -287,12 +287,33 @@ describe("VariableStore — the age records a change, not a write", () => {
   it("a box nothing has written has no age until its first write", () => {
     jest.setSystemTime(1000);
     const store = new VariableStore(systemTimekeeper);
-    store.defineBox("n", "number", PENDING);
+    store.defineBox("n", "number", pendingOf("unread"));
     expect(store.getNode("n").lastUpdatedMs()).toBeNull();
 
     jest.setSystemTime(5000);
     store.setBox("n", 7);
     expect(store.getNode("n").lastUpdatedMs()).toBe(5000);
+  });
+
+  // A pending value is a plain object, recognised by its discriminator: one
+  // read off the wire is a different object from the one the box holds, and
+  // one rule (structure) decides both for it and for a number.
+  it("a pending written again, as another object, moves nothing", () => {
+    jest.setSystemTime(1000);
+    const store = new VariableStore(systemTimekeeper);
+    store.defineBox("n", "number", 7);
+
+    jest.setSystemTime(2000);
+    store.setBox("n", { kind: "pending", why: "unread" });
+    expect(store.getNode("n").lastUpdatedMs()).toBe(2000);
+
+    jest.setSystemTime(3000);
+    store.setBox("n", { kind: "pending", why: "unread" });
+    expect(store.getNode("n").lastUpdatedMs()).toBe(2000);
+
+    jest.setSystemTime(4000);
+    store.setBox("n", { kind: "pending", why: "superseded" });
+    expect(store.getNode("n").lastUpdatedMs()).toBe(4000);
   });
 
   it("a scalar write that moves nothing leaves the age alone", () => {

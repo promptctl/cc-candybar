@@ -23,7 +23,7 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { GitInfo, GitInfoOptions, PrState } from "../src/segments/git";
 import {
   ABSENT,
-  PENDING,
+  pendingOf,
   failed,
   ok,
   type Outcome,
@@ -639,8 +639,8 @@ describe("payloadOf — git PR projection", () => {
   );
 
   test("a render reading no PR has no PR fact, whatever git's state", () => {
-    expect(prFactOf(PENDING, false)).toBe("-");
-    expect(prFactOf(PENDING, true)).toBe("pending");
+    expect(prFactOf(pendingOf("unread"), false)).toBe("-");
+    expect(prFactOf(pendingOf("unread"), true)).toBe("pending");
   });
 
   test("a layout reading only git.prEarlier still asks the forge", async () => {
@@ -978,6 +978,9 @@ describe("settlePayload — what a request waits on", () => {
       why: "superseded",
       landed: new Promise(() => {}),
     };
-    expect((await request()).tmux).toEqual({ pane: "%7", session: PENDING });
+    expect((await request()).tmux).toEqual({
+      pane: "%7",
+      session: pendingOf("superseded"),
+    });
   });
 });

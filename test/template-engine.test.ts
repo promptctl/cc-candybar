@@ -7,7 +7,7 @@ import { buildScope } from "../src/template-engine/scope";
 import { ccCandybarFuncs } from "../src/template-engine/funcs";
 import { VariableStore } from "../src/var-system/store";
 import { MissingFieldError, ParseError } from "@promptctl/go-template-js";
-import { ABSENT, PENDING, failed, ok } from "../src/utils/outcome";
+import { ABSENT, pendingOf, failed, ok } from "../src/utils/outcome";
 import { readPending, toDocument } from "../src/var-system/types";
 import { systemTimekeeper } from "../src/time";
 
@@ -471,7 +471,7 @@ describe("documents in scope", () => {
   });
 
   test("a document not yet scanned reads as the pending signal naming the variable", () => {
-    const store = docStore(PENDING);
+    const store = docStore(pendingOf("unread"));
     let thrown: unknown;
     try {
       evalStore("{{ .budget.spent }}", store);

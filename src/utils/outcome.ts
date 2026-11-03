@@ -45,19 +45,57 @@ export function orElse<T>(outcome: Outcome<T> | undefined, fallback: T): T {
   return outcome?.kind === "ok" ? outcome.value : fallback;
 }
 
-// [LAW:types-are-the-program] A source's value as it stands: not answered yet,
-// or what its read answered. `pending` is not `absent`: absent says the domain
-// genuinely has nothing, pending says nobody has asked it yet — a document
-// before its first scan — and is never drawn as an answer.
+// [LAW:types-are-the-program] Why a value is not answered yet: `unread`, a key
+// never answered (a first read, a new key); `superseded`, a key whose value the
+// daemon itself made stale (a click that moved it). A request waits only for
+// first answers: a superseded value may take as long as the program the click
+// ran, so it draws its loading cell, and its landing reaches the next frame.
+export type PendingWhy = "unread" | "superseded";
+
+// A source's value as it stands: not answered yet, or what its read answered.
+// `pending` is not `absent`: absent says the domain genuinely has nothing,
+// pending says nobody has asked it yet — a document before its first scan —
+// and is never drawn as an answer. It is a plain value, so it crosses a
+// process as JSON and is recognised by its discriminator, never by identity.
 export interface Pending {
   readonly kind: "pending";
+  readonly why: PendingWhy;
 }
 export type Reading<T> = Pending | Outcome<T>;
 
-export const PENDING: Pending = { kind: "pending" };
+const PENDINGS: Readonly<Record<PendingWhy, Pending>> = {
+  unread: Object.freeze({ kind: "pending", why: "unread" }),
+  superseded: Object.freeze({ kind: "pending", why: "superseded" }),
+};
 
-// [LAW:single-enforcer] The one test for the pending spelling a value carries
-// where any value may stand (a payload field): PENDING itself.
-export function isPending(value: unknown): value is Pending {
-  return value === PENDING;
+// Shared per `why` only so a payload recomputed from the same pending is the
+// same value to a MobX identity comparer; every test of pending is `isPending`.
+export function pendingOf(why: PendingWhy): Pending {
+  return PENDINGS[why];
+}
+
+// What a position the daemon built can hold. `unknown` is not among them: a
+// user's JSON (a source's `ok` value) is tested by no one, because a document
+// that reads `{"kind":"pending"}` is a value.
+// What a payload node the daemon built can be.
+export type PayloadNode =
+  | object
+  | string
+  | number
+  | boolean
+  | bigint
+  | symbol
+  | null
+  | undefined;
+
+// [LAW:single-enforcer] The one test for pending where a typed position may
+// hold it (a lane, a payload field the daemon built).
+export function isPending<T extends PayloadNode>(
+  value: T | Pending,
+): value is Pending {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { readonly kind?: unknown }).kind === "pending"
+  );
 }

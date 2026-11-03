@@ -10,6 +10,7 @@
 // invalidation graph is built without us declaring it.
 
 import {
+  compareStructural,
   observable,
   computed,
   runInAction as mobxRunInAction,
@@ -26,8 +27,9 @@ import {
   type VarValue,
 } from "./types";
 import {
+  isPending,
   ok,
-  PENDING,
+  pendingOf,
   type Ok,
   type Pending,
   type Reading,
@@ -57,10 +59,10 @@ export interface VarNode {
   lastUpdatedMs(): number | null;
 }
 
-// Not written yet is the one PENDING value, by identity: any other value a box
-// is handed is checked against its type.
+// Not written yet is pending: any other value a box is handed is checked
+// against its type.
 const unwritten = (value: VarValue | Pending): value is Pending =>
-  value === PENDING;
+  isPending(value);
 
 // What a written node holds: a box's value, or a document's reading.
 export type StoredValue = VarValue | Pending | Reading<JsonValue>;
@@ -105,7 +107,7 @@ class BoxNode implements VarNode {
     return value;
   }
 
-  // A box written PENDING is not answered yet again: what its payload holds
+  // A box written pending is not answered yet again: what its payload holds
   // is a source that has not answered (src/daemon/render-payload.ts).
   set(value: VarValue | Pending): void {
     if (!unwritten(value)) assertType(this.name, this.type, value, "set value");
@@ -116,7 +118,7 @@ class BoxNode implements VarNode {
     // and a dead one, since `set` is the only writer and never hands the cell an
     // equal value. A mutation proved it dead rather than an argument: inverting
     // that `equals` changed no test.
-    if (Object.is(this.cell.get(), value)) return;
+    if (compareStructural(this.cell.get(), value)) return;
     this.cell.set(value);
     this.lastChangedAt = this.clock.now();
   }
@@ -580,7 +582,7 @@ export class VariableStore {
     const node = this.requireNode(name);
     if (node.kind === "document") {
       const doc = node.read();
-      return doc.kind === "pending" ? PENDING : ok(documentKey(doc));
+      return doc.kind === "pending" ? doc : ok(documentKey(doc));
     }
     // A scalar read can throw: a `template` variable with no authored `default`
     // reads as its failure (brandon-var-sources-1p6). Failing IS a change — a
@@ -594,7 +596,7 @@ export class VariableStore {
       return ok(String(node.read()));
     } catch (e) {
       return readPending(e) !== undefined
-        ? PENDING
+        ? pendingOf("unread")
         : ok(` failed:${e instanceof Error ? e.message : String(e)}`);
     }
   }

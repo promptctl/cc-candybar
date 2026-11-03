@@ -21,15 +21,15 @@ test("a read that found what is stored, by structure, moves nothing derived from
   if (first.kind === "pending") await first.landed;
   // A new object, equal by structure.
   settle(source, ok({ branch: "main", ahead: 1 }));
-  expect(moves).toEqual(["read"]);
+  expect(moves).toEqual(["ok"]);
   settle(source, ok({ branch: "main", ahead: 2 }));
   settle(source, failed("git exited 128", "read"));
   settle(source, failed("git exited 128", "read"));
-  expect(moves).toEqual(["read", "read", "read"]);
+  expect(moves).toEqual(["ok", "ok", "failed"]);
   // A renewed value is pending, and the read after it lands even when it
   // found what was stored before.
   renew(source, "unread");
   settle(source, failed("git exited 128", "read"));
-  expect(moves).toEqual(["read", "read", "read", "pending", "read"]);
+  expect(moves).toEqual(["ok", "ok", "failed", "pending", "failed"]);
   stop();
 });

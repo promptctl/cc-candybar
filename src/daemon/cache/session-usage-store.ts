@@ -34,7 +34,7 @@ import {
   ABSENT,
   failed,
   ok,
-  PENDING,
+  pendingOf,
   type Outcome,
   type Reading,
 } from "../../utils/outcome";
@@ -640,7 +640,7 @@ export class SessionUsageStore {
   // empty record its refresh answers for it.
   usageOf(sessionId: string, hookData: ClaudeHookData): Reading<UsageInfo> {
     const slot = this.sessions.get(sessionId);
-    if (slot === undefined) return PENDING;
+    if (slot === undefined) return pendingOf("unread");
     const failure = slot.failure.get();
     if (failure !== null) return failed(failure, "read");
     return ok(
@@ -848,7 +848,7 @@ export class SessionUsageStore {
   // takes no sample, so how often the bar is drawn moves no rate.
   speedOf(sessionId: string): Reading<SpeedObservation> {
     if (!sessionId) return ABSENT;
-    return this.sessions.get(sessionId)?.speed.get() ?? PENDING;
+    return this.sessions.get(sessionId)?.speed.get() ?? pendingOf("unread");
   }
 
   // stamp-gated, coalesced re-parse of ONE session. `ok` is its record,
