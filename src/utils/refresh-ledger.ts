@@ -45,6 +45,9 @@ export interface SourceRecord {
   readonly scope: SourceScope;
   readonly refreshes: Readonly<Partial<Record<RefreshTrigger, number>>>;
   readonly failures: number;
+  // Reads the owner told to stop before they answered (a supersede, a drop):
+  // each ran, and none is a refresh or a failure the source met.
+  readonly abandoned: number;
   readonly lastMs: number | null;
 }
 
@@ -53,6 +56,7 @@ interface Tally {
   readonly scope: SourceScope;
   readonly refreshes: Partial<Record<RefreshTrigger, number>>;
   failures: number;
+  abandoned: number;
   lastMs: number | null;
 }
 
@@ -75,6 +79,7 @@ export class RefreshLedger {
       scope: declaration.scope,
       refreshes: {},
       failures: 0,
+      abandoned: 0,
       lastMs: null,
     };
     for (const trigger of declaration.refresh) tally.refreshes[trigger] ??= 0;
@@ -148,6 +153,17 @@ export class Refreshes<Trigger extends RefreshTrigger> {
     this.logger(
       failure ? "warn" : "info",
       `${this.tally.name} refresh ${fields} by=${by} outcome=${outcome.kind}${why} took=${ms}ms`,
+    );
+  }
+
+  // [LAW:nothing-unseen] A read the owner abandoned is its own event and its
+  // own count: a key that moves on every tick aborts a read on every tick,
+  // which no refresh or failure tally would show.
+  abandoned(fields: string, by: Trigger, ms: number): void {
+    this.tally.abandoned++;
+    this.logger(
+      "info",
+      `${this.tally.name} refresh ${fields} by=${by} abandoned took=${ms}ms`,
     );
   }
 }

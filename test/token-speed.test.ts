@@ -13,7 +13,7 @@
 
 import { textOf } from "../src/render/frame";
 import { HOST } from "./helpers/host";
-import { unscriptedLauncher } from "./helpers/fake-launcher";
+import { unscriptedRuns } from "./helpers/fake-launcher";
 import { drawPayload } from "./helpers/draw-payload";
 import type { Frame } from "../src/render/frame";
 import { TEST_SIGNER } from "./helpers/link-signer";
@@ -479,8 +479,7 @@ function renderSpeed(payload: Record<string, unknown>): Frame {
   // SessionState is required to declare it (matching every other
   // DEFAULT_DSL_CONFIG-based render helper) or it silently fails to declare
   // and speed's own `when` renders an unrelated ⚠ error cell.
-  const registry = new SourceRegistry(
-    unscriptedLauncher,
+  const registry = new SourceRegistry(unscriptedRuns(),
     store,
     "",
     new SessionState(),

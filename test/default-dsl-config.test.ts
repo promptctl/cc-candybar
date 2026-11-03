@@ -9,7 +9,7 @@
 // (via parseDslConfig). Two boundaries, one truth.
 
 import { drawPayload } from "./helpers/draw-payload";
-import { unscriptedLauncher } from "./helpers/fake-launcher";
+import { unscriptedRuns } from "./helpers/fake-launcher";
 import { plainOf, textOf, type Frame, type Row, type Run } from "../src/render/frame";
 import { linkUrls, runAt, runUnder, truecolorOf } from "./helpers/frame";
 import { TEST_SIGNER } from "./helpers/link-signer";
@@ -200,8 +200,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     const store = new VariableStore(systemTimekeeper);
     // The default now carries `kind: "state"` vars (the style picker); a
     // SessionState is required to declare them, exactly as the daemon supplies.
-    const registry = new SourceRegistry(
-      unscriptedLauncher,
+    const registry = new SourceRegistry(unscriptedRuns(),
       store,
       "",
       new SessionState(),
@@ -276,8 +275,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         () => false,
       );
       const store = new VariableStore(systemTimekeeper);
-      const registry = new SourceRegistry(
-        unscriptedLauncher,
+      const registry = new SourceRegistry(unscriptedRuns(),
         store,
         "",
         new SessionState(),
@@ -505,7 +503,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     const parsed = parseAndValidate("<default>", SERIALIZED);
     const sessionState = new SessionState();
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(unscriptedLauncher, store, "", sessionState);
+    const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
     const compiled = registerDslConfig(parsed, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
     // A click is gated by the config its session renders: record the render
     // and hand the click that config, so the clicks below pass through the
@@ -637,8 +635,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     };
     const render = (padding: number): string => {
       const store = new VariableStore(systemTimekeeper);
-      const registry = new SourceRegistry(
-        unscriptedLauncher,
+      const registry = new SourceRegistry(unscriptedRuns(),
         store,
         "",
         new SessionState(),
@@ -702,8 +699,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
 
     function render(cfg: typeof configA): Frame {
       const store = new VariableStore(systemTimekeeper);
-      const registry = new SourceRegistry(
-        unscriptedLauncher,
+      const registry = new SourceRegistry(unscriptedRuns(),
         store,
         "",
         new SessionState(),
@@ -761,8 +757,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
 
     function render(cfg: typeof configA): Frame {
       const store = new VariableStore(systemTimekeeper);
-      const registry = new SourceRegistry(
-        unscriptedLauncher,
+      const registry = new SourceRegistry(unscriptedRuns(),
         store,
         "",
         new SessionState(),
@@ -792,8 +787,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const parsed = parseAndValidate("<default>", SERIALIZED);
       const toolbarOnly = narrowToSegment(parsed, "toolbar");
       const store = new VariableStore(systemTimekeeper);
-      const registry = new SourceRegistry(
-        unscriptedLauncher,
+      const registry = new SourceRegistry(unscriptedRuns(),
         store,
         "",
         new SessionState(),
@@ -899,8 +893,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       // on the payload object directly; no env-var mutation needed.
       const dirOnly = narrowToSegment(parsed, "directory");
       const store = new VariableStore(systemTimekeeper);
-      const registry = new SourceRegistry(
-        unscriptedLauncher,
+      const registry = new SourceRegistry(unscriptedRuns(),
         store,
         "",
         new SessionState(),
@@ -1052,7 +1045,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         variables: { ...narrowed.variables, ...variables },
       };
       const store = new VariableStore(systemTimekeeper);
-      const registry = new SourceRegistry(unscriptedLauncher, store, "", sessionState);
+      const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
       try {
         const compiled = registerDslConfig(cfg, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
         const basePalette = paletteForThemeName(
@@ -1367,8 +1360,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const parsed = parseAndValidate("<default>", SERIALIZED);
       const metricsOnly = narrowToSegment(parsed, "metrics");
       const store = new VariableStore(systemTimekeeper);
-      const registry = new SourceRegistry(
-        unscriptedLauncher,
+      const registry = new SourceRegistry(unscriptedRuns(),
         store,
         "",
         new SessionState(),
@@ -1460,8 +1452,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         const parsed = parseAndValidate("<default>", SERIALIZED);
         const blockOnly = narrowToSegment(parsed, "block", { errorAt });
         const store = new VariableStore(systemTimekeeper);
-        const registry = new SourceRegistry(
-          unscriptedLauncher,
+        const registry = new SourceRegistry(unscriptedRuns(),
           store,
           "",
           new SessionState(),
@@ -1540,8 +1531,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       // it those two vars silently fail to declare into loadWarnings — harmless
       // for the session segment here, but the fixture should exercise the
       // genuinely-complete default config, not a partially-registered one.
-      const registry = new SourceRegistry(
-        unscriptedLauncher,
+      const registry = new SourceRegistry(unscriptedRuns(),
         store,
         "",
         new SessionState(),
@@ -1691,7 +1681,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
     // the `state` vars the templates read (edit.mode gating the chrome, the
     // ↺ banner) and the globals resolved above answer from one session, not
     // from a fresh SessionState that disagrees with it about edit mode.
-    const registry = new SourceRegistry(unscriptedLauncher, store, "", {
+    const registry = new SourceRegistry(unscriptedRuns(), store, "", {
       get: (_sessionId, key) => sessionPick(key, name),
       revision: () => 0,
     });

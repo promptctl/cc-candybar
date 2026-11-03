@@ -22,6 +22,14 @@ export {
   toBool,
 } from "./types";
 export {
+  SourceRuns,
+  digestOf,
+  keyHashOf,
+  type SourceIdentity,
+  type SourceLane,
+  type SourceRunsDeps,
+} from "./source-runs";
+export {
   SourceRegistry,
   parseDuration,
   MIN_SHELL_TTL_MS,

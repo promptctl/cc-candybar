@@ -17,6 +17,7 @@ import {
 import type { Holds, Release } from "../../utils/holds";
 import {
   KeyedSource,
+  NO_WATCH,
   type KeyedSourceStats,
   type Resume,
 } from "../../utils/keyed-source";
@@ -177,7 +178,8 @@ export class ManagedStorage {
       read: (f) => this.read(f),
       // [LAW:types-are-the-program] A plugin source has no period: its watch
       // is its trigger, and a hold's return re-reads a kept entry.
-      every: null,
+      every: () => null,
+      watch: NO_WATCH,
       maxEntries: MAX_ENTRIES,
       logger: opts.logger,
       ledger: opts.ledger ?? new RefreshLedger(opts.logger),

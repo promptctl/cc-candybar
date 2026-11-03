@@ -42,7 +42,11 @@ import { quietLogger, type DaemonLogger } from "../../utils/logger";
 import { settledLane, type Lane } from "../../utils/reading";
 import { valueOf } from "../../utils/logfmt";
 import type { Holds } from "../../utils/holds";
-import { KeyedSource, type KeyedSourceStats } from "../../utils/keyed-source";
+import {
+  KeyedSource,
+  NO_WATCH,
+  type KeyedSourceStats,
+} from "../../utils/keyed-source";
 import { RefreshLedger, type Refreshes } from "../../utils/refresh-ledger";
 import type { Every } from "../../utils/period";
 import { elapsedMs, type Timekeeper } from "../../time";
@@ -502,7 +506,8 @@ export class SessionUsageStore {
       keyOf: (paths) => paths.join("\0"),
       fields: (paths) => `dirs=${valueOf(paths.join(","))}`,
       read: (paths) => this.scan(paths),
-      every: opts.rescan ?? DEFAULT_RESCAN,
+      every: () => opts.rescan ?? DEFAULT_RESCAN,
+      watch: NO_WATCH,
       maxEntries: MAX_UNHELD_SCANS,
       logger: this.log,
       ledger: this.ledger,

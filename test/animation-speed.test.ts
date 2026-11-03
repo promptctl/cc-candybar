@@ -4,7 +4,7 @@
 // speed moves no loop to another phase, and a readout of real time
 // (`realtimeFrames`) keeps real time.
 import { drawPayload } from "./helpers/draw-payload";
-import { unscriptedLauncher } from "./helpers/fake-launcher";
+import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { DEFAULT_TERMINAL_THEME, RichText } from "@promptctl/rich-js";
@@ -191,7 +191,7 @@ describe("a template's frames run at the session's animation speed; realtimeFram
     seconds: readonly number[],
   ): string => {
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(unscriptedLauncher, store, "", new SessionState());
+    const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState());
     const compiled = registerDslConfig(CONFIG, registry, {
       signer: TEST_SIGNER,
       cwd: "/tmp",

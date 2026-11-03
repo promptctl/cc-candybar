@@ -13,7 +13,6 @@ import {
   type Declare,
   type SessionView,
 } from "../src/daemon/cache/render";
-import { NO_FILE_EVENTS } from "../src/daemon/cache/file-events";
 import type { ViewFacts } from "../src/daemon/render-payload";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { SessionState } from "../src/daemon/session-state";
@@ -27,6 +26,7 @@ import { answerRepo } from "./helpers/repo-approval";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
+import { SourceRuns } from "../src/var-system/source-runs";
 
 // brandon-unfiled-3248.8ro6, step 2: each value lives where its scope says. A
 // directory's store holds the sources no session value reaches; each session
@@ -75,11 +75,10 @@ function makeCache(
       stateDir: stateDir(HOST),
       locations: locs(),
       env: HOST.env,
-      launcher,
+      runs: new SourceRuns({ launcher: launcher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
-      fileEvents: NO_FILE_EVENTS,
       sessionState: new SessionState(),
       watchers,
       source: SOURCES_NOTHING,
@@ -407,8 +406,10 @@ test("a source keyed on the instant is refused at load, naming the period that r
 });
 
 // A key over the depth reads a session's setting, which only its view holds:
-// each view runs its own, floored at the depth that view draws at.
-test("a source keyed on the drawn depth is each view's own", async () => {
+// the source is each view's own, floored at the depth that view draws at. Two
+// views drawing at one depth hash one key value, so they hold one digest and
+// share its one run (source-runs.ts).
+test("a source keyed on the drawn depth is each view's own, and one run where their depths agree", async () => {
   fs.writeFileSync(
     path.join(dir, ".cc-candybar.json5"),
     JSON.stringify({
@@ -430,7 +431,7 @@ test("a source keyed on the drawn depth is each view's own", async () => {
   expect(a.view.state.registry.variableStore.has("inked")).toBe(false);
   expect(drawn(a.view)).toContain(" i ");
   expect(drawn(b.view)).toContain(" i ");
-  expect(runs("inked")).toBe(afterA + 1);
+  expect(runs("inked")).toBe(afterA);
 });
 
 test("debug introspection samples the most recently rendered session's view", async () => {

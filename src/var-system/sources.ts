@@ -9,23 +9,7 @@
 // - SourceRegistry: source-kind semantics (path resolution, fallback chain,
 //   last_error tracking)
 
-import type { Launcher } from "../proc/launch";
 import { debug } from "../utils/logger";
-import { readFile as fsReadFile } from "fs/promises";
-import {
-  WatcherRegistry,
-  watchFault,
-  watchTargetsOf,
-  type BoundWatch,
-  type Invalidation,
-  type PathsWatch,
-} from "../daemon/cache/watchers.js";
-import {
-  NO_FILE_EVENTS,
-  stallReason,
-  type DeliveryNotice,
-  type FileEvents,
-} from "../daemon/cache/file-events.js";
 import {
   computed,
   observable,
@@ -50,7 +34,6 @@ import {
   ok,
   failed,
   orElse,
-  ABSENT,
   isPending,
   pendingOf,
   type Outcome,
@@ -58,23 +41,23 @@ import {
   type Pending,
   type Reading,
 } from "../utils/outcome.js";
-import {
-  jsonParser,
-  regexParser,
-  textParser,
-  type Parser,
-  type SourceParse,
-} from "./parse.js";
+import type { SourceParse } from "./parse.js";
 import { PendingValueError, readPending, type JsonValue } from "./types.js";
 import type { SessionStateReader } from "../daemon/session-state.js";
-import { TrailingEdge, type Trigger } from "../utils/trailing-edge.js";
+import { Holds } from "../utils/holds.js";
+import { timeoutSignal } from "../time";
 import {
-  RefreshLedger,
-  type Refreshes,
-  type RefreshTrigger,
-} from "../utils/refresh-ledger.js";
-import { valueOf } from "../utils/logfmt.js";
-import { elapsedMs, timeoutSignal, type Timekeeper } from "../time";
+  keyHashOf,
+  type ParserId,
+  type ReadMode,
+  type RunRefresh,
+  type SourceIdentity,
+  type SourceLane,
+  type SourceRead,
+  type SourceRuns,
+} from "./source-runs.js";
+
+export { SHELL_READ_TIMEOUT_MS, type ReadMode } from "./source-runs.js";
 
 // How long text that is not a document may be a write still in progress
 // before it shows as the failure it is (documentPublisher).
@@ -98,14 +81,6 @@ export type CachePolicy =
 // churn from a misconfigured `ttl: 50ms` against a 200ms command (which would
 // silently overlap and stack up). [LAW:no-mode-explosion] not a config knob.
 export const MIN_SHELL_TTL_MS = 500;
-
-// [LAW:no-silent-failure] How long one run of a shell source may take. The
-// launcher's output bound ends a child that writes without end; this ends one
-// that never writes, which would otherwise hold its source open for the life
-// of the daemon, and once a source's identity is shared, for every renderer
-// sharing it. A run past it is failed in its read phase, naming the bound.
-// [LAW:no-mode-explosion] Not a config knob: one bound, named where chosen.
-export const SHELL_READ_TIMEOUT_MS = 10_000;
 
 // [LAW:single-enforcer] Apply the shell-source TTL floor at declare-time.
 // If the policy is anything other than `ttl`, the input is returned unchanged
@@ -158,8 +133,6 @@ export interface ShellOptions {
   readonly parse: SourceParse;
 }
 
-export type ReadMode = "whole" | "first-line";
-
 export interface FileOptions {
   // What text the file yields to the parser: its whole content (default) or
   // its first line.
@@ -202,334 +175,24 @@ export const SESSION_ID_VAR_NAME = "session.id";
 
 // ─── Private infrastructure ───────────────────────────────────────────────────
 
-// [LAW:effects-at-boundaries] A reader is the effect half of a source: it
-// performs the read and classifies its own failure (a non-zero exit, an
-// unreadable file) as a value. `where` names the text's origin for the
-// parser's failure message ("regex no-match in output of \"uptime\"").
-// A read the registry cancelled (`signal`, fired by dispose) is not a value
-// the source yielded: it rejects with the signal's reason, which is the one
-// rejection the pipeline expects.
-interface SourceReader {
-  readonly where: string;
-  read(): Promise<Outcome<string>>;
-}
-
-function shellReader(
-  launcher: Launcher,
-  command: string,
-  cwd: string,
-  signal: AbortSignal,
-): SourceReader {
-  return {
-    // The directory is part of the origin: a command that asks about "this
-    // repo" answers differently per session, so every failure — exit, regex
-    // no-match, JSON parse — names where it ran.
-    where: `output of "${command}" in ${cwd}`,
-    read: async () => {
-      const r = await launcher.launch({
-        bin: "/bin/sh",
-        args: ["-c", command],
-        cwd,
-        category: "user-shell",
-        timeoutMs: SHELL_READ_TIMEOUT_MS,
-        signal,
-      });
-      // Only the source's own abort ends a run. The launcher's is a daemon
-      // closing under a live source: a failed read, like any other. The
-      // source's abort stands whatever the launcher reports: a child the
-      // timeout signalled first is reaped as a timeout, and its registry is
-      // gone all the same.
-      if (signal.aborted) throw signal.reason;
-      if (r.ok) return ok(r.stdout);
-      // The reason, not the exit code, says which: a child the launcher ended
-      // (timeout, output-limit) can still exit with a code of its own.
-      const why =
-        r.reason === "non-zero"
-          ? `exited with code ${r.exitCode}`
-          : r.reason === "timeout"
-            ? `timed out after ${SHELL_READ_TIMEOUT_MS / 1000} s`
-            : [r.reason, r.error].filter((s) => s !== undefined).join(": ");
-      return failed(`shell "${command}" ${why} in ${cwd}`, "read");
-    },
-  };
-}
-
-function fileReader(
-  filePath: string,
-  readMode: ReadMode,
-  signal: AbortSignal,
-): SourceReader {
-  return {
-    where: `"${filePath}"`,
-    read: async () => {
-      try {
-        const raw = await fsReadFile(filePath, { encoding: "utf8", signal });
-        return ok(
-          readMode === "first-line" ? (raw.split(/\r?\n/)[0] ?? "") : raw,
-        );
-      } catch {
-        if (signal.aborted) throw signal.reason;
-        return failed(`file unreadable: ${filePath}`, "read");
-      }
-    },
-  };
-}
-
-// The parse step over a read's outcome: a failed read passes through
-// untouched (it already names its origin); a failed parse gains the origin.
-function parsed<V>(
-  read: Outcome<string>,
-  parser: Parser<V>,
-  where: string,
-): Outcome<V> {
-  if (read.kind !== "ok") return read;
-  const out = parser(read.value);
-  return out.kind === "failed"
-    ? failed(`${out.reason} in ${where}`, out.failedAt)
-    : out;
-}
-
 // The publish half of a source, closed over its store node: takes what the
-// reader yielded, parses it, and writes the node — value or fallback.
-// What the read stored: its outcome, once parsed.
-type Publish = (read: Outcome<string>) => Outcome<unknown>;
+// run yielded, parsed, and writes the node — value or fallback.
+type Publish = (outcome: Outcome<unknown>) => void;
 
-// What makes a user source read: its first read, and then what its cache
-// policy names — a period, or a change (a watched file, its key or
-// dependencies moving).
-type UserTrigger = Extract<RefreshTrigger, "first" | "period" | "change">;
-
-// [LAW:one-source-of-truth] A cache policy's refresh, in the ledger's
-// vocabulary.
-function refreshOf(policy: CachePolicy): readonly UserTrigger[] {
-  switch (policy.kind) {
-    case "never":
-      return ["first"];
-    case "ttl":
-      return ["first", "period"];
-    case "watch_file":
-    case "key":
-    case "depends_on":
-      return ["first", "change"];
-  }
-}
-
-// A policy over what a source reads runs it first when that answers, and on
-// every change of the answer after.
-function firstThenChange(
-  update: (cause: RunCause, by: UserTrigger) => void,
-): () => void {
-  let ran = false;
-  return () => {
-    update("new-key", ran ? "change" : "first");
-    ran = true;
-  };
-}
-
-// ─── PathWatches ──────────────────────────────────────────────────────────────
-
-// What a watch says to each subscriber: why it may be missing changes to its
-// path right now, or `null` when it hears every place the path can change.
-type WatchFault = (fault: string | null) => void;
-
-interface WatchEntry {
-  // Where the path can change, as last derived from disk, and the watcher
-  // registry's watch on it.
-  bound: BoundWatch;
-  // Each subscriber's update, and where it hears the watch's fault.
-  readonly subscribers: Map<() => void, WatchFault>;
-}
-
-// [LAW:single-enforcer] One watch per path regardless of subscriber count:
-// several shell/file variables can share it. The directory watches are the
-// watcher registry's, which opens, shares, counts and logs every one in the
-// daemon; this follows each path's spec and fans its windows out.
-//
-// A path is watched wherever it can change (`watchTargetsOf`, the rule the
-// config watcher shares): each directory through which its link chain passes,
-// filtered to the names there, and the path itself when it is a directory. A
-// directory, never a file, because a watch on a file binds its inode: it
-// never sees a file created after it (an app that has not written yet) and
-// goes deaf after the first atomic rename (write-then-rename, the safe way to
-// rewrite a file). A directory that does not exist yet is watched through its
-// nearest existing ancestor, and each one that appears moves the watch one
-// level deeper.
-class PathWatches {
-  private readonly entries = new Map<string, WatchEntry>();
-  private readonly releaseDelivery: () => void;
-
-  constructor(
-    private readonly watchers: WatcherRegistry,
-    private readonly fileEvents: FileEvents,
-  ) {
-    this.releaseDelivery = fileEvents.subscribe((notice) =>
-      this.noticed(notice),
-    );
-  }
-
-  subscribe(
-    filePath: string,
-    callback: () => void,
-    onFault: WatchFault,
-  ): () => void {
-    const entry = this.entries.get(filePath) ?? this.arm(filePath);
-    entry.subscribers.set(callback, onFault);
-    onFault(this.faultOf(filePath, entry));
-    return () => this.unsubscribe(filePath, callback);
-  }
-
-  private arm(filePath: string): WatchEntry {
-    const watch = derived(filePath);
-    const entry: WatchEntry = {
-      bound: {
-        derived: watch,
-        held: this.watchers.follow(null, watch, (heard) =>
-          this.heard(filePath, entry, heard),
-        ).watch,
-      },
-      subscribers: new Map(),
-    };
-    this.entries.set(filePath, entry);
-    return entry;
-  }
-
-  // Derive where the path can change, follow it, and say the watch's fault.
-  // A new key acquires its watch, keeping every directory both keys name.
-  private rederive(filePath: string, entry: WatchEntry): void {
-    const paths = derived(filePath);
-    const { watch } = this.watchers.follow(entry.bound.held, paths, (heard) =>
-      this.heard(filePath, entry, heard),
-    );
-    entry.bound = { derived: paths, held: watch };
-    this.report(filePath, entry);
-  }
-
-  // A window re-derives and re-reads.
-  private heard(
-    filePath: string,
-    entry: WatchEntry,
-    heard: Invalidation,
-  ): void {
-    const wasLeaf = entry.bound.derived.reached;
-    this.rederive(filePath, entry);
-    // Ancestor churn on the way DOWN is not a change to the path; a move
-    // up from the leaf is its removal, which the subscribers must read. A
-    // failed directory may have missed a change, so its window always reads.
-    if (heard.kind !== "failed" && !wasLeaf && !entry.bound.derived.reached)
-      return;
-    for (const cb of entry.subscribers.keys()) cb();
-  }
-
-  private report(filePath: string, entry: WatchEntry): void {
-    const fault = this.faultOf(filePath, entry);
-    for (const onFault of entry.subscribers.values()) onFault(fault);
-  }
-
-  // The watch's fault, derived from what it holds now and whether the OS is
-  // delivering what it would hear. A stall is every watch's: it rides the
-  // delivery owner's one stream.
-  private faultOf(filePath: string, entry: WatchEntry): string | null {
-    return watchFault(
-      `watch_file ${filePath}`,
-      entry.bound,
-      stallReason(this.fileEvents.delivery()),
-    );
-  }
-
-  // [LAW:no-silent-failure] Delivery moved or a span closed, so the watches
-  // may have missed events: each watch re-derives where its path can change,
-  // since a directory may have appeared unheard, which says its fault, and
-  // every subscriber re-reads as if its own watch had reported. Both together,
-  // so no variable drops a stall's fault without reading again, and in one
-  // action, so one change of delivery is one publish of this registry's.
-  private noticed(notice: DeliveryNotice): void {
-    switch (notice.kind) {
-      case "period":
-        return;
-      case "moved":
-      case "caught-up":
-        runInAction(() => {
-          for (const [filePath, entry] of this.entries) {
-            this.rederive(filePath, entry);
-            for (const cb of entry.subscribers.keys()) cb();
-          }
-        });
-        return;
-    }
-  }
-
-  private unsubscribe(filePath: string, callback: () => void): void {
-    const entry = this.entries.get(filePath);
-    if (!entry) return;
-    entry.subscribers.delete(callback);
-    if (entry.subscribers.size === 0) {
-      entry.bound.held.handle.release();
-      this.entries.delete(filePath);
-    }
-  }
-
-  dispose(): void {
-    this.releaseDelivery();
-    for (const entry of this.entries.values())
-      entry.bound.held.handle.release();
-    this.entries.clear();
-  }
-
-  size(): number {
-    return this.entries.size;
-  }
-}
-
-// Where the path can change: every hop of its link chain by name, and the
-// path itself when it is a directory.
-const derived = (filePath: string): PathsWatch =>
-  watchTargetsOf({ named: [filePath], whole: [filePath] });
-
-// ─── TtlBucketManager ────────────────────────────────────────────────────────
-
-// [LAW:single-enforcer] One setInterval per unique TTL duration, shared by all
-// variables with that TTL.  Multiple variables at the same interval fire on
-// one timer tick rather than N separate timers.
-class TtlBucketManager {
-  // `stop` clears the bucket's timer.
-  private readonly buckets = new Map<
-    number,
-    { stop: () => void; callbacks: Set<() => void> }
-  >();
-
-  constructor(private readonly clock: Pick<Timekeeper, "every">) {}
-
-  subscribe(durationMs: number, callback: () => void): () => void {
-    let entry = this.buckets.get(durationMs);
-    if (!entry) {
-      const callbacks = new Set<() => void>();
-      const stop = this.clock.every(durationMs, () => {
-        for (const cb of callbacks) cb();
-      });
-      entry = { stop, callbacks };
-      this.buckets.set(durationMs, entry);
-    }
-    entry.callbacks.add(callback);
-    return () => this.unsubscribe(durationMs, callback);
-  }
-
-  private unsubscribe(durationMs: number, callback: () => void): void {
-    const entry = this.buckets.get(durationMs);
-    if (!entry) return;
-    entry.callbacks.delete(callback);
-    if (entry.callbacks.size === 0) {
-      entry.stop();
-      this.buckets.delete(durationMs);
-    }
-  }
-
-  dispose(): void {
-    for (const { stop } of this.buckets.values()) stop();
-    this.buckets.clear();
-  }
-
-  bucketCount(): number {
-    return this.buckets.size;
+// [LAW:one-source-of-truth] The parser's identity, without its default: what
+// the run digests.
+function parserIdOf(parse: SourceParse): ParserId {
+  switch (parse.kind) {
+    case "text":
+      return { kind: "text" };
+    case "regex":
+      return {
+        kind: "regex",
+        source: parse.regex.source,
+        flags: parse.regex.flags,
+      };
+    case "json":
+      return { kind: "json" };
   }
 }
 
@@ -666,12 +329,6 @@ function zeroValue(type: VarType): VarValue {
 // VariableStore. Multiple registries on the same store would produce
 // duplicate box definitions for input-kind variables.
 
-// Why a source runs: for a key it has no answer under yet — its first run, or
-// a key or dependency that moved — or to re-read the key it has answered, on
-// a period's tick or a watched file's change. A re-read keeps its answer
-// standing; a new key has none, so a wait is for it alone.
-type RunCause = "new-key" | "re-read";
-
 export class SourceRegistry {
   private readonly lastErrors = new Map<string, LastError>();
   // A cache policy that cannot fire is a STANDING fault, not a read's
@@ -685,36 +342,32 @@ export class SourceRegistry {
     deep: false,
   });
 
-  // Triggers for shell/file cache policies and the time source's tick:
-  private readonly watchMgr: PathWatches;
-  private readonly ttlMgr: TtlBucketManager;
-  // Collects all cleanup callbacks (TTL unsubscribes, watch unsubscribes,
-  // MobX reaction disposers) so dispose() tears everything down in one call.
+  // Collects all cleanup callbacks (MobX reaction disposers) so dispose()
+  // tears everything down in one call.
   private readonly cleanups: Array<() => void> = [];
-  // Each async source's in-flight loop, by name: one per source at a time.
-  private readonly runs = new Map<string, Promise<void>>();
-  // [LAW:no-ambient-temporal-coupling] The sources whose loop out answers a
-  // key they have no answer under yet (`RunCause`). Observable, so
-  // `inFlight()` is a reaction over it — the explicit "the runs a wait is for
-  // have ended" state a caller (a statusline request, `cc-candybar check`)
-  // awaits instead of guessing a delay, and one its deadline can stop
-  // listening to. Set by the trigger, since a source's node holds its
-  // fallback before its first answer (`stringInitial`), so the store cannot
-  // say it.
-  private readonly newKeys = observable.set<string>();
-  // [LAW:single-enforcer] Serializes each source's reads and remembers a trigger
-  // that arrived mid-read, so a re-trigger re-reads once rather than starting a
-  // parallel read or being dropped. Shared with the git cache's refresh path,
-  // which had the same problem first — see src/utils/trailing-edge.ts.
-  private readonly reads = new TrailingEdge();
-  // Each source's latest trigger, which the pass that answers it records.
-  private readonly askedBy = new Map<string, UserTrigger>();
-  // [LAW:single-enforcer] The registry owns every async handle its sources
-  // hold — timers, watchers, reactions, and the child processes and file
-  // reads in flight. This is their cancellation: dispose() aborts it, so a
-  // run cannot outlive the registry that started it (RenderCache's
-  // dispose-before-swap contract reaches the children too).
-  private readonly abort = new AbortController();
+  // [LAW:single-enforcer] What this registry holds of the daemon's source
+  // runs (source-runs.ts): one hold per entry however many of its sources
+  // read it, declared again whenever any source's identity moves, so the
+  // entry a moved key names is held before the one it leaves is released. A
+  // view's payload holds the daemon's built-in entries through a Holds of
+  // its own (src/daemon/cache/render.ts): the two hold disjoint entries with
+  // the one lifetime, and merging them would make a view's declaration of
+  // its lanes re-declare its sources, and the reverse.
+  private readonly holds = new Holds();
+  // Each source's identity as its policy last named it. A policy over the
+  // source's own values names none until they answer.
+  private readonly identities = new Map<string, SourceIdentity>();
+  // [LAW:no-ambient-temporal-coupling] The lane each source reads, by name:
+  // observable, so a source's publish is a reaction over the entry it holds
+  // now, and `inFlight()` a reaction over which of them has not answered —
+  // the explicit "the runs a wait is for have ended" state a caller (a
+  // statusline request, `cc-candybar check`) awaits instead of guessing a
+  // delay, and one its deadline can stop listening to. A re-read keeps its
+  // answer standing, so no wait is for it; a new identity has none, so a
+  // wait is for it alone.
+  private readonly lanes = observable.map<string, SourceLane>(undefined, {
+    deep: false,
+  });
   // [LAW:one-source-of-truth] What this registry's inputs are derived from
   // (`bindInputs`), and so the depth the terminal draws this view's renders at
   // — the one depth every contrast floor reads, in this registry's variable
@@ -764,34 +417,20 @@ export class SourceRegistry {
   // share one MobX atom and one disk-persistence layer with the click verbs.
   // Omitted in tests that don't exercise state vars.
   constructor(
-    // Who a shell source's program belongs to.
-    private readonly launcher: Launcher,
+    // [LAW:single-enforcer] The daemon's one owner of every declared source's
+    // runs, which this registry's `shell` and `file` sources hold entries of.
+    private readonly runs: SourceRuns,
     private readonly store: VariableStore,
     private readonly defaultEmptyValue: VarValue = "",
     sessionState?: SessionStateReader,
     // The directory home a session's view reads through to (`view()`).
     private readonly parent: SourceRegistry | null = null,
-    // [LAW:single-enforcer] The daemon's one ledger, which every source's
-    // refreshes are recorded in; a registry outside the daemon keeps its own.
-    private readonly ledger: RefreshLedger = new RefreshLedger(),
-    // [LAW:one-source-of-truth] The daemon's one word on whether the OS is
-    // delivering file events, which its `watch_file` sources' watches ride.
-    // Only the daemon measures delivery.
-    private readonly fileEvents: FileEvents = NO_FILE_EVENTS,
-    // [LAW:single-enforcer] The daemon's one watcher registry, which holds
-    // every directory watch its `watch_file` sources need; a registry outside
-    // the daemon keeps its own.
-    private readonly watchers: WatcherRegistry = new WatcherRegistry({
-      clock: store.clock,
-    }),
     // [LAW:one-source-of-truth] The environment an `env` source reads: the
     // daemon's host, handed in by whatever builds the registry. A registry built
     // without one reads every variable as unset, and says so on the source.
     private readonly env: Readonly<Record<string, string | undefined>> = {},
   ) {
     this.sessionState = sessionState;
-    this.ttlMgr = new TtlBucketManager(store.clock);
-    this.watchMgr = new PathWatches(watchers, fileEvents);
   }
 
   // [LAW:one-source-of-truth] A session's view of this directory home
@@ -804,14 +443,11 @@ export class SourceRegistry {
   // own: a session leaving the directory disposes nothing of it.
   view(): SourceRegistry {
     return new SourceRegistry(
-      this.launcher,
+      this.runs,
       new VariableStore(this.store.clock, this.store),
       this.defaultEmptyValue,
       this.sessionState,
       this,
-      this.ledger,
-      this.fileEvents,
-      this.watchers,
       this.env,
     );
   }
@@ -940,7 +576,7 @@ export class SourceRegistry {
   declareShell(name: string, command: string, opts: ShellOptions): void {
     this.declareSource(
       name,
-      shellReader(this.launcher, command, opts.cwd, this.abort.signal),
+      { kind: "shell", command, cwd: opts.cwd },
       clampShellCache(name, opts.cache),
       opts.parse,
     );
@@ -951,74 +587,90 @@ export class SourceRegistry {
   declareFile(name: string, filePath: string, opts: FileOptions): void {
     this.declareSource(
       name,
-      fileReader(filePath, opts.readMode ?? "whole", this.abort.signal),
+      { kind: "file", path: filePath, readMode: opts.readMode ?? "whole" },
       opts.cache,
       opts.parse,
     );
   }
 
-  // [LAW:single-enforcer] THE user-source pipeline: read → parse → publish,
-  // whenever the cache policy fires, its first read included. Shell and file
-  // are two readers through this one function; text/regex/json are three
-  // parsers through it. The node holds its fallback until the first run
-  // completes — the cache policy drives WHEN it is read, never whether the
-  // node exists [LAW:dataflow-not-control-flow].
+  // [LAW:single-enforcer] THE user-source declaration: the source's node, and
+  // the one reaction that publishes into it what the entry it holds has read
+  // (source-runs.ts runs it: read → parse). The cache policy names WHICH
+  // entry, through the identity it holds (registerCachePolicy), never whether
+  // the node exists [LAW:dataflow-not-control-flow].
+  //
+  // [LAW:types-are-the-program] Only an answered reading is published: the
+  // node holds its fallback until the first entry answers, and on a key's
+  // move it holds the old entry's answer until the new entry's lands — the
+  // old `ok` is simply not overwritten yet, so a key change draws no pending
+  // flash (spec section 19).
   private declareSource(
     name: string,
-    reader: SourceReader,
+    read: SourceRead,
     cache: CachePolicy,
     parse: SourceParse,
   ): void {
-    const publish = this.publisherFor(name, parse, reader.where);
+    const publish = this.publisherFor(name, parse);
     runInAction(() => this.sourceNames.push(name));
-    // [LAW:types-are-the-program] Its scope is derived, never authored: a
-    // view's source reads a session value, a directory home's reads none.
-    const refreshes = this.ledger.declare({
-      name: `var.${name}`,
-      scope: this.parent === null ? "directory" : "view",
-      refresh: refreshOf(cache),
-    });
-    this.registerCachePolicy(name, cache, (cause, by) =>
-      this.runSource(name, reader, publish, cause, by, refreshes),
+    this.cleanups.push(
+      reaction(
+        () => this.lanes.get(name)?.current(),
+        (reading) => {
+          if (reading === undefined || reading.kind === "pending") return;
+          publish(reading);
+        },
+        { fireImmediately: true },
+      ),
     );
+    this.registerCachePolicy(name, cache, (refresh) =>
+      this.hold(name, { read, parse: parserIdOf(parse), refresh }),
+    );
+  }
+
+  // [LAW:single-enforcer] The one declaration of what this registry holds:
+  // every source's current identity, taken in one body so the entry a moved
+  // identity names is held before the entry it leaves is released (Holds).
+  // A source whose entry did not move keeps its lane, so its publish reaction
+  // is untouched; the lanes are set outside the body, where a publish they
+  // start cannot nest a declaration.
+  private hold(name: string, identity: SourceIdentity): void {
+    this.identities.set(name, identity);
+    const { result: taken } = this.holds.declare(() =>
+      [...this.identities].map(([n, id]) => {
+        const lane = this.runs.declare(this.holds, id);
+        const prior = this.lanes.get(n);
+        return [n, prior?.digest === lane.digest ? prior : lane] as const;
+      }),
+    );
+    runInAction(() => {
+      for (const [n, lane] of taken) this.lanes.set(n, lane);
+    });
   }
 
   // [LAW:one-type-per-behavior] One total projection of the parser arm onto
   // the node it publishes: the text arms publish a string box, the json arm a
   // document. Selected once, at declaration — the pipeline never asks again.
-  private publisherFor(
-    name: string,
-    parse: SourceParse,
-    where: string,
-  ): Publish {
+  // The run parsed by the arm's own parser (source-runs.ts), so its value is
+  // the arm's type.
+  private publisherFor(name: string, parse: SourceParse): Publish {
     switch (parse.kind) {
       case "text":
-        return this.scalarPublisher(name, textParser, parse.default, where);
       case "regex":
-        return this.scalarPublisher(
-          name,
-          regexParser(parse.regex),
-          parse.default,
-          where,
-        );
+        return this.scalarPublisher(name, parse.default);
       case "json":
-        return this.documentPublisher(name, parse.default, where);
+        return this.documentPublisher(name, parse.default);
     }
   }
 
   private scalarPublisher(
     name: string,
-    parser: Parser<string>,
     varDefault: string | undefined,
-    where: string,
   ): Publish {
     const fallback = this.stringInitial(varDefault);
     this.store.defineBox(name, "string", fallback);
-    return (read) => {
-      const outcome = parsed(read, parser, where);
+    return (outcome) => {
       this.noteOutcome(name, outcome);
-      this.store.setBox(name, orElse(outcome, fallback));
-      return outcome;
+      this.store.setBox(name, orElse(outcome as Outcome<string>, fallback));
     };
   }
 
@@ -1030,9 +682,10 @@ export class SourceRegistry {
   // string has "".
   //
   // The default stands in for a run that had nothing to READ — a missing
-  // file, a command that failed, blank output — never for text that was read and is not a
-  // document: that is a broken writer, and reads as its failure (⚠) whatever
-  // the default says (brandon-plugins-ktag.8fv).
+  // file, a command that failed, blank output — never for text that was read
+  // and is not a document (failed in its parse phase): that is a broken
+  // writer, and reads as its failure (⚠) whatever the default says
+  // (brandon-plugins-ktag.8fv).
   //
   // [LAW:no-ambient-temporal-coupling] A writer rewriting a file in place
   // (truncate, then write) is caught mid-update by any read that lands
@@ -1045,7 +698,6 @@ export class SourceRegistry {
   private documentPublisher(
     name: string,
     varDefault: JsonValue | undefined,
-    where: string,
   ): Publish {
     // What the node holds before its first scan, and — with a default — what
     // stands in for a run that had nothing to read.
@@ -1058,17 +710,13 @@ export class SourceRegistry {
     this.cleanups.push(() => clearSettling?.());
     return (raw) => {
       clearSettling?.();
-      // Blank text is nothing to read — a command that printed nothing, a
-      // file only touched — exactly as a missing file is.
-      const read: Outcome<string> =
-        raw.kind === "ok" && raw.value.trim() === "" ? ABSENT : raw;
-      const outcome = parsed(read, jsonParser, where);
+      const outcome = raw as Outcome<JsonValue>;
       this.noteOutcome(name, outcome);
-      const next =
-        outcome.kind === "ok" || read.kind === "ok" || varDefault === undefined
-          ? outcome
-          : fallback;
-      const torn = showingRead && read.kind === "ok" && outcome.kind !== "ok";
+      const readText =
+        outcome.kind === "ok" ||
+        (outcome.kind === "failed" && outcome.failedAt === "parse");
+      const next = readText || varDefault === undefined ? outcome : fallback;
+      const torn = showingRead && readText && outcome.kind !== "ok";
       const show = () => {
         showingRead = outcome.kind === "ok";
         this.store.setDocument(name, next);
@@ -1078,110 +726,42 @@ export class SourceRegistry {
       } else {
         show();
       }
-      // A torn read is still the failure its read met, though the document
-      // stays showing until the settle.
-      return outcome;
     };
-  }
-
-  private runSource(
-    name: string,
-    reader: SourceReader,
-    publish: Publish,
-    cause: RunCause,
-    by: UserTrigger,
-    refreshes: Refreshes<UserTrigger>,
-  ): void {
-    // The latest trigger is the one a coalesced pass answers.
-    this.askedBy.set(name, by);
-    // [LAW:no-ambient-temporal-coupling] A trigger that arrives while this
-    // source is mid-read is not a duplicate to drop: it means the inputs the
-    // running read is about to publish are already stale. The trailing edge
-    // remembers it and re-reads once more, so the published value is the last
-    // trigger's, never whichever one happened not to collide. Dropping it was
-    // only ever survivable for `ttl`, which asks again on a clock; a
-    // `depends_on`, `key` or `watch_file` trigger fires once and never again,
-    // so a dropped one stayed stale forever (brandon-var-sources-tex).
-    //
-    // [LAW:no-silent-failure] A cancelled read publishes nothing; the
-    // registry's own abort is the one rejection a run may end in. Any other
-    // rejection is a bug and stays unhandled — loud.
-    const trigger = this.reads.run(name, () => {
-      const asked = this.askedBy.get(name) ?? by;
-      const startedAt = this.store.clock.monotonic();
-      return reader.read().then(
-        (read) =>
-          refreshes.recorded(
-            `where=${valueOf(reader.where)}`,
-            asked,
-            publish(read),
-            elapsedMs(this.store.clock, startedAt),
-          ),
-        (err: unknown) => {
-          if (err !== this.abort.signal.reason) throw err;
-        },
-      );
-    });
-    this.track(name, trigger, cause);
-  }
-
-  // [LAW:single-enforcer] The one writer of `runs` and `newKeys`: an async
-  // source's pending work enters here and leaves when it completes, so "which
-  // sources are still out" has a single mechanism rather than one per source
-  // kind. A queued trigger joins the loop out, which runs one more pass for it
-  // before it ends: that loop answers a new key when either trigger brought
-  // one.
-  private track(name: string, trigger: Trigger, cause: RunCause): void {
-    runInAction(() => {
-      if (trigger.kind === "started") {
-        this.runs.set(name, trigger.done);
-        this.newKeys.delete(name);
-      }
-      if (cause === "new-key") this.newKeys.add(name);
-    });
-    if (trigger.kind === "queued") return;
-    const done = trigger.done;
-    // The identity check is the same one SingleFlight makes, for the same
-    // reason: `TrailingEdge` releases a key before this `finally` runs, so a
-    // trigger landing in that window starts a NEW tracked loop, and an
-    // unconditional delete here would remove the live entry and leave
-    // `inFlight()` no longer waiting for work that is still out.
-    // [LAW:no-silent-failure] A run's rejection is a bug and stays unhandled
-    // here: a waiter watches the run leave `newKeys`, never its outcome, so
-    // no wait swallows it.
-    void done.finally(() =>
-      runInAction(() => {
-        if (this.runs.get(name) !== done) return;
-        this.runs.delete(name);
-        this.newKeys.delete(name);
-      }),
-    );
   }
 
   // [LAW:no-ambient-temporal-coupling] Resolves when none of the runs a wait
   // is for is out (`awaited`), or when `signal` aborts — and then holds
-  // nothing, so a run that never ends keeps no waiter behind it. A run one of
-  // them triggers (a `depends_on` reaction fires inside a publish) is marked
-  // before the run that triggered it ends, so it is waited out too. Resolves
+  // nothing, so a run that never ends keeps no waiter behind it. Resolves
   // to the names still awaited: empty when all settled, the stragglers when
   // the signal ended the wait. A signal already aborted ends it at once, so a
   // caller holding one deadline over many waits pays it once.
+  //
+  // Asked again until it holds at this wait's own continuation: a landing
+  // that answers a key (a `depends_on` or `key` over the value that landed)
+  // holds the next lane in a reaction of the same batch, which can run after
+  // the one this wait is, so one evaluation can see nothing pending between
+  // the answer and the hold it causes.
   async inFlight(signal: AbortSignal): Promise<readonly string[]> {
-    try {
-      await when(() => this.awaited().length === 0, { signal });
-    } catch (e) {
-      // The signal's abort is the one rejection the wait expects.
-      if (!signal.aborted) throw e;
+    while (!signal.aborted && this.awaited().length > 0) {
+      try {
+        await when(() => this.awaited().length === 0, { signal });
+      } catch (e) {
+        // The signal's abort is the one rejection the wait expects.
+        if (!signal.aborted) throw e;
+      }
     }
     return this.awaited();
   }
 
-  // The sources a wait on this registry is for: the runs out here and in the
-  // home it reads through to that answer a new key (rule 2's first value, or
-  // a key its facts moved). A re-read keeps the answer it has standing, so no
-  // wait is for it, whoever's period or watch started it.
+  // The sources a wait on this registry is for: those whose held entry, here
+  // and in the home it reads through to, has not answered (rule 2's first
+  // value, or a key its facts moved). A re-read keeps the answer it has
+  // standing, so no wait is for it, whoever's period or watch started it.
   private awaited(): string[] {
-    return [...this.newKeys, ...(this.parent?.awaited() ?? [])];
+    const here = [...this.lanes]
+      .filter(([, lane]) => lane.current().kind === "pending")
+      .map(([name]) => name);
+    return [...here, ...(this.parent?.awaited() ?? [])];
   }
 
   // The names still awaited once every run has ended or `withinMs` has
@@ -1401,15 +981,11 @@ export class SourceRegistry {
   // config hot-reload). Returns how many computeds the store released, for
   // the caller's log line.
   dispose(): number {
-    this.abort.abort();
     for (const cleanup of this.cleanups) cleanup();
     this.cleanups.length = 0;
-    // A trigger queued while a read was in flight must not be honoured after
-    // teardown: the abort above cancels the read that is out, and this drops the
-    // re-read it would otherwise have asked for.
-    this.reads.clear();
-    this.watchMgr.dispose();
-    this.ttlMgr.dispose();
+    // [LAW:single-enforcer] Every entry this registry held is released: the
+    // last holder's release ends its run, its period and its watch.
+    this.holds.close();
     // The store's computeds are the last handles outward: a keepAlive computed
     // stays subscribed to the daemon-wide SessionState atom until released, and
     // that subscription held every disposed config's store for the life of the
@@ -1420,42 +996,42 @@ export class SourceRegistry {
 
   // ─── Private helpers ──────────────────────────────────────────────────────
 
-  // [LAW:single-enforcer] One place that maps every CachePolicy kind to its
-  // trigger mechanism, the source's first read included: a clock, a watch or
-  // nothing reads it at declaration, and a policy over what the source reads
-  // reads it when that first answers.  Adding a new policy kind means adding
-  // one case here.
+  // [LAW:single-enforcer] One place that maps every CachePolicy kind to the
+  // identity the source holds: a period, a watched path or nothing is the
+  // run's own refresh and is held at declaration; a policy over what the
+  // source reads names the hash of what that answered, held when it first
+  // answers and again whenever the answer moves. Adding a new policy kind
+  // means adding one case here.
   private registerCachePolicy(
     name: string,
     policy: CachePolicy,
-    update: (cause: RunCause, by: UserTrigger) => void,
+    hold: (refresh: RunRefresh) => void,
   ): void {
     switch (policy.kind) {
       case "never":
-        update("new-key", "first");
+        hold({ kind: "never" });
         break;
 
-      case "ttl": {
-        update("new-key", "first");
-        const unsub = this.ttlMgr.subscribe(policy.durationMs, () =>
-          update("re-read", "period"),
-        );
-        this.cleanups.push(unsub);
+      case "ttl":
+        hold({ kind: "ttl", durationMs: policy.durationMs });
         break;
-      }
 
       case "watch_file": {
-        update("new-key", "first");
-        const unsub = this.watchMgr.subscribe(
-          policy.path,
-          () => update("re-read", "change"),
-          (fault) =>
-            this.notePolicy(
-              name,
-              fault === null ? ok(undefined) : failed(fault, "read"),
-            ),
+        hold({ kind: "watch_file", path: policy.path });
+        // The watch's fault is the entry's (source-runs.ts); here it is the
+        // variable's standing fault, for as long as this source holds that
+        // entry.
+        this.cleanups.push(
+          reaction(
+            () => this.lanes.get(name)?.fault() ?? null,
+            (fault) =>
+              this.notePolicy(
+                name,
+                fault === null ? ok(undefined) : failed(fault, "read"),
+              ),
+            { fireImmediately: true },
+          ),
         );
-        this.cleanups.push(unsub);
         break;
       }
 
@@ -1489,7 +1065,7 @@ export class SourceRegistry {
                   );
             }
           },
-          firstThenChange(update),
+          (value) => hold({ kind: "key", hash: keyHashOf(value) }),
         );
         break;
       }
@@ -1506,7 +1082,7 @@ export class SourceRegistry {
               ? ok(keys.map((key) => key.value).join(","))
               : pendingOf("unread");
           },
-          firstThenChange(update),
+          (value) => hold({ kind: "key", hash: keyHashOf(value) }),
         );
         break;
       }
@@ -1514,27 +1090,27 @@ export class SourceRegistry {
   }
 
   // [LAW:one-type-per-behavior] Both policies over what a source reads — its
-  // key, the variables it depends on — read it when what they read answers,
-  // and again whenever that answer differs from the one it last read under.
-  // Over a value not answered yet (a view's inputs before its first payload)
-  // it waits rather than reading, so its first value is one read, not a read
-  // under no value and another when the value arrives (brandon-unfiled-3248.
-  // 8ro6). Measured against the last read's answer rather than the previous
-  // evaluation, so one that throws for a moment and comes back unchanged reads
-  // nothing.
+  // key, the variables it depends on — hold an identity when what they read
+  // answers, and another whenever that answer differs from the one last
+  // held. Over a value not answered yet (a view's inputs before its first
+  // payload) it waits rather than reading, so its first value is one read,
+  // not a read under no value and another when the value arrives
+  // (brandon-unfiled-3248.8ro6). Measured against the last answer held
+  // rather than the previous evaluation, so one that throws for a moment and
+  // comes back unchanged holds nothing new.
   private onReads(
     name: string,
     reads: () => Reading<string>,
-    update: () => void,
+    hold: (value: string) => void,
   ): void {
-    let readUnder: string | undefined;
+    let heldUnder: string | undefined;
     const disposer: IReactionDisposer = reaction(
       reads,
       (answer) => {
         this.notePolicy(name, answer);
-        if (answer.kind !== "ok" || answer.value === readUnder) return;
-        readUnder = answer.value;
-        update();
+        if (answer.kind !== "ok" || answer.value === heldUnder) return;
+        heldUnder = answer.value;
+        hold(answer.value);
       },
       { fireImmediately: true },
     );

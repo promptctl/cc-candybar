@@ -28,6 +28,7 @@ describe("RefreshLedger", () => {
         scope: "repo",
         refreshes: { first: 0, period: 0, change: 0 },
         failures: 0,
+        abandoned: 0,
         lastMs: null,
       },
     ]);
@@ -40,6 +41,7 @@ describe("RefreshLedger", () => {
         scope: "repo",
         refreshes: { first: 1, period: 1, change: 0 },
         failures: 1,
+        abandoned: 0,
         lastMs: 9,
       },
     ]);

@@ -16,11 +16,14 @@ import type { Delivery } from "../src/daemon/cache/file-events";
 import {
   VariableStore,
   SourceRegistry,
+  SourceRuns,
   parseDuration,
   MIN_SHELL_TTL_MS,
   SHELL_READ_TIMEOUT_MS,
   type Published,
   type SourceParse,
+  type SourceRunsDeps,
+  type VarValue,
 } from "../src/var-system";
 import { fakeLauncher, turns } from "./helpers/fake-launcher";
 import { heldClock } from "./helpers/held-clock";
@@ -60,15 +63,40 @@ const regex = (pattern: string, dflt?: string): SourceParse => ({
 // suite and holding Jest open. A test whose subject is dispose still calls it;
 // dispose is idempotent.
 const live = new Set<SourceRegistry>();
+const liveRuns = new Set<SourceRuns>();
 afterEach(() => {
   for (const registry of live) registry.dispose();
   live.clear();
+  for (const runs of liveRuns) runs.close();
+  liveRuns.clear();
 });
-type AfterLauncher<T> = T extends [unknown, ...infer Rest] ? Rest : never;
+// A source-runs owner for a test's registries: over the process launcher on
+// the real clock unless the test says otherwise, closed after the test.
+function runsOver(deps: Partial<SourceRunsDeps> = {}): SourceRuns {
+  const runs = new SourceRuns({
+    launcher: processLauncher,
+    clock: systemTimekeeper,
+    ...deps,
+  });
+  liveRuns.add(runs);
+  return runs;
+}
 function registryOver(
-  ...args: AfterLauncher<ConstructorParameters<typeof SourceRegistry>>
+  store: VariableStore,
+  defaultEmptyValue?: VarValue,
+  sessionState?: SessionState,
+  parent?: SourceRegistry | null,
+  env?: NodeJS.ProcessEnv,
+  runs: SourceRuns = runsOver(),
 ): SourceRegistry {
-  const registry = new SourceRegistry(processLauncher, ...args);
+  const registry = new SourceRegistry(
+    runs,
+    store,
+    defaultEmptyValue,
+    sessionState,
+    parent,
+    env,
+  );
   live.add(registry);
   return registry;
 }
@@ -80,16 +108,7 @@ function make(defaultEmptyValue?: string, env: NodeJS.ProcessEnv = {}) {
   const store = new VariableStore(systemTimekeeper);
   return {
     store,
-    registry: registryOver(
-      store,
-      defaultEmptyValue,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      env,
-    ),
+    registry: registryOver(store, defaultEmptyValue, undefined, undefined, env),
   };
 }
 
@@ -601,14 +620,19 @@ describe("SourceRegistry — shell: basic", () => {
   it("a read its launcher refused is a failed read, not the registry's abort", async () => {
     const closing = new AbortController();
     closing.abort(new Error("the daemon closed"));
-    const registry = new SourceRegistry(
-      systemLauncher(
-        { inherited: process.env, signal: closing.signal },
-        systemTimekeeper,
-      ),
+    const registry = registryOver(
       new VariableStore(systemTimekeeper),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      runsOver({
+        launcher: systemLauncher(
+          { inherited: process.env, signal: closing.signal },
+          systemTimekeeper,
+        ),
+      }),
     );
-    live.add(registry);
     registry.declareShell("val", "echo x", {
       cwd: process.cwd(),
       parse: TEXT,
@@ -797,8 +821,14 @@ describe("SourceRegistry — shell: read timeout", () => {
     const { launcher, spawner, started } = fakeLauncher(clock);
     spawner.program(shell("sleep 99"), hangs());
     const store = new VariableStore(clock);
-    const registry = new SourceRegistry(launcher, store, "");
-    live.add(registry);
+    const registry = registryOver(
+      store,
+      "",
+      undefined,
+      undefined,
+      undefined,
+      runsOver({ launcher, clock }),
+    );
     const periodMs = SHELL_READ_TIMEOUT_MS * 2;
     registry.declareShell("val", "sleep 99", {
       cwd: "/work",
@@ -824,7 +854,12 @@ describe("SourceRegistry — shell: read timeout", () => {
       reason: `shell "sleep 99" timed out after ${SHELL_READ_TIMEOUT_MS / 1000} s in /work`,
     });
 
-    clock.advance(periodMs - SHELL_READ_TIMEOUT_MS);
+    // The period measures from the read that landed (the timeout's failure),
+    // as every source's does: the next run is one period after it.
+    clock.advance(periodMs - 1);
+    await turns();
+    expect(started()).toHaveLength(1);
+    clock.advance(1);
     await turns();
     expect(started()).toHaveLength(2);
     expect(started()[1]!.ended).toBeNull();
@@ -841,8 +876,14 @@ describe("SourceRegistry — shell: read timeout", () => {
     const { launcher, spawner, started } = fakeLauncher(clock);
     spawner.program(shell("sleep 99"), ignoring(["SIGTERM"], hangs()));
     const store = new VariableStore(clock);
-    const registry = new SourceRegistry(launcher, store, "");
-    live.add(registry);
+    const registry = registryOver(
+      store,
+      "",
+      undefined,
+      undefined,
+      undefined,
+      runsOver({ launcher, clock }),
+    );
     registry.declareShell("val", "sleep 99", {
       cwd: "/work",
       parse: { kind: "json", default: undefined },
@@ -914,7 +955,14 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
       fs.writeFileSync(f, "v1");
       const ledger = new RefreshLedger();
       const store = new VariableStore(systemTimekeeper);
-      const registry = registryOver(store, "", undefined, null, ledger);
+      const registry = registryOver(
+        store,
+        "",
+        undefined,
+        null,
+        undefined,
+        runsOver({ ledger }),
+      );
       registry.declareShell("val", `cat ${f}`, {
         cwd: process.cwd(),
         parse: TEXT,
@@ -924,16 +972,32 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
       await elapse(TTL_TICK_WAIT_MS);
       await ran(registry);
 
+      // One record per read kind, each refresh naming its digest (spec
+      // section 21): the file record exists at zero, as distinct from none.
       expect(ledger.snapshot()).toEqual([
         {
-          name: "var.val",
-          scope: "directory",
-          refreshes: { first: 1, period: expect.any(Number) },
+          name: "source.file",
+          scope: "daemon",
+          refreshes: { first: 0, period: 0, change: 0, supersede: 0 },
           failures: 0,
+          abandoned: 0,
+          lastMs: null,
+        },
+        {
+          name: "source.shell",
+          scope: "daemon",
+          refreshes: {
+            first: 1,
+            period: expect.any(Number),
+            change: 0,
+            supersede: 0,
+          },
+          failures: 0,
+          abandoned: 0,
           lastMs: expect.any(Number),
         },
       ]);
-      expect(ledger.snapshot()[0]!.refreshes.period).toBeGreaterThanOrEqual(1);
+      expect(ledger.snapshot()[1]!.refreshes.period).toBeGreaterThanOrEqual(1);
     } finally {
       cleanup();
     }
@@ -1671,7 +1735,7 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
     }
   });
 
-  it("a catch-up re-reads every watch_file source, in a view too, as if its watch had reported; a disposed registry hears none", async () => {
+  it("a catch-up re-reads every watch_file source, in a view too, as if its watch had reported; a disposed registry holds none", async () => {
     const { dir, cleanup } = makeTmpDir();
     try {
       // The watched file is never written: only the catch-up can trigger.
@@ -1681,13 +1745,14 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
       fs.writeFileSync(f, "v1");
       const events = handDelivery();
       const store = new VariableStore(systemTimekeeper);
+      const runs = runsOver({ fileEvents: events });
       const registry = registryOver(
         store,
         "",
         undefined,
         null,
-        new RefreshLedger(),
-        events,
+        undefined,
+        runs,
       );
       const view = registry.view();
       live.add(view);
@@ -1713,8 +1778,14 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         "both registries re-reading v2",
       );
 
+      // The delivery subscription is the owner's, for as long as it lives; a
+      // disposed registry holds no entry of it, so there is nothing left for
+      // a catch-up to re-read.
       view.dispose();
       registry.dispose();
+      expect(runs.stats().file.entries).toBe(0);
+      expect(events.listening()).toBe(1);
+      runs.close();
       expect(events.listening()).toBe(0);
     } finally {
       cleanup();
@@ -1745,8 +1816,8 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         "",
         undefined,
         null,
-        new RefreshLedger(),
-        events,
+        undefined,
+        runsOver({ fileEvents: events }),
       );
       const cache = { kind: "watch_file", path: watched } as const;
       return { watched, data, events, store, registry, cache };
@@ -1919,9 +1990,8 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         "",
         undefined,
         null,
-        new RefreshLedger(),
         undefined,
-        watchers,
+        runsOver({ watchers }),
       );
       const view = home.view();
       live.add(view);
@@ -2118,9 +2188,8 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
           undefined,
           undefined,
           null,
-          new RefreshLedger(),
           undefined,
-          watchers,
+          runsOver({ watchers }),
         );
         registry.declareFile("val", a, {
           parse: TEXT,

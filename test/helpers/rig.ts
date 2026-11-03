@@ -46,7 +46,7 @@ import { SourceRegistry } from "../../src/var-system/sources";
 import { VariableStore } from "../../src/var-system/store";
 import { clickUrl, recordRender, testVerbContext } from "./click";
 import { drawPayload } from "./draw-payload";
-import { unscriptedLauncher } from "./fake-launcher";
+import { unscriptedRuns } from "./fake-launcher";
 import { TEST_SIGNER } from "./link-signer";
 import { EMPTY_DEFAULT, parseAndValidate } from "./parse-and-validate";
 import { selectionFor } from "./selection";
@@ -207,14 +207,11 @@ export function buildRig(init: RigInit = {}): Rig {
   const sessionState = init.sessionState ?? new SessionState();
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(
-    unscriptedLauncher,
+    unscriptedRuns(),
     store,
     "",
     sessionState,
     null,
-    undefined,
-    undefined,
-    undefined,
     init.env,
   );
   const registered = registerCompiled(

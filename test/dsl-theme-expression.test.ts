@@ -1,5 +1,5 @@
 import type { Frame } from "../src/render/frame";
-import { unscriptedLauncher } from "./helpers/fake-launcher";
+import { unscriptedRuns } from "./helpers/fake-launcher";
 // [LAW:verifiable-goals] brandon-themes-dzl done-gates: (1) `globals.palette`
 // accepts a TEMPLATE, evaluated per render, so the bar's theme can follow data;
 // (2) precedence comes out IDENTICAL to the style's — staged over session over the
@@ -308,8 +308,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
     // repaint every compile-only render (the demo, `cc-candybar check`, tests).
     const config = parseAndValidate("<theme-default>", src("nord"), ALLOWED);
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(
-      unscriptedLauncher,
+    const registry = new SourceRegistry(unscriptedRuns(),
       store,
       "",
       new SessionState(),
@@ -338,8 +337,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
   test("a session with no picks evaluates a RULE too, rather than falling to the floor", () => {
     const config = parseAndValidate("<theme-default-rule>", src(RULE), ALLOWED);
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(
-      unscriptedLauncher,
+    const registry = new SourceRegistry(unscriptedRuns(),
       store,
       "",
       new SessionState(),
@@ -405,8 +403,7 @@ describe("globals.palette as an expression — loader", () => {
       ALLOWED,
     );
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(
-      unscriptedLauncher,
+    const registry = new SourceRegistry(unscriptedRuns(),
       store,
       "",
       new SessionState(),
@@ -534,7 +531,7 @@ describe("a rule inside a preset's globals", () => {
   ): R => {
     const config = parseAndValidate("<theme-expr-preset>", source, ALLOWED);
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(unscriptedLauncher, store, "", new SessionState());
+    const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState());
     try {
       return body(config, registry, store);
     } finally {

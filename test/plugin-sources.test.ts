@@ -25,7 +25,6 @@ import {
   RenderCache,
   type SessionView,
 } from "../src/daemon/cache/render";
-import { NO_FILE_EVENTS } from "../src/daemon/cache/file-events";
 import {
   declareLanes,
   projectSources,
@@ -59,6 +58,7 @@ import { locations, stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { daemonGates } from "../src/daemon/update-keys";
 import { systemTimekeeper } from "../src/time";
+import { SourceRuns } from "../src/var-system/source-runs";
 
 const SOURCE = `{ scope: "session", refresh: { watch: true }, read: { file: { json: true } } }`;
 const STATUS = "plugins.p.status";
@@ -173,13 +173,12 @@ function rig(): Rig {
       stateDir: stateDir(host),
       locations: locations(host),
       env: host.env,
-      launcher: world.launcher,
+      runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
       sessionState,
       watchers,
       storage: providers.managedStorage,
       signer: TEST_SIGNER,
       gates: bareGates(),
-      fileEvents: NO_FILE_EVENTS,
       log,
       declare: (holds, facts, closure, sources) =>
         declareLanes(providers, holds, facts, closure, sources),
@@ -304,7 +303,7 @@ describe("a source's declaration", () => {
       stateDir: stateDir(host),
       locations: locations(host),
       env: host.env,
-      launcher: world.launcher,
+      runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
       signer: TEST_SIGNER,
@@ -400,7 +399,7 @@ describe("a source's declaration", () => {
       stateDir: stateDir(host),
       locations: locations(host),
       env: host.env,
-      launcher: world.launcher,
+      runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
       signer: TEST_SIGNER,
@@ -436,7 +435,7 @@ describe("a source's declaration", () => {
       stateDir: stateDir(host),
       locations: locations(host),
       env: host.env,
-      launcher: world.launcher,
+      runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
       signer: TEST_SIGNER,
@@ -564,7 +563,7 @@ describe("a source's declaration", () => {
       stateDir: stateDir(host),
       locations: locations(host),
       env: host.env,
-      launcher: world.launcher,
+      runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
       signer: TEST_SIGNER,
@@ -689,7 +688,7 @@ describe("a session reads its source", () => {
 describe("a source's document", () => {
   function sourceDoc(payload: () => unknown) {
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(processLauncher, store);
+    const registry = new SourceRegistry(new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }), store);
     registry.declareSourceDocument(STATUS);
     registry.bindInputs({
       read: (p) => resolvePath(payload(), p),

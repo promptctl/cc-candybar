@@ -2,7 +2,7 @@
 // is built from — a carousel whose label fires an action of the author's, and a
 // picker that is a row of a disclosure body and so draws no ✕ of its own.
 import { drawPayload } from "./helpers/draw-payload";
-import { unscriptedLauncher } from "./helpers/fake-launcher";
+import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linksOf } from "../src/click/read";
@@ -54,7 +54,7 @@ function renderOf(
     DEFAULT_DSL_CONFIG,
   );
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedLauncher, store, "", new SessionState());
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   return drawPayload(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), {
     ...OPTS,
@@ -134,7 +134,7 @@ describe("{{ picker }} over a catalogue", () => {
       DEFAULT_DSL_CONFIG,
     );
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(unscriptedLauncher, store, "", new SessionState());
+    const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState());
     const compiled = registerDslConfig(config, registry, {
       signer: TEST_SIGNER,
       cwd: "/tmp/proj",

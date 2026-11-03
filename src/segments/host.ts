@@ -2,7 +2,7 @@ import os from "node:os";
 
 import { ABSENT, failed, ok, type Outcome } from "../utils/outcome.js";
 import type { Holds } from "../utils/holds.js";
-import { KeyedSource } from "../utils/keyed-source.js";
+import { KeyedSource, NO_WATCH } from "../utils/keyed-source.js";
 import { quietLogger, type DaemonLogger } from "../utils/logger.js";
 import { RefreshLedger } from "../utils/refresh-ledger.js";
 import type { Lane } from "../utils/reading.js";
@@ -67,7 +67,8 @@ export class HostService {
       scope: "daemon",
       keyOf: () => "",
       fields: () => "-",
-      every: HOST_EVERY,
+      every: () => HOST_EVERY,
+      watch: NO_WATCH,
       maxEntries: 1,
       logger,
       ledger,

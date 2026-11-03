@@ -141,14 +141,20 @@ The complete shape of a `shell` variable:
 | `cache` | **required** — exactly one of `{ ttl: "60s" }` (re-run on a timer; units `ms`/`s`/`m`/`h`; a shell `ttl` below 500 ms is silently raised to 500 ms), `{ watch_file: "/abs/path" }` (re-run when that file changes, or a symlink on the way to it is re-pointed; a watch the OS refuses, or a link chain that loops, is reported like a key that throws, below, and while the OS delivers no file events at all the bar's `⚠` counts the same warning), `{ depends_on: ["otherVar"] }` (run once the declared variables have values, and again when one changes), `{ key: "{{ .otherVar }}" }` (run once the key template has a value, and again when it changes; a key over a document still waiting for its first scan waits with it; while the key throws, the variable keeps its last value — its `default` if it never ran — the bar's `⚠` indicator counts a warning that it `cannot refresh`, and `cc-candybar check` fails on it), `{ never: true }` (run once) |
 | `default` | what the variable reads until the first run completes and whenever a run fails. Under `text`/`regex` it is a string; under `json` it is a JSON value — normally the document shape, every field your templates read, with placeholder values — and it stands in only when there was nothing to read (the command failed, the file is missing): text that was read and is not JSON is the `⚠`, default or not |
 
-A source that reads no session's value runs once for its directory, shared by
-every session rendering there. One whose `key` or `depends_on` reads a
-session's value — an `input` such as `session.id`, a `state` or a `template`
-variable — runs once per session, on that session's values: another
-session rendering from the same directory never re-runs it. A `key` or
-`depends_on` that reads the clock — a `time` variable, a template calling
-`now`, or a variable reading either — is refused at load: to re-run on time,
-use `ttl` (see "A cache key that reads the clock" under Mistakes).
+A run's identity is what it needs: the command (or the path and read mode),
+the directory it runs in, the parser, the cache policy and the value its
+`key` or `depends_on` answered. Every declaration with that identity — in one
+config or many, from one session or many — shares one run; `default` is not
+part of it, so two declarations differing only in their default read one
+program's output. A source that reads no session's value therefore runs once
+for its directory. One whose `key` or `depends_on` reads a session's value —
+an `input` such as `session.id`, a `state` or a `template` variable — runs
+once per distinct value: sessions whose values agree share the run, and a
+session whose value moves starts a run of its own, keeping the last value
+until that run lands. A `key` or `depends_on` that reads the clock — a `time`
+variable, a template calling `now`, or a variable reading either — is refused
+at load: to re-run on time, use `ttl` (see "A cache key that reads the clock"
+under Mistakes).
 
 A source runs only when its cache policy says so. Drawing the bar never runs
 one: while the bar moves it is redrawn up to 30 times a second between

@@ -1,7 +1,7 @@
 import { textOf } from "../src/render/frame";
 import { locations } from "../src/daemon/paths";
 import { HOST, locs } from "./helpers/host";
-import { unscriptedLauncher } from "./helpers/fake-launcher";
+import { unscriptedLauncher, unscriptedRuns } from "./helpers/fake-launcher";
 // [LAW:verifiable-goals] brandon-layout-edit-2gc.1 done-gates, driven through
 // the real spine (mirroring dsl-persist-actions.test.ts's model one arm
 // over), re-aimed at the config FILE as the one durable store
@@ -83,7 +83,6 @@ import {
   RenderCache,
   renderCacheBudget,
 } from "../src/daemon/cache/render";
-import { NO_FILE_EVENTS } from "../src/daemon/cache/file-events";
 import type { CacheEntry } from "../src/daemon/cache/render";
 import {
   EDIT_MODE_KEY,
@@ -113,6 +112,7 @@ import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
+import { SourceRuns } from "../src/var-system/source-runs";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -554,7 +554,7 @@ function buildLayoutRuntime(src: string, sessionId = "s1") {
   const sessionState = new SessionState();
   durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedLauncher, store, "", sessionState);
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
   const compiled = registerDslConfig(config, registry, {
     signer: TEST_SIGNER,
     cwd: process.cwd(),
@@ -893,8 +893,7 @@ describe("the reset-layout banner survives quote/backslash preset names", () => 
     // preset customized, so the render below opens edit mode for "s1".
     const sessionState = new SessionState();
     sessionState.set("s1", EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
-    const registry = new SourceRegistry(
-      unscriptedLauncher,
+    const registry = new SourceRegistry(unscriptedRuns(),
       store,
       "",
       sessionState,
@@ -956,8 +955,7 @@ describe("a preset root's own top-level `when` hides content, not the menu or ba
     sessionState.set("s1", EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     // Live output, not names: the subject is whether the CONTENT follows the gate.
     sessionState.set("s1", EDIT_LIVE_KEY, "open");
-    const registry = new SourceRegistry(
-      unscriptedLauncher,
+    const registry = new SourceRegistry(unscriptedRuns(),
       store,
       "",
       sessionState,
@@ -1032,11 +1030,10 @@ function makeCache(reloads?: ReloadSignal): {
       stateDir: stateDir(durable.host),
       locations: locations(durable.host),
       env: durable.host.env,
-      launcher: unscriptedLauncher,
+      runs: new SourceRuns({ launcher: unscriptedLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
-      fileEvents: NO_FILE_EVENTS,
       sessionState,
       watchers,
       source: SOURCES_NOTHING,
@@ -1252,11 +1249,10 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         stateDir: stateDir(durable.host),
         locations: locations(durable.host),
         env: durable.host.env,
-        launcher: unscriptedLauncher,
+        runs: new SourceRuns({ launcher: unscriptedLauncher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         gates: bareGates(),
-        fileEvents: NO_FILE_EVENTS,
         sessionState,
         watchers,
         source: SOURCES_NOTHING,

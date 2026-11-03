@@ -25,6 +25,9 @@ import {
 // session's own lanes take.
 export type KeyedTrigger = Exclude<RefreshTrigger, "request">;
 
+// A source whose entries arm no watch of their own.
+export const NO_WATCH = (): Release => () => {};
+
 // Ends one supersede of a key. The last of a key's outstanding supersedes to
 // resume starts its one fresh read. Calling it again does nothing.
 export type Resume = () => void;
@@ -50,14 +53,23 @@ export interface KeyedSourceSpec<I, T> {
   readonly scope: SourceScope;
   // The read's identity: two inputs with one key are one reading.
   readonly keyOf: (input: I) => string;
-  // The entry's logfmt fields on a refresh event.
-  readonly fields: (input: I) => string;
-  readonly read: (input: I) => Promise<Outcome<T>>;
-  // [LAW:types-are-the-program] The source's refresh, as data: a period, on
-  // which a held entry is read again and which a hold's return resumes; or
-  // none (`null`), when only a change reads an entry again, and a hold's
-  // return to a kept entry re-reads it once.
-  readonly every: Every | null;
+  // The entry's logfmt fields on a refresh event, handed how many homes hold
+  // it, for a source whose event says what it is shared by.
+  readonly fields: (input: I, holders: number) => string;
+  // [LAW:no-ambient-temporal-coupling] The read is handed its flight's
+  // signal, aborted when the flight is abandoned (a supersede, a drop), so
+  // a program a read started does not outlive the entry that asked for it.
+  readonly read: (input: I, signal: AbortSignal) => Promise<Outcome<T>>;
+  // [LAW:types-are-the-program] The entry's refresh, as data of its input: a
+  // period, on which a held entry is read again and which a hold's return
+  // resumes; or none (`null`), when only a change reads an entry again, and
+  // a hold's return to a kept entry re-reads it once.
+  readonly every: (input: I) => Every | null;
+  // What else reads an entry again, armed for the entry's life: a watch on
+  // what the input names, whose `changed` reads the entry as `changed` does;
+  // a source whose entries are read again only by its period or its owner's
+  // own `changed` arms nothing (`NO_WATCH`).
+  readonly watch: (input: I, changed: () => void) => Release;
   // How many entries nothing holds are kept, least recently read first out.
   readonly maxEntries: number;
   readonly logger: DaemonLogger;
@@ -71,10 +83,13 @@ interface Entry<I, T> extends Readable<T> {
   readonly key: string;
   readonly input: I;
   readonly revisit: Revisit;
+  // Ends the entry's watch, with the entry.
+  unwatch: Release;
   holders: number;
-  // The read whose answer will be stored, or none out. A read superseded or
-  // dropped finds another token here and stores nothing.
-  flight: object | null;
+  // The read whose answer will be stored, or none out, as its abort: a read
+  // superseded or dropped is aborted, finds another flight here and stores
+  // nothing.
+  flight: AbortController | null;
   // A change arrived while a read was out: one re-read follows its landing.
   changed: boolean;
   // Supersedes of this key not resumed yet. While any is out, every trigger
@@ -102,16 +117,13 @@ export class KeyedSource<I, T> {
   private closed = false;
 
   constructor(private readonly spec: KeyedSourceSpec<I, T>) {
+    // [LAW:types-are-the-program] exception: whether an entry has a period
+    // is its input's (`every`), so the handle is typed for every keyed
+    // trigger, and a source none of whose entries has one records no period.
     this.refreshes = spec.ledger.declare({
       name: spec.name,
       scope: spec.scope,
-      // [LAW:types-are-the-program] exception: a source with no period
-      // declares no tick, but its handle is typed for every keyed trigger;
-      // only the absent period keeps it from recording one.
-      refresh:
-        spec.every === null
-          ? ["first", "change", "supersede"]
-          : ["first", "period", "change", "supersede"],
+      refresh: ["first", "period", "change", "supersede"],
     });
   }
 
@@ -150,7 +162,7 @@ export class KeyedSource<I, T> {
     const entry = this.touched(key) ?? this.created(key, input);
     entry.superseding++;
     renew(entry, "superseded");
-    entry.flight = null;
+    this.abandon(entry);
     entry.changed = false;
     this.evict();
     let resumed = false;
@@ -169,10 +181,15 @@ export class KeyedSource<I, T> {
   // out. An entry nobody holds is read when a hold returns to it.
   changed(affected: (input: I) => boolean): void {
     for (const entry of this.entries.values()) {
-      if (entry.holders > 0 && affected(entry.input)) {
-        this.refresh(entry, "change");
-      }
+      if (affected(entry.input)) this.heard(entry);
     }
+  }
+
+  // [LAW:single-enforcer] The one rule for a change under an entry, whether
+  // the owner's or the entry's own watch reports it: a held entry is read
+  // again; one nobody holds is not, since a hold's return re-reads it.
+  private heard(entry: Entry<I, T>): void {
+    if (entry.holders > 0) this.refresh(entry, "change");
   }
 
   // Whether some home holds an entry `match` names now.
@@ -186,8 +203,15 @@ export class KeyedSource<I, T> {
   stats(): KeyedSourceStats {
     let held = 0;
     for (const entry of this.entries.values()) if (entry.holders > 0) held++;
-    const { refreshes, failures, lastMs } = this.refreshes.record();
-    return { entries: this.entries.size, held, refreshes, failures, lastMs };
+    const { refreshes, failures, abandoned, lastMs } = this.refreshes.record();
+    return {
+      entries: this.entries.size,
+      held,
+      refreshes,
+      failures,
+      abandoned,
+      lastMs,
+    };
   }
 
   // Ends every entry's period: a held entry's period re-arms on every landing,
@@ -216,12 +240,17 @@ export class KeyedSource<I, T> {
       flight: null,
       changed: false,
       superseding: 0,
-      revisit: revisitOf(this.spec.every, this.spec.clock, {
+      revisit: revisitOf(this.spec.every(input), this.spec.clock, {
         period: () => this.refresh(entry, "period"),
         holdReturned: () => this.refresh(entry, "change"),
       }),
+      unwatch: () => {},
     };
     this.entries.set(key, entry);
+    // Armed once the entry is stored, so a change it reports at once finds
+    // its entry; armed before the first read, so a change during that read
+    // queues the re-read it means.
+    entry.unwatch = this.spec.watch(input, () => this.heard(entry));
     return entry;
   }
 
@@ -240,30 +269,34 @@ export class KeyedSource<I, T> {
       entry.changed ||= by === "change";
       return;
     }
-    const flight = {};
+    const flight = new AbortController();
     entry.flight = flight;
     const startedAt = this.spec.clock.monotonic();
-    void attempt(() => this.spec.read(entry.input))
+    void attempt(() => this.spec.read(entry.input, flight.signal))
       .then((outcome) => {
-        // [LAW:no-silent-failure] Every read that ran is an event, one a
-        // supersede or a drop abandoned included: its answer is not stored,
-        // but it ran, and a failure it met is still a fact.
-        const stored = entry.flight === flight;
+        const fields = this.spec.fields(entry.input, entry.holders);
+        const ms = elapsedMs(this.spec.clock, startedAt);
+        // [LAW:no-silent-failure] A read the owner abandoned (a supersede, a
+        // drop) was told to stop, so what it answers is the owner's doing,
+        // never a failure the source met: it is an event and a count of its
+        // own, not a refresh.
+        if (flight.signal.aborted) {
+          this.refreshes.abandoned(fields, by, ms);
+          return;
+        }
+        // The flight that answered is the entry's: every path that replaces
+        // one (a supersede, a drop) aborts it first, so a read not aborted
+        // is the one whose answer is stored.
         try {
-          this.refreshes.recorded(
-            `${this.spec.fields(entry.input)} stored=${stored ? "Y" : "N"}`,
-            by,
-            outcome,
-            elapsedMs(this.spec.clock, startedAt),
-          );
+          this.refreshes.recorded(fields, by, outcome, ms);
         } finally {
-          if (stored) this.store(entry, outcome);
+          this.store(entry, outcome);
         }
       })
       .catch((e: unknown) => {
         this.spec.logger(
           "error",
-          `${this.spec.name} refresh threw (${this.spec.fields(entry.input)}): ${String(e)}`,
+          `${this.spec.name} refresh threw (${this.spec.fields(entry.input, entry.holders)}): ${String(e)}`,
         );
       });
   }
@@ -291,14 +324,17 @@ export class KeyedSource<I, T> {
     return () => {
       entry.holders--;
       entry.revisit.hold(entry.holders > 0);
+      this.evict();
     };
   }
 
   // A held entry is never evicted, so held entries are bounded by their
   // holders (the render cache's budget).
   // [LAW:single-enforcer] Run by every claim that can add an entry (a hold, a
-  // supersede). An entry mid-supersede is kept like a held one: dropped, a
-  // hold returning during the move would read the world from before it.
+  // supersede) and by every release, so an entry over the bound is dropped
+  // the moment nobody holds it. An entry mid-supersede is kept like a held
+  // one: dropped, a hold returning during the move would read the world
+  // from before it.
   private evict(): void {
     for (const entry of [...this.entries.values()]) {
       if (this.entries.size <= this.spec.maxEntries) return;
@@ -308,9 +344,17 @@ export class KeyedSource<I, T> {
 
   private drop(entry: Entry<I, T>): void {
     this.entries.delete(entry.key);
-    entry.flight = null;
+    this.abandon(entry);
+    entry.unwatch();
     entry.revisit.dispose();
     answerPending(entry, failed(`${this.spec.name} entry dropped`, "read"));
+  }
+
+  // The read out, if one is, stores nothing and is told to stop.
+  private abandon(entry: Entry<I, T>): void {
+    const flight = entry.flight;
+    entry.flight = null;
+    flight?.abort(new Error(`${this.spec.name} read abandoned`));
   }
 }
 

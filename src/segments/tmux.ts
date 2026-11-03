@@ -3,7 +3,11 @@ import { runTmuxAsync } from "../proc/tmux";
 import type { TmuxHint } from "../tmux-hint";
 import type { Timekeeper } from "../time";
 import type { Holds } from "../utils/holds";
-import { KeyedSource, type KeyedSourceStats } from "../utils/keyed-source";
+import {
+  KeyedSource,
+  NO_WATCH,
+  type KeyedSourceStats,
+} from "../utils/keyed-source";
 import { quietLogger, type DaemonLogger } from "../utils/logger";
 import { RefreshLedger } from "../utils/refresh-ledger";
 import type { Lane } from "../utils/reading";
@@ -48,7 +52,8 @@ export class TmuxService {
       fields: (hint) =>
         `pane=${valueOf(hint.pane)} socket=${valueOf(hint.socket)}`,
       read: (hint) => askSessionName(opts.launcher, hint),
-      every: { okMs: NAME_PERIOD_MS, failedMs: NAME_PERIOD_MS },
+      every: () => ({ okMs: NAME_PERIOD_MS, failedMs: NAME_PERIOD_MS }),
+      watch: NO_WATCH,
       maxEntries: MAX_ENTRIES,
       logger,
       ledger: opts.ledger ?? new RefreshLedger(logger),

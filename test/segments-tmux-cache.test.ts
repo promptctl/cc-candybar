@@ -73,7 +73,10 @@ beforeEach(() => {
     onDrainRead: () => {},
     onPipeError: () => {},
   };
-  launcher = systemLauncher({ inherited: INHERITED, stats: handle }, systemTimekeeper);
+  launcher = systemLauncher(
+    { inherited: INHERITED, stats: handle },
+    systemTimekeeper,
+  );
   svc = new TmuxService({ launcher, clock: systemTimekeeper });
   holds = new Holds();
 });
@@ -151,16 +154,28 @@ describe("TmuxService", () => {
   it("two panes of one server each get their own answer", async () => {
     const a = hint("/client/a.sock", "%1");
     const b = hint("/client/a.sock", "%2");
-    expect(await laneOutcome(svc.declare(holds, a))).toEqual({ kind: "ok", value: asked(a) });
-    expect(await laneOutcome(svc.declare(holds, b))).toEqual({ kind: "ok", value: asked(b) });
+    expect(await laneOutcome(svc.declare(holds, a))).toEqual({
+      kind: "ok",
+      value: asked(a),
+    });
+    expect(await laneOutcome(svc.declare(holds, b))).toEqual({
+      kind: "ok",
+      value: asked(b),
+    });
     expect(starts).toEqual(["tmux", "tmux"]);
   });
 
   it("one pane id on two servers is two panes", async () => {
     const a = hint("/client/a.sock", "%1");
     const b = hint("/client/b.sock", "%1");
-    expect(await laneOutcome(svc.declare(holds, a))).toEqual({ kind: "ok", value: asked(a) });
-    expect(await laneOutcome(svc.declare(holds, b))).toEqual({ kind: "ok", value: asked(b) });
+    expect(await laneOutcome(svc.declare(holds, a))).toEqual({
+      kind: "ok",
+      value: asked(a),
+    });
+    expect(await laneOutcome(svc.declare(holds, b))).toEqual({
+      kind: "ok",
+      value: asked(b),
+    });
   });
 
   it("a server that refuses is a failure naming tmux's reason, logged once and asked again on its period", async () => {
@@ -176,12 +191,16 @@ describe("TmuxService", () => {
     const first = await laneOutcome(svc.declare(holds, h));
     expect(first.kind).toBe("failed");
     expect(first).toMatchObject({
-      reason: expect.stringContaining("no server running on /client/refuse.sock"),
+      reason: expect.stringContaining(
+        "no server running on /client/refuse.sock",
+      ),
     });
     expect(await laneOutcome(svc.declare(holds, h))).toBe(first);
     expect(starts).toEqual(["tmux"]);
     expect(lines).toEqual([
-      expect.stringMatching(/^warn tmux refresh pane=%1 socket=\/client\/refuse.sock stored=Y by=first outcome=failed reason=".*no server running on \/client\/refuse.sock.*" took=\d+ms$/),
+      expect.stringMatching(
+        /^warn tmux refresh pane=%1 socket=\/client\/refuse.sock by=first outcome=failed reason=".*no server running on \/client\/refuse.sock.*" took=\d+ms$/,
+      ),
     ]);
 
     await jest.advanceTimersByTimeAsync(NAME_PERIOD_MS);

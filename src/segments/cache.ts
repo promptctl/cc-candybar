@@ -150,8 +150,8 @@ export class CacheExpiryProvider {
   }
 
   getStats(): SourceStats {
-    const { refreshes, failures, lastMs } = this.refreshes.record();
-    return { entries: this.known.size, refreshes, failures, lastMs };
+    const { refreshes, failures, abandoned, lastMs } = this.refreshes.record();
+    return { entries: this.known.size, refreshes, failures, abandoned, lastMs };
   }
 
   private async read(

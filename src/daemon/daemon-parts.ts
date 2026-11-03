@@ -12,6 +12,7 @@ import type { PayloadProviders } from "./payload-providers";
 import type { RenderSightings } from "./render-sightings";
 import type { RenderWarningRecords } from "./render-warnings.js";
 import type { Runs } from "./runs.js";
+import type { SourceRuns } from "../var-system/source-runs.js";
 import type { RuntimeStats } from "./stats";
 import type { SessionSource } from "./session-source.js";
 import type { SessionState } from "./session-state";
@@ -53,6 +54,9 @@ export interface DaemonParts {
   readonly menuIdle: MenuIdle;
   readonly linkSigner: LinkSigner;
   readonly runs: Runs;
+  // [LAW:single-enforcer] The daemon's one owner of every declared source's
+  // runs, which the stats reply reads.
+  readonly sourceRuns: SourceRuns;
   readonly laneSetups: LaneSetups;
   readonly tmuxStatusLines: TmuxStatusLines;
   readonly frameFeeds: FrameFeeds<CheckedRenderRequest>;

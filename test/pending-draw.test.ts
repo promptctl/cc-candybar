@@ -9,6 +9,7 @@
 
 import { drawPayload } from "./helpers/draw-payload";
 import { fakeLauncher, turns } from "./helpers/fake-launcher";
+import { systemTimekeeper } from "../src/time";
 import { heldClock } from "./helpers/held-clock";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { SessionState } from "../src/daemon/session-state";
@@ -33,6 +34,7 @@ import { lastBinding } from "./helpers/render-binding";
 import { selectionFor } from "./helpers/selection";
 import { textOf, ansiOf, type Frame } from "../src/render/frame";
 import { exits, hangs, runsFor, shell } from "../src/proc/spawner-fake";
+import { SourceRuns } from "../src/var-system/source-runs";
 
 const AT = 1_800_000_000 as Instant;
 
@@ -68,7 +70,7 @@ function renderer(cfg: ValidatedConfig) {
   spawner.program(shell("sleep 0.2; printf ''"), runsFor(200, exits(0)));
   const store = new VariableStore(clock);
   const session = new SessionState();
-  const registry = new SourceRegistry(launcher, store, "", session);
+  const registry = new SourceRegistry(new SourceRuns({ launcher: launcher, clock: systemTimekeeper }), store, "", session);
   declareDslVariables(cfg, registry, "/tmp", EVERY_SCOPE);
   const drawn = lastBinding(compiled.menuRuntime.action);
   return {

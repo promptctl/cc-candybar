@@ -55,6 +55,7 @@ describe("AutoCompactProvider", () => {
       entries: 1,
       refreshes: { request: 2 },
       failures: 0,
+      abandoned: 0,
       lastMs: expect.any(Number),
     });
   });

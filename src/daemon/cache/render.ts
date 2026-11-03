@@ -13,9 +13,7 @@ import {
   type DeclaredSources,
   type ViewFacts,
 } from "../render-payload.js";
-import type { FileEvents } from "./file-events.js";
 import type { ManagedStorage, StorageKey } from "./managed-storage.js";
-import type { RefreshLedger } from "../../utils/refresh-ledger";
 import type { LinkSigner } from "../../click/link-signer.js";
 import type { SessionId } from "../session-id.js";
 import { fileHeldSettings } from "../setting-drafts.js";
@@ -71,7 +69,7 @@ import { fixedSource, type ViewSource } from "../../dsl/view-source.js";
 import { bindView } from "../../dsl/parts.js";
 import { unusedDeclarations, type UnusedDecl } from "../../config/unused.js";
 import { VariableStore } from "../../var-system/store.js";
-import type { Launcher } from "../../proc/launch";
+import type { SourceRuns } from "../../var-system/source-runs.js";
 import { SourceRegistry } from "../../var-system/sources.js";
 import type { VarScope } from "../../dsl/variable-scope.js";
 import type { SessionStateReader, SessionStateRW } from "../session-state.js";
@@ -164,8 +162,9 @@ export const MAX_ENTRIES = 256;
 export interface RenderDeps<S extends ViewSource = ViewSource> {
   // The daemon's clock (StateDeps).
   clock: Timekeeper;
-  // Who its sources' programs belong to (StateDeps).
-  launcher: Launcher;
+  // The owner of every declared source's runs, whose entries its states'
+  // `shell` and `file` sources hold (StateDeps).
+  runs: SourceRuns;
   // The daemon's state directory, where the repositories' answers are kept
   // (StateDeps).
   stateDir: string;
@@ -182,12 +181,6 @@ export interface RenderDeps<S extends ViewSource = ViewSource> {
   signer: LinkSigner;
   // The gates a load builds against (StateDeps).
   gates: Gates;
-  // The ledger its states' user sources record their refreshes in
-  // (StateDeps).
-  ledger?: RefreshLedger;
-  // The delivery owner its states' user sources read (StateDeps). Required,
-  // so a daemon whose sources cannot hear a stall does not compile.
-  fileEvents: FileEvents;
   // What a view declares of the daemon's shared entries
   // (src/daemon/render-payload.ts `declareLanes`); a test reading no built-in
   // source passes DECLARES_NOTHING.
@@ -218,11 +211,14 @@ export const UNOWNED_STORAGE: PluginStorage = {
 
 // What building one config's state needs.
 export interface StateDeps {
-  // The clock its variables' ages, its sources' timers and the load's own
-  // duration run on: the daemon's.
+  // The clock its variables' ages and the load's own duration run on: the
+  // daemon's.
   readonly clock: Timekeeper;
-  // Who a source's program belongs to.
-  readonly launcher: Launcher;
+  // [LAW:single-enforcer] The daemon's one owner of every declared source's
+  // runs: a state's `shell` and `file` sources hold entries of it, so two
+  // states declaring one identity share one run. A build outside the daemon
+  // (check, the doctor, a test) hands in one of its own.
+  readonly runs: SourceRuns;
   // The state directory whose answers book a load reads: which repositories'
   // plugins it may run.
   readonly stateDir: string;
@@ -237,16 +233,8 @@ export interface StateDeps {
   // The gates a config's sessions click through, which a load builds once so a
   // config that cannot gate fails there.
   readonly gates: Gates;
-  // Where a state's user sources record their refreshes: the daemon's one
-  // ledger. A build outside the daemon (check, the doctor, a test) leaves it
-  // out, and its registries keep their own.
-  readonly ledger?: RefreshLedger;
-  // The daemon's delivery owner, which a state's `watch_file` sources read. A
-  // build outside the daemon leaves it out, and measures nothing.
-  readonly fileEvents?: FileEvents;
-  // The daemon's one watcher registry, which holds a state's `watch_file`
-  // watches. A build outside the daemon leaves it out, and its registries
-  // keep their own.
+  // The daemon's one watcher registry, which the cache's own watches (the
+  // answers book's) ride. A build outside the daemon leaves it out.
   readonly watchers?: WatcherRegistry;
   // The compile for a config's compile key. A cache shares one between every
   // entry whose config compiles alike (RenderCache's table); a one-shot load
@@ -937,14 +925,11 @@ export function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
   // its own `default`. The loader validates it as a string; the registry
   // default ("") matches the historical behavior when omitted.
   const registry = new SourceRegistry(
-    deps.launcher,
+    deps.runs,
     store,
     config.globals.default_empty_value ?? "",
     deps.sessionState,
     null,
-    deps.ledger,
-    deps.fileEvents,
-    deps.watchers,
     deps.env,
   );
 

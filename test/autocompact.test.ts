@@ -8,7 +8,7 @@
 // test/render-payload-outcomes.test.ts's.
 
 import { drawPayload } from "./helpers/draw-payload";
-import { unscriptedLauncher } from "./helpers/fake-launcher";
+import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
 import { TEST_SIGNER } from "./helpers/link-signer";
@@ -75,8 +75,7 @@ function runtime(read: Outcome<AutoCompactWindow>, contextWindow = 1_000_000) {
     JSON.stringify({ tmux: HINT }),
   );
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(
-    unscriptedLauncher,
+  const registry = new SourceRegistry(unscriptedRuns(),
     store,
     "",
     sessionState,

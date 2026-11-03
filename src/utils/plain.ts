@@ -28,8 +28,24 @@ export type Plain<T> = unknown extends T
 // names it.
 export type Projection<T> = { readonly [K in keyof T]-?: unknown };
 
-// The identity of a plain value. Written `T & Plain<T>` because a constraint
-// `T extends Plain<T>` is circular (TS2313).
+// The identity of a plain value: sha256 hex over its JSON with keys sorted at
+// every level, so two values built in any field order digest alike. Written
+// `T & Plain<T>` because a constraint `T extends Plain<T>` is circular
+// (TS2313).
 export function digestOf<T>(value: T & Plain<T>): string {
-  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+  return createHash("sha256")
+    .update(JSON.stringify(canonical(value)))
+    .digest("hex");
+}
+
+function canonical(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (typeof value === "object" && value !== null) {
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .map(([k, v]) => [k, canonical(v)]),
+    );
+  }
+  return value;
 }

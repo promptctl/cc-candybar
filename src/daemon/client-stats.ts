@@ -223,6 +223,13 @@ export function formatStats(s: StatsSnapshot): string {
     `  plugin storage folders=${storage.folders} lost=${storage.lost} faults ${faults}`,
   );
   lines.push(`  fileEvents    ${fileEventsLine(s.fileEvents)}`);
+  for (const kind of ["shell", "file"] as const) {
+    const r = s.sourceRuns[kind];
+    lines.push(
+      `  runs.${kind.padEnd(8)} entries=${r.entries} held=${r.held} failures=${r.failures} abandoned=${r.abandoned} last=${r.lastMs === null ? "-" : `${r.lastMs}ms`}`,
+    );
+  }
+  lines.push(`  runs.watches  ${s.sourceRuns.watches}`);
   lines.push(``);
   lines.push(`transcriptReads`);
   lines.push(`  reads         ${s.transcriptReads.reads}`);

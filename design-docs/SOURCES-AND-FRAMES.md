@@ -28,7 +28,7 @@ A value has one home, keyed by its scope:
 
 What belongs to a session wherever it renders (its latest request, its effect memory, its session-scoped sources) is kept by each one's owner under the session id, never by a view. A `cd` or a worktree changes none of these, so an effect keeps its clock and a transcript is folded once. A **view** holds what depends on one directory's config under the session's picks. A session has at most one view, the one for its latest request's directory, and a request from elsewhere closes it and opens the new one.
 
-A user source's scope is derived, never authored: it is `view` when its key or dependencies read a session value, otherwise `directory`. So a `shell` keyed on a session input runs once per session, and one that reads nothing per session runs once per directory.
+A user source's scope is derived, never authored: it is `view` when its key or dependencies read a session value, otherwise `directory`. Its run's identity is a digest of what the run needs — the command or path, the directory, the parser, the normalised policy and the hash of its key's value — and nothing the renderer owns, so every declaration with one digest, in one directory or many, shares one run: a `shell` keyed on a session input runs once per distinct key value, and one that reads nothing per session runs once however many sessions and configs declare it.
 
 ## Refresh: what makes a source read
 
@@ -61,7 +61,7 @@ A source's value is pending, a value, absent (the domain genuinely has nothing) 
 - A placement reading a pending value draws its **loading cell**: `…` in its own colours, at the width it last drew. A placement that last drew nothing stays hidden. So a pending value never reflows its row or flashes.
 - A failure still draws `⚠` with its reason.
 - An input's default answers absence only, never pending. A user `shell` or `file` source's own default is its value until its first read, so it draws that default rather than `…`.
-- A new key is pending until its own answer lands, so an old key's answer is never drawn for a new one: the pull request of a branch just checked out reads `…`, not the previous branch's PR. A re-read under the same key keeps its value until it lands.
+- A built-in's new key is pending until its own answer lands, so an old key's answer is never drawn for a new one: the pull request of a branch just checked out reads `…`, not the previous branch's PR. A declared source's node keeps its last value while a moved key's run is out, so a key change draws no `…` between two answers. A re-read under the same key keeps its value until it lands.
 
 The draw keeps one record of what each placement last drew, its frame memory. It is the one thing a draw writes, and it wakes nothing.
 

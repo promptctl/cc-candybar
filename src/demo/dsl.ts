@@ -71,6 +71,7 @@ import type { RenderedLine } from "../dsl/node-registry.js";
 import type { ClaudeHookData } from "../utils/claude.js";
 import { debug, setDebug } from "../utils/logger.js";
 import { instantOf } from "../utils/instant.js";
+import { SourceRuns } from "../var-system/source-runs.js";
 
 const FRAMES = 4;
 const FRAME_INTERVAL_MS = 450;
@@ -80,6 +81,9 @@ const cwd = process.cwd();
 // [LAW:effects-at-boundaries] This script is its own process main: it reads the
 // machine once, as src/index.ts does, and the debug channel follows it.
 const world = processWorld();
+// [LAW:single-enforcer] The demo's own owner of its sources' runs, closed
+// with the registry that holds them.
+const runs = new SourceRuns({ launcher: world.launcher, clock: world.clock });
 const { host } = world;
 setDebug(Boolean(host.env.CC_CANDYBAR_DEBUG));
 const configPath = resolve(process.argv[2] ?? join(here, "statusline.json5"));
@@ -150,7 +154,7 @@ function loadState(): DslRenderState {
     chain,
     {
       clock: world.clock,
-      launcher: world.launcher,
+      runs,
       locations: locs,
       env: host.env,
       sessionState,
@@ -173,6 +177,7 @@ async function renderFrames(): Promise<void> {
     refuseDrops(state.dropped);
   } catch (e) {
     state.registry.dispose();
+    runs.close();
     throw e;
   }
   // The demo runs no update watch: its facts document carries an update nothing
@@ -255,6 +260,7 @@ async function renderFrames(): Promise<void> {
   } finally {
     view.dispose();
     state.registry.dispose();
+    runs.close();
   }
 }
 

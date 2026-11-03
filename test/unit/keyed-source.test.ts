@@ -1,6 +1,7 @@
 import { RefreshLedger } from "../../src/utils/refresh-ledger";
 import {
   KeyedSource,
+  NO_WATCH,
   type KeyedSourceSpec,
 } from "../../src/utils/keyed-source";
 import { Holds } from "../../src/utils/holds";
@@ -23,12 +24,13 @@ type Line = { level: string; msg: string };
 function fakeRead() {
   const calls: Array<{
     key: string;
+    signal: AbortSignal;
     resolve: (o: Outcome<string>) => void;
   }> = [];
   return {
     calls,
-    read: (key: string): Promise<Outcome<string>> =>
-      new Promise((resolve) => calls.push({ key, resolve })),
+    read: (key: string, signal: AbortSignal): Promise<Outcome<string>> =>
+      new Promise((resolve) => calls.push({ key, signal, resolve })),
     answer(i: number, outcome: Outcome<string>): void {
       calls[i]!.resolve(outcome);
     },
@@ -38,7 +40,7 @@ function fakeRead() {
 const EVERY = { okMs: 1_000, failedMs: 100 };
 
 function sourceOf(
-  read: (key: string) => Promise<Outcome<string>>,
+  read: (key: string, signal: AbortSignal) => Promise<Outcome<string>>,
   opts: {
     maxEntries?: number;
     lines?: Line[];
@@ -51,7 +53,8 @@ function sourceOf(
     keyOf: (k) => k,
     fields: (k) => `key=${k}`,
     read,
-    every: EVERY,
+    every: () => EVERY,
+    watch: NO_WATCH,
     maxEntries: opts.maxEntries ?? 64,
     logger: (level, msg) => opts.lines?.push({ level, msg }),
     ledger: new RefreshLedger((level, msg) => opts.lines?.push({ level, msg })),
@@ -172,30 +175,34 @@ describe("KeyedSource", () => {
     expect(await laneOutcome(source.declare(holds, "a"))).toEqual(ok("after"));
   });
 
-  // The abandoned read still ran: its event and its count say so, and a
-  // failure it met is logged although nothing stores it.
-  test("a read a supersede abandoned is still one event, marked not stored", async () => {
+  // The abandoned read was told to stop (its signal), so what it answers is
+  // the owner's doing: an event of its own, never a refresh or a failure the
+  // source met, and nothing stores it.
+  test("a read a supersede abandoned is its own event, not a refresh and not a failure", async () => {
     const lines: Line[] = [];
     const f = fakeRead();
     source = sourceOf(f.read, { lines });
     const waiting = laneOutcome(source.declare(new Holds(), "a"));
     const resume = source.supersede("a");
+    expect(f.calls[0]!.signal.aborted).toBe(true);
     f.answer(0, failed("layer changed under it", "read"));
     await settled();
     resume();
+    expect(f.calls[1]!.signal.aborted).toBe(false);
     f.answer(1, ok("after"));
     expect(await waiting).toEqual(ok("after"));
     expect(lines.map((l) => `${l.level} ${l.msg}`)).toEqual([
       expect.stringMatching(
-        /^warn fake refresh key=a stored=N by=first outcome=failed reason="layer changed under it" took=\d+ms$/,
+        /^info fake refresh key=a by=first abandoned took=\d+ms$/,
       ),
       expect.stringMatching(
-        /^info fake refresh key=a stored=Y by=supersede outcome=ok took=\d+ms$/,
+        /^info fake refresh key=a by=supersede outcome=ok took=\d+ms$/,
       ),
     ]);
     expect(source.stats()).toMatchObject({
-      refreshes: { first: 1, period: 0, change: 0, supersede: 1 },
-      failures: 1,
+      refreshes: { first: 0, period: 0, change: 0, supersede: 1 },
+      failures: 0,
+      abandoned: 1,
     });
   });
 
@@ -335,14 +342,17 @@ describe("KeyedSource", () => {
   });
 
   describe("with no period", () => {
-    const noPeriod = (read: (key: string) => Promise<Outcome<string>>) =>
+    const noPeriod = (
+      read: (key: string, signal: AbortSignal) => Promise<Outcome<string>>,
+    ) =>
       new KeyedSource<string, string>({
         name: "fake",
         scope: "pane",
         keyOf: (k) => k,
         fields: (k) => `key=${k}`,
         read,
-        every: null,
+        every: () => null,
+        watch: NO_WATCH,
         maxEntries: 64,
         logger: () => {},
         ledger: new RefreshLedger(),
@@ -450,7 +460,7 @@ describe("KeyedSource", () => {
       {
         level: "warn",
         msg: expect.stringMatching(
-          /^fake refresh key=a stored=Y by=first outcome=failed reason="no server" took=\d+ms$/,
+          /^fake refresh key=a by=first outcome=failed reason="no server" took=\d+ms$/,
         ),
       },
     ]);

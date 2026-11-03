@@ -69,6 +69,7 @@ import {
   UNOWNED_STORAGE,
 } from "../daemon/cache/render.js";
 import { SessionState } from "../daemon/session-state.js";
+import { SourceRuns } from "../var-system/source-runs.js";
 import { claudeConfigDir } from "../claude-settings.js";
 import type {
   RateLimitsSeen,
@@ -107,7 +108,7 @@ export function loadConfigOnce(
 ): ConfigLoad {
   const deps = {
     clock,
-    launcher,
+    runs: new SourceRuns({ launcher, clock }),
     locations: locations(host),
     env: host.env,
     sessionState: new SessionState(),
@@ -125,6 +126,7 @@ export function loadConfigOnce(
   const state =
     loaded.state ?? fallbackState(origin.cwd, loaded.repos.plugins, deps);
   state.registry.dispose();
+  deps.runs.close();
   return {
     layers: loaded.layers,
     // [LAW:no-silent-failure] A placement the bar drew past is still the

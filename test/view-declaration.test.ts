@@ -15,7 +15,6 @@ import os from "node:os";
 import path from "node:path";
 import { GitDataProvider, PR_PERIOD } from "../src/daemon/cache/git";
 import { SOURCES_NOTHING, RenderCache } from "../src/daemon/cache/render";
-import { NO_FILE_EVENTS } from "../src/daemon/cache/file-events";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { SessionState } from "../src/daemon/session-state";
 import { parseClientHints } from "../src/daemon/protocol";
@@ -39,6 +38,7 @@ import { answerRepo } from "./helpers/repo-approval";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
+import { SourceRuns } from "../src/var-system/source-runs";
 
 const REPO = "/repo";
 
@@ -133,11 +133,10 @@ test("a preset click that newly places the PR starts its lookup with no draw; sw
       stateDir: stateDir(HOST),
       locations: locs(),
       env: HOST.env,
-      launcher: unscriptedLauncher,
+      runs: new SourceRuns({ launcher: unscriptedLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
-      fileEvents: NO_FILE_EVENTS,
       sessionState,
       watchers,
       source: SOURCES_NOTHING,
@@ -282,11 +281,10 @@ function gitCache() {
       stateDir: stateDir(HOST),
       locations: locs(),
       env: HOST.env,
-      launcher: unscriptedLauncher,
+      runs: new SourceRuns({ launcher: unscriptedLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
-      fileEvents: NO_FILE_EVENTS,
       sessionState: new SessionState(),
       watchers,
       source: SOURCES_NOTHING,
