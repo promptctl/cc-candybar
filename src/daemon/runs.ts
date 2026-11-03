@@ -13,7 +13,7 @@ import type { Resume } from "../utils/keyed-source.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import type { SessionStateRW } from "./session-state.js";
 import type { Instant } from "../utils/instant.js";
-import type { Timekeeper } from "../time.js";
+import { elapsedMs, type Timekeeper } from "../time.js";
 import { holdClickError } from "./click-error.js";
 import { valueOf } from "../utils/logfmt.js";
 
@@ -173,11 +173,7 @@ export class Runs {
         category: "click.run",
       })
       .then((result) =>
-        this.ended(
-          run,
-          result,
-          Math.round(this.deps.clock.monotonic() - startedAt),
-        ),
+        this.ended(run, result, elapsedMs(this.deps.clock, startedAt)),
       )
       .finally(() => {
         this.inFlight.delete(abort);

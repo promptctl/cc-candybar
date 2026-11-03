@@ -69,8 +69,8 @@ export interface HandlerProbeEdge {
   readonly daemon: () => Promise<Asked<DaemonView>>;
   // Hand a URL to Launch Services. The reason it refused, or null.
   readonly open: (url: string) => string | null;
-  // The time, in milliseconds.
-  readonly now: () => number;
+  // A monotonic reading, in milliseconds, for the wait's bound.
+  readonly monotonic: () => number;
   // One poll interval.
   readonly pause: () => Promise<void>;
   // The app Launch Services opens the scheme with; null when none claims it.
@@ -97,8 +97,8 @@ async function awaitArrival(
 ): Promise<UrlHandlerFacts | null> {
   // [LAW:no-ambient-temporal-coupling] The bound is the clock's, so a daemon
   // slow to answer each read cannot stretch the wait.
-  const deadline = edge.now() + WAIT_MS;
-  while (edge.now() < deadline) {
+  const deadline = edge.monotonic() + WAIT_MS;
+  while (edge.monotonic() < deadline) {
     await edge.pause();
     const view = await edge.daemon();
     // A daemon that cannot be asked this instant may answer the next poll.
@@ -219,7 +219,7 @@ export function productionHandlerProbeEdge(
   return {
     platform: process.platform,
     sockets: { own: socketPath(host), handler: defaultSocketPath() },
-    now: () => clock.now(),
+    monotonic: () => clock.monotonic(),
     nonce: randomUUID,
     daemon: () => daemonView(world),
     open: (url) => {

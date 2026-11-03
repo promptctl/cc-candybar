@@ -194,6 +194,7 @@ export interface StatsSnapshot {
 
 export class RuntimeStats {
   readonly startedAt: Date;
+  private readonly startedMono: number;
   requestsTotal = 0;
   requestsErrored = 0;
   requestsTimedOut = 0;
@@ -202,8 +203,9 @@ export class RuntimeStats {
 
   // [LAW:one-source-of-truth] The daemon's clock, which these counters read
   // like everything else the daemon times.
-  constructor(private readonly clock: Pick<Timekeeper, "now">) {
+  constructor(private readonly clock: Pick<Timekeeper, "now" | "monotonic">) {
     this.startedAt = new Date(clock.now());
+    this.startedMono = clock.monotonic();
   }
 
   // Whether `field` is the first sight of that unknown hook field in this
@@ -287,7 +289,7 @@ export class RuntimeStats {
   };
 
   private recordRollingNow(): void {
-    const now = this.clock.now();
+    const now = this.clock.monotonic();
     if (this.rollingTimestamps.length < ROLLING_BUFFER_CAP) {
       this.rollingTimestamps.push(now);
       return;
@@ -315,7 +317,7 @@ export class RuntimeStats {
   }
 
   private snapshotSubprocesses(): StatsSnapshot["subprocesses"] {
-    const cutoff = this.clock.now() - ROLLING_WINDOW_MS;
+    const cutoff = this.clock.monotonic() - ROLLING_WINDOW_MS;
     let lastMinute = 0;
     for (const ts of this.rollingTimestamps) {
       if (ts >= cutoff) lastMinute++;
@@ -367,7 +369,7 @@ export class RuntimeStats {
   // one reads; comparing against the producer's own output, not a second
   // spelling of the type, means a field added here is checked for there.
   static referenceSnapshot(): StatsSnapshot {
-    return new RuntimeStats({ now: () => 0 }).snapshot({
+    return new RuntimeStats({ now: () => 0, monotonic: () => 0 }).snapshot({
       gitCache: {
         size: 0,
         held: 0,
@@ -480,9 +482,7 @@ export class RuntimeStats {
       sourceDigest: extras.sourceDigest,
       protocolVersion: PROTOCOL_VERSION,
       startedAt: this.startedAt.toISOString(),
-      uptimeSec: Math.floor(
-        (this.clock.now() - this.startedAt.getTime()) / 1000,
-      ),
+      uptimeSec: Math.floor((this.clock.monotonic() - this.startedMono) / 1000),
       rssBytes: mem.rss,
       heapUsedBytes: mem.heapUsed,
       heapTotalBytes: mem.heapTotal,

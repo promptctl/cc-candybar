@@ -95,7 +95,7 @@ import {
 } from "../../config/loader/plugins.js";
 import { ownedBy, pluginNs } from "../../config/loader/plugin-scope.js";
 import { projectionsOf } from "../../config/loader/projections.js";
-import type { Timekeeper } from "../../time";
+import { elapsedMs, type Timekeeper } from "../../time";
 
 // [LAW:one-source-of-truth] Each cache entry owns the live DSL state for a
 // (projectDir, cwd) tuple: the parsed config, the variable store +
@@ -1071,7 +1071,7 @@ export function settle(
     layers: chain.layers.map((l) => l.path),
     home: chain.home,
     repos: frame.repos,
-    ms: Math.round(clock.monotonic() - frame.started),
+    ms: elapsedMs(clock, frame.started),
   };
   const warning = (own: readonly string[]): string | null =>
     joinWarnings([...frame.advisories, ...resolveWarnings, ...own]);

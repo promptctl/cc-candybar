@@ -49,7 +49,7 @@ import type { Socket } from "node:net";
 import type { Readable, Writable } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
 import { types } from "node:util";
-import type { Timekeeper } from "../time";
+import { elapsedMs, type Timekeeper } from "../time";
 import type { Drawing } from "../config/lanes";
 import { answeredBy, eventHoldAt, type HeldEvent } from "../utils/event-hold";
 import { instantOf, type Instant } from "../utils/instant";
@@ -319,7 +319,7 @@ function rateLimitedResult(
     stderr: "",
     exitCode: null,
     signal: null,
-    error: `rate-limited: ${category} min interval ${minIntervalMs}ms, last start ${sinceLastMs}ms ago`,
+    error: `rate-limited: ${category} min interval ${minIntervalMs}ms, last start ${Math.round(sinceLastMs)}ms ago`,
   };
 }
 
@@ -609,11 +609,11 @@ function spawnLifeline(state: LaunchState): Lifeline | null {
       detached: true,
     });
   } catch (err) {
-    stats?.onEnd("lifeline", clock.monotonic() - t0);
+    stats?.onEnd("lifeline", elapsedMs(clock, t0));
     setFault(state, `did not start: ${spawnErrorText(err, undefined)}`);
     return null;
   }
-  stats?.onEnd("lifeline", clock.monotonic() - t0);
+  stats?.onEnd("lifeline", elapsedMs(clock, t0));
   // stdio[0] is "pipe", so Node hands back a socket, unless descriptors ran out:
   // that spawn fails with no throw and no stdin, and only its "error" says why.
   const pipe = line.stdin as Socket | null;
@@ -813,7 +813,7 @@ async function launchWaited(
         detached: true,
       });
     } catch (err) {
-      stats?.onEnd(opts.category, clock.monotonic() - t0);
+      stats?.onEnd(opts.category, elapsedMs(clock, t0));
       resolve({
         ok: false,
         reason: "spawn-error",
@@ -874,7 +874,7 @@ async function launchWaited(
       groupEndTimer?.();
       unlisten();
       if (group !== undefined) unguard(state, group);
-      stats?.onEnd(opts.category, clock.monotonic() - t0);
+      stats?.onEnd(opts.category, elapsedMs(clock, t0));
       // The launch's scope goes once its child has exited: what still reads
       // the child's pipes then is a drain, which holds nothing of the launch.
       child.off("close", conclude);
@@ -1047,7 +1047,7 @@ function launchBlocking(state: LaunchState, opts: LaunchOpts): LaunchResult {
       encoding: "utf8",
     });
 
-    stats?.onEnd(opts.category, clock.monotonic() - t0);
+    stats?.onEnd(opts.category, elapsedMs(clock, t0));
 
     const stdout = typeof result.stdout === "string" ? result.stdout : "";
     const stderr = typeof result.stderr === "string" ? result.stderr : "";
@@ -1087,7 +1087,7 @@ function launchBlocking(state: LaunchState, opts: LaunchOpts): LaunchResult {
       signal: result.signal ?? null,
     };
   } catch (err) {
-    stats?.onEnd(opts.category, clock.monotonic() - t0);
+    stats?.onEnd(opts.category, elapsedMs(clock, t0));
     return {
       ok: false,
       reason: "spawn-error",
@@ -1113,7 +1113,7 @@ function launchOrphan(state: LaunchState, opts: LaunchOpts): LaunchResult {
   const t0 = clock.monotonic();
   stats?.onStart(opts.category);
   const result = launchDetachedSyncInner(state, opts);
-  stats?.onEnd(opts.category, clock.monotonic() - t0);
+  stats?.onEnd(opts.category, elapsedMs(clock, t0));
   return result;
 }
 
@@ -1264,14 +1264,14 @@ function launchJob(
       },
     );
   } catch (err) {
-    stats?.onEnd(opts.category, clock.monotonic() - t0);
+    stats?.onEnd(opts.category, elapsedMs(clock, t0));
     return {
       ok: false,
       reason: "spawn-error",
       error: spawnErrorText(err, opts.cwd),
     };
   }
-  stats?.onEnd(opts.category, clock.monotonic() - t0);
+  stats?.onEnd(opts.category, elapsedMs(clock, t0));
   // An async spawn failure has no pid; its `error` needs a listener or Node
   // crashes the launcher, and the missing pid already says it failed.
   child.once("error", () => {});

@@ -27,6 +27,15 @@ export interface Timekeeper {
   defer(fire: () => void): () => void;
 }
 
+// [LAW:single-enforcer] A span in whole milliseconds since `since`, a
+// monotonic reading: every duration src records or prints is one of these.
+export function elapsedMs(
+  clock: Pick<Timekeeper, "monotonic">,
+  since: number,
+): number {
+  return Math.round(clock.monotonic() - since);
+}
+
 // [LAW:single-enforcer] The one place src reads the real clock, sets a timer
 // or waits for a loop turn. It holds no state; `after` and `every` read the
 // timer globals when they are called, so jest's fake timers still drive code

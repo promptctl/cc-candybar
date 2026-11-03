@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { quietLogger, type DaemonLogger } from "../utils/logger";
 import type { SessionSnapshot, SessionStorage } from "./session-state";
-import type { Timekeeper } from "../time";
+import { elapsedMs, type Timekeeper } from "../time";
 
 // [LAW:no-silent-failure] Corrupt/missing file → empty state is the *defined*
 // recovery, not a hidden fallback to different data: an empty store re-rolls
@@ -154,7 +154,7 @@ export class FileSessionStorage implements SessionStorage {
         if (!landed) await fs.promises.rm(tmp, { force: true });
         this.logger(
           "info",
-          `session-state write superseded by a flush landed=${landed} took=${Math.round(this.clock.monotonic() - started)}ms held=${Math.round(heldMs)}ms`,
+          `session-state write superseded by a flush landed=${landed} took=${elapsedMs(this.clock, started)}ms held=${Math.round(heldMs)}ms`,
         );
         return;
       }
@@ -221,7 +221,7 @@ export class FileSessionStorage implements SessionStorage {
   ): void {
     this.logger(
       "info",
-      `session-state saved bytes=${Buffer.byteLength(body)} sessions=${Object.keys(snapshot).length} took=${Math.round(this.clock.monotonic() - started)}ms held=${Math.round(heldMs)}ms`,
+      `session-state saved bytes=${Buffer.byteLength(body)} sessions=${Object.keys(snapshot).length} took=${elapsedMs(this.clock, started)}ms held=${Math.round(heldMs)}ms`,
     );
   }
 }

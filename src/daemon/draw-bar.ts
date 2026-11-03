@@ -1,6 +1,7 @@
 // One render of a session, a request's or a frame's, and what it records.
 
 import path from "node:path";
+import { elapsedMs } from "../time.js";
 import { checkoutLocation } from "../utils/git-root.js";
 import { inTmux } from "../tmux-hint.js";
 import { inspect } from "node:util";
@@ -172,7 +173,7 @@ export function renderFrame(
       "render",
       facts,
       outcome,
-      Math.round(clock.monotonic() - started),
+      elapsedMs(clock, started),
     );
     const failed = renderFailed(error);
     return {
@@ -1021,7 +1022,7 @@ async function drawAnswer(
   // are encoded before this is read.
   noteFacts(facts, {
     handoff: (toStatusline ? elsewhere : []).join(",") || "-",
-    drew: `${Math.round(clock.monotonic() - drawFrom)}ms`,
+    drew: `${elapsedMs(clock, drawFrom)}ms`,
   });
   return {
     resp,

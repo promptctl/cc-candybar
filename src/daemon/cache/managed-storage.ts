@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { SessionId } from "../session-id";
-import type { Timekeeper } from "../../time";
+import { elapsedMs, type Timekeeper } from "../../time";
 import type { WatcherHandle, WatcherRegistry, Invalidation } from "./watchers";
 import {
   stallReason,
@@ -486,7 +486,7 @@ export class ManagedStorage {
     let scanned = 0;
     let removed = 0;
     const event = () =>
-      `plugin storage sweep folder=${valueOf(key.folder)} scanned=${scanned} removed=${removed} took=${Math.round(this.clock.monotonic() - startedAt)}ms`;
+      `plugin storage sweep folder=${valueOf(key.folder)} scanned=${scanned} removed=${removed} took=${elapsedMs(this.clock, startedAt)}ms`;
     try {
       const entries = await fs.promises.readdir(key.folder, {
         withFileTypes: true,

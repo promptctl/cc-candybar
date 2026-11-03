@@ -26,6 +26,7 @@ import {
   BadVerbArgs,
 } from "./verbs";
 import { ClickAbandoned, DaemonClosing } from "./verb-error";
+import { elapsedMs } from "../time.js";
 import { transcriptReads } from "../utils/transcript-fs.js";
 import { readStores } from "../doctor/edge";
 import type { ClickArrival } from "../doctor/sightings";
@@ -417,7 +418,7 @@ export async function replyTo(
       "render",
       facts,
       rendered.outcome,
-      Math.round(clock.monotonic() - t0),
+      elapsedMs(clock, t0),
     );
     parts.log(level, line);
     return {
@@ -616,7 +617,7 @@ async function clickEvent(
     "click",
     facts,
     outcome,
-    Math.round(clock.monotonic() - t0),
+    elapsedMs(clock, t0),
   );
   parts.log(level, line);
   return clickReply(outcome);

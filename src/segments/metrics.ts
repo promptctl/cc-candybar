@@ -107,7 +107,7 @@ export class MetricsProvider {
   private readonly fold: TranscriptFold<MetricsState>;
 
   constructor(opts: {
-    readonly clock: Pick<Timekeeper, "now" | "monotonic">;
+    readonly clock: Pick<Timekeeper, "monotonic">;
     readonly logger?: DaemonLogger;
     readonly ledger?: RefreshLedger;
   }) {

@@ -849,7 +849,7 @@ export class GitDataProvider {
         this.clock.monotonic() - startedAt,
       );
       // Kept under its own key whether or not the PR has moved on since.
-      const at = this.clock.now();
+      const at = this.clock.monotonic();
       pr.seen.delete(key);
       pr.seen.set(key, { outcome, at });
       for (const oldest of pr.seen.keys()) {

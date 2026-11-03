@@ -155,7 +155,7 @@ function fakeEdge(
   const edge: HandlerProbeEdge = {
     platform: "darwin",
     sockets: { own: "/tmp/s", handler: "/tmp/s" },
-    now: () => clock,
+    monotonic: () => clock,
     nonce: () => NONCE,
     daemon: async () => {
       const read = reads++;
@@ -259,7 +259,7 @@ describe("probeUrlHandler", () => {
   test("the wait is five seconds on the clock, however slowly the daemon answers", async () => {
     let clock = 0;
     const { edge, calls } = fakeEdge({
-      now: () => clock,
+      monotonic: () => clock,
       // Each read costs half a second on top of the pause.
       pause: async () => {
         calls.push("pause");
