@@ -4,15 +4,22 @@
     {
       "version": "pr-603",
       "ref": "refs/pull/603/merge",
-      "sha": "3f158829664d997cafa8e1cd0ffc7ba84f4f806b",
-      "timestamp": "2026-11-03T04:36:04.410Z",
+      "sha": "9045c4e7c63f74c1b1c41a1b22eb3e893c2a155c",
+      "timestamp": "2026-11-03T04:43:21.402Z",
       "commits": [
         {
-          "sha": "3f158829664d997cafa8e1cd0ffc7ba84f4f806b",
+          "sha": "9045c4e7c63f74c1b1c41a1b22eb3e893c2a155c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T04:35:01Z",
-          "message": "Merge cc763a8c4cdfe279fbb6643bde3a038f4e10b825 into f076fdeb651bcf4d15226703d9e09fdaf17f7ef8\n"
+          "timestamp": "2026-11-03T04:42:28Z",
+          "message": "Merge 28e7a1bb8cc965d317d99c40319a5504b962ac1e into e2b84658bbaa52f486f36c248e2c7a45e88eda88\n"
+        },
+        {
+          "sha": "28e7a1bb8cc965d317d99c40319a5504b962ac1e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T21:42:16-07:00",
+          "message": "fix(bench): the logfmt reader tokenizes, a rotation is told by inode, and the probe click is asked once (candybar-url-handler-uy01.05x)\n\nMedium review of #603. A field spelled inside an earlier quoted value\nshadowed the real field, so the reader walks the line's tokens and a\nquoted value is consumed whole; it yields every field, so the click\nsuite reads the problems field without a prefilter that could throw on\na line that only mentions it. A rotated log was told by its size\nshrinking, which a busy daemon undoes within the wait; the inode tells\nit. A line with no timestamp fails naming the line. The probe click and\nits event land once a process, not once a benchmark, and the cold\nbenchmark's `about` says it quits the live handler app.\n"
         },
         {
           "sha": "cc763a8c4cdfe279fbb6643bde3a038f4e10b825",
