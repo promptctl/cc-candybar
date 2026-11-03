@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "36ffb923c9abe5f1509b655e014aa90714188dde",
+      "timestamp": "2026-11-03T00:43:56.865Z",
+      "commits": [
+        {
+          "sha": "36ffb923c9abe5f1509b655e014aa90714188dde",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T17:43:03-07:00",
+          "message": "test(daemon-boots): a worktree with no dist/ is told to build, not given a raw ENOENT (candybar-testing-0x6u.7eq) (#592)\n\ndaemon-build-currency-e2e is a process-tier suite: it spawns the built bundle and\nchecks first that dist/index.mjs carries the current source digest, with a message\nnaming the remedy. A fresh worktree has no dist/, and the check's readFileSync threw\nENOENT before reaching that message. Not a product bug: with a build from the\ncurrent source all three cases pass (CI builds before this tier)."
+        },
+        {
+          "sha": "cf0b0887d5176cd5ff812d0234dd84b3f09663f6",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-03T00:42:26Z",
+          "message": "chore(release): set `package.json` to 1.180.6 [skip ci]\n\n## [1.180.6](https://github.com/promptctl/cc-candybar/compare/v1.180.5...v1.180.6) (2026-11-03)\n\n### Bug Fixes\n\n* **pricing:** the pricing fetch decodes the response as a stream (candybar-testing-0x6u.61o) ([#591](https://github.com/promptctl/cc-candybar/issues/591)) ([e16e4d8](https://github.com/promptctl/cc-candybar/commit/e16e4d82cca128b9a22e0c6bc6cf69fc30529654))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-588",
       "ref": "refs/pull/588/merge",
       "sha": "a248ac3bcdb6a2b90ed5b7b35e99eabde313d89d",
@@ -41,50 +63,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T16:27:33-07:00",
           "message": "fix(git): a closed git cache answers a late declaration as closed, so no period re-arms after close (candybar-testing-ihvy.dbg)\n\nA render mid-wait at close declared after close had dropped every repo,\nbuilt a fresh state on the closed cache, and that state's period re-armed\nafter every pass: hundreds of timers armed after daemon.close() returned.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-592",
-      "ref": "refs/pull/592/merge",
-      "sha": "2fa3ebe97e1fbf42f092fe4feab06f1c448a44e8",
-      "timestamp": "2026-11-03T00:35:43.370Z",
-      "commits": [
-        {
-          "sha": "2fa3ebe97e1fbf42f092fe4feab06f1c448a44e8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T17:33:49-07:00",
-          "message": "Merge 97c6c9340bff615ad791bfa207d6962fb177e844 into e16e4d82cca128b9a22e0c6bc6cf69fc30529654\n"
-        },
-        {
-          "sha": "97c6c9340bff615ad791bfa207d6962fb177e844",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T17:33:35-07:00",
-          "message": "test(daemon-boots): a worktree with no dist/ is told to build, not given a raw ENOENT (candybar-testing-0x6u.7eq)\n\ndaemon-build-currency-e2e is a process-tier suite: it spawns the built bundle and\nchecks first that dist/index.mjs carries the current source digest, with a message\nnaming the remedy. A fresh worktree has no dist/, and the check's readFileSync threw\nENOENT before reaching that message. Not a product bug: with a build from the\ncurrent source all three cases pass (CI builds before this tier).\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "e16e4d82cca128b9a22e0c6bc6cf69fc30529654",
-      "timestamp": "2026-11-03T00:30:22.606Z",
-      "commits": [
-        {
-          "sha": "e16e4d82cca128b9a22e0c6bc6cf69fc30529654",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T17:29:22-07:00",
-          "message": "fix(pricing): the pricing fetch decodes the response as a stream (candybar-testing-0x6u.61o) (#591)\n\n* fix(pricing): the pricing fetch decodes the response as a stream, so a character split across reads arrives whole (candybar-testing-0x6u.61o)\n\n* fix(pricing): the response size cap counts bytes, and the tests pin the abort (candybar-testing-0x6u.61o)\n\n* fix(pricing): the cap's comment says bytes, and each fetch test starts with no reads (candybar-testing-0x6u.61o)"
-        },
-        {
-          "sha": "c3331d140a1e7e2f873ff79e4b64ad6d728d553b",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-03T00:26:11Z",
-          "message": "chore(release): set `package.json` to 1.180.5 [skip ci]\n\n## [1.180.5](https://github.com/promptctl/cc-candybar/compare/v1.180.4...v1.180.5) (2026-11-03)\n\n### Bug Fixes\n\n* **test:** the client's answer cases run over a memory connection on a held clock (candybar-testing-ihvy.5q4) ([#589](https://github.com/promptctl/cc-candybar/issues/589)) ([7ca57ba](https://github.com/promptctl/cc-candybar/commit/7ca57ba16e524929f55d99beb41eba44d31a74fb))\n"
         }
       ]
     },
