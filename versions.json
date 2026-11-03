@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-598",
+      "ref": "refs/pull/598/merge",
+      "sha": "7459b3f71f0e931886a7934e96fe8c9b2d42963f",
+      "timestamp": "2026-11-03T02:42:38.514Z",
+      "commits": [
+        {
+          "sha": "7459b3f71f0e931886a7934e96fe8c9b2d42963f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T02:41:35Z",
+          "message": "Merge 8514367e5ab3ffc1a7cb9a683c756dd991becb47 into 0b82ee794b36b93e687f43f4fe214418d8d83c9e\n"
+        },
+        {
+          "sha": "8514367e5ab3ffc1a7cb9a683c756dd991becb47",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T19:41:12-07:00",
+          "message": "fix(launch): a held input shares the drains' one hold, metered and free of the launch's scope (candybar-testing-0x6u.3zo)\n"
+        },
+        {
+          "sha": "792c2860e000d1d95b420936aa2ef097d2c5f1b2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T19:31:33-07:00",
+          "message": "fix(launch): a launch's input outlives its direct child for the descendants that read it (candybar-testing-0x6u.3zo)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-597",
       "ref": "refs/pull/597/merge",
       "sha": "662005a20425bd8f239ea9e05de7b3fc76d534ef",
@@ -34,28 +63,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T19:12:06-07:00",
           "message": "fix(test): a render is held past the request backstop by a pipe the test writes, not by a compile's speed (candybar-testing-0x6u.8vd)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-598",
-      "ref": "refs/pull/598/merge",
-      "sha": "7ccf1de6c1a141d390300c1cf827f4cc0abc93a1",
-      "timestamp": "2026-11-03T02:32:47.189Z",
-      "commits": [
-        {
-          "sha": "7ccf1de6c1a141d390300c1cf827f4cc0abc93a1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T19:31:45-07:00",
-          "message": "Merge 792c2860e000d1d95b420936aa2ef097d2c5f1b2 into a79a66523b3e7763ab4abce2c4a79c4a9fd4443f\n"
-        },
-        {
-          "sha": "792c2860e000d1d95b420936aa2ef097d2c5f1b2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T19:31:33-07:00",
-          "message": "fix(launch): a launch's input outlives its direct child for the descendants that read it (candybar-testing-0x6u.3zo)\n"
         }
       ]
     },
