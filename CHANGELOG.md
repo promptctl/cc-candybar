@@ -1,3 +1,9 @@
+## [1.183.1](https://github.com/promptctl/cc-candybar/compare/v1.183.0...v1.183.1) (2026-11-03)
+
+### Bug Fixes
+
+* **time:** spans read the monotonic clock (candybar-testing-ihvy.98i) ([#604](https://github.com/promptctl/cc-candybar/issues/604)) ([baf8dfd](https://github.com/promptctl/cc-candybar/commit/baf8dfde2d7d28a78fc76247adf9889e7c7fb742))
+
 ## [1.183.0](https://github.com/promptctl/cc-candybar/compare/v1.182.0...v1.183.0) (2026-11-03)
 
 ### Features
