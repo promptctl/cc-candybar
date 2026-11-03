@@ -4,15 +4,22 @@
     {
       "version": "pr-599",
       "ref": "refs/pull/599/merge",
-      "sha": "a5b5bf25d8a121c44eb3112f94fe4a5c7c126d14",
-      "timestamp": "2026-11-03T03:12:27.534Z",
+      "sha": "d64976fa7b097a73992ad2a3ab4262bbe87a3c02",
+      "timestamp": "2026-11-03T03:15:21.388Z",
       "commits": [
         {
-          "sha": "a5b5bf25d8a121c44eb3112f94fe4a5c7c126d14",
+          "sha": "d64976fa7b097a73992ad2a3ab4262bbe87a3c02",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T20:11:28-07:00",
-          "message": "Merge 7e48ba4b4a7ad75935a12cc640a4dfff414f1da0 into 587196cbaa9d6ccd67cf50cb1c7598a88730d3b6\n"
+          "timestamp": "2026-11-03T03:14:28Z",
+          "message": "Merge 69cd5e888130a949da9e0cb7828c6228354d8a12 into 587196cbaa9d6ccd67cf50cb1c7598a88730d3b6\n"
+        },
+        {
+          "sha": "69cd5e888130a949da9e0cb7828c6228354d8a12",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T20:13:57-07:00",
+          "message": "fix(test): the retainer helper yields a macrotask before it writes its snapshot (candybar-testing-0x6u.ed2)\n"
         },
         {
           "sha": "7e48ba4b4a7ad75935a12cc640a4dfff414f1da0",
