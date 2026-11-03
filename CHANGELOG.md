@@ -1,3 +1,9 @@
+## [1.188.0](https://github.com/promptctl/cc-candybar/compare/v1.187.0...v1.188.0) (2026-11-03)
+
+### Features
+
+* **facts:** the draw's today and sources count are read from the document ([#613](https://github.com/promptctl/cc-candybar/issues/613)) ([189bd5b](https://github.com/promptctl/cc-candybar/commit/189bd5bed066e328ad699ec236391defbfcc4106))
+
 ## [1.187.0](https://github.com/promptctl/cc-candybar/compare/v1.186.0...v1.187.0) (2026-11-03)
 
 ### Features
