@@ -1,6 +1,6 @@
 // [LAW:single-enforcer] The single place where the daemon assembles every
 // data field the DSL templates can read. The output of this function — the
-// view's payload (`payloadOf`) — is what a session view's inputs derive from
+// view's payload (`projectPayload`) — is what a session view's inputs derive from
 // (`bindView`, src/dsl/parts.ts), and every `kind: "input"` variable in the
 // default DSL config resolves its `path` against exactly this shape.
 //

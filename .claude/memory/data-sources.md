@@ -38,6 +38,12 @@ Pending is a plain value recognised by its discriminator, so it survives a proce
 
 An input variable stays pending until its view's source is bound and answers its path. Its default answers only a payload that lacks the path, not a missing payload. A cache policy reads its source when the value it keys on first answers, not at declaration, so a view's source reads once when the view opens.
 
+## The facts document
+
+Each session's view holds one facts document, a fold of the same readings the payload folds, so the two cannot disagree about what an owner holds. Every built-in and every declared source has a key in it. A stamp is the instant an answer first differed from the one before, so it is taken in a reaction's effect, never in a derivation: a derivation that read the clock and its own prior answer would answer by when it ran.
+
+A built-in the config does not read has no reading, and its fact is pending, not absent, because absent says a read found nothing. The stamps live on the view, so a rebuilt state or the idle sweep restarts them, and a document's instants mean first seen by that view. The update is the exception: one fact for the daemon, stamped by the watch that owns it and shared by every session's document, so one change has one instant everywhere.
+
 ## Usage and today
 
 Per-session usage records live in one store. Session totals and today's total are folds over that store, and nothing scans the transcript tree per render. Today counts the rendering session plus every record whose transcript sits under that Claude Code directory's projects. It doesn't count every session the daemon has seen, because that sum would change depending on which other sessions happened to render. Today's period rescans the tree, so sessions that never render (headless `claude -p`, the Agent SDK) still reach today within a minute. Today rolls over at local midnight without a refresh.
