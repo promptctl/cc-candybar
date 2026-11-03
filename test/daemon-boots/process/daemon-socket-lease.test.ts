@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { unscriptedLauncher } from "../../helpers/fake-launcher";
+import { processLauncher } from "../../helpers/host";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -13,7 +13,7 @@ import { spawnTestDaemon } from "../../helpers/spawn-test-daemon";
 // The real kernel start-time of a live pid, so a planted lease matches the true
 // process identity the daemon's arbitration reads back via `ps`.
 async function realStartTime(pid: number): Promise<string> {
-  const r = await readStartTime(pid, unscriptedLauncher.launch);
+  const r = await readStartTime(pid, processLauncher.launch);
   if (r.kind !== "start") {
     throw new Error(`expected a live start-time for pid ${pid}, got ${r.kind}`);
   }
