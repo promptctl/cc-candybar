@@ -692,14 +692,14 @@ function hold(
   stats?.onDrainOpen(category);
 }
 
-// [LAW:no-silent-failure] exception: a child may stop reading and still
-// succeed (`head -1`), so its exit is the verdict, and the failed write says
-// nothing that exit does not. At module scope, so a held input's listener
-// holds nothing of the launch.
 // An input is written, never cut, so it always ends "closed".
 const inputEnd = (): DrainEnd => "closed";
 
+// At module scope, so a held input's listener holds nothing of the launch.
 function feed(input: Writable, text: string | Buffer | undefined): void {
+  // [LAW:no-silent-failure] exception: a reader may stop reading and still
+  // succeed (`head -1`), so its exit is the verdict, and the failed write says
+  // nothing that exit does not.
   input.on("error", () => {});
   input.end(text);
 }

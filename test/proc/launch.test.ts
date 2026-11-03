@@ -524,7 +524,8 @@ describe("launch (async)", () => {
     try {
       const r = await launch({
         bin: "/bin/sh",
-        args: ["-c", "sleep 0.3; exec cat > /dev/null"],
+        // Holds its input unread, so only the close can free it.
+        args: ["-c", "sleep 0.3; exec sleep 30"],
         stdinInput: "x".repeat(1024 * 1024),
         timeoutMs: 50,
         category: "user-shell",
