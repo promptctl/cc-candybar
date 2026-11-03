@@ -2,60 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-606",
-      "ref": "refs/pull/606/merge",
-      "sha": "cf81f14e446680ae09d5893cd7ef5f02a8788981",
-      "timestamp": "2026-11-03T08:07:54.348Z",
-      "commits": [
-        {
-          "sha": "cf81f14e446680ae09d5893cd7ef5f02a8788981",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T08:07:02Z",
-          "message": "Merge 0623126f647d39bf0afcb9d608779bb7d186e443 into 04d058325f14b84fc80d66fc432ae7583f3ceb7d\n"
-        },
-        {
-          "sha": "0623126f647d39bf0afcb9d608779bb7d186e443",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T01:06:52-07:00",
-          "message": "test: lower the daemon-boot ratchet to the 204 cases left after #605 removed ten\n"
-        },
-        {
-          "sha": "617e282b7bf5412e0d802975e3197872e047ea04",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T00:57:30-07:00",
-          "message": "docs(url-handler): say why the lost-click banner needs the app never frontmost (candybar-daemon-health-ajx0.p04)\n"
-        },
-        {
-          "sha": "1eda524241b9bda60adcf5191cfa3e800bbfa19d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T00:55:18-07:00",
-          "message": "fix(url-handler): a click no longer takes the terminal's keyboard focus (candybar-daemon-health-ajx0.p04)\n\nThe forwarder was an agent app (LSUIElement). Launch Services activates an\nagent to deliver a link, and a resident app keeps the focus it was given, so\nevery click on a bar link took keyboard focus from the user's terminal and\nbroke the settings menu. The old applet quit after each click, which returned\nfocus to the previous app and hid this.\n\nThe Info.plist now declares the app background-only, which Launch Services\nnever activates. A background-only copy still received and forwarded links,\nand still raised the notification-authorization prompt for a lost click.\n\nThe notification delegate existed only because the app was frontmost when it\nposted, and macOS hides a frontmost app's banner. The app is never frontmost\nnow, so the delegate and its comment are removed.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "04d058325f14b84fc80d66fc432ae7583f3ceb7d",
-      "timestamp": "2026-11-03T06:03:04.888Z",
+      "sha": "8005d083220ec5eb217749c74c3caf1a246f2bc5",
+      "timestamp": "2026-11-03T08:13:33.919Z",
       "commits": [
         {
-          "sha": "04d058325f14b84fc80d66fc432ae7583f3ceb7d",
+          "sha": "8005d083220ec5eb217749c74c3caf1a246f2bc5",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T23:02:16-07:00",
-          "message": "Remove bad tests (#605)"
-        },
-        {
-          "sha": "6f35f84d13b40a5e30d3e41150a025c0cc994233",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-03T05:53:08Z",
-          "message": "chore(release): set `package.json` to 1.184.0 [skip ci]\n\n## [1.184.0](https://github.com/promptctl/cc-candybar/compare/v1.183.1...v1.184.0) (2026-11-03)\n\n### Features\n\n* **bench:** a click's whole time, Launch Services included, is measured for the applet and the forwarder (candybar-url-handler-uy01.05x) ([#603](https://github.com/promptctl/cc-candybar/issues/603)) ([ab5468d](https://github.com/promptctl/cc-candybar/commit/ab5468dce0ade1b535714d8a83a1647cdb840481))\n"
+          "timestamp": "2026-11-03T01:12:26-07:00",
+          "message": "fix(url-handler): a click no longer takes the terminal's keyboard focus (#606)\n\n* fix(url-handler): a click no longer takes the terminal's keyboard focus (candybar-daemon-health-ajx0.p04)\n\nThe forwarder was an agent app (LSUIElement). Launch Services activates an\nagent to deliver a link, and a resident app keeps the focus it was given, so\nevery click on a bar link took keyboard focus from the user's terminal and\nbroke the settings menu. The old applet quit after each click, which returned\nfocus to the previous app and hid this.\n\nThe Info.plist now declares the app background-only, which Launch Services\nnever activates. A background-only copy still received and forwarded links,\nand still raised the notification-authorization prompt for a lost click.\n\nThe notification delegate existed only because the app was frontmost when it\nposted, and macOS hides a frontmost app's banner. The app is never frontmost\nnow, so the delegate and its comment are removed.\n\n* docs(url-handler): say why the lost-click banner needs the app never frontmost (candybar-daemon-health-ajx0.p04)\n\n* test: lower the daemon-boot ratchet to the 204 cases left after #605 removed ten"
         }
       ]
     }
