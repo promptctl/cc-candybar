@@ -18,7 +18,7 @@ import { DISCLOSURE_CLOSED } from "../../../src/config/disclosure.js";
 import { tryClickViaDaemon } from "../../../src/daemon/client.js";
 import { describeFailure } from "../../../src/daemon/client-transport.js";
 import type { StatsSnapshot } from "../../../src/daemon/stats.js";
-import { parseHandlerUrl } from "../../../src/install/index.js";
+import { clickOf } from "../../../src/click/read.js";
 import { composeBar } from "../../../src/render/frame.js";
 import type { RepoShape } from "../fixtures.js";
 import { sleep } from "../measure.js";
@@ -374,7 +374,7 @@ const configReload = (entries: number): Benchmark => ({
 // ── a click ─────────────────────────────────────────────────────────────────
 
 async function click(url: string): Promise<number> {
-  const { verb, value } = parseHandlerUrl(url);
+  const { verb, value } = clickOf(url);
   const started = performance.now();
   const outcome = await tryClickViaDaemon(processWorld(), verb, value);
   const ms = performance.now() - started;

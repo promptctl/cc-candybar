@@ -21,7 +21,7 @@ import {
 } from "../../src/daemon/protocol";
 import { textOf, parseFrame, type Frame } from "../../src/render/frame";
 import type { ClaudeHookData } from "../../src/utils/claude";
-import { parseHandlerUrl } from "../../src/install/index";
+import { linkClick } from "./click";
 import { effectsOf, type DecodedEffect } from "./click";
 import {
   endpointOf,
@@ -32,7 +32,6 @@ import {
 import type { RunningDaemon } from "./spawn-isolated-daemon";
 import { ROUTE_ENV } from "./process-tier.cjs";
 import { detectClaudeConfigDir } from "../../src/claude-settings";
-import { PACKAGE_VERSION } from "../../src/version";
 import { logLines } from "../../src/daemon/log";
 import {
   answeredRender,
@@ -225,7 +224,7 @@ export function sendClick(
   url: string,
   replyBudgetMs = REPLY_BUDGET_MS,
 ): Promise<Response> {
-  const { verb, value } = parseHandlerUrl(url);
+  const { verb, value } = linkClick(url);
   return sendDaemonRequest(
     target,
     {
@@ -233,7 +232,6 @@ export function sendClick(
       kind: "click",
       verb,
       value,
-      clientVersion: PACKAGE_VERSION,
     },
     replyBudgetMs,
   );

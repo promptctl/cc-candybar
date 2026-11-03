@@ -348,19 +348,56 @@ export interface ShutdownRequest {
   kind: "shutdown";
 }
 
+// A click as `cc-candybar url-handle` sends it: the verb and value already
+// split. The tmux status line's click binding runs that command.
 export interface ClickRequest {
   v: number;
   kind: "click";
   verb: string;
   value: string;
-  // The package version of the client that delivered the click — the URL
-  // handler's staged runtime, or a page whose daemon runs in it. Absent from
-  // a handler too old to report it.
-  clientVersion?: string;
 }
 
-export function sanitizeClientVersion(v: unknown): string | null {
-  return typeof v === "string" && v !== "" && v.length <= 64 ? v : null;
+// [LAW:types-are-the-program] A link as the URL handler app forwards it: the
+// raw `cc-candybar://` string, nothing split, nothing decoded. The frame is
+// versioned by itself (`urlV`), never by PROTOCOL_VERSION: the app is resident
+// and knows nothing a release changes, so a daemon upgrade must not refuse it,
+// and the daemon accepts every `urlV` it has shipped (URL_FRAME_VERSIONS).
+// Not a member of `Request`, which is what the `v` gate admits. Mirrored by
+// url-handler/main.swift, the one frame that app spells, and pinned by
+// scripts/check-protocol.mjs.
+export const URL_FRAME_KIND = "url";
+export const URL_FRAME_VERSION = 1;
+// Every version a shipped forwarder has written: the ones before the current,
+// then the current itself, so a bump cannot refuse the frame it ships.
+const EARLIER_URL_FRAME_VERSIONS: readonly number[] = [];
+export const URL_FRAME_VERSIONS: ReadonlySet<number> = new Set([
+  ...EARLIER_URL_FRAME_VERSIONS,
+  URL_FRAME_VERSION,
+]);
+
+export interface UrlFrame {
+  kind: typeof URL_FRAME_KIND;
+  urlV: number;
+  url: string;
+}
+
+// [LAW:parse-dont-validate] What came in over the wire, classified once, by
+// the connection that read it: the URL handler's frame, or a request the `v`
+// gate judges. The connection needs the kind too, since a url frame's writer
+// hangs up at once by design, so its socket's close says nothing about its
+// click. A url frame's fields stay untrusted JSON here (not a Partial that
+// claims their types): the click path reads them, and refuses what it cannot
+// read with the click event that says so.
+export type Inbound =
+  | { readonly kind: "url"; readonly frame: Record<string, unknown> }
+  | { readonly kind: "request"; readonly req: Request };
+
+export function classifyInbound(raw: unknown): Inbound {
+  return typeof raw === "object" &&
+    raw !== null &&
+    (raw as { kind?: unknown }).kind === URL_FRAME_KIND
+    ? { kind: "url", frame: raw as Record<string, unknown> }
+    : { kind: "request", req: raw as Request };
 }
 
 export interface StatsRequest {

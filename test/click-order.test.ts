@@ -193,7 +193,7 @@ describe("a gather holds no turn", () => {
     await VERBS.get(VERB_DOCTOR_PROBE)!(NONCE, {
       ...ctx,
       clientGone: () => true,
-      arrival: { via: "link", handler: null },
+      arrival: { via: "link", delivery: { kind: "cli" } },
     });
     expect(ctx.probes.list().map((p) => p.nonce)).toEqual([NONCE]);
     expect(turns.getStats().holder).toBe(VERB_COPY);

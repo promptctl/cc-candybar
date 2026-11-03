@@ -8,9 +8,11 @@ The shipped client is native (Rust) and handles only the render hot path. It han
 
 A one-shot Node subcommand folds its outcome into a plan (what goes to each stream, the exit code) and ends through one delivery that waits for both streams' write callbacks before exiting. A piped stdout flushes asynchronously on macOS, so an exit right after the write drops everything past the first 64 KiB the pipe buffered, and the loss is invisible on Linux, where pipes are synchronous. [LAW:single-enforcer]
 
-## The wire is spelled twice
+## The wire is spelled in every runtime
 
-The protocol lives in TypeScript and is copied into the Rust client as literal constants: version, frame cap and header, timeouts, error codes, diagnostic styling, and the code points the sanitizer neutralizes. The protocol check compares every copied constant across the two runtimes, and a missing anchor counts as drift. Change a mirrored constant in both runtimes in one commit. When you add a mirrored constant, add a row to the check. The same check also covers the hint code both runtimes share, the vendored launcher's statusline push, and which subcommands only the native client knows.
+The protocol lives in TypeScript and is copied into the Rust client as literal constants: version, frame cap and header, timeouts, error codes, diagnostic styling, and the code points the sanitizer neutralizes. The protocol check compares every copied constant across the runtimes, and a missing anchor counts as drift. Change a mirrored constant in both runtimes in one commit. When you add a mirrored constant, add a row to the check. The same check also covers the hint code both runtimes share, the vendored launcher's statusline push, which subcommands only the native client knows, and the one frame the Swift URL handler spells.
+
+The URL handler's frame carries its own version, never the protocol version. The handler is resident and ships with the platform package, so it outlives daemon upgrades, and a daemon that refused an old frame version would lose every click until the user reinstalled. The daemon accepts every frame version it has ever shipped.
 
 ## The daemon is detached: session facts come from the client
 
@@ -62,6 +64,6 @@ A source checkout is an install only when the statusline command names a path in
 
 pnpm settings live in the workspace YAML, because pnpm 11 ignores the `pnpm` field of package.json.
 
-On macOS, install builds a URL-handler app for the `cc-candybar://` scheme and copies its runtime to a stable path outside the pnpm store. A link click goes from the handler app to the CLI, and from the CLI to the daemon's click protocol.
+On macOS, install assembles a URL-handler app for the `cc-candybar://` scheme around a prebuilt Swift binary from the darwin platform package (a checkout builds its own), and copies the runtime to a stable path outside the pnpm store. The app is a resident forwarder: it writes the raw link to the daemon's default socket as one frame and reads no answer, and the daemon does every bit of parsing. It never starts a daemon, because that would need the node and bundle paths, which age; a click on a dead daemon is lost, and the statusline's next tick restarts the daemon. Launch Services never relaunches a running app, so install quits the resident instance before registering the new bundle. The `url-handle` subcommand remains the tmux status line's route only, and the daemon composes that command from its own bundle path at runtime.
 
 The attach launcher for the statusline lane is a verbatim, vendored copy of cc-extra. A script copies it in and records the source commit. Don't edit it here: change cc-extra and vendor it again.

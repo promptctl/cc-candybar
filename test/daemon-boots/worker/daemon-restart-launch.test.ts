@@ -17,7 +17,11 @@ import {
 import os from "node:os";
 import path from "node:path";
 
-import { PROTOCOL_VERSION, type Request } from "../../../src/daemon/protocol";
+import {
+  classifyInbound,
+  PROTOCOL_VERSION,
+  type Request,
+} from "../../../src/daemon/protocol";
 import type { DaemonLogger } from "../../../src/utils/logger";
 import { answeredEvents, renderBody } from "../../helpers/daemon-e2e";
 import { loggedLines, logLines, renderEventsOf } from "../../helpers/daemon-log";
@@ -161,7 +165,7 @@ esac
     const first = start();
     const answer = first.daemon
       .handle(
-        renderOf(sid) as unknown as Request,
+        classifyInbound(renderOf(sid) as unknown as Request),
         () => false,
         first.daemon.clock.monotonic(),
         () => false,

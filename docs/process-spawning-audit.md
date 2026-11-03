@@ -80,7 +80,7 @@ and the unrelated `scripts/release.mjs`).
 ```
 git, user-shell, tmux,
 click.pbcopy, click.open,
-install.plutil, install.osacompile, install.lsregister, install.pbcopy, install.open,
+install.codesign, install.killall, install.lsregister, install.pbcopy, install.open,
 daemon-spawn
 ```
 
@@ -98,9 +98,8 @@ a new category here — that forces code review of the pattern.
 | `src/var-system/sources.ts` (`execShell`) | `user-shell` | async | no | `/bin/sh -c <user-command>` for `declareShell` variables. **No timeout.** Currently unused at runtime (see **F6**). |
 | `src/daemon/server.ts` (`clickCopy`) | `click.pbcopy` | sync | no | Click verb `copy`: `/usr/bin/pbcopy <stdin>`. |
 | `src/daemon/server.ts` (`clickOpenVscode`) | `click.open` | sync | no | Click verb `open-vscode`: `/usr/bin/open -a "Visual Studio Code" <path>`. |
-| `src/install/index.ts` | `install.osacompile` | sync | no | `osacompile` builds the URL-handler `.app`. One-shot during `cc-candybar install`. |
-| `src/install/index.ts` | `install.plutil` | sync | no | `plutil -remove <key>` (pre-clear). |
-| `src/install/index.ts` | `install.plutil` | sync | no | `plutil -insert <key> -xml <xml>` (per Info.plist key). |
+| `src/install/index.ts` | `install.codesign` | sync | no | `codesign` ad-hoc signs the assembled URL-handler `.app`. One-shot during `cc-candybar install`. |
+| `src/install/index.ts` | `install.killall` | sync | no | `killall` quits the resident handler a previous install left running, so Launch Services starts the new one. |
 | `src/install/index.ts` | `install.lsregister` | sync | no | `lsregister -f <bundle>` to register `cc-candybar://`. |
 | `src/install/index.ts` | `install.pbcopy` | sync | no | URL-handler-side `copy` verb (daemon-down fallback). |
 | `src/install/index.ts` | `install.open` | sync | no | URL-handler-side `open-vscode` verb (daemon-down fallback). |

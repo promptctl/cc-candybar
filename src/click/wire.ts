@@ -404,3 +404,45 @@ export function splitVerb(s: string): ParsedEffect {
     ? { verb: s, value: "" }
     : { verb: s.slice(0, i), value: s.slice(i + 1) };
 }
+
+// [LAW:parse-dont-validate] A whole `cc-candybar://` link as a click, or why
+// it is not one: the daemon reads every link this way, whether the URL
+// handler app forwarded it raw or a tmux status line's range marked it.
+export type HandlerUrl =
+  | { readonly ok: true; readonly verb: string; readonly value: string }
+  | { readonly ok: false; readonly problem: string };
+
+// [LAW:dataflow-not-control-flow] Parse the URL into a {verb, value} pair
+// without using `new URL`, which lowercases hosts (would mangle case-sensitive
+// session ids). Format: cc-candybar://<verb>/<tail> | cc-candybar://<value>
+// (bare → copy). The verb ends at the FIRST `/`; everything after is the raw
+// value. The dispatch effect list rides as `dispatch/does=…&e=…`, so its query-
+// style payload is just the tail — `?` is NOT a delimiter, it is ordinary data
+// in a bare-copy value (`cc-candybar://hello?world` copies "hello?world").
+//
+// [LAW:single-enforcer] Only the VERB is decoded here. The value is passed RAW
+// to the verb; each verb's handler decodes its own value at its boundary (the
+// verb that owns the structure owns its decode). A whole-value decode here would
+// un-escape structural separators inside a nested value — the exact hazard that
+// made compound clicks unrepresentable — so it is deliberately absent.
+export function parseHandlerUrl(rawUrl: string): HandlerUrl {
+  const prefix = `${URL_SCHEME}://`;
+  if (!rawUrl.startsWith(prefix)) {
+    return { ok: false, problem: `expected a ${prefix} link, got: ${rawUrl}` };
+  }
+  const rest = rawUrl.slice(prefix.length);
+  const slash = rest.indexOf("/");
+  if (slash === -1) {
+    return { ok: true, verb: VERB_COPY, value: rest };
+  }
+  const encoded = rest.slice(0, slash);
+  try {
+    return {
+      ok: true,
+      verb: decodeURIComponent(encoded),
+      value: rest.slice(slash + 1),
+    };
+  } catch {
+    return { ok: false, problem: `the link's verb is malformed: ${encoded}` };
+  }
+}

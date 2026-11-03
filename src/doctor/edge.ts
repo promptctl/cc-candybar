@@ -78,7 +78,6 @@ import {
   type TmuxFacts,
   type UrlHandlerFacts,
 } from "./checks.js";
-import { PACKAGE_VERSION } from "../version.js";
 import type { TerminalEnvHint } from "../terminal-hint.js";
 import {
   identifyFromEnv,
@@ -805,16 +804,12 @@ async function terminalFacts(
 }
 
 // A click that arrived as a link IS a link that came back through the URL
-// handler, carrying the version of the handler that delivered it; one from
-// the tmux status line came through tmux, and says nothing of the handler.
+// handler, and who delivered it says whether that handler is the forwarder;
+// one from the tmux status line came through tmux, and says nothing of it.
 export function clickArrived(arrival: ClickArrival): UrlHandlerFacts {
   switch (arrival.via) {
     case "link":
-      return {
-        kind: "arrived",
-        handler: arrival.handler,
-        bar: PACKAGE_VERSION,
-      };
+      return { kind: "arrived", delivery: arrival.delivery };
     case "tmux-status":
       return {
         kind: "unprobed",

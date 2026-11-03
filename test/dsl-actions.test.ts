@@ -32,7 +32,7 @@ import { ConfigError } from "../src/config/dsl-loader";
 import { registerOptionDomain } from "../src/config/option-domain";
 import { effectsOf } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
-import { parseHandlerUrl } from "../src/install/index";
+import { linkClick } from "./helpers/click";
 import {
   parseEffects,
   VERB_DISPATCH,
@@ -72,7 +72,7 @@ function actionBar(src: string) {
   const sideEffects: SideEffect[] = [];
   // The per-effect loop stays: `rig.click` would run copy/open for real.
   const click = async (url: string): Promise<void> => {
-    const { verb, value } = parseHandlerUrl(url);
+    const { verb, value } = linkClick(url);
     const effects =
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
     for (const e of effects) {

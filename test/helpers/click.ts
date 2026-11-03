@@ -15,7 +15,7 @@ import {
   HEALTHY_SERVING,
   noManagedSettings,
 } from "./doctor-facts";
-import { parseHandlerUrl } from "../../src/install/index";
+import { clickOf } from "../../src/click/read";
 import { VERBS } from "../../src/daemon/verbs";
 import { SESSION_RENDER_ORIGIN_KEY } from "../../src/daemon/foundations/session-keys";
 import { encodeRenderOrigin } from "../../src/daemon/foundations/render-origin";
@@ -25,7 +25,6 @@ import { SettingsHistory } from "../../src/daemon/settings-history";
 import type { DslConfig } from "../../src/config/dsl-types";
 import { ProbeArrivals } from "../../src/doctor/handler-probe";
 import { RenderSightings } from "../../src/daemon/render-sightings";
-import { PACKAGE_VERSION } from "../../src/version";
 import { instantOf } from "../../src/utils/instant";
 import {
   laneSwitches,
@@ -145,7 +144,7 @@ export function testVerbContext(
     },
     // A click from the handler this build would stage, and nowhere of the
     // daemon's for a probe to land: a test that reads arrivals hands in its own.
-    arrival: { via: "link", handler: PACKAGE_VERSION },
+    arrival: { via: "link", delivery: { kind: "forwarder", urlV: 1 } },
     probes: new ProbeArrivals(),
     clients: new RenderSightings(),
     bundle: HEALTHY_BUNDLE,
@@ -218,9 +217,12 @@ export function testVerbContext(
 
 export { effectsOf, type DecodedEffect } from "../../src/click/read";
 
+// A rendered link as the daemon reads it; a test's links are always links.
+export const linkClick = clickOf;
+
 // Drive a rendered click URL through the real parse → dispatch path.
 export async function clickUrl(url: string, ctx: VerbContext): Promise<void> {
-  const { verb, value } = parseHandlerUrl(url);
+  const { verb, value } = linkClick(url);
   const handler = VERBS.get(verb);
   if (!handler) throw new Error(`no handler for verb "${verb}"`);
   await handler(value, ctx);

@@ -58,7 +58,7 @@ const BAR = DEFAULT_DECOR;
 import { VERBS } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
 import { recordRender, testVerbContext, effectsOf } from "./helpers/click";
-import { parseHandlerUrl } from "../src/install/index";
+import { linkClick } from "./helpers/click";
 import { parseEffects, VERB_DISPATCH, VERB_SET_STATE } from "../src/click/wire";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { instantOf } from "../src/utils/instant";
@@ -220,7 +220,7 @@ function build(src: string, withDefault = false) {
   const fgOf = (name: string): string =>
     resolvedStyle(cellsOf(name)[0]!.style).color?.value?.hex ?? "(no fg)";
   const click = async (url: string): Promise<void> => {
-    const { verb, value } = parseHandlerUrl(url);
+    const { verb, value } = linkClick(url);
     const effects =
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
     for (const e of effects) {

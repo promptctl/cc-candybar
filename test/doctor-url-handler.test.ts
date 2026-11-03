@@ -1,9 +1,10 @@
 // [LAW:verifiable-goals] brandon-doctor-v62x.a1z — "the URL handler works":
 // the check's verdict over every state a `cc-candybar://` link can end in, the
 // CLI's probe over a faked edge (what it opens, how long it waits, what it
-// diagnoses and when), the daemon's side of the round trip (the `doctor-probe`
-// verb, the handler version a click carries), and the reading of the handler
-// app's script against the installer that writes it.
+// diagnoses and when), and the daemon's side of the round trip (the
+// `doctor-probe` verb, who delivered a click). The URL handler is a forwarder
+// (candybar-daemon-health-ajx0.co4): a link it delivers proves it, and a link
+// `cc-candybar url-handle` delivered came through the retired applet.
 
 import { instantOf } from "../src/utils/instant";
 import { RenderSightings } from "../src/daemon/render-sightings";
@@ -15,60 +16,57 @@ import {
 import { checkByName, type UrlHandlerFacts } from "../src/doctor/checks";
 import {
   ProbeArrivals,
+  parseArrival,
   probeUrlHandler,
   type DaemonView,
   type HandlerProbeEdge,
 } from "../src/doctor/handler-probe";
 import { clickArrived } from "../src/doctor/edge";
-import type { ClickArrival } from "../src/doctor/sightings";
+import { type ClickArrival, type Delivery } from "../src/doctor/sightings";
 import { VERB_DOCTOR_PROBE, VERB_DOCTOR_RUN } from "../src/click/wire";
 import { BadVerbArgs, VERBS, type VerbContext } from "../src/daemon/verbs";
 import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
 import { SessionState } from "../src/daemon/session-state";
-import { sanitizeClientVersion } from "../src/daemon/protocol";
 import { doctorReportKeys } from "../src/doctor/report";
-import {
-  __test__ as install,
-  handlerCommand,
-  handlerScriptPath,
-} from "../src/install/index";
-import { PACKAGE_VERSION } from "../src/version";
+import { forwarderExecutable } from "../src/install/index";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { recordRender, testVerbContext } from "./helpers/click";
-import { emptyStores, HEALTHY_FACTS, healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, healthyClient, renderSaid } from "./helpers/doctor-facts";
+import {
+  emptyStores,
+  HEALTHY_FACTS,
+  healthyDaemonEdge,
+  healthyDataEdge,
+  noManagedSettings,
+  HEALTHY_SERVING,
+  HEALTHY_INSTALL_EDGE,
+  healthyClient,
+  renderSaid,
+} from "./helpers/doctor-facts";
 
 const probe = checkByName("urlHandler")!.probe;
 const verdict = (urlHandler: UrlHandlerFacts) =>
   probe({ ...HEALTHY_FACTS, urlHandler });
 
 const APP = "/Users/u/Applications/CCCandybarURLHandler.app";
+const FORWARDED = { kind: "forwarder", urlV: 1 } as const;
+const CLI = { kind: "cli" } as const;
+const REINSTALL = "re-run `cc-candybar install`";
 
 describe("urlHandler probe", () => {
   test("a platform with no URL handler is ok", async () => {
     expect(verdict({ kind: "unsupported" })).toEqual({ ok: true });
   });
 
-  test("a link delivered by the version the bar runs is ok", async () => {
-    expect(
-      verdict({ kind: "arrived", handler: "1.2.3", bar: "1.2.3" }),
-    ).toEqual({ ok: true });
-  });
-
-  test("a link delivered by another version names both", async () => {
-    expect(
-      verdict({ kind: "arrived", handler: "1.2.0", bar: "1.2.3" }),
-    ).toEqual({
-      ok: false,
-      reason:
-        "the URL handler runs cc-candybar 1.2.0; the bar runs 1.2.3 — re-run `cc-candybar install`",
+  test("a link the forwarder delivered is ok: it knows nothing that goes stale", async () => {
+    expect(verdict({ kind: "arrived", delivery: FORWARDED })).toEqual({
+      ok: true,
     });
   });
 
-  test("a handler too old to report its version is not ok", async () => {
-    expect(verdict({ kind: "arrived", handler: null, bar: "1.2.3" })).toEqual({
+  test("a link a click request delivered is not the forwarder's", async () => {
+    expect(verdict({ kind: "arrived", delivery: CLI })).toEqual({
       ok: false,
-      reason:
-        "the URL handler does not report its version, so it is older than the bar (1.2.3) — re-run `cc-candybar install`",
+      reason: `the link was delivered by a click request (\`cc-candybar url-handle\`), not the forwarder app — ${REINSTALL}`,
     });
   });
 
@@ -88,42 +86,35 @@ describe("urlHandler probe", () => {
       }),
     ).toEqual({
       ok: false,
-      reason:
-        "no app is registered for cc-candybar:// — re-run `cc-candybar install`",
+      reason: `no app is registered for cc-candybar:// — ${REINSTALL}`,
       more: [
         "a cc-candybar:// link could not be opened — No application knows how to open URL",
       ],
     });
   });
 
-  test("a lost link names each file the handler app runs that is gone", async () => {
+  test("a lost link whose opener is not the forwarder names the app", async () => {
     expect(
       verdict({
         kind: "lost",
         unopened: null,
-        opener: {
-          kind: "ok",
-          value: { app: APP, missing: { kind: "ok", value: ["/old/node"] } },
-        },
+        opener: { kind: "ok", value: { app: APP, forwarder: false } },
       }),
     ).toEqual({
       ok: false,
-      reason: `/old/node is missing, and ${APP} runs it — re-run \`cc-candybar install\``,
+      reason: `${APP} opens cc-candybar://, but it is not the forwarder app \`cc-candybar install\` builds — ${REINSTALL}`,
       more: [
         "a cc-candybar:// link was opened and did not arrive at the daemon",
       ],
     });
   });
 
-  test("a lost link whose handler app is intact reports the loss alone", async () => {
+  test("a lost link whose opener is the forwarder reports the loss alone", async () => {
     expect(
       verdict({
         kind: "lost",
         unopened: null,
-        opener: {
-          kind: "ok",
-          value: { app: APP, missing: { kind: "ok", value: [] } },
-        },
+        opener: { kind: "ok", value: { app: APP, forwarder: true } },
       }),
     ).toEqual({
       ok: false,
@@ -133,26 +124,7 @@ describe("urlHandler probe", () => {
     });
   });
 
-  test("an app whose script cannot be read, and a lookup that failed, are named", async () => {
-    expect(
-      verdict({
-        kind: "lost",
-        unopened: null,
-        opener: {
-          kind: "ok",
-          value: {
-            app: "/Applications/Other.app",
-            missing: {
-              kind: "failed",
-              reason: "its script is not one `cc-candybar install` wrote",
-            },
-          },
-        },
-      }),
-    ).toMatchObject({
-      reason:
-        "/Applications/Other.app opens cc-candybar://, but its script is not one `cc-candybar install` wrote — re-run `cc-candybar install`",
-    });
+  test("a lookup that failed is named", async () => {
     expect(
       verdict({
         kind: "lost",
@@ -169,7 +141,6 @@ describe("urlHandler probe", () => {
 // ─── The CLI's probe ─────────────────────────────────────────────────────────
 
 const NONCE = "123e4567-e89b-42d3-a456-426614174000";
-const SCRIPT = install.appleScriptSource("/bin/node", "/rt/dist/index.mjs");
 
 // An edge that records what the probe did. `arrivesOnPoll` is the daemon read
 // (counting the one before the link is opened as read 0) from which the nonce
@@ -190,14 +161,13 @@ function fakeEdge(
       const read = reads++;
       calls.push("daemon");
       const view: DaemonView = {
-        version: "1.2.3",
         arrivals:
           arrivesOnRead !== null && read >= arrivesOnRead
             ? [
-                { nonce: "another", handler: "0.0.1" },
-                { nonce: NONCE, handler: "1.2.3" },
+                { nonce: "another", delivery: CLI },
+                { nonce: NONCE, delivery: FORWARDED },
               ]
-            : [{ nonce: "another", handler: "0.0.1" }],
+            : [{ nonce: "another", delivery: CLI }],
       };
       return { kind: "ok", value: view };
     },
@@ -213,11 +183,10 @@ function fakeEdge(
       calls.push("opener");
       return { kind: "ok", value: APP };
     },
-    script: (app) => {
-      calls.push(`script ${app}`);
-      return { kind: "ok", value: SCRIPT };
+    exists: (file) => {
+      calls.push(`exists ${file}`);
+      return file === forwarderExecutable(APP);
     },
-    exists: (file) => file !== "/bin/node",
     ...members,
   };
   return { edge, calls };
@@ -242,12 +211,11 @@ describe("probeUrlHandler", () => {
     expect(calls).toEqual([]);
   });
 
-  test("the link it opens arrives: the handler's version beside the daemon's, and no diagnosis", async () => {
+  test("the link it opens arrives: who delivered it, and no diagnosis", async () => {
     const { edge, calls } = fakeEdge({ arrivesOnRead: 3 });
     expect(await probeUrlHandler(edge)).toEqual({
       kind: "arrived",
-      handler: "1.2.3",
-      bar: "1.2.3",
+      delivery: FORWARDED,
     });
     expect(calls).toEqual([
       "daemon",
@@ -261,18 +229,31 @@ describe("probeUrlHandler", () => {
     ]);
   });
 
-  test("a link that never arrives is waited for, then diagnosed", async () => {
+  test("a link that never arrives is waited for, then the opener is diagnosed", async () => {
     const { edge, calls } = fakeEdge();
     expect(await probeUrlHandler(edge)).toEqual({
       kind: "lost",
       unopened: null,
-      opener: {
-        kind: "ok",
-        value: { app: APP, missing: { kind: "ok", value: ["/bin/node"] } },
-      },
+      opener: { kind: "ok", value: { app: APP, forwarder: true } },
     });
     expect(calls.filter((c) => c === "pause")).toHaveLength(50);
-    expect(calls.slice(-2)).toEqual(["opener", `script ${APP}`]);
+    expect(calls.slice(-2)).toEqual([
+      "opener",
+      `exists ${APP}/Contents/MacOS/CCCandybarURLHandler`,
+    ]);
+  });
+
+  test("an opener whose forwarder executable is gone, or that is another app, is not the forwarder", async () => {
+    const applet = fakeEdge({ exists: () => false });
+    expect(await probeUrlHandler(applet.edge)).toMatchObject({
+      opener: { value: { app: APP, forwarder: false } },
+    });
+    const other = fakeEdge({
+      opener: () => ({ kind: "ok", value: "/Applications/Other.app" }),
+    });
+    expect(await probeUrlHandler(other.edge)).toMatchObject({
+      opener: { value: { app: "/Applications/Other.app", forwarder: false } },
+    });
   });
 
   test("the wait is five seconds on the clock, however slowly the daemon answers", async () => {
@@ -314,35 +295,6 @@ describe("probeUrlHandler", () => {
     expect(calls).toEqual(["daemon"]);
   });
 
-  test("an app whose script this installer did not write, or that cannot be read", async () => {
-    const foreign = fakeEdge({
-      script: () => ({ kind: "ok", value: 'display dialog "hi"' }),
-    });
-    expect(await probeUrlHandler(foreign.edge)).toMatchObject({
-      opener: {
-        value: {
-          missing: {
-            kind: "failed",
-            reason: "its script is not one `cc-candybar install` wrote",
-          },
-        },
-      },
-    });
-    const unreadable = fakeEdge({
-      script: () => ({ kind: "failed", reason: "no such file" }),
-    });
-    expect(await probeUrlHandler(unreadable.edge)).toMatchObject({
-      opener: {
-        value: {
-          missing: {
-            kind: "failed",
-            reason: "its script could not be read (no such file)",
-          },
-        },
-      },
-    });
-  });
-
   test("a daemon that stops answering mid-wait is asked again", async () => {
     let reads = 0;
     const { edge } = fakeEdge({
@@ -352,55 +304,46 @@ describe("probeUrlHandler", () => {
           : {
               kind: "ok",
               value: {
-                version: "1.2.3",
-                arrivals: reads > 2 ? [{ nonce: NONCE, handler: null }] : [],
+                arrivals: reads > 2 ? [{ nonce: NONCE, delivery: CLI }] : [],
               },
             },
     });
     expect(await probeUrlHandler(edge)).toEqual({
       kind: "arrived",
-      handler: null,
-      bar: "1.2.3",
-    });
-  });
-});
-
-// ─── The handler app's script ────────────────────────────────────────────────
-
-describe("handlerCommand", () => {
-  test("reads back the two paths the installer bakes in", async () => {
-    const node = "/opt/homebrew/Cellar/node/26.7.0/bin/node";
-    const script = "/Users/u/Library/Application Support/CCCandybar/dist/index.mjs";
-    expect(handlerCommand(install.appleScriptSource(node, script))).toEqual({
-      node,
-      script,
+      delivery: CLI,
     });
   });
 
-  test("a path holding a double quote survives the script's escaping", async () => {
+  // [LAW:parse-dont-validate] An arrival off the wire: a daemon from before
+  // the forwarder lists its probes with `handler`, not `delivery`, and is
+  // told apart here, never dereferenced as one of ours.
+  test("an arrival is parsed off the daemon's stats, and an older daemon's shape is not one", () => {
+    expect(parseArrival({ nonce: NONCE, delivery: CLI })).toEqual({
+      nonce: NONCE,
+      delivery: CLI,
+    });
+    expect(parseArrival({ nonce: NONCE, delivery: FORWARDED })).toEqual({
+      nonce: NONCE,
+      delivery: FORWARDED,
+    });
+    expect(parseArrival({ nonce: NONCE, handler: "1.179.0" })).toBeNull();
     expect(
-      handlerCommand(install.appleScriptSource('/a "b"/node', "/s.mjs")),
-    ).toEqual({ node: '/a "b"/node', script: "/s.mjs" });
-  });
-
-  test("a script that is not the installer's is not read as one", async () => {
-    expect(handlerCommand('do shell script "open " & L')).toBeNull();
-  });
-
-  test("the compiled script sits where osacompile puts it", async () => {
-    expect(handlerScriptPath(APP)).toBe(
-      `${APP}/Contents/Resources/Scripts/main.scpt`,
-    );
+      parseArrival({ nonce: NONCE, delivery: { kind: "forwarder" } }),
+    ).toBeNull();
+    expect(
+      parseArrival({ nonce: NONCE, delivery: { kind: "applet" } }),
+    ).toBeNull();
+    expect(parseArrival({ delivery: CLI })).toBeNull();
+    expect(parseArrival(null)).toBeNull();
   });
 });
 
 // ─── The daemon's side ───────────────────────────────────────────────────────
 
 describe("the daemon's side of the round trip", () => {
-  // A click the URL handler of version `handler` delivered.
-  const link = (handler: string | null): ClickArrival => ({
+  const link = (delivery: Delivery): ClickArrival => ({
     via: "link",
-    handler,
+    delivery,
   });
 
   function daemon(arrival: ClickArrival) {
@@ -435,7 +378,13 @@ describe("the daemon's side of the round trip", () => {
         ...noManagedSettings(),
         probeTmux: async () => ({
           kind: "ok",
-          value: { features: [], termtype: "", termname: "", pid: 4242, utf8: true },
+          value: {
+            features: [],
+            termtype: "",
+            termname: "",
+            pid: 4242,
+            utf8: true,
+          },
         }),
         remoteLogin: async () => {
           throw new Error("remoteLogin must not run in this case");
@@ -457,34 +406,36 @@ describe("the daemon's side of the round trip", () => {
     return { sessionState, probes, logs, click };
   }
 
-  test("a probe link records its nonce and the handler that delivered it", async () => {
-    const d = daemon(link("1.2.3"));
+  test("a probe link records its nonce and who delivered it", async () => {
+    const d = daemon(link(FORWARDED));
     await d.click(VERB_DOCTOR_PROBE, NONCE);
-    expect(d.probes.list()).toEqual([{ nonce: NONCE, handler: "1.2.3" }]);
+    expect(d.probes.list()).toEqual([{ nonce: NONCE, delivery: FORWARDED }]);
     expect(d.logs).toEqual([
-      `doctor-probe: arrived nonce=${NONCE} handler=1.2.3`,
+      `doctor-probe: arrived nonce=${NONCE} delivery=forwarder`,
     ]);
   });
 
-  test("a probe from a handler that reports no version is recorded as such", async () => {
-    const d = daemon(link(null));
+  test("a probe the CLI delivered is recorded as such", async () => {
+    const d = daemon(link(CLI));
     await d.click(VERB_DOCTOR_PROBE, NONCE);
-    expect(d.probes.list()).toEqual([{ nonce: NONCE, handler: null }]);
+    expect(d.probes.list()).toEqual([{ nonce: NONCE, delivery: CLI }]);
     expect(d.logs).toEqual([
-      `doctor-probe: arrived nonce=${NONCE} handler=unreported`,
+      `doctor-probe: arrived nonce=${NONCE} delivery=cli`,
     ]);
   });
 
   test("a value that is not a probe nonce is refused and records nothing", async () => {
-    const d = daemon(link("1.2.3"));
-    await expect(d.click(VERB_DOCTOR_PROBE, "../../etc")).rejects.toThrow(BadVerbArgs);
+    const d = daemon(link(FORWARDED));
+    await expect(d.click(VERB_DOCTOR_PROBE, "../../etc")).rejects.toThrow(
+      BadVerbArgs,
+    );
     expect(d.probes.list()).toEqual([]);
   });
 
   test("only the newest arrivals are kept", async () => {
     const probes = new ProbeArrivals();
     for (let i = 0; i < 20; i++) {
-      probes.arrive({ nonce: `n${i}`, handler: null });
+      probes.arrive({ nonce: `n${i}`, delivery: CLI });
     }
     expect(probes.list().map((a) => a.nonce)).toEqual(
       Array.from({ length: 16 }, (_, i) => `n${i + 4}`),
@@ -497,7 +448,16 @@ describe("the daemon's side of the round trip", () => {
     recordRender(d.sessionState, "s1");
     // The session's own Claude Code directory (test/setup.ts's empty one):
     // with none, the doctor reads ~/.claude, the host's real settings.
-    d.sessionState.set("s1", SESSION_CLIENT_HINTS_KEY, JSON.stringify({ tmux: null, claudeConfigDir: process.env.CLAUDE_CONFIG_DIR, terminalEnv: { TERM_PROGRAM: "ghostty" }, termCols: 148 }));
+    d.sessionState.set(
+      "s1",
+      SESSION_CLIENT_HINTS_KEY,
+      JSON.stringify({
+        tmux: null,
+        claudeConfigDir: process.env.CLAUDE_CONFIG_DIR,
+        terminalEnv: { TERM_PROGRAM: "ghostty" },
+        termCols: 148,
+      }),
+    );
     await d.click(VERB_DOCTOR_RUN, "s1");
     const keys = doctorReportKeys("urlHandler");
     return {
@@ -507,19 +467,19 @@ describe("the daemon's side of the round trip", () => {
     };
   }
 
-  test("a doctor click delivered by this version's handler: the row is ok", async () => {
-    const row = await doctorRow(link(PACKAGE_VERSION));
+  test("a doctor click the forwarder delivered: the row is ok", async () => {
+    const row = await doctorRow(link(FORWARDED));
     expect(row.verdict).toBe("ok");
     expect(row.logs).toEqual([
       `doctor: config=ok install=ok daemon=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=ok segmentData=ok sessionData=ok configTarget=search glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=ghostty@- font=- mark=- tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native/same/- daemons=1 others=- memory=phys_footprint:120/512 postMortems=0/0 data=pr:-,rateLimits:1/0/0 transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 chains=absent truecolorEnv=unset (session=s1)`,
     ]);
   });
 
-  test("a doctor click delivered by an older handler: the row names both versions", async () => {
-    const row = await doctorRow(link("0.0.1"));
+  test("a doctor click a click request delivered: the row says it was not the forwarder", async () => {
+    const row = await doctorRow(link(CLI));
     expect(row.verdict).toBe("failed");
     expect(row.reason).toBe(
-      `the URL handler runs cc-candybar 0.0.1; the bar runs ${PACKAGE_VERSION} — re-run \`cc-candybar install\``,
+      `the link was delivered by a click request (\`cc-candybar url-handle\`), not the forwarder app — ${REINSTALL}`,
     );
     expect(row.logs).toEqual([
       `doctor: config=ok install=ok daemon=ok urlHandler=failed(1) links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=ok segmentData=ok sessionData=ok configTarget=search glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=ghostty@- font=- mark=- tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native/same/- daemons=1 others=- memory=phys_footprint:120/512 postMortems=0/0 data=pr:-,rateLimits:1/0/0 transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 chains=absent truecolorEnv=unset (session=s1)`,
@@ -538,23 +498,16 @@ describe("the daemon's side of the round trip", () => {
 
   test("a probe cannot arrive from the tmux status line", async () => {
     const d = daemon({ via: "tmux-status" });
-    await expect(d.click(VERB_DOCTOR_PROBE, NONCE)).rejects.toThrow(BadVerbArgs);
+    await expect(d.click(VERB_DOCTOR_PROBE, NONCE)).rejects.toThrow(
+      BadVerbArgs,
+    );
     expect(d.probes.list()).toEqual([]);
   });
 
-  test("a click's handler version is this daemon's own beside it", async () => {
-    expect(clickArrived({ via: "link", handler: null })).toEqual({
+  test("a click's arrival is the fact its doctor row reads", async () => {
+    expect(clickArrived(link(FORWARDED))).toEqual({
       kind: "arrived",
-      handler: null,
-      bar: PACKAGE_VERSION,
+      delivery: FORWARDED,
     });
-  });
-
-  test("the wire's client version is a short non-empty string or nothing", async () => {
-    expect(sanitizeClientVersion("1.2.3")).toBe("1.2.3");
-    expect(sanitizeClientVersion(undefined)).toBeNull();
-    expect(sanitizeClientVersion("")).toBeNull();
-    expect(sanitizeClientVersion(7)).toBeNull();
-    expect(sanitizeClientVersion("x".repeat(65))).toBeNull();
   });
 });

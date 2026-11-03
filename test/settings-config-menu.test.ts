@@ -45,7 +45,7 @@ import {
 } from "../src/daemon/setting-drafts";
 import { chmodSync } from "node:fs";
 import { dirname } from "node:path";
-import { parseHandlerUrl } from "../src/install/index";
+import { linkClick } from "./helpers/click";
 import { testVerbContext, effectsOf, recordRender } from "./helpers/click";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import type { ValidatedConfig } from "../src/config/dsl-types";
@@ -217,7 +217,7 @@ function rig(
     // The daemon's own path: the URL's verb — `dispatch` for a compound
     // click — looked up in the one table, so a click is one history step.
     click: async (url: string) => {
-      const { verb, value } = parseHandlerUrl(url);
+      const { verb, value } = linkClick(url);
       const handler = VERBS.get(verb);
       if (!handler) throw new Error(`no handler for verb "${verb}"`);
       await handler(value, ctx);

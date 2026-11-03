@@ -19,7 +19,6 @@ import {
   type Response,
 } from "./protocol";
 import { REQUEST_TIMEOUT_MS } from "./request-deadline";
-import { PACKAGE_VERSION } from "../version";
 
 export const RENDER_BUDGETS: RoundTripBudgets = {
   connectMs: CONNECT_TIMEOUT_MS,
@@ -106,7 +105,7 @@ export function tryClickViaDaemon(
 ): Promise<ClientOutcome> {
   return requestOutcome(
     world,
-    () => ({ kind: "click", verb, value, clientVersion: PACKAGE_VERSION }),
+    () => ({ kind: "click", verb, value }),
     CLICK_BUDGETS,
     projectOutput,
   );

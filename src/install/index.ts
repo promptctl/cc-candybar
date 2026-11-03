@@ -16,7 +16,7 @@ import type {
   PermanentOutcome,
 } from "../daemon/client-transport";
 import { obtainDaemonKick } from "../daemon/acquire";
-import { URL_SCHEME, VERB_COPY } from "../click/wire";
+import { parseHandlerUrl, URL_SCHEME } from "../click/wire";
 import { DOOR_GLYPH } from "../config/disclosure";
 import { PACKAGE_VERSION } from "../version";
 import { shellWord, singleQuoted } from "../shell-word";
@@ -40,6 +40,9 @@ import { PLATFORM_PACKAGES } from "./platforms";
 
 const BUNDLE_ID = "com.cccandybar.url-handler";
 const APP_NAME = "CCCandybarURLHandler";
+// The forwarder binary's name in a darwin platform package's `bin/`, as
+// .github/workflows/release.yml stages it.
+const FORWARDER_BIN = "cc-candybar-url-handler";
 
 // [LAW:one-source-of-truth] `install` writes no renderer flags into
 // ~/.claude/settings.json. All authoring lives in `.cc-candybar.json5` or
@@ -97,35 +100,70 @@ export function stableAttachPreload(runningBundle: string, host: Host): string {
   );
 }
 
-function appleScriptSource(nodePath: string, scriptPath: string): string {
-  // Bake absolute paths into the AppleScript so click-time invocation doesn't
-  // depend on PATH or install-time cache state. The dist bundle is fully
-  // self-contained (tsdown noExternal), so no NODE_PATH is needed.
-  const escNode = nodePath.replace(/"/g, '\\"');
-  const escScript = scriptPath.replace(/"/g, '\\"');
-  return [
-    "on open location L",
-    `\tdo shell script "'${escNode}' '${escScript}' url-handle " & quoted form of L`,
-    "end open location",
-  ].join("\n");
+// [LAW:one-source-of-truth] Where the forwarder's executable sits inside the
+// app bundle install assembles, kept beside the writer: the doctor reads it to
+// tell the forwarder from an applet an older install registered.
+export function forwarderExecutable(app: string): string {
+  return path.join(app, "Contents", "MacOS", APP_NAME);
 }
 
-// [LAW:one-source-of-truth] The reading of `appleScriptSource`'s one line,
-// kept beside its writer: the node binary and the bundle a handler app runs,
-// from the source `osadecompile` gives back, or null when the script is not
-// one this installer wrote.
-export function handlerCommand(
-  source: string,
-): { node: string; script: string } | null {
-  const m = /do shell script "'([^']+)' '([^']+)' url-handle "/.exec(source);
-  if (m === null) return null;
-  const unescape = (s: string): string => s.replace(/\\"/g, '"');
-  return { node: unescape(m[1]!), script: unescape(m[2]!) };
+// The forwarder binary: a checkout's own build (`just install-url-handler`),
+// or the one the darwin platform package ships, by the running bundle's
+// provenance — the same reading the update notice and the doctor make
+// (sourceCheckoutOf). [LAW:no-silent-failure] Neither present is an error
+// naming the path and how to make it exist; no applet is built in its place.
+function resolveForwarder(sourceDist: string): string {
+  const checkout = sourceCheckoutOf(sourceDist);
+  if (checkout !== null) {
+    const built = path.join(checkout, "bin", "cc-candybar-url-handler-native");
+    if (!fs.existsSync(built)) {
+      throw new Error(
+        `install: the URL handler app is not built at ${built}. Run \`just install-url-handler\` in the checkout.`,
+      );
+    }
+    return built;
+  }
+  const shipped = platformPackageFile(sourceDist, `bin/${FORWARDER_BIN}`);
+  switch (shipped.kind) {
+    case "found":
+      return shipped.path;
+    case "no-package":
+      throw new Error(
+        `install: no URL handler app ships for ${shipped.platform}; the scheme is macOS-only.`,
+      );
+    case "missing":
+      throw new Error(
+        `install: the URL handler app was not found in ${shipped.pkgName} (bin/${FORWARDER_BIN}). The optional platform package is missing or older than this release: reinstall the package.`,
+      );
+  }
 }
 
-// Where `osacompile` puts the compiled script inside the bundle it builds.
-export function handlerScriptPath(app: string): string {
-  return path.join(app, "Contents", "Resources", "Scripts", "main.scpt");
+// [LAW:one-source-of-truth] One lookup of a file the running platform's
+// package ships, for everything install stages from it: the package is named
+// by platform and arch (PLATFORM_PACKAGES) and resolved from the installed
+// bundle's own node_modules, where the optional dependency lives — anchored
+// to the bundle's real location, not this module's compiled form (which
+// ts-jest loads as CJS where import.meta is illegal).
+type PlatformPackageFile =
+  | { kind: "found"; path: string }
+  | { kind: "no-package"; platform: string }
+  | { kind: "missing"; pkgName: string };
+
+function platformPackageFile(
+  sourceDist: string,
+  file: string,
+): PlatformPackageFile {
+  const platform = `${process.platform}-${process.arch}`;
+  const pkgName = PLATFORM_PACKAGES[platform];
+  if (pkgName === undefined) return { kind: "no-package", platform };
+  try {
+    return {
+      kind: "found",
+      path: createRequire(sourceDist).resolve(`${pkgName}/${file}`),
+    };
+  } catch {
+    return { kind: "missing", pkgName };
+  }
 }
 
 // The staged render entry: the prebuilt native binary when this platform has
@@ -137,24 +175,13 @@ type RenderEntry =
   | { kind: "node-shim"; sourcePath: string };
 
 function resolveRenderEntry(sourceDist: string): RenderEntry {
-  const key = `${process.platform}-${process.arch}`;
-  const pkgName = PLATFORM_PACKAGES[key];
-  if (pkgName) {
-    // Anchored to the bundle's real location, not this module's compiled
-    // form (which ts-jest loads as CJS where import.meta is illegal) — the
-    // platform package lives in node_modules beside the installed dist.
-    const require = createRequire(sourceDist);
-    try {
-      return {
-        kind: "native",
-        sourcePath: require.resolve(`${pkgName}/bin/cc-candybar`),
-      };
-    } catch {
-      // Optional dependency absent (unsupported install, pruned optionals).
-      // Falls through to the node shim — announced by the caller, never
-      // silent. [LAW:no-silent-failure]
-    }
+  const shipped = platformPackageFile(sourceDist, "bin/cc-candybar");
+  if (shipped.kind === "found") {
+    return { kind: "native", sourcePath: shipped.path };
   }
+  // No package for this platform, or the optional dependency absent (pruned
+  // optionals): the node shim — announced by the caller, never silent.
+  // [LAW:no-silent-failure]
   return {
     kind: "node-shim",
     sourcePath: path.resolve(
@@ -283,79 +310,116 @@ export function runStageRuntime(
   };
 }
 
-function infoPlistPatch(): Array<{ key: string; xml: string }> {
+// The app's Info.plist, whole: an agent app (no Dock icon, no menu bar) that
+// claims the scheme. [LAW:one-source-of-truth] The scheme and the bundle id
+// are spelled here, from the constants the rest of the code reads; the Swift
+// source spells neither.
+function infoPlist(): string {
   return [
-    {
-      key: "CFBundleIdentifier",
-      xml: `<string>${BUNDLE_ID}</string>`,
-    },
-    {
-      key: "CFBundleURLTypes",
-      xml: [
-        "<array>",
-        "  <dict>",
-        "    <key>CFBundleURLName</key>",
-        `    <string>Claude Powerline Click Action</string>`,
-        "    <key>CFBundleURLSchemes</key>",
-        "    <array>",
-        `      <string>${URL_SCHEME}</string>`,
-        "    </array>",
-        "  </dict>",
-        "</array>",
-      ].join("\n"),
-    },
-  ];
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">',
+    '<plist version="1.0">',
+    "<dict>",
+    "  <key>CFBundleIdentifier</key>",
+    `  <string>${BUNDLE_ID}</string>`,
+    "  <key>CFBundleName</key>",
+    `  <string>${APP_NAME}</string>`,
+    "  <key>CFBundleExecutable</key>",
+    `  <string>${APP_NAME}</string>`,
+    "  <key>CFBundlePackageType</key>",
+    "  <string>APPL</string>",
+    "  <key>CFBundleVersion</key>",
+    `  <string>${PACKAGE_VERSION}</string>`,
+    "  <key>CFBundleShortVersionString</key>",
+    `  <string>${PACKAGE_VERSION}</string>`,
+    "  <key>LSMinimumSystemVersion</key>",
+    "  <string>12.0</string>",
+    "  <key>LSUIElement</key>",
+    "  <true/>",
+    "  <key>CFBundleURLTypes</key>",
+    "  <array>",
+    "    <dict>",
+    "      <key>CFBundleURLName</key>",
+    "      <string>cc-candybar click</string>",
+    "      <key>CFBundleURLSchemes</key>",
+    "      <array>",
+    `        <string>${URL_SCHEME}</string>`,
+    "      </array>",
+    "    </dict>",
+    "  </array>",
+    "</dict>",
+    "</plist>",
+    "",
+  ].join("\n");
 }
 
 // Callers establish the macOS precondition ([LAW:single-enforcer] — the
 // subcommand entry checks before any side effect; runInstall reaches here
 // only through its darwin dispatch).
-function installUrlHandlerFrom(
-  stagedDist: string,
-  { host, launcher }: World,
-): void {
+//
+// The app is assembled around the prebuilt forwarder: the bundle is written
+// fresh, ad-hoc signed (Launch Services registers a signed bundle; nothing
+// here passes through Gatekeeper, since no package manager quarantines what it
+// unpacks), the instance a previous install left resident is quit, and the
+// scheme is registered. [LAW:no-ambient-temporal-coupling] The quit is
+// install's: Launch Services never relaunches a running app, so without it a
+// reinstall would leave the old forwarder delivering until logout.
+function installUrlHandlerFrom(sourceDist: string, world: World): void {
+  installUrlHandler(resolveForwarder(sourceDist), world);
+}
+
+// The app assembled around a forwarder binary already resolved: install
+// resolves it first, as a precondition, so a checkout with no build or a
+// package with no binary fails with nothing staged. [LAW:effects-at-boundaries]
+function installUrlHandler(forwarder: string, { host, launcher }: World): void {
   const bundle = appBundlePath(host);
-  fs.mkdirSync(path.dirname(bundle), { recursive: true });
 
-  // If a previous handler exists, remove it so osacompile can write fresh.
-  if (fs.existsSync(bundle)) {
-    fs.rmSync(bundle, { recursive: true, force: true });
-  }
-
+  // [LAW:effects-at-boundaries] The app is assembled and signed beside its
+  // place, then renamed over the old one: a copy or a sign that fails leaves
+  // the handler the user had, registered and whole, not a half bundle.
+  const staging = `${bundle}.installing`;
+  const executable = forwarderExecutable(staging);
   process.stdout.write(`Building ${bundle}\n`);
-  const osa = launcher.launchSync({
-    bin: "/usr/bin/osacompile",
-    args: ["-o", bundle, "-e", appleScriptSource(process.execPath, stagedDist)],
-    category: "install.osacompile",
-  });
-  if (!osa.ok) {
-    process.stderr.write(osa.stderr);
-    throw new Error(`osacompile failed (${osa.reason})`);
-  }
+  fs.rmSync(staging, { recursive: true, force: true });
+  try {
+    fs.mkdirSync(path.dirname(executable), { recursive: true });
+    fs.copyFileSync(forwarder, executable);
+    fs.chmodSync(executable, 0o755);
+    fs.writeFileSync(path.join(staging, "Contents", "Info.plist"), infoPlist());
 
-  const plistPath = path.join(bundle, "Contents", "Info.plist");
-
-  for (const { key } of infoPlistPatch()) {
-    // plutil errors if the key already exists; pre-delete so the operation is
-    // idempotent. Ignore failures (key may not exist on a fresh build).
-    launcher.launchSync({
-      bin: "/usr/bin/plutil",
-      args: ["-remove", key, plistPath],
-      category: "install.plutil",
+    const signed = launcher.launchSync({
+      bin: "/usr/bin/codesign",
+      args: ["--force", "--sign", "-", staging],
+      category: "install.codesign",
     });
-  }
-
-  for (const { key, xml } of infoPlistPatch()) {
-    const r = launcher.launchSync({
-      bin: "/usr/bin/plutil",
-      args: ["-insert", key, "-xml", xml, plistPath],
-      category: "install.plutil",
-    });
-    if (!r.ok) {
-      process.stderr.write(r.stderr);
-      throw new Error(`plutil -insert ${key} failed (${r.reason})`);
+    if (!signed.ok) {
+      process.stderr.write(signed.stderr);
+      throw new Error(`codesign failed (${signed.reason})`);
     }
+    fs.rmSync(bundle, { recursive: true, force: true });
+    fs.renameSync(staging, bundle);
+  } catch (error) {
+    fs.rmSync(staging, { recursive: true, force: true });
+    throw error;
   }
+
+  // killall exits 1 when no process matches, which is the other legal state
+  // here: the app is only ever ours, in our own home, so no other exit 1 cause
+  // (another user's process) applies.
+  const quit = launcher.launchSync({
+    bin: "/usr/bin/killall",
+    args: [APP_NAME],
+    category: "install.killall",
+  });
+  if (!quit.ok && quit.exitCode !== 1) {
+    process.stderr.write(quit.stderr);
+    throw new Error(`killall ${APP_NAME} failed (${quit.reason})`);
+  }
+  process.stdout.write(
+    quit.ok
+      ? `Quit the running ${APP_NAME}; the next click starts the new one\n`
+      : `${APP_NAME} was not running\n`,
+  );
 
   process.stdout.write(`Registering ${URL_SCHEME}:// with Launch Services\n`);
   const lsr = launcher.launchSync({
@@ -378,45 +442,9 @@ export function runInstallUrlHandler(bundle: string, world: World): void {
   // Precondition before any side effect: on a non-mac this fails with zero
   // files written, not after staging the runtime.
   ensureMacOS();
-  const staged = runStageRuntime(bundle, supportDir(world.host));
-  installUrlHandlerFrom(staged.distPath, world);
-}
-
-interface ParsedUrl {
-  verb: string;
-  value: string;
-}
-
-// [LAW:dataflow-not-control-flow] Parse the URL into a {verb, value} pair
-// without using `new URL`, which lowercases hosts (would mangle case-sensitive
-// session ids). Format: cc-candybar://<verb>/<tail> | cc-candybar://<value>
-// (bare → copy). The verb ends at the FIRST `/`; everything after is the raw
-// value. The dispatch effect list rides as `dispatch/does=…&e=…`, so its query-
-// style payload is just the tail — `?` is NOT a delimiter, it is ordinary data
-// in a bare-copy value (`cc-candybar://hello?world` copies "hello?world").
-//
-// [LAW:single-enforcer] Only the VERB is decoded here. The value is passed RAW
-// to the daemon; each verb's handler decodes its own value at its boundary (the
-// verb that owns the structure owns its decode). A whole-value decode here would
-// un-escape structural separators inside a nested value — the exact hazard that
-// made compound clicks unrepresentable — so it is deliberately absent.
-export function parseHandlerUrl(
-  rawUrl: string,
-  scheme: string = URL_SCHEME,
-): ParsedUrl {
-  const prefix = `${scheme}://`;
-  if (!rawUrl.startsWith(prefix)) {
-    throw new Error(`expected ${prefix} scheme, got: ${rawUrl}`);
-  }
-  const rest = rawUrl.slice(prefix.length);
-  const slash = rest.indexOf("/");
-  if (slash === -1) {
-    return { verb: VERB_COPY, value: rest };
-  }
-  return {
-    verb: decodeURIComponent(rest.slice(0, slash)),
-    value: rest.slice(slash + 1),
-  };
+  const forwarder = resolveForwarder(bundle);
+  runStageRuntime(bundle, supportDir(world.host));
+  installUrlHandler(forwarder, world);
 }
 
 // [LAW:single-enforcer] url-handle is a thin IPC shim: parse the URL, send
@@ -424,7 +452,11 @@ export function parseHandlerUrl(
 // dispatch and NO direct disk mutation. The daemon is the only writer of
 // click-side state ([LAW:one-source-of-truth] for SessionState); kicking a
 // daemon on a transient failure is the only recovery, and it's
-// fire-and-forget so the next click hits a warm daemon.
+// fire-and-forget so the next click hits a warm daemon. The tmux status
+// line's click binding runs it (src/daemon/tmux-status.ts), with a command
+// the daemon composes from its own bundle, so it cannot go stale; a link
+// click in a terminal never comes this way, since the URL handler app forwards
+// the raw link to the daemon itself.
 //
 // A `permanent` daemon outcome (BAD_REQUEST for an unknown verb,
 // VERSION_MISMATCH against a future daemon) exits non-zero with the daemon's
@@ -439,13 +471,9 @@ export async function runUrlHandle(
     process.exit(1);
   }
 
-  let parsed: ParsedUrl;
-  try {
-    parsed = parseHandlerUrl(rawUrl);
-  } catch (err) {
-    process.stderr.write(
-      `url-handle: ${err instanceof Error ? err.message : String(err)}\n`,
-    );
+  const parsed = parseHandlerUrl(rawUrl);
+  if (!parsed.ok) {
+    process.stderr.write(`url-handle: ${parsed.problem}\n`);
     process.exit(1);
   }
 
@@ -546,10 +574,14 @@ export async function runInstall(
   const argsToInstall =
     filteredArgs.length > 0 ? filteredArgs : [...DEFAULT_INSTALL_ARGS];
 
+  // Preconditions before any side effect: the forwarder must exist before
+  // the runtime is staged, so a failed install leaves nothing half done.
+  const forwarder =
+    process.platform === "darwin" ? resolveForwarder(bundle) : null;
   const staged = runStageRuntime(bundle, supportDir(world.host));
 
-  if (process.platform === "darwin") {
-    installUrlHandlerFrom(staged.distPath, world);
+  if (forwarder !== null) {
+    installUrlHandler(forwarder, world);
   } else {
     process.stdout.write(
       "Skipping URL handler (cmd-click verbs are macOS-only).\n",
@@ -652,8 +684,9 @@ function updateClaudeSettings(
 
 // Exports for testing
 export const __test__ = {
-  appleScriptSource,
   buildStatusLineCommand,
+  infoPlist,
+  installUrlHandlerFrom,
   DEFAULT_INSTALL_ARGS,
   updateClaudeSettings,
   resolveRenderEntry,

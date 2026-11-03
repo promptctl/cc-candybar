@@ -14,7 +14,7 @@ import type { ValidatedConfig } from "../src/config/dsl-types";
 import { SessionState } from "../src/daemon/session-state";
 import { VERBS } from "../src/daemon/verbs";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
-import { parseHandlerUrl } from "../src/install/index";
+import { linkClick } from "./helpers/click";
 import { registerDslConfig, type DrawnFrame, type RenderWarning } from "../src/dsl/render";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -358,7 +358,7 @@ describe("a kept view draws what a fresh one draws", () => {
             .join(" ")}`,
         );
       }
-      const { verb, value } = parseHandlerUrl(hit.url);
+      const { verb, value } = linkClick(hit.url);
       const effects =
         verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
       for (const e of effects) await VERBS.get(e.verb)!(e.value, ctx);

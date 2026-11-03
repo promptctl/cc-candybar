@@ -45,7 +45,7 @@ import type { RichText } from "@promptctl/rich-js";
 import { VERBS } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
 import { recordRender, testVerbContext, effectsOf } from "./helpers/click";
-import { parseHandlerUrl } from "../src/install/index";
+import { linkClick } from "./helpers/click";
 import { parseEffects, VERB_DISPATCH, VERB_SET_STATE } from "../src/click/wire";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
@@ -142,7 +142,7 @@ function build(src: string, withDefault: boolean) {
   // Drive a click through the daemon's own handlers — the gate the row ✕
   // passes is the cycle action's, derived like every other set.
   const click = async (url: string): Promise<void> => {
-    const { verb, value } = parseHandlerUrl(url);
+    const { verb, value } = linkClick(url);
     const effects =
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
     for (const e of effects) {

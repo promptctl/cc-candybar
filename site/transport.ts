@@ -8,7 +8,7 @@
 
 import { VERB_COPY } from "../src/click/wire";
 import { processWorld } from "../src/host";
-import { describeLink, effectsOf, HOST_VERBS, linksOf } from "../src/click/read";
+import { clickOf, describeLink, effectsOf, HOST_VERBS, linksOf } from "../src/click/read";
 import { createDaemon } from "../src/daemon/daemon";
 import { memoryLimitBytes } from "../src/daemon/limits";
 import { daemonGates } from "../src/daemon/update-keys";
@@ -19,9 +19,7 @@ import { EPHEMERAL_SESSION_STORAGE } from "../src/daemon/session-state";
 import { EPHEMERAL_HISTORY_STORAGE } from "../src/daemon/settings-history";
 import { PROTOCOL_VERSION, type ClickRequest, type ReaderRenderRequest, type Response } from "../src/daemon/protocol";
 import { REGISTRY_URL } from "../src/install/currency";
-import { parseHandlerUrl } from "../src/install/index";
 import { composeBar, parseFrame, type Frame } from "../src/render/frame";
-import { PACKAGE_VERSION } from "../src/version";
 import type { ClaudeHookData } from "../src/utils/claude";
 import { DURATION, INITIAL_MOMENT, INITIAL_REPO, STEPS, type Entry, type Moment, type ScenarioRepo, type Step } from "./scenario";
 import { CLAUDE_DIR, REPO, appendTranscript, forgetWrites, newTranscript, seedWorld, updateRepo, type RepoState } from "./world";
@@ -238,10 +236,10 @@ async function click(url: string, size: Size) {
       : `not sent: on a real machine this ${host.map((e) => HOST_VERBS.get(e.verb)).join(", ")}`;
     return { ...(await render(size)), refused };
   }
-  const { verb, value } = parseHandlerUrl(url);
+  const { verb, value } = clickOf(url);
   let refused: string | null = null;
   try {
-    await daemon({ v: PROTOCOL_VERSION, kind: "click", verb, value, clientVersion: PACKAGE_VERSION });
+    await daemon({ v: PROTOCOL_VERSION, kind: "click", verb, value });
   } catch (e) {
     refused = e instanceof Error ? e.message : String(e);
   }

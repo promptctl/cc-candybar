@@ -59,7 +59,7 @@ import {
 } from "../src/daemon/client-frames.js";
 import { PARENT_PID_ENV } from "../src/daemon/parent-watchdog.js";
 import type { StatsSnapshot } from "../src/daemon/stats.js";
-import { parseHandlerUrl } from "../src/install/index.js";
+import { clickOf } from "../src/click/read.js";
 import { sourceDigest } from "../src/source-digest.js";
 import type { ClaudeHookData } from "../src/utils/claude.js";
 import { percentile } from "./lib/percentile.js";
@@ -563,7 +563,7 @@ const clicks: Click[] = [];
 // as the URL handler makes it — through the handler's own parse and client —
 // and how it ended.
 async function menuClick(s: Session, open: boolean): Promise<string> {
-  const { verb, value } = parseHandlerUrl(
+  const { verb, value } = clickOf(
     effectsUrl([
       {
         verb: VERB_SET_STATE,

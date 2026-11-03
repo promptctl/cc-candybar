@@ -1491,8 +1491,8 @@ there is nothing to go back to), and the bar's row closes up where the door was.
   and everything it declares is used: no variable nothing reads, no action
   nothing clicks, no helper nothing calls, no segment absent from every
   preset. `URL handler` passes when a `cc-candybar://` link reaches the
-  daemon through the handler app, delivered by the version the bar runs: in
-  the bar that link is the doctor click itself, and `cc-candybar doctor`
+  daemon through the handler app, the forwarder `cc-candybar install` builds:
+  in the bar that link is the doctor click itself, and `cc-candybar doctor`
   opens one of its own and waits up to five seconds for it, naming what is
   missing when it does not come back. `tmux truecolor` passes when Claude Code draws the bar in full
   colour inside tmux; its `[fix]` writes `CLAUDE_CODE_TMUX_TRUECOLOR=1` into

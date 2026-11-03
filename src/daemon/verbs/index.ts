@@ -1665,11 +1665,11 @@ const doctorProbe = async (
   // a frame, so one cannot come from the tmux status line.
   if (ctx.arrival.via !== "link")
     throw new BadVerbArgs("doctor-probe: a probe arrives only as a link");
-  const { handler } = ctx.arrival;
-  ctx.probes.arrive({ nonce, handler });
+  const { delivery } = ctx.arrival;
+  ctx.probes.arrive({ nonce, delivery });
   ctx.log(
     "info",
-    `doctor-probe: arrived nonce=${nonce} handler=${handler ?? "unreported"}`,
+    `doctor-probe: arrived nonce=${nonce} delivery=${delivery.kind}`,
   );
 };
 

@@ -40,7 +40,8 @@ import {
   batchAdjacentWrites,
   type Effect,
 } from "../src/click/wire";
-import { parseHandlerUrl } from "../src/install/index";
+import { parseHandlerUrl } from "../src/click/wire";
+import { linkClick } from "./helpers/click";
 import { VERBS, BadVerbArgs } from "../src/daemon/verbs";
 import { SessionState } from "../src/daemon/session-state";
 import {
@@ -100,7 +101,7 @@ describe("click wire — encode/decode round-trip", () => {
       { verb: VERB_SET_STATE, args: [SID, "k", "v"] },
       { verb: VERB_COPY, args: ["x"] },
     ]);
-    const { value } = parseHandlerUrl(url);
+    const { value } = linkClick(url);
     const parsed = parseEffects(value);
     expect(parsed.map((e) => e.verb)).toEqual(["set-state", "copy"]);
   });
@@ -335,13 +336,13 @@ describe("a dispatch link drawn before `does` existed", () => {
 describe("parseHandlerUrl — verb split, value raw", () => {
   test("dispatch URL → verb=dispatch, value is the raw query string", () => {
     const url = effectsUrl([{ verb: VERB_COPY, args: ["hi"] }]);
-    const { verb, value } = parseHandlerUrl(url);
+    const { verb, value } = linkClick(url);
     expect(verb).toBe(VERB_DISPATCH);
     expect(parseEffects(value)).toEqual([{ verb: "copy", value: "hi" }]);
   });
 
   test("old direct set-state link still parses (back-compat scrollback)", () => {
-    const { verb, value } = parseHandlerUrl(
+    const { verb, value } = linkClick(
       "cc-candybar://set-state/s1/theme/textual-dark",
     );
     expect(verb).toBe("set-state");
@@ -350,6 +351,7 @@ describe("parseHandlerUrl — verb split, value raw", () => {
 
   test("bare form → copy with the raw value", () => {
     expect(parseHandlerUrl("cc-candybar://hello-world")).toEqual({
+      ok: true,
       verb: "copy",
       value: "hello-world",
     });
@@ -359,6 +361,7 @@ describe("parseHandlerUrl — verb split, value raw", () => {
     // Regression: only `/` delimits the verb; `dispatch/e=…` carries the effect
     // list, so `?` never needs to split and stays part of a bare copy value.
     expect(parseHandlerUrl("cc-candybar://hello?world")).toEqual({
+      ok: true,
       verb: "copy",
       value: "hello?world",
     });
@@ -369,8 +372,26 @@ describe("parseHandlerUrl — verb split, value raw", () => {
     // decodeURIComponent), so an old `copy/a/b` link copies "a/b", not "a".
     // parseHandlerUrl hands the raw tail; only the verb is split off.
     expect(parseHandlerUrl("cc-candybar://copy/a/b")).toEqual({
+      ok: true,
       verb: "copy",
       value: "a/b",
+    });
+  });
+
+  // [LAW:parse-dont-validate] The daemon reads every link the URL handler
+  // forwards through this one parse, so what it refuses is a typed problem the
+  // click event records, never a throw and never a copy of the whole string.
+  test("a link of another scheme is refused, naming the link", () => {
+    expect(parseHandlerUrl("https://example.com/x")).toEqual({
+      ok: false,
+      problem: "expected a cc-candybar:// link, got: https://example.com/x",
+    });
+  });
+
+  test("a malformed verb escape is refused, naming the verb", () => {
+    expect(parseHandlerUrl("cc-candybar://bad%zz/v")).toEqual({
+      ok: false,
+      problem: "the link's verb is malformed: bad%zz",
     });
   });
 

@@ -72,6 +72,8 @@ jobs:
       - name: Test end-to-end
         run: pnpm test:e2e
 
+      # Covers the Rust client, the vendored statusline push and the Swift
+      # URL handler, by reading their sources: no toolchain needed here.
       - name: Protocol-version guard
         run: pnpm run check:protocol
 
@@ -161,10 +163,31 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  # The URL handler app (url-handler/main.swift): a resident macOS agent that
+  # forwards a cc-candybar:// link to the daemon. Swift needs a macOS runner;
+  # one universal binary serves both darwin packages.
+  build-url-handler:
+    name: Build URL handler app (darwin universal)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build universal binary
+        run: ./url-handler/build.sh build/cc-candybar-url-handler
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cc-candybar-url-handler
+          path: build/cc-candybar-url-handler
+          if-no-files-found: error
+          retention-days: 1
+
   release:
     name: Release
     runs-on: ubuntu-latest
-    needs: [test, build-rust]
+    needs: [test, build-rust, build-url-handler]
     if: github.ref == 'refs/heads/main'
     permissions:
       contents: write
@@ -206,6 +229,14 @@ jobs:
                "npm/cc-candybar-${platform}/bin/cc-candybar"
             chmod 0755 "npm/cc-candybar-${platform}/bin/cc-candybar"
             file "npm/cc-candybar-${platform}/bin/cc-candybar"
+          done
+          # The URL handler app's binary, which `cc-candybar install` wraps in
+          # an app bundle (src/install/index.ts FORWARDER_BIN names it).
+          for platform in darwin-arm64 darwin-x64; do
+            cp "artifacts/cc-candybar-url-handler/cc-candybar-url-handler" \
+               "npm/cc-candybar-${platform}/bin/cc-candybar-url-handler"
+            chmod 0755 "npm/cc-candybar-${platform}/bin/cc-candybar-url-handler"
+            file "npm/cc-candybar-${platform}/bin/cc-candybar-url-handler"
           done
 
       - name: Build TypeScript
