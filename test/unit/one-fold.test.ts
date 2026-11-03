@@ -156,7 +156,7 @@ describe("no declared name sits under another", () => {
   });
 });
 
-describe("a segment's input paths follow every edge the draw does", () => {
+describe("a segment's input paths follow every edge of what a value reads", () => {
   // The config as merged, before synthesis: the settings menu binds an action
   // by a name it computes, which reaches every action's text, so a negative
   // control needs a bar without it. The segment asked of is `s`.
