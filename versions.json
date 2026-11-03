@@ -4,15 +4,22 @@
     {
       "version": "pr-607",
       "ref": "refs/pull/607/merge",
-      "sha": "b24eec9cc0918b47fc3ac8bc498e8fed59811b7e",
-      "timestamp": "2026-11-03T08:22:14.068Z",
+      "sha": "6e977579172f81b037d58336b99ff26d9356339b",
+      "timestamp": "2026-11-03T08:24:48.350Z",
       "commits": [
         {
-          "sha": "b24eec9cc0918b47fc3ac8bc498e8fed59811b7e",
+          "sha": "6e977579172f81b037d58336b99ff26d9356339b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T08:20:38Z",
-          "message": "Merge dd7bc5b33f1c0782dcc0477c5e593a9e77c1df25 into 8005d083220ec5eb217749c74c3caf1a246f2bc5\n"
+          "timestamp": "2026-11-03T08:22:03Z",
+          "message": "Merge 0c5e307ab477d7c121b1c956ad206ff52fec76e2 into 8005d083220ec5eb217749c74c3caf1a246f2bc5\n"
+        },
+        {
+          "sha": "0c5e307ab477d7c121b1c956ad206ff52fec76e2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T01:21:52-07:00",
+          "message": "docs(design): the name bound, the empty-name click, the link-id table's bound and the browser-surface supersession, from the medium review (candybar-gather-renderer-76bb.yl3)\n"
         },
         {
           "sha": "dd7bc5b33f1c0782dcc0477c5e593a9e77c1df25",
