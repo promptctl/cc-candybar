@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-595",
+      "ref": "refs/pull/595/merge",
+      "sha": "081f0aa39da70ceb6098c3f585f19c28352f7a03",
+      "timestamp": "2026-11-03T02:17:05.776Z",
+      "commits": [
+        {
+          "sha": "081f0aa39da70ceb6098c3f585f19c28352f7a03",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T02:16:23Z",
+          "message": "Merge ff7e1ac09291237ced0be12110e64a2ef732daf5 into 669df9209449d3ac4080a21d3a7144477fa78a73\n"
+        },
+        {
+          "sha": "ff7e1ac09291237ced0be12110e64a2ef732daf5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T18:57:27-07:00",
+          "message": "fix(launch): drain bytes count as read and pipe errors count in either phase (candybar-testing-0x6u.yzt)\n\nSecond high review of #595. A capture knows its category and stats from the\nstart, so a read error is counted whether or not the stream is drained, and a\ndrain's dropped bytes show while it is still open. A drain's end is one value.\nComments no longer claim the launch's scope goes at settle, or that only a\ndescendant outside the group is drained.\n"
+        },
+        {
+          "sha": "90255b1a36cc83c53bc1176e20d8688a3d6dc505",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T18:51:22-07:00",
+          "message": "fix(launch): a captured pipe's read error is counted for its whole life, not only once drained (candybar-testing-0x6u.yzt)\n\nMedium review of #595. The drain tests assert end kinds, not bytes a group-end\nsettle may move, and the abort case proves the holder's pipe is destroyed.\n"
+        },
+        {
+          "sha": "49fa3c7d0fb10d1d2d7e520298c93bff2e051135",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T18:47:17-07:00",
+          "message": "fix(launch): a drain is bounded and counted from settle, holds nothing of the launch, and shows in daemon-stats (candybar-testing-0x6u.yzt)\n\nHigh review of #595: clamp the kept window so no byte past the bound is kept\nbefore the end lands; destroy a drain handed over after the launcher closed;\ncount and bound a drain from settle with its end (closed/cut/errored) as data;\nrelease the launch's full callback at settle; listen for a held pipe's error;\nprint the drain row in daemon-stats.\n"
+        },
+        {
+          "sha": "5e7dd39e36baaa719a7571682d29273aa7da7469",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T18:41:08-07:00",
+          "message": "fix(launch): a launch's drained pipes have one owner, one bound and a stat (candybar-testing-0x6u.yzt)\n\nA pipe a descendant holds past its launch is read by the launch's own capture\nfor its whole life: one byte count against MAX_CAPTURED_BYTES, cut past it so a\nchatty holder dies at its next write. The launcher holds every open drain,\ndestroys them when its scope closes, and meters draining/drainedBytes/drainsCut\ninto the subprocess stats. Settle drops the child's listeners, so the launch's\nclosure and output go with its result.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-594",
       "ref": "refs/pull/594/merge",
       "sha": "3554e5ee87f0e6969b9a73bca9771ebe63bd5158",
@@ -92,49 +135,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-03T01:43:27Z",
           "message": "chore(release): set `package.json` to 1.180.8 [skip ci]\n\n## [1.180.8](https://github.com/promptctl/cc-candybar/compare/v1.180.7...v1.180.8) (2026-11-03)\n\n### Bug Fixes\n\n* **launch:** a waited launch keeps at most 16 MiB per stream and ends the child past it (candybar-testing-0x6u.ndy) ([#590](https://github.com/promptctl/cc-candybar/issues/590)) ([c0943ea](https://github.com/promptctl/cc-candybar/commit/c0943ea0205fc68b6c59b0134dd79a75552b2f10))\n* **test:** the turn-per-draw feed case runs on held time (candybar-testing-0x6u.e2d) ([#593](https://github.com/promptctl/cc-candybar/issues/593)) ([c63e8bc](https://github.com/promptctl/cc-candybar/commit/c63e8bcefa93b28ab53cf599d14d916dda71e551))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-595",
-      "ref": "refs/pull/595/merge",
-      "sha": "41975e507dc408cd814da5f81e2068c3f367a3dd",
-      "timestamp": "2026-11-03T02:06:43.958Z",
-      "commits": [
-        {
-          "sha": "41975e507dc408cd814da5f81e2068c3f367a3dd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T19:05:50-07:00",
-          "message": "Merge 8ad602d9e2d69c99bf44b1278d6e25808e779b4b into e7ee7542655b493942757800b257dc4accd601f1\n"
-        },
-        {
-          "sha": "8ad602d9e2d69c99bf44b1278d6e25808e779b4b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T18:57:27-07:00",
-          "message": "fix(launch): drain bytes count as read and pipe errors count in either phase (candybar-testing-0x6u.yzt)\n\nSecond high review of #595. A capture knows its category and stats from the\nstart, so a read error is counted whether or not the stream is drained, and a\ndrain's dropped bytes show while it is still open. A drain's end is one value.\nComments no longer claim the launch's scope goes at settle, or that only a\ndescendant outside the group is drained.\n"
-        },
-        {
-          "sha": "5e9ad6b4d3dca5d533ec83c6d6b1c9a2ff5f5ad7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T18:51:22-07:00",
-          "message": "fix(launch): a captured pipe's read error is counted for its whole life, not only once drained (candybar-testing-0x6u.yzt)\n\nMedium review of #595. The drain tests assert end kinds, not bytes a group-end\nsettle may move, and the abort case proves the holder's pipe is destroyed.\n"
-        },
-        {
-          "sha": "914ec3ebc70037d05ead539e46f020cdab8429b1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T18:47:17-07:00",
-          "message": "fix(launch): a drain is bounded and counted from settle, holds nothing of the launch, and shows in daemon-stats (candybar-testing-0x6u.yzt)\n\nHigh review of #595: clamp the kept window so no byte past the bound is kept\nbefore the end lands; destroy a drain handed over after the launcher closed;\ncount and bound a drain from settle with its end (closed/cut/errored) as data;\nrelease the launch's full callback at settle; listen for a held pipe's error;\nprint the drain row in daemon-stats.\n"
-        },
-        {
-          "sha": "c259c0668da3e09613bcdf8bd9d2bbaeae6181a7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T18:41:08-07:00",
-          "message": "fix(launch): a launch's drained pipes have one owner, one bound and a stat (candybar-testing-0x6u.yzt)\n\nA pipe a descendant holds past its launch is read by the launch's own capture\nfor its whole life: one byte count against MAX_CAPTURED_BYTES, cut past it so a\nchatty holder dies at its next write. The launcher holds every open drain,\ndestroys them when its scope closes, and meters draining/drainedBytes/drainsCut\ninto the subprocess stats. Settle drops the child's listeners, so the launch's\nclosure and output go with its result.\n"
         }
       ]
     }
