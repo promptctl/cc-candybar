@@ -67327,9 +67327,16 @@ function firstPending(...lanes) {
   return lane?.kind === "pending" ? pendingOf(lane.why) : void 0;
 }
 var unstamped = (fact) => {
-  if (fact.kind === "pending") return fact;
-  const { at: _at, ...reading } = fact;
-  return reading;
+  switch (fact.kind) {
+    case "pending":
+      return fact;
+    case "absent":
+      return ABSENT2;
+    case "ok":
+      return ok(fact.value);
+    case "failed":
+      return failed(fact.reason, fact.failedAt);
+  }
 };
 function composePayload(facts, inputs, draw2) {
   const { hookData: hookData2, hints } = inputs;
@@ -76661,7 +76668,7 @@ function drawRender(parts, setup, drawing2) {
   noteFacts(facts, {
     lanes: LANE_NAMES.filter((lane) => lanes[lane]).join(",") || "-"
   });
-  const { hints } = view.facts();
+  const hints = view.source.hints();
   const width = payload.term.cols;
   noteFacts(facts, { width: String(width) });
   const clickHold = clickErrorAt(sessionState, sessionId2, at, drawing2.by);
@@ -82807,8 +82814,9 @@ function assembleFacts(prior, session, readings, update, at) {
 }
 
 // src/daemon/session-source.ts
+var failedWith = (prior, reason) => prior.failure === reason ? prior : { ...prior, failure: reason };
 function stamped(prior, moved, at, session) {
-  if (moved.kind === "failed") return { ...prior, failure: moved.reason };
+  if (moved.kind === "failed") return failedWith(prior, moved.reason);
   try {
     const document = assembleFacts(
       prior.document,
@@ -82824,7 +82832,7 @@ function stamped(prior, moved, at, session) {
       failure: null
     };
   } catch (e) {
-    return { ...prior, failure: `stamping the facts document: ${String(e)}` };
+    return failedWith(prior, `stamping the facts document: ${String(e)}`);
   }
 }
 function sessionSource(deps) {
@@ -82919,13 +82927,9 @@ function sessionSource(deps) {
           }
         },
         (moved) => runInAction(() => {
-          const next = stamped(
-            turn.get(),
-            moved,
-            instantAt(clock),
-            sessionId2
-          );
-          if (next.failure !== null) {
+          const prior = turn.get();
+          const next = stamped(prior, moved, instantAt(clock), sessionId2);
+          if (next.failure !== null && next !== prior) {
             deps.providers.log(
               "error",
               `session facts sid=${JSON.stringify(sessionId2)}: ${next.failure}`
@@ -82950,6 +82954,7 @@ function sessionSource(deps) {
       payload: () => payload.read(),
       effective: () => turn.get().draw.effective,
       facts: () => turn.get().document,
+      hints: () => turn.get().compose.hints,
       failure: () => turn.get().failure,
       selections: () => turn.get().draw.effective
     };

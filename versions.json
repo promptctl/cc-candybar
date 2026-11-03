@@ -4,15 +4,22 @@
     {
       "version": "pr-616",
       "ref": "refs/pull/616/merge",
-      "sha": "76672e66b47b95f90f1c7d6be16e205c2233caf4",
-      "timestamp": "2026-11-03T16:21:07.203Z",
+      "sha": "f19e639af112da1b838e4c6c14e6029b12cb0c4c",
+      "timestamp": "2026-11-03T16:30:01.184Z",
       "commits": [
         {
-          "sha": "76672e66b47b95f90f1c7d6be16e205c2233caf4",
+          "sha": "f19e639af112da1b838e4c6c14e6029b12cb0c4c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T09:20:05-07:00",
-          "message": "Merge 63d9ce3e3e9e4768108741184f96634afdffb1ff into b744cf603e403a589c9d9d397312a7fdece6ad65\n"
+          "timestamp": "2026-11-03T16:28:48Z",
+          "message": "Merge 8f9d91e8b2e7670041034ae1bba5988dc97d00cd into b744cf603e403a589c9d9d397312a7fdece6ad65\n"
+        },
+        {
+          "sha": "8f9d91e8b2e7670041034ae1bba5988dc97d00cd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T09:28:30-07:00",
+          "message": "fix(facts): a draw reads the client's hints off its turn; a repeated failure is one turn; unstamped projects its arms (candybar-gather-renderer-76bb.6pj.83l)\n"
         },
         {
           "sha": "63d9ce3e3e9e4768108741184f96634afdffb1ff",
