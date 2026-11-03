@@ -52596,10 +52596,14 @@ var KeyedSource = class {
   // out. An entry nobody holds is read when a hold returns to it.
   changed(affected) {
     for (const entry of this.entries.values()) {
-      if (entry.holders > 0 && affected(entry.input)) {
-        this.refresh(entry, "change");
-      }
+      if (affected(entry.input)) this.heard(entry);
     }
+  }
+  // [LAW:single-enforcer] The one rule for a change under an entry, whether
+  // the owner's or the entry's own watch reports it: a held entry is read
+  // again; one nobody holds is not, since a hold's return re-reads it.
+  heard(entry) {
+    if (entry.holders > 0) this.refresh(entry, "change");
   }
   // Whether some home holds an entry `match` names now.
   isHeld(match) {
@@ -52611,8 +52615,15 @@ var KeyedSource = class {
   stats() {
     let held = 0;
     for (const entry of this.entries.values()) if (entry.holders > 0) held++;
-    const { refreshes, failures, lastMs } = this.refreshes.record();
-    return { entries: this.entries.size, held, refreshes, failures, lastMs };
+    const { refreshes, failures, abandoned, lastMs } = this.refreshes.record();
+    return {
+      entries: this.entries.size,
+      held,
+      refreshes,
+      failures,
+      abandoned,
+      lastMs
+    };
   }
   // Ends every entry's period: a held entry's period re-arms on every landing,
   // so an owner that is not closed keeps its timers for good.
@@ -52646,7 +52657,7 @@ var KeyedSource = class {
       }
     };
     this.entries.set(key, entry);
-    entry.unwatch = this.spec.watch(input, () => this.refresh(entry, "change"));
+    entry.unwatch = this.spec.watch(input, () => this.heard(entry));
     return entry;
   }
   firstRead(entry) {
@@ -52666,10 +52677,7 @@ var KeyedSource = class {
       const fields2 = this.spec.fields(entry.input, entry.holders);
       const ms = elapsedMs(this.spec.clock, startedAt);
       if (flight.signal.aborted) {
-        this.spec.logger(
-          "info",
-          `${this.spec.name} refresh ${fields2} by=${by} abandoned took=${ms}ms`
-        );
+        this.refreshes.abandoned(fields2, by, ms);
         return;
       }
       const stored = entry.flight === flight;
@@ -52799,6 +52807,7 @@ var RefreshLedger = class {
       scope: declaration.scope,
       refreshes: {},
       failures: 0,
+      abandoned: 0,
       lastMs: null
     };
     for (const trigger of declaration.refresh) tally.refreshes[trigger] ??= 0;
@@ -52853,6 +52862,16 @@ var Refreshes = class {
     this.logger(
       failure ? "warn" : "info",
       `${this.tally.name} refresh ${fields2} by=${by} outcome=${outcome.kind}${why2} took=${ms}ms`
+    );
+  }
+  // [LAW:nothing-unseen] A read the owner abandoned is its own event and its
+  // own count: a key that moves on every tick aborts a read on every tick,
+  // which no refresh or failure tally would show.
+  abandoned(fields2, by, ms) {
+    this.tally.abandoned++;
+    this.logger(
+      "info",
+      `${this.tally.name} refresh ${fields2} by=${by} abandoned took=${ms}ms`
     );
   }
 };
@@ -53134,8 +53153,7 @@ var SourceRuns = class {
       },
       every: ({ refresh }) => refresh.kind === "ttl" ? { okMs: refresh.durationMs, failedMs: refresh.durationMs } : null,
       watch: (identity2, changed) => {
-        if (identity2.refresh.kind !== "watch_file") return () => {
-        };
+        if (identity2.refresh.kind !== "watch_file") return NO_WATCH();
         const digest2 = digestOf2(identity2);
         const unsubscribe = this.watchMgr.subscribe(
           identity2.refresh.path,
@@ -69663,6 +69681,14 @@ init_globals();
 
 // src/daemon/stats.ts
 init_globals();
+var NO_RUNS = {
+  entries: 0,
+  held: 0,
+  refreshes: {},
+  failures: 0,
+  abandoned: 0,
+  lastMs: null
+};
 var ROLLING_WINDOW_MS = 6e4;
 var ROLLING_BUFFER_CAP = 16384;
 var HISTOGRAM_CAP = 16;
@@ -69858,6 +69884,11 @@ var RuntimeStats = class _RuntimeStats {
         probes: 0,
         probeFailures: 0
       },
+      sourceRuns: {
+        shell: NO_RUNS,
+        file: NO_RUNS,
+        watches: 0
+      },
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
       renderCache: {
         size: 0,
@@ -69931,6 +69962,7 @@ var RuntimeStats = class _RuntimeStats {
       usageCache: extras.usageCache,
       sources: extras.sources,
       fileEvents: extras.fileEvents,
+      sourceRuns: extras.sourceRuns,
       transcriptReads: extras.transcriptReads,
       renderCache: extras.renderCache,
       effectCache: extras.effectCache,
@@ -77399,6 +77431,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     payloadProviders: { gitProvider, usageStore },
     fileEvents,
     runs,
+    sourceRuns,
     effectSessions,
     menuIdle,
     journalTurns,
@@ -77443,6 +77476,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
         usageCache: usageStore.getStats(),
         sources: sourceSnapshots(parts),
         fileEvents: fileEvents.stats(),
+        sourceRuns: sourceRuns.stats(),
         runs: runs.stats(),
         transcriptReads: transcriptReads(),
         renderCache: renderCache.stats,
@@ -80883,8 +80917,8 @@ var AutoCompactProvider = class {
     return this.known.get(settingsPath)?.outcome ?? pendingOf("unread");
   }
   getStats() {
-    const { refreshes, failures, lastMs } = this.refreshes.record();
-    return { entries: this.known.size, refreshes, failures, lastMs };
+    const { refreshes, failures, abandoned, lastMs } = this.refreshes.record();
+    return { entries: this.known.size, refreshes, failures, abandoned, lastMs };
   }
 };
 function stampAt(settingsPath) {
@@ -80949,8 +80983,8 @@ var CacheExpiryProvider = class {
     return this.known.get(sessionId2)?.outcome ?? pendingOf("unread");
   }
   getStats() {
-    const { refreshes, failures, lastMs } = this.refreshes.record();
-    return { entries: this.known.size, refreshes, failures, lastMs };
+    const { refreshes, failures, abandoned, lastMs } = this.refreshes.record();
+    return { entries: this.known.size, refreshes, failures, abandoned, lastMs };
   }
   async read(sessionId2, transcriptPath, stamp2) {
     const startedAt = this.clock.monotonic();
@@ -85025,6 +85059,7 @@ function createDaemon(inputs) {
     journalTurns,
     linkSigner: linkSigner2,
     runs,
+    sourceRuns,
     laneSetups,
     tmuxStatusLines,
     frameFeeds,

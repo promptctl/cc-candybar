@@ -4,15 +4,22 @@
     {
       "version": "pr-614",
       "ref": "refs/pull/614/merge",
-      "sha": "ebc3fa86cd17f96654c881c8b0d44785c67d5587",
-      "timestamp": "2026-11-03T15:02:10.306Z",
+      "sha": "72cf7363ba5a611cfc1f7929df6886428a16afe7",
+      "timestamp": "2026-11-03T15:26:15.581Z",
       "commits": [
         {
-          "sha": "ebc3fa86cd17f96654c881c8b0d44785c67d5587",
+          "sha": "72cf7363ba5a611cfc1f7929df6886428a16afe7",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T15:00:59Z",
-          "message": "Merge 7169833bdde5f79bcac7febf441f41ddfbdebca0 into 8067e9a72297c93efa9dd1063cfd8f2ca5ced0c1\n"
+          "timestamp": "2026-11-03T15:25:11Z",
+          "message": "Merge 2fea65a2d1e405e52f0b1818e54c18aeac3e0f6d into 8067e9a72297c93efa9dd1063cfd8f2ca5ced0c1\n"
+        },
+        {
+          "sha": "2fea65a2d1e405e52f0b1818e54c18aeac3e0f6d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T08:24:50-07:00",
+          "message": "fix(sources): an abandoned read is the ledger's own count, the run owner's stats reach the stats reply, and a watch takes the held guard (candybar-gather-renderer-76bb.6pj.5dx)\n"
         },
         {
           "sha": "7169833bdde5f79bcac7febf441f41ddfbdebca0",
