@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-615",
+      "ref": "refs/pull/615/merge",
+      "sha": "d442ca7003ba0cf7a58cf2fba4f2233d6dab821b",
+      "timestamp": "2026-11-03T16:17:02.754Z",
+      "commits": [
+        {
+          "sha": "d442ca7003ba0cf7a58cf2fba4f2233d6dab821b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T09:16:11-07:00",
+          "message": "Merge 59bc128bd7342d5f76cc7c327b7f94569e479bfb into b744cf603e403a589c9d9d397312a7fdece6ad65\n"
+        },
+        {
+          "sha": "59bc128bd7342d5f76cc7c327b7f94569e479bfb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T09:15:48-07:00",
+          "message": "feat(sources): a failed shell read carries the command's stderr; the launcher names its timeout (candybar-gather-renderer-76bb.6pj.dr2)\n\nA shell source's failed read now ends in what the command wrote to\nstderr, trimmed and shown by its last 2000 characters, on every arm but\nan output flood or a failed pipe. A timeout result carries\n`timed out after N s` from the launch's own bound, so the shell reader\nand the daemon's runs read it instead of spelling it from constants of\ntheir own.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "b744cf603e403a589c9d9d397312a7fdece6ad65",
