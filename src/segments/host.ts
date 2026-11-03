@@ -57,7 +57,7 @@ export class HostService {
 
   constructor(opts: {
     // [LAW:effects-at-boundaries] Times each refresh and arms each period.
-    readonly clock: Pick<Timekeeper, "now" | "monotonic" | "after">;
+    readonly clock: Pick<Timekeeper, "monotonic" | "after">;
     readonly logger?: DaemonLogger;
     readonly ledger?: RefreshLedger;
   }) {

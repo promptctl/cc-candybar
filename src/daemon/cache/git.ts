@@ -188,7 +188,7 @@ interface RepoState {
 
 interface ResolutionCacheEntry {
   readonly known: Outcome<string>;
-  readonly computedAt: number;
+  readonly computedAt: Monotonic;
 }
 
 // `held` counts the repos a home holds — the ones the period visits.
@@ -332,12 +332,12 @@ export class GitDataProvider {
   private readonly watchers: WatcherRegistry;
   private readonly ownsWatchers: boolean;
   private readonly logger: GitProviderLogger;
-  private readonly clock: Pick<Timekeeper, "now" | "monotonic" | "after">;
+  private readonly clock: Pick<Timekeeper, "monotonic" | "after">;
 
   constructor(opts: {
     // [LAW:effects-at-boundaries] The daemon's clock: every period, and the
     // times the reads are stamped and timed with.
-    clock: Pick<Timekeeper, "now" | "monotonic" | "after">;
+    clock: Pick<Timekeeper, "monotonic" | "after">;
     periodMs?: number;
     maxRepos?: number;
     inner: GitService;

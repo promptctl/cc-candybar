@@ -1,10 +1,10 @@
-import type { Monotonic } from "../src/time";
 // The frame clock of src/daemon/frame-feed.ts, over a render that answers at
 // once: frames fall due a period apart (the moving period while the bar moves
 // where someone can see it, the still one otherwise), a change brings the next
 // frame forward to the earliest the feed's spacing allows, two subscribers
 // share each render, and a feed with no subscriber draws nothing.
 
+import type { Monotonic } from "../src/time";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import { ok } from "../src/utils/outcome";
 import type { DaemonParts } from "../src/daemon/daemon-parts";

@@ -316,7 +316,7 @@ describe("the click path", () => {
         given,
         { kind: "click", verb, value } as Parameters<typeof replyTo>[1],
         () => false,
-        performance.now(),
+        systemTimekeeper.monotonic(),
         gone,
       );
     return { send, events };

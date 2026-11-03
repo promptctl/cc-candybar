@@ -513,7 +513,7 @@ test("the click path counts a click pending from arrival, through a refusal, and
       parts,
       { kind: "click", verb: VERB_DOCTOR_RUN, value: encodeURIComponent(A) } as Parameters<typeof replyTo>[1],
       () => false,
-      performance.now(),
+      systemTimekeeper.monotonic(),
       gone,
     );
   const sent = send(() => false);

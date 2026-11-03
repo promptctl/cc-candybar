@@ -95,7 +95,7 @@ import {
 } from "../../config/loader/plugins.js";
 import { ownedBy, pluginNs } from "../../config/loader/plugin-scope.js";
 import { projectionsOf } from "../../config/loader/projections.js";
-import { elapsedMs, type Timekeeper } from "../../time";
+import { elapsedMs, type Monotonic, type Timekeeper } from "../../time";
 
 // [LAW:one-source-of-truth] Each cache entry owns the live DSL state for a
 // (projectDir, cwd) tuple: the parsed config, the variable store +
@@ -1050,7 +1050,7 @@ export function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
 export interface LoadFrame {
   readonly repos: RepoGate;
   readonly advisories: ReadonlyArray<string | null>;
-  readonly started: number;
+  readonly started: Monotonic;
 }
 
 // [LAW:single-enforcer] The one place a load's outcome is composed, for every

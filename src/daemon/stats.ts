@@ -239,7 +239,7 @@ export class RuntimeStats {
     LaunchCategory,
     number
   >();
-  private readonly rollingTimestamps: number[] = [];
+  private readonly rollingTimestamps: Monotonic[] = [];
   private rollingHead = 0;
 
   // Readable off the value because a closed daemon's work is still refused, and

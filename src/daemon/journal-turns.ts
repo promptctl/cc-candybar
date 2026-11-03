@@ -20,7 +20,7 @@
 // uninterruptible sleep: its launch never settles, and `getStats` shows the
 // holder's `heldMs` growing.
 
-import { elapsedMs, type Monotonic } from "../time.js";
+import { elapsedMs, spanMs, type Monotonic } from "../time.js";
 import { KeyedSerialQueue } from "../utils/keyed-serial-queue.js";
 import { ClickAbandoned, DaemonClosing } from "./verb-error.js";
 
@@ -74,7 +74,7 @@ export class JournalTurns {
   private readonly gathers = new KeyedSerialQueue<typeof GATHERS>();
   private open = true;
   private inFlight: InFlight | null = null;
-  private holder: { readonly verb: string; readonly since: number } | null =
+  private holder: { readonly verb: string; readonly since: Monotonic } | null =
     null;
   private queued = 0;
   private gathersInFlight = 0;
@@ -102,7 +102,7 @@ export class JournalTurns {
       this.refuseClosed(verb);
       if (gone()) throw new ClickAbandoned(verb);
       const since = this.deps.monotonic();
-      waited(Math.round(since - asked));
+      waited(spanMs(asked, since));
       this.holder = { verb, since };
       try {
         return await body({

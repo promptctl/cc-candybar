@@ -12,7 +12,7 @@
 // `probeUrlHandler` is the sequence over them, and a test hands in its own.
 
 import { randomUUID } from "node:crypto";
-import { sleep } from "../time.js";
+import { sleep, type Monotonic } from "../time.js";
 import fs from "node:fs";
 import { URL_SCHEME, VERB_DOCTOR_PROBE } from "../click/wire.js";
 import { describeFailure } from "../daemon/client-transport.js";
@@ -70,7 +70,7 @@ export interface HandlerProbeEdge {
   // Hand a URL to Launch Services. The reason it refused, or null.
   readonly open: (url: string) => string | null;
   // A monotonic reading, in milliseconds, for the wait's bound.
-  readonly monotonic: () => number;
+  readonly monotonic: () => Monotonic;
   // One poll interval.
   readonly pause: () => Promise<void>;
   // The app Launch Services opens the scheme with; null when none claims it.

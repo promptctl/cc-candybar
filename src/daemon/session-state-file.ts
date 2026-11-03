@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { quietLogger, type DaemonLogger } from "../utils/logger";
 import type { SessionSnapshot, SessionStorage } from "./session-state";
-import { elapsedMs, type Timekeeper } from "../time";
+import { elapsedMs, type Monotonic, type Timekeeper } from "../time";
 
 // [LAW:no-silent-failure] Corrupt/missing file → empty state is the *defined*
 // recovery, not a hidden fallback to different data: an empty store re-rolls
@@ -117,7 +117,7 @@ export class FileSessionStorage implements SessionStorage {
     const tmp = this.writingPath;
     this.writing = true;
     // The thread is held until the first await.
-    const heldMs = this.clock.monotonic() - started;
+    const heldMs = elapsedMs(this.clock, started);
     try {
       await fs.promises.mkdir(path.dirname(this.filePath), { recursive: true });
       const file = await fs.promises.open(tmp, "w", 0o600);
@@ -154,7 +154,7 @@ export class FileSessionStorage implements SessionStorage {
         if (!landed) await fs.promises.rm(tmp, { force: true });
         this.logger(
           "info",
-          `session-state write superseded by a flush landed=${landed} took=${elapsedMs(this.clock, started)}ms held=${Math.round(heldMs)}ms`,
+          `session-state write superseded by a flush landed=${landed} took=${elapsedMs(this.clock, started)}ms held=${heldMs}ms`,
         );
         return;
       }
@@ -200,7 +200,7 @@ export class FileSessionStorage implements SessionStorage {
       fs.rmSync(this.writingPath, { force: true });
       fs.renameSync(tmp, this.filePath);
       this.generation++;
-      this.saved(body, snapshot, started, this.clock.monotonic() - started);
+      this.saved(body, snapshot, started, elapsedMs(this.clock, started));
       // [LAW:one-source-of-truth] `pending` is "state not yet durably written".
       // Clear it only once the rename lands, so a transient EIO/ENOSPC leaves
       // the snapshot for a later flush (e.g. shutdown) to retry rather than
@@ -216,12 +216,12 @@ export class FileSessionStorage implements SessionStorage {
   private saved(
     body: string,
     snapshot: SessionSnapshot,
-    started: number,
+    started: Monotonic,
     heldMs: number,
   ): void {
     this.logger(
       "info",
-      `session-state saved bytes=${Buffer.byteLength(body)} sessions=${Object.keys(snapshot).length} took=${elapsedMs(this.clock, started)}ms held=${Math.round(heldMs)}ms`,
+      `session-state saved bytes=${Buffer.byteLength(body)} sessions=${Object.keys(snapshot).length} took=${elapsedMs(this.clock, started)}ms held=${heldMs}ms`,
     );
   }
 }

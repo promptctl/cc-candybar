@@ -6,6 +6,7 @@
 // (candybar-daemon-health-ajx0.co4): a link it delivers proves it, and a link
 // `cc-candybar url-handle` delivered came through the retired applet.
 
+import type { Monotonic } from "../src/time";
 import { instantOf } from "../src/utils/instant";
 import { RenderSightings } from "../src/daemon/render-sightings";
 import {
@@ -155,7 +156,7 @@ function fakeEdge(
   const edge: HandlerProbeEdge = {
     platform: "darwin",
     sockets: { own: "/tmp/s", handler: "/tmp/s" },
-    monotonic: () => clock,
+    monotonic: () => clock as Monotonic,
     nonce: () => NONCE,
     daemon: async () => {
       const read = reads++;
@@ -259,7 +260,7 @@ describe("probeUrlHandler", () => {
   test("the wait is five seconds on the clock, however slowly the daemon answers", async () => {
     let clock = 0;
     const { edge, calls } = fakeEdge({
-      monotonic: () => clock,
+      monotonic: () => clock as Monotonic,
       // Each read costs half a second on top of the pause.
       pause: async () => {
         calls.push("pause");

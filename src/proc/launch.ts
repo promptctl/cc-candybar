@@ -49,7 +49,7 @@ import type { Socket } from "node:net";
 import type { Readable, Writable } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
 import { types } from "node:util";
-import { elapsedMs, type Timekeeper } from "../time";
+import { elapsedMs, type Monotonic, type Timekeeper } from "../time";
 import type { Drawing } from "../config/lanes";
 import { answeredBy, eventHoldAt, type HeldEvent } from "../utils/event-hold";
 import { instantOf, type Instant } from "../utils/instant";
@@ -206,7 +206,7 @@ const RATE_LIMITS: Partial<Record<LaunchCategory, number>> = {
 // of (category, now, last-start, policy). Same code path every call; the
 // result type carries which branch fired.
 function checkRateLimit(
-  lastStartAt: ReadonlyMap<LaunchCategory, number>,
+  lastStartAt: ReadonlyMap<LaunchCategory, Monotonic>,
   category: LaunchCategory,
   now: number,
 ):
@@ -361,7 +361,7 @@ interface LaunchState {
   // Last-attempt timestamp per category: the data the rate-limit decision
   // reads. Recorded for every attempted spawn (success or spawn-error);
   // rate-limit rejections do NOT update this, because no spawn was attempted.
-  readonly lastStartAt: Map<LaunchCategory, number>;
+  readonly lastStartAt: Map<LaunchCategory, Monotonic>;
   // What ends each launch in flight, on the scope's abort.
   // [LAW:no-silent-failure] One listener, on a signal as long-lived as its
   // owner: `AbortSignal.any` over it grows the heap launch by launch on Node 20
