@@ -407,7 +407,7 @@ test("a compile's clock is the draw's: read outside one, it refuses", () => {
 // laid under. Kept, an evicted entry's store would stay on the heap for as
 // long as any other entry carried the compile, charged to no one.
 const heldStores: object[] = [];
-test("a compile keeps nothing of a render once it returns", () => {
+test("a compile keeps nothing of a render once it returns", async () => {
   const config = parseAndValidate("<test>", carouselConfig("mode", "alpha"));
   const compiled = compileDslConfig(compileInputOf(config), TEST_SIGNER);
   // [LAW:verifiable-goals] Reachability is read off a heap snapshot, which
@@ -420,7 +420,7 @@ test("a compile keeps nothing of a render once it returns", () => {
   heldStores.push(new ProbeStore(systemTimekeeper));
   try {
     drawAlone(config, compiled);
-    expect(retainerPathsTo("ProbeStore")).toHaveLength(1);
+    expect(await retainerPathsTo("ProbeStore")).toHaveLength(1);
   } finally {
     heldStores.length = 0;
   }
