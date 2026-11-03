@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-610",
+      "ref": "refs/pull/610/merge",
+      "sha": "2dfb4097359191705dcd806720f2585a8c46717d",
+      "timestamp": "2026-11-03T11:30:15.124Z",
+      "commits": [
+        {
+          "sha": "2dfb4097359191705dcd806720f2585a8c46717d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T04:29:26-07:00",
+          "message": "Merge 73bec3fe07f172471c207878ee3019c578deb5c5 into 7780c8b5a83e6290289f3901555f0b63bf5704e8\n"
+        },
+        {
+          "sha": "73bec3fe07f172471c207878ee3019c578deb5c5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T04:28:42-07:00",
+          "message": "fix(render): today's day sums and the PR stop blocking the first bar; PR lookups are capped and back off (candybar-gather-renderer-76bb.6pj.2nv)\n\nTotality puts every built-in in every first bar, and both of these are slow\nand external. The request's today refresh no longer awaits the directory\nscan, the wait set no longer lists today or the PR, and both draw pending and\nland through the store they are read from.\n\nThe PR source puts every forge lookup through one limiter shared across\nrepos (the limiter moves out of transcript-fs so both use it), and a key\nwhose lookups keep failing is retried at a doubling interval up to the ok\nperiod.\n\nThe e2e render helper asks again after a bar drawn pending only on these two,\nonce their refresh is logged.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "9d75378da3169d188c0f6bca1bf8f0e57e2dcb88",
