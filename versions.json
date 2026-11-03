@@ -4,15 +4,22 @@
     {
       "version": "pr-611",
       "ref": "refs/pull/611/merge",
-      "sha": "0996521a41114ca0da36a320e04185b9ed50a556",
-      "timestamp": "2026-11-03T12:46:22.354Z",
+      "sha": "6f8a4e0e6ce6e8918d434b9708219cb16ec032fd",
+      "timestamp": "2026-11-03T12:56:14.438Z",
       "commits": [
         {
-          "sha": "0996521a41114ca0da36a320e04185b9ed50a556",
+          "sha": "6f8a4e0e6ce6e8918d434b9708219cb16ec032fd",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T05:45:27-07:00",
-          "message": "Merge c1cbfa756eb3c7fdee3776d2ade8f74dedbcc34b into 5138e2c802a9c3baf1fc4756147126024fd36bf0\n"
+          "timestamp": "2026-11-03T12:55:21Z",
+          "message": "Merge 45a2aa9dcb251ab0cd056e7b4fc1f7632514360d into 5138e2c802a9c3baf1fc4756147126024fd36bf0\n"
+        },
+        {
+          "sha": "45a2aa9dcb251ab0cd056e7b4fc1f7632514360d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T05:54:49-07:00",
+          "message": "review(facts): equality has one judge, the view derives its inputs once (candybar-gather-renderer-76bb.6pj.af6)\n\nassembleFacts compares builtins and sources by the identity restamp already\nreturns, instead of walking every value a second time. The session source\nderives its payload inputs once for both the payload and the readings.\nStale updateOf comment and a shadowed stop are fixed.\n"
         },
         {
           "sha": "c1cbfa756eb3c7fdee3776d2ade8f74dedbcc34b",

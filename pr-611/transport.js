@@ -81841,7 +81841,7 @@ function openView(state, cwd2, facts, { sessionState, declare, source: sourceOf,
     state,
     store: registry.variableStore,
     declared: () => declared.get(),
-    onDispose: (stop3) => sourceStops.push(stop3)
+    onDispose: (stopSource) => sourceStops.push(stopSource)
   });
   bindView(state.compiled, registry.variableStore, registry, source);
   const stopChanged = reaction(
@@ -82627,6 +82627,10 @@ function prOf(git) {
       return git.value.pullRequest ?? pendingOf("unread");
   }
 }
+var sameFacts = (now2, held) => {
+  const entries = Object.entries(now2);
+  return entries.length === Object.keys(held).length && entries.every(([key, fact]) => Object.is(fact, Reflect.get(held, key)));
+};
 function gitFactsOf({ pullRequest: _pullRequest, ...git }) {
   return git;
 }
@@ -82666,12 +82670,10 @@ function assembleFacts(prior, session, readings, update, at) {
     ])
   );
   const parts = { builtins, sources, update, diagnostics: readings.faults };
-  if (prior !== void 0 && compareStructural(parts, {
-    builtins: prior.builtins,
-    sources: prior.sources,
-    update: prior.update,
-    diagnostics: prior.diagnostics
-  })) {
+  if (prior !== void 0 && sameFacts(builtins, prior.builtins) && sameFacts(sources, prior.sources) && compareStructural(
+    { update, diagnostics: readings.faults },
+    { update: prior.update, diagnostics: prior.diagnostics }
+  )) {
     return prior;
   }
   return {
@@ -82695,25 +82697,29 @@ function sessionSource(deps) {
         (preset) => state.authoredRoots.has(preset)
       )
     );
-    const inputsOf = () => {
-      const { facts, lanes } = declared();
-      return {
-        hookData: facts.hookData,
-        cwd: facts.cwd,
-        hints: facts.hints,
-        neededInputPaths: state.neededInputPaths(effective.read().preset),
-        deps: { ...deps.providers, lanes: () => lanes }
-      };
-    };
+    const inputs = store.derive(
+      "session.inputs",
+      "computed",
+      () => {
+        const { facts, lanes } = declared();
+        return {
+          hookData: facts.hookData,
+          cwd: facts.cwd,
+          hints: facts.hints,
+          neededInputPaths: state.neededInputPaths(effective.read().preset),
+          deps: { ...deps.providers, lanes: () => lanes }
+        };
+      }
+    );
     const readings = store.derive(
       "session.readings",
       "computed",
-      () => readingsOf(inputsOf(), state.sources)
+      () => readingsOf(inputs.read(), state.sources)
     );
     const payload = store.derive("session.payload", "computed", () => {
       const globals = effective.read();
       return projectPayload(
-        inputsOf(),
+        inputs.read(),
         {
           effective: globals,
           configFacts: {
