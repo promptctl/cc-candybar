@@ -24,7 +24,10 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { testVerbContext, effectsOf, clickUrl } from "./helpers/click";
 import { VERB_SLASH } from "../src/click/wire";
-import { SESSION_CLIENT_HINTS_KEY, SESSION_RENDER_ORIGIN_KEY } from "../src/daemon/foundations/session-keys";
+import {
+  SESSION_CLIENT_HINTS_KEY,
+  SESSION_RENDER_ORIGIN_KEY,
+} from "../src/daemon/foundations/session-keys";
 import { encodeRenderOrigin } from "../src/daemon/foundations/render-origin";
 import type { ClaudeInputEdge } from "../src/claude-input/edge";
 import {
@@ -48,10 +51,7 @@ const OPTS = {
 };
 const HINT = { socket: "/tmp/tmux.sock", pane: "%7", truecolor: null };
 
-function runtime(
-  read: Outcome<AutoCompactWindow>,
-  contextWindow = 1_000_000,
-) {
+function runtime(read: Outcome<AutoCompactWindow>, contextWindow = 1_000_000) {
   const autocompact = projectAutoCompact(read, contextWindow);
   const config = parseAndValidate(
     "<user>",
@@ -63,12 +63,28 @@ function runtime(
   sessionState.set(
     "s1",
     SESSION_RENDER_ORIGIN_KEY,
-    encodeRenderOrigin({ projectDir: "/tmp/proj", cwd: "/tmp/proj", target: { source: "search" } }),
+    encodeRenderOrigin({
+      projectDir: "/tmp/proj",
+      cwd: "/tmp/proj",
+      target: { source: "search" },
+    }),
   );
-  sessionState.set("s1", SESSION_CLIENT_HINTS_KEY, JSON.stringify({ tmux: HINT }));
+  sessionState.set(
+    "s1",
+    SESSION_CLIENT_HINTS_KEY,
+    JSON.stringify({ tmux: HINT }),
+  );
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedLauncher, store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
+  const registry = new SourceRegistry(
+    unscriptedLauncher,
+    store,
+    "",
+    sessionState,
+  );
+  const compiled = registerDslConfig(config, registry, {
+    signer: TEST_SIGNER,
+    cwd: "/tmp/proj",
+  });
   const payload = {
     session_id: "s1",
     // The session is in a pane (RenderPayload.tmux), so the controls are drawn;
@@ -77,16 +93,30 @@ function runtime(
     context: { totalTokens: 1, contextLeft: 99 },
     ...(autocompact !== undefined && { autocompact }),
   };
-  const raw = drawPayload(config, compiled, store, registry, payload, instantOf(new Date()), OPTS).frame;
+  const raw = drawPayload(
+    config,
+    compiled,
+    store,
+    registry,
+    payload,
+    instantOf(new Date()),
+    OPTS,
+  ).frame;
   const typed: string[] = [];
   const claudeInput: ClaudeInputEdge = {
-    read: async () => ({ inMode: false, screen: ["─".repeat(30), "❯ ", "─".repeat(30)] }),
+    read: async () => ({
+      inMode: false,
+      screen: ["─".repeat(30), "❯ ", "─".repeat(30)],
+    }),
     type: async (_hint, line) => {
       typed.push(line);
       return { kind: "typed" };
     },
   };
-  const ctx = { ...testVerbContext(sessionState, undefined, config), claudeInput };
+  const ctx = {
+    ...testVerbContext(sessionState, undefined, config),
+    claudeInput,
+  };
   const urls = linkUrls(raw).filter((u) =>
     effectsOf(u).some((e) => e.verb === VERB_SLASH),
   );
@@ -151,8 +181,12 @@ describe("the autocompact segment", () => {
   });
 
   test("an unreadable settings file is shown in the cell, with no controls", async () => {
-    const rt = runtime(failed("cannot read /x/settings.json: not a JSON object"));
-    expect(rt.text).toContain("⇲ ⚠ cannot read /x/settings.json: not a JSON object");
+    const rt = runtime(
+      failed("cannot read /x/settings.json: not a JSON object", "read"),
+    );
+    expect(rt.text).toContain(
+      "⇲ ⚠ cannot read /x/settings.json: not a JSON object",
+    );
     expect(rt.lines).toEqual([]);
   });
 
@@ -188,18 +222,22 @@ describe("readAutoCompactWindow", () => {
   };
 
   test("no settings file, a blank one, or no key: auto", async () => {
-    expect(readAutoCompactWindow(path.join(dir, "missing.json"))).toEqual(ok("auto"));
+    expect(readAutoCompactWindow(path.join(dir, "missing.json"))).toEqual(
+      ok("auto"),
+    );
     expect(readAutoCompactWindow(settings(" \n"))).toEqual(ok("auto"));
-    expect(readAutoCompactWindow(settings(`{ "model": "opus" }`))).toEqual(ok("auto"));
+    expect(readAutoCompactWindow(settings(`{ "model": "opus" }`))).toEqual(
+      ok("auto"),
+    );
   });
 
   test("the window /autocompact wrote, on the grid or off it", async () => {
-    expect(readAutoCompactWindow(settings(`{ "autoCompactWindow": 400000 }`))).toEqual(
-      ok(400_000),
-    );
-    expect(readAutoCompactWindow(settings(`{ "autoCompactWindow": 150000 }`))).toEqual(
-      ok(150_000),
-    );
+    expect(
+      readAutoCompactWindow(settings(`{ "autoCompactWindow": 400000 }`)),
+    ).toEqual(ok(400_000));
+    expect(
+      readAutoCompactWindow(settings(`{ "autoCompactWindow": 150000 }`)),
+    ).toEqual(ok(150_000));
   });
 
   test("an unparseable file fails, naming the file", async () => {
@@ -208,18 +246,44 @@ describe("readAutoCompactWindow", () => {
     expect(r.kind === "failed" && r.reason).toContain(`cannot read ${bad}`);
   });
 
+  // The phase a fact carries (src/utils/outcome.ts): bytes that were never
+  // read, bytes that are not a settings document, and a document whose window
+  // is out of range are three different repairs, two of them parse failures.
+  test("a failure says which phase failed: unread bytes, malformed text, an out-of-range window", async () => {
+    const unreadable = path.join(dir, "a-directory.json");
+    fs.mkdirSync(unreadable);
+    expect(readAutoCompactWindow(unreadable)).toMatchObject({
+      kind: "failed",
+      failedAt: "read",
+    });
+    expect(readAutoCompactWindow(settings("{ not json"))).toMatchObject({
+      kind: "failed",
+      failedAt: "parse",
+    });
+    expect(
+      readAutoCompactWindow(settings(`{ "autoCompactWindow": 99999 }`)),
+    ).toMatchObject({ kind: "failed", failedAt: "parse" });
+  });
+
   // A value /autocompact could not have written is a hand edit the bar will
   // not guess about — and one it cannot step from without naming an action
   // no config declares.
-  test.each([["\"big\""], ["0"], ["-1"], ["99999"], ["1000001"], ["1500000"], ["150000.5"]])(
-    "autoCompactWindow %s fails, naming the accepted range",
-    (value) => {
-      const r = readAutoCompactWindow(settings(`{ "autoCompactWindow": ${value} }`));
-      expect(r.kind === "failed" && r.reason).toContain(
-        `autoCompactWindow is ${value}, not a window /autocompact accepts (100000–1000000 tokens)`,
-      );
-    },
-  );
+  test.each([
+    ['"big"'],
+    ["0"],
+    ["-1"],
+    ["99999"],
+    ["1000001"],
+    ["1500000"],
+    ["150000.5"],
+  ])("autoCompactWindow %s fails, naming the accepted range", (value) => {
+    const r = readAutoCompactWindow(
+      settings(`{ "autoCompactWindow": ${value} }`),
+    );
+    expect(r.kind === "failed" && r.reason).toContain(
+      `autoCompactWindow is ${value}, not a window /autocompact accepts (100000–1000000 tokens)`,
+    );
+  });
 });
 
 describe("autoCompactControls / projectAutoCompact", () => {
@@ -253,7 +317,9 @@ describe("autoCompactControls / projectAutoCompact", () => {
   });
 
   test("failed carries the reason; absent drops the family", async () => {
-    expect(projectAutoCompact(failed("nope"), 200_000)).toEqual({ error: "nope" });
+    expect(projectAutoCompact(failed("nope", "read"), 200_000)).toEqual({
+      error: "nope",
+    });
     expect(projectAutoCompact(ABSENT, 200_000)).toBeUndefined();
   });
 });

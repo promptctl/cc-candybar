@@ -11,7 +11,7 @@
 // edge (src/daemon/repo-configs.ts) and handed in.
 
 import type { WorktreeLink } from "../../utils/git-root.js";
-import type { Outcome } from "../../utils/outcome.js";
+import type { Asked } from "../../utils/outcome.js";
 
 export type RepoAnswer = "approved" | "declined";
 export const REPO_ANSWERS: readonly RepoAnswer[] = ["approved", "declined"];
@@ -21,10 +21,7 @@ export type RepoConfigBook = Readonly<Record<string, RepoAnswer>>;
 
 // The book as its reader found it, or why it could not be read: the shape the
 // doctor's state-file store reads, so that one store keeps it.
-export type RepoAnswers = Extract<
-  Outcome<RepoConfigBook>,
-  { kind: "ok" | "failed" }
->;
+export type RepoAnswers = Asked<RepoConfigBook>;
 
 declare const approved: unique symbol;
 

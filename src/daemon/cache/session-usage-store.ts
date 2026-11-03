@@ -34,7 +34,7 @@ import {
   ABSENT,
   failed,
   ok,
-  PENDING,
+  pendingOf,
   type Outcome,
   type Reading,
 } from "../../utils/outcome";
@@ -393,7 +393,7 @@ function under(path: string | undefined, roots: readonly string[]): boolean {
 function daySumsOver(
   slots: Iterable<SessionSlot>,
   roots: readonly string[],
-): ReadonlyMap<string, DayUsage> {
+): Readonly<Record<string, DayUsage>> {
   const sums = new Map<string, DayUsage>();
   for (const { record } of slots) {
     if (record === undefined || !under(record.transcriptPath, roots)) continue;
@@ -403,14 +403,16 @@ function daySumsOver(
       sums.set(day, sum);
     }
   }
-  return sums;
+  // [LAW:types-are-the-program] A record, not a Map: the day sums are a fact
+  // that crosses a process as JSON (src/facts/session-facts.ts).
+  return Object.fromEntries(sums);
 }
 
 // A directory set's `today` state beside its scan: its roots, and its day
 // sums derived from the records.
 interface DaySet {
   readonly roots: readonly string[];
-  readonly sums: Kept<ReadonlyMap<string, DayUsage>>;
+  readonly sums: Kept<Readonly<Record<string, DayUsage>>>;
 }
 
 // What `today`'s lane answers: the set's roots and its day sums as they
@@ -418,7 +420,7 @@ interface DaySet {
 // record lands, as it does for every other lane.
 export interface DaySums {
   readonly roots: readonly string[];
-  readonly sums: ReadonlyMap<string, DayUsage>;
+  readonly sums: Readonly<Record<string, DayUsage>>;
 }
 
 // Bounded-concurrency fan-out for the seed: at most `limit` parses in flight.
@@ -640,9 +642,9 @@ export class SessionUsageStore {
   // empty record its refresh answers for it.
   usageOf(sessionId: string, hookData: ClaudeHookData): Reading<UsageInfo> {
     const slot = this.sessions.get(sessionId);
-    if (slot === undefined) return PENDING;
+    if (slot === undefined) return pendingOf("unread");
     const failure = slot.failure.get();
-    if (failure !== null) return failed(failure);
+    if (failure !== null) return failed(failure, "read");
     return ok(
       usageOver(slot.record?.sessionInfo ?? EMPTY_SESSION_INFO, hookData),
     );
@@ -720,7 +722,7 @@ export class SessionUsageStore {
   ): Lane<DaySums> {
     // [LAW:single-enforcer] A closed store builds no day set: a set built
     // after close is one close never releases.
-    if (this.closed) return settledLane(failed("usage store closed"));
+    if (this.closed) return settledLane(failed("usage store closed", "read"));
     const claudePaths = getClaudePaths(claudeConfigDir, this.host.home);
     const scans = this.scans.declare(holds, claudePaths);
     const set = this.daySet(claudePaths);
@@ -745,11 +747,11 @@ export class SessionUsageStore {
   ): Outcome<TodayInfo> {
     const active = this.sessions.get(hookData?.session_id ?? "");
     const failure = active?.failure.get() ?? null;
-    if (failure !== null) return failed(failure);
+    if (failure !== null) return failed(failure, "read");
 
     const today = dayKey(dateOf(at));
     const total: DayUsage = { ...EMPTY_DAY };
-    const inSet = set.sums.get(today);
+    const inSet = set.sums[today];
     if (inSet !== undefined) addDay(total, inSet);
     // The rendering session counts wherever its transcript lives; under the
     // set's roots it is already in the sums.
@@ -848,7 +850,7 @@ export class SessionUsageStore {
   // takes no sample, so how often the bar is drawn moves no rate.
   speedOf(sessionId: string): Reading<SpeedObservation> {
     if (!sessionId) return ABSENT;
-    return this.sessions.get(sessionId)?.speed.get() ?? PENDING;
+    return this.sessions.get(sessionId)?.speed.get() ?? pendingOf("unread");
   }
 
   // stamp-gated, coalesced re-parse of ONE session. `ok` is its record,
@@ -912,6 +914,7 @@ export class SessionUsageStore {
     } catch (error) {
       return failed(
         `usage refold (${sessionId}): ${error instanceof Error ? error.message : String(error)}`,
+        "read",
       );
     }
     const { prior, outcome } = refolded;
@@ -1104,12 +1107,14 @@ export class SessionUsageStore {
       if (failures.length > 0) {
         return failed(
           `usage scan: ${failures.length} of ${candidates.length} sessions could not be read — ${failures[0]}`,
+          "read",
         );
       }
       return ok({ sessions: candidates.length, read: tally.misses });
     } catch (error) {
       return failed(
         `usage scan: ${error instanceof Error ? error.message : String(error)}`,
+        "read",
       );
     }
   }

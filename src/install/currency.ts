@@ -34,6 +34,7 @@ export function parseReleaseVersion(text: string): Parsed<Version> {
     : {
         kind: "failed",
         reason: `"${text}" is not a release version (expected MAJOR.MINOR.PATCH)`,
+        failedAt: "parse",
       };
 }
 
@@ -79,7 +80,7 @@ export async function fetchLatestVersion(
       signal: timeoutSignal(clock, REGISTRY_TIMEOUT_MS),
     });
     if (!res.ok) {
-      return failed(`registry responded ${res.status} for ${url}`);
+      return failed(`registry responded ${res.status} for ${url}`, "read");
     }
     const tags = (await res.json()) as { latest?: unknown };
     if (typeof tags.latest !== "string") {
@@ -87,7 +88,7 @@ export async function fetchLatestVersion(
     }
     return parseReleaseVersion(tags.latest);
   } catch (err) {
-    return failed(err instanceof Error ? err.message : String(err));
+    return failed(err instanceof Error ? err.message : String(err), "read");
   }
 }
 

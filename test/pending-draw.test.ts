@@ -14,12 +14,18 @@ import { TEST_SIGNER } from "./helpers/link-signer";
 import { SessionState } from "../src/daemon/session-state";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { compileDslConfig, compileInputOf, declareDslVariables, EVERY_SCOPE, type RenderWarning } from "../src/dsl/render";
+import {
+  compileDslConfig,
+  compileInputOf,
+  declareDslVariables,
+  EVERY_SCOPE,
+  type RenderWarning,
+} from "../src/dsl/render";
 import { LOADING_GLYPH } from "../src/dsl/node-registry";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { paletteForThemeName } from "../src/themes/palette-resolvers";
 import { THEME_FLOOR } from "../src/themes/policy";
-import { ok, PENDING } from "../src/utils/outcome";
+import { ok, pendingOf } from "../src/utils/outcome";
 import type { JsonValue } from "../src/var-system/types";
 import type { Instant } from "../src/utils/instant";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -77,7 +83,7 @@ function renderer(cfg: ValidatedConfig) {
     // The base palette the latest frame wore.
     palette: () => drawn().look!.basePalette,
     answer: (value: JsonValue) => store.setDocument("doc", ok(value)),
-    unanswer: () => store.setDocument("doc", PENDING),
+    unanswer: () => store.setDocument("doc", pendingOf("unread")),
     draw: (width = 160): Drawn => {
       const errors: string[] = [];
       const warnings: RenderWarning[] = [];
@@ -115,7 +121,10 @@ function renderer(cfg: ValidatedConfig) {
 // The cell `id` draws between the plain separators either side of it, padding
 // included: what a row of `left | id | right` holds in that place.
 const cellBetween = (line: string, left: string, right: string): string =>
-  line.slice(line.indexOf(`${left}  |`) + left.length + 3, line.lastIndexOf(`|  ${right}`));
+  line.slice(
+    line.indexOf(`${left}  |`) + left.length + 3,
+    line.lastIndexOf(`|  ${right}`),
+  );
 
 const ROW = `
   segments: {
@@ -169,7 +178,9 @@ describe("a placement whose value is not answered yet draws where it stood", () 
       on.answer({ label: "a wide value", show: true });
       on.draw(160);
       on.unanswer();
-      expect(cellBetween(on.draw(120).text, "L", "R")).toBe(`  ${LOADING_GLYPH}  `);
+      expect(cellBetween(on.draw(120).text, "L", "R")).toBe(
+        `  ${LOADING_GLYPH}  `,
+      );
     } finally {
       on.dispose();
     }
@@ -187,7 +198,9 @@ describe("a placement whose value is not answered yet draws where it stood", () 
       const { frame, errors } = on.draw();
       const rows = textOf(frame).split("\n");
       expect(rows.join("\n")).toContain(LOADING_GLYPH);
-      expect(rows.map((row) => row.length)).toEqual(drew.map((row) => row.length));
+      expect(rows.map((row) => row.length)).toEqual(
+        drew.map((row) => row.length),
+      );
       expect(errors).toEqual([]);
     } finally {
       on.dispose();
@@ -209,7 +222,9 @@ describe("a placement whose value is not answered yet draws where it stood", () 
       expect(drew).toHaveLength(2);
       on.unanswer();
       const rows = textOf(on.draw().frame).split("\n");
-      expect(rows.map((row) => row.length)).toEqual(drew.map((row) => row.length));
+      expect(rows.map((row) => row.length)).toEqual(
+        drew.map((row) => row.length),
+      );
       // The settings door leads the first row.
       expect(rows[0]!.trimEnd().endsWith(`|  ${LOADING_GLYPH}`)).toBe(true);
       expect(drew[1]!.trim()).toBe("and a longer bottom row");
@@ -364,14 +379,22 @@ describe("a json source with no default", () => {
       ),
     );
     try {
-      expect(cellBetween(on.draw().text, "L", "R")).toBe(`  ${LOADING_GLYPH}  `);
+      expect(cellBetween(on.draw().text, "L", "R")).toBe(
+        `  ${LOADING_GLYPH}  `,
+      );
       const waiting = on.registry.settled(5000);
       await on.pass(200);
       expect(await waiting).toEqual([]);
       const { text, errors, frame } = on.draw();
       // Absent is a missing field (src/template-engine/scope.ts).
-      expect(text).toContain('⚠ value: field "doc.label" not found on receiver');
-      expect(errors).toEqual([expect.stringContaining('value: field "doc.label" not found on receiver')]);
+      expect(text).toContain(
+        '⚠ value: field "doc.label" not found on receiver',
+      );
+      expect(errors).toEqual([
+        expect.stringContaining(
+          'value: field "doc.label" not found on receiver',
+        ),
+      ]);
       expect(frame.pending).toEqual([]);
     } finally {
       on.dispose();
@@ -437,7 +460,9 @@ describe("what hangs open under a placement not answered yet stays open", () => 
       const rows = textOf(frame).split("\n");
       // The body's row is still there, the width it drew, its placement
       // waiting on the gate over it.
-      expect(rows.map((row) => row.length)).toEqual(drew.map((row) => row.length));
+      expect(rows.map((row) => row.length)).toEqual(
+        drew.map((row) => row.length),
+      );
       expect(rows.join("\n")).not.toContain("an inner value");
       expect(rows.filter((row) => row.includes(LOADING_GLYPH))).toHaveLength(2);
       expect(frame.pending).toEqual(["doc"]);
@@ -472,7 +497,9 @@ describe("what hangs open under a placement not answered yet stays open", () => 
       expect(rows.join("\n")).not.toContain("a group label");
       expect(rows.join("\n")).toContain(LOADING_GLYPH);
       expect(rows.join("\n")).toContain("an inner value");
-      expect(rows.map((row) => row.length)).toEqual(drew.map((row) => row.length));
+      expect(rows.map((row) => row.length)).toEqual(
+        drew.map((row) => row.length),
+      );
       expect(frame.pending).toEqual(["doc"]);
       expect(errors).toEqual([]);
     } finally {

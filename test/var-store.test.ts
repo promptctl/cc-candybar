@@ -7,7 +7,7 @@ import {
   toBool,
   typeOf,
 } from "../src/var-system";
-import { ABSENT, failed, ok, PENDING } from "../src/utils/outcome";
+import { ABSENT, failed, ok, pendingOf } from "../src/utils/outcome";
 import { systemTimekeeper } from "../src/time";
 
 describe("VariableStore — boxes", () => {
@@ -26,22 +26,25 @@ describe("VariableStore — boxes", () => {
 
   it("rejects an initial value of the wrong type", () => {
     const store = new VariableStore(systemTimekeeper);
-    expect(() => store.defineBox("count", "number", "seven" as unknown as number))
-      .toThrow(/initial value type string does not match declared type number/);
+    expect(() =>
+      store.defineBox("count", "number", "seven" as unknown as number),
+    ).toThrow(/initial value type string does not match declared type number/);
   });
 
   it("rejects setBox with the wrong type", () => {
     const store = new VariableStore(systemTimekeeper);
     store.defineBox("count", "number", 0);
-    expect(() => store.setBox("count", "lots" as unknown as number))
-      .toThrow(/set value type string does not match declared type number/);
+    expect(() => store.setBox("count", "lots" as unknown as number)).toThrow(
+      /set value type string does not match declared type number/,
+    );
   });
 
   it("rejects setBox on a computed", () => {
     const store = new VariableStore(systemTimekeeper);
     store.defineComputed("answer", "number", () => 42);
-    expect(() => store.setBox("answer", 99))
-      .toThrow(/is a computed, not a box/);
+    expect(() => store.setBox("answer", 99)).toThrow(
+      /is a computed, not a box/,
+    );
   });
 
   it("rejects setBox on an unknown name", () => {
@@ -52,10 +55,10 @@ describe("VariableStore — boxes", () => {
   it("rejects duplicate declarations", () => {
     const store = new VariableStore(systemTimekeeper);
     store.defineBox("x", "number", 1);
-    expect(() => store.defineBox("x", "number", 2))
-      .toThrow(/already declared/);
-    expect(() => store.defineComputed("x", "number", () => 3))
-      .toThrow(/already declared/);
+    expect(() => store.defineBox("x", "number", 2)).toThrow(/already declared/);
+    expect(() => store.defineComputed("x", "number", () => 3)).toThrow(
+      /already declared/,
+    );
   });
 });
 
@@ -63,7 +66,11 @@ describe("VariableStore — computed nodes track dependencies", () => {
   it("re-evaluates when an upstream box changes", () => {
     const store = new VariableStore(systemTimekeeper);
     store.defineBox("a", "number", 1);
-    store.defineComputed("doubled", "number", (read) => toNumber(read("a")) * 2);
+    store.defineComputed(
+      "doubled",
+      "number",
+      (read) => toNumber(read("a")) * 2,
+    );
     expect(store.read("doubled")).toBe(2);
     store.setBox("a", 5);
     expect(store.read("doubled")).toBe(10);
@@ -127,8 +134,9 @@ describe("VariableStore — computed nodes track dependencies", () => {
     const store = new VariableStore(systemTimekeeper);
     store.defineBox("seed", "number", 1);
     store.defineComputed("bogus", "string", (read) => toNumber(read("seed")));
-    expect(() => store.read("bogus"))
-      .toThrow(/computed result type number does not match declared type string/);
+    expect(() => store.read("bogus")).toThrow(
+      /computed result type number does not match declared type string/,
+    );
   });
 
   it("throws when the deriver reads an unknown variable", () => {
@@ -229,7 +237,7 @@ describe("type-checked cast helpers", () => {
       expect(toBool(true)).toBe(true);
       expect(toBool(false)).toBe(false);
     });
-    it("accepts the strings \"true\" and \"false\"", () => {
+    it('accepts the strings "true" and "false"', () => {
       expect(toBool("true")).toBe(true);
       expect(toBool("false")).toBe(false);
     });
@@ -279,12 +287,33 @@ describe("VariableStore — the age records a change, not a write", () => {
   it("a box nothing has written has no age until its first write", () => {
     jest.setSystemTime(1000);
     const store = new VariableStore(systemTimekeeper);
-    store.defineBox("n", "number", PENDING);
+    store.defineBox("n", "number", pendingOf("unread"));
     expect(store.getNode("n").lastUpdatedMs()).toBeNull();
 
     jest.setSystemTime(5000);
     store.setBox("n", 7);
     expect(store.getNode("n").lastUpdatedMs()).toBe(5000);
+  });
+
+  // A pending value is a plain object, recognised by its discriminator: one
+  // read off the wire is a different object from the one the box holds, and
+  // one rule (structure) decides both for it and for a number.
+  it("a pending written again, as another object, moves nothing", () => {
+    jest.setSystemTime(1000);
+    const store = new VariableStore(systemTimekeeper);
+    store.defineBox("n", "number", 7);
+
+    jest.setSystemTime(2000);
+    store.setBox("n", { kind: "pending", why: "unread" });
+    expect(store.getNode("n").lastUpdatedMs()).toBe(2000);
+
+    jest.setSystemTime(3000);
+    store.setBox("n", { kind: "pending", why: "unread" });
+    expect(store.getNode("n").lastUpdatedMs()).toBe(2000);
+
+    jest.setSystemTime(4000);
+    store.setBox("n", { kind: "pending", why: "superseded" });
+    expect(store.getNode("n").lastUpdatedMs()).toBe(4000);
   });
 
   it("a scalar write that moves nothing leaves the age alone", () => {
@@ -327,8 +356,12 @@ describe("VariableStore — documents", () => {
     expect(store.readDocument("d")).toEqual({ kind: "absent" });
     store.setDocument("d", ok(doc()));
     expect(store.readDocument("d")).toEqual({ kind: "ok", value: doc() });
-    store.setDocument("d", failed("boom"));
-    expect(store.readDocument("d")).toEqual({ kind: "failed", reason: "boom" });
+    store.setDocument("d", failed("boom", "read"));
+    expect(store.readDocument("d")).toEqual({
+      kind: "failed",
+      reason: "boom",
+      failedAt: "read",
+    });
   });
 
   it("is a distinct node kind", () => {
@@ -350,14 +383,20 @@ describe("VariableStore — documents", () => {
   it("the document reads refuse a scalar by name", () => {
     const store = new VariableStore(systemTimekeeper);
     store.defineBox("s", "string", "x");
-    expect(() => store.readDocument("s")).toThrow(/"s" is a box, not a document/);
-    expect(() => store.setDocument("s", ok(doc()))).toThrow(/is a box, not a document/);
+    expect(() => store.readDocument("s")).toThrow(
+      /"s" is a box, not a document/,
+    );
+    expect(() => store.setDocument("s", ok(doc()))).toThrow(
+      /is a box, not a document/,
+    );
   });
 
   it("a document name cannot be re-declared as anything", () => {
     const store = new VariableStore(systemTimekeeper);
     store.defineDocument("d", ABSENT);
-    expect(() => store.defineBox("d", "string", "")).toThrow(/already declared/);
+    expect(() => store.defineBox("d", "string", "")).toThrow(
+      /already declared/,
+    );
     expect(() => store.defineDocument("d", ABSENT)).toThrow(/already declared/);
   });
 
@@ -394,7 +433,10 @@ describe("VariableStore — documents", () => {
     expect(() => {
       (root.b as Record<string, unknown>).z = 2;
     }).toThrow(TypeError);
-    expect(store.readDocument("d")).toEqual({ kind: "ok", value: { a: [{ q: 1 }, 2], b: { z: 1 } } });
+    expect(store.readDocument("d")).toEqual({
+      kind: "ok",
+      value: { a: [{ q: 1 }, 2], b: { z: 1 } },
+    });
   });
 
   it("changeKey is canonical: the same content in another key order is the same key", () => {
@@ -456,15 +498,15 @@ describe("VariableStore — documents", () => {
   // reason has not changed, and one whose reason changes has.
   it("an unchanged outcome is unchanged whatever its kind", () => {
     const store = new VariableStore(systemTimekeeper);
-    store.defineDocument("d", failed("boom"));
+    store.defineDocument("d", failed("boom", "read"));
     let runs = 0;
     const stop = autorun(() => {
       store.readDocument("d");
       runs++;
     });
-    store.setDocument("d", failed("boom"));
+    store.setDocument("d", failed("boom", "read"));
     expect(runs).toBe(1);
-    store.setDocument("d", failed("different"));
+    store.setDocument("d", failed("different", "read"));
     expect(runs).toBe(2);
     store.setDocument("d", ABSENT);
     expect(runs).toBe(3);

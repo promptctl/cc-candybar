@@ -30,7 +30,7 @@ function mtimeOf(path: string, stat: BundleStat): Outcome<number> {
     const code = (e as NodeJS.ErrnoException).code;
     return code === "ENOENT" || code === "ENOTDIR"
       ? ABSENT
-      : failed((e as Error).message);
+      : failed((e as Error).message, "read");
   }
 }
 

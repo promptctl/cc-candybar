@@ -244,7 +244,7 @@ test("a lane whose declaration throws is reported, takes no hold, and stops no o
   ]);
   // The lane that threw answers its failure; the others answer their own.
   expect(declared.result.lanes.git.current()).toEqual(
-    failed("git: Error: resolver bug"),
+    failed("git: Error: resolver bug", "read"),
   );
   expect(declared.result.lanes.tmux.current()).toEqual(ABSENT);
   expect(taken).toEqual(["git", "tmux", "today"]);

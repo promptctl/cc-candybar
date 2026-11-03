@@ -199,7 +199,7 @@ export class ContextProvider {
     contextLimit: number,
   ): Outcome<ContextInfo> {
     if (read.kind === "failed") {
-      return failed(`context transcript: ${read.reason}`);
+      return failed(`context transcript: ${read.reason}`, read.failedAt);
     }
     const totalTokens = read.value;
     if (totalTokens === undefined) {

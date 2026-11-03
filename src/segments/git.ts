@@ -74,7 +74,8 @@ export function prOfHead(
   head: Outcome<string>,
 ): BranchPr {
   if (pr.kind !== "ok" || pr.value.state === "open") return pr;
-  if (head.kind === "failed") return failed(`HEAD: ${head.reason}`);
+  if (head.kind === "failed")
+    return failed(`HEAD: ${head.reason}`, head.failedAt);
   return head.kind === "ok" && head.value === pr.value.head
     ? pr
     : { kind: "earlier", value: pr.value };
@@ -102,7 +103,7 @@ function prStateOf(
 ): Outcome<PrState> {
   return Object.hasOwn(states, word)
     ? ok(states[word]!)
-    : failed(`${cli}: unknown state ${JSON.stringify(word)}`);
+    : failed(`${cli}: unknown state ${JSON.stringify(word)}`, "parse");
 }
 
 // [LAW:types-are-the-program] Every on-demand field is an Outcome, so "this
@@ -233,7 +234,7 @@ function classify(
   if (result.reason === "non-zero" && nonZero === "absent") return ABSENT;
   if (result.reason === "non-zero" && nonZero === result.exitCode)
     return ABSENT;
-  return failed(launchFailure(label, result));
+  return failed(launchFailure(label, result), "read");
 }
 
 // [LAW:one-source-of-truth] The one spelling of a launch that did not answer —
@@ -652,7 +653,7 @@ export function classifyForgePr(
   ]
     .filter(Boolean)
     .join(", ");
-  return failed(`${label}: ${detail}`);
+  return failed(`${label}: ${detail}`, "read");
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -769,9 +770,11 @@ export function parseGithubPr(stdout: string): Outcome<PullRequest> {
   } catch (e) {
     return failed(
       `gh pr view: unparseable JSON (${e instanceof Error ? e.message : String(e)})`,
+      "parse",
     );
   }
-  if (!isRecord(json)) return failed("gh pr view: JSON is not an object");
+  if (!isRecord(json))
+    return failed("gh pr view: JSON is not an object", "parse");
   const { number, state, url, headRefOid: head } = json;
   if (
     typeof number !== "number" ||
@@ -779,7 +782,7 @@ export function parseGithubPr(stdout: string): Outcome<PullRequest> {
     typeof url !== "string" ||
     typeof head !== "string"
   ) {
-    return failed("gh pr view: missing number/state/url/headRefOid");
+    return failed("gh pr view: missing number/state/url/headRefOid", "parse");
   }
   const prState = prStateOf("gh pr view", GITHUB_PR_STATES, state);
   return prState.kind === "ok"
@@ -798,9 +801,11 @@ export function parseGitlabMr(stdout: string): Outcome<PullRequest> {
   } catch (e) {
     return failed(
       `glab mr view: unparseable JSON (${e instanceof Error ? e.message : String(e)})`,
+      "parse",
     );
   }
-  if (!isRecord(json)) return failed("glab mr view: JSON is not an object");
+  if (!isRecord(json))
+    return failed("glab mr view: JSON is not an object", "parse");
   const iid = json.iid;
   const state = json.state;
   const url = json.web_url;
@@ -811,7 +816,7 @@ export function parseGitlabMr(stdout: string): Outcome<PullRequest> {
     typeof url !== "string" ||
     typeof head !== "string"
   ) {
-    return failed("glab mr view: missing iid/state/web_url/sha");
+    return failed("glab mr view: missing iid/state/web_url/sha", "parse");
   }
   const mrState = prStateOf("glab mr view", GITLAB_MR_STATES, state);
   return mrState.kind === "ok"
@@ -978,7 +983,10 @@ export class GitService {
     try {
       return await this.computeGitInfo(workingDir, options, projectDir);
     } catch (e) {
-      return failed(`git: ${e instanceof Error ? e.message : String(e)}`);
+      return failed(
+        `git: ${e instanceof Error ? e.message : String(e)}`,
+        "read",
+      );
     }
   }
 
@@ -1102,6 +1110,7 @@ export class GitService {
     } catch (e) {
       return failed(
         `git operation probe: ${e instanceof Error ? e.message : String(e)}`,
+        "read",
       );
     }
   }
@@ -1226,7 +1235,7 @@ export class GitService {
 
     const committedAt = parseInt(r.value, 10);
     if (Number.isNaN(committedAt)) {
-      return failed(`git log -1: unparseable timestamp "${r.value}"`);
+      return failed(`git log -1: unparseable timestamp "${r.value}"`, "parse");
     }
     return ok(committedAt);
   }
@@ -1273,6 +1282,7 @@ export class GitService {
       if ((e as NodeJS.ErrnoException).code === "ENOENT") return ok(0);
       return failed(
         `git stash reflog ${reflog}: ${e instanceof Error ? e.message : String(e)}`,
+        "read",
       );
     }
     const entries = text.trim();

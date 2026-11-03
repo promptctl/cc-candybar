@@ -22,6 +22,31 @@ export type JsonValue =
   | readonly JsonValue[]
   | { readonly [key: string]: JsonValue };
 
+// [LAW:parse-dont-validate] The stamp for anything that claims to be JSON: a
+// config file's values are JSON-shaped by construction (JSON5 admits
+// Infinity/NaN, which JSON does not), and a document read off a wire is whatever
+// the other side sent.
+export function isJsonValue(value: unknown): value is JsonValue {
+  if (value === null) return true;
+  switch (typeof value) {
+    case "string":
+    case "boolean":
+      return true;
+    case "number":
+      return Number.isFinite(value);
+    case "object": {
+      if (Array.isArray(value)) return value.every(isJsonValue);
+      const proto: unknown = Object.getPrototypeOf(value);
+      return (
+        (proto === Object.prototype || proto === null) &&
+        Object.values(value as Record<string, unknown>).every(isJsonValue)
+      );
+    }
+    default:
+      return false;
+  }
+}
+
 // [LAW:single-enforcer] The shape every document in the store has, applied
 // where a document is written (VariableStore.defineDocument / setDocument) to
 // a scan's JSON.parse output and an authored default alike: objects rebuilt

@@ -359,6 +359,7 @@ async function readWholeLines(
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return ABSENT;
     return failed(
       `readAppended ${path}: ${e instanceof Error ? e.message : String(e)}`,
+      "read",
     );
   } finally {
     // [LAW:no-silent-failure] A close() rejection must NOT override the typed
@@ -427,6 +428,7 @@ export async function readTail(
       if ((e as NodeJS.ErrnoException).code === "ENOENT") return ABSENT;
       return failed(
         `readTail ${path}: ${e instanceof Error ? e.message : String(e)}`,
+        "read",
       );
     } finally {
       // [LAW:no-silent-failure] A close() rejection must NOT override the typed
@@ -465,13 +467,13 @@ export function readTailSync(
   } catch (e) {
     const { code } = e as NodeJS.ErrnoException;
     if (code === "ENOENT" || code === "ENOTDIR") return ABSENT;
-    return failed(e instanceof Error ? e.message : String(e));
+    return failed(e instanceof Error ? e.message : String(e), "read");
   }
   try {
     // bigint: a 64-bit file id survives whole, so `file` names exactly the
     // file these bytes came from (two spellings of one path read alike).
     const stat = fstatSync(fd, { bigint: true });
-    if (!stat.isFile()) return failed("not a regular file");
+    if (!stat.isFile()) return failed("not a regular file", "read");
     const size = Number(stat.size);
     const start = Math.max(0, size - maxBytes);
     const buf = Buffer.alloc(size - start);
@@ -487,7 +489,7 @@ export function readTailSync(
       file: `${stat.dev}:${stat.ino}`,
     });
   } catch (e) {
-    return failed(e instanceof Error ? e.message : String(e));
+    return failed(e instanceof Error ? e.message : String(e), "read");
   } finally {
     try {
       closeSync(fd);

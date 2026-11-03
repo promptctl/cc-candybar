@@ -460,21 +460,23 @@ export class ManagedStorage {
 
   private async read(f: SessionFile): Promise<Outcome<JsonValue>> {
     const fault = this.standing(f.storage);
-    if (fault !== null) return failed(fault);
+    if (fault !== null) return failed(fault, "read");
     const file = fileOf(f);
     let text: string;
     try {
       text = await fs.promises.readFile(file, "utf8");
     } catch (e) {
       const err = e as NodeJS.ErrnoException;
-      return err.code === "ENOENT" ? ABSENT : failed(`${file}: ${err.message}`);
+      return err.code === "ENOENT"
+        ? ABSENT
+        : failed(`${file}: ${err.message}`, "read");
     }
     // A program writes the file whole, by rename, so blank text is a program
     // that has nothing to say, never a torn write.
     if (text.trim() === "") return ABSENT;
     const parsed = jsonParser(text);
     return parsed.kind === "failed"
-      ? failed(`${file}: ${parsed.reason}`)
+      ? failed(`${file}: ${parsed.reason}`, parsed.failedAt)
       : parsed;
   }
 

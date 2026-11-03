@@ -42,7 +42,7 @@ function syscall(field: string, read: () => string): Promise<Outcome<string>> {
     const value = read();
     return Promise.resolve(value === "" ? ABSENT : ok(value));
   } catch (e) {
-    return Promise.resolve(failed(`host.${field}: ${String(e)}`));
+    return Promise.resolve(failed(`host.${field}: ${String(e)}`, "read"));
   }
 }
 

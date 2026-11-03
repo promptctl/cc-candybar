@@ -1,5 +1,8 @@
 import { RefreshLedger } from "../../src/utils/refresh-ledger";
-import { KeyedSource, type KeyedSourceSpec } from "../../src/utils/keyed-source";
+import {
+  KeyedSource,
+  type KeyedSourceSpec,
+} from "../../src/utils/keyed-source";
 import { Holds } from "../../src/utils/holds";
 import { failed, ok, type Outcome } from "../../src/utils/outcome";
 import { laneOutcome } from "../../src/utils/reading";
@@ -109,8 +112,8 @@ describe("KeyedSource", () => {
     source = sourceOf(f.read);
     const holds = new Holds();
     const first = laneOutcome(source.declare(holds, "a"));
-    f.answer(0, failed("down"));
-    expect(await first).toEqual(failed("down"));
+    f.answer(0, failed("down", "read"));
+    expect(await first).toEqual(failed("down", "read"));
     await jest.advanceTimersByTimeAsync(EVERY.failedMs);
     expect(f.calls).toHaveLength(2);
   });
@@ -177,7 +180,7 @@ describe("KeyedSource", () => {
     source = sourceOf(f.read, { lines });
     const waiting = laneOutcome(source.declare(new Holds(), "a"));
     const resume = source.supersede("a");
-    f.answer(0, failed("layer changed under it"));
+    f.answer(0, failed("layer changed under it", "read"));
     await settled();
     resume();
     f.answer(1, ok("after"));
@@ -430,7 +433,7 @@ describe("KeyedSource", () => {
     const waiting = laneOutcome(source.declare(holds, "a"));
     holds.declare(() => {});
     void laneOutcome(source.declare(new Holds(), "b"));
-    expect(await waiting).toEqual(failed("fake entry dropped"));
+    expect(await waiting).toEqual(failed("fake entry dropped", "read"));
   });
 
   test("each refresh is logged once, a failed one at warn; reads of it log nothing", async () => {
@@ -439,7 +442,7 @@ describe("KeyedSource", () => {
     source = sourceOf(f.read, { lines });
     const holds = new Holds();
     const first = laneOutcome(source.declare(holds, "a"));
-    f.answer(0, failed("no server"));
+    f.answer(0, failed("no server", "read"));
     await first;
     await laneOutcome(source.declare(holds, "a"));
     await laneOutcome(source.declare(holds, "a"));
@@ -466,7 +469,7 @@ describe("KeyedSource", () => {
     );
     const holds = new Holds();
     const out = await laneOutcome(source.declare(holds, "a"));
-    expect(out).toEqual(failed("read threw: Error: boom"));
+    expect(out).toEqual(failed("read threw: Error: boom", "read"));
     await jest.advanceTimersByTimeAsync(EVERY.failedMs);
     expect(calls).toBe(2);
     expect(lines[0]).toMatchObject({ level: "warn" });
@@ -500,7 +503,7 @@ describe("KeyedSource", () => {
     source = sourceOf(f.read);
     source.close();
     const lane = source.declare(new Holds(), "a");
-    expect(lane.current()).toEqual(failed("fake closed"));
+    expect(lane.current()).toEqual(failed("fake closed", "read"));
     source.supersede("a")();
     await jest.advanceTimersByTimeAsync(EVERY.okMs * 5);
     expect(f.calls).toHaveLength(0);

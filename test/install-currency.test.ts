@@ -41,7 +41,10 @@ describe("parseReleaseVersion", () => {
     "refuses %j",
     (text) => {
       expect(parseReleaseVersion(text)).toEqual(
-        failed(expect.stringContaining(`"${text}" is not a release version`)),
+        failed(
+          expect.stringContaining(`"${text}" is not a release version`),
+          "parse",
+        ),
       );
     },
   );
@@ -54,7 +57,9 @@ describe("fetchLatestVersion", () => {
       seen = { url: String(input), signal: init?.signal };
       return new Response(JSON.stringify({ latest: "1.41.3" }));
     };
-    await expect(fetchLatestVersion(PKG, spy, REGISTRY_URL, systemTimekeeper)).resolves.toEqual(ok([1, 41, 3]));
+    await expect(
+      fetchLatestVersion(PKG, spy, REGISTRY_URL, systemTimekeeper),
+    ).resolves.toEqual(ok([1, 41, 3]));
     expect(seen?.url).toBe(DIST_TAGS_URL);
     expect(seen?.url).toContain("%40promptctl%2Fcc-candybar");
     expect(seen?.signal).toBeInstanceOf(AbortSignal);
@@ -64,27 +69,48 @@ describe("fetchLatestVersion", () => {
   // `failed` carrying its reason — never a rejection that would take the
   // install down, never a value that could read as current.
   test("a refused connection is `failed` with the error text", async () => {
-    await expect(fetchLatestVersion(PKG, unreachable, REGISTRY_URL, systemTimekeeper)).resolves.toEqual(
-      failed("getaddrinfo ENOTFOUND registry.npmjs.org"),
+    await expect(
+      fetchLatestVersion(PKG, unreachable, REGISTRY_URL, systemTimekeeper),
+    ).resolves.toEqual(
+      failed("getaddrinfo ENOTFOUND registry.npmjs.org", "read"),
     );
   });
 
   test("a non-2xx response is `failed` naming the status", async () => {
     await expect(
-      fetchLatestVersion(PKG, registry("Unauthorized", 401), REGISTRY_URL, systemTimekeeper),
-    ).resolves.toEqual(failed(`registry responded 401 for ${DIST_TAGS_URL}`));
+      fetchLatestVersion(
+        PKG,
+        registry("Unauthorized", 401),
+        REGISTRY_URL,
+        systemTimekeeper,
+      ),
+    ).resolves.toEqual(
+      failed(`registry responded 401 for ${DIST_TAGS_URL}`, "read"),
+    );
   });
 
   test("a body without `latest` is `absent`", async () => {
     await expect(
-      fetchLatestVersion(PKG, registry({ next: "2.0.0" }), REGISTRY_URL, systemTimekeeper),
+      fetchLatestVersion(
+        PKG,
+        registry({ next: "2.0.0" }),
+        REGISTRY_URL,
+        systemTimekeeper,
+      ),
     ).resolves.toEqual(ABSENT);
   });
 
   test("a `latest` that is not a release version is `failed`", async () => {
     await expect(
-      fetchLatestVersion(PKG, registry({ latest: "2.0.0-rc.1" }), REGISTRY_URL, systemTimekeeper),
-    ).resolves.toEqual(failed(expect.stringMatching(/not a release version/)));
+      fetchLatestVersion(
+        PKG,
+        registry({ latest: "2.0.0-rc.1" }),
+        REGISTRY_URL,
+        systemTimekeeper,
+      ),
+    ).resolves.toEqual(
+      failed(expect.stringMatching(/not a release version/), "parse"),
+    );
   });
 });
 
@@ -118,7 +144,7 @@ describe("assessCurrency", () => {
   });
 
   test("a failed or absent lookup is unchecked, carrying the reason", () => {
-    expect(assessCurrency("1.26.0", failed("fetch failed"))).toEqual({
+    expect(assessCurrency("1.26.0", failed("fetch failed", "read"))).toEqual({
       kind: "unchecked",
       installed: "1.26.0",
       reason: "fetch failed",
@@ -197,7 +223,12 @@ describe("install currency, composed", () => {
   test("stale registry → stderr warning with the pinned command", async () => {
     const currency = assessCurrency(
       "1.26.0",
-      await fetchLatestVersion(PKG, registry({ latest: "1.34.0" }), REGISTRY_URL, systemTimekeeper),
+      await fetchLatestVersion(
+        PKG,
+        registry({ latest: "1.34.0" }),
+        REGISTRY_URL,
+        systemTimekeeper,
+      ),
     );
     const report = currencyReport(PKG, currency);
     expect(report.stream).toBe("stderr");
@@ -207,7 +238,12 @@ describe("install currency, composed", () => {
   test("unreachable registry → a report (never a rejection) saying skipped", async () => {
     const currency = assessCurrency(
       "1.26.0",
-      await fetchLatestVersion(PKG, unreachable, REGISTRY_URL, systemTimekeeper),
+      await fetchLatestVersion(
+        PKG,
+        unreachable,
+        REGISTRY_URL,
+        systemTimekeeper,
+      ),
     );
     const report = currencyReport(PKG, currency);
     expect(report.stream).toBe("stderr");
@@ -221,7 +257,12 @@ describe("install currency, composed", () => {
   test("non-release stamp + unreachable registry → still a report", async () => {
     const currency = assessCurrency(
       "dev",
-      await fetchLatestVersion(PKG, unreachable, REGISTRY_URL, systemTimekeeper),
+      await fetchLatestVersion(
+        PKG,
+        unreachable,
+        REGISTRY_URL,
+        systemTimekeeper,
+      ),
     );
     expect(currencyReport(PKG, currency).text).toContain(
       '"dev" is not a release version',

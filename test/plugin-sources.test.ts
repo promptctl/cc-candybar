@@ -43,7 +43,7 @@ import { resolvePath, SourceRegistry } from "../src/var-system/sources";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { checkConfig, type CheckOutcome } from "../src/check";
 import { instantOf } from "../src/utils/instant";
-import { ABSENT, ok, PENDING } from "../src/utils/outcome";
+import { ABSENT, ok, pendingOf } from "../src/utils/outcome";
 import { settledLane } from "../src/utils/reading";
 import { installFromRepo } from "../src/plugin-install";
 import { REPO_PLUGIN_DIR } from "../src/config/loader/plugin-folders";
@@ -687,7 +687,7 @@ describe("a source's document", () => {
 
   test("reads the payload's reading at its own name: pending, ok, absent, failed", () => {
     for (const reading of [
-      PENDING,
+      pendingOf("unread"),
       ok({ home: "/h" }),
       ABSENT,
       { kind: "failed", reason: "bad json" },
@@ -703,6 +703,7 @@ describe("a source's document", () => {
       expect(sourceDoc(() => ({ plugins: { p: { status: held } } }))()).toEqual(
         {
           kind: "failed",
+          failedAt: "read",
           reason: `variable "${STATUS}": the view's payload holds no source reading at "${STATUS}"`,
         },
       );
@@ -712,6 +713,7 @@ describe("a source's document", () => {
   test("a payload without it reads failed, naming the variable: the declaration did not take it", () => {
     expect(sourceDoc(() => ({ plugins: {} }))()).toEqual({
       kind: "failed",
+      failedAt: "read",
       reason: `variable "${STATUS}": the view's payload has no "${STATUS}": its declaration did not take the source the preset reads`,
     });
   });
@@ -778,7 +780,6 @@ describe("the view declares the sources its preset reads", () => {
       sources: "4",
       sourcesPending: "plugins.b.s:unread,plugins.d.s:superseded",
     });
-    expect(PENDING.kind).toBe("pending");
   });
 });
 

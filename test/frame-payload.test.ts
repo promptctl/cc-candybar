@@ -3,7 +3,7 @@
 // triggers (`settlePayload`) and draws from what that left; the view's payload
 // (`payloadOf`), which every frame draws, reads every owner's stored value as
 // it stands — no I/O, no refresh, no instant — and a value not answered yet
-// crosses as PENDING, which the draw takes as its loading cell. What moves
+// crosses as pending, which the draw takes as its loading cell. What moves
 // with the instant (`today`, the feeds) is the draw's own projection.
 //
 // [LAW:behavior-not-structure] Each owner is a fake over a counted reader
@@ -24,7 +24,7 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { globalsFor } from "./helpers/selection";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf } from "../src/utils/instant";
-import { ABSENT, PENDING, ok } from "../src/utils/outcome";
+import { ABSENT, pendingOf, ok } from "../src/utils/outcome";
 import type { ClientHints } from "../src/daemon/protocol";
 import { sessionIdOf } from "../src/daemon/session-id";
 import type { ClaudeHookData } from "../src/utils/claude";
@@ -120,7 +120,12 @@ function counted(pr?: unknown) {
     ...owners,
     lanes: declaredLanes(
       owners,
-      { sessionId: sessionIdOf(HOOK.session_id), hookData: HOOK, cwd: undefined, hints: HINTS },
+      {
+        sessionId: sessionIdOf(HOOK.session_id),
+        hookData: HOOK,
+        cwd: undefined,
+        hints: HINTS,
+      },
       EVERY_LANE,
     ),
   } as unknown as RenderPayloadDeps;
@@ -137,8 +142,7 @@ function counted(pr?: unknown) {
     return payloadOf(inputs(), DRAW);
   };
   // `today` as a draw at `at` projects it.
-  const today = (at = AT) =>
-    todayOf(deps, deps.lanes().today, HOOK, at);
+  const today = (at = AT) => todayOf(deps, deps.lanes().today, HOOK, at);
   return { reads, inputs, request, today, deps, logs };
 }
 
@@ -175,9 +179,9 @@ describe("a frame's payload", () => {
   test("draws every lane no request has answered as not answered yet", () => {
     const { inputs, today } = counted();
     const payload = payloadOf(inputs(), DRAW);
-    expect(today()).toBe(PENDING);
-    expect(payload.git).toBe(PENDING);
-    expect(payload.tmux).toEqual({ pane: "%7", session: PENDING });
+    expect(today()).toEqual(pendingOf("unread"));
+    expect(payload.git).toEqual(pendingOf("unread"));
+    expect(payload.tmux).toEqual({ pane: "%7", session: pendingOf("unread") });
     for (const lane of [
       payload.session,
       payload.speed,
@@ -187,7 +191,7 @@ describe("a frame's payload", () => {
       payload.cache,
       payload.autocompact,
     ]) {
-      expect(lane).toBe(PENDING);
+      expect(lane).toEqual(pendingOf("unread"));
     }
   });
 
@@ -200,7 +204,7 @@ describe("a frame's payload", () => {
     const payload = payloadOf(inputs(), DRAW);
     expect(payload.context).toBeUndefined();
     expect(payload.git).toMatchObject({ branch: "main" });
-    expect(payload.session).not.toBe(PENDING);
+    expect(payload.session).not.toEqual(pendingOf("unread"));
     // Logged by the frame's read, which no request's failures reach.
     expect(logs).toContainEqual(
       expect.stringMatching(/^error context read threw: Error: context bug/),
@@ -214,7 +218,7 @@ describe("a frame's payload", () => {
       neededInputPaths: new Set(["context.contextLeft"]),
     };
     const payload = payloadOf(contextOnly, DRAW);
-    expect(payload.context).toBe(PENDING);
+    expect(payload.context).toEqual(pendingOf("unread"));
     expect(payload.autocompact).toBeUndefined();
   });
 
@@ -224,12 +228,18 @@ describe("a frame's payload", () => {
     const { inputs, request } = counted();
     await request();
     const other = { ...inputs(), hookData: { ...HOOK, session_id: "other" } };
-    expect(payloadOf(other, DRAW).autocompact).toBe(PENDING);
-    expect(payloadOf(inputs(), DRAW).autocompact).not.toBe(PENDING);
+    expect(payloadOf(other, DRAW).autocompact).toEqual(pendingOf("unread"));
+    expect(payloadOf(inputs(), DRAW).autocompact).not.toEqual(
+      pendingOf("unread"),
+    );
   });
 
   test("a PR not answered yet draws only the PR's fields as not answered", async () => {
-    const pr = { kind: "pending", landed: new Promise<void>(() => {}) };
+    const pr = {
+      kind: "pending",
+      why: "unread",
+      landed: new Promise<void>(() => {}),
+    };
     const { inputs } = counted(pr);
     // The frame that first reads the repo queues its read; the next one draws
     // what it stored.
@@ -238,11 +248,11 @@ describe("a frame's payload", () => {
     const { git } = payloadOf(inputs(), DRAW);
     expect(git).toMatchObject({ branch: "main", sha: "abc1234" });
     expect(git).toMatchObject({
-      prNumber: PENDING,
-      prState: PENDING,
-      prUrl: PENDING,
-      prError: PENDING,
-      prEarlier: PENDING,
+      prNumber: pendingOf("unread"),
+      prState: pendingOf("unread"),
+      prUrl: pendingOf("unread"),
+      prError: pendingOf("unread"),
+      prEarlier: pendingOf("unread"),
     });
   });
 
@@ -281,6 +291,7 @@ describe("a frame's payload", () => {
     deps.contextProvider.contextOf = () => ({
       kind: "failed",
       reason: "context: no window",
+      failedAt: "read",
     });
     const before = logs.length;
     expect(payloadOf(inputs(), DRAW).context).toBeUndefined();

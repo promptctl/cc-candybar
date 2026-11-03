@@ -15,7 +15,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { CacheExpiryProvider, cacheExpiresAt } from "../src/segments/cache";
-import { ABSENT, PENDING, ok } from "../src/utils/outcome";
+import { ABSENT, pendingOf, ok } from "../src/utils/outcome";
 import { systemTimekeeper } from "../src/time";
 
 const TTL_SEC = 60 * 60;
@@ -153,7 +153,9 @@ describe("CacheExpiryProvider", () => {
   const B = "2026-01-01T00:00:09.000Z"; // same length as A
 
   test("a draw before any request reads it as not answered yet", () => {
-    expect(new CacheExpiryProvider(systemTimekeeper).expiryOf("s")).toBe(PENDING);
+    expect(new CacheExpiryProvider(systemTimekeeper).expiryOf("s")).toEqual(
+      pendingOf("unread"),
+    );
   });
 
   test("a failed read is read again under the same stamp, never believed", async () => {

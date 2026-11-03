@@ -7,21 +7,29 @@ import { buildScope } from "../src/template-engine/scope";
 import { ccCandybarFuncs } from "../src/template-engine/funcs";
 import { VariableStore } from "../src/var-system/store";
 import { MissingFieldError, ParseError } from "@promptctl/go-template-js";
-import { ABSENT, PENDING, failed, ok } from "../src/utils/outcome";
+import { ABSENT, pendingOf, failed, ok } from "../src/utils/outcome";
 import { readPending, toDocument } from "../src/var-system/types";
 import { systemTimekeeper } from "../src/time";
 
 // Helper: evaluate a template against a plain-object scope, return joined text.
 function evalText(source: string, scope: object): string {
   const engine = createCcCandybarEngine(TEST_ENGINE);
-  return engine.parse(source).evaluate(scope).map((rt) => rt.plain).join("");
+  return engine
+    .parse(source)
+    .evaluate(scope)
+    .map((rt) => rt.plain)
+    .join("");
 }
 
 // Helper: evaluate against a VariableStore scope.
 function evalStore(source: string, store: VariableStore): string {
   const engine = createCcCandybarEngine(TEST_ENGINE);
   const scope = buildScope(store);
-  return engine.parse(source).evaluate(scope).map((rt) => rt.plain).join("");
+  return engine
+    .parse(source)
+    .evaluate(scope)
+    .map((rt) => rt.plain)
+    .join("");
 }
 
 // Helper: make a store with one box variable.
@@ -80,7 +88,10 @@ describe("variable resolver (store scope)", () => {
     const scope = buildScope(store);
     const engine = createCcCandybarEngine(TEST_ENGINE);
     const tpl = engine.parse("{{ .git.branch }}:{{ .git.dirty }}");
-    const result = tpl.evaluate(scope).map((rt) => rt.plain).join("");
+    const result = tpl
+      .evaluate(scope)
+      .map((rt) => rt.plain)
+      .join("");
     expect(result).toBe("main:false");
   });
 
@@ -92,7 +103,11 @@ describe("variable resolver (store scope)", () => {
   test("computed variable resolves correctly", () => {
     const store = new VariableStore(systemTimekeeper);
     store.defineBox("prefix", "string", "hello");
-    store.defineComputed("greeting", "string", (read) => read("prefix") + " world");
+    store.defineComputed(
+      "greeting",
+      "string",
+      (read) => read("prefix") + " world",
+    );
     expect(evalStore("{{ .greeting }}", store)).toBe("hello world");
   });
 
@@ -127,7 +142,9 @@ describe("string filters", () => {
   });
 
   test("trimPrefix removes prefix", () => {
-    expect(evalText('{{ trimPrefix "refs/heads/" "refs/heads/main" }}', {})).toBe("main");
+    expect(
+      evalText('{{ trimPrefix "refs/heads/" "refs/heads/main" }}', {}),
+    ).toBe("main");
   });
 
   test("trimSuffix removes suffix", () => {
@@ -139,15 +156,21 @@ describe("string filters", () => {
   });
 
   test("contains checks substring", () => {
-    expect(evalText('{{ if contains "ell" "hello" }}yes{{ end }}', {})).toBe("yes");
+    expect(evalText('{{ if contains "ell" "hello" }}yes{{ end }}', {})).toBe(
+      "yes",
+    );
   });
 
   test("hasPrefix checks prefix", () => {
-    expect(evalText('{{ if hasPrefix "he" "hello" }}yes{{ end }}', {})).toBe("yes");
+    expect(evalText('{{ if hasPrefix "he" "hello" }}yes{{ end }}', {})).toBe(
+      "yes",
+    );
   });
 
   test("hasSuffix checks suffix", () => {
-    expect(evalText('{{ if hasSuffix "lo" "hello" }}yes{{ end }}', {})).toBe("yes");
+    expect(evalText('{{ if hasSuffix "lo" "hello" }}yes{{ end }}', {})).toBe(
+      "yes",
+    );
   });
 });
 
@@ -161,11 +184,15 @@ describe("path functions", () => {
   });
 
   test("dirname extracts parent directory", () => {
-    expect(evalText('{{ dirname "/home/user/project" }}', {})).toBe("/home/user");
+    expect(evalText('{{ dirname "/home/user/project" }}', {})).toBe(
+      "/home/user",
+    );
   });
 
   test("basename piped from field", () => {
-    expect(evalText("{{ basename .cwd }}", { cwd: "/home/user/myproject" })).toBe("myproject");
+    expect(
+      evalText("{{ basename .cwd }}", { cwd: "/home/user/myproject" }),
+    ).toBe("myproject");
   });
 });
 
@@ -227,7 +254,13 @@ describe("cast functions", () => {
   // An explicit cast is how an author drops a fraction the int gate refuses.
   test("int truncates toward zero, as sprig's does", () => {
     const engine = createCcCandybarEngine(TEST_ENGINE);
-    expect(engine.parse("{{ formatInteger (int 2.7) }} {{ int -2.7 }}").evaluate({}).map((r) => r.plain).join("")).toBe("2 -2");
+    expect(
+      engine
+        .parse("{{ formatInteger (int 2.7) }} {{ int -2.7 }}")
+        .evaluate({})
+        .map((r) => r.plain)
+        .join(""),
+    ).toBe("2 -2");
   });
 
   test("bool throws on ambiguous string", () => {
@@ -244,7 +277,13 @@ describe("cast functions", () => {
     expect(() => engine.parse("{{ formatInteger 2.7 }}").evaluate({})).toThrow(
       /expected integer; found 2\.7/,
     );
-    expect(engine.parse("{{ formatInteger 3 }}").evaluate({}).map((r) => r.plain).join("")).toBe("3");
+    expect(
+      engine
+        .parse("{{ formatInteger 3 }}")
+        .evaluate({})
+        .map((r) => r.plain)
+        .join(""),
+    ).toBe("3");
   });
 });
 
@@ -258,20 +297,32 @@ describe("default function and conditionals", () => {
   });
 
   test("default returns value when non-empty", () => {
-    expect(evalText('{{ default "n/a" .branch }}', { branch: "main" })).toBe("main");
+    expect(evalText('{{ default "n/a" .branch }}', { branch: "main" })).toBe(
+      "main",
+    );
   });
 
   test("if/else conditional on boolean", () => {
-    expect(evalText("{{ if .dirty }}●{{ else }}○{{ end }}", { dirty: true })).toBe("●");
-    expect(evalText("{{ if .dirty }}●{{ else }}○{{ end }}", { dirty: false })).toBe("○");
+    expect(
+      evalText("{{ if .dirty }}●{{ else }}○{{ end }}", { dirty: true }),
+    ).toBe("●");
+    expect(
+      evalText("{{ if .dirty }}●{{ else }}○{{ end }}", { dirty: false }),
+    ).toBe("○");
   });
 
   test("if with eq builtin", () => {
-    expect(evalText('{{ if eq .env "prod" }}PROD{{ end }}', { env: "prod" })).toBe("PROD");
+    expect(
+      evalText('{{ if eq .env "prod" }}PROD{{ end }}', { env: "prod" }),
+    ).toBe("PROD");
   });
 
   test("if with ne builtin", () => {
-    expect(evalText('{{ if ne .branch "" }}{{ .branch }}{{ end }}', { branch: "main" })).toBe("main");
+    expect(
+      evalText('{{ if ne .branch "" }}{{ .branch }}{{ end }}', {
+        branch: "main",
+      }),
+    ).toBe("main");
   });
 });
 
@@ -285,17 +336,25 @@ describe("filter chains", () => {
   });
 
   test("field piped through multiple filters", () => {
-    expect(evalText("{{ .cwd | basename | trunc 5 }}", { cwd: "/home/user/longproject" })).toBe("longp");
+    expect(
+      evalText("{{ .cwd | basename | trunc 5 }}", {
+        cwd: "/home/user/longproject",
+      }),
+    ).toBe("longp");
   });
 
   test("field piped through trimPrefix then lower", () => {
     expect(
-      evalText('{{ .branch | trimPrefix "refs/heads/" | lower }}', { branch: "refs/heads/MAIN" })
+      evalText('{{ .branch | trimPrefix "refs/heads/" | lower }}', {
+        branch: "refs/heads/MAIN",
+      }),
     ).toBe("main");
   });
 
   test("printf with field", () => {
-    expect(evalText('{{ printf "#%s" .id }}', { id: "abc123" })).toBe("#abc123");
+    expect(evalText('{{ printf "#%s" .id }}', { id: "abc123" })).toBe(
+      "#abc123",
+    );
   });
 });
 
@@ -343,16 +402,18 @@ describe("documents in scope", () => {
     const store = docStore(
       ok(toDocument({ spent: 12.5, limits: { daily: 20 }, tags: ["a", "b"] })),
     );
-    expect(evalStore("{{ .budget.spent }}/{{ .budget.limits.daily }}", store)).toBe(
-      "12.5/20",
-    );
+    expect(
+      evalStore("{{ .budget.spent }}/{{ .budget.limits.daily }}", store),
+    ).toBe("12.5/20");
     expect(evalStore("{{ index .budget.tags 1 }}", store)).toBe("b");
     expect(evalStore("{{ len .budget.tags }}", store)).toBe("2");
   });
 
   test("a document sits beside scalar namespaces in one scope", () => {
     const store = docStore(ok(toDocument({ spent: 1 })));
-    expect(evalStore("{{ .session.id }}:{{ .budget.spent }}", store)).toBe("s1:1");
+    expect(evalStore("{{ .session.id }}:{{ .budget.spent }}", store)).toBe(
+      "s1:1",
+    );
   });
 
   test("a missing field is a MissingFieldError, like a payload field", () => {
@@ -363,17 +424,21 @@ describe("documents in scope", () => {
 
   test("prototype names are not fields of a document", () => {
     const store = docStore(ok(toDocument({ spent: 1 })));
-    const tpl = createCcCandybarEngine(TEST_ENGINE).parse("{{ .budget.constructor }}");
+    const tpl = createCcCandybarEngine(TEST_ENGINE).parse(
+      "{{ .budget.constructor }}",
+    );
     expect(() => tpl.evaluate(buildScope(store))).toThrow(MissingFieldError);
   });
 
   test("a null leaf prints as <no value>, is falsy, and has no fields", () => {
     const store = docStore(ok(toDocument({ owner: null })));
     expect(evalStore("[{{ .budget.owner }}]", store)).toBe("[<no value>]");
-    expect(evalStore("{{ if .budget.owner }}set{{ else }}unset{{ end }}", store)).toBe(
-      "unset",
+    expect(
+      evalStore("{{ if .budget.owner }}set{{ else }}unset{{ end }}", store),
+    ).toBe("unset");
+    const tpl = createCcCandybarEngine(TEST_ENGINE).parse(
+      "{{ .budget.owner.name }}",
     );
-    const tpl = createCcCandybarEngine(TEST_ENGINE).parse("{{ .budget.owner.name }}");
     expect(() => tpl.evaluate(buildScope(store))).toThrow(MissingFieldError);
   });
 
@@ -387,9 +452,9 @@ describe("documents in scope", () => {
   });
 
   test("array- and scalar-rooted documents print bare the same Go way", () => {
-    expect(evalStore("{{ .budget }}", docStore(ok(toDocument([1, 2, 3]))))).toBe(
-      "[1 2 3]",
-    );
+    expect(
+      evalStore("{{ .budget }}", docStore(ok(toDocument([1, 2, 3])))),
+    ).toBe("[1 2 3]");
     expect(evalStore("{{ .budget }}", docStore(ok(toDocument(42))))).toBe("42");
   });
 
@@ -399,11 +464,14 @@ describe("documents in scope", () => {
     expect(() => evalStore('{{ set .budget "spent" 0 }}', store)).toThrow(
       expect.objectContaining({ cause: expect.any(TypeError) }),
     );
-    expect(store.readDocument("budget")).toEqual({ kind: "ok", value: { spent: 1 } });
+    expect(store.readDocument("budget")).toEqual({
+      kind: "ok",
+      value: { spent: 1 },
+    });
   });
 
   test("a document not yet scanned reads as the pending signal naming the variable", () => {
-    const store = docStore(PENDING);
+    const store = docStore(pendingOf("unread"));
     let thrown: unknown;
     try {
       evalStore("{{ .budget.spent }}", store);
@@ -429,11 +497,15 @@ describe("documents in scope", () => {
     }
     expect(readPending(thrown)).toBeUndefined();
     expect((thrown as Error).name).toBe("MissingFieldError");
-    expect(String(thrown)).toContain('field "budget.spent" not found on receiver');
+    expect(String(thrown)).toContain(
+      'field "budget.spent" not found on receiver',
+    );
   });
 
   test("a failed scan reads as an error carrying the variable and the reason", () => {
-    const store = docStore(failed("JSON parse failed: Unexpected token }"));
+    const store = docStore(
+      failed("JSON parse failed: Unexpected token }", "read"),
+    );
     expect(() => evalStore("{{ .budget.spent }}", store)).toThrow(
       'variable "budget": JSON parse failed: Unexpected token }',
     );
@@ -486,24 +558,16 @@ describe("ccCandybarFuncs registry", () => {
 // signature would break here loudly.
 describe("themes / endcaps domain-list bindings", () => {
   test("themes() returns the canonical resolvable-palette list", async () => {
-    const { listResolvablePaletteNames } = await import(
-      "../src/themes/policy"
-    );
+    const { listResolvablePaletteNames } = await import("../src/themes/policy");
     const expected = [...listResolvablePaletteNames()];
-    const result = evalText(
-      "{{ range themes }}{{ . }}|{{ end }}",
-      {},
-    );
+    const result = evalText("{{ range themes }}{{ . }}|{{ end }}", {});
     expect(result).toBe(expected.join("|") + "|");
   });
 
   test("endcaps() returns the canonical ENDCAPS_SHAPES list", async () => {
     const { ENDCAPS_SHAPES } = await import("../src/themes/policy");
     const expected = [...ENDCAPS_SHAPES];
-    const result = evalText(
-      "{{ range endcaps }}{{ . }}|{{ end }}",
-      {},
-    );
+    const result = evalText("{{ range endcaps }}{{ . }}|{{ end }}", {});
     expect(result).toBe(expected.join("|") + "|");
   });
 

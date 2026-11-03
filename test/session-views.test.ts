@@ -353,6 +353,7 @@ test("a view whose declaration throws answers that failure on its lanes", () => 
   using held = cache.holdSession(dir, dir, undefined, viewFacts(dir, "s-a"));
   expect(held.view.lanes().git.current()).toEqual({
     kind: "failed",
+    failedAt: "read",
     reason: expect.stringContaining("closure exploded"),
   });
   expect(lines).toContainEqual(

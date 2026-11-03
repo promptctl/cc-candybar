@@ -2,7 +2,7 @@ import type { SessionUsageStore } from "../../src/daemon/cache/session-usage-sto
 import type { ClaudeHookData } from "../../src/utils/claude";
 import type { Holds } from "../../src/utils/holds";
 import type { Instant } from "../../src/utils/instant";
-import { PENDING } from "../../src/utils/outcome";
+import { pendingOf } from "../../src/utils/outcome";
 import { laneOutcome } from "../../src/utils/reading";
 
 // `today` as a request reads it: the set declared, its first scan and the
@@ -30,6 +30,6 @@ export function todayNow(
   at: Instant,
 ) {
   const set = store.declareToday(holds, claudeConfigDir).current();
-  if (set.kind === "pending") return PENDING;
+  if (set.kind === "pending") return pendingOf("unread");
   return set.kind === "ok" ? store.todayAt(set.value, hookData, at) : set;
 }

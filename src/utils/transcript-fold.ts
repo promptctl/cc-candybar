@@ -28,7 +28,7 @@ import {
 } from "./claude";
 import { statStamp } from "./transcript-fs";
 import { quietLogger, type DaemonLogger } from "./logger";
-import { PENDING, type Pending } from "./outcome";
+import { pendingOf, type FailedAt, type Pending } from "./outcome";
 import { ObservableLru } from "./observable-lru";
 import { valueOf } from "./logfmt";
 import type { Refreshes } from "./refresh-ledger";
@@ -38,7 +38,11 @@ import { elapsedMs, type Timekeeper } from "../time";
 // is a real empty fold, so the caller has exactly two arms.
 export type FoldOutcome<S> =
   | { readonly kind: "ok"; readonly value: S }
-  | { readonly kind: "failed"; readonly reason: string };
+  | {
+      readonly kind: "failed";
+      readonly reason: string;
+      readonly failedAt: FailedAt;
+    };
 
 // A long-lived daemon sees many sessions; each retained state is small, but the
 // map must not grow without bound. LRU by insertion order, evicting past the cap.
@@ -126,7 +130,7 @@ export class TranscriptFold<S> {
   // What the session's last read answered, as it stands: never read is
   // pending, its first read the next request's.
   answer(sessionId: string): FoldOutcome<S> | Pending {
-    return this.sessions.get(sessionId)?.answer ?? PENDING;
+    return this.sessions.get(sessionId)?.answer ?? pendingOf("unread");
   }
 
   private store(

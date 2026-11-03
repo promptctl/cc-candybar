@@ -12,7 +12,7 @@
 //     above the model's context window is capped to it.
 //   - The statusline hook payload carries none of this.
 
-import { readClaudeSettings } from "../claude-settings.js";
+import { readClaudeSettingsOutcome } from "../claude-settings.js";
 import { failed, ok, type Outcome } from "../utils/outcome.js";
 
 // The windows the bar offers: Claude Code's whole accepted range, in the 100K
@@ -38,13 +38,9 @@ export type AutoCompactWindow = number | "auto";
 export function readAutoCompactWindow(
   settingsPath: string,
 ): Outcome<AutoCompactWindow> {
-  let settings: Readonly<Record<string, unknown>>;
-  try {
-    settings = readClaudeSettings(settingsPath);
-  } catch (e) {
-    return failed(e instanceof Error ? e.message : String(e));
-  }
-  const window = settings.autoCompactWindow;
+  const read = readClaudeSettingsOutcome(settingsPath);
+  if (read.kind !== "ok") return read;
+  const window = read.value.autoCompactWindow;
   if (window === undefined) return ok("auto");
   return typeof window === "number" &&
     Number.isInteger(window) &&
@@ -53,6 +49,7 @@ export function readAutoCompactWindow(
     ? ok(window)
     : failed(
         `${settingsPath}: autoCompactWindow is ${JSON.stringify(window)}, not a window /autocompact accepts (${LEAST}–${MOST} tokens)`,
+        "parse",
       );
 }
 

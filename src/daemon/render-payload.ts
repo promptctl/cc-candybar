@@ -51,9 +51,10 @@ import {
   ABSENT,
   failed,
   isPending,
-  PENDING,
+  pendingOf,
   type Outcome,
   type Pending,
+  type PendingWhy,
   type Reading,
 } from "../utils/outcome.js";
 import type { CacheExpiryProvider } from "../segments/cache.js";
@@ -1247,7 +1248,7 @@ export function declareLanes(
       return take();
     } catch (e) {
       faults.push(`${lane}: ${inspect(e)}`);
-      return settledLane(failed(`${lane}: ${String(e)}`));
+      return settledLane(failed(`${lane}: ${String(e)}`, "read"));
     }
   };
   const lanes: DeclaredLanes = {
@@ -1308,7 +1309,7 @@ function readLanes(inputs: PayloadInputs): Lanes {
       return value();
     } catch (e) {
       deps.log("error", `${lane} read threw: ${inspect(e)}`);
-      return failed(`${lane}: ${String(e)}`);
+      return failed(`${lane}: ${String(e)}`, "read");
     }
   };
   return {
@@ -1363,9 +1364,19 @@ function waitsOf(lanes: DeclaredLanes): Array<Promise<void>> {
   );
 }
 
+// [LAW:dataflow-not-control-flow] A value derived from several lanes is not
+// answered while any of them is not: it waits for the first that is pending,
+// and says why that one is.
+function firstPending(
+  ...lanes: ReadonlyArray<Reading<unknown> | undefined>
+): Pending | undefined {
+  const lane = lanes.find((l) => l?.kind === "pending");
+  return lane?.kind === "pending" ? pendingOf(lane.why) : undefined;
+}
+
 // [LAW:effects-at-boundaries] The projections are pure folds returning data
 // (payload fragment + failure descriptions); the log effect is the caller's.
-// A value not answered yet is PENDING, which the draw takes as its own
+// A value not answered yet is pending, which the draw takes as its own
 // outcome.
 function projectPayload(
   inputs: PayloadInputs,
@@ -1387,7 +1398,7 @@ function projectPayload(
   ): U | Pending | undefined => {
     switch (reading.kind) {
       case "pending":
-        return PENDING;
+        return pendingOf(reading.why);
       case "failed":
       case "absent":
         return undefined;
@@ -1406,24 +1417,25 @@ function projectPayload(
   // reach the payload as values.
   const git =
     lanes.git.kind === "pending"
-      ? PENDING
-      : projectGitInfo(lanes.git, () => PENDING);
+      ? pendingOf(lanes.git.why)
+      : projectGitInfo(lanes.git, pendingOf);
   const tmuxValue =
-    lanes.tmuxSession.kind === "pending" ? PENDING : valueOf(lanes.tmuxSession);
+    lanes.tmuxSession.kind === "pending"
+      ? pendingOf(lanes.tmuxSession.why)
+      : valueOf(lanes.tmuxSession);
   const hostName =
-    lanes.hostName.kind === "pending" ? PENDING : valueOf(lanes.hostName);
+    lanes.hostName.kind === "pending"
+      ? pendingOf(lanes.hostName.why)
+      : valueOf(lanes.hostName);
   const hostUser =
-    lanes.hostUser.kind === "pending" ? PENDING : valueOf(lanes.hostUser);
+    lanes.hostUser.kind === "pending"
+      ? pendingOf(lanes.hostUser.why)
+      : valueOf(lanes.hostUser);
   // The controls are capped to the model's context window, so they are not
   // answered while the window is not.
   const autoCompactValue =
-    lanes.autoCompact.kind === "pending" ||
-    (want.autocompact && lanes.context.kind === "pending")
-      ? PENDING
-      : projectAutoCompact(
-          lanes.autoCompact,
-          valueOf(lanes.context)?.maxTokens,
-        );
+    firstPending(want.autocompact ? lanes.context : undefined) ??
+    projectAutoCompact(lanes.autoCompact, valueOf(lanes.context)?.maxTokens);
   // [LAW:dataflow-not-control-flow] block.* and weekly.* read straight from
   // hookData's rate-limit windows; what they say relative to now is the
   // draw's (BlockPayload).
@@ -1436,12 +1448,11 @@ function projectPayload(
   // failures are theirs to report, below.
   const burn: BurnPayload | Pending | undefined = !want.burn
     ? undefined
-    : lanes.usage.kind === "pending" || lanes.metrics.kind === "pending"
-      ? PENDING
-      : burnOf(
-          valueOf(lanes.usage)?.session.cost,
-          valueOf(lanes.metrics)?.sessionDuration,
-        );
+    : (firstPending(lanes.usage, lanes.metrics) ??
+      burnOf(
+        valueOf(lanes.usage)?.session.cost,
+        valueOf(lanes.metrics)?.sessionDuration,
+      ));
   // [LAW:dataflow-not-control-flow] The instantaneous rates and the burn-rate
   // history fold independently from one observation — either can be present
   // without the other (a fresh burst has rates but a one-sample history; an
@@ -1568,7 +1579,7 @@ function projectPayload(
     // drawn by the template reading it.
     ...projectSources(lanes.sources.keys(), (name) => {
       const reading = lanes.sources.get(name)!;
-      return reading.kind === "pending" ? PENDING : reading;
+      return reading.kind === "pending" ? pendingOf(reading.why) : reading;
     }),
   };
   return payload;
@@ -1646,7 +1657,7 @@ function speedPayloadOf(obs: SpeedObservation): SpeedPayload | undefined {
 }
 
 // [LAW:one-source-of-truth] The one assembly of a view's payload: every
-// source as its owner holds it now, a value not answered yet as PENDING —
+// source as its owner holds it now, a value not answered yet as pending —
 // which the draw takes as its own outcome (the placement's loading cell).
 // Performs no I/O, refreshes
 // nothing and reads no instant, so the session's view keeps it as one computed
@@ -1675,7 +1686,7 @@ export function todayOf(
 ): TodayPayload | Pending | undefined {
   if (faults.of(hookData.session_id, "today") !== undefined) return undefined;
   const set = lane.current();
-  if (set.kind === "pending") return PENDING;
+  if (set.kind === "pending") return pendingOf(set.why);
   if (set.kind !== "ok") return undefined;
   const read = (): Reading<TodayInfo> => {
     try {
@@ -1686,7 +1697,7 @@ export function todayOf(
     }
   };
   const today = read();
-  if (today.kind === "pending") return PENDING;
+  if (today.kind === "pending") return pendingOf(today.why);
   return today.kind === "ok"
     ? { cost: today.value.cost, tokens: today.value.tokens }
     : undefined;
@@ -1723,10 +1734,12 @@ export async function settlePayload(
 // window in, the payload shape out. The read never answers `absent` (a missing
 // file is `auto`), so the family is dropped only when no segment asked for it.
 export function projectAutoCompact(
-  outcome: Outcome<AutoCompactWindow>,
+  outcome: Reading<AutoCompactWindow>,
   contextWindow: number | undefined,
-): AutoCompactPayload | undefined {
+): AutoCompactPayload | Pending | undefined {
   switch (outcome.kind) {
+    case "pending":
+      return pendingOf(outcome.why);
     case "absent":
       return undefined;
     case "failed":
@@ -1823,7 +1836,7 @@ function posixify(s: string | undefined): string | undefined {
 // failure is what logged it.
 function projectGitInfo<P>(
   outcome: Outcome<GitInfo>,
-  pending: (lane: string) => P,
+  pending: (why: PendingWhy) => P,
 ): GitPayloadOf<P> | undefined {
   if (outcome.kind !== "ok") return undefined;
 
@@ -1861,7 +1874,7 @@ function projectGitInfo<P>(
   let prFields: PrPayload | PrPendingOf<P> = {};
   switch (pr?.kind) {
     case "pending": {
-      const p = pending("git.pr");
+      const p = pending(pr.why);
       prFields = {
         prNumber: p,
         prState: p,

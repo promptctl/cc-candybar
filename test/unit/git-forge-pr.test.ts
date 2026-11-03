@@ -85,7 +85,12 @@ describe("classifyForgePr (github)", () => {
     ["CLOSED", "closed"],
   ])("a %s PR for the branch → ok, state %s", (state, parsed) => {
     const url = "https://github.com/x/y/pull/76";
-    const out = JSON.stringify({ number: 76, state, url, headRefOid: "c0ffee" });
+    const out = JSON.stringify({
+      number: 76,
+      state,
+      url,
+      headRefOid: "c0ffee",
+    });
     expect(classify(okResult(out))).toEqual({
       kind: "ok",
       value: { number: 76, state: parsed, url, head: "c0ffee" },
@@ -95,10 +100,16 @@ describe("classifyForgePr (github)", () => {
   test.each(["DRAFT", "open", ""])(
     "a state word gh does not print (%j) → failed, naming it",
     (state) => {
-      const out = JSON.stringify({ number: 76, state, url: "https://x/76", headRefOid: "c0ffee" });
+      const out = JSON.stringify({
+        number: 76,
+        state,
+        url: "https://x/76",
+        headRefOid: "c0ffee",
+      });
       const r = classify(okResult(out));
       expect(r).toEqual({
         kind: "failed",
+        failedAt: "parse",
         reason: `gh pr view: unknown state ${JSON.stringify(state)}`,
       });
     },
@@ -183,9 +194,15 @@ describe("classifyForgePr (gitlab)", () => {
   });
 
   test("a state word glab does not print → failed, naming it", () => {
-    const out = JSON.stringify({ iid: 42, state: "OPENED", web_url: "https://x/42", sha: "c0ffee" });
+    const out = JSON.stringify({
+      iid: 42,
+      state: "OPENED",
+      web_url: "https://x/42",
+      sha: "c0ffee",
+    });
     expect(classify(okResult(out))).toEqual({
       kind: "failed",
+      failedAt: "parse",
       reason: 'glab mr view: unknown state "OPENED"',
     });
   });
@@ -228,15 +245,15 @@ describe("prOfHead", () => {
       kind: "earlier",
       value: pull("merged"),
     });
-    expect(prOfHead(pr("closed"), failed("no oid"))).toEqual(
-      failed("HEAD: no oid"),
+    expect(prOfHead(pr("closed"), failed("no oid", "read"))).toEqual(
+      failed("HEAD: no oid", "read"),
     );
-    expect(prOfHead(pr("open"), failed("no oid"))).toEqual(pr("open"));
+    expect(prOfHead(pr("open"), failed("no oid", "read"))).toEqual(pr("open"));
   });
 
   test("no PR and a failed lookup pass through", () => {
     expect(prOfHead(ABSENT, ok("aaa"))).toEqual(ABSENT);
-    const f = failed("gh pr view: HTTP 401");
+    const f = failed("gh pr view: HTTP 401", "read");
     expect(prOfHead(f, ok("aaa"))).toEqual(f);
   });
 });
