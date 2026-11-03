@@ -1,3 +1,9 @@
+## [1.180.5](https://github.com/promptctl/cc-candybar/compare/v1.180.4...v1.180.5) (2026-11-03)
+
+### Bug Fixes
+
+* **test:** the client's answer cases run over a memory connection on a held clock (candybar-testing-ihvy.5q4) ([#589](https://github.com/promptctl/cc-candybar/issues/589)) ([7ca57ba](https://github.com/promptctl/cc-candybar/commit/7ca57ba16e524929f55d99beb41eba44d31a74fb))
+
 ## [1.180.4](https://github.com/promptctl/cc-candybar/compare/v1.180.3...v1.180.4) (2026-11-02)
 
 ### Bug Fixes
