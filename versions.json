@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-594",
+      "ref": "refs/pull/594/merge",
+      "sha": "c358d0cc22e1b96a7f1924ac54adfa1482ffaa90",
+      "timestamp": "2026-11-03T01:18:04.412Z",
+      "commits": [
+        {
+          "sha": "c358d0cc22e1b96a7f1924ac54adfa1482ffaa90",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T18:17:06-07:00",
+          "message": "Merge 8dd92b8c96dc16e03626a73abe5804f49f3281c6 into 8b23a558ca80eb27c92e05a931e56f0267be820f\n"
+        },
+        {
+          "sha": "8dd92b8c96dc16e03626a73abe5804f49f3281c6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T18:16:36-07:00",
+          "message": "feat(url-handler): a resident Swift forwarder sends the raw link to the daemon, which does all parsing (candybar-daemon-health-ajx0.co4)\n\nThe URL handler app is a Swift agent (url-handler/main.swift) that forwards each\ncc-candybar:// link as one url frame, versioned by itself, and reads no answer.\nThe daemon classifies inbound frames once, splits the verb itself, and writes a\nclick event for every url frame, refused ones included. clientVersion leaves the\nwire; a click's arrival carries who delivered it, and the doctor judges by that.\nInstall assembles the .app around the prebuilt binary, ad-hoc signs it, quits the\nresident instance and registers the scheme. CI builds a universal binary on macOS\ninto both darwin packages; check-protocol pins the Swift frame and socket path.\nurl-handle remains the tmux status line's route only.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-593",
       "ref": "refs/pull/593/merge",
       "sha": "dd1f7d010cef77054ca011326c22970a3e33d788",
