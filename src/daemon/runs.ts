@@ -50,6 +50,7 @@ export type RunOutcome =
   | "timeout"
   | "launch"
   | "output-limit"
+  | "pipe"
   | "aborted";
 
 export interface RunStats {
@@ -95,6 +96,9 @@ function outcomeOf(result: LaunchResult): RunOutcome {
       return "launch";
     case "output-limit":
       return "output-limit";
+    // It ran: the launcher ended it because a pipe failed to read.
+    case "pipe-error":
+      return "pipe";
   }
 }
 
@@ -105,14 +109,18 @@ function exitOf(result: LaunchResult): string {
 }
 
 // What the bar shows of a failed run: the program's own words, else why. A run
-// ended for flooding its output says why alone: its words are the flood.
+// ended for flooding its output says why alone: its words are the flood. One
+// ended for a failed pipe says why alone too: its words were cut short.
 function failureText(
   action: string,
   outcome: RunOutcome,
   result: LaunchResult,
   timeoutMs: number,
 ): string {
-  const stderr = outcome === "output-limit" ? "" : result.stderr.trim();
+  const stderr =
+    outcome === "output-limit" || outcome === "pipe"
+      ? ""
+      : result.stderr.trim();
   const reason =
     outcome === "timeout"
       ? `timed out after ${timeoutMs / 1000} s`

@@ -94,6 +94,10 @@ describe("assembling the URL handler app", () => {
     expect(plist).toContain("<key>LSUIElement</key>");
     expect(plist).toContain("<string>com.cccandybar.url-handler</string>");
     expect(plist).toContain("<string>CCCandybarURLHandler</string>");
+    // The name on the notification-authorization prompt a lost click raises.
+    expect(plist).toContain(
+      "<key>CFBundleDisplayName</key>\n  <string>cc-candybar</string>",
+    );
     expect(ran).toEqual([
       `codesign --force --sign - ${app()}.installing`,
       "killall CCCandybarURLHandler",

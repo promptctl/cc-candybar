@@ -13,8 +13,9 @@ export interface LaunchStatsHandle {
   // A launch the launcher refused: no child started, so neither of the above.
   onRefused(category: LaunchCategory): void;
   // A pipe that outlived its launch, held by a process the launcher cannot
-  // end: opened when the launch settles, `bytes` read and dropped as they
-  // arrive, closed when the pipe does — on its own, or cut at the bound.
+  // end: opened when the launch settles, closed when the pipe does — on its
+  // own, or cut at the bound. An output's `bytes` are read and dropped as they
+  // arrive; an input is still being written, so it reads none.
   onDrainOpen(category: LaunchCategory): void;
   onDrainRead(category: LaunchCategory, bytes: number): void;
   onDrainClose(category: LaunchCategory, end: DrainEnd): void;

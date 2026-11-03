@@ -16,7 +16,7 @@ const scope = () => {
     closing,
     launcher: systemLauncher({ inherited: process.env, 
       signal: closing.signal,
-      observeLifeline: () => {},
+      observeWarnings: () => {},
     }, systemTimekeeper),
   };
 };

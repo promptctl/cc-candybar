@@ -370,14 +370,14 @@ export async function replyTo(
             }),
           facts,
         ).then(
-          ({ resp, motion, clickShown, delivered }) => {
+          ({ resp, motion, clickShown, pipeShown, delivered }) => {
             sighted(checked.req, motion);
             return {
               outcome: { kind: "ok" } as const,
               resp,
-              // [LAW:single-enforcer] An answer carrying the click error that
-              // reaches its client is the one that delivered it
-              // (src/daemon/click-error.ts).
+              // [LAW:single-enforcer] An answer carrying the click error or the
+              // launcher's pipe event that reaches its client is the one that
+              // delivered it (src/utils/event-hold.ts).
               delivered: () => {
                 delivered();
                 if (clickShown !== null)
@@ -386,6 +386,10 @@ export async function replyTo(
                     checked.req.sessionId,
                     clickShown,
                   );
+                // Daemon-wide: one session's answer having shown the
+                // launcher's pipe event is what makes it not silent.
+                if (pipeShown !== null)
+                  parts.launcher.answeredPipeEvent(pipeShown);
               },
             };
           },
