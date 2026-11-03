@@ -1,6 +1,6 @@
 # Browser surface
 
-`scene-and-browser.md` supersedes this document where they differ.
+`scene-and-browser.md` supersedes this document where they differ: the page paints a Scene instead of a Frame once the Scene exists (that document's steps 3 to 5), this document's build order is that document's step 1, and depth and width are settled there (§2).
 
 Status: design, nothing built. [The Frame](areas/frame.md) it depends on is built. Tickets: `candybar-browser-surface-97sw`.
 
