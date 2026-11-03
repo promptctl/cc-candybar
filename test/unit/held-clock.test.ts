@@ -38,4 +38,70 @@ describe("the held clock", () => {
     expect(at).toEqual([30, 40, 80]);
     expect(clock.monotonic()).toBe(100);
   });
+
+  test("a burn moves time and fires nothing; what fell due runs at the burned moment on the next advance", () => {
+    const clock = heldClock(new Date(1_000_000));
+    const at: number[] = [];
+    clock.after(30, () => at.push(clock.monotonic()));
+    clock.burn(60);
+    expect(clock.monotonic()).toBe(60);
+    expect(clock.now()).toBe(1_000_060);
+    expect(at).toEqual([]);
+    clock.advance(0);
+    expect(at).toEqual([60]);
+  });
+
+  test("an advance that ends before a burn's end leaves time where the burn put it", () => {
+    const clock = heldClock(new Date(1_000_000));
+    clock.burn(60);
+    clock.advance(10);
+    expect(clock.monotonic()).toBe(70);
+  });
+
+  test("a timer that re-arms with no delay inside a burning callback runs once per burn, so an advance ends", () => {
+    const clock = heldClock(new Date(1_000_000));
+    const at: number[] = [];
+    const run = (): void => {
+      at.push(clock.monotonic());
+      clock.burn(60);
+      clock.after(0, run);
+    };
+    clock.after(0, run);
+    clock.advance(130);
+    // Runs at 0, 60 and 120; the one after the burn at 180 is past the end.
+    expect(at).toEqual([0, 60, 120]);
+    expect(clock.monotonic()).toBe(180);
+  });
+
+  test("a repeating timer a burn passed runs once, late, then a period on", () => {
+    const clock = heldClock(new Date(1_000_000));
+    const at: number[] = [];
+    clock.every(20, () => at.push(clock.monotonic()));
+    clock.burn(70);
+    clock.advance(30);
+    expect(at).toEqual([70, 90]);
+  });
+
+  test.each([-1, Number.NaN, Number.POSITIVE_INFINITY])(
+    "a span of %s is refused, so time cannot run back or stop firing",
+    (ms) => {
+      const clock = heldClock(new Date(1_000_000));
+      expect(() => clock.advance(ms)).toThrow(RangeError);
+      expect(() => clock.burn(ms)).toThrow(RangeError);
+      expect(clock.monotonic()).toBe(0);
+    },
+  );
+
+  test("counts the timers armed, not those fired or cancelled", () => {
+    const clock = heldClock(new Date(1_000_000));
+    expect(clock.pending()).toBe(0);
+    const cancel = clock.after(10, () => {});
+    clock.after(20, () => {});
+    clock.every(5, () => {});
+    expect(clock.pending()).toBe(3);
+    cancel();
+    expect(clock.pending()).toBe(2);
+    clock.advance(20);
+    expect(clock.pending()).toBe(1);
+  });
 });
