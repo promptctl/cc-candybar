@@ -115,6 +115,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   const clearBackstop = daemon.clock.after(REQUEST_TIMEOUT_MS, () => {
     timedOut = true;
     daemon.stats.requestsTimedOut++;
+    if (!waits) return;
     respond(
       {
         ok: false,
@@ -146,14 +147,18 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
           accepted,
           () => waits && sock.destroyed,
         )
-        .then((r) =>
-          r.kind === "reply"
-            ? respond(r.resp, r.exitAfterFlush, r.delivered)
-            : stream(r.sessionId, r.lane),
-        )
+        .then((r) => {
+          // A url frame's answer goes to no one: its writer closed, and a
+          // write to that socket is only an error event. The click's event
+          // (src/daemon/reply.ts) is where its outcome is seen.
+          if (!waits) return;
+          if (r.kind === "reply")
+            respond(r.resp, r.exitAfterFlush, r.delivered);
+          else stream(r.sessionId, r.lane);
+        })
         .catch((err: unknown) => {
           daemon.log("error", `handler threw: ${inspect(err)}`);
-          respond(renderFailed(err), null, NOTHING_DELIVERED);
+          if (waits) respond(renderFailed(err), null, NOTHING_DELIVERED);
         })
         .finally(() => {
           if (waits) return;

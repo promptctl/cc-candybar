@@ -47,6 +47,7 @@ import {
   PROTOCOL_VERSION,
   URL_FRAME_KIND,
   URL_FRAME_VERSION,
+  encodeFrame,
 } from "../../../src/daemon/protocol";
 import { sendDaemonRequest } from "../../helpers/daemon-wire";
 import { checkByName } from "../../../src/doctor/checks";
@@ -224,8 +225,23 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
         { v: PROTOCOL_VERSION, ...body } as never,
         5000,
       );
-    const forwarded = (frame: Record<string, unknown>) =>
-      daemon.send({ kind: URL_FRAME_KIND, ...frame }, 5000);
+    // As the URL handler app forwards: one frame, then hang up, reading no
+    // answer. The daemon writes none. Each click's event is awaited before
+    // the next frame, so the events below come in the order sent.
+    const clickEvents = (lines: readonly string[]) =>
+      lines.filter((l) => / click queued=/.test(l));
+    let clicks = 0;
+    const forwarded = async (frame: Record<string, unknown>) => {
+      daemon.connect().end(encodeFrame({ kind: URL_FRAME_KIND, ...frame }));
+      clicks += 1;
+      const n = clicks;
+      await loggedLines(
+        env,
+        clickEvents,
+        (picked) => picked.length >= n,
+        `${n} click events`,
+      );
+    };
 
     const nonce = "123e4567-e89b-42d3-a456-426614174000";
     expect(
@@ -235,13 +251,12 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
         value: nonce,
       }),
     ).toMatchObject({ ok: true });
+    clicks += 1;
     const forwardedNonce = "223e4567-e89b-42d3-a456-426614174000";
-    expect(
-      await forwarded({
-        urlV: URL_FRAME_VERSION,
-        url: `cc-candybar://${VERB_DOCTOR_PROBE}/${forwardedNonce}`,
-      }),
-    ).toMatchObject({ ok: true });
+    await forwarded({
+      urlV: URL_FRAME_VERSION,
+      url: `cc-candybar://${VERB_DOCTOR_PROBE}/${forwardedNonce}`,
+    });
     expect((await statsOf(daemon.daemon)).handlerProbes).toMatchObject([
       { nonce, delivery: { kind: "cli" } },
       { nonce: forwardedNonce, delivery: { kind: "forwarder", urlV: 1 } },
@@ -249,24 +264,12 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
 
     // A frame the daemon cannot read is refused on its click event, with the
     // frame's own facts, since the forwarder reads no answer.
-    expect(await forwarded({ urlV: 99, url: "cc-candybar://copy/x" })).toMatchObject({
-      ok: false,
-      code: "BAD_REQUEST",
-      error: "the URL handler's frame version 99 is not one this daemon speaks (1)",
-    });
-    expect(await forwarded({ urlV: 1, url: "https://example.com/" })).toMatchObject({
-      ok: false,
-      code: "BAD_REQUEST",
-      error: "expected a cc-candybar:// link, got: https://example.com/",
-    });
-    expect(await forwarded({ urlV: 1 })).toMatchObject({
-      ok: false,
-      code: "BAD_REQUEST",
-      error: "the URL handler's frame carries no url string",
-    });
+    await forwarded({ urlV: 99, url: "cc-candybar://copy/x" });
+    await forwarded({ urlV: 1, url: "https://example.com/" });
+    await forwarded({ urlV: 1 });
     const events = await loggedLines(
       env,
-      (lines) => lines.filter((l) => / click queued=/.test(l)),
+      clickEvents,
       (picked) => picked.length >= 5,
       "five click events",
     );
@@ -274,8 +277,12 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
     expect(events[1]).toMatch(
       / via=forwarder urlV=1 verb=doctor-probe .* outcome=ok/,
     );
-    expect(events[2]).toMatch(/ via=forwarder urlV=99 .* outcome=bad-request/);
-    expect(events[3]).toMatch(/ via=forwarder urlV=1 .* outcome=bad-request/);
+    expect(events[2]).toMatch(
+      / via=forwarder urlV=99 .* outcome=bad-request problems="the URL handler's frame version 99 is not one this daemon speaks \(1\)"/,
+    );
+    expect(events[3]).toMatch(
+      / via=forwarder urlV=1 .* outcome=bad-request problems="expected a cc-candybar:\/\/ link, got: https:\/\/example.com\/"/,
+    );
     expect(events[4]).toMatch(
       / via=forwarder urlV=1 .* outcome=bad-request problems="the URL handler's frame carries no url string"/,
     );
@@ -307,7 +314,7 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
     );
     expect(flat(await render(daemon, SID, projectDir))).toContain(
       squeezed(
-        "✗ URL handler — the link was delivered by `cc-candybar url-handle`, not the forwarder app",
+        "✗ URL handler — the link was delivered by a click request (`cc-candybar url-handle`), not the forwarder app",
       ),
     );
   } finally {
@@ -328,20 +335,21 @@ test("the CLI's probe reads its own link back from the daemon it was delivered t
   const daemon = startDaemon(env);
   try {
     await daemon.listen(sockPath);
-    const delivered: Array<Promise<unknown>> = [];
     const facts = await probeUrlHandler({
       ...productionHandlerProbeEdge(WORLD.launcher, WORLD),
       platform: "darwin",
-      // The stand-in for the handler app below delivers to this daemon.
+      // The stand-in for the handler app below delivers to this daemon as
+      // the app does: one frame, then hang up, reading no answer.
       sockets: { own: sockPath, handler: sockPath },
       open: (url) => {
-        delivered.push(
-          daemon.send({ kind: URL_FRAME_KIND, urlV: URL_FRAME_VERSION, url }, 5000),
-        );
+        daemon
+          .connect()
+          .end(
+            encodeFrame({ kind: URL_FRAME_KIND, urlV: URL_FRAME_VERSION, url }),
+          );
         return null;
       },
     });
-    expect(await Promise.all(delivered)).toMatchObject([{ ok: true }]);
     expect(facts).toEqual({
       kind: "arrived",
       delivery: { kind: "forwarder", urlV: URL_FRAME_VERSION },

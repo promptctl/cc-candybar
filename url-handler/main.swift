@@ -10,11 +10,12 @@
 // A handler goes stale through what it knows, and this one knows nothing a
 // release changes: not a bundle path, not a node binary, not a verb.
 //
-// [LAW:carrying-cost] No timeout, no thread, no retry. The socket is
-// non-blocking: a connect either completes at once (a unix socket with room in
-// its backlog needs no round trip) or fails, and one small frame either fits
-// the socket buffer or does not. Nothing here can wait on the daemon, so
-// nothing bounds a wait.
+// [LAW:carrying-cost] No thread, no retry. The socket is non-blocking: a
+// connect either completes at once (a unix socket with room in its backlog
+// needs no round trip) or fails. The one wait is for a frame longer than the
+// socket buffer, which lands only as the daemon reads it, and it is bounded
+// (WRITE_WAIT_MS) so a daemon that reads nothing cannot hold this app's main
+// thread, which is the thread Launch Services delivers the next click on.
 //
 // [LAW:no-silent-failure] A frame that could not be written is the one failure
 // this app can see, and it is written to the unified log under the app's
@@ -30,6 +31,11 @@ import os
 let FRAME_HEADER_BYTES = 4
 let URL_FRAME_KIND = "url"
 let URL_FRAME_VERSION = 1
+
+// How long a write waits for the daemon to make room in the socket buffer.
+// A daemon that is up reads a frame as soon as its loop turns; a bound this
+// long is only ever reached by one that is wedged.
+let WRITE_WAIT_MS: Int32 = 1000
 
 // Mirrored: src/daemon/paths.ts defaultSocketPath.
 func socketPath() -> String {
@@ -87,12 +93,26 @@ func forward(_ url: String) -> Forward {
   if connected < 0 { return .failed(errnoText("connect \(path)")) }
 
   let bytes = frame(url)
-  let written = bytes.withUnsafeBytes { write(fd, $0.baseAddress, bytes.count) }
-  if written < 0 { return .failed(errnoText("write")) }
-  if written != bytes.count {
-    return .failed("short write: \(written) of \(bytes.count) bytes")
+  return bytes.withUnsafeBytes { buffer in
+    var sent = 0
+    while sent < bytes.count {
+      let n = write(fd, buffer.baseAddress! + sent, bytes.count - sent)
+      if n >= 0 {
+        sent += n
+        continue
+      }
+      if errno != EAGAIN { return .failed(errnoText("write")) }
+      // The socket buffer is full: a frame longer than it (a long link) lands
+      // only as the daemon reads. Wait for room, bounded, and no longer.
+      var ready = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
+      let polled = poll(&ready, 1, WRITE_WAIT_MS)
+      if polled < 0 { return .failed(errnoText("poll")) }
+      if polled == 0 {
+        return .failed("the daemon read nothing for \(WRITE_WAIT_MS)ms: \(sent) of \(bytes.count) bytes sent")
+      }
+    }
+    return .delivered
   }
-  return .delivered
 }
 
 final class Handler: NSObject, NSApplicationDelegate {
@@ -102,11 +122,14 @@ final class Handler: NSObject, NSApplicationDelegate {
       switch forward(link) {
       // Notice, not info: the unified log persists notice and above, so
       // `log show` can answer "did the click reach the socket" after the fact.
+      // The link itself is private: a copy link carries the text being copied,
+      // and the unified log is readable by every admin on the machine. The
+      // daemon's own click event records the link, in the user's own log.
       // [LAW:nothing-unseen]
       case .delivered:
-        log.notice("forwarded \(link, privacy: .public)")
+        log.notice("forwarded \(link, privacy: .private)")
       case .failed(let why):
-        log.error("lost \(link, privacy: .public): \(why, privacy: .public)")
+        log.error("lost \(link, privacy: .private): \(why, privacy: .public)")
       }
     }
   }

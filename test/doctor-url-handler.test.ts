@@ -55,10 +55,10 @@ describe("urlHandler probe", () => {
     });
   });
 
-  test("a link the CLI delivered means the retired applet is still the handler", async () => {
+  test("a link a click request delivered is not the forwarder's", async () => {
     expect(verdict({ kind: "arrived", delivery: CLI })).toEqual({
       ok: false,
-      reason: `the link was delivered by \`cc-candybar url-handle\`, not the forwarder app, so the URL handler is the retired AppleScript applet — ${REINSTALL}`,
+      reason: `the link was delivered by a click request (\`cc-candybar url-handle\`), not the forwarder app — ${REINSTALL}`,
     });
   });
 
@@ -424,11 +424,11 @@ describe("the daemon's side of the round trip", () => {
     ]);
   });
 
-  test("a doctor click the CLI delivered: the row says the applet is still the handler", async () => {
+  test("a doctor click a click request delivered: the row says it was not the forwarder", async () => {
     const row = await doctorRow(link(CLI));
     expect(row.verdict).toBe("failed");
     expect(row.reason).toBe(
-      `the link was delivered by \`cc-candybar url-handle\`, not the forwarder app, so the URL handler is the retired AppleScript applet — ${REINSTALL}`,
+      `the link was delivered by a click request (\`cc-candybar url-handle\`), not the forwarder app — ${REINSTALL}`,
     );
     expect(row.logs).toEqual([
       `doctor: config=ok install=ok daemon=ok urlHandler=failed(1) links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=ok segmentData=ok sessionData=ok configTarget=search glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=ghostty@- font=- mark=- tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native/same/- daemons=1 others=- memory=phys_footprint:120/512 postMortems=0/0 data=pr:-,rateLimits:1/0/0 transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 chains=absent truecolorEnv=unset (session=s1)`,

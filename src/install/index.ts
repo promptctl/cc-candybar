@@ -364,11 +364,14 @@ function infoPlist(): string {
 // scheme is registered. [LAW:no-ambient-temporal-coupling] The quit is
 // install's: Launch Services never relaunches a running app, so without it a
 // reinstall would leave the old forwarder delivering until logout.
-function installUrlHandlerFrom(
-  sourceDist: string,
-  { host, launcher }: World,
-): void {
-  const forwarder = resolveForwarder(sourceDist);
+function installUrlHandlerFrom(sourceDist: string, world: World): void {
+  installUrlHandler(resolveForwarder(sourceDist), world);
+}
+
+// The app assembled around a forwarder binary already resolved: install
+// resolves it first, as a precondition, so a checkout with no build or a
+// package with no binary fails with nothing staged. [LAW:effects-at-boundaries]
+function installUrlHandler(forwarder: string, { host, launcher }: World): void {
   const bundle = appBundlePath(host);
   const executable = forwarderExecutable(bundle);
 
@@ -428,8 +431,9 @@ export function runInstallUrlHandler(bundle: string, world: World): void {
   // Precondition before any side effect: on a non-mac this fails with zero
   // files written, not after staging the runtime.
   ensureMacOS();
+  const forwarder = resolveForwarder(bundle);
   runStageRuntime(bundle, supportDir(world.host));
-  installUrlHandlerFrom(bundle, world);
+  installUrlHandler(forwarder, world);
 }
 
 // [LAW:single-enforcer] url-handle is a thin IPC shim: parse the URL, send
@@ -559,10 +563,14 @@ export async function runInstall(
   const argsToInstall =
     filteredArgs.length > 0 ? filteredArgs : [...DEFAULT_INSTALL_ARGS];
 
+  // Preconditions before any side effect: the forwarder must exist before
+  // the runtime is staged, so a failed install leaves nothing half done.
+  const forwarder =
+    process.platform === "darwin" ? resolveForwarder(bundle) : null;
   const staged = runStageRuntime(bundle, supportDir(world.host));
 
-  if (process.platform === "darwin") {
-    installUrlHandlerFrom(bundle, world);
+  if (forwarder !== null) {
+    installUrlHandler(forwarder, world);
   } else {
     process.stdout.write(
       "Skipping URL handler (cmd-click verbs are macOS-only).\n",
