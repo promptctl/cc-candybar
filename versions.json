@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-595",
+      "ref": "refs/pull/595/merge",
+      "sha": "290d17ca830f02043d4e247b3e18817b0f671d5c",
+      "timestamp": "2026-11-03T01:42:10.689Z",
+      "commits": [
+        {
+          "sha": "290d17ca830f02043d4e247b3e18817b0f671d5c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T18:41:18-07:00",
+          "message": "Merge 281b2f8de3c3444f52c50e096d3ca3589446919c into c63e8bcefa93b28ab53cf599d14d916dda71e551\n"
+        },
+        {
+          "sha": "281b2f8de3c3444f52c50e096d3ca3589446919c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T18:41:08-07:00",
+          "message": "fix(launch): a launch's drained pipes have one owner, one bound and a stat (candybar-testing-0x6u.yzt)\n\nA pipe a descendant holds past its launch is read by the launch's own capture\nfor its whole life: one byte count against MAX_CAPTURED_BYTES, cut past it so a\nchatty holder dies at its next write. The launcher holds every open drain,\ndestroys them when its scope closes, and meters draining/drainedBytes/drainsCut\ninto the subprocess stats. Settle drops the child's listeners, so the launch's\nclosure and output go with its result.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-594",
       "ref": "refs/pull/594/merge",
       "sha": "e705a47ff424417a9f7f049e45933331fda76dfd",
