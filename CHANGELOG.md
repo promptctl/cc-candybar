@@ -1,3 +1,10 @@
+## [1.181.1](https://github.com/promptctl/cc-candybar/compare/v1.181.0...v1.181.1) (2026-11-03)
+
+### Bug Fixes
+
+* **launch:** a launch's input outlives its direct child for the descendants that read it (candybar-testing-0x6u.3zo) ([#598](https://github.com/promptctl/cc-candybar/issues/598)) ([100e4fe](https://github.com/promptctl/cc-candybar/commit/100e4fe743b7d0f668a46455fd011db361031ccb))
+* **test:** the compile-retains-nothing heap check reads its snapshot a macrotask after the draw (candybar-testing-0x6u.ed2) ([#599](https://github.com/promptctl/cc-candybar/issues/599)) ([c72e51e](https://github.com/promptctl/cc-candybar/commit/c72e51e1f062fa43bd02971e664d42e7d701432a))
+
 ## [1.181.0](https://github.com/promptctl/cc-candybar/compare/v1.180.10...v1.181.0) (2026-11-03)
 
 ### Features
