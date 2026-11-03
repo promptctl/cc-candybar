@@ -1440,7 +1440,7 @@ describe("a feed draws when its bar next changes", () => {
 // saying so, with no failure branch in the lane.
 test("a frame whose render threw is the failure's Frame, a still bar in the error glyph's words", () => {
   const parts = {
-    clock: { now: () => 0 },
+    clock: { monotonic: () => 0 },
     renderCache: {
       holdView: () => null,
       openFailure: () => ({ error: new Error("the view would not open") }),

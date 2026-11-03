@@ -108,7 +108,7 @@ export class CacheExpiryProvider {
 
   constructor(
     // [LAW:effects-at-boundaries] Times each read of the tail.
-    private readonly clock: Pick<Timekeeper, "now">,
+    private readonly clock: Pick<Timekeeper, "monotonic">,
     logger: DaemonLogger = quietLogger,
     ledger: RefreshLedger = new RefreshLedger(logger),
   ) {
@@ -159,13 +159,13 @@ export class CacheExpiryProvider {
     transcriptPath: string,
     stamp: string,
   ): Promise<Outcome<number>> {
-    const startedAt = this.clock.now();
+    const startedAt = this.clock.monotonic();
     const outcome = await cacheExpiresAt(transcriptPath);
     this.refreshes.recorded(
       `sid=${valueOf(sessionId)} stamp=${valueOf(stamp)}`,
       "request",
       outcome,
-      this.clock.now() - startedAt,
+      this.clock.monotonic() - startedAt,
     );
     return outcome;
   }

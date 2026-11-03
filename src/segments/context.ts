@@ -58,7 +58,7 @@ export class ContextProvider {
   private readonly fold: TranscriptFold<ContextState>;
 
   constructor(opts: {
-    readonly clock: Pick<Timekeeper, "now">;
+    readonly clock: Pick<Timekeeper, "now" | "monotonic">;
     readonly logger?: DaemonLogger;
     readonly ledger?: RefreshLedger;
   }) {

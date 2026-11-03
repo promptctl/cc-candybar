@@ -34,7 +34,7 @@ export class AutoCompactProvider {
 
   constructor(
     // [LAW:effects-at-boundaries] Times each read of the settings file.
-    private readonly clock: Pick<Timekeeper, "now">,
+    private readonly clock: Pick<Timekeeper, "monotonic">,
     logger: DaemonLogger = quietLogger,
     ledger: RefreshLedger = new RefreshLedger(logger),
   ) {
@@ -54,13 +54,13 @@ export class AutoCompactProvider {
       this.known.touch(settingsPath);
       return known.outcome;
     }
-    const startedAt = this.clock.now();
+    const startedAt = this.clock.monotonic();
     const outcome = readAutoCompactWindow(settingsPath);
     this.refreshes.recorded(
       `path=${valueOf(settingsPath)} stamp=${valueOf(stamp)}`,
       "request",
       outcome,
-      this.clock.now() - startedAt,
+      this.clock.monotonic() - startedAt,
     );
     this.known.set(settingsPath, { stamp, outcome });
     return outcome;

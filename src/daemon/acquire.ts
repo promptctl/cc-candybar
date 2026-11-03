@@ -82,7 +82,7 @@ export async function obtainDaemon(
   }
 
   // No daemon yet. Try to win the spawn-lock so we are the one to bring it up.
-  const contentionStart = clock.now();
+  const contentionStart = clock.monotonic();
   while (clock.now() < deadline) {
     const lock = tryAcquireSpawnLock(host, clock);
     if (lock.kind === "error") {
@@ -125,7 +125,7 @@ export async function obtainDaemon(
     // bypass the lock and let bind() inside the daemon arbitrate duplicates.
     // Same shape as a fresh spawn — caller pays one extra Node startup cost
     // in the worst case, which is the right trade for availability.
-    if (clock.now() - contentionStart > lockFallbackMs) {
+    if (clock.monotonic() - contentionStart > lockFallbackMs) {
       return await spawnAndWaitForReady(
         host,
         clock,

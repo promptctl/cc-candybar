@@ -332,12 +332,12 @@ export class GitDataProvider {
   private readonly watchers: WatcherRegistry;
   private readonly ownsWatchers: boolean;
   private readonly logger: GitProviderLogger;
-  private readonly clock: Pick<Timekeeper, "now" | "after">;
+  private readonly clock: Pick<Timekeeper, "now" | "monotonic" | "after">;
 
   constructor(opts: {
     // [LAW:effects-at-boundaries] The daemon's clock: every period, and the
     // times the reads are stamped and timed with.
-    clock: Pick<Timekeeper, "now" | "after">;
+    clock: Pick<Timekeeper, "now" | "monotonic" | "after">;
     periodMs?: number;
     maxRepos?: number;
     inner: GitService;
@@ -699,7 +699,7 @@ export class GitDataProvider {
   // another branch's PR. Each pass that lands writes one refresh event.
   private async pass(state: RepoState): Promise<void> {
     if (this.repos.get(state.root) !== state) return;
-    const startedAt = this.clock.now();
+    const startedAt = this.clock.monotonic();
     const asked = [...state.asked];
     state.asked.clear();
     const followed = this.followWatch(state.root, state.watch);
@@ -755,7 +755,7 @@ export class GitDataProvider {
       `${state.root} asked=${asked.join(",") || "-"} values=${values.length} pr=${prMove} watch=${followed.move}`,
       triggerOf(asked),
       failures.size === 0 ? ok(null) : failed([...failures].join("; ")),
-      this.clock.now() - startedAt,
+      this.clock.monotonic() - startedAt,
     );
   }
 
@@ -832,7 +832,7 @@ export class GitDataProvider {
     const key = pr.key;
     if (pr.inFlight?.key === key) return pr.inFlight.done;
     const remote = pr.remote;
-    const startedAt = this.clock.now();
+    const startedAt = this.clock.monotonic();
     const lookup: Promise<Outcome<PullRequest>> =
       remote.kind === "ok"
         ? this.inner
@@ -846,7 +846,7 @@ export class GitDataProvider {
         `${state.root} key=${logfmtValue(key)}`,
         by,
         outcome,
-        this.clock.now() - startedAt,
+        this.clock.monotonic() - startedAt,
       );
       // Kept under its own key whether or not the PR has moved on since.
       const at = this.clock.now();

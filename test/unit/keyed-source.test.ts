@@ -1,9 +1,10 @@
 import { RefreshLedger } from "../../src/utils/refresh-ledger";
-import { KeyedSource } from "../../src/utils/keyed-source";
+import { KeyedSource, type KeyedSourceSpec } from "../../src/utils/keyed-source";
 import { Holds } from "../../src/utils/holds";
 import { failed, ok, type Outcome } from "../../src/utils/outcome";
 import { laneOutcome } from "../../src/utils/reading";
 import { systemTimekeeper } from "../../src/time";
+import { heldClock } from "../helpers/held-clock";
 
 // [LAW:behavior-not-structure] The contract of a keyed source, through its
 // read, its changes and its supersede alone: a read takes the stored value
@@ -35,7 +36,11 @@ const EVERY = { okMs: 1_000, failedMs: 100 };
 
 function sourceOf(
   read: (key: string) => Promise<Outcome<string>>,
-  opts: { maxEntries?: number; lines?: Line[] } = {},
+  opts: {
+    maxEntries?: number;
+    lines?: Line[];
+    clock?: KeyedSourceSpec<string, string>["clock"];
+  } = {},
 ) {
   return new KeyedSource<string, string>({
     name: "fake",
@@ -47,7 +52,7 @@ function sourceOf(
     maxEntries: opts.maxEntries ?? 64,
     logger: (level, msg) => opts.lines?.push({ level, msg }),
     ledger: new RefreshLedger((level, msg) => opts.lines?.push({ level, msg })),
-    clock: systemTimekeeper,
+    clock: opts.clock ?? systemTimekeeper,
   });
 }
 
@@ -501,5 +506,24 @@ describe("KeyedSource", () => {
     expect(f.calls).toHaveLength(0);
     expect(source.stats()).toMatchObject({ entries: 0, held: 0 });
     expect(jest.getTimerCount()).toBe(0);
+  });
+});
+
+describe("KeyedSource's read time", () => {
+  test("is the monotonic span, so a wall step during the read does not change it", async () => {
+    const held = heldClock(new Date("2026-01-01T00:00:00Z"));
+    let step = 0;
+    const clock = { ...held, now: () => held.now() + step };
+    const lines: Line[] = [];
+    const f = fakeRead();
+    source = sourceOf(f.read, { lines, clock });
+    const read = laneOutcome(source.declare(new Holds(), "a"));
+    held.burn(250);
+    step = -3_600_000;
+    f.answer(0, ok("A"));
+    await read;
+    expect(lines.map((l) => l.msg)).toContainEqual(
+      expect.stringMatching(/ by=first outcome=ok took=250ms$/),
+    );
   });
 });

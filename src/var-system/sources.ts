@@ -1070,14 +1070,14 @@ export class SourceRegistry {
     // rejection is a bug and stays unhandled — loud.
     const trigger = this.reads.run(name, () => {
       const asked = this.askedBy.get(name) ?? by;
-      const startedAt = this.store.clock.now();
+      const startedAt = this.store.clock.monotonic();
       return reader.read().then(
         (read) =>
           refreshes.recorded(
             `where=${valueOf(reader.where)}`,
             asked,
             publish(read),
-            this.store.clock.now() - startedAt,
+            this.store.clock.monotonic() - startedAt,
           ),
         (err: unknown) => {
           if (err !== this.abort.signal.reason) throw err;

@@ -139,7 +139,7 @@ export function renderFrame(
   at: Instant,
 ): FeedFrame | null {
   const { clock, frameFeeds } = parts;
-  const started = clock.now();
+  const started = clock.monotonic();
   const facts: RequestFacts = [];
   try {
     using setup = setUpFrame(parts, sessionId, at, facts);
@@ -172,7 +172,7 @@ export function renderFrame(
       "render",
       facts,
       outcome,
-      clock.now() - started,
+      Math.round(clock.monotonic() - started),
     );
     const failed = renderFailed(error);
     return {
