@@ -14,7 +14,10 @@ export interface LaunchStatsHandle {
   onRefused(category: LaunchCategory): void;
   // A pipe that outlived its launch, held by a process that left the group:
   // opened when the launch settles, closed when the pipe does — after `bytes`
-  // read and dropped, `cut` when the launcher ended it at the bound.
+  // read and dropped after the launch, and how it ended: on its own, cut by
+  // the launcher at the bound, or on a read error.
   onDrainOpen(category: LaunchCategory): void;
-  onDrainClose(category: LaunchCategory, bytes: number, cut: boolean): void;
+  onDrainClose(category: LaunchCategory, bytes: number, end: DrainEnd): void;
 }
+
+export type DrainEnd = "closed" | "cut" | "errored";

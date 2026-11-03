@@ -614,22 +614,33 @@ function capture(stream: Readable | null, full: () => void): Captured {
   const decoder = new StringDecoder("utf8");
   let text = "";
   let bytes = 0;
-  let taken = false;
+  // What a drain reads after settle, against a bound of its own: a launch that
+  // used its whole bound leaves a surviving descendant the same room as any.
+  let dropped = 0;
+  // Released at settle, so a drain holds nothing of the launch.
+  let onFull: (() => void) | null = full;
+  let cut = false;
   stream?.on("data", (chunk: Buffer) => {
-    if (!taken)
-      text += decoder.write(chunk.subarray(0, MAX_CAPTURED_BYTES - bytes));
+    if (onFull === null) {
+      dropped += chunk.length;
+      if (dropped <= MAX_CAPTURED_BYTES) return;
+      // [LAW:no-silent-failure] Past the bound after settle, the holder would
+      // cost the launcher CPU for its whole life, and it has left the group,
+      // so no signal reaches it: its pipe is cut, so its writes fail from
+      // here on, and the drain's close says so.
+      cut = true;
+      stream.destroy();
+      return;
+    }
+    const room = Math.max(0, MAX_CAPTURED_BYTES - bytes);
+    text += decoder.write(chunk.subarray(0, room));
     bytes += chunk.length;
-    if (bytes <= MAX_CAPTURED_BYTES) return;
-    // [LAW:no-silent-failure] Past the bound after settle, the holder would
-    // cost the launcher CPU for its whole life: its pipe is cut, so its next
-    // write ends it, and the drain's close says so.
-    if (taken) stream.destroy();
-    else full();
+    if (bytes > MAX_CAPTURED_BYTES) onFull();
   });
   return {
     take: () => {
-      if (taken) return "";
-      taken = true;
+      if (onFull === null) return "";
+      onFull = null;
       const whole = text + decoder.end();
       text = "";
       return whole;
@@ -640,10 +651,25 @@ function capture(stream: Readable | null, full: () => void): Captured {
     // metered in one place while it does.
     drain: (state, category) => {
       if (stream === null || stream.destroyed || stream.readableEnded) return;
+      // Nothing reads a closed launcher's drains, so their fds go with it.
+      if (state.scope.signal.aborted) {
+        stream.destroy();
+        return;
+      }
       const { stats } = state.scope;
+      let errored = false;
+      // [LAW:no-silent-failure] A held pipe's read error ends the drain and
+      // is counted at its close, never thrown into the launcher's loop.
+      stream.on("error", () => {
+        errored = true;
+      });
       stream.once("close", () => {
         state.drains.delete(stream);
-        stats?.onDrainClose(category, bytes, bytes > MAX_CAPTURED_BYTES);
+        stats?.onDrainClose(
+          category,
+          dropped,
+          cut ? "cut" : errored ? "errored" : "closed",
+        );
       });
       (stream as Socket).unref();
       state.drains.add(stream);

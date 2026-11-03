@@ -8,7 +8,7 @@ import {
   type LaunchCategory,
   type Launcher,
 } from "../../src/proc/launch";
-import type { LaunchStatsHandle } from "../../src/proc/stats-handle";
+import type { DrainEnd, LaunchStatsHandle } from "../../src/proc/stats-handle";
 import { until } from "../helpers/until";
 import { systemTimekeeper } from "../../src/time";
 
@@ -24,7 +24,7 @@ const FORK_HOLDER =
 interface DrainClose {
   category: LaunchCategory;
   bytes: number;
-  cut: boolean;
+  end: DrainEnd;
 }
 
 let ending: AbortController;
@@ -40,8 +40,8 @@ beforeEach(() => {
     onEnd: () => {},
     onRefused: () => {},
     onDrainOpen: (category) => drainsOpened.push(category),
-    onDrainClose: (category, bytes, cut) =>
-      drainsClosed.push({ category, bytes, cut }),
+    onDrainClose: (category, bytes, end) =>
+      drainsClosed.push({ category, bytes, end }),
   };
   launcher = createLauncher(
     { inherited: process.env, signal: ending.signal, stats },
@@ -248,8 +248,8 @@ describe("the pipes a descendant holds past its launch", () => {
     await until(() => drainsClosed.length === 2, "the holder's end");
     expect(drainsClosed).toEqual(
       expect.arrayContaining([
-        { category: "user-shell", bytes: 5, cut: false },
-        { category: "user-shell", bytes: 0, cut: false },
+        { category: "user-shell", bytes: 5, end: "closed" },
+        { category: "user-shell", bytes: 0, end: "closed" },
       ]),
     );
   });
@@ -262,12 +262,38 @@ describe("the pipes a descendant holds past its launch", () => {
     );
     expect(r.ok).toBe(true);
     await until(
-      () => drainsClosed.some((d) => d.cut),
+      () => drainsClosed.some((d) => d.end === "cut"),
       "the chatty holder's pipe cut",
     );
-    const cut = drainsClosed.find((d) => d.cut);
+    const cut = drainsClosed.find((d) => d.end === "cut");
     expect(cut?.bytes).toBeGreaterThan(MAX_CAPTURED_BYTES);
     // The holder died writing to the cut pipe, so its stderr closed too.
     await until(() => drainsClosed.length === 2, "the holder's end");
+  });
+
+  it("count only what the holder writes after the launch, against a bound of their own", async () => {
+    const r = await launch(
+      python(
+        `${SET}os.write(1,b'x'*(${MAX_CAPTURED_BYTES}-100))\nif os.fork()==0:\n  os.setsid()\n  time.sleep(0.3)\n  os.write(1,b'y'*4096)\n  os._exit(0)\nos._exit(0)\n`,
+      ),
+    );
+    expect(r).toMatchObject({ ok: true });
+    await until(() => drainsClosed.length === 2, "the holder's end");
+    expect(drainsClosed).toEqual(
+      expect.arrayContaining([
+        { category: "user-shell", bytes: 4096, end: "closed" },
+        { category: "user-shell", bytes: 0, end: "closed" },
+      ]),
+    );
+  });
+
+  it("are destroyed on the spot when the launcher closed while the launch ran", async () => {
+    const pending = launch(
+      python(`${SET}${FORK_HOLDER}time.sleep(0.3)\nos._exit(0)\n`),
+    );
+    await new Promise((r) => setTimeout(r, 100));
+    ending.abort();
+    await pending;
+    expect(drainsOpened).toEqual([]);
   });
 });

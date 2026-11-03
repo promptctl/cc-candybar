@@ -164,10 +164,11 @@ export interface StatsSnapshot {
     byCategory: Record<string, number>;
     refused: Record<string, number>;
     // Pipes held open past their launch, the bytes read from them and dropped,
-    // and how many the launcher cut at the bound.
+    // how many the launcher cut at the bound, and how many ended on a read error.
     draining: number;
     drainedBytes: number;
     drainsCut: number;
+    drainsErrored: number;
     p50DurationMs: Record<string, number>;
     p99DurationMs: Record<string, number>;
   };
@@ -227,6 +228,7 @@ export class RuntimeStats {
   subprocessDraining = 0;
   subprocessDrainedBytes = 0;
   subprocessDrainsCut = 0;
+  subprocessDrainsErrored = 0;
   // Launches asked for that started nothing: the launcher had closed, the
   // category's interval had not passed, or the caller had aborted first.
   private readonly subprocessRefusals = new Map<LaunchCategory, number>();
@@ -271,10 +273,11 @@ export class RuntimeStats {
     onDrainOpen: () => {
       this.subprocessDraining++;
     },
-    onDrainClose: (_category, bytes, cut) => {
+    onDrainClose: (_category, bytes, end) => {
       this.subprocessDraining--;
       this.subprocessDrainedBytes += bytes;
-      if (cut) this.subprocessDrainsCut++;
+      if (end === "cut") this.subprocessDrainsCut++;
+      if (end === "errored") this.subprocessDrainsErrored++;
     },
   };
 
@@ -347,6 +350,7 @@ export class RuntimeStats {
       draining: this.subprocessDraining,
       drainedBytes: this.subprocessDrainedBytes,
       drainsCut: this.subprocessDrainsCut,
+      drainsErrored: this.subprocessDrainsErrored,
       p50DurationMs: p50,
       p99DurationMs: p99,
     };
