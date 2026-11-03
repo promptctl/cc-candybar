@@ -276,6 +276,10 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(`  total         ${s.subprocesses.total}`);
   lines.push(`  inFlight      ${s.subprocesses.inFlight}`);
   lines.push(`  lastMinute    ${s.subprocesses.lastMinute}`);
+  lines.push(
+    `  draining      ${s.subprocesses.draining} (${s.subprocesses.drainedBytes} bytes dropped, ${s.subprocesses.drainsCut} cut)`,
+  );
+  lines.push(`  pipeErrors    ${s.subprocesses.pipeErrors}`);
   // Snapshot already includes only executed categories (stats.ts:
   // snapshotSubprocesses keeps byCategory and the histograms symmetric).
   const activeCats = Object.entries(s.subprocesses.byCategory);

@@ -1,8 +1,14 @@
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { createLauncher, type Launcher } from "../../src/proc/launch";
+import {
+  createLauncher,
+  MAX_CAPTURED_BYTES,
+  type LaunchCategory,
+  type Launcher,
+} from "../../src/proc/launch";
+import type { DrainEnd, LaunchStatsHandle } from "../../src/proc/stats-handle";
 import { until } from "../helpers/until";
 import { systemTimekeeper } from "../../src/time";
 
@@ -15,11 +21,39 @@ const SET = "import os,sys,time\n";
 const FORK_HOLDER =
   "if os.fork()==0:\n  os.setsid()\n  time.sleep(3)\n  os._exit(0)\n";
 
+interface DrainClose {
+  category: LaunchCategory;
+  // What every drain had read by this close.
+  bytes: number;
+  end: DrainEnd;
+}
+let drainRead: number;
+
 let ending: AbortController;
 let launcher: Launcher;
+let drainsOpened: LaunchCategory[];
+let drainsClosed: DrainClose[];
 beforeEach(() => {
   ending = new AbortController();
-  launcher = createLauncher({ inherited: process.env,  signal: ending.signal }, systemTimekeeper);
+  drainsOpened = [];
+  drainsClosed = [];
+  drainRead = 0;
+  const stats: LaunchStatsHandle = {
+    onStart: () => {},
+    onEnd: () => {},
+    onRefused: () => {},
+    onDrainOpen: (category) => drainsOpened.push(category),
+    onDrainRead: (_category, bytes) => {
+      drainRead += bytes;
+    },
+    onDrainClose: (category, end) =>
+      drainsClosed.push({ category, bytes: drainRead, end }),
+    onPipeError: () => {},
+  };
+  launcher = createLauncher(
+    { inherited: process.env, signal: ending.signal, stats },
+    systemTimekeeper,
+  );
 });
 afterEach(() => ending.abort());
 
@@ -208,3 +242,71 @@ it("a child that ends alone loses nothing it wrote", async () => {
     expect(r.stdout.length).toBe(1048576);
   }
 }, 60_000);
+
+describe("the pipes a descendant holds past its launch", () => {
+  it("are drained in the open and closed when the holder ends", async () => {
+    const r = await launch(
+      python(
+        `${SET}if os.fork()==0:\n  os.setsid()\n  time.sleep(0.5)\n  print('late',flush=True)\n  os._exit(0)\nos._exit(0)\n`,
+      ),
+    );
+    expect(r).toMatchObject({ ok: true, stdout: "" });
+    expect(drainsOpened).toEqual(["user-shell", "user-shell"]);
+    await until(() => drainsClosed.length === 2, "the holder's end");
+    expect(drainsClosed.map((d) => d.end)).toEqual(["closed", "closed"]);
+    expect(drainRead).toBe(5);
+  });
+
+  it("are cut at the bound, so a holder that writes without end dies", async () => {
+    const r = await launch(
+      python(
+        `${SET}if os.fork()==0:\n  os.setsid()\n  time.sleep(0.3)\n  while True: os.write(1,b'x'*65536)\nos._exit(0)\n`,
+      ),
+    );
+    expect(r.ok).toBe(true);
+    await until(
+      () => drainsClosed.some((d) => d.end === "cut"),
+      "the chatty holder's pipe cut",
+    );
+    const cut = drainsClosed.find((d) => d.end === "cut");
+    expect(cut?.bytes).toBeGreaterThan(MAX_CAPTURED_BYTES);
+    // The holder died writing to the cut pipe, so its stderr closed too.
+    await until(() => drainsClosed.length === 2, "the holder's end");
+  });
+
+  it("count only what the holder writes after the launch, against a bound of their own", async () => {
+    const r = await launch(
+      python(
+        `${SET}os.write(1,b'x'*(${MAX_CAPTURED_BYTES}-100))\nif os.fork()==0:\n  os.setsid()\n  time.sleep(0.3)\n  os.write(1,b'y'*4096)\n  os._exit(0)\nos._exit(0)\n`,
+      ),
+    );
+    expect(r).toMatchObject({ ok: true });
+    await until(() => drainsClosed.length === 2, "the holder's end");
+    expect(drainsClosed.map((d) => d.end)).toEqual(["closed", "closed"]);
+  });
+
+  it("are destroyed on the spot when the launcher closed while the launch ran", async () => {
+    // The holder writes without end once the launch is over: only a destroyed
+    // pipe ends it, since an open one nobody reads blocks it for good.
+    const pidFile = join(tmpdir(), `drain-abort-${process.pid}`);
+    const pending = launch(
+      python(
+        `${SET}if os.fork()==0:\n  os.setsid()\n  open(${JSON.stringify(pidFile)},'w').write(str(os.getpid()))\n  time.sleep(0.5)\n  while True: os.write(1,b'x'*65536)\ntime.sleep(0.3)\nos._exit(0)\n`,
+      ),
+    );
+    await until(() => existsSync(pidFile), "the holder's start");
+    ending.abort();
+    await pending;
+    expect(drainsOpened).toEqual([]);
+    const pid = Number(readFileSync(pidFile, "utf8"));
+    rmSync(pidFile);
+    await until(() => {
+      try {
+        process.kill(pid, 0);
+        return false;
+      } catch {
+        return true;
+      }
+    }, "the holder's end at its cut pipe");
+  });
+});

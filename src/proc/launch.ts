@@ -52,7 +52,7 @@ import { types } from "node:util";
 import type { ChildProcess, StdioOptions } from "node:child_process";
 import type { Timekeeper } from "../time";
 
-import type { LaunchStatsHandle } from "./stats-handle";
+import type { DrainEnd, LaunchStatsHandle } from "./stats-handle";
 
 // [LAW:no-silent-failure] A spawn whose `cwd` is gone fails with the SAME
 // errno as a missing binary — Node words it `spawn /bin/sh ENOENT`, blaming
@@ -371,6 +371,9 @@ interface LaunchState {
   // [LAW:no-silent-failure] Launches the OS would not let this launcher end,
   // while their children live: a result was delivered, and they still run.
   readonly unreaped: Map<ChildProcess, LaunchCategory>;
+  // [LAW:single-enforcer] Pipes that outlived their launch, while they stay
+  // open: the one place that holds, bounds and meters them.
+  readonly drains: Set<Readable>;
 }
 
 // [LAW:no-ambient-temporal-coupling] `ending` is the one record of whether what
@@ -593,29 +596,84 @@ function leaderRefuses(pid: number): boolean {
   }
 }
 
-// Decodes a stream until the returned read, at settle, which flushes and ends
-// the capture: later output is drained unread and the text is released, whatever
-// outlives the launch. An owned decoder, not setEncoding: a launch can end before
-// EOF, and only this one can be flushed then, so a character cut short still
-// shows as U+FFFD. It keeps at most MAX_CAPTURED_BYTES: past that it reads and
-// drops, and says `full` each time, so the pipe still drains while the launch
-// ends the child.
-function capture(stream: Readable | null, full: () => void): () => string {
+// [LAW:single-enforcer] One reader per stream for the stream's whole life, and
+// one count of its bytes against MAX_CAPTURED_BYTES. While the launch runs it
+// decodes, keeping at most the bound and saying `full` past it, so the pipe
+// still drains while the launch ends the child. An owned decoder, not
+// setEncoding: a launch can end before EOF, and only this one can be flushed
+// then, so a character cut short still shows as U+FFFD. `take`, at settle,
+// flushes and releases the text; what the stream carries after it is read and
+// dropped.
+interface Captured {
+  take(): string;
+  // Hands a stream still open after settle to the launcher's drains.
+  drain(): void;
+}
+
+function capture(
+  state: LaunchState,
+  category: LaunchCategory,
+  stream: Readable | null,
+  full: () => void,
+): Captured {
+  const { stats } = state.scope;
   const decoder = new StringDecoder("utf8");
   let text = "";
   let bytes = 0;
-  const read = (chunk: Buffer) => {
-    const kept = chunk.subarray(0, MAX_CAPTURED_BYTES - bytes);
-    bytes += kept.length;
-    text += decoder.write(kept);
-    if (kept.length < chunk.length) full();
-  };
-  stream?.on("data", read);
-  return () => {
-    stream?.off("data", read);
-    const whole = text + decoder.end();
-    text = "";
-    return whole;
+  // What a drain reads after settle, against a bound of its own: a launch that
+  // used its whole bound leaves a surviving descendant the same room as any.
+  let dropped = 0;
+  // Released at settle, so a drain holds nothing of the launch's result.
+  let onFull: (() => void) | null = full;
+  let end: DrainEnd = "closed";
+  // [LAW:no-silent-failure] A pipe's read error, before settle or after, is
+  // counted where it happens, never thrown into the launcher's loop.
+  stream?.on("error", () => stats?.onPipeError(category));
+  stream?.on("data", (chunk: Buffer) => {
+    if (onFull === null) {
+      dropped += chunk.length;
+      stats?.onDrainRead(category, chunk.length);
+      if (dropped <= MAX_CAPTURED_BYTES) return;
+      // [LAW:no-silent-failure] Past the bound after settle, the holder would
+      // cost the launcher CPU for its whole life, and the launcher cannot end
+      // it (it left the group, or refused the group's signal): its pipe is
+      // cut, so its writes fail from here on, and the drain's close says so.
+      end = "cut";
+      stream.destroy();
+      return;
+    }
+    const room = Math.max(0, MAX_CAPTURED_BYTES - bytes);
+    text += decoder.write(chunk.subarray(0, room));
+    bytes += chunk.length;
+    if (bytes > MAX_CAPTURED_BYTES) onFull();
+  });
+  return {
+    take: () => {
+      if (onFull === null) return "";
+      onFull = null;
+      const whole = text + decoder.end();
+      text = "";
+      return whole;
+    },
+    // Whatever outlives the launch — a refused child, a descendant that left
+    // the group — keeps its pipes: a destroyed one would kill it with SIGPIPE
+    // at its next write. So the pipe stays open, unref'd, and is held and
+    // metered in one place while it does.
+    drain: () => {
+      if (stream === null || stream.destroyed || stream.readableEnded) return;
+      // Nothing reads a closed launcher's drains, so their fds go with it.
+      if (state.scope.signal.aborted) {
+        stream.destroy();
+        return;
+      }
+      stream.once("close", () => {
+        state.drains.delete(stream);
+        stats?.onDrainClose(category, end);
+      });
+      (stream as Socket).unref();
+      state.drains.add(stream);
+      stats?.onDrainOpen(category);
+    },
   };
 }
 
@@ -658,9 +716,9 @@ async function launchWaited(
     const exited = new Promise((end) => child.once("exit", end));
 
     const full = () => terminate("output-limit");
-    const stdout = capture(child.stdout, full);
-    const stderr = capture(child.stderr, full);
-    const output = () => ({ stdout: stdout(), stderr: stderr() });
+    const stdout = capture(state, opts.category, child.stdout, full);
+    const stderr = capture(state, opts.category, child.stderr, full);
+    const output = () => ({ stdout: stdout.take(), stderr: stderr.take() });
     let settled = false;
     // What clears each timer the launch has armed.
     let timer: (() => void) | null = null;
@@ -688,12 +746,12 @@ async function launchWaited(
       unlisten();
       if (group !== undefined) unguard(state, group);
       stats?.onEnd(opts.category, clock.now() - t0);
-      // Whatever outlives the launch — a refused child, a descendant that left
-      // the group — keeps its pipes: a destroyed one would kill it with SIGPIPE
-      // at its next write, for as long as the launcher lives to read them.
-      for (const pipe of [child.stdout, child.stderr]) {
-        (pipe as Socket | null)?.unref();
-      }
+      // The launch's scope goes once its child has exited: what still reads
+      // the child's pipes then is a drain, which holds nothing of the launch.
+      child.off("close", conclude);
+      child.off("error", onError);
+      stdout.drain();
+      stderr.drain();
       deliver();
     };
     const settle = (r: LaunchResult) => finish(() => resolve(r));
@@ -779,7 +837,7 @@ async function launchWaited(
       }
     };
 
-    child.on("error", (err) => {
+    const onError = (err: Error) => {
       settle({
         ok: false,
         reason: "spawn-error",
@@ -788,7 +846,8 @@ async function launchWaited(
         signal: null,
         error: spawnErrorText(err, opts.cwd),
       });
-    });
+    };
+    child.on("error", onError);
 
     const conclude = (code: number | null, signal: NodeJS.Signals | null) => {
       // [LAW:types-are-the-program] We resolve here, on the *actual* exit —
@@ -1326,11 +1385,14 @@ function launcherWithState(
     fault: null,
     ending: new Set(),
     unreaped: new Map(),
+    drains: new Set(),
   };
   state.scope.signal.addEventListener(
     "abort",
     () => {
       state.inFlight.forEach((end) => end());
+      // Nothing reads a closed launcher's drains, so their fds go with it.
+      state.drains.forEach((pipe) => pipe.destroy());
       endLifeline(state);
     },
     { once: true },

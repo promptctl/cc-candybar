@@ -163,6 +163,13 @@ export interface StatsSnapshot {
     lastMinute: number;
     byCategory: Record<string, number>;
     refused: Record<string, number>;
+    // Pipes held open past their launch, the bytes read from them and dropped,
+    // how many the launcher cut at the bound, and the launched pipes that
+    // failed to read.
+    draining: number;
+    drainedBytes: number;
+    drainsCut: number;
+    pipeErrors: number;
     p50DurationMs: Record<string, number>;
     p99DurationMs: Record<string, number>;
   };
@@ -219,6 +226,10 @@ export class RuntimeStats {
   // function of that data, not of which call site fired.
   subprocessTotal = 0;
   subprocessInFlight = 0;
+  subprocessDraining = 0;
+  subprocessDrainedBytes = 0;
+  subprocessDrainsCut = 0;
+  subprocessPipeErrors = 0;
   // Launches asked for that started nothing: the launcher had closed, the
   // category's interval had not passed, or the caller had aborted first.
   private readonly subprocessRefusals = new Map<LaunchCategory, number>();
@@ -259,6 +270,19 @@ export class RuntimeStats {
         category,
         (this.subprocessRefusals.get(category) ?? 0) + 1,
       );
+    },
+    onDrainOpen: () => {
+      this.subprocessDraining++;
+    },
+    onDrainRead: (_category, bytes) => {
+      this.subprocessDrainedBytes += bytes;
+    },
+    onDrainClose: (_category, end) => {
+      this.subprocessDraining--;
+      if (end === "cut") this.subprocessDrainsCut++;
+    },
+    onPipeError: () => {
+      this.subprocessPipeErrors++;
     },
   };
 
@@ -328,6 +352,10 @@ export class RuntimeStats {
       lastMinute,
       byCategory,
       refused: Object.fromEntries(this.subprocessRefused),
+      draining: this.subprocessDraining,
+      drainedBytes: this.subprocessDrainedBytes,
+      drainsCut: this.subprocessDrainsCut,
+      pipeErrors: this.subprocessPipeErrors,
       p50DurationMs: p50,
       p99DurationMs: p99,
     };

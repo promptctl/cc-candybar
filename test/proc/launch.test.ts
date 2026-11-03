@@ -33,6 +33,10 @@ function makeSpyHandle(): {
       onStart: (c) => starts.push(c),
       onEnd: (c, d) => ends.push({ category: c, durationMs: d }),
       onRefused: (c) => refused.push(c),
+      onDrainOpen: () => {},
+      onDrainClose: () => {},
+      onDrainRead: () => {},
+      onPipeError: () => {},
     },
     starts,
     ends,
@@ -156,6 +160,24 @@ describe("launch (async)", () => {
       }, "the endless writer's end");
     });
   });
+
+  it("keeps no byte past the bound from what a child writes before its end lands", async () => {
+    // The child ignores SIGTERM, so chunks past the first overflow keep coming
+    // through the kill grace.
+    const r = await launch({
+      bin: process.execPath,
+      args: [
+        "-e",
+        `process.on("SIGTERM", () => {});` +
+          `process.stdout.write(Buffer.alloc(${MAX_CAPTURED_BYTES} - 10, 97));` +
+          `process.stdout.write(Buffer.alloc(20, 97));` +
+          `setInterval(() => process.stdout.write(Buffer.alloc(65536, 98)), 0);`,
+      ],
+      category: "user-shell",
+    });
+    expect(r).toMatchObject({ ok: false, reason: "output-limit" });
+    expect(r.stdout).toBe("a".repeat(MAX_CAPTURED_BYTES));
+  }, 30_000);
 
   it("keeps a child whose output is exactly the bound ok, and ends one that exits past it", async () => {
     const write = (bytes: number) => ({
