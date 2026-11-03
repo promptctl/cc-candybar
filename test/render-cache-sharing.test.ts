@@ -417,18 +417,10 @@ test("a compile keeps nothing of a render once it returns", async () => {
   // store is one this reader could have failed to give, whatever happens to
   // the class's name. The drawn store's result is dropped here, so a second
   // path is a holder the draw left behind, printed from the heap's roots.
-  // The snapshot is read a macrotask after
-  // the draw, not inside it: a handle a native call made while the draw ran
-  // lives as long as the scope the draw's macrotask runs in, and the heap shows
-  // it as a `(Handle scope)` root reaching a closure's context and the store
-  // with it. That root is gone once the macrotask ends and says nothing about
-  // what the compile keeps, so a snapshot in the draw's own macrotask fails
-  // on whether such a handle was made.
   heldStores.push(new ProbeStore(systemTimekeeper));
   try {
     drawAlone(config, compiled);
-    await new Promise((resolve) => setImmediate(resolve));
-    expect(retainerPathsTo("ProbeStore")).toHaveLength(1);
+    expect(await retainerPathsTo("ProbeStore")).toHaveLength(1);
   } finally {
     heldStores.length = 0;
   }

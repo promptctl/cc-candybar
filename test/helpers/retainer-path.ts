@@ -13,10 +13,15 @@ const RETAINERS = join(__dirname, "..", "..", "scripts", "heap-retainers.mjs");
 // says nothing holds an instance, with no collection count or wait behind it.
 // A path names the holder, which a WeakRef cannot: it says only that something
 // does.
+// [LAW:single-enforcer] The snapshot is taken a macrotask after the caller's
+// work, not inside it: a handle a native call made during that macrotask shows
+// as a `(Handle scope)` root reaching the closures' captured state, and is gone
+// once the macrotask ends. Every caller gets the yield from here.
 // [LAW:one-source-of-truth] The snapshot is read by scripts/heap-retainers.mjs,
 // the repo's one reader, which takes a file of any size where a test could not
 // hold the snapshot as a string.
-export const retainerPathsTo = (className: string, limit = 3): string[][] => {
+export const retainerPathsTo = async (className: string, limit = 3): Promise<string[][]> => {
+  await new Promise((resolve) => setImmediate(resolve));
   const dir = mkdtempSync(join(tmpdir(), "retainer-path-"));
   try {
     const snapshot = v8.writeHeapSnapshot(join(dir, "heap.heapsnapshot"));
