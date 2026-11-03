@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-612",
+      "ref": "refs/pull/612/merge",
+      "sha": "bb744a1917e3bdafc0feb8e5510e8af8c6f731e5",
+      "timestamp": "2026-11-03T14:12:03.107Z",
+      "commits": [
+        {
+          "sha": "bb744a1917e3bdafc0feb8e5510e8af8c6f731e5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T14:11:01Z",
+          "message": "Merge 80a2e0d37fddd69afbc3928f61b74c19ce6f68de into d05718f5dc3d1b63c32060d3455f649c9af05c8a\n"
+        },
+        {
+          "sha": "80a2e0d37fddd69afbc3928f61b74c19ce6f68de",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T07:10:46-07:00",
+          "message": "docs(segments): a helper a shell command backgrounds ends with the run's process group (candybar-gather-renderer-76bb.6pj.dal)\n"
+        },
+        {
+          "sha": "3366319f49f69b86bb83f6457b3f430a3d6451d8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T07:05:48-07:00",
+          "message": "fix(sources): a shell run the timeout ends under a disposed registry publishes nothing (candybar-gather-renderer-76bb.6pj.dal)\n\nThe launcher keeps the first cause that ended a child, so a run the timeout\nsignalled before dispose is reaped as a timeout with the source's abort set.\nThe reader gated the abort on the launcher's reason too, and published the\ntimeout's failure into the torn-down registry. It now throws the abort on\nthe signal alone, as the file reader does.\n"
+        },
+        {
+          "sha": "88ea3373ac682ce629d3f5bbb12c2fe7e5e8de31",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T06:57:41-07:00",
+          "message": "feat(sources): the shell reader has a read timeout, and a run past it is failed in its read phase (candybar-gather-renderer-76bb.6pj.dal)\n\nOne parameter, 10 s, named beside the shell TTL floor and passed on the shell\nreader's launch, so the launcher's one timeout path ends a command that never\nwrites and never exits. Its read fails naming the bound, in the read phase, and\nthe next period's run starts clean. Spec: docs/design/gather-and-renderer.md\nsection 19.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-613",
       "ref": "refs/pull/613/merge",
       "sha": "74a3907f216e0044ced7ace7e1f9eca1a719689f",
@@ -20,35 +56,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-03T07:09:54-07:00",
           "message": "feat(facts): the draw's today and sources count are read from the document (candybar-gather-renderer-76bb.6pj.ktv)\n\nThe today fact now carries everything the draw's day projection reads: the\ndirectory's day sums and the rendering session's own days, with the session's\ningest failure as the fact failing. projectToday is a pure function of that\nfact and the draw's instant, so todayOf takes no store, lane or ledger, and\nthe draw and the demo read the view's document. The render event's source\ncounts read the document's sources too. check projects a fixture fact through\nthe same todayOf, so CHECK_TODAY is gone.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-612",
-      "ref": "refs/pull/612/merge",
-      "sha": "3301190ae3b872ba8988621fddbaeaa40a6b76a4",
-      "timestamp": "2026-11-03T14:08:12.608Z",
-      "commits": [
-        {
-          "sha": "3301190ae3b872ba8988621fddbaeaa40a6b76a4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T14:06:03Z",
-          "message": "Merge 3366319f49f69b86bb83f6457b3f430a3d6451d8 into d05718f5dc3d1b63c32060d3455f649c9af05c8a\n"
-        },
-        {
-          "sha": "3366319f49f69b86bb83f6457b3f430a3d6451d8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T07:05:48-07:00",
-          "message": "fix(sources): a shell run the timeout ends under a disposed registry publishes nothing (candybar-gather-renderer-76bb.6pj.dal)\n\nThe launcher keeps the first cause that ended a child, so a run the timeout\nsignalled before dispose is reaped as a timeout with the source's abort set.\nThe reader gated the abort on the launcher's reason too, and published the\ntimeout's failure into the torn-down registry. It now throws the abort on\nthe signal alone, as the file reader does.\n"
-        },
-        {
-          "sha": "88ea3373ac682ce629d3f5bbb12c2fe7e5e8de31",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T06:57:41-07:00",
-          "message": "feat(sources): the shell reader has a read timeout, and a run past it is failed in its read phase (candybar-gather-renderer-76bb.6pj.dal)\n\nOne parameter, 10 s, named beside the shell TTL floor and passed on the shell\nreader's launch, so the launcher's one timeout path ends a command that never\nwrites and never exits. Its read fails naming the bound, in the read phase, and\nthe next period's run starts clean. Spec: docs/design/gather-and-renderer.md\nsection 19.\n"
         }
       ]
     },
