@@ -2,6 +2,70 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-602",
+      "ref": "refs/pull/602/merge",
+      "sha": "5219fc4aff922ddca193b61026205282e73981e2",
+      "timestamp": "2026-11-03T04:28:00.242Z",
+      "commits": [
+        {
+          "sha": "5219fc4aff922ddca193b61026205282e73981e2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T04:26:33Z",
+          "message": "Merge f25312f43259a9dbe5fff0e7c0b6b229491e9a85 into 1778b930898902caf685e0600e9ebe897409cb72\n"
+        },
+        {
+          "sha": "f25312f43259a9dbe5fff0e7c0b6b229491e9a85",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T21:26:18-07:00",
+          "message": "refactor(daemon): one probe feeds the update watch and the lane edge; the next-tick pump lives beside the fake launcher (candybar-testing-ihvy.5t2)\n\nReview round 1 (high). The daemon built its ProcessProbe for the update watch\nand let the lane edge build its own, so a fake probe reached only one of them.\nThe daemon now builds it once and hands it to the lane edge. Two comments that\nnamed the removed pidAlive now name the probe. The duplicated turns() pump\nmoves next to fakeLauncher.\n"
+        },
+        {
+          "sha": "30a682929b5a14e925863587461ec197d4ce26eb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T21:18:38-07:00",
+          "message": "test: the socket-lease process test reads the real ps again (candybar-testing-ihvy.5t2)\n\nThe mass rewrite measured the unit and worker tiers only and swapped this\nprocess-tier file onto the unscripted launcher, which cannot read a start time.\n"
+        },
+        {
+          "sha": "31956c90dc18d76e85d3a04183bd796c5f66f62b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T21:12:14-07:00",
+          "message": "test(proc): real launchers are importable only from the adapter tiers; process.kill from its owners (candybar-testing-ihvy.5t2)\n\nprocess.kill is allowed in the Spawner, the ProcessProbe and three named\nexceptions; a fake is never imported by src; and a test outside the adapter\ntiers and a listed exception cannot import the machine's launcher. Each\nexception names the ticket that removes it. examples.test scripts its sources.\n"
+        },
+        {
+          "sha": "ce370260f6c92eec15df7dcb6601e3e34ce2be2b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T20:58:05-07:00",
+          "message": "test: tests that launch nothing hold an unscripted launcher; pending-draw scripts its sources (candybar-testing-ihvy.5t2)\n\n70 test files and three shared helpers imported the machine's launcher without\never starting a program. They hold a fake with nothing registered now, so a test\nthat starts to spawn fails loudly and must say what it spawns. pending-draw's\ntwo shell sources are scripted programs on a held clock: no /bin/sh, no sleep.\n"
+        },
+        {
+          "sha": "e1bce1ef9a18bf9a4d28a3a4647d106670918358",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T20:49:17-07:00",
+          "message": "refactor(daemon): liveness and start-time reads go through a ProcessProbe (candybar-testing-ihvy.5t2)\n\npidAlive and readStartTime were imported directly by the watchdog, the lease,\nthe fork-bomb breaker, the lane edge and the update notice. They take a\nProcessProbe now: the system probe is the code that was there, a fake holds the\nprocesses a test names, and one contract runs on both. The watchdog's pidAlive\ncases move into that contract.\n"
+        },
+        {
+          "sha": "dc87d025d8b4377073fbc588ba6ef0eb32a2c783",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T20:45:24-07:00",
+          "message": "test(proc): a scripted Spawner, its contract, and the launch policy over it (candybar-testing-ihvy.5t2)\n\nfakeSpawner runs scripted children on the clock it is given; the real launcher\nruns unchanged over it, so timeout, abort, output bound, rate limit and the\nowner's gate are tested on a held clock with no process. The Spawner contract\nruns on the fake (test/unit) and the system spawner (test/integration), and\nfakeLauncher registers the lifeline from the launcher's own program constant.\n"
+        },
+        {
+          "sha": "a3b7b6673608526cacb51b3df92f7da6bf48f467",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T20:40:13-07:00",
+          "message": "refactor(proc): a launch reaches the OS through a Spawner (candybar-testing-ihvy.5t2)\n\nlaunch.ts decided every launch and also named node:child_process and\nprocess.kill. The OS side is now a Spawner port (spawn, spawnSync, signalGroup,\ngroupGone, signalJob) whose real adapter is the moved code, so a test can run\nthe launch decisions over a child it scripts. jobGroupAlive and endJob become\nLauncher members, since they signal through the same seam. Real launchers are\nbuilt in system-launcher.ts; child_process lint now allows spawner.ts alone.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-601",
       "ref": "refs/pull/601/merge",
       "sha": "56e8f8015a1432bd394b6230f7a8db06d79832b3",
@@ -70,63 +134,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T21:18:59-07:00",
           "message": "feat(bench): a click's whole time, Launch Services included, is measured for the applet and the forwarder (candybar-url-handler-uy01.05x)\n\nA click suite in the benchmark: open to the daemon's own click event,\ncold (handler app quit first) and warm, with the handler that answered\nread off the event. Measured on Brandon's Mac: the retired applet\n~0.53-0.59 s every click (it exits after each), the forwarder ~0.23 s\ncold and ~0.07 s warm. Numbers on the ticket and the epic.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-602",
-      "ref": "refs/pull/602/merge",
-      "sha": "16df4bb08b1afec5138b3fb18b470461a719f7c1",
-      "timestamp": "2026-11-03T04:20:11.748Z",
-      "commits": [
-        {
-          "sha": "16df4bb08b1afec5138b3fb18b470461a719f7c1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T21:18:59-07:00",
-          "message": "Merge 30a682929b5a14e925863587461ec197d4ce26eb into 1778b930898902caf685e0600e9ebe897409cb72\n"
-        },
-        {
-          "sha": "30a682929b5a14e925863587461ec197d4ce26eb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T21:18:38-07:00",
-          "message": "test: the socket-lease process test reads the real ps again (candybar-testing-ihvy.5t2)\n\nThe mass rewrite measured the unit and worker tiers only and swapped this\nprocess-tier file onto the unscripted launcher, which cannot read a start time.\n"
-        },
-        {
-          "sha": "31956c90dc18d76e85d3a04183bd796c5f66f62b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T21:12:14-07:00",
-          "message": "test(proc): real launchers are importable only from the adapter tiers; process.kill from its owners (candybar-testing-ihvy.5t2)\n\nprocess.kill is allowed in the Spawner, the ProcessProbe and three named\nexceptions; a fake is never imported by src; and a test outside the adapter\ntiers and a listed exception cannot import the machine's launcher. Each\nexception names the ticket that removes it. examples.test scripts its sources.\n"
-        },
-        {
-          "sha": "ce370260f6c92eec15df7dcb6601e3e34ce2be2b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T20:58:05-07:00",
-          "message": "test: tests that launch nothing hold an unscripted launcher; pending-draw scripts its sources (candybar-testing-ihvy.5t2)\n\n70 test files and three shared helpers imported the machine's launcher without\never starting a program. They hold a fake with nothing registered now, so a test\nthat starts to spawn fails loudly and must say what it spawns. pending-draw's\ntwo shell sources are scripted programs on a held clock: no /bin/sh, no sleep.\n"
-        },
-        {
-          "sha": "e1bce1ef9a18bf9a4d28a3a4647d106670918358",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T20:49:17-07:00",
-          "message": "refactor(daemon): liveness and start-time reads go through a ProcessProbe (candybar-testing-ihvy.5t2)\n\npidAlive and readStartTime were imported directly by the watchdog, the lease,\nthe fork-bomb breaker, the lane edge and the update notice. They take a\nProcessProbe now: the system probe is the code that was there, a fake holds the\nprocesses a test names, and one contract runs on both. The watchdog's pidAlive\ncases move into that contract.\n"
-        },
-        {
-          "sha": "dc87d025d8b4377073fbc588ba6ef0eb32a2c783",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T20:45:24-07:00",
-          "message": "test(proc): a scripted Spawner, its contract, and the launch policy over it (candybar-testing-ihvy.5t2)\n\nfakeSpawner runs scripted children on the clock it is given; the real launcher\nruns unchanged over it, so timeout, abort, output bound, rate limit and the\nowner's gate are tested on a held clock with no process. The Spawner contract\nruns on the fake (test/unit) and the system spawner (test/integration), and\nfakeLauncher registers the lifeline from the launcher's own program constant.\n"
-        },
-        {
-          "sha": "a3b7b6673608526cacb51b3df92f7da6bf48f467",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T20:40:13-07:00",
-          "message": "refactor(proc): a launch reaches the OS through a Spawner (candybar-testing-ihvy.5t2)\n\nlaunch.ts decided every launch and also named node:child_process and\nprocess.kill. The OS side is now a Spawner port (spawn, spawnSync, signalGroup,\ngroupGone, signalJob) whose real adapter is the moved code, so a test can run\nthe launch decisions over a child it scripts. jobGroupAlive and endJob become\nLauncher members, since they signal through the same seam. Real launchers are\nbuilt in system-launcher.ts; child_process lint now allows spawner.ts alone.\n"
         }
       ]
     },

@@ -84273,6 +84273,7 @@ function createDaemon(inputs) {
       frameFeeds.wakeWhere("data", () => true);
     }
   });
+  const probe2 = inputs.probe(launcher);
   const storage = inputs.storage(log);
   const sessionState = new SessionState(storage.session);
   const settingsHistory = new SettingsHistory(
@@ -84342,6 +84343,7 @@ function createDaemon(inputs) {
   const laneSetups = new LaneSetups({
     edge: inputs.laneEdge(
       launcher,
+      probe2,
       (sessionId2) => frameFeeds.following(sessionId2),
       closing.signal
     ),
@@ -84516,7 +84518,7 @@ function createDaemon(inputs) {
   const updateWatch = makeUpdateWatch({
     clock,
     launcher,
-    probe: inputs.probe(launcher),
+    probe: probe2,
     entryUrl: bundle.entryUrl,
     digest: bundle.digest,
     // [LAW:one-source-of-truth] Keyed by the bundle the act rewrites, the one
@@ -85617,13 +85619,7 @@ function productionAdapters(paths2, daemonLog, machine) {
     doctorEdge: productionEdge,
     claudeInput: productionClaudeInputEdge,
     probe: systemProbe,
-    laneEdge: (launcher, following, closing) => productionLaneEdge(
-      launcher,
-      following,
-      closing,
-      machine,
-      systemProbe(launcher)
-    ),
+    laneEdge: (launcher, probe2, following, closing) => productionLaneEdge(launcher, following, closing, machine, probe2),
     linkSigner: linkSignerFromKeyFile(linkKeyFile(paths2.state)),
     limits: ({ startedAtMs, exit: exit2, launcher, log }) => realLimitsDeps(startedAtMs, exit2, {
       launcher,
