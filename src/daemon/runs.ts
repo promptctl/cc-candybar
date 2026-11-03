@@ -208,7 +208,11 @@ export class Runs {
       `run sid=${valueOf(run.sessionId)} action=${valueOf(run.action)} program=${valueOf(run.argv[0])} outcome=${outcome} exit=${exitOf(result)} took=${took} refreshed=${run.refreshes.map((r) => r.name).join(",") || "-"}`,
     );
     if (outcome === "timeout") this.timedOut++;
-    if (outcome === "exit" || outcome === "launch" || outcome === "output-limit")
+    if (
+      outcome === "exit" ||
+      outcome === "launch" ||
+      outcome === "output-limit"
+    )
       this.failed++;
     // An aborted run is the daemon going down, not the program failing.
     if (outcome === "ok" || outcome === "aborted") return;
