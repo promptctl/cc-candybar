@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-614",
+      "ref": "refs/pull/614/merge",
+      "sha": "7e7429c99f09060f87b18d21af84ad4c3395af3f",
+      "timestamp": "2026-11-03T14:56:58.425Z",
+      "commits": [
+        {
+          "sha": "7e7429c99f09060f87b18d21af84ad4c3395af3f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T07:56:01-07:00",
+          "message": "Merge 686d45fbb52a0d94ac995c15b50d56c7b482f870 into 8067e9a72297c93efa9dd1063cfd8f2ca5ced0c1\n"
+        },
+        {
+          "sha": "686d45fbb52a0d94ac995c15b50d56c7b482f870",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T07:55:38-07:00",
+          "message": "feat(sources): a source's identity is a digest, one digest is one run, and a moved key's old value stands until the new run lands (candybar-gather-renderer-76bb.6pj.5dx)\n\nA shell or file source is identified by a digest of what its run needs (the\nread, the parser without its default, the normalised policy, the hash of the\nkey's value), and one daemon-wide owner, two KeyedSource instances by read\nkind, runs each identity once for every registry that holds it. The registry\nholds entries through Holds, publishes only answered readings into its node,\nand derives what a request waits on from the lanes still pending. KeyedSource\ntakes its per-entry refresh, a watch per entry and the flight's abort signal\nas spec data; an abandoned read is its own event, not a failure. The ledger\nrecords user sources per read kind (source.shell, source.file), each refresh\nnaming its digest and how many homes share it.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "189bd5bed066e328ad699ec236391defbfcc4106",
