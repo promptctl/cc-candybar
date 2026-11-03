@@ -1,0 +1,2507 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`\`check\`'s representative payload preset compact: the payload and its day 1`] = `
+{
+  "payload": {
+    "animationSpeed": {
+      "effective": "1x",
+    },
+    "autoWrap": {
+      "effective": true,
+    },
+    "autocompact": {
+      "applied": 400000,
+      "higher": 500000,
+      "lower": 300000,
+      "window": 400000,
+    },
+    "block": {
+      "nativeUtilization": 63,
+      "resetsAt": 1700007200,
+    },
+    "cache": {
+      "expiresAt": 1700000900,
+    },
+    "colorCompatibility": {
+      "effective": "truecolor",
+    },
+    "configPath": "/home/tester/.config/cc-candybar/config.json5",
+    "context": {
+      "contextLeft": 24,
+      "totalTokens": 48487,
+    },
+    "cwd": "/home/tester/code/cc-candybar/src",
+    "effort": {
+      "level": "xhigh",
+    },
+    "endcaps": {
+      "effective": "powerline",
+    },
+    "experimentalBand": {
+      "effective": false,
+    },
+    "experimentalPane": {
+      "effective": false,
+    },
+    "experimentalStatusline": {
+      "effective": false,
+    },
+    "git": {
+      "ahead": 2,
+      "behind": 1,
+      "branch": "main",
+      "committedAt": 1699999220,
+      "conflicts": 0,
+      "operation": "rebase",
+      "repoName": "cc-candybar",
+      "repoUrl": "https://github.com/promptctl/cc-candybar",
+      "sha": "abc1234",
+      "staged": 3,
+      "stash": 1,
+      "status": "dirty",
+      "tracking": "tracked",
+      "unstaged": 2,
+      "untracked": 1,
+      "upstream": "origin/main",
+    },
+    "history": {
+      "redo": 1,
+      "sinceEdit": 1,
+      "undo": 1,
+    },
+    "home": "/home/tester",
+    "hook_event_name": "Status",
+    "host": {
+      "name": "tester-box",
+      "ssh": true,
+      "user": "tester",
+    },
+    "menuTimeout": {
+      "effective": 120,
+    },
+    "metrics": {
+      "lastResponseTime": 8.2,
+      "linesAdded": 512,
+      "linesRemoved": 88,
+      "messageCount": 8,
+      "responseTime": 4.2,
+      "sessionDuration": 930,
+    },
+    "model": {
+      "display_name": "Opus 4.8",
+      "id": "claude-opus-4-8",
+    },
+    "navigation": {
+      "back": 1,
+    },
+    "padding": {
+      "effective": 0,
+    },
+    "plugins": {},
+    "preset": {
+      "bundled": true,
+      "customized": false,
+      "effective": "compact",
+    },
+    "renderer": {
+      "effective": "claude",
+    },
+    "repo": {},
+    "resettable": {
+      "animationSpeed": true,
+      "autoWrap": true,
+      "effect": true,
+      "endcaps": true,
+      "experimentalBand": true,
+      "experimentalPane": true,
+      "experimentalStatusline": true,
+      "menuTimeout": true,
+      "padding": true,
+      "preset": true,
+      "renderer": true,
+      "shade": true,
+      "style": true,
+      "theme": true,
+      "transitions": true,
+      "updateNotice": true,
+      "variation": true,
+    },
+    "resumeCommand": "cd /home/tester/code/cc-candybar && claude --resume test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",
+    "session": {
+      "cost": 0.39,
+      "tokens": 241400,
+    },
+    "session_id": "test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",
+    "shade": {
+      "effective": "middle",
+    },
+    "themeDefault": {
+      "differs": true,
+      "theme": "tokyo-night",
+    },
+    "tmux": {
+      "pane": "%0",
+      "session": "work",
+    },
+    "transcript_path": "/home/tester/.claude/projects/x/test.jsonl",
+    "transitions": {
+      "effective": false,
+    },
+    "unsaved": 1,
+    "updateNotice": {
+      "effective": true,
+    },
+    "variation": {
+      "effective": "accent",
+    },
+    "version": "1.15.0",
+    "weekly": {
+      "percentage": 21,
+      "resetsAt": 1700432000,
+    },
+    "workspace": {
+      "added_dirs": [],
+      "current_dir": "/home/tester/code/cc-candybar/src",
+      "project_dir": "/home/tester/code/cc-candybar",
+    },
+  },
+  "today": {
+    "cost": 12.5,
+    "tokens": 3400000,
+  },
+}
+`;
+
+exports[`\`check\`'s representative payload preset default: the payload and its day 1`] = `
+{
+  "payload": {
+    "animationSpeed": {
+      "effective": "1x",
+    },
+    "autoWrap": {
+      "effective": true,
+    },
+    "autocompact": {
+      "applied": 400000,
+      "higher": 500000,
+      "lower": 300000,
+      "window": 400000,
+    },
+    "block": {
+      "nativeUtilization": 63,
+      "resetsAt": 1700007200,
+    },
+    "cache": {
+      "expiresAt": 1700000900,
+    },
+    "colorCompatibility": {
+      "effective": "truecolor",
+    },
+    "configPath": "/home/tester/.config/cc-candybar/config.json5",
+    "context": {
+      "contextLeft": 24,
+      "totalTokens": 48487,
+    },
+    "cwd": "/home/tester/code/cc-candybar/src",
+    "effort": {
+      "level": "xhigh",
+    },
+    "endcaps": {
+      "effective": "powerline",
+    },
+    "experimentalBand": {
+      "effective": false,
+    },
+    "experimentalPane": {
+      "effective": false,
+    },
+    "experimentalStatusline": {
+      "effective": false,
+    },
+    "git": {
+      "ahead": 2,
+      "behind": 1,
+      "branch": "main",
+      "committedAt": 1699999220,
+      "conflicts": 0,
+      "operation": "rebase",
+      "repoName": "cc-candybar",
+      "repoUrl": "https://github.com/promptctl/cc-candybar",
+      "sha": "abc1234",
+      "staged": 3,
+      "stash": 1,
+      "status": "dirty",
+      "tracking": "tracked",
+      "unstaged": 2,
+      "untracked": 1,
+      "upstream": "origin/main",
+    },
+    "history": {
+      "redo": 1,
+      "sinceEdit": 1,
+      "undo": 1,
+    },
+    "home": "/home/tester",
+    "hook_event_name": "Status",
+    "host": {
+      "name": "tester-box",
+      "ssh": true,
+      "user": "tester",
+    },
+    "menuTimeout": {
+      "effective": 120,
+    },
+    "metrics": {
+      "lastResponseTime": 8.2,
+      "linesAdded": 512,
+      "linesRemoved": 88,
+      "messageCount": 8,
+      "responseTime": 4.2,
+      "sessionDuration": 930,
+    },
+    "model": {
+      "display_name": "Opus 4.8",
+      "id": "claude-opus-4-8",
+    },
+    "navigation": {
+      "back": 1,
+    },
+    "padding": {
+      "effective": 1,
+    },
+    "plugins": {},
+    "preset": {
+      "bundled": true,
+      "customized": false,
+      "effective": "default",
+    },
+    "renderer": {
+      "effective": "claude",
+    },
+    "repo": {},
+    "resettable": {
+      "animationSpeed": true,
+      "autoWrap": true,
+      "effect": true,
+      "endcaps": true,
+      "experimentalBand": true,
+      "experimentalPane": true,
+      "experimentalStatusline": true,
+      "menuTimeout": true,
+      "padding": true,
+      "preset": true,
+      "renderer": true,
+      "shade": true,
+      "style": true,
+      "theme": true,
+      "transitions": true,
+      "updateNotice": true,
+      "variation": true,
+    },
+    "resumeCommand": "cd /home/tester/code/cc-candybar && claude --resume test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",
+    "session": {
+      "cost": 0.39,
+      "tokens": 241400,
+    },
+    "session_id": "test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",
+    "shade": {
+      "effective": "middle",
+    },
+    "themeDefault": {
+      "differs": true,
+      "theme": "tokyo-night",
+    },
+    "tmux": {
+      "pane": "%0",
+      "session": "work",
+    },
+    "transcript_path": "/home/tester/.claude/projects/x/test.jsonl",
+    "transitions": {
+      "effective": false,
+    },
+    "unsaved": 1,
+    "updateNotice": {
+      "effective": true,
+    },
+    "variation": {
+      "effective": "accent",
+    },
+    "version": "1.15.0",
+    "weekly": {
+      "percentage": 21,
+      "resetsAt": 1700432000,
+    },
+    "workspace": {
+      "added_dirs": [],
+      "current_dir": "/home/tester/code/cc-candybar/src",
+      "project_dir": "/home/tester/code/cc-candybar",
+    },
+  },
+  "today": {
+    "cost": 12.5,
+    "tokens": 3400000,
+  },
+}
+`;
+
+exports[`\`check\`'s representative payload preset dense: the payload and its day 1`] = `
+{
+  "payload": {
+    "animationSpeed": {
+      "effective": "1x",
+    },
+    "autoWrap": {
+      "effective": true,
+    },
+    "autocompact": {
+      "applied": 400000,
+      "higher": 500000,
+      "lower": 300000,
+      "window": 400000,
+    },
+    "block": {
+      "nativeUtilization": 63,
+      "resetsAt": 1700007200,
+    },
+    "cache": {
+      "expiresAt": 1700000900,
+    },
+    "colorCompatibility": {
+      "effective": "truecolor",
+    },
+    "configPath": "/home/tester/.config/cc-candybar/config.json5",
+    "context": {
+      "contextLeft": 24,
+      "totalTokens": 48487,
+    },
+    "cwd": "/home/tester/code/cc-candybar/src",
+    "effort": {
+      "level": "xhigh",
+    },
+    "endcaps": {
+      "effective": "powerline",
+    },
+    "experimentalBand": {
+      "effective": false,
+    },
+    "experimentalPane": {
+      "effective": false,
+    },
+    "experimentalStatusline": {
+      "effective": false,
+    },
+    "git": {
+      "ahead": 2,
+      "behind": 1,
+      "branch": "main",
+      "committedAt": 1699999220,
+      "conflicts": 0,
+      "operation": "rebase",
+      "repoName": "cc-candybar",
+      "repoUrl": "https://github.com/promptctl/cc-candybar",
+      "sha": "abc1234",
+      "staged": 3,
+      "stash": 1,
+      "status": "dirty",
+      "tracking": "tracked",
+      "unstaged": 2,
+      "untracked": 1,
+      "upstream": "origin/main",
+    },
+    "history": {
+      "redo": 1,
+      "sinceEdit": 1,
+      "undo": 1,
+    },
+    "home": "/home/tester",
+    "hook_event_name": "Status",
+    "host": {
+      "name": "tester-box",
+      "ssh": true,
+      "user": "tester",
+    },
+    "menuTimeout": {
+      "effective": 120,
+    },
+    "metrics": {
+      "lastResponseTime": 8.2,
+      "linesAdded": 512,
+      "linesRemoved": 88,
+      "messageCount": 8,
+      "responseTime": 4.2,
+      "sessionDuration": 930,
+    },
+    "model": {
+      "display_name": "Opus 4.8",
+      "id": "claude-opus-4-8",
+    },
+    "navigation": {
+      "back": 1,
+    },
+    "padding": {
+      "effective": 0,
+    },
+    "plugins": {},
+    "preset": {
+      "bundled": true,
+      "customized": false,
+      "effective": "dense",
+    },
+    "renderer": {
+      "effective": "claude",
+    },
+    "repo": {},
+    "resettable": {
+      "animationSpeed": true,
+      "autoWrap": true,
+      "effect": true,
+      "endcaps": true,
+      "experimentalBand": true,
+      "experimentalPane": true,
+      "experimentalStatusline": true,
+      "menuTimeout": true,
+      "padding": true,
+      "preset": true,
+      "renderer": true,
+      "shade": true,
+      "style": true,
+      "theme": true,
+      "transitions": true,
+      "updateNotice": true,
+      "variation": true,
+    },
+    "resumeCommand": "cd /home/tester/code/cc-candybar && claude --resume test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",
+    "session": {
+      "cost": 0.39,
+      "tokens": 241400,
+    },
+    "session_id": "test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",
+    "shade": {
+      "effective": "middle",
+    },
+    "themeDefault": {
+      "differs": true,
+      "theme": "tokyo-night",
+    },
+    "tmux": {
+      "pane": "%0",
+      "session": "work",
+    },
+    "transcript_path": "/home/tester/.claude/projects/x/test.jsonl",
+    "transitions": {
+      "effective": false,
+    },
+    "unsaved": 1,
+    "updateNotice": {
+      "effective": true,
+    },
+    "variation": {
+      "effective": "accent",
+    },
+    "version": "1.15.0",
+    "weekly": {
+      "percentage": 21,
+      "resetsAt": 1700432000,
+    },
+    "workspace": {
+      "added_dirs": [],
+      "current_dir": "/home/tester/code/cc-candybar/src",
+      "project_dir": "/home/tester/code/cc-candybar",
+    },
+  },
+  "today": {
+    "cost": 12.5,
+    "tokens": 3400000,
+  },
+}
+`;
+
+exports[`\`check\`'s representative payload preset git: the payload and its day 1`] = `
+{
+  "payload": {
+    "animationSpeed": {
+      "effective": "1x",
+    },
+    "autoWrap": {
+      "effective": true,
+    },
+    "autocompact": {
+      "applied": 400000,
+      "higher": 500000,
+      "lower": 300000,
+      "window": 400000,
+    },
+    "block": {
+      "nativeUtilization": 63,
+      "resetsAt": 1700007200,
+    },
+    "cache": {
+      "expiresAt": 1700000900,
+    },
+    "colorCompatibility": {
+      "effective": "truecolor",
+    },
+    "configPath": "/home/tester/.config/cc-candybar/config.json5",
+    "context": {
+      "contextLeft": 24,
+      "totalTokens": 48487,
+    },
+    "cwd": "/home/tester/code/cc-candybar/src",
+    "effort": {
+      "level": "xhigh",
+    },
+    "endcaps": {
+      "effective": "powerline",
+    },
+    "experimentalBand": {
+      "effective": false,
+    },
+    "experimentalPane": {
+      "effective": false,
+    },
+    "experimentalStatusline": {
+      "effective": false,
+    },
+    "git": {
+      "ahead": 2,
+      "behind": 1,
+      "branch": "main",
+      "committedAt": 1699999220,
+      "conflicts": 0,
+      "operation": "rebase",
+      "repoName": "cc-candybar",
+      "repoUrl": "https://github.com/promptctl/cc-candybar",
+      "sha": "abc1234",
+      "staged": 3,
+      "stash": 1,
+      "status": "dirty",
+      "tracking": "tracked",
+      "unstaged": 2,
+      "untracked": 1,
+      "upstream": "origin/main",
+    },
+    "history": {
+      "redo": 1,
+      "sinceEdit": 1,
+      "undo": 1,
+    },
+    "home": "/home/tester",
+    "hook_event_name": "Status",
+    "host": {
+      "name": "tester-box",
+      "ssh": true,
+      "user": "tester",
+    },
+    "menuTimeout": {
+      "effective": 120,
+    },
+    "metrics": {
+      "lastResponseTime": 8.2,
+      "linesAdded": 512,
+      "linesRemoved": 88,
+      "messageCount": 8,
+      "responseTime": 4.2,
+      "sessionDuration": 930,
+    },
+    "model": {
+      "display_name": "Opus 4.8",
+      "id": "claude-opus-4-8",
+    },
+    "navigation": {
+      "back": 1,
+    },
+    "padding": {
+      "effective": 1,
+    },
+    "plugins": {},
+    "preset": {
+      "bundled": true,
+      "customized": false,
+      "effective": "git",
+    },
+    "renderer": {
+      "effective": "claude",
+    },
+    "repo": {},
+    "resettable": {
+      "animationSpeed": true,
+      "autoWrap": true,
+      "effect": true,
+      "endcaps": true,
+      "experimentalBand": true,
+      "experimentalPane": true,
+      "experimentalStatusline": true,
+      "menuTimeout": true,
+      "padding": true,
+      "preset": true,
+      "renderer": true,
+      "shade": true,
+      "style": true,
+      "theme": true,
+      "transitions": true,
+      "updateNotice": true,
+      "variation": true,
+    },
+    "resumeCommand": "cd /home/tester/code/cc-candybar && claude --resume test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",
+    "session": {
+      "cost": 0.39,
+      "tokens": 241400,
+    },
+    "session_id": "test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",
+    "shade": {
+      "effective": "middle",
+    },
+    "themeDefault": {
+      "differs": true,
+      "theme": "tokyo-night",
+    },
+    "tmux": {
+      "pane": "%0",
+      "session": "work",
+    },
+    "transcript_path": "/home/tester/.claude/projects/x/test.jsonl",
+    "transitions": {
+      "effective": false,
+    },
+    "unsaved": 1,
+    "updateNotice": {
+      "effective": true,
+    },
+    "variation": {
+      "effective": "accent",
+    },
+    "version": "1.15.0",
+    "weekly": {
+      "percentage": 21,
+      "resetsAt": 1700432000,
+    },
+    "workspace": {
+      "added_dirs": [],
+      "current_dir": "/home/tester/code/cc-candybar/src",
+      "project_dir": "/home/tester/code/cc-candybar",
+    },
+  },
+  "today": {
+    "cost": 12.5,
+    "tokens": 3400000,
+  },
+}
+`;
+
+exports[`\`check\`'s representative payload preset usage: the payload and its day 1`] = `
+{
+  "payload": {
+    "animationSpeed": {
+      "effective": "1x",
+    },
+    "autoWrap": {
+      "effective": true,
+    },
+    "autocompact": {
+      "applied": 400000,
+      "higher": 500000,
+      "lower": 300000,
+      "window": 400000,
+    },
+    "block": {
+      "nativeUtilization": 63,
+      "resetsAt": 1700007200,
+    },
+    "cache": {
+      "expiresAt": 1700000900,
+    },
+    "colorCompatibility": {
+      "effective": "truecolor",
+    },
+    "configPath": "/home/tester/.config/cc-candybar/config.json5",
+    "context": {
+      "contextLeft": 24,
+      "totalTokens": 48487,
+    },
+    "cwd": "/home/tester/code/cc-candybar/src",
+    "effort": {
+      "level": "xhigh",
+    },
+    "endcaps": {
+      "effective": "powerline",
+    },
+    "experimentalBand": {
+      "effective": false,
+    },
+    "experimentalPane": {
+      "effective": false,
+    },
+    "experimentalStatusline": {
+      "effective": false,
+    },
+    "git": {
+      "ahead": 2,
+      "behind": 1,
+      "branch": "main",
+      "committedAt": 1699999220,
+      "conflicts": 0,
+      "operation": "rebase",
+      "repoName": "cc-candybar",
+      "repoUrl": "https://github.com/promptctl/cc-candybar",
+      "sha": "abc1234",
+      "staged": 3,
+      "stash": 1,
+      "status": "dirty",
+      "tracking": "tracked",
+      "unstaged": 2,
+      "untracked": 1,
+      "upstream": "origin/main",
+    },
+    "history": {
+      "redo": 1,
+      "sinceEdit": 1,
+      "undo": 1,
+    },
+    "home": "/home/tester",
+    "hook_event_name": "Status",
+    "host": {
+      "name": "tester-box",
+      "ssh": true,
+      "user": "tester",
+    },
+    "menuTimeout": {
+      "effective": 120,
+    },
+    "metrics": {
+      "lastResponseTime": 8.2,
+      "linesAdded": 512,
+      "linesRemoved": 88,
+      "messageCount": 8,
+      "responseTime": 4.2,
+      "sessionDuration": 930,
+    },
+    "model": {
+      "display_name": "Opus 4.8",
+      "id": "claude-opus-4-8",
+    },
+    "navigation": {
+      "back": 1,
+    },
+    "padding": {
+      "effective": 1,
+    },
+    "plugins": {},
+    "preset": {
+      "bundled": true,
+      "customized": false,
+      "effective": "usage",
+    },
+    "renderer": {
+      "effective": "claude",
+    },
+    "repo": {},
+    "resettable": {
+      "animationSpeed": true,
+      "autoWrap": true,
+      "effect": true,
+      "endcaps": true,
+      "experimentalBand": true,
+      "experimentalPane": true,
+      "experimentalStatusline": true,
+      "menuTimeout": true,
+      "padding": true,
+      "preset": true,
+      "renderer": true,
+      "shade": true,
+      "style": true,
+      "theme": true,
+      "transitions": true,
+      "updateNotice": true,
+      "variation": true,
+    },
+    "resumeCommand": "cd /home/tester/code/cc-candybar && claude --resume test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",
+    "session": {
+      "cost": 0.39,
+      "tokens": 241400,
+    },
+    "session_id": "test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",
+    "shade": {
+      "effective": "middle",
+    },
+    "themeDefault": {
+      "differs": true,
+      "theme": "tokyo-night",
+    },
+    "tmux": {
+      "pane": "%0",
+      "session": "work",
+    },
+    "transcript_path": "/home/tester/.claude/projects/x/test.jsonl",
+    "transitions": {
+      "effective": false,
+    },
+    "unsaved": 1,
+    "updateNotice": {
+      "effective": true,
+    },
+    "variation": {
+      "effective": "accent",
+    },
+    "version": "1.15.0",
+    "weekly": {
+      "percentage": 21,
+      "resetsAt": 1700432000,
+    },
+    "workspace": {
+      "added_dirs": [],
+      "current_dir": "/home/tester/code/cc-candybar/src",
+      "project_dir": "/home/tester/code/cc-candybar",
+    },
+  },
+  "today": {
+    "cost": 12.5,
+    "tokens": 3400000,
+  },
+}
+`;
+
+exports[`\`check\`'s representative payload preset verbose: the payload and its day 1`] = `
+{
+  "payload": {
+    "animationSpeed": {
+      "effective": "1x",
+    },
+    "autoWrap": {
+      "effective": true,
+    },
+    "autocompact": {
+      "applied": 400000,
+      "higher": 500000,
+      "lower": 300000,
+      "window": 400000,
+    },
+    "block": {
+      "nativeUtilization": 63,
+      "resetsAt": 1700007200,
+    },
+    "cache": {
+      "expiresAt": 1700000900,
+    },
+    "colorCompatibility": {
+      "effective": "truecolor",
+    },
+    "configPath": "/home/tester/.config/cc-candybar/config.json5",
+    "context": {
+      "contextLeft": 24,
+      "totalTokens": 48487,
+    },
+    "cwd": "/home/tester/code/cc-candybar/src",
+    "effort": {
+      "level": "xhigh",
+    },
+    "endcaps": {
+      "effective": "powerline",
+    },
+    "experimentalBand": {
+      "effective": false,
+    },
+    "experimentalPane": {
+      "effective": false,
+    },
+    "experimentalStatusline": {
+      "effective": false,
+    },
+    "git": {
+      "ahead": 2,
+      "behind": 1,
+      "branch": "main",
+      "committedAt": 1699999220,
+      "conflicts": 0,
+      "operation": "rebase",
+      "repoName": "cc-candybar",
+      "repoUrl": "https://github.com/promptctl/cc-candybar",
+      "sha": "abc1234",
+      "staged": 3,
+      "stash": 1,
+      "status": "dirty",
+      "tracking": "tracked",
+      "unstaged": 2,
+      "untracked": 1,
+      "upstream": "origin/main",
+    },
+    "history": {
+      "redo": 1,
+      "sinceEdit": 1,
+      "undo": 1,
+    },
+    "home": "/home/tester",
+    "hook_event_name": "Status",
+    "host": {
+      "name": "tester-box",
+      "ssh": true,
+      "user": "tester",
+    },
+    "menuTimeout": {
+      "effective": 120,
+    },
+    "metrics": {
+      "lastResponseTime": 8.2,
+      "linesAdded": 512,
+      "linesRemoved": 88,
+      "messageCount": 8,
+      "responseTime": 4.2,
+      "sessionDuration": 930,
+    },
+    "model": {
+      "display_name": "Opus 4.8",
+      "id": "claude-opus-4-8",
+    },
+    "navigation": {
+      "back": 1,
+    },
+    "padding": {
+      "effective": 1,
+    },
+    "plugins": {},
+    "preset": {
+      "bundled": true,
+      "customized": false,
+      "effective": "verbose",
+    },
+    "renderer": {
+      "effective": "claude",
+    },
+    "repo": {},
+    "resettable": {
+      "animationSpeed": true,
+      "autoWrap": true,
+      "effect": true,
+      "endcaps": true,
+      "experimentalBand": true,
+      "experimentalPane": true,
+      "experimentalStatusline": true,
+      "menuTimeout": true,
+      "padding": true,
+      "preset": true,
+      "renderer": true,
+      "shade": true,
+      "style": true,
+      "theme": true,
+      "transitions": true,
+      "updateNotice": true,
+      "variation": true,
+    },
+    "resumeCommand": "cd /home/tester/code/cc-candybar && claude --resume test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",
+    "session": {
+      "cost": 0.39,
+      "tokens": 241400,
+    },
+    "session_id": "test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",
+    "shade": {
+      "effective": "middle",
+    },
+    "themeDefault": {
+      "differs": true,
+      "theme": "tokyo-night",
+    },
+    "tmux": {
+      "pane": "%0",
+      "session": "work",
+    },
+    "transcript_path": "/home/tester/.claude/projects/x/test.jsonl",
+    "transitions": {
+      "effective": false,
+    },
+    "unsaved": 1,
+    "updateNotice": {
+      "effective": true,
+    },
+    "variation": {
+      "effective": "accent",
+    },
+    "version": "1.15.0",
+    "weekly": {
+      "percentage": 21,
+      "resetsAt": 1700432000,
+    },
+    "workspace": {
+      "added_dirs": [],
+      "current_dir": "/home/tester/code/cc-candybar/src",
+      "project_dir": "/home/tester/code/cc-candybar",
+    },
+  },
+  "today": {
+    "cost": 12.5,
+    "tokens": 3400000,
+  },
+}
+`;
+
+exports[`\`check\`'s representative payload preset zen: the payload and its day 1`] = `
+{
+  "payload": {
+    "animationSpeed": {
+      "effective": "1x",
+    },
+    "autoWrap": {
+      "effective": true,
+    },
+    "autocompact": {
+      "applied": 400000,
+      "higher": 500000,
+      "lower": 300000,
+      "window": 400000,
+    },
+    "block": {
+      "nativeUtilization": 63,
+      "resetsAt": 1700007200,
+    },
+    "cache": {
+      "expiresAt": 1700000900,
+    },
+    "colorCompatibility": {
+      "effective": "truecolor",
+    },
+    "configPath": "/home/tester/.config/cc-candybar/config.json5",
+    "context": {
+      "contextLeft": 24,
+      "totalTokens": 48487,
+    },
+    "cwd": "/home/tester/code/cc-candybar/src",
+    "effort": {
+      "level": "xhigh",
+    },
+    "endcaps": {
+      "effective": "plain",
+    },
+    "experimentalBand": {
+      "effective": false,
+    },
+    "experimentalPane": {
+      "effective": false,
+    },
+    "experimentalStatusline": {
+      "effective": false,
+    },
+    "git": {
+      "ahead": 2,
+      "behind": 1,
+      "branch": "main",
+      "committedAt": 1699999220,
+      "conflicts": 0,
+      "operation": "rebase",
+      "repoName": "cc-candybar",
+      "repoUrl": "https://github.com/promptctl/cc-candybar",
+      "sha": "abc1234",
+      "staged": 3,
+      "stash": 1,
+      "status": "dirty",
+      "tracking": "tracked",
+      "unstaged": 2,
+      "untracked": 1,
+      "upstream": "origin/main",
+    },
+    "history": {
+      "redo": 1,
+      "sinceEdit": 1,
+      "undo": 1,
+    },
+    "home": "/home/tester",
+    "hook_event_name": "Status",
+    "host": {
+      "name": "tester-box",
+      "ssh": true,
+      "user": "tester",
+    },
+    "menuTimeout": {
+      "effective": 120,
+    },
+    "metrics": {
+      "lastResponseTime": 8.2,
+      "linesAdded": 512,
+      "linesRemoved": 88,
+      "messageCount": 8,
+      "responseTime": 4.2,
+      "sessionDuration": 930,
+    },
+    "model": {
+      "display_name": "Opus 4.8",
+      "id": "claude-opus-4-8",
+    },
+    "navigation": {
+      "back": 1,
+    },
+    "padding": {
+      "effective": 1,
+    },
+    "plugins": {},
+    "preset": {
+      "bundled": true,
+      "customized": false,
+      "effective": "zen",
+    },
+    "renderer": {
+      "effective": "claude",
+    },
+    "repo": {},
+    "resettable": {
+      "animationSpeed": true,
+      "autoWrap": true,
+      "effect": true,
+      "endcaps": true,
+      "experimentalBand": true,
+      "experimentalPane": true,
+      "experimentalStatusline": true,
+      "menuTimeout": true,
+      "padding": true,
+      "preset": true,
+      "renderer": true,
+      "shade": true,
+      "style": true,
+      "theme": true,
+      "transitions": true,
+      "updateNotice": true,
+      "variation": true,
+    },
+    "resumeCommand": "cd /home/tester/code/cc-candybar && claude --resume test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",
+    "session": {
+      "cost": 0.39,
+      "tokens": 241400,
+    },
+    "session_id": "test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",
+    "shade": {
+      "effective": "middle",
+    },
+    "themeDefault": {
+      "differs": true,
+      "theme": "tokyo-night",
+    },
+    "tmux": {
+      "pane": "%0",
+      "session": "work",
+    },
+    "transcript_path": "/home/tester/.claude/projects/x/test.jsonl",
+    "transitions": {
+      "effective": false,
+    },
+    "unsaved": 1,
+    "updateNotice": {
+      "effective": true,
+    },
+    "variation": {
+      "effective": "accent",
+    },
+    "version": "1.15.0",
+    "weekly": {
+      "percentage": 21,
+      "resetsAt": 1700432000,
+    },
+    "workspace": {
+      "added_dirs": [],
+      "current_dir": "/home/tester/code/cc-candybar/src",
+      "project_dir": "/home/tester/code/cc-candybar",
+    },
+  },
+  "today": {
+    "cost": 12.5,
+    "tokens": 3400000,
+  },
+}
+`;
+
+exports[`a session's view, drawn from fixed owners at a fixed instant preset compact: the bar 1`] = `"[7;38;2;100;142;225m[0m]8;id=94ee9e0c;cc-candybar://dispatch/does=open+candybar.menu+and+2+more&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.menu%2Fopen&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.resetAll.armed%2Fdisarmed&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.commands.clear.armed%2Fdisarmed\\[38;2;26;27;38;48;2;100;142;225m🍫[0m]8;;\\[38;2;100;142;225;48;2;122;162;247m[0m[38;2;26;27;38;48;2;122;162;247m polled[0m[38;2;122;162;247;48;2;143;182;255m[0m]8;id=b197edfd;cc-candybar://dispatch/does=copy+/home/tester/code/project&e=copy%2F%252Fhome%252Ftester%252Fcode%252Fproject\\[38;2;73;97;150;48;2;143;182;255m~/c/project[0m]8;;\\[38;2;143;182;255;48;2;122;162;247m[0m[38;2;59;82;141;48;2;122;162;247m⎇ [0m[38;2;74;38;121;48;2;122;162;247mmain[0m[38;2;59;82;141;48;2;122;162;247m [0m[38;2;40;65;0;48;2;122;162;247m+2[0m[38;2;59;82;141;48;2;122;162;247m/[0m[38;2;81;52;0;48;2;122;162;247m-1[0m[38;2;59;82;141;48;2;122;162;247m [0m]8;id=6343e001;cc-candybar://dispatch/does=set+git-detail+to+expanded&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fgit-detail%2Fexpanded\\[38;2;59;82;141;48;2;122;162;247m▸[0m]8;;\\[38;2;122;162;247;48;2;223;175;104m[0m[38;2;26;27;38;48;2;223;175;104m◔ [0m[38;2;26;27;38;48;2;223;175;104m48,487[0m[38;2;26;27;38;48;2;223;175;104m ([0m[38;2;26;27;38;48;2;223;175;104m24[0m[38;2;26;27;38;48;2;223;175;104m%)[0m[38;2;223;175;104m[0m"`;
+
+exports[`a session's view, drawn from fixed owners at a fixed instant preset compact: the payload a template reads 1`] = `
+{
+  "animationSpeed": {
+    "effective": "1x",
+  },
+  "autoWrap": {
+    "effective": true,
+  },
+  "autocompact": {
+    "applied": 400000,
+    "higher": 500000,
+    "lower": 300000,
+    "window": 400000,
+  },
+  "colorCompatibility": {
+    "effective": "truecolor",
+  },
+  "configPath": "<dir>/config.json5",
+  "context": {
+    "contextLeft": 24,
+    "totalTokens": 48487,
+  },
+  "cwd": "/home/tester/code/project",
+  "effort": {
+    "level": "xhigh",
+  },
+  "endcaps": {
+    "effective": "powerline",
+  },
+  "experimentalBand": {
+    "effective": false,
+  },
+  "experimentalPane": {
+    "effective": false,
+  },
+  "experimentalStatusline": {
+    "effective": false,
+  },
+  "git": {
+    "ahead": 2,
+    "behind": 1,
+    "branch": "main",
+    "prNumber": 7,
+    "prState": "open",
+    "prUrl": "https://example.test/pr/7",
+    "sha": "abc1234",
+    "stash": 1,
+    "status": "dirty",
+    "tracking": "none",
+  },
+  "history": {
+    "redo": 0,
+    "sinceEdit": 0,
+    "undo": 0,
+  },
+  "home": "/home/tester",
+  "hook_event_name": "Status",
+  "host": {},
+  "menuTimeout": {
+    "effective": 120,
+  },
+  "model": {
+    "display_name": "M",
+    "id": "m",
+  },
+  "navigation": {
+    "back": 0,
+  },
+  "padding": {
+    "effective": 0,
+  },
+  "plugins": {},
+  "preset": {
+    "bundled": true,
+    "customized": false,
+    "effective": "compact",
+  },
+  "rate_limits": {
+    "five_hour": {
+      "resets_at": 1700007200,
+      "used_percentage": 63,
+    },
+    "seven_day": {
+      "resets_at": 1700432000,
+      "used_percentage": 21,
+    },
+  },
+  "renderer": {
+    "effective": "claude",
+  },
+  "repo": {},
+  "resettable": {
+    "animationSpeed": false,
+    "autoWrap": false,
+    "effect": false,
+    "endcaps": false,
+    "experimentalBand": false,
+    "experimentalPane": false,
+    "experimentalStatusline": false,
+    "menuTimeout": false,
+    "padding": false,
+    "preset": true,
+    "renderer": false,
+    "shade": false,
+    "style": false,
+    "theme": false,
+    "transitions": false,
+    "updateNotice": false,
+    "variation": false,
+  },
+  "resumeCommand": "cd /home/tester/code/project && claude --resume golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
+  "session_id": "golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
+  "shade": {
+    "effective": "middle",
+  },
+  "term": {
+    "cols": 118,
+  },
+  "themeDefault": {
+    "differs": false,
+  },
+  "tmux": {
+    "pane": "%7",
+  },
+  "transcript_path": "/home/tester/code/project/golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a.jsonl",
+  "transitions": {
+    "effective": false,
+  },
+  "unsaved": 1,
+  "updateNotice": {
+    "effective": true,
+  },
+  "variation": {
+    "effective": "accent",
+  },
+  "version": "1.15.0",
+  "weekly": {
+    "percentage": 21,
+    "resetsAt": 1700432000,
+  },
+  "workspace": {
+    "added_dirs": [],
+    "current_dir": "/home/tester/code/project",
+    "project_dir": "/home/tester/code/project",
+  },
+}
+`;
+
+exports[`a session's view, drawn from fixed owners at a fixed instant preset default: the bar 1`] = `
+"[7;38;2;100;142;225m[0m[38;2;26;27;38;48;2;100;142;225m [0m]8;id=94ee9e0c;cc-candybar://dispatch/does=open+candybar.menu+and+2+more&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.menu%2Fopen&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.resetAll.armed%2Fdisarmed&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.commands.clear.armed%2Fdisarmed\\[38;2;26;27;38;48;2;100;142;225m🍫[0m]8;;\\[38;2;26;27;38;48;2;100;142;225m [0m[38;2;100;142;225;48;2;122;162;247m[0m[38;2;26;27;38;48;2;122;162;247m [0m[38;2;26;27;38;48;2;122;162;247m polled[0m[38;2;26;27;38;48;2;122;162;247m [0m[38;2;137;175;255;48;2;122;162;247m[0m[38;2;59;82;141;48;2;122;162;247m [0m]8;id=b197edfd;cc-candybar://dispatch/does=copy+/home/tester/code/project&e=copy%2F%252Fhome%252Ftester%252Fcode%252Fproject\\[38;2;59;82;141;48;2;122;162;247m~/c/project[0m]8;;\\[38;2;59;82;141;48;2;122;162;247m [0m[38;2;122;162;247;48;2;100;142;225m[0m[38;2;43;65;123;48;2;100;142;225m [0m[38;2;43;65;123;48;2;100;142;225m⎇ [0m[38;2;57;17;101;48;2;100;142;225mmain[0m[38;2;43;65;123;48;2;100;142;225m [0m[38;2;27;46;0;48;2;100;142;225m+2[0m[38;2;43;65;123;48;2;100;142;225m/[0m[38;2;58;36;0;48;2;100;142;225m-1[0m[38;2;43;65;123;48;2;100;142;225m [0m]8;id=6343e001;cc-candybar://dispatch/does=set+git-detail+to+expanded&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fgit-detail%2Fexpanded\\[38;2;43;65;123;48;2;100;142;225m▸[0m]8;;\\[38;2;43;65;123;48;2;100;142;225m [0m[38;2;100;142;225m[0m
+[7;38;2;231;138;81m[0m[38;2;26;27;38;48;2;231;138;81m [0m[38;2;26;27;38;48;2;231;138;81m✱ [0m[38;2;26;27;38;48;2;231;138;81mM[0m[38;2;26;27;38;48;2;231;138;81m [0m[38;2;95;41;0;48;2;231;138;81m󰶼[0m[38;2;26;27;38;48;2;231;138;81m [0m[38;2;231;138;81;48;2;223;175;104m[0m[38;2;26;27;38;48;2;223;175;104m [0m[38;2;26;27;38;48;2;223;175;104m◔ [0m[38;2;26;27;38;48;2;223;175;104m48,487[0m[38;2;26;27;38;48;2;223;175;104m ([0m[38;2;26;27;38;48;2;223;175;104m24[0m[38;2;26;27;38;48;2;223;175;104m%)[0m[38;2;26;27;38;48;2;223;175;104m [0m[38;2;223;175;104;48;2;255;178;119m[0m[38;2;26;27;38;48;2;255;178;119m [0m[38;2;26;27;38;48;2;255;178;119m⇲ [0m[38;2;26;27;38;48;2;255;178;119m400.0[0m[38;2;26;27;38;48;2;255;178;119mK[0m[38;2;26;27;38;48;2;255;178;119m [0m]8;id=2653b15e;cc-candybar://dispatch/does=type+/autocompact+300000&e=slash%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2F%252Fautocompact%2520300000\\[38;2;26;27;38;48;2;255;178;119m−[0m]8;;\\[38;2;26;27;38;48;2;255;178;119m [0m]8;id=7b50309e;cc-candybar://dispatch/does=type+/autocompact+500000&e=slash%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2F%252Fautocompact%2520500000\\[38;2;26;27;38;48;2;255;178;119m+[0m]8;;\\[38;2;26;27;38;48;2;255;178;119m [0m]8;id=cd7a1bd2;cc-candybar://dispatch/does=type+/autocompact+auto&e=slash%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2F%252Fautocompact%2520auto\\[38;2;26;27;38;48;2;255;178;119m↺[0m]8;;\\[38;2;26;27;38;48;2;255;178;119m [0m[38;2;255;178;119;48;2;254;158;100m[0m[38;2;98;65;0;48;2;254;158;100m [0m[38;2;98;65;0;48;2;254;158;100m◴ [0m[38;2;98;65;0;48;2;254;158;100m15[0m[38;2;98;65;0;48;2;254;158;100mm[0m[38;2;98;65;0;48;2;254;158;100m [0m[38;2;254;158;100;48;2;223;175;104m[0m[38;2;26;27;38;48;2;223;175;104m [0m[38;2;26;27;38;48;2;223;175;104m◱ [0m[38;2;26;27;38;48;2;223;175;104m63[0m[38;2;26;27;38;48;2;223;175;104m% ([0m[38;2;26;27;38;48;2;223;175;104m2[0m[38;2;26;27;38;48;2;223;175;104mh [0m[38;2;26;27;38;48;2;223;175;104m1[0m[38;2;26;27;38;48;2;223;175;104mm[0m[38;2;26;27;38;48;2;223;175;104m)[0m[38;2;26;27;38;48;2;223;175;104m [0m[38;2;223;175;104;48;2;254;158;100m[0m[38;2;26;27;38;48;2;254;158;100m [0m[38;2;26;27;38;48;2;254;158;100m◑ [0m[38;2;26;27;38;48;2;254;158;100m21[0m[38;2;26;27;38;48;2;254;158;100m% ([0m[38;2;26;27;38;48;2;254;158;100m5[0m[38;2;26;27;38;48;2;254;158;100md[0m[38;2;26;27;38;48;2;254;158;100m)[0m[38;2;26;27;38;48;2;254;158;100m [0m[38;2;254;158;100m[0m"
+`;
+
+exports[`a session's view, drawn from fixed owners at a fixed instant preset default: the payload a template reads 1`] = `
+{
+  "animationSpeed": {
+    "effective": "1x",
+  },
+  "autoWrap": {
+    "effective": true,
+  },
+  "autocompact": {
+    "applied": 400000,
+    "higher": 500000,
+    "lower": 300000,
+    "window": 400000,
+  },
+  "block": {
+    "nativeUtilization": 63,
+    "resetsAt": 1700007200,
+  },
+  "cache": {
+    "expiresAt": 1700000900,
+  },
+  "colorCompatibility": {
+    "effective": "truecolor",
+  },
+  "configPath": "<dir>/config.json5",
+  "context": {
+    "contextLeft": 24,
+    "totalTokens": 48487,
+  },
+  "cwd": "/home/tester/code/project",
+  "effort": {
+    "level": "xhigh",
+  },
+  "endcaps": {
+    "effective": "powerline",
+  },
+  "experimentalBand": {
+    "effective": false,
+  },
+  "experimentalPane": {
+    "effective": false,
+  },
+  "experimentalStatusline": {
+    "effective": false,
+  },
+  "git": {
+    "ahead": 2,
+    "behind": 1,
+    "branch": "main",
+    "prNumber": 7,
+    "prState": "open",
+    "prUrl": "https://example.test/pr/7",
+    "sha": "abc1234",
+    "stash": 1,
+    "status": "dirty",
+    "tracking": "none",
+  },
+  "history": {
+    "redo": 0,
+    "sinceEdit": 0,
+    "undo": 0,
+  },
+  "home": "/home/tester",
+  "hook_event_name": "Status",
+  "host": {
+    "name": "tester-box",
+    "user": "tester",
+  },
+  "menuTimeout": {
+    "effective": 120,
+  },
+  "model": {
+    "display_name": "M",
+    "id": "m",
+  },
+  "navigation": {
+    "back": 0,
+  },
+  "padding": {
+    "effective": 1,
+  },
+  "plugins": {},
+  "preset": {
+    "bundled": true,
+    "customized": false,
+    "effective": "default",
+  },
+  "rate_limits": {
+    "five_hour": {
+      "resets_at": 1700007200,
+      "used_percentage": 63,
+    },
+    "seven_day": {
+      "resets_at": 1700432000,
+      "used_percentage": 21,
+    },
+  },
+  "renderer": {
+    "effective": "claude",
+  },
+  "repo": {},
+  "resettable": {
+    "animationSpeed": false,
+    "autoWrap": false,
+    "effect": false,
+    "endcaps": false,
+    "experimentalBand": false,
+    "experimentalPane": false,
+    "experimentalStatusline": false,
+    "menuTimeout": false,
+    "padding": false,
+    "preset": false,
+    "renderer": false,
+    "shade": false,
+    "style": false,
+    "theme": false,
+    "transitions": false,
+    "updateNotice": false,
+    "variation": false,
+  },
+  "resumeCommand": "cd /home/tester/code/project && claude --resume golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
+  "session_id": "golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
+  "shade": {
+    "effective": "middle",
+  },
+  "term": {
+    "cols": 118,
+  },
+  "themeDefault": {
+    "differs": false,
+  },
+  "tmux": {
+    "pane": "%7",
+  },
+  "transcript_path": "/home/tester/code/project/golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a.jsonl",
+  "transitions": {
+    "effective": false,
+  },
+  "unsaved": 0,
+  "updateNotice": {
+    "effective": true,
+  },
+  "variation": {
+    "effective": "accent",
+  },
+  "version": "1.15.0",
+  "weekly": {
+    "percentage": 21,
+    "resetsAt": 1700432000,
+  },
+  "workspace": {
+    "added_dirs": [],
+    "current_dir": "/home/tester/code/project",
+    "project_dir": "/home/tester/code/project",
+  },
+}
+`;
+
+exports[`a session's view, drawn from fixed owners at a fixed instant preset dense: the bar 1`] = `
+"[7;38;2;100;142;225m[0m]8;id=94ee9e0c;cc-candybar://dispatch/does=open+candybar.menu+and+2+more&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.menu%2Fopen&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.resetAll.armed%2Fdisarmed&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.commands.clear.armed%2Fdisarmed\\[38;2;26;27;38;48;2;100;142;225m🍫[0m]8;;\\[38;2;100;142;225;48;2;122;162;247m[0m[38;2;26;27;38;48;2;122;162;247m polled[0m[38;2;137;175;255;48;2;122;162;247m[0m]8;id=b197edfd;cc-candybar://dispatch/does=copy+/home/tester/code/project&e=copy%2F%252Fhome%252Ftester%252Fcode%252Fproject\\[38;2;59;82;141;48;2;122;162;247m~/c/project[0m]8;;\\[38;2;122;162;247;48;2;100;142;225m[0m[38;2;43;65;123;48;2;100;142;225m⎇ [0m[38;2;57;17;101;48;2;100;142;225mmain[0m[38;2;43;65;123;48;2;100;142;225m [0m[38;2;27;46;0;48;2;100;142;225m+2[0m[38;2;43;65;123;48;2;100;142;225m/[0m[38;2;58;36;0;48;2;100;142;225m-1[0m[38;2;43;65;123;48;2;100;142;225m [0m]8;id=6343e001;cc-candybar://dispatch/does=set+git-detail+to+expanded&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fgit-detail%2Fexpanded\\[38;2;43;65;123;48;2;100;142;225m▸[0m]8;;\\[38;2;100;142;225;48;2;122;162;247m[0m[38;2;26;27;38;48;2;122;162;247m✱ [0m[38;2;26;27;38;48;2;122;162;247mM[0m[38;2;26;27;38;48;2;122;162;247m [0m[38;2;97;42;0;48;2;122;162;247m󰶼[0m[38;2;122;162;247;48;2;223;175;104m[0m[38;2;26;27;38;48;2;223;175;104m◔ [0m[38;2;26;27;38;48;2;223;175;104m48,487[0m[38;2;26;27;38;48;2;223;175;104m ([0m[38;2;26;27;38;48;2;223;175;104m24[0m[38;2;26;27;38;48;2;223;175;104m%)[0m[38;2;223;175;104;48;2;122;162;247m[0m[38;2;26;27;38;48;2;122;162;247m⇲ [0m[38;2;26;27;38;48;2;122;162;247m400.0[0m[38;2;26;27;38;48;2;122;162;247mK[0m[38;2;26;27;38;48;2;122;162;247m [0m]8;id=2653b15e;cc-candybar://dispatch/does=type+/autocompact+300000&e=slash%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2F%252Fautocompact%2520300000\\[38;2;26;27;38;48;2;122;162;247m−[0m]8;;\\[38;2;26;27;38;48;2;122;162;247m [0m]8;id=7b50309e;cc-candybar://dispatch/does=type+/autocompact+500000&e=slash%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2F%252Fautocompact%2520500000\\[38;2;26;27;38;48;2;122;162;247m+[0m]8;;\\[38;2;26;27;38;48;2;122;162;247m [0m]8;id=cd7a1bd2;cc-candybar://dispatch/does=type+/autocompact+auto&e=slash%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2F%252Fautocompact%2520auto\\[38;2;26;27;38;48;2;122;162;247m↺[0m]8;;\\[38;2;122;162;247;48;2;100;142;225m[0m[38;2;58;36;0;48;2;100;142;225m◴ [0m[38;2;58;36;0;48;2;100;142;225m15[0m[38;2;58;36;0;48;2;100;142;225mm[0m[38;2;100;142;225;48;2;223;175;104m[0m[38;2;26;27;38;48;2;223;175;104m◱ [0m[38;2;26;27;38;48;2;223;175;104m63[0m[38;2;26;27;38;48;2;223;175;104m% ([0m[38;2;26;27;38;48;2;223;175;104m2[0m[38;2;26;27;38;48;2;223;175;104mh [0m[38;2;26;27;38;48;2;223;175;104m1[0m[38;2;26;27;38;48;2;223;175;104mm[0m[38;2;26;27;38;48;2;223;175;104m)[0m[38;2;223;175;104;48;2;143;182;255m[0m[38;2;26;27;38;48;2;143;182;255m◑ [0m[38;2;26;27;38;48;2;143;182;255m21[0m[38;2;26;27;38;48;2;143;182;255m% ([0m[38;2;26;27;38;48;2;143;182;255m5[0m[38;2;26;27;38;48;2;143;182;255md[0m[38;2;26;27;38;48;2;143;182;255m)[0m[38;2;143;182;255m[0m
+[7;38;2;122;162;247m[0m[38;2;26;27;38;48;2;122;162;247m§ [0m[38;2;26;27;38;48;2;122;162;247m$[0m[38;2;26;27;38;48;2;122;162;247m0.39[0m[38;2;26;27;38;48;2;122;162;247m ([0m[38;2;26;27;38;48;2;122;162;247m241.4[0m[38;2;26;27;38;48;2;122;162;247mK[0m[38;2;26;27;38;48;2;122;162;247m tokens[0m[38;2;26;27;38;48;2;122;162;247m)[0m[38;2;122;162;247m[0m"
+`;
+
+exports[`a session's view, drawn from fixed owners at a fixed instant preset dense: the payload a template reads 1`] = `
+{
+  "animationSpeed": {
+    "effective": "1x",
+  },
+  "autoWrap": {
+    "effective": true,
+  },
+  "autocompact": {
+    "applied": 400000,
+    "higher": 500000,
+    "lower": 300000,
+    "window": 400000,
+  },
+  "block": {
+    "nativeUtilization": 63,
+    "resetsAt": 1700007200,
+  },
+  "cache": {
+    "expiresAt": 1700000900,
+  },
+  "colorCompatibility": {
+    "effective": "truecolor",
+  },
+  "configPath": "<dir>/config.json5",
+  "context": {
+    "contextLeft": 24,
+    "totalTokens": 48487,
+  },
+  "cwd": "/home/tester/code/project",
+  "effort": {
+    "level": "xhigh",
+  },
+  "endcaps": {
+    "effective": "powerline",
+  },
+  "experimentalBand": {
+    "effective": false,
+  },
+  "experimentalPane": {
+    "effective": false,
+  },
+  "experimentalStatusline": {
+    "effective": false,
+  },
+  "git": {
+    "ahead": 2,
+    "behind": 1,
+    "branch": "main",
+    "prNumber": 7,
+    "prState": "open",
+    "prUrl": "https://example.test/pr/7",
+    "sha": "abc1234",
+    "stash": 1,
+    "status": "dirty",
+    "tracking": "none",
+  },
+  "history": {
+    "redo": 0,
+    "sinceEdit": 0,
+    "undo": 0,
+  },
+  "home": "/home/tester",
+  "hook_event_name": "Status",
+  "host": {
+    "name": "tester-box",
+    "user": "tester",
+  },
+  "menuTimeout": {
+    "effective": 120,
+  },
+  "model": {
+    "display_name": "M",
+    "id": "m",
+  },
+  "navigation": {
+    "back": 0,
+  },
+  "padding": {
+    "effective": 0,
+  },
+  "plugins": {},
+  "preset": {
+    "bundled": true,
+    "customized": false,
+    "effective": "dense",
+  },
+  "rate_limits": {
+    "five_hour": {
+      "resets_at": 1700007200,
+      "used_percentage": 63,
+    },
+    "seven_day": {
+      "resets_at": 1700432000,
+      "used_percentage": 21,
+    },
+  },
+  "renderer": {
+    "effective": "claude",
+  },
+  "repo": {},
+  "resettable": {
+    "animationSpeed": false,
+    "autoWrap": false,
+    "effect": false,
+    "endcaps": false,
+    "experimentalBand": false,
+    "experimentalPane": false,
+    "experimentalStatusline": false,
+    "menuTimeout": false,
+    "padding": false,
+    "preset": true,
+    "renderer": false,
+    "shade": false,
+    "style": false,
+    "theme": false,
+    "transitions": false,
+    "updateNotice": false,
+    "variation": false,
+  },
+  "resumeCommand": "cd /home/tester/code/project && claude --resume golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
+  "session": {
+    "cost": 0.39,
+    "tokens": 241400,
+  },
+  "session_id": "golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
+  "shade": {
+    "effective": "middle",
+  },
+  "term": {
+    "cols": 118,
+  },
+  "themeDefault": {
+    "differs": false,
+  },
+  "tmux": {
+    "pane": "%7",
+  },
+  "transcript_path": "/home/tester/code/project/golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a.jsonl",
+  "transitions": {
+    "effective": false,
+  },
+  "unsaved": 1,
+  "updateNotice": {
+    "effective": true,
+  },
+  "variation": {
+    "effective": "accent",
+  },
+  "version": "1.15.0",
+  "weekly": {
+    "percentage": 21,
+    "resetsAt": 1700432000,
+  },
+  "workspace": {
+    "added_dirs": [],
+    "current_dir": "/home/tester/code/project",
+    "project_dir": "/home/tester/code/project",
+  },
+}
+`;
+
+exports[`a session's view, drawn from fixed owners at a fixed instant preset git: the bar 1`] = `
+"[7;38;2;100;142;225m[0m[38;2;26;27;38;48;2;100;142;225m [0m]8;id=94ee9e0c;cc-candybar://dispatch/does=open+candybar.menu+and+2+more&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.menu%2Fopen&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.resetAll.armed%2Fdisarmed&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.commands.clear.armed%2Fdisarmed\\[38;2;26;27;38;48;2;100;142;225m🍫[0m]8;;\\[38;2;26;27;38;48;2;100;142;225m [0m[38;2;100;142;225;48;2;122;162;247m[0m[38;2;26;27;38;48;2;122;162;247m [0m[38;2;26;27;38;48;2;122;162;247m polled[0m[38;2;26;27;38;48;2;122;162;247m [0m[38;2;137;175;255;48;2;122;162;247m[0m[38;2;59;82;141;48;2;122;162;247m [0m]8;id=b197edfd;cc-candybar://dispatch/does=copy+/home/tester/code/project&e=copy%2F%252Fhome%252Ftester%252Fcode%252Fproject\\[38;2;59;82;141;48;2;122;162;247m~/c/project[0m]8;;\\[38;2;59;82;141;48;2;122;162;247m [0m[38;2;122;162;247;48;2;100;142;225m[0m[38;2;43;65;123;48;2;100;142;225m [0m[38;2;43;65;123;48;2;100;142;225m⎇ [0m[38;2;57;17;101;48;2;100;142;225mmain[0m[38;2;43;65;123;48;2;100;142;225m [0m[38;2;27;46;0;48;2;100;142;225m+2[0m[38;2;43;65;123;48;2;100;142;225m/[0m[38;2;58;36;0;48;2;100;142;225m-1[0m[38;2;43;65;123;48;2;100;142;225m [0m]8;id=6343e001;cc-candybar://dispatch/does=set+git-detail+to+expanded&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fgit-detail%2Fexpanded\\[38;2;43;65;123;48;2;100;142;225m▸[0m]8;;\\[38;2;43;65;123;48;2;100;142;225m [0m[38;2;100;142;225;48;2;122;162;247m[0m[38;2;26;27;38;48;2;122;162;247m [0m]8;id=96baeaf3;https://example.test/pr/7\\[38;2;26;27;38;48;2;122;162;247m⇆ #7[0m]8;;\\[38;2;26;27;38;48;2;122;162;247m [0m[38;2;122;162;247m[0m
+[7;38;2;231;138;81m[0m[38;2;26;27;38;48;2;231;138;81m [0m[38;2;26;27;38;48;2;231;138;81m✱ [0m[38;2;26;27;38;48;2;231;138;81mM[0m[38;2;26;27;38;48;2;231;138;81m [0m[38;2;95;41;0;48;2;231;138;81m󰶼[0m[38;2;26;27;38;48;2;231;138;81m [0m[38;2;231;138;81;48;2;223;175;104m[0m[38;2;26;27;38;48;2;223;175;104m [0m[38;2;26;27;38;48;2;223;175;104m◔ [0m[38;2;26;27;38;48;2;223;175;104m48,487[0m[38;2;26;27;38;48;2;223;175;104m ([0m[38;2;26;27;38;48;2;223;175;104m24[0m[38;2;26;27;38;48;2;223;175;104m%)[0m[38;2;26;27;38;48;2;223;175;104m [0m[38;2;223;175;104m[0m"
+`;
+
+exports[`a session's view, drawn from fixed owners at a fixed instant preset git: the payload a template reads 1`] = `
+{
+  "animationSpeed": {
+    "effective": "1x",
+  },
+  "autoWrap": {
+    "effective": true,
+  },
+  "autocompact": {
+    "applied": 400000,
+    "higher": 500000,
+    "lower": 300000,
+    "window": 400000,
+  },
+  "colorCompatibility": {
+    "effective": "truecolor",
+  },
+  "configPath": "<dir>/config.json5",
+  "context": {
+    "contextLeft": 24,
+    "totalTokens": 48487,
+  },
+  "cwd": "/home/tester/code/project",
+  "effort": {
+    "level": "xhigh",
+  },
+  "endcaps": {
+    "effective": "powerline",
+  },
+  "experimentalBand": {
+    "effective": false,
+  },
+  "experimentalPane": {
+    "effective": false,
+  },
+  "experimentalStatusline": {
+    "effective": false,
+  },
+  "git": {
+    "ahead": 2,
+    "behind": 1,
+    "branch": "main",
+    "prNumber": 7,
+    "prState": "open",
+    "prUrl": "https://example.test/pr/7",
+    "sha": "abc1234",
+    "stash": 1,
+    "status": "dirty",
+    "tracking": "none",
+  },
+  "history": {
+    "redo": 0,
+    "sinceEdit": 0,
+    "undo": 0,
+  },
+  "home": "/home/tester",
+  "hook_event_name": "Status",
+  "host": {
+    "name": "tester-box",
+    "user": "tester",
+  },
+  "menuTimeout": {
+    "effective": 120,
+  },
+  "model": {
+    "display_name": "M",
+    "id": "m",
+  },
+  "navigation": {
+    "back": 0,
+  },
+  "padding": {
+    "effective": 1,
+  },
+  "plugins": {},
+  "preset": {
+    "bundled": true,
+    "customized": false,
+    "effective": "git",
+  },
+  "rate_limits": {
+    "five_hour": {
+      "resets_at": 1700007200,
+      "used_percentage": 63,
+    },
+    "seven_day": {
+      "resets_at": 1700432000,
+      "used_percentage": 21,
+    },
+  },
+  "renderer": {
+    "effective": "claude",
+  },
+  "repo": {},
+  "resettable": {
+    "animationSpeed": false,
+    "autoWrap": false,
+    "effect": false,
+    "endcaps": false,
+    "experimentalBand": false,
+    "experimentalPane": false,
+    "experimentalStatusline": false,
+    "menuTimeout": false,
+    "padding": false,
+    "preset": true,
+    "renderer": false,
+    "shade": false,
+    "style": false,
+    "theme": false,
+    "transitions": false,
+    "updateNotice": false,
+    "variation": false,
+  },
+  "resumeCommand": "cd /home/tester/code/project && claude --resume golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
+  "session_id": "golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
+  "shade": {
+    "effective": "middle",
+  },
+  "term": {
+    "cols": 118,
+  },
+  "themeDefault": {
+    "differs": false,
+  },
+  "tmux": {
+    "pane": "%7",
+  },
+  "transcript_path": "/home/tester/code/project/golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a.jsonl",
+  "transitions": {
+    "effective": false,
+  },
+  "unsaved": 1,
+  "updateNotice": {
+    "effective": true,
+  },
+  "variation": {
+    "effective": "accent",
+  },
+  "version": "1.15.0",
+  "weekly": {
+    "percentage": 21,
+    "resetsAt": 1700432000,
+  },
+  "workspace": {
+    "added_dirs": [],
+    "current_dir": "/home/tester/code/project",
+    "project_dir": "/home/tester/code/project",
+  },
+}
+`;
+
+exports[`a session's view, drawn from fixed owners at a fixed instant preset null: the bar 1`] = `
+"[7;38;2;100;142;225m[0m[38;2;26;27;38;48;2;100;142;225m [0m]8;id=94ee9e0c;cc-candybar://dispatch/does=open+candybar.menu+and+2+more&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.menu%2Fopen&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.resetAll.armed%2Fdisarmed&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.commands.clear.armed%2Fdisarmed\\[38;2;26;27;38;48;2;100;142;225m🍫[0m]8;;\\[38;2;26;27;38;48;2;100;142;225m [0m[38;2;100;142;225;48;2;122;162;247m[0m[38;2;26;27;38;48;2;122;162;247m [0m[38;2;26;27;38;48;2;122;162;247m polled[0m[38;2;26;27;38;48;2;122;162;247m [0m[38;2;137;175;255;48;2;122;162;247m[0m[38;2;59;82;141;48;2;122;162;247m [0m]8;id=b197edfd;cc-candybar://dispatch/does=copy+/home/tester/code/project&e=copy%2F%252Fhome%252Ftester%252Fcode%252Fproject\\[38;2;59;82;141;48;2;122;162;247m~/c/project[0m]8;;\\[38;2;59;82;141;48;2;122;162;247m [0m[38;2;122;162;247;48;2;100;142;225m[0m[38;2;43;65;123;48;2;100;142;225m [0m[38;2;43;65;123;48;2;100;142;225m⎇ [0m[38;2;57;17;101;48;2;100;142;225mmain[0m[38;2;43;65;123;48;2;100;142;225m [0m[38;2;27;46;0;48;2;100;142;225m+2[0m[38;2;43;65;123;48;2;100;142;225m/[0m[38;2;58;36;0;48;2;100;142;225m-1[0m[38;2;43;65;123;48;2;100;142;225m [0m]8;id=6343e001;cc-candybar://dispatch/does=set+git-detail+to+expanded&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fgit-detail%2Fexpanded\\[38;2;43;65;123;48;2;100;142;225m▸[0m]8;;\\[38;2;43;65;123;48;2;100;142;225m [0m[38;2;100;142;225m[0m
+[7;38;2;231;138;81m[0m[38;2;26;27;38;48;2;231;138;81m [0m[38;2;26;27;38;48;2;231;138;81m✱ [0m[38;2;26;27;38;48;2;231;138;81mM[0m[38;2;26;27;38;48;2;231;138;81m [0m[38;2;95;41;0;48;2;231;138;81m󰶼[0m[38;2;26;27;38;48;2;231;138;81m [0m[38;2;231;138;81;48;2;223;175;104m[0m[38;2;26;27;38;48;2;223;175;104m [0m[38;2;26;27;38;48;2;223;175;104m◔ [0m[38;2;26;27;38;48;2;223;175;104m48,487[0m[38;2;26;27;38;48;2;223;175;104m ([0m[38;2;26;27;38;48;2;223;175;104m24[0m[38;2;26;27;38;48;2;223;175;104m%)[0m[38;2;26;27;38;48;2;223;175;104m [0m[38;2;223;175;104;48;2;255;178;119m[0m[38;2;26;27;38;48;2;255;178;119m [0m[38;2;26;27;38;48;2;255;178;119m⇲ [0m[38;2;26;27;38;48;2;255;178;119m400.0[0m[38;2;26;27;38;48;2;255;178;119mK[0m[38;2;26;27;38;48;2;255;178;119m [0m]8;id=2653b15e;cc-candybar://dispatch/does=type+/autocompact+300000&e=slash%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2F%252Fautocompact%2520300000\\[38;2;26;27;38;48;2;255;178;119m−[0m]8;;\\[38;2;26;27;38;48;2;255;178;119m [0m]8;id=7b50309e;cc-candybar://dispatch/does=type+/autocompact+500000&e=slash%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2F%252Fautocompact%2520500000\\[38;2;26;27;38;48;2;255;178;119m+[0m]8;;\\[38;2;26;27;38;48;2;255;178;119m [0m]8;id=cd7a1bd2;cc-candybar://dispatch/does=type+/autocompact+auto&e=slash%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2F%252Fautocompact%2520auto\\[38;2;26;27;38;48;2;255;178;119m↺[0m]8;;\\[38;2;26;27;38;48;2;255;178;119m [0m[38;2;255;178;119;48;2;254;158;100m[0m[38;2;98;65;0;48;2;254;158;100m [0m[38;2;98;65;0;48;2;254;158;100m◴ [0m[38;2;98;65;0;48;2;254;158;100m15[0m[38;2;98;65;0;48;2;254;158;100mm[0m[38;2;98;65;0;48;2;254;158;100m [0m[38;2;254;158;100;48;2;223;175;104m[0m[38;2;26;27;38;48;2;223;175;104m [0m[38;2;26;27;38;48;2;223;175;104m◱ [0m[38;2;26;27;38;48;2;223;175;104m63[0m[38;2;26;27;38;48;2;223;175;104m% ([0m[38;2;26;27;38;48;2;223;175;104m2[0m[38;2;26;27;38;48;2;223;175;104mh [0m[38;2;26;27;38;48;2;223;175;104m1[0m[38;2;26;27;38;48;2;223;175;104mm[0m[38;2;26;27;38;48;2;223;175;104m)[0m[38;2;26;27;38;48;2;223;175;104m [0m[38;2;223;175;104;48;2;254;158;100m[0m[38;2;26;27;38;48;2;254;158;100m [0m[38;2;26;27;38;48;2;254;158;100m◑ [0m[38;2;26;27;38;48;2;254;158;100m21[0m[38;2;26;27;38;48;2;254;158;100m% ([0m[38;2;26;27;38;48;2;254;158;100m5[0m[38;2;26;27;38;48;2;254;158;100md[0m[38;2;26;27;38;48;2;254;158;100m)[0m[38;2;26;27;38;48;2;254;158;100m [0m[38;2;254;158;100m[0m"
+`;
+
+exports[`a session's view, drawn from fixed owners at a fixed instant preset null: the payload a template reads 1`] = `
+{
+  "animationSpeed": {
+    "effective": "1x",
+  },
+  "autoWrap": {
+    "effective": true,
+  },
+  "autocompact": {
+    "applied": 400000,
+    "higher": 500000,
+    "lower": 300000,
+    "window": 400000,
+  },
+  "block": {
+    "nativeUtilization": 63,
+    "resetsAt": 1700007200,
+  },
+  "cache": {
+    "expiresAt": 1700000900,
+  },
+  "colorCompatibility": {
+    "effective": "truecolor",
+  },
+  "configPath": "<dir>/config.json5",
+  "context": {
+    "contextLeft": 24,
+    "totalTokens": 48487,
+  },
+  "cwd": "/home/tester/code/project",
+  "effort": {
+    "level": "xhigh",
+  },
+  "endcaps": {
+    "effective": "powerline",
+  },
+  "experimentalBand": {
+    "effective": false,
+  },
+  "experimentalPane": {
+    "effective": false,
+  },
+  "experimentalStatusline": {
+    "effective": false,
+  },
+  "git": {
+    "ahead": 2,
+    "behind": 1,
+    "branch": "main",
+    "prNumber": 7,
+    "prState": "open",
+    "prUrl": "https://example.test/pr/7",
+    "sha": "abc1234",
+    "stash": 1,
+    "status": "dirty",
+    "tracking": "none",
+  },
+  "history": {
+    "redo": 0,
+    "sinceEdit": 0,
+    "undo": 0,
+  },
+  "home": "/home/tester",
+  "hook_event_name": "Status",
+  "host": {
+    "name": "tester-box",
+    "user": "tester",
+  },
+  "menuTimeout": {
+    "effective": 120,
+  },
+  "model": {
+    "display_name": "M",
+    "id": "m",
+  },
+  "navigation": {
+    "back": 0,
+  },
+  "padding": {
+    "effective": 1,
+  },
+  "plugins": {},
+  "preset": {
+    "bundled": true,
+    "customized": false,
+    "effective": "default",
+  },
+  "rate_limits": {
+    "five_hour": {
+      "resets_at": 1700007200,
+      "used_percentage": 63,
+    },
+    "seven_day": {
+      "resets_at": 1700432000,
+      "used_percentage": 21,
+    },
+  },
+  "renderer": {
+    "effective": "claude",
+  },
+  "repo": {},
+  "resettable": {
+    "animationSpeed": false,
+    "autoWrap": false,
+    "effect": false,
+    "endcaps": false,
+    "experimentalBand": false,
+    "experimentalPane": false,
+    "experimentalStatusline": false,
+    "menuTimeout": false,
+    "padding": false,
+    "preset": false,
+    "renderer": false,
+    "shade": false,
+    "style": false,
+    "theme": false,
+    "transitions": false,
+    "updateNotice": false,
+    "variation": false,
+  },
+  "resumeCommand": "cd /home/tester/code/project && claude --resume golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
+  "session_id": "golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
+  "shade": {
+    "effective": "middle",
+  },
+  "term": {
+    "cols": 118,
+  },
+  "themeDefault": {
+    "differs": false,
+  },
+  "tmux": {
+    "pane": "%7",
+  },
+  "transcript_path": "/home/tester/code/project/golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a.jsonl",
+  "transitions": {
+    "effective": false,
+  },
+  "unsaved": 0,
+  "updateNotice": {
+    "effective": true,
+  },
+  "variation": {
+    "effective": "accent",
+  },
+  "version": "1.15.0",
+  "weekly": {
+    "percentage": 21,
+    "resetsAt": 1700432000,
+  },
+  "workspace": {
+    "added_dirs": [],
+    "current_dir": "/home/tester/code/project",
+    "project_dir": "/home/tester/code/project",
+  },
+}
+`;
+
+exports[`a session's view, drawn from fixed owners at a fixed instant preset usage: the bar 1`] = `
+"[7;38;2;100;142;225m[0m[38;2;26;27;38;48;2;100;142;225m [0m]8;id=94ee9e0c;cc-candybar://dispatch/does=open+candybar.menu+and+2+more&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.menu%2Fopen&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.resetAll.armed%2Fdisarmed&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.commands.clear.armed%2Fdisarmed\\[38;2;26;27;38;48;2;100;142;225m🍫[0m]8;;\\[38;2;26;27;38;48;2;100;142;225m [0m[38;2;100;142;225;48;2;122;162;247m[0m[38;2;26;27;38;48;2;122;162;247m [0m[38;2;26;27;38;48;2;122;162;247m polled[0m[38;2;26;27;38;48;2;122;162;247m [0m[38;2;122;162;247;48;2;143;182;255m[0m[38;2;26;27;38;48;2;143;182;255m [0m[38;2;26;27;38;48;2;143;182;255m✱ [0m[38;2;26;27;38;48;2;143;182;255mM[0m[38;2;26;27;38;48;2;143;182;255m [0m[38;2;118;53;0;48;2;143;182;255m󰶼[0m[38;2;26;27;38;48;2;143;182;255m [0m[38;2;143;182;255;48;2;223;175;104m[0m[38;2;26;27;38;48;2;223;175;104m [0m[38;2;26;27;38;48;2;223;175;104m◔ [0m[38;2;26;27;38;48;2;223;175;104m48,487[0m[38;2;26;27;38;48;2;223;175;104m ([0m[38;2;26;27;38;48;2;223;175;104m24[0m[38;2;26;27;38;48;2;223;175;104m%)[0m[38;2;26;27;38;48;2;223;175;104m [0m[38;2;223;175;104;48;2;100;142;225m[0m[38;2;26;27;38;48;2;100;142;225m [0m[38;2;26;27;38;48;2;100;142;225m⇲ [0m[38;2;26;27;38;48;2;100;142;225m400.0[0m[38;2;26;27;38;48;2;100;142;225mK[0m[38;2;26;27;38;48;2;100;142;225m [0m]8;id=2653b15e;cc-candybar://dispatch/does=type+/autocompact+300000&e=slash%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2F%252Fautocompact%2520300000\\[38;2;26;27;38;48;2;100;142;225m−[0m]8;;\\[38;2;26;27;38;48;2;100;142;225m [0m]8;id=7b50309e;cc-candybar://dispatch/does=type+/autocompact+500000&e=slash%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2F%252Fautocompact%2520500000\\[38;2;26;27;38;48;2;100;142;225m+[0m]8;;\\[38;2;26;27;38;48;2;100;142;225m [0m]8;id=cd7a1bd2;cc-candybar://dispatch/does=type+/autocompact+auto&e=slash%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2F%252Fautocompact%2520auto\\[38;2;26;27;38;48;2;100;142;225m↺[0m]8;;\\[38;2;26;27;38;48;2;100;142;225m [0m[38;2;100;142;225;48;2;122;162;247m[0m[38;2;81;52;0;48;2;122;162;247m [0m[38;2;81;52;0;48;2;122;162;247m◴ [0m[38;2;81;52;0;48;2;122;162;247m15[0m[38;2;81;52;0;48;2;122;162;247mm[0m[38;2;81;52;0;48;2;122;162;247m [0m[38;2;122;162;247m[0m
+[7;38;2;223;175;104m[0m[38;2;26;27;38;48;2;223;175;104m [0m[38;2;26;27;38;48;2;223;175;104m◱ [0m[38;2;26;27;38;48;2;223;175;104m63[0m[38;2;26;27;38;48;2;223;175;104m% ([0m[38;2;26;27;38;48;2;223;175;104m2[0m[38;2;26;27;38;48;2;223;175;104mh [0m[38;2;26;27;38;48;2;223;175;104m1[0m[38;2;26;27;38;48;2;223;175;104mm[0m[38;2;26;27;38;48;2;223;175;104m)[0m[38;2;26;27;38;48;2;223;175;104m [0m[38;2;223;175;104;48;2;254;158;100m[0m[38;2;26;27;38;48;2;254;158;100m [0m[38;2;26;27;38;48;2;254;158;100m◑ [0m[38;2;26;27;38;48;2;254;158;100m21[0m[38;2;26;27;38;48;2;254;158;100m% ([0m[38;2;26;27;38;48;2;254;158;100m5[0m[38;2;26;27;38;48;2;254;158;100md[0m[38;2;26;27;38;48;2;254;158;100m)[0m[38;2;26;27;38;48;2;254;158;100m [0m[38;2;254;158;100;48;2;255;178;119m[0m[38;2;26;27;38;48;2;255;178;119m [0m[38;2;26;27;38;48;2;255;178;119m⚡ [0m[38;2;26;27;38;48;2;255;178;119m$[0m[38;2;26;27;38;48;2;255;178;119m1.51[0m[38;2;26;27;38;48;2;255;178;119m/hr[0m[38;2;26;27;38;48;2;255;178;119m · [0m[38;2;26;27;38;48;2;255;178;119m1[0m[38;2;26;27;38;48;2;255;178;119mh [0m[38;2;26;27;38;48;2;255;178;119m46[0m[38;2;26;27;38;48;2;255;178;119mm[0m[38;2;26;27;38;48;2;255;178;119m to 5h · [0m[38;2;26;27;38;48;2;255;178;119m7[0m[38;2;26;27;38;48;2;255;178;119md [0m[38;2;26;27;38;48;2;255;178;119m12[0m[38;2;26;27;38;48;2;255;178;119mh[0m[38;2;26;27;38;48;2;255;178;119m to wk[0m[38;2;26;27;38;48;2;255;178;119m [0m[38;2;255;178;119m[0m
+[7;38;2;100;142;225m[0m[38;2;26;27;38;48;2;100;142;225m [0m[38;2;26;27;38;48;2;100;142;225m§ [0m[38;2;26;27;38;48;2;100;142;225m$[0m[38;2;26;27;38;48;2;100;142;225m0.39[0m[38;2;26;27;38;48;2;100;142;225m ([0m[38;2;26;27;38;48;2;100;142;225m241.4[0m[38;2;26;27;38;48;2;100;142;225mK[0m[38;2;26;27;38;48;2;100;142;225m tokens[0m[38;2;26;27;38;48;2;100;142;225m)[0m[38;2;26;27;38;48;2;100;142;225m [0m[38;2;100;142;225;48;2;122;162;247m[0m[38;2;26;27;38;48;2;122;162;247m [0m[38;2;26;27;38;48;2;122;162;247m☉ [0m[38;2;26;27;38;48;2;122;162;247m$[0m[38;2;26;27;38;48;2;122;162;247m12.50[0m[38;2;26;27;38;48;2;122;162;247m ([0m[38;2;26;27;38;48;2;122;162;247m3.4[0m[38;2;26;27;38;48;2;122;162;247mM[0m[38;2;26;27;38;48;2;122;162;247m tokens[0m[38;2;26;27;38;48;2;122;162;247m)[0m[38;2;26;27;38;48;2;122;162;247m [0m[38;2;26;27;38;48;2;122;162;247m25%[0m[38;2;26;27;38;48;2;122;162;247m [0m[38;2;122;162;247;48;2;143;182;255m[0m[38;2;26;27;38;48;2;143;182;255m [0m[38;2;26;27;38;48;2;143;182;255m⇅ out [0m[38;2;26;27;38;48;2;143;182;255m—[0m[38;2;26;27;38;48;2;143;182;255m · in [0m[38;2;26;27;38;48;2;143;182;255m—[0m[38;2;26;27;38;48;2;143;182;255m · tot [0m[38;2;26;27;38;48;2;143;182;255m—[0m[38;2;26;27;38;48;2;143;182;255m [0m[38;2;143;182;255m[0m"
+`;
+
+exports[`a session's view, drawn from fixed owners at a fixed instant preset usage: the payload a template reads 1`] = `
+{
+  "animationSpeed": {
+    "effective": "1x",
+  },
+  "autoWrap": {
+    "effective": true,
+  },
+  "autocompact": {
+    "applied": 400000,
+    "higher": 500000,
+    "lower": 300000,
+    "window": 400000,
+  },
+  "block": {
+    "nativeUtilization": 63,
+    "resetsAt": 1700007200,
+  },
+  "burn": {
+    "costPerHour": 1.5096774193548388,
+  },
+  "cache": {
+    "expiresAt": 1700000900,
+  },
+  "colorCompatibility": {
+    "effective": "truecolor",
+  },
+  "configPath": "<dir>/config.json5",
+  "context": {
+    "contextLeft": 24,
+    "totalTokens": 48487,
+  },
+  "cwd": "/home/tester/code/project",
+  "effort": {
+    "level": "xhigh",
+  },
+  "endcaps": {
+    "effective": "powerline",
+  },
+  "experimentalBand": {
+    "effective": false,
+  },
+  "experimentalPane": {
+    "effective": false,
+  },
+  "experimentalStatusline": {
+    "effective": false,
+  },
+  "git": {
+    "ahead": 2,
+    "behind": 1,
+    "branch": "main",
+    "prNumber": 7,
+    "prState": "open",
+    "prUrl": "https://example.test/pr/7",
+    "sha": "abc1234",
+    "stash": 1,
+    "status": "dirty",
+    "tracking": "none",
+  },
+  "history": {
+    "redo": 0,
+    "sinceEdit": 0,
+    "undo": 0,
+  },
+  "home": "/home/tester",
+  "hook_event_name": "Status",
+  "host": {},
+  "menuTimeout": {
+    "effective": 120,
+  },
+  "metrics": {
+    "lastResponseTime": 8.2,
+    "linesAdded": 512,
+    "linesRemoved": 88,
+    "messageCount": 8,
+    "responseTime": 4.2,
+    "sessionDuration": 930,
+  },
+  "model": {
+    "display_name": "M",
+    "id": "m",
+  },
+  "navigation": {
+    "back": 0,
+  },
+  "padding": {
+    "effective": 1,
+  },
+  "plugins": {},
+  "preset": {
+    "bundled": true,
+    "customized": false,
+    "effective": "usage",
+  },
+  "rate_limits": {
+    "five_hour": {
+      "resets_at": 1700007200,
+      "used_percentage": 63,
+    },
+    "seven_day": {
+      "resets_at": 1700432000,
+      "used_percentage": 21,
+    },
+  },
+  "renderer": {
+    "effective": "claude",
+  },
+  "repo": {},
+  "resettable": {
+    "animationSpeed": false,
+    "autoWrap": false,
+    "effect": false,
+    "endcaps": false,
+    "experimentalBand": false,
+    "experimentalPane": false,
+    "experimentalStatusline": false,
+    "menuTimeout": false,
+    "padding": false,
+    "preset": true,
+    "renderer": false,
+    "shade": false,
+    "style": false,
+    "theme": false,
+    "transitions": false,
+    "updateNotice": false,
+    "variation": false,
+  },
+  "resumeCommand": "cd /home/tester/code/project && claude --resume golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
+  "session": {
+    "cost": 0.39,
+    "tokens": 241400,
+  },
+  "session_id": "golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
+  "shade": {
+    "effective": "middle",
+  },
+  "term": {
+    "cols": 118,
+  },
+  "themeDefault": {
+    "differs": false,
+  },
+  "tmux": {
+    "pane": "%7",
+  },
+  "transcript_path": "/home/tester/code/project/golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a.jsonl",
+  "transitions": {
+    "effective": false,
+  },
+  "unsaved": 1,
+  "updateNotice": {
+    "effective": true,
+  },
+  "variation": {
+    "effective": "accent",
+  },
+  "version": "1.15.0",
+  "weekly": {
+    "percentage": 21,
+    "resetsAt": 1700432000,
+  },
+  "workspace": {
+    "added_dirs": [],
+    "current_dir": "/home/tester/code/project",
+    "project_dir": "/home/tester/code/project",
+  },
+}
+`;
+
+exports[`a session's view, drawn from fixed owners at a fixed instant preset verbose: the bar 1`] = `
+"[7;38;2;100;142;225m[0m[38;2;26;27;38;48;2;100;142;225m [0m]8;id=94ee9e0c;cc-candybar://dispatch/does=open+candybar.menu+and+2+more&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.menu%2Fopen&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.resetAll.armed%2Fdisarmed&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.commands.clear.armed%2Fdisarmed\\[38;2;26;27;38;48;2;100;142;225m🍫[0m]8;;\\[38;2;26;27;38;48;2;100;142;225m [0m[38;2;100;142;225;48;2;122;162;247m[0m[38;2;26;27;38;48;2;122;162;247m [0m[38;2;26;27;38;48;2;122;162;247m polled[0m[38;2;26;27;38;48;2;122;162;247m [0m[38;2;122;162;247;48;2;143;182;255m[0m[38;2;73;97;150;48;2;143;182;255m [0m]8;id=b197edfd;cc-candybar://dispatch/does=copy+/home/tester/code/project&e=copy%2F%252Fhome%252Ftester%252Fcode%252Fproject\\[38;2;73;97;150;48;2;143;182;255m~/c/project[0m]8;;\\[38;2;73;97;150;48;2;143;182;255m [0m[38;2;143;182;255;48;2;122;162;247m[0m[38;2;59;82;141;48;2;122;162;247m [0m[38;2;59;82;141;48;2;122;162;247m⎇ [0m[38;2;74;38;121;48;2;122;162;247mmain[0m[38;2;59;82;141;48;2;122;162;247m [0m[38;2;40;65;0;48;2;122;162;247m+2[0m[38;2;59;82;141;48;2;122;162;247m/[0m[38;2;81;52;0;48;2;122;162;247m-1[0m[38;2;59;82;141;48;2;122;162;247m [0m]8;id=6343e001;cc-candybar://dispatch/does=set+git-detail+to+expanded&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fgit-detail%2Fexpanded\\[38;2;59;82;141;48;2;122;162;247m▸[0m]8;;\\[38;2;59;82;141;48;2;122;162;247m [0m[38;2;122;162;247;48;2;100;142;225m[0m[38;2;26;27;38;48;2;100;142;225m [0m]8;id=96baeaf3;https://example.test/pr/7\\[38;2;26;27;38;48;2;100;142;225m⇆ #7[0m]8;;\\[38;2;26;27;38;48;2;100;142;225m [0m[38;2;100;142;225m[0m
+[7;38;2;231;138;81m[0m[38;2;26;27;38;48;2;231;138;81m [0m[38;2;26;27;38;48;2;231;138;81m✱ [0m[38;2;26;27;38;48;2;231;138;81mM[0m[38;2;26;27;38;48;2;231;138;81m [0m[38;2;95;41;0;48;2;231;138;81m󰶼[0m[38;2;26;27;38;48;2;231;138;81m [0m[38;2;231;138;81;48;2;223;175;104m[0m[38;2;26;27;38;48;2;223;175;104m [0m[38;2;26;27;38;48;2;223;175;104m◔ [0m[38;2;26;27;38;48;2;223;175;104m48,487[0m[38;2;26;27;38;48;2;223;175;104m ([0m[38;2;26;27;38;48;2;223;175;104m24[0m[38;2;26;27;38;48;2;223;175;104m%)[0m[38;2;26;27;38;48;2;223;175;104m [0m[38;2;223;175;104;48;2;255;178;119m[0m[38;2;26;27;38;48;2;255;178;119m [0m[38;2;26;27;38;48;2;255;178;119m⇲ [0m[38;2;26;27;38;48;2;255;178;119m400.0[0m[38;2;26;27;38;48;2;255;178;119mK[0m[38;2;26;27;38;48;2;255;178;119m [0m]8;id=2653b15e;cc-candybar://dispatch/does=type+/autocompact+300000&e=slash%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2F%252Fautocompact%2520300000\\[38;2;26;27;38;48;2;255;178;119m−[0m]8;;\\[38;2;26;27;38;48;2;255;178;119m [0m]8;id=7b50309e;cc-candybar://dispatch/does=type+/autocompact+500000&e=slash%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2F%252Fautocompact%2520500000\\[38;2;26;27;38;48;2;255;178;119m+[0m]8;;\\[38;2;26;27;38;48;2;255;178;119m [0m]8;id=cd7a1bd2;cc-candybar://dispatch/does=type+/autocompact+auto&e=slash%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2F%252Fautocompact%2520auto\\[38;2;26;27;38;48;2;255;178;119m↺[0m]8;;\\[38;2;26;27;38;48;2;255;178;119m [0m[38;2;255;178;119;48;2;254;158;100m[0m[38;2;98;65;0;48;2;254;158;100m [0m[38;2;98;65;0;48;2;254;158;100m◴ [0m[38;2;98;65;0;48;2;254;158;100m15[0m[38;2;98;65;0;48;2;254;158;100mm[0m[38;2;98;65;0;48;2;254;158;100m [0m[38;2;254;158;100;48;2;223;175;104m[0m[38;2;26;27;38;48;2;223;175;104m [0m[38;2;26;27;38;48;2;223;175;104m◱ [0m[38;2;26;27;38;48;2;223;175;104m63[0m[38;2;26;27;38;48;2;223;175;104m% ([0m[38;2;26;27;38;48;2;223;175;104m2[0m[38;2;26;27;38;48;2;223;175;104mh [0m[38;2;26;27;38;48;2;223;175;104m1[0m[38;2;26;27;38;48;2;223;175;104mm[0m[38;2;26;27;38;48;2;223;175;104m)[0m[38;2;26;27;38;48;2;223;175;104m [0m[38;2;223;175;104;48;2;254;158;100m[0m[38;2;26;27;38;48;2;254;158;100m [0m[38;2;26;27;38;48;2;254;158;100m◑ [0m[38;2;26;27;38;48;2;254;158;100m21[0m[38;2;26;27;38;48;2;254;158;100m% ([0m[38;2;26;27;38;48;2;254;158;100m5[0m[38;2;26;27;38;48;2;254;158;100md[0m[38;2;26;27;38;48;2;254;158;100m)[0m[38;2;26;27;38;48;2;254;158;100m [0m[38;2;254;158;100m[0m
+[7;38;2;255;178;119m[0m[38;2;26;27;38;48;2;255;178;119m [0m[38;2;26;27;38;48;2;255;178;119m⚡ [0m[38;2;26;27;38;48;2;255;178;119m$[0m[38;2;26;27;38;48;2;255;178;119m1.51[0m[38;2;26;27;38;48;2;255;178;119m/hr[0m[38;2;26;27;38;48;2;255;178;119m · [0m[38;2;26;27;38;48;2;255;178;119m1[0m[38;2;26;27;38;48;2;255;178;119mh [0m[38;2;26;27;38;48;2;255;178;119m46[0m[38;2;26;27;38;48;2;255;178;119mm[0m[38;2;26;27;38;48;2;255;178;119m to 5h · [0m[38;2;26;27;38;48;2;255;178;119m7[0m[38;2;26;27;38;48;2;255;178;119md [0m[38;2;26;27;38;48;2;255;178;119m12[0m[38;2;26;27;38;48;2;255;178;119mh[0m[38;2;26;27;38;48;2;255;178;119m to wk[0m[38;2;26;27;38;48;2;255;178;119m [0m[38;2;255;178;119m[0m
+[7;38;2;100;142;225m[0m[38;2;26;27;38;48;2;100;142;225m [0m[38;2;26;27;38;48;2;100;142;225m⇅ out [0m[38;2;26;27;38;48;2;100;142;225m—[0m[38;2;26;27;38;48;2;100;142;225m · in [0m[38;2;26;27;38;48;2;100;142;225m—[0m[38;2;26;27;38;48;2;100;142;225m · tot [0m[38;2;26;27;38;48;2;100;142;225m—[0m[38;2;26;27;38;48;2;100;142;225m [0m[38;2;100;142;225m[0m"
+`;
+
+exports[`a session's view, drawn from fixed owners at a fixed instant preset verbose: the payload a template reads 1`] = `
+{
+  "animationSpeed": {
+    "effective": "1x",
+  },
+  "autoWrap": {
+    "effective": true,
+  },
+  "autocompact": {
+    "applied": 400000,
+    "higher": 500000,
+    "lower": 300000,
+    "window": 400000,
+  },
+  "block": {
+    "nativeUtilization": 63,
+    "resetsAt": 1700007200,
+  },
+  "burn": {
+    "costPerHour": 1.5096774193548388,
+  },
+  "cache": {
+    "expiresAt": 1700000900,
+  },
+  "colorCompatibility": {
+    "effective": "truecolor",
+  },
+  "configPath": "<dir>/config.json5",
+  "context": {
+    "contextLeft": 24,
+    "totalTokens": 48487,
+  },
+  "cwd": "/home/tester/code/project",
+  "effort": {
+    "level": "xhigh",
+  },
+  "endcaps": {
+    "effective": "powerline",
+  },
+  "experimentalBand": {
+    "effective": false,
+  },
+  "experimentalPane": {
+    "effective": false,
+  },
+  "experimentalStatusline": {
+    "effective": false,
+  },
+  "git": {
+    "ahead": 2,
+    "behind": 1,
+    "branch": "main",
+    "prNumber": 7,
+    "prState": "open",
+    "prUrl": "https://example.test/pr/7",
+    "sha": "abc1234",
+    "stash": 1,
+    "status": "dirty",
+    "tracking": "none",
+  },
+  "history": {
+    "redo": 0,
+    "sinceEdit": 0,
+    "undo": 0,
+  },
+  "home": "/home/tester",
+  "hook_event_name": "Status",
+  "host": {},
+  "menuTimeout": {
+    "effective": 120,
+  },
+  "metrics": {
+    "lastResponseTime": 8.2,
+    "linesAdded": 512,
+    "linesRemoved": 88,
+    "messageCount": 8,
+    "responseTime": 4.2,
+    "sessionDuration": 930,
+  },
+  "model": {
+    "display_name": "M",
+    "id": "m",
+  },
+  "navigation": {
+    "back": 0,
+  },
+  "padding": {
+    "effective": 1,
+  },
+  "plugins": {},
+  "preset": {
+    "bundled": true,
+    "customized": false,
+    "effective": "verbose",
+  },
+  "rate_limits": {
+    "five_hour": {
+      "resets_at": 1700007200,
+      "used_percentage": 63,
+    },
+    "seven_day": {
+      "resets_at": 1700432000,
+      "used_percentage": 21,
+    },
+  },
+  "renderer": {
+    "effective": "claude",
+  },
+  "repo": {},
+  "resettable": {
+    "animationSpeed": false,
+    "autoWrap": false,
+    "effect": false,
+    "endcaps": false,
+    "experimentalBand": false,
+    "experimentalPane": false,
+    "experimentalStatusline": false,
+    "menuTimeout": false,
+    "padding": false,
+    "preset": true,
+    "renderer": false,
+    "shade": false,
+    "style": false,
+    "theme": false,
+    "transitions": false,
+    "updateNotice": false,
+    "variation": false,
+  },
+  "resumeCommand": "cd /home/tester/code/project && claude --resume golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
+  "session": {
+    "cost": 0.39,
+    "tokens": 241400,
+  },
+  "session_id": "golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
+  "shade": {
+    "effective": "middle",
+  },
+  "term": {
+    "cols": 118,
+  },
+  "themeDefault": {
+    "differs": false,
+  },
+  "tmux": {
+    "pane": "%7",
+  },
+  "transcript_path": "/home/tester/code/project/golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a.jsonl",
+  "transitions": {
+    "effective": false,
+  },
+  "unsaved": 1,
+  "updateNotice": {
+    "effective": true,
+  },
+  "variation": {
+    "effective": "accent",
+  },
+  "version": "1.15.0",
+  "weekly": {
+    "percentage": 21,
+    "resetsAt": 1700432000,
+  },
+  "workspace": {
+    "added_dirs": [],
+    "current_dir": "/home/tester/code/project",
+    "project_dir": "/home/tester/code/project",
+  },
+}
+`;
+
+exports[`a session's view, drawn from fixed owners at a fixed instant preset zen: the bar 1`] = `"[38;2;245;247;255;48;2;72;112;192m [0m]8;id=94ee9e0c;cc-candybar://dispatch/does=open+candybar.menu+and+2+more&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.menu%2Fopen&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.resetAll.armed%2Fdisarmed&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.commands.clear.armed%2Fdisarmed\\[38;2;245;247;255;48;2;72;112;192m🍫[0m]8;;\\[38;2;245;247;255;48;2;72;112;192m [0m[39m | [0m[38;2;18;19;30;48;2;91;128;210m [0m[38;2;18;19;30;48;2;91;128;210m polled[0m[38;2;18;19;30;48;2;91;128;210m [0m[39m | [0m[38;2;48;68;120;48;2;108;145;216m [0m]8;id=b197edfd;cc-candybar://dispatch/does=copy+/home/tester/code/project&e=copy%2F%252Fhome%252Ftester%252Fcode%252Fproject\\[38;2;48;68;120;48;2;108;145;216m~/c/project[0m]8;;\\[38;2;48;68;120;48;2;108;145;216m [0m[39m | [0m[38;2;18;19;30;48;2;185;138;67m [0m[38;2;18;19;30;48;2;185;138;67m◔ [0m[38;2;18;19;30;48;2;185;138;67m48,487[0m[38;2;18;19;30;48;2;185;138;67m ([0m[38;2;18;19;30;48;2;185;138;67m24[0m[38;2;18;19;30;48;2;185;138;67m%)[0m[38;2;18;19;30;48;2;185;138;67m [0m"`;
+
+exports[`a session's view, drawn from fixed owners at a fixed instant preset zen: the payload a template reads 1`] = `
+{
+  "animationSpeed": {
+    "effective": "1x",
+  },
+  "autoWrap": {
+    "effective": true,
+  },
+  "autocompact": {
+    "applied": 400000,
+    "higher": 500000,
+    "lower": 300000,
+    "window": 400000,
+  },
+  "colorCompatibility": {
+    "effective": "truecolor",
+  },
+  "configPath": "<dir>/config.json5",
+  "context": {
+    "contextLeft": 24,
+    "totalTokens": 48487,
+  },
+  "cwd": "/home/tester/code/project",
+  "effort": {
+    "level": "xhigh",
+  },
+  "endcaps": {
+    "effective": "plain",
+  },
+  "experimentalBand": {
+    "effective": false,
+  },
+  "experimentalPane": {
+    "effective": false,
+  },
+  "experimentalStatusline": {
+    "effective": false,
+  },
+  "git": {
+    "ahead": 2,
+    "behind": 1,
+    "branch": "main",
+    "prNumber": 7,
+    "prState": "open",
+    "prUrl": "https://example.test/pr/7",
+    "sha": "abc1234",
+    "stash": 1,
+    "status": "dirty",
+    "tracking": "none",
+  },
+  "history": {
+    "redo": 0,
+    "sinceEdit": 0,
+    "undo": 0,
+  },
+  "home": "/home/tester",
+  "hook_event_name": "Status",
+  "host": {},
+  "menuTimeout": {
+    "effective": 120,
+  },
+  "model": {
+    "display_name": "M",
+    "id": "m",
+  },
+  "navigation": {
+    "back": 0,
+  },
+  "padding": {
+    "effective": 1,
+  },
+  "plugins": {},
+  "preset": {
+    "bundled": true,
+    "customized": false,
+    "effective": "zen",
+  },
+  "rate_limits": {
+    "five_hour": {
+      "resets_at": 1700007200,
+      "used_percentage": 63,
+    },
+    "seven_day": {
+      "resets_at": 1700432000,
+      "used_percentage": 21,
+    },
+  },
+  "renderer": {
+    "effective": "claude",
+  },
+  "repo": {},
+  "resettable": {
+    "animationSpeed": false,
+    "autoWrap": false,
+    "effect": false,
+    "endcaps": false,
+    "experimentalBand": false,
+    "experimentalPane": false,
+    "experimentalStatusline": false,
+    "menuTimeout": false,
+    "padding": false,
+    "preset": true,
+    "renderer": false,
+    "shade": false,
+    "style": false,
+    "theme": false,
+    "transitions": false,
+    "updateNotice": false,
+    "variation": false,
+  },
+  "resumeCommand": "cd /home/tester/code/project && claude --resume golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
+  "session_id": "golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
+  "shade": {
+    "effective": "middle",
+  },
+  "term": {
+    "cols": 118,
+  },
+  "themeDefault": {
+    "differs": false,
+  },
+  "tmux": {
+    "pane": "%7",
+  },
+  "transcript_path": "/home/tester/code/project/golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a.jsonl",
+  "transitions": {
+    "effective": false,
+  },
+  "unsaved": 1,
+  "updateNotice": {
+    "effective": true,
+  },
+  "variation": {
+    "effective": "accent",
+  },
+  "version": "1.15.0",
+  "weekly": {
+    "percentage": 21,
+    "resetsAt": 1700432000,
+  },
+  "workspace": {
+    "added_dirs": [],
+    "current_dir": "/home/tester/code/project",
+    "project_dir": "/home/tester/code/project",
+  },
+}
+`;

@@ -11,6 +11,7 @@
 // reads it the way it reads the daemon's. `requestPayload` below declares
 // the lanes over the fakes as a view's declaration does.
 
+import { observable, runInAction } from "mobx";
 import type { Holds } from "../../src/utils/holds";
 import { HOST } from "./host";
 import type { ClaudeHookData } from "../../src/utils/claude";
@@ -68,33 +69,37 @@ type Loose = Answer<unknown>;
 const lane = <T>(answer: Loose): Answer<T> => answer as Answer<T>;
 
 // One keyed source: its value per key, pending from the key's first read until
-// its reader lands.
+// its reader lands. The values are observable, as every real owner's are, so a
+// view's computed over a lane is recomputed when the reader lands; the first
+// read of a key (which stores) is therefore made where a lane is declared,
+// outside any derivation.
 function keyed<A extends unknown[], T>(
   read: (holds: Holds, ...args: A) => Loose,
 ) {
-  const values = new Map<string, Current<T>>();
+  const values = observable.map<string, Current<T>>({}, { deep: false });
   return (holds: Holds, ...args: A): Current<T> => {
     const key = JSON.stringify(args);
     const known = values.get(key);
     if (known !== undefined) return known;
     const landed = Promise.resolve(lane<T>(read(holds, ...args))).then(
       (outcome) => {
-        values.set(key, outcome);
+        runInAction(() => values.set(key, outcome));
       },
     );
     const pending: Current<T> = { kind: "pending", why: "unread", landed };
-    values.set(key, pending);
+    runInAction(() => values.set(key, pending));
     return pending;
   };
 }
 
-// One request lane: what its last refresh's reader answered, per session.
+// One request lane: what its last refresh's reader answered, per session. The
+// store is observable, as the real owners' are.
 function refreshed<T>() {
-  const stored = new Map<string, Outcome<T>>();
+  const stored = observable.map<string, Outcome<T>>({}, { deep: false });
   return {
     store: async (sessionId: string, answer: Loose): Promise<Outcome<T>> => {
       const outcome = await lane<T>(answer);
-      stored.set(sessionId, outcome);
+      runInAction(() => stored.set(sessionId, outcome));
       return outcome;
     },
     read: (sessionId: string): Reading<T> =>
@@ -160,7 +165,7 @@ export function fakeUsage(
   const usage = refreshed<UsageInfo>();
   // The sessions whose request refreshed `today`: before one has, a draw
   // reads it as not answered yet.
-  const todayRefreshed = new Set<string>();
+  const todayRefreshed = observable.set<string>();
   const speed = refreshed<SpeedObservation>();
   const getUsageInfo = (sessionId: string, hookData?: ClaudeHookData) =>
     usage.store(sessionId, readers.usage?.(sessionId, hookData) ?? ABSENT);
@@ -181,7 +186,7 @@ export function fakeUsage(
         getUsageInfo(sessionId, hookData),
       speed: (nowMs: number) => observeSpeed(sessionId, transcriptPath, nowMs),
       today: async () => {
-        todayRefreshed.add(sessionId);
+        runInAction(() => todayRefreshed.add(sessionId));
       },
     }),
     usageOf: (sessionId: string): Reading<UsageInfo> => usage.read(sessionId),
@@ -210,7 +215,7 @@ export function fakeUsage(
     refreshToday: async (
       hookData: ClaudeHookData | undefined,
     ): Promise<void> => {
-      todayRefreshed.add(hookData?.session_id ?? "");
+      runInAction(() => todayRefreshed.add(hookData?.session_id ?? ""));
     },
     observeSpeed,
     speedOf: (sessionId: string): Reading<SpeedObservation> =>
@@ -266,11 +271,14 @@ export function fakeCacheExpiry(
 export function fakeAutoCompact(
   read: (settingsPath: string) => Outcome<unknown>,
 ) {
-  const stored = new Map<string, Outcome<AutoCompactWindow>>();
+  const stored = observable.map<string, Outcome<AutoCompactWindow>>(
+    {},
+    { deep: false },
+  );
   return {
     window: (settingsPath: string): Outcome<AutoCompactWindow> => {
       const outcome = read(settingsPath) as Outcome<AutoCompactWindow>;
-      stored.set(settingsPath, outcome);
+      runInAction(() => stored.set(settingsPath, outcome));
       return outcome;
     },
     stored: (settingsPath: string): Reading<AutoCompactWindow> =>
