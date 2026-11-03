@@ -2,95 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-593",
-      "ref": "refs/pull/593/merge",
-      "sha": "55dda7bb6ed211cdb06ceedcb2e39cecc9eb9b44",
-      "timestamp": "2026-11-03T01:25:36.956Z",
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "c0943ea0205fc68b6c59b0134dd79a75552b2f10",
+      "timestamp": "2026-11-03T01:33:42.801Z",
       "commits": [
         {
-          "sha": "55dda7bb6ed211cdb06ceedcb2e39cecc9eb9b44",
+          "sha": "c0943ea0205fc68b6c59b0134dd79a75552b2f10",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T01:24:42Z",
-          "message": "Merge f3df40972f4e117f7eb56de2db13a1609c7938af into 8b23a558ca80eb27c92e05a931e56f0267be820f\n"
+          "timestamp": "2026-11-02T18:32:54-07:00",
+          "message": "fix(launch): a waited launch keeps at most 16 MiB per stream and ends the child past it (candybar-testing-0x6u.ndy) (#590)\n\n* fix(launch): a waited launch keeps at most 16 MiB per stream and ends the child past it (candybar-testing-0x6u.ndy)\n\nA child writing without end grew the capture string until V8 threw\n'Invalid string length' from the data listener; the uncaughtException\nhandler then shut the daemon down. capture now stops at\nMAX_CAPTURED_BYTES and launchWaited ends the child through terminate with\na new reason, output-limit, so a truncated capture is never ok.\nterminate keeps the first cause.\n\n* fix(launch): a flooding run reports the output limit, not the flood, and a shell source names the reason over the exit code (candybar-testing-0x6u.ndy)\n\noutput-limit is its own run outcome, so the bar and the run log say the child\nflooded instead of that it could not start, and the 16 MiB capture never\nbecomes the bar's error. A shell source reads reason, not exitCode, to tell\nthe child's own exit from one the launcher ended, so a child that traps TERM\nand exits with a code no longer hides the limit (or the timeout).\n\n* fix(launch): a flooding run reports the output limit, not the flood, and a shell source names the reason over the exit code (candybar-testing-0x6u.ndy)\n\noutput-limit is its own run outcome, so the bar and the run log say the child\nflooded instead of that it could not start, and the 16 MiB capture never\nbecomes the bar's error. A shell source reads reason, not exitCode, to tell\nthe child's own exit from one the launcher ended, so a child that traps TERM\nand exits with a code no longer hides the limit (or the timeout).\n\n* refactor(runs): the failed count is every run that is not ok, aborted or timed out; the launch bound's trap is in memory (candybar-testing-0x6u.ndy)"
         },
         {
-          "sha": "f3df40972f4e117f7eb56de2db13a1609c7938af",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T18:24:38-07:00",
-          "message": "Merge branch 'main' into candybar-testing-0x6u.e2d"
-        },
-        {
-          "sha": "472659ba99adbefa58b3a2278ada0c9c62f7cf06",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T18:15:54-07:00",
-          "message": "test(frame-feed): the stepped-back case bounds each frame against the wall it was drawn at, and mixed shortfall sequences have prime lengths (candybar-testing-0x6u.e2d)\n"
-        },
-        {
-          "sha": "7df1f7b7de750708d475fb360c5656880fcb07f6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T18:11:03-07:00",
-          "message": "test(frame-feed): wall readings cycle a fixed shortfall sequence, so one reading can disagree with the next, and the stepped-back case runs on held time (candybar-testing-0x6u.e2d)\n"
-        },
-        {
-          "sha": "fe3336f79b79427255d6d488976d1faca0b2f384",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T18:06:21-07:00",
-          "message": "test(frame-feed): the turn-per-draw case reads every shortfall on every run, and its exact-count siblings run on held time too (candybar-testing-0x6u.e2d)\n"
-        },
-        {
-          "sha": "85b59f300d1fe4828c395e998e195d5ca328c8e1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T18:00:07-07:00",
-          "message": "fix(test): the turn-per-draw feed case runs on held time, so a stalled loop cannot skip a turn (candybar-testing-0x6u.e2d)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-590",
-      "ref": "refs/pull/590/merge",
-      "sha": "c4bc9289467f04bd367864344db6db93572b2103",
-      "timestamp": "2026-11-03T01:24:24.559Z",
-      "commits": [
-        {
-          "sha": "c4bc9289467f04bd367864344db6db93572b2103",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T18:23:23-07:00",
-          "message": "Merge 82b0bf2dd9b0a75828eedd78f44db4e5cffc3936 into 8b23a558ca80eb27c92e05a931e56f0267be820f\n"
-        },
-        {
-          "sha": "82b0bf2dd9b0a75828eedd78f44db4e5cffc3936",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T17:08:20-07:00",
-          "message": "refactor(runs): the failed count is every run that is not ok, aborted or timed out; the launch bound's trap is in memory (candybar-testing-0x6u.ndy)\n"
-        },
-        {
-          "sha": "4a96e80f621ff45e70fcc1b5caf8126f541b1405",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T17:05:20-07:00",
-          "message": "fix(launch): a flooding run reports the output limit, not the flood, and a shell source names the reason over the exit code (candybar-testing-0x6u.ndy)\n\noutput-limit is its own run outcome, so the bar and the run log say the child\nflooded instead of that it could not start, and the 16 MiB capture never\nbecomes the bar's error. A shell source reads reason, not exitCode, to tell\nthe child's own exit from one the launcher ended, so a child that traps TERM\nand exits with a code no longer hides the limit (or the timeout).\n"
-        },
-        {
-          "sha": "3196b1481ff47177155a96bef9436745baed70f9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T17:04:54-07:00",
-          "message": "fix(launch): a flooding run reports the output limit, not the flood, and a shell source names the reason over the exit code (candybar-testing-0x6u.ndy)\n\noutput-limit is its own run outcome, so the bar and the run log say the child\nflooded instead of that it could not start, and the 16 MiB capture never\nbecomes the bar's error. A shell source reads reason, not exitCode, to tell\nthe child's own exit from one the launcher ended, so a child that traps TERM\nand exits with a code no longer hides the limit (or the timeout).\n"
-        },
-        {
-          "sha": "72c411ff7d05c9c1c3b254eb640380706033a6d5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T17:00:09-07:00",
-          "message": "fix(launch): a waited launch keeps at most 16 MiB per stream and ends the child past it (candybar-testing-0x6u.ndy)\n\nA child writing without end grew the capture string until V8 threw\n'Invalid string length' from the data listener; the uncaughtException\nhandler then shut the daemon down. capture now stops at\nMAX_CAPTURED_BYTES and launchWaited ends the child through terminate with\na new reason, output-limit, so a truncated capture is never ok.\nterminate keeps the first cause.\n"
+          "sha": "8b23a558ca80eb27c92e05a931e56f0267be820f",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-03T01:06:15Z",
+          "message": "chore(release): set `package.json` to 1.180.7 [skip ci]\n\n## [1.180.7](https://github.com/promptctl/cc-candybar/compare/v1.180.6...v1.180.7) (2026-11-03)\n\n### Bug Fixes\n\n* **git:** a closed git cache answers a late declaration as closed, so no period re-arms after close (candybar-testing-ihvy.dbg) ([#588](https://github.com/promptctl/cc-candybar/issues/588)) ([2b674e3](https://github.com/promptctl/cc-candybar/commit/2b674e303614d5b76f88596aa59060f2319c8233))\n"
         }
       ]
     },
@@ -120,21 +49,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T18:16:36-07:00",
           "message": "feat(url-handler): a resident Swift forwarder sends the raw link to the daemon, which does all parsing (candybar-daemon-health-ajx0.co4)\n\nThe URL handler app is a Swift agent (url-handler/main.swift) that forwards each\ncc-candybar:// link as one url frame, versioned by itself, and reads no answer.\nThe daemon classifies inbound frames once, splits the verb itself, and writes a\nclick event for every url frame, refused ones included. clientVersion leaves the\nwire; a click's arrival carries who delivered it, and the doctor judges by that.\nInstall assembles the .app around the prebuilt binary, ad-hoc signs it, quits the\nresident instance and registers the scheme. CI builds a universal binary on macOS\ninto both darwin packages; check-protocol pins the Swift frame and socket path.\nurl-handle remains the tmux status line's route only.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "2b674e303614d5b76f88596aa59060f2319c8233",
-      "timestamp": "2026-11-03T00:58:02.262Z",
-      "commits": [
-        {
-          "sha": "2b674e303614d5b76f88596aa59060f2319c8233",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T17:57:09-07:00",
-          "message": "fix(git): a closed git cache answers a late declaration as closed, so no period re-arms after close (candybar-testing-ihvy.dbg) (#588)\n\n* fix(git): a closed git cache answers a late declaration as closed, so no period re-arms after close (candybar-testing-ihvy.dbg)\n\nA render mid-wait at close declared after close had dropped every repo,\nbuilt a fresh state on the closed cache, and that state's period re-armed\nafter every pass: hundreds of timers armed after daemon.close() returned.\n\n* fix(sources): a closed keyed source answers a late declaration as closed, as the git cache does (candybar-testing-ihvy.dbg)\n\nReview: tmux, host, managed storage and usage reach the same late\ndeclaration through KeyedSource, whose close set no closed state.\n\n* fix(daemon): a disposed view declares nothing, and a closed usage store builds no day set (candybar-testing-ihvy.dbg)\n\nReview: an owner builds its entry before a closed Holds refuses the hold,\nso a declaration reaching a disposed view orphaned state in every owner.\n\n* fix(daemon): a disposed view's declaration throws through its holds again (candybar-testing-ihvy.dbg)\n\nReview: the disposed-view guard was unreachable in production (a disposed\nview is never served a request) and only hid the closed-holds throw."
         }
       ]
     }

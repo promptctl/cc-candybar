@@ -23074,6 +23074,8 @@ function endLifeline(state) {
   line?.process.ref();
   line?.pipe.end();
 }
+var MAX_CAPTURED_BYTES = 16 * 1024 * 1024;
+var OUTPUT_LIMIT_ERROR = `output exceeded ${MAX_CAPTURED_BYTES} bytes`;
 function signalGroup(pid2, sig) {
   try {
     process_default.kill(-pid2, sig);
@@ -23092,11 +23094,15 @@ function leaderRefuses(pid2) {
     return err.code === "EPERM";
   }
 }
-function capture(stream) {
+function capture(stream, full) {
   const decoder = new import_node_string_decoder.StringDecoder("utf8");
   let text4 = "";
+  let bytes = 0;
   const read2 = (chunk3) => {
-    text4 += decoder.write(chunk3);
+    const kept = chunk3.subarray(0, MAX_CAPTURED_BYTES - bytes);
+    bytes += kept.length;
+    text4 += decoder.write(kept);
+    if (kept.length < chunk3.length) full();
   };
   stream?.on("data", read2);
   return () => {
@@ -23137,8 +23143,9 @@ async function launchWaited(state, opts) {
     const group = child.pid;
     if (group !== void 0) guard(state, group);
     const exited = new Promise((end) => child.once("exit", end));
-    const stdout2 = capture(child.stdout);
-    const stderr2 = capture(child.stderr);
+    const full = () => terminate("output-limit");
+    const stdout2 = capture(child.stdout, full);
+    const stderr2 = capture(child.stderr, full);
     const output = () => ({ stdout: stdout2(), stderr: stderr2() });
     let settled3 = false;
     let timer = null;
@@ -23199,9 +23206,10 @@ async function launchWaited(state, opts) {
       );
     }
     const terminate = (cause) => {
+      if (terminated !== null) return;
       const ended = child.exitCode !== null || child.signalCode !== null;
       if (ended && group !== void 0 && groupGone(group)) {
-        terminated = cause === "aborted" ? cause : null;
+        terminated = cause === "timeout" ? null : cause;
         clock.defer(concludeWithGroup);
         return;
       }
@@ -23234,7 +23242,8 @@ async function launchWaited(state, opts) {
           reason: terminated,
           ...output(),
           exitCode: code,
-          signal: signal2
+          signal: signal2,
+          ...terminated === "output-limit" ? { error: OUTPUT_LIMIT_ERROR } : {}
         });
         return;
       }
@@ -23772,7 +23781,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.180.6";
+var PACKAGE_VERSION = "1.180.7";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -53590,7 +53599,7 @@ function shellReader(launcher, command, cwd2, signal) {
       if (!r.ok && r.reason === "aborted" && signal.aborted)
         throw signal.reason;
       if (r.ok) return ok(r.stdout);
-      const why2 = r.exitCode === null ? [r.reason, r.error].filter((s) => s !== void 0).join(": ") : `exited with code ${r.exitCode}`;
+      const why2 = r.reason === "non-zero" ? `exited with code ${r.exitCode}` : [r.reason, r.error].filter((s) => s !== void 0).join(": ");
       return failed(`shell "${command}" ${why2} in ${cwd2}`);
     }
   };
@@ -70992,6 +71001,8 @@ function outcomeOf(result) {
     case "rate-limited":
     case "signal-refused":
       return "launch";
+    case "output-limit":
+      return "output-limit";
   }
 }
 function exitOf(result) {
@@ -70999,7 +71010,7 @@ function exitOf(result) {
   return result.exitCode === null ? "-" : String(result.exitCode);
 }
 function failureText(action2, outcome, result, timeoutMs) {
-  const stderr2 = result.stderr.trim();
+  const stderr2 = outcome === "output-limit" ? "" : result.stderr.trim();
   const reason = outcome === "timeout" ? `timed out after ${timeoutMs / 1e3} s` : outcome === "exit" ? `exited ${exitOf(result)}` : (result.ok ? "" : result.error) || "could not be started";
   return `run ${action2}: ${stderr2 === "" ? reason : stderr2}`;
 }
@@ -71076,8 +71087,8 @@ var Runs = class {
       `run sid=${valueOf(run3.sessionId)} action=${valueOf(run3.action)} program=${valueOf(run3.argv[0])} outcome=${outcome} exit=${exitOf(result)} took=${took} refreshed=${run3.refreshes.map((r) => r.name).join(",") || "-"}`
     );
     if (outcome === "timeout") this.timedOut++;
-    if (outcome === "exit" || outcome === "launch") this.failed++;
     if (outcome === "ok" || outcome === "aborted") return;
+    if (outcome !== "timeout") this.failed++;
     holdClickError(
       this.deps.state,
       run3.sessionId,
