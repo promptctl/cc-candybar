@@ -4,15 +4,22 @@
     {
       "version": "pr-611",
       "ref": "refs/pull/611/merge",
-      "sha": "6f8a4e0e6ce6e8918d434b9708219cb16ec032fd",
-      "timestamp": "2026-11-03T12:56:14.438Z",
+      "sha": "a209c0bdab0916f40e83d3307fa99f6c5420a03b",
+      "timestamp": "2026-11-03T13:01:37.668Z",
       "commits": [
         {
-          "sha": "6f8a4e0e6ce6e8918d434b9708219cb16ec032fd",
+          "sha": "a209c0bdab0916f40e83d3307fa99f6c5420a03b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T12:55:21Z",
-          "message": "Merge 45a2aa9dcb251ab0cd056e7b4fc1f7632514360d into 5138e2c802a9c3baf1fc4756147126024fd36bf0\n"
+          "timestamp": "2026-11-03T13:00:33Z",
+          "message": "Merge 5e6056c693fcd2ba0fdb595bd97c83c141ae3cf4 into 5138e2c802a9c3baf1fc4756147126024fd36bf0\n"
+        },
+        {
+          "sha": "5e6056c693fcd2ba0fdb595bd97c83c141ae3cf4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T06:00:01-07:00",
+          "message": "review(facts): Wire refuses undefined, projectPayload keeps one header (candybar-gather-renderer-76bb.6pj.af6)\n\nJSON drops an undefined property and nulls an undefined array member, so a\ntype admitting it does not round-trip as itself.\n"
         },
         {
           "sha": "45a2aa9dcb251ab0cd056e7b4fc1f7632514360d",
