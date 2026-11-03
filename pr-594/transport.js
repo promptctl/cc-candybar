@@ -65163,7 +65163,12 @@ function sanitizeTermExtent(v) {
 function sanitizeSsh(v) {
   return typeof v === "boolean" ? v : void 0;
 }
-var URL_FRAME_VERSIONS = /* @__PURE__ */ new Set([1]);
+var URL_FRAME_VERSION = 1;
+var EARLIER_URL_FRAME_VERSIONS = [];
+var URL_FRAME_VERSIONS = /* @__PURE__ */ new Set([
+  ...EARLIER_URL_FRAME_VERSIONS,
+  URL_FRAME_VERSION
+]);
 var MAX_FRAME_BYTES = 16 * 1024 * 1024;
 function sanitizeClient(v) {
   if (typeof v !== "object" || v === null || Array.isArray(v)) return void 0;
