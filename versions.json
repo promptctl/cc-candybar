@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-599",
+      "ref": "refs/pull/599/merge",
+      "sha": "a5b5bf25d8a121c44eb3112f94fe4a5c7c126d14",
+      "timestamp": "2026-11-03T03:12:27.534Z",
+      "commits": [
+        {
+          "sha": "a5b5bf25d8a121c44eb3112f94fe4a5c7c126d14",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T20:11:28-07:00",
+          "message": "Merge 7e48ba4b4a7ad75935a12cc640a4dfff414f1da0 into 587196cbaa9d6ccd67cf50cb1c7598a88730d3b6\n"
+        },
+        {
+          "sha": "7e48ba4b4a7ad75935a12cc640a4dfff414f1da0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T20:11:11-07:00",
+          "message": "fix(test): the compile-retains-nothing heap check reads its snapshot a macrotask after the draw (candybar-testing-0x6u.ed2)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-598",
       "ref": "refs/pull/598/merge",
       "sha": "d13ffa2a08956bbf0108cb92fbef2e99967ae692",
