@@ -20,6 +20,7 @@
 // uninterruptible sleep: its launch never settles, and `getStats` shows the
 // holder's `heldMs` growing.
 
+import { elapsedMs, spanMs, type Monotonic } from "../time.js";
 import { KeyedSerialQueue } from "../utils/keyed-serial-queue.js";
 import { ClickAbandoned, DaemonClosing } from "./verb-error.js";
 
@@ -73,7 +74,7 @@ export class JournalTurns {
   private readonly gathers = new KeyedSerialQueue<typeof GATHERS>();
   private open = true;
   private inFlight: InFlight | null = null;
-  private holder: { readonly verb: string; readonly since: number } | null =
+  private holder: { readonly verb: string; readonly since: Monotonic } | null =
     null;
   private queued = 0;
   private gathersInFlight = 0;
@@ -82,7 +83,7 @@ export class JournalTurns {
     private readonly deps: {
       readonly log: (level: "warn", msg: string) => void;
       // On a clock whose differences are milliseconds.
-      readonly monotonic: () => number;
+      readonly monotonic: () => Monotonic;
     },
   ) {}
 
@@ -101,7 +102,7 @@ export class JournalTurns {
       this.refuseClosed(verb);
       if (gone()) throw new ClickAbandoned(verb);
       const since = this.deps.monotonic();
-      waited(Math.round(since - asked));
+      waited(spanMs(asked, since));
       this.holder = { verb, since };
       try {
         return await body({
@@ -134,12 +135,12 @@ export class JournalTurns {
   ): Promise<T> {
     const arrived = this.deps.monotonic();
     const inPlace = async (): Promise<T> => {
-      placed(Math.round(this.deps.monotonic() - arrived));
+      placed(elapsedMs(this.deps, arrived));
       this.refuseClosed(verb);
       if (gone()) throw new ClickAbandoned(verb);
       const started = this.deps.monotonic();
       const gathering = await gather();
-      gathered(Math.round(this.deps.monotonic() - started));
+      gathered(elapsedMs(this.deps, started));
       const left = gone();
       return this.take(verb, { waited, gone: () => !left && gone() }, (turn) =>
         body(gathering, turn),
@@ -165,8 +166,7 @@ export class JournalTurns {
     const { holder, queued } = this;
     return {
       holder: holder?.verb ?? null,
-      heldMs:
-        holder === null ? 0 : Math.round(this.deps.monotonic() - holder.since),
+      heldMs: holder === null ? 0 : elapsedMs(this.deps, holder.since),
       queued,
       gathers: this.gathersInFlight,
     };

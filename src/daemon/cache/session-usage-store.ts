@@ -46,7 +46,7 @@ import type { Holds } from "../../utils/holds";
 import { KeyedSource, type KeyedSourceStats } from "../../utils/keyed-source";
 import { RefreshLedger, type Refreshes } from "../../utils/refresh-ledger";
 import type { Every } from "../../utils/period";
-import type { Timekeeper } from "../../time";
+import { elapsedMs, type Timekeeper } from "../../time";
 import { Kept } from "../../var-system/store";
 
 // [LAW:one-source-of-truth] The daemon's single owner of per-session usage.
@@ -294,7 +294,7 @@ async function foldFile(
   state: FileFold,
   entries: readonly ParsedEntry[],
   cacheRoot: string,
-  clock: Pick<Timekeeper, "now" | "after">,
+  clock: Pick<Timekeeper, "now" | "monotonic" | "after">,
 ): Promise<FileFold> {
   // dayKey strings sort lexically == chronologically, so "keep recent" is a
   // string comparison against yesterday's key.
@@ -508,13 +508,16 @@ export class SessionUsageStore {
   private sweeps = 0;
   private stopSweep: (() => void) | null = null;
   private closed = false;
-  private readonly clock: Pick<Timekeeper, "now" | "after" | "every">;
+  private readonly clock: Pick<
+    Timekeeper,
+    "now" | "monotonic" | "after" | "every"
+  >;
 
   constructor(opts: {
     host: Host;
     // [LAW:effects-at-boundaries] The daemon's clock: the sweep and the scans'
     // periods, and the instants the store stamps, ages and cuts off by.
-    clock: Pick<Timekeeper, "now" | "after" | "every">;
+    clock: Pick<Timekeeper, "now" | "monotonic" | "after" | "every">;
     staleAgeMs?: number;
     sweepIntervalMs?: number;
     rescan?: Every;
@@ -657,7 +660,7 @@ export class SessionUsageStore {
       // whether IT read is its own fact, never another session's refresh
       // landing in the same await.
       const tally: IngestTally = { hits: 0, misses: 0 };
-      const startedAt = this.clock.now();
+      const startedAt = this.clock.monotonic();
       const record = await this.ingest(sessionId, transcriptPath, tally, stamp);
       this.renderTally.hits += tally.hits;
       this.renderTally.misses += tally.misses;
@@ -666,7 +669,7 @@ export class SessionUsageStore {
           `sid=${valueOf(sessionId)}`,
           "request",
           record,
-          this.clock.now() - startedAt,
+          elapsedMs(this.clock, startedAt),
         );
       }
       // The session's slot records that its refresh answered — a failure

@@ -33,6 +33,7 @@ import {
 } from "../../src/config/effective-globals";
 import { LANE_NAMES, type LaneSwitches } from "../../src/config/lanes";
 import { locations, stateDir } from "../../src/daemon/paths";
+import { systemTimekeeper } from "../../src/time";
 
 const NO_LANES = Object.fromEntries(
   LANE_NAMES.map((lane) => [lane, false]),
@@ -78,7 +79,7 @@ export function testVerbContext(
     clientGone: () => false,
     journalTurns: new JournalTurns({
       log: () => {},
-      monotonic: () => performance.now(),
+      monotonic: () => systemTimekeeper.monotonic(),
     }),
     clickLanded: () => {},
     placeWaited: () => {},

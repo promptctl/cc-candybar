@@ -22,7 +22,7 @@ import {
   type WatchSpec,
 } from "./watchers";
 import { boundKey, boundOf } from "../../utils/folder-identity";
-import type { Timekeeper } from "../../time";
+import { elapsedMs, type Monotonic, type Timekeeper } from "../../time";
 import { TrailingEdge } from "../../utils/trailing-edge";
 import { Period, periodOf, type Every } from "../../utils/period";
 import {
@@ -132,7 +132,7 @@ interface PrSource extends Readable<PullRequest> {
 
 interface PrAnswer {
   readonly outcome: Outcome<PullRequest>;
-  readonly at: number;
+  readonly at: Monotonic;
 }
 
 // What a pass did to the PR's key, for its refresh event: no PR source, the
@@ -188,7 +188,7 @@ interface RepoState {
 
 interface ResolutionCacheEntry {
   readonly known: Outcome<string>;
-  readonly computedAt: number;
+  readonly computedAt: Monotonic;
 }
 
 // `held` counts the repos a home holds — the ones the period visits.
@@ -332,12 +332,12 @@ export class GitDataProvider {
   private readonly watchers: WatcherRegistry;
   private readonly ownsWatchers: boolean;
   private readonly logger: GitProviderLogger;
-  private readonly clock: Pick<Timekeeper, "now" | "after">;
+  private readonly clock: Pick<Timekeeper, "monotonic" | "after">;
 
   constructor(opts: {
     // [LAW:effects-at-boundaries] The daemon's clock: every period, and the
     // times the reads are stamped and timed with.
-    clock: Pick<Timekeeper, "now" | "after">;
+    clock: Pick<Timekeeper, "monotonic" | "after">;
     periodMs?: number;
     maxRepos?: number;
     inner: GitService;
@@ -407,7 +407,7 @@ export class GitDataProvider {
     projectDir: string | undefined,
   ): Outcome<string> {
     const key = `${workingDir}|${projectDir ?? ""}`;
-    const now = this.clock.now();
+    const now = this.clock.monotonic();
 
     const existing = this.resolutions.get(key);
     if (existing && now - existing.computedAt < RESOLUTION_TTL_MS) {
@@ -699,7 +699,7 @@ export class GitDataProvider {
   // another branch's PR. Each pass that lands writes one refresh event.
   private async pass(state: RepoState): Promise<void> {
     if (this.repos.get(state.root) !== state) return;
-    const startedAt = this.clock.now();
+    const startedAt = this.clock.monotonic();
     const asked = [...state.asked];
     state.asked.clear();
     const followed = this.followWatch(state.root, state.watch);
@@ -755,7 +755,7 @@ export class GitDataProvider {
       `${state.root} asked=${asked.join(",") || "-"} values=${values.length} pr=${prMove} watch=${followed.move}`,
       triggerOf(asked),
       failures.size === 0 ? ok(null) : failed([...failures].join("; ")),
-      this.clock.now() - startedAt,
+      elapsedMs(this.clock, startedAt),
     );
   }
 
@@ -832,7 +832,7 @@ export class GitDataProvider {
     const key = pr.key;
     if (pr.inFlight?.key === key) return pr.inFlight.done;
     const remote = pr.remote;
-    const startedAt = this.clock.now();
+    const startedAt = this.clock.monotonic();
     const lookup: Promise<Outcome<PullRequest>> =
       remote.kind === "ok"
         ? this.inner
@@ -846,10 +846,10 @@ export class GitDataProvider {
         `${state.root} key=${logfmtValue(key)}`,
         by,
         outcome,
-        this.clock.now() - startedAt,
+        elapsedMs(this.clock, startedAt),
       );
       // Kept under its own key whether or not the PR has moved on since.
-      const at = this.clock.now();
+      const at = this.clock.monotonic();
       pr.seen.delete(key);
       pr.seen.set(key, { outcome, at });
       for (const oldest of pr.seen.keys()) {

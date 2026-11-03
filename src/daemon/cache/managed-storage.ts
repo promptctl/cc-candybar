@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { SessionId } from "../session-id";
-import type { Timekeeper } from "../../time";
+import { elapsedMs, type Timekeeper } from "../../time";
 import type { WatcherHandle, WatcherRegistry, Invalidation } from "./watchers";
 import {
   stallReason,
@@ -143,7 +143,10 @@ export class ManagedStorage {
   private readonly logger: DaemonLogger;
   private readonly identityOf: IdentityRead;
   private readonly fileEvents: FileEvents;
-  private readonly clock: Pick<Timekeeper, "now" | "after" | "every">;
+  private readonly clock: Pick<
+    Timekeeper,
+    "now" | "monotonic" | "after" | "every"
+  >;
   private readonly unsubscribe: Release;
 
   constructor(opts: {
@@ -152,7 +155,7 @@ export class ManagedStorage {
     readonly fileEvents: FileEvents;
     // [LAW:effects-at-boundaries] The daemon's clock: the sweep period, the
     // age a file is judged against, and the source's timings.
-    readonly clock: Pick<Timekeeper, "now" | "after" | "every">;
+    readonly clock: Pick<Timekeeper, "now" | "monotonic" | "after" | "every">;
     readonly identityOf?: IdentityRead;
     readonly ledger?: RefreshLedger;
   }) {
@@ -478,12 +481,12 @@ export class ManagedStorage {
   // Removes every `*.json` file nobody has written for 30 days, unless a
   // session holds it now. One event per sweep.
   private async sweep(key: StorageKey): Promise<void> {
-    const startedAt = this.clock.now();
-    const cutoff = startedAt - STORAGE_FILE_MAX_AGE_MS;
+    const startedAt = this.clock.monotonic();
+    const cutoff = this.clock.now() - STORAGE_FILE_MAX_AGE_MS;
     let scanned = 0;
     let removed = 0;
     const event = () =>
-      `plugin storage sweep folder=${valueOf(key.folder)} scanned=${scanned} removed=${removed} took=${this.clock.now() - startedAt}ms`;
+      `plugin storage sweep folder=${valueOf(key.folder)} scanned=${scanned} removed=${removed} took=${elapsedMs(this.clock, startedAt)}ms`;
     try {
       const entries = await fs.promises.readdir(key.folder, {
         withFileTypes: true,

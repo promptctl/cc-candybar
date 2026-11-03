@@ -1,5 +1,5 @@
 import type { Outcome } from "./outcome";
-import type { Timekeeper } from "../time";
+import type { Monotonic, Timekeeper } from "../time";
 
 // [LAW:types-are-the-program] A period chosen by the last read's outcome: a
 // failed read is retried on its own (usually shorter) period, so a transient
@@ -42,13 +42,13 @@ export class Period {
     private readonly tick: () => void,
     // [LAW:effects-at-boundaries] The clock the period is measured and armed
     // on: the owner's, so a test holds it.
-    private readonly clock: Pick<Timekeeper, "now" | "after">,
+    private readonly clock: Pick<Timekeeper, "monotonic" | "after">,
   ) {}
 
-  // A read landed at `at` (now, unless the owner is resuming an answer it
+  // A read landed at the monotonic reading `at` (now, unless the owner is resuming an answer it
   // kept from earlier). `periodMs` is chosen by the caller from the read's
   // outcome (a failed PR lookup is retried sooner than a found one).
-  landed(periodMs: number, at: number = this.clock.now()): void {
+  landed(periodMs: number, at: Monotonic = this.clock.monotonic()): void {
     this.last = { at, periodMs };
     this.schedule();
   }
@@ -71,7 +71,7 @@ export class Period {
     if (this.state !== "held" || this.last === null) return;
     const wait = Math.max(
       0,
-      this.last.at + this.last.periodMs - this.clock.now(),
+      this.last.at + this.last.periodMs - this.clock.monotonic(),
     );
     this.stop = this.clock.after(
       wait,

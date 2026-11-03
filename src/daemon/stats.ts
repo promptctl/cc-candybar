@@ -21,7 +21,7 @@ import type { LaunchCategory } from "../proc/launch";
 import type { LaunchStatsHandle } from "../proc/stats-handle";
 import { PROTOCOL_VERSION } from "./protocol";
 import { PACKAGE_VERSION } from "../version";
-import type { Timekeeper } from "../time";
+import type { Monotonic, Timekeeper } from "../time";
 
 // Rolling window for "last minute" counts. Keep timestamps for each launch in
 // a ring buffer; eviction happens lazily on read.
@@ -202,7 +202,7 @@ export class RuntimeStats {
 
   // [LAW:one-source-of-truth] The daemon's clock, which these counters read
   // like everything else the daemon times.
-  constructor(private readonly clock: Pick<Timekeeper, "now">) {
+  constructor(private readonly clock: Pick<Timekeeper, "now" | "monotonic">) {
     this.startedAt = new Date(clock.now());
   }
 
@@ -239,7 +239,7 @@ export class RuntimeStats {
     LaunchCategory,
     number
   >();
-  private readonly rollingTimestamps: number[] = [];
+  private readonly rollingTimestamps: Monotonic[] = [];
   private rollingHead = 0;
 
   // Readable off the value because a closed daemon's work is still refused, and
@@ -287,7 +287,7 @@ export class RuntimeStats {
   };
 
   private recordRollingNow(): void {
-    const now = this.clock.now();
+    const now = this.clock.monotonic();
     if (this.rollingTimestamps.length < ROLLING_BUFFER_CAP) {
       this.rollingTimestamps.push(now);
       return;
@@ -315,7 +315,7 @@ export class RuntimeStats {
   }
 
   private snapshotSubprocesses(): StatsSnapshot["subprocesses"] {
-    const cutoff = this.clock.now() - ROLLING_WINDOW_MS;
+    const cutoff = this.clock.monotonic() - ROLLING_WINDOW_MS;
     let lastMinute = 0;
     for (const ts of this.rollingTimestamps) {
       if (ts >= cutoff) lastMinute++;
@@ -367,7 +367,10 @@ export class RuntimeStats {
   // one reads; comparing against the producer's own output, not a second
   // spelling of the type, means a field added here is checked for there.
   static referenceSnapshot(): StatsSnapshot {
-    return new RuntimeStats({ now: () => 0 }).snapshot({
+    return new RuntimeStats({
+      now: () => 0,
+      monotonic: () => 0 as Monotonic,
+    }).snapshot({
       gitCache: {
         size: 0,
         held: 0,

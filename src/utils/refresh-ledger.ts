@@ -137,17 +137,17 @@ export class Refreshes<Trigger extends RefreshTrigger> {
     fields: string,
     by: Trigger,
     outcome: Outcome<unknown>,
-    took: number,
+    ms: number,
   ): void {
     this.tally.refreshes[by] = (this.tally.refreshes[by] ?? 0) + 1;
-    this.tally.lastMs = took;
+    this.tally.lastMs = ms;
     if (outcome.kind === "failed") this.tally.failures++;
     const failure = outcome.kind === "failed";
     if (!failure && !OWN_EVENT[by]) return;
     const why = failure ? ` reason=${JSON.stringify(outcome.reason)}` : "";
     this.logger(
       failure ? "warn" : "info",
-      `${this.tally.name} refresh ${fields} by=${by} outcome=${outcome.kind}${why} took=${took}ms`,
+      `${this.tally.name} refresh ${fields} by=${by} outcome=${outcome.kind}${why} took=${ms}ms`,
     );
   }
 }

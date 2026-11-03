@@ -4,6 +4,7 @@
 // frame forward to the earliest the feed's spacing allows, two subscribers
 // share each render, and a feed with no subscriber draws nothing.
 
+import type { Monotonic } from "../src/time";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import { ok } from "../src/utils/outcome";
 import type { DaemonParts } from "../src/daemon/daemon-parts";
@@ -173,7 +174,8 @@ function harness(opts: {
     refreshes: () => ledger.totals(),
     periods: PERIODS,
     clock: {
-      monotonic: () => START_MS + clock.monotonic() + state.skewMs,
+      monotonic: () =>
+        (START_MS + clock.monotonic() + state.skewMs) as Monotonic,
       after: (ms, fire) => clock.after(wholeMs(ms), fire),
     },
     instant: () =>
@@ -1440,7 +1442,7 @@ describe("a feed draws when its bar next changes", () => {
 // saying so, with no failure branch in the lane.
 test("a frame whose render threw is the failure's Frame, a still bar in the error glyph's words", () => {
   const parts = {
-    clock: { now: () => 0 },
+    clock: { monotonic: () => 0 },
     renderCache: {
       holdView: () => null,
       openFailure: () => ({ error: new Error("the view would not open") }),

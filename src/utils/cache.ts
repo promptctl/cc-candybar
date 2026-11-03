@@ -10,7 +10,7 @@ interface ErrnoError extends Error {
 
 // [LAW:effects-at-boundaries] What the cache waits and dates entries on: every
 // method that sleeps or stamps takes the owner's clock, so a test holds it.
-export type CacheClock = Pick<Timekeeper, "now" | "after">;
+export type CacheClock = Pick<Timekeeper, "now" | "monotonic" | "after">;
 
 export interface CacheEntry<T> {
   data: T;
@@ -73,10 +73,10 @@ export class CacheManager {
 
     await this.ensureCacheDirectories(root);
     const lockFile = path.join(this.locksDir(root), name);
-    const startTime = clock.now();
+    const startTime = clock.monotonic();
     const lockContent = String(process.pid);
 
-    while (clock.now() - startTime < timeout) {
+    while (clock.monotonic() - startTime < timeout) {
       try {
         await fs.promises.writeFile(lockFile, lockContent, {
           flag: FILE_CREATE_FLAG,

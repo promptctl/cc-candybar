@@ -108,12 +108,12 @@ async function askPlacement(
 // server that is gone misses them all. One per call the bar pane makes, so a
 // call that keeps failing is not excused by another that answers.
 function tmuxPatience(
-  clock: Pick<Timekeeper, "now">,
+  clock: Pick<Timekeeper, "monotonic">,
 ): (run: { readonly kind: "ok" } | TmuxMissed) => void {
-  let answeredAt = clock.now();
+  let answeredAt = clock.monotonic();
   return (run) => {
-    if (run.kind === "ok") answeredAt = clock.now();
-    else if (clock.now() - answeredAt > TMUX_PATIENCE_MS)
+    if (run.kind === "ok") answeredAt = clock.monotonic();
+    else if (clock.monotonic() - answeredAt > TMUX_PATIENCE_MS)
       throw new Error(
         `tmux has not answered for ${TMUX_PATIENCE_MS / 1000} s: ${run.reason}`,
       );

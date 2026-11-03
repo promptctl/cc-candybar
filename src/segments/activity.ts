@@ -150,7 +150,7 @@ export class ActivityProvider {
   private readonly fold: TranscriptFold<ActivityState>;
 
   constructor(opts: {
-    readonly clock: Pick<Timekeeper, "now">;
+    readonly clock: Pick<Timekeeper, "monotonic">;
     readonly logger?: DaemonLogger;
     readonly ledger?: RefreshLedger;
   }) {

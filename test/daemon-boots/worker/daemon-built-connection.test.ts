@@ -7,7 +7,11 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { systemTimekeeper, type Timekeeper } from "../../../src/time";
+import {
+  systemTimekeeper,
+  type Monotonic,
+  type Timekeeper,
+} from "../../../src/time";
 import { PROTOCOL_VERSION, type Request, type Response } from "../../../src/daemon/protocol";
 import { textOf } from "../../../src/render/frame";
 import { render, renderBody } from "../../helpers/daemon-e2e";
@@ -137,7 +141,7 @@ describe("a connection to a daemon built in this worker", () => {
       start({
         ...systemTimekeeper,
         now: () => at.getTime(),
-        monotonic: () => monotonic,
+        monotonic: () => monotonic as Monotonic,
       }).connect(),
     );
     monotonic += 500;

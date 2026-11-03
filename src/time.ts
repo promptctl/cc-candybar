@@ -11,12 +11,16 @@ export interface TimerOptions {
   readonly unref?: boolean;
 }
 
+// [LAW:one-type-per-behavior] A monotonic reading, so one cannot be passed
+// where a wall time is meant, or the reverse: the two differ by decades.
+export type Monotonic = number & { readonly __monotonic: true };
+
 export interface Timekeeper {
   // Wall time, in epoch milliseconds: the one wall reading. A `Date` is
   // `new Date(clock.now())`, and a file's age is `clock.now() - mtimeMs`.
   now(): number;
   // Milliseconds since an arbitrary start that never steps back, for spans.
-  monotonic(): number;
+  monotonic(): Monotonic;
   // Runs `fire` on a later turn, once `ms` have passed, unless what it returns
   // clears it first. Never before it returns: its callers arm it before they
   // are ready to be fired at.
@@ -27,13 +31,27 @@ export interface Timekeeper {
   defer(fire: () => void): () => void;
 }
 
+// [LAW:single-enforcer] A span in whole milliseconds between two monotonic
+// readings: every duration src records or prints is one of these.
+export function spanMs(from: Monotonic, to: Monotonic): number {
+  return Math.round(to - from);
+}
+
+// A span from `since` to now.
+export function elapsedMs(
+  clock: Pick<Timekeeper, "monotonic">,
+  since: Monotonic,
+): number {
+  return spanMs(since, clock.monotonic());
+}
+
 // [LAW:single-enforcer] The one place src reads the real clock, sets a timer
 // or waits for a loop turn. It holds no state; `after` and `every` read the
 // timer globals when they are called, so jest's fake timers still drive code
 // handed it. `defer` is `node:timers`' own, which jest's fakes leave alone.
 export const systemTimekeeper: Timekeeper = {
   now: () => Date.now(),
-  monotonic: () => performance.now(),
+  monotonic: () => performance.now() as Monotonic,
   after: (ms, fire, options) => {
     const timer = setTimeout(fire, ms);
     if (options?.unref) {

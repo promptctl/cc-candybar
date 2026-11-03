@@ -34,7 +34,7 @@ import type { SourceStats } from "../utils/keyed-source.js";
 import { valueOf } from "../utils/logfmt.js";
 import { quietLogger, type DaemonLogger } from "../utils/logger.js";
 import { readTail, statStamp } from "../utils/transcript-fs.js";
-import type { Timekeeper } from "../time.js";
+import { elapsedMs, type Timekeeper } from "../time.js";
 
 // Anthropic prompt cache TTL. A const, not a knob: it is a property of the
 // upstream cache, not of this renderer. If a future cache tier ships a
@@ -108,7 +108,7 @@ export class CacheExpiryProvider {
 
   constructor(
     // [LAW:effects-at-boundaries] Times each read of the tail.
-    private readonly clock: Pick<Timekeeper, "now">,
+    private readonly clock: Pick<Timekeeper, "monotonic">,
     logger: DaemonLogger = quietLogger,
     ledger: RefreshLedger = new RefreshLedger(logger),
   ) {
@@ -159,13 +159,13 @@ export class CacheExpiryProvider {
     transcriptPath: string,
     stamp: string,
   ): Promise<Outcome<number>> {
-    const startedAt = this.clock.now();
+    const startedAt = this.clock.monotonic();
     const outcome = await cacheExpiresAt(transcriptPath);
     this.refreshes.recorded(
       `sid=${valueOf(sessionId)} stamp=${valueOf(stamp)}`,
       "request",
       outcome,
-      this.clock.now() - startedAt,
+      elapsedMs(this.clock, startedAt),
     );
     return outcome;
   }

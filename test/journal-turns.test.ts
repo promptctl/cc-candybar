@@ -73,7 +73,7 @@ function setup() {
   const logged: string[] = [];
   const turns = new JournalTurns({
     log: (_level, msg) => logged.push(msg),
-    monotonic: () => performance.now(),
+    monotonic: () => systemTimekeeper.monotonic(),
   });
   const followed: string[] = [];
   const ctx: VerbContext = {
@@ -316,7 +316,7 @@ describe("the click path", () => {
         given,
         { kind: "click", verb, value } as Parameters<typeof replyTo>[1],
         () => false,
-        performance.now(),
+        systemTimekeeper.monotonic(),
         gone,
       );
     return { send, events };

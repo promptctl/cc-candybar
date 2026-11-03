@@ -325,7 +325,7 @@ export function productionLaneEdge(
     // — the shell that started Claude Code, which may itself be a job of the
     // pane's first shell (`nix develop`, a nested `bash`).
     paneDir: async (hint, shell) => {
-      const until = clock.now() + SHELL_PATIENCE_MS;
+      const until = clock.monotonic() + SHELL_PATIENCE_MS;
       for (;;) {
         const pane = await paneForeground(launcher, hint);
         if (pane.foreground === shell) {
@@ -336,7 +336,7 @@ export function productionLaneEdge(
           }
           return pane.cwd;
         }
-        if (clock.now() > until) {
+        if (clock.monotonic() > until) {
           throw new Error(
             `the shell in pane ${hint.pane} (pid ${shell}) did not take its terminal back within ${SHELL_PATIENCE_MS / 1000} s`,
           );
@@ -357,9 +357,9 @@ export function productionLaneEdge(
       return file === null ? null : fs.realpathSync(file);
     },
     followed: async (sessionId, lane, withinMs) => {
-      const until = clock.now() + withinMs;
+      const until = clock.monotonic() + withinMs;
       while (!following(sessionId).has(lane)) {
-        if (clock.now() > until) return false;
+        if (clock.monotonic() > until) return false;
         await wait(FOLLOW_POLL_MS);
       }
       return true;
@@ -394,9 +394,9 @@ export function productionLaneEdge(
       }
     },
     exited: async (pid, withinMs) => {
-      const until = clock.now() + withinMs;
+      const until = clock.monotonic() + withinMs;
       while (probe.alive(pid)) {
-        if (clock.now() > until) return false;
+        if (clock.monotonic() > until) return false;
         await wait(EXIT_POLL_MS);
       }
       return true;

@@ -32,7 +32,7 @@ import { PENDING, type Pending } from "./outcome";
 import { ObservableLru } from "./observable-lru";
 import { valueOf } from "./logfmt";
 import type { Refreshes } from "./refresh-ledger";
-import type { Timekeeper } from "../time";
+import { elapsedMs, type Timekeeper } from "../time";
 
 // [LAW:types-are-the-program] Never `absent`: a session with no transcript yet
 // is a real empty fold, so the caller has exactly two arms.
@@ -65,7 +65,7 @@ export class TranscriptFold<S> {
     // The projection's source: a session's fold, refreshed by its request.
     private readonly refreshes: Refreshes<"request">,
     // [LAW:effects-at-boundaries] Times each fold, so a test holds the clock.
-    private readonly clock: Pick<Timekeeper, "now">,
+    private readonly clock: Pick<Timekeeper, "monotonic">,
     private readonly log: DaemonLogger = quietLogger,
     maxSessions: number = MAX_SESSIONS,
   ) {
@@ -95,7 +95,7 @@ export class TranscriptFold<S> {
       return this.store(sessionId, folded, { kind: "ok", value: folded.value });
     }
 
-    const startedAt = this.clock.now();
+    const startedAt = this.clock.monotonic();
     const read = await foldAppended(
       transcriptPath,
       prior,
@@ -106,7 +106,7 @@ export class TranscriptFold<S> {
       `sid=${valueOf(sessionId)}`,
       "request",
       read,
-      this.clock.now() - startedAt,
+      elapsedMs(this.clock, startedAt),
     );
     if (read.kind === "failed") return this.store(sessionId, prior, read);
     if (read.kind === "absent") {

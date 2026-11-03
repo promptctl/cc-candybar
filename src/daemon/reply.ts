@@ -26,6 +26,7 @@ import {
   BadVerbArgs,
 } from "./verbs";
 import { ClickAbandoned, DaemonClosing } from "./verb-error";
+import { elapsedMs, spanMs, type Monotonic } from "../time.js";
 import { transcriptReads } from "../utils/transcript-fs.js";
 import { readStores } from "../doctor/edge";
 import type { ClickArrival } from "../doctor/sightings";
@@ -131,7 +132,7 @@ export async function handleRequest(
   parts: DaemonParts,
   inbound: Inbound,
   timedOut: () => boolean,
-  accepted: number,
+  accepted: Monotonic,
   clientLeft: () => boolean,
 ): Promise<HandledRequest> {
   // The connection classified the frame (classifyInbound): the URL handler's,
@@ -206,7 +207,7 @@ export async function replyTo(
   parts: DaemonParts,
   req: ReplyRequest,
   timedOut: () => boolean,
-  accepted: number,
+  accepted: Monotonic,
   clientLeft: () => boolean,
 ): Promise<Reply> {
   const {
@@ -304,7 +305,7 @@ export async function replyTo(
     const started = new Date(clock.now());
     const at = instantOf(started);
     const t0 = clock.monotonic();
-    const queuedMs = Math.round(t0 - accepted);
+    const queuedMs = spanMs(accepted, t0);
     // [LAW:nothing-unseen] One render event per render request, written here
     // on every exit — a refusal and a throw included — from the facts the
     // render reached, so a failing render is described like any other.
@@ -417,7 +418,7 @@ export async function replyTo(
       "render",
       facts,
       rendered.outcome,
-      Math.round(clock.monotonic() - t0),
+      elapsedMs(clock, t0),
     );
     parts.log(level, line);
     return {
@@ -591,14 +592,14 @@ function serializeSegmentCells(
 // means it stopped before it.
 async function clickEvent(
   parts: DaemonParts,
-  accepted: number,
+  accepted: Monotonic,
   timedOut: () => boolean,
   clientLeft: () => boolean,
   run: (facts: RequestFacts, gone: () => boolean) => Promise<RequestOutcome>,
 ): Promise<Response> {
   const { clock } = parts;
   const t0 = clock.monotonic();
-  const facts: RequestFacts = [["queued", `${Math.round(t0 - accepted)}ms`]];
+  const facts: RequestFacts = [["queued", `${spanMs(accepted, t0)}ms`]];
   // When a click still waiting for its turn is refused: the daemon's deadline,
   // or a client that waited for the answer leaving. The connection knows which
   // clients wait (the forwarder does not), so its `clientLeft` already says so.
@@ -616,7 +617,7 @@ async function clickEvent(
     "click",
     facts,
     outcome,
-    Math.round(clock.monotonic() - t0),
+    elapsedMs(clock, t0),
   );
   parts.log(level, line);
   return clickReply(outcome);
@@ -657,7 +658,7 @@ async function urlClick(
   parts: DaemonParts,
   frame: Record<string, unknown>,
   timedOut: () => boolean,
-  accepted: number,
+  accepted: Monotonic,
   clientLeft: () => boolean,
 ): Promise<Response> {
   return clickEvent(

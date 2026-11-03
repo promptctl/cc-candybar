@@ -34,7 +34,7 @@ export class TmuxService {
   constructor(opts: {
     readonly launcher: Launcher;
     // [LAW:effects-at-boundaries] Times each refresh and arms each pane's period.
-    readonly clock: Pick<Timekeeper, "now" | "after">;
+    readonly clock: Pick<Timekeeper, "monotonic" | "after">;
     readonly logger?: DaemonLogger;
     readonly ledger?: RefreshLedger;
   }) {

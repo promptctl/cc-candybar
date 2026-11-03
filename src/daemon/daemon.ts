@@ -34,7 +34,7 @@ import { stableAttachPreload } from "../install/index.js";
 import { type RenderOrigin } from "../config-hint";
 import { createPayloadProviders } from "./payload-providers";
 import { FileEventDelivery } from "./cache/file-events";
-import type { Timekeeper } from "../time";
+import type { Monotonic, Timekeeper } from "../time";
 import { RefreshLedger } from "../utils/refresh-ledger";
 import {
   configLoadedLine,
@@ -198,7 +198,7 @@ export interface Daemon {
   readonly handle: (
     inbound: Inbound,
     timedOut: () => boolean,
-    accepted: number,
+    accepted: Monotonic,
     clientLeft: () => boolean,
   ) => Promise<HandledRequest>;
   // The reply to a request of any kind but a subscribe, past the connection's
@@ -206,7 +206,7 @@ export interface Daemon {
   readonly reply: (
     req: ReplyRequest,
     timedOut: () => boolean,
-    accepted: number,
+    accepted: Monotonic,
     clientLeft: () => boolean,
   ) => Promise<Reply>;
   readonly subscribe: FrameFeeds<CheckedRenderRequest>["subscribe"];

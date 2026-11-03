@@ -66,7 +66,7 @@ export async function obtainDaemon(
   const { host, clock } = world;
   const settings = { ...DEFAULT_OPTS, ...opts };
   const spawnFn = opts.spawn ?? (() => spawnDaemonDetachedReal(world));
-  const deadline = clock.now() + settings.totalTimeoutMs;
+  const deadline = clock.monotonic() + settings.totalTimeoutMs;
   const lockFallbackMs =
     opts.lockFallbackMs ?? Math.floor(settings.totalTimeoutMs / 2);
 
@@ -82,8 +82,8 @@ export async function obtainDaemon(
   }
 
   // No daemon yet. Try to win the spawn-lock so we are the one to bring it up.
-  const contentionStart = clock.now();
-  while (clock.now() < deadline) {
+  const contentionStart = clock.monotonic();
+  while (clock.monotonic() < deadline) {
     const lock = tryAcquireSpawnLock(host, clock);
     if (lock.kind === "error") {
       // [LAW:no-silent-failure] Unrecoverable errors (EACCES, ENOTDIR,
@@ -125,7 +125,7 @@ export async function obtainDaemon(
     // bypass the lock and let bind() inside the daemon arbitrate duplicates.
     // Same shape as a fresh spawn — caller pays one extra Node startup cost
     // in the worst case, which is the right trade for availability.
-    if (clock.now() - contentionStart > lockFallbackMs) {
+    if (clock.monotonic() - contentionStart > lockFallbackMs) {
       return await spawnAndWaitForReady(
         host,
         clock,
@@ -153,7 +153,7 @@ async function spawnAndWaitForReady(
   reasonSuffix: string,
 ): Promise<ObtainResult> {
   const readyDeadline = Math.min(
-    clock.now() + spawnReadyTimeoutMs,
+    clock.monotonic() + spawnReadyTimeoutMs,
     outerDeadline,
   );
 
@@ -210,7 +210,7 @@ async function pollUntilReady(
   connectTimeoutMs: number,
   readyDeadline: number,
 ): Promise<boolean> {
-  while (clock.now() < readyDeadline) {
+  while (clock.monotonic() < readyDeadline) {
     if (await canConnect(socketPath(host), connectTimeoutMs, clock)) {
       return true;
     }

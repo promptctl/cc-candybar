@@ -85,7 +85,7 @@ const refuse = (): never => {
 const NO_HANDLER: HandlerProbeEdge = {
   platform: "linux",
   sockets: { own: "/s", handler: "/s" },
-  now: refuse,
+  monotonic: refuse,
   nonce: refuse,
   daemon: refuse,
   open: refuse,

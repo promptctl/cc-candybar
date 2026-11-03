@@ -102,7 +102,7 @@ import type { RefreshFaults, RefreshLane } from "./refresh-faults.js";
 import type { SessionId } from "./session-id.js";
 import type { ManagedStorage, StorageKey } from "./cache/managed-storage.js";
 import type { JsonValue } from "../var-system/types.js";
-import type { Timekeeper } from "../time";
+import { elapsedMs, type Timekeeper } from "../time";
 
 // The resolved globals as the options drawDsl's joiner and cells read (its
 // selection is the resolution itself — RenderSelection is a Pick of it).
@@ -1078,7 +1078,7 @@ export async function refreshPayload(
       deps.log("error", `${name} lane threw: ${inspect(e)}`);
       threw = `${name}: ${String(e)}`;
     }
-    refreshed.set(name, Math.round(deps.clock.monotonic() - startedAt));
+    refreshed.set(name, elapsedMs(deps.clock, startedAt));
     deps.faults.refreshed(sessionId, name, threw);
   };
   await Promise.all([

@@ -7,7 +7,7 @@ import type {
   SourceScope,
 } from "./refresh-ledger";
 import type { DaemonLogger } from "./logger";
-import type { Timekeeper } from "../time";
+import { elapsedMs, type Timekeeper } from "../time";
 import type { Holds, Release } from "./holds";
 import { Period, periodOf, type Every } from "./period";
 import {
@@ -64,7 +64,7 @@ export interface KeyedSourceSpec<I, T> {
   readonly ledger: RefreshLedger;
   // [LAW:effects-at-boundaries] Times each refresh and arms each entry's
   // period.
-  readonly clock: Pick<Timekeeper, "now" | "after">;
+  readonly clock: Pick<Timekeeper, "monotonic" | "after">;
 }
 
 interface Entry<I, T> extends Readable<T> {
@@ -241,7 +241,7 @@ export class KeyedSource<I, T> {
     }
     const flight = {};
     entry.flight = flight;
-    const startedAt = this.spec.clock.now();
+    const startedAt = this.spec.clock.monotonic();
     void attempt(() => this.spec.read(entry.input))
       .then((outcome) => {
         // [LAW:no-silent-failure] Every read that ran is an event, one a
@@ -253,7 +253,7 @@ export class KeyedSource<I, T> {
             `${this.spec.fields(entry.input)} stored=${stored ? "Y" : "N"}`,
             by,
             outcome,
-            this.spec.clock.now() - startedAt,
+            elapsedMs(this.spec.clock, startedAt),
           );
         } finally {
           if (stored) this.store(entry, outcome);
@@ -324,7 +324,7 @@ interface Revisit {
 
 function revisitOf(
   every: Every | null,
-  clock: Pick<Timekeeper, "now" | "after">,
+  clock: Pick<Timekeeper, "monotonic" | "after">,
   read: { readonly period: () => void; readonly holdReturned: () => void },
 ): Revisit {
   if (every === null) return new HoldReturn(read.holdReturned);
