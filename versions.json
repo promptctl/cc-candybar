@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "587196cbaa9d6ccd67cf50cb1c7598a88730d3b6",
+      "timestamp": "2026-11-03T03:06:36.368Z",
+      "commits": [
+        {
+          "sha": "587196cbaa9d6ccd67cf50cb1c7598a88730d3b6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T20:05:41-07:00",
+          "message": "feat(url-handler): a resident Swift forwarder sends the raw link to the daemon (candybar-daemon-health-ajx0.co4) (#594)\n\n* feat(url-handler): a resident Swift forwarder sends the raw link to the daemon, which does all parsing (candybar-daemon-health-ajx0.co4)\n\nThe URL handler app is a Swift agent (url-handler/main.swift) that forwards each\ncc-candybar:// link as one url frame, versioned by itself, and reads no answer.\nThe daemon classifies inbound frames once, splits the verb itself, and writes a\nclick event for every url frame, refused ones included. clientVersion leaves the\nwire; a click's arrival carries who delivered it, and the doctor judges by that.\nInstall assembles the .app around the prebuilt binary, ad-hoc signs it, quits the\nresident instance and registers the scheme. CI builds a universal binary on macOS\ninto both darwin packages; check-protocol pins the Swift frame and socket path.\nurl-handle remains the tmux status line's route only.\n\n* test(click-event): the click event's via field is expected on every click (candybar-daemon-health-ajx0.co4)\n\n* fix(connection): a url frame stays in flight under the deadline, and the connection classifies the frame once (candybar-daemon-health-ajx0.co4)\n\nThe forwarder hangs up after its write by design. The connection treated\nthat close as a vanished peer: it cleared the request backstop and left\nin-flight while the click was still queued, so a forwarded click had no\ndeadline (a repeat click could revert a toggle) and stats under-counted.\nNow the connection classifies the inbound frame once (Inbound), passes it\nto the daemon, and for a url frame keeps the backstop and the in-flight\ncount until the click is handled, with no client said to have left.\n\nAlso from the high review: install's platform-package lookup is one\nhelper for the render entry and the forwarder; check-protocol refuses a\nrow naming no mirror by label; the spawn-category docs name codesign and\nkillall instead of the retired osacompile and plutil.\n\n* fix(url-handler): a url frame is answered to no one, the app writes a long frame whole, and install resolves the forwarder before staging (candybar-daemon-health-ajx0.co4)\n\nFrom the medium review. The connection no longer writes a url frame's\nanswer: its writer closed by design, and on a real socket the write was\nonly an error event logged as a warning per click. The Swift app loops\nits write with a bounded poll, so a link longer than the socket buffer\nlands whole instead of being dropped as a short write; the link is\nprivate in the unified log, since a copy link carries the text copied.\nInstall resolves the forwarder before the runtime is staged, so a\ncheckout with no build fails with nothing half done. The doctor's row\nfor a click request says what it knows (not the forwarder) and leaves\nnaming the applet to the opener's row. The doctor e2e test forwards as\nthe app does: one frame, hang up, read the click event.\n\n* fix(url-handler): the app is replaced whole, EPIPE is reported not fatal, and the doctor parses an old daemon's arrivals (candybar-daemon-health-ajx0.co4)\n\nFrom the second high review. Install assembles and signs the app beside\nits place and renames it over the old one, so a failed sign leaves the\nhandler the user had. The forwarder sets SO_NOSIGPIPE, so a daemon that\nends the socket mid-write is an EPIPE it logs, not a SIGPIPE that ends\nthe app silently. The doctor's CLI probe parses each arrival off the\ndaemon's stats and tells a daemon from before the forwarder (no\ndelivery) apart as skew instead of dereferencing it. The set of frame\nversions the daemon speaks is derived from the current version, and the\nconnection declares `waits` above the backstop that reads it."
+        }
+      ]
+    },
+    {
       "version": "pr-598",
       "ref": "refs/pull/598/merge",
       "sha": "0a352e11560e25e5d91dd4b42661d79b4ebc3b13",
@@ -55,78 +70,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T19:31:33-07:00",
           "message": "fix(launch): a launch's input outlives its direct child for the descendants that read it (candybar-testing-0x6u.3zo)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-594",
-      "ref": "refs/pull/594/merge",
-      "sha": "c671b8de79e180ef45153768653541d555170ede",
-      "timestamp": "2026-11-03T03:01:47.723Z",
-      "commits": [
-        {
-          "sha": "c671b8de79e180ef45153768653541d555170ede",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T19:58:51-07:00",
-          "message": "Merge 13989bdfca9a76b342c7aea07eef0a9abe948fd8 into 1971f872ffd6e2d3f793d966800cc9ea93c56738\n"
-        },
-        {
-          "sha": "13989bdfca9a76b342c7aea07eef0a9abe948fd8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T19:12:40-07:00",
-          "message": "fix(url-handler): the app is replaced whole, EPIPE is reported not fatal, and the doctor parses an old daemon's arrivals (candybar-daemon-health-ajx0.co4)\n\nFrom the second high review. Install assembles and signs the app beside\nits place and renames it over the old one, so a failed sign leaves the\nhandler the user had. The forwarder sets SO_NOSIGPIPE, so a daemon that\nends the socket mid-write is an EPIPE it logs, not a SIGPIPE that ends\nthe app silently. The doctor's CLI probe parses each arrival off the\ndaemon's stats and tells a daemon from before the forwarder (no\ndelivery) apart as skew instead of dereferencing it. The set of frame\nversions the daemon speaks is derived from the current version, and the\nconnection declares `waits` above the backstop that reads it.\n"
-        },
-        {
-          "sha": "ea3b772066f6a1f1653a8a2c5bc9134d37364c6b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T18:57:41-07:00",
-          "message": "fix(url-handler): a url frame is answered to no one, the app writes a long frame whole, and install resolves the forwarder before staging (candybar-daemon-health-ajx0.co4)\n\nFrom the medium review. The connection no longer writes a url frame's\nanswer: its writer closed by design, and on a real socket the write was\nonly an error event logged as a warning per click. The Swift app loops\nits write with a bounded poll, so a link longer than the socket buffer\nlands whole instead of being dropped as a short write; the link is\nprivate in the unified log, since a copy link carries the text copied.\nInstall resolves the forwarder before the runtime is staged, so a\ncheckout with no build fails with nothing half done. The doctor's row\nfor a click request says what it knows (not the forwarder) and leaves\nnaming the applet to the opener's row. The doctor e2e test forwards as\nthe app does: one frame, hang up, read the click event.\n"
-        },
-        {
-          "sha": "ef5d7d6d7c0cc5b5aa5d8e170ccf5c410583d5f9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T18:37:31-07:00",
-          "message": "fix(connection): a url frame stays in flight under the deadline, and the connection classifies the frame once (candybar-daemon-health-ajx0.co4)\n\nThe forwarder hangs up after its write by design. The connection treated\nthat close as a vanished peer: it cleared the request backstop and left\nin-flight while the click was still queued, so a forwarded click had no\ndeadline (a repeat click could revert a toggle) and stats under-counted.\nNow the connection classifies the inbound frame once (Inbound), passes it\nto the daemon, and for a url frame keeps the backstop and the in-flight\ncount until the click is handled, with no client said to have left.\n\nAlso from the high review: install's platform-package lookup is one\nhelper for the render entry and the forwarder; check-protocol refuses a\nrow naming no mirror by label; the spawn-category docs name codesign and\nkillall instead of the retired osacompile and plutil.\n"
-        },
-        {
-          "sha": "2ca6c48ae0cd718fdf745f4c54fd5c2920ed8d6a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T18:23:03-07:00",
-          "message": "test(click-event): the click event's via field is expected on every click (candybar-daemon-health-ajx0.co4)\n"
-        },
-        {
-          "sha": "3d87d9423aa705a8b4e6c4916491dff893cc3fe9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T18:16:36-07:00",
-          "message": "feat(url-handler): a resident Swift forwarder sends the raw link to the daemon, which does all parsing (candybar-daemon-health-ajx0.co4)\n\nThe URL handler app is a Swift agent (url-handler/main.swift) that forwards each\ncc-candybar:// link as one url frame, versioned by itself, and reads no answer.\nThe daemon classifies inbound frames once, splits the verb itself, and writes a\nclick event for every url frame, refused ones included. clientVersion leaves the\nwire; a click's arrival carries who delivered it, and the doctor judges by that.\nInstall assembles the .app around the prebuilt binary, ad-hoc signs it, quits the\nresident instance and registers the scheme. CI builds a universal binary on macOS\ninto both darwin packages; check-protocol pins the Swift frame and socket path.\nurl-handle remains the tmux status line's route only.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "1971f872ffd6e2d3f793d966800cc9ea93c56738",
-      "timestamp": "2026-11-03T02:54:44.141Z",
-      "commits": [
-        {
-          "sha": "1971f872ffd6e2d3f793d966800cc9ea93c56738",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T19:53:26-07:00",
-          "message": "fix(test): a render is held past the request backstop by a pipe the test writes (candybar-testing-0x6u.8vd) (#597)\n\n* fix(test): a render is held past the request backstop by a pipe the test writes, not by a compile's speed (candybar-testing-0x6u.8vd)\n\n* fix(test): a render that never reads its held config fails on its reply, and the memory line keeps only the reason (candybar-testing-0x6u.8vd)\n\n* fix(test): a held-config case that fails releases the writer open it left waiting on the pipe (candybar-testing-0x6u.8vd)"
-        },
-        {
-          "sha": "0b82ee794b36b93e687f43f4fe214418d8d83c9e",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-03T02:39:36Z",
-          "message": "chore(release): set `package.json` to 1.180.10 [skip ci]\n\n## [1.180.10](https://github.com/promptctl/cc-candybar/compare/v1.180.9...v1.180.10) (2026-11-03)\n\n### Bug Fixes\n\n* **launch:** a launch's drained pipes have one owner, one bound and a stat (candybar-testing-0x6u.yzt) ([#595](https://github.com/promptctl/cc-candybar/issues/595)) ([a79a665](https://github.com/promptctl/cc-candybar/commit/a79a66523b3e7763ab4abce2c4a79c4a9fd4443f))\n"
         }
       ]
     }
