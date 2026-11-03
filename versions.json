@@ -4,15 +4,22 @@
     {
       "version": "pr-591",
       "ref": "refs/pull/591/merge",
-      "sha": "bd5748f575099363a6d18765247b44a7cdf6c794",
-      "timestamp": "2026-11-03T00:15:18.336Z",
+      "sha": "bd1031c652e7eb07a9277308ccd3f0c9cbd4eec3",
+      "timestamp": "2026-11-03T00:16:48.021Z",
       "commits": [
         {
-          "sha": "bd5748f575099363a6d18765247b44a7cdf6c794",
+          "sha": "bd1031c652e7eb07a9277308ccd3f0c9cbd4eec3",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T00:14:27Z",
-          "message": "Merge 7e5138b16179758c1611a8eea6cf25f011fdb441 into 7ca57ba16e524929f55d99beb41eba44d31a74fb\n"
+          "timestamp": "2026-11-03T00:15:29Z",
+          "message": "Merge 3f2b279b652b59d9f4a2139b130b08b3599bcc88 into 7ca57ba16e524929f55d99beb41eba44d31a74fb\n"
+        },
+        {
+          "sha": "3f2b279b652b59d9f4a2139b130b08b3599bcc88",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T17:15:08-07:00",
+          "message": "fix(pricing): the cap's comment says bytes, and each fetch test starts with no reads (candybar-testing-0x6u.61o)\n"
         },
         {
           "sha": "7e5138b16179758c1611a8eea6cf25f011fdb441",
