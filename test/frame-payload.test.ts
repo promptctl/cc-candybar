@@ -12,10 +12,12 @@
 // a frame draws beside the one the request drew.
 
 import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
+import { sumsOf } from "./helpers/today";
 import {
   renderWidth,
   settlePayload,
   todayOf,
+  todayReading,
   type PayloadInputs,
   type RenderPayloadDeps,
 } from "../src/daemon/render-payload";
@@ -104,7 +106,7 @@ function counted(pr?: unknown) {
     tmuxService: fakeTmux(count("tmux", ok("work"))),
     usageStore: fakeUsage({
       usage: count("session", ok({ session: { cost: 2, tokens: 10 } })),
-      today: count("today", ok({ cost: 5, tokens: 50 })),
+      today: count("today", ok(sumsOf(AT, 5, 50))),
       speed: count("speed", ABSENT),
     }),
     contextProvider: fakeContext(count("context", ABSENT)),
@@ -142,7 +144,16 @@ function counted(pr?: unknown) {
     return payloadOf(inputs(), DRAW);
   };
   // `today` as a draw at `at` projects it.
-  const today = (at = AT) => todayOf(deps, deps.lanes().today, HOOK, at);
+  const today = (at = AT) =>
+    todayOf(
+      todayReading(
+        deps.lanes().today,
+        deps.faults,
+        deps.usageStore,
+        HOOK.session_id,
+      ),
+      at,
+    );
   return { reads, inputs, request, today, deps, logs };
 }
 
@@ -170,10 +181,10 @@ describe("a frame's payload", () => {
       expect(payloadOf(inputs(), DRAW)).toEqual(drawn);
       expect(today()).toEqual({ cost: 5, tokens: 50 });
     }
-    // `today`'s reader is the day a draw picks of the sums its lane holds
-    // (`todayAt`, no I/O): every frame picks its own, since a frame may be
-    // drawn after midnight. Every other lane was read by the request alone.
-    expect(reads).toEqual({ ...afterRequest, today: afterRequest.today! + 5 });
+    // The day a draw picks of the sums its fact holds is a projection, so
+    // every frame picks its own (a frame may be drawn after midnight) with
+    // nothing read: every lane was read by the request alone.
+    expect(reads).toEqual(afterRequest);
   });
 
   test("draws every lane no request has answered as not answered yet", () => {

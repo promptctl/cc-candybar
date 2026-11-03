@@ -763,35 +763,18 @@ describe("the view declares the sources its preset reads", () => {
 
   // [LAW:nothing-unseen] The render event's fields.
   test("the render event counts the declared sources and names the pending ones", () => {
-    expect(sourcesFactOf(new Map())).toEqual({
+    expect(sourcesFactOf({})).toEqual({
       sources: "0",
       sourcesPending: "-",
     });
-    const unread = {
-      current: () => ({
-        kind: "pending" as const,
-        why: "unread" as const,
-        landed: new Promise<void>(() => {}),
-      }),
-    };
+    const at = instantOf(new Date(0));
     expect(
-      sourcesFactOf(
-        new Map([
-          ["plugins.a.s", settledLane(ok({}))],
-          ["plugins.b.s", unread],
-          ["plugins.c.s", settledLane(ABSENT)],
-          [
-            "plugins.d.s",
-            {
-              current: () => ({
-                kind: "pending" as const,
-                why: "superseded" as const,
-                landed: new Promise<void>(() => {}),
-              }),
-            },
-          ],
-        ]),
-      ),
+      sourcesFactOf({
+        "plugins.a.s": restamp(undefined, ok({}), at),
+        "plugins.b.s": pendingOf("unread"),
+        "plugins.c.s": restamp(undefined, ABSENT, at),
+        "plugins.d.s": pendingOf("superseded"),
+      }),
     ).toEqual({
       sources: "4",
       sourcesPending: "plugins.b.s:unread,plugins.d.s:superseded",

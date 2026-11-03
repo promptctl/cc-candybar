@@ -132,7 +132,7 @@ function speedSampleOf(
 // Per-(session, day) scalar contribution — the only granularity the today fold
 // needs. Raw entries are discarded after bucketing, so per-session retained
 // memory is O(retained-days), not O(entries).
-interface DayUsage {
+export interface DayUsage {
   cost: number;
   input: number;
   output: number;
@@ -241,7 +241,7 @@ const EMPTY_SESSION_INFO: SessionInfo = {
   tokenBreakdown: null,
 };
 
-function dayKey(date: Date): string {
+export function dayKey(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
@@ -386,6 +386,40 @@ function under(path: string | undefined, roots: readonly string[]): boolean {
   return path !== undefined && roots.some((root) => path.startsWith(root));
 }
 
+// [LAW:one-source-of-truth] The `today` projection at a draw's instant: the
+// day of the set's sums the instant is in, so a frame past midnight sums the
+// new day with no refresh and no owner moving. The rendering session counts
+// wherever its transcript lives; under the set's roots it is already in the
+// sums. `absent` when the day holds nothing.
+export function projectToday(
+  facts: TodayFacts,
+  at: Instant,
+): Outcome<TodayInfo> {
+  const today = dayKey(dateOf(at));
+  const total: DayUsage = { ...EMPTY_DAY };
+  const inSet = facts.sums[today];
+  if (inSet !== undefined) addDay(total, inSet);
+  const own =
+    facts.session === null ||
+    under(facts.session.transcriptPath ?? undefined, facts.roots)
+      ? undefined
+      : facts.session.days[today];
+  if (own !== undefined) addDay(total, own);
+
+  if (inSet === undefined && own === undefined) return ABSENT;
+  return ok({
+    cost: total.cost,
+    tokens: total.input + total.output + total.cacheCreation + total.cacheRead,
+    tokenBreakdown: {
+      input: total.input,
+      output: total.output,
+      cacheCreation: total.cacheCreation,
+      cacheRead: total.cacheRead,
+    },
+    date: today,
+  });
+}
+
 // [LAW:effects-at-boundaries] One directory set's day sums: each day some
 // record under its roots holds a bucket for, the sum of those buckets. Keyed
 // by the records' own days, so it reads no clock — the day `today` reads off
@@ -421,6 +455,22 @@ interface DaySet {
 export interface DaySums {
   readonly roots: readonly string[];
   readonly sums: Readonly<Record<string, DayUsage>>;
+}
+
+// The rendering session's own days: its transcript's place and its day
+// buckets, as plain records (a Map does not survive JSON).
+export interface SessionDays {
+  readonly transcriptPath: string | null;
+  readonly days: Readonly<Record<string, DayUsage>>;
+}
+
+// [LAW:types-are-the-program] Everything the `today` projection reads, so the
+// projection is a pure function of this and the draw's instant (`projectToday`):
+// the directory set's day sums, and the rendering session's own days (`null`
+// for a session with no record). The session's ingest failing is not a field,
+// it is the fact failing.
+export interface TodayFacts extends DaySums {
+  readonly session: SessionDays | null;
 }
 
 // Bounded-concurrency fan-out for the seed: at most `limit` parses in flight.
@@ -710,7 +760,7 @@ export class SessionUsageStore {
   // src/daemon/render-payload.ts): the directory set's scans, held, so a set
   // no scan has answered starts its first one now — before the request or the
   // frame that reads it. The lane answers the set's day sums once a scan has
-  // answered; which day of them is the draw's (`todayAt`).
+  // answered; which day of them is the draw's (`projectToday`).
   declareToday(
     holds: Holds,
     claudeConfigDir: string | undefined,
@@ -731,42 +781,21 @@ export class SessionUsageStore {
     };
   }
 
-  // The `today` projection as the records stand, for a draw: the directory
-  // set's day sums at the day of `at`, so a frame past midnight sums the new
-  // day with no refresh. The active session's last ingest failing is the
-  // projection's failure.
-  todayAt(
-    set: DaySums,
-    hookData: ClaudeHookData | undefined,
-    at: Instant,
-  ): Outcome<TodayInfo> {
-    const active = this.sessions.get(hookData?.session_id ?? "");
-    const failure = active?.failure.get() ?? null;
+  // The rendering session's own days as the records stand, for the `today`
+  // fact: no I/O, no fold. [LAW:no-silent-failure] The session's last ingest
+  // failing is this read failing, so the fact fails with it and the draw shows
+  // a gap, never a total silently missing the session's own work. A session
+  // with no record has no days of its own.
+  daysOf(sessionId: string): Outcome<SessionDays> {
+    const slot = this.sessions.get(sessionId);
+    if (slot === undefined) return ABSENT;
+    const failure = slot.failure.get();
     if (failure !== null) return failed(failure, "read");
-
-    const today = dayKey(dateOf(at));
-    const total: DayUsage = { ...EMPTY_DAY };
-    const inSet = set.sums[today];
-    if (inSet !== undefined) addDay(total, inSet);
-    // The rendering session counts wherever its transcript lives; under the
-    // set's roots it is already in the sums.
-    const own = under(active?.record?.transcriptPath, set.roots)
-      ? undefined
-      : active?.record?.days.get(today);
-    if (own !== undefined) addDay(total, own);
-
-    if (inSet === undefined && own === undefined) return ABSENT;
+    const record = slot.record;
+    if (record === undefined) return ABSENT;
     return ok({
-      cost: total.cost,
-      tokens:
-        total.input + total.output + total.cacheCreation + total.cacheRead,
-      tokenBreakdown: {
-        input: total.input,
-        output: total.output,
-        cacheCreation: total.cacheCreation,
-        cacheRead: total.cacheRead,
-      },
-      date: today,
+      transcriptPath: record.transcriptPath ?? null,
+      days: Object.fromEntries(record.days),
     });
   }
 

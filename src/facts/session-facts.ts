@@ -1,6 +1,6 @@
 import type {
-  DaySums,
   SpeedObservation,
+  TodayFacts,
 } from "../daemon/cache/session-usage-store";
 import type { RefreshLane } from "../daemon/refresh-faults";
 import type { SessionId } from "../daemon/session-id";
@@ -50,7 +50,7 @@ export interface FactsDiagnostic {
 
 export interface BuiltinFacts {
   readonly session: Fact<UsageInfo>;
-  readonly today: Fact<DaySums>;
+  readonly today: Fact<TodayFacts>;
   readonly speed: Fact<SpeedObservation>;
   readonly context: Fact<ContextInfo>;
   readonly metrics: Fact<MetricsInfo>;

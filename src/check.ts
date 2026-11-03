@@ -67,18 +67,19 @@ import { ansiOf, type Frame } from "./render/frame.js";
 import type { Gates } from "./daemon/foundations/gates.js";
 import { daemonGates } from "./daemon/update-keys.js";
 import { resumeCommand } from "./claude-resume.js";
-import { instantOf, type Instant } from "./utils/instant.js";
+import { dateOf, instantOf, type Instant } from "./utils/instant.js";
 import { perSetting } from "./config/setting-projections.js";
 import { effectivePresetName, presetNames } from "./config/presets.js";
 import {
   effectiveInputs,
   projectSources,
   renderOptionsOf,
+  todayOf,
   type RenderPayload,
-  type TodayPayload,
   type ViewPayload,
 } from "./daemon/render-payload.js";
-import { ABSENT } from "./utils/outcome.js";
+import { dayKey, type TodayFacts } from "./daemon/cache/session-usage-store.js";
+import { ABSENT, ok } from "./utils/outcome.js";
 import {
   resolveEffectiveGlobals,
   type EffectiveGlobals,
@@ -160,7 +161,7 @@ function bindPass(
     registry,
     {
       ...checkPayload(config, effective, layers.at(-1) ?? null, at),
-      today: CHECK_TODAY,
+      today: checkToday(at),
     },
     opts,
     effective,
@@ -310,8 +311,27 @@ export function checkPayload(
 
 // `today` is a fact of the draw's own instant, not of the view's payload
 // (DRAW_PROJECTIONS), so the fixture hands it to the draw beside the payload,
-// as the demo hands its draws theirs.
-export const CHECK_TODAY: TodayPayload = { cost: 12.5, tokens: 3_400_000 };
+// as the demo hands its draws theirs. [LAW:one-source-of-truth] It is the
+// daemon's own projection (`todayOf`) of a `today` fact holding one day's
+// sums, so `check` spells that number the way the document spells it.
+export function checkToday(at: Instant) {
+  return todayOf(
+    ok<TodayFacts>({
+      roots: [],
+      sums: {
+        [dayKey(dateOf(at))]: {
+          cost: 12.5,
+          input: 3_400_000,
+          output: 0,
+          cacheCreation: 0,
+          cacheRead: 0,
+        },
+      },
+      session: null,
+    }),
+    at,
+  );
+}
 
 // [LAW:dataflow-not-control-flow] The check result is DATA — a pure function of
 // the target file's contents — discriminated into the three outcomes the exit-

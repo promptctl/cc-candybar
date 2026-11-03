@@ -34,7 +34,9 @@ import {
   type Outcome,
 } from "../src/utils/outcome";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
+import type { DaySums } from "../src/daemon/cache/session-usage-store";
 import { instantOf } from "../src/utils/instant";
+import { sumsOf } from "./helpers/today";
 import type { Current } from "../src/utils/reading";
 import {
   absentOwners,
@@ -230,32 +232,6 @@ describe("payloadOf — git outcome lane", () => {
 
     expect(await storedAt(90.5)).toBe(committedAt);
     expect(await storedAt(3600)).toBe(committedAt);
-  });
-});
-
-describe("payloadOf — today lane", () => {
-  test("asks the usage store for the day of the render's instant", async () => {
-    const at = instantOf(new Date(Date.UTC(2031, 0, 2, 12, 0, 0)));
-    const asked: unknown[] = [];
-    await requestPayload(
-      hookData("/no/such/transcript.jsonl"),
-      at,
-      depsWith(ABSENT, [], {
-        usageStore: fakeUsage({
-          usage: async () => ABSENT,
-          today: (_hook: unknown, _dir: unknown, when: unknown) => {
-            asked.push(when);
-            return ABSENT;
-          },
-        }),
-      }),
-      undefined,
-      new Set(["today.cost"]),
-      EFFECTIVE_GLOBALS,
-      NO_HINTS,
-      NO_CONFIG_FILE,
-    );
-    expect(asked).toEqual([at]);
   });
 });
 
@@ -863,7 +839,7 @@ describe("payloadOf — the lanes that read a session's Claude Code", () => {
     const deps = depsWith(ABSENT, [], {
       usageStore: fakeUsage({
         usage: async () => ABSENT,
-        today: (_hook: unknown, claudeConfigDir: unknown) => {
+        today: (claudeConfigDir: unknown) => {
           seeded.push(claudeConfigDir);
           return ABSENT;
         },
@@ -999,7 +975,8 @@ describe("settlePayload — what a request waits on", () => {
       why: "unread",
       landed: new Promise<void>(() => {}),
     } as const;
-    let sums: Current<unknown> = unanswered;
+    const at = instantOf(new Date());
+    let sums: Current<DaySums> = unanswered;
     let pullRequest: Current<PullRequest> = unanswered;
     const deps = depsWith(ABSENT, [], {
       gitProvider: {
@@ -1017,7 +994,6 @@ describe("settlePayload — what a request waits on", () => {
       usageStore: {
         ...fakeUsage({
           usage: async () => ABSENT,
-          today: () => ok({ cost: 1.5, tokens: 10 }),
         }),
         declareToday: () => ({ current: () => sums }),
       },
@@ -1025,7 +1001,7 @@ describe("settlePayload — what a request waits on", () => {
     const draw = () =>
       requestPayload(
         hookData("/no/such/transcript.jsonl"),
-        instantOf(new Date()),
+        at,
         deps,
         undefined,
         new Set(["git.branch", "git.prNumber", "today.cost"]),
@@ -1041,7 +1017,7 @@ describe("settlePayload — what a request waits on", () => {
     });
     expect(first.today).toEqual(pendingOf("unread"));
 
-    sums = ok({ claudeConfigDir: undefined });
+    sums = ok(sumsOf(at, 1.5, 10));
     pullRequest = ok({
       number: 76,
       state: "open",

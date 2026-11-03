@@ -235,7 +235,7 @@ async function renderFrames(): Promise<void> {
         {
           drawing: { by: "request" },
           feeds: UNFOLLOWED_FEEDS,
-          today: todayOf(providers, view.lanes().today, hookData, at),
+          today: todayOf(view.source.facts().builtins.today, at),
         },
         at,
         renderOptionsOf(effective, width),
