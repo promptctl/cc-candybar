@@ -189,7 +189,7 @@ export function gitInfoFailures(info: GitInfo): string[] {
 // [LAW:one-source-of-truth] The one shape of getGitInfo's `show*` toggles. Each
 // flag opts into an extra git invocation; an unset flag leaves its GitInfo field
 // undefined (not requested). Every caller that builds these options
-// (render-payload's gitOptionsFromClosure, the cache override) references THIS
+// (render-payload's GIT_READS, the cache override) references THIS
 // type, so the toggle set cannot drift between producer and consumer.
 export interface GitInfoOptions {
   showSha?: boolean;

@@ -263,7 +263,6 @@ export async function playDemo({
   // The session's view of the state, as the daemon opens one per session,
   // declared with the request the first frame draws by.
   const view = openView(state, cwd, opening.request, {
-    sessionState,
     facts,
     source: sessionSource({
       providers: { home, log },

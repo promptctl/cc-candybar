@@ -1,11 +1,9 @@
-// brandon-unfiled-3248.8ro6, step 3: a view declares what its preset's closure
-// reads. One reaction, over the request the view's renders draw by and the
-// preset the session's picks resolve to, takes the view's holds on the
-// daemon's shared entries — so a preset click that newly places a source
-// starts its read before any draw asks for it, and switching back releases
-// the hold, stopping the source's period. Before, a source was declared by the
-// first draw that read it, and released only by a sweep 2.5 to 5 minutes
-// after the last draw that did.
+// brandon-unfiled-3248.8ro6, step 3: a view declares what its request names.
+// One declaration, over the request the view's renders draw by, takes the
+// view's holds on the daemon's shared entries — whatever the layout places, so
+// a preset click moves no hold. Before, a source was declared by the first draw
+// that read it, and released only by a sweep 2.5 to 5 minutes after the last
+// draw that did.
 
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { HOST, locs, WORLD } from "./helpers/host";
@@ -13,7 +11,7 @@ import { unscriptedLauncher } from "./helpers/fake-launcher";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { GitDataProvider, PR_PERIOD } from "../src/daemon/cache/git";
+import { GitDataProvider } from "../src/daemon/cache/git";
 import { SOURCES_NOTHING, RenderCache } from "../src/daemon/cache/render";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { inProcessFacts } from "../src/daemon/facts-source";
@@ -98,7 +96,7 @@ afterEach(() => {
   jest.useRealTimers();
 });
 
-test("a preset click that newly places the PR starts its lookup with no draw; switching back releases it, and its period stops", async () => {
+test("a view reads the PR from its declaration whatever its preset places, and a preset click moves no hold", async () => {
   // Two presets over one directory: `plain` shows the branch, `pr` shows its
   // PR beside it.
   fs.writeFileSync(
@@ -173,24 +171,17 @@ test("a preset click that newly places the PR starts its lookup with no draw; sw
   // The next request declares again, and finds the repo's value stored.
   view.requested({ ...facts });
   expect(git.getStats()).toMatchObject({ held: 1, hits: 1, misses: 1 });
-  expect(inner.prLookups).toBe(0);
 
-  // The click alone: no request, no frame.
+  // The PR is read though `plain` places none of it.
+  expect(inner.prLookups).toBe(1);
+
+  // The click alone: no request, no frame. The layout places no hold, so
+  // nothing is taken or released and no lookup starts.
   sessionState.set("s1", "preset", "pr");
   await jest.advanceTimersByTimeAsync(0);
-  expect(inner.prLookups).toBe(1);
-
-  // Back: the PR's hold goes with the click, so its period asks the forge no
-  // more — across three of its periods, the bar drawn every minute — while
-  // the repo stays held.
-  sessionState.set("s1", "preset", "plain");
   expect(git.getStats().held).toBe(1);
-  for (let minute = 0; minute < (PR_PERIOD.okMs * 3) / 60_000; minute++) {
-    await jest.advanceTimersByTimeAsync(60_000);
-    using drawn = cache.holdSession(dir, dir, undefined, facts);
-    expect(drawn.view).toBe(view);
-  }
   expect(inner.prLookups).toBe(1);
+  sessionState.set("s1", "preset", "plain");
   expect(git.getStats().held).toBe(1);
 });
 
@@ -212,6 +203,10 @@ test("a lane whose declaration throws is reported, takes no hold, and stops no o
       },
     },
     tmuxService: { declare: () => take("tmux") },
+    hostService: {
+      declareName: () => settledLane(ABSENT),
+      declareUser: () => settledLane(ABSENT),
+    },
     usageStore: { declareToday: () => take("today") },
   } as unknown as KeyedOwners;
   const facts: ViewFacts = {
@@ -232,13 +227,7 @@ test("a lane whose declaration throws is reported, takes no hold, and stops no o
   // The git hold an earlier declaration took goes with the one that threw.
   holds.declare(() => take("git"));
   const declared = holds.declare(() =>
-    declareLanes(
-      owners,
-      holds,
-      facts,
-      new Set(["git.branch", "tmux.session", "today.cost"]),
-      new Map(),
-    ),
+    declareLanes(owners, holds, facts, new Map()),
   );
   expect(declared.result.faults).toEqual([
     expect.stringMatching(/^git: .*resolver bug/),

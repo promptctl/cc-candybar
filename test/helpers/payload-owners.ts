@@ -133,18 +133,14 @@ export function fakeGit(
   };
 }
 
-// The payload a view's source derives, over the owners the inputs name and the
-// sources a config declares (none, unless given): the facts document stamped
-// from what the owners hold, and the payload composed from it.
-export function payloadOf(
-  inputs: PayloadInputs,
-  draw: DrawInputs,
-  declared: Parameters<typeof readingsOf>[1] = new Map(),
-) {
+// The payload a view's source derives, over the owners the inputs name: the
+// facts document stamped from what the owners hold, and the payload composed
+// from it.
+export function payloadOf(inputs: PayloadInputs, draw: DrawInputs) {
   const document = assembleFacts(
     undefined,
     sessionIdOf(inputs.hookData.session_id),
-    readingsOf(inputs, declared),
+    readingsOf(inputs),
     pendingOf("unread"),
     instantOf(new Date(0)),
   );
@@ -153,7 +149,6 @@ export function payloadOf(
     {
       hookData: inputs.hookData,
       hints: inputs.hints,
-      neededInputPaths: inputs.neededInputPaths,
       home: inputs.deps.home,
     },
     draw,
@@ -339,7 +334,6 @@ export async function requestPayload(
   at: Instant,
   deps: Omit<RenderPayloadDeps, "lanes">,
   cwd: string | undefined,
-  closure: ReadonlySet<string>,
   effective: EffectiveGlobals,
   hints: ClientHints,
   configFacts: ConfigFileFacts,
@@ -348,14 +342,12 @@ export async function requestPayload(
     deps as unknown as KeyedOwners,
     new HoldsClass(),
     { sessionId: sessionIdOf(hookData.session_id), hookData, cwd, hints },
-    closure,
     new Map(),
   );
   const inputs: PayloadInputs = {
     hookData,
     cwd,
     hints,
-    neededInputPaths: closure,
     deps: { ...deps, lanes: () => lanes } as RenderPayloadDeps,
   };
   await settlePayload(inputs, at, new Map());
@@ -368,7 +360,7 @@ export async function requestPayload(
   return {
     ...payload,
     feeds: UNFOLLOWED_FEEDS,
-    today: todayOf(readingsOf(inputs, new Map()).today, at),
+    today: todayOf(readingsOf(inputs).today, at),
   };
 }
 
@@ -384,13 +376,11 @@ export function settled<T extends PayloadNode>(value: T | Pending): T {
 export function declaredLanes(
   owners: unknown,
   facts: Parameters<typeof declareLanes>[2],
-  closure: ReadonlySet<string>,
 ): () => ReturnType<typeof declareLanes>["lanes"] {
   const { lanes } = declareLanes(
     owners as KeyedOwners,
     new HoldsClass(),
     facts,
-    closure,
     new Map(),
   );
   return () => lanes;

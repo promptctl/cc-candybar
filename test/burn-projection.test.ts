@@ -137,15 +137,6 @@ function hookWithWindows() {
   };
 }
 
-const BURN_PATHS = new Set([
-  "burn",
-  "burn.costPerHour",
-  "block.nativeUtilization",
-  "block.resetsAt",
-  "weekly.percentage",
-  "weekly.resetsAt",
-]);
-
 // The daemon-resolved effective globals; these burn-lane tests don't exercise
 // them, so any well-formed struct satisfies the required argument.
 // No client hints: these fixtures exercise the daemon-side folds, not the wire
@@ -162,7 +153,6 @@ describe("payloadOf — burn projection lane", () => {
       instantOf(new Date(NOW_MS)),
       depsWith(),
       undefined,
-      BURN_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
       NO_CONFIG_FILE,
@@ -180,19 +170,6 @@ describe("payloadOf — burn projection lane", () => {
     });
   });
 
-  test("gating: burn omitted from the closure ⇒ no burn key (lanes not pulled)", async () => {
-    const payload = await requestPayload(
-      hookWithWindows(),
-      instantOf(new Date(NOW_MS)),
-      depsWith(),
-      undefined,
-      new Set(["block.resetsAt", "weekly.resetsAt"]),
-      EFFECTIVE_GLOBALS,
-      NO_HINTS,
-      NO_CONFIG_FILE,
-    );
-    expect(payload.burn).toBeUndefined();
-  });
 });
 
 // ─── burnrate segment render ────────────────────────────────────────────────────

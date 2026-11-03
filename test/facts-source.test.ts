@@ -33,10 +33,9 @@ const GIT = {
   aheadBehind: ok({ ahead: 0, behind: 0 }),
   head: ok("c0ffee"),
 };
-const reads = (...paths: string[]): FollowDeclaration => ({
-  closure: new Set(paths),
-  sources: new Map(),
-});
+// A config declaring no plugin source: every built-in is gathered whatever
+// the layout places, so a declaration names nothing else.
+const DECLARED: FollowDeclaration = { sources: new Map() };
 
 describe("the in-process arm", () => {
   // Owners whose git lane takes one hold per repository and answers at once,
@@ -75,7 +74,7 @@ describe("the in-process arm", () => {
     const { providers, held, released, lines } = owners();
     const followed = arm(providers).follow(
       viewFacts("/a"),
-      reads("git.branch"),
+      DECLARED,
     );
     expect(held).toEqual(["/a"]);
     expect(followed.stamped().facts.builtins.git).toMatchObject({
@@ -83,15 +82,17 @@ describe("the in-process arm", () => {
       value: { branch: "main" },
     });
     // The same keys again: nothing moves, and nothing is said.
-    followed.follow(viewFacts("/a"), reads("git.branch"));
+    followed.follow(viewFacts("/a"), DECLARED);
     expect(released).toEqual([]);
     // Another directory: the old repo goes the moment the new is taken.
-    followed.follow(viewFacts("/b"), reads("git.branch"));
+    followed.follow(viewFacts("/b"), DECLARED);
     expect(held).toEqual(["/a", "/b"]);
     expect(released).toEqual(["/a"]);
+    // Every built-in is declared, so the opening takes one hold per owner
+    // lane; the move takes and releases only the repo's.
     expect(lines.filter((l) => l.startsWith("session view declared"))).toEqual([
-      'session view declared sid="s1" acquired=1 released=0 held=1',
-      'session view declared sid="s1" acquired=1 released=1 held=1',
+      'session view declared sid="s1" acquired=3 released=0 held=3',
+      'session view declared sid="s1" acquired=1 released=1 held=3',
     ]);
     followed.dispose();
     expect(released).toEqual(["/a", "/b"]);
@@ -106,7 +107,7 @@ describe("the in-process arm", () => {
     };
     const followed = arm(providers).follow(
       viewFacts("/a"),
-      reads("git.branch"),
+      DECLARED,
     );
     expect(held).toEqual([]);
     expect(followed.stamped().facts.builtins.git).toMatchObject({
@@ -127,7 +128,7 @@ describe("the in-process arm", () => {
     expect(() =>
       arm(providers, () => {
         throw new Error("no update fact");
-      }).follow(viewFacts("/a"), reads("git.branch")),
+      }).follow(viewFacts("/a"), DECLARED),
     ).toThrow("no update fact");
     expect(held).toEqual(["/a"]);
     expect(released).toEqual(["/a"]);
@@ -145,7 +146,7 @@ describe("the in-process arm", () => {
     });
     const followed = arm(providers).follow(
       { ...broken, hints },
-      reads("git.branch"),
+      DECLARED,
     );
     expect(followed.stamped().facts.builtins.git).toMatchObject({
       kind: "failed",
@@ -161,7 +162,7 @@ describe("the in-process arm", () => {
     );
     expect(held).toEqual([]);
 
-    followed.follow(viewFacts("/a"), reads("git.branch"));
+    followed.follow(viewFacts("/a"), DECLARED);
     expect(held).toEqual(["/a"]);
     expect(followed.stamped().facts.builtins.git).toMatchObject({
       kind: "ok",
@@ -179,7 +180,7 @@ describe("the in-process arm", () => {
       landings.get();
       if (broken.get()) throw new Error("update watch exploded");
       return pendingOf("unread");
-    }).follow(viewFacts("/a"), reads("git.branch"));
+    }).follow(viewFacts("/a"), DECLARED);
     const before = followed.stamped();
     expect(followed.failure()).toBeNull();
 
@@ -235,7 +236,7 @@ describe("the recording arm", () => {
     ];
     const followed = recordingFacts(recording(lines), clock).follow(
       request(),
-      reads(),
+      DECLARED,
     );
     expect(followed.stamped()).toBe(lines[1]);
     clock.advance(1000);
@@ -252,7 +253,7 @@ describe("the recording arm", () => {
     const lines = [line(0, 1), line(2, 2), line(5, 3), line(9, 4)];
     const facts = recordingFacts(recording(lines), clock);
     clock.advance(6000);
-    const followed = facts.follow(request(), reads());
+    const followed = facts.follow(request(), DECLARED);
     expect(followed.stamped()).toBe(lines[2]);
     expect(clock.pending()).toBe(1);
     clock.advance(2999);
@@ -260,10 +261,10 @@ describe("the recording arm", () => {
     clock.advance(1);
     expect(followed.stamped()).toBe(lines[3]);
     // A second follow at the same instant is at the same place.
-    expect(facts.follow(request(), reads()).stamped()).toBe(lines[3]);
+    expect(facts.follow(request(), DECLARED).stamped()).toBe(lines[3]);
     const early = heldClock(new Date(AT.getTime() - 1000));
     expect(() =>
-      recordingFacts(recording(lines), early).follow(request(), reads()),
+      recordingFacts(recording(lines), early).follow(request(), DECLARED),
     ).toThrow(/this recording begins at .*, and the clock reads/);
   });
 
@@ -271,12 +272,12 @@ describe("the recording arm", () => {
     const clock = heldClock(AT);
     const followed = recordingFacts(recording([line(0, 1)]), clock).follow(
       request(),
-      reads(),
+      DECLARED,
     );
     const settling = followed.settle(at(0));
     expect(settling.refreshed.size).toBe(0);
     await settling.landed;
-    followed.follow(viewFacts("/elsewhere", "s1"), reads("git.branch"));
+    followed.follow(viewFacts("/elsewhere", "s1"), DECLARED);
     expect(followed.stamped().facts.seq).toBe(1);
   });
 
@@ -285,7 +286,7 @@ describe("the recording arm", () => {
     const followed = recordingFacts(
       recording([line(0, 1), line(2, 2)]),
       clock,
-    ).follow(request(), reads());
+    ).follow(request(), DECLARED);
     expect(clock.pending()).toBe(1);
     followed.dispose();
     expect(clock.pending()).toBe(0);
@@ -296,7 +297,7 @@ describe("the recording arm", () => {
     expect(() =>
       recordingFacts(recording([line(0, 1)]), clock).follow(
         viewFacts("/a", "s2"),
-        reads(),
+        DECLARED,
       ),
     ).toThrow('this recording holds session "s1", not "s2"');
   });
@@ -306,7 +307,7 @@ describe("the recording arm", () => {
     const lines = [line(0, 1), line(1, 2), line(2, 1), line(3, 2)];
     const followed = recordingFacts(recording(lines), clock).follow(
       request(),
-      reads(),
+      DECLARED,
     );
     clock.advance(1000);
     expect(followed.stamped()).toBe(lines[1]);

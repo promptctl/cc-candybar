@@ -4,11 +4,7 @@ import { nearestWatchTarget } from "../../utils/watch-target.js";
 import { chainName } from "../../config-hint.js";
 import type { RichText } from "@promptctl/rich-js";
 import { compareShallow, observable, reaction, runInAction } from "mobx";
-import {
-  neededPrefixesByPreset,
-  type DeclaredSources,
-  type ViewFacts,
-} from "../render-payload.js";
+import { type DeclaredSources, type ViewFacts } from "../render-payload.js";
 import type { ManagedStorage, StorageKey } from "./managed-storage.js";
 import type { LinkSigner } from "../../click/link-signer.js";
 import type { SessionId } from "../session-id.js";
@@ -57,10 +53,7 @@ import {
 import { mb, NEAR_LIMIT } from "../limits.js";
 import type { Gates } from "../foundations/gates.js";
 import { presetNames, presetRoot } from "../../config/presets.js";
-import {
-  presetOf,
-  resolveEffectiveGlobals,
-} from "../../config/effective-globals.js";
+import { resolveEffectiveGlobals } from "../../config/effective-globals.js";
 import { fixedSource, type ViewSource } from "../../dsl/view-source.js";
 import { bindView } from "../../dsl/parts.js";
 import { unusedDeclarations, type UnusedDecl } from "../../config/unused.js";
@@ -68,7 +61,7 @@ import { VariableStore } from "../../var-system/store.js";
 import type { SourceRuns } from "../../var-system/source-runs.js";
 import { SourceRegistry } from "../../var-system/sources.js";
 import type { VarScope } from "../../dsl/variable-scope.js";
-import type { SessionStateReader, SessionStateRW } from "../session-state.js";
+import type { SessionStateRW } from "../session-state.js";
 import {
   watchTargetsOf,
   type WatcherRegistry,
@@ -307,10 +300,6 @@ export type ReloadedEntry = Readonly<
 // the settings menu (the door back to the file) exists from the first
 // render, through the same synthesis every config gets.
 //
-// `neededInputPaths` is the layout-reachable closure of input paths for a
-// preset, computed once per preset. The daemon's payload builder reads the
-// active preset's to gate provider invocation.
-//
 // `store` and `registry` are the entry's DIRECTORY home: the sources no
 // session value reaches (variable-scope.ts). A session draws through its own
 // view over them (SessionView).
@@ -332,7 +321,6 @@ export interface DslRenderState {
   readonly store: VariableStore;
   readonly registry: SourceRegistry;
   readonly compiled: CompiledConfig;
-  readonly neededInputPaths: (preset: string) => ReadonlySet<string>;
   // [LAW:one-source-of-truth] The preset names whose layout tree the config
   // FILE authors at the path presetRoot() reports for them (candybar-config-
   // dqe): `root` for a preset staging the config's own root, `presets.<n>.
@@ -996,7 +984,6 @@ export function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
       store,
       registry,
       compiled: registration.compiled,
-      neededInputPaths: neededPrefixesByPreset(config),
       // What a reset clears is the home's: resets write nowhere else.
       authoredRoots: authoredRoots(merged, homeRaw),
       fileHeldSettings: fileHeldSettings(homeRaw),
@@ -1202,8 +1189,8 @@ const VIEW_SCOPE: ReadonlySet<VarScope> = new Set(["view"]);
 //
 // `holds` is what the session's renders read of the daemon's shared entries (a
 // repo, a pane, a plugin's session file), as the view's declaration takes them
-// (openView), so their owners' periods visit them while the view's preset and
-// request name them and stop when it is disposed; the directory home reads
+// (openView), so their owners' periods visit them while the view's request
+// names them and stop when it is disposed; the directory home reads
 // none itself, so it holds none (brandon-unfiled-3248.8ro6).
 //
 // `lastRenderCellsBySegment` is the per-segment StripCell sink that drawDsl
@@ -1250,12 +1237,10 @@ export interface SessionView<
 }
 
 // [LAW:one-source-of-truth] What a view is declared for, as it stands: the
-// request its renders draw by and the preset its declaration resolved — one
-// record, written whole by each declaration. What the declaration took is the
-// follow's (src/daemon/facts-source.ts), read through `followed`.
+// request its renders draw by. What the declaration took is the follow's
+// (src/daemon/facts-source.ts), read through `followed`.
 export interface ViewDeclared<F extends ViewFacts = ViewFacts> {
   readonly facts: F;
-  readonly preset: string;
 }
 
 // What a view's source is built over: the session, the state it is a view of,
@@ -1291,7 +1276,6 @@ export const SOURCES_NOTHING: SourceOf<ViewSource> = ({ state }) =>
 // What a view reads to keep its declaration current, where its facts come
 // from, what it draws from, and whom it tells that what it draws from moved.
 export interface ViewDeclaring<S extends ViewSource = ViewSource> {
-  readonly sessionState: SessionStateReader;
   readonly facts: Facts;
   readonly source: SourceOf<S>;
   readonly changed: (sessionId: string) => void;
@@ -1304,11 +1288,9 @@ export interface ViewDeclaring<S extends ViewSource = ViewSource> {
 //
 // [LAW:no-ambient-temporal-coupling] The view follows its session through the
 // facts source it is handed, declared over the request its renders draw by
-// and the preset the session's picks resolve to (brandon-unfiled-3248.8ro6,
-// step 3): a request naming other keys, or a click moving the preset, follows
-// again in the turn it lands, so the sources a preset newly places are read
-// before any draw asks for them, and those it stops placing are released at
-// once.
+// (brandon-unfiled-3248.8ro6, step 3): a request naming other keys follows
+// again in the turn it lands. The layout places no hold, so a preset pick
+// moves none.
 //
 // [LAW:types-are-the-program] A view is never undeclared (step 4): it opens
 // with the request it is drawn for and follows in its opening turn, so its
@@ -1317,13 +1299,7 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
   state: DslRenderState,
   cwd: string,
   facts: F,
-  {
-    sessionState,
-    facts: factsSource,
-    source: sourceOf,
-    changed,
-    log,
-  }: ViewDeclaring<S>,
+  { facts: factsSource, source: sourceOf, changed, log }: ViewDeclaring<S>,
 ): SessionView<S, F> {
   // [LAW:one-source-of-truth] The session is the one the request's checkpoint
   // parsed: a later request of the view's names the same one.
@@ -1332,12 +1308,10 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
   // What fails to declare here failed in the load's probe (buildRenderState),
   // which reported it: a declaration reads only the config.
   declareDslVariables(state.config, registry, cwd, VIEW_SCOPE);
-  const presetNow = () =>
-    presetOf(state.config, (key) => sessionState.get(sessionId, key));
-  const declarationOf = (preset: string): FollowDeclaration => ({
-    closure: state.neededInputPaths(preset),
-    sources: state.sources,
-  });
+  // [LAW:dataflow-not-control-flow] What the view declares beyond its request
+  // is its config's sources, the same for every request: the facts are total,
+  // so nothing a layout places decides what is gathered.
+  const declaration: FollowDeclaration = { sources: state.sources };
   // [LAW:no-ambient-temporal-coupling] The opening follow, and each
   // request's, runs in its own call, never as a reaction's run: MobX holds a
   // reaction inside a batch (a reaction's effect, an action) until the batch
@@ -1347,48 +1321,26 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
   // [LAW:one-source-of-truth] The view's one record of what it is declared
   // for (ViewDeclared): observable, so the view's payload is derived again in
   // the turn a declaration lands.
-  const opening = presetNow();
   // [LAW:no-silent-failure] A follow the source refuses fails the open, which
   // the cache records and reports; the registry the open took goes first.
   let followed: Followed;
   try {
-    followed = factsSource.follow(facts, declarationOf(opening));
+    followed = factsSource.follow(facts, declaration);
   } catch (e) {
     registry.dispose();
     throw e;
   }
-  const declared = observable.box<ViewDeclared<F>>(
-    { facts, preset: opening },
-    { deep: false },
-  );
-  // [LAW:single-enforcer] A (request, preset) pair is declared once.
-  const redeclare = (facts: F, preset: string): void => {
-    const now = declared.get();
-    if (facts === now.facts && preset === now.preset) return;
-    // [LAW:one-source-of-truth] One turn: the follow's document under the new
-    // closure and the preset the source composes over land together, so no
-    // turn pairs one preset's document with another's closure.
+  const declared = observable.box<ViewDeclared<F>>({ facts }, { deep: false });
+  // [LAW:single-enforcer] A request is declared once.
+  const redeclare = (facts: F): void => {
+    if (facts === declared.get().facts) return;
+    // [LAW:one-source-of-truth] One turn: the follow's document for the new
+    // request and the request the source composes over land together.
     runInAction(() => {
-      followed.follow(facts, declarationOf(preset));
-      declared.set({ facts, preset });
+      followed.follow(facts, declaration);
+      declared.set({ facts });
     });
   };
-  // The preset moves with the session's picks, which the reaction tracks: its
-  // first run, whenever it comes, declares only a preset moved since.
-  const stop = reaction(
-    presetNow,
-    (preset) => redeclare(declared.get().facts, preset),
-    {
-      fireImmediately: true,
-      // [LAW:no-silent-failure] A follow that throws on a pick reaches only
-      // the console MobX prints to, which nobody reads in a detached daemon.
-      onError: (e) =>
-        log(
-          "error",
-          `session view follow threw on a pick sid=${JSON.stringify(sessionId)}: ${String(e)}`,
-        ),
-    },
-  );
   // [LAW:single-enforcer] The view's inputs and slots read its source from
   // here on (src/dsl/parts.ts): no draw writes one.
   const sourceStops: Array<() => void> = [];
@@ -1396,7 +1348,6 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
   // that fails after taking it. The follow's dispose releases every hold its
   // declaration took.
   const release = () => {
-    stop();
     for (const stopSource of sourceStops) stopSource();
     followed.dispose();
     return registry.dispose();
@@ -1452,7 +1403,7 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
     store: registry.variableStore,
     registry,
     source,
-    requested: (next) => redeclare(next, presetNow()),
+    requested: redeclare,
     facts: () => declared.get().facts,
     settle: (at) => followed.settle(at),
     followed: { stamped: followed.stamped, failure: followed.failure },
@@ -1814,7 +1765,6 @@ export class RenderCache<
     let view: SessionView<S, F>;
     try {
       view = openView(state, entry.cwd, facts, {
-        sessionState: this.deps.sessionState,
         facts: this.deps.facts,
         source: this.deps.source,
         changed: (sid) => this.observers.onViewChanged?.(sid),

@@ -297,13 +297,6 @@ function depsWith(
   } as unknown as RenderPayloadDeps;
 }
 
-const SPEED_PATHS = new Set([
-  "speed.input",
-  "speed.output",
-  "speed.total",
-  "session.tokens",
-]);
-
 // The daemon-resolved effective globals; these speed-lane tests don't
 // exercise them, so any well-formed struct satisfies the required argument.
 // No client hints: these fixtures exercise the daemon-side folds, not the wire
@@ -331,7 +324,6 @@ describe("payloadOf — speed lane", () => {
       instantOf(new Date(1000)),
       depsWith(),
       undefined,
-      SPEED_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
       NO_CONFIG_FILE,
@@ -357,7 +349,6 @@ describe("payloadOf — speed lane", () => {
         }) as unknown as RenderPayloadDeps["usageStore"],
       }),
       undefined,
-      SPEED_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
       NO_CONFIG_FILE,
@@ -390,7 +381,6 @@ describe("payloadOf — speed lane", () => {
         }) as unknown as RenderPayloadDeps["usageStore"],
       }),
       undefined,
-      new Set(["speed.history"]),
       EFFECTIVE_GLOBALS,
       NO_HINTS,
       NO_CONFIG_FILE,
@@ -420,7 +410,6 @@ describe("payloadOf — speed lane", () => {
         }) as unknown as RenderPayloadDeps["usageStore"],
       }),
       undefined,
-      new Set(["speed.history"]),
       EFFECTIVE_GLOBALS,
       NO_HINTS,
       NO_CONFIG_FILE,
@@ -445,7 +434,6 @@ describe("payloadOf — speed lane", () => {
         }) as unknown as RenderPayloadDeps["usageStore"],
       }),
       undefined,
-      new Set(["speed.history"]),
       EFFECTIVE_GLOBALS,
       NO_HINTS,
       NO_CONFIG_FILE,
@@ -453,19 +441,6 @@ describe("payloadOf — speed lane", () => {
     expect(payload.speed).toBeUndefined();
   });
 
-  test("a closure that omits speed leaves the lane pending unread (lane not pulled)", async () => {
-    const payload = await requestPayload(
-      hook(),
-      instantOf(new Date(1000)),
-      depsWith(),
-      undefined,
-      new Set(["session.tokens"]),
-      EFFECTIVE_GLOBALS,
-      NO_HINTS,
-      NO_CONFIG_FILE,
-    );
-    expect(payload.speed).toEqual(pendingOf("unread"));
-  });
 });
 
 // ─── speed segment render ─────────────────────────────────────────────────────

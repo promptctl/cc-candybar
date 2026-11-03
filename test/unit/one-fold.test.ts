@@ -13,8 +13,7 @@ import {
 import { declaredVariables } from "../../src/config/loader/refs";
 import { ConfigError } from "../../src/config/loader/diagnostics";
 import type { DslConfig } from "../../src/config/dsl-types";
-import { PRESET_FLOOR } from "../../src/config/presets";
-import { buildNeededPrefixes } from "../../src/daemon/render-payload";
+import { segmentInputPaths } from "../../src/doctor/data-needs";
 import { listResolvablePaletteNames } from "../../src/themes/policy";
 import { EMPTY_DEFAULT, parseAndValidate, validateConfig } from "../helpers/parse-and-validate";
 
@@ -157,14 +156,15 @@ describe("no declared name sits under another", () => {
   });
 });
 
-describe("the input closure follows every edge the draw does", () => {
+describe("a segment's input paths follow every edge the draw does", () => {
   // The config as merged, before synthesis: the settings menu binds an action
   // by a name it computes, which reaches every action's text, so a negative
-  // control needs a bar without it.
+  // control needs a bar without it. The segment asked of is `s`.
   const closureOf = (src: string): ReadonlySet<string> =>
-    buildNeededPrefixes(
+    segmentInputPaths(
       mergeWithDefault(parseDslConfig("<user>", src, ALLOWED), EMPTY_DEFAULT),
-      PRESET_FLOOR,
+      "s",
+      [],
     );
 
   test("a copy text's read of an input no segment reads", () => {
@@ -189,6 +189,29 @@ describe("the input closure follows every edge the draw does", () => {
       root: { h: ["s"] },
     }`);
     expect(needed.has("fixture.dir")).toBe(true);
+  });
+  // A path read only inside a dispatched `partials` body was once never
+  // reached (candybar-templates-zh8b.53s).
+  test("an input read only inside a partial", () => {
+    const needed = closureOf(`{
+      variables: { branch: { kind: "input", path: "git.branch", default: "" } },
+      segments: { s: { template: '{{ template "echo" . }}', partials: { echo: "{{ .branch }}" } } },
+      root: { h: ["s"] },
+    }`);
+    expect(needed.has("git.branch")).toBe(true);
+  });
+  test("a helper handed a dict reads the dict, not the root", () => {
+    const needed = closureOf(`{
+      variables: {
+        dir: { kind: "input", path: "workspace.current_dir", default: "" },
+        branch: { kind: "input", path: "git.branch", default: "" },
+      },
+      helpers: { echo: "{{ .branch }}" },
+      segments: { s: { template: '{{ template "echo" (dict "branch" .dir) }}' } },
+      root: { h: ["s"] },
+    }`);
+    expect(needed.has("workspace.current_dir")).toBe(true);
+    expect(needed.has("git.branch")).toBe(false);
   });
   test("and not one no placed template reaches", () => {
     const needed = closureOf(`{

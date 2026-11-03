@@ -3,8 +3,8 @@
 // entry however often the home reads it (brandon-unfiled-3248.8ro6, step 1).
 // An owner's period visits only held entries (src/utils/period.ts), so an
 // entry the home stopped reading stops costing its refreshes. What the home
-// holds is what its latest declaration took (`declare`): an entry its closure
-// or its request stopped naming is released by the declaration that no
+// holds is what its latest declaration took (`declare`): an entry its request
+// stopped naming is released by the declaration that no
 // longer takes it, and a disposed home closes.
 export type Release = () => void;
 

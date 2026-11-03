@@ -337,7 +337,7 @@ export interface GroupSugarDecl {
 
 // [LAW:single-enforcer] THE one pre-order walk over a node tree. Every consumer
 // that needs "which segments / which `when` predicates does this layout name"
-// (the reachability closure, the debug dump, the cross-ref validator) iterates
+// (the doctor's data needs, the debug dump, the cross-ref validator) iterates
 // this — none re-recurses the tree itself.
 export function* walkNodes(node: LayoutNode): IterableIterator<LayoutNode> {
   yield node;

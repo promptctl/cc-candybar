@@ -55,10 +55,6 @@ export interface SessionSource extends ViewSource {
   // client beside the payload, so it never pairs a turn with a request it was
   // not composed from.
   readonly hints: () => ComposeInputs["hints"];
-  // The closure the turn's payload was composed over: what a draw reads of
-  // the declaration beside the payload, so it never pairs a payload with a
-  // closure resolved through later picks.
-  readonly closure: () => ComposeInputs["neededInputPaths"];
   // Why the turn after the one every read above is of could not be taken, or
   // why the facts source could not stamp the document it holds, or null when
   // the latest turn completed on a stamped document: while it is set the bar
@@ -140,21 +136,14 @@ export function sessionSource(
     );
     // Derivations, so each keeps its identity until an input of it moves, and
     // a turn that moved nothing of them is the turn before.
-    //
-    // [LAW:one-source-of-truth] The closure is the preset the declaration was
-    // taken for, never a second resolution through the picks: the
-    // redeclaration that follows a preset pick is its own reaction, so a
-    // closure read from the picks could pair a new preset's closure with the
-    // old preset's document.
     const compose = store.derive(
       "session.compose",
       "computed",
       (): ComposeInputs => {
-        const { facts, preset } = declared();
+        const { facts } = declared();
         return {
           hookData: facts.hookData,
           hints: facts.hints,
-          neededInputPaths: state.neededInputPaths(preset),
           home: deps.providers.home,
         };
       },
@@ -240,7 +229,6 @@ export function sessionSource(
       effective: () => turn.get().draw.effective,
       facts: () => turn.get().document,
       hints: () => turn.get().compose.hints,
-      closure: () => turn.get().compose.neededInputPaths,
       failure: () => turn.get().failure,
       selections: () => turn.get().draw.effective,
     };

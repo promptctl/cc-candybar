@@ -18,7 +18,6 @@ import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { presetNames } from "../src/config/presets";
 import { assembleFacts } from "../src/daemon/facts-assembly";
 import {
-  buildNeededPrefixes,
   composePayload,
   settlePayload,
   type Readings,
@@ -74,31 +73,6 @@ describe("one turn", () => {
     expect(payload.preset.effective).toBe("compact");
     expect(payload.history.undo).toBe(2);
     expect(view.source.facts().session).toBe(SESSION);
-  });
-
-  // Guards the end state and every value the box takes on the way: the lane the
-  // new preset wants is never stamped absent. It cannot force the order of the
-  // preset's redeclaration against the turn (MobX runs the redeclaration first
-  // here); the closure is taken from the declaration so that order is moot.
-  test("a preset that newly wants a lane never stamps that lane absent for want of a declaration", async () => {
-    const rig = sessionRig(dir, cleanups);
-    const view = await openSettled(rig, dir, cleanups, "compact");
-    // Every value the box takes while the pick lands, in order.
-    const seen: string[] = [];
-    cleanups.push(
-      reaction(
-        () => view.source.facts().builtins.git.kind,
-        (kind) => seen.push(kind),
-        { fireImmediately: true },
-      ),
-    );
-    runInAction(() => rig.sessionState.set(SESSION, "preset", "git"));
-    await until(
-      () => view.source.facts().builtins.git.kind === "ok",
-      "the new preset's repository read",
-    );
-    expect(seen).not.toContain("absent");
-    expect(view.source.effective().preset).toBe("git");
   });
 });
 
@@ -270,21 +244,6 @@ describe("the all-pending document", () => {
       sources: new Map(),
     },
     today: waiting,
-    gathered: {
-      git: true,
-      session: true,
-      today: true,
-      context: true,
-      metrics: true,
-      activity: true,
-      tmux: true,
-      hostName: true,
-      hostUser: true,
-      cache: true,
-      speed: true,
-      autocompact: true,
-    },
-    declaredSources: [],
     faults: [],
   };
 
@@ -316,7 +275,6 @@ describe("the all-pending document", () => {
           {
             hookData: requestOf(dir).hookData,
             hints: requestOf(dir).hints,
-            neededInputPaths: buildNeededPrefixes(config, effective.preset),
             home: "/home/tester",
           },
           {

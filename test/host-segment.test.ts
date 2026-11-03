@@ -82,7 +82,6 @@ const HOOK = {
 } as never;
 
 // The host segment's reads: its name and user are sources, `ssh` the hint.
-const HOST_PATHS = new Set(["host.name", "host.user", "host.ssh"]);
 
 const payloadWith = (hints: ClientHints) =>
   requestPayload(
@@ -90,7 +89,6 @@ const payloadWith = (hints: ClientHints) =>
     instantOf(new Date()),
     DEPS,
     "/tmp",
-    HOST_PATHS,
     EFFECTIVE_GLOBALS,
     hints,
     NO_CONFIG_FILE,

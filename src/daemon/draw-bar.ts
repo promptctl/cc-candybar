@@ -41,7 +41,6 @@ import {
 } from "../render/frame.js";
 import {
   renderOptionsOf,
-  gitOptionsFromClosure,
   prFactOf,
   sourcesFactOf,
   refreshedFact,
@@ -593,12 +592,7 @@ export function drawRender(
     factsSeq: String(document.seq),
     prompts: String(metrics?.messageCount ?? "-"),
     nonPrompts: String(metrics?.nonPrompts ?? "-"),
-    // [LAW:one-source-of-truth] The closure the payload's git fact was read
-    // under is the turn's, beside the payload, not one resolved again here.
-    pr: prFactOf(
-      payload.git,
-      gitOptionsFromClosure(view.source.closure()).showPullRequest === true,
-    ),
+    pr: prFactOf(payload.git),
     feeds: feedsFact(projected.feeds),
   });
   // [LAW:no-silent-failure] What drawDsl had to settle for itself and could
