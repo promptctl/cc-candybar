@@ -1,3 +1,9 @@
+## [1.180.7](https://github.com/promptctl/cc-candybar/compare/v1.180.6...v1.180.7) (2026-11-03)
+
+### Bug Fixes
+
+* **git:** a closed git cache answers a late declaration as closed, so no period re-arms after close (candybar-testing-ihvy.dbg) ([#588](https://github.com/promptctl/cc-candybar/issues/588)) ([2b674e3](https://github.com/promptctl/cc-candybar/commit/2b674e303614d5b76f88596aa59060f2319c8233))
+
 ## [1.180.6](https://github.com/promptctl/cc-candybar/compare/v1.180.5...v1.180.6) (2026-11-03)
 
 ### Bug Fixes
