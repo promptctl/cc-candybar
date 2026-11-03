@@ -406,8 +406,10 @@ test("a source keyed on the instant is refused at load, naming the period that r
 });
 
 // A key over the depth reads a session's setting, which only its view holds:
-// each view runs its own, floored at the depth that view draws at.
-test("a source keyed on the drawn depth is each view's own", async () => {
+// the source is each view's own, floored at the depth that view draws at. Two
+// views drawing at one depth hash one key value, so they hold one digest and
+// share its one run (source-runs.ts).
+test("a source keyed on the drawn depth is each view's own, and one run where their depths agree", async () => {
   fs.writeFileSync(
     path.join(dir, ".cc-candybar.json5"),
     JSON.stringify({
@@ -429,7 +431,7 @@ test("a source keyed on the drawn depth is each view's own", async () => {
   expect(a.view.state.registry.variableStore.has("inked")).toBe(false);
   expect(drawn(a.view)).toContain(" i ");
   expect(drawn(b.view)).toContain(" i ");
-  expect(runs("inked")).toBe(afterA + 1);
+  expect(runs("inked")).toBe(afterA);
 });
 
 test("debug introspection samples the most recently rendered session's view", async () => {
