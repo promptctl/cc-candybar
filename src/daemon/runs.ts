@@ -44,7 +44,13 @@ export interface RunRequest {
 }
 
 // How a run ended. `aborted`: the owner closed under it.
-export type RunOutcome = "ok" | "exit" | "timeout" | "launch" | "aborted";
+export type RunOutcome =
+  | "ok"
+  | "exit"
+  | "timeout"
+  | "launch"
+  | "output-limit"
+  | "aborted";
 
 export interface RunStats {
   readonly started: number;
@@ -86,8 +92,9 @@ function outcomeOf(result: LaunchResult): RunOutcome {
     case "spawn-error":
     case "rate-limited":
     case "signal-refused":
-    case "output-limit":
       return "launch";
+    case "output-limit":
+      return "output-limit";
   }
 }
 
@@ -97,14 +104,15 @@ function exitOf(result: LaunchResult): string {
   return result.exitCode === null ? "-" : String(result.exitCode);
 }
 
-// What the bar shows of a failed run: the program's own words, else why.
+// What the bar shows of a failed run: the program's own words, else why. A run
+// ended for flooding its output says why alone: its words are the flood.
 function failureText(
   action: string,
   outcome: RunOutcome,
   result: LaunchResult,
   timeoutMs: number,
 ): string {
-  const stderr = result.stderr.trim();
+  const stderr = outcome === "output-limit" ? "" : result.stderr.trim();
   const reason =
     outcome === "timeout"
       ? `timed out after ${timeoutMs / 1000} s`
@@ -200,7 +208,8 @@ export class Runs {
       `run sid=${valueOf(run.sessionId)} action=${valueOf(run.action)} program=${valueOf(run.argv[0])} outcome=${outcome} exit=${exitOf(result)} took=${took} refreshed=${run.refreshes.map((r) => r.name).join(",") || "-"}`,
     );
     if (outcome === "timeout") this.timedOut++;
-    if (outcome === "exit" || outcome === "launch") this.failed++;
+    if (outcome === "exit" || outcome === "launch" || outcome === "output-limit")
+      this.failed++;
     // An aborted run is the daemon going down, not the program failing.
     if (outcome === "ok" || outcome === "aborted") return;
     holdClickError(

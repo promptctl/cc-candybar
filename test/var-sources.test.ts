@@ -22,7 +22,7 @@ import {
   type SourceParse,
 } from "../src/var-system";
 import { SessionState } from "../src/daemon/session-state";
-import { createLauncher } from "../src/proc/launch";
+import { createLauncher, MAX_CAPTURED_BYTES } from "../src/proc/launch";
 import { readPending } from "../src/var-system/types";
 import { PENDING } from "../src/utils/outcome";
 import { drawingAt } from "./helpers/test-engine";
@@ -578,6 +578,19 @@ describe("SourceRegistry — shell: basic", () => {
     expect(err).toBeDefined();
     expect(err!.message).toMatch(/exited with code/);
     expect(err!.timestamp).toBeGreaterThanOrEqual(before);
+  });
+
+  it("a command ended for flooding its output names the limit even when it exits with a code of its own", async () => {
+    const { registry } = make();
+    registry.declareShell("val", "trap 'exit 0' TERM; yes", {
+      cwd: process.cwd(),
+      parse: TEXT,
+      cache: { kind: "never" },
+    });
+    await ran(registry);
+    expect(registry.getLastError("val")!.message).toBe(
+      `shell "trap 'exit 0' TERM; yes" output-limit: output exceeded ${MAX_CAPTURED_BYTES} bytes in ${process.cwd()}`,
+    );
   });
 
   it("a read its launcher refused is a failed read, not the registry's abort", async () => {

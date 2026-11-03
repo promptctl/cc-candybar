@@ -7,7 +7,7 @@
 // `sessionSource`.
 
 import { linkUrls } from "./helpers/frame";
-import { createLauncher } from "../src/proc/launch";
+import { createLauncher, MAX_CAPTURED_BYTES } from "../src/proc/launch";
 import { HOST, WORLD, locs, processLauncher } from "./helpers/host";
 import { type Launcher } from "../src/proc/launch";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
@@ -897,6 +897,20 @@ describe("the run owner", () => {
       timedOut: 1,
     });
     expect(o.lines).toContainEqual(expect.stringContaining("outcome=timeout"));
+  });
+
+  test("a program that floods its output puts the limit in the bar, not the flood, and counts as failed", async () => {
+    const o = owner();
+    o.runs.start(o.run("yes >&2"));
+    await until(() => o.runs.stats().running === 0, "the flood's end");
+    expect(lastClickError(o.sessionState, SID)?.text).toBe(
+      `run act: output exceeded ${MAX_CAPTURED_BYTES} bytes`,
+    );
+    expect(o.held).toContain(`resume /s ${SID}`);
+    expect(o.runs.stats()).toMatchObject({ failed: 1, timedOut: 0 });
+    expect(o.lines).toContainEqual(
+      expect.stringContaining("outcome=output-limit"),
+    );
   });
 
   test("a program that cannot start puts why in the bar, and counts as failed", async () => {
