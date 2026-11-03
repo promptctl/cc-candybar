@@ -16,7 +16,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { parse as parseToml } from "smol-toml";
-import type { Launcher } from "../proc/launch.js";
+import { failureText, type Launcher } from "../proc/launch.js";
 import type { Asked, FontInUse } from "./checks.js";
 import { itermDrawsItself, type ConfiguredTerminal } from "./terminal.js";
 import { DoctorBusy } from "./busy.js";
@@ -109,7 +109,7 @@ async function jxa<T>(
   });
   if (!run.ok) {
     if (run.reason === "rate-limited") throw new DoctorBusy("the font");
-    const detail = run.error ?? `${run.reason}: ${run.stderr.trim()}`;
+    const detail = failureText(run);
     return { kind: "failed", reason: `osascript failed (${detail})` };
   }
   let answer: { readonly error: string } | T;
@@ -334,7 +334,7 @@ async function fcCoverage(
   });
   if (!run.ok) {
     if (run.reason === "rate-limited") throw new DoctorBusy("the font");
-    const detail = run.error ?? `${run.reason}: ${run.stderr.trim()}`;
+    const detail = failureText(run);
     return { kind: "failed", reason: `fc-match failed (${detail})` };
   }
   return fcMatchCoverage(run.stdout, glyphs);

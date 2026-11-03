@@ -155,7 +155,7 @@ describe("the memory charge", () => {
       exitCode: null,
       signal: "SIGTERM",
     }));
-    expect(await failed(5)).toEqual({ kind: "stand-in", bytes: 5, unread: "footprint timeout (footprint: hung)" });
+    expect(await failed(5)).toEqual({ kind: "stand-in", bytes: 5, unread: "footprint timeout: footprint: hung" });
     const garbled = footprintCharge(77, async () => ran("nothing here"));
     expect(await garbled(5)).toEqual({
       kind: "stand-in",

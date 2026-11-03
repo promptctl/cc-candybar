@@ -292,6 +292,58 @@ export type LaunchResult =
       error?: string;
     };
 
+export type Failed = Extract<LaunchResult, { ok: false }>;
+
+// [LAW:single-enforcer] Why a launch failed, said one way for every caller.
+export function whyFailed(r: Failed): string {
+  switch (r.reason) {
+    case "non-zero":
+      return `exited with code ${r.exitCode}`;
+    case "signal":
+      return `killed by ${r.signal ?? "a signal"}`;
+    // These are whole sentences: the launcher wrote them.
+    case "timeout":
+    case "output-limit":
+    case "rate-limited":
+    case "pipe-error":
+    case "spawn-error":
+      return r.error ?? r.reason;
+    default:
+      return r.error === undefined ? r.reason : `${r.reason}: ${r.error}`;
+  }
+}
+
+// What a child said, on one bounded line. A tool's error may come first (git's
+// `fatal:` before its hints, `ps`'s complaint before its usage) or last (a
+// traceback, a prompt), so the first and last lines stand for the rest; each is
+// clipped by code point. Bounded here because the failure is held and drawn
+// whole: the bar's ⚠ cell is the only place it shows.
+const SAID_LINE_CHARS = 200;
+const clipped = (line: string): string => {
+  const kept: string[] = [];
+  for (const ch of line) {
+    if (kept.length === SAID_LINE_CHARS) return `${kept.join("")}…`;
+    kept.push(ch);
+  }
+  return line;
+};
+export function saidBy(r: Failed, text: string): string {
+  // A flood's output is the flood, and a failed pipe's was cut short: those
+  // say why alone.
+  if (r.reason === "output-limit" || r.reason === "pipe-error") return "";
+  const t = text.trim();
+  const firstEnd = t.search(/[\r\n]/);
+  if (firstEnd === -1) return clipped(t);
+  const lastStart = Math.max(t.lastIndexOf("\n"), t.lastIndexOf("\r")) + 1;
+  return `${clipped(t.slice(0, firstEnd).trim())} … ${clipped(t.slice(lastStart).trim())}`;
+}
+
+// [LAW:no-silent-failure] Why, and what the child said about it.
+export function failureText(r: Failed, where = ""): string {
+  const said = saidBy(r, r.stderr);
+  return `${whyFailed(r)}${where}${said === "" ? "" : `: ${said}`}`;
+}
+
 // A launch that started nothing. It always says why, so a form with no
 // `LaunchResult` to return still carries the reason rather than guessing one.
 type Refusal = Extract<LaunchResult, { ok: false }> & { error: string };
@@ -670,6 +722,8 @@ type Terminated = "timeout" | "aborted" | "output-limit" | "pipe-error";
 // not the caller's, so every waited launch is total.
 export const MAX_CAPTURED_BYTES = 16 * 1024 * 1024;
 const OUTPUT_LIMIT_ERROR = `output exceeded ${MAX_CAPTURED_BYTES} bytes`;
+export const timedOutError = (timeoutMs: number): string =>
+  `timed out after ${timeoutMs / 1000} s`;
 
 // [LAW:single-enforcer] One reader per stream for the stream's whole life, and
 // one count of its bytes against MAX_CAPTURED_BYTES. While the launch runs it
@@ -993,11 +1047,15 @@ async function launchWaited(
           ...output(),
           exitCode: code,
           signal,
-          ...(terminated === "output-limit"
-            ? { error: OUTPUT_LIMIT_ERROR }
-            : terminated === "pipe-error"
-              ? { error: `a pipe failed to read: ${pipeError}` }
-              : {}),
+          // [LAW:one-source-of-truth] The launcher enforced the bound, so it
+          // names it; callers never spell it from a constant of their own.
+          ...(terminated === "timeout"
+            ? { error: timedOutError(opts.timeoutMs ?? 0) }
+            : terminated === "output-limit"
+              ? { error: OUTPUT_LIMIT_ERROR }
+              : terminated === "pipe-error"
+                ? { error: `a pipe failed to read: ${pipeError}` }
+                : {}),
         });
         return;
       }
@@ -1067,7 +1125,10 @@ function launchBlocking(state: LaunchState, opts: LaunchOpts): LaunchResult {
         stderr,
         exitCode: null,
         signal: result.signal ?? null,
-        error: spawnErrorText(result.error, opts.cwd),
+        error:
+          reason === "timeout"
+            ? timedOutError(opts.timeoutMs ?? 0)
+            : spawnErrorText(result.error, opts.cwd),
       };
     }
 

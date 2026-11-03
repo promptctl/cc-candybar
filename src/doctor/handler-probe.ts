@@ -20,7 +20,11 @@ import { fetchStats, shapeSkew } from "../daemon/client-stats.js";
 import type { ClientWorld } from "../daemon/client-transport.js";
 import { defaultSocketPath, socketPath } from "../daemon/paths.js";
 import { forwarderExecutable } from "../install/index.js";
-import type { LaunchCategory, OneShotLauncher } from "../proc/launch.js";
+import {
+  failureText,
+  type LaunchCategory,
+  type OneShotLauncher,
+} from "../proc/launch.js";
 import type { Asked, HandlerApp, UrlHandlerFacts } from "./checks.js";
 import type { Delivery } from "./sightings.js";
 
@@ -159,9 +163,7 @@ function run(
     category,
     timeoutMs: SPAWN_MS,
   });
-  return result.ok
-    ? ok(result.stdout)
-    : failed(result.stderr.trim() || result.error || result.reason);
+  return result.ok ? ok(result.stdout) : failed(failureText(result));
 }
 
 // NSWorkspace's own answer to "which app opens this URL" — the lookup `open`

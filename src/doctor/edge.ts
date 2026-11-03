@@ -26,7 +26,11 @@ import { writeAtomic } from "../utils/atomic-write.js";
 import type { ClientHints } from "../daemon/protocol.js";
 import { runTmuxAsync } from "../proc/tmux.js";
 import type { Host } from "../host.js";
-import type { LaunchResult, Launcher } from "../proc/launch.js";
+import {
+  failureText,
+  type LaunchResult,
+  type Launcher,
+} from "../proc/launch.js";
 import {
   FORGE_CLI,
   REMOTES_ARGS,
@@ -368,7 +372,7 @@ async function remoteLogin(
   });
   if (!run.ok) {
     if (run.reason === "rate-limited") throw new DoctorBusy("the processes");
-    const detail = run.error ?? `${run.reason}: ${run.stderr.trim()}`;
+    const detail = failureText(run);
     return { kind: "failed", reason: `ps failed (${detail})` };
   }
   return descendsFromRemoteLogin(run.stdout, pid);
@@ -448,7 +452,7 @@ async function daemons(
     envOverlay: { LC_ALL: "C", TZ: "UTC" },
   });
   if (!run.ok) {
-    const detail = run.error ?? `${run.reason}: ${run.stderr.trim()}`;
+    const detail = failureText(run);
     return { kind: "failed", reason: `ps failed (${detail})` };
   }
   return { kind: "ok", value: daemonProcesses(run.stdout, ownsEntry) };

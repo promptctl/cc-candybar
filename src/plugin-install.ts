@@ -16,7 +16,7 @@ import {
 import { DEFINITION_FILE, pluginDefinition } from "./config/loader/plugins.js";
 import { locations } from "./daemon/paths.js";
 import type { World } from "./host.js";
-import type { OneShotLauncher } from "./proc/launch.js";
+import { failureText, type OneShotLauncher } from "./proc/launch.js";
 import { canonicalDirectory } from "./utils/watch-target.js";
 import { resolveUserPath } from "./utils/user-path.js";
 
@@ -108,7 +108,7 @@ function cloneRepo(
     });
     if (!run.ok)
       throw new Error(
-        `git ${args.map((a) => (a === url ? shown : a)).join(" ")} failed (${run.reason}): ${run.stderr.trim() || run.error || ""}`,
+        `git ${args.map((a) => (a === url ? shown : a)).join(" ")} failed (${failureText(run)})`,
       );
     return run.stdout;
   };

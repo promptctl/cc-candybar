@@ -27,7 +27,7 @@
 import crypto from "node:crypto";
 import { readFile as fsReadFile } from "node:fs/promises";
 import { observable, runInAction } from "mobx";
-import type { Launcher } from "../proc/launch";
+import { failureText, type Launcher } from "../proc/launch";
 import {
   WatcherRegistry,
   watchFault,
@@ -156,13 +156,10 @@ function shellReader(
       // The reason, not the exit code, says which: a child the launcher ended
       // (timeout, output-limit, an abandoned read's abort) can still exit
       // with a code of its own.
-      const why =
-        r.reason === "non-zero"
-          ? `exited with code ${r.exitCode}`
-          : r.reason === "timeout"
-            ? `timed out after ${SHELL_READ_TIMEOUT_MS / 1000} s`
-            : [r.reason, r.error].filter((s) => s !== undefined).join(": ");
-      return failed(`shell "${command}" ${why} in ${cwd}`, "read");
+      return failed(
+        `shell "${command}" ${failureText(r, ` in ${cwd}`)}`,
+        "read",
+      );
     },
   };
 }
