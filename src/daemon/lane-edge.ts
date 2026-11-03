@@ -46,7 +46,11 @@ async function tmux(
 
 function ran(what: string, result: LaunchResult): string {
   if (result.ok) return result.stdout;
-  throw new Error(`${what} failed (${failureText(result)})`);
+  // The claude CLI and the graph reader say why on stdout, not stderr.
+  const told = result.stderr.trim() === "" ? result.stdout.trim() : "";
+  throw new Error(
+    `${what} failed (${failureText(result)}${told === "" ? "" : `: ${told}`})`,
+  );
 }
 
 // [LAW:parse-dont-validate] The module graph reader's refusal: one JSON line,

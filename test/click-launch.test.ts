@@ -109,7 +109,7 @@ describe("clickHandoff", () => {
         HOST.tmp,
       ),
     ).rejects.toThrow(
-      "opening https://example.com failed (non-zero, exit 3): no method available",
+      "opening https://example.com failed (exited with code 3: no method available)",
     );
   });
 
@@ -141,7 +141,7 @@ describe("clickLaunch", () => {
         () => {},
       ),
     ).rejects.toThrow(
-      /^opening https:\/\/example\.com failed \(spawn-error, exit null\): .*ENOENT/,
+      /^opening https:\/\/example\.com failed \(.*ENOENT\)$/,
     );
   });
 });

@@ -21,9 +21,11 @@
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import {
+  failureText,
   readJobEnd,
+  timedOutError,
+  type Failed,
   type LaunchOpts,
-  type LaunchResult,
   type Launcher,
 } from "../../proc/launch";
 import type { Locations } from "../paths";
@@ -407,23 +409,17 @@ export const CLICK_PROGRAM_TIMEOUT_MS = 5000;
 // daemon is its own outcome; every other failure surfaces as RENDER_FAILED,
 // saying what the launch itself said: the spawn's error, or the program's stderr.
 function clickFailed(
-  end: {
-    reason: Extract<LaunchResult, { ok: false }>["reason"];
-    exitCode: number | null;
-    said: string;
-  },
+  r: Failed,
   category: LaunchOpts["category"],
   what: string,
   log: DaemonContext["log"],
 ): void {
-  if (end.reason === "rate-limited") {
-    log("warn", `${category} rate-limited: ${end.said}`);
+  if (r.reason === "rate-limited") {
+    log("warn", `${category} ${failureText(r)}`);
     return;
   }
-  if (end.reason === "aborted") throw new DaemonClosing(what);
-  throw new Error(
-    `${what} failed (${end.reason}, exit ${end.exitCode ?? "null"})${end.said === "" ? "" : `: ${end.said}`}`,
-  );
+  if (r.reason === "aborted") throw new DaemonClosing(what);
+  throw new Error(`${what} failed (${failureText(r)})`);
 }
 
 // [LAW:one-type-per-behavior] A click's launch of a program it waits out —
@@ -441,16 +437,7 @@ export async function clickLaunch(
     timeoutMs: CLICK_PROGRAM_TIMEOUT_MS,
   });
   if (result.ok) return;
-  clickFailed(
-    {
-      reason: result.reason,
-      exitCode: result.exitCode,
-      said: result.error ?? result.stderr.trim(),
-    },
-    opts.category,
-    what,
-    log,
-  );
+  clickFailed(result, opts.category, what, log);
 }
 
 // How often a handoff looks for its opener's verdict while the click waits.
@@ -487,7 +474,7 @@ export async function clickHandoff(
     const job = launcher.launchJobSync(opts, files);
     if (!job.ok) {
       clickFailed(
-        { reason: job.reason, exitCode: null, said: job.error },
+        { ...job, stdout: "", stderr: "", exitCode: null, signal: null },
         opts.category,
         what,
         log,
@@ -508,11 +495,22 @@ export async function clickHandoff(
         clickFailed(
           end.kind === "exit"
             ? {
+                ok: false,
                 reason: "non-zero",
+                stdout: "",
+                stderr: readFileSync(files.stderr, "utf8"),
                 exitCode: end.code,
-                said: readFileSync(files.stderr, "utf8").trim(),
+                signal: null,
               }
-            : { reason: "timeout", exitCode: null, said: "" },
+            : {
+                ok: false,
+                reason: "timeout",
+                stdout: "",
+                stderr: "",
+                exitCode: null,
+                signal: null,
+                error: timedOutError(boundMs),
+              },
           opts.category,
           what,
           log,

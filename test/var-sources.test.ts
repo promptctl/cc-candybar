@@ -697,7 +697,7 @@ describe("SourceRegistry — shell: basic", () => {
       // A removed working directory is named as such — Node's own text
       // (`spawn /bin/sh ENOENT`) would blame the shell.
       expect(registry.getLastError("gone")!.message).toBe(
-        `shell "echo x" spawn-error: working directory does not exist: ${gone} in ${gone}`,
+        `shell "echo x" working directory does not exist: ${gone} in ${gone}`,
       );
     } finally {
       fs.rmSync(a, { recursive: true, force: true });
@@ -981,20 +981,13 @@ describe("SourceRegistry — shell: a failed read carries stderr", () => {
     });
   });
 
-  it("a multi-line stderr is shown by its last line", async () => {
-    const said = "Traceback (most recent call last):\n  File x\nKeyError: 'k'\n";
-    expect(await failedRead("py", exits(1, "", said))).toEqual({
+  it("a multi-line stderr is carried whole", async () => {
+    const said = "fatal: not a git repository\nhint: run git init\n";
+    expect(await failedRead("git x", exits(128, "", said))).toEqual({
       kind: "failed",
       failedAt: "read",
-      reason: `shell "py" exited with code 1 in /work: KeyError: 'k'`,
+      reason: `shell "git x" exited with code 128 in /work: fatal: not a git repository\nhint: run git init`,
     });
-  });
-
-  it("a long line is shown by its tail, cut between characters", async () => {
-    const said = `${"😀".repeat(300)}end`;
-    const doc = await failedRead("noisy", exits(1, "", said));
-    const reason = (doc as { reason: string }).reason;
-    expect(reason.endsWith(`: …${"😀".repeat(197)}end`)).toBe(true);
   });
 });
 

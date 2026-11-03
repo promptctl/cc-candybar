@@ -306,30 +306,23 @@ export function whyFailed(r: Failed): string {
     case "output-limit":
     case "rate-limited":
     case "pipe-error":
+    case "spawn-error":
       return r.error ?? r.reason;
     default:
       return r.error === undefined ? r.reason : `${r.reason}: ${r.error}`;
   }
 }
 
-// The line of stderr that explains a failure is the last: a shell names the
-// missing binary last, a traceback ends on its error, a prompt waits on the
-// last line. Bounded by code point, so one line stays one line of the bar.
-const STDERR_SHOWN_CHARS = 200;
-export const lastStderrLine = (r: Failed): string => {
-  // A flood's stderr is the flood, and a failed pipe's was cut short: those
-  // say why alone.
-  if (r.reason === "output-limit" || r.reason === "pipe-error") return "";
-  const lines = r.stderr.trim().split("\n");
-  const chars = Array.from(lines[lines.length - 1]!.trim());
-  return chars.length <= STDERR_SHOWN_CHARS
-    ? chars.join("")
-    : `…${chars.slice(-STDERR_SHOWN_CHARS).join("")}`;
-};
-
-// [LAW:no-silent-failure] Why, and what the child said about it.
+// [LAW:no-silent-failure] Why, and what the child said about it. A flood's
+// stderr is the flood, and a failed pipe's was cut short: those say why alone.
+// The whole of stderr rides along — a tool's error may come first (git's
+// `fatal:` before its hints) or last (a traceback) — and whoever draws it on
+// one line bounds it there.
 export function failureText(r: Failed, where = ""): string {
-  const said = lastStderrLine(r);
+  const said =
+    r.reason === "output-limit" || r.reason === "pipe-error"
+      ? ""
+      : r.stderr.trim();
   return `${whyFailed(r)}${where}${said === "" ? "" : `: ${said}`}`;
 }
 
@@ -711,7 +704,7 @@ type Terminated = "timeout" | "aborted" | "output-limit" | "pipe-error";
 // not the caller's, so every waited launch is total.
 export const MAX_CAPTURED_BYTES = 16 * 1024 * 1024;
 const OUTPUT_LIMIT_ERROR = `output exceeded ${MAX_CAPTURED_BYTES} bytes`;
-const timedOutError = (timeoutMs: number): string =>
+export const timedOutError = (timeoutMs: number): string =>
   `timed out after ${timeoutMs / 1000} s`;
 
 // [LAW:single-enforcer] One reader per stream for the stream's whole life, and

@@ -123,6 +123,20 @@ describe("a layout node's when that throws costs that node, not the bar", () => 
     }
   });
 
+  test("a long failure draws one bounded ⚠ line, and reaches the viewer whole", () => {
+    const long = `${"x".repeat(400)}END`;
+    const rt = runtime(src(`{ h: [ { seg: 'ay', when: '{{ fail "${long}" }}' }, 'bee' ] }`));
+    try {
+      const bar = rt.render();
+      expect(bar).not.toContain("END");
+      expect(bar).toContain("…");
+      expect(bar.split("\n")).toHaveLength(1);
+      expect(rt.segmentErrors).toEqual([["ay", long]]);
+    } finally {
+      rt.dispose();
+    }
+  });
+
   test("a placement's gate failing draws that placement's ⚠, as its segment's own when does", () => {
     const rt = runtime(
       src(
