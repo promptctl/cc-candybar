@@ -1,3 +1,13 @@
+## [1.181.0](https://github.com/promptctl/cc-candybar/compare/v1.180.10...v1.181.0) (2026-11-03)
+
+### Features
+
+* **url-handler:** a resident Swift forwarder sends the raw link to the daemon (candybar-daemon-health-ajx0.co4) ([#594](https://github.com/promptctl/cc-candybar/issues/594)) ([587196c](https://github.com/promptctl/cc-candybar/commit/587196cbaa9d6ccd67cf50cb1c7598a88730d3b6))
+
+### Bug Fixes
+
+* **test:** a render is held past the request backstop by a pipe the test writes (candybar-testing-0x6u.8vd) ([#597](https://github.com/promptctl/cc-candybar/issues/597)) ([1971f87](https://github.com/promptctl/cc-candybar/commit/1971f872ffd6e2d3f793d966800cc9ea93c56738))
+
 ## [1.180.10](https://github.com/promptctl/cc-candybar/compare/v1.180.9...v1.180.10) (2026-11-03)
 
 ### Bug Fixes
