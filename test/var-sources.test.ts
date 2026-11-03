@@ -27,7 +27,13 @@ import {
 } from "../src/var-system";
 import { fakeLauncher, turns } from "./helpers/fake-launcher";
 import { heldClock } from "./helpers/held-clock";
-import { hangs, ignoring, shell } from "../src/proc/spawner-fake";
+import {
+  type Behaviour,
+  exits,
+  hangs,
+  ignoring,
+  shell,
+} from "../src/proc/spawner-fake";
 import { SessionState } from "../src/daemon/session-state";
 import { systemLauncher } from "../src/proc/system-launcher";
 import { MAX_CAPTURED_BYTES } from "../src/proc/launch";
@@ -912,6 +918,75 @@ describe("SourceRegistry — shell: read timeout", () => {
     }
     expect(heard).toEqual([]);
     expect(store.readDocument("val")).toEqual(before);
+  });
+});
+
+// ─── shell — a failed read's stderr ──────────────────────────────────────────
+
+describe("SourceRegistry — shell: a failed read carries stderr", () => {
+  // The document a failed read of `command` leaves, its program `behaviour`,
+  // the clock run past the read's timeout.
+  async function failedRead(command: string, behaviour: Behaviour) {
+    const clock = heldClock(new Date(0));
+    const { launcher, spawner } = fakeLauncher(clock);
+    spawner.program(shell(command), behaviour);
+    const store = new VariableStore(clock);
+    const registry = registryOver(
+      store,
+      "",
+      undefined,
+      undefined,
+      undefined,
+      runsOver({ launcher, clock }),
+    );
+    registry.declareShell("val", command, {
+      cwd: "/work",
+      parse: { kind: "json", default: undefined },
+      cache: { kind: "ttl", durationMs: SHELL_READ_TIMEOUT_MS * 2 },
+    });
+    clock.advance(0);
+    await turns();
+    clock.advance(SHELL_READ_TIMEOUT_MS);
+    await turns();
+    await ran(registry);
+    return store.readDocument("val");
+  }
+
+  it("a non-zero exit's reason ends in what the command wrote to stderr", async () => {
+    expect(
+      await failedRead("frob", exits(127, "", "sh: frob: command not found\n")),
+    ).toEqual({
+      kind: "failed",
+      failedAt: "read",
+      reason:
+        'shell "frob" exited with code 127 in /work: sh: frob: command not found',
+    });
+  });
+
+  it("a timeout's reason ends in what the command wrote to stderr", async () => {
+    expect(
+      await failedRead("git fetch", { ...hangs(), stderr: "Password: " }),
+    ).toEqual({
+      kind: "failed",
+      failedAt: "read",
+      reason: `shell "git fetch" timed out after ${SHELL_READ_TIMEOUT_MS / 1000} s in /work: Password:`,
+    });
+  });
+
+  it("an empty stderr adds nothing", async () => {
+    expect(await failedRead("false", exits(1, "", " \n"))).toEqual({
+      kind: "failed",
+      failedAt: "read",
+      reason: 'shell "false" exited with code 1 in /work',
+    });
+  });
+
+  it("a long stderr is shown by its tail", async () => {
+    const said = `${"x".repeat(5000)}the last line`;
+    const doc = await failedRead("noisy", exits(1, "", said));
+    expect(doc).toMatchObject({ kind: "failed", failedAt: "read" });
+    const reason = (doc as { reason: string }).reason;
+    expect(reason.endsWith(`: …${said.slice(-2000)}`)).toBe(true);
   });
 });
 

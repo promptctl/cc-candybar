@@ -1085,8 +1085,8 @@ describe("launch input a child does not read", () => {
       stdinInput: unread,
       timeoutMs: 100,
     });
-    expect(r).toMatchObject({ ok: false, reason: "timeout" });
-    expect(r).not.toHaveProperty("error");
+    // The error names the bound, not the unread input.
+    expect(r).toMatchObject({ ok: false, reason: "timeout", error: "timed out after 0.1 s" });
   });
 
   it("gives the blocking launch the same verdicts", () => {

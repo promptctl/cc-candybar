@@ -115,18 +115,15 @@ function failureText(
   action: string,
   outcome: RunOutcome,
   result: LaunchResult,
-  timeoutMs: number,
 ): string {
   const stderr =
     outcome === "output-limit" || outcome === "pipe"
       ? ""
       : result.stderr.trim();
   const reason =
-    outcome === "timeout"
-      ? `timed out after ${timeoutMs / 1000} s`
-      : outcome === "exit"
-        ? `exited ${exitOf(result)}`
-        : (result.ok ? "" : result.error) || "could not be started";
+    outcome === "exit"
+      ? `exited ${exitOf(result)}`
+      : (result.ok ? "" : result.error) || "could not be started";
   return `run ${action}: ${stderr === "" ? reason : stderr}`;
 }
 
@@ -222,7 +219,7 @@ export class Runs {
     holdClickError(
       this.deps.state,
       run.sessionId,
-      failureText(run.action, outcome, result, this.timeoutMs),
+      failureText(run.action, outcome, result),
       this.deps.now(),
     );
   }
