@@ -449,7 +449,7 @@ const GROUP_END_POLL_MAX_MS = 1000;
 // [LAW:no-silent-failure] exception: kill's stderr goes nowhere, because a
 // group that ended on its own (ESRCH) is the state this exists to reach, and
 // the launcher it would report to is gone.
-const LIFELINE_PROGRAM =
+export const LIFELINE_PROGRAM =
   `$1 == "+" { live[$2] = 1; next } ` +
   `$1 == "-" { delete live[$2]; next } ` +
   `END { for (g in live) groups = groups " -" g; ` +
