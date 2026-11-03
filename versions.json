@@ -4,32 +4,32 @@
     {
       "version": "pr-600",
       "ref": "refs/pull/600/merge",
-      "sha": "8262496ec9a68443507d06767a7940b0f051344c",
-      "timestamp": "2026-11-03T03:45:16.917Z",
+      "sha": "f9db3a158185658b7975f685dd507b2987affbe2",
+      "timestamp": "2026-11-03T03:46:26.495Z",
       "commits": [
         {
-          "sha": "8262496ec9a68443507d06767a7940b0f051344c",
+          "sha": "f9db3a158185658b7975f685dd507b2987affbe2",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T03:44:20Z",
-          "message": "Merge b1b500245fa7de8a35ae160784fcaed75e2a5567 into 1e23d8a6bf2b1e5c9e5073a317f3f70b0b5ce88e\n"
+          "timestamp": "2026-11-02T20:45:32-07:00",
+          "message": "Merge c2f94868f89986489c3459c21169017b2ee778fb into 1e23d8a6bf2b1e5c9e5073a317f3f70b0b5ce88e\n"
         },
         {
-          "sha": "b1b500245fa7de8a35ae160784fcaed75e2a5567",
+          "sha": "c2f94868f89986489c3459c21169017b2ee778fb",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T20:42:59-07:00",
           "message": "fix(url-handler): the notice carries the product name once, and a denied notification is a notice in the log\n\nMedium review of PR #600. The banner header already names cc-candybar\nfrom the bundle's display name, so the title no longer repeats it; the\ndisplay name is pinned by the install test; a user's denial logs at\nnotice, not error; and the header names the trap that the binary aborts\noutside its bundle.\n"
         },
         {
-          "sha": "5221f7987d469b96e1795025c9f929cb78f7aff4",
+          "sha": "b3fc18e25fd5ef3354a5e9bc5c3400b4167ffccb",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T20:37:40-07:00",
           "message": "fix(url-handler): the lost-click notice is one entry that stays listed, under the product's name\n\nHigh review of PR #600. The notice keeps a Notification Center entry after\nthe banner expires, a run of lost clicks replaces one notice instead of\nstacking copies, and the authorization prompt names cc-candybar via\nCFBundleDisplayName instead of the bundle name. The authorization comment\nstates only what the API documents, and the single-enforcer marker sits\nin the sentence it governs.\n"
         },
         {
-          "sha": "eb1c574d0bc7298ce2d8d78da87560e82027ccd9",
+          "sha": "df13d31a356453a423d79da5ed6935d3ef0ee7e2",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T20:27:10-07:00",
