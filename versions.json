@@ -4,15 +4,22 @@
     {
       "version": "pr-609",
       "ref": "refs/pull/609/merge",
-      "sha": "3fb0c96ede2b44ba13d5103a60e5e6a7ee97c99d",
-      "timestamp": "2026-11-03T10:47:34.638Z",
+      "sha": "8749b6d62825ccb9f0ada8255f7e779e6045a4be",
+      "timestamp": "2026-11-03T10:57:39.342Z",
       "commits": [
         {
-          "sha": "3fb0c96ede2b44ba13d5103a60e5e6a7ee97c99d",
+          "sha": "8749b6d62825ccb9f0ada8255f7e779e6045a4be",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T03:45:44-07:00",
-          "message": "Merge 229eac10740b30581c272e3deceb40461d72f141 into 00161160468582e48082f373f82dcbae3d28bf6a\n"
+          "timestamp": "2026-11-03T10:56:47Z",
+          "message": "Merge 436ef53efe810942f35298f785eb654c6bf64116 into 00161160468582e48082f373f82dcbae3d28bf6a\n"
+        },
+        {
+          "sha": "436ef53efe810942f35298f785eb654c6bf64116",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T03:56:35-07:00",
+          "message": "refactor(facts): fold failures keep their phase, Asked and the settings reader have one home (candybar-gather-renderer-76bb.6pj.cna)\n"
         },
         {
           "sha": "229eac10740b30581c272e3deceb40461d72f141",

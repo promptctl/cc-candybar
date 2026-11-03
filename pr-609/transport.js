@@ -80293,7 +80293,7 @@ var ContextProvider = class {
   // [LAW:one-source-of-truth] The one projection of the fold's answer.
   contextFrom(read2, contextLimit) {
     if (read2.kind === "failed") {
-      return failed(`context transcript: ${read2.reason}`, "read");
+      return failed(`context transcript: ${read2.reason}`, read2.failedAt);
     }
     const totalTokens = read2.value;
     if (totalTokens === void 0) {
@@ -80390,7 +80390,7 @@ var MetricsProvider = class {
 };
 function metricsFrom(sessionId2, cost, folded2) {
   if (folded2.kind === "failed") {
-    return failed(`metrics (${sessionId2}): ${folded2.reason}`, "read");
+    return failed(`metrics (${sessionId2}): ${folded2.reason}`, folded2.failedAt);
   }
   return ok({
     responseTime: cost.total_api_duration_ms / 1e3,
@@ -80504,7 +80504,7 @@ var ActivityProvider = class {
   }
 };
 function activityFrom(sessionId2, folded2) {
-  return folded2.kind === "failed" ? failed(`activity (${sessionId2}): ${folded2.reason}`, "read") : ok(report(folded2.value));
+  return folded2.kind === "failed" ? failed(`activity (${sessionId2}): ${folded2.reason}`, folded2.failedAt) : ok(report(folded2.value));
 }
 
 // src/segments/tmux.ts
