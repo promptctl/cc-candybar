@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-591",
+      "ref": "refs/pull/591/merge",
+      "sha": "ac9bdb743ecdf84178bab7a3f5c0f4272894dea9",
+      "timestamp": "2026-11-03T00:12:59.086Z",
+      "commits": [
+        {
+          "sha": "ac9bdb743ecdf84178bab7a3f5c0f4272894dea9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T17:11:49-07:00",
+          "message": "Merge 4039b73205c9d6d7eee26708b8663e7f3869406d into 7ca57ba16e524929f55d99beb41eba44d31a74fb\n"
+        },
+        {
+          "sha": "4039b73205c9d6d7eee26708b8663e7f3869406d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T17:11:34-07:00",
+          "message": "fix(pricing): the pricing fetch decodes the response as a stream, so a character split across reads arrives whole (candybar-testing-0x6u.61o)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-590",
       "ref": "refs/pull/590/merge",
       "sha": "c2853e50becb556569a53fffe77c215019f12226",
