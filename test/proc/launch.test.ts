@@ -8,6 +8,7 @@ import { StringDecoder } from "node:string_decoder";
 import {
   createLauncher,
   createOneShotLauncher,
+  MAX_CAPTURED_BYTES,
   type OneShotLauncher,
   type LaunchCategory,
   type LaunchScope,
@@ -126,6 +127,48 @@ describe("launch (async)", () => {
       category: "user-shell",
     });
     expect(r).toMatchObject({ ok: true, stdout: "€", stderr: "€" });
+  });
+
+  describe.each(["stdout", "stderr"] as const)("a child writing without end to %s", (stream) => {
+    it("is ended at the bound: output-limit, the first MAX_CAPTURED_BYTES kept, the child gone", async () => {
+      const pidFile = path.join(scratch, `endless-${stream}`);
+      const r = await launch({
+        bin: process.execPath,
+        args: [
+          "-e",
+          `require('fs').writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));` +
+            `const chunk = Buffer.alloc(1 << 20, 97);` +
+            `setInterval(() => process.${stream}.write(chunk), 0);`,
+        ],
+        category: "user-shell",
+      });
+      expect(r).toMatchObject({ ok: false, reason: "output-limit" });
+      expect((r as { error?: string }).error).toContain(String(MAX_CAPTURED_BYTES));
+      expect(r[stream]).toBe("a".repeat(MAX_CAPTURED_BYTES));
+      const pid = Number(fs.readFileSync(pidFile, "utf8"));
+      await until(() => {
+        try {
+          process.kill(pid, 0);
+          return false;
+        } catch {
+          return true;
+        }
+      }, "the endless writer's end");
+    });
+  });
+
+  it("keeps a child whose output is exactly the bound ok, and ends one that exits past it", async () => {
+    const write = (bytes: number) => ({
+      bin: process.execPath,
+      args: ["-e", `process.stdout.write(Buffer.alloc(${bytes}, 97));`],
+      category: "user-shell" as const,
+    });
+    const at = await launch(write(MAX_CAPTURED_BYTES));
+    expect(at).toMatchObject({ ok: true });
+    expect(at.stdout.length).toBe(MAX_CAPTURED_BYTES);
+    const past = await launch(write(MAX_CAPTURED_BYTES + 1));
+    expect(past).toMatchObject({ ok: false, reason: "output-limit" });
+    expect(past.stdout.length).toBe(MAX_CAPTURED_BYTES);
   });
 
   it("reports non-zero exits as data, not throws", async () => {

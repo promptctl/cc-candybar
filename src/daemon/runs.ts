@@ -86,6 +86,7 @@ function outcomeOf(result: LaunchResult): RunOutcome {
     case "spawn-error":
     case "rate-limited":
     case "signal-refused":
+    case "output-limit":
       return "launch";
   }
 }
