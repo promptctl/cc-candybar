@@ -12,10 +12,12 @@
 // a frame draws beside the one the request drew.
 
 import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
+import { sumsOf } from "./helpers/today";
 import {
   renderWidth,
   settlePayload,
   todayOf,
+  readingsOf,
   type PayloadInputs,
   type RenderPayloadDeps,
 } from "../src/daemon/render-payload";
@@ -23,7 +25,7 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { globalsFor } from "./helpers/selection";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf } from "../src/utils/instant";
-import { ABSENT, pendingOf, ok } from "../src/utils/outcome";
+import { ABSENT, failed, pendingOf, ok } from "../src/utils/outcome";
 import type { ClientHints } from "../src/daemon/protocol";
 import { sessionIdOf } from "../src/daemon/session-id";
 import type { ClaudeHookData } from "../src/utils/claude";
@@ -104,7 +106,7 @@ function counted(pr?: unknown) {
     tmuxService: fakeTmux(count("tmux", ok("work"))),
     usageStore: fakeUsage({
       usage: count("session", ok({ session: { cost: 2, tokens: 10 } })),
-      today: count("today", ok({ cost: 5, tokens: 50 })),
+      today: count("today", ok(sumsOf(AT, 5, 50))),
       speed: count("speed", ABSENT),
     }),
     contextProvider: fakeContext(count("context", ABSENT)),
@@ -142,7 +144,8 @@ function counted(pr?: unknown) {
     return payloadOf(inputs(), DRAW);
   };
   // `today` as a draw at `at` projects it.
-  const today = (at = AT) => todayOf(deps, deps.lanes().today, HOOK, at);
+  const today = (at = AT) =>
+    todayOf(readingsOf(inputs(), new Map()).today, at);
   return { reads, inputs, request, today, deps, logs };
 }
 
@@ -170,10 +173,10 @@ describe("a frame's payload", () => {
       expect(payloadOf(inputs(), DRAW)).toEqual(drawn);
       expect(today()).toEqual({ cost: 5, tokens: 50 });
     }
-    // `today`'s reader is the day a draw picks of the sums its lane holds
-    // (`todayAt`, no I/O): every frame picks its own, since a frame may be
-    // drawn after midnight. Every other lane was read by the request alone.
-    expect(reads).toEqual({ ...afterRequest, today: afterRequest.today! + 5 });
+    // The day a draw picks of the sums its fact holds is a projection, so
+    // every frame picks its own (a frame may be drawn after midnight) with
+    // nothing read: every lane was read by the request alone.
+    expect(reads).toEqual(afterRequest);
   });
 
   test("draws every lane no request has answered as not answered yet", () => {
@@ -209,6 +212,32 @@ describe("a frame's payload", () => {
     expect(logs).toContainEqual(
       expect.stringMatching(/^error context read threw: Error: context bug/),
     );
+  });
+
+  test("a `today` read that throws is today's failure, logged; the rest of the frame draws", async () => {
+    const { inputs, request, deps, logs } = counted();
+    await request();
+    deps.usageStore.daysOutside = () => {
+      throw new Error("days bug");
+    };
+    expect(readingsOf(inputs(), new Map()).today).toMatchObject({
+      kind: "failed",
+    });
+    expect(payloadOf(inputs(), DRAW).git).toMatchObject({ branch: "main" });
+    expect(logs).toContainEqual(
+      expect.stringMatching(/^error today read threw: Error: days bug/),
+    );
+  });
+
+  test("a `today` whose refresh threw is that failure, before the lane is read", async () => {
+    const { inputs, reads, request, deps } = counted();
+    await request();
+    const before = reads["today"];
+    deps.faults.refreshed(HOOK.session_id, "today", "scan threw");
+    expect(readingsOf(inputs(), new Map()).today).toEqual(
+      failed("scan threw", "read"),
+    );
+    expect(reads["today"]).toBe(before);
   });
 
   test("a frame reading the context window and no autocompact draws no autocompact", () => {

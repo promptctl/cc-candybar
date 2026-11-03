@@ -52,7 +52,7 @@ import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { presetNames } from "../src/config/presets";
 import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
 import { narrowToSegment } from "./helpers/narrow-to-segment";
-import { CHECK_TODAY, checkPayload } from "../src/check";
+import { checkPayload, checkToday } from "../src/check";
 import {
   renderOptionsOf,
 } from "../src/daemon/render-payload";
@@ -292,7 +292,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       ): Row => {
         const { effort: _fixtureEffort, ...payload } = {
           ...checkPayload(config, effective, null, when),
-          today: CHECK_TODAY,
+          today: checkToday(when),
         };
         const errors: string[] = [];
         const rendered = drawPayload(
@@ -1701,16 +1701,17 @@ describe("bundled preset library renders clean at every width — brandon-preset
         cwd: "/tmp",
       });
       const segmentErrors: string[] = [];
+      const drawnAt = instantOf(new Date());
       const rendered = drawPayload(
         VALIDATED,
         compiled,
         store,
         registry,
         withPayload({
-          ...checkPayload(VALIDATED, effective, null, instantOf(new Date())),
-          today: CHECK_TODAY,
+          ...checkPayload(VALIDATED, effective, null, drawnAt),
+          today: checkToday(drawnAt),
         }),
-        instantOf(new Date()),
+        drawnAt,
         {
           endcaps: effective.endcaps,
           separator: effective.separator,

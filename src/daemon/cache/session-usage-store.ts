@@ -39,7 +39,6 @@ import {
   type Reading,
 } from "../../utils/outcome";
 import { quietLogger, type DaemonLogger } from "../../utils/logger";
-import { dateOf, type Instant } from "../../utils/instant";
 import { settledLane, type Lane } from "../../utils/reading";
 import { valueOf } from "../../utils/logfmt";
 import type { Holds } from "../../utils/holds";
@@ -48,6 +47,7 @@ import { RefreshLedger, type Refreshes } from "../../utils/refresh-ledger";
 import type { Every } from "../../utils/period";
 import { elapsedMs, type Timekeeper } from "../../time";
 import { Kept } from "../../var-system/store";
+import { addDay, dayKey, EMPTY_DAY, type DayUsage } from "./today-facts";
 
 // [LAW:one-source-of-truth] The daemon's single owner of per-session usage.
 // Per-session records are canonical; the `session` projection (whole-session
@@ -73,15 +73,6 @@ import { Kept } from "../../var-system/store";
 // records live in an observable map, and each directory's day sums are a kept
 // computed over it, so a frame's `today` is one lookup that changes in the
 // turn a record does (brandon-unfiled-3248.8ro6, step 3).
-
-// [LAW:types-are-the-program] An `ok` TodayInfo always carries real totals —
-// "no usage recorded today" is the `absent` outcome arm, not a bag of nulls.
-export interface TodayInfo {
-  cost: number;
-  tokens: number;
-  tokenBreakdown: TokenBreakdown;
-  date: string;
-}
 
 // [LAW:one-source-of-truth] One observation of the active session's cumulative
 // token counts at a single instant. tok/s is the delta between two of these —
@@ -127,17 +118,6 @@ function speedSampleOf(
     : 0;
   const output = breakdown ? breakdown.output : 0;
   return { input, output, total: input + output, atMs };
-}
-
-// Per-(session, day) scalar contribution — the only granularity the today fold
-// needs. Raw entries are discarded after bucketing, so per-session retained
-// memory is O(retained-days), not O(entries).
-interface DayUsage {
-  cost: number;
-  input: number;
-  output: number;
-  cacheCreation: number;
-  cacheRead: number;
 }
 
 interface SessionRecord {
@@ -225,14 +205,6 @@ const MAX_UNHELD_SCANS = 8;
 // unbounded burst gn4 exists to kill.
 const SEED_CONCURRENCY = 8;
 
-const EMPTY_DAY: DayUsage = {
-  cost: 0,
-  input: 0,
-  output: 0,
-  cacheCreation: 0,
-  cacheRead: 0,
-};
-
 const EMPTY_SESSION_INFO: SessionInfo = {
   cost: null,
   calculatedCost: null,
@@ -240,13 +212,6 @@ const EMPTY_SESSION_INFO: SessionInfo = {
   tokens: null,
   tokenBreakdown: null,
 };
-
-function dayKey(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
 
 // Files modified before this can hold no entry that lands in "today", so the
 // seed never parses them. A full day of slack absorbs timezone/rollover skew.
@@ -331,14 +296,6 @@ async function foldFile(
     days.set(key, d);
   }
   return { entries: count, cost, breakdown, days };
-}
-
-function addDay(into: DayUsage, d: DayUsage): void {
-  into.cost += d.cost;
-  into.input += d.input;
-  into.output += d.output;
-  into.cacheCreation += d.cacheCreation;
-  into.cacheRead += d.cacheRead;
 }
 
 // [LAW:effects-at-boundaries] Pure merge of a session's file folds into the
@@ -710,7 +667,7 @@ export class SessionUsageStore {
   // src/daemon/render-payload.ts): the directory set's scans, held, so a set
   // no scan has answered starts its first one now — before the request or the
   // frame that reads it. The lane answers the set's day sums once a scan has
-  // answered; which day of them is the draw's (`todayAt`).
+  // answered; which day of them is the draw's (`projectToday`).
   declareToday(
     holds: Holds,
     claudeConfigDir: string | undefined,
@@ -731,43 +688,25 @@ export class SessionUsageStore {
     };
   }
 
-  // The `today` projection as the records stand, for a draw: the directory
-  // set's day sums at the day of `at`, so a frame past midnight sums the new
-  // day with no refresh. The active session's last ingest failing is the
-  // projection's failure.
-  todayAt(
-    set: DaySums,
-    hookData: ClaudeHookData | undefined,
-    at: Instant,
-  ): Outcome<TodayInfo> {
-    const active = this.sessions.get(hookData?.session_id ?? "");
-    const failure = active?.failure.get() ?? null;
+  // The rendering session's own days the set's sums do not hold, as the
+  // records stand, for the `today` fact: no I/O, no fold. A record under the
+  // set's roots is in its sums already, so it has none beyond them.
+  // [LAW:no-silent-failure] The session's last ingest failing is this read
+  // failing, so the fact fails with it and the draw shows a gap, never a total
+  // silently missing the session's own work.
+  daysOutside(
+    sessionId: string,
+    roots: readonly string[],
+  ): Outcome<Readonly<Record<string, DayUsage>>> {
+    const slot = this.sessions.get(sessionId);
+    if (slot === undefined) return ABSENT;
+    const failure = slot.failure.get();
     if (failure !== null) return failed(failure, "read");
-
-    const today = dayKey(dateOf(at));
-    const total: DayUsage = { ...EMPTY_DAY };
-    const inSet = set.sums[today];
-    if (inSet !== undefined) addDay(total, inSet);
-    // The rendering session counts wherever its transcript lives; under the
-    // set's roots it is already in the sums.
-    const own = under(active?.record?.transcriptPath, set.roots)
-      ? undefined
-      : active?.record?.days.get(today);
-    if (own !== undefined) addDay(total, own);
-
-    if (inSet === undefined && own === undefined) return ABSENT;
-    return ok({
-      cost: total.cost,
-      tokens:
-        total.input + total.output + total.cacheCreation + total.cacheRead,
-      tokenBreakdown: {
-        input: total.input,
-        output: total.output,
-        cacheCreation: total.cacheCreation,
-        cacheRead: total.cacheRead,
-      },
-      date: today,
-    });
+    const record = slot.record;
+    if (record === undefined || under(record.transcriptPath, roots)) {
+      return ABSENT;
+    }
+    return ok(Object.fromEntries(record.days));
   }
 
   // Take one tok/s observation of the active session: ingest its current

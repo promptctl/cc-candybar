@@ -51,6 +51,7 @@ import {
   ABSENT,
   failed,
   isPending,
+  ok,
   pendingOf,
   type Outcome,
   type Pending,
@@ -71,8 +72,8 @@ import type {
   DaySums,
   SessionUsageStore,
   SpeedObservation,
-  TodayInfo,
 } from "./cache/session-usage-store.js";
+import { projectToday, type TodayFacts } from "./cache/today-facts.js";
 import type { ContextInfo, ContextProvider } from "../segments/context.js";
 import type { MetricsInfo, MetricsProvider } from "../segments/metrics.js";
 import type { UsageInfo } from "../segments/session.js";
@@ -104,7 +105,8 @@ import {
   type RefreshFaults,
   type RefreshLane,
 } from "./refresh-faults.js";
-import type { FactsDiagnostic } from "../facts/session-facts.js";
+import type { Fact } from "../facts/fact.js";
+import type { FactsDiagnostic, SourceValue } from "../facts/session-facts.js";
 import type { SessionId } from "./session-id.js";
 import type { ManagedStorage, StorageKey } from "./cache/managed-storage.js";
 import type { JsonValue } from "../var-system/types.js";
@@ -1159,7 +1161,7 @@ export type Gathered = Pick<
 // document are both folds of this one record.
 export interface Readings {
   readonly lanes: Lanes;
-  readonly today: Current<DaySums>;
+  readonly today: Current<TodayFacts>;
   readonly gathered: Gathered;
   readonly declaredSources: readonly string[];
   readonly faults: readonly FactsDiagnostic[];
@@ -1382,7 +1384,9 @@ export function readingsOf(
   };
   return {
     lanes: laneReadings,
-    today: todayReading(lanes.today, deps.faults, sessionId),
+    today: read("today", want.today, () =>
+      todayReading(lanes.today, deps.usageStore, sessionId),
+    ),
     gathered: want,
     declaredSources: [...declared.keys()],
     faults: REFRESH_LANES.flatMap((lane) => {
@@ -1392,15 +1396,21 @@ export function readingsOf(
   };
 }
 
-// [LAW:single-enforcer] Today's day sums as the session reads them: the
-// refresh's fault if it threw, else what the lane holds. The draw's projection
-// (`todayOf`) and the facts document read through this one definition.
+// [LAW:single-enforcer] Today's facts as the session reads them: the directory
+// set's day sums with the session's own days beside them, failing if the
+// session's last ingest did. The draw's projection (`todayOf`) and the facts
+// document read through this one definition, behind `readingsOf`'s `read`
+// (the refresh's fault, a throw).
 export function todayReading(
   lane: Lane<DaySums>,
-  faults: RefreshFaults,
+  usage: Pick<SessionUsageStore, "daysOutside">,
   sessionId: string,
-): Current<DaySums> {
-  return faults.of(sessionId, "today") ?? lane.current();
+): Current<TodayFacts> {
+  const set = lane.current();
+  if (set.kind !== "ok") return set;
+  const own = usage.daysOutside(sessionId, set.value.roots);
+  if (own.kind === "failed") return own;
+  return ok({ sums: set.value.sums, own: own.kind === "ok" ? own.value : {} });
 }
 
 // The landings a request waits on before it draws: every declared lane whose
@@ -1654,18 +1664,20 @@ export function projectPayload(
 // the draw reads them, each with why (`<name>:unread` or `<name>:superseded`;
 // `-` for none), so a source that never lands is told from one nothing
 // declared, and a run's superseded source from a wait that left one out.
-export function sourcesFactOf(sources: ReadonlyMap<string, Lane<JsonValue>>): {
+export function sourcesFactOf(
+  sources: Readonly<Record<string, Fact<SourceValue>>>,
+): {
   readonly sources: string;
   readonly sourcesPending: string;
 } {
+  const named = Object.entries(sources);
   return {
-    sources: String(sources.size),
+    sources: String(named.length),
     sourcesPending:
-      [...sources]
-        .flatMap(([name, lane]) => {
-          const reading = lane.current();
-          return reading.kind === "pending" ? [`${name}:${reading.why}`] : [];
-        })
+      named
+        .flatMap(([name, fact]) =>
+          fact.kind === "pending" ? [`${name}:${fact.why}`] : [],
+        )
         .join(",") || "-",
   };
 }
@@ -1721,33 +1733,17 @@ function speedPayloadOf(obs: SpeedObservation): SpeedPayload | undefined {
 }
 
 // [LAW:one-source-of-truth] `today` at a draw's instant: the day of the
-// declared set's sums the draw is at. A projection of the draw, never of the
-// view's payload, since the day turns over at midnight with no source moving
-// (DRAW_PROJECTIONS, src/config/payload-inputs.ts). A failed scan is logged
-// by its owner, the usage store.
+// document's `today` fact the draw is at. A projection of the draw, never of
+// the view's payload, since the day turns over at midnight with no source
+// moving (DRAW_PROJECTIONS, src/config/payload-inputs.ts). A failed scan or
+// ingest is logged by its owner, the usage store.
 export function todayOf(
-  {
-    usageStore,
-    faults,
-    log,
-  }: Pick<RenderPayloadDeps, "usageStore" | "faults" | "log">,
-  lane: Lane<DaySums>,
-  hookData: ClaudeHookData,
+  fact: Reading<TodayFacts>,
   at: Instant,
 ): TodayPayload | Pending | undefined {
-  const set = todayReading(lane, faults, hookData.session_id);
-  if (set.kind === "pending") return pendingOf(set.why);
-  if (set.kind !== "ok") return undefined;
-  const read = (): Reading<TodayInfo> => {
-    try {
-      return usageStore.todayAt(set.value, hookData, at);
-    } catch (e) {
-      log("error", `today read threw: ${inspect(e)}`);
-      return ABSENT;
-    }
-  };
-  const today = read();
-  if (today.kind === "pending") return pendingOf(today.why);
+  if (fact.kind === "pending") return pendingOf(fact.why);
+  if (fact.kind !== "ok") return undefined;
+  const today = projectToday(fact.value, at);
   return today.kind === "ok"
     ? { cost: today.value.cost, tokens: today.value.tokens }
     : undefined;

@@ -74,11 +74,12 @@ import {
   effectiveInputs,
   projectSources,
   renderOptionsOf,
+  todayOf,
   type RenderPayload,
-  type TodayPayload,
   type ViewPayload,
 } from "./daemon/render-payload.js";
-import { ABSENT } from "./utils/outcome.js";
+import { oneDay, type TodayFacts } from "./daemon/cache/today-facts.js";
+import { ABSENT, ok } from "./utils/outcome.js";
 import {
   resolveEffectiveGlobals,
   type EffectiveGlobals,
@@ -160,7 +161,7 @@ function bindPass(
     registry,
     {
       ...checkPayload(config, effective, layers.at(-1) ?? null, at),
-      today: CHECK_TODAY,
+      today: checkToday(at),
     },
     opts,
     effective,
@@ -310,8 +311,15 @@ export function checkPayload(
 
 // `today` is a fact of the draw's own instant, not of the view's payload
 // (DRAW_PROJECTIONS), so the fixture hands it to the draw beside the payload,
-// as the demo hands its draws theirs.
-export const CHECK_TODAY: TodayPayload = { cost: 12.5, tokens: 3_400_000 };
+// as the demo hands its draws theirs. [LAW:one-source-of-truth] It is the
+// daemon's own projection (`todayOf`) of a `today` fact holding one day's
+// sums, so `check` spells that number the way the document spells it.
+export function checkToday(at: Instant) {
+  return todayOf(
+    ok<TodayFacts>({ sums: oneDay(at, 12.5, 3_400_000), own: {} }),
+    at,
+  );
+}
 
 // [LAW:dataflow-not-control-flow] The check result is DATA — a pure function of
 // the target file's contents — discriminated into the three outcomes the exit-

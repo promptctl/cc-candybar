@@ -22,8 +22,8 @@ import type { MetricsInfo } from "../../src/segments/metrics";
 import type { ActivityInfo } from "../../src/segments/activity";
 import type { UsageInfo } from "../../src/segments/session";
 import type {
+  DaySums,
   SpeedObservation,
-  TodayInfo,
 } from "../../src/daemon/cache/session-usage-store";
 import type { AutoCompactWindow } from "../../src/segments/autocompact";
 import type { Instant } from "../../src/utils/instant";
@@ -144,22 +144,12 @@ export function fakeTmux(read: (holds: Holds, hint: TmuxHint) => Loose) {
   };
 }
 
-// What the fake's `today` lane answers: the directory set it was declared at,
-// standing in for that set's day sums.
-interface FakeSet {
-  readonly claudeConfigDir: string | undefined;
-}
-
 export function fakeUsage(
   readers: {
     readonly usage?: (sessionId: string, hookData?: ClaudeHookData) => Loose;
-    // The day of the set's sums a draw is at: answered at the draw, as the
-    // real store's `todayAt` is.
-    readonly today?: (
-      hookData: ClaudeHookData | undefined,
-      claudeConfigDir: string | undefined,
-      at: Instant,
-    ) => Outcome<unknown>;
+    // The day sums of the directory set declared at `claudeConfigDir`, read
+    // once, when the first request has refreshed `today`.
+    readonly today?: (claudeConfigDir: string | undefined) => Outcome<DaySums>;
     readonly speed?: (
       sessionId: string,
       transcriptPath: string | undefined,
@@ -195,24 +185,33 @@ export function fakeUsage(
       },
     }),
     usageOf: (sessionId: string): Reading<UsageInfo> => usage.read(sessionId),
+    // Not answered yet until some request has refreshed `today`, then what
+    // the reader gave for the set, as the real lane's first scan lands.
     declareToday: (
       _holds: Holds,
       claudeConfigDir: string | undefined,
-    ): Lane<FakeSet> => settledLane(ok({ claudeConfigDir })),
+    ): Lane<DaySums> => {
+      let answered: Outcome<DaySums> | undefined;
+      return {
+        current: (): Current<DaySums> => {
+          if (todayRefreshed.size === 0) {
+            return {
+              kind: "pending",
+              why: "unread",
+              landed: new Promise<void>(() => {}),
+            };
+          }
+          answered ??= readers.today?.(claudeConfigDir) ?? ABSENT;
+          return answered;
+        },
+      };
+    },
+    daysOutside: (): Outcome<never> => ABSENT,
     refreshToday: async (
       hookData: ClaudeHookData | undefined,
     ): Promise<void> => {
       todayRefreshed.add(hookData?.session_id ?? "");
     },
-    todayAt: (
-      set: FakeSet,
-      hookData: ClaudeHookData | undefined,
-      at: Instant,
-    ): Reading<TodayInfo> =>
-      todayRefreshed.has(hookData?.session_id ?? "")
-        ? ((readers.today?.(hookData, set.claudeConfigDir, at) ??
-            ABSENT) as Outcome<TodayInfo>)
-        : pendingOf("unread"),
     observeSpeed,
     speedOf: (sessionId: string): Reading<SpeedObservation> =>
       speed.read(sessionId),
@@ -341,7 +340,7 @@ export async function requestPayload(
   return {
     ...payload,
     feeds: UNFOLLOWED_FEEDS,
-    today: todayOf(deps, lanes.today, hookData, at),
+    today: todayOf(readingsOf(inputs, new Map()).today, at),
   };
 }
 

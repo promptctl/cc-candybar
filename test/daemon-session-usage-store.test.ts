@@ -487,6 +487,33 @@ describe("SessionUsageStore — session projection", () => {
     }
   });
 
+  // The session's own days, which the `today` fact carries beside the set's.
+  test("a session's own days are absent before a record or under the set's roots, its transcript's days outside them, and its ingest failure when the refresh failed", async () => {
+    const t = join(dir, "A.jsonl");
+    const at = new Date();
+    writeFileSync(t, usageLine("a", at, 0.01));
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      sweepIntervalMs: 0,
+    });
+    try {
+      const elsewhere = ["/not/this/dir/"];
+      expect(store.daysOutside("A", elsewhere)).toEqual(ABSENT);
+      await store.getUsageInfo("A", hook("A", t));
+      const own = store.daysOutside("A", elsewhere);
+      expect(Object.keys(own.kind === "ok" ? own.value : {})).toHaveLength(1);
+      // Under the set's roots the days are in its sums already.
+      expect(store.daysOutside("A", [dir])).toEqual(ABSENT);
+      // A directory is no transcript: the refresh fails, and so does the read.
+      await store.getUsageInfo("G", hook("G", dir));
+      expect(store.daysOutside("G", elsewhere).kind).toBe("failed");
+      expect(store.daysOutside("G", [dir]).kind).toBe("failed");
+    } finally {
+      store.close();
+    }
+  });
+
   test("`today` is not answered until a scan has finished over its directories, never a partial sum", async () => {
     const t = join(dir, "A.jsonl");
     const at = new Date();

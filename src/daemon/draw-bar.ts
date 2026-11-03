@@ -585,19 +585,15 @@ export function drawRender(
         .map((w) => ({ about: `${w.kind}\0${w.message}`, message: w.message })),
     ].map((w) => ({ about: w.about, text: w.message, copy: w.message })),
   );
+  const document = view.source.facts();
   const projected = {
     diagnostics: diagnosticsProjection(diagnostics),
     drawing,
     feeds: frameFeeds.feedsOf(sessionId, at),
-    today: todayOf(
-      payloadProviders,
-      view.lanes().today,
-      view.facts().hookData,
-      at,
-    ),
+    today: todayOf(document.builtins.today, at),
   };
   const metrics = isPending(payload.metrics) ? undefined : payload.metrics;
-  noteFacts(facts, sourcesFactOf(view.lanes().sources));
+  noteFacts(facts, sourcesFactOf(document.sources));
   noteFacts(facts, {
     prompts: String(metrics?.messageCount ?? "-"),
     nonPrompts: String(metrics?.nonPrompts ?? "-"),

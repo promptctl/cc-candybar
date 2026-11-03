@@ -14,6 +14,8 @@ import {
   type RenderPayloadDeps,
 } from "../src/daemon/render-payload";
 import { sessionIdOf } from "../src/daemon/session-id";
+import { oneDay } from "../src/daemon/cache/today-facts";
+import { sumsOf } from "./helpers/today";
 import { claudeConfigDir, claudeSettingsPath } from "../src/claude-settings";
 import type { ClaudeHookData } from "../src/utils/claude";
 import type { ClientHints } from "../src/daemon/protocol";
@@ -90,7 +92,7 @@ function owners(git: Outcome<unknown> = ok({ ...GIT, pullRequest: ok(PR) })) {
     tmuxService: fakeTmux(() => ok("work")),
     usageStore: fakeUsage({
       usage: () => ok({ session: { cost: 2, tokens: 10 } }),
-      today: () => ok({ cost: 5, tokens: 50 }),
+      today: () => ok(sumsOf(T0, 5, 50)),
       speed: () => ABSENT,
     }),
     contextProvider: fakeContext(() => ok({ maxTokens: 200_000 })),
@@ -164,7 +166,8 @@ describe("a session's facts document", () => {
     const settings = claudeSettingsPath(claudeConfigDir(undefined, r.deps.home));
     const expected: Record<keyof BuiltinFacts, Fact<unknown>> = {
       session: restamp(undefined, r.held.usageStore.usageOf(SID), T0),
-      today: restamp(undefined, lanes.today.current(), T0),
+      // The fixture's one day, and the session with no days of its own.
+      today: restamp(undefined, ok({ sums: oneDay(T0, 5, 50), own: {} }), T0),
       speed: restamp(undefined, r.held.usageStore.speedOf(SID), T0),
       context: restamp(undefined, r.held.contextProvider.contextOf(HOOK), T0),
       metrics: restamp(undefined, r.held.metricsProvider.metricsOf(SID), T0),
