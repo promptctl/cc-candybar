@@ -5,8 +5,8 @@
 // [LAW:one-type-per-behavior] A case that differs from another only in a
 // number or a path is the same benchmark with other data.
 
-// What a statusline tick pays, in the order it pays it.
-export const GROUPS = ["stages", "sources", "wire", "client"] as const;
+// What a statusline tick pays, in the order it pays it, then what a click pays.
+export const GROUPS = ["stages", "sources", "wire", "client", "click"] as const;
 export type Group = (typeof GROUPS)[number];
 
 // One timed quantity of a run, in ms. A run can time several at once: the

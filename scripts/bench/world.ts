@@ -25,7 +25,10 @@ import { detectClientHints } from "../../src/client-hints.js";
 import { daemonArgs } from "../../src/daemon/acquire.js";
 import { RENDER_BUDGETS, tryRenderViaDaemon } from "../../src/daemon/client.js";
 import { fetchStats } from "../../src/daemon/client-stats.js";
-import { describeFailure, requestOutcome } from "../../src/daemon/client-transport.js";
+import {
+  describeFailure,
+  requestOutcome,
+} from "../../src/daemon/client-transport.js";
 import { logLines } from "../../src/daemon/log.js";
 import { PARENT_PID_ENV } from "../../src/daemon/parent-watchdog.js";
 import type { ClientHints } from "../../src/daemon/protocol.js";
@@ -33,7 +36,8 @@ import { logPath } from "../../src/daemon/paths.js";
 import type { StatsSnapshot } from "../../src/daemon/stats.js";
 import { parseFrame, type Frame } from "../../src/render/frame.js";
 import type { ClaudeHookData } from "../../src/utils/claude.js";
-import { valueOf } from "../../src/utils/logfmt.js";
+import { fieldOf, valueOf } from "../../src/utils/logfmt.js";
+import { atOf, msOf } from "./log-event.js";
 import { hookData as barHookData } from "../lib/hook-data.js";
 import { sessionEnv } from "../lib/session-env.js";
 import { transcriptPath } from "../lib/transcript.js";
@@ -108,7 +112,11 @@ export interface World {
   /** How many render events of a session the log holds now. */
   mark(sessionId: string): number;
   /** The `count` render events of a session after the first `from`, once they have landed. */
-  events(sessionId: string, from: number, count: number): Promise<RenderEvent[]>;
+  events(
+    sessionId: string,
+    from: number,
+    count: number,
+  ): Promise<RenderEvent[]>;
   stop(): Promise<void>;
 }
 
@@ -220,14 +228,18 @@ export async function startWorld(config = "{}\n"): Promise<World> {
     // [LAW:no-silent-failure] A question the world does not answer means the
     // bars drawn here were not the ones the benchmark names.
     if (refused !== null) {
-      throw new Error(`the daemon asked gh what the stub does not answer:\n${refused}`);
+      throw new Error(
+        `the daemon asked gh what the stub does not answer:\n${refused}`,
+      );
     }
   };
 
   const stats = async (): Promise<StatsSnapshot> => {
     const outcome = await fetchStats(client);
     if (outcome.kind !== "ok") {
-      throw new Error(`the daemon did not answer stats: ${describeFailure(outcome)}`);
+      throw new Error(
+        `the daemon did not answer stats: ${describeFailure(outcome)}`,
+      );
     }
     return outcome.value;
   };
@@ -236,11 +248,15 @@ export async function startWorld(config = "{}\n"): Promise<World> {
   try {
     for (;;) {
       if (exited !== null) {
-        throw new Error(`the daemon ${exited} before it answered:\n${logLines(log).slice(-20).join("\n")}`);
+        throw new Error(
+          `the daemon ${exited} before it answered:\n${logLines(log).slice(-20).join("\n")}`,
+        );
       }
       if ((await fetchStats(client)).kind === "ok") break;
       if (performance.now() - spawned > BOOT_BUDGET_MS) {
-        throw new Error(`the daemon did not answer within ${BOOT_BUDGET_MS} ms of its spawn`);
+        throw new Error(
+          `the daemon did not answer within ${BOOT_BUDGET_MS} ms of its spawn`,
+        );
       }
       await sleep(BOOT_POLL_MS);
     }
@@ -277,9 +293,10 @@ export async function startWorld(config = "{}\n"): Promise<World> {
 
   // What a client reports of the terminal it runs at.
   const hintsOf = (session: Session, columns: number): ClientHints => ({
-    ...detectClientHints(
-      { env: terminal, home: dirs.home },
-      session.cwd, { columns, rows: 48 }),
+    ...detectClientHints({ env: terminal, home: dirs.home }, session.cwd, {
+      columns,
+      rows: 48,
+    }),
     client: CLIENT,
   });
 
@@ -313,7 +330,7 @@ export async function startWorld(config = "{}\n"): Promise<World> {
       const started = performance.now();
       const outcome = await tryRenderViaDaemon(
         client,
-        
+
         hookDataOf(session, n),
         [BUNDLE],
         session.cwd,
@@ -340,7 +357,9 @@ export async function startWorld(config = "{}\n"): Promise<World> {
         (resp) => ("frame" in resp ? parseFrame(resp.frame) : undefined),
       );
       if (outcome.kind !== "ok") {
-        throw new Error(`a frame of ${session.id}: ${describeFailure(outcome)}`);
+        throw new Error(
+          `a frame of ${session.id}: ${describeFailure(outcome)}`,
+        );
       }
       return outcome.value;
     },
@@ -362,7 +381,11 @@ export async function startWorld(config = "{}\n"): Promise<World> {
         if (tick.ok) {
           const last = await lastEventSince(session.id, since);
           if (last.outcome === "ok" && last.pending === "-") {
-            return { attempts, firstMs, settledMs: performance.now() - started };
+            return {
+              attempts,
+              firstMs,
+              settledMs: performance.now() - started,
+            };
           }
         }
         await sleep(SETTLE_PACE_MS);
@@ -376,7 +399,8 @@ export async function startWorld(config = "{}\n"): Promise<World> {
       const deadline = Date.now() + LOG_LANDS_MS;
       for (;;) {
         const found = eventsOf(sessionId);
-        if (found.length >= from + count) return found.slice(from, from + count);
+        if (found.length >= from + count)
+          return found.slice(from, from + count);
         if (Date.now() >= deadline) {
           throw new Error(
             `${sessionId}: ${found.length} of ${from + count} render events in the log ${LOG_LANDS_MS} ms after the last tick`,
@@ -390,18 +414,9 @@ export async function startWorld(config = "{}\n"): Promise<World> {
   return world;
 }
 
-function fieldOf(line: string, name: string): string {
-  const match = new RegExp(` ${name}=(\\S+)`).exec(line);
-  if (match === null) throw new Error(`no ${name}= in the render event: ${line}`);
-  return match[1]!;
-}
-
-const msOf = (line: string, name: string): number =>
-  Number(fieldOf(line, name).replace(/ms$/, ""));
-
 function parseRenderEvent(line: string): RenderEvent {
   return {
-    at: Date.parse(line.slice(0, 24)),
+    at: atOf(line),
     tookMs: msOf(line, "took"),
     queuedMs: msOf(line, "queued"),
     outcome: fieldOf(line, "outcome"),
@@ -432,7 +447,10 @@ export async function inWorld<T>(
 
 // [LAW:no-silent-failure] The checkpoint a benchmark of a drawn bar crosses: a
 // tick that did not draw is not a fast tick.
-export function drawn(tick: Tick, what: string): { ms: number; output: string } {
+export function drawn(
+  tick: Tick,
+  what: string,
+): { ms: number; output: string } {
   if (!tick.ok) throw new Error(`${what}: the tick drew no bar (${tick.why})`);
   return tick;
 }

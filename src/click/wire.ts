@@ -42,6 +42,12 @@ import {
 // emits it; install/ (Launch Services registration) imports it.
 export const URL_SCHEME = "cc-candybar";
 
+// The app Launch Services starts for the scheme: its bundle, binary and
+// process all carry this name. Beside the scheme because it is the same fact,
+// which app a click reaches, and a reader of it (the bench) wants nothing of
+// the installer.
+export const APP_NAME = "CCCandybarURLHandler";
+
 // [LAW:one-source-of-truth] The verb vocabulary. The daemon's VERBS registry
 // keys off these and every emitter builds effects with them, so the emitted
 // verb and the dispatched handler cannot name-drift.
