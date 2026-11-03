@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-612",
+      "ref": "refs/pull/612/merge",
+      "sha": "a471ec55840f0692a5a08fc01de48834843f9a7e",
+      "timestamp": "2026-11-03T13:59:04.745Z",
+      "commits": [
+        {
+          "sha": "a471ec55840f0692a5a08fc01de48834843f9a7e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T06:58:06-07:00",
+          "message": "Merge 88ea3373ac682ce629d3f5bbb12c2fe7e5e8de31 into d05718f5dc3d1b63c32060d3455f649c9af05c8a\n"
+        },
+        {
+          "sha": "88ea3373ac682ce629d3f5bbb12c2fe7e5e8de31",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T06:57:41-07:00",
+          "message": "feat(sources): the shell reader has a read timeout, and a run past it is failed in its read phase (candybar-gather-renderer-76bb.6pj.dal)\n\nOne parameter, 10 s, named beside the shell TTL floor and passed on the shell\nreader's launch, so the launcher's one timeout path ends a command that never\nwrites and never exits. Its read fails naming the bound, in the read phase, and\nthe next period's run starts clean. Spec: docs/design/gather-and-renderer.md\nsection 19.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "a7b85c98a60c7c9bc6196f726311fc6a6650e438",
