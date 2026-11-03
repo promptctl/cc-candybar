@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-597",
+      "ref": "refs/pull/597/merge",
+      "sha": "d22006a77af6d6fb001ba47be97ab9486e699955",
+      "timestamp": "2026-11-03T02:34:22.902Z",
+      "commits": [
+        {
+          "sha": "d22006a77af6d6fb001ba47be97ab9486e699955",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T02:33:34Z",
+          "message": "Merge 11df6df7856b9ed6fac7cdcb105794c92798ae06 into a79a66523b3e7763ab4abce2c4a79c4a9fd4443f\n"
+        },
+        {
+          "sha": "11df6df7856b9ed6fac7cdcb105794c92798ae06",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T19:18:05-07:00",
+          "message": "fix(test): a held-config case that fails releases the writer open it left waiting on the pipe (candybar-testing-0x6u.8vd)\n"
+        },
+        {
+          "sha": "ca7b89645b984342553dab0be872f82fde791f64",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T19:16:51-07:00",
+          "message": "fix(test): a render that never reads its held config fails on its reply, and the memory line keeps only the reason (candybar-testing-0x6u.8vd)\n"
+        },
+        {
+          "sha": "7120060a09062342bf6b6487058797dd00210a4e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T19:12:06-07:00",
+          "message": "fix(test): a render is held past the request backstop by a pipe the test writes, not by a compile's speed (candybar-testing-0x6u.8vd)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-598",
       "ref": "refs/pull/598/merge",
       "sha": "7ccf1de6c1a141d390300c1cf827f4cc0abc93a1",
@@ -42,42 +78,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-03T02:19:48Z",
           "message": "chore(release): set `package.json` to 1.180.9 [skip ci]\n\n## [1.180.9](https://github.com/promptctl/cc-candybar/compare/v1.180.8...v1.180.9) (2026-11-03)\n\n### Bug Fixes\n\n* **test:** the frame-feed cases run on one held clock (candybar-testing-0x6u.fs0) ([#596](https://github.com/promptctl/cc-candybar/issues/596)) ([669df92](https://github.com/promptctl/cc-candybar/commit/669df9209449d3ac4080a21d3a7144477fa78a73))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-597",
-      "ref": "refs/pull/597/merge",
-      "sha": "2e73812846ec4912d70869adcd1f0794099d91b5",
-      "timestamp": "2026-11-03T02:28:03.843Z",
-      "commits": [
-        {
-          "sha": "2e73812846ec4912d70869adcd1f0794099d91b5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T02:27:06Z",
-          "message": "Merge 7254f805ea1b04f5e8cd88dd8a9afeb739466cce into d1d24e6e5710535d86e5d015200f9f12a13535fc\n"
-        },
-        {
-          "sha": "7254f805ea1b04f5e8cd88dd8a9afeb739466cce",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T19:18:05-07:00",
-          "message": "fix(test): a held-config case that fails releases the writer open it left waiting on the pipe (candybar-testing-0x6u.8vd)\n"
-        },
-        {
-          "sha": "1933329916dd1a0b97b04b2b51b22fe387a54b7e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T19:16:51-07:00",
-          "message": "fix(test): a render that never reads its held config fails on its reply, and the memory line keeps only the reason (candybar-testing-0x6u.8vd)\n"
-        },
-        {
-          "sha": "a0e78f741200902f6c7f5cfd260b7ef677030132",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T19:12:06-07:00",
-          "message": "fix(test): a render is held past the request backstop by a pipe the test writes, not by a compile's speed (candybar-testing-0x6u.8vd)\n"
         }
       ]
     },
