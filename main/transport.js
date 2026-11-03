@@ -22864,6 +22864,74 @@ var inspect = (v) => {
   }
 };
 
+// src/time.ts
+init_globals();
+init_timers();
+function spanMs(from, to) {
+  return Math.round(to - from);
+}
+function elapsedMs(clock, since) {
+  return spanMs(since, clock.monotonic());
+}
+var systemTimekeeper = {
+  now: () => Date.now(),
+  monotonic: () => performance.now(),
+  after: (ms, fire, options) => {
+    const timer = setTimeout(fire, ms);
+    if (options?.unref) {
+      timer.unref();
+    }
+    return () => clearTimeout(timer);
+  },
+  every: (ms, fire, options) => {
+    const timer = setInterval(fire, ms);
+    if (options?.unref) {
+      timer.unref();
+    }
+    return () => clearInterval(timer);
+  },
+  defer: (fire) => {
+    const turn = setImmediate(fire);
+    return () => clearImmediate(turn);
+  }
+};
+function sleep(clock, ms, signal) {
+  return new Promise((resolve, reject2) => {
+    const aborted = () => Object.assign(new Error("The operation was aborted"), {
+      name: "AbortError",
+      code: "ABORT_ERR",
+      cause: signal?.reason
+    });
+    if (signal?.aborted) {
+      reject2(aborted());
+      return;
+    }
+    const onAbort = () => {
+      cancel();
+      reject2(aborted());
+    };
+    const cancel = clock.after(ms, () => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    });
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+function timeoutSignal(clock, ms) {
+  const timeout = new AbortController();
+  clock.after(
+    ms,
+    () => timeout.abort(
+      new DOMException(
+        "The operation was aborted due to timeout",
+        "TimeoutError"
+      )
+    ),
+    { unref: true }
+  );
+  return timeout.signal;
+}
+
 // src/utils/event-hold.ts
 init_globals();
 function eventHoldAt(event, holdS, at, render3) {
@@ -22933,7 +23001,7 @@ function rateLimitedResult(category, minIntervalMs, sinceLastMs) {
     stderr: "",
     exitCode: null,
     signal: null,
-    error: `rate-limited: ${category} min interval ${minIntervalMs}ms, last start ${sinceLastMs}ms ago`
+    error: `rate-limited: ${category} min interval ${minIntervalMs}ms, last start ${Math.round(sinceLastMs)}ms ago`
   };
 }
 function track(state, work) {
@@ -22947,7 +23015,7 @@ function admit(state, category, signal) {
     state.scope.stats?.onRefused(category);
     return refusal;
   }
-  state.lastStartAt.set(category, state.scope.clock.now());
+  state.lastStartAt.set(category, state.scope.clock.monotonic());
   return null;
 }
 function refusalOf(state, category, signal) {
@@ -22956,7 +23024,7 @@ function refusalOf(state, category, signal) {
   const gate2 = checkRateLimit(
     state.lastStartAt,
     category,
-    state.scope.clock.now()
+    state.scope.clock.monotonic()
   );
   return gate2.allowed ? null : rateLimitedResult(category, gate2.minIntervalMs, gate2.sinceLastMs);
 }
@@ -23015,7 +23083,7 @@ function launcherWarnings(state, at, render3) {
 function spawnLifeline(state) {
   const { stats, clock } = state.scope;
   stats?.onStart("lifeline");
-  const t0 = clock.now();
+  const t0 = clock.monotonic();
   let line;
   try {
     line = state.spawner.spawn("awk", [LIFELINE_PROGRAM], {
@@ -23023,11 +23091,11 @@ function spawnLifeline(state) {
       detached: true
     });
   } catch (err) {
-    stats?.onEnd("lifeline", clock.now() - t0);
+    stats?.onEnd("lifeline", elapsedMs(clock, t0));
     setFault(state, `did not start: ${spawnErrorText(err, void 0)}`);
     return null;
   }
-  stats?.onEnd("lifeline", clock.now() - t0);
+  stats?.onEnd("lifeline", elapsedMs(clock, t0));
   const pipe = line.stdin;
   if (pipe === null || pipe === void 0) {
     line.once(
@@ -23138,7 +23206,7 @@ async function launchWaited(state, opts) {
   const { stats, clock } = state.scope;
   const refused = admit(state, opts.category, opts.signal);
   if (refused !== null) return refused;
-  const t0 = clock.now();
+  const t0 = clock.monotonic();
   stats?.onStart(opts.category);
   return new Promise((resolve) => {
     const { spawner } = state;
@@ -23151,7 +23219,7 @@ async function launchWaited(state, opts) {
         detached: true
       });
     } catch (err) {
-      stats?.onEnd(opts.category, clock.now() - t0);
+      stats?.onEnd(opts.category, elapsedMs(clock, t0));
       resolve({
         ok: false,
         reason: "spawn-error",
@@ -23197,7 +23265,7 @@ async function launchWaited(state, opts) {
       groupEndTimer?.();
       unlisten();
       if (group !== void 0) unguard(state, group);
-      stats?.onEnd(opts.category, clock.now() - t0);
+      stats?.onEnd(opts.category, elapsedMs(clock, t0));
       child.off("close", conclude);
       child.off("error", onError);
       stdout2.drain();
@@ -23309,7 +23377,7 @@ function launchBlocking(state, opts) {
   const { stats, clock } = state.scope;
   const refused = admit(state, opts.category);
   if (refused !== null) return refused;
-  const t0 = clock.now();
+  const t0 = clock.monotonic();
   stats?.onStart(opts.category);
   try {
     const result = state.spawner.spawnSync(opts.bin, opts.args ?? [], {
@@ -23320,7 +23388,7 @@ function launchBlocking(state, opts) {
       stdio: ["pipe", "pipe", "pipe"],
       encoding: "utf8"
     });
-    stats?.onEnd(opts.category, clock.now() - t0);
+    stats?.onEnd(opts.category, elapsedMs(clock, t0));
     const stdout2 = typeof result.stdout === "string" ? result.stdout : "";
     const stderr2 = typeof result.stderr === "string" ? result.stderr : "";
     const code = result.error?.code;
@@ -23349,7 +23417,7 @@ function launchBlocking(state, opts) {
       signal: result.signal ?? null
     };
   } catch (err) {
-    stats?.onEnd(opts.category, clock.now() - t0);
+    stats?.onEnd(opts.category, elapsedMs(clock, t0));
     return {
       ok: false,
       reason: "spawn-error",
@@ -23365,10 +23433,10 @@ function launchOrphan(state, opts) {
   const { stats, clock } = state.scope;
   const refused = admit(state, opts.category);
   if (refused !== null) return refused;
-  const t0 = clock.now();
+  const t0 = clock.monotonic();
   stats?.onStart(opts.category);
   const result = launchDetachedSyncInner(state, opts);
-  stats?.onEnd(opts.category, clock.now() - t0);
+  stats?.onEnd(opts.category, elapsedMs(clock, t0));
   return result;
 }
 function launchDetachedSyncInner(state, opts) {
@@ -23414,7 +23482,7 @@ function launchJob(state, opts, files) {
   const refused = admit(state, opts.category);
   if (refused !== null)
     return { ok: false, reason: refused.reason, error: refused.error };
-  const t0 = clock.now();
+  const t0 = clock.monotonic();
   stats?.onStart(opts.category);
   let child;
   try {
@@ -23438,14 +23506,14 @@ function launchJob(state, opts, files) {
       }
     );
   } catch (err) {
-    stats?.onEnd(opts.category, clock.now() - t0);
+    stats?.onEnd(opts.category, elapsedMs(clock, t0));
     return {
       ok: false,
       reason: "spawn-error",
       error: spawnErrorText(err, opts.cwd)
     };
   }
-  stats?.onEnd(opts.category, clock.now() - t0);
+  stats?.onEnd(opts.category, elapsedMs(clock, t0));
   child.once("error", () => {
   });
   const pid2 = child.pid;
@@ -23706,68 +23774,6 @@ var systemSpawner = {
 // src/proc/system-launcher.ts
 var systemLauncher = (owner, clock) => createLauncher(owner, clock, systemSpawner);
 var systemOneShotLauncher = (owner, clock) => createOneShotLauncher(owner, clock, systemSpawner);
-
-// src/time.ts
-init_globals();
-init_timers();
-var systemTimekeeper = {
-  now: () => Date.now(),
-  monotonic: () => performance.now(),
-  after: (ms, fire, options) => {
-    const timer = setTimeout(fire, ms);
-    if (options?.unref) {
-      timer.unref();
-    }
-    return () => clearTimeout(timer);
-  },
-  every: (ms, fire, options) => {
-    const timer = setInterval(fire, ms);
-    if (options?.unref) {
-      timer.unref();
-    }
-    return () => clearInterval(timer);
-  },
-  defer: (fire) => {
-    const turn = setImmediate(fire);
-    return () => clearImmediate(turn);
-  }
-};
-function sleep(clock, ms, signal) {
-  return new Promise((resolve, reject2) => {
-    const aborted = () => Object.assign(new Error("The operation was aborted"), {
-      name: "AbortError",
-      code: "ABORT_ERR",
-      cause: signal?.reason
-    });
-    if (signal?.aborted) {
-      reject2(aborted());
-      return;
-    }
-    const onAbort = () => {
-      cancel();
-      reject2(aborted());
-    };
-    const cancel = clock.after(ms, () => {
-      signal?.removeEventListener("abort", onAbort);
-      resolve();
-    });
-    signal?.addEventListener("abort", onAbort, { once: true });
-  });
-}
-function timeoutSignal(clock, ms) {
-  const timeout = new AbortController();
-  clock.after(
-    ms,
-    () => timeout.abort(
-      new DOMException(
-        "The operation was aborted due to timeout",
-        "TimeoutError"
-      )
-    ),
-    { unref: true }
-  );
-  return timeout.signal;
-}
 
 // src/host.ts
 function processWorld() {
@@ -52014,9 +52020,9 @@ function ccCandybarFuncs() {
 }
 var MIN_PROJECTABLE_ELAPSED_MS = 5 * 60 * 1e3;
 function etaMinutes(usedPercentage, resetsAtSec, windowMinutes, nowMs) {
-  const elapsedMs = windowMinutes * 6e4 - (resetsAtSec * 1e3 - nowMs);
-  if (elapsedMs < MIN_PROJECTABLE_ELAPSED_MS || usedPercentage <= 0) return -1;
-  const pctPerMs = usedPercentage / elapsedMs;
+  const elapsedMs2 = windowMinutes * 6e4 - (resetsAtSec * 1e3 - nowMs);
+  if (elapsedMs2 < MIN_PROJECTABLE_ELAPSED_MS || usedPercentage <= 0) return -1;
+  const pctPerMs = usedPercentage / elapsedMs2;
   return Math.max(0, Math.round((100 - usedPercentage) / pctPerMs / 6e4));
 }
 var relativeTimeFuncs = (clock) => ({
@@ -52439,16 +52445,16 @@ var Refreshes = class {
     return { ...this.tally, refreshes: { ...this.tally.refreshes } };
   }
   // `fields` is the refreshed entry's logfmt identity.
-  recorded(fields2, by, outcome, took) {
+  recorded(fields2, by, outcome, ms) {
     this.tally.refreshes[by] = (this.tally.refreshes[by] ?? 0) + 1;
-    this.tally.lastMs = took;
+    this.tally.lastMs = ms;
     if (outcome.kind === "failed") this.tally.failures++;
     const failure = outcome.kind === "failed";
     if (!failure && !OWN_EVENT[by]) return;
     const why2 = failure ? ` reason=${JSON.stringify(outcome.reason)}` : "";
     this.logger(
       failure ? "warn" : "info",
-      `${this.tally.name} refresh ${fields2} by=${by} outcome=${outcome.kind}${why2} took=${took}ms`
+      `${this.tally.name} refresh ${fields2} by=${by} outcome=${outcome.kind}${why2} took=${ms}ms`
     );
   }
 };
@@ -53083,13 +53089,13 @@ var SourceRegistry = class _SourceRegistry {
     this.askedBy.set(name, by);
     const trigger = this.reads.run(name, () => {
       const asked2 = this.askedBy.get(name) ?? by;
-      const startedAt = this.store.clock.now();
+      const startedAt = this.store.clock.monotonic();
       return reader.read().then(
         (read2) => refreshes.recorded(
           `where=${valueOf(reader.where)}`,
           asked2,
           publish(read2),
-          this.store.clock.now() - startedAt
+          elapsedMs(this.store.clock, startedAt)
         ),
         (err) => {
           if (err !== this.abort.signal.reason) throw err;
@@ -66601,7 +66607,7 @@ async function refreshPayload(inputs, at, refreshed) {
       deps.log("error", `${name} lane threw: ${inspect(e)}`);
       threw2 = `${name}: ${String(e)}`;
     }
-    refreshed.set(name, Math.round(deps.clock.monotonic() - startedAt));
+    refreshed.set(name, elapsedMs(deps.clock, startedAt));
     deps.faults.refreshed(sessionId2, name, threw2);
   };
   await Promise.all([
@@ -69294,7 +69300,7 @@ var RuntimeStats = class _RuntimeStats {
     }
   };
   recordRollingNow() {
-    const now2 = this.clock.now();
+    const now2 = this.clock.monotonic();
     if (this.rollingTimestamps.length < ROLLING_BUFFER_CAP) {
       this.rollingTimestamps.push(now2);
       return;
@@ -69317,7 +69323,7 @@ var RuntimeStats = class _RuntimeStats {
     this.subprocessHistogramRotator.set(category, idx + 1);
   }
   snapshotSubprocesses() {
-    const cutoff = this.clock.now() - ROLLING_WINDOW_MS;
+    const cutoff = this.clock.monotonic() - ROLLING_WINDOW_MS;
     let lastMinute = 0;
     for (const ts of this.rollingTimestamps) {
       if (ts >= cutoff) lastMinute++;
@@ -69361,7 +69367,10 @@ var RuntimeStats = class _RuntimeStats {
   // one reads; comparing against the producer's own output, not a second
   // spelling of the type, means a field added here is checked for there.
   static referenceSnapshot() {
-    return new _RuntimeStats({ now: () => 0 }).snapshot({
+    return new _RuntimeStats({
+      now: () => 0,
+      monotonic: () => 0
+    }).snapshot({
       gitCache: {
         size: 0,
         held: 0,
@@ -71202,7 +71211,7 @@ var Runs = class {
     this.inFlight.add(abort);
     this.started++;
     const [program, ...args] = run3.argv;
-    const startedAt = this.deps.clock.now();
+    const startedAt = this.deps.clock.monotonic();
     void this.deps.launch({
       // [LAW:types-are-the-program] A relative program path is the
       // declaring file's, as the directory it runs in is; a bare name is
@@ -71215,7 +71224,7 @@ var Runs = class {
       signal: abort.signal,
       category: "click.run"
     }).then(
-      (result) => this.ended(run3, result, this.deps.clock.now() - startedAt)
+      (result) => this.ended(run3, result, elapsedMs(this.deps.clock, startedAt))
     ).finally(() => {
       this.inFlight.delete(abort);
       for (const resume of resumes) resume();
@@ -75935,7 +75944,7 @@ var RENDER_ANSWERS = {
 };
 function renderFrame(parts, sessionId2, fps, at) {
   const { clock, frameFeeds } = parts;
-  const started2 = clock.now();
+  const started2 = clock.monotonic();
   const facts = [];
   try {
     var _stack = [];
@@ -75974,7 +75983,7 @@ function renderFrame(parts, sessionId2, fps, at) {
       "render",
       facts,
       outcome,
-      clock.now() - started2
+      elapsedMs(clock, started2)
     );
     const failed2 = renderFailed(error);
     return {
@@ -76471,7 +76480,7 @@ async function drawAnswer(parts, req, at, waitEndsAt, facts) {
     );
     noteFacts(facts, {
       handoff: (toStatusline ? elsewhere : []).join(",") || "-",
-      drew: `${Math.round(clock.monotonic() - drawFrom)}ms`
+      drew: `${elapsedMs(clock, drawFrom)}ms`
     });
     return {
       resp,
@@ -77013,7 +77022,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     const started2 = new Date(clock.now());
     const at = instantOf(started2);
     const t0 = clock.monotonic();
-    const queuedMs = Math.round(t0 - accepted);
+    const queuedMs = spanMs(accepted, t0);
     const facts = [];
     const order2 = ++stats.requestsTotal;
     const checked = checkRenderRequest(req, stats, parts.log, parts.home);
@@ -77091,7 +77100,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       "render",
       facts,
       rendered.outcome,
-      Math.round(clock.monotonic() - t0)
+      elapsedMs(clock, t0)
     );
     parts.log(level, line);
     return {
@@ -77209,7 +77218,7 @@ function serializeSegmentCells(cells, colorCompatibility) {
 async function clickEvent(parts, accepted, timedOut, clientLeft, run3) {
   const { clock } = parts;
   const t0 = clock.monotonic();
-  const facts = [["queued", `${Math.round(t0 - accepted)}ms`]];
+  const facts = [["queued", `${spanMs(accepted, t0)}ms`]];
   const gone = () => timedOut() || clientLeft();
   const outcome = await run3(facts, gone);
   noteFacts(facts, {
@@ -77220,7 +77229,7 @@ async function clickEvent(parts, accepted, timedOut, clientLeft, run3) {
     "click",
     facts,
     outcome,
-    Math.round(clock.monotonic() - t0)
+    elapsedMs(clock, t0)
   );
   parts.log(level, line);
   return clickReply(outcome);
@@ -77997,10 +78006,10 @@ var Period = class {
   stop = null;
   state = "released";
   last = null;
-  // A read landed at `at` (now, unless the owner is resuming an answer it
+  // A read landed at the monotonic reading `at` (now, unless the owner is resuming an answer it
   // kept from earlier). `periodMs` is chosen by the caller from the read's
   // outcome (a failed PR lookup is retried sooner than a found one).
-  landed(periodMs, at = this.clock.now()) {
+  landed(periodMs, at = this.clock.monotonic()) {
     this.last = { at, periodMs };
     this.schedule();
   }
@@ -78020,7 +78029,7 @@ var Period = class {
     if (this.state !== "held" || this.last === null) return;
     const wait = Math.max(
       0,
-      this.last.at + this.last.periodMs - this.clock.now()
+      this.last.at + this.last.periodMs - this.clock.monotonic()
     );
     this.stop = this.clock.after(
       wait,
@@ -78167,7 +78176,7 @@ var GitDataProvider = class {
   // and never resolves.
   resolution(workingDir, projectDir) {
     const key = `${workingDir}|${projectDir ?? ""}`;
-    const now2 = this.clock.now();
+    const now2 = this.clock.monotonic();
     const existing = this.resolutions.get(key);
     if (existing && now2 - existing.computedAt < RESOLUTION_TTL_MS) {
       this.resolutions.delete(key);
@@ -78395,7 +78404,7 @@ var GitDataProvider = class {
   // another branch's PR. Each pass that lands writes one refresh event.
   async pass(state) {
     if (this.repos.get(state.root) !== state) return;
-    const startedAt = this.clock.now();
+    const startedAt = this.clock.monotonic();
     const asked2 = [...state.asked];
     state.asked.clear();
     const followed = this.followWatch(state.root, state.watch);
@@ -78433,7 +78442,7 @@ var GitDataProvider = class {
       `${state.root} asked=${asked2.join(",") || "-"} values=${values2.length} pr=${prMove} watch=${followed.move}`,
       triggerOf(asked2),
       failures.size === 0 ? ok(null) : failed([...failures].join("; ")),
-      this.clock.now() - startedAt
+      elapsedMs(this.clock, startedAt)
     );
   }
   // The branch's PR source, pending until the pass its first ask queues gives
@@ -78497,7 +78506,7 @@ var GitDataProvider = class {
     const key = pr.key;
     if (pr.inFlight?.key === key) return pr.inFlight.done;
     const remote = pr.remote;
-    const startedAt = this.clock.now();
+    const startedAt = this.clock.monotonic();
     const lookup = remote.kind === "ok" ? this.inner.resolvePullRequest(state.root, remote.value).catch(threw("PR lookup")) : Promise.resolve(remote.kind === "failed" ? remote : ABSENT2);
     const done2 = lookup.then((outcome) => {
       if (pr.inFlight?.key === key) pr.inFlight = null;
@@ -78506,9 +78515,9 @@ var GitDataProvider = class {
         `${state.root} key=${valueOf(key)}`,
         by,
         outcome,
-        this.clock.now() - startedAt
+        elapsedMs(this.clock, startedAt)
       );
-      const at = this.clock.now();
+      const at = this.clock.monotonic();
       pr.seen.delete(key);
       pr.seen.set(key, { outcome, at });
       for (const oldest of pr.seen.keys()) {
@@ -78606,9 +78615,9 @@ var CacheManager = class {
     const FILE_CREATE_FLAG = "wx";
     await this.ensureCacheDirectories(root);
     const lockFile = import_node_path36.default.join(this.locksDir(root), name);
-    const startTime = clock.now();
+    const startTime = clock.monotonic();
     const lockContent = String(process_default.pid);
-    while (clock.now() - startTime < timeout) {
+    while (clock.monotonic() - startTime < timeout) {
       try {
         await fs_default.promises.writeFile(lockFile, lockContent, {
           flag: FILE_CREATE_FLAG
@@ -79260,7 +79269,7 @@ var KeyedSource = class {
     }
     const flight = {};
     entry.flight = flight;
-    const startedAt = this.spec.clock.now();
+    const startedAt = this.spec.clock.monotonic();
     void attempt3(() => this.spec.read(entry.input)).then((outcome) => {
       const stored = entry.flight === flight;
       try {
@@ -79268,7 +79277,7 @@ var KeyedSource = class {
           `${this.spec.fields(entry.input)} stored=${stored ? "Y" : "N"}`,
           by,
           outcome,
-          this.spec.clock.now() - startedAt
+          elapsedMs(this.spec.clock, startedAt)
         );
       } finally {
         if (stored) this.store(entry, outcome);
@@ -79661,7 +79670,7 @@ var SessionUsageStore = class {
   refreshed(sessionId2, transcriptPath, stamp2) {
     return this.requestFlight.run(`${sessionId2}:${stamp2}`, async () => {
       const tally = { hits: 0, misses: 0 };
-      const startedAt = this.clock.now();
+      const startedAt = this.clock.monotonic();
       const record2 = await this.ingest(sessionId2, transcriptPath, tally, stamp2);
       this.renderTally.hits += tally.hits;
       this.renderTally.misses += tally.misses;
@@ -79670,7 +79679,7 @@ var SessionUsageStore = class {
           `sid=${valueOf(sessionId2)}`,
           "request",
           record2,
-          this.clock.now() - startedAt
+          elapsedMs(this.clock, startedAt)
         );
       }
       answer(
@@ -80097,7 +80106,7 @@ var TranscriptFold = class {
       }
       return this.store(sessionId2, folded3, { kind: "ok", value: folded3.value });
     }
-    const startedAt = this.clock.now();
+    const startedAt = this.clock.monotonic();
     const read2 = await foldAppended(
       transcriptPath,
       prior,
@@ -80108,7 +80117,7 @@ var TranscriptFold = class {
       `sid=${valueOf(sessionId2)}`,
       "request",
       read2,
-      this.clock.now() - startedAt
+      elapsedMs(this.clock, startedAt)
     );
     if (read2.kind === "failed") return this.store(sessionId2, prior, read2);
     if (read2.kind === "absent") {
@@ -80594,13 +80603,13 @@ var AutoCompactProvider = class {
       this.known.touch(settingsPath);
       return known.outcome;
     }
-    const startedAt = this.clock.now();
+    const startedAt = this.clock.monotonic();
     const outcome = readAutoCompactWindow(settingsPath);
     this.refreshes.recorded(
       `path=${valueOf(settingsPath)} stamp=${valueOf(stamp2)}`,
       "request",
       outcome,
-      this.clock.now() - startedAt
+      elapsedMs(this.clock, startedAt)
     );
     this.known.set(settingsPath, { stamp: stamp2, outcome });
     return outcome;
@@ -80681,13 +80690,13 @@ var CacheExpiryProvider = class {
     return { entries: this.known.size, refreshes, failures, lastMs };
   }
   async read(sessionId2, transcriptPath, stamp2) {
-    const startedAt = this.clock.now();
+    const startedAt = this.clock.monotonic();
     const outcome = await cacheExpiresAt(transcriptPath);
     this.refreshes.recorded(
       `sid=${valueOf(sessionId2)} stamp=${valueOf(stamp2)}`,
       "request",
       outcome,
-      this.clock.now() - startedAt
+      elapsedMs(this.clock, startedAt)
     );
     return outcome;
   }
@@ -81057,11 +81066,11 @@ var ManagedStorage = class {
   // Removes every `*.json` file nobody has written for 30 days, unless a
   // session holds it now. One event per sweep.
   async sweep(key) {
-    const startedAt = this.clock.now();
-    const cutoff = startedAt - STORAGE_FILE_MAX_AGE_MS;
+    const startedAt = this.clock.monotonic();
+    const cutoff = this.clock.now() - STORAGE_FILE_MAX_AGE_MS;
     let scanned = 0;
     let removed = 0;
-    const event = () => `plugin storage sweep folder=${valueOf(key.folder)} scanned=${scanned} removed=${removed} took=${this.clock.now() - startedAt}ms`;
+    const event = () => `plugin storage sweep folder=${valueOf(key.folder)} scanned=${scanned} removed=${removed} took=${elapsedMs(this.clock, startedAt)}ms`;
     try {
       const entries = await fs_default.promises.readdir(key.folder, {
         withFileTypes: true
@@ -81578,7 +81587,7 @@ function settle2(frame2, chain2, resolveWarnings, attempt4, clock) {
     layers: chain2.layers.map((l) => l.path),
     home: chain2.home,
     repos: frame2.repos,
-    ms: Math.round(clock.monotonic() - frame2.started)
+    ms: elapsedMs(clock, frame2.started)
   };
   const warning = (own2) => joinWarnings([...frame2.advisories, ...resolveWarnings, ...own2]);
   switch (attempt4.kind) {
@@ -84084,7 +84093,7 @@ var JournalTurns = class {
       this.refuseClosed(verb);
       if (gone()) throw new ClickAbandoned(verb);
       const since = this.deps.monotonic();
-      waited(Math.round(since - asked2));
+      waited(spanMs(asked2, since));
       this.holder = { verb, since };
       try {
         return await body({
@@ -84110,12 +84119,12 @@ var JournalTurns = class {
   click(verb, session, { placed: placed2, waited, gone, gathered }, gather, body) {
     const arrived3 = this.deps.monotonic();
     const inPlace = async () => {
-      placed2(Math.round(this.deps.monotonic() - arrived3));
+      placed2(elapsedMs(this.deps, arrived3));
       this.refuseClosed(verb);
       if (gone()) throw new ClickAbandoned(verb);
       const started2 = this.deps.monotonic();
       const gathering = await gather();
-      gathered(Math.round(this.deps.monotonic() - started2));
+      gathered(elapsedMs(this.deps, started2));
       const left = gone();
       return this.take(
         verb,
@@ -84141,7 +84150,7 @@ var JournalTurns = class {
     const { holder, queued } = this;
     return {
       holder: holder?.verb ?? null,
-      heldMs: holder === null ? 0 : Math.round(this.deps.monotonic() - holder.since),
+      heldMs: holder === null ? 0 : elapsedMs(this.deps, holder.since),
       queued,
       gathers: this.gathersInFlight
     };
@@ -85205,7 +85214,7 @@ var FileSessionStorage = class {
     const body = JSON.stringify(snapshot);
     const tmp = this.writingPath;
     this.writing = true;
-    const heldMs = this.clock.monotonic() - started2;
+    const heldMs = elapsedMs(this.clock, started2);
     try {
       await fs_default.promises.mkdir(import_node_path43.default.dirname(this.filePath), { recursive: true });
       const file = await fs_default.promises.open(tmp, "w", 384);
@@ -85230,7 +85239,7 @@ var FileSessionStorage = class {
         if (!landed) await fs_default.promises.rm(tmp, { force: true });
         this.logger(
           "info",
-          `session-state write superseded by a flush landed=${landed} took=${Math.round(this.clock.monotonic() - started2)}ms held=${Math.round(heldMs)}ms`
+          `session-state write superseded by a flush landed=${landed} took=${elapsedMs(this.clock, started2)}ms held=${heldMs}ms`
         );
         return;
       }
@@ -85260,7 +85269,7 @@ var FileSessionStorage = class {
       fs_default.rmSync(this.writingPath, { force: true });
       fs_default.renameSync(tmp, this.filePath);
       this.generation++;
-      this.saved(body, snapshot, started2, this.clock.monotonic() - started2);
+      this.saved(body, snapshot, started2, elapsedMs(this.clock, started2));
       this.pending = null;
     } catch (e) {
       this.logger("warn", `session-state save failed: ${e.message}`);
@@ -85271,7 +85280,7 @@ var FileSessionStorage = class {
   saved(body, snapshot, started2, heldMs) {
     this.logger(
       "info",
-      `session-state saved bytes=${import_buffer.Buffer.byteLength(body)} sessions=${Object.keys(snapshot).length} took=${Math.round(this.clock.monotonic() - started2)}ms held=${Math.round(heldMs)}ms`
+      `session-state saved bytes=${import_buffer.Buffer.byteLength(body)} sessions=${Object.keys(snapshot).length} took=${elapsedMs(this.clock, started2)}ms held=${heldMs}ms`
     );
   }
 };
@@ -85525,7 +85534,7 @@ function productionLaneEdge(launcher, following, closing, clock, probe2) {
     // — the shell that started Claude Code, which may itself be a job of the
     // pane's first shell (`nix develop`, a nested `bash`).
     paneDir: async (hint, shell) => {
-      const until2 = clock.now() + SHELL_PATIENCE_MS;
+      const until2 = clock.monotonic() + SHELL_PATIENCE_MS;
       for (; ; ) {
         const pane = await paneForeground(launcher, hint);
         if (pane.foreground === shell) {
@@ -85534,7 +85543,7 @@ function productionLaneEdge(launcher, following, closing, clock, probe2) {
           }
           return pane.cwd;
         }
-        if (clock.now() > until2) {
+        if (clock.monotonic() > until2) {
           throw new Error(
             `the shell in pane ${hint.pane} (pid ${shell}) did not take its terminal back within ${SHELL_PATIENCE_MS / 1e3} s`
           );
@@ -85556,9 +85565,9 @@ function productionLaneEdge(launcher, following, closing, clock, probe2) {
       return file === null ? null : fs_default.realpathSync(file);
     },
     followed: async (sessionId2, lane, withinMs) => {
-      const until2 = clock.now() + withinMs;
+      const until2 = clock.monotonic() + withinMs;
       while (!following(sessionId2).has(lane)) {
-        if (clock.now() > until2) return false;
+        if (clock.monotonic() > until2) return false;
         await wait(FOLLOW_POLL_MS);
       }
       return true;
@@ -85589,9 +85598,9 @@ function productionLaneEdge(launcher, following, closing, clock, probe2) {
       }
     },
     exited: async (pid2, withinMs) => {
-      const until2 = clock.now() + withinMs;
+      const until2 = clock.monotonic() + withinMs;
       while (probe2.alive(pid2)) {
-        if (clock.now() > until2) return false;
+        if (clock.monotonic() > until2) return false;
         await wait(EXIT_POLL_MS);
       }
       return true;

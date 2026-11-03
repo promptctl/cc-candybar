@@ -2,67 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-604",
-      "ref": "refs/pull/604/merge",
-      "sha": "3a4cc18e2fc101d055925b335a31ca8f819b0265",
-      "timestamp": "2026-11-03T05:10:26.425Z",
-      "commits": [
-        {
-          "sha": "3a4cc18e2fc101d055925b335a31ca8f819b0265",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T05:09:34Z",
-          "message": "Merge 5e930bc6cd75308b772d7c3ef9082c8ac039dfb4 into 5c3ebc046681255a3eeef32361efeff8d2eeab69\n"
-        },
-        {
-          "sha": "5e930bc6cd75308b772d7c3ef9082c8ac039dfb4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T22:07:18-07:00",
-          "message": "fix(time): spans take branded readings at every stored start and through one span helper; providers drop the wall clock they no longer read (candybar-testing-ihvy.98i)\n"
-        },
-        {
-          "sha": "23c681454e37f7f252030646b2eb391bdb41f8f7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T22:02:32-07:00",
-          "message": "fix(time): a monotonic reading is its own type; the git-dir window is a span; callers round every refresh time; uptime stays wall time since start (candybar-testing-ihvy.98i)\n"
-        },
-        {
-          "sha": "34f9fc95ae41fc2c64612519d11e2f15366fc099",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T21:57:42-07:00",
-          "message": "fix(time): deadlines, the refresh period, the launch window and uptime read the monotonic clock; one helper rounds every span (candybar-testing-ihvy.98i)\n"
-        },
-        {
-          "sha": "964d6414b4e9be276be0683023562c4872237f0d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T21:49:23-07:00",
-          "message": "fix(time): spans read the Timekeeper's monotonic clock, so a wall step cannot make a duration negative or huge (candybar-testing-ihvy.98i)\n\nEvery span in src that subtracted two now() readings reads monotonic():\nlaunch stats and rate limit, refresh ledgers' took=, runs, draw-bar,\nlock waits, spawn-lock contention, tmux patience. A refresh's took= is\nrounded once in the ledger, since monotonic reads fractions. The plugin\nstorage sweep keeps a wall cutoff, because it compares against mtimes.\n\nLeft on the wall clock on purpose: the daemon's uptime and file events'\nmissed= span, which mean elapsed real time including sleep, which the\nmonotonic clock on macOS does not count.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "5c3ebc046681255a3eeef32361efeff8d2eeab69",
-      "timestamp": "2026-11-03T04:56:03.983Z",
+      "sha": "baf8dfde2d7d28a78fc76247adf9889e7c7fb742",
+      "timestamp": "2026-11-03T05:17:46.269Z",
       "commits": [
         {
-          "sha": "5c3ebc046681255a3eeef32361efeff8d2eeab69",
+          "sha": "baf8dfde2d7d28a78fc76247adf9889e7c7fb742",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T21:54:38-07:00",
-          "message": "refactor(proc): a launch reaches the OS through a Spawner; liveness through a ProcessProbe (candybar-testing-ihvy.5t2) (#602)\n\n* refactor(proc): a launch reaches the OS through a Spawner (candybar-testing-ihvy.5t2)\n\nlaunch.ts decided every launch and also named node:child_process and\nprocess.kill. The OS side is now a Spawner port (spawn, spawnSync, signalGroup,\ngroupGone, signalJob) whose real adapter is the moved code, so a test can run\nthe launch decisions over a child it scripts. jobGroupAlive and endJob become\nLauncher members, since they signal through the same seam. Real launchers are\nbuilt in system-launcher.ts; child_process lint now allows spawner.ts alone.\n\n* test(proc): a scripted Spawner, its contract, and the launch policy over it (candybar-testing-ihvy.5t2)\n\nfakeSpawner runs scripted children on the clock it is given; the real launcher\nruns unchanged over it, so timeout, abort, output bound, rate limit and the\nowner's gate are tested on a held clock with no process. The Spawner contract\nruns on the fake (test/unit) and the system spawner (test/integration), and\nfakeLauncher registers the lifeline from the launcher's own program constant.\n\n* refactor(daemon): liveness and start-time reads go through a ProcessProbe (candybar-testing-ihvy.5t2)\n\npidAlive and readStartTime were imported directly by the watchdog, the lease,\nthe fork-bomb breaker, the lane edge and the update notice. They take a\nProcessProbe now: the system probe is the code that was there, a fake holds the\nprocesses a test names, and one contract runs on both. The watchdog's pidAlive\ncases move into that contract.\n\n* test: tests that launch nothing hold an unscripted launcher; pending-draw scripts its sources (candybar-testing-ihvy.5t2)\n\n70 test files and three shared helpers imported the machine's launcher without\never starting a program. They hold a fake with nothing registered now, so a test\nthat starts to spawn fails loudly and must say what it spawns. pending-draw's\ntwo shell sources are scripted programs on a held clock: no /bin/sh, no sleep.\n\n* test(proc): real launchers are importable only from the adapter tiers; process.kill from its owners (candybar-testing-ihvy.5t2)\n\nprocess.kill is allowed in the Spawner, the ProcessProbe and three named\nexceptions; a fake is never imported by src; and a test outside the adapter\ntiers and a listed exception cannot import the machine's launcher. Each\nexception names the ticket that removes it. examples.test scripts its sources.\n\n* test: the socket-lease process test reads the real ps again (candybar-testing-ihvy.5t2)\n\nThe mass rewrite measured the unit and worker tiers only and swapped this\nprocess-tier file onto the unscripted launcher, which cannot read a start time.\n\n* refactor(daemon): one probe feeds the update watch and the lane edge; the next-tick pump lives beside the fake launcher (candybar-testing-ihvy.5t2)\n\nReview round 1 (high). The daemon built its ProcessProbe for the update watch\nand let the lane edge build its own, so a fake probe reached only one of them.\nThe daemon now builds it once and hands it to the lane edge. Two comments that\nnamed the removed pidAlive now name the probe. The duplicated turns() pump\nmoves next to fakeLauncher.\n\n* refactor(daemon): the lane edge takes its probe last, as productionLaneEdge does; the fake records stdin decoded whole (candybar-testing-ihvy.5t2)\n\nReview round 2 (medium). The daemon's probe comment now says only what is\ntrue: the update watch and the lane edge share it, and the process entry asks\nits own before the daemon exists. The spawner fake derived the recorded stdin\nchunk by chunk, so a multibyte character split across chunks recorded\ndifferently from what the echo wrote back."
-        },
-        {
-          "sha": "e2b84658bbaa52f486f36c248e2c7a45e88eda88",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-03T04:39:55Z",
-          "message": "chore(release): set `package.json` to 1.183.0 [skip ci]\n\n## [1.183.0](https://github.com/promptctl/cc-candybar/compare/v1.182.0...v1.183.0) (2026-11-03)\n\n### Features\n\n* **launch:** a cut drain or a failed launch pipe shows in the ⚠ indicator (candybar-testing-0x6u.0dh) ([#601](https://github.com/promptctl/cc-candybar/issues/601)) ([f076fde](https://github.com/promptctl/cc-candybar/commit/f076fdeb651bcf4d15226703d9e09fdaf17f7ef8))\n"
+          "timestamp": "2026-11-02T22:16:37-07:00",
+          "message": "fix(time): spans read the monotonic clock (candybar-testing-ihvy.98i) (#604)\n\n* fix(time): spans read the Timekeeper's monotonic clock, so a wall step cannot make a duration negative or huge (candybar-testing-ihvy.98i)\n\nEvery span in src that subtracted two now() readings reads monotonic():\nlaunch stats and rate limit, refresh ledgers' took=, runs, draw-bar,\nlock waits, spawn-lock contention, tmux patience. A refresh's took= is\nrounded once in the ledger, since monotonic reads fractions. The plugin\nstorage sweep keeps a wall cutoff, because it compares against mtimes.\n\nLeft on the wall clock on purpose: the daemon's uptime and file events'\nmissed= span, which mean elapsed real time including sleep, which the\nmonotonic clock on macOS does not count.\n\n* fix(time): deadlines, the refresh period, the launch window and uptime read the monotonic clock; one helper rounds every span (candybar-testing-ihvy.98i)\n\n* fix(time): a monotonic reading is its own type; the git-dir window is a span; callers round every refresh time; uptime stays wall time since start (candybar-testing-ihvy.98i)\n\n* fix(time): spans take branded readings at every stored start and through one span helper; providers drop the wall clock they no longer read (candybar-testing-ihvy.98i)"
         }
       ]
     },
