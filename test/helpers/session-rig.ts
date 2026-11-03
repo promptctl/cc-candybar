@@ -6,7 +6,6 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { NO_FILE_EVENTS } from "../../src/daemon/cache/file-events";
 import {
   RenderCache,
   type RenderCacheObservers,
@@ -28,6 +27,7 @@ import { ABSENT, failed, ok, pendingOf } from "../../src/utils/outcome";
 import { settledLane } from "../../src/utils/reading";
 import { bareGates } from "./gates";
 import { locs } from "./host";
+import { SourceRuns } from "../../src/var-system/source-runs";
 import { unscriptedLauncher } from "./fake-launcher";
 import { TEST_SIGNER } from "./link-signer";
 import { NO_PLUGIN_STORAGE } from "./plugin-storage";
@@ -151,19 +151,23 @@ export function sessionRig(
     clock: systemTimekeeper,
     logger: () => {},
   });
+  const runs = new SourceRuns({
+    launcher: unscriptedLauncher,
+    clock: systemTimekeeper,
+  });
+  cleanups.push(() => runs.close());
   const cache = new RenderCache<SessionSource>(
     {
       clock: systemTimekeeper,
       stateDir: stateDir({ env: {}, home: dir, tmp: dir }),
       locations: locs(),
       env: {},
-      launcher: unscriptedLauncher,
+      runs,
       sessionState,
       watchers,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
-      fileEvents: NO_FILE_EVENTS,
       log,
       declare: (holds, facts, closure, sources) =>
         declareLanes(providers as never, holds, facts, closure, sources),
