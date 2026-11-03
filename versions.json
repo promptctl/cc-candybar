@@ -4,15 +4,22 @@
     {
       "version": "pr-616",
       "ref": "refs/pull/616/merge",
-      "sha": "f19e639af112da1b838e4c6c14e6029b12cb0c4c",
-      "timestamp": "2026-11-03T16:30:01.184Z",
+      "sha": "f26c4738fa08e95ea3674b56b4177986bc7f25fa",
+      "timestamp": "2026-11-03T16:34:03.288Z",
       "commits": [
         {
-          "sha": "f19e639af112da1b838e4c6c14e6029b12cb0c4c",
+          "sha": "f26c4738fa08e95ea3674b56b4177986bc7f25fa",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T16:28:48Z",
-          "message": "Merge 8f9d91e8b2e7670041034ae1bba5988dc97d00cd into b744cf603e403a589c9d9d397312a7fdece6ad65\n"
+          "timestamp": "2026-11-03T16:32:49Z",
+          "message": "Merge b1891142150dee4e50eec6a5bb3180d177815330 into b744cf603e403a589c9d9d397312a7fdece6ad65\n"
+        },
+        {
+          "sha": "b1891142150dee4e50eec6a5bb3180d177815330",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T09:32:35-07:00",
+          "message": "test(facts): a failed stamp and its recovery each wake the view (candybar-gather-renderer-76bb.6pj.83l)\n"
         },
         {
           "sha": "8f9d91e8b2e7670041034ae1bba5988dc97d00cd",
