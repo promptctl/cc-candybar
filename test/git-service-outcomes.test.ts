@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { GitService } from "../src/segments/git";
-import { createLauncher } from "../src/proc/launch";
+import { systemLauncher } from "../src/proc/system-launcher";
 import { ABSENT, ok } from "../src/utils/outcome";
 import { systemTimekeeper } from "../src/time";
 
@@ -183,7 +183,7 @@ describe("GitService outcome classification", () => {
     );
     // The git the service launches inherits a global config of its own.
     const shadowed = new GitService(
-      createLauncher({
+      systemLauncher({
         inherited: { ...process.env, GIT_CONFIG_GLOBAL: fakeGlobal },
       }, systemTimekeeper),
     );

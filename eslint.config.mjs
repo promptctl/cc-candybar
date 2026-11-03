@@ -4,10 +4,11 @@ import tsparser from "@typescript-eslint/parser";
 import prettierConfig from "eslint-config-prettier";
 import prettierPlugin from "eslint-plugin-prettier";
 
-// [LAW:single-enforcer] (kz8.2) src/proc/launch.ts is the only file allowed to
+// [LAW:single-enforcer] (kz8.2) src/proc/spawner.ts is the only file allowed to
 // import node:child_process directly. Every other spawn site routes through a
-// Launcher. This rule keeps the invariant load-bearing: a future regression
-// fails lint, not just a manual grep.
+// Launcher, which reaches the OS through that Spawner. This rule keeps the
+// invariant load-bearing: a future regression fails lint, not just a manual grep.
+const SPAWNER_FILE = "src/proc/spawner.ts";
 const CHILD_PROCESS_PATHS = ["child_process", "node:child_process"].map(
   (name) => ({
     name,
@@ -77,17 +78,28 @@ const PATHS = [
 const OWNED_IMPORTS = {
   // The process's one launcher, built beside the host it inherits from: a
   // process main takes it from `processWorld`, and everything else is handed it.
-  createOneShotLauncher: {
-    group: ["**/proc/launch", "**/proc/launch.js"],
+  systemOneShotLauncher: {
+    group: ["**/proc/system-launcher", "**/proc/system-launcher.js"],
     owners: ["src/host.ts"],
     message:
       "The process has its one-shot launcher: take the one you are given.",
   },
   // The composition root of the one owner that is not the process.
-  createLauncher: {
-    group: ["**/proc/launch", "**/proc/launch.js"],
+  systemLauncher: {
+    group: ["**/proc/system-launcher", "**/proc/system-launcher.js"],
     owners: ["src/daemon/production-adapters.ts"],
     message: "A Launcher is an owner's: take the one you are handed.",
+  },
+  // A launcher over a Spawner other than the machine's is a test's to build.
+  createOneShotLauncher: {
+    group: ["**/proc/launch", "**/proc/launch.js"],
+    owners: [],
+    message: "A launcher over the machine is system-launcher's to build.",
+  },
+  createLauncher: {
+    group: ["**/proc/launch", "**/proc/launch.js"],
+    owners: [],
+    message: "A launcher over the machine is system-launcher's to build.",
   },
   // The process's one real clock, built beside its host and launcher.
   systemTimekeeper: {
@@ -289,10 +301,20 @@ function ownedImportBlocks() {
       ignores: ["src/proc/**", CLOCK_FILE],
       rules: { "no-restricted-imports": restrictedImports(null) },
     },
-    // src/proc/launch.ts alone may import child_process, so this block keeps the
-    // clock's paths and leaves that one out.
+    // src/proc/spawner.ts alone may import child_process, so the rest of
+    // src/proc keeps it with the clock's paths, and the spawner only the clock's.
     {
       files: ["src/proc/**/*.{ts,mts}"],
+      ignores: [SPAWNER_FILE],
+      rules: {
+        "no-restricted-imports": [
+          "error",
+          { paths: [...CHILD_PROCESS_PATHS, ...CLOCK_IMPORT_PATHS] },
+        ],
+      },
+    },
+    {
+      files: [SPAWNER_FILE],
       rules: {
         "no-restricted-imports": ["error", { paths: CLOCK_IMPORT_PATHS }],
       },

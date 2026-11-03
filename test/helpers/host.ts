@@ -1,7 +1,7 @@
 import os from "node:os";
 import { locations } from "../../src/daemon/paths";
 import type { Host, World } from "../../src/host";
-import { createOneShotLauncher } from "../../src/proc/launch";
+import { systemOneShotLauncher } from "../../src/proc/system-launcher";
 import { systemTimekeeper } from "../../src/time";
 
 // [LAW:effects-at-boundaries] The machine a test runs on, as src is handed it:
@@ -27,7 +27,7 @@ export function hostOf(
 export function worldOf(host: Host): World {
   return {
     host,
-    launcher: createOneShotLauncher({ inherited: host.env }, systemTimekeeper),
+    launcher: systemOneShotLauncher({ inherited: host.env }, systemTimekeeper),
     clock: systemTimekeeper,
   };
 }

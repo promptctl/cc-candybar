@@ -5,9 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
 
+import { systemLauncher, systemOneShotLauncher } from "../../src/proc/system-launcher";
 import {
-  createLauncher,
-  createOneShotLauncher,
   MAX_CAPTURED_BYTES,
   type OneShotLauncher,
   type LaunchCategory,
@@ -86,7 +85,7 @@ afterAll(() => fs.rmSync(scratch, { recursive: true, force: true }));
 let launcher: TestableLauncher & OneShotLauncher;
 let ending: AbortController;
 const scoped = (scope: Partial<LaunchScope>): void => {
-  launcher = createOneShotLauncher({ inherited: process.env,  signal: ending.signal, ...scope }, systemTimekeeper);
+  launcher = systemOneShotLauncher({ inherited: process.env,  signal: ending.signal, ...scope }, systemTimekeeper);
 };
 const launch: Launcher["launch"] = (opts) => launcher.launch(opts);
 const launchSync: OneShotLauncher["launchSync"] = (opts) =>
@@ -802,7 +801,7 @@ describe("a launcher's scope", () => {
   it("a closed launcher stays closed while another launches", async () => {
     const closing = new AbortController();
     const closed = makeSpyHandle();
-    const first = createLauncher({ inherited: process.env, 
+    const first = systemLauncher({ inherited: process.env, 
       stats: closed.handle,
       signal: closing.signal,
     }, systemTimekeeper);
@@ -823,7 +822,7 @@ describe("a launcher's scope", () => {
   });
 
   it("a daemon's launcher has no blocking launch to reach", () => {
-    const daemons = createLauncher({ inherited: process.env }, systemTimekeeper);
+    const daemons = systemLauncher({ inherited: process.env }, systemTimekeeper);
     // @ts-expect-error A Launcher offers no launchSync.
     expect(daemons.launchSync).toBeUndefined();
     expect("launchSync" in daemons).toBe(false);
@@ -836,7 +835,7 @@ describe("a launcher's scope", () => {
       ok: false,
       reason: "rate-limited",
     });
-    const next = createOneShotLauncher({ inherited: process.env,  signal: ending.signal }, systemTimekeeper);
+    const next = systemOneShotLauncher({ inherited: process.env,  signal: ending.signal }, systemTimekeeper);
     expect(next.launchSync(once)).toMatchObject({ ok: true });
   });
 

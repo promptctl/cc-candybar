@@ -26,7 +26,7 @@ import { encodeRenderOrigin } from "../src/daemon/foundations/render-origin";
 import { productionClaudeInputEdge } from "../src/claude-input/edge";
 import { promptState } from "../src/claude-input/prompt-screen";
 import { parseSlashLine } from "../src/claude-input/slash-line";
-import { createLauncher } from "../src/proc/launch";
+import { systemLauncher } from "../src/proc/system-launcher";
 import type { TmuxHint } from "../src/tmux-hint";
 import { AUTOCOMPACT_WINDOWS } from "../src/segments/autocompact";
 import { instantOf } from "../src/utils/instant";
@@ -230,7 +230,7 @@ function runtime(tmux: TmuxHint | null) {
   const ctx = {
     ...testVerbContext(sessionState, undefined, config),
     log: (_level: string, msg: string) => logged.push(msg),
-    claudeInput: productionClaudeInputEdge(createLauncher({ inherited: process.env }, systemTimekeeper)),
+    claudeInput: productionClaudeInputEdge(systemLauncher({ inherited: process.env }, systemTimekeeper)),
   };
   const urls = linkUrls(raw).filter((u) =>
     effectsOf(u).some((e) => e.verb === VERB_SLASH),
@@ -361,7 +361,7 @@ function tray(tmux: TmuxHint | null, drawnIn: TmuxHint | null = tmux) {
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   const ctx = {
     ...testVerbContext(sessionState, undefined, config),
-    claudeInput: productionClaudeInputEdge(createLauncher({ inherited: process.env }, systemTimekeeper)),
+    claudeInput: productionClaudeInputEdge(systemLauncher({ inherited: process.env }, systemTimekeeper)),
   };
   // What the daemon's payload carries for that hint (RenderPayload.tmux).
   const payload = {

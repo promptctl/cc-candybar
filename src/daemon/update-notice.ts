@@ -367,7 +367,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
     if (closed) throw new DaemonClosing("apply-update");
     return read;
   };
-  const acts = makeActReader(actsDir, readStart, clock);
+  const acts = makeActReader(actsDir, readStart, launcher, clock);
   // [LAW:one-source-of-truth] The act as last read, for the notice's render
   // and for noticing an end; null until the first read. Every decision — a
   // second click, a restart's hold — reads the record afresh instead, since a
@@ -461,7 +461,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   // verdict unless the job's own landed first.
   function endIfOverdue(facts: ActFacts | null): void {
     if (!facts?.alive || clock.now() <= facts.record.deadline) return;
-    const { stands, signalled } = endOverdue(actsDir, facts, clock);
+    const { stands, signalled } = endOverdue(actsDir, facts, launcher);
     const why = stands ? "timed out" : "outlived its verdict";
     const ending = signalled ? "ending it" : "its group took no signal";
     log("error", `apply-update: act ${facts.act} ${why}; ${ending}`);

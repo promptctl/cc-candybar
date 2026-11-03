@@ -21,7 +21,8 @@ import { instantOf } from "../src/utils/instant";
 import { ABSENT } from "../src/utils/outcome";
 import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
-import { createLauncher, type Launcher } from "../src/proc/launch";
+import { systemLauncher } from "../src/proc/system-launcher";
+import { type Launcher } from "../src/proc/launch";
 import { answerRepo } from "./helpers/repo-approval";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
@@ -529,7 +530,7 @@ test("a config load starts no view's source, and still names a session value tha
     }),
   );
   let shells = 0;
-  const launcher = createLauncher(
+  const launcher = systemLauncher(
     {
       inherited: process.env,
       stats: {

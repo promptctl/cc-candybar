@@ -1,5 +1,6 @@
 import os from "node:os";
-import { createOneShotLauncher, type OneShotLauncher } from "./proc/launch.js";
+import type { OneShotLauncher } from "./proc/launch.js";
+import { systemOneShotLauncher } from "./proc/system-launcher.js";
 import { systemTimekeeper, type Timekeeper } from "./time.js";
 
 // [LAW:effects-at-boundaries] What a process knows of the machine it runs on,
@@ -40,7 +41,7 @@ export function processWorld(): World {
   const clock = systemTimekeeper;
   return {
     host,
-    launcher: createOneShotLauncher({ inherited: process.env }, clock),
+    launcher: systemOneShotLauncher({ inherited: process.env }, clock),
     clock,
   };
 }

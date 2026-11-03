@@ -7,7 +7,7 @@ import { HOST } from "./helpers/host";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { clickHandoff, clickLaunch } from "../src/daemon/verbs";
-import { createLauncher } from "../src/proc/launch";
+import { systemLauncher } from "../src/proc/system-launcher";
 import { systemTimekeeper } from "../src/time";
 
 const alive = (pid: number): boolean => {
@@ -26,7 +26,7 @@ describe("clickHandoff", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "handoff-test-"));
     const pidFile = path.join(dir, "pid");
     await clickHandoff(
-      createLauncher({ inherited: process.env }, systemTimekeeper),
+      systemLauncher({ inherited: process.env }, systemTimekeeper),
       {
         bin: "/bin/sh",
         args: ["-c", `echo $$ > ${pidFile}; exec sleep 30`],
@@ -55,7 +55,7 @@ describe("clickHandoff", () => {
   test("an opener whose sh dies with no verdict fails the click as lost", async () => {
     await expect(
       clickHandoff(
-        createLauncher({ inherited: process.env }, systemTimekeeper),
+        systemLauncher({ inherited: process.env }, systemTimekeeper),
         // Kills the job's whole group, the verdict-writing sh with it.
         { bin: "/bin/sh", args: ["-c", "kill -9 0"], category: "click.open" },
         "opening https://example.com",
@@ -67,7 +67,7 @@ describe("clickHandoff", () => {
   });
 
   test("a rate-limited opener is logged and the click acknowledged", async () => {
-    const launcher = createLauncher(
+    const launcher = systemLauncher(
       { inherited: process.env },
       systemTimekeeper,
     );
@@ -97,7 +97,7 @@ describe("clickHandoff", () => {
   test("an opener that exits non-zero fails the click with its stderr", async () => {
     await expect(
       clickHandoff(
-        createLauncher({ inherited: process.env }, systemTimekeeper),
+        systemLauncher({ inherited: process.env }, systemTimekeeper),
         {
           bin: "/bin/sh",
           args: ["-c", "echo no method available >&2; exit 3"],
@@ -116,7 +116,7 @@ describe("clickHandoff", () => {
   test("an opener that exits zero is answered at once", async () => {
     const t0 = Date.now();
     await clickHandoff(
-      createLauncher({ inherited: process.env }, systemTimekeeper),
+      systemLauncher({ inherited: process.env }, systemTimekeeper),
       { bin: "/usr/bin/true", category: "click.open" },
       "opening https://example.com",
       () => {},
@@ -131,7 +131,7 @@ describe("clickLaunch", () => {
   test("a program that cannot start is a throw naming the spawn's own error", async () => {
     await expect(
       clickLaunch(
-        createLauncher({ inherited: process.env }, systemTimekeeper),
+        systemLauncher({ inherited: process.env }, systemTimekeeper),
         {
           bin: "/nonexistent/cc-candybar-no-such-opener",
           args: ["https://example.com"],
