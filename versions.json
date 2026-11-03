@@ -4,53 +4,60 @@
     {
       "version": "pr-616",
       "ref": "refs/pull/616/merge",
-      "sha": "f26c4738fa08e95ea3674b56b4177986bc7f25fa",
-      "timestamp": "2026-11-03T16:34:03.288Z",
+      "sha": "ebbd1ae1af9f05b44d3e9615f8760bf36f1e39e4",
+      "timestamp": "2026-11-03T16:39:14.852Z",
       "commits": [
         {
-          "sha": "f26c4738fa08e95ea3674b56b4177986bc7f25fa",
+          "sha": "ebbd1ae1af9f05b44d3e9615f8760bf36f1e39e4",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T16:32:49Z",
-          "message": "Merge b1891142150dee4e50eec6a5bb3180d177815330 into b744cf603e403a589c9d9d397312a7fdece6ad65\n"
+          "timestamp": "2026-11-03T16:37:09Z",
+          "message": "Merge 2f018f616e48956ccd3752458ddd1b5c909be773 into b744cf603e403a589c9d9d397312a7fdece6ad65\n"
         },
         {
-          "sha": "b1891142150dee4e50eec6a5bb3180d177815330",
+          "sha": "2f018f616e48956ccd3752458ddd1b5c909be773",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T09:36:55-07:00",
+          "message": "test(facts): the session rig holds the source runs main moved onto RenderDeps (candybar-gather-renderer-76bb.6pj.83l)\n"
+        },
+        {
+          "sha": "4eb1defe704a1cb82a29caeb5af2f8efa199ca0e",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-03T09:32:35-07:00",
           "message": "test(facts): a failed stamp and its recovery each wake the view (candybar-gather-renderer-76bb.6pj.83l)\n"
         },
         {
-          "sha": "8f9d91e8b2e7670041034ae1bba5988dc97d00cd",
+          "sha": "2986a2a7e8c08508cce0d4ba964114f9d5d0d4b9",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-03T09:28:30-07:00",
           "message": "fix(facts): a draw reads the client's hints off its turn; a repeated failure is one turn; unstamped projects its arms (candybar-gather-renderer-76bb.6pj.83l)\n"
         },
         {
-          "sha": "63d9ce3e3e9e4768108741184f96634afdffb1ff",
+          "sha": "3701485cac02fc75e7cd31fa928a0926f54c33a0",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-03T09:18:48-07:00",
           "message": "test(facts): payload tests assert an unread lane as pending, not a missing key (candybar-gather-renderer-76bb.6pj.83l)\n"
         },
         {
-          "sha": "417535d9c102cc5f9d66875d6867d457c49479f1",
+          "sha": "250909d2f0776a028884ab797b2f6608d5ec5fb4",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-03T09:00:29-07:00",
           "message": "docs(claude-md): checks run on the code under review, never on another commit to second-guess a threshold\n"
         },
         {
-          "sha": "86be4efd648b2f49a74012b044b5791df0827891",
+          "sha": "c9ad47b88f0ac3a69df76197f65845ec82328c4a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-03T08:30:56-07:00",
           "message": "feat(facts): the payload a template reads is composed from the document (candybar-gather-renderer-76bb.6pj.83l)\n\nThe payload, the globals a draw builds its options from and the facts document\nare one turn, stamped together in one reaction, so a draw never mixes a\ndocument with a request or a pick it was not composed from. A turn takes its\nclosure and lanes from the view's one declaration. A turn that cannot be\nstamped keeps the last one and surfaces as a warning in the bar's indicator.\nA view that fails to open releases what it began. The check command stamps a\nfixture document and composes through the same function; its hand-written\npayload and checkToday are gone.\n"
         },
         {
-          "sha": "f5ced7e107bd672139fdf66cfa9bab21d86c4e8a",
+          "sha": "0a4edcb1fc73e5263fce49e5ba52fc325194af53",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-03T08:00:23-07:00",
