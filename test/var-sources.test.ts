@@ -981,13 +981,20 @@ describe("SourceRegistry — shell: a failed read carries stderr", () => {
     });
   });
 
-  it("a multi-line stderr is carried whole", async () => {
-    const said = "fatal: not a git repository\nhint: run git init\n";
+  it("a multi-line stderr is shown by its first and last lines", async () => {
+    const said = "fatal: not a git repository\nhint: one\nhint: run git init\n";
     expect(await failedRead("git x", exits(128, "", said))).toEqual({
       kind: "failed",
       failedAt: "read",
-      reason: `shell "git x" exited with code 128 in /work: fatal: not a git repository\nhint: run git init`,
+      reason: `shell "git x" exited with code 128 in /work: fatal: not a git repository … hint: run git init`,
     });
+  });
+
+  it("a long line is clipped between characters", async () => {
+    const said = `${"😀".repeat(300)}end`;
+    const doc = await failedRead("noisy", exits(1, "", said));
+    const reason = (doc as { reason: string }).reason;
+    expect(reason.endsWith(`: ${"😀".repeat(200)}…`)).toBe(true);
   });
 });
 

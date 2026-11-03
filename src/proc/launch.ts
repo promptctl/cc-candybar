@@ -313,16 +313,34 @@ export function whyFailed(r: Failed): string {
   }
 }
 
-// [LAW:no-silent-failure] Why, and what the child said about it. A flood's
-// stderr is the flood, and a failed pipe's was cut short: those say why alone.
-// The whole of stderr rides along — a tool's error may come first (git's
-// `fatal:` before its hints) or last (a traceback) — and whoever draws it on
-// one line bounds it there.
+// What a child said, on one bounded line. A tool's error may come first (git's
+// `fatal:` before its hints, `ps`'s complaint before its usage) or last (a
+// traceback, a prompt), so the first and last lines stand for the rest; each is
+// clipped by code point. Bounded here because the failure is held and drawn
+// whole: the bar's ⚠ cell is the only place it shows.
+const SAID_LINE_CHARS = 200;
+const clipped = (line: string): string => {
+  const kept: string[] = [];
+  for (const ch of line) {
+    if (kept.length === SAID_LINE_CHARS) return `${kept.join("")}…`;
+    kept.push(ch);
+  }
+  return line;
+};
+export function saidBy(r: Failed, text: string): string {
+  // A flood's output is the flood, and a failed pipe's was cut short: those
+  // say why alone.
+  if (r.reason === "output-limit" || r.reason === "pipe-error") return "";
+  const t = text.trim();
+  const firstEnd = t.search(/[\r\n]/);
+  if (firstEnd === -1) return clipped(t);
+  const lastStart = Math.max(t.lastIndexOf("\n"), t.lastIndexOf("\r")) + 1;
+  return `${clipped(t.slice(0, firstEnd).trim())} … ${clipped(t.slice(lastStart).trim())}`;
+}
+
+// [LAW:no-silent-failure] Why, and what the child said about it.
 export function failureText(r: Failed, where = ""): string {
-  const said =
-    r.reason === "output-limit" || r.reason === "pipe-error"
-      ? ""
-      : r.stderr.trim();
+  const said = saidBy(r, r.stderr);
   return `${whyFailed(r)}${where}${said === "" ? "" : `: ${said}`}`;
 }
 

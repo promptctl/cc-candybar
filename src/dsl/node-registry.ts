@@ -45,7 +45,6 @@ import { groundOf } from "../template-engine/colors.js";
 import { FOLLOW_BAR, type PlacementEffect } from "../themes/policy.js";
 import { disclosureGate } from "../config/disclosure.js";
 import { splitCellsIntoLines } from "../render/split-lines.js";
-import { sanitizeAndTruncate } from "../render/diagnostic-text.js";
 import {
   placedBy,
   type Address,
@@ -1112,9 +1111,6 @@ function cellsWidth(cells: readonly RichText[]): number {
 }
 
 // The ⚠ cell a broken placement draws in place of everything it would have.
-// Bounded so a long reason (a source's whole stderr) stays one line of the
-// bar; the viewer shows it in full.
-const BROKEN_CELL_CHARS = 240;
 function brokenSegment(
   node: CompiledSegmentNode,
   scope: object,
@@ -1128,10 +1124,7 @@ function brokenSegment(
   // excerpt, a source's stderr) fold to spaces here — the full text went
   // to onSegmentError above — and the cell is one item, which its row divides
   // like every other cell.
-  const oneLine = sanitizeAndTruncate(
-    message.replace(/\s*[\r\n]\s*/g, " "),
-    BROKEN_CELL_CHARS,
-  );
+  const oneLine = message.replace(/\s*\n\s*/g, " ");
   return [
     {
       cells: applySegmentLayout(

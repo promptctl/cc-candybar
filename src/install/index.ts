@@ -1,3 +1,4 @@
+import { whyFailed } from "../proc/launch.js";
 import {
   ATTACH_DIR,
   ATTACH_PRELOAD,
@@ -401,7 +402,7 @@ function installUrlHandler(forwarder: string, { host, launcher }: World): void {
     });
     if (!signed.ok) {
       process.stderr.write(signed.stderr);
-      throw new Error(`codesign failed (${signed.reason})`);
+      throw new Error(`codesign failed (${whyFailed(signed)})`);
     }
     fs.rmSync(bundle, { recursive: true, force: true });
     fs.renameSync(staging, bundle);
@@ -420,7 +421,7 @@ function installUrlHandler(forwarder: string, { host, launcher }: World): void {
   });
   if (!quit.ok && quit.exitCode !== 1) {
     process.stderr.write(quit.stderr);
-    throw new Error(`killall ${APP_NAME} failed (${quit.reason})`);
+    throw new Error(`killall ${APP_NAME} failed (${whyFailed(quit)})`);
   }
   process.stdout.write(
     quit.ok
@@ -436,7 +437,7 @@ function installUrlHandler(forwarder: string, { host, launcher }: World): void {
   });
   if (!lsr.ok) {
     process.stderr.write(lsr.stderr);
-    throw new Error(`lsregister failed (${lsr.reason})`);
+    throw new Error(`lsregister failed (${whyFailed(lsr)})`);
   }
 
   process.stdout.write(`✓ ${APP_NAME}.app installed and registered.\n`);

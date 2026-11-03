@@ -23,7 +23,6 @@ import path from "node:path";
 import {
   failureText,
   readJobEnd,
-  timedOutError,
   type Failed,
   type LaunchOpts,
   type Launcher,
@@ -408,14 +407,9 @@ export const CLICK_PROGRAM_TIMEOUT_MS = 5000;
 // many — the click is acknowledged and the rejection is logged. A closing
 // daemon is its own outcome; every other failure surfaces as RENDER_FAILED,
 // saying what the launch itself said: the spawn's error, or the program's stderr.
-function clickFailed(
-  r: Failed,
-  category: LaunchOpts["category"],
-  what: string,
-  log: DaemonContext["log"],
-): void {
+function clickFailed(r: Failed, what: string, log: DaemonContext["log"]): void {
   if (r.reason === "rate-limited") {
-    log("warn", `${category} ${failureText(r)}`);
+    log("warn", failureText(r));
     return;
   }
   if (r.reason === "aborted") throw new DaemonClosing(what);
@@ -437,7 +431,7 @@ export async function clickLaunch(
     timeoutMs: CLICK_PROGRAM_TIMEOUT_MS,
   });
   if (result.ok) return;
-  clickFailed(result, opts.category, what, log);
+  clickFailed(result, what, log);
 }
 
 // How often a handoff looks for its opener's verdict while the click waits.
@@ -475,7 +469,6 @@ export async function clickHandoff(
     if (!job.ok) {
       clickFailed(
         { ...job, stdout: "", stderr: "", exitCode: null, signal: null },
-        opts.category,
         what,
         log,
       );
@@ -509,9 +502,7 @@ export async function clickHandoff(
                 stderr: "",
                 exitCode: null,
                 signal: null,
-                error: timedOutError(boundMs),
               },
-          opts.category,
           what,
           log,
         );

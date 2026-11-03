@@ -90,7 +90,7 @@ describe("clickHandoff", () => {
       HOST.tmp,
     );
     expect(logged).toEqual([
-      expect.stringMatching(/^click.open rate-limited: /),
+      expect.stringMatching(/^rate-limited: click.open /),
     ]);
   });
 

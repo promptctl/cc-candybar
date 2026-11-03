@@ -177,7 +177,7 @@ describe("assembling the URL handler app", () => {
             }).launcher,
           ),
         ),
-      ).toThrow("codesign failed (non-zero)");
+      ).toThrow("codesign failed (exited with code 1)");
       expect(() =>
         install.installUrlHandlerFrom(
           checkout("MACHO"),

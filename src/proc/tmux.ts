@@ -40,7 +40,7 @@ function invocation(
 function tmuxRun(result: LaunchResult, args: readonly string[]): TmuxRun {
   if (result.ok) return { kind: "ok", stdout: result.stdout };
   if (result.reason === "rate-limited") {
-    return { kind: "rate-limited", reason: result.error ?? "rate-limited" };
+    return { kind: "rate-limited", reason: failureText(result) };
   }
   return {
     kind: "failed",

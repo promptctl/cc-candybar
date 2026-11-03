@@ -9,6 +9,7 @@ import fs from "node:fs";
 import { sleep, type Timekeeper } from "../time";
 import {
   failureText,
+  saidBy,
   type LaunchResult,
   type Launcher,
 } from "../proc/launch.js";
@@ -46,8 +47,8 @@ async function tmux(
 
 function ran(what: string, result: LaunchResult): string {
   if (result.ok) return result.stdout;
-  // The claude CLI and the graph reader say why on stdout, not stderr.
-  const told = result.stderr.trim() === "" ? result.stdout.trim() : "";
+  // The claude CLI and the graph reader say why on stdout.
+  const told = saidBy(result, result.stdout);
   throw new Error(
     `${what} failed (${failureText(result)}${told === "" ? "" : `: ${told}`})`,
   );
