@@ -1,3 +1,9 @@
+## [1.180.6](https://github.com/promptctl/cc-candybar/compare/v1.180.5...v1.180.6) (2026-11-03)
+
+### Bug Fixes
+
+* **pricing:** the pricing fetch decodes the response as a stream (candybar-testing-0x6u.61o) ([#591](https://github.com/promptctl/cc-candybar/issues/591)) ([e16e4d8](https://github.com/promptctl/cc-candybar/commit/e16e4d82cca128b9a22e0c6bc6cf69fc30529654))
+
 ## [1.180.5](https://github.com/promptctl/cc-candybar/compare/v1.180.4...v1.180.5) (2026-11-03)
 
 ### Bug Fixes
