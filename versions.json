@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-611",
+      "ref": "refs/pull/611/merge",
+      "sha": "0996521a41114ca0da36a320e04185b9ed50a556",
+      "timestamp": "2026-11-03T12:46:22.354Z",
+      "commits": [
+        {
+          "sha": "0996521a41114ca0da36a320e04185b9ed50a556",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T05:45:27-07:00",
+          "message": "Merge c1cbfa756eb3c7fdee3776d2ade8f74dedbcc34b into 5138e2c802a9c3baf1fc4756147126024fd36bf0\n"
+        },
+        {
+          "sha": "c1cbfa756eb3c7fdee3776d2ade8f74dedbcc34b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T05:43:46-07:00",
+          "message": "docs(facts): the facts document's traps in data-sources memory; payloadOf comments follow its split (candybar-gather-renderer-76bb.6pj.af6)\n"
+        },
+        {
+          "sha": "edd9f2100f1af1e19bd4e2e2983d9771bf4ad1ec",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T05:22:52-07:00",
+          "message": "feat(facts): a session's facts document is assembled from today's providers and restamped against its last (candybar-gather-renderer-76bb.6pj.af6)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "be10d89d0f489dffdc71e3a67ef2fec37cb70333",
