@@ -235,9 +235,11 @@ function shellReader(
         signal,
       });
       // Only the source's own abort ends a run. The launcher's is a daemon
-      // closing under a live source: a failed read, like any other.
-      if (!r.ok && r.reason === "aborted" && signal.aborted)
-        throw signal.reason;
+      // closing under a live source: a failed read, like any other. The
+      // source's abort stands whatever the launcher reports: a child the
+      // timeout signalled first is reaped as a timeout, and its registry is
+      // gone all the same.
+      if (signal.aborted) throw signal.reason;
       if (r.ok) return ok(r.stdout);
       // The reason, not the exit code, says which: a child the launcher ended
       // (timeout, output-limit) can still exit with a code of its own.

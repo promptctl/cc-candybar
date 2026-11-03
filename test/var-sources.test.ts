@@ -24,7 +24,7 @@ import {
 } from "../src/var-system";
 import { fakeLauncher, turns } from "./helpers/fake-launcher";
 import { heldClock } from "./helpers/held-clock";
-import { hangs, shell } from "../src/proc/spawner-fake";
+import { hangs, ignoring, shell } from "../src/proc/spawner-fake";
 import { SessionState } from "../src/daemon/session-state";
 import { systemLauncher } from "../src/proc/system-launcher";
 import { MAX_CAPTURED_BYTES } from "../src/proc/launch";
@@ -828,6 +828,49 @@ describe("SourceRegistry — shell: read timeout", () => {
     await turns();
     expect(started()).toHaveLength(2);
     expect(started()[1]!.ended).toBeNull();
+  });
+
+  // [LAW:no-silent-failure] The timeout and the registry's dispose can both
+  // end one run: the launcher keeps the first cause, so a child ended by the
+  // timeout under a disposed registry is reported as a timeout, with the
+  // source's own abort standing. That run publishes nothing: the registry it
+  // would publish into is gone, and the abort is the one rejection a run may
+  // end in, swallowed by the run loop.
+  it("a run the timeout ends after dispose publishes nothing and rejects with nothing unhandled", async () => {
+    const clock = heldClock(new Date(0));
+    const { launcher, spawner, started } = fakeLauncher(clock);
+    spawner.program(shell("sleep 99"), ignoring(["SIGTERM"], hangs()));
+    const store = new VariableStore(clock);
+    const registry = new SourceRegistry(launcher, store, "");
+    live.add(registry);
+    registry.declareShell("val", "sleep 99", {
+      cwd: "/work",
+      parse: { kind: "json", default: undefined },
+      cache: { kind: "ttl", durationMs: SHELL_READ_TIMEOUT_MS * 2 },
+    });
+    clock.advance(0);
+    await turns();
+    const before = store.readDocument("val");
+
+    const heard: unknown[] = [];
+    const note = (e: unknown): void => void heard.push(e);
+    process.on("unhandledRejection", note);
+    try {
+      clock.advance(SHELL_READ_TIMEOUT_MS);
+      await turns();
+      expect(started()[0]!.signals).toEqual(["SIGTERM"]);
+      expect(started()[0]!.ended).toBeNull();
+      registry.dispose();
+      // The SIGKILL grace: the child is reaped under the disposed registry.
+      clock.advance(1000);
+      await turns();
+      expect(started()[0]!.ended).toEqual({ code: null, signal: "SIGKILL" });
+      await turns();
+    } finally {
+      process.off("unhandledRejection", note);
+    }
+    expect(heard).toEqual([]);
+    expect(store.readDocument("val")).toEqual(before);
   });
 });
 
