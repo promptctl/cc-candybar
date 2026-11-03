@@ -86,9 +86,13 @@ async function withBuiltDaemon<T>(
 describe("a daemon spawned from the built bundle", () => {
   // [LAW:no-silent-failure] The feature checks its own test's precondition: a
   // bundle not built from the current `src/` carries another digest, and every
-  // verdict below would be about that build. CI builds before this tier.
+  // verdict below would be about that build. CI builds before this tier. A
+  // fresh worktree has no dist/ at all, and that says the same thing: no build.
   beforeAll(() => {
-    if (!fs.readFileSync(REPO_BUNDLE, "utf8").includes(REPO_DIGEST)) {
+    const built = fs.existsSync(REPO_BUNDLE)
+      ? fs.readFileSync(REPO_BUNDLE, "utf8")
+      : "";
+    if (!built.includes(REPO_DIGEST)) {
       throw new Error(
         "dist/index.mjs was not built from the current src/ — this test spawns the built bundle; run `pnpm build` first",
       );
