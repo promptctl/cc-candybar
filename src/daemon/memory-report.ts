@@ -15,7 +15,11 @@
 
 import fs from "node:fs";
 
-import type { LaunchResult, Launcher } from "../proc/launch.js";
+import {
+  failureText,
+  type LaunchResult,
+  type Launcher,
+} from "../proc/launch.js";
 
 // [LAW:parse-dont-validate] A probe either produced text or could not, and the
 // reason travels with the failure — it is what the post-mortem reads when no
@@ -163,9 +167,7 @@ export function footprintCharge(
       return {
         kind: "stand-in",
         bytes: rss,
-        unread: `footprint ${result.reason}${
-          result.error !== undefined ? `: ${result.error}` : ""
-        }${firstLine(result.stderr)}`,
+        unread: `footprint ${failureText(result)}`,
       };
     }
     const bytes = physFootprintOf(result.stdout);
@@ -205,9 +207,7 @@ function commandProbe(
       if (!result.ok) {
         return {
           kind: "unavailable",
-          reason: `${result.reason}${
-            result.error !== undefined ? `: ${result.error}` : ""
-          }${firstLine(result.stderr)}`,
+          reason: failureText(result),
         };
       }
       // A clean exit that printed nothing is not an answer: writing it would
@@ -233,12 +233,4 @@ function fileProbe(path: string): MemoryProbe {
       }
     },
   };
-}
-
-function firstLine(stderr: string): string {
-  const line = stderr
-    .split("\n")
-    .map((l) => l.trim())
-    .find((l) => l.length > 0);
-  return line === undefined ? "" : ` (${line})`;
 }

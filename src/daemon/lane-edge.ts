@@ -7,7 +7,11 @@
 
 import fs from "node:fs";
 import { sleep, type Timekeeper } from "../time";
-import type { LaunchResult, Launcher } from "../proc/launch.js";
+import {
+  failureText,
+  type LaunchResult,
+  type Launcher,
+} from "../proc/launch.js";
 import { runTmuxAsync } from "../proc/tmux.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import type { Lane } from "../config/lanes.js";
@@ -42,12 +46,7 @@ async function tmux(
 
 function ran(what: string, result: LaunchResult): string {
   if (result.ok) return result.stdout;
-  const detail =
-    result.error ??
-    [result.reason, result.stderr.trim(), result.stdout.trim()]
-      .filter((s) => s !== "")
-      .join(": ");
-  throw new Error(`${what} failed (${detail})`);
+  throw new Error(`${what} failed (${failureText(result)})`);
 }
 
 // [LAW:parse-dont-validate] The module graph reader's refusal: one JSON line,

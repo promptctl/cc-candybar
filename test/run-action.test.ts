@@ -867,7 +867,7 @@ describe("the run owner", () => {
     o.runs.start(o.run(`echo "  it broke  " >&2; exit 3`));
     expect(o.held).toEqual([`supersede /s ${SID}`]);
     await until(() => o.runs.stats().running === 0, "the run's end");
-    expect(lastClickError(o.sessionState, SID)?.text).toBe("run act: it broke");
+    expect(lastClickError(o.sessionState, SID)?.text).toBe("run act: exited with code 3: it broke");
     expect(o.held).toEqual([`supersede /s ${SID}`, `resume /s ${SID}`]);
     expect(o.runs.stats()).toMatchObject({
       started: 1,
@@ -885,7 +885,7 @@ describe("the run owner", () => {
     const o = owner();
     o.runs.start(o.run("exit 4"));
     await until(() => o.runs.stats().running === 0, "the run's end");
-    expect(lastClickError(o.sessionState, SID)?.text).toBe("run act: exited 4");
+    expect(lastClickError(o.sessionState, SID)?.text).toBe("run act: exited with code 4");
   });
 
   test("a timeout puts the reason in the bar, resumes its sources, and counts as timed out", async () => {

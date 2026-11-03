@@ -1089,6 +1089,11 @@ describe("launch input a child does not read", () => {
     expect(r).toMatchObject({ ok: false, reason: "timeout", error: "timed out after 0.1 s" });
   });
 
+  it("names the bound when the blocking launch times out", () => {
+    const r = launchSync({ category: "user-shell", bin: "sleep", args: ["5"], timeoutMs: 100 });
+    expect(r).toMatchObject({ ok: false, reason: "timeout", error: "timed out after 0.1 s" });
+  });
+
   it("gives the blocking launch the same verdicts", () => {
     const run = (script: string) =>
       launchSync({ category: "user-shell", bin: "sh", args: ["-c", script], stdinInput: unread });

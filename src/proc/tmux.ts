@@ -5,12 +5,13 @@
 // (src/tmux-hint.ts); this is the one place that spells `tmux -S <socket>`,
 // its timeout, and how a failure reads.
 
-import type {
-  LaunchCategory,
-  LaunchOpts,
-  LaunchResult,
-  Launcher,
-  OneShotLauncher,
+import {
+  failureText,
+  type LaunchCategory,
+  type LaunchOpts,
+  type LaunchResult,
+  type Launcher,
+  type OneShotLauncher,
 } from "./launch.js";
 import type { TmuxHint } from "../tmux-hint.js";
 
@@ -41,12 +42,10 @@ function tmuxRun(result: LaunchResult, args: readonly string[]): TmuxRun {
   if (result.reason === "rate-limited") {
     return { kind: "rate-limited", reason: result.error ?? "rate-limited" };
   }
-  // `error` is a whole sentence when present (rate-limited, timeout, spawn);
-  // a non-zero exit has only its stderr to say.
-  const detail =
-    result.error ??
-    [result.reason, result.stderr.trim()].filter((s) => s !== "").join(": ");
-  return { kind: "failed", reason: `tmux ${args[0]} failed (${detail})` };
+  return {
+    kind: "failed",
+    reason: `tmux ${args[0]} failed (${failureText(result)})`,
+  };
 }
 
 // Holds the caller's loop until tmux answers: for what must finish before the

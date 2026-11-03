@@ -619,7 +619,7 @@ describe("SourceRegistry — shell: basic", () => {
     });
     await ran(registry);
     expect(registry.getLastError("val")!.message).toBe(
-      `shell "trap 'exit 0' TERM; yes" output-limit: output exceeded ${MAX_CAPTURED_BYTES} bytes in ${process.cwd()}`,
+      `shell "trap 'exit 0' TERM; yes" output exceeded ${MAX_CAPTURED_BYTES} bytes in ${process.cwd()}`,
     );
   });
 
@@ -981,12 +981,20 @@ describe("SourceRegistry — shell: a failed read carries stderr", () => {
     });
   });
 
-  it("a long stderr is shown by its tail", async () => {
-    const said = `${"x".repeat(5000)}the last line`;
+  it("a multi-line stderr is shown by its last line", async () => {
+    const said = "Traceback (most recent call last):\n  File x\nKeyError: 'k'\n";
+    expect(await failedRead("py", exits(1, "", said))).toEqual({
+      kind: "failed",
+      failedAt: "read",
+      reason: `shell "py" exited with code 1 in /work: KeyError: 'k'`,
+    });
+  });
+
+  it("a long line is shown by its tail, cut between characters", async () => {
+    const said = `${"😀".repeat(300)}end`;
     const doc = await failedRead("noisy", exits(1, "", said));
-    expect(doc).toMatchObject({ kind: "failed", failedAt: "read" });
     const reason = (doc as { reason: string }).reason;
-    expect(reason.endsWith(`: …${said.slice(-2000)}`)).toBe(true);
+    expect(reason.endsWith(`: …${"😀".repeat(197)}end`)).toBe(true);
   });
 });
 

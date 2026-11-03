@@ -27,7 +27,7 @@
 import crypto from "node:crypto";
 import { readFile as fsReadFile } from "node:fs/promises";
 import { observable, runInAction } from "mobx";
-import type { Launcher } from "../proc/launch";
+import { failureText, type Launcher } from "../proc/launch";
 import {
   WatcherRegistry,
   watchFault,
@@ -135,16 +135,6 @@ const whereOf = (read: SourceRead): string =>
     ? `output of "${read.command}" in ${read.cwd}`
     : `"${read.path}"`;
 
-// The tail holds the line that explains a failure: a shell names the missing
-// binary last, a prompt waits on the last line.
-const STDERR_SHOWN_CHARS = 2000;
-const boundedStderr = (stderr: string): string => {
-  const t = stderr.trim();
-  return t.length <= STDERR_SHOWN_CHARS
-    ? t
-    : `…${t.slice(-STDERR_SHOWN_CHARS)}`;
-};
-
 function shellReader(
   launcher: Launcher,
   command: string,
@@ -166,22 +156,8 @@ function shellReader(
       // The reason, not the exit code, says which: a child the launcher ended
       // (timeout, output-limit, an abandoned read's abort) can still exit
       // with a code of its own.
-      const why =
-        r.reason === "non-zero"
-          ? `exited with code ${r.exitCode}`
-          : r.reason === "timeout" && r.error !== undefined
-            ? r.error
-            : [r.reason, r.error].filter((s) => s !== undefined).join(": ");
-      // [LAW:no-silent-failure] What the command wrote to stderr is often the
-      // one line that explains the failure, so every arm carries it. A flood's
-      // stderr is the flood, and a failed pipe's was cut short: those say why
-      // alone.
-      const said =
-        r.reason === "output-limit" || r.reason === "pipe-error"
-          ? ""
-          : boundedStderr(r.stderr);
       return failed(
-        `shell "${command}" ${why} in ${cwd}${said === "" ? "" : `: ${said}`}`,
+        `shell "${command}" ${failureText(r, ` in ${cwd}`)}`,
         "read",
       );
     },

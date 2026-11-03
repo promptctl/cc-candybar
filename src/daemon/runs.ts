@@ -6,7 +6,11 @@
 // the click's.
 
 import path from "node:path";
-import type { LaunchResult, Launcher } from "../proc/launch.js";
+import {
+  failureText,
+  type LaunchResult,
+  type Launcher,
+} from "../proc/launch.js";
 import type { SessionId } from "./session-id.js";
 import type { StorageKey } from "./cache/managed-storage.js";
 import type { Resume } from "../utils/keyed-source.js";
@@ -108,25 +112,6 @@ function exitOf(result: LaunchResult): string {
   return result.exitCode === null ? "-" : String(result.exitCode);
 }
 
-// What the bar shows of a failed run: the program's own words, else why. A run
-// ended for flooding its output says why alone: its words are the flood. One
-// ended for a failed pipe says why alone too: its words were cut short.
-function failureText(
-  action: string,
-  outcome: RunOutcome,
-  result: LaunchResult,
-): string {
-  const stderr =
-    outcome === "output-limit" || outcome === "pipe"
-      ? ""
-      : result.stderr.trim();
-  const reason =
-    outcome === "exit"
-      ? `exited ${exitOf(result)}`
-      : (result.ok ? "" : result.error) || "could not be started";
-  return `run ${action}: ${stderr === "" ? reason : stderr}`;
-}
-
 export class Runs {
   private readonly deps: RunsDeps;
   private readonly timeoutMs: number;
@@ -214,12 +199,12 @@ export class Runs {
     );
     if (outcome === "timeout") this.timedOut++;
     // An aborted run is the daemon going down, not the program failing.
-    if (outcome === "ok" || outcome === "aborted") return;
+    if (result.ok || outcome === "aborted") return;
     if (outcome !== "timeout") this.failed++;
     holdClickError(
       this.deps.state,
       run.sessionId,
-      failureText(run.action, outcome, result),
+      `run ${run.action}: ${failureText(result)}`,
       this.deps.now(),
     );
   }

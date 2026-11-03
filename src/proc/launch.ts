@@ -292,6 +292,47 @@ export type LaunchResult =
       error?: string;
     };
 
+export type Failed = Extract<LaunchResult, { ok: false }>;
+
+// [LAW:single-enforcer] Why a launch failed, said one way for every caller.
+export function whyFailed(r: Failed): string {
+  switch (r.reason) {
+    case "non-zero":
+      return `exited with code ${r.exitCode}`;
+    case "signal":
+      return `killed by ${r.signal ?? "a signal"}`;
+    // These are whole sentences: the launcher wrote them.
+    case "timeout":
+    case "output-limit":
+    case "rate-limited":
+    case "pipe-error":
+      return r.error ?? r.reason;
+    default:
+      return r.error === undefined ? r.reason : `${r.reason}: ${r.error}`;
+  }
+}
+
+// The line of stderr that explains a failure is the last: a shell names the
+// missing binary last, a traceback ends on its error, a prompt waits on the
+// last line. Bounded by code point, so one line stays one line of the bar.
+const STDERR_SHOWN_CHARS = 200;
+export const lastStderrLine = (r: Failed): string => {
+  // A flood's stderr is the flood, and a failed pipe's was cut short: those
+  // say why alone.
+  if (r.reason === "output-limit" || r.reason === "pipe-error") return "";
+  const lines = r.stderr.trim().split("\n");
+  const chars = Array.from(lines[lines.length - 1]!.trim());
+  return chars.length <= STDERR_SHOWN_CHARS
+    ? chars.join("")
+    : `…${chars.slice(-STDERR_SHOWN_CHARS).join("")}`;
+};
+
+// [LAW:no-silent-failure] Why, and what the child said about it.
+export function failureText(r: Failed, where = ""): string {
+  const said = lastStderrLine(r);
+  return `${whyFailed(r)}${where}${said === "" ? "" : `: ${said}`}`;
+}
+
 // A launch that started nothing. It always says why, so a form with no
 // `LaunchResult` to return still carries the reason rather than guessing one.
 type Refusal = Extract<LaunchResult, { ok: false }> & { error: string };

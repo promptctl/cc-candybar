@@ -91,7 +91,8 @@ The command runs under `/bin/sh -c` in the directory Claude Code started the
 statusline in — the directory the bar's git facts are read in — so a command that
 asks about "this repo" answers for the session's repo. It runs with the daemon's environment, so the script
 is either on the daemon's `PATH` or spelled as an absolute path. A command the
-shell cannot find fails its run with `exited with code 127`, and
+shell cannot find fails its run with `exited with code 127`, followed by the
+last line the command wrote to stderr, and
 what that failure renders as depends on the `default` you declare (Step 2).
 
 ## Step 2 — the source: one `shell` variable, one document
@@ -1425,7 +1426,8 @@ echo 'budget: unavailable'
 Every segment reading the document renders `⚠` naming the variable, then the
 reason: `JSON parse failed: Unexpected token 'b', "budget: unavailable` for
 this script (each followed by ` in output of "<command>" in <cwd>`),
-`shell "budget-broken" exited with code 127 in <cwd>` for one the shell
+`shell "budget-broken" exited with code 127 in <cwd>: sh: budget-broken: not found`
+for one the shell
 cannot find, `file unreadable: <path>` for a `file` source. A `default`
 renders in place of the last two — there was nothing to read — but never in
 place of the first: a script that printed something that is not JSON is
