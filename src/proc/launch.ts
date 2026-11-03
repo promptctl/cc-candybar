@@ -52,7 +52,7 @@ import { types } from "node:util";
 import type { ChildProcess, StdioOptions } from "node:child_process";
 import type { Timekeeper } from "../time";
 
-import type { LaunchStatsHandle } from "./stats-handle";
+import type { DrainEnd, LaunchStatsHandle } from "./stats-handle";
 
 // [LAW:no-silent-failure] A spawn whose `cwd` is gone fails with the SAME
 // errno as a missing binary — Node words it `spawn /bin/sh ENOENT`, blaming
@@ -607,34 +607,38 @@ function leaderRefuses(pid: number): boolean {
 interface Captured {
   take(): string;
   // Hands a stream still open after settle to the launcher's drains.
-  drain(state: LaunchState, category: LaunchCategory): void;
+  drain(): void;
 }
 
-function capture(stream: Readable | null, full: () => void): Captured {
+function capture(
+  state: LaunchState,
+  category: LaunchCategory,
+  stream: Readable | null,
+  full: () => void,
+): Captured {
+  const { stats } = state.scope;
   const decoder = new StringDecoder("utf8");
   let text = "";
   let bytes = 0;
   // What a drain reads after settle, against a bound of its own: a launch that
   // used its whole bound leaves a surviving descendant the same room as any.
   let dropped = 0;
-  // Released at settle, so a drain holds nothing of the launch.
+  // Released at settle, so a drain holds nothing of the launch's result.
   let onFull: (() => void) | null = full;
-  let cut = false;
-  let errored = false;
-  // [LAW:no-silent-failure] A pipe's read error ends the stream and is
-  // counted at a drain's close, never thrown into the launcher's loop.
-  stream?.on("error", () => {
-    errored = true;
-  });
+  let end: DrainEnd = "closed";
+  // [LAW:no-silent-failure] A pipe's read error, before settle or after, is
+  // counted where it happens, never thrown into the launcher's loop.
+  stream?.on("error", () => stats?.onPipeError(category));
   stream?.on("data", (chunk: Buffer) => {
     if (onFull === null) {
       dropped += chunk.length;
+      stats?.onDrainRead(category, chunk.length);
       if (dropped <= MAX_CAPTURED_BYTES) return;
       // [LAW:no-silent-failure] Past the bound after settle, the holder would
-      // cost the launcher CPU for its whole life, and it has left the group,
-      // so no signal reaches it: its pipe is cut, so its writes fail from
-      // here on, and the drain's close says so.
-      cut = true;
+      // cost the launcher CPU for its whole life, and the launcher cannot end
+      // it (it left the group, or refused the group's signal): its pipe is
+      // cut, so its writes fail from here on, and the drain's close says so.
+      end = "cut";
       stream.destroy();
       return;
     }
@@ -655,21 +659,16 @@ function capture(stream: Readable | null, full: () => void): Captured {
     // the group — keeps its pipes: a destroyed one would kill it with SIGPIPE
     // at its next write. So the pipe stays open, unref'd, and is held and
     // metered in one place while it does.
-    drain: (state, category) => {
+    drain: () => {
       if (stream === null || stream.destroyed || stream.readableEnded) return;
       // Nothing reads a closed launcher's drains, so their fds go with it.
       if (state.scope.signal.aborted) {
         stream.destroy();
         return;
       }
-      const { stats } = state.scope;
       stream.once("close", () => {
         state.drains.delete(stream);
-        stats?.onDrainClose(
-          category,
-          dropped,
-          cut ? "cut" : errored ? "errored" : "closed",
-        );
+        stats?.onDrainClose(category, end);
       });
       (stream as Socket).unref();
       state.drains.add(stream);
@@ -717,8 +716,8 @@ async function launchWaited(
     const exited = new Promise((end) => child.once("exit", end));
 
     const full = () => terminate("output-limit");
-    const stdout = capture(child.stdout, full);
-    const stderr = capture(child.stderr, full);
+    const stdout = capture(state, opts.category, child.stdout, full);
+    const stderr = capture(state, opts.category, child.stderr, full);
     const output = () => ({ stdout: stdout.take(), stderr: stderr.take() });
     let settled = false;
     // What clears each timer the launch has armed.
@@ -747,12 +746,12 @@ async function launchWaited(
       unlisten();
       if (group !== undefined) unguard(state, group);
       stats?.onEnd(opts.category, clock.now() - t0);
-      // The launch's scope goes with its result: what still reads the child's
-      // pipes is a drain, which holds nothing of the launch.
+      // The launch's scope goes once its child has exited: what still reads
+      // the child's pipes then is a drain, which holds nothing of the launch.
       child.off("close", conclude);
       child.off("error", onError);
-      stdout.drain(state, opts.category);
-      stderr.drain(state, opts.category);
+      stdout.drain();
+      stderr.drain();
       deliver();
     };
     const settle = (r: LaunchResult) => finish(() => resolve(r));

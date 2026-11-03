@@ -12,12 +12,14 @@ export interface LaunchStatsHandle {
   onEnd(category: LaunchCategory, durationMs: number): void;
   // A launch the launcher refused: no child started, so neither of the above.
   onRefused(category: LaunchCategory): void;
-  // A pipe that outlived its launch, held by a process that left the group:
-  // opened when the launch settles, closed when the pipe does — after `bytes`
-  // read and dropped after the launch, and how it ended: on its own, cut by
-  // the launcher at the bound, or on a read error.
+  // A pipe that outlived its launch, held by a process the launcher cannot
+  // end: opened when the launch settles, `bytes` read and dropped as they
+  // arrive, closed when the pipe does — on its own, or cut at the bound.
   onDrainOpen(category: LaunchCategory): void;
-  onDrainClose(category: LaunchCategory, bytes: number, end: DrainEnd): void;
+  onDrainRead(category: LaunchCategory, bytes: number): void;
+  onDrainClose(category: LaunchCategory, end: DrainEnd): void;
+  // A launched child's pipe failed to read, during its launch or after.
+  onPipeError(category: LaunchCategory): void;
 }
 
-export type DrainEnd = "closed" | "cut" | "errored";
+export type DrainEnd = "closed" | "cut";

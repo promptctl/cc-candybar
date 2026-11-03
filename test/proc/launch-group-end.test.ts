@@ -23,9 +23,11 @@ const FORK_HOLDER =
 
 interface DrainClose {
   category: LaunchCategory;
+  // What every drain had read by this close.
   bytes: number;
   end: DrainEnd;
 }
+let drainRead: number;
 
 let ending: AbortController;
 let launcher: Launcher;
@@ -35,13 +37,18 @@ beforeEach(() => {
   ending = new AbortController();
   drainsOpened = [];
   drainsClosed = [];
+  drainRead = 0;
   const stats: LaunchStatsHandle = {
     onStart: () => {},
     onEnd: () => {},
     onRefused: () => {},
     onDrainOpen: (category) => drainsOpened.push(category),
-    onDrainClose: (category, bytes, end) =>
-      drainsClosed.push({ category, bytes, end }),
+    onDrainRead: (_category, bytes) => {
+      drainRead += bytes;
+    },
+    onDrainClose: (category, end) =>
+      drainsClosed.push({ category, bytes: drainRead, end }),
+    onPipeError: () => {},
   };
   launcher = createLauncher(
     { inherited: process.env, signal: ending.signal, stats },
@@ -246,12 +253,8 @@ describe("the pipes a descendant holds past its launch", () => {
     expect(r).toMatchObject({ ok: true, stdout: "" });
     expect(drainsOpened).toEqual(["user-shell", "user-shell"]);
     await until(() => drainsClosed.length === 2, "the holder's end");
-    expect(drainsClosed).toEqual(
-      expect.arrayContaining([
-        { category: "user-shell", bytes: 5, end: "closed" },
-        { category: "user-shell", bytes: 0, end: "closed" },
-      ]),
-    );
+    expect(drainsClosed.map((d) => d.end)).toEqual(["closed", "closed"]);
+    expect(drainRead).toBe(5);
   });
 
   it("are cut at the bound, so a holder that writes without end dies", async () => {

@@ -35,6 +35,8 @@ function makeSpyHandle(): {
       onRefused: (c) => refused.push(c),
       onDrainOpen: () => {},
       onDrainClose: () => {},
+      onDrainRead: () => {},
+      onPipeError: () => {},
     },
     starts,
     ends,

@@ -72,6 +72,8 @@ beforeEach(() => {
     onRefused: () => {},
     onDrainOpen: () => {},
     onDrainClose: () => {},
+    onDrainRead: () => {},
+    onPipeError: () => {},
   };
   launcher = createLauncher({ inherited: INHERITED, stats: handle }, systemTimekeeper);
   svc = new TmuxService({ launcher, clock: systemTimekeeper });
