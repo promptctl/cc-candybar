@@ -4,15 +4,22 @@
     {
       "version": "pr-606",
       "ref": "refs/pull/606/merge",
-      "sha": "10f6de54be8f8539f478ae1ad2084764a078ccb7",
-      "timestamp": "2026-11-03T07:56:30.060Z",
+      "sha": "a20ea59ab1e1823b6798b08e07b5bda84b40a0dd",
+      "timestamp": "2026-11-03T07:58:46.902Z",
       "commits": [
         {
-          "sha": "10f6de54be8f8539f478ae1ad2084764a078ccb7",
+          "sha": "a20ea59ab1e1823b6798b08e07b5bda84b40a0dd",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T00:55:37-07:00",
-          "message": "Merge 1eda524241b9bda60adcf5191cfa3e800bbfa19d into 04d058325f14b84fc80d66fc432ae7583f3ceb7d\n"
+          "timestamp": "2026-11-03T07:57:50Z",
+          "message": "Merge 617e282b7bf5412e0d802975e3197872e047ea04 into 04d058325f14b84fc80d66fc432ae7583f3ceb7d\n"
+        },
+        {
+          "sha": "617e282b7bf5412e0d802975e3197872e047ea04",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T00:57:30-07:00",
+          "message": "docs(url-handler): say why the lost-click banner needs the app never frontmost (candybar-daemon-health-ajx0.p04)\n"
         },
         {
           "sha": "1eda524241b9bda60adcf5191cfa3e800bbfa19d",
