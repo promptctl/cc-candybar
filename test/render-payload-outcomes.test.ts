@@ -188,6 +188,12 @@ describe("payloadOf — git outcome lane", () => {
       sha: "abc1234",
       // Read, and the branch has none.
       tracking: "none",
+      // No PR lookup was asked, so the document holds the PR fields unread.
+      prNumber: pendingOf("unread"),
+      prState: pendingOf("unread"),
+      prUrl: pendingOf("unread"),
+      prError: pendingOf("unread"),
+      prEarlier: pendingOf("unread"),
     });
     expect("stash" in payload.git!).toBe(false);
     // Neither the absent upstream nor the failed stash is logged here: the

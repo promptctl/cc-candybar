@@ -32,7 +32,7 @@ import { globalsFor } from "./helpers/selection";
 import type { ClientHints } from "../src/daemon/protocol";
 import { SessionUsageStore } from "../src/daemon/cache/session-usage-store";
 import type { ClaudeHookData } from "../src/utils/claude";
-import { ABSENT, ok } from "../src/utils/outcome";
+import { ABSENT, ok, pendingOf } from "../src/utils/outcome";
 import { validateConfig } from "./helpers/parse-and-validate";
 import { mergeWithDefault, parseDslConfig } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -447,7 +447,7 @@ describe("payloadOf — speed lane", () => {
     expect(payload.speed).toBeUndefined();
   });
 
-  test("gating: speed omitted from the closure ⇒ no speed key (lane not pulled)", async () => {
+  test("a closure that omits speed leaves the lane pending unread (lane not pulled)", async () => {
     const payload = await requestPayload(
       hook(),
       instantOf(new Date(1000)),
@@ -458,7 +458,7 @@ describe("payloadOf — speed lane", () => {
       NO_HINTS,
       NO_CONFIG_FILE,
     );
-    expect(payload.speed).toBeUndefined();
+    expect(payload.speed).toEqual(pendingOf("unread"));
   });
 });
 
