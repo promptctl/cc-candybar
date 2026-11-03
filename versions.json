@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-604",
+      "ref": "refs/pull/604/merge",
+      "sha": "8f38206df2c99c11fd60c9fd0532b27ce1150663",
+      "timestamp": "2026-11-03T04:50:33.893Z",
+      "commits": [
+        {
+          "sha": "8f38206df2c99c11fd60c9fd0532b27ce1150663",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T21:49:33-07:00",
+          "message": "Merge 4ad90e7618692cecfac03d58eda5db411dbfa0c4 into e2b84658bbaa52f486f36c248e2c7a45e88eda88\n"
+        },
+        {
+          "sha": "4ad90e7618692cecfac03d58eda5db411dbfa0c4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T21:49:23-07:00",
+          "message": "fix(time): spans read the Timekeeper's monotonic clock, so a wall step cannot make a duration negative or huge (candybar-testing-ihvy.98i)\n\nEvery span in src that subtracted two now() readings reads monotonic():\nlaunch stats and rate limit, refresh ledgers' took=, runs, draw-bar,\nlock waits, spawn-lock contention, tmux patience. A refresh's took= is\nrounded once in the ledger, since monotonic reads fractions. The plugin\nstorage sweep keeps a wall cutoff, because it compares against mtimes.\n\nLeft on the wall clock on purpose: the daemon's uptime and file events'\nmissed= span, which mean elapsed real time including sleep, which the\nmonotonic clock on macOS does not count.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-602",
       "ref": "refs/pull/602/merge",
       "sha": "795aa832c9a98ab5848570c248f07a2dadace8b6",
