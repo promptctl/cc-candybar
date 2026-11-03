@@ -4,15 +4,22 @@
     {
       "version": "pr-608",
       "ref": "refs/pull/608/merge",
-      "sha": "d8f1b489973e822d71ef7f736b0acf125c463f76",
-      "timestamp": "2026-11-03T09:14:58.903Z",
+      "sha": "0e38919f4fae05e011470650658d8163263e0527",
+      "timestamp": "2026-11-03T09:17:51.740Z",
       "commits": [
         {
-          "sha": "d8f1b489973e822d71ef7f736b0acf125c463f76",
+          "sha": "0e38919f4fae05e011470650658d8163263e0527",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T02:13:58-07:00",
-          "message": "Merge 701b73c5ec0c345fd5e083f7fe39ce8150955787 into 31c5d2195388883cb31ad3aa739719db744242fb\n"
+          "timestamp": "2026-11-03T09:16:43Z",
+          "message": "Merge 3ae378e1c473f6aee935223340b4019dcd90a93b into 31c5d2195388883cb31ad3aa739719db744242fb\n"
+        },
+        {
+          "sha": "3ae378e1c473f6aee935223340b4019dcd90a93b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T02:16:24-07:00",
+          "message": "fix(capture-heap): a run's snapshot is its own, whole, and on macOS; the doc names which rule binds each ceiling (candybar-gather-renderer-76bb.5d1)\n"
         },
         {
           "sha": "701b73c5ec0c345fd5e083f7fe39ce8150955787",
