@@ -1,3 +1,4 @@
+import type { Monotonic } from "../src/time";
 // The frame clock of src/daemon/frame-feed.ts, over a render that answers at
 // once: frames fall due a period apart (the moving period while the bar moves
 // where someone can see it, the still one otherwise), a change brings the next
@@ -173,7 +174,8 @@ function harness(opts: {
     refreshes: () => ledger.totals(),
     periods: PERIODS,
     clock: {
-      monotonic: () => START_MS + clock.monotonic() + state.skewMs,
+      monotonic: () =>
+        (START_MS + clock.monotonic() + state.skewMs) as Monotonic,
       after: (ms, fire) => clock.after(wholeMs(ms), fire),
     },
     instant: () =>

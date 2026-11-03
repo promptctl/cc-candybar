@@ -73,7 +73,7 @@ function setup() {
   const logged: string[] = [];
   const turns = new JournalTurns({
     log: (_level, msg) => logged.push(msg),
-    monotonic: () => performance.now(),
+    monotonic: () => systemTimekeeper.monotonic(),
   });
   const followed: string[] = [];
   const ctx: VerbContext = {

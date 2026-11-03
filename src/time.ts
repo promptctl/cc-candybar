@@ -11,12 +11,16 @@ export interface TimerOptions {
   readonly unref?: boolean;
 }
 
+// [LAW:one-type-per-behavior] A monotonic reading, so one cannot be passed
+// where a wall time is meant, or the reverse: the two differ by decades.
+export type Monotonic = number & { readonly __monotonic: true };
+
 export interface Timekeeper {
   // Wall time, in epoch milliseconds: the one wall reading. A `Date` is
   // `new Date(clock.now())`, and a file's age is `clock.now() - mtimeMs`.
   now(): number;
   // Milliseconds since an arbitrary start that never steps back, for spans.
-  monotonic(): number;
+  monotonic(): Monotonic;
   // Runs `fire` on a later turn, once `ms` have passed, unless what it returns
   // clears it first. Never before it returns: its callers arm it before they
   // are ready to be fired at.
@@ -42,7 +46,7 @@ export function elapsedMs(
 // handed it. `defer` is `node:timers`' own, which jest's fakes leave alone.
 export const systemTimekeeper: Timekeeper = {
   now: () => Date.now(),
-  monotonic: () => performance.now(),
+  monotonic: () => performance.now() as Monotonic,
   after: (ms, fire, options) => {
     const timer = setTimeout(fire, ms);
     if (options?.unref) {

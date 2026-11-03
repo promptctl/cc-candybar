@@ -10,7 +10,7 @@ import { quietLogger, type DaemonLogger } from "../utils/logger.js";
 import { valueOf } from "../utils/logfmt.js";
 import { PENDING, type Outcome, type Reading } from "../utils/outcome.js";
 import { stampOf } from "../utils/transcript-fs.js";
-import type { Timekeeper } from "../time.js";
+import { elapsedMs, type Timekeeper } from "../time.js";
 
 // How many settings files keep their last reading: one per Claude Code
 // directory a session reported, which a user has few of.
@@ -60,7 +60,7 @@ export class AutoCompactProvider {
       `path=${valueOf(settingsPath)} stamp=${valueOf(stamp)}`,
       "request",
       outcome,
-      this.clock.monotonic() - startedAt,
+      elapsedMs(this.clock, startedAt),
     );
     this.known.set(settingsPath, { stamp, outcome });
     return outcome;

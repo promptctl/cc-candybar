@@ -71,7 +71,7 @@ import {
   type RefreshTrigger,
 } from "../utils/refresh-ledger.js";
 import { valueOf } from "../utils/logfmt.js";
-import { timeoutSignal, type Timekeeper } from "../time";
+import { elapsedMs, timeoutSignal, type Timekeeper } from "../time";
 
 // How long text that is not a document may be a write still in progress
 // before it shows as the failure it is (documentPublisher).
@@ -1077,7 +1077,7 @@ export class SourceRegistry {
             `where=${valueOf(reader.where)}`,
             asked,
             publish(read),
-            this.store.clock.monotonic() - startedAt,
+            elapsedMs(this.store.clock, startedAt),
           ),
         (err: unknown) => {
           if (err !== this.abort.signal.reason) throw err;

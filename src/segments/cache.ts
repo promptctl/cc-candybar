@@ -34,7 +34,7 @@ import type { SourceStats } from "../utils/keyed-source.js";
 import { valueOf } from "../utils/logfmt.js";
 import { quietLogger, type DaemonLogger } from "../utils/logger.js";
 import { readTail, statStamp } from "../utils/transcript-fs.js";
-import type { Timekeeper } from "../time.js";
+import { elapsedMs, type Timekeeper } from "../time.js";
 
 // Anthropic prompt cache TTL. A const, not a knob: it is a property of the
 // upstream cache, not of this renderer. If a future cache tier ships a
@@ -165,7 +165,7 @@ export class CacheExpiryProvider {
       `sid=${valueOf(sessionId)} stamp=${valueOf(stamp)}`,
       "request",
       outcome,
-      this.clock.monotonic() - startedAt,
+      elapsedMs(this.clock, startedAt),
     );
     return outcome;
   }

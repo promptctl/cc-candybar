@@ -32,7 +32,7 @@ import { PENDING, type Pending } from "./outcome";
 import { ObservableLru } from "./observable-lru";
 import { valueOf } from "./logfmt";
 import type { Refreshes } from "./refresh-ledger";
-import type { Timekeeper } from "../time";
+import { elapsedMs, type Timekeeper } from "../time";
 
 // [LAW:types-are-the-program] Never `absent`: a session with no transcript yet
 // is a real empty fold, so the caller has exactly two arms.
@@ -106,7 +106,7 @@ export class TranscriptFold<S> {
       `sid=${valueOf(sessionId)}`,
       "request",
       read,
-      this.clock.monotonic() - startedAt,
+      elapsedMs(this.clock, startedAt),
     );
     if (read.kind === "failed") return this.store(sessionId, prior, read);
     if (read.kind === "absent") {

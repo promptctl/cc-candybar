@@ -21,7 +21,7 @@ import type { LaunchCategory } from "../proc/launch";
 import type { LaunchStatsHandle } from "../proc/stats-handle";
 import { PROTOCOL_VERSION } from "./protocol";
 import { PACKAGE_VERSION } from "../version";
-import type { Timekeeper } from "../time";
+import type { Monotonic, Timekeeper } from "../time";
 
 // Rolling window for "last minute" counts. Keep timestamps for each launch in
 // a ring buffer; eviction happens lazily on read.
@@ -194,7 +194,6 @@ export interface StatsSnapshot {
 
 export class RuntimeStats {
   readonly startedAt: Date;
-  private readonly startedMono: number;
   requestsTotal = 0;
   requestsErrored = 0;
   requestsTimedOut = 0;
@@ -205,7 +204,6 @@ export class RuntimeStats {
   // like everything else the daemon times.
   constructor(private readonly clock: Pick<Timekeeper, "now" | "monotonic">) {
     this.startedAt = new Date(clock.now());
-    this.startedMono = clock.monotonic();
   }
 
   // Whether `field` is the first sight of that unknown hook field in this
@@ -369,7 +367,10 @@ export class RuntimeStats {
   // one reads; comparing against the producer's own output, not a second
   // spelling of the type, means a field added here is checked for there.
   static referenceSnapshot(): StatsSnapshot {
-    return new RuntimeStats({ now: () => 0, monotonic: () => 0 }).snapshot({
+    return new RuntimeStats({
+      now: () => 0,
+      monotonic: () => 0 as Monotonic,
+    }).snapshot({
       gitCache: {
         size: 0,
         held: 0,
@@ -482,7 +483,9 @@ export class RuntimeStats {
       sourceDigest: extras.sourceDigest,
       protocolVersion: PROTOCOL_VERSION,
       startedAt: this.startedAt.toISOString(),
-      uptimeSec: Math.floor((this.clock.monotonic() - this.startedMono) / 1000),
+      uptimeSec: Math.floor(
+        (this.clock.now() - this.startedAt.getTime()) / 1000,
+      ),
       rssBytes: mem.rss,
       heapUsedBytes: mem.heapUsed,
       heapTotalBytes: mem.heapTotal,

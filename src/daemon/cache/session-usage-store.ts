@@ -46,7 +46,7 @@ import type { Holds } from "../../utils/holds";
 import { KeyedSource, type KeyedSourceStats } from "../../utils/keyed-source";
 import { RefreshLedger, type Refreshes } from "../../utils/refresh-ledger";
 import type { Every } from "../../utils/period";
-import type { Timekeeper } from "../../time";
+import { elapsedMs, type Timekeeper } from "../../time";
 import { Kept } from "../../var-system/store";
 
 // [LAW:one-source-of-truth] The daemon's single owner of per-session usage.
@@ -669,7 +669,7 @@ export class SessionUsageStore {
           `sid=${valueOf(sessionId)}`,
           "request",
           record,
-          this.clock.monotonic() - startedAt,
+          elapsedMs(this.clock, startedAt),
         );
       }
       // The session's slot records that its refresh answered — a failure

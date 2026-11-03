@@ -22,7 +22,7 @@ import {
   type WatchSpec,
 } from "./watchers";
 import { boundKey, boundOf } from "../../utils/folder-identity";
-import type { Timekeeper } from "../../time";
+import { elapsedMs, type Monotonic, type Timekeeper } from "../../time";
 import { TrailingEdge } from "../../utils/trailing-edge";
 import { Period, periodOf, type Every } from "../../utils/period";
 import {
@@ -132,7 +132,7 @@ interface PrSource extends Readable<PullRequest> {
 
 interface PrAnswer {
   readonly outcome: Outcome<PullRequest>;
-  readonly at: number;
+  readonly at: Monotonic;
 }
 
 // What a pass did to the PR's key, for its refresh event: no PR source, the
@@ -407,7 +407,7 @@ export class GitDataProvider {
     projectDir: string | undefined,
   ): Outcome<string> {
     const key = `${workingDir}|${projectDir ?? ""}`;
-    const now = this.clock.now();
+    const now = this.clock.monotonic();
 
     const existing = this.resolutions.get(key);
     if (existing && now - existing.computedAt < RESOLUTION_TTL_MS) {
@@ -755,7 +755,7 @@ export class GitDataProvider {
       `${state.root} asked=${asked.join(",") || "-"} values=${values.length} pr=${prMove} watch=${followed.move}`,
       triggerOf(asked),
       failures.size === 0 ? ok(null) : failed([...failures].join("; ")),
-      this.clock.monotonic() - startedAt,
+      elapsedMs(this.clock, startedAt),
     );
   }
 
@@ -846,7 +846,7 @@ export class GitDataProvider {
         `${state.root} key=${logfmtValue(key)}`,
         by,
         outcome,
-        this.clock.monotonic() - startedAt,
+        elapsedMs(this.clock, startedAt),
       );
       // Kept under its own key whether or not the PR has moved on since.
       const at = this.clock.monotonic();

@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import type { Timekeeper } from "../../src/time";
+import type { Monotonic, Timekeeper } from "../../src/time";
 
 // A clock a test moves by hand. Both of its readings and every timer it hands
 // out stand still until `advance`, so it belongs on a daemon its case owns,
@@ -69,7 +69,7 @@ export function heldClock(start: Date): HeldClock {
   return {
     // Whole milliseconds, as `Date.now()` reads them.
     now: () => Math.trunc(start.getTime() + elapsed),
-    monotonic: () => elapsed,
+    monotonic: () => elapsed as Monotonic,
     after: (ms, fire) => arm(ms, fire),
     every: (ms, fire) => arm(Math.max(1, ms), fire, Math.max(1, ms)),
     defer: (fire) => arm(0, fire),

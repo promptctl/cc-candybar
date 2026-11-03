@@ -1,5 +1,5 @@
 import type { Outcome } from "./outcome";
-import type { Timekeeper } from "../time";
+import type { Monotonic, Timekeeper } from "../time";
 
 // [LAW:types-are-the-program] A period chosen by the last read's outcome: a
 // failed read is retried on its own (usually shorter) period, so a transient
@@ -45,10 +45,10 @@ export class Period {
     private readonly clock: Pick<Timekeeper, "monotonic" | "after">,
   ) {}
 
-  // A read landed at `at` (now, unless the owner is resuming an answer it
+  // A read landed at the monotonic reading `at` (now, unless the owner is resuming an answer it
   // kept from earlier). `periodMs` is chosen by the caller from the read's
   // outcome (a failed PR lookup is retried sooner than a found one).
-  landed(periodMs: number, at: number = this.clock.monotonic()): void {
+  landed(periodMs: number, at: Monotonic = this.clock.monotonic()): void {
     this.last = { at, periodMs };
     this.schedule();
   }

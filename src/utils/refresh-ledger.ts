@@ -137,11 +137,8 @@ export class Refreshes<Trigger extends RefreshTrigger> {
     fields: string,
     by: Trigger,
     outcome: Outcome<unknown>,
-    took: number,
+    ms: number,
   ): void {
-    // [LAW:single-enforcer] A read is timed on the monotonic clock, which reads
-    // fractions; every refresh is whole milliseconds here, in the tally and the event.
-    const ms = Math.round(took);
     this.tally.refreshes[by] = (this.tally.refreshes[by] ?? 0) + 1;
     this.tally.lastMs = ms;
     if (outcome.kind === "failed") this.tally.failures++;

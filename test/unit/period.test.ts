@@ -1,5 +1,5 @@
 import { Period } from "../../src/utils/period";
-import { systemTimekeeper } from "../../src/time";
+import { systemTimekeeper, type Monotonic } from "../../src/time";
 import { heldClock } from "../helpers/held-clock";
 
 afterEach(() => {
@@ -28,13 +28,13 @@ describe("Period", () => {
     const period = new Period(() => ticks++, systemTimekeeper);
     period.hold(true);
 
-    period.landed(1_000, performance.now() - 600);
+    period.landed(1_000, (performance.now() - 600) as Monotonic);
     await jest.advanceTimersByTimeAsync(399);
     expect(ticks).toBe(0);
     await jest.advanceTimersByTimeAsync(1);
     expect(ticks).toBe(1);
 
-    period.landed(1_000, performance.now() - 5_000);
+    period.landed(1_000, (performance.now() - 5_000) as Monotonic);
     await jest.advanceTimersByTimeAsync(0);
     expect(ticks).toBe(2);
     period.dispose();

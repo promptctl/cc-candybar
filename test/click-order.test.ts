@@ -81,7 +81,7 @@ function setup(over: Partial<DoctorEdge> = {}) {
   const logged: string[] = [];
   const turns = new JournalTurns({
     log: () => {},
-    monotonic: () => performance.now(),
+    monotonic: () => systemTimekeeper.monotonic(),
   });
   for (const sid of [A, B]) {
     recordRender(sessionState, sid);
