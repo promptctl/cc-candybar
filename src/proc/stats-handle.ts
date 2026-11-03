@@ -12,4 +12,9 @@ export interface LaunchStatsHandle {
   onEnd(category: LaunchCategory, durationMs: number): void;
   // A launch the launcher refused: no child started, so neither of the above.
   onRefused(category: LaunchCategory): void;
+  // A pipe that outlived its launch, held by a process that left the group:
+  // opened when the launch settles, closed when the pipe does — after `bytes`
+  // read and dropped, `cut` when the launcher ended it at the bound.
+  onDrainOpen(category: LaunchCategory): void;
+  onDrainClose(category: LaunchCategory, bytes: number, cut: boolean): void;
 }

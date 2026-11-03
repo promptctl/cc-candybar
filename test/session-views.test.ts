@@ -538,6 +538,8 @@ test("a config load starts no view's source, and still names a session value tha
         },
         onEnd: () => {},
         onRefused: () => {},
+        onDrainOpen: () => {},
+        onDrainClose: () => {},
       },
     },
     systemTimekeeper,

@@ -33,6 +33,8 @@ function makeSpyHandle(): {
       onStart: (c) => starts.push(c),
       onEnd: (c, d) => ends.push({ category: c, durationMs: d }),
       onRefused: (c) => refused.push(c),
+      onDrainOpen: () => {},
+      onDrainClose: () => {},
     },
     starts,
     ends,
