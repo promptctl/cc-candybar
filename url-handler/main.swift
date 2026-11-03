@@ -23,9 +23,9 @@
 // told to the user as a macOS user notification carrying what was observed,
 // never a diagnosis. The click is lost by design: the app never starts a
 // daemon, because that would need the paths that age, and a launcher the
-// daemon left beside its socket would make this app a second enforcer of that
-// directory's trust check and of the daemon's spawn-storm protections.
-// [LAW:single-enforcer]
+// daemon left beside its socket would make this app a second enforcer
+// [LAW:single-enforcer] of that directory's trust check and of the daemon's
+// spawn-storm protections.
 
 import AppKit
 import UserNotifications
@@ -129,12 +129,16 @@ func forward(_ url: String) -> Forward {
 
 // Tells the user a click was lost, in a form that needs no daemon. The body is
 // the observed failure as the forward reported it; the user reads it as the
-// fact it is. Authorization is asked for on every lost click: the request is
-// idempotent (macOS prompts once and remembers), so the app keeps no state
-// about it, and a user who never loses a click never sees the prompt.
+// fact it is. Authorization is asked for on every lost click: the request
+// completes without a prompt once the user has answered, so the app keeps no
+// state about it, and a user who never loses a click never sees the prompt.
+// One fixed identifier, because there is one condition: a run of lost clicks
+// is one notice carrying the latest observation, not a stack of copies.
 // [LAW:no-silent-failure] A post the center refuses (notifications denied for
 // the app, or an OS error) is logged under the subsystem; the user who denied
 // them chose not to be told this way, and there is no second channel.
+let lostClickNotice = "lost-click"
+
 func notifyLost(_ why: String) {
   let center = UNUserNotificationCenter.current()
   center.requestAuthorization(options: [.alert]) { granted, error in
@@ -150,7 +154,7 @@ func notifyLost(_ why: String) {
     content.title = "cc-candybar: click not delivered"
     content.body = why
     let request = UNNotificationRequest(
-      identifier: UUID().uuidString, content: content, trigger: nil)
+      identifier: lostClickNotice, content: content, trigger: nil)
     center.add(request) { error in
       if let error = error {
         log.error("notification not shown: \(error.localizedDescription, privacy: .public)")
@@ -163,13 +167,15 @@ final class Handler: NSObject, NSApplicationDelegate, UNUserNotificationCenterDe
   // Launch Services activates this app to deliver a click, so the app is
   // frontmost at the moment it posts, and macOS hides a frontmost app's
   // notifications unless its delegate asks for the banner. Verified on
-  // macOS 15: without this the post succeeds and the user sees nothing.
+  // macOS 15: without this the post succeeds and the user sees nothing. The
+  // list entry stays after the banner expires, so a user who looked away still
+  // finds the lost click in Notification Center.
   func userNotificationCenter(
     _ center: UNUserNotificationCenter,
     willPresent notification: UNNotification,
     withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
   ) {
-    completionHandler([.banner])
+    completionHandler([.banner, .list])
   }
 
   func application(_ application: NSApplication, open urls: [URL]) {
