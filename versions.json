@@ -4,15 +4,22 @@
     {
       "version": "pr-593",
       "ref": "refs/pull/593/merge",
-      "sha": "e6f58721b46b9add70bbdf899d57ccc3e6d87170",
-      "timestamp": "2026-11-03T01:07:17.073Z",
+      "sha": "6cfcc8248d1eb5e3a258ede2606bf763e4022a17",
+      "timestamp": "2026-11-03T01:12:31.880Z",
       "commits": [
         {
-          "sha": "e6f58721b46b9add70bbdf899d57ccc3e6d87170",
+          "sha": "6cfcc8248d1eb5e3a258ede2606bf763e4022a17",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T01:06:35Z",
-          "message": "Merge fe3336f79b79427255d6d488976d1faca0b2f384 into 8b23a558ca80eb27c92e05a931e56f0267be820f\n"
+          "timestamp": "2026-11-03T01:11:29Z",
+          "message": "Merge 7df1f7b7de750708d475fb360c5656880fcb07f6 into 8b23a558ca80eb27c92e05a931e56f0267be820f\n"
+        },
+        {
+          "sha": "7df1f7b7de750708d475fb360c5656880fcb07f6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T18:11:03-07:00",
+          "message": "test(frame-feed): wall readings cycle a fixed shortfall sequence, so one reading can disagree with the next, and the stepped-back case runs on held time (candybar-testing-0x6u.e2d)\n"
         },
         {
           "sha": "fe3336f79b79427255d6d488976d1faca0b2f384",
