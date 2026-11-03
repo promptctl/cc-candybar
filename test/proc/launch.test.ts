@@ -498,7 +498,8 @@ describe("launch (async)", () => {
         category: "user-shell",
       });
       expect(r).toMatchObject({ ok: false, reason: "signal-refused" });
-      expect(drains.opened).toContain("user-shell");
+      // stdout, stderr and the input.
+      expect(drains.opened).toHaveLength(3);
       await until(
         () => fs.existsSync(counted) && fs.readFileSync(counted, "utf8") !== "",
         "the reader's count",
@@ -529,8 +530,9 @@ describe("launch (async)", () => {
         category: "user-shell",
       });
       expect(r).toMatchObject({ ok: false, reason: "signal-refused" });
+      // stdout, stderr and the input.
       const held = drains.opened.length;
-      expect(held).toBeGreaterThan(0);
+      expect(held).toBe(3);
       closing.abort();
       await until(
         () => drains.closed.length === held,

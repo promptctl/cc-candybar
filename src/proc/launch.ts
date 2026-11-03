@@ -668,8 +668,9 @@ function capture(
 }
 
 // [LAW:single-enforcer] A pipe still open after settle, in either direction,
-// is held, unref'd and metered here, and goes with a closed launcher. Built at
-// module scope, so its listeners hold the pipe and not the launch.
+// is held, unref'd and metered here, and goes with a closed launcher. Its
+// listeners hold the pipe and `end`, so `end` must be built outside the launch
+// too, or the held pipe pins the launch's scope for its reader's life.
 function hold(
   state: LaunchState,
   category: LaunchCategory,
@@ -695,6 +696,9 @@ function hold(
 // succeed (`head -1`), so its exit is the verdict, and the failed write says
 // nothing that exit does not. At module scope, so a held input's listener
 // holds nothing of the launch.
+// An input is written, never cut, so it always ends "closed".
+const inputEnd = (): DrainEnd => "closed";
+
 function feed(input: Writable, text: string | Buffer | undefined): void {
   input.on("error", () => {});
   input.end(text);
@@ -782,7 +786,7 @@ async function launchWaited(
       stderr.drain();
       // Input still being written at settle is held with the drains.
       if (input !== null && !input.destroyed && !input.writableFinished)
-        hold(state, opts.category, input, () => "closed");
+        hold(state, opts.category, input, inputEnd);
       deliver();
     };
     const settle = (r: LaunchResult) => finish(() => resolve(r));
