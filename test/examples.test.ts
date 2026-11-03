@@ -8,7 +8,8 @@
 // fails CI, not a user's status line.
 
 import { drawPayload } from "./helpers/draw-payload";
-import { processLauncher } from "./helpers/host";
+import { fakeLauncher } from "./helpers/fake-launcher";
+import { hangs } from "../src/proc/spawner-fake";
 import { NO_PROJECT } from "./helpers/no-project";
 import { textOf } from "../src/render/frame";
 import { TEST_SIGNER } from "./helpers/link-signer";
@@ -61,7 +62,11 @@ describe("shipped examples load and render through the real cascade", () => {
 
     const sessionState = new SessionState();
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(processLauncher, store, "", sessionState);
+    // The draw below is the first one: every shell source is still reading, as
+    // it is to the real launcher until a process answers.
+    const { launcher, spawner } = fakeLauncher(systemTimekeeper);
+    spawner.program(() => true, hangs());
+    const registry = new SourceRegistry(launcher, store, "", sessionState);
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     // [LAW:no-silent-failure] A variable that fails to declare is collected, not
     // thrown — surface it here so a broken example var fails the test loudly.
@@ -88,5 +93,8 @@ describe("shipped examples load and render through the real cascade", () => {
     // The render-time error cell prefix — its presence means a segment threw
     // (missing var, bad template) and degraded to a visible warning.
     expect(rendered).not.toContain("⚠");
+    // The sources are still reading: ending the registry ends their launches and
+    // the timers those hold.
+    registry.dispose();
   });
 });

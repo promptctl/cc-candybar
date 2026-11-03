@@ -32,6 +32,30 @@ const CLOCK_PROPERTIES = [
   { object: "process", property: "uptime", message: CLOCK_MESSAGE },
   { object: "AbortSignal", property: "timeout", message: CLOCK_MESSAGE },
 ];
+// [LAW:single-enforcer] A signal sent to a pid or its group, or signal 0 asking
+// whether it is there, is read of the process table: src/proc/spawner.ts owns
+// it for a launch's groups and the ProcessProbe for a pid. The three files
+// below are exceptions, each owned by the ticket that gives its program a port;
+// the list may shrink and no other file joins it.
+//   src/utils/cache.ts       pricing's lock holder (candybar-testing-ihvy.89p)
+//   src/daemon/lane-edge.ts  SIGTERM to Claude Code (candybar-testing-ihvy.dcv)
+//   src/daemon/server.ts     the daemon's own SIGKILL (the Lifetime piece)
+const KILL_EXCEPTIONS = [
+  "src/utils/cache.ts",
+  "src/daemon/lane-edge.ts",
+  "src/daemon/server.ts",
+];
+const KILL_OWNERS = [
+  "src/proc/spawner.ts",
+  "src/daemon/process-fingerprint.ts",
+  ...KILL_EXCEPTIONS,
+];
+const KILL_PROPERTY = {
+  object: "process",
+  property: "kill",
+  message:
+    "Signals and liveness reads go through a Spawner (a launch's group) or a ProcessProbe (a pid). [LAW:single-enforcer]",
+};
 const CLOCK_SYNTAX = [
   {
     selector: "NewExpression[callee.name='Date'][arguments.length=0]",
@@ -73,6 +97,21 @@ const PATHS = [
   "**/daemon/paths.js",
   "**/paths",
   "**/paths.js",
+];
+
+// [LAW:single-enforcer] A fake exists to be scripted by a test; no src file
+// names one, so a stand-in cannot reach a daemon that runs for a person.
+const FAKE_IMPORTS = [
+  {
+    group: [
+      "**/spawner-fake",
+      "**/spawner-fake.js",
+      "**/process-probe-fake",
+      "**/process-probe-fake.js",
+    ],
+    message:
+      "A fake is a test's: src never imports one. [LAW:single-enforcer]",
+  },
 ];
 
 const OWNED_IMPORTS = {
@@ -285,6 +324,7 @@ function restrictedImports(file, rowPatterns = []) {
             message: `${message} [LAW:single-enforcer]`,
           })),
         ...HOST_NAMED_IMPORTS,
+        ...FAKE_IMPORTS,
         ...rowPatterns,
       ],
     },
@@ -309,7 +349,10 @@ function ownedImportBlocks() {
       rules: {
         "no-restricted-imports": [
           "error",
-          { paths: [...CHILD_PROCESS_PATHS, ...CLOCK_IMPORT_PATHS] },
+          {
+            paths: [...CHILD_PROCESS_PATHS, ...CLOCK_IMPORT_PATHS],
+            patterns: FAKE_IMPORTS,
+          },
         ],
       },
     },
@@ -408,7 +451,18 @@ export default [
   // alias of `process` itself is the one it cannot see.
   {
     files: ["src/**/*.{ts,mts}"],
-    ignores: [...HOST_READERS, CLOCK_FILE],
+    ignores: [...HOST_READERS, CLOCK_FILE, ...KILL_OWNERS],
+    rules: {
+      "no-restricted-properties": [
+        "error",
+        ...HOST_PROPERTIES,
+        ...CLOCK_PROPERTIES,
+        KILL_PROPERTY,
+      ],
+    },
+  },
+  {
+    files: KILL_OWNERS,
     rules: {
       "no-restricted-properties": [
         "error",
@@ -419,11 +473,19 @@ export default [
   },
   {
     files: HOST_READERS,
-    rules: { "no-restricted-properties": ["error", ...CLOCK_PROPERTIES] },
+    rules: {
+      "no-restricted-properties": [
+        "error",
+        ...CLOCK_PROPERTIES,
+        KILL_PROPERTY,
+      ],
+    },
   },
   {
     files: [CLOCK_FILE],
-    rules: { "no-restricted-properties": ["error", ...HOST_PROPERTIES] },
+    rules: {
+      "no-restricted-properties": ["error", ...HOST_PROPERTIES, KILL_PROPERTY],
+    },
   },
   // Every file but the clock's: the timer globals, and `new Date()` with no
   // argument. The blocks after this one repeat CLOCK_SYNTAX and CLOCK_GLOBALS
