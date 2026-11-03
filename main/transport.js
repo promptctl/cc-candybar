@@ -23772,7 +23772,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.180.4";
+var PACKAGE_VERSION = "1.180.5";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -78671,8 +78671,9 @@ var PricingService = class {
           let data = "";
           let size = 0;
           const MAX_SIZE = 1024 * 1024;
+          response.setEncoding("utf8");
           response.on("data", (chunk3) => {
-            size += chunk3.length;
+            size += import_buffer.Buffer.byteLength(chunk3);
             if (size > MAX_SIZE) {
               debug("Response too large");
               request2.destroy();

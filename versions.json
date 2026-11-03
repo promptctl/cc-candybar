@@ -2,38 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-591",
-      "ref": "refs/pull/591/merge",
-      "sha": "2f64163036ed081cffddd932dd3d23ed8ea6c2e4",
-      "timestamp": "2026-11-03T00:25:00.590Z",
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "e16e4d82cca128b9a22e0c6bc6cf69fc30529654",
+      "timestamp": "2026-11-03T00:30:22.606Z",
       "commits": [
         {
-          "sha": "2f64163036ed081cffddd932dd3d23ed8ea6c2e4",
+          "sha": "e16e4d82cca128b9a22e0c6bc6cf69fc30529654",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T00:24:07Z",
-          "message": "Merge 8fd809a4f8406d09f39a5f8becb1a200323fc0f7 into e441e0b2b811339c5e3219670b1f0688f08132e1\n"
+          "timestamp": "2026-11-02T17:29:22-07:00",
+          "message": "fix(pricing): the pricing fetch decodes the response as a stream (candybar-testing-0x6u.61o) (#591)\n\n* fix(pricing): the pricing fetch decodes the response as a stream, so a character split across reads arrives whole (candybar-testing-0x6u.61o)\n\n* fix(pricing): the response size cap counts bytes, and the tests pin the abort (candybar-testing-0x6u.61o)\n\n* fix(pricing): the cap's comment says bytes, and each fetch test starts with no reads (candybar-testing-0x6u.61o)"
         },
         {
-          "sha": "8fd809a4f8406d09f39a5f8becb1a200323fc0f7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T17:15:08-07:00",
-          "message": "fix(pricing): the cap's comment says bytes, and each fetch test starts with no reads (candybar-testing-0x6u.61o)\n"
-        },
-        {
-          "sha": "43037d75e05c06c625d7d293757efa536d548d01",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T17:13:55-07:00",
-          "message": "fix(pricing): the response size cap counts bytes, and the tests pin the abort (candybar-testing-0x6u.61o)\n"
-        },
-        {
-          "sha": "4ef91a7f198ea7417d8044f89e5007390f57999a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T17:11:34-07:00",
-          "message": "fix(pricing): the pricing fetch decodes the response as a stream, so a character split across reads arrives whole (candybar-testing-0x6u.61o)\n"
+          "sha": "c3331d140a1e7e2f873ff79e4b64ad6d728d553b",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-03T00:26:11Z",
+          "message": "chore(release): set `package.json` to 1.180.5 [skip ci]\n\n## [1.180.5](https://github.com/promptctl/cc-candybar/compare/v1.180.4...v1.180.5) (2026-11-03)\n\n### Bug Fixes\n\n* **test:** the client's answer cases run over a memory connection on a held clock (candybar-testing-ihvy.5q4) ([#589](https://github.com/promptctl/cc-candybar/issues/589)) ([7ca57ba](https://github.com/promptctl/cc-candybar/commit/7ca57ba16e524929f55d99beb41eba44d31a74fb))\n"
         }
       ]
     },
@@ -77,21 +63,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T17:00:09-07:00",
           "message": "fix(launch): a waited launch keeps at most 16 MiB per stream and ends the child past it (candybar-testing-0x6u.ndy)\n\nA child writing without end grew the capture string until V8 threw\n'Invalid string length' from the data listener; the uncaughtException\nhandler then shut the daemon down. capture now stops at\nMAX_CAPTURED_BYTES and launchWaited ends the child through terminate with\na new reason, output-limit, so a truncated capture is never ok.\nterminate keeps the first cause.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "e441e0b2b811339c5e3219670b1f0688f08132e1",
-      "timestamp": "2026-11-03T00:18:08.975Z",
-      "commits": [
-        {
-          "sha": "e441e0b2b811339c5e3219670b1f0688f08132e1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T17:17:08-07:00",
-          "message": "docs(design): the isolated daemon, tmux events and browser surface designs (#559)\n\nGoals, architecture, contracts and one document per area, with the surveys and probes behind them. The Frame is recorded as built, and the browser surface is un-parked."
         }
       ]
     },
