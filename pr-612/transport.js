@@ -52511,8 +52511,7 @@ function shellReader(launcher, command, cwd2, signal) {
         timeoutMs: SHELL_READ_TIMEOUT_MS,
         signal
       });
-      if (!r.ok && r.reason === "aborted" && signal.aborted)
-        throw signal.reason;
+      if (signal.aborted) throw signal.reason;
       if (r.ok) return ok(r.stdout);
       const why2 = r.reason === "non-zero" ? `exited with code ${r.exitCode}` : r.reason === "timeout" ? `timed out after ${SHELL_READ_TIMEOUT_MS / 1e3} s` : [r.reason, r.error].filter((s) => s !== void 0).join(": ");
       return failed(`shell "${command}" ${why2} in ${cwd2}`, "read");

@@ -4,15 +4,22 @@
     {
       "version": "pr-612",
       "ref": "refs/pull/612/merge",
-      "sha": "a471ec55840f0692a5a08fc01de48834843f9a7e",
-      "timestamp": "2026-11-03T13:59:04.745Z",
+      "sha": "3301190ae3b872ba8988621fddbaeaa40a6b76a4",
+      "timestamp": "2026-11-03T14:08:12.608Z",
       "commits": [
         {
-          "sha": "a471ec55840f0692a5a08fc01de48834843f9a7e",
+          "sha": "3301190ae3b872ba8988621fddbaeaa40a6b76a4",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T06:58:06-07:00",
-          "message": "Merge 88ea3373ac682ce629d3f5bbb12c2fe7e5e8de31 into d05718f5dc3d1b63c32060d3455f649c9af05c8a\n"
+          "timestamp": "2026-11-03T14:06:03Z",
+          "message": "Merge 3366319f49f69b86bb83f6457b3f430a3d6451d8 into d05718f5dc3d1b63c32060d3455f649c9af05c8a\n"
+        },
+        {
+          "sha": "3366319f49f69b86bb83f6457b3f430a3d6451d8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T07:05:48-07:00",
+          "message": "fix(sources): a shell run the timeout ends under a disposed registry publishes nothing (candybar-gather-renderer-76bb.6pj.dal)\n\nThe launcher keeps the first cause that ended a child, so a run the timeout\nsignalled before dispose is reaped as a timeout with the source's abort set.\nThe reader gated the abort on the launcher's reason too, and published the\ntimeout's failure into the torn-down registry. It now throws the abort on\nthe signal alone, as the file reader does.\n"
         },
         {
           "sha": "88ea3373ac682ce629d3f5bbb12c2fe7e5e8de31",
