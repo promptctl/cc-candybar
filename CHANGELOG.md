@@ -1,3 +1,9 @@
+## [1.183.0](https://github.com/promptctl/cc-candybar/compare/v1.182.0...v1.183.0) (2026-11-03)
+
+### Features
+
+* **launch:** a cut drain or a failed launch pipe shows in the ⚠ indicator (candybar-testing-0x6u.0dh) ([#601](https://github.com/promptctl/cc-candybar/issues/601)) ([f076fde](https://github.com/promptctl/cc-candybar/commit/f076fdeb651bcf4d15226703d9e09fdaf17f7ef8))
+
 ## [1.182.0](https://github.com/promptctl/cc-candybar/compare/v1.181.1...v1.182.0) (2026-11-03)
 
 ### Features
