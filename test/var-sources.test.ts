@@ -18,9 +18,13 @@ import {
   SourceRegistry,
   parseDuration,
   MIN_SHELL_TTL_MS,
+  SHELL_READ_TIMEOUT_MS,
   type Published,
   type SourceParse,
 } from "../src/var-system";
+import { fakeLauncher, turns } from "./helpers/fake-launcher";
+import { heldClock } from "./helpers/held-clock";
+import { hangs, ignoring, shell } from "../src/proc/spawner-fake";
 import { SessionState } from "../src/daemon/session-state";
 import { systemLauncher } from "../src/proc/system-launcher";
 import { MAX_CAPTURED_BYTES } from "../src/proc/launch";
@@ -778,6 +782,95 @@ describe("SourceRegistry — shell: TTL floor", () => {
     } finally {
       cleanup();
     }
+  });
+});
+
+// ─── shell — read timeout ────────────────────────────────────────────────────
+
+// [LAW:no-silent-failure] A command that never writes and never exits is ended
+// at the read timeout and reads as a failure naming it, in its read phase; the
+// run's end does not hold the next period's run. Over the fake launcher on a
+// held clock, so the bound is the production launcher's, advanced by hand.
+describe("SourceRegistry — shell: read timeout", () => {
+  it("a command past the timeout is failed in its read phase, its child ended, and the next period starts clean", async () => {
+    const clock = heldClock(new Date(0));
+    const { launcher, spawner, started } = fakeLauncher(clock);
+    spawner.program(shell("sleep 99"), hangs());
+    const store = new VariableStore(clock);
+    const registry = new SourceRegistry(launcher, store, "");
+    live.add(registry);
+    const periodMs = SHELL_READ_TIMEOUT_MS * 2;
+    registry.declareShell("val", "sleep 99", {
+      cwd: "/work",
+      parse: { kind: "json", default: undefined },
+      cache: { kind: "ttl", durationMs: periodMs },
+    });
+    clock.advance(0);
+    await turns();
+    expect(started()).toHaveLength(1);
+
+    clock.advance(SHELL_READ_TIMEOUT_MS - 1);
+    await turns();
+    expect(started()[0]!.ended).toBeNull();
+
+    clock.advance(1);
+    await turns();
+    expect(started()[0]!.signals).toEqual(["SIGTERM"]);
+    expect(started()[0]!.ended).toEqual({ code: null, signal: "SIGTERM" });
+    await ran(registry);
+    expect(store.readDocument("val")).toEqual({
+      kind: "failed",
+      failedAt: "read",
+      reason: `shell "sleep 99" timed out after ${SHELL_READ_TIMEOUT_MS / 1000} s in /work`,
+    });
+
+    clock.advance(periodMs - SHELL_READ_TIMEOUT_MS);
+    await turns();
+    expect(started()).toHaveLength(2);
+    expect(started()[1]!.ended).toBeNull();
+  });
+
+  // [LAW:no-silent-failure] The timeout and the registry's dispose can both
+  // end one run: the launcher keeps the first cause, so a child ended by the
+  // timeout under a disposed registry is reported as a timeout, with the
+  // source's own abort standing. That run publishes nothing: the registry it
+  // would publish into is gone, and the abort is the one rejection a run may
+  // end in, swallowed by the run loop.
+  it("a run the timeout ends after dispose publishes nothing and rejects with nothing unhandled", async () => {
+    const clock = heldClock(new Date(0));
+    const { launcher, spawner, started } = fakeLauncher(clock);
+    spawner.program(shell("sleep 99"), ignoring(["SIGTERM"], hangs()));
+    const store = new VariableStore(clock);
+    const registry = new SourceRegistry(launcher, store, "");
+    live.add(registry);
+    registry.declareShell("val", "sleep 99", {
+      cwd: "/work",
+      parse: { kind: "json", default: undefined },
+      cache: { kind: "ttl", durationMs: SHELL_READ_TIMEOUT_MS * 2 },
+    });
+    clock.advance(0);
+    await turns();
+    const before = store.readDocument("val");
+
+    const heard: unknown[] = [];
+    const note = (e: unknown): void => void heard.push(e);
+    process.on("unhandledRejection", note);
+    try {
+      clock.advance(SHELL_READ_TIMEOUT_MS);
+      await turns();
+      expect(started()[0]!.signals).toEqual(["SIGTERM"]);
+      expect(started()[0]!.ended).toBeNull();
+      registry.dispose();
+      // The SIGKILL grace: the child is reaped under the disposed registry.
+      clock.advance(1000);
+      await turns();
+      expect(started()[0]!.ended).toEqual({ code: null, signal: "SIGKILL" });
+      await turns();
+    } finally {
+      process.off("unhandledRejection", note);
+    }
+    expect(heard).toEqual([]);
+    expect(store.readDocument("val")).toEqual(before);
   });
 });
 

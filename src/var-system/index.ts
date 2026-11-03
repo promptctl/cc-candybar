@@ -25,6 +25,7 @@ export {
   SourceRegistry,
   parseDuration,
   MIN_SHELL_TTL_MS,
+  SHELL_READ_TIMEOUT_MS,
   type CachePolicy,
   type ShellOptions,
   type FileOptions,
