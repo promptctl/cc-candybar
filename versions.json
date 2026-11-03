@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-590",
+      "ref": "refs/pull/590/merge",
+      "sha": "c4bc9289467f04bd367864344db6db93572b2103",
+      "timestamp": "2026-11-03T01:24:24.559Z",
+      "commits": [
+        {
+          "sha": "c4bc9289467f04bd367864344db6db93572b2103",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T18:23:23-07:00",
+          "message": "Merge 82b0bf2dd9b0a75828eedd78f44db4e5cffc3936 into 8b23a558ca80eb27c92e05a931e56f0267be820f\n"
+        },
+        {
+          "sha": "82b0bf2dd9b0a75828eedd78f44db4e5cffc3936",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T17:08:20-07:00",
+          "message": "refactor(runs): the failed count is every run that is not ok, aborted or timed out; the launch bound's trap is in memory (candybar-testing-0x6u.ndy)\n"
+        },
+        {
+          "sha": "4a96e80f621ff45e70fcc1b5caf8126f541b1405",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T17:05:20-07:00",
+          "message": "fix(launch): a flooding run reports the output limit, not the flood, and a shell source names the reason over the exit code (candybar-testing-0x6u.ndy)\n\noutput-limit is its own run outcome, so the bar and the run log say the child\nflooded instead of that it could not start, and the 16 MiB capture never\nbecomes the bar's error. A shell source reads reason, not exitCode, to tell\nthe child's own exit from one the launcher ended, so a child that traps TERM\nand exits with a code no longer hides the limit (or the timeout).\n"
+        },
+        {
+          "sha": "3196b1481ff47177155a96bef9436745baed70f9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T17:04:54-07:00",
+          "message": "fix(launch): a flooding run reports the output limit, not the flood, and a shell source names the reason over the exit code (candybar-testing-0x6u.ndy)\n\noutput-limit is its own run outcome, so the bar and the run log say the child\nflooded instead of that it could not start, and the 16 MiB capture never\nbecomes the bar's error. A shell source reads reason, not exitCode, to tell\nthe child's own exit from one the launcher ended, so a child that traps TERM\nand exits with a code no longer hides the limit (or the timeout).\n"
+        },
+        {
+          "sha": "72c411ff7d05c9c1c3b254eb640380706033a6d5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T17:00:09-07:00",
+          "message": "fix(launch): a waited launch keeps at most 16 MiB per stream and ends the child past it (candybar-testing-0x6u.ndy)\n\nA child writing without end grew the capture string until V8 threw\n'Invalid string length' from the data listener; the uncaughtException\nhandler then shut the daemon down. capture now stops at\nMAX_CAPTURED_BYTES and launchWaited ends the child through terminate with\na new reason, output-limit, so a truncated capture is never ok.\nterminate keeps the first cause.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-594",
       "ref": "refs/pull/594/merge",
       "sha": "68b3bfd93f9b848875bdba6bbd64b6a1a3eab96d",
@@ -85,49 +128,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T17:57:09-07:00",
           "message": "fix(git): a closed git cache answers a late declaration as closed, so no period re-arms after close (candybar-testing-ihvy.dbg) (#588)\n\n* fix(git): a closed git cache answers a late declaration as closed, so no period re-arms after close (candybar-testing-ihvy.dbg)\n\nA render mid-wait at close declared after close had dropped every repo,\nbuilt a fresh state on the closed cache, and that state's period re-armed\nafter every pass: hundreds of timers armed after daemon.close() returned.\n\n* fix(sources): a closed keyed source answers a late declaration as closed, as the git cache does (candybar-testing-ihvy.dbg)\n\nReview: tmux, host, managed storage and usage reach the same late\ndeclaration through KeyedSource, whose close set no closed state.\n\n* fix(daemon): a disposed view declares nothing, and a closed usage store builds no day set (candybar-testing-ihvy.dbg)\n\nReview: an owner builds its entry before a closed Holds refuses the hold,\nso a declaration reaching a disposed view orphaned state in every owner.\n\n* fix(daemon): a disposed view's declaration throws through its holds again (candybar-testing-ihvy.dbg)\n\nReview: the disposed-view guard was unreachable in production (a disposed\nview is never served a request) and only hid the closed-holds throw."
-        }
-      ]
-    },
-    {
-      "version": "pr-590",
-      "ref": "refs/pull/590/merge",
-      "sha": "9a825dd71ea7d0337249b7d2bc939c9c2c1a0efd",
-      "timestamp": "2026-11-03T00:20:41.189Z",
-      "commits": [
-        {
-          "sha": "9a825dd71ea7d0337249b7d2bc939c9c2c1a0efd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T00:19:36Z",
-          "message": "Merge a9a2e1c3dc60851dda372341faacf503d27e6ff8 into e441e0b2b811339c5e3219670b1f0688f08132e1\n"
-        },
-        {
-          "sha": "a9a2e1c3dc60851dda372341faacf503d27e6ff8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T17:08:20-07:00",
-          "message": "refactor(runs): the failed count is every run that is not ok, aborted or timed out; the launch bound's trap is in memory (candybar-testing-0x6u.ndy)\n"
-        },
-        {
-          "sha": "7a0f309a84722beea45b42846cb0ea284855cfdd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T17:05:20-07:00",
-          "message": "fix(launch): a flooding run reports the output limit, not the flood, and a shell source names the reason over the exit code (candybar-testing-0x6u.ndy)\n\noutput-limit is its own run outcome, so the bar and the run log say the child\nflooded instead of that it could not start, and the 16 MiB capture never\nbecomes the bar's error. A shell source reads reason, not exitCode, to tell\nthe child's own exit from one the launcher ended, so a child that traps TERM\nand exits with a code no longer hides the limit (or the timeout).\n"
-        },
-        {
-          "sha": "6777ccb30b1c1724d63fd461adecdda8fd01c196",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T17:04:54-07:00",
-          "message": "fix(launch): a flooding run reports the output limit, not the flood, and a shell source names the reason over the exit code (candybar-testing-0x6u.ndy)\n\noutput-limit is its own run outcome, so the bar and the run log say the child\nflooded instead of that it could not start, and the 16 MiB capture never\nbecomes the bar's error. A shell source reads reason, not exitCode, to tell\nthe child's own exit from one the launcher ended, so a child that traps TERM\nand exits with a code no longer hides the limit (or the timeout).\n"
-        },
-        {
-          "sha": "66820efe9faae346a053ce977cfa9ac95a68a2c7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T17:00:09-07:00",
-          "message": "fix(launch): a waited launch keeps at most 16 MiB per stream and ends the child past it (candybar-testing-0x6u.ndy)\n\nA child writing without end grew the capture string until V8 threw\n'Invalid string length' from the data listener; the uncaughtException\nhandler then shut the daemon down. capture now stops at\nMAX_CAPTURED_BYTES and launchWaited ends the child through terminate with\na new reason, output-limit, so a truncated capture is never ok.\nterminate keeps the first cause.\n"
         }
       ]
     }

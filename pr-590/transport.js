@@ -23781,7 +23781,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.180.4";
+var PACKAGE_VERSION = "1.180.7";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -77888,6 +77888,7 @@ function composed(value, pr) {
   if (pr === null || info.kind !== "ok") return info;
   return ok({ ...info.value, pullRequest: currentOf(pr) });
 }
+var CLOSED = failed("git cache closed");
 function threw(label2) {
   return (e) => failed(`${label2} threw: ${String(e)}`);
 }
@@ -77901,6 +77902,7 @@ var GitDataProvider = class {
   // (brandon-git-cache-y2t, -y9h) — and it coalesces concurrent resolutions
   // of one directory into one.
   resolutions = /* @__PURE__ */ new Map();
+  closed = false;
   hits = 0;
   misses = 0;
   changes = 0;
@@ -78007,7 +78009,7 @@ var GitDataProvider = class {
   // declaration (declareLanes).
   declare(holds2, workingDir, options = {}, projectDir) {
     const asked2 = this.asked(holds2, workingDir, options, projectDir);
-    if (asked2.kind === "not-a-repo") return settledLane(asked2.outcome);
+    if (asked2.kind === "settled") return settledLane(asked2.outcome);
     const { value, pr } = asked2;
     if (value.reading.get().kind === "pending") this.misses++;
     else this.hits++;
@@ -78015,10 +78017,15 @@ var GitDataProvider = class {
   }
   // [LAW:one-source-of-truth] The one place a home asks a repo by directory:
   // the effective gitDir is the state + watch identity, and an absent (not a
-  // repo) or failed resolution is the answer.
+  // repo) or failed resolution is the answer. [LAW:single-enforcer] A closed
+  // provider builds no state: a declaration landing after close (a render
+  // that was mid-wait) would otherwise build a repo, and its watch, that
+  // nothing drops, whose period re-arms after every pass while that home
+  // holds it.
   asked(holds2, workingDir, options, projectDir) {
+    if (this.closed) return { kind: "settled", outcome: CLOSED };
     const dir = this.resolution(workingDir, projectDir);
-    if (dir.kind !== "ok") return { kind: "not-a-repo", outcome: dir };
+    if (dir.kind !== "ok") return { kind: "settled", outcome: dir };
     const { showPullRequest, ...gitOptions } = options;
     return {
       kind: "asked",
@@ -78336,6 +78343,7 @@ var GitDataProvider = class {
     }
   }
   close() {
+    this.closed = true;
     for (const state of this.repos.values()) this.drop(state);
     this.repos.clear();
     this.resolutions.clear();
@@ -78682,8 +78690,9 @@ var PricingService = class {
           let data = "";
           let size = 0;
           const MAX_SIZE = 1024 * 1024;
+          response.setEncoding("utf8");
           response.on("data", (chunk3) => {
-            size += chunk3.length;
+            size += import_buffer.Buffer.byteLength(chunk3);
             if (size > MAX_SIZE) {
               debug("Response too large");
               request2.destroy();
@@ -78940,6 +78949,7 @@ var KeyedSource = class {
   spec;
   entries = /* @__PURE__ */ new Map();
   refreshes;
+  closed = false;
   // [LAW:single-enforcer] The one way into an entry: `holds` takes it — the
   // home holds it until a declaration of the home's takes it no more, or the
   // home is disposed, which keeps the entry for its next hold — and the lane
@@ -78950,6 +78960,7 @@ var KeyedSource = class {
   // by that refresh — so its caller logs none. A declaration that THROWS is a
   // bug none of those saw, reported by the view's declaration (declareLanes).
   declare(holds2, input) {
+    if (this.closed) return settledLane(failed(`${this.spec.name} closed`));
     const key = this.spec.keyOf(input);
     const entry = this.touched(key) ?? this.firstRead(this.created(key, input));
     holds2.take(`${this.spec.name}:${key}`, () => this.hold(entry));
@@ -78964,6 +78975,8 @@ var KeyedSource = class {
   // one fresh read. A key never read is created for it, and its first read is
   // that resume's.
   supersede(input) {
+    if (this.closed) return () => {
+    };
     const key = this.spec.keyOf(input);
     const entry = this.touched(key) ?? this.created(key, input);
     entry.superseding++;
@@ -79006,6 +79019,7 @@ var KeyedSource = class {
   // Ends every entry's period: a held entry's period re-arms on every landing,
   // so an owner that is not closed keeps its timers for good.
   close() {
+    this.closed = true;
     for (const entry of [...this.entries.values()]) this.drop(entry);
   }
   // LRU touch: re-inserting moves the entry to the newest end.
@@ -79337,6 +79351,7 @@ var SessionUsageStore = class {
   usage;
   sweeps = 0;
   stopSweep = null;
+  closed = false;
   clock;
   constructor(opts) {
     this.host = opts.host;
@@ -79494,6 +79509,7 @@ var SessionUsageStore = class {
   // frame that reads it. The lane answers the set's day sums once a scan has
   // answered; which day of them is the draw's (`todayAt`).
   declareToday(holds2, claudeConfigDir2) {
+    if (this.closed) return settledLane(failed("usage store closed"));
     const claudePaths = getClaudePaths(claudeConfigDir2, this.host.home);
     const scans = this.scans.declare(holds2, claudePaths);
     const set2 = this.daySet(claudePaths);
@@ -79793,6 +79809,7 @@ var SessionUsageStore = class {
     return dropped;
   }
   close() {
+    this.closed = true;
     this.stopSweep?.();
     this.stopSweep = null;
     this.scans.close();
