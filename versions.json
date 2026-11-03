@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-593",
+      "ref": "refs/pull/593/merge",
+      "sha": "31ec72e23843fa2a2d622ff7135b29fb6935d5ee",
+      "timestamp": "2026-11-03T01:01:23.754Z",
+      "commits": [
+        {
+          "sha": "31ec72e23843fa2a2d622ff7135b29fb6935d5ee",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T18:00:30-07:00",
+          "message": "Merge 85b59f300d1fe4828c395e998e195d5ca328c8e1 into 2b674e303614d5b76f88596aa59060f2319c8233\n"
+        },
+        {
+          "sha": "85b59f300d1fe4828c395e998e195d5ca328c8e1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T18:00:07-07:00",
+          "message": "fix(test): the turn-per-draw feed case runs on held time, so a stalled loop cannot skip a turn (candybar-testing-0x6u.e2d)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "2b674e303614d5b76f88596aa59060f2319c8233",
