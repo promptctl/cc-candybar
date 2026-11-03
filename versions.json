@@ -2,60 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-608",
-      "ref": "refs/pull/608/merge",
-      "sha": "d722334fd609865d21bd266bcc104d3f05dc021a",
-      "timestamp": "2026-11-03T09:19:03.308Z",
-      "commits": [
-        {
-          "sha": "d722334fd609865d21bd266bcc104d3f05dc021a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T09:18:04Z",
-          "message": "Merge c2a12a321be2520eb5113275f04fb90adeb7a31d into 31c5d2195388883cb31ad3aa739719db744242fb\n"
-        },
-        {
-          "sha": "c2a12a321be2520eb5113275f04fb90adeb7a31d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T02:17:53-07:00",
-          "message": "fix(capture-heap): the snapshot is the daemon's by pid, and zero turns is a valid baseline (candybar-gather-renderer-76bb.5d1)\n"
-        },
-        {
-          "sha": "3ae378e1c473f6aee935223340b4019dcd90a93b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T02:16:24-07:00",
-          "message": "fix(capture-heap): a run's snapshot is its own, whole, and on macOS; the doc names which rule binds each ceiling (candybar-gather-renderer-76bb.5d1)\n"
-        },
-        {
-          "sha": "701b73c5ec0c345fd5e083f7fe39ce8150955787",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T02:13:28-07:00",
-          "message": "docs(design): measured memory settles Gather as Node and sets the two ceilings (candybar-gather-renderer-76bb.5d1)\n\nMeasured on macOS, charge = phys_footprint through the backstop's probe.\n\n- A bare idle node is 12 MB; the bundle with no sessions 55-65 MB; the load\n  gate's daemon charges 68 / 103 / 389-397 MB at 1 / 10 / 100 sessions\n  (3.3 MB per session). Gather's idle floor passes the 102 MB line (10% of the\n  limit) with 37+ MB to spare.\n- A session's source values live in the variable store the render cache's view\n  holds, so the split moves a minority of a session's cost: about 0.46 MB of\n  2.4 MB of collected heap per session is what the config gates (258 vs 212 MB\n  at 100 sessions, two runs each). The state both processes would hold is\n  about 5% of the daemon's charge at 100 sessions against a 10% line.\n- Gather 448 MB and renderer 896 MB: the charge at 100 sessions times the\n  2.6 headroom the single daemon's default carries, rounded up to 64 MB. The\n  renderer's is set by its render cache (587 MB accounted at 100 sessions\n  needs a limit of 868 MB), not by what moved out.\n\nThe ceilings are recorded in spec section 15 and added to limits.ts by the\ntickets that read them. scripts/capture-heap.ts drives the daemon at N\nsessions under a chosen config and writes a heap snapshot by signal;\nstartWorld takes extra daemon environment for it.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "31c5d2195388883cb31ad3aa739719db744242fb",
-      "timestamp": "2026-11-03T08:45:41.969Z",
+      "sha": "00161160468582e48082f373f82dcbae3d28bf6a",
+      "timestamp": "2026-11-03T09:27:00.716Z",
       "commits": [
         {
-          "sha": "31c5d2195388883cb31ad3aa739719db744242fb",
+          "sha": "00161160468582e48082f373f82dcbae3d28bf6a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T01:44:42-07:00",
-          "message": "docs(design): the gather/renderer and scene/browser proposals as the specs the epic cites (candybar-gather-renderer-76bb.yl3) (#607)\n\n* docs(design): the gather/renderer and scene/browser proposals as the specs the epic cites (candybar-gather-renderer-76bb.yl3)\n\n* docs(design): settle the socket rule, link ids, key changes, bundle path, breaker and recording kinds the high review found (candybar-gather-renderer-76bb.yl3)\n\n* docs(design): the name bound, the empty-name click, the link-id table's bound and the browser-surface supersession, from the medium review (candybar-gather-renderer-76bb.yl3)"
-        },
-        {
-          "sha": "4092f8362180c58c88a3776fb3241e3e46fe144c",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-03T08:22:45Z",
-          "message": "chore(release): set `package.json` to 1.184.1 [skip ci]\n\n## [1.184.1](https://github.com/promptctl/cc-candybar/compare/v1.184.0...v1.184.1) (2026-11-03)\n\n### Bug Fixes\n\n* **url-handler:** a click no longer takes the terminal's keyboard focus ([#606](https://github.com/promptctl/cc-candybar/issues/606)) ([8005d08](https://github.com/promptctl/cc-candybar/commit/8005d083220ec5eb217749c74c3caf1a246f2bc5)), closes [#605](https://github.com/promptctl/cc-candybar/issues/605)\n"
+          "timestamp": "2026-11-03T02:26:11-07:00",
+          "message": "docs(design): measured memory settles Gather as Node and sets the two ceilings (candybar-gather-renderer-76bb.5d1) (#608)\n\n* docs(design): measured memory settles Gather as Node and sets the two ceilings (candybar-gather-renderer-76bb.5d1)\n\nMeasured on macOS, charge = phys_footprint through the backstop's probe.\n\n- A bare idle node is 12 MB; the bundle with no sessions 55-65 MB; the load\n  gate's daemon charges 68 / 103 / 389-397 MB at 1 / 10 / 100 sessions\n  (3.3 MB per session). Gather's idle floor passes the 102 MB line (10% of the\n  limit) with 37+ MB to spare.\n- A session's source values live in the variable store the render cache's view\n  holds, so the split moves a minority of a session's cost: about 0.46 MB of\n  2.4 MB of collected heap per session is what the config gates (258 vs 212 MB\n  at 100 sessions, two runs each). The state both processes would hold is\n  about 5% of the daemon's charge at 100 sessions against a 10% line.\n- Gather 448 MB and renderer 896 MB: the charge at 100 sessions times the\n  2.6 headroom the single daemon's default carries, rounded up to 64 MB. The\n  renderer's is set by its render cache (587 MB accounted at 100 sessions\n  needs a limit of 868 MB), not by what moved out.\n\nThe ceilings are recorded in spec section 15 and added to limits.ts by the\ntickets that read them. scripts/capture-heap.ts drives the daemon at N\nsessions under a chosen config and writes a heap snapshot by signal;\nstartWorld takes extra daemon environment for it.\n\n* fix(capture-heap): a run's snapshot is its own, whole, and on macOS; the doc names which rule binds each ceiling (candybar-gather-renderer-76bb.5d1)\n\n* fix(capture-heap): the snapshot is the daemon's by pid, and zero turns is a valid baseline (candybar-gather-renderer-76bb.5d1)"
         }
       ]
     }
