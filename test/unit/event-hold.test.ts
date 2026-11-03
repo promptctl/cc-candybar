@@ -2,13 +2,13 @@
 // (src/utils/event-hold.ts): every render inside the hold, and past it a
 // request until an answer has carried it.
 
-import { eventHoldAt } from "../../src/utils/event-hold";
+import { answeredBy, eventHoldAt } from "../../src/utils/event-hold";
 import type { Instant } from "../../src/utils/instant";
 
 const at = (seconds: number): Instant => seconds as Instant;
 const HOLD = 10;
-const fresh = { at: at(100), answered: false };
-const answered = { at: at(100), answered: true };
+const fresh = { text: "e", at: at(100), answered: false };
+const answered = { ...fresh, answered: true };
 
 test("every render inside the hold shows the event, answered or not", () => {
   for (const render of ["feed", "request"] as const)
@@ -27,4 +27,12 @@ test("past the hold a request is owed an unanswered event, and a feed is not", (
 test("past the hold an answered event is over for every render", () => {
   expect(eventHoldAt(answered, HOLD, at(110), "request")).toBe("over");
   expect(eventHoldAt(answered, HOLD, at(110), "feed")).toBe("over");
+});
+
+test("an answer marks the latest event it carried, once, and never a newer one", () => {
+  expect(answeredBy(fresh, fresh)).toBe(true);
+  expect(answeredBy(answered, fresh)).toBe(false);
+  expect(answeredBy(null, fresh)).toBe(false);
+  expect(answeredBy({ ...fresh, at: at(101) }, fresh)).toBe(false);
+  expect(answeredBy({ ...fresh, text: "2× e" }, fresh)).toBe(false);
 });

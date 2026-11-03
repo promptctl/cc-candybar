@@ -52,7 +52,7 @@ import { types } from "node:util";
 import type { ChildProcess, StdioOptions } from "node:child_process";
 import type { Timekeeper } from "../time";
 import type { Drawing } from "../config/lanes";
-import { eventHoldAt, type HeldEvent } from "../utils/event-hold";
+import { answeredBy, eventHoldAt, type HeldEvent } from "../utils/event-hold";
 import { instantOf, type Instant } from "../utils/instant";
 
 import type { DrainEnd, LaunchStatsHandle } from "./stats-handle";
@@ -345,6 +345,10 @@ export interface LaunchScope {
   // kill grace run on, and where they wait for a loop turn. A child lives in
   // real time, so a held daemon is handed the real one here.
   readonly clock: Timekeeper;
+  // The owner's own instant: when a pipe event happened, on the clock every
+  // render compares the event hold against. A held daemon's renders run on its
+  // clock, not the machine's, so the event is stamped on the same one.
+  readonly now: () => Instant;
 }
 
 // [LAW:one-source-of-truth] Everything one owner's launches read and leave
@@ -500,9 +504,7 @@ export interface LifelineWarning {
 // reader stopped reading, which `feed` already says is no fault.
 type PipeEventKind = "cut" | "read-error";
 
-export interface PipeEvent extends HeldEvent {
-  readonly text: string;
-}
+export type PipeEvent = HeldEvent;
 
 export interface LaunchPipesWarning {
   readonly kind: "launch-pipes";
@@ -544,7 +546,7 @@ function pipeEvent(
   const text = `a launched program's pipe outlived its launch: ${said.join("; ")}`;
   state.pipeEvent = {
     text,
-    at: instantOf(new Date(state.scope.clock.now())),
+    at: state.scope.now(),
     answered: false,
   };
   state.scope.observeWarnings({ kind: "launch-pipes", text });
@@ -554,8 +556,7 @@ function pipeEvent(
 // `event` reached its client. A newer event since is left unmarked.
 function answeredPipeEvent(state: LaunchState, event: PipeEvent): void {
   const last = state.pipeEvent;
-  if (last === null || last.answered) return;
-  if (last.at !== event.at || last.text !== event.text) return;
+  if (last === null || !answeredBy(last, event)) return;
   state.pipeEvent = { ...last, answered: true };
   state.pipeCounts.clear();
 }
@@ -1529,6 +1530,7 @@ function launcherWithState(
         if (message !== null) process.emitWarning(message);
       },
       signal: new AbortController().signal,
+      now: () => instantOf(new Date(clock.now())),
       ...owner,
       clock,
     },

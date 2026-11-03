@@ -197,7 +197,7 @@ All are composed in `drawRender` (`src/daemon/server.ts`).
 | `errors`: `clickShown` | `clickErrorAt` | Facts-stored, shown per Draw |
 | `updates` | `updateNotice(update, act, ctx)`: pure fold over facts, `dismissed`, `enabled` | Facts publish `update` and `act`; Draw folds |
 | `questions` | `repoQuestions(entry.repos, …)` signed | Draw, since awaiting depends on its chain |
-| Standing `file-events`, `lifeline` | `fileEventsWarnings`, `lifelineWarnings` in `src/proc/launch.ts` | Facts |
+| Standing `file-events`, `lifeline`, `launch-pipes` | `fileEventsWarnings`; `launcherWarnings(at, by)` in `src/proc/launch.ts`, whose pipe event shows by the event hold | Facts |
 | Standing `config-watch`, `load` | Entry | Draw (watch fault arrives from Facts if Facts holds it) |
 | Render warnings `rule`, `when` | Draw walk, `RenderWarningRecords` (`src/daemon/render-warnings.ts`) | Draw |
 | Render warning `refresh` | `cachePolicyFaults` | Mixed: key faults are Draw's, watch faults arrive on the reading |

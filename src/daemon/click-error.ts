@@ -16,7 +16,11 @@
 import type { SessionStateReader, SessionStateRW } from "./session-state.js";
 import type { Instant } from "../utils/instant.js";
 import type { Drawing } from "../config/lanes.js";
-import { eventHoldAt } from "../utils/event-hold.js";
+import {
+  answeredBy,
+  eventHoldAt,
+  type HeldEvent,
+} from "../utils/event-hold.js";
 
 const KEY = "click.error";
 
@@ -24,13 +28,8 @@ const KEY = "click.error";
 // fastest reruns (`statusLine.refreshInterval: 1`), and long enough to read.
 export const CLICK_ERROR_HOLD_S = 5;
 
-export interface ClickErrorRecord {
-  readonly text: string;
-  // When the click failed.
-  readonly at: Instant;
-  // Whether a request's answer has carried it to its client.
-  readonly answered: boolean;
-}
+// `at` is when the click failed.
+export type ClickErrorRecord = HeldEvent;
 
 // What one render makes of the session's click error: `held` inside the hold,
 // `owed` past it to a request while no answer has carried it.
@@ -60,8 +59,7 @@ export function answeredClickError(
   error: ClickErrorRecord,
 ): void {
   const last = lastClickError(state, sessionId);
-  const same = last?.at === error.at && last.text === error.text;
-  if (!same || last.answered) return;
+  if (last === null || !answeredBy(last, error)) return;
   state.set(sessionId, KEY, JSON.stringify({ ...last, answered: true }));
 }
 

@@ -259,6 +259,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     inherited: host.env,
     stats: stats.launchStats,
     signal: closing.signal,
+    // [LAW:one-source-of-truth] Pipe events are stamped on the clock renders
+    // hold them against.
+    now: instant,
     // [LAW:no-silent-failure] Each change in whether what the daemon launches
     // dies with it, and each pipe event, is said in daemon.log, and every feed
     // redraws, so its warning comes on frames too.

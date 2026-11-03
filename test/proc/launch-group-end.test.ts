@@ -286,10 +286,13 @@ describe("the pipes a descendant holds past its launch", () => {
     // an answer carries it.
     expect(heard.some((c) => c.kind === "launch-pipes")).toBe(true);
     // What a render at `t` seconds after the event shows of it.
-    const [first] = launcher.launcherWarnings(0 as Instant, "feed");
-    expect(first?.kind).toBe("launch-pipes");
-    if (first?.kind !== "launch-pipes") return;
-    const event = first.event;
+    // Found by kind: a lifeline fault under load would list first.
+    const pipes = launcher
+      .launcherWarnings(0 as Instant, "feed")
+      .find((w) => w.kind === "launch-pipes");
+    expect(pipes).toBeDefined();
+    if (pipes?.kind !== "launch-pipes") return;
+    const event = pipes.event;
     const shown = (t: number, render: "feed" | "request") =>
       launcher
         .launcherWarnings((event.at + t) as Instant, render)

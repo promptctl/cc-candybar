@@ -547,7 +547,7 @@ export function drawRender(
   // A stall is no reason of this watch's: it has the bar's own row.
   const configWatch =
     entry.watch === null ? null : watchFault("config watch", entry.watch, null);
-  // [LAW:no-ambient-temporal-coupling] The launcher's at this draw's instant
+  // [LAW:no-ambient-temporal-coupling] The launcher's warnings at this draw's instant
   // and for whom it draws, by the same event hold as the click error.
   const launched = launcher.launcherWarnings(at, drawing.by);
   const pipeShown =
@@ -574,14 +574,15 @@ export function drawRender(
     drawing.by,
     errors,
     [...updates, ...questions],
+    // A standing warning is one per kind whose words change as it does (a
+    // pipe event's counts), so its kind alone is what it is about: a viewer
+    // open on it stays open. A render warning is about its words.
     [
-      ...standing,
-      ...renderWarnings.ofSession(sessionId, drawing.by, scope),
-    ].map((w) => ({
-      about: `${w.kind}\0${w.message}`,
-      text: w.message,
-      copy: w.message,
-    })),
+      ...standing.map((w) => ({ about: w.kind, message: w.message })),
+      ...renderWarnings
+        .ofSession(sessionId, drawing.by, scope)
+        .map((w) => ({ about: `${w.kind}\0${w.message}`, message: w.message })),
+    ].map((w) => ({ about: w.about, text: w.message, copy: w.message })),
   );
   const projected = {
     diagnostics: diagnosticsProjection(diagnostics),

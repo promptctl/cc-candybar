@@ -12,6 +12,8 @@ import type { Instant } from "./instant.js";
 import type { Drawing } from "../config/lanes.js";
 
 export interface HeldEvent {
+  // What it says: with `at`, which event it is.
+  readonly text: string;
   // When the event happened.
   readonly at: Instant;
   // Whether a request's answer has carried it to its client.
@@ -33,4 +35,15 @@ export function eventHoldAt(
 ): EventHold {
   if (at < event.at + holdS) return "held";
   return render === "request" && !event.answered ? "owed" : "over";
+}
+
+// [LAW:single-enforcer] The one rule for which answer marks an event: one that
+// carried the latest event, not yet marked. A newer event since stays unmarked.
+export function answeredBy(last: HeldEvent | null, shown: HeldEvent): boolean {
+  return (
+    last !== null &&
+    !last.answered &&
+    last.at === shown.at &&
+    last.text === shown.text
+  );
 }
