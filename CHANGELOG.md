@@ -1,3 +1,9 @@
+## [1.187.0](https://github.com/promptctl/cc-candybar/compare/v1.186.0...v1.187.0) (2026-11-03)
+
+### Features
+
+* **sources:** the shell reader has a read timeout (candybar-gather-renderer-76bb.6pj.dal) ([#612](https://github.com/promptctl/cc-candybar/issues/612)) ([4a53ad2](https://github.com/promptctl/cc-candybar/commit/4a53ad24cd95fa2ed074025955271337c3bf3653))
+
 ## [1.186.0](https://github.com/promptctl/cc-candybar/compare/v1.185.1...v1.186.0) (2026-11-03)
 
 ### Features
