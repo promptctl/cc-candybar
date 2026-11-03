@@ -4,32 +4,32 @@
     {
       "version": "pr-597",
       "ref": "refs/pull/597/merge",
-      "sha": "d22006a77af6d6fb001ba47be97ab9486e699955",
-      "timestamp": "2026-11-03T02:34:22.902Z",
+      "sha": "662005a20425bd8f239ea9e05de7b3fc76d534ef",
+      "timestamp": "2026-11-03T02:42:33.140Z",
       "commits": [
         {
-          "sha": "d22006a77af6d6fb001ba47be97ab9486e699955",
+          "sha": "662005a20425bd8f239ea9e05de7b3fc76d534ef",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T02:33:34Z",
-          "message": "Merge 11df6df7856b9ed6fac7cdcb105794c92798ae06 into a79a66523b3e7763ab4abce2c4a79c4a9fd4443f\n"
+          "timestamp": "2026-11-03T02:41:46Z",
+          "message": "Merge 569dbfb0dfa07bb2daba7f60fa6d3f42420f47ec into 0b82ee794b36b93e687f43f4fe214418d8d83c9e\n"
         },
         {
-          "sha": "11df6df7856b9ed6fac7cdcb105794c92798ae06",
+          "sha": "569dbfb0dfa07bb2daba7f60fa6d3f42420f47ec",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T19:18:05-07:00",
           "message": "fix(test): a held-config case that fails releases the writer open it left waiting on the pipe (candybar-testing-0x6u.8vd)\n"
         },
         {
-          "sha": "ca7b89645b984342553dab0be872f82fde791f64",
+          "sha": "fb34d6fcc9115c3941004bfe6becc8b10f1e720e",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T19:16:51-07:00",
           "message": "fix(test): a render that never reads its held config fails on its reply, and the memory line keeps only the reason (candybar-testing-0x6u.8vd)\n"
         },
         {
-          "sha": "7120060a09062342bf6b6487058797dd00210a4e",
+          "sha": "26b0cfee0a7e1ee8f1046823b980e8774650e453",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T19:12:06-07:00",
