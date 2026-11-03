@@ -2,6 +2,63 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-598",
+      "ref": "refs/pull/598/merge",
+      "sha": "0a352e11560e25e5d91dd4b42661d79b4ebc3b13",
+      "timestamp": "2026-11-03T03:02:15.514Z",
+      "commits": [
+        {
+          "sha": "0a352e11560e25e5d91dd4b42661d79b4ebc3b13",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T03:00:15Z",
+          "message": "Merge a38bca4daa538442330c5ee4b2382f4d5b3c631c into 1971f872ffd6e2d3f793d966800cc9ea93c56738\n"
+        },
+        {
+          "sha": "a38bca4daa538442330c5ee4b2382f4d5b3c631c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T19:59:59-07:00",
+          "message": "fix(test): the descendant reads its input through an fd dash leaves alone (candybar-testing-0x6u.3zo)\n"
+        },
+        {
+          "sha": "edffa9423681776f8c992d484b13eea23d6102c2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T19:53:17-07:00",
+          "message": "fix(launch): the input's exception marks the swallowed error, and the close test holds its input unread (candybar-testing-0x6u.3zo)\n"
+        },
+        {
+          "sha": "71a9e0c2534dfe2b3cc0eb19a7e27e6336831f1a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T19:46:11-07:00",
+          "message": "fix(launch): a held input's end is built outside the launch, and its tests count the input (candybar-testing-0x6u.3zo)\n"
+        },
+        {
+          "sha": "63994133fa15ccd05337b5ee0697764d719fd580",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T19:42:52-07:00",
+          "message": "fix(launch): feed takes the input's Buffer form too (candybar-testing-0x6u.3zo)\n"
+        },
+        {
+          "sha": "8514367e5ab3ffc1a7cb9a683c756dd991becb47",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T19:41:12-07:00",
+          "message": "fix(launch): a held input shares the drains' one hold, metered and free of the launch's scope (candybar-testing-0x6u.3zo)\n"
+        },
+        {
+          "sha": "792c2860e000d1d95b420936aa2ef097d2c5f1b2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T19:31:33-07:00",
+          "message": "fix(launch): a launch's input outlives its direct child for the descendants that read it (candybar-testing-0x6u.3zo)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-594",
       "ref": "refs/pull/594/merge",
       "sha": "c671b8de79e180ef45153768653541d555170ede",
@@ -48,56 +105,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T18:16:36-07:00",
           "message": "feat(url-handler): a resident Swift forwarder sends the raw link to the daemon, which does all parsing (candybar-daemon-health-ajx0.co4)\n\nThe URL handler app is a Swift agent (url-handler/main.swift) that forwards each\ncc-candybar:// link as one url frame, versioned by itself, and reads no answer.\nThe daemon classifies inbound frames once, splits the verb itself, and writes a\nclick event for every url frame, refused ones included. clientVersion leaves the\nwire; a click's arrival carries who delivered it, and the doctor judges by that.\nInstall assembles the .app around the prebuilt binary, ad-hoc signs it, quits the\nresident instance and registers the scheme. CI builds a universal binary on macOS\ninto both darwin packages; check-protocol pins the Swift frame and socket path.\nurl-handle remains the tmux status line's route only.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-598",
-      "ref": "refs/pull/598/merge",
-      "sha": "82c555947fde0083114be87c6811db16452d3c72",
-      "timestamp": "2026-11-03T02:55:39.434Z",
-      "commits": [
-        {
-          "sha": "82c555947fde0083114be87c6811db16452d3c72",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T02:53:30Z",
-          "message": "Merge edffa9423681776f8c992d484b13eea23d6102c2 into 1971f872ffd6e2d3f793d966800cc9ea93c56738\n"
-        },
-        {
-          "sha": "edffa9423681776f8c992d484b13eea23d6102c2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T19:53:17-07:00",
-          "message": "fix(launch): the input's exception marks the swallowed error, and the close test holds its input unread (candybar-testing-0x6u.3zo)\n"
-        },
-        {
-          "sha": "71a9e0c2534dfe2b3cc0eb19a7e27e6336831f1a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T19:46:11-07:00",
-          "message": "fix(launch): a held input's end is built outside the launch, and its tests count the input (candybar-testing-0x6u.3zo)\n"
-        },
-        {
-          "sha": "63994133fa15ccd05337b5ee0697764d719fd580",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T19:42:52-07:00",
-          "message": "fix(launch): feed takes the input's Buffer form too (candybar-testing-0x6u.3zo)\n"
-        },
-        {
-          "sha": "8514367e5ab3ffc1a7cb9a683c756dd991becb47",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T19:41:12-07:00",
-          "message": "fix(launch): a held input shares the drains' one hold, metered and free of the launch's scope (candybar-testing-0x6u.3zo)\n"
-        },
-        {
-          "sha": "792c2860e000d1d95b420936aa2ef097d2c5f1b2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T19:31:33-07:00",
-          "message": "fix(launch): a launch's input outlives its direct child for the descendants that read it (candybar-testing-0x6u.3zo)\n"
         }
       ]
     },
