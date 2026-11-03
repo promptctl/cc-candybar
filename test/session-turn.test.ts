@@ -106,6 +106,7 @@ describe("a turn that cannot be stamped", () => {
   test("is a failure the draw reads, the last turn stays drawn, and the next good turn clears it", async () => {
     const broken = observable.box(false);
     const logged: string[] = [];
+    const changed: string[] = [];
     const rig = sessionRig(dir, cleanups, {
       source: {
         update: () => {
@@ -114,18 +115,24 @@ describe("a turn that cannot be stamped", () => {
         },
       },
       log: (level, message) => logged.push(`${level} ${message}`),
+      observers: { onViewChanged: (sid) => changed.push(sid) },
     });
     const view = await openSettled(rig, dir, cleanups, null);
     const before = view.source.payload();
     expect(view.source.failure()).toBeNull();
 
+    // The flip is what wakes the view: a pushed frame says the bar is behind.
+    const settled = changed.length;
     runInAction(() => broken.set(true));
+    expect(changed.length).toBeGreaterThan(settled);
     expect(view.source.failure()).toContain("update watch exploded");
     // The bar is still the last turn's, whole.
     expect(view.source.payload()).toEqual(before);
     expect(logged.join("\n")).toContain("update watch exploded");
 
+    const failed = changed.length;
     runInAction(() => broken.set(false));
+    expect(changed.length).toBeGreaterThan(failed);
     expect(view.source.failure()).toBeNull();
   });
 });
