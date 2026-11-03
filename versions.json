@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "847071c25ae39f8f9af52d1ab5b46f3a54b872e1",
+      "timestamp": "2026-11-03T16:49:58.018Z",
+      "commits": [
+        {
+          "sha": "847071c25ae39f8f9af52d1ab5b46f3a54b872e1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T09:47:52-07:00",
+          "message": "feat(facts): the payload a template reads is composed from the document (#616)\n\n* test(facts): pin the bar, the view's payload and check's payload per preset (candybar-gather-renderer-76bb.6pj.83l)\n\nDrawn from the daemon's session source over fixed owners at a fixed instant, so\ncomposing the payload from the document can be judged against bytes: the bar\nmust not move, and the payload snapshot's diff is where the accepted\ndifferences show. The payload-owners fakes hold their answers in observables,\nas the real owners do, so a view's computed sees a lane land.\n\n* feat(facts): the payload a template reads is composed from the document (candybar-gather-renderer-76bb.6pj.83l)\n\nThe payload, the globals a draw builds its options from and the facts document\nare one turn, stamped together in one reaction, so a draw never mixes a\ndocument with a request or a pick it was not composed from. A turn takes its\nclosure and lanes from the view's one declaration. A turn that cannot be\nstamped keeps the last one and surfaces as a warning in the bar's indicator.\nA view that fails to open releases what it began. The check command stamps a\nfixture document and composes through the same function; its hand-written\npayload and checkToday are gone.\n\n* docs(claude-md): checks run on the code under review, never on another commit to second-guess a threshold\n\n* test(facts): payload tests assert an unread lane as pending, not a missing key (candybar-gather-renderer-76bb.6pj.83l)\n\n* fix(facts): a draw reads the client's hints off its turn; a repeated failure is one turn; unstamped projects its arms (candybar-gather-renderer-76bb.6pj.83l)\n\n* test(facts): a failed stamp and its recovery each wake the view (candybar-gather-renderer-76bb.6pj.83l)\n\n* test(facts): the session rig holds the source runs main moved onto RenderDeps (candybar-gather-renderer-76bb.6pj.83l)"
+        }
+      ]
+    },
+    {
       "version": "pr-615",
       "ref": "refs/pull/615/merge",
       "sha": "fe144928414e7821720ce9e09fc0b8b59006e1bc",
@@ -27,92 +42,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-03T09:15:48-07:00",
           "message": "feat(sources): a failed shell read carries the command's stderr; the launcher names its timeout (candybar-gather-renderer-76bb.6pj.dr2)\n\nA shell source's failed read now ends in what the command wrote to\nstderr, trimmed and shown by its last 2000 characters, on every arm but\nan output flood or a failed pipe. A timeout result carries\n`timed out after N s` from the launch's own bound, so the shell reader\nand the daemon's runs read it instead of spelling it from constants of\ntheir own.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-616",
-      "ref": "refs/pull/616/merge",
-      "sha": "ebbd1ae1af9f05b44d3e9615f8760bf36f1e39e4",
-      "timestamp": "2026-11-03T16:39:14.852Z",
-      "commits": [
-        {
-          "sha": "ebbd1ae1af9f05b44d3e9615f8760bf36f1e39e4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T16:37:09Z",
-          "message": "Merge 2f018f616e48956ccd3752458ddd1b5c909be773 into b744cf603e403a589c9d9d397312a7fdece6ad65\n"
-        },
-        {
-          "sha": "2f018f616e48956ccd3752458ddd1b5c909be773",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T09:36:55-07:00",
-          "message": "test(facts): the session rig holds the source runs main moved onto RenderDeps (candybar-gather-renderer-76bb.6pj.83l)\n"
-        },
-        {
-          "sha": "4eb1defe704a1cb82a29caeb5af2f8efa199ca0e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T09:32:35-07:00",
-          "message": "test(facts): a failed stamp and its recovery each wake the view (candybar-gather-renderer-76bb.6pj.83l)\n"
-        },
-        {
-          "sha": "2986a2a7e8c08508cce0d4ba964114f9d5d0d4b9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T09:28:30-07:00",
-          "message": "fix(facts): a draw reads the client's hints off its turn; a repeated failure is one turn; unstamped projects its arms (candybar-gather-renderer-76bb.6pj.83l)\n"
-        },
-        {
-          "sha": "3701485cac02fc75e7cd31fa928a0926f54c33a0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T09:18:48-07:00",
-          "message": "test(facts): payload tests assert an unread lane as pending, not a missing key (candybar-gather-renderer-76bb.6pj.83l)\n"
-        },
-        {
-          "sha": "250909d2f0776a028884ab797b2f6608d5ec5fb4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T09:00:29-07:00",
-          "message": "docs(claude-md): checks run on the code under review, never on another commit to second-guess a threshold\n"
-        },
-        {
-          "sha": "c9ad47b88f0ac3a69df76197f65845ec82328c4a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T08:30:56-07:00",
-          "message": "feat(facts): the payload a template reads is composed from the document (candybar-gather-renderer-76bb.6pj.83l)\n\nThe payload, the globals a draw builds its options from and the facts document\nare one turn, stamped together in one reaction, so a draw never mixes a\ndocument with a request or a pick it was not composed from. A turn takes its\nclosure and lanes from the view's one declaration. A turn that cannot be\nstamped keeps the last one and surfaces as a warning in the bar's indicator.\nA view that fails to open releases what it began. The check command stamps a\nfixture document and composes through the same function; its hand-written\npayload and checkToday are gone.\n"
-        },
-        {
-          "sha": "0a4edcb1fc73e5263fce49e5ba52fc325194af53",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T08:00:23-07:00",
-          "message": "test(facts): pin the bar, the view's payload and check's payload per preset (candybar-gather-renderer-76bb.6pj.83l)\n\nDrawn from the daemon's session source over fixed owners at a fixed instant, so\ncomposing the payload from the document can be judged against bytes: the bar\nmust not move, and the payload snapshot's diff is where the accepted\ndifferences show. The payload-owners fakes hold their answers in observables,\nas the real owners do, so a view's computed sees a lane land.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "b744cf603e403a589c9d9d397312a7fdece6ad65",
-      "timestamp": "2026-11-03T15:57:36.246Z",
-      "commits": [
-        {
-          "sha": "b744cf603e403a589c9d9d397312a7fdece6ad65",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T08:56:19-07:00",
-          "message": "feat(sources): a source's identity is a digest, one digest is one run (candybar-gather-renderer-76bb.6pj.5dx) (#614)\n\n* feat(sources): a source's identity is a digest, one digest is one run, and a moved key's old value stands until the new run lands (candybar-gather-renderer-76bb.6pj.5dx)\n\nA shell or file source is identified by a digest of what its run needs (the\nread, the parser without its default, the normalised policy, the hash of the\nkey's value), and one daemon-wide owner, two KeyedSource instances by read\nkind, runs each identity once for every registry that holds it. The registry\nholds entries through Holds, publishes only answered readings into its node,\nand derives what a request waits on from the lanes still pending. KeyedSource\ntakes its per-entry refresh, a watch per entry and the flight's abort signal\nas spec data; an abandoned read is its own event, not a failure. The ledger\nrecords user sources per read kind (source.shell, source.file), each refresh\nnaming its digest and how many homes share it.\n\n* test(sources): two views keyed on one drawn depth share one run (candybar-gather-renderer-76bb.6pj.5dx)\n\n* fix(sources): an abandoned read is the ledger's own count, the run owner's stats reach the stats reply, and a watch takes the held guard (candybar-gather-renderer-76bb.6pj.5dx)\n\n* fix(sources): medium-pass fixes — one-shot owners close their runs, one canonical digest, errno on unreadable file (candybar-gather-renderer-76bb.6pj.5dx)"
-        },
-        {
-          "sha": "8067e9a72297c93efa9dd1063cfd8f2ca5ced0c1",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-03T14:51:30Z",
-          "message": "chore(release): set `package.json` to 1.188.0 [skip ci]\n\n## [1.188.0](https://github.com/promptctl/cc-candybar/compare/v1.187.0...v1.188.0) (2026-11-03)\n\n### Features\n\n* **facts:** the draw's today and sources count are read from the document ([#613](https://github.com/promptctl/cc-candybar/issues/613)) ([189bd5b](https://github.com/promptctl/cc-candybar/commit/189bd5bed066e328ad699ec236391defbfcc4106))\n"
         }
       ]
     }
