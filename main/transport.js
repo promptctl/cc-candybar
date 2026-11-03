@@ -45720,7 +45720,7 @@ function editModeArtifacts() {
 
 // src/config/edit-chrome.ts
 init_globals();
-var import_node_path9 = __toESM(require_path_browserify(), 1);
+var import_node_path10 = __toESM(require_path_browserify(), 1);
 
 // src/config/synthesis-inputs.ts
 init_globals();
@@ -46091,791 +46091,6 @@ function changeLogger(log) {
   };
 }
 var quietLogger = (_level, message) => debug(message);
-
-// site/shims/fs-promises.ts
-init_globals();
-var import_memfs2 = __toESM(require_lib8(), 1);
-var p = import_memfs2.fs.promises;
-var { readFile, writeFile, stat, lstat, readdir, mkdir, rm, unlink, rename, open, access, appendFile, realpath, mkdtemp, copyFile } = p;
-
-// src/daemon/cache/watchers.ts
-init_globals();
-var import_node_path4 = __toESM(require_path_browserify(), 1);
-
-// src/utils/logfmt.ts
-init_globals();
-var BARE = /^[^\s"=\\]+$/;
-var valueOf = (value) => BARE.test(value) ? value : JSON.stringify(value);
-
-// src/utils/atomic-write.ts
-init_globals();
-var import_node_path2 = __toESM(require_path_browserify(), 1);
-function writeAtomic(at, text4, mode) {
-  const file = resolvedTarget(at);
-  fs_default.mkdirSync(import_node_path2.default.dirname(file), { recursive: true });
-  const tmp = `${file}.tmp`;
-  const fileMode = mode ?? fs_default.statSync(file, { throwIfNoEntry: false })?.mode;
-  try {
-    fs_default.writeFileSync(
-      tmp,
-      text4,
-      fileMode === void 0 ? {} : { mode: fileMode }
-    );
-    fs_default.renameSync(tmp, file);
-  } catch (e) {
-    fs_default.rmSync(tmp, { force: true });
-    throw e;
-  }
-}
-function resolvedTarget(at) {
-  return linkChain(at).at(-1);
-}
-function linkChain(at) {
-  const { hops, stopped: stopped2 } = walkLinks(at);
-  if (stopped2 !== null) throw stopped2;
-  return hops;
-}
-function walkLinks(at) {
-  const hops = [at];
-  try {
-    for (let n = 0; n < MAX_LINK_HOPS; n++) {
-      const next = linkTarget(hops[hops.length - 1]);
-      if (next === null) return { hops, stopped: null };
-      hops.push(next);
-    }
-    return {
-      hops,
-      stopped: new Error(`${at}: more than ${MAX_LINK_HOPS} symbolic links`)
-    };
-  } catch (e) {
-    return { hops, stopped: e };
-  }
-}
-function linkTarget(file) {
-  try {
-    if (!fs_default.lstatSync(file).isSymbolicLink()) return null;
-    return import_node_path2.default.resolve(
-      fs_default.realpathSync(import_node_path2.default.dirname(file)),
-      fs_default.readlinkSync(file)
-    );
-  } catch (e) {
-    const { code } = e;
-    if (code === "ENOENT" || code === "ENOTDIR") return null;
-    throw e;
-  }
-}
-var MAX_LINK_HOPS = 40;
-
-// src/utils/folder-identity.ts
-init_globals();
-var statIdentity = (folder) => {
-  try {
-    const st = fs_default.statSync(folder, { bigint: true });
-    return { dev: st.dev, ino: st.ino, birthtimeNs: st.birthtimeNs };
-  } catch (e) {
-    const code = e.code;
-    if (code === "ENOENT" || code === "ENOTDIR") return "gone";
-    throw e;
-  }
-};
-var sameIdentity = (a, b) => a.dev === b.dev && a.ino === b.ino && a.birthtimeNs === b.birthtimeNs;
-var identityKey = (identity2) => identity2 === "gone" ? "gone" : `${identity2.dev}:${identity2.ino}:${identity2.birthtimeNs}`;
-var boundOf = (folder) => {
-  try {
-    return statIdentity(folder);
-  } catch (e) {
-    return { unreadable: e.code ?? String(e) };
-  }
-};
-var boundKey = (bound) => typeof bound === "string" || "ino" in bound ? identityKey(bound) : `unreadable:${bound.unreadable}`;
-var bindsFolder = (bound) => typeof bound !== "string" && "ino" in bound;
-
-// src/utils/watch-target.ts
-init_globals();
-var import_node_path3 = __toESM(require_path_browserify(), 1);
-function nearestWatchTarget(candidate) {
-  let name = import_node_path3.default.basename(candidate);
-  let dir = import_node_path3.default.dirname(candidate);
-  for (; ; ) {
-    const real = canonicalDirectory(dir);
-    if (real !== null)
-      return { dir: real, name, leaf: dir === import_node_path3.default.dirname(candidate) };
-    name = import_node_path3.default.basename(dir);
-    dir = import_node_path3.default.dirname(dir);
-  }
-}
-function canonicalDirectory(p2) {
-  try {
-    return fs_default.statSync(p2).isDirectory() ? fs_default.realpathSync(p2) : null;
-  } catch {
-    return null;
-  }
-}
-
-// src/daemon/cache/watchers.ts
-var defaultLogger = (_level, message) => debug(message);
-var DEBOUNCE_MS = 50;
-function watchTargetsOf(paths2) {
-  const unresolved = [];
-  let reached = true;
-  const byDir = /* @__PURE__ */ new Map();
-  for (const at of paths2.named) {
-    const { hops, stopped: stopped2 } = walkLinks(at);
-    if (stopped2 !== null)
-      unresolved.push({ path: at, reason: stopped2.message });
-    for (const hop of hops) {
-      const { dir, name, leaf } = nearestWatchTarget(hop);
-      reached &&= leaf;
-      const names = byDir.has(dir) ? byDir.get(dir) : /* @__PURE__ */ new Set();
-      names?.add(name);
-      byDir.set(dir, names);
-    }
-  }
-  for (const dir of paths2.whole.map(canonicalDirectory))
-    if (dir !== null) byDir.set(dir, null);
-  const targets = {
-    dirs: [...byDir.entries()].sort(([a], [b]) => a.localeCompare(b)).map(
-      ([dirPath, names]) => names === null ? { path: dirPath } : { path: dirPath, filenames: [...names].sort() }
-    )
-  };
-  const bound = new Map(
-    targets.dirs.map((d) => {
-      const at = boundOf(d.path);
-      return [d.path, bindsFolder(at) ? boundKey(at) : null];
-    })
-  );
-  return {
-    key: JSON.stringify([targets, [...bound]]),
-    targets,
-    unbound: [...bound.values()].includes(null),
-    bound,
-    reached,
-    unresolved
-  };
-}
-function watchFault(label2, watch2, beyond) {
-  const reasons = [
-    ...watch2.derived.unresolved.map(
-      // Every reason names the path it stopped at, the kernel's and the loop's.
-      (u) => `cannot follow a link chain \u2014 ${u.reason}`
-    ),
-    ...watch2.held.handle.deaf.map(
-      (d) => d.kind === "refused" ? `cannot watch ${d.path} \u2014 ${d.reason}` : `watching ${d.path} failed \u2014 ${d.reason}`
-    ),
-    ...beyond === null ? [] : [beyond]
-  ];
-  return reasons.length === 0 ? null : `${label2}: ${reasons.join("; ")}`;
-}
-function folded(window2, next) {
-  if (next.kind === "failed") return next;
-  if (window2.kind !== "changed") return window2;
-  if (next.kind === "unknown") return next;
-  for (const p2 of next.paths) window2.paths.add(p2);
-  return window2;
-}
-var namedOf = (dir, filename) => filename === null ? { kind: "unknown" } : { kind: "changed", paths: /* @__PURE__ */ new Set([import_node_path4.default.join(dir, filename)]) };
-var failedOf = (d) => ({
-  kind: "failed",
-  reason: `${d.path}: ${d.reason}`
-});
-var heldBy = (state, handle) => state.kind === "listening" && state.handle === handle;
-var dirId = (target) => `${target.recursive === true ? "tree" : "dir"}:${target.path}`;
-var WatcherRegistry = class {
-  slots = /* @__PURE__ */ new Map();
-  dirs = /* @__PURE__ */ new Map();
-  counters;
-  logger;
-  clock;
-  closed = false;
-  constructor(opts) {
-    this.clock = opts.clock;
-    this.counters = opts.counters;
-    this.logger = opts.logger ?? defaultLogger;
-  }
-  // Acquire (or share) the watch keyed by `key`. Every acquire of a key is a
-  // holder of one slot, and each holder's callback hears every window.
-  // `targets` from the first acquire wins; subsequent acquires keep the
-  // original target set (consumers must use a fresh key if they need different
-  // targets). A consumer that needs no more than "something changed" ignores
-  // the invalidation's value.
-  acquire(key, targets, onInvalidate) {
-    if (this.closed) {
-      return {
-        release: () => {
-        },
-        deaf: targets.dirs.map((d) => ({
-          kind: "refused",
-          path: d.path,
-          reason: "the watcher registry is closed"
-        }))
-      };
-    }
-    const shared = this.slots.get(key);
-    for (const { dir } of shared?.listeners ?? []) this.judged(dir, "acquire");
-    const slot = shared ?? this.opened(key, targets);
-    const holder = { onInvalidate };
-    slot.holders.add(holder);
-    return this.makeHandle(slot, holder);
-  }
-  // [LAW:single-enforcer] The one rule for a watch whose targets can move: a
-  // consumer derives its spec from disk again and the held watch follows it
-  // exactly when the key differs. The same key is the same directories, kept
-  // as they are; a new key acquires the spec's watch and then releases the
-  // held one, so a directory both name keeps its OS handle through the move.
-  // Nothing held yet is a first acquire, which is a rebind from nothing.
-  //
-  // A spec with a directory that binds nothing yet (gone, or a mount's
-  // transient fault) keeps the watch held: a derive that lands between a
-  // directory's removal and its making again would otherwise trade a watch
-  // FSEvents keeps on its path for a slot the OS refuses. The next derive
-  // that finds the directory there rebinds, since its key differs.
-  //
-  // [LAW:no-ambient-temporal-coupling] A kept watch retries nothing: its deaf
-  // directories are the period's to open again (`judge`). A follow that
-  // retried would answer the failed window its own handle's error told, and
-  // a handle that errors after every open would retry itself at the debounce
-  // cadence.
-  follow(held, spec, onInvalidate) {
-    if (held !== null && (held.key === spec.key || spec.unbound))
-      return { watch: held, move: "kept" };
-    const watch2 = {
-      key: spec.key,
-      handle: this.acquire(spec.key, spec.targets, onInvalidate)
-    };
-    held?.handle.release();
-    return { watch: watch2, move: "rebound" };
-  }
-  opened(key, targets) {
-    const slot = {
-      key,
-      listeners: [],
-      holders: /* @__PURE__ */ new Set(),
-      debounce: null
-    };
-    for (const target of targets.dirs) {
-      const dir = this.dirFor(target);
-      const listener = {
-        slot,
-        dir,
-        filter: target.filenames ? new Set(target.filenames) : null
-      };
-      dir.listeners.add(listener);
-      slot.listeners.push(listener);
-    }
-    this.slots.set(key, slot);
-    if (this.counters) {
-      if (slot.listeners.every((l) => l.dir.state.kind === "listening"))
-        this.counters.watchersOpened++;
-      else this.counters.watchRefusals++;
-    }
-    return slot;
-  }
-  // The directory watch a new slot's target joins: the one already open
-  // there, judged, or a new one.
-  dirFor(target) {
-    const id2 = dirId(target);
-    const existing = this.dirs.get(id2);
-    if (existing !== void 0) {
-      this.judged(existing, "acquire");
-      return existing;
-    }
-    const where = { path: target.path, recursive: target.recursive === true };
-    const dir = {
-      id: id2,
-      ...where,
-      listeners: /* @__PURE__ */ new Set(),
-      state: this.open(where, () => dir, "acquire", null)
-    };
-    this.dirs.set(id2, dir);
-    return dir;
-  }
-  // [LAW:single-enforcer] The one rule that a directory watch names the
-  // folder at its path, applied whenever a holder acquires the directory,
-  // whenever an event says the folder there moved, and on every period
-  // (`judge`). A deaf one is opened again; a listening one whose path holds
-  // another folder than the one it bound (removed and made again, or a strict
-  // ancestor renamed away and another tree put at its path: inotify hears the
-  // old inode, and the bound folder is what an event naming the directory is
-  // judged against) is reopened in place. A path that binds nothing right now
-  // keeps the listening handle, as `follow` keeps a held watch: a macOS watch
-  // on the path hears the folder come back.
-  judged(dir, cause) {
-    if (dir.state.kind === "deaf") {
-      this.reopen(dir, cause);
-      return;
-    }
-    const now2 = boundOf(dir.path);
-    if (bindsFolder(now2) && boundKey(now2) !== dir.state.bound)
-      this.reopen(dir, "another folder is at its path");
-  }
-  // [LAW:no-ambient-temporal-coupling] Every directory watch judged against
-  // the disk, on the period the file-event delivery owner keeps (the daemon
-  // wires it). It is the one trigger for a replacement no event reaches a
-  // handle for (a strict ancestor renamed away and another tree put at its
-  // path: inotify reports a directory's own removal or self-move, never its
-  // parent's), and the retry of a directory the OS refused or whose handle
-  // errored while no holder newly acquires it. A directory staying as it is
-  // costs one stat, or one refused open, and tells nothing.
-  judge() {
-    for (const dir of this.dirs.values()) this.judged(dir, "period");
-  }
-  // [LAW:no-silent-failure] Every slot on the directory hears it change
-  // state. Going deaf, it hears the fault. Listening again, it hears an
-  // `unknown` window: whatever changed while the directory was deaf or bound
-  // to another folder went unheard, and a holder that re-derives on it reports
-  // its fault cleared. Deaf staying deaf is no change and tells nothing.
-  reopen(dir, cause) {
-    const was = dir.state;
-    if (was.kind === "listening") this.closeHandle(dir.path, was.handle, cause);
-    dir.state = this.open(dir, () => dir, cause, was);
-    if (dir.state.kind === "listening") this.tell(dir, { kind: "unknown" });
-    else if (was.kind === "listening")
-      this.tell(dir, failedOf(dir.state.deafness));
-  }
-  // `dirOf` names the watch the handle belongs to; its callbacks run only
-  // after the open returns, once the watch holds the state returned here.
-  open(where, dirOf, cause, was) {
-    const at = where.path;
-    const bound = boundKey(boundOf(at));
-    try {
-      fs_default.opendirSync(at).closeSync();
-      const handle = fs_default.watch(
-        at,
-        { persistent: false, recursive: where.recursive },
-        (_event, changed) => this.heard(dirOf(), handle, changed)
-      );
-      handle.on("error", (e) => {
-        this.logger("warn", `watcher error ${at}: ${e.message}`);
-        if (this.counters) this.counters.watchErrors++;
-        const dir = dirOf();
-        if (!heldBy(dir.state, handle)) return;
-        this.closeHandle(at, handle, "error");
-        const deafness = {
-          kind: "failed",
-          path: at,
-          reason: e.message
-        };
-        dir.state = { kind: "deaf", deafness };
-        this.tell(dir, failedOf(deafness));
-      });
-      if (this.counters) this.counters.dirWatchesOpened++;
-      this.logger(
-        "info",
-        `dir watch opened path=${valueOf(at)} cause=${valueOf(cause)}`
-      );
-      return { kind: "listening", handle, bound };
-    } catch (e) {
-      const reason = e.message;
-      const same2 = was?.kind === "deaf" && was.deafness.kind === "refused" && was.deafness.reason === reason;
-      if (!same2) this.logger("warn", `watch failed ${at}: ${reason}`);
-      return {
-        kind: "deaf",
-        deafness: { kind: "refused", path: at, reason }
-      };
-    }
-  }
-  // [LAW:dataflow-not-control-flow] Each listener's filter is a value: a name
-  // it lists, an unnamed event (the OS may be reporting the filtered child),
-  // or the directory's own name while the folder at the path is no longer the
-  // one this handle bound (its removal or replacement, which macOS reports as
-  // a change and Linux as a rename) reaches the slot. The same name with the
-  // folder unchanged is macOS reporting a child that came or went, or a chmod,
-  // and is not. Judged once per event, for every listener. A move is then
-  // judged, so a handle never stays bound to a folder no longer at its path
-  // and every later event naming the directory is judged against the folder
-  // there.
-  heard(dir, handle, changed) {
-    const { state } = dir;
-    if (!heldBy(state, handle)) return;
-    const moved = changed === import_node_path4.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== state.bound;
-    for (const { slot, filter } of dir.listeners) {
-      if (filter === null || changed === null || filter.has(changed) || moved)
-        this.fire(slot, namedOf(dir.path, changed));
-    }
-    if (moved) this.judged(dir, "moved");
-  }
-  tell(dir, invalidation) {
-    for (const { slot } of dir.listeners) this.fire(slot, invalidation);
-  }
-  fire(slot, invalidation) {
-    if (slot.debounce !== null) {
-      slot.debounce.window = folded(slot.debounce.window, invalidation);
-      return;
-    }
-    const debounce = {
-      window: invalidation,
-      cancel: this.clock.after(
-        DEBOUNCE_MS,
-        () => {
-          slot.debounce = null;
-          for (const holder of slot.holders) {
-            try {
-              holder.onInvalidate(debounce.window);
-            } catch (e) {
-              this.logger(
-                "warn",
-                `watcher invalidate threw key=${valueOf(slot.key)}: ${e.message}`
-              );
-            }
-          }
-        },
-        { unref: true }
-      )
-    };
-    slot.debounce = debounce;
-  }
-  makeHandle(slot, holder) {
-    return {
-      get deaf() {
-        return slot.listeners.flatMap(
-          ({ dir }) => dir.state.kind === "deaf" ? [dir.state.deafness] : []
-        );
-      },
-      release: () => {
-        if (!slot.holders.delete(holder) || slot.holders.size > 0) return;
-        if (this.slots.get(slot.key) !== slot) return;
-        this.closeSlot(slot, "last release");
-        this.slots.delete(slot.key);
-      }
-    };
-  }
-  closeHandle(at, handle, cause) {
-    try {
-      handle.close();
-    } catch {
-    }
-    if (this.counters) this.counters.dirWatchesClosed++;
-    this.logger(
-      "info",
-      `dir watch closed path=${valueOf(at)} cause=${valueOf(cause)}`
-    );
-  }
-  // A directory watch closes with the last slot on it.
-  closeSlot(slot, cause) {
-    if (slot.debounce !== null) {
-      slot.debounce.cancel();
-      slot.debounce = null;
-    }
-    for (const listener of slot.listeners) {
-      const { dir } = listener;
-      dir.listeners.delete(listener);
-      if (dir.listeners.size > 0) continue;
-      if (dir.state.kind === "listening")
-        this.closeHandle(dir.path, dir.state.handle, cause);
-      this.dirs.delete(dir.id);
-    }
-    if (this.counters) this.counters.watchersClosed++;
-  }
-  // The slots held now.
-  size() {
-    return this.slots.size;
-  }
-  // The OS directory watches open now.
-  dirWatches() {
-    return [...this.dirs.values()].filter((d) => d.state.kind === "listening").length;
-  }
-  // Every directory a held watch targets.
-  watchedDirs() {
-    return [...this.dirs.values()].map((d) => d.path);
-  }
-  closeAll() {
-    this.closed = true;
-    for (const slot of this.slots.values()) this.closeSlot(slot, "close");
-    this.slots.clear();
-  }
-};
-
-// src/daemon/cache/file-events.ts
-init_globals();
-var import_node_path5 = __toESM(require_path_browserify(), 1);
-var PROBE_EVERY_MS = 3e4;
-var STALL_AFTER = 2;
-var PROBE_FILE = "probe";
-var NO_FILE_EVENTS = {
-  delivery: () => ({
-    kind: "unmeasured",
-    since: 0,
-    reason: "outside the daemon",
-    missedSince: null
-  }),
-  subscribe: () => () => {
-  }
-};
-var iso = (at) => new Date(at).toISOString();
-var label = (d) => d.kind === "unmeasured" ? `unmeasured:${d.reason}` : d.kind;
-var FileEventDelivery = class {
-  current;
-  instrument = { kind: "idle" };
-  listeners = /* @__PURE__ */ new Set();
-  stalls = 0;
-  catchUps = 0;
-  probes = 0;
-  probeFailures = 0;
-  watchers;
-  logger;
-  identityOf;
-  clock;
-  constructor(opts) {
-    this.watchers = opts.watchers;
-    this.logger = opts.logger;
-    this.clock = opts.clock;
-    this.identityOf = opts.identityOf ?? statIdentity;
-    this.current = {
-      kind: "unmeasured",
-      since: this.clock.now(),
-      reason: "not started",
-      missedSince: null
-    };
-  }
-  delivery() {
-    return this.current;
-  }
-  subscribe(listener) {
-    this.listeners.add(listener);
-    return () => void this.listeners.delete(listener);
-  }
-  // Only the daemon starts the owner, once it has won its socket: it makes
-  // the folder, opens the one watch, and arms the period.
-  start(folder) {
-    if (this.instrument.kind !== "idle") {
-      throw new Error("file events: the owner was started twice");
-    }
-    const stopPeriod = this.clock.every(
-      PROBE_EVERY_MS,
-      () => void this.tick(),
-      {
-        unref: true
-      }
-    );
-    let identity2;
-    try {
-      fs_default.mkdirSync(folder, { recursive: true });
-      identity2 = this.identityOf(folder);
-    } catch (e) {
-      this.end(
-        stopPeriod,
-        `the probe folder could not be made: ${e.message}`
-      );
-      return;
-    }
-    if (identity2 === "gone") {
-      this.end(stopPeriod, "the probe folder was removed as it was made");
-      return;
-    }
-    const probing = {
-      kind: "probing",
-      folder,
-      identity: identity2,
-      stopPeriod,
-      // [LAW:single-enforcer] The only acquirer of this registry key.
-      handle: this.watchers.acquire(
-        `file-events:${folder}`,
-        { dirs: [{ path: folder, filenames: [PROBE_FILE] }] },
-        (heard) => this.heard(probing, heard)
-      )
-    };
-    this.instrument = probing;
-    this.logger("info", `file events probing folder=${valueOf(folder)}`);
-    const [refusal] = probing.handle.deaf;
-    if (refusal !== void 0) {
-      this.end(
-        stopPeriod,
-        `the OS refused the probe folder's watch: ${refusal.reason}`
-      );
-      return;
-    }
-    this.move({ kind: "delivering", unreported: [], missedSince: null });
-    void this.tick();
-  }
-  stats() {
-    return {
-      delivery: this.current,
-      stalls: this.stalls,
-      catchUps: this.catchUps,
-      probes: this.probes,
-      probeFailures: this.probeFailures
-    };
-  }
-  close() {
-    const inst = this.instrument;
-    this.instrument = { kind: "idle" };
-    this.listeners.clear();
-    switch (inst.kind) {
-      case "probing":
-        inst.handle.release();
-        inst.stopPeriod();
-        return;
-      case "ended":
-        inst.stopPeriod();
-        return;
-      case "idle":
-        return;
-    }
-  }
-  // [LAW:dataflow-not-control-flow] The same steps at the start and every
-  // period after: tell subscribers the period passed; judge the probe folder
-  // against the one the watch opened on, first, so a folder replaced at its
-  // path never reads as a stall; judge the probes still unreported; write the
-  // next one.
-  async tick() {
-    this.notify({ kind: "period" });
-    const inst = this.instrument;
-    if (inst.kind !== "probing") return;
-    let now2;
-    try {
-      now2 = this.identityOf(inst.folder);
-    } catch (e) {
-      this.end(
-        inst.stopPeriod,
-        `the probe folder cannot be read: ${e.message}`
-      );
-      return;
-    }
-    if (now2 === "gone") {
-      this.end(inst.stopPeriod, "the probe folder was removed");
-      return;
-    }
-    if (!sameIdentity(now2, inst.identity)) {
-      this.end(inst.stopPeriod, "the probe folder was replaced");
-      return;
-    }
-    const d = this.current;
-    if (d.kind === "delivering" && d.unreported.length >= STALL_AFTER) {
-      this.stalls++;
-      this.move({
-        kind: "stalled",
-        missedSince: d.missedSince ?? d.unreported[0]
-      });
-    }
-    await this.probe(inst);
-  }
-  // A delivering watch awaits the probe; a stalled one awaits none in
-  // particular, since any report recovers it. A write that lands while
-  // unmeasured measures again, awaiting that probe, so a transient failure
-  // (a full disk) measures once it clears. A write that fails is unmeasured
-  // with its error: it tests no watch. A probe still in flight when the
-  // instrument ends or closes judges nothing.
-  async probe(inst) {
-    const at = this.clock.now();
-    const before = this.current;
-    if (before.kind === "delivering") {
-      this.current = { ...before, unreported: [...before.unreported, at] };
-    }
-    try {
-      await fs_default.promises.writeFile(
-        import_node_path5.default.join(inst.folder, PROBE_FILE),
-        String(at)
-      );
-    } catch (e) {
-      this.probeFailures++;
-      const d2 = this.current;
-      if (this.instrument !== inst || d2.kind === "unmeasured") return;
-      this.move({
-        kind: "unmeasured",
-        since: at,
-        reason: `the probe could not be written: ${e.message}`,
-        missedSince: d2.missedSince ?? at
-      });
-      return;
-    }
-    this.probes++;
-    const d = this.current;
-    if (this.instrument !== inst || d.kind !== "unmeasured") return;
-    this.move({
-      kind: "delivering",
-      unreported: [at],
-      missedSince: d.missedSince
-    });
-  }
-  // [LAW:no-silent-failure] The watch's own failure ends the instrument: the
-  // OS refuses an immediate retry the way it refused the first (limits,
-  // permissions). Anything else it reports proves delivery.
-  heard(inst, heard) {
-    if (this.instrument !== inst) return;
-    if (heard.kind === "failed") {
-      this.end(
-        inst.stopPeriod,
-        `the probe folder's watch failed: ${heard.reason}`
-      );
-      return;
-    }
-    const d = this.current;
-    const delivering = {
-      kind: "delivering",
-      unreported: [],
-      missedSince: null
-    };
-    if (d.missedSince === null) {
-      this.move(delivering);
-      return;
-    }
-    this.current = delivering;
-    this.catchUps++;
-    this.logger(
-      "info",
-      `file events resumed since=${iso(d.missedSince)} missed=${this.clock.now() - d.missedSince}ms from=${d.kind}`
-    );
-    this.notify({ kind: "caught-up", since: d.missedSince });
-  }
-  // [LAW:no-silent-failure] An ended instrument holds no watch and never
-  // measures again, so whatever ended it, only a restart can.
-  end(stopPeriod, reason) {
-    const inst = this.instrument;
-    if (inst.kind === "probing") inst.handle.release();
-    this.instrument = { kind: "ended", stopPeriod };
-    const at = this.clock.now();
-    this.move({
-      kind: "unmeasured",
-      since: at,
-      reason: `${reason}; restart the daemon`,
-      missedSince: this.current.missedSince ?? at
-    });
-  }
-  // [LAW:nothing-unseen] One line on each change of state, none per period.
-  move(next) {
-    const was = label(this.current);
-    this.current = next;
-    if (label(next) === was) return;
-    switch (next.kind) {
-      case "delivering":
-        this.logger("info", "file events delivering");
-        break;
-      case "stalled":
-        this.logger(
-          "warn",
-          `file events stalled since=${iso(next.missedSince)}`
-        );
-        break;
-      case "unmeasured":
-        this.logger(
-          "warn",
-          `file events unmeasured since=${iso(next.since)} reason=${JSON.stringify(next.reason)}`
-        );
-        break;
-    }
-    this.notify({ kind: "moved" });
-  }
-  notify(notice) {
-    for (const listener of [...this.listeners]) listener(notice);
-  }
-};
-var stopped = (since) => `file events stopped at ${iso(since)}; the OS has delivered none since, not even for a file the daemon wrote to test it`;
-var stallReason = (d) => d.kind === "stalled" ? stopped(d.missedSince) : null;
-function fileEventsWarnings(d) {
-  if (d.missedSince === null) return [];
-  const since = iso(d.missedSince);
-  const message = () => {
-    switch (d.kind) {
-      case "delivering":
-        return `file events unconfirmed since ${since}: the probe written to test them has not been heard yet, so an edit to the config made since may not have reloaded`;
-      case "stalled":
-        return `${stopped(d.missedSince)}, so an edit to the config will not reload until they resume`;
-      case "unmeasured":
-        return `since ${since}, the daemon cannot check whether file events are arriving: ${d.reason}`;
-    }
-  };
-  return [{ kind: "file-events", state: d.kind, message: message() }];
-}
 
 // node_modules/.pnpm/mobx@7.0.6/node_modules/mobx/dist/mobx.mjs
 init_globals();
@@ -51522,8 +50737,8 @@ function attributeFuncs() {
     out[name] = attrFunc(attrStyle(name, true));
     out[`not_${name}`] = attrFunc(attrStyle(name, false));
   }
-  for (const [alias, canonical2] of Object.entries(ATTRIBUTE_SHORT_ALIASES)) {
-    out[alias] = attrFunc(attrStyle(canonical2, true));
+  for (const [alias, canonical3] of Object.entries(ATTRIBUTE_SHORT_ALIASES)) {
+    out[alias] = attrFunc(attrStyle(canonical3, true));
   }
   return out;
 }
@@ -52310,81 +51525,1259 @@ function unwrapDocument(name, doc) {
   }
 }
 
-// src/var-system/parse.ts
+// src/utils/holds.ts
 init_globals();
-var LINE_BREAK = /\r\n|\r|\n/g;
-var textParser = (text4) => ok(text4.replace(LINE_BREAK, " ").trim());
-function regexParser(regex) {
-  return (text4) => {
-    const m = regex.exec(text4);
-    const group = m?.[1];
-    return group === void 0 ? failed("regex no-match", "parse") : ok(group.replace(LINE_BREAK, " "));
-  };
-}
-var jsonParser = (text4) => {
-  try {
-    return ok(JSON.parse(text4));
-  } catch (e) {
-    return failed(`JSON parse failed: ${e.message}`, "parse");
+var Holds = class {
+  held = /* @__PURE__ */ new Map();
+  // The keys the declaration in progress has taken, and how many of them it
+  // acquired.
+  declaring = null;
+  closed = false;
+  // `acquire` runs only for an entry this home does not hold now.
+  take(key, acquire) {
+    if (this.closed) throw new Error(`hold taken after close: ${key}`);
+    this.declaring?.taken.add(key);
+    if (this.held.has(key)) return;
+    this.held.set(key, acquire());
+    if (this.declaring !== null) this.declaring.acquired++;
+  }
+  // [LAW:no-ambient-temporal-coupling] One declaration: `body` takes every
+  // hold the home's draws read, and each hold it did not take is released
+  // once it returns, so the home holds exactly what it declared. Returns what
+  // the body answered, and how many holds it acquired and released.
+  declare(body) {
+    if (this.declaring !== null) throw new Error("declaration within one");
+    const declaring = { taken: /* @__PURE__ */ new Set(), acquired: 0 };
+    this.declaring = declaring;
+    let result;
+    try {
+      result = body();
+    } finally {
+      this.declaring = null;
+    }
+    let released = 0;
+    for (const [key, release3] of this.held) {
+      if (declaring.taken.has(key)) continue;
+      this.held.delete(key);
+      release3();
+      released++;
+    }
+    return { result, acquired: declaring.acquired, released };
+  }
+  // Releases every hold and refuses new ones: the home is gone.
+  close() {
+    this.closed = true;
+    const count = this.held.size;
+    for (const release3 of this.held.values()) release3();
+    this.held.clear();
+    return count;
+  }
+  get size() {
+    return this.held.size;
   }
 };
 
-// src/utils/trailing-edge.ts
+// src/var-system/source-runs.ts
 init_globals();
-var TrailingEdge = class {
-  // The keys whose loop is currently executing, each with its completion.
-  running = /* @__PURE__ */ new Map();
-  // The keys a trigger arrived for while their loop was mid-pass. A Set, not a
-  // count: ten triggers during one pass mean the same thing as one — the work
-  // must be done once more with current inputs.
-  again = /* @__PURE__ */ new Set();
-  run(key, work) {
-    this.again.add(key);
-    if (this.running.has(key)) return { kind: "queued" };
-    return { kind: "started", done: this.start(key, work) };
-  }
-  // A trigger that only ASKS for a reading — a period's tick, a first read —
-  // and carries no news that the answer changed: the loop in flight already
-  // answers it, so it shares that loop's completion rather than queueing a
-  // pass (brandon-unfiled-3248.8ro6, step 1: a trigger's kind decides what it
-  // does mid-read). Idle, it starts a loop exactly as `run` does.
-  share(key, work) {
-    const running = this.running.get(key);
-    if (running !== void 0) return running;
-    this.again.add(key);
-    return this.start(key, work);
-  }
-  start(key, work) {
-    const done2 = this.loop(key, work);
-    this.running.set(key, done2);
-    return done2;
-  }
-  async loop(key, work) {
-    try {
-      do {
-        this.again.delete(key);
-        await work();
-      } while (this.again.has(key));
-    } finally {
-      this.running.delete(key);
-      this.again.delete(key);
+
+// site/shims/crypto.ts
+init_globals();
+var import_buffer3 = __toESM(require_buffer(), 1);
+function fnv(text4) {
+  let h = 2166136261;
+  for (let i = 0; i < text4.length; i++) h = Math.imul(h ^ text4.charCodeAt(i), 16777619) >>> 0;
+  return h.toString(16).padStart(8, "0").repeat(8);
+}
+function createHash(_alg) {
+  let acc = "";
+  const h = {
+    update(d) {
+      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
+      return h;
+    },
+    digest(_enc2) {
+      return fnv(acc);
     }
+  };
+  return h;
+}
+function createHmac(_alg, key) {
+  let acc = import_buffer3.Buffer.from(key).toString("hex");
+  const h = {
+    update(d) {
+      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
+      return h;
+    },
+    digest() {
+      return import_buffer3.Buffer.from(fnv(acc), "hex");
+    }
+  };
+  return h;
+}
+function timingSafeEqual(a, b) {
+  if (a.length !== b.length) throw new RangeError("Input buffers must have the same byte length");
+  return a.every((byte, i) => byte === b[i]);
+}
+var randomUUID = () => globalThis.crypto.randomUUID();
+var randomBytes = (n) => globalThis.crypto.getRandomValues(new Uint8Array(n));
+var crypto_default = { createHash, createHmac, timingSafeEqual, randomUUID, randomBytes };
+
+// site/shims/fs-promises.ts
+init_globals();
+var import_memfs2 = __toESM(require_lib8(), 1);
+var p = import_memfs2.fs.promises;
+var { readFile, writeFile, stat, lstat, readdir, mkdir, rm, unlink, rename, open, access, appendFile, realpath, mkdtemp, copyFile } = p;
+
+// src/daemon/cache/watchers.ts
+init_globals();
+var import_node_path4 = __toESM(require_path_browserify(), 1);
+
+// src/utils/logfmt.ts
+init_globals();
+var BARE = /^[^\s"=\\]+$/;
+var valueOf = (value) => BARE.test(value) ? value : JSON.stringify(value);
+
+// src/utils/atomic-write.ts
+init_globals();
+var import_node_path2 = __toESM(require_path_browserify(), 1);
+function writeAtomic(at, text4, mode) {
+  const file = resolvedTarget(at);
+  fs_default.mkdirSync(import_node_path2.default.dirname(file), { recursive: true });
+  const tmp = `${file}.tmp`;
+  const fileMode = mode ?? fs_default.statSync(file, { throwIfNoEntry: false })?.mode;
+  try {
+    fs_default.writeFileSync(
+      tmp,
+      text4,
+      fileMode === void 0 ? {} : { mode: fileMode }
+    );
+    fs_default.renameSync(tmp, file);
+  } catch (e) {
+    fs_default.rmSync(tmp, { force: true });
+    throw e;
   }
-  // Drop every record of running and pending work — the teardown path of an
-  // owner being disposed. In-flight passes cannot be cancelled from here (the
-  // await belongs to `work`), so they run to completion; what this guarantees is
-  // that no QUEUED trigger is honoured after teardown, and that an owner
-  // rebuilt with the same keys starts clean.
-  clear() {
-    this.running.clear();
-    this.again.clear();
+}
+function resolvedTarget(at) {
+  return linkChain(at).at(-1);
+}
+function linkChain(at) {
+  const { hops, stopped: stopped2 } = walkLinks(at);
+  if (stopped2 !== null) throw stopped2;
+  return hops;
+}
+function walkLinks(at) {
+  const hops = [at];
+  try {
+    for (let n = 0; n < MAX_LINK_HOPS; n++) {
+      const next = linkTarget(hops[hops.length - 1]);
+      if (next === null) return { hops, stopped: null };
+      hops.push(next);
+    }
+    return {
+      hops,
+      stopped: new Error(`${at}: more than ${MAX_LINK_HOPS} symbolic links`)
+    };
+  } catch (e) {
+    return { hops, stopped: e };
   }
-  // Number of keys whose loop is executing — a read-only observability surface
-  // for tests asserting the serialization contract. Never read as control flow.
-  get size() {
-    return this.running.size;
+}
+function linkTarget(file) {
+  try {
+    if (!fs_default.lstatSync(file).isSymbolicLink()) return null;
+    return import_node_path2.default.resolve(
+      fs_default.realpathSync(import_node_path2.default.dirname(file)),
+      fs_default.readlinkSync(file)
+    );
+  } catch (e) {
+    const { code } = e;
+    if (code === "ENOENT" || code === "ENOTDIR") return null;
+    throw e;
+  }
+}
+var MAX_LINK_HOPS = 40;
+
+// src/utils/folder-identity.ts
+init_globals();
+var statIdentity = (folder) => {
+  try {
+    const st = fs_default.statSync(folder, { bigint: true });
+    return { dev: st.dev, ino: st.ino, birthtimeNs: st.birthtimeNs };
+  } catch (e) {
+    const code = e.code;
+    if (code === "ENOENT" || code === "ENOTDIR") return "gone";
+    throw e;
   }
 };
+var sameIdentity = (a, b) => a.dev === b.dev && a.ino === b.ino && a.birthtimeNs === b.birthtimeNs;
+var identityKey = (identity2) => identity2 === "gone" ? "gone" : `${identity2.dev}:${identity2.ino}:${identity2.birthtimeNs}`;
+var boundOf = (folder) => {
+  try {
+    return statIdentity(folder);
+  } catch (e) {
+    return { unreadable: e.code ?? String(e) };
+  }
+};
+var boundKey = (bound) => typeof bound === "string" || "ino" in bound ? identityKey(bound) : `unreadable:${bound.unreadable}`;
+var bindsFolder = (bound) => typeof bound !== "string" && "ino" in bound;
+
+// src/utils/watch-target.ts
+init_globals();
+var import_node_path3 = __toESM(require_path_browserify(), 1);
+function nearestWatchTarget(candidate) {
+  let name = import_node_path3.default.basename(candidate);
+  let dir = import_node_path3.default.dirname(candidate);
+  for (; ; ) {
+    const real = canonicalDirectory(dir);
+    if (real !== null)
+      return { dir: real, name, leaf: dir === import_node_path3.default.dirname(candidate) };
+    name = import_node_path3.default.basename(dir);
+    dir = import_node_path3.default.dirname(dir);
+  }
+}
+function canonicalDirectory(p2) {
+  try {
+    return fs_default.statSync(p2).isDirectory() ? fs_default.realpathSync(p2) : null;
+  } catch {
+    return null;
+  }
+}
+
+// src/daemon/cache/watchers.ts
+var defaultLogger = (_level, message) => debug(message);
+var DEBOUNCE_MS = 50;
+function watchTargetsOf(paths2) {
+  const unresolved = [];
+  let reached = true;
+  const byDir = /* @__PURE__ */ new Map();
+  for (const at of paths2.named) {
+    const { hops, stopped: stopped2 } = walkLinks(at);
+    if (stopped2 !== null)
+      unresolved.push({ path: at, reason: stopped2.message });
+    for (const hop of hops) {
+      const { dir, name, leaf } = nearestWatchTarget(hop);
+      reached &&= leaf;
+      const names = byDir.has(dir) ? byDir.get(dir) : /* @__PURE__ */ new Set();
+      names?.add(name);
+      byDir.set(dir, names);
+    }
+  }
+  for (const dir of paths2.whole.map(canonicalDirectory))
+    if (dir !== null) byDir.set(dir, null);
+  const targets = {
+    dirs: [...byDir.entries()].sort(([a], [b]) => a.localeCompare(b)).map(
+      ([dirPath, names]) => names === null ? { path: dirPath } : { path: dirPath, filenames: [...names].sort() }
+    )
+  };
+  const bound = new Map(
+    targets.dirs.map((d) => {
+      const at = boundOf(d.path);
+      return [d.path, bindsFolder(at) ? boundKey(at) : null];
+    })
+  );
+  return {
+    key: JSON.stringify([targets, [...bound]]),
+    targets,
+    unbound: [...bound.values()].includes(null),
+    bound,
+    reached,
+    unresolved
+  };
+}
+function watchFault(label2, watch2, beyond) {
+  const reasons = [
+    ...watch2.derived.unresolved.map(
+      // Every reason names the path it stopped at, the kernel's and the loop's.
+      (u) => `cannot follow a link chain \u2014 ${u.reason}`
+    ),
+    ...watch2.held.handle.deaf.map(
+      (d) => d.kind === "refused" ? `cannot watch ${d.path} \u2014 ${d.reason}` : `watching ${d.path} failed \u2014 ${d.reason}`
+    ),
+    ...beyond === null ? [] : [beyond]
+  ];
+  return reasons.length === 0 ? null : `${label2}: ${reasons.join("; ")}`;
+}
+function folded(window2, next) {
+  if (next.kind === "failed") return next;
+  if (window2.kind !== "changed") return window2;
+  if (next.kind === "unknown") return next;
+  for (const p2 of next.paths) window2.paths.add(p2);
+  return window2;
+}
+var namedOf = (dir, filename) => filename === null ? { kind: "unknown" } : { kind: "changed", paths: /* @__PURE__ */ new Set([import_node_path4.default.join(dir, filename)]) };
+var failedOf = (d) => ({
+  kind: "failed",
+  reason: `${d.path}: ${d.reason}`
+});
+var heldBy = (state, handle) => state.kind === "listening" && state.handle === handle;
+var dirId = (target) => `${target.recursive === true ? "tree" : "dir"}:${target.path}`;
+var WatcherRegistry = class {
+  slots = /* @__PURE__ */ new Map();
+  dirs = /* @__PURE__ */ new Map();
+  counters;
+  logger;
+  clock;
+  closed = false;
+  constructor(opts) {
+    this.clock = opts.clock;
+    this.counters = opts.counters;
+    this.logger = opts.logger ?? defaultLogger;
+  }
+  // Acquire (or share) the watch keyed by `key`. Every acquire of a key is a
+  // holder of one slot, and each holder's callback hears every window.
+  // `targets` from the first acquire wins; subsequent acquires keep the
+  // original target set (consumers must use a fresh key if they need different
+  // targets). A consumer that needs no more than "something changed" ignores
+  // the invalidation's value.
+  acquire(key, targets, onInvalidate) {
+    if (this.closed) {
+      return {
+        release: () => {
+        },
+        deaf: targets.dirs.map((d) => ({
+          kind: "refused",
+          path: d.path,
+          reason: "the watcher registry is closed"
+        }))
+      };
+    }
+    const shared = this.slots.get(key);
+    for (const { dir } of shared?.listeners ?? []) this.judged(dir, "acquire");
+    const slot = shared ?? this.opened(key, targets);
+    const holder = { onInvalidate };
+    slot.holders.add(holder);
+    return this.makeHandle(slot, holder);
+  }
+  // [LAW:single-enforcer] The one rule for a watch whose targets can move: a
+  // consumer derives its spec from disk again and the held watch follows it
+  // exactly when the key differs. The same key is the same directories, kept
+  // as they are; a new key acquires the spec's watch and then releases the
+  // held one, so a directory both name keeps its OS handle through the move.
+  // Nothing held yet is a first acquire, which is a rebind from nothing.
+  //
+  // A spec with a directory that binds nothing yet (gone, or a mount's
+  // transient fault) keeps the watch held: a derive that lands between a
+  // directory's removal and its making again would otherwise trade a watch
+  // FSEvents keeps on its path for a slot the OS refuses. The next derive
+  // that finds the directory there rebinds, since its key differs.
+  //
+  // [LAW:no-ambient-temporal-coupling] A kept watch retries nothing: its deaf
+  // directories are the period's to open again (`judge`). A follow that
+  // retried would answer the failed window its own handle's error told, and
+  // a handle that errors after every open would retry itself at the debounce
+  // cadence.
+  follow(held, spec, onInvalidate) {
+    if (held !== null && (held.key === spec.key || spec.unbound))
+      return { watch: held, move: "kept" };
+    const watch2 = {
+      key: spec.key,
+      handle: this.acquire(spec.key, spec.targets, onInvalidate)
+    };
+    held?.handle.release();
+    return { watch: watch2, move: "rebound" };
+  }
+  opened(key, targets) {
+    const slot = {
+      key,
+      listeners: [],
+      holders: /* @__PURE__ */ new Set(),
+      debounce: null
+    };
+    for (const target of targets.dirs) {
+      const dir = this.dirFor(target);
+      const listener = {
+        slot,
+        dir,
+        filter: target.filenames ? new Set(target.filenames) : null
+      };
+      dir.listeners.add(listener);
+      slot.listeners.push(listener);
+    }
+    this.slots.set(key, slot);
+    if (this.counters) {
+      if (slot.listeners.every((l) => l.dir.state.kind === "listening"))
+        this.counters.watchersOpened++;
+      else this.counters.watchRefusals++;
+    }
+    return slot;
+  }
+  // The directory watch a new slot's target joins: the one already open
+  // there, judged, or a new one.
+  dirFor(target) {
+    const id2 = dirId(target);
+    const existing = this.dirs.get(id2);
+    if (existing !== void 0) {
+      this.judged(existing, "acquire");
+      return existing;
+    }
+    const where = { path: target.path, recursive: target.recursive === true };
+    const dir = {
+      id: id2,
+      ...where,
+      listeners: /* @__PURE__ */ new Set(),
+      state: this.open(where, () => dir, "acquire", null)
+    };
+    this.dirs.set(id2, dir);
+    return dir;
+  }
+  // [LAW:single-enforcer] The one rule that a directory watch names the
+  // folder at its path, applied whenever a holder acquires the directory,
+  // whenever an event says the folder there moved, and on every period
+  // (`judge`). A deaf one is opened again; a listening one whose path holds
+  // another folder than the one it bound (removed and made again, or a strict
+  // ancestor renamed away and another tree put at its path: inotify hears the
+  // old inode, and the bound folder is what an event naming the directory is
+  // judged against) is reopened in place. A path that binds nothing right now
+  // keeps the listening handle, as `follow` keeps a held watch: a macOS watch
+  // on the path hears the folder come back.
+  judged(dir, cause) {
+    if (dir.state.kind === "deaf") {
+      this.reopen(dir, cause);
+      return;
+    }
+    const now2 = boundOf(dir.path);
+    if (bindsFolder(now2) && boundKey(now2) !== dir.state.bound)
+      this.reopen(dir, "another folder is at its path");
+  }
+  // [LAW:no-ambient-temporal-coupling] Every directory watch judged against
+  // the disk, on the period the file-event delivery owner keeps (the daemon
+  // wires it). It is the one trigger for a replacement no event reaches a
+  // handle for (a strict ancestor renamed away and another tree put at its
+  // path: inotify reports a directory's own removal or self-move, never its
+  // parent's), and the retry of a directory the OS refused or whose handle
+  // errored while no holder newly acquires it. A directory staying as it is
+  // costs one stat, or one refused open, and tells nothing.
+  judge() {
+    for (const dir of this.dirs.values()) this.judged(dir, "period");
+  }
+  // [LAW:no-silent-failure] Every slot on the directory hears it change
+  // state. Going deaf, it hears the fault. Listening again, it hears an
+  // `unknown` window: whatever changed while the directory was deaf or bound
+  // to another folder went unheard, and a holder that re-derives on it reports
+  // its fault cleared. Deaf staying deaf is no change and tells nothing.
+  reopen(dir, cause) {
+    const was = dir.state;
+    if (was.kind === "listening") this.closeHandle(dir.path, was.handle, cause);
+    dir.state = this.open(dir, () => dir, cause, was);
+    if (dir.state.kind === "listening") this.tell(dir, { kind: "unknown" });
+    else if (was.kind === "listening")
+      this.tell(dir, failedOf(dir.state.deafness));
+  }
+  // `dirOf` names the watch the handle belongs to; its callbacks run only
+  // after the open returns, once the watch holds the state returned here.
+  open(where, dirOf, cause, was) {
+    const at = where.path;
+    const bound = boundKey(boundOf(at));
+    try {
+      fs_default.opendirSync(at).closeSync();
+      const handle = fs_default.watch(
+        at,
+        { persistent: false, recursive: where.recursive },
+        (_event, changed) => this.heard(dirOf(), handle, changed)
+      );
+      handle.on("error", (e) => {
+        this.logger("warn", `watcher error ${at}: ${e.message}`);
+        if (this.counters) this.counters.watchErrors++;
+        const dir = dirOf();
+        if (!heldBy(dir.state, handle)) return;
+        this.closeHandle(at, handle, "error");
+        const deafness = {
+          kind: "failed",
+          path: at,
+          reason: e.message
+        };
+        dir.state = { kind: "deaf", deafness };
+        this.tell(dir, failedOf(deafness));
+      });
+      if (this.counters) this.counters.dirWatchesOpened++;
+      this.logger(
+        "info",
+        `dir watch opened path=${valueOf(at)} cause=${valueOf(cause)}`
+      );
+      return { kind: "listening", handle, bound };
+    } catch (e) {
+      const reason = e.message;
+      const same2 = was?.kind === "deaf" && was.deafness.kind === "refused" && was.deafness.reason === reason;
+      if (!same2) this.logger("warn", `watch failed ${at}: ${reason}`);
+      return {
+        kind: "deaf",
+        deafness: { kind: "refused", path: at, reason }
+      };
+    }
+  }
+  // [LAW:dataflow-not-control-flow] Each listener's filter is a value: a name
+  // it lists, an unnamed event (the OS may be reporting the filtered child),
+  // or the directory's own name while the folder at the path is no longer the
+  // one this handle bound (its removal or replacement, which macOS reports as
+  // a change and Linux as a rename) reaches the slot. The same name with the
+  // folder unchanged is macOS reporting a child that came or went, or a chmod,
+  // and is not. Judged once per event, for every listener. A move is then
+  // judged, so a handle never stays bound to a folder no longer at its path
+  // and every later event naming the directory is judged against the folder
+  // there.
+  heard(dir, handle, changed) {
+    const { state } = dir;
+    if (!heldBy(state, handle)) return;
+    const moved = changed === import_node_path4.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== state.bound;
+    for (const { slot, filter } of dir.listeners) {
+      if (filter === null || changed === null || filter.has(changed) || moved)
+        this.fire(slot, namedOf(dir.path, changed));
+    }
+    if (moved) this.judged(dir, "moved");
+  }
+  tell(dir, invalidation) {
+    for (const { slot } of dir.listeners) this.fire(slot, invalidation);
+  }
+  fire(slot, invalidation) {
+    if (slot.debounce !== null) {
+      slot.debounce.window = folded(slot.debounce.window, invalidation);
+      return;
+    }
+    const debounce = {
+      window: invalidation,
+      cancel: this.clock.after(
+        DEBOUNCE_MS,
+        () => {
+          slot.debounce = null;
+          for (const holder of slot.holders) {
+            try {
+              holder.onInvalidate(debounce.window);
+            } catch (e) {
+              this.logger(
+                "warn",
+                `watcher invalidate threw key=${valueOf(slot.key)}: ${e.message}`
+              );
+            }
+          }
+        },
+        { unref: true }
+      )
+    };
+    slot.debounce = debounce;
+  }
+  makeHandle(slot, holder) {
+    return {
+      get deaf() {
+        return slot.listeners.flatMap(
+          ({ dir }) => dir.state.kind === "deaf" ? [dir.state.deafness] : []
+        );
+      },
+      release: () => {
+        if (!slot.holders.delete(holder) || slot.holders.size > 0) return;
+        if (this.slots.get(slot.key) !== slot) return;
+        this.closeSlot(slot, "last release");
+        this.slots.delete(slot.key);
+      }
+    };
+  }
+  closeHandle(at, handle, cause) {
+    try {
+      handle.close();
+    } catch {
+    }
+    if (this.counters) this.counters.dirWatchesClosed++;
+    this.logger(
+      "info",
+      `dir watch closed path=${valueOf(at)} cause=${valueOf(cause)}`
+    );
+  }
+  // A directory watch closes with the last slot on it.
+  closeSlot(slot, cause) {
+    if (slot.debounce !== null) {
+      slot.debounce.cancel();
+      slot.debounce = null;
+    }
+    for (const listener of slot.listeners) {
+      const { dir } = listener;
+      dir.listeners.delete(listener);
+      if (dir.listeners.size > 0) continue;
+      if (dir.state.kind === "listening")
+        this.closeHandle(dir.path, dir.state.handle, cause);
+      this.dirs.delete(dir.id);
+    }
+    if (this.counters) this.counters.watchersClosed++;
+  }
+  // The slots held now.
+  size() {
+    return this.slots.size;
+  }
+  // The OS directory watches open now.
+  dirWatches() {
+    return [...this.dirs.values()].filter((d) => d.state.kind === "listening").length;
+  }
+  // Every directory a held watch targets.
+  watchedDirs() {
+    return [...this.dirs.values()].map((d) => d.path);
+  }
+  closeAll() {
+    this.closed = true;
+    for (const slot of this.slots.values()) this.closeSlot(slot, "close");
+    this.slots.clear();
+  }
+};
+
+// src/daemon/cache/file-events.ts
+init_globals();
+var import_node_path5 = __toESM(require_path_browserify(), 1);
+var PROBE_EVERY_MS = 3e4;
+var STALL_AFTER = 2;
+var PROBE_FILE = "probe";
+var NO_FILE_EVENTS = {
+  delivery: () => ({
+    kind: "unmeasured",
+    since: 0,
+    reason: "outside the daemon",
+    missedSince: null
+  }),
+  subscribe: () => () => {
+  }
+};
+var iso = (at) => new Date(at).toISOString();
+var label = (d) => d.kind === "unmeasured" ? `unmeasured:${d.reason}` : d.kind;
+var FileEventDelivery = class {
+  current;
+  instrument = { kind: "idle" };
+  listeners = /* @__PURE__ */ new Set();
+  stalls = 0;
+  catchUps = 0;
+  probes = 0;
+  probeFailures = 0;
+  watchers;
+  logger;
+  identityOf;
+  clock;
+  constructor(opts) {
+    this.watchers = opts.watchers;
+    this.logger = opts.logger;
+    this.clock = opts.clock;
+    this.identityOf = opts.identityOf ?? statIdentity;
+    this.current = {
+      kind: "unmeasured",
+      since: this.clock.now(),
+      reason: "not started",
+      missedSince: null
+    };
+  }
+  delivery() {
+    return this.current;
+  }
+  subscribe(listener) {
+    this.listeners.add(listener);
+    return () => void this.listeners.delete(listener);
+  }
+  // Only the daemon starts the owner, once it has won its socket: it makes
+  // the folder, opens the one watch, and arms the period.
+  start(folder) {
+    if (this.instrument.kind !== "idle") {
+      throw new Error("file events: the owner was started twice");
+    }
+    const stopPeriod = this.clock.every(
+      PROBE_EVERY_MS,
+      () => void this.tick(),
+      {
+        unref: true
+      }
+    );
+    let identity2;
+    try {
+      fs_default.mkdirSync(folder, { recursive: true });
+      identity2 = this.identityOf(folder);
+    } catch (e) {
+      this.end(
+        stopPeriod,
+        `the probe folder could not be made: ${e.message}`
+      );
+      return;
+    }
+    if (identity2 === "gone") {
+      this.end(stopPeriod, "the probe folder was removed as it was made");
+      return;
+    }
+    const probing = {
+      kind: "probing",
+      folder,
+      identity: identity2,
+      stopPeriod,
+      // [LAW:single-enforcer] The only acquirer of this registry key.
+      handle: this.watchers.acquire(
+        `file-events:${folder}`,
+        { dirs: [{ path: folder, filenames: [PROBE_FILE] }] },
+        (heard) => this.heard(probing, heard)
+      )
+    };
+    this.instrument = probing;
+    this.logger("info", `file events probing folder=${valueOf(folder)}`);
+    const [refusal] = probing.handle.deaf;
+    if (refusal !== void 0) {
+      this.end(
+        stopPeriod,
+        `the OS refused the probe folder's watch: ${refusal.reason}`
+      );
+      return;
+    }
+    this.move({ kind: "delivering", unreported: [], missedSince: null });
+    void this.tick();
+  }
+  stats() {
+    return {
+      delivery: this.current,
+      stalls: this.stalls,
+      catchUps: this.catchUps,
+      probes: this.probes,
+      probeFailures: this.probeFailures
+    };
+  }
+  close() {
+    const inst = this.instrument;
+    this.instrument = { kind: "idle" };
+    this.listeners.clear();
+    switch (inst.kind) {
+      case "probing":
+        inst.handle.release();
+        inst.stopPeriod();
+        return;
+      case "ended":
+        inst.stopPeriod();
+        return;
+      case "idle":
+        return;
+    }
+  }
+  // [LAW:dataflow-not-control-flow] The same steps at the start and every
+  // period after: tell subscribers the period passed; judge the probe folder
+  // against the one the watch opened on, first, so a folder replaced at its
+  // path never reads as a stall; judge the probes still unreported; write the
+  // next one.
+  async tick() {
+    this.notify({ kind: "period" });
+    const inst = this.instrument;
+    if (inst.kind !== "probing") return;
+    let now2;
+    try {
+      now2 = this.identityOf(inst.folder);
+    } catch (e) {
+      this.end(
+        inst.stopPeriod,
+        `the probe folder cannot be read: ${e.message}`
+      );
+      return;
+    }
+    if (now2 === "gone") {
+      this.end(inst.stopPeriod, "the probe folder was removed");
+      return;
+    }
+    if (!sameIdentity(now2, inst.identity)) {
+      this.end(inst.stopPeriod, "the probe folder was replaced");
+      return;
+    }
+    const d = this.current;
+    if (d.kind === "delivering" && d.unreported.length >= STALL_AFTER) {
+      this.stalls++;
+      this.move({
+        kind: "stalled",
+        missedSince: d.missedSince ?? d.unreported[0]
+      });
+    }
+    await this.probe(inst);
+  }
+  // A delivering watch awaits the probe; a stalled one awaits none in
+  // particular, since any report recovers it. A write that lands while
+  // unmeasured measures again, awaiting that probe, so a transient failure
+  // (a full disk) measures once it clears. A write that fails is unmeasured
+  // with its error: it tests no watch. A probe still in flight when the
+  // instrument ends or closes judges nothing.
+  async probe(inst) {
+    const at = this.clock.now();
+    const before = this.current;
+    if (before.kind === "delivering") {
+      this.current = { ...before, unreported: [...before.unreported, at] };
+    }
+    try {
+      await fs_default.promises.writeFile(
+        import_node_path5.default.join(inst.folder, PROBE_FILE),
+        String(at)
+      );
+    } catch (e) {
+      this.probeFailures++;
+      const d2 = this.current;
+      if (this.instrument !== inst || d2.kind === "unmeasured") return;
+      this.move({
+        kind: "unmeasured",
+        since: at,
+        reason: `the probe could not be written: ${e.message}`,
+        missedSince: d2.missedSince ?? at
+      });
+      return;
+    }
+    this.probes++;
+    const d = this.current;
+    if (this.instrument !== inst || d.kind !== "unmeasured") return;
+    this.move({
+      kind: "delivering",
+      unreported: [at],
+      missedSince: d.missedSince
+    });
+  }
+  // [LAW:no-silent-failure] The watch's own failure ends the instrument: the
+  // OS refuses an immediate retry the way it refused the first (limits,
+  // permissions). Anything else it reports proves delivery.
+  heard(inst, heard) {
+    if (this.instrument !== inst) return;
+    if (heard.kind === "failed") {
+      this.end(
+        inst.stopPeriod,
+        `the probe folder's watch failed: ${heard.reason}`
+      );
+      return;
+    }
+    const d = this.current;
+    const delivering = {
+      kind: "delivering",
+      unreported: [],
+      missedSince: null
+    };
+    if (d.missedSince === null) {
+      this.move(delivering);
+      return;
+    }
+    this.current = delivering;
+    this.catchUps++;
+    this.logger(
+      "info",
+      `file events resumed since=${iso(d.missedSince)} missed=${this.clock.now() - d.missedSince}ms from=${d.kind}`
+    );
+    this.notify({ kind: "caught-up", since: d.missedSince });
+  }
+  // [LAW:no-silent-failure] An ended instrument holds no watch and never
+  // measures again, so whatever ended it, only a restart can.
+  end(stopPeriod, reason) {
+    const inst = this.instrument;
+    if (inst.kind === "probing") inst.handle.release();
+    this.instrument = { kind: "ended", stopPeriod };
+    const at = this.clock.now();
+    this.move({
+      kind: "unmeasured",
+      since: at,
+      reason: `${reason}; restart the daemon`,
+      missedSince: this.current.missedSince ?? at
+    });
+  }
+  // [LAW:nothing-unseen] One line on each change of state, none per period.
+  move(next) {
+    const was = label(this.current);
+    this.current = next;
+    if (label(next) === was) return;
+    switch (next.kind) {
+      case "delivering":
+        this.logger("info", "file events delivering");
+        break;
+      case "stalled":
+        this.logger(
+          "warn",
+          `file events stalled since=${iso(next.missedSince)}`
+        );
+        break;
+      case "unmeasured":
+        this.logger(
+          "warn",
+          `file events unmeasured since=${iso(next.since)} reason=${JSON.stringify(next.reason)}`
+        );
+        break;
+    }
+    this.notify({ kind: "moved" });
+  }
+  notify(notice) {
+    for (const listener of [...this.listeners]) listener(notice);
+  }
+};
+var stopped = (since) => `file events stopped at ${iso(since)}; the OS has delivered none since, not even for a file the daemon wrote to test it`;
+var stallReason = (d) => d.kind === "stalled" ? stopped(d.missedSince) : null;
+function fileEventsWarnings(d) {
+  if (d.missedSince === null) return [];
+  const since = iso(d.missedSince);
+  const message = () => {
+    switch (d.kind) {
+      case "delivering":
+        return `file events unconfirmed since ${since}: the probe written to test them has not been heard yet, so an edit to the config made since may not have reloaded`;
+      case "stalled":
+        return `${stopped(d.missedSince)}, so an edit to the config will not reload until they resume`;
+      case "unmeasured":
+        return `since ${since}, the daemon cannot check whether file events are arriving: ${d.reason}`;
+    }
+  };
+  return [{ kind: "file-events", state: d.kind, message: message() }];
+}
+
+// src/utils/keyed-source.ts
+init_globals();
+
+// src/utils/period.ts
+init_globals();
+function periodOf(every, outcome) {
+  return outcome.kind === "failed" ? every.failedMs : every.okMs;
+}
+function backedOffMs(every, failures, ceilingMs) {
+  return failures === 0 ? every.okMs : Math.min(every.failedMs * 2 ** (failures - 1), ceilingMs);
+}
+var Period = class {
+  constructor(tick, clock) {
+    this.tick = tick;
+    this.clock = clock;
+  }
+  tick;
+  clock;
+  stop = null;
+  state = "released";
+  last = null;
+  // A read landed at the monotonic reading `at` (now, unless the owner is resuming an answer it
+  // kept from earlier). `periodMs` is chosen by the caller from the read's
+  // outcome (a failed PR lookup is retried sooner than a found one).
+  landed(periodMs, at = this.clock.monotonic()) {
+    this.last = { at, periodMs };
+    this.schedule();
+  }
+  hold(held) {
+    if (this.state === "disposed") return;
+    const next = held ? "held" : "released";
+    if (next === this.state) return;
+    this.state = next;
+    this.schedule();
+  }
+  dispose() {
+    this.state = "disposed";
+    this.cancel();
+  }
+  schedule() {
+    this.cancel();
+    if (this.state !== "held" || this.last === null) return;
+    const wait = Math.max(
+      0,
+      this.last.at + this.last.periodMs - this.clock.monotonic()
+    );
+    this.stop = this.clock.after(
+      wait,
+      () => {
+        this.stop = null;
+        this.tick();
+      },
+      { unref: true }
+    );
+  }
+  cancel() {
+    this.stop?.();
+    this.stop = null;
+  }
+};
+
+// src/utils/reading.ts
+init_globals();
+function unread() {
+  return observable.box(pending("unread"), { deep: false });
+}
+function pending(why2) {
+  let land;
+  const landed = new Promise((resolve) => {
+    land = resolve;
+  });
+  return { kind: "pending", why: why2, landed, land };
+}
+function settle(source, outcome) {
+  const prior = source.reading.get();
+  if (prior.kind !== "pending" && compareStructural(prior, outcome)) return;
+  runInAction(() => source.reading.set(outcome));
+  if (prior.kind === "pending") prior.land();
+}
+function renew(source, why2) {
+  const prior = source.reading.get();
+  if (prior.kind !== "pending") {
+    runInAction(() => source.reading.set(pending(why2)));
+  } else if (prior.why !== why2 && why2 === "unread") {
+    runInAction(() => source.reading.set({ ...prior, why: why2 }));
+  }
+}
+function answerPending(source, outcome) {
+  if (source.reading.get().kind === "pending") settle(source, outcome);
+}
+function isWaiting(current) {
+  return typeof current === "object" && current !== null && current.kind === "pending";
+}
+function currentOf(source) {
+  return source.reading.get();
+}
+async function answered(read2) {
+  for (; ; ) {
+    const current = read2();
+    if (!isWaiting(current)) return current;
+    await current.landed;
+  }
+}
+function waitWithin(work, ms, late, after) {
+  const wait = new AbortController();
+  const clear = after(Math.max(0, ms), () => wait.abort());
+  const ended = new Promise((resolve, reject2) => {
+    wait.signal.addEventListener("abort", () => resolve("deadline"));
+    void work(wait.signal).then(
+      () => resolve("answered"),
+      // [LAW:no-silent-failure] Every rejection is reported: the wait's own
+      // while it listens, its owner's after.
+      (e) => wait.signal.aborted ? late(e) : reject2(e)
+    );
+  });
+  return ended.finally(() => {
+    clear();
+    wait.abort();
+  });
+}
+function settledLane(outcome) {
+  return { current: () => outcome };
+}
+
+// src/utils/keyed-source.ts
+var NO_WATCH = () => () => {
+};
+var KeyedSource = class {
+  constructor(spec) {
+    this.spec = spec;
+    this.refreshes = spec.ledger.declare({
+      name: spec.name,
+      scope: spec.scope,
+      refresh: ["first", "period", "change", "supersede"]
+    });
+  }
+  spec;
+  entries = /* @__PURE__ */ new Map();
+  refreshes;
+  closed = false;
+  // [LAW:single-enforcer] The one way into an entry: `holds` takes it — the
+  // home holds it until a declaration of the home's takes it no more, or the
+  // home is disposed, which keeps the entry for its next hold — and the lane
+  // reads it as it stands, never awaited and taking nothing. A key never read
+  // is created pending and read once, its first refresh.
+  //
+  // [LAW:no-silent-failure] The owner logs its own failures — each refresh's
+  // by that refresh — so its caller logs none. A declaration that THROWS is a
+  // bug none of those saw, reported by the view's declaration (declareLanes).
+  declare(holds2, input) {
+    if (this.closed)
+      return settledLane(failed(`${this.spec.name} closed`, "read"));
+    const key = this.spec.keyOf(input);
+    const entry = this.touched(key) ?? this.firstRead(this.created(key, input));
+    holds2.take(`${this.spec.name}:${key}`, () => this.hold(entry));
+    return { current: () => currentOf(entry) };
+  }
+  // [LAW:one-source-of-truth] The one supersede rule (SOURCES-AND-FRAMES.md):
+  // the daemon itself is changing what this key reads (a click's move). The
+  // value is pending (`superseded`) and the read in flight is abandoned, so no
+  // draw after the click shows the value from before it. Every trigger of the
+  // key is held back until every supersede of it has resumed, so no read
+  // during the move stores the world from before it; the last resume starts
+  // one fresh read. A key never read is created for it, and its first read is
+  // that resume's.
+  supersede(input) {
+    if (this.closed) return () => {
+    };
+    const key = this.spec.keyOf(input);
+    const entry = this.touched(key) ?? this.created(key, input);
+    entry.superseding++;
+    renew(entry, "superseded");
+    this.abandon(entry);
+    entry.changed = false;
+    this.evict();
+    let resumed = false;
+    return () => {
+      if (resumed) return;
+      resumed = true;
+      entry.superseding--;
+      if (this.entries.get(entry.key) === entry)
+        this.refresh(entry, "supersede");
+    };
+  }
+  // The world changed under every held entry `affected` names (a watched file
+  // was written): each is read again, after the read in flight when one is
+  // out. An entry nobody holds is read when a hold returns to it.
+  changed(affected) {
+    for (const entry of this.entries.values()) {
+      if (affected(entry.input)) this.heard(entry);
+    }
+  }
+  // [LAW:single-enforcer] The one rule for a change under an entry, whether
+  // the owner's or the entry's own watch reports it: a held entry is read
+  // again; one nobody holds is not, since a hold's return re-reads it.
+  heard(entry) {
+    if (entry.holders > 0) this.refresh(entry, "change");
+  }
+  // Whether some home holds an entry `match` names now.
+  isHeld(match) {
+    for (const entry of this.entries.values()) {
+      if (entry.holders > 0 && match(entry.input)) return true;
+    }
+    return false;
+  }
+  stats() {
+    let held = 0;
+    for (const entry of this.entries.values()) if (entry.holders > 0) held++;
+    const { refreshes, failures, abandoned, lastMs } = this.refreshes.record();
+    return {
+      entries: this.entries.size,
+      held,
+      refreshes,
+      failures,
+      abandoned,
+      lastMs
+    };
+  }
+  // Ends every entry's period: a held entry's period re-arms on every landing,
+  // so an owner that is not closed keeps its timers for good.
+  close() {
+    this.closed = true;
+    for (const entry of [...this.entries.values()]) this.drop(entry);
+  }
+  // LRU touch: re-inserting moves the entry to the newest end.
+  touched(key) {
+    const entry = this.entries.get(key);
+    if (entry === void 0) return void 0;
+    this.entries.delete(key);
+    this.entries.set(key, entry);
+    return entry;
+  }
+  // In place before any read, so a read's answer finds its entry stored.
+  created(key, input) {
+    const entry = {
+      key,
+      input,
+      reading: unread(),
+      holders: 0,
+      flight: null,
+      changed: false,
+      superseding: 0,
+      revisit: revisitOf(this.spec.every(input), this.spec.clock, {
+        period: () => this.refresh(entry, "period"),
+        holdReturned: () => this.refresh(entry, "change")
+      }),
+      unwatch: () => {
+      }
+    };
+    this.entries.set(key, entry);
+    entry.unwatch = this.spec.watch(input, () => this.heard(entry));
+    return entry;
+  }
+  firstRead(entry) {
+    this.refresh(entry, "first");
+    return entry;
+  }
+  refresh(entry, by) {
+    if (entry.superseding > 0) return;
+    if (entry.flight !== null) {
+      entry.changed ||= by === "change";
+      return;
+    }
+    const flight = new AbortController();
+    entry.flight = flight;
+    const startedAt = this.spec.clock.monotonic();
+    void attempt(() => this.spec.read(entry.input, flight.signal)).then((outcome) => {
+      const fields2 = this.spec.fields(entry.input, entry.holders);
+      const ms = elapsedMs(this.spec.clock, startedAt);
+      if (flight.signal.aborted) {
+        this.refreshes.abandoned(fields2, by, ms);
+        return;
+      }
+      try {
+        this.refreshes.recorded(fields2, by, outcome, ms);
+      } finally {
+        this.store(entry, outcome);
+      }
+    }).catch((e) => {
+      this.spec.logger(
+        "error",
+        `${this.spec.name} refresh threw (${this.spec.fields(entry.input, entry.holders)}): ${String(e)}`
+      );
+    });
+  }
+  store(entry, outcome) {
+    entry.flight = null;
+    try {
+      settle(entry, outcome);
+    } finally {
+      entry.revisit.landed(outcome);
+      if (entry.changed) {
+        entry.changed = false;
+        this.refresh(entry, "change");
+      }
+    }
+  }
+  hold(entry) {
+    entry.holders++;
+    entry.revisit.hold(true);
+    this.evict();
+    return () => {
+      entry.holders--;
+      entry.revisit.hold(entry.holders > 0);
+      this.evict();
+    };
+  }
+  // A held entry is never evicted, so held entries are bounded by their
+  // holders (the render cache's budget).
+  // [LAW:single-enforcer] Run by every claim that can add an entry (a hold, a
+  // supersede) and by every release, so an entry over the bound is dropped
+  // the moment nobody holds it. An entry mid-supersede is kept like a held
+  // one: dropped, a hold returning during the move would read the world
+  // from before it.
+  evict() {
+    for (const entry of [...this.entries.values()]) {
+      if (this.entries.size <= this.spec.maxEntries) return;
+      if (entry.holders === 0 && entry.superseding === 0) this.drop(entry);
+    }
+  }
+  drop(entry) {
+    this.entries.delete(entry.key);
+    this.abandon(entry);
+    entry.unwatch();
+    entry.revisit.dispose();
+    answerPending(entry, failed(`${this.spec.name} entry dropped`, "read"));
+  }
+  // The read out, if one is, stores nothing and is told to stop.
+  abandon(entry) {
+    const flight = entry.flight;
+    entry.flight = null;
+    flight?.abort(new Error(`${this.spec.name} read abandoned`));
+  }
+};
+function revisitOf(every, clock, read2) {
+  if (every === null) return new HoldReturn(read2.holdReturned);
+  const period = new Period(read2.period, clock);
+  return {
+    landed: (outcome) => period.landed(periodOf(every, outcome)),
+    hold: (held) => period.hold(held),
+    dispose: () => period.dispose()
+  };
+}
+var HoldReturn = class {
+  constructor(reread) {
+    this.reread = reread;
+  }
+  reread;
+  state = "released";
+  answered = false;
+  landed() {
+    this.answered = true;
+  }
+  hold(held) {
+    if (this.state === "disposed") return;
+    const returned2 = held && this.state === "released" && this.answered;
+    this.state = held ? "held" : "released";
+    if (returned2) this.reread();
+  }
+  dispose() {
+    this.state = "disposed";
+  }
+};
+function attempt(read2) {
+  const threw2 = (e) => failed(`read threw: ${String(e)}`, "read");
+  try {
+    return read2().catch(threw2);
+  } catch (e) {
+    return Promise.resolve(threw2(e));
+  }
+}
 
 // src/utils/refresh-ledger.ts
 init_globals();
@@ -52408,6 +52801,7 @@ var RefreshLedger = class {
       scope: declaration.scope,
       refreshes: {},
       failures: 0,
+      abandoned: 0,
       lastMs: null
     };
     for (const trigger of declaration.refresh) tally.refreshes[trigger] ??= 0;
@@ -52464,44 +52858,102 @@ var Refreshes = class {
       `${this.tally.name} refresh ${fields2} by=${by} outcome=${outcome.kind}${why2} took=${ms}ms`
     );
   }
+  // [LAW:nothing-unseen] A read the owner abandoned is its own event and its
+  // own count: a key that moves on every tick aborts a read on every tick,
+  // which no refresh or failure tally would show.
+  abandoned(fields2, by, ms) {
+    this.tally.abandoned++;
+    this.logger(
+      "info",
+      `${this.tally.name} refresh ${fields2} by=${by} abandoned took=${ms}ms`
+    );
+  }
 };
 
-// src/var-system/sources.ts
-var TORN_WRITE_SETTLE_MS = 250;
-var MIN_SHELL_TTL_MS = 500;
-var SHELL_READ_TIMEOUT_MS = 1e4;
-function clampShellCache(name, policy) {
-  if (policy.kind !== "ttl") return policy;
-  if (policy.durationMs >= MIN_SHELL_TTL_MS) return policy;
-  debug(
-    `declareShell "${name}": ttl ${policy.durationMs}ms below floor ${MIN_SHELL_TTL_MS}ms; clamping`
-  );
-  return { kind: "ttl", durationMs: MIN_SHELL_TTL_MS };
+// src/source-digest.ts
+init_globals();
+var import_node_path6 = __toESM(require_path_browserify(), 1);
+var isSourceEntry = (name) => !name.startsWith(".") && !name.endsWith("~");
+function entryBytes(p2, st) {
+  return st.isSymbolicLink() ? import_buffer.Buffer.from(fs_default.readlinkSync(p2)) : fs_default.readFileSync(p2);
 }
-function parseDuration(s) {
-  const m = /^(\d+(?:\.\d+)?)(ms|s|m|h)$/.exec(s);
-  if (!m) throw new RangeError(`Invalid duration: "${s}"`);
-  const v = parseFloat(m[1]);
-  switch (m[2]) {
-    case "ms":
-      return v;
-    case "s":
-      return v * 1e3;
-    case "m":
-      return v * 6e4;
-    case "h":
-      return v * 36e5;
-    default:
-      throw new RangeError(`Unexpected duration unit: "${m[2]}"`);
+function sourceEntries(root, dir, keep2 = isSourceEntry) {
+  return fs_default.readdirSync(dir).filter(keep2).sort().flatMap((name) => {
+    const p2 = import_node_path6.default.join(dir, name);
+    const st = fs_default.lstatSync(p2, { throwIfNoEntry: false });
+    if (st === void 0) return [];
+    if (st.isDirectory()) return sourceEntries(root, p2);
+    const rel = import_node_path6.default.relative(root, p2).split(import_node_path6.default.sep).join("/");
+    return [[rel, entryBytes(p2, st)]];
+  });
+}
+function digestOf(entries) {
+  const h = crypto_default.createHash("sha256");
+  for (const [rel, bytes] of entries) {
+    h.update(rel).update("\0").update(bytes).update("\0");
   }
+  return h.digest("hex");
 }
-var SESSION_ID_VAR_NAME = "session.id";
+function sourceDigest(srcDir) {
+  return digestOf(sourceEntries(srcDir, srcDir));
+}
+var CRATE_SOURCE = ["Cargo.toml", "Cargo.lock", "src"];
+function crateDigest(crateDir) {
+  return digestOf(
+    sourceEntries(
+      crateDir,
+      crateDir,
+      (name) => CRATE_SOURCE.includes(name)
+    )
+  );
+}
+var SHORT_DIGEST_LENGTH = 7;
+var shortDigest = (digest2) => digest2.slice(0, SHORT_DIGEST_LENGTH);
+
+// src/utils/plain.ts
+init_globals();
+function digestOf2(value) {
+  return createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex");
+}
+function canonical(value) {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (typeof value === "object" && value !== null) {
+    return Object.fromEntries(
+      Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([k, v]) => [k, canonical(v)])
+    );
+  }
+  return value;
+}
+
+// src/var-system/parse.ts
+init_globals();
+var LINE_BREAK = /\r\n|\r|\n/g;
+var textParser = (text4) => ok(text4.replace(LINE_BREAK, " ").trim());
+function regexParser(regex) {
+  return (text4) => {
+    const m = regex.exec(text4);
+    const group = m?.[1];
+    return group === void 0 ? failed("regex no-match", "parse") : ok(group.replace(LINE_BREAK, " "));
+  };
+}
+var jsonParser = (text4) => {
+  try {
+    return ok(JSON.parse(text4));
+  } catch (e) {
+    return failed(`JSON parse failed: ${e.message}`, "parse");
+  }
+};
+
+// src/var-system/source-runs.ts
+var SHELL_READ_TIMEOUT_MS = 1e4;
+var digestOf3 = (identity2) => digestOf2(identity2);
+function keyHashOf(value) {
+  return crypto_default.createHash("sha256").update(value).digest("hex");
+}
+var whereOf = (read2) => read2.kind === "shell" ? `output of "${read2.command}" in ${read2.cwd}` : `"${read2.path}"`;
 function shellReader(launcher, command, cwd2, signal) {
   return {
-    // The directory is part of the origin: a command that asks about "this
-    // repo" answers differently per session, so every failure — exit, regex
-    // no-match, JSON parse — names where it ran.
-    where: `output of "${command}" in ${cwd2}`,
+    where: whereOf({ kind: "shell", command, cwd: cwd2 }),
     read: async () => {
       const r = await launcher.launch({
         bin: "/bin/sh",
@@ -52511,7 +52963,6 @@ function shellReader(launcher, command, cwd2, signal) {
         timeoutMs: SHELL_READ_TIMEOUT_MS,
         signal
       });
-      if (signal.aborted) throw signal.reason;
       if (r.ok) return ok(r.stdout);
       const why2 = r.reason === "non-zero" ? `exited with code ${r.exitCode}` : r.reason === "timeout" ? `timed out after ${SHELL_READ_TIMEOUT_MS / 1e3} s` : [r.reason, r.error].filter((s) => s !== void 0).join(": ");
       return failed(`shell "${command}" ${why2} in ${cwd2}`, "read");
@@ -52520,43 +52971,45 @@ function shellReader(launcher, command, cwd2, signal) {
 }
 function fileReader(filePath2, readMode, signal) {
   return {
-    where: `"${filePath2}"`,
+    where: whereOf({ kind: "file", path: filePath2, readMode }),
     read: async () => {
       try {
         const raw = await readFile(filePath2, { encoding: "utf8", signal });
         return ok(
           readMode === "first-line" ? raw.split(/\r?\n/)[0] ?? "" : raw
         );
-      } catch {
-        if (signal.aborted) throw signal.reason;
-        return failed(`file unreadable: ${filePath2}`, "read");
+      } catch (e) {
+        const code = e.code ?? String(e);
+        return failed(
+          signal.aborted ? `file read aborted: ${String(signal.reason)}` : `file unreadable (${code}): ${filePath2}`,
+          "read"
+        );
       }
     }
   };
+}
+function readerOf(launcher, read2, signal) {
+  switch (read2.kind) {
+    case "shell":
+      return shellReader(launcher, read2.command, read2.cwd, signal);
+    case "file":
+      return fileReader(read2.path, read2.readMode, signal);
+  }
+}
+function parserOf(parse3) {
+  switch (parse3.kind) {
+    case "text":
+      return textParser;
+    case "regex":
+      return regexParser(new RegExp(parse3.source, parse3.flags));
+    case "json":
+      return (text4) => text4.trim() === "" ? ABSENT2 : jsonParser(text4);
+  }
 }
 function parsed(read2, parser, where) {
   if (read2.kind !== "ok") return read2;
   const out = parser(read2.value);
   return out.kind === "failed" ? failed(`${out.reason} in ${where}`, out.failedAt) : out;
-}
-function refreshOf(policy) {
-  switch (policy.kind) {
-    case "never":
-      return ["first"];
-    case "ttl":
-      return ["first", "period"];
-    case "watch_file":
-    case "key":
-    case "depends_on":
-      return ["first", "change"];
-  }
-}
-function firstThenChange(update) {
-  let ran2 = false;
-  return () => {
-    update("new-key", ran2 ? "change" : "first");
-    ran2 = true;
-  };
 }
 var PathWatches = class {
   constructor(watchers, fileEvents) {
@@ -52630,8 +53083,8 @@ var PathWatches = class {
   // may have missed events: each watch re-derives where its path can change,
   // since a directory may have appeared unheard, which says its fault, and
   // every subscriber re-reads as if its own watch had reported. Both together,
-  // so no variable drops a stall's fault without reading again, and in one
-  // action, so one change of delivery is one publish of this registry's.
+  // so no entry drops a stall's fault without reading again, and in one
+  // action, so one change of delivery is one publish of every entry's.
   noticed(notice) {
     switch (notice.kind) {
       case "period":
@@ -52667,43 +53120,130 @@ var PathWatches = class {
   }
 };
 var derived = (filePath2) => watchTargetsOf({ named: [filePath2], whole: [filePath2] });
-var TtlBucketManager = class {
-  constructor(clock) {
-    this.clock = clock;
+var SourceRuns = class {
+  byKind;
+  watchMgr;
+  // Each watching entry's fault, by digest, for the lanes that read it.
+  faults = observable.map(void 0, {
+    deep: false
+  });
+  constructor(deps) {
+    const logger = deps.logger ?? quietLogger;
+    const ledger = deps.ledger ?? new RefreshLedger(logger);
+    this.watchMgr = new PathWatches(
+      deps.watchers ?? new WatcherRegistry({ clock: deps.clock }),
+      deps.fileEvents ?? NO_FILE_EVENTS
+    );
+    const source = (kind) => new KeyedSource({
+      name: `source.${kind}`,
+      scope: "daemon",
+      keyOf: digestOf3,
+      fields: (identity2, holders) => `digest=${shortDigest(digestOf3(identity2))} where=${valueOf(whereOf(identity2.read))} sharedBy=${holders}`,
+      // [LAW:single-enforcer] THE run: read → parse. Shell and file are two
+      // readers through this one function; text/regex/json are three
+      // parsers through it.
+      read: async (identity2, signal) => {
+        const reader = readerOf(deps.launcher, identity2.read, signal);
+        return parsed(
+          await reader.read(),
+          parserOf(identity2.parse),
+          reader.where
+        );
+      },
+      every: ({ refresh }) => refresh.kind === "ttl" ? { okMs: refresh.durationMs, failedMs: refresh.durationMs } : null,
+      watch: (identity2, changed) => {
+        if (identity2.refresh.kind !== "watch_file") return NO_WATCH();
+        const digest2 = digestOf3(identity2);
+        const unsubscribe = this.watchMgr.subscribe(
+          identity2.refresh.path,
+          changed,
+          (fault) => runInAction(() => {
+            if (fault === null) this.faults.delete(digest2);
+            else this.faults.set(digest2, fault);
+          })
+        );
+        return () => {
+          unsubscribe();
+          runInAction(() => this.faults.delete(digest2));
+        };
+      },
+      maxEntries: 0,
+      logger,
+      ledger,
+      clock: deps.clock
+    });
+    this.byKind = { shell: source("shell"), file: source("file") };
   }
-  clock;
-  // `stop` clears the bucket's timer.
-  buckets = /* @__PURE__ */ new Map();
-  subscribe(durationMs, callback) {
-    let entry = this.buckets.get(durationMs);
-    if (!entry) {
-      const callbacks = /* @__PURE__ */ new Set();
-      const stop2 = this.clock.every(durationMs, () => {
-        for (const cb of callbacks) cb();
-      });
-      entry = { stop: stop2, callbacks };
-      this.buckets.set(durationMs, entry);
-    }
-    entry.callbacks.add(callback);
-    return () => this.unsubscribe(durationMs, callback);
+  // [LAW:single-enforcer] The one way to a run: `holds` takes the entry for
+  // the identity's digest, created and read once on its first hold, and the
+  // lane reads it as it stands.
+  declare(holds2, identity2) {
+    const digest2 = digestOf3(identity2);
+    const lane = this.byKind[identity2.read.kind].declare(holds2, identity2);
+    return {
+      digest: digest2,
+      current: () => lane.current(),
+      fault: () => this.faults.get(digest2) ?? null
+    };
   }
-  unsubscribe(durationMs, callback) {
-    const entry = this.buckets.get(durationMs);
-    if (!entry) return;
-    entry.callbacks.delete(callback);
-    if (entry.callbacks.size === 0) {
-      entry.stop();
-      this.buckets.delete(durationMs);
-    }
+  stats() {
+    return {
+      shell: this.byKind.shell.stats(),
+      file: this.byKind.file.stats(),
+      watches: this.watchMgr.size()
+    };
   }
-  dispose() {
-    for (const { stop: stop2 } of this.buckets.values()) stop2();
-    this.buckets.clear();
-  }
-  bucketCount() {
-    return this.buckets.size;
+  // Drops every entry, ending its read, its period and its watch.
+  close() {
+    this.byKind.shell.close();
+    this.byKind.file.close();
+    this.watchMgr.dispose();
   }
 };
+
+// src/var-system/sources.ts
+var TORN_WRITE_SETTLE_MS = 250;
+var MIN_SHELL_TTL_MS = 500;
+function clampShellCache(name, policy) {
+  if (policy.kind !== "ttl") return policy;
+  if (policy.durationMs >= MIN_SHELL_TTL_MS) return policy;
+  debug(
+    `declareShell "${name}": ttl ${policy.durationMs}ms below floor ${MIN_SHELL_TTL_MS}ms; clamping`
+  );
+  return { kind: "ttl", durationMs: MIN_SHELL_TTL_MS };
+}
+function parseDuration(s) {
+  const m = /^(\d+(?:\.\d+)?)(ms|s|m|h)$/.exec(s);
+  if (!m) throw new RangeError(`Invalid duration: "${s}"`);
+  const v = parseFloat(m[1]);
+  switch (m[2]) {
+    case "ms":
+      return v;
+    case "s":
+      return v * 1e3;
+    case "m":
+      return v * 6e4;
+    case "h":
+      return v * 36e5;
+    default:
+      throw new RangeError(`Unexpected duration unit: "${m[2]}"`);
+  }
+}
+var SESSION_ID_VAR_NAME = "session.id";
+function parserIdOf(parse3) {
+  switch (parse3.kind) {
+    case "text":
+      return { kind: "text" };
+    case "regex":
+      return {
+        kind: "regex",
+        source: parse3.regex.source,
+        flags: parse3.regex.flags
+      };
+    case "json":
+      return { kind: "json" };
+  }
+}
 var UNBOUND = {
   read: () => pendingOf("unread"),
   drawnAt: () => {
@@ -52769,28 +53309,18 @@ var SourceRegistry = class _SourceRegistry {
   // sessionState lets the daemon inject its singleton so state-kind variables
   // share one MobX atom and one disk-persistence layer with the click verbs.
   // Omitted in tests that don't exercise state vars.
-  constructor(launcher, store, defaultEmptyValue = "", sessionState, parent = null, ledger = new RefreshLedger(), fileEvents = NO_FILE_EVENTS, watchers = new WatcherRegistry({
-    clock: store.clock
-  }), env2 = {}) {
-    this.launcher = launcher;
+  constructor(runs, store, defaultEmptyValue = "", sessionState, parent = null, env2 = {}) {
+    this.runs = runs;
     this.store = store;
     this.defaultEmptyValue = defaultEmptyValue;
     this.parent = parent;
-    this.ledger = ledger;
-    this.fileEvents = fileEvents;
-    this.watchers = watchers;
     this.env = env2;
     this.sessionState = sessionState;
-    this.ttlMgr = new TtlBucketManager(store.clock);
-    this.watchMgr = new PathWatches(watchers, fileEvents);
   }
-  launcher;
+  runs;
   store;
   defaultEmptyValue;
   parent;
-  ledger;
-  fileEvents;
-  watchers;
   env;
   lastErrors = /* @__PURE__ */ new Map();
   // A cache policy that cannot fire is a STANDING fault, not a read's
@@ -52803,36 +53333,32 @@ var SourceRegistry = class _SourceRegistry {
   policyFaults = observable.map(void 0, {
     deep: false
   });
-  // Triggers for shell/file cache policies and the time source's tick:
-  watchMgr;
-  ttlMgr;
-  // Collects all cleanup callbacks (TTL unsubscribes, watch unsubscribes,
-  // MobX reaction disposers) so dispose() tears everything down in one call.
+  // Collects all cleanup callbacks (MobX reaction disposers) so dispose()
+  // tears everything down in one call.
   cleanups = [];
-  // Each async source's in-flight loop, by name: one per source at a time.
-  runs = /* @__PURE__ */ new Map();
-  // [LAW:no-ambient-temporal-coupling] The sources whose loop out answers a
-  // key they have no answer under yet (`RunCause`). Observable, so
-  // `inFlight()` is a reaction over it — the explicit "the runs a wait is for
-  // have ended" state a caller (a statusline request, `cc-candybar check`)
-  // awaits instead of guessing a delay, and one its deadline can stop
-  // listening to. Set by the trigger, since a source's node holds its
-  // fallback before its first answer (`stringInitial`), so the store cannot
-  // say it.
-  newKeys = observable.set();
-  // [LAW:single-enforcer] Serializes each source's reads and remembers a trigger
-  // that arrived mid-read, so a re-trigger re-reads once rather than starting a
-  // parallel read or being dropped. Shared with the git cache's refresh path,
-  // which had the same problem first — see src/utils/trailing-edge.ts.
-  reads = new TrailingEdge();
-  // Each source's latest trigger, which the pass that answers it records.
-  askedBy = /* @__PURE__ */ new Map();
-  // [LAW:single-enforcer] The registry owns every async handle its sources
-  // hold — timers, watchers, reactions, and the child processes and file
-  // reads in flight. This is their cancellation: dispose() aborts it, so a
-  // run cannot outlive the registry that started it (RenderCache's
-  // dispose-before-swap contract reaches the children too).
-  abort = new AbortController();
+  // [LAW:single-enforcer] What this registry holds of the daemon's source
+  // runs (source-runs.ts): one hold per entry however many of its sources
+  // read it, declared again whenever any source's identity moves, so the
+  // entry a moved key names is held before the one it leaves is released. A
+  // view's payload holds the daemon's built-in entries through a Holds of
+  // its own (src/daemon/cache/render.ts): the two hold disjoint entries with
+  // the one lifetime, and merging them would make a view's declaration of
+  // its lanes re-declare its sources, and the reverse.
+  holds = new Holds();
+  // Each source's identity as its policy last named it. A policy over the
+  // source's own values names none until they answer.
+  identities = /* @__PURE__ */ new Map();
+  // [LAW:no-ambient-temporal-coupling] The lane each source reads, by name:
+  // observable, so a source's publish is a reaction over the entry it holds
+  // now, and `inFlight()` a reaction over which of them has not answered —
+  // the explicit "the runs a wait is for have ended" state a caller (a
+  // statusline request, `cc-candybar check`) awaits instead of guessing a
+  // delay, and one its deadline can stop listening to. A re-read keeps its
+  // answer standing, so no wait is for it; a new identity has none, so a
+  // wait is for it alone.
+  lanes = observable.map(void 0, {
+    deep: false
+  });
   // [LAW:one-source-of-truth] What this registry's inputs are derived from
   // (`bindInputs`), and so the depth the terminal draws this view's renders at
   // — the one depth every contrast floor reads, in this registry's variable
@@ -52882,14 +53408,11 @@ var SourceRegistry = class _SourceRegistry {
   // own: a session leaving the directory disposes nothing of it.
   view() {
     return new _SourceRegistry(
-      this.launcher,
+      this.runs,
       new VariableStore(this.store.clock, this.store),
       this.defaultEmptyValue,
       this.sessionState,
       this,
-      this.ledger,
-      this.fileEvents,
-      this.watchers,
       this.env
     );
   }
@@ -52992,7 +53515,7 @@ var SourceRegistry = class _SourceRegistry {
   declareShell(name, command, opts) {
     this.declareSource(
       name,
-      shellReader(this.launcher, command, opts.cwd, this.abort.signal),
+      { kind: "shell", command, cwd: opts.cwd },
       clampShellCache(name, opts.cache),
       opts.parse
     );
@@ -53002,57 +53525,80 @@ var SourceRegistry = class _SourceRegistry {
   declareFile(name, filePath2, opts) {
     this.declareSource(
       name,
-      fileReader(filePath2, opts.readMode ?? "whole", this.abort.signal),
+      { kind: "file", path: filePath2, readMode: opts.readMode ?? "whole" },
       opts.cache,
       opts.parse
     );
   }
-  // [LAW:single-enforcer] THE user-source pipeline: read → parse → publish,
-  // whenever the cache policy fires, its first read included. Shell and file
-  // are two readers through this one function; text/regex/json are three
-  // parsers through it. The node holds its fallback until the first run
-  // completes — the cache policy drives WHEN it is read, never whether the
-  // node exists [LAW:dataflow-not-control-flow].
-  declareSource(name, reader, cache2, parse3) {
-    const publish = this.publisherFor(name, parse3, reader.where);
+  // [LAW:single-enforcer] THE user-source declaration: the source's node, and
+  // the one reaction that publishes into it what the entry it holds has read
+  // (source-runs.ts runs it: read → parse). The cache policy names WHICH
+  // entry, through the identity it holds (registerCachePolicy), never whether
+  // the node exists [LAW:dataflow-not-control-flow].
+  //
+  // [LAW:types-are-the-program] Only an answered reading is published: the
+  // node holds its fallback until the first entry answers, and on a key's
+  // move it holds the old entry's answer until the new entry's lands — the
+  // old `ok` is simply not overwritten yet, so a key change draws no pending
+  // flash (spec section 19).
+  declareSource(name, read2, cache2, parse3) {
+    const publish = this.publisherFor(name, parse3);
     runInAction(() => this.sourceNames.push(name));
-    const refreshes = this.ledger.declare({
-      name: `var.${name}`,
-      scope: this.parent === null ? "directory" : "view",
-      refresh: refreshOf(cache2)
-    });
+    this.cleanups.push(
+      reaction(
+        () => this.lanes.get(name)?.current(),
+        (reading) => {
+          if (reading === void 0 || reading.kind === "pending") return;
+          publish(reading);
+        },
+        { fireImmediately: true }
+      )
+    );
     this.registerCachePolicy(
       name,
       cache2,
-      (cause, by) => this.runSource(name, reader, publish, cause, by, refreshes)
+      (refresh) => this.hold(name, { read: read2, parse: parserIdOf(parse3), refresh })
     );
+  }
+  // [LAW:single-enforcer] The one declaration of what this registry holds:
+  // every source's current identity, taken in one body so the entry a moved
+  // identity names is held before the entry it leaves is released (Holds).
+  // A source whose entry did not move keeps its lane, so its publish reaction
+  // is untouched; the lanes are set outside the body, where a publish they
+  // start cannot nest a declaration.
+  hold(name, identity2) {
+    this.identities.set(name, identity2);
+    const { result: taken } = this.holds.declare(
+      () => [...this.identities].map(([n, id2]) => {
+        const lane = this.runs.declare(this.holds, id2);
+        const prior = this.lanes.get(n);
+        return [n, prior?.digest === lane.digest ? prior : lane];
+      })
+    );
+    runInAction(() => {
+      for (const [n, lane] of taken) this.lanes.set(n, lane);
+    });
   }
   // [LAW:one-type-per-behavior] One total projection of the parser arm onto
   // the node it publishes: the text arms publish a string box, the json arm a
   // document. Selected once, at declaration — the pipeline never asks again.
-  publisherFor(name, parse3, where) {
+  // The run parsed by the arm's own parser (source-runs.ts), so its value is
+  // the arm's type.
+  publisherFor(name, parse3) {
     switch (parse3.kind) {
       case "text":
-        return this.scalarPublisher(name, textParser, parse3.default, where);
       case "regex":
-        return this.scalarPublisher(
-          name,
-          regexParser(parse3.regex),
-          parse3.default,
-          where
-        );
+        return this.scalarPublisher(name, parse3.default);
       case "json":
-        return this.documentPublisher(name, parse3.default, where);
+        return this.documentPublisher(name, parse3.default);
     }
   }
-  scalarPublisher(name, parser, varDefault, where) {
+  scalarPublisher(name, varDefault) {
     const fallback = this.stringInitial(varDefault);
     this.store.defineBox(name, "string", fallback);
-    return (read2) => {
-      const outcome = parsed(read2, parser, where);
+    return (outcome) => {
       this.noteOutcome(name, outcome);
       this.store.setBox(name, orElse(outcome, fallback));
-      return outcome;
     };
   }
   // A document's fallback is the declared default, or NO document: without a
@@ -53063,9 +53609,10 @@ var SourceRegistry = class _SourceRegistry {
   // string has "".
   //
   // The default stands in for a run that had nothing to READ — a missing
-  // file, a command that failed, blank output — never for text that was read and is not a
-  // document: that is a broken writer, and reads as its failure (⚠) whatever
-  // the default says (brandon-plugins-ktag.8fv).
+  // file, a command that failed, blank output — never for text that was read
+  // and is not a document (failed in its parse phase): that is a broken
+  // writer, and reads as its failure (⚠) whatever the default says
+  // (brandon-plugins-ktag.8fv).
   //
   // [LAW:no-ambient-temporal-coupling] A writer rewriting a file in place
   // (truncate, then write) is caught mid-update by any read that lands
@@ -53075,7 +53622,7 @@ var SourceRegistry = class _SourceRegistry {
   // TORN_WRITE_SETTLE_MS — the writer's own final write is an event that
   // re-reads and supersedes it. A writer that is truly broken shows ⚠ after
   // that settle; a document that was never good shows it at once.
-  documentPublisher(name, varDefault, where) {
+  documentPublisher(name, varDefault) {
     const fallback = varDefault === void 0 ? pendingOf("unread") : ok(varDefault);
     this.store.defineDocument(name, fallback);
     let clearSettling;
@@ -53083,11 +53630,11 @@ var SourceRegistry = class _SourceRegistry {
     this.cleanups.push(() => clearSettling?.());
     return (raw) => {
       clearSettling?.();
-      const read2 = raw.kind === "ok" && raw.value.trim() === "" ? ABSENT2 : raw;
-      const outcome = parsed(read2, jsonParser, where);
+      const outcome = raw;
       this.noteOutcome(name, outcome);
-      const next = outcome.kind === "ok" || read2.kind === "ok" || varDefault === void 0 ? outcome : fallback;
-      const torn2 = showingRead && read2.kind === "ok" && outcome.kind !== "ok";
+      const readText = outcome.kind === "ok" || outcome.kind === "failed" && outcome.failedAt === "parse";
+      const next = readText || varDefault === void 0 ? outcome : fallback;
+      const torn2 = showingRead && readText && outcome.kind !== "ok";
       const show2 = () => {
         showingRead = outcome.kind === "ok";
         this.store.setDocument(name, next);
@@ -53097,74 +53644,37 @@ var SourceRegistry = class _SourceRegistry {
       } else {
         show2();
       }
-      return outcome;
     };
-  }
-  runSource(name, reader, publish, cause, by, refreshes) {
-    this.askedBy.set(name, by);
-    const trigger = this.reads.run(name, () => {
-      const asked2 = this.askedBy.get(name) ?? by;
-      const startedAt = this.store.clock.monotonic();
-      return reader.read().then(
-        (read2) => refreshes.recorded(
-          `where=${valueOf(reader.where)}`,
-          asked2,
-          publish(read2),
-          elapsedMs(this.store.clock, startedAt)
-        ),
-        (err) => {
-          if (err !== this.abort.signal.reason) throw err;
-        }
-      );
-    });
-    this.track(name, trigger, cause);
-  }
-  // [LAW:single-enforcer] The one writer of `runs` and `newKeys`: an async
-  // source's pending work enters here and leaves when it completes, so "which
-  // sources are still out" has a single mechanism rather than one per source
-  // kind. A queued trigger joins the loop out, which runs one more pass for it
-  // before it ends: that loop answers a new key when either trigger brought
-  // one.
-  track(name, trigger, cause) {
-    runInAction(() => {
-      if (trigger.kind === "started") {
-        this.runs.set(name, trigger.done);
-        this.newKeys.delete(name);
-      }
-      if (cause === "new-key") this.newKeys.add(name);
-    });
-    if (trigger.kind === "queued") return;
-    const done2 = trigger.done;
-    void done2.finally(
-      () => runInAction(() => {
-        if (this.runs.get(name) !== done2) return;
-        this.runs.delete(name);
-        this.newKeys.delete(name);
-      })
-    );
   }
   // [LAW:no-ambient-temporal-coupling] Resolves when none of the runs a wait
   // is for is out (`awaited`), or when `signal` aborts — and then holds
-  // nothing, so a run that never ends keeps no waiter behind it. A run one of
-  // them triggers (a `depends_on` reaction fires inside a publish) is marked
-  // before the run that triggered it ends, so it is waited out too. Resolves
+  // nothing, so a run that never ends keeps no waiter behind it. Resolves
   // to the names still awaited: empty when all settled, the stragglers when
   // the signal ended the wait. A signal already aborted ends it at once, so a
   // caller holding one deadline over many waits pays it once.
+  //
+  // Asked again until it holds at this wait's own continuation: a landing
+  // that answers a key (a `depends_on` or `key` over the value that landed)
+  // holds the next lane in a reaction of the same batch, which can run after
+  // the one this wait is, so one evaluation can see nothing pending between
+  // the answer and the hold it causes.
   async inFlight(signal) {
-    try {
-      await when(() => this.awaited().length === 0, { signal });
-    } catch (e) {
-      if (!signal.aborted) throw e;
+    while (!signal.aborted && this.awaited().length > 0) {
+      try {
+        await when(() => this.awaited().length === 0, { signal });
+      } catch (e) {
+        if (!signal.aborted) throw e;
+      }
     }
     return this.awaited();
   }
-  // The sources a wait on this registry is for: the runs out here and in the
-  // home it reads through to that answer a new key (rule 2's first value, or
-  // a key its facts moved). A re-read keeps the answer it has standing, so no
-  // wait is for it, whoever's period or watch started it.
+  // The sources a wait on this registry is for: those whose held entry, here
+  // and in the home it reads through to, has not answered (rule 2's first
+  // value, or a key its facts moved). A re-read keeps the answer it has
+  // standing, so no wait is for it, whoever's period or watch started it.
   awaited() {
-    return [...this.newKeys, ...this.parent?.awaited() ?? []];
+    const here = [...this.lanes].filter(([, lane]) => lane.current().kind === "pending").map(([name]) => name);
+    return [...here, ...this.parent?.awaited() ?? []];
   }
   // The names still awaited once every run has ended or `withinMs` has
   // passed: empty when all settled. The state a one-shot render awaits so it
@@ -53306,45 +53816,38 @@ var SourceRegistry = class _SourceRegistry {
   // config hot-reload). Returns how many computeds the store released, for
   // the caller's log line.
   dispose() {
-    this.abort.abort();
     for (const cleanup of this.cleanups) cleanup();
     this.cleanups.length = 0;
-    this.reads.clear();
-    this.watchMgr.dispose();
-    this.ttlMgr.dispose();
+    this.holds.close();
     return this.store.dispose();
   }
   // ─── Private helpers ──────────────────────────────────────────────────────
-  // [LAW:single-enforcer] One place that maps every CachePolicy kind to its
-  // trigger mechanism, the source's first read included: a clock, a watch or
-  // nothing reads it at declaration, and a policy over what the source reads
-  // reads it when that first answers.  Adding a new policy kind means adding
-  // one case here.
-  registerCachePolicy(name, policy, update) {
+  // [LAW:single-enforcer] One place that maps every CachePolicy kind to the
+  // identity the source holds: a period, a watched path or nothing is the
+  // run's own refresh and is held at declaration; a policy over what the
+  // source reads names the hash of what that answered, held when it first
+  // answers and again whenever the answer moves. Adding a new policy kind
+  // means adding one case here.
+  registerCachePolicy(name, policy, hold2) {
     switch (policy.kind) {
       case "never":
-        update("new-key", "first");
+        hold2({ kind: "never" });
         break;
-      case "ttl": {
-        update("new-key", "first");
-        const unsub = this.ttlMgr.subscribe(
-          policy.durationMs,
-          () => update("re-read", "period")
-        );
-        this.cleanups.push(unsub);
+      case "ttl":
+        hold2({ kind: "ttl", durationMs: policy.durationMs });
         break;
-      }
       case "watch_file": {
-        update("new-key", "first");
-        const unsub = this.watchMgr.subscribe(
-          policy.path,
-          () => update("re-read", "change"),
-          (fault) => this.notePolicy(
-            name,
-            fault === null ? ok(void 0) : failed(fault, "read")
+        hold2({ kind: "watch_file", path: policy.path });
+        this.cleanups.push(
+          reaction(
+            () => this.lanes.get(name)?.fault() ?? null,
+            (fault) => this.notePolicy(
+              name,
+              fault === null ? ok(void 0) : failed(fault, "read")
+            ),
+            { fireImmediately: true }
           )
         );
-        this.cleanups.push(unsub);
         break;
       }
       case "key": {
@@ -53363,7 +53866,7 @@ var SourceRegistry = class _SourceRegistry {
               );
             }
           },
-          firstThenChange(update)
+          (value) => hold2({ kind: "key", hash: keyHashOf(value) })
         );
         break;
       }
@@ -53374,30 +53877,30 @@ var SourceRegistry = class _SourceRegistry {
             const keys2 = policy.varNames.map((n) => this.store.changeKey(n));
             return keys2.every((key) => key.kind === "ok") ? ok(keys2.map((key) => key.value).join(",")) : pendingOf("unread");
           },
-          firstThenChange(update)
+          (value) => hold2({ kind: "key", hash: keyHashOf(value) })
         );
         break;
       }
     }
   }
   // [LAW:one-type-per-behavior] Both policies over what a source reads — its
-  // key, the variables it depends on — read it when what they read answers,
-  // and again whenever that answer differs from the one it last read under.
-  // Over a value not answered yet (a view's inputs before its first payload)
-  // it waits rather than reading, so its first value is one read, not a read
-  // under no value and another when the value arrives (brandon-unfiled-3248.
-  // 8ro6). Measured against the last read's answer rather than the previous
-  // evaluation, so one that throws for a moment and comes back unchanged reads
-  // nothing.
-  onReads(name, reads, update) {
-    let readUnder;
+  // key, the variables it depends on — hold an identity when what they read
+  // answers, and another whenever that answer differs from the one last
+  // held. Over a value not answered yet (a view's inputs before its first
+  // payload) it waits rather than reading, so its first value is one read,
+  // not a read under no value and another when the value arrives
+  // (brandon-unfiled-3248.8ro6). Measured against the last answer held
+  // rather than the previous evaluation, so one that throws for a moment and
+  // comes back unchanged holds nothing new.
+  onReads(name, reads, hold2) {
+    let heldUnder;
     const disposer = reaction(
       reads,
       (answer2) => {
         this.notePolicy(name, answer2);
-        if (answer2.kind !== "ok" || answer2.value === readUnder) return;
-        readUnder = answer2.value;
-        update();
+        if (answer2.kind !== "ok" || answer2.value === heldUnder) return;
+        heldUnder = answer2.value;
+        hold2(answer2.value);
       },
       { fireImmediately: true }
     );
@@ -54211,12 +54714,12 @@ init_globals();
 
 // src/utils/user-path.ts
 init_globals();
-var import_node_path6 = __toESM(require_path_browserify(), 1);
+var import_node_path7 = __toESM(require_path_browserify(), 1);
 function expandHome(p2, home) {
   return p2 === "~" || p2.startsWith("~/") || p2.startsWith("~\\") ? home + p2.slice(1) : p2;
 }
 function resolveUserPath(base, p2, home) {
-  return import_node_path6.default.resolve(base, expandHome(p2, home));
+  return import_node_path7.default.resolve(base, expandHome(p2, home));
 }
 function explicitConfigPath(base, p2, home) {
   return typeof p2 === "string" && p2 !== "" ? resolveUserPath(base, p2, home) : void 0;
@@ -54919,7 +55422,7 @@ function renderStripCells(cells, options) {
 
 // src/claude-settings.ts
 init_globals();
-var import_node_path7 = __toESM(require_path_browserify(), 1);
+var import_node_path8 = __toESM(require_path_browserify(), 1);
 
 // src/utils/transcript-fs.ts
 init_globals();
@@ -55174,10 +55677,10 @@ function readTailSync(path42, maxBytes) {
 // src/claude-settings.ts
 var CLAUDE_CONFIG_DIR_ENV = "CLAUDE_CONFIG_DIR";
 function claudeConfigDir(detected, home) {
-  return detected ?? import_node_path7.default.join(home, ".claude");
+  return detected ?? import_node_path8.default.join(home, ".claude");
 }
 function claudeSettingsPath(configDir) {
-  return import_node_path7.default.join(configDir, "settings.json");
+  return import_node_path8.default.join(configDir, "settings.json");
 }
 function readSettingsFile(settingsPath) {
   const read2 = readTailSync(settingsPath, Number.MAX_SAFE_INTEGER);
@@ -55231,17 +55734,17 @@ function claudeManagedSettingsDir(platform3) {
       return "/etc/claude-code";
   }
 }
-var projectLocalSettingsFile = (projectDir) => import_node_path7.default.join(projectDir, ".claude", "settings.local.json");
+var projectLocalSettingsFile = (projectDir) => import_node_path8.default.join(projectDir, ".claude", "settings.local.json");
 function readSettingsChain(at) {
-  const dropIns = import_node_path7.default.join(at.managedDir, "managed-settings.d");
+  const dropIns = import_node_path8.default.join(at.managedDir, "managed-settings.d");
   const located = [
     ...visibleJsonFiles(dropIns).reverse().map((name) => ({
       scope: "managed",
-      path: import_node_path7.default.join(dropIns, name)
+      path: import_node_path8.default.join(dropIns, name)
     })),
     {
       scope: "managed",
-      path: import_node_path7.default.join(at.managedDir, "managed-settings.json")
+      path: import_node_path8.default.join(at.managedDir, "managed-settings.json")
     },
     {
       scope: "project-local",
@@ -55249,7 +55752,7 @@ function readSettingsChain(at) {
     },
     {
       scope: "project",
-      path: import_node_path7.default.join(at.projectDir, ".claude", "settings.json")
+      path: import_node_path8.default.join(at.projectDir, ".claude", "settings.json")
     },
     { scope: "user", path: at.userFile }
   ];
@@ -55342,7 +55845,7 @@ var RenderSightings = class {
 
 // src/daemon/limits.ts
 init_globals();
-var import_node_path8 = __toESM(require_path_browserify(), 1);
+var import_node_path9 = __toESM(require_path_browserify(), 1);
 
 // site/shims/unavailable.ts
 init_globals();
@@ -55520,7 +56023,7 @@ function approachingLimit(bytes, limit) {
 }
 function artifactFile(dir, kind, identity2) {
   const { prefix, suffix } = BREACH_ARTIFACTS[kind];
-  return import_node_path8.default.join(dir, `${prefix}${identity2}${suffix}`);
+  return import_node_path9.default.join(dir, `${prefix}${identity2}${suffix}`);
 }
 function breachArtifactOf(base) {
   for (const kind of Object.keys(BREACH_ARTIFACTS)) {
@@ -55558,7 +56061,7 @@ function makeLimits(deps) {
     );
     const stamp2 = new Date(deps.clock.now()).toISOString().replace(/[:.]/g, "-");
     const identity2 = `${stamp2}-${deps.pid}`;
-    await attempt(deps.log, "memory report", async () => {
+    await attempt2(deps.log, "memory report", async () => {
       const file = artifactFile(deps.snapshotDir, "memoryReport", identity2);
       const report2 = await deps.captureMemoryReport();
       if (disarmed) return;
@@ -55569,7 +56072,7 @@ function makeLimits(deps) {
       deps.log("info", "daemon closed during the breach: no snapshot, no exit");
       return false;
     }
-    await attempt(deps.log, "heap snapshot", () => {
+    await attempt2(deps.log, "heap snapshot", () => {
       deps.writeLogNow();
       const file = artifactFile(deps.snapshotDir, "heapSnapshot", identity2);
       deps.log(
@@ -55577,12 +56080,12 @@ function makeLimits(deps) {
         `heap snapshot written: ${deps.writeHeapSnapshot(file)}`
       );
     });
-    await attempt(deps.log, "artifact rotation", async () => {
+    await attempt2(deps.log, "artifact rotation", async () => {
       for (const { artifacts } of postMortemsOf(deps.listArtifacts()).slice(
         keep2
       )) {
         for (const file of Object.values(artifacts)) {
-          await attempt(
+          await attempt2(
             deps.log,
             `evicting ${file}`,
             () => deps.removeFile(file)
@@ -55635,7 +56138,7 @@ function readingFields({ charge, rss, heapTotal }, limit) {
   const unread2 = charge.kind === "stand-in" ? ` unread=${JSON.stringify(charge.unread)} gap=${mb(charge.gap)}MB` : "";
   return `measure=${measureOf(charge)} charge=${mb(charge.bytes)}MB rss=${mb(rss)}MB heap=${mb(heapTotal)}MB limit=${mb(limit)}MB${unread2}`;
 }
-async function attempt(log, what, body) {
+async function attempt2(log, what, body) {
   try {
     await body();
   } catch (e) {
@@ -55645,7 +56148,7 @@ async function attempt(log, what, body) {
 function postMortemsOf(files) {
   const byIdentity = /* @__PURE__ */ new Map();
   for (const file of files) {
-    const base = import_node_path8.default.basename(file);
+    const base = import_node_path9.default.basename(file);
     const kind = breachArtifactOf(base);
     if (kind === null) continue;
     const { prefix, suffix } = BREACH_ARTIFACTS[kind];
@@ -55692,7 +56195,7 @@ function realLimitsDeps(startedAtMs, shutdown, owner, overrides = {}) {
         if (e.code === "ENOENT") return [];
         throw e;
       }
-      return names.filter((f) => breachArtifactOf(f) !== null).map((f) => import_node_path8.default.join(dir, f));
+      return names.filter((f) => breachArtifactOf(f) !== null).map((f) => import_node_path9.default.join(dir, f));
     },
     removeFile: (file) => fs_default.unlinkSync(file),
     shutdown,
@@ -57724,7 +58227,7 @@ function editableUnit(child, spliced, first2, ctx) {
   ];
 }
 function fileLabel(file) {
-  return import_node_path9.default.join(import_node_path9.default.basename(import_node_path9.default.dirname(file)), import_node_path9.default.basename(file));
+  return import_node_path10.default.join(import_node_path10.default.basename(import_node_path10.default.dirname(file)), import_node_path10.default.basename(file));
 }
 function insertedUnit(child, insertedBy, spliced, ctx) {
   const decl = ctx.segments[child.name];
@@ -57965,7 +58468,7 @@ function synthesizeEditChrome(config2) {
 
 // src/config/loader/actions.ts
 init_globals();
-var import_node_path10 = __toESM(require_path_browserify(), 1);
+var import_node_path11 = __toESM(require_path_browserify(), 1);
 function validateActions(ctx, raw, home) {
   if (raw === void 0) return {};
   if (!isPlainObject(raw)) {
@@ -58020,7 +58523,7 @@ function validateActionDecl(ctx, path42, raw, home) {
 }
 function actionHomeOf(filePath2) {
   if (filePath2 === "<default>") return { dir: null };
-  return import_node_path10.default.isAbsolute(filePath2) ? { dir: import_node_path10.default.dirname(filePath2) } : { text: filePath2 };
+  return import_node_path11.default.isAbsolute(filePath2) ? { dir: import_node_path11.default.dirname(filePath2) } : { text: filePath2 };
 }
 var actionArms = (home) => ({
   set: (ctx, path42, raw) => valueSourceAction(ctx, path42, raw, "set", SET_ARMS),
@@ -59081,7 +59584,7 @@ function templateInstants(basis) {
 
 // src/config/loader/plugins.ts
 init_globals();
-var import_node_path11 = __toESM(require_path_browserify(), 1);
+var import_node_path12 = __toESM(require_path_browserify(), 1);
 var import_json52 = __toESM(require_dist(), 1);
 function droppedPluginNotice(d) {
   return `plugin ${d.path} was not loaded: ${d.reason}`;
@@ -59097,7 +59600,7 @@ var DEFINITION_KEYS = /* @__PURE__ */ new Set([
 var DEFINITION_FILE = "plugin.json5";
 var PLUGIN_NAME = /^[a-z][a-z0-9_]*$/;
 function pluginDefinition(definition, scope) {
-  const name = import_node_path11.default.basename(import_node_path11.default.dirname(definition));
+  const name = import_node_path12.default.basename(import_node_path12.default.dirname(definition));
   return PLUGIN_NAME.test(name) ? { path: definition, scope, name } : { path: definition, scope, name: void 0 };
 }
 function pluginDataVar(ns) {
@@ -59107,7 +59610,7 @@ var STORAGE_FOLDER = "session";
 function sessionFileName(sessionId2) {
   return `${sessionId2}.json`;
 }
-function attempt2(run3) {
+function attempt3(run3) {
   try {
     return { ok: true, value: run3() };
   } catch (err) {
@@ -59124,7 +59627,7 @@ function reasonOf(err) {
 }
 function listedPlugins(refs, from, scope, home) {
   return refs.map(
-    (ref) => pluginDefinition(resolveUserPath(import_node_path11.default.dirname(from), ref, home), scope)
+    (ref) => pluginDefinition(resolveUserPath(import_node_path12.default.dirname(from), ref, home), scope)
   );
 }
 function applyPlugins(definitions, ctx, base, validate) {
@@ -59143,7 +59646,7 @@ function applyPlugins(definitions, ctx, base, validate) {
           dropped: [...layer.dropped, { ...definition, reason }]
         };
       };
-      if (import_node_path11.default.basename(file) !== DEFINITION_FILE) {
+      if (import_node_path12.default.basename(file) !== DEFINITION_FILE) {
         const reason = `a plugin is a folder holding its ${DEFINITION_FILE}, and the folder's name is the plugin's: move this file to <dir>/<name>/${DEFINITION_FILE} and list that`;
         return drop2(
           reason,
@@ -59155,7 +59658,7 @@ function applyPlugins(definitions, ctx, base, validate) {
       }
       if (definition.name === void 0 || ns === void 0) {
         return drop2(
-          `its folder "${import_node_path11.default.basename(import_node_path11.default.dirname(file))}" is not a plugin name (one matching ${PLUGIN_NAME}: it prefixes every name the plugin declares)`,
+          `its folder "${import_node_path12.default.basename(import_node_path12.default.dirname(file))}" is not a plugin name (one matching ${PLUGIN_NAME}: it prefixes every name the plugin declares)`,
           layer.config
         );
       }
@@ -59168,7 +59671,7 @@ function applyPlugins(definitions, ctx, base, validate) {
       }
       taken.set(ns, file);
       const under2 = withoutPlugin(layer.config, ns);
-      const merged = attempt2(() => {
+      const merged = attempt3(() => {
         const source = fs_default.readFileSync(file, "utf-8");
         const config2 = mergeWithDefault(
           fragmentOf(
@@ -59404,7 +59907,7 @@ function fragmentOf(file, id2, { source, json: json2 }, { checkout, home }) {
     if (!DEFINITION_KEYS.has(key)) {
       issues.push({
         path: key,
-        message: key === "plugin" ? `a plugin definition does not name itself: its name is its folder's ("${import_node_path11.default.basename(import_node_path11.default.dirname(file))}") \u2014 remove "plugin"` : `a plugin definition may not declare "${key}". Expected only: ${[...DEFINITION_KEYS].join(", ")}`
+        message: key === "plugin" ? `a plugin definition does not name itself: its name is its folder's ("${import_node_path12.default.basename(import_node_path12.default.dirname(file))}") \u2014 remove "plugin"` : `a plugin definition may not declare "${key}". Expected only: ${[...DEFINITION_KEYS].join(", ")}`
       });
     }
   }
@@ -59474,7 +59977,7 @@ function fragmentOf(file, id2, { source, json: json2 }, { checkout, home }) {
       setKeysUnder(
         ns,
         validateActions(ctx, json2.actions, {
-          dir: fs_default.realpathSync(import_node_path11.default.dirname(file))
+          dir: fs_default.realpathSync(import_node_path12.default.dirname(file))
         })
       )
     )
@@ -59688,8 +60191,8 @@ function sourcesOf(sources, file, issues) {
     });
     return {};
   }
-  const storage = import_node_path11.default.join(
-    fs_default.realpathSync(import_node_path11.default.dirname(file)),
+  const storage = import_node_path12.default.join(
+    fs_default.realpathSync(import_node_path12.default.dirname(file)),
     STORAGE_FOLDER
   );
   const built = JSON.stringify(BUILT_SOURCE);
@@ -59731,7 +60234,7 @@ function requireOneSourcePerFile(file, plugin, config2) {
   if (issues.length > 0) throw new ConfigError(file, issues);
 }
 function sourceFileOf(source) {
-  return import_node_path11.default.join(source.storage, sessionFileName("<session id>"));
+  return import_node_path12.default.join(source.storage, sessionFileName("<session id>"));
 }
 function unbuilt(authored, built, at) {
   if (!isPlainObject(built) || !isPlainObject(authored)) {
@@ -59748,11 +60251,11 @@ function unbuilt(authored, built, at) {
 }
 function dataPathOf(data, file, checkout, home, issues) {
   if (typeof data === "string" && data !== "") {
-    return resolveUserPath(import_node_path11.default.dirname(file), data, home);
+    return resolveUserPath(import_node_path12.default.dirname(file), data, home);
   }
   if (isPlainObject(data) && Object.keys(data).length === 1 && typeof data.checkout === "string" && data.checkout !== "") {
     const rel = data.checkout;
-    if (import_node_path11.default.isAbsolute(rel) || rel.startsWith("~") || import_node_path11.default.normalize(rel).split(import_node_path11.default.sep)[0] === "..") {
+    if (import_node_path12.default.isAbsolute(rel) || rel.startsWith("~") || import_node_path12.default.normalize(rel).split(import_node_path12.default.sep)[0] === "..") {
       issues.push({
         path: "data.checkout",
         message: `data.checkout "${rel}" must be a path inside the checkout, relative to its root (like ".lit/statusline.json"): no absolute path, "~" or ".."`
@@ -59766,7 +60269,7 @@ function dataPathOf(data, file, checkout, home, issues) {
       });
       return void 0;
     }
-    return import_node_path11.default.resolve(checkout.root, rel);
+    return import_node_path12.default.resolve(checkout.root, rel);
   }
   if (isPlainObject(data) && "project" in data) {
     issues.push({
@@ -60721,21 +61224,21 @@ function validateNoNesting(ctx, cfg, names) {
 
 // src/config/loader/plugin-folders.ts
 init_globals();
-var import_node_path12 = __toESM(require_path_browserify(), 1);
+var import_node_path13 = __toESM(require_path_browserify(), 1);
 function pluginRoots(locs, repo2) {
   const installed = [
-    ...[...locs.dataDirs].reverse().map((d) => import_node_path12.default.join(d, "cc-candybar", "plugins")),
+    ...[...locs.dataDirs].reverse().map((d) => import_node_path13.default.join(d, "cc-candybar", "plugins")),
     userPluginRoot(locs)
   ];
   return [
     ...installed.filter((r, i) => installed.lastIndexOf(r) === i).map((dir) => ({ dir, scope: "plugins" })),
-    ...repo2 === null ? [] : [{ dir: import_node_path12.default.join(repo2, REPO_PLUGIN_DIR), scope: "repo" }]
+    ...repo2 === null ? [] : [{ dir: import_node_path13.default.join(repo2, REPO_PLUGIN_DIR), scope: "repo" }]
   ];
 }
 function userPluginRoot(locs) {
-  return import_node_path12.default.join(locs.dataHome, "cc-candybar", "plugins");
+  return import_node_path13.default.join(locs.dataHome, "cc-candybar", "plugins");
 }
-var REPO_PLUGIN_DIR = import_node_path12.default.join(".cc-candybar", "plugins");
+var REPO_PLUGIN_DIR = import_node_path13.default.join(".cc-candybar", "plugins");
 function installedPlugins(locs, repo2) {
   const roots = pluginRoots(locs, repo2);
   const byNs = /* @__PURE__ */ new Map();
@@ -60749,7 +61252,7 @@ function installedPlugins(locs, repo2) {
     }
     for (const name of listed.folders) {
       const definition = pluginDefinition(
-        import_node_path12.default.join(root, name, DEFINITION_FILE),
+        import_node_path13.default.join(root, name, DEFINITION_FILE),
         scope
       );
       const key = `${scope}\0${name}`;
@@ -60758,10 +61261,10 @@ function installedPlugins(locs, repo2) {
     }
     for (const file of listed.files) {
       strays.push({
-        path: import_node_path12.default.join(root, file),
+        path: import_node_path13.default.join(root, file),
         scope,
         name: void 0,
-        reason: `a plugin is a folder holding its ${DEFINITION_FILE}: move this file to ${import_node_path12.default.join(root, "<name>", DEFINITION_FILE)}`
+        reason: `a plugin is a folder holding its ${DEFINITION_FILE}: move this file to ${import_node_path13.default.join(root, "<name>", DEFINITION_FILE)}`
       });
     }
   }
@@ -60787,7 +61290,7 @@ function listFolders(root) {
 function isDirectoryLink(root, e) {
   if (!e.isSymbolicLink()) return false;
   try {
-    return fs_default.statSync(import_node_path12.default.join(root, e.name)).isDirectory();
+    return fs_default.statSync(import_node_path13.default.join(root, e.name)).isDirectory();
   } catch {
     return true;
   }
@@ -60795,22 +61298,22 @@ function isDirectoryLink(root, e) {
 
 // src/utils/git-root.ts
 init_globals();
-var import_node_path13 = __toESM(require_path_browserify(), 1);
+var import_node_path14 = __toESM(require_path_browserify(), 1);
 function holdsGit(dir) {
-  return fs_default.existsSync(import_node_path13.default.join(dir, ".git"));
+  return fs_default.existsSync(import_node_path14.default.join(dir, ".git"));
 }
 function gitRootOf(start) {
-  let dir = import_node_path13.default.resolve(start);
+  let dir = import_node_path14.default.resolve(start);
   for (; ; ) {
     if (holdsGit(dir)) return dir;
-    const parent = import_node_path13.default.dirname(dir);
+    const parent = import_node_path14.default.dirname(dir);
     if (parent === dir) return void 0;
     dir = parent;
   }
 }
 function checkoutOf(cwd2) {
   const root = gitRootOf(cwd2);
-  return root === void 0 ? { root: import_node_path13.default.resolve(cwd2), git: false } : { root, git: true };
+  return root === void 0 ? { root: import_node_path14.default.resolve(cwd2), git: false } : { root, git: true };
 }
 function probe(read2) {
   try {
@@ -60822,18 +61325,18 @@ function probe(read2) {
 var realDir = (p2) => probe(() => fs_default.realpathSync.native(p2));
 var why = (what, o) => o.kind === "absent" ? `${what} is not there` : o.reason;
 function gitDirNamed(root) {
-  const text4 = probe(() => fs_default.readFileSync(import_node_path13.default.join(root, ".git"), "utf-8"));
+  const text4 = probe(() => fs_default.readFileSync(import_node_path14.default.join(root, ".git"), "utf-8"));
   if (text4.kind !== "ok") return text4;
   const named3 = text4.value.match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
-  return named3 === void 0 ? failed(`${import_node_path13.default.join(root, ".git")} names no gitdir`, "parse") : ok(import_node_path13.default.resolve(root, named3));
+  return named3 === void 0 ? failed(`${import_node_path14.default.join(root, ".git")} names no gitdir`, "parse") : ok(import_node_path14.default.resolve(root, named3));
 }
 function commonDirOf(gitDir) {
   const text4 = probe(
-    () => fs_default.readFileSync(import_node_path13.default.join(gitDir, "commondir"), "utf-8")
+    () => fs_default.readFileSync(import_node_path14.default.join(gitDir, "commondir"), "utf-8")
   );
   if (text4.kind !== "ok") return text4;
   const common = text4.value.trim();
-  return common === "" ? failed(`${import_node_path13.default.join(gitDir, "commondir")} is empty`, "parse") : ok(import_node_path13.default.resolve(gitDir, common));
+  return common === "" ? failed(`${import_node_path14.default.join(gitDir, "commondir")} is empty`, "parse") : ok(import_node_path14.default.resolve(gitDir, common));
 }
 var UNLINKED = { kind: "unlinked" };
 var unproven = (reason) => ({
@@ -60843,7 +61346,7 @@ var unproven = (reason) => ({
 function worktreeLink(dir) {
   const root = gitRootOf(dir);
   if (root === void 0) return UNLINKED;
-  const dotGit = import_node_path13.default.join(root, ".git");
+  const dotGit = import_node_path14.default.join(root, ".git");
   const followed = probe(() => fs_default.statSync(dotGit));
   if (followed.kind === "ok" && followed.value.isDirectory()) return UNLINKED;
   const entry = probe(() => fs_default.lstatSync(dotGit));
@@ -60858,34 +61361,34 @@ function worktreeLink(dir) {
   if (common.kind === "failed") return unproven(common.reason);
   const realCommon = realDir(common.value);
   if (realCommon.kind !== "ok") return unproven(why(common.value, realCommon));
-  if (import_node_path13.default.dirname(gitDir.value) !== import_node_path13.default.join(realCommon.value, "worktrees")) {
+  if (import_node_path14.default.dirname(gitDir.value) !== import_node_path14.default.join(realCommon.value, "worktrees")) {
     return unproven(`${gitDir.value} is not a worktree of ${realCommon.value}`);
   }
-  const backFile = import_node_path13.default.join(gitDir.value, "gitdir");
+  const backFile = import_node_path14.default.join(gitDir.value, "gitdir");
   const back2 = probe(() => fs_default.readFileSync(backFile, "utf-8"));
   if (back2.kind !== "ok") return unproven(why(backFile, back2));
-  const pointer = import_node_path13.default.resolve(gitDir.value, back2.value.trim());
-  const pointerDir = realDir(import_node_path13.default.dirname(pointer));
-  if (import_node_path13.default.basename(pointer) !== ".git" || pointerDir.kind !== "ok" || pointerDir.value !== root) {
+  const pointer = import_node_path14.default.resolve(gitDir.value, back2.value.trim());
+  const pointerDir = realDir(import_node_path14.default.dirname(pointer));
+  if (import_node_path14.default.basename(pointer) !== ".git" || pointerDir.kind !== "ok" || pointerDir.value !== root) {
     return unproven(
       `${gitDir.value} is the worktree at ${pointer}, not ${root}`
     );
   }
-  const main = import_node_path13.default.basename(realCommon.value) === ".git" ? import_node_path13.default.dirname(realCommon.value) : realCommon.value;
-  return { kind: "linked", main: import_node_path13.default.join(main, import_node_path13.default.relative(root, dir)) };
+  const main = import_node_path14.default.basename(realCommon.value) === ".git" ? import_node_path14.default.dirname(realCommon.value) : realCommon.value;
+  return { kind: "linked", main: import_node_path14.default.join(main, import_node_path14.default.relative(root, dir)) };
 }
 function checkoutLocation(dir) {
   const real = realDir(dir);
-  const at = real.kind === "ok" ? real.value : import_node_path13.default.resolve(dir);
+  const at = real.kind === "ok" ? real.value : import_node_path14.default.resolve(dir);
   const root = gitRootOf(at);
   if (root === void 0)
     return { main: "", worktree: "", subpath: "", noRepo: true };
-  const sub2 = import_node_path13.default.relative(root, at);
-  const subpath = sub2 === "" ? "" : `/${sub2.split(import_node_path13.default.sep).join("/")}`;
+  const sub2 = import_node_path14.default.relative(root, at);
+  const subpath = sub2 === "" ? "" : `/${sub2.split(import_node_path14.default.sep).join("/")}`;
   const link = worktreeLink(at);
   return link.kind === "linked" ? {
-    main: import_node_path13.default.resolve(link.main, import_node_path13.default.relative(at, root)),
-    worktree: import_node_path13.default.basename(root),
+    main: import_node_path14.default.resolve(link.main, import_node_path14.default.relative(at, root)),
+    worktree: import_node_path14.default.basename(root),
     subpath,
     noRepo: false
   } : { main: root, worktree: "", subpath, noRepo: false };
@@ -60893,7 +61396,7 @@ function checkoutLocation(dir) {
 
 // src/config/loader/discovery.ts
 init_globals();
-var import_node_path14 = __toESM(require_path_browserify(), 1);
+var import_node_path15 = __toESM(require_path_browserify(), 1);
 
 // src/utils/presence.ts
 init_globals();
@@ -60978,10 +61481,10 @@ function dslConfigCandidatePaths(locs, projectDir, cwd2, configFile) {
   return [
     .../* @__PURE__ */ new Set([
       ...projectDir ? CONFIG_EXTENSIONS.map(
-        (ext) => import_node_path14.default.join(projectDir, `${REPO_CONFIG_BASE}.${ext}`)
+        (ext) => import_node_path15.default.join(projectDir, `${REPO_CONFIG_BASE}.${ext}`)
       ) : [],
       ...CONFIG_EXTENSIONS.map(
-        (ext) => import_node_path14.default.join(effectiveCwd, `${REPO_CONFIG_BASE}.${ext}`)
+        (ext) => import_node_path15.default.join(effectiveCwd, `${REPO_CONFIG_BASE}.${ext}`)
       ),
       ...CONFIG_EXTENSIONS.map((ext) => `${xdgConfigBase(locs)}.${ext}`)
     ])
@@ -60989,7 +61492,7 @@ function dslConfigCandidatePaths(locs, projectDir, cwd2, configFile) {
 }
 var REPO_CONFIG_BASE = ".cc-candybar";
 function xdgConfigBase(locs) {
-  return import_node_path14.default.join(locs.configHome, "cc-candybar", "config");
+  return import_node_path15.default.join(locs.configHome, "cc-candybar", "config");
 }
 function homeLayer(path42) {
   return { path: path42, scope: "plugins" };
@@ -61009,10 +61512,10 @@ function resolveDslConfig(locs, answers, projectDir, cwd2, configFile) {
       unchecked.push(p2);
       continue;
     }
-    const dir = fs_default.realpathSync.native(import_node_path14.default.dirname(candidate));
-    const location = import_node_path14.default.join(
+    const dir = fs_default.realpathSync.native(import_node_path15.default.dirname(candidate));
+    const location = import_node_path15.default.join(
       dir,
-      import_node_path14.default.basename(candidate).replace(/\.(json5|json)$/, "")
+      import_node_path15.default.basename(candidate).replace(/\.(json5|json)$/, "")
     );
     if (!atLocation.has(location)) {
       atLocation.set(location, {
@@ -61059,7 +61562,7 @@ function repoProject(projectDir) {
   if (projectDir === void 0 || presence(projectDir) !== "present") {
     return null;
   }
-  const listed = listFolders(import_node_path14.default.join(projectDir, REPO_PLUGIN_DIR));
+  const listed = listFolders(import_node_path15.default.join(projectDir, REPO_PLUGIN_DIR));
   const dir = fs_default.realpathSync.native(projectDir);
   return {
     dir,
@@ -61107,9 +61610,9 @@ function detectConfigCollisions(locs, projectDir, cwd2) {
   );
   const groups = /* @__PURE__ */ new Map();
   for (const candidate of existing) {
-    const dir = import_node_path14.default.dirname(candidate);
-    const base = import_node_path14.default.basename(candidate).replace(/\.(json5|json)$/, "");
-    const key = import_node_path14.default.join(dir, base);
+    const dir = import_node_path15.default.dirname(candidate);
+    const base = import_node_path15.default.basename(candidate).replace(/\.(json5|json)$/, "");
+    const key = import_node_path15.default.join(dir, base);
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(candidate);
   }
@@ -64130,7 +64633,7 @@ function spliceOp(text4, path42, op, rendered) {
 
 // src/daemon/settings-history.ts
 init_globals();
-var import_node_path15 = __toESM(require_path_browserify(), 1);
+var import_node_path16 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/session-state.ts
 init_globals();
@@ -64776,7 +65279,7 @@ function fileHistoryStorage(file, logger) {
     },
     save: (state) => {
       try {
-        fs_default.mkdirSync(import_node_path15.default.dirname(file), { recursive: true });
+        fs_default.mkdirSync(import_node_path16.default.dirname(file), { recursive: true });
         writeAtomic(file, JSON.stringify(state), 384);
       } catch (e) {
         const message = `settings-history write failed \u2014 the change landed but is not undoable: ${e.message}`;
@@ -64789,13 +65292,13 @@ function fileHistoryStorage(file, logger) {
 
 // src/daemon/repo-configs.ts
 init_globals();
-var import_node_path17 = __toESM(require_path_browserify(), 1);
+var import_node_path18 = __toESM(require_path_browserify(), 1);
 
 // src/doctor/state-file.ts
 init_globals();
-var import_node_path16 = __toESM(require_path_browserify(), 1);
+var import_node_path17 = __toESM(require_path_browserify(), 1);
 function stateFile(dir, name, empty2, parse3) {
-  const file = import_node_path16.default.join(dir, name);
+  const file = import_node_path17.default.join(dir, name);
   const read2 = () => {
     let text4;
     try {
@@ -64835,50 +65338,6 @@ function stateFile(dir, name, empty2, parse3) {
 
 // src/render/diagnostics.ts
 init_globals();
-
-// site/shims/crypto.ts
-init_globals();
-var import_buffer3 = __toESM(require_buffer(), 1);
-function fnv(text4) {
-  let h = 2166136261;
-  for (let i = 0; i < text4.length; i++) h = Math.imul(h ^ text4.charCodeAt(i), 16777619) >>> 0;
-  return h.toString(16).padStart(8, "0").repeat(8);
-}
-function createHash(_alg) {
-  let acc = "";
-  const h = {
-    update(d) {
-      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
-      return h;
-    },
-    digest(_enc2) {
-      return fnv(acc);
-    }
-  };
-  return h;
-}
-function createHmac(_alg, key) {
-  let acc = import_buffer3.Buffer.from(key).toString("hex");
-  const h = {
-    update(d) {
-      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
-      return h;
-    },
-    digest() {
-      return import_buffer3.Buffer.from(fnv(acc), "hex");
-    }
-  };
-  return h;
-}
-function timingSafeEqual(a, b) {
-  if (a.length !== b.length) throw new RangeError("Input buffers must have the same byte length");
-  return a.every((byte, i) => byte === b[i]);
-}
-var randomUUID = () => globalThis.crypto.randomUUID();
-var randomBytes = (n) => globalThis.crypto.getRandomValues(new Uint8Array(n));
-var crypto_default = { createHash, createHmac, timingSafeEqual, randomUUID, randomBytes };
-
-// src/render/diagnostics.ts
 var ERROR_SEVERITY = {
   level: "error",
   glyph: "\u26A0",
@@ -65111,10 +65570,10 @@ function channelRows(message, opts, trailing) {
 var REPO_CONFIGS_FILE = "repo-configs.json";
 var REPO_CONFIGS_DIR = "repo-configs";
 function repoConfigsDir(dir) {
-  return import_node_path17.default.join(dir, REPO_CONFIGS_DIR);
+  return import_node_path18.default.join(dir, REPO_CONFIGS_DIR);
 }
 function repoConfigsPath(dir) {
-  return import_node_path17.default.join(repoConfigsDir(dir), REPO_CONFIGS_FILE);
+  return import_node_path18.default.join(repoConfigsDir(dir), REPO_CONFIGS_FILE);
 }
 var repoConfigs = (dir) => {
   const book = stateFile(
@@ -65214,7 +65673,7 @@ function sessionEnv(facts) {
 
 // src/daemon/protocol.ts
 init_globals();
-var import_node_path18 = __toESM(require_path_browserify(), 1);
+var import_node_path19 = __toESM(require_path_browserify(), 1);
 
 // src/terminal-hint.ts
 init_globals();
@@ -65301,7 +65760,7 @@ function sanitizeTerminalEnv(v) {
   return set2.every((name) => typeof o[name] === "string" && o[name] !== "") ? Object.fromEntries(set2.map((name) => [name, o[name]])) : void 0;
 }
 function sanitizeAbsolutePath(v) {
-  return typeof v === "string" && import_node_path18.default.isAbsolute(v) ? v : void 0;
+  return typeof v === "string" && import_node_path19.default.isAbsolute(v) ? v : void 0;
 }
 function sanitizeTmux(v) {
   if (v === null) return null;
@@ -65452,7 +65911,7 @@ async function runTmuxAsync(launcher, hint, category, args, stdinInput) {
 
 // src/segments/git.ts
 init_globals();
-var import_node_path19 = __toESM(require_path_browserify(), 1);
+var import_node_path20 = __toESM(require_path_browserify(), 1);
 function trackingOf(upstream, aheadBehind) {
   if (upstream.kind === "absent") return ok("none");
   if (upstream.kind === "failed") return upstream;
@@ -65912,17 +66371,17 @@ var GitService = class {
   // A `.git` that names nothing readable (a directory, an unreadable or
   // malformed file) watches the dotGit path, so callers always get a string.
   resolveGitDir(workingDir) {
-    return orElse(gitDirNamed(workingDir), import_node_path19.default.join(workingDir, ".git"));
+    return orElse(gitDirNamed(workingDir), import_node_path20.default.join(workingDir, ".git"));
   }
   getOngoingOperation(workingDir) {
     try {
       const gitDir = this.resolveGitDir(workingDir);
-      if (fs_default.existsSync(import_node_path19.default.join(gitDir, "MERGE_HEAD"))) return ok("MERGE");
-      if (fs_default.existsSync(import_node_path19.default.join(gitDir, "CHERRY_PICK_HEAD")))
+      if (fs_default.existsSync(import_node_path20.default.join(gitDir, "MERGE_HEAD"))) return ok("MERGE");
+      if (fs_default.existsSync(import_node_path20.default.join(gitDir, "CHERRY_PICK_HEAD")))
         return ok("CHERRY-PICK");
-      if (fs_default.existsSync(import_node_path19.default.join(gitDir, "REVERT_HEAD"))) return ok("REVERT");
-      if (fs_default.existsSync(import_node_path19.default.join(gitDir, "BISECT_LOG"))) return ok("BISECT");
-      if (fs_default.existsSync(import_node_path19.default.join(gitDir, "rebase-merge")) || fs_default.existsSync(import_node_path19.default.join(gitDir, "rebase-apply")))
+      if (fs_default.existsSync(import_node_path20.default.join(gitDir, "REVERT_HEAD"))) return ok("REVERT");
+      if (fs_default.existsSync(import_node_path20.default.join(gitDir, "BISECT_LOG"))) return ok("BISECT");
+      if (fs_default.existsSync(import_node_path20.default.join(gitDir, "rebase-merge")) || fs_default.existsSync(import_node_path20.default.join(gitDir, "rebase-apply")))
         return ok("REBASE");
       return ABSENT2;
     } catch (e) {
@@ -66061,7 +66520,7 @@ var GitService = class {
   // unrepresentable. Sync, because reading one small file is not worth a
   // microtask: its former `Promise.all` partner is the only spawn left.
   getStashCount(workingDir) {
-    const reflog = import_node_path19.default.join(
+    const reflog = import_node_path20.default.join(
       this.resolveCommonGitDir(this.resolveGitDir(workingDir)),
       "logs",
       "refs",
@@ -66128,7 +66587,7 @@ var GitService = class {
   // yields no stamp and therefore no memo, so an unreadable config re-reads rather
   // than freezing an answer.
   async getRemotesAsync(workingDir) {
-    const configPath = import_node_path19.default.join(
+    const configPath = import_node_path20.default.join(
       this.resolveCommonGitDir(this.resolveGitDir(workingDir)),
       "config"
     );
@@ -66177,7 +66636,7 @@ var GitService = class {
   // remotes read stays failed at the call site instead of borrowing this rule.
   repoNameFrom(remotes, workingDir) {
     const url = repoRemoteUrl(remotes);
-    return (url === null ? null : repoNameFromUrl(url)) ?? import_node_path19.default.basename(workingDir);
+    return (url === null ? null : repoNameFromUrl(url)) ?? import_node_path20.default.basename(workingDir);
   }
   // [LAW:locality-or-seam] Public so the daemon's GitDataProvider can read the
   // remote to fold into its PR cache key (the PR value depends on the remote; a
@@ -66251,7 +66710,7 @@ var GitService = class {
   }
   isWorktree(workingDir) {
     try {
-      const gitDir = import_node_path19.default.join(workingDir, ".git");
+      const gitDir = import_node_path20.default.join(workingDir, ".git");
       if (fs_default.existsSync(gitDir) && fs_default.statSync(gitDir).isFile()) {
         return true;
       }
@@ -66287,76 +66746,13 @@ init_globals();
 
 // src/daemon/render-payload.ts
 init_globals();
-var import_node_path20 = __toESM(require_path_browserify(), 1);
+var import_node_path21 = __toESM(require_path_browserify(), 1);
 
 // src/utils/terminal-width.ts
 init_globals();
 var RESERVED_CHARS = 2;
 function applyClaudeCodeReserve(rawCols) {
   return Math.max(1, rawCols - RESERVED_CHARS);
-}
-
-// src/utils/reading.ts
-init_globals();
-function unread() {
-  return observable.box(pending("unread"), { deep: false });
-}
-function pending(why2) {
-  let land;
-  const landed = new Promise((resolve) => {
-    land = resolve;
-  });
-  return { kind: "pending", why: why2, landed, land };
-}
-function settle(source, outcome) {
-  const prior = source.reading.get();
-  if (prior.kind !== "pending" && compareStructural(prior, outcome)) return;
-  runInAction(() => source.reading.set(outcome));
-  if (prior.kind === "pending") prior.land();
-}
-function renew(source, why2) {
-  const prior = source.reading.get();
-  if (prior.kind !== "pending") {
-    runInAction(() => source.reading.set(pending(why2)));
-  } else if (prior.why !== why2 && why2 === "unread") {
-    runInAction(() => source.reading.set({ ...prior, why: why2 }));
-  }
-}
-function answerPending(source, outcome) {
-  if (source.reading.get().kind === "pending") settle(source, outcome);
-}
-function isWaiting(current) {
-  return typeof current === "object" && current !== null && current.kind === "pending";
-}
-function currentOf(source) {
-  return source.reading.get();
-}
-async function answered(read2) {
-  for (; ; ) {
-    const current = read2();
-    if (!isWaiting(current)) return current;
-    await current.landed;
-  }
-}
-function waitWithin(work, ms, late, after) {
-  const wait = new AbortController();
-  const clear = after(Math.max(0, ms), () => wait.abort());
-  const ended = new Promise((resolve, reject2) => {
-    wait.signal.addEventListener("abort", () => resolve("deadline"));
-    void work(wait.signal).then(
-      () => resolve("answered"),
-      // [LAW:no-silent-failure] Every rejection is reported: the wait's own
-      // while it listens, its owner's after.
-      (e) => wait.signal.aborted ? late(e) : reject2(e)
-    );
-  });
-  return ended.finally(() => {
-    clear();
-    wait.abort();
-  });
-}
-function settledLane(outcome) {
-  return { current: () => outcome };
 }
 
 // src/daemon/cache/today-facts.ts
@@ -67172,7 +67568,7 @@ function pickNonNull(src) {
 }
 function posixify(s) {
   if (s === void 0 || s.length === 0) return s;
-  if (import_node_path20.default.sep !== "\\") return s;
+  if (import_node_path21.default.sep !== "\\") return s;
   return s.replace(/\\/g, "/");
 }
 function projectGitInfo(outcome, pending2) {
@@ -67275,7 +67671,7 @@ function dataNeeds(config2, preset) {
 
 // src/utils/claude.ts
 init_globals();
-var import_node_path21 = __toESM(require_path_browserify(), 1);
+var import_node_path22 = __toESM(require_path_browserify(), 1);
 
 // src/utils/transcript-activity.ts
 init_globals();
@@ -67349,19 +67745,19 @@ function entryActivity(parsed2, userEntry) {
 // src/utils/claude.ts
 function getClaudePaths(detected, homeDir) {
   if (detected !== void 0) return [detected];
-  return [(0, import_node_path21.join)(homeDir, ".config", "claude"), (0, import_node_path21.join)(homeDir, ".claude")].filter(
+  return [(0, import_node_path22.join)(homeDir, ".config", "claude"), (0, import_node_path22.join)(homeDir, ".claude")].filter(
     (dir) => existsSync(dir)
   );
 }
 async function findProjectPaths(claudePaths) {
   const projectPaths = [];
   for (const claudePath of claudePaths) {
-    const projectsDir = (0, import_node_path21.join)(claudePath, "projects");
+    const projectsDir = (0, import_node_path22.join)(claudePath, "projects");
     const entries = await unlessGone(
       readdir2(projectsDir, { withFileTypes: true })
     );
     for (const entry of entries ?? []) {
-      if (entry.isDirectory()) projectPaths.push((0, import_node_path21.join)(projectsDir, entry.name));
+      if (entry.isDirectory()) projectPaths.push((0, import_node_path22.join)(projectsDir, entry.name));
     }
   }
   return projectPaths;
@@ -67377,14 +67773,14 @@ async function unlessGone(read2) {
 async function findAgentTranscripts(sessionId2, projectPath, verified) {
   const paths2 = [];
   let longLines = [];
-  const subagentsDir = (0, import_node_path21.join)(projectPath, sessionId2, "subagents");
+  const subagentsDir = (0, import_node_path22.join)(projectPath, sessionId2, "subagents");
   try {
     const files = await readdir2(subagentsDir);
     const agentFileNames = files.filter(
       (f) => f.startsWith("agent-") && f.endsWith(".jsonl")
     );
     for (const fileName2 of agentFileNames) {
-      const filePath2 = (0, import_node_path21.join)(subagentsDir, fileName2);
+      const filePath2 = (0, import_node_path22.join)(subagentsDir, fileName2);
       if (verified?.has(filePath2)) {
         paths2.push(filePath2);
         continue;
@@ -67530,7 +67926,7 @@ async function foldAppended(filePath2, prior, empty2, step4) {
 
 // src/doctor/font-edge.ts
 init_globals();
-var import_node_path22 = __toESM(require_path_browserify(), 1);
+var import_node_path23 = __toESM(require_path_browserify(), 1);
 
 // node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/index.js
 init_globals();
@@ -68503,12 +68899,12 @@ function coverage(launcher, ref, glyphs) {
   return process_default.platform === "darwin" ? macCoverage(launcher, ref, glyphs) : fcCoverage(launcher, ref.name, glyphs);
 }
 function alacrittyConfigPaths(home, xdgConfigHome) {
-  const xdg = xdgConfigHome || import_node_path22.default.join(home, ".config");
+  const xdg = xdgConfigHome || import_node_path23.default.join(home, ".config");
   return [
-    import_node_path22.default.join(xdg, "alacritty", "alacritty.toml"),
-    import_node_path22.default.join(xdg, "alacritty.toml"),
-    import_node_path22.default.join(home, ".config", "alacritty", "alacritty.toml"),
-    import_node_path22.default.join(home, ".alacritty.toml")
+    import_node_path23.default.join(xdg, "alacritty", "alacritty.toml"),
+    import_node_path23.default.join(xdg, "alacritty.toml"),
+    import_node_path23.default.join(home, ".config", "alacritty", "alacritty.toml"),
+    import_node_path23.default.join(home, ".alacritty.toml")
   ];
 }
 function alacrittyDefaultFamily(platform3) {
@@ -68550,7 +68946,7 @@ function alacrittyFamilyIn(file, home, depth) {
   if (depth === 5) return { kind: "ok", value: null };
   let found2 = null;
   for (const imported of own2.imports) {
-    const target = imported.startsWith("~/") ? import_node_path22.default.join(home, imported.slice(2)) : import_node_path22.default.resolve(import_node_path22.default.dirname(file), imported);
+    const target = imported.startsWith("~/") ? import_node_path23.default.join(home, imported.slice(2)) : import_node_path23.default.resolve(import_node_path23.default.dirname(file), imported);
     if (!fs_default.existsSync(target)) continue;
     const inner = alacrittyFamilyIn(target, home, depth + 1);
     if (inner.kind === "failed") return inner;
@@ -68595,46 +68991,6 @@ init_globals();
 var import_node_path24 = __toESM(require_path_browserify(), 1);
 init_url();
 
-// src/source-digest.ts
-init_globals();
-var import_node_path23 = __toESM(require_path_browserify(), 1);
-var isSourceEntry = (name) => !name.startsWith(".") && !name.endsWith("~");
-function entryBytes(p2, st) {
-  return st.isSymbolicLink() ? import_buffer.Buffer.from(fs_default.readlinkSync(p2)) : fs_default.readFileSync(p2);
-}
-function sourceEntries(root, dir, keep2 = isSourceEntry) {
-  return fs_default.readdirSync(dir).filter(keep2).sort().flatMap((name) => {
-    const p2 = import_node_path23.default.join(dir, name);
-    const st = fs_default.lstatSync(p2, { throwIfNoEntry: false });
-    if (st === void 0) return [];
-    if (st.isDirectory()) return sourceEntries(root, p2);
-    const rel = import_node_path23.default.relative(root, p2).split(import_node_path23.default.sep).join("/");
-    return [[rel, entryBytes(p2, st)]];
-  });
-}
-function digestOf(entries) {
-  const h = crypto_default.createHash("sha256");
-  for (const [rel, bytes] of entries) {
-    h.update(rel).update("\0").update(bytes).update("\0");
-  }
-  return h.digest("hex");
-}
-function sourceDigest(srcDir) {
-  return digestOf(sourceEntries(srcDir, srcDir));
-}
-var CRATE_SOURCE = ["Cargo.toml", "Cargo.lock", "src"];
-function crateDigest(crateDir) {
-  return digestOf(
-    sourceEntries(
-      crateDir,
-      crateDir,
-      (name) => CRATE_SOURCE.includes(name)
-    )
-  );
-}
-var SHORT_DIGEST_LENGTH = 7;
-var shortDigest = (digest2) => digest2.slice(0, SHORT_DIGEST_LENGTH);
-
 // src/version.ts
 init_globals();
 if (false) {
@@ -68642,7 +68998,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.187.0";
+var PACKAGE_VERSION = "1.188.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -69324,6 +69680,14 @@ init_globals();
 
 // src/daemon/stats.ts
 init_globals();
+var NO_RUNS = {
+  entries: 0,
+  held: 0,
+  refreshes: {},
+  failures: 0,
+  abandoned: 0,
+  lastMs: null
+};
 var ROLLING_WINDOW_MS = 6e4;
 var ROLLING_BUFFER_CAP = 16384;
 var HISTOGRAM_CAP = 16;
@@ -69519,6 +69883,11 @@ var RuntimeStats = class _RuntimeStats {
         probes: 0,
         probeFailures: 0
       },
+      sourceRuns: {
+        shell: NO_RUNS,
+        file: NO_RUNS,
+        watches: 0
+      },
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
       renderCache: {
         size: 0,
@@ -69592,6 +69961,7 @@ var RuntimeStats = class _RuntimeStats {
       usageCache: extras.usageCache,
       sources: extras.sources,
       fileEvents: extras.fileEvents,
+      sourceRuns: extras.sourceRuns,
       transcriptReads: extras.transcriptReads,
       renderCache: extras.renderCache,
       effectCache: extras.effectCache,
@@ -77060,6 +77430,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     payloadProviders: { gitProvider, usageStore },
     fileEvents,
     runs,
+    sourceRuns,
     effectSessions,
     menuIdle,
     journalTurns,
@@ -77104,6 +77475,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
         usageCache: usageStore.getStats(),
         sources: sourceSnapshots(parts),
         fileEvents: fileEvents.stats(),
+        sourceRuns: sourceRuns.stats(),
         runs: runs.stats(),
         transcriptReads: transcriptReads(),
         renderCache: renderCache.stats,
@@ -78146,61 +78518,60 @@ init_globals();
 init_globals();
 var import_node_path35 = __toESM(require_path_browserify(), 1);
 
-// src/utils/period.ts
+// src/utils/trailing-edge.ts
 init_globals();
-function periodOf(every, outcome) {
-  return outcome.kind === "failed" ? every.failedMs : every.okMs;
-}
-function backedOffMs(every, failures, ceilingMs) {
-  return failures === 0 ? every.okMs : Math.min(every.failedMs * 2 ** (failures - 1), ceilingMs);
-}
-var Period = class {
-  constructor(tick, clock) {
-    this.tick = tick;
-    this.clock = clock;
+var TrailingEdge = class {
+  // The keys whose loop is currently executing, each with its completion.
+  running = /* @__PURE__ */ new Map();
+  // The keys a trigger arrived for while their loop was mid-pass. A Set, not a
+  // count: ten triggers during one pass mean the same thing as one — the work
+  // must be done once more with current inputs.
+  again = /* @__PURE__ */ new Set();
+  run(key, work) {
+    this.again.add(key);
+    if (this.running.has(key)) return { kind: "queued" };
+    return { kind: "started", done: this.start(key, work) };
   }
-  tick;
-  clock;
-  stop = null;
-  state = "released";
-  last = null;
-  // A read landed at the monotonic reading `at` (now, unless the owner is resuming an answer it
-  // kept from earlier). `periodMs` is chosen by the caller from the read's
-  // outcome (a failed PR lookup is retried sooner than a found one).
-  landed(periodMs, at = this.clock.monotonic()) {
-    this.last = { at, periodMs };
-    this.schedule();
+  // A trigger that only ASKS for a reading — a period's tick, a first read —
+  // and carries no news that the answer changed: the loop in flight already
+  // answers it, so it shares that loop's completion rather than queueing a
+  // pass (brandon-unfiled-3248.8ro6, step 1: a trigger's kind decides what it
+  // does mid-read). Idle, it starts a loop exactly as `run` does.
+  share(key, work) {
+    const running = this.running.get(key);
+    if (running !== void 0) return running;
+    this.again.add(key);
+    return this.start(key, work);
   }
-  hold(held) {
-    if (this.state === "disposed") return;
-    const next = held ? "held" : "released";
-    if (next === this.state) return;
-    this.state = next;
-    this.schedule();
+  start(key, work) {
+    const done2 = this.loop(key, work);
+    this.running.set(key, done2);
+    return done2;
   }
-  dispose() {
-    this.state = "disposed";
-    this.cancel();
+  async loop(key, work) {
+    try {
+      do {
+        this.again.delete(key);
+        await work();
+      } while (this.again.has(key));
+    } finally {
+      this.running.delete(key);
+      this.again.delete(key);
+    }
   }
-  schedule() {
-    this.cancel();
-    if (this.state !== "held" || this.last === null) return;
-    const wait = Math.max(
-      0,
-      this.last.at + this.last.periodMs - this.clock.monotonic()
-    );
-    this.stop = this.clock.after(
-      wait,
-      () => {
-        this.stop = null;
-        this.tick();
-      },
-      { unref: true }
-    );
+  // Drop every record of running and pending work — the teardown path of an
+  // owner being disposed. In-flight passes cannot be cancelled from here (the
+  // await belongs to `work`), so they run to completion; what this guarantees is
+  // that no QUEUED trigger is honoured after teardown, and that an owner
+  // rebuilt with the same keys starts clean.
+  clear() {
+    this.running.clear();
+    this.again.clear();
   }
-  cancel() {
-    this.stop?.();
-    this.stop = null;
+  // Number of keys whose loop is executing — a read-only observability surface
+  // for tests asserting the serialization contract. Never read as control flow.
+  get size() {
+    return this.running.size;
   }
 };
 
@@ -79317,232 +79688,6 @@ var SingleFlight = class {
   }
 };
 
-// src/utils/keyed-source.ts
-init_globals();
-var KeyedSource = class {
-  constructor(spec) {
-    this.spec = spec;
-    this.refreshes = spec.ledger.declare({
-      name: spec.name,
-      scope: spec.scope,
-      // [LAW:types-are-the-program] exception: a source with no period
-      // declares no tick, but its handle is typed for every keyed trigger;
-      // only the absent period keeps it from recording one.
-      refresh: spec.every === null ? ["first", "change", "supersede"] : ["first", "period", "change", "supersede"]
-    });
-  }
-  spec;
-  entries = /* @__PURE__ */ new Map();
-  refreshes;
-  closed = false;
-  // [LAW:single-enforcer] The one way into an entry: `holds` takes it — the
-  // home holds it until a declaration of the home's takes it no more, or the
-  // home is disposed, which keeps the entry for its next hold — and the lane
-  // reads it as it stands, never awaited and taking nothing. A key never read
-  // is created pending and read once, its first refresh.
-  //
-  // [LAW:no-silent-failure] The owner logs its own failures — each refresh's
-  // by that refresh — so its caller logs none. A declaration that THROWS is a
-  // bug none of those saw, reported by the view's declaration (declareLanes).
-  declare(holds2, input) {
-    if (this.closed)
-      return settledLane(failed(`${this.spec.name} closed`, "read"));
-    const key = this.spec.keyOf(input);
-    const entry = this.touched(key) ?? this.firstRead(this.created(key, input));
-    holds2.take(`${this.spec.name}:${key}`, () => this.hold(entry));
-    return { current: () => currentOf(entry) };
-  }
-  // [LAW:one-source-of-truth] The one supersede rule (SOURCES-AND-FRAMES.md):
-  // the daemon itself is changing what this key reads (a click's move). The
-  // value is pending (`superseded`) and the read in flight is abandoned, so no
-  // draw after the click shows the value from before it. Every trigger of the
-  // key is held back until every supersede of it has resumed, so no read
-  // during the move stores the world from before it; the last resume starts
-  // one fresh read. A key never read is created for it, and its first read is
-  // that resume's.
-  supersede(input) {
-    if (this.closed) return () => {
-    };
-    const key = this.spec.keyOf(input);
-    const entry = this.touched(key) ?? this.created(key, input);
-    entry.superseding++;
-    renew(entry, "superseded");
-    entry.flight = null;
-    entry.changed = false;
-    this.evict();
-    let resumed = false;
-    return () => {
-      if (resumed) return;
-      resumed = true;
-      entry.superseding--;
-      if (this.entries.get(entry.key) === entry)
-        this.refresh(entry, "supersede");
-    };
-  }
-  // The world changed under every held entry `affected` names (a watched file
-  // was written): each is read again, after the read in flight when one is
-  // out. An entry nobody holds is read when a hold returns to it.
-  changed(affected) {
-    for (const entry of this.entries.values()) {
-      if (entry.holders > 0 && affected(entry.input)) {
-        this.refresh(entry, "change");
-      }
-    }
-  }
-  // Whether some home holds an entry `match` names now.
-  isHeld(match) {
-    for (const entry of this.entries.values()) {
-      if (entry.holders > 0 && match(entry.input)) return true;
-    }
-    return false;
-  }
-  stats() {
-    let held = 0;
-    for (const entry of this.entries.values()) if (entry.holders > 0) held++;
-    const { refreshes, failures, lastMs } = this.refreshes.record();
-    return { entries: this.entries.size, held, refreshes, failures, lastMs };
-  }
-  // Ends every entry's period: a held entry's period re-arms on every landing,
-  // so an owner that is not closed keeps its timers for good.
-  close() {
-    this.closed = true;
-    for (const entry of [...this.entries.values()]) this.drop(entry);
-  }
-  // LRU touch: re-inserting moves the entry to the newest end.
-  touched(key) {
-    const entry = this.entries.get(key);
-    if (entry === void 0) return void 0;
-    this.entries.delete(key);
-    this.entries.set(key, entry);
-    return entry;
-  }
-  // In place before any read, so a read's answer finds its entry stored.
-  created(key, input) {
-    const entry = {
-      key,
-      input,
-      reading: unread(),
-      holders: 0,
-      flight: null,
-      changed: false,
-      superseding: 0,
-      revisit: revisitOf(this.spec.every, this.spec.clock, {
-        period: () => this.refresh(entry, "period"),
-        holdReturned: () => this.refresh(entry, "change")
-      })
-    };
-    this.entries.set(key, entry);
-    return entry;
-  }
-  firstRead(entry) {
-    this.refresh(entry, "first");
-    return entry;
-  }
-  refresh(entry, by) {
-    if (entry.superseding > 0) return;
-    if (entry.flight !== null) {
-      entry.changed ||= by === "change";
-      return;
-    }
-    const flight = {};
-    entry.flight = flight;
-    const startedAt = this.spec.clock.monotonic();
-    void attempt3(() => this.spec.read(entry.input)).then((outcome) => {
-      const stored = entry.flight === flight;
-      try {
-        this.refreshes.recorded(
-          `${this.spec.fields(entry.input)} stored=${stored ? "Y" : "N"}`,
-          by,
-          outcome,
-          elapsedMs(this.spec.clock, startedAt)
-        );
-      } finally {
-        if (stored) this.store(entry, outcome);
-      }
-    }).catch((e) => {
-      this.spec.logger(
-        "error",
-        `${this.spec.name} refresh threw (${this.spec.fields(entry.input)}): ${String(e)}`
-      );
-    });
-  }
-  store(entry, outcome) {
-    entry.flight = null;
-    try {
-      settle(entry, outcome);
-    } finally {
-      entry.revisit.landed(outcome);
-      if (entry.changed) {
-        entry.changed = false;
-        this.refresh(entry, "change");
-      }
-    }
-  }
-  hold(entry) {
-    entry.holders++;
-    entry.revisit.hold(true);
-    this.evict();
-    return () => {
-      entry.holders--;
-      entry.revisit.hold(entry.holders > 0);
-    };
-  }
-  // A held entry is never evicted, so held entries are bounded by their
-  // holders (the render cache's budget).
-  // [LAW:single-enforcer] Run by every claim that can add an entry (a hold, a
-  // supersede). An entry mid-supersede is kept like a held one: dropped, a
-  // hold returning during the move would read the world from before it.
-  evict() {
-    for (const entry of [...this.entries.values()]) {
-      if (this.entries.size <= this.spec.maxEntries) return;
-      if (entry.holders === 0 && entry.superseding === 0) this.drop(entry);
-    }
-  }
-  drop(entry) {
-    this.entries.delete(entry.key);
-    entry.flight = null;
-    entry.revisit.dispose();
-    answerPending(entry, failed(`${this.spec.name} entry dropped`, "read"));
-  }
-};
-function revisitOf(every, clock, read2) {
-  if (every === null) return new HoldReturn(read2.holdReturned);
-  const period = new Period(read2.period, clock);
-  return {
-    landed: (outcome) => period.landed(periodOf(every, outcome)),
-    hold: (held) => period.hold(held),
-    dispose: () => period.dispose()
-  };
-}
-var HoldReturn = class {
-  constructor(reread) {
-    this.reread = reread;
-  }
-  reread;
-  state = "released";
-  answered = false;
-  landed() {
-    this.answered = true;
-  }
-  hold(held) {
-    if (this.state === "disposed") return;
-    const returned2 = held && this.state === "released" && this.answered;
-    this.state = held ? "held" : "released";
-    if (returned2) this.reread();
-  }
-  dispose() {
-    this.state = "disposed";
-  }
-};
-function attempt3(read2) {
-  const threw2 = (e) => failed(`read threw: ${String(e)}`, "read");
-  try {
-    return read2().catch(threw2);
-  } catch (e) {
-    return Promise.resolve(threw2(e));
-  }
-}
-
 // src/daemon/cache/session-usage-store.ts
 var SPEED_RING_CAPACITY = 64;
 function speedSampleOf(breakdown, atMs) {
@@ -79736,7 +79881,8 @@ var SessionUsageStore = class {
       keyOf: (paths2) => paths2.join("\0"),
       fields: (paths2) => `dirs=${valueOf(paths2.join(","))}`,
       read: (paths2) => this.scan(paths2),
-      every: opts.rescan ?? DEFAULT_RESCAN,
+      every: () => opts.rescan ?? DEFAULT_RESCAN,
+      watch: NO_WATCH,
       maxEntries: MAX_UNHELD_SCANS,
       logger: this.log,
       ledger: this.ledger,
@@ -80629,7 +80775,8 @@ var TmuxService = class {
 ${hint.pane}`,
       fields: (hint) => `pane=${valueOf(hint.pane)} socket=${valueOf(hint.socket)}`,
       read: (hint) => askSessionName(opts.launcher, hint),
-      every: { okMs: NAME_PERIOD_MS, failedMs: NAME_PERIOD_MS },
+      every: () => ({ okMs: NAME_PERIOD_MS, failedMs: NAME_PERIOD_MS }),
+      watch: NO_WATCH,
       maxEntries: MAX_ENTRIES,
       logger,
       ledger: opts.ledger ?? new RefreshLedger(logger),
@@ -80694,7 +80841,8 @@ var HostService = class {
       scope: "daemon",
       keyOf: () => "",
       fields: () => "-",
-      every: HOST_EVERY,
+      every: () => HOST_EVERY,
+      watch: NO_WATCH,
       maxEntries: 1,
       logger,
       ledger,
@@ -80768,8 +80916,8 @@ var AutoCompactProvider = class {
     return this.known.get(settingsPath)?.outcome ?? pendingOf("unread");
   }
   getStats() {
-    const { refreshes, failures, lastMs } = this.refreshes.record();
-    return { entries: this.known.size, refreshes, failures, lastMs };
+    const { refreshes, failures, abandoned, lastMs } = this.refreshes.record();
+    return { entries: this.known.size, refreshes, failures, abandoned, lastMs };
   }
 };
 function stampAt(settingsPath) {
@@ -80834,8 +80982,8 @@ var CacheExpiryProvider = class {
     return this.known.get(sessionId2)?.outcome ?? pendingOf("unread");
   }
   getStats() {
-    const { refreshes, failures, lastMs } = this.refreshes.record();
-    return { entries: this.known.size, refreshes, failures, lastMs };
+    const { refreshes, failures, abandoned, lastMs } = this.refreshes.record();
+    return { entries: this.known.size, refreshes, failures, abandoned, lastMs };
   }
   async read(sessionId2, transcriptPath, stamp2) {
     const startedAt = this.clock.monotonic();
@@ -80921,7 +81069,8 @@ var ManagedStorage = class {
       read: (f) => this.read(f),
       // [LAW:types-are-the-program] A plugin source has no period: its watch
       // is its trigger, and a hold's return re-reads a kept entry.
-      every: null,
+      every: () => null,
+      watch: NO_WATCH,
       maxEntries: MAX_ENTRIES2,
       logger: opts.logger,
       ledger: opts.ledger ?? new RefreshLedger(opts.logger),
@@ -81369,64 +81518,6 @@ function unusedDeclarations(raw, config2, inserted) {
   ];
 }
 
-// src/utils/plain.ts
-init_globals();
-function digestOf2(value) {
-  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
-}
-
-// src/utils/holds.ts
-init_globals();
-var Holds = class {
-  held = /* @__PURE__ */ new Map();
-  // The keys the declaration in progress has taken, and how many of them it
-  // acquired.
-  declaring = null;
-  closed = false;
-  // `acquire` runs only for an entry this home does not hold now.
-  take(key, acquire) {
-    if (this.closed) throw new Error(`hold taken after close: ${key}`);
-    this.declaring?.taken.add(key);
-    if (this.held.has(key)) return;
-    this.held.set(key, acquire());
-    if (this.declaring !== null) this.declaring.acquired++;
-  }
-  // [LAW:no-ambient-temporal-coupling] One declaration: `body` takes every
-  // hold the home's draws read, and each hold it did not take is released
-  // once it returns, so the home holds exactly what it declared. Returns what
-  // the body answered, and how many holds it acquired and released.
-  declare(body) {
-    if (this.declaring !== null) throw new Error("declaration within one");
-    const declaring = { taken: /* @__PURE__ */ new Set(), acquired: 0 };
-    this.declaring = declaring;
-    let result;
-    try {
-      result = body();
-    } finally {
-      this.declaring = null;
-    }
-    let released = 0;
-    for (const [key, release3] of this.held) {
-      if (declaring.taken.has(key)) continue;
-      this.held.delete(key);
-      release3();
-      released++;
-    }
-    return { result, acquired: declaring.acquired, released };
-  }
-  // Releases every hold and refuses new ones: the home is gone.
-  close() {
-    this.closed = true;
-    const count = this.held.size;
-    for (const release3 of this.held.values()) release3();
-    this.held.clear();
-    return count;
-  }
-  get size() {
-    return this.held.size;
-  }
-};
-
 // src/daemon/cache/render.ts
 var ENTRY_BYTES = 3 * 1024 * 1024;
 var COMPILE_BYTES = 10 * 1024 * 1024;
@@ -81632,14 +81723,11 @@ function buildRenderState(load, deps) {
   const warnings = [];
   const store = new VariableStore(deps.clock);
   const registry = new SourceRegistry(
-    deps.launcher,
+    deps.runs,
     store,
     config2.globals.default_empty_value ?? "",
     deps.sessionState,
     null,
-    deps.ledger,
-    deps.fileEvents,
-    deps.watchers,
     deps.env
   );
   let registration;
@@ -84639,6 +84727,14 @@ function createDaemon(inputs) {
     logger: log,
     clock
   });
+  const sourceRuns = new SourceRuns({
+    launcher,
+    clock,
+    logger: log,
+    ledger: refreshLedger,
+    watchers: watcherRegistry,
+    fileEvents
+  });
   const payloadProviders = createPayloadProviders({
     launcher,
     host,
@@ -84769,7 +84865,7 @@ function createDaemon(inputs) {
   const renderCache = new RenderCache(
     {
       clock,
-      launcher,
+      runs: sourceRuns,
       stateDir: paths2.state,
       locations: locs,
       env: host.env,
@@ -84779,10 +84875,6 @@ function createDaemon(inputs) {
       storage: managedStorage,
       signer: linkSigner2,
       gates,
-      ledger: refreshLedger,
-      // [LAW:single-enforcer] The one delivery owner, whose OS stream a
-      // `watch_file` source's watch rides.
-      fileEvents,
       declare: (holds2, facts, closure, sources) => declareLanes(payloadProviders, holds2, facts, closure, sources),
       // [LAW:single-enforcer] What every session's view draws from: its payload
       // derived over its declaration, its picks and its histories' depths.
@@ -84960,6 +85052,7 @@ function createDaemon(inputs) {
     journalTurns,
     linkSigner: linkSigner2,
     runs,
+    sourceRuns,
     laneSetups,
     tmuxStatusLines,
     frameFeeds,
@@ -85027,6 +85120,9 @@ function createDaemon(inputs) {
         ["tmuxService close", () => tmuxService.close()],
         ["hostService close", () => hostService.close()],
         ["runs close", () => runs.close()],
+        // After the render cache: its states' registries release their holds
+        // first, so this close drops nothing a registry still reads.
+        ["sourceRuns close", () => sourceRuns.close()],
         ["managedStorage close", () => managedStorage.close()],
         ["fileEvents close", () => fileEvents.close()],
         ["watcherRegistry close", () => watcherRegistry.closeAll()],
@@ -85571,7 +85667,7 @@ function regularFileWith(file, mode) {
     return false;
   }
 }
-function canonical(file) {
+function canonical2(file) {
   try {
     return fs_default.realpathSync(file);
   } catch {
@@ -85582,7 +85678,7 @@ function canonical(file) {
 // src/attach-preload.ts
 init_globals();
 var import_node_path45 = __toESM(require_path_browserify(), 1);
-function launcherNode(pathVariable, isExecutable, canonical2) {
+function launcherNode(pathVariable, isExecutable, canonical3) {
   const node = executableOn("node", pathVariable, isExecutable);
   if (node === null) {
     return {
@@ -85590,7 +85686,7 @@ function launcherNode(pathVariable, isExecutable, canonical2) {
       why: "no `node` on PATH to run the attach launcher"
     };
   }
-  return import_node_path45.default.basename(canonical2(node)) === "bun" ? {
+  return import_node_path45.default.basename(canonical3(node)) === "bun" ? {
     kind: "refused",
     why: `the \`node\` on PATH (${node}) is Bun; the attach launcher runs under Node`
   } : { kind: "node", file: node };
@@ -85810,7 +85906,7 @@ function productionLaneEdge(launcher, following, closing, clock, probe2) {
     launcherNode: (pathVariable) => launcherNode(
       pathVariable,
       (f) => regularFileWith(f, fs_default.constants.X_OK),
-      canonical
+      canonical2
     ),
     onPath: (name, pathVariable) => {
       const file = executableOn(

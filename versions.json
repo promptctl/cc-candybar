@@ -2,67 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-614",
-      "ref": "refs/pull/614/merge",
-      "sha": "9d46f4b4cdf831153f958cdd48f952a00c16bcf2",
-      "timestamp": "2026-11-03T15:49:30.988Z",
-      "commits": [
-        {
-          "sha": "9d46f4b4cdf831153f958cdd48f952a00c16bcf2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T15:47:59Z",
-          "message": "Merge a9612f6ab46476993b6f79858c2ad72c20fabddb into 8067e9a72297c93efa9dd1063cfd8f2ca5ced0c1\n"
-        },
-        {
-          "sha": "a9612f6ab46476993b6f79858c2ad72c20fabddb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T08:47:38-07:00",
-          "message": "fix(sources): medium-pass fixes — one-shot owners close their runs, one canonical digest, errno on unreadable file (candybar-gather-renderer-76bb.6pj.5dx)\n"
-        },
-        {
-          "sha": "2fea65a2d1e405e52f0b1818e54c18aeac3e0f6d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T08:24:50-07:00",
-          "message": "fix(sources): an abandoned read is the ledger's own count, the run owner's stats reach the stats reply, and a watch takes the held guard (candybar-gather-renderer-76bb.6pj.5dx)\n"
-        },
-        {
-          "sha": "7169833bdde5f79bcac7febf441f41ddfbdebca0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T08:00:44-07:00",
-          "message": "test(sources): two views keyed on one drawn depth share one run (candybar-gather-renderer-76bb.6pj.5dx)\n"
-        },
-        {
-          "sha": "686d45fbb52a0d94ac995c15b50d56c7b482f870",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T07:55:38-07:00",
-          "message": "feat(sources): a source's identity is a digest, one digest is one run, and a moved key's old value stands until the new run lands (candybar-gather-renderer-76bb.6pj.5dx)\n\nA shell or file source is identified by a digest of what its run needs (the\nread, the parser without its default, the normalised policy, the hash of the\nkey's value), and one daemon-wide owner, two KeyedSource instances by read\nkind, runs each identity once for every registry that holds it. The registry\nholds entries through Holds, publishes only answered readings into its node,\nand derives what a request waits on from the lanes still pending. KeyedSource\ntakes its per-entry refresh, a watch per entry and the flight's abort signal\nas spec data; an abandoned read is its own event, not a failure. The ledger\nrecords user sources per read kind (source.shell, source.file), each refresh\nnaming its digest and how many homes share it.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "189bd5bed066e328ad699ec236391defbfcc4106",
-      "timestamp": "2026-11-03T14:39:33.685Z",
+      "sha": "b744cf603e403a589c9d9d397312a7fdece6ad65",
+      "timestamp": "2026-11-03T15:57:36.246Z",
       "commits": [
         {
-          "sha": "189bd5bed066e328ad699ec236391defbfcc4106",
+          "sha": "b744cf603e403a589c9d9d397312a7fdece6ad65",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T07:38:20-07:00",
-          "message": "feat(facts): the draw's today and sources count are read from the document (#613)\n\n* feat(facts): the draw's today and sources count are read from the document (candybar-gather-renderer-76bb.6pj.ktv)\n\nThe today fact now carries everything the draw's day projection reads: the\ndirectory's day sums and the rendering session's own days, with the session's\ningest failure as the fact failing. projectToday is a pure function of that\nfact and the draw's instant, so todayOf takes no store, lane or ledger, and\nthe draw and the demo read the view's document. The render event's source\ncounts read the document's sources too. check projects a fixture fact through\nthe same todayOf, so CHECK_TODAY is gone.\n\n* refactor(facts): the today projection leaves the store, and the fact holds only days the sums lack (candybar-gather-renderer-76bb.6pj.ktv)\n\nThe projection, its types and the day arithmetic are pure, and sat in the\nmodule that owns pricing, transcript reads and observables; check and the\ndraw now value-import a small module of their own.\n\nThe session's days enter the fact only when its transcript lies outside the\nset's projects, decided by the store's read (daysOutside), so the projection\nloses its roots branch and a session under the roots no longer moves the\ndocument on every ingest.\n\nA one-day sums constructor replaces the two hand-built copies, and the\ndocument test spells its expected today fact instead of calling the\nproduction reading.\n\n* refactor(facts): the today read goes through the readings' one read (candybar-gather-renderer-76bb.6pj.ktv)\n\nEvery other owner read in the readings is behind one wrapper that answers the\nrefresh's fault first and turns a throw into that lane's failure, logged. The\ntoday fact was the one read outside it, with its own copy of the fault check.\nIt now goes through the wrapper, so a throw costs the today cells and not the\nbar, and the fault is judged in one place.\n\nThe tests read today the way the draw does (through the readings), and the two\npaths the wrapper owns for today are pinned in the frame payload tests."
+          "timestamp": "2026-11-03T08:56:19-07:00",
+          "message": "feat(sources): a source's identity is a digest, one digest is one run (candybar-gather-renderer-76bb.6pj.5dx) (#614)\n\n* feat(sources): a source's identity is a digest, one digest is one run, and a moved key's old value stands until the new run lands (candybar-gather-renderer-76bb.6pj.5dx)\n\nA shell or file source is identified by a digest of what its run needs (the\nread, the parser without its default, the normalised policy, the hash of the\nkey's value), and one daemon-wide owner, two KeyedSource instances by read\nkind, runs each identity once for every registry that holds it. The registry\nholds entries through Holds, publishes only answered readings into its node,\nand derives what a request waits on from the lanes still pending. KeyedSource\ntakes its per-entry refresh, a watch per entry and the flight's abort signal\nas spec data; an abandoned read is its own event, not a failure. The ledger\nrecords user sources per read kind (source.shell, source.file), each refresh\nnaming its digest and how many homes share it.\n\n* test(sources): two views keyed on one drawn depth share one run (candybar-gather-renderer-76bb.6pj.5dx)\n\n* fix(sources): an abandoned read is the ledger's own count, the run owner's stats reach the stats reply, and a watch takes the held guard (candybar-gather-renderer-76bb.6pj.5dx)\n\n* fix(sources): medium-pass fixes — one-shot owners close their runs, one canonical digest, errno on unreadable file (candybar-gather-renderer-76bb.6pj.5dx)"
         },
         {
-          "sha": "4f659d913a2ae8b1bd0c402446dc984ad58defe9",
+          "sha": "8067e9a72297c93efa9dd1063cfd8f2ca5ced0c1",
           "author_name": "semantic-release-bot",
           "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-03T14:30:53Z",
-          "message": "chore(release): set `package.json` to 1.187.0 [skip ci]\n\n## [1.187.0](https://github.com/promptctl/cc-candybar/compare/v1.186.0...v1.187.0) (2026-11-03)\n\n### Features\n\n* **sources:** the shell reader has a read timeout (candybar-gather-renderer-76bb.6pj.dal) ([#612](https://github.com/promptctl/cc-candybar/issues/612)) ([4a53ad2](https://github.com/promptctl/cc-candybar/commit/4a53ad24cd95fa2ed074025955271337c3bf3653))\n"
+          "timestamp": "2026-11-03T14:51:30Z",
+          "message": "chore(release): set `package.json` to 1.188.0 [skip ci]\n\n## [1.188.0](https://github.com/promptctl/cc-candybar/compare/v1.187.0...v1.188.0) (2026-11-03)\n\n### Features\n\n* **facts:** the draw's today and sources count are read from the document ([#613](https://github.com/promptctl/cc-candybar/issues/613)) ([189bd5b](https://github.com/promptctl/cc-candybar/commit/189bd5bed066e328ad699ec236391defbfcc4106))\n"
         }
       ]
     }
