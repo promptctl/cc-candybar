@@ -191,8 +191,12 @@ export class PricingService {
           let size = 0;
           const MAX_SIZE = 1024 * 1024;
 
-          response.on("data", (chunk) => {
-            size += chunk.length;
+          // A multi-byte character can straddle two reads; the response's own
+          // decoder holds the partial bytes until the rest arrive. The cap is in
+          // bytes, so a decoded chunk is measured by its encoded size.
+          response.setEncoding("utf8");
+          response.on("data", (chunk: string) => {
+            size += Buffer.byteLength(chunk);
             if (size > MAX_SIZE) {
               debug("Response too large");
               request.destroy();
