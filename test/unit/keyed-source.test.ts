@@ -489,4 +489,17 @@ describe("KeyedSource", () => {
     await jest.advanceTimersByTimeAsync(EVERY.okMs * 5);
     expect(f.calls).toHaveLength(1);
   });
+
+  test("a declaration after close is answered as closed: it reads nothing and arms no period", async () => {
+    const f = fakeRead();
+    source = sourceOf(f.read);
+    source.close();
+    const lane = source.declare(new Holds(), "a");
+    expect(lane.current()).toEqual(failed("fake closed"));
+    source.supersede("a")();
+    await jest.advanceTimersByTimeAsync(EVERY.okMs * 5);
+    expect(f.calls).toHaveLength(0);
+    expect(source.stats()).toMatchObject({ entries: 0, held: 0 });
+    expect(jest.getTimerCount()).toBe(0);
+  });
 });

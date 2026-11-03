@@ -36,7 +36,7 @@ import { RefreshLedger } from "../src/utils/refresh-ledger";
 import type { ClaudeHookData } from "../src/utils/claude";
 import { Holds } from "../src/utils/holds";
 import { instantOf } from "../src/utils/instant";
-import { ABSENT, PENDING } from "../src/utils/outcome";
+import { ABSENT, PENDING, failed } from "../src/utils/outcome";
 import { FOLD_WINDOW_BYTES } from "../src/utils/transcript-fs";
 import { until } from "./helpers/until";
 import { todayInfo, todayNow } from "./helpers/today";
@@ -1138,5 +1138,17 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     } finally {
       store.close();
     }
+  });
+
+  test("a closed store answers a late declaration of today as closed", () => {
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      sweepIntervalMs: 0,
+    });
+    store.close();
+    expect(store.declareToday(new Holds(), undefined).current()).toEqual(
+      failed("usage store closed"),
+    );
   });
 });
