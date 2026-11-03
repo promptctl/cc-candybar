@@ -63,7 +63,7 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError, parseDslConfig } from "../src/config/dsl-loader";
 import { authoredFragment } from "../src/daemon/config-file-store";
 import { testVerbContext, effectsOf } from "./helpers/click";
-import { parseHandlerUrl } from "../src/install/index";
+import { linkClick } from "./helpers/click";
 import {
   encodeSegments,
   parseEffects,
@@ -591,7 +591,7 @@ function buildLayoutRuntime(src: string, sessionId = "s1") {
     log: (_level, message) => log.push(message),
   };
   const click = async (url: string): Promise<void> => {
-    const { verb, value } = parseHandlerUrl(url);
+    const { verb, value } = linkClick(url);
     const effects =
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
     for (const e of effects) {

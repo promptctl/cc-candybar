@@ -33,7 +33,7 @@ import {
   type TranscriptSaid,
 } from "../daemon/render-sightings.js";
 import type { DeclKind, UnusedDecl } from "../config/unused.js";
-import type { SightingScope } from "./sightings.js";
+import type { Delivery, SightingScope } from "./sightings.js";
 import {
   approachingLimit,
   chargeWords,
@@ -112,29 +112,27 @@ export type ConfigFacts = {
     }
 );
 
-// The app Launch Services opens `cc-candybar://` with, and the files its
-// script runs that are not on disk (or why the script could not be read).
+// The app Launch Services opens `cc-candybar://` with, and whether it is the
+// forwarder `cc-candybar install` builds: its executable sits where install
+// puts it. An applet from an older install, or a bundle whose executable is
+// gone, is not.
 export interface HandlerApp {
   readonly app: string;
-  readonly missing: Asked<readonly string[]>;
+  readonly forwarder: boolean;
 }
 
 // [LAW:types-are-the-program] What became of a `cc-candybar://` link. The one
 // proof that the URL handler works is a link coming back through it, so that
-// is the discriminator: `arrived` carries the version the handler that
-// delivered it reports (null from one too old to say) beside the bar's own;
-// `lost` carries what the system says about why — only a lost link is
-// diagnosed, an arrived one needs no explanation. `unsupported` is a platform
-// with no handler (clicks are macOS-only), `unprobed` a probe that could not
-// be attempted.
+// is the discriminator: `arrived` carries who delivered it — a forwarder
+// cannot go stale, so it is proof enough; the CLI means the retired applet is
+// still registered; `lost` carries what the system says about why — only a
+// lost link is diagnosed, an arrived one needs no explanation. `unsupported`
+// is a platform with no handler (clicks are macOS-only), `unprobed` a probe
+// that could not be attempted.
 export type UrlHandlerFacts =
   | { readonly kind: "unsupported" }
   | { readonly kind: "unprobed"; readonly reason: string }
-  | {
-      readonly kind: "arrived";
-      readonly handler: string | null;
-      readonly bar: string;
-    }
+  | { readonly kind: "arrived"; readonly delivery: Delivery }
   | {
       readonly kind: "lost";
       // Why the link could not be opened at all, or null: it was opened.
@@ -852,18 +850,17 @@ function handlerAppProblems(opener: Asked<HandlerApp | null>): string[] {
   if (opener.value === null) {
     return [`no app is registered for cc-candybar:// — ${REINSTALL}`];
   }
-  const { app, missing } = opener.value;
-  return missing.kind === "failed"
-    ? [`${app} opens cc-candybar://, but ${missing.reason} — ${REINSTALL}`]
-    : missing.value.map(
-        (file) => `${file} is missing, and ${app} runs it — ${REINSTALL}`,
-      );
+  const { app, forwarder } = opener.value;
+  return forwarder
+    ? []
+    : [
+        `${app} opens cc-candybar://, but it is not the forwarder app \`cc-candybar install\` builds — ${REINSTALL}`,
+      ];
 }
 
 // "The URL handler works" (brandon-doctor-v62x.a1z): a `cc-candybar://` link
-// comes back through it, delivered by the version the bar runs. In the bar the
-// doctor's own click is that link; the CLI opens one and asks the daemon
-// whether it arrived.
+// comes back through the forwarder app. In the bar the doctor's own click is
+// that link; the CLI opens one and asks the daemon whether it arrived.
 const urlHandler: Check = {
   name: "urlHandler",
   label: "URL handler",
@@ -875,13 +872,10 @@ const urlHandler: Check = {
       case "unprobed":
         return { ok: false, reason: urlHandler.reason };
       case "arrived":
-        if (urlHandler.handler === urlHandler.bar) return { ok: true };
+        if (urlHandler.delivery.kind === "forwarder") return { ok: true };
         return {
           ok: false,
-          reason:
-            urlHandler.handler === null
-              ? `the URL handler does not report its version, so it is older than the bar (${urlHandler.bar}) — ${REINSTALL}`
-              : `the URL handler runs cc-candybar ${urlHandler.handler}; the bar runs ${urlHandler.bar} — ${REINSTALL}`,
+          reason: `the link was delivered by \`cc-candybar url-handle\`, not the forwarder app, so the URL handler is the retired AppleScript applet — ${REINSTALL}`,
         };
       case "lost":
         return problemsVerdict([

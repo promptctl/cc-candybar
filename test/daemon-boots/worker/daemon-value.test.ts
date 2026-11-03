@@ -36,7 +36,7 @@ import {
   type Response,
 } from "../../../src/daemon/protocol";
 import type { SessionStorage } from "../../../src/daemon/session-state";
-import { parseHandlerUrl } from "../../../src/install/index";
+import { linkClick } from "../../helpers/click";
 import { parseFrame, textOf, type Frame } from "../../../src/render/frame";
 import { PACKAGE_VERSION } from "../../../src/version";
 import { hookData } from "../../helpers/daemon-e2e";
@@ -166,13 +166,12 @@ describe("the daemon is a value", () => {
   };
 
   const clickLink = (daemon: Daemon, url: string): Promise<Response> => {
-    const { verb, value } = parseHandlerUrl(url);
+    const { verb, value } = linkClick(url);
     return reply(daemon, {
       v: PROTOCOL_VERSION,
       kind: "click",
       verb,
       value,
-      clientVersion: PACKAGE_VERSION,
     });
   };
 

@@ -120,7 +120,7 @@ describe("RuntimeStats.snapshot", () => {
       tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
       watchersActive: 2,
       dirWatchesActive: 5,
-      handlerProbes: [{ nonce: "n", handler: "1.2.3" }],
+      handlerProbes: [{ nonce: "n", delivery: { kind: "forwarder", urlV: 1 } }],
       clients: [
         {
           client: null,
@@ -144,7 +144,9 @@ describe("RuntimeStats.snapshot", () => {
       },
       doctorStores: EMPTY_STORES,
     });
-    expect(snap.handlerProbes).toEqual([{ nonce: "n", handler: "1.2.3" }]);
+    expect(snap.handlerProbes).toEqual([
+      { nonce: "n", delivery: { kind: "forwarder", urlV: 1 } },
+    ]);
     expect(snap.clients).toEqual([
       {
         client: null,

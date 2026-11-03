@@ -44,7 +44,7 @@ import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError } from "../src/config/dsl-loader";
 import { testVerbContext, effectsOf } from "./helpers/click";
-import { parseHandlerUrl } from "../src/install/index";
+import { linkClick } from "./helpers/click";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { VERBS } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
@@ -188,7 +188,7 @@ function buildEditRuntime(src: string, sessionId = "s1") {
     configFor: () => config,
   };
   const click = async (url: string): Promise<void> => {
-    const { verb, value } = parseHandlerUrl(url);
+    const { verb, value } = linkClick(url);
     const effects =
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
     for (const e of effects) {

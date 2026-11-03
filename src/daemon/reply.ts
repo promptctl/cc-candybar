@@ -8,12 +8,17 @@ import {
   checkRenderRequest,
   type CheckedRenderRequest,
 } from "./render-checkpoint.js";
-import { PROTOCOL_VERSION, sanitizeClientVersion } from "./protocol";
+import {
+  classifyInbound,
+  PROTOCOL_VERSION,
+  URL_FRAME_VERSIONS,
+} from "./protocol";
 import type {
   ClickRequest,
   Request,
   Response,
   SubscribeRequest,
+  UrlFrame,
 } from "./protocol";
 import { parseSessionId, type SessionId } from "./session-id";
 import { type SourceSnapshots } from "./stats";
@@ -27,10 +32,9 @@ import {
 import { ClickAbandoned, DaemonClosing } from "./verb-error";
 import { transcriptReads } from "../utils/transcript-fs.js";
 import { readStores } from "../doctor/edge";
-import type { ClickArrival } from "../doctor/sightings";
+import { clientWaits, type ClickArrival } from "../doctor/sightings";
 import { transcriptSaid, type FrameSeen } from "./render-sightings";
 import { claudeConfigDir } from "../claude-settings";
-import { decodeWire } from "./verb-error";
 import { buildDebugSnapshot } from "./debug";
 import { DEBUG_WHATS, isDebugWhat } from "./debug-types";
 import {
@@ -42,8 +46,7 @@ import { floorOf } from "../config/globals-fields.js";
 import type { RichText } from "@promptctl/rich-js";
 import { LANE_NAMES, parseLane, type Lane } from "../config/lanes.js";
 import { answeredClickError } from "./click-error.js";
-import { VERB_TMUX_STATUS_CLICK } from "../click/wire.js";
-import { parseHandlerUrl } from "../install/index.js";
+import { parseHandlerUrl, VERB_TMUX_STATUS_CLICK } from "../click/wire.js";
 import { instantOf } from "../utils/instant.js";
 import { waitBudgetMs } from "./request-deadline.js";
 import {
@@ -130,11 +133,24 @@ function subscription(req: SubscribeRequest): HandledRequest {
 
 export async function handleRequest(
   parts: DaemonParts,
-  req: Request,
+  raw: Request,
   timedOut: () => boolean,
   accepted: number,
   clientLeft: () => boolean,
 ): Promise<HandledRequest> {
+  // [LAW:parse-dont-validate] The one classification of an inbound frame: the
+  // URL handler's, which carries its own version and is judged by the click
+  // path (every one of them writes a click event, refused ones included), or
+  // a request, which the `v` gate below admits.
+  const inbound = classifyInbound(raw);
+  if (inbound.kind === "url") {
+    return replied(
+      stay(
+        await urlClick(parts, inbound.frame, timedOut, accepted, clientLeft),
+      ),
+    );
+  }
+  const req = inbound.req;
   if (
     !req ||
     typeof req !== "object" ||
@@ -413,34 +429,11 @@ export async function replyTo(
   }
 
   if (req.kind === "click") {
-    // [LAW:nothing-unseen] One click event per click request, whatever its
-    // outcome: how long it was queued behind the loop from its accept, how
-    // long it then took, and what it learned on the way (a status-line
-    // click's link, the verb that ran, its session). A field absent means it
-    // stopped before it.
-    const t0 = clock.monotonic();
-    const facts: RequestFacts = [["queued", `${Math.round(t0 - accepted)}ms`]];
-    const outcome = await clickOutcome(
-      parts,
-      req,
-      facts,
-      () => timedOut() || clientLeft(),
+    return stay(
+      await clickEvent(parts, accepted, timedOut, clientLeft, (facts, gone) =>
+        clickOutcome(parts, req, facts, gone),
+      ),
     );
-    // Whether the client was told TIMEOUT, and whether it hung up, while the
-    // click ran: its effect lands though the client reported a failure. One
-    // still waiting for its turn at either moment was refused (`abandoned`).
-    noteFacts(facts, {
-      timedOut: timedOut() ? "Y" : "N",
-      clientLeft: clientLeft() ? "Y" : "N",
-    });
-    const { level, line } = requestEvent(
-      "click",
-      facts,
-      outcome,
-      Math.round(clock.monotonic() - t0),
-    );
-    parts.log(level, line);
-    return stay(clickReply(outcome));
   }
 
   if (req.kind === "debug") {
@@ -591,6 +584,48 @@ function serializeSegmentCells(
   return out;
 }
 
+// [LAW:nothing-unseen][LAW:single-enforcer] One click event per click,
+// however it arrived (a `click` request, the URL handler's frame), whatever
+// its outcome: how long it was queued behind the loop from its accept, how
+// long it then took, and what it learned on the way (who delivered it, a
+// status-line click's link, the verb that ran, its session). A field absent
+// means it stopped before it.
+async function clickEvent(
+  parts: DaemonParts,
+  accepted: number,
+  timedOut: () => boolean,
+  clientLeft: () => boolean,
+  run: (
+    facts: RequestFacts,
+    gone: (arrival: ClickArrival) => () => boolean,
+  ) => Promise<RequestOutcome>,
+): Promise<Response> {
+  const { clock } = parts;
+  const t0 = clock.monotonic();
+  const facts: RequestFacts = [["queued", `${Math.round(t0 - accepted)}ms`]];
+  // [LAW:dataflow-not-control-flow] When a click still waiting for its turn
+  // is refused: the daemon's own deadline always, the client's hang-up only
+  // from a client that waits for the answer (clientWaits).
+  const gone = (arrival: ClickArrival) => () =>
+    timedOut() || (clientWaits(arrival) && clientLeft());
+  const outcome = await run(facts, gone);
+  // Whether the client was told TIMEOUT, and whether it hung up, while the
+  // click ran: its effect lands though the client reported a failure. One
+  // still waiting for its turn at either moment was refused (`abandoned`).
+  noteFacts(facts, {
+    timedOut: timedOut() ? "Y" : "N",
+    clientLeft: clientLeft() ? "Y" : "N",
+  });
+  const { level, line } = requestEvent(
+    "click",
+    facts,
+    outcome,
+    Math.round(clock.monotonic() - t0),
+  );
+  parts.log(level, line);
+  return clickReply(outcome);
+}
+
 // [LAW:parse-dont-validate][LAW:no-silent-failure] A click request run to its
 // outcome. Its verb and value are untrusted JSON, refused here unless both are
 // strings, and whatever the click then throws is its outcome too, so every
@@ -601,8 +636,10 @@ async function clickOutcome(
   parts: DaemonParts,
   req: ClickRequest,
   facts: RequestFacts,
-  clientGone: () => boolean,
+  gone: (arrival: ClickArrival) => () => boolean,
 ): Promise<RequestOutcome> {
+  const arrival: ClickArrival = { via: "link", delivery: { kind: "cli" } };
+  noteFacts(facts, { via: "cli" });
   const { verb, value } = req as { verb: unknown; value: unknown };
   if (typeof verb !== "string" || typeof value !== "string") {
     return {
@@ -612,15 +649,72 @@ async function clickOutcome(
       ],
     };
   }
+  return clickRan(() =>
+    handleClick(parts, verb, value, arrival, facts, gone(arrival)),
+  );
+}
+
+// [LAW:parse-dont-validate][LAW:no-silent-failure] The URL handler's frame run
+// to its outcome. The app forwards the link raw and reads no answer, so this
+// event is the only place its click is seen: a frame of a version the daemon
+// does not speak, a link of another scheme, or a malformed verb is refused
+// here, as a bad request on the event, never dropped.
+async function urlClick(
+  parts: DaemonParts,
+  frame: Partial<UrlFrame>,
+  timedOut: () => boolean,
+  accepted: number,
+  clientLeft: () => boolean,
+): Promise<Response> {
+  return clickEvent(
+    parts,
+    accepted,
+    timedOut,
+    clientLeft,
+    async (facts, gone) => {
+      const { urlV, url } = frame as { urlV: unknown; url: unknown };
+      noteFacts(facts, { via: "forwarder", urlV: String(urlV) });
+      if (typeof urlV !== "number" || !URL_FRAME_VERSIONS.has(urlV)) {
+        return {
+          kind: "bad-request",
+          problems: [
+            `the URL handler's frame version ${inspect(urlV)} is not one this daemon speaks (${[...URL_FRAME_VERSIONS].join(", ")})`,
+          ],
+        };
+      }
+      if (typeof url !== "string") {
+        return {
+          kind: "bad-request",
+          problems: [`the URL handler's frame carries no url string`],
+        };
+      }
+      const link = parseHandlerUrl(url);
+      if (!link.ok) return { kind: "bad-request", problems: [link.problem] };
+      const arrival: ClickArrival = {
+        via: "link",
+        delivery: { kind: "forwarder", urlV },
+      };
+      return clickRan(() =>
+        handleClick(
+          parts,
+          link.verb,
+          link.value,
+          arrival,
+          facts,
+          gone(arrival),
+        ),
+      );
+    },
+  );
+}
+
+// What a click that reached its verb became: whatever it throws is its
+// outcome, so every click writes its event.
+async function clickRan(
+  click: () => Promise<RequestOutcome>,
+): Promise<RequestOutcome> {
   try {
-    return await handleClick(
-      parts,
-      verb,
-      value,
-      { via: "link", handler: sanitizeClientVersion(req.clientVersion) },
-      facts,
-      clientGone,
-    );
+    return await click();
   } catch (error) {
     if (error instanceof BadVerbArgs)
       return { kind: "bad-request", problems: [error.message] };
@@ -729,7 +823,8 @@ async function statusLineClick(
   if (click.url.startsWith("cc-candybar://")) {
     // A link a config wrote with a malformed escape is refused, as any
     // click's malformed wire encoding is.
-    const parsed = decodeWire(() => parseHandlerUrl(click.url));
+    const parsed = parseHandlerUrl(click.url);
+    if (!parsed.ok) return refused(parsed.problem);
     // [LAW:no-silent-failure] A link the bar draws never names this verb; one
     // that did would be a click that only ever clicks another.
     if (parsed.verb === VERB_TMUX_STATUS_CLICK)

@@ -127,9 +127,10 @@ Subcommands:
                            ~/.claude/settings.json. Re-run to update.
   install-url-handler      Just stage the runtime and create + register the URL
                            handler app (macOS only).
-  url-handle URL           Internal — invoked by the URL handler app on
-                           cmd-click. Parses cc-candybar://<verb>/<value> and
-                           dispatches (currently: copy to clipboard).
+  url-handle URL           Internal — the tmux status line's click binding
+                           runs it. Sends a cc-candybar:// link to the daemon
+                           as a click. A link clicked in a terminal goes
+                           through the URL handler app instead.
   plugin install SOURCE    Install a repository's plugins into
                            $XDG_DATA_HOME/cc-candybar/plugins: SOURCE is a
                            local path, a GitHub slug (owner/repo) or a git URL,

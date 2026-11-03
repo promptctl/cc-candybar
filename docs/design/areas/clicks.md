@@ -17,8 +17,8 @@ This also works after a session moves to another renderer, and for links with no
 ### The route
 
 ```
-OSC 8 link → macOS → handler app → url-handle ─┐
-tmux status range → click binding ─────────────┴→ Gather's socket
+OSC 8 link → macOS → handler app (raw link) ───┐
+tmux status range → click binding → url-handle ┴→ Gather's socket
                      ↓
 Gather finds the renderer among attached connections
                      ↓
@@ -29,7 +29,7 @@ Gather writes the click down that renderer's connection. A link routes by name a
 
 ### The handler changes
 
-Clients keep the default socket, which is the main renderer's, so the Rust hot path doesn't change. The handler has to reach Gather instead, at a new fixed path. That's a real change to `url-handle` and the staged handler, and it ships through reinstall.
+Clients keep the default socket, which is the main renderer's, so the Rust hot path doesn't change. The handler app knows only the socket path and one frame, so moving it to Gather's path is a change to that one path, and it ships through reinstall; `url-handle` follows the daemon that composes its command.
 
 The URL needs no handler change to pass through: `open` on a `to/…` link reached the live daemon as verb `to`, unchanged. Parsing it is the change. `parseHandlerUrl` returns a typed address, and `statusLineClick`, `isBarLink` and `follow()` in `scripts/bar-web/index.html` update to match.
 
@@ -87,7 +87,7 @@ Limits: this used a whole daemon behind a bridge script, and the timing excludes
 
 ## To probe
 
-- **Notification from the applet.** Whether it needs a permission grant, and whether it appears at all.
+- **Notification from the handler app.** Whether it needs a permission grant, and whether it appears at all.
 - **Handler update path.** How a staged handler is replaced on upgrade, and what a click does between a new Gather and an old handler.
 - **Range id characters.** `range=user|…` has only carried hex here. Base 36 needs a check; hex still works, with counters that run out sooner.
 - **Link session at routing time.** Whether `clickSessionOf` works on an addressed link, for raising a refusal on its bar.

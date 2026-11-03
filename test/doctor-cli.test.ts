@@ -91,7 +91,6 @@ const NO_HANDLER: HandlerProbeEdge = {
   open: refuse,
   pause: refuse,
   opener: refuse,
-  script: refuse,
   exists: refuse,
 };
 // The settings file the CLI reads is the one its own CLAUDE_CONFIG_DIR names.

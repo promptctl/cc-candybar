@@ -3,11 +3,10 @@
 //
 // The bar never runs this — a doctor click there already came back through
 // the handler (edge.ts `clickArrived`). The CLI has no click, so it sends a
-// link of its own: Launch Services hands it to the handler app, the app runs
-// `url-handle`, and that delivers the `doctor-probe` verb to the daemon, which
-// lists what arrived in its stats. A link that does not come back is then
-// diagnosed: which app Launch Services opens the scheme with, and whether the
-// files that app's script runs still exist.
+// link of its own: Launch Services hands it to the handler app, which forwards
+// it to the daemon, where the `doctor-probe` verb lists it among the arrivals
+// in its stats. A link that does not come back is then diagnosed: which app
+// Launch Services opens the scheme with, and whether it is the forwarder.
 //
 // [LAW:effects-at-boundaries] Every effect is a member of `HandlerProbeEdge`;
 // `probeUrlHandler` is the sequence over them, and a test hands in its own.
@@ -20,18 +19,17 @@ import { describeFailure } from "../daemon/client-transport.js";
 import { fetchStats, shapeSkew } from "../daemon/client-stats.js";
 import type { ClientWorld } from "../daemon/client-transport.js";
 import { defaultSocketPath, socketPath } from "../daemon/paths.js";
-import { handlerCommand, handlerScriptPath } from "../install/index.js";
+import { forwarderExecutable } from "../install/index.js";
 import type { LaunchCategory, OneShotLauncher } from "../proc/launch.js";
 import type { Asked, HandlerApp, UrlHandlerFacts } from "./checks.js";
+import type { Delivery } from "./sightings.js";
 
 const ok = <T>(value: T): Asked<T> => ({ kind: "ok", value });
 const failed = (reason: string): Asked<never> => ({ kind: "failed", reason });
 
 export interface ProbeArrival {
   readonly nonce: string;
-  // The version the handler that delivered the link reports, or null from
-  // one too old to report it.
-  readonly handler: string | null;
+  readonly delivery: Delivery;
 }
 
 // The daemon's record of the probe links that reached it — the newest few,
@@ -57,10 +55,8 @@ export function parseProbeNonce(value: string): string | null {
   return NONCE.test(value) ? value : null;
 }
 
-// What the CLI needs of the running daemon: the version the bar runs, and the
-// probes that reached it.
+// What the CLI needs of the running daemon: the probes that reached it.
 export interface DaemonView {
-  readonly version: string;
   readonly arrivals: readonly ProbeArrival[];
 }
 
@@ -79,13 +75,11 @@ export interface HandlerProbeEdge {
   readonly pause: () => Promise<void>;
   // The app Launch Services opens the scheme with; null when none claims it.
   readonly opener: () => Asked<string | null>;
-  // The source of the script an app bundle runs.
-  readonly script: (app: string) => Asked<string>;
   readonly exists: (file: string) => boolean;
 }
 
-// Five seconds for Launch Services to start the handler app and node to
-// deliver the link; one not back by then is reported lost.
+// Five seconds for Launch Services to start the handler app and the app to
+// forward the link; one not back by then is reported lost.
 const WAIT_MS = 5000;
 const POLL_MS = 100;
 
@@ -94,23 +88,7 @@ function handlerApp(edge: HandlerProbeEdge): Asked<HandlerApp | null> {
   if (opener.kind === "failed") return opener;
   if (opener.value === null) return ok(null);
   const app = opener.value;
-  const source = edge.script(app);
-  if (source.kind === "failed") {
-    return ok({
-      app,
-      missing: failed(`its script could not be read (${source.reason})`),
-    });
-  }
-  const command = handlerCommand(source.value);
-  return ok({
-    app,
-    missing:
-      command === null
-        ? failed("its script is not one `cc-candybar install` wrote")
-        : ok(
-            [command.node, command.script].filter((file) => !edge.exists(file)),
-          ),
-  });
+  return ok({ app, forwarder: edge.exists(forwarderExecutable(app)) });
 }
 
 async function awaitArrival(
@@ -129,11 +107,7 @@ async function awaitArrival(
         ? view.value.arrivals.find((a) => a.nonce === nonce)
         : undefined;
     if (view.kind === "ok" && arrival !== undefined) {
-      return {
-        kind: "arrived",
-        handler: arrival.handler,
-        bar: view.value.version,
-      };
+      return { kind: "arrived", delivery: arrival.delivery };
     }
   }
   return null;
@@ -208,8 +182,7 @@ async function daemonView(world: ClientWorld): Promise<Asked<DaemonView>> {
   // the probe: told by the one shape comparison daemon-stats makes.
   const skew = shapeSkew(outcome.value, ["handlerProbes"]);
   if (skew !== null) return failed(skew);
-  const { version, handlerProbes } = outcome.value;
-  return ok({ version, arrivals: handlerProbes });
+  return ok({ arrivals: outcome.value.handlerProbes });
 }
 
 export function productionHandlerProbeEdge(
@@ -240,10 +213,6 @@ export function productionHandlerProbeEdge(
       const app = asked.value.trim();
       return ok(app === "" ? null : app);
     },
-    script: (app) =>
-      run(launcher, "doctor.osadecompile", "/usr/bin/osadecompile", [
-        handlerScriptPath(app),
-      ]),
     exists: fs.existsSync,
   };
 }

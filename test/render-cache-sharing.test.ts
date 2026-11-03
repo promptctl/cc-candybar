@@ -39,7 +39,7 @@ import { effectsOf } from "./helpers/click";
 import { recordRender, testVerbContext } from "./helpers/click";
 import { VERBS } from "../src/daemon/verbs";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
-import { parseHandlerUrl } from "../src/install/index";
+import { linkClick } from "./helpers/click";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
@@ -527,7 +527,7 @@ test("an entry, a compile and a view hold no more than the cache charges for the
       const hit = linksOf(last).find((l) => l.text === text);
       if (hit === undefined)
         throw new Error(`no link "${text}" in:\n${textOf(last)}`);
-      const { verb, value } = parseHandlerUrl(hit.url);
+      const { verb, value } = linkClick(hit.url);
       const effects =
         verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
       for (const e of effects) await VERBS.get(e.verb)!(e.value, ctx);

@@ -348,19 +348,48 @@ export interface ShutdownRequest {
   kind: "shutdown";
 }
 
+// A click as `cc-candybar url-handle` sends it: the verb and value already
+// split. The tmux status line's click binding runs that command.
 export interface ClickRequest {
   v: number;
   kind: "click";
   verb: string;
   value: string;
-  // The package version of the client that delivered the click — the URL
-  // handler's staged runtime, or a page whose daemon runs in it. Absent from
-  // a handler too old to report it.
-  clientVersion?: string;
 }
 
-export function sanitizeClientVersion(v: unknown): string | null {
-  return typeof v === "string" && v !== "" && v.length <= 64 ? v : null;
+// [LAW:types-are-the-program] A link as the URL handler app forwards it: the
+// raw `cc-candybar://` string, nothing split, nothing decoded. The frame is
+// versioned by itself (`urlV`), never by PROTOCOL_VERSION: the app is resident
+// and knows nothing a release changes, so a daemon upgrade must not refuse it,
+// and the daemon accepts every `urlV` it has shipped (URL_FRAME_VERSIONS).
+// Not a member of `Request`, which is what the `v` gate admits. Mirrored by
+// url-handler/main.swift, the one frame that app spells, and pinned by
+// scripts/check-protocol.mjs.
+export const URL_FRAME_KIND = "url";
+export const URL_FRAME_VERSION = 1;
+export const URL_FRAME_VERSIONS: ReadonlySet<number> = new Set([1]);
+
+export interface UrlFrame {
+  kind: typeof URL_FRAME_KIND;
+  urlV: number;
+  url: string;
+}
+
+// [LAW:parse-dont-validate] What came in over the wire, classified once at
+// the checkpoint: the URL handler's frame, or a request the `v` gate judges.
+// A url frame of any shape goes to the click path, which refuses what it
+// cannot read with the click event that says so; nothing about it is judged
+// here.
+export type Inbound =
+  | { readonly kind: "url"; readonly frame: Partial<UrlFrame> }
+  | { readonly kind: "request"; readonly req: Request };
+
+export function classifyInbound(raw: unknown): Inbound {
+  return typeof raw === "object" &&
+    raw !== null &&
+    (raw as { kind?: unknown }).kind === URL_FRAME_KIND
+    ? { kind: "url", frame: raw as Partial<UrlFrame> }
+    : { kind: "request", req: raw as Request };
 }
 
 export interface StatsRequest {

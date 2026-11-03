@@ -3,11 +3,11 @@
 // drive-bar harness, the benchmark, and the page that runs the daemon in the
 // browser (site/) read links through here, the one same way.
 
-import { parseHandlerUrl } from "../install/index";
 import type { Frame } from "../render/frame";
 import {
   decodeSegments,
   parseEffects,
+  parseHandlerUrl,
   URL_SCHEME,
   VERB_APPLY_UPDATE,
   VERB_RUN,
@@ -75,9 +75,18 @@ function decodeArgs(verb: string, value: string): string[] {
   return [decodeURIComponent(value)];
 }
 
+// [LAW:no-silent-failure] A link a bar DREW, as the daemon splits it. A reader
+// of drawn links holds links the renderer wrote, so one the daemon would refuse
+// is a bug in the draw, thrown here rather than carried as a refusal.
+export function clickOf(url: string): { verb: string; value: string } {
+  const link = parseHandlerUrl(url);
+  if (!link.ok) throw new Error(link.problem);
+  return { verb: link.verb, value: link.value };
+}
+
 /** A click URL's ordered effect list (verb + decoded args); a direct URL is the one-effect case. */
 export function effectsOf(url: string): DecodedEffect[] {
-  const { verb, value } = parseHandlerUrl(url);
+  const { verb, value } = clickOf(url);
   if (verb !== VERB_DISPATCH) return [{ verb, args: decodeArgs(verb, value) }];
   return parseEffects(value).map((e) => ({
     verb: e.verb,

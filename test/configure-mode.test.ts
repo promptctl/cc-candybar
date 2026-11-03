@@ -23,7 +23,7 @@ import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { clickUrl, effectsOf } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
-import { parseHandlerUrl } from "../src/install/index";
+import { linkClick } from "./helpers/click";
 import {
   parseEffects,
   VERB_DISPATCH,
@@ -693,7 +693,7 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
       encodeLayoutOp({ op: "remove", target: "vcs" }),
     );
     const logged: string[] = [];
-    const { verb, value } = parseHandlerUrl(remove);
+    const { verb, value } = linkClick(remove);
     const [effect] =
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
     await VERBS.get(effect!.verb)!(effect!.value, {

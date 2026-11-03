@@ -14,13 +14,30 @@ import type {
 } from "../daemon/render-sightings.js";
 import { RECENT_CLIENT_S } from "./checks.js";
 
-// How a doctor click reached the daemon: a link the terminal drew, delivered
-// by the URL handler (its version, or null from one too old to report it), or
-// a range of the tmux status line, which tmux's own binding runs — proof that
-// the bar is on screen, and of nothing about links or the handler.
+// [LAW:types-are-the-program] Who delivered a link to the daemon: the URL
+// handler app, forwarding it raw in a frame of the version it spells, or
+// `cc-candybar url-handle`, which splits the verb itself — run by the tmux
+// status line's click binding, or by the retired AppleScript applet an old
+// install left registered for the scheme.
+export type Delivery =
+  | { readonly kind: "forwarder"; readonly urlV: number }
+  | { readonly kind: "cli" };
+
+// How a click reached the daemon: a link the terminal drew, with who delivered
+// it, or a range of the tmux status line, which tmux's own binding runs — proof
+// that the bar is on screen, and of nothing about links or the handler.
 export type ClickArrival =
-  | { readonly via: "link"; readonly handler: string | null }
+  | { readonly via: "link"; readonly delivery: Delivery }
   | { readonly via: "tmux-status" };
+
+// [LAW:dataflow-not-control-flow] Whether the client that brought the click
+// stays for the answer, as a fact of its arrival: the forwarder writes its
+// frame and hangs up by design, so its leaving says nothing about the click,
+// which still waits for its turn. Every other client holds the socket until
+// answered, so its leaving abandons a click still queued.
+export function clientWaits(arrival: ClickArrival): boolean {
+  return arrival.via === "tmux-status" || arrival.delivery.kind === "cli";
+}
 
 // [LAW:types-are-the-program] One session's bar, however long it has been
 // idle — `clicked`: a click on its 🩺, so the bar is cc-candybar's and on

@@ -68,6 +68,7 @@ const TS_GLYPH = "src/render/error-glyph.ts";
 const TS_DIAG_TEXT = "src/render/diagnostic-text.ts";
 const TS_STYLE = "src/render/diagnostic-style.ts";
 const TS_PATHS = "src/daemon/paths.ts";
+const TS_PROTOCOL_PATHS = TS_PATHS;
 const TS_ACQUIRE = "src/daemon/acquire.ts";
 const TS_LIMITS_TEST = "test/daemon-limits.test.ts";
 const TS_LIMITS = "src/daemon/limits.ts";
@@ -82,6 +83,9 @@ const JS_PUSH = "vendor/cc-extra/src/statusline-push.js";
 const TS_ENTRY = "src/index.ts";
 const TS_DEBUG_TYPES = "src/daemon/debug-types.ts";
 const RS_FOLLOW = "rust-client/src/follow.rs";
+// The URL handler app, the fourth runtime speaking the wire: one frame (the
+// header and the `url` kind, versioned by itself) and the socket path.
+const SWIFT_HANDLER = "url-handler/main.swift";
 
 // The names of the native client's own subcommands that Node does NOT also
 // name. Compared against the native list itself, so the row agrees exactly
@@ -158,9 +162,52 @@ function followerCodesTheDaemonSends() {
   return reads.within(followerCodes(), errorCodes());
 }
 
-// [LAW:one-source-of-truth] A row's mirror is the Rust client (`rust`) or
-// the vendored statusline push (`push`); the runner diffs either against TS.
+// [LAW:one-source-of-truth] A row's mirror is the Rust client (`rust`), the
+// vendored statusline push (`push`) or the Swift URL handler (`swift`); the
+// runner diffs any of them against TS.
 const CHECKS = [
+  {
+    label: "FRAME_HEADER_BYTES, as the URL handler writes frames",
+    ts: num(TS_PROTOCOL, /export const FRAME_HEADER_BYTES = ([\d\s*]+);/),
+    swift: num(SWIFT_HANDLER, /^let FRAME_HEADER_BYTES = ([\d\s*]+)$/m),
+  },
+  {
+    label: "frame-header byte order, as the URL handler writes it",
+    ts: markers(TS_PROTOCOL, [/writeUInt32BE/], "u32 big-endian"),
+    swift: markers(SWIFT_HANDLER, [/UInt32\(body\.count\)\.bigEndian/], "u32 big-endian"),
+  },
+  {
+    label: "the URL handler's frame kind",
+    ts: lit(TS_PROTOCOL, /export const URL_FRAME_KIND = "([a-z]+)";/),
+    swift: lit(SWIFT_HANDLER, /^let URL_FRAME_KIND = "([a-z]+)"$/m),
+  },
+  {
+    label: "the URL handler's frame version",
+    ts: num(TS_PROTOCOL, /export const URL_FRAME_VERSION = ([\d\s*]+);/),
+    swift: num(SWIFT_HANDLER, /^let URL_FRAME_VERSION = ([\d\s*]+)$/m),
+  },
+  // The frame's field names, as the daemon reads them and the app writes them.
+  {
+    label: "the URL handler's frame fields",
+    ts: memberSet(TS_PROTOCOL, /export interface UrlFrame \{[\s\S]+?\n\}/, /^ {2}(\w+):/gm),
+    swift: memberSet(SWIFT_HANDLER, /withJSONObject: \[[^\]]+\]/, /"(\w+)":/g),
+  },
+  // The default socket path: under /tmp, by uid, as src/daemon/paths.ts
+  // derives it. The app starts with no shell's environment, so it has no
+  // override to honour.
+  {
+    label: "the default socket path, as the URL handler derives it",
+    ts: markers(
+      TS_PROTOCOL_PATHS,
+      [/path\.join\("\/tmp", `cc-candybar-\$\{uid\}`, "socket"\)/],
+      "/tmp/cc-candybar-<uid>/socket",
+    ),
+    swift: markers(
+      SWIFT_HANDLER,
+      [/"\/tmp\/cc-candybar-\\\(uid\)\/socket"/],
+      "/tmp/cc-candybar-<uid>/socket",
+    ),
+  },
   {
     label: "lane B's name, as the statusline push subscribes",
     ts: lit(TS_LANES, /^ {2}(statusline): \{/m),
@@ -538,10 +585,11 @@ const CHECKS = [
 
 // --- runner ----------------------------------------------------------------
 
+const MIRRORS = { rust: "Rust", push: "statusline push", swift: "Swift URL handler" };
 const failures = [];
 for (const row of CHECKS) {
-  const [mirrorName, mirror] =
-    "rust" in row ? ["Rust", row.rust] : ["statusline push", row.push];
+  const key = Object.keys(MIRRORS).find((k) => k in row);
+  const [mirrorName, mirror] = [MIRRORS[key], row[key]];
   const tsValue = row.ts();
   const mirrorValue = mirror();
   if (tsValue === null || mirrorValue === null) {
@@ -564,5 +612,5 @@ if (failures.length > 0) {
 }
 
 console.log(
-  `check-protocol: ${CHECKS.length} mirrored constants verified (TS, Rust and the statusline push agree).`,
+  `check-protocol: ${CHECKS.length} mirrored constants verified (TS, Rust, the statusline push and the Swift URL handler agree).`,
 );

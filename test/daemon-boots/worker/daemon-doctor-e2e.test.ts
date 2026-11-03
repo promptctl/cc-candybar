@@ -43,10 +43,12 @@ import {
   VERB_DOCTOR_RUN,
   VERB_LOAD_CONFIG,
 } from "../../../src/click/wire";
-import { PROTOCOL_VERSION } from "../../../src/daemon/protocol";
+import {
+  PROTOCOL_VERSION,
+  URL_FRAME_KIND,
+  URL_FRAME_VERSION,
+} from "../../../src/daemon/protocol";
 import { sendDaemonRequest } from "../../helpers/daemon-wire";
-import { tryClickViaDaemon } from "../../../src/daemon/client";
-import { parseHandlerUrl } from "../../../src/install/index";
 import { checkByName } from "../../../src/doctor/checks";
 import {
   probeUrlHandler,
@@ -54,7 +56,6 @@ import {
 } from "../../../src/doctor/handler-probe";
 import { DEFAULT_TERMINAL_WIDTH } from "../../../src/render/strip";
 import { applyClaudeCodeReserve } from "../../../src/utils/terminal-width";
-import { PACKAGE_VERSION } from "../../../src/version";
 import { loggedLines, renderLines } from "../../helpers/daemon-log";
 import { crateDigest } from "../../../src/source-digest";
 import { productionInstallEdge } from "../../../src/doctor/edge";
@@ -202,10 +203,13 @@ test("the doctor's config row says what named the session's file", async () => {
 });
 
 // brandon-doctor-v62x.a1z: the daemon's half of `cc-candybar doctor`'s probe,
-// over the wire — a `doctor-probe` click as the URL handler sends it
-// (its own version on the request) is listed in the stats the CLI reads back,
-// and the doctor row of a session reads the version its own click carried.
-test("a probe click is listed in stats; a doctor click's handler version is its row", async () => {
+// over the wire — a `doctor-probe` link as the URL handler forwards it (a
+// `url` frame, versioned by itself, no `v`) and as `url-handle` sends it (a
+// `click` request) are listed in the stats the CLI reads back with who
+// delivered them, and the doctor row of a session reads its own click's.
+// Every url frame writes a click event, the refused ones included
+// (candybar-daemon-health-ajx0.co4). [LAW:nothing-unseen]
+test("a probe is listed in stats with its delivery; a doctor click's delivery is its row", async () => {
   const { env, removeTmpDirs } = prepareIsolatedDaemonEnv(
     "cc-candybar-doctor-e2e",
   );
@@ -220,6 +224,8 @@ test("a probe click is listed in stats; a doctor click's handler version is its 
         { v: PROTOCOL_VERSION, ...body } as never,
         5000,
       );
+    const forwarded = (frame: Record<string, unknown>) =>
+      daemon.send({ kind: URL_FRAME_KIND, ...frame }, 5000);
 
     const nonce = "123e4567-e89b-42d3-a456-426614174000";
     expect(
@@ -227,12 +233,52 @@ test("a probe click is listed in stats; a doctor click's handler version is its 
         kind: "click",
         verb: VERB_DOCTOR_PROBE,
         value: nonce,
-        clientVersion: "0.0.1",
+      }),
+    ).toMatchObject({ ok: true });
+    const forwardedNonce = "223e4567-e89b-42d3-a456-426614174000";
+    expect(
+      await forwarded({
+        urlV: URL_FRAME_VERSION,
+        url: `cc-candybar://${VERB_DOCTOR_PROBE}/${forwardedNonce}`,
       }),
     ).toMatchObject({ ok: true });
     expect((await statsOf(daemon.daemon)).handlerProbes).toMatchObject([
-      { nonce, handler: "0.0.1" },
+      { nonce, delivery: { kind: "cli" } },
+      { nonce: forwardedNonce, delivery: { kind: "forwarder", urlV: 1 } },
     ]);
+
+    // A frame the daemon cannot read is refused on its click event, with the
+    // frame's own facts, since the forwarder reads no answer.
+    expect(await forwarded({ urlV: 99, url: "cc-candybar://copy/x" })).toMatchObject({
+      ok: false,
+      code: "BAD_REQUEST",
+      error: "the URL handler's frame version 99 is not one this daemon speaks (1)",
+    });
+    expect(await forwarded({ urlV: 1, url: "https://example.com/" })).toMatchObject({
+      ok: false,
+      code: "BAD_REQUEST",
+      error: "expected a cc-candybar:// link, got: https://example.com/",
+    });
+    expect(await forwarded({ urlV: 1 })).toMatchObject({
+      ok: false,
+      code: "BAD_REQUEST",
+      error: "the URL handler's frame carries no url string",
+    });
+    const events = await loggedLines(
+      env,
+      (lines) => lines.filter((l) => / click queued=/.test(l)),
+      (picked) => picked.length >= 5,
+      "five click events",
+    );
+    expect(events[0]).toMatch(/ via=cli verb=doctor-probe .* outcome=ok/);
+    expect(events[1]).toMatch(
+      / via=forwarder urlV=1 verb=doctor-probe .* outcome=ok/,
+    );
+    expect(events[2]).toMatch(/ via=forwarder urlV=99 .* outcome=bad-request/);
+    expect(events[3]).toMatch(/ via=forwarder urlV=1 .* outcome=bad-request/);
+    expect(events[4]).toMatch(
+      / via=forwarder urlV=1 .* outcome=bad-request problems="the URL handler's frame carries no url string"/,
+    );
 
     const SID = "doctor-e2e-2";
     await render(daemon, SID, projectDir);
@@ -241,7 +287,6 @@ test("a probe click is listed in stats; a doctor click's handler version is its 
         kind: "click",
         verb: VERB_DOCTOR_RUN,
         value: SID,
-        clientVersion: "0.0.1",
       }),
     ).toMatchObject({ ok: true });
     await click(
@@ -262,7 +307,7 @@ test("a probe click is listed in stats; a doctor click's handler version is its 
     );
     expect(flat(await render(daemon, SID, projectDir))).toContain(
       squeezed(
-        "✗ URL handler — the URL handler runs cc-candybar 0.0.1; the bar runs",
+        "✗ URL handler — the link was delivered by `cc-candybar url-handle`, not the forwarder app",
       ),
     );
   } finally {
@@ -273,8 +318,8 @@ test("a probe click is listed in stats; a doctor click's handler version is its 
 
 // The CLI's probe end to end over a real socket, less Launch Services: the
 // production edge, with the one leg this test cannot isolate — macOS handing
-// the link to the handler app, which would deliver it to the user's own
-// daemon — replaced by what that app runs, `url-handle`'s own send.
+// the link to the forwarder app, which would deliver it to the user's own
+// daemon — replaced by the frame that app writes.
 test("the CLI's probe reads its own link back from the daemon it was delivered to", async () => {
   const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv(
     "cc-candybar-doctor-e2e",
@@ -290,16 +335,16 @@ test("the CLI's probe reads its own link back from the daemon it was delivered t
       // The stand-in for the handler app below delivers to this daemon.
       sockets: { own: sockPath, handler: sockPath },
       open: (url) => {
-        const { verb, value } = parseHandlerUrl(url);
-        delivered.push(tryClickViaDaemon(WORLD, verb, value));
+        delivered.push(
+          daemon.send({ kind: URL_FRAME_KIND, urlV: URL_FRAME_VERSION, url }, 5000),
+        );
         return null;
       },
     });
-    expect(await Promise.all(delivered)).toMatchObject([{ kind: "ok" }]);
+    expect(await Promise.all(delivered)).toMatchObject([{ ok: true }]);
     expect(facts).toEqual({
       kind: "arrived",
-      handler: PACKAGE_VERSION,
-      bar: PACKAGE_VERSION,
+      delivery: { kind: "forwarder", urlV: URL_FRAME_VERSION },
     });
     expect(
       checkByName("urlHandler")!.probe({ urlHandler: facts } as never),

@@ -177,6 +177,23 @@ describe("a connection over a stream", () => {
     expect(delivered).not.toHaveBeenCalled();
   });
 
+  // The URL handler app writes its frame and hangs up without reading
+  // (candybar-daemon-health-ajx0.co4): the frame is still handled, the answer
+  // goes to no one, and the daemon says nothing about it above info, since
+  // this is the forwarder's design and not a peer that vanished.
+  test("a frame whose writer hung up at once is handled, answered to no one, and not a warning", async () => {
+    const handle = jest.fn(async () => replyWith());
+    const log = jest.fn();
+    const daemon = standIn({ handle, log });
+    const { client, received } = open(daemon);
+    client.end(encodeFrame({ kind: "url", urlV: 1, url: "cc-candybar://x" }));
+    await settled();
+    expect(handle).toHaveBeenCalledTimes(1);
+    expect(received).toEqual([]);
+    expect(daemon.stats.inFlight).toBe(0);
+    expect(log.mock.calls.filter(([level]) => level !== "info")).toEqual([]);
+  });
+
   test("a client that half-closes before its answer is answered to no one", async () => {
     const request = held();
     const daemon = standIn({ handle: request.handle });

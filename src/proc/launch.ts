@@ -107,17 +107,18 @@ export const LAUNCH_CATEGORIES = [
   "doctor.forge",
   // `cc-candybar doctor`'s URL-handler probe (src/doctor/handler-probe.ts), in
   // the CLI's own process: the link it opens, and — only for a link that did
-  // not come back — the Launch Services lookup and the applet's script.
+  // not come back — the Launch Services lookup.
   "doctor.open",
   "doctor.launch-services",
-  "doctor.osadecompile",
   // Typing a slash command into a session's Claude Code pane
   // (src/claude-input/edge.ts): `read` captures the pane to decide whether it
   // is safe, `type` sends the keys.
   "claude-input.read",
   "claude-input.type",
-  "install.plutil",
-  "install.osacompile",
+  // Assembling the URL handler app (src/install/index.ts): sign it, quit the
+  // instance a previous install left resident, register the scheme.
+  "install.codesign",
+  "install.killall",
   "install.lsregister",
   "install.pbcopy",
   "install.open",
