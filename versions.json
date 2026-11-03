@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-604",
+      "ref": "refs/pull/604/merge",
+      "sha": "3a4cc18e2fc101d055925b335a31ca8f819b0265",
+      "timestamp": "2026-11-03T05:10:26.425Z",
+      "commits": [
+        {
+          "sha": "3a4cc18e2fc101d055925b335a31ca8f819b0265",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T05:09:34Z",
+          "message": "Merge 5e930bc6cd75308b772d7c3ef9082c8ac039dfb4 into 5c3ebc046681255a3eeef32361efeff8d2eeab69\n"
+        },
+        {
+          "sha": "5e930bc6cd75308b772d7c3ef9082c8ac039dfb4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T22:07:18-07:00",
+          "message": "fix(time): spans take branded readings at every stored start and through one span helper; providers drop the wall clock they no longer read (candybar-testing-ihvy.98i)\n"
+        },
+        {
+          "sha": "23c681454e37f7f252030646b2eb391bdb41f8f7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T22:02:32-07:00",
+          "message": "fix(time): a monotonic reading is its own type; the git-dir window is a span; callers round every refresh time; uptime stays wall time since start (candybar-testing-ihvy.98i)\n"
+        },
+        {
+          "sha": "34f9fc95ae41fc2c64612519d11e2f15366fc099",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T21:57:42-07:00",
+          "message": "fix(time): deadlines, the refresh period, the launch window and uptime read the monotonic clock; one helper rounds every span (candybar-testing-ihvy.98i)\n"
+        },
+        {
+          "sha": "964d6414b4e9be276be0683023562c4872237f0d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T21:49:23-07:00",
+          "message": "fix(time): spans read the Timekeeper's monotonic clock, so a wall step cannot make a duration negative or huge (candybar-testing-ihvy.98i)\n\nEvery span in src that subtracted two now() readings reads monotonic():\nlaunch stats and rate limit, refresh ledgers' took=, runs, draw-bar,\nlock waits, spawn-lock contention, tmux patience. A refresh's took= is\nrounded once in the ledger, since monotonic reads fractions. The plugin\nstorage sweep keeps a wall cutoff, because it compares against mtimes.\n\nLeft on the wall clock on purpose: the daemon's uptime and file events'\nmissed= span, which mean elapsed real time including sleep, which the\nmonotonic clock on macOS does not count.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "5c3ebc046681255a3eeef32361efeff8d2eeab69",
@@ -20,28 +63,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-03T04:39:55Z",
           "message": "chore(release): set `package.json` to 1.183.0 [skip ci]\n\n## [1.183.0](https://github.com/promptctl/cc-candybar/compare/v1.182.0...v1.183.0) (2026-11-03)\n\n### Features\n\n* **launch:** a cut drain or a failed launch pipe shows in the ⚠ indicator (candybar-testing-0x6u.0dh) ([#601](https://github.com/promptctl/cc-candybar/issues/601)) ([f076fde](https://github.com/promptctl/cc-candybar/commit/f076fdeb651bcf4d15226703d9e09fdaf17f7ef8))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-604",
-      "ref": "refs/pull/604/merge",
-      "sha": "8f38206df2c99c11fd60c9fd0532b27ce1150663",
-      "timestamp": "2026-11-03T04:50:33.893Z",
-      "commits": [
-        {
-          "sha": "8f38206df2c99c11fd60c9fd0532b27ce1150663",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T21:49:33-07:00",
-          "message": "Merge 4ad90e7618692cecfac03d58eda5db411dbfa0c4 into e2b84658bbaa52f486f36c248e2c7a45e88eda88\n"
-        },
-        {
-          "sha": "4ad90e7618692cecfac03d58eda5db411dbfa0c4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T21:49:23-07:00",
-          "message": "fix(time): spans read the Timekeeper's monotonic clock, so a wall step cannot make a duration negative or huge (candybar-testing-ihvy.98i)\n\nEvery span in src that subtracted two now() readings reads monotonic():\nlaunch stats and rate limit, refresh ledgers' took=, runs, draw-bar,\nlock waits, spawn-lock contention, tmux patience. A refresh's took= is\nrounded once in the ledger, since monotonic reads fractions. The plugin\nstorage sweep keeps a wall cutoff, because it compares against mtimes.\n\nLeft on the wall clock on purpose: the daemon's uptime and file events'\nmissed= span, which mean elapsed real time including sleep, which the\nmonotonic clock on macOS does not count.\n"
         }
       ]
     },

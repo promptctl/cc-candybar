@@ -22800,84 +22800,11 @@ function parseHandlerUrl(rawUrl) {
 init_globals();
 init_os();
 
-// src/proc/launch.ts
+// src/proc/system-launcher.ts
 init_globals();
 
-// site/shims/child_process.ts
+// src/proc/launch.ts
 init_globals();
-var import_buffer2 = __toESM(require_buffer(), 1);
-var import_events2 = __toESM(require_events(), 1);
-var RESIDENT = "resident";
-var programs = /* @__PURE__ */ new Map();
-var enoent = (cmd) => Object.assign(new Error(`spawn ${cmd} ENOENT`), { code: "ENOENT", errno: -2, syscall: `spawn ${cmd}`, path: cmd });
-var Stream = class extends import_events2.EventEmitter {
-  encoding = null;
-  setEncoding(encoding) {
-    this.encoding = encoding;
-    return this;
-  }
-  chunk(text4) {
-    this.emit("data", this.encoding === null ? import_buffer2.Buffer.from(text4) : text4);
-  }
-  pipe() {
-    return this;
-  }
-  destroy() {
-  }
-  end() {
-  }
-  write() {
-    return true;
-  }
-  resume() {
-    return this;
-  }
-  unref() {
-    return this;
-  }
-};
-var nextPid = 5e3;
-function spawn(cmd, args = [], opts = {}) {
-  const program = programs.get(cmd.split("/").pop());
-  const child = Object.assign(new import_events2.EventEmitter(), {
-    // As in Node, a program that cannot start has no pid (src/proc/launch.ts reads that).
-    pid: program === void 0 ? void 0 : nextPid++,
-    stdout: new Stream(),
-    stderr: new Stream(),
-    stdin: new Stream(),
-    exitCode: null,
-    signalCode: null,
-    killed: false,
-    kill: () => true,
-    unref: () => {
-    },
-    ref: () => {
-    }
-  });
-  setTimeout(() => {
-    if (program === void 0) {
-      child.emit("error", enoent(cmd));
-      return;
-    }
-    const run3 = program(args, opts.cwd);
-    if (run3 === RESIDENT) return;
-    if (run3.stdout) child.stdout.chunk(run3.stdout);
-    if (run3.stderr) child.stderr.chunk(run3.stderr);
-    child.exitCode = run3.code;
-    child.stdout.emit("end");
-    child.stderr.emit("end");
-    child.emit("exit", run3.code, null);
-    child.emit("close", run3.code, null);
-  }, 0);
-  return child;
-}
-function spawnSync(cmd, args = [], opts = {}) {
-  const program = programs.get(cmd.split("/").pop());
-  if (program === void 0) return { pid: 0, status: null, signal: null, stdout: "", stderr: "", output: [], error: enoent(cmd) };
-  const run3 = program(args, opts.cwd);
-  if (run3 === RESIDENT) throw new Error(`${cmd} runs as long as the page does; a sync run of it would never return`);
-  return { pid: nextPid++, status: run3.code, signal: null, stdout: run3.stdout, stderr: run3.stderr ?? "", output: [null, run3.stdout, run3.stderr ?? ""] };
-}
 
 // site/shims/fs.ts
 init_globals();
@@ -22936,6 +22863,74 @@ var inspect = (v) => {
     return String(v);
   }
 };
+
+// src/time.ts
+init_globals();
+init_timers();
+function spanMs(from, to) {
+  return Math.round(to - from);
+}
+function elapsedMs(clock, since) {
+  return spanMs(since, clock.monotonic());
+}
+var systemTimekeeper = {
+  now: () => Date.now(),
+  monotonic: () => performance.now(),
+  after: (ms, fire, options) => {
+    const timer = setTimeout(fire, ms);
+    if (options?.unref) {
+      timer.unref();
+    }
+    return () => clearTimeout(timer);
+  },
+  every: (ms, fire, options) => {
+    const timer = setInterval(fire, ms);
+    if (options?.unref) {
+      timer.unref();
+    }
+    return () => clearInterval(timer);
+  },
+  defer: (fire) => {
+    const turn = setImmediate(fire);
+    return () => clearImmediate(turn);
+  }
+};
+function sleep(clock, ms, signal) {
+  return new Promise((resolve, reject2) => {
+    const aborted = () => Object.assign(new Error("The operation was aborted"), {
+      name: "AbortError",
+      code: "ABORT_ERR",
+      cause: signal?.reason
+    });
+    if (signal?.aborted) {
+      reject2(aborted());
+      return;
+    }
+    const onAbort = () => {
+      cancel();
+      reject2(aborted());
+    };
+    const cancel = clock.after(ms, () => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    });
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+function timeoutSignal(clock, ms) {
+  const timeout = new AbortController();
+  clock.after(
+    ms,
+    () => timeout.abort(
+      new DOMException(
+        "The operation was aborted due to timeout",
+        "TimeoutError"
+      )
+    ),
+    { unref: true }
+  );
+  return timeout.signal;
+}
 
 // src/utils/event-hold.ts
 init_globals();
@@ -23006,7 +23001,7 @@ function rateLimitedResult(category, minIntervalMs, sinceLastMs) {
     stderr: "",
     exitCode: null,
     signal: null,
-    error: `rate-limited: ${category} min interval ${minIntervalMs}ms, last start ${sinceLastMs}ms ago`
+    error: `rate-limited: ${category} min interval ${minIntervalMs}ms, last start ${Math.round(sinceLastMs)}ms ago`
   };
 }
 function track(state, work) {
@@ -23091,16 +23086,16 @@ function spawnLifeline(state) {
   const t0 = clock.monotonic();
   let line;
   try {
-    line = spawn("awk", [LIFELINE_PROGRAM], {
+    line = state.spawner.spawn("awk", [LIFELINE_PROGRAM], {
       stdio: ["pipe", "ignore", "ignore"],
       detached: true
     });
   } catch (err) {
-    stats?.onEnd("lifeline", clock.monotonic() - t0);
+    stats?.onEnd("lifeline", elapsedMs(clock, t0));
     setFault(state, `did not start: ${spawnErrorText(err, void 0)}`);
     return null;
   }
-  stats?.onEnd("lifeline", clock.monotonic() - t0);
+  stats?.onEnd("lifeline", elapsedMs(clock, t0));
   const pipe = line.stdin;
   if (pipe === null || pipe === void 0) {
     line.once(
@@ -23141,24 +23136,6 @@ function endLifeline(state) {
 }
 var MAX_CAPTURED_BYTES = 16 * 1024 * 1024;
 var OUTPUT_LIMIT_ERROR = `output exceeded ${MAX_CAPTURED_BYTES} bytes`;
-function signalGroup(pid2, sig) {
-  try {
-    process_default.kill(-pid2, sig);
-  } catch (err) {
-    const code = err.code;
-    if (code !== "ESRCH" && !(code === "EPERM" && !leaderRefuses(pid2))) {
-      throw err;
-    }
-  }
-}
-function leaderRefuses(pid2) {
-  try {
-    process_default.kill(pid2, 0);
-    return false;
-  } catch (err) {
-    return err.code === "EPERM";
-  }
-}
 function capture(state, category, stream, ends) {
   const { stats } = state.scope;
   const decoder = new import_node_string_decoder.StringDecoder("utf8");
@@ -23232,16 +23209,17 @@ async function launchWaited(state, opts) {
   const t0 = clock.monotonic();
   stats?.onStart(opts.category);
   return new Promise((resolve) => {
+    const { spawner } = state;
     let child;
     try {
-      child = spawn(opts.bin, opts.args ?? [], {
+      child = spawner.spawn(opts.bin, opts.args ?? [], {
         cwd: opts.cwd,
         env: childEnv(state.scope, opts),
         stdio: ["pipe", "pipe", "pipe"],
         detached: true
       });
     } catch (err) {
-      stats?.onEnd(opts.category, clock.monotonic() - t0);
+      stats?.onEnd(opts.category, elapsedMs(clock, t0));
       resolve({
         ok: false,
         reason: "spawn-error",
@@ -23287,7 +23265,7 @@ async function launchWaited(state, opts) {
       groupEndTimer?.();
       unlisten();
       if (group !== void 0) unguard(state, group);
-      stats?.onEnd(opts.category, clock.monotonic() - t0);
+      stats?.onEnd(opts.category, elapsedMs(clock, t0));
       child.off("close", conclude);
       child.off("error", onError);
       stdout2.drain();
@@ -23299,7 +23277,7 @@ async function launchWaited(state, opts) {
     const settle3 = (r) => finish(() => resolve(r));
     const signal = (pid2, sig) => {
       try {
-        signalGroup(pid2, sig);
+        spawner.signalGroup(pid2, sig);
       } catch (err) {
         state.unreaped.set(child, opts.category);
         void exited.then(() => state.unreaped.delete(child));
@@ -23317,7 +23295,7 @@ async function launchWaited(state, opts) {
     if (group !== void 0) {
       const awaitGroupEnd = (delayMs) => {
         if (settled3) return;
-        if (groupGone(group)) {
+        if (spawner.groupGone(group)) {
           clock.defer(concludeWithGroup);
           return;
         }
@@ -23333,7 +23311,7 @@ async function launchWaited(state, opts) {
     const terminate = (cause) => {
       if (terminated !== null) return;
       const ended = child.exitCode !== null || child.signalCode !== null;
-      if (ended && group !== void 0 && groupGone(group)) {
+      if (ended && group !== void 0 && spawner.groupGone(group)) {
         terminated = cause === "timeout" ? null : cause;
         clock.defer(concludeWithGroup);
         return;
@@ -23401,17 +23379,16 @@ function launchBlocking(state, opts) {
   if (refused !== null) return refused;
   const t0 = clock.monotonic();
   stats?.onStart(opts.category);
-  const stdio = ["pipe", "pipe", "pipe"];
   try {
-    const result = spawnSync(opts.bin, opts.args ?? [], {
+    const result = state.spawner.spawnSync(opts.bin, opts.args ?? [], {
       cwd: opts.cwd,
       env: childEnv(state.scope, opts),
       input: opts.stdinInput,
       timeout: opts.timeoutMs && opts.timeoutMs > 0 ? opts.timeoutMs : void 0,
-      stdio,
+      stdio: ["pipe", "pipe", "pipe"],
       encoding: "utf8"
     });
-    stats?.onEnd(opts.category, clock.monotonic() - t0);
+    stats?.onEnd(opts.category, elapsedMs(clock, t0));
     const stdout2 = typeof result.stdout === "string" ? result.stdout : "";
     const stderr2 = typeof result.stderr === "string" ? result.stderr : "";
     const code = result.error?.code;
@@ -23440,7 +23417,7 @@ function launchBlocking(state, opts) {
       signal: result.signal ?? null
     };
   } catch (err) {
-    stats?.onEnd(opts.category, clock.monotonic() - t0);
+    stats?.onEnd(opts.category, elapsedMs(clock, t0));
     return {
       ok: false,
       reason: "spawn-error",
@@ -23458,16 +23435,16 @@ function launchOrphan(state, opts) {
   if (refused !== null) return refused;
   const t0 = clock.monotonic();
   stats?.onStart(opts.category);
-  const result = launchDetachedSyncInner(state.scope, opts);
-  stats?.onEnd(opts.category, clock.monotonic() - t0);
+  const result = launchDetachedSyncInner(state, opts);
+  stats?.onEnd(opts.category, elapsedMs(clock, t0));
   return result;
 }
-function launchDetachedSyncInner(scope, opts) {
+function launchDetachedSyncInner(state, opts) {
   let child;
   try {
-    child = spawn(opts.bin, opts.args ?? [], {
+    child = state.spawner.spawn(opts.bin, opts.args ?? [], {
       cwd: opts.cwd,
-      env: childEnv(scope, opts),
+      env: childEnv(state.scope, opts),
       detached: true,
       stdio: "ignore"
     });
@@ -23509,7 +23486,7 @@ function launchJob(state, opts, files) {
   stats?.onStart(opts.category);
   let child;
   try {
-    child = spawn(
+    child = state.spawner.spawn(
       "/bin/sh",
       [
         "-c",
@@ -23529,14 +23506,14 @@ function launchJob(state, opts, files) {
       }
     );
   } catch (err) {
-    stats?.onEnd(opts.category, clock.monotonic() - t0);
+    stats?.onEnd(opts.category, elapsedMs(clock, t0));
     return {
       ok: false,
       reason: "spawn-error",
       error: spawnErrorText(err, opts.cwd)
     };
   }
-  stats?.onEnd(opts.category, clock.monotonic() - t0);
+  stats?.onEnd(opts.category, elapsedMs(clock, t0));
   child.once("error", () => {
   });
   const pid2 = child.pid;
@@ -23573,28 +23550,7 @@ function readJobEnd(status) {
   if (text4 === "timeout") return { kind: "timeout" };
   throw new Error(`${status}: not a job verdict: ${JSON.stringify(text4)}`);
 }
-function signalJob(pid2, sig) {
-  try {
-    process_default.kill(-pid2, sig);
-    return true;
-  } catch (err) {
-    const code = err.code;
-    if (code === "ESRCH" || code === "EPERM") return false;
-    throw err;
-  }
-}
-function jobGroupAlive(pid2) {
-  return signalJob(pid2, 0);
-}
-function groupGone(pid2) {
-  try {
-    process_default.kill(-pid2, 0);
-    return false;
-  } catch (err) {
-    return err.code === "ESRCH";
-  }
-}
-function endJob(pid2, status, end, clock) {
+function endJob(spawner, clock, pid2, status, end) {
   const staged = `${status}.${process_default.pid}`;
   try {
     writeFileSync(staged, `${formatJobEnd(end)}
@@ -23614,27 +23570,33 @@ function endJob(pid2, status, end, clock) {
   } finally {
     rmSync(staged, { force: true });
   }
-  const signalled = signalJob(pid2, "SIGTERM");
+  const signalled = spawner.signalJob(pid2, "SIGTERM");
   if (signalled) {
-    clock.after(TIMEOUT_KILL_GRACE_MS, () => signalJob(pid2, "SIGKILL"), {
-      unref: true
-    });
+    clock.after(
+      TIMEOUT_KILL_GRACE_MS,
+      () => spawner.signalJob(pid2, "SIGKILL"),
+      {
+        unref: true
+      }
+    );
   }
   return { stands, signalled };
 }
-function createLauncher(owner, clock) {
-  return launcherWithState(owner, clock).launcher;
+function createLauncher(owner, clock, spawner) {
+  return launcherWithState(owner, clock, spawner).launcher;
 }
-function createOneShotLauncher(owner, clock) {
-  const { launcher, state } = launcherWithState(owner, clock);
+function createOneShotLauncher(owner, clock, spawner) {
+  const { launcher, state } = launcherWithState(owner, clock, spawner);
   return { ...launcher, launchSync: (opts) => launchBlocking(state, opts) };
 }
-function launcherWithState(owner, clock) {
+function launcherWithState(owner, clock, spawner) {
   const launcher = {
     clock,
     launch: (opts) => track(state, launchWaited(state, opts)),
     launchDetachedSync: (opts) => launchOrphan(state, opts),
     launchJobSync: (opts, files) => launchJob(state, opts, files),
+    jobGroupAlive: (pid2) => spawner.signalJob(pid2, 0),
+    endJob: (pid2, status, end) => endJob(spawner, clock, pid2, status, end),
     launcherWarnings: (at, render3) => launcherWarnings(state, at, render3),
     answeredPipeEvent: (event) => answeredPipeEvent(state, event),
     settled: async () => {
@@ -23653,6 +23615,7 @@ function launcherWithState(owner, clock) {
     }
   };
   const state = {
+    spawner,
     scope: {
       stats: null,
       // A launcher with nobody to tell says the warning on stderr.
@@ -23687,67 +23650,130 @@ function launcherWithState(owner, clock) {
   return { launcher, state };
 }
 
-// src/time.ts
+// src/proc/spawner.ts
 init_globals();
-init_timers();
-var systemTimekeeper = {
-  now: () => Date.now(),
-  monotonic: () => performance.now(),
-  after: (ms, fire, options) => {
-    const timer = setTimeout(fire, ms);
-    if (options?.unref) {
-      timer.unref();
-    }
-    return () => clearTimeout(timer);
-  },
-  every: (ms, fire, options) => {
-    const timer = setInterval(fire, ms);
-    if (options?.unref) {
-      timer.unref();
-    }
-    return () => clearInterval(timer);
-  },
-  defer: (fire) => {
-    const turn = setImmediate(fire);
-    return () => clearImmediate(turn);
+
+// site/shims/child_process.ts
+init_globals();
+var import_buffer2 = __toESM(require_buffer(), 1);
+var import_events2 = __toESM(require_events(), 1);
+var RESIDENT = "resident";
+var programs = /* @__PURE__ */ new Map();
+var enoent = (cmd) => Object.assign(new Error(`spawn ${cmd} ENOENT`), { code: "ENOENT", errno: -2, syscall: `spawn ${cmd}`, path: cmd });
+var Stream = class extends import_events2.EventEmitter {
+  encoding = null;
+  setEncoding(encoding) {
+    this.encoding = encoding;
+    return this;
+  }
+  chunk(text4) {
+    this.emit("data", this.encoding === null ? import_buffer2.Buffer.from(text4) : text4);
+  }
+  pipe() {
+    return this;
+  }
+  destroy() {
+  }
+  end() {
+  }
+  write() {
+    return true;
+  }
+  resume() {
+    return this;
+  }
+  unref() {
+    return this;
   }
 };
-function sleep(clock, ms, signal) {
-  return new Promise((resolve, reject2) => {
-    const aborted = () => Object.assign(new Error("The operation was aborted"), {
-      name: "AbortError",
-      code: "ABORT_ERR",
-      cause: signal?.reason
-    });
-    if (signal?.aborted) {
-      reject2(aborted());
+var nextPid = 5e3;
+function spawn(cmd, args = [], opts = {}) {
+  const program = programs.get(cmd.split("/").pop());
+  const child = Object.assign(new import_events2.EventEmitter(), {
+    // As in Node, a program that cannot start has no pid (src/proc/launch.ts reads that).
+    pid: program === void 0 ? void 0 : nextPid++,
+    stdout: new Stream(),
+    stderr: new Stream(),
+    stdin: new Stream(),
+    exitCode: null,
+    signalCode: null,
+    killed: false,
+    kill: () => true,
+    unref: () => {
+    },
+    ref: () => {
+    }
+  });
+  setTimeout(() => {
+    if (program === void 0) {
+      child.emit("error", enoent(cmd));
       return;
     }
-    const onAbort = () => {
-      cancel();
-      reject2(aborted());
-    };
-    const cancel = clock.after(ms, () => {
-      signal?.removeEventListener("abort", onAbort);
-      resolve();
-    });
-    signal?.addEventListener("abort", onAbort, { once: true });
-  });
+    const run3 = program(args, opts.cwd);
+    if (run3 === RESIDENT) return;
+    if (run3.stdout) child.stdout.chunk(run3.stdout);
+    if (run3.stderr) child.stderr.chunk(run3.stderr);
+    child.exitCode = run3.code;
+    child.stdout.emit("end");
+    child.stderr.emit("end");
+    child.emit("exit", run3.code, null);
+    child.emit("close", run3.code, null);
+  }, 0);
+  return child;
 }
-function timeoutSignal(clock, ms) {
-  const timeout = new AbortController();
-  clock.after(
-    ms,
-    () => timeout.abort(
-      new DOMException(
-        "The operation was aborted due to timeout",
-        "TimeoutError"
-      )
-    ),
-    { unref: true }
-  );
-  return timeout.signal;
+function spawnSync(cmd, args = [], opts = {}) {
+  const program = programs.get(cmd.split("/").pop());
+  if (program === void 0) return { pid: 0, status: null, signal: null, stdout: "", stderr: "", output: [], error: enoent(cmd) };
+  const run3 = program(args, opts.cwd);
+  if (run3 === RESIDENT) throw new Error(`${cmd} runs as long as the page does; a sync run of it would never return`);
+  return { pid: nextPid++, status: run3.code, signal: null, stdout: run3.stdout, stderr: run3.stderr ?? "", output: [null, run3.stdout, run3.stderr ?? ""] };
 }
+
+// src/proc/spawner.ts
+function leaderRefuses(pid2) {
+  try {
+    process_default.kill(pid2, 0);
+    return false;
+  } catch (err) {
+    return err.code === "EPERM";
+  }
+}
+var systemSpawner = {
+  spawn: (bin, args, options) => spawn(bin, args, options),
+  spawnSync: (bin, args, options) => spawnSync(bin, args, options),
+  signalGroup: (pid2, sig) => {
+    try {
+      process_default.kill(-pid2, sig);
+    } catch (err) {
+      const code = err.code;
+      if (code !== "ESRCH" && !(code === "EPERM" && !leaderRefuses(pid2))) {
+        throw err;
+      }
+    }
+  },
+  groupGone: (pid2) => {
+    try {
+      process_default.kill(-pid2, 0);
+      return false;
+    } catch (err) {
+      return err.code === "ESRCH";
+    }
+  },
+  signalJob: (pid2, sig) => {
+    try {
+      process_default.kill(-pid2, sig);
+      return true;
+    } catch (err) {
+      const code = err.code;
+      if (code === "ESRCH" || code === "EPERM") return false;
+      throw err;
+    }
+  }
+};
+
+// src/proc/system-launcher.ts
+var systemLauncher = (owner, clock) => createLauncher(owner, clock, systemSpawner);
+var systemOneShotLauncher = (owner, clock) => createOneShotLauncher(owner, clock, systemSpawner);
 
 // src/host.ts
 function processWorld() {
@@ -23759,7 +23785,7 @@ function processWorld() {
   const clock = systemTimekeeper;
   return {
     host,
-    launcher: createOneShotLauncher({ inherited: process_default.env }, clock),
+    launcher: systemOneShotLauncher({ inherited: process_default.env }, clock),
     clock
   };
 }
@@ -51994,9 +52020,9 @@ function ccCandybarFuncs() {
 }
 var MIN_PROJECTABLE_ELAPSED_MS = 5 * 60 * 1e3;
 function etaMinutes(usedPercentage, resetsAtSec, windowMinutes, nowMs) {
-  const elapsedMs = windowMinutes * 6e4 - (resetsAtSec * 1e3 - nowMs);
-  if (elapsedMs < MIN_PROJECTABLE_ELAPSED_MS || usedPercentage <= 0) return -1;
-  const pctPerMs = usedPercentage / elapsedMs;
+  const elapsedMs2 = windowMinutes * 6e4 - (resetsAtSec * 1e3 - nowMs);
+  if (elapsedMs2 < MIN_PROJECTABLE_ELAPSED_MS || usedPercentage <= 0) return -1;
+  const pctPerMs = usedPercentage / elapsedMs2;
   return Math.max(0, Math.round((100 - usedPercentage) / pctPerMs / 6e4));
 }
 var relativeTimeFuncs = (clock) => ({
@@ -52419,8 +52445,7 @@ var Refreshes = class {
     return { ...this.tally, refreshes: { ...this.tally.refreshes } };
   }
   // `fields` is the refreshed entry's logfmt identity.
-  recorded(fields2, by, outcome, took) {
-    const ms = Math.round(took);
+  recorded(fields2, by, outcome, ms) {
     this.tally.refreshes[by] = (this.tally.refreshes[by] ?? 0) + 1;
     this.tally.lastMs = ms;
     if (outcome.kind === "failed") this.tally.failures++;
@@ -53070,7 +53095,7 @@ var SourceRegistry = class _SourceRegistry {
           `where=${valueOf(reader.where)}`,
           asked2,
           publish(read2),
-          this.store.clock.monotonic() - startedAt
+          elapsedMs(this.store.clock, startedAt)
         ),
         (err) => {
           if (err !== this.abort.signal.reason) throw err;
@@ -66582,7 +66607,7 @@ async function refreshPayload(inputs, at, refreshed) {
       deps.log("error", `${name} lane threw: ${inspect(e)}`);
       threw2 = `${name}: ${String(e)}`;
     }
-    refreshed.set(name, Math.round(deps.clock.monotonic() - startedAt));
+    refreshed.set(name, elapsedMs(deps.clock, startedAt));
     deps.faults.refreshed(sessionId2, name, threw2);
   };
   await Promise.all([
@@ -69275,7 +69300,7 @@ var RuntimeStats = class _RuntimeStats {
     }
   };
   recordRollingNow() {
-    const now2 = this.clock.now();
+    const now2 = this.clock.monotonic();
     if (this.rollingTimestamps.length < ROLLING_BUFFER_CAP) {
       this.rollingTimestamps.push(now2);
       return;
@@ -69298,7 +69323,7 @@ var RuntimeStats = class _RuntimeStats {
     this.subprocessHistogramRotator.set(category, idx + 1);
   }
   snapshotSubprocesses() {
-    const cutoff = this.clock.now() - ROLLING_WINDOW_MS;
+    const cutoff = this.clock.monotonic() - ROLLING_WINDOW_MS;
     let lastMinute = 0;
     for (const ts of this.rollingTimestamps) {
       if (ts >= cutoff) lastMinute++;
@@ -69342,7 +69367,10 @@ var RuntimeStats = class _RuntimeStats {
   // one reads; comparing against the producer's own output, not a second
   // spelling of the type, means a field added here is checked for there.
   static referenceSnapshot() {
-    return new _RuntimeStats({ now: () => 0 }).snapshot({
+    return new _RuntimeStats({
+      now: () => 0,
+      monotonic: () => 0
+    }).snapshot({
       gitCache: {
         size: 0,
         held: 0,
@@ -69852,7 +69880,7 @@ async function clickHandoff(launcher, opts, what, log, boundMs, tmp) {
     job.release();
     const deadline = launcher.clock.monotonic() + boundMs;
     for (; ; ) {
-      const alive = jobGroupAlive(job.pid);
+      const alive = launcher.jobGroupAlive(job.pid);
       const end = readJobEnd(files.status);
       if (end !== null) {
         if (end.kind === "exit" && end.code === 0) return;
@@ -71196,11 +71224,7 @@ var Runs = class {
       signal: abort.signal,
       category: "click.run"
     }).then(
-      (result) => this.ended(
-        run3,
-        result,
-        Math.round(this.deps.clock.monotonic() - startedAt)
-      )
+      (result) => this.ended(run3, result, elapsedMs(this.deps.clock, startedAt))
     ).finally(() => {
       this.inFlight.delete(abort);
       for (const resume of resumes) resume();
@@ -75959,7 +75983,7 @@ function renderFrame(parts, sessionId2, fps, at) {
       "render",
       facts,
       outcome,
-      Math.round(clock.monotonic() - started2)
+      elapsedMs(clock, started2)
     );
     const failed2 = renderFailed(error);
     return {
@@ -76456,7 +76480,7 @@ async function drawAnswer(parts, req, at, waitEndsAt, facts) {
     );
     noteFacts(facts, {
       handoff: (toStatusline ? elsewhere : []).join(",") || "-",
-      drew: `${Math.round(clock.monotonic() - drawFrom)}ms`
+      drew: `${elapsedMs(clock, drawFrom)}ms`
     });
     return {
       resp,
@@ -76998,7 +77022,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     const started2 = new Date(clock.now());
     const at = instantOf(started2);
     const t0 = clock.monotonic();
-    const queuedMs = Math.round(t0 - accepted);
+    const queuedMs = spanMs(accepted, t0);
     const facts = [];
     const order2 = ++stats.requestsTotal;
     const checked = checkRenderRequest(req, stats, parts.log, parts.home);
@@ -77076,7 +77100,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       "render",
       facts,
       rendered.outcome,
-      Math.round(clock.monotonic() - t0)
+      elapsedMs(clock, t0)
     );
     parts.log(level, line);
     return {
@@ -77194,7 +77218,7 @@ function serializeSegmentCells(cells, colorCompatibility) {
 async function clickEvent(parts, accepted, timedOut, clientLeft, run3) {
   const { clock } = parts;
   const t0 = clock.monotonic();
-  const facts = [["queued", `${Math.round(t0 - accepted)}ms`]];
+  const facts = [["queued", `${spanMs(accepted, t0)}ms`]];
   const gone = () => timedOut() || clientLeft();
   const outcome = await run3(facts, gone);
   noteFacts(facts, {
@@ -77205,7 +77229,7 @@ async function clickEvent(parts, accepted, timedOut, clientLeft, run3) {
     "click",
     facts,
     outcome,
-    Math.round(clock.monotonic() - t0)
+    elapsedMs(clock, t0)
   );
   parts.log(level, line);
   return clickReply(outcome);
@@ -77435,8 +77459,8 @@ function removeAct(dir, act) {
   fs_default.rmSync(leaving, { recursive: true, force: true });
 }
 var bootedAt = (clock) => clock.now() - os_default.uptime() * 1e3;
-async function isRecordedJob(record2, read2, boot) {
-  if (record2.started <= boot || !jobGroupAlive(record2.pid)) return false;
+async function isRecordedJob(record2, read2, jobs, boot) {
+  if (record2.started <= boot || !jobs.jobGroupAlive(record2.pid)) return false;
   const leader = await read2(record2.pid);
   return record2.startTime === null || leader.kind === "unavailable" || leader.token === record2.startTime;
 }
@@ -77449,7 +77473,7 @@ function readRecord(actDir) {
   }
 }
 var sameJob = (a, b) => a.pid === b.pid && a.startTime === b.startTime;
-function makeActReader(dir, read2, clock) {
+function makeActReader(dir, read2, jobs, clock) {
   let known = null;
   async function factsOf2(act) {
     const actDir = import_node_path34.default.join(dir, String(act));
@@ -77458,12 +77482,12 @@ function makeActReader(dir, read2, clock) {
     if (known === null || !sameJob(known.record, record2)) {
       known = {
         record: record2,
-        ours: await isRecordedJob(record2, read2, bootedAt(clock)),
+        ours: await isRecordedJob(record2, read2, jobs, bootedAt(clock)),
         final: null
       };
     }
     if (known.final !== null) return known.final;
-    known.ours = known.ours && jobGroupAlive(record2.pid);
+    known.ours = known.ours && jobs.jobGroupAlive(record2.pid);
     const files = filesOf(actDir);
     const end = readJobEnd(files.status);
     const lastLine = end === null ? null : lastLineOf(files.stderr) ?? lastLineOf(files.stdout);
@@ -77539,37 +77563,13 @@ var CLAIMED_FIRST = {
   ok: false,
   reason: "another act claimed this bundle first"
 };
-function endOverdue(dir, facts, clock) {
+function endOverdue(dir, facts, jobs) {
   const status = filesOf(import_node_path34.default.join(dir, String(facts.act))).status;
-  return endJob(facts.record.pid, status, { kind: "timeout" }, clock);
+  return jobs.endJob(facts.record.pid, status, { kind: "timeout" });
 }
 
 // src/daemon/update-notice.ts
 init_globals();
-
-// src/daemon/process-fingerprint.ts
-init_globals();
-async function readStartTime(pid2, launch) {
-  const res = await launch({
-    bin: "ps",
-    args: ["-o", "lstart=", "-p", String(pid2)],
-    category: "process-fingerprint",
-    timeoutMs: 2e3,
-    // [FRAMING:representation] Pin BOTH locale and timezone so the token is
-    // deterministic across daemons — the writer and reader must render the same
-    // process identically for opaque string equality to be sound. LC_ALL=C fixes
-    // the strftime format; TZ=UTC fixes localtime(), so DST / TZ / tzdata changes
-    // can't make one live process render two different start-time strings.
-    envOverlay: { LC_ALL: "C", TZ: "UTC" }
-  });
-  if (res.ok) {
-    const token = res.stdout.trim();
-    if (token.length > 0) return { kind: "start", token };
-    return { kind: "unavailable", detail: "ps produced no start-time" };
-  }
-  const detail = res.reason === "spawn-error" ? res.error ?? "ps spawn failed" : `ps ${res.reason} (exit ${res.exitCode})`;
-  return { kind: "unavailable", detail };
-}
 
 // src/utils/keyed-serial-queue.ts
 init_globals();
@@ -77742,6 +77742,7 @@ function makeUpdateWatch(opts) {
   const {
     clock,
     launcher,
+    probe: probe2,
     entryUrl,
     digest: digest2,
     actsDir: actsDir2,
@@ -77756,11 +77757,11 @@ function makeUpdateWatch(opts) {
   let build = { kind: "unchecked", reason: "not sampled yet" };
   let release3 = null;
   const readStart = async (pid2) => {
-    const read2 = await readStartTime(pid2, launcher.launch);
+    const read2 = await probe2.startTime(pid2);
     if (closed) throw new DaemonClosing("apply-update");
     return read2;
   };
-  const acts = makeActReader(actsDir2, readStart, clock);
+  const acts = makeActReader(actsDir2, readStart, launcher, clock);
   let seen = null;
   let gate2 = null;
   const logBuild = changeLogger(log);
@@ -77817,7 +77818,7 @@ function makeUpdateWatch(opts) {
   }
   function endIfOverdue(facts) {
     if (!facts?.alive || clock.now() <= facts.record.deadline) return;
-    const { stands, signalled } = endOverdue(actsDir2, facts, clock);
+    const { stands, signalled } = endOverdue(actsDir2, facts, launcher);
     const why2 = stands ? "timed out" : "outlived its verdict";
     const ending = signalled ? "ending it" : "its group took no signal";
     log("error", `apply-update: act ${facts.act} ${why2}; ${ending}`);
@@ -78005,10 +78006,10 @@ var Period = class {
   stop = null;
   state = "released";
   last = null;
-  // A read landed at `at` (now, unless the owner is resuming an answer it
+  // A read landed at the monotonic reading `at` (now, unless the owner is resuming an answer it
   // kept from earlier). `periodMs` is chosen by the caller from the read's
   // outcome (a failed PR lookup is retried sooner than a found one).
-  landed(periodMs, at = this.clock.now()) {
+  landed(periodMs, at = this.clock.monotonic()) {
     this.last = { at, periodMs };
     this.schedule();
   }
@@ -78028,7 +78029,7 @@ var Period = class {
     if (this.state !== "held" || this.last === null) return;
     const wait = Math.max(
       0,
-      this.last.at + this.last.periodMs - this.clock.now()
+      this.last.at + this.last.periodMs - this.clock.monotonic()
     );
     this.stop = this.clock.after(
       wait,
@@ -78175,7 +78176,7 @@ var GitDataProvider = class {
   // and never resolves.
   resolution(workingDir, projectDir) {
     const key = `${workingDir}|${projectDir ?? ""}`;
-    const now2 = this.clock.now();
+    const now2 = this.clock.monotonic();
     const existing = this.resolutions.get(key);
     if (existing && now2 - existing.computedAt < RESOLUTION_TTL_MS) {
       this.resolutions.delete(key);
@@ -78441,7 +78442,7 @@ var GitDataProvider = class {
       `${state.root} asked=${asked2.join(",") || "-"} values=${values2.length} pr=${prMove} watch=${followed.move}`,
       triggerOf(asked2),
       failures.size === 0 ? ok(null) : failed([...failures].join("; ")),
-      this.clock.monotonic() - startedAt
+      elapsedMs(this.clock, startedAt)
     );
   }
   // The branch's PR source, pending until the pass its first ask queues gives
@@ -78514,9 +78515,9 @@ var GitDataProvider = class {
         `${state.root} key=${valueOf(key)}`,
         by,
         outcome,
-        this.clock.monotonic() - startedAt
+        elapsedMs(this.clock, startedAt)
       );
-      const at = this.clock.now();
+      const at = this.clock.monotonic();
       pr.seen.delete(key);
       pr.seen.set(key, { outcome, at });
       for (const oldest of pr.seen.keys()) {
@@ -79276,7 +79277,7 @@ var KeyedSource = class {
           `${this.spec.fields(entry.input)} stored=${stored ? "Y" : "N"}`,
           by,
           outcome,
-          this.spec.clock.monotonic() - startedAt
+          elapsedMs(this.spec.clock, startedAt)
         );
       } finally {
         if (stored) this.store(entry, outcome);
@@ -79678,7 +79679,7 @@ var SessionUsageStore = class {
           `sid=${valueOf(sessionId2)}`,
           "request",
           record2,
-          this.clock.monotonic() - startedAt
+          elapsedMs(this.clock, startedAt)
         );
       }
       answer(
@@ -80116,7 +80117,7 @@ var TranscriptFold = class {
       `sid=${valueOf(sessionId2)}`,
       "request",
       read2,
-      this.clock.monotonic() - startedAt
+      elapsedMs(this.clock, startedAt)
     );
     if (read2.kind === "failed") return this.store(sessionId2, prior, read2);
     if (read2.kind === "absent") {
@@ -80608,7 +80609,7 @@ var AutoCompactProvider = class {
       `path=${valueOf(settingsPath)} stamp=${valueOf(stamp2)}`,
       "request",
       outcome,
-      this.clock.monotonic() - startedAt
+      elapsedMs(this.clock, startedAt)
     );
     this.known.set(settingsPath, { stamp: stamp2, outcome });
     return outcome;
@@ -80695,7 +80696,7 @@ var CacheExpiryProvider = class {
       `sid=${valueOf(sessionId2)} stamp=${valueOf(stamp2)}`,
       "request",
       outcome,
-      this.clock.monotonic() - startedAt
+      elapsedMs(this.clock, startedAt)
     );
     return outcome;
   }
@@ -81069,7 +81070,7 @@ var ManagedStorage = class {
     const cutoff = this.clock.now() - STORAGE_FILE_MAX_AGE_MS;
     let scanned = 0;
     let removed = 0;
-    const event = () => `plugin storage sweep folder=${valueOf(key.folder)} scanned=${scanned} removed=${removed} took=${Math.round(this.clock.monotonic() - startedAt)}ms`;
+    const event = () => `plugin storage sweep folder=${valueOf(key.folder)} scanned=${scanned} removed=${removed} took=${elapsedMs(this.clock, startedAt)}ms`;
     try {
       const entries = await fs_default.promises.readdir(key.folder, {
         withFileTypes: true
@@ -81586,7 +81587,7 @@ function settle2(frame2, chain2, resolveWarnings, attempt4, clock) {
     layers: chain2.layers.map((l) => l.path),
     home: chain2.home,
     repos: frame2.repos,
-    ms: Math.round(clock.monotonic() - frame2.started)
+    ms: elapsedMs(clock, frame2.started)
   };
   const warning = (own2) => joinWarnings([...frame2.advisories, ...resolveWarnings, ...own2]);
   switch (attempt4.kind) {
@@ -84092,7 +84093,7 @@ var JournalTurns = class {
       this.refuseClosed(verb);
       if (gone()) throw new ClickAbandoned(verb);
       const since = this.deps.monotonic();
-      waited(Math.round(since - asked2));
+      waited(spanMs(asked2, since));
       this.holder = { verb, since };
       try {
         return await body({
@@ -84118,12 +84119,12 @@ var JournalTurns = class {
   click(verb, session, { placed: placed2, waited, gone, gathered }, gather, body) {
     const arrived3 = this.deps.monotonic();
     const inPlace = async () => {
-      placed2(Math.round(this.deps.monotonic() - arrived3));
+      placed2(elapsedMs(this.deps, arrived3));
       this.refuseClosed(verb);
       if (gone()) throw new ClickAbandoned(verb);
       const started2 = this.deps.monotonic();
       const gathering = await gather();
-      gathered(Math.round(this.deps.monotonic() - started2));
+      gathered(elapsedMs(this.deps, started2));
       const left = gone();
       return this.take(
         verb,
@@ -84149,7 +84150,7 @@ var JournalTurns = class {
     const { holder, queued } = this;
     return {
       holder: holder?.verb ?? null,
-      heldMs: holder === null ? 0 : Math.round(this.deps.monotonic() - holder.since),
+      heldMs: holder === null ? 0 : elapsedMs(this.deps, holder.since),
       queued,
       gathers: this.gathersInFlight
     };
@@ -84354,6 +84355,7 @@ function createDaemon(inputs) {
       frameFeeds.wakeWhere("data", () => true);
     }
   });
+  const probe2 = inputs.probe(launcher);
   const storage = inputs.storage(log);
   const sessionState = new SessionState(storage.session);
   const settingsHistory = new SettingsHistory(
@@ -84424,7 +84426,8 @@ function createDaemon(inputs) {
     edge: inputs.laneEdge(
       launcher,
       (sessionId2) => frameFeeds.following(sessionId2),
-      closing.signal
+      closing.signal,
+      probe2
     ),
     // A bar pane runs this bundle under the node running it now, with the
     // flags it runs with (tsx's loader, under the test harness).
@@ -84597,6 +84600,7 @@ function createDaemon(inputs) {
   const updateWatch = makeUpdateWatch({
     clock,
     launcher,
+    probe: probe2,
     entryUrl: bundle.entryUrl,
     digest: bundle.digest,
     // [LAW:one-source-of-truth] Keyed by the bundle the act rewrites, the one
@@ -85073,6 +85077,43 @@ var DaemonLog = class {
 // src/daemon/production-adapters.ts
 init_globals();
 
+// src/daemon/process-fingerprint.ts
+init_globals();
+async function readStartTime(pid2, launch) {
+  const res = await launch({
+    bin: "ps",
+    args: ["-o", "lstart=", "-p", String(pid2)],
+    category: "process-fingerprint",
+    timeoutMs: 2e3,
+    // [FRAMING:representation] Pin BOTH locale and timezone so the token is
+    // deterministic across daemons — the writer and reader must render the same
+    // process identically for opaque string equality to be sound. LC_ALL=C fixes
+    // the strftime format; TZ=UTC fixes localtime(), so DST / TZ / tzdata changes
+    // can't make one live process render two different start-time strings.
+    envOverlay: { LC_ALL: "C", TZ: "UTC" }
+  });
+  if (res.ok) {
+    const token = res.stdout.trim();
+    if (token.length > 0) return { kind: "start", token };
+    return { kind: "unavailable", detail: "ps produced no start-time" };
+  }
+  const detail = res.reason === "spawn-error" ? res.error ?? "ps spawn failed" : `ps ${res.reason} (exit ${res.exitCode})`;
+  return { kind: "unavailable", detail };
+}
+function systemProbe(launcher) {
+  return {
+    alive: (pid2) => {
+      try {
+        process_default.kill(pid2, 0);
+        return true;
+      } catch (e) {
+        return e.code === "EPERM";
+      }
+    },
+    startTime: (pid2) => readStartTime(pid2, launcher.launch)
+  };
+}
+
 // src/daemon/file-storage.ts
 init_globals();
 
@@ -85173,7 +85214,7 @@ var FileSessionStorage = class {
     const body = JSON.stringify(snapshot);
     const tmp = this.writingPath;
     this.writing = true;
-    const heldMs = this.clock.monotonic() - started2;
+    const heldMs = elapsedMs(this.clock, started2);
     try {
       await fs_default.promises.mkdir(import_node_path43.default.dirname(this.filePath), { recursive: true });
       const file = await fs_default.promises.open(tmp, "w", 384);
@@ -85198,7 +85239,7 @@ var FileSessionStorage = class {
         if (!landed) await fs_default.promises.rm(tmp, { force: true });
         this.logger(
           "info",
-          `session-state write superseded by a flush landed=${landed} took=${Math.round(this.clock.monotonic() - started2)}ms held=${Math.round(heldMs)}ms`
+          `session-state write superseded by a flush landed=${landed} took=${elapsedMs(this.clock, started2)}ms held=${heldMs}ms`
         );
         return;
       }
@@ -85228,7 +85269,7 @@ var FileSessionStorage = class {
       fs_default.rmSync(this.writingPath, { force: true });
       fs_default.renameSync(tmp, this.filePath);
       this.generation++;
-      this.saved(body, snapshot, started2, this.clock.monotonic() - started2);
+      this.saved(body, snapshot, started2, elapsedMs(this.clock, started2));
       this.pending = null;
     } catch (e) {
       this.logger("warn", `session-state save failed: ${e.message}`);
@@ -85239,7 +85280,7 @@ var FileSessionStorage = class {
   saved(body, snapshot, started2, heldMs) {
     this.logger(
       "info",
-      `session-state saved bytes=${import_buffer.Buffer.byteLength(body)} sessions=${Object.keys(snapshot).length} took=${Math.round(this.clock.monotonic() - started2)}ms held=${Math.round(heldMs)}ms`
+      `session-state saved bytes=${import_buffer.Buffer.byteLength(body)} sessions=${Object.keys(snapshot).length} took=${elapsedMs(this.clock, started2)}ms held=${heldMs}ms`
     );
   }
 };
@@ -85254,18 +85295,6 @@ function fileStorage(paths2, log, clock) {
 
 // src/daemon/lane-edge.ts
 init_globals();
-
-// src/daemon/parent-watchdog.ts
-init_globals();
-init_process();
-function pidAlive(pid2) {
-  try {
-    process_default.kill(pid2, 0);
-    return true;
-  } catch (e) {
-    return e.code === "EPERM";
-  }
-}
 
 // src/path-search.ts
 init_globals();
@@ -85448,7 +85477,7 @@ async function paneClaude(launcher, hint) {
   };
 }
 var FOLLOW_POLL_MS = 200;
-function productionLaneEdge(launcher, following, closing, clock) {
+function productionLaneEdge(launcher, following, closing, clock, probe2) {
   const wait = (ms) => sleep(clock, ms, closing);
   return {
     claudeInput: productionClaudeInputEdge(launcher),
@@ -85505,7 +85534,7 @@ function productionLaneEdge(launcher, following, closing, clock) {
     // — the shell that started Claude Code, which may itself be a job of the
     // pane's first shell (`nix develop`, a nested `bash`).
     paneDir: async (hint, shell) => {
-      const until2 = clock.now() + SHELL_PATIENCE_MS;
+      const until2 = clock.monotonic() + SHELL_PATIENCE_MS;
       for (; ; ) {
         const pane = await paneForeground(launcher, hint);
         if (pane.foreground === shell) {
@@ -85514,7 +85543,7 @@ function productionLaneEdge(launcher, following, closing, clock) {
           }
           return pane.cwd;
         }
-        if (clock.now() > until2) {
+        if (clock.monotonic() > until2) {
           throw new Error(
             `the shell in pane ${hint.pane} (pid ${shell}) did not take its terminal back within ${SHELL_PATIENCE_MS / 1e3} s`
           );
@@ -85536,9 +85565,9 @@ function productionLaneEdge(launcher, following, closing, clock) {
       return file === null ? null : fs_default.realpathSync(file);
     },
     followed: async (sessionId2, lane, withinMs) => {
-      const until2 = clock.now() + withinMs;
+      const until2 = clock.monotonic() + withinMs;
       while (!following(sessionId2).has(lane)) {
-        if (clock.now() > until2) return false;
+        if (clock.monotonic() > until2) return false;
         await wait(FOLLOW_POLL_MS);
       }
       return true;
@@ -85569,9 +85598,9 @@ function productionLaneEdge(launcher, following, closing, clock) {
       }
     },
     exited: async (pid2, withinMs) => {
-      const until2 = clock.now() + withinMs;
-      while (pidAlive(pid2)) {
-        if (clock.now() > until2) return false;
+      const until2 = clock.monotonic() + withinMs;
+      while (probe2.alive(pid2)) {
+        if (clock.monotonic() > until2) return false;
         await wait(EXIT_POLL_MS);
       }
       return true;
@@ -85666,12 +85695,13 @@ function create(file) {
 function productionAdapters(paths2, daemonLog, machine) {
   return {
     daemonLog,
-    launcher: (own2) => createLauncher(own2, machine),
+    launcher: (own2) => systemLauncher(own2, machine),
     storage: (log) => fileStorage(paths2, log, machine),
     doctorStores: fileStores(paths2.state),
     doctorEdge: productionEdge,
     claudeInput: productionClaudeInputEdge,
-    laneEdge: (launcher, following, closing) => productionLaneEdge(launcher, following, closing, machine),
+    probe: systemProbe,
+    laneEdge: (launcher, following, closing, probe2) => productionLaneEdge(launcher, following, closing, machine, probe2),
     linkSigner: linkSignerFromKeyFile(linkKeyFile(paths2.state)),
     limits: ({ startedAtMs, exit: exit2, launcher, log }) => realLimitsDeps(startedAtMs, exit2, {
       launcher,
