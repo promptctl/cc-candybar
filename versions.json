@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-559",
+      "ref": "refs/pull/559/merge",
+      "sha": "caaee4cab992a64e86be525494c1203f40b4a38a",
+      "timestamp": "2026-11-03T00:11:32.699Z",
+      "commits": [
+        {
+          "sha": "caaee4cab992a64e86be525494c1203f40b4a38a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T00:10:37Z",
+          "message": "Merge 822f21fd6397d85672471799af2e18209a34b994 into 7ca57ba16e524929f55d99beb41eba44d31a74fb\n"
+        },
+        {
+          "sha": "822f21fd6397d85672471799af2e18209a34b994",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T20:15:07-07:00",
+          "message": "docs(design): the isolated daemon, tmux events and browser surface designs\n\nGoals, architecture, contracts and one document per area, with the surveys and probes behind them. The Frame is recorded as built, and the browser surface is un-parked.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-590",
       "ref": "refs/pull/590/merge",
       "sha": "b79077c06957c01f422c9020deb454d27af49734",
@@ -56,28 +78,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T17:07:03-07:00",
           "message": "fix(test): the client's answer cases run over a memory connection on a held clock (candybar-testing-ihvy.5q4) (#589)\n\n* fix(test): the client's answer cases run over a memory connection on a held clock (candybar-testing-ihvy.5q4)\n\nThree stub-daemon cases took the statusline's 50 ms connect and 150 ms total\nbudgets against a net server on the worker's own loop, so a loaded runner read\nCONNECT_TIMEOUT or busy in place of the stub's reply (error-glyph: 1 of 40\nloaded runs). What they prove is a decision, not an effect.\n\nrequestOutcome splits at the connect: exchangeOutcome is the round trip over a\nstream already made, and requestOutcome is the connect plus that call. The\nwire-code cases call renderOutcomeOf; the raw-bytes and glyph cases run\nexchangeOutcome over memoryConnection() with a held clock. No socket, no wall\nclock, no budget left to miss.\n\n* fix(test): review of the memory-connection cases: prettier, a title that claims only what it runs, and the load note as its mechanism (candybar-testing-ihvy.5q4)"
-        }
-      ]
-    },
-    {
-      "version": "pr-559",
-      "ref": "refs/pull/559/merge",
-      "sha": "bd9045f864cf73f30bb852b4178da311b06291a9",
-      "timestamp": "2026-11-03T00:03:43.233Z",
-      "commits": [
-        {
-          "sha": "bd9045f864cf73f30bb852b4178da311b06291a9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T00:02:30Z",
-          "message": "Merge 8abe84c6f97566f46cd8e10f29fa1410781f523e into c566bb07016fbae3ad97df6abf6cc28e94fc129b\n"
-        },
-        {
-          "sha": "8abe84c6f97566f46cd8e10f29fa1410781f523e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T20:15:07-07:00",
-          "message": "docs(design): the isolated daemon, tmux events and browser surface designs\n\nGoals, architecture, contracts and one document per area, with the surveys and probes behind them. The Frame is recorded as built, and the browser surface is un-parked.\n"
         }
       ]
     },
