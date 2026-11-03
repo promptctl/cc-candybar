@@ -141,7 +141,13 @@ case "$*" in
 esac
 `;
 
-export async function startWorld(config = "{}\n"): Promise<World> {
+// `daemonEnv` is added to the daemon's environment and nothing else's: a
+// measurement that has to ask the daemon for something (a heap snapshot on a
+// signal) names it here, so the world stays closed by default.
+export async function startWorld(
+  config = "{}\n",
+  daemonEnv: NodeJS.ProcessEnv = {},
+): Promise<World> {
   // Short, under /tmp: a unix socket path is capped at 104 bytes on macOS.
   const root = scratchDir("ccbn");
   const dirs = {
@@ -185,6 +191,7 @@ export async function startWorld(config = "{}\n"): Promise<World> {
     // The daemon dies with this process, however this process ends.
     [PARENT_PID_ENV]: String(process.pid),
     ...HERMETIC_GIT_ENV,
+    ...daemonEnv,
   };
   const terminal = sessionEnv(dirs.claude);
   // The host this world's clients are handed: its socket, its home.
