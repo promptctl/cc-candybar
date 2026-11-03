@@ -22,6 +22,14 @@ export interface FakeLauncher {
   readonly started: () => readonly Spawn[];
 }
 
+// A stream finishes its work on the next-tick queue, which a chain of resolved
+// promises never leaves room for, so each turn waits on that queue itself.
+export const turns = async (): Promise<void> => {
+  for (let i = 0; i < 5; i++) {
+    await new Promise<void>((resolve) => process.nextTick(resolve));
+  }
+};
+
 const isLifeline = (s: Pick<Spawn, "bin" | "args">): boolean =>
   s.bin === "awk" && s.args[0] === LIFELINE_PROGRAM;
 

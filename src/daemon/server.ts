@@ -276,7 +276,7 @@ function bindOrAttachAndExit(
 // and the ownership self-check are what recover a lost race.
 //
 // [LAW:effects-at-boundaries] The decision is the arbitrateSocket fold
-// over the lease read + injected pidAlive; the kill / unlink / rebind effects
+// over the lease read + the injected probe; the kill / unlink / rebind effects
 // are performed here at the edge.
 async function handleAddressInUse(
   daemon: Daemon,

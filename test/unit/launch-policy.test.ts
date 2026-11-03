@@ -1,19 +1,11 @@
 import { MAX_CAPTURED_BYTES, type LaunchResult } from "../../src/proc/launch";
 import { exits, floods, hangs, ignoring, runsFor, shell } from "../../src/proc/spawner-fake";
-import { fakeLauncher } from "../helpers/fake-launcher";
+import { fakeLauncher, turns } from "../helpers/fake-launcher";
 import { heldClock } from "../helpers/held-clock";
 
 // [LAW:behavior-not-structure] What a launch promises its caller, proved on the
 // production launcher over a scripted OS and a held clock: no process starts, no
 // time passes, and the cases that used to sleep for a timeout run at once.
-
-// A stream finishes its work on the next-tick queue, which a chain of resolved
-// promises never leaves room for, so each turn waits on that queue itself.
-const turns = async (): Promise<void> => {
-  for (let i = 0; i < 5; i++) {
-    await new Promise<void>((resolve) => process.nextTick(resolve));
-  }
-};
 
 function rig() {
   const clock = heldClock(new Date(1_000_000));

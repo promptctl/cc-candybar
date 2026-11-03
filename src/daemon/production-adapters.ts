@@ -35,14 +35,8 @@ export function productionAdapters(
     doctorEdge: productionEdge,
     claudeInput: productionClaudeInputEdge,
     probe: systemProbe,
-    laneEdge: (launcher, following, closing) =>
-      productionLaneEdge(
-        launcher,
-        following,
-        closing,
-        machine,
-        systemProbe(launcher),
-      ),
+    laneEdge: (launcher, probe, following, closing) =>
+      productionLaneEdge(launcher, following, closing, machine, probe),
     linkSigner: linkSignerFromKeyFile(linkKeyFile(paths.state)),
     limits: ({ startedAtMs, exit, launcher, log }) =>
       realLimitsDeps(startedAtMs, exit, {

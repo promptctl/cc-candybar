@@ -8,7 +8,7 @@
 // answering with its default. None of it is a fault: nothing is reported.
 
 import { drawPayload } from "./helpers/draw-payload";
-import { fakeLauncher } from "./helpers/fake-launcher";
+import { fakeLauncher, turns } from "./helpers/fake-launcher";
 import { heldClock } from "./helpers/held-clock";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { SessionState } from "../src/daemon/session-state";
@@ -51,14 +51,6 @@ interface Drawn {
   readonly errors: readonly string[];
   readonly warnings: readonly RenderWarning[];
 }
-
-// A stream finishes its work on the next-tick queue, which a chain of resolved
-// promises never leaves room for, so each turn waits on that queue itself.
-const turns = async (): Promise<void> => {
-  for (let i = 0; i < 5; i++) {
-    await new Promise<void>((resolve) => process.nextTick(resolve));
-  }
-};
 
 function renderer(cfg: ValidatedConfig) {
   const compiled = compileDslConfig(compileInputOf(cfg), TEST_SIGNER);
