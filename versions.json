@@ -2,67 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-588",
-      "ref": "refs/pull/588/merge",
-      "sha": "4395f0872f9cb9412b082e059da8644ae7b32a83",
-      "timestamp": "2026-11-03T00:49:46.882Z",
-      "commits": [
-        {
-          "sha": "4395f0872f9cb9412b082e059da8644ae7b32a83",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T00:48:52Z",
-          "message": "Merge c04ef90af5698ee015e9bee2eb3aefc1d351234f into 36ffb923c9abe5f1509b655e014aa90714188dde\n"
-        },
-        {
-          "sha": "c04ef90af5698ee015e9bee2eb3aefc1d351234f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T17:31:19-07:00",
-          "message": "fix(daemon): a disposed view's declaration throws through its holds again (candybar-testing-ihvy.dbg)\n\nReview: the disposed-view guard was unreachable in production (a disposed\nview is never served a request) and only hid the closed-holds throw.\n"
-        },
-        {
-          "sha": "f8046eb8e7f460efa632f8937fb00d45f13e0802",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T17:11:40-07:00",
-          "message": "fix(daemon): a disposed view declares nothing, and a closed usage store builds no day set (candybar-testing-ihvy.dbg)\n\nReview: an owner builds its entry before a closed Holds refuses the hold,\nso a declaration reaching a disposed view orphaned state in every owner.\n"
-        },
-        {
-          "sha": "ff5bb87e7d205467ca774c2887b02f6fad339c68",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T16:52:58-07:00",
-          "message": "fix(sources): a closed keyed source answers a late declaration as closed, as the git cache does (candybar-testing-ihvy.dbg)\n\nReview: tmux, host, managed storage and usage reach the same late\ndeclaration through KeyedSource, whose close set no closed state.\n"
-        },
-        {
-          "sha": "35260ca6986fa1a5e8670621d9f11a9867d7cc78",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T16:27:33-07:00",
-          "message": "fix(git): a closed git cache answers a late declaration as closed, so no period re-arms after close (candybar-testing-ihvy.dbg)\n\nA render mid-wait at close declared after close had dropped every repo,\nbuilt a fresh state on the closed cache, and that state's period re-armed\nafter every pass: hundreds of timers armed after daemon.close() returned.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "36ffb923c9abe5f1509b655e014aa90714188dde",
-      "timestamp": "2026-11-03T00:43:56.865Z",
+      "sha": "2b674e303614d5b76f88596aa59060f2319c8233",
+      "timestamp": "2026-11-03T00:58:02.262Z",
       "commits": [
         {
-          "sha": "36ffb923c9abe5f1509b655e014aa90714188dde",
+          "sha": "2b674e303614d5b76f88596aa59060f2319c8233",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T17:43:03-07:00",
-          "message": "test(daemon-boots): a worktree with no dist/ is told to build, not given a raw ENOENT (candybar-testing-0x6u.7eq) (#592)\n\ndaemon-build-currency-e2e is a process-tier suite: it spawns the built bundle and\nchecks first that dist/index.mjs carries the current source digest, with a message\nnaming the remedy. A fresh worktree has no dist/, and the check's readFileSync threw\nENOENT before reaching that message. Not a product bug: with a build from the\ncurrent source all three cases pass (CI builds before this tier)."
-        },
-        {
-          "sha": "cf0b0887d5176cd5ff812d0234dd84b3f09663f6",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-03T00:42:26Z",
-          "message": "chore(release): set `package.json` to 1.180.6 [skip ci]\n\n## [1.180.6](https://github.com/promptctl/cc-candybar/compare/v1.180.5...v1.180.6) (2026-11-03)\n\n### Bug Fixes\n\n* **pricing:** the pricing fetch decodes the response as a stream (candybar-testing-0x6u.61o) ([#591](https://github.com/promptctl/cc-candybar/issues/591)) ([e16e4d8](https://github.com/promptctl/cc-candybar/commit/e16e4d82cca128b9a22e0c6bc6cf69fc30529654))\n"
+          "timestamp": "2026-11-02T17:57:09-07:00",
+          "message": "fix(git): a closed git cache answers a late declaration as closed, so no period re-arms after close (candybar-testing-ihvy.dbg) (#588)\n\n* fix(git): a closed git cache answers a late declaration as closed, so no period re-arms after close (candybar-testing-ihvy.dbg)\n\nA render mid-wait at close declared after close had dropped every repo,\nbuilt a fresh state on the closed cache, and that state's period re-armed\nafter every pass: hundreds of timers armed after daemon.close() returned.\n\n* fix(sources): a closed keyed source answers a late declaration as closed, as the git cache does (candybar-testing-ihvy.dbg)\n\nReview: tmux, host, managed storage and usage reach the same late\ndeclaration through KeyedSource, whose close set no closed state.\n\n* fix(daemon): a disposed view declares nothing, and a closed usage store builds no day set (candybar-testing-ihvy.dbg)\n\nReview: an owner builds its entry before a closed Holds refuses the hold,\nso a declaration reaching a disposed view orphaned state in every owner.\n\n* fix(daemon): a disposed view's declaration throws through its holds again (candybar-testing-ihvy.dbg)\n\nReview: the disposed-view guard was unreachable in production (a disposed\nview is never served a request) and only hid the closed-holds throw."
         }
       ]
     },
