@@ -14,6 +14,19 @@ export function periodOf(every: Every, outcome: Outcome<unknown>): number {
   return outcome.kind === "failed" ? every.failedMs : every.okMs;
 }
 
+// Exponential backoff: after `failures` reads in a row that failed, the next
+// waits `failedMs` doubled once per failure past the first, up to
+// `ceilingMs`; a read that did not fail (`failures` zero) waits `okMs`.
+export function backedOffMs(
+  every: Every,
+  failures: number,
+  ceilingMs: number,
+): number {
+  return failures === 0
+    ? every.okMs
+    : Math.min(every.failedMs * 2 ** (failures - 1), ceilingMs);
+}
+
 // [LAW:single-enforcer] The one clock an owner refreshes a shared entry on
 // (brandon-unfiled-3248.8ro6, step 1). A read never decides whether its value
 // is fresh; the owner's period re-reads the entry in the background, and a

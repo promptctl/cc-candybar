@@ -168,29 +168,15 @@ describe("SessionUsageStore — session projection", () => {
         expect.stringContaining("sid=B "),
       ]);
 
-      // Today's lane lands after its directory set's scan, once the other
-      // lanes' refresh has answered: it reads that refresh, never its own.
+      // Today's lane reads the request's one refresh, never its own.
       const late = join(dir, "C.jsonl");
       mkdirSync(late);
       const request = store.request("C", late);
-      let landed = false;
-      let scanned!: () => void;
-      const scan = new Promise<void>((resolve) => (scanned = resolve));
-      const today = {
-        current: () =>
-          (landed
-            ? { kind: "ok", value: null }
-            : { kind: "pending", why: "unread", landed: scan }) as never,
-      };
-      const lanes = Promise.all([
+      await Promise.all([
         request.usage(hook("C", late)),
         request.speed(Date.now()),
-        request.today(today),
+        request.today(),
       ]);
-      await new Promise((r) => setTimeout(r, 20));
-      landed = true;
-      scanned();
-      await lanes;
       expect(usage()).toMatchObject({ refreshes: { request: 3 }, failures: 2 });
       expect(
         lines.filter((l) => l.startsWith("warn usage refresh sid=C ")),
@@ -705,30 +691,6 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
         5,
       );
       expect(store.scanStats().refreshes.first).toBe(1);
-    } finally {
-      store.close();
-    }
-  });
-
-  // The seed runs before the request's own refresh, so a cold request reads
-  // its session once — the seed's — and its refresh takes that record: run
-  // together they were two cold parses, and whichever landed second, the
-  // request's newer fold among them, was not stored.
-  test("a cold request's own session is read once, by the seed", async () => {
-    const store = new SessionUsageStore({
-      clock: systemTimekeeper,
-      host: HOST,
-      sweepIntervalMs: 0,
-    });
-    try {
-      await todayInfo(
-        store,
-        holds,
-        hook("sess-0-0", activePath),
-        root,
-        instantOf(new Date()),
-      );
-      expect(store.getStats()).toMatchObject({ hits: 1, misses: 0 });
     } finally {
       store.close();
     }

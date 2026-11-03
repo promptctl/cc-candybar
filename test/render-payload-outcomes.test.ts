@@ -20,7 +20,12 @@ import { type EffectiveGlobals } from "../src/config/effective-globals";
 import { globalsFor } from "./helpers/selection";
 import { VALUED_FIELDS } from "../src/config/globals-fields";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import type { GitInfo, GitInfoOptions, PrState } from "../src/segments/git";
+import type {
+  GitInfo,
+  GitInfoOptions,
+  PrState,
+  PullRequest,
+} from "../src/segments/git";
 import {
   ABSENT,
   pendingOf,
@@ -982,5 +987,69 @@ describe("settlePayload — what a request waits on", () => {
       pane: "%7",
       session: pendingOf("superseded"),
     });
+  });
+
+  // Totality puts both in every first bar, and both are slow and external: a
+  // scan of the transcript tree and a forge's network call. A first bar that
+  // waited on either would be as slow as the slowest. The landings here never
+  // resolve, so a request that awaited one would never return.
+  test("a first bar awaits neither today's day sums nor the branch's PR: both draw pending and land on a later draw", async () => {
+    const unanswered = {
+      kind: "pending",
+      why: "unread",
+      landed: new Promise<void>(() => {}),
+    } as const;
+    let sums: Current<unknown> = unanswered;
+    let pullRequest: Current<PullRequest> = unanswered;
+    const deps = depsWith(ABSENT, [], {
+      gitProvider: {
+        declare: () => ({
+          current: () =>
+            ok({
+              branch: "feature",
+              status: "clean",
+              aheadBehind: ABSENT,
+              head: ok("c0ffee"),
+              pullRequest,
+            }),
+        }),
+      },
+      usageStore: {
+        ...fakeUsage({
+          usage: async () => ABSENT,
+          today: () => ok({ cost: 1.5, tokens: 10 }),
+        }),
+        declareToday: () => ({ current: () => sums }),
+      },
+    });
+    const draw = () =>
+      requestPayload(
+        hookData("/no/such/transcript.jsonl"),
+        instantOf(new Date()),
+        deps,
+        undefined,
+        new Set(["git.branch", "git.prNumber", "today.cost"]),
+        EFFECTIVE_GLOBALS,
+        NO_HINTS,
+        NO_CONFIG_FILE,
+      );
+
+    const first = await draw();
+    expect(first.git).toMatchObject({
+      branch: "feature",
+      prNumber: pendingOf("unread"),
+    });
+    expect(first.today).toEqual(pendingOf("unread"));
+
+    sums = ok({ claudeConfigDir: undefined });
+    pullRequest = ok({
+      number: 76,
+      state: "open",
+      url: "https://example.test/x/y/pull/76",
+      head: "c0ffee",
+    });
+    const later = await draw();
+    expect(later.git).toMatchObject({ branch: "feature", prNumber: 76 });
+    expect(later.today).toMatchObject({ cost: 1.5 });
   });
 });

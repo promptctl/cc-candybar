@@ -5,6 +5,7 @@
 import {
   drewAwaitedPending,
   keptRenders,
+  owedLandings,
   retriedRender,
 } from "../helpers/daemon-log";
 
@@ -25,6 +26,23 @@ describe("retriedRender", () => {
     ],
   ])("an answer with %s is the one kept", (_, fields) => {
     expect(retriedRender(event(fields))).toBe(false);
+  });
+
+  // The PR and today's day sums are the two values no request waits for, so
+  // a first bar draws them pending whatever its wait did, and the answer is
+  // asked again once the lookup that lands them is logged.
+  test("an answer that drew only the PR and today pending is asked again after their refreshes", () => {
+    const line = event(
+      "timedOut=N ended=answered pending=git.prState,git.prUrl,today.cost",
+    );
+    expect(retriedRender(line)).toBe(true);
+    expect(owedLandings(line)).toEqual(["] pr refresh ", "] today refresh "]);
+  });
+
+  test("an answer that drew another value pending beside the PR is not retried", () => {
+    const line = event("timedOut=N ended=answered pending=git.prState,git.sha");
+    expect(owedLandings(line)).toEqual([]);
+    expect(retriedRender(line)).toBe(false);
   });
 
   test("an answer that drew pending though its wait answered is not retried but is pending", () => {

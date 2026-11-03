@@ -36,6 +36,7 @@ import { logLines } from "../../src/daemon/log";
 import {
   answeredRender,
   drewAwaitedPending,
+  owedLandings,
   renderEventsOf,
   retriedRender,
 } from "./daemon-log";
@@ -109,6 +110,7 @@ async function renderAnswer(
   );
   for (let attempt = 1; ; attempt++) {
     const before = answeredEvents(log, sessionId).length;
+    const linesBefore = logLines(log).length;
     // [LAW:one-source-of-truth] The deadline it states is the one it waits
     // to: like a real client, it says when it will hang up, so the daemon's
     // wait for its refreshes ends by that or by its own backstop
@@ -144,6 +146,19 @@ async function renderAnswer(
     if (attempt >= PENDING_RETRY_BUDGET)
       throw new Error(
         `render still drew pending after ${attempt} asks: ${event}`,
+      );
+    // [LAW:no-ambient-temporal-coupling] A value no request waits for is asked
+    // again once its owner logs the refresh that lands it, never after a guessed
+    // delay. The landing is logged after this ask began, since a value landed
+    // before it would have been drawn.
+    const owed = owedLandings(event);
+    if (owed.length > 0)
+      await until(
+        () =>
+          logLines(log)
+            .slice(linesBefore)
+            .some((line) => owed.some((o) => line.includes(o))),
+        `${owed.join(" or ")} after ${sessionId}'s answer`,
       );
   }
 }

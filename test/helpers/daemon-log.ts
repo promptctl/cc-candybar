@@ -79,12 +79,37 @@ export function drewOnlySuperseded(event: string): boolean {
 export const drewAwaitedPending = (event: string): boolean =>
   !/ pending=-(?: |$)/.test(event) && !drewOnlySuperseded(event);
 
+// The values no request waits for: each draws pending on a first bar and lands
+// through its owner's refresh, which that owner logs as `<source> refresh`.
+const UNWAITED: ReadonlyArray<{ readonly name: RegExp; readonly lands: string }> =
+  [
+    { name: /^git\.pr[A-Z]/, lands: "] pr refresh " },
+    { name: /^today\./, lands: "] today refresh " },
+  ];
+
+// The log lines that land the values a render drew pending, when every one of
+// them is a value no request waits for; none otherwise, since a render that
+// drew any other value pending is the one the deadline or a bug explains.
+export function owedLandings(event: string): readonly string[] {
+  const pending = (/ pending=(\S+)/.exec(event)?.[1] ?? "-")
+    .split(",")
+    .filter((v) => v !== "-");
+  const owed = pending.map(
+    (name) => UNWAITED.find((u) => u.name.test(name))?.lands,
+  );
+  return owed.length > 0 && owed.every((l) => l !== undefined)
+    ? [...new Set(owed as string[])]
+    : [];
+}
+
 // [LAW:one-source-of-truth] The answer `renderRequest` asks again after: one
-// that drew a source pending because its wait ended at the deadline. The retry
-// loop decides with this and `renderLines` drops what it decided, so a render
-// is read as the one event its client kept.
+// that drew a source pending because its wait ended at the deadline, or drew
+// only values no request waits for. The retry loop decides with this and
+// `renderLines` drops what it decided, so a render is read as the one event
+// its client kept.
 export const retriedRender = (event: string): boolean =>
-  drewAwaitedPending(event) && / ended=deadline(?: |$)/.test(event);
+  drewAwaitedPending(event) &&
+  (/ ended=deadline(?: |$)/.test(event) || owedLandings(event).length > 0);
 
 // A session's render events, one per render its client kept, in log order.
 // A request the client retried is logged once per attempt: after a timeout

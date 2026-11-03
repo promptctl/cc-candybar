@@ -141,6 +141,7 @@ function makeCache(
   opts: {
     periodMs?: number;
     maxRepos?: number;
+    maxPrLookups?: number;
     // Throws once on the first message it matches, standing in for a bug
     // inside a refresh.
     throwOn?: string;
@@ -153,6 +154,7 @@ function makeCache(
     clock: systemTimekeeper,
     periodMs: opts.periodMs,
     maxRepos: opts.maxRepos,
+    maxPrLookups: opts.maxPrLookups,
     inner,
     logger: (_level, message) => {
       if (throwOn !== undefined && message.includes(throwOn)) {
@@ -1182,6 +1184,61 @@ describe("GitDataProvider PR source", () => {
     expect(inner.prCalls).toHaveLength(2);
     await jest.advanceTimersByTimeAsync(1);
     expect(inner.prCalls).toHaveLength(3);
+    svc.close();
+  });
+
+  // A forge that stays down is asked less often the longer it does, and the
+  // first answer that is not a failure returns the key to its ordinary period.
+  test("failed lookups back off, doubling to the ok period; a success resets them", async () => {
+    jest.useFakeTimers();
+    const { svc, inner, holds } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    inner.stubPr = { kind: "failed", reason: "gh: network", failedAt: "read" };
+
+    await gitOf(svc, holds, "/repo", { showPullRequest: true });
+    let calls = 1;
+    for (const waitMs of [
+      PR_PERIOD.failedMs,
+      PR_PERIOD.failedMs * 2,
+      PR_PERIOD.failedMs * 4,
+      PR_PERIOD.okMs,
+      PR_PERIOD.okMs,
+    ]) {
+      await jest.advanceTimersByTimeAsync(waitMs - 1);
+      expect(inner.prCalls).toHaveLength(calls);
+      await jest.advanceTimersByTimeAsync(1);
+      expect(inner.prCalls).toHaveLength(++calls);
+    }
+
+    inner.stubPr = OPEN_PR;
+    await jest.advanceTimersByTimeAsync(PR_PERIOD.okMs);
+    expect(inner.prCalls).toHaveLength(++calls);
+    inner.stubPr = { kind: "failed", reason: "gh: network", failedAt: "read" };
+    await jest.advanceTimersByTimeAsync(PR_PERIOD.okMs);
+    expect(inner.prCalls).toHaveLength(++calls);
+    // The failure after a success is the first of a new run.
+    await jest.advanceTimersByTimeAsync(PR_PERIOD.failedMs);
+    expect(inner.prCalls).toHaveLength(++calls);
+    svc.close();
+  });
+
+  test("lookups across repos never exceed the cap in flight, and every repo is looked up", async () => {
+    const { svc, inner, holds } = makeCache({ maxPrLookups: 2 });
+    inner.repoRootByDir = { "/a": "/a", "/b": "/b", "/c": "/c" };
+    inner.prGate = deferred();
+
+    for (const dir of ["/a", "/b", "/c"])
+      svc.declare(holds, dir, { showPullRequest: true });
+    await tick(10);
+    expect(inner.prCalls).toHaveLength(2);
+
+    inner.prGate.resolve();
+    await tick(10);
+    expect(inner.prCalls.map((call) => call.workingDir).sort()).toEqual([
+      "/a",
+      "/b",
+      "/c",
+    ]);
     svc.close();
   });
 
