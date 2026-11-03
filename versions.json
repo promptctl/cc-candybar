@@ -2,32 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "c63e8bcefa93b28ab53cf599d14d916dda71e551",
-      "timestamp": "2026-11-03T01:34:38.731Z",
-      "commits": [
-        {
-          "sha": "c63e8bcefa93b28ab53cf599d14d916dda71e551",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T18:32:56-07:00",
-          "message": "fix(test): the turn-per-draw feed case runs on held time (candybar-testing-0x6u.e2d) (#593)\n\n* fix(test): the turn-per-draw feed case runs on held time, so a stalled loop cannot skip a turn (candybar-testing-0x6u.e2d)\n\n* test(frame-feed): the turn-per-draw case reads every shortfall on every run, and its exact-count siblings run on held time too (candybar-testing-0x6u.e2d)\n\n* test(frame-feed): wall readings cycle a fixed shortfall sequence, so one reading can disagree with the next, and the stepped-back case runs on held time (candybar-testing-0x6u.e2d)\n\n* test(frame-feed): the stepped-back case bounds each frame against the wall it was drawn at, and mixed shortfall sequences have prime lengths (candybar-testing-0x6u.e2d)"
-        }
-      ]
-    },
-    {
       "version": "pr-594",
       "ref": "refs/pull/594/merge",
-      "sha": "68b3bfd93f9b848875bdba6bbd64b6a1a3eab96d",
-      "timestamp": "2026-11-03T01:24:22.061Z",
+      "sha": "e705a47ff424417a9f7f049e45933331fda76dfd",
+      "timestamp": "2026-11-03T01:39:36.484Z",
       "commits": [
         {
-          "sha": "68b3bfd93f9b848875bdba6bbd64b6a1a3eab96d",
+          "sha": "e705a47ff424417a9f7f049e45933331fda76dfd",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T01:23:15Z",
-          "message": "Merge 7031352d301c6b6b69cb0ddc7cfad26eabd279a7 into 8b23a558ca80eb27c92e05a931e56f0267be820f\n"
+          "timestamp": "2026-11-03T01:37:56Z",
+          "message": "Merge b10649bcde6c190346b62a81103480244a1859e6 into c63e8bcefa93b28ab53cf599d14d916dda71e551\n"
+        },
+        {
+          "sha": "b10649bcde6c190346b62a81103480244a1859e6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T18:37:31-07:00",
+          "message": "fix(connection): a url frame stays in flight under the deadline, and the connection classifies the frame once (candybar-daemon-health-ajx0.co4)\n\nThe forwarder hangs up after its write by design. The connection treated\nthat close as a vanished peer: it cleared the request backstop and left\nin-flight while the click was still queued, so a forwarded click had no\ndeadline (a repeat click could revert a toggle) and stats under-counted.\nNow the connection classifies the inbound frame once (Inbound), passes it\nto the daemon, and for a url frame keeps the backstop and the in-flight\ncount until the click is handled, with no client said to have left.\n\nAlso from the high review: install's platform-package lookup is one\nhelper for the render entry and the forwarder; check-protocol refuses a\nrow naming no mirror by label; the spawn-category docs name codesign and\nkillall instead of the retired osacompile and plutil.\n"
         },
         {
           "sha": "7031352d301c6b6b69cb0ddc7cfad26eabd279a7",
@@ -42,6 +34,21 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T18:16:36-07:00",
           "message": "feat(url-handler): a resident Swift forwarder sends the raw link to the daemon, which does all parsing (candybar-daemon-health-ajx0.co4)\n\nThe URL handler app is a Swift agent (url-handler/main.swift) that forwards each\ncc-candybar:// link as one url frame, versioned by itself, and reads no answer.\nThe daemon classifies inbound frames once, splits the verb itself, and writes a\nclick event for every url frame, refused ones included. clientVersion leaves the\nwire; a click's arrival carries who delivered it, and the doctor judges by that.\nInstall assembles the .app around the prebuilt binary, ad-hoc signs it, quits the\nresident instance and registers the scheme. CI builds a universal binary on macOS\ninto both darwin packages; check-protocol pins the Swift frame and socket path.\nurl-handle remains the tmux status line's route only.\n"
+        }
+      ]
+    },
+    {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "c63e8bcefa93b28ab53cf599d14d916dda71e551",
+      "timestamp": "2026-11-03T01:34:38.731Z",
+      "commits": [
+        {
+          "sha": "c63e8bcefa93b28ab53cf599d14d916dda71e551",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T18:32:56-07:00",
+          "message": "fix(test): the turn-per-draw feed case runs on held time (candybar-testing-0x6u.e2d) (#593)\n\n* fix(test): the turn-per-draw feed case runs on held time, so a stalled loop cannot skip a turn (candybar-testing-0x6u.e2d)\n\n* test(frame-feed): the turn-per-draw case reads every shortfall on every run, and its exact-count siblings run on held time too (candybar-testing-0x6u.e2d)\n\n* test(frame-feed): wall readings cycle a fixed shortfall sequence, so one reading can disagree with the next, and the stepped-back case runs on held time (candybar-testing-0x6u.e2d)\n\n* test(frame-feed): the stepped-back case bounds each frame against the wall it was drawn at, and mixed shortfall sequences have prime lengths (candybar-testing-0x6u.e2d)"
         }
       ]
     }
