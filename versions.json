@@ -4,15 +4,22 @@
     {
       "version": "pr-601",
       "ref": "refs/pull/601/merge",
-      "sha": "e23510c57a2448ab9dcb39e3ef4346fa9e01cd40",
-      "timestamp": "2026-11-03T03:59:26.090Z",
+      "sha": "257e54315e33ccaa38ce5401e4e6c0d705c3c289",
+      "timestamp": "2026-11-03T04:09:30.007Z",
       "commits": [
         {
-          "sha": "e23510c57a2448ab9dcb39e3ef4346fa9e01cd40",
+          "sha": "257e54315e33ccaa38ce5401e4e6c0d705c3c289",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T20:57:26-07:00",
-          "message": "Merge 783f8536d0b341d981edd666ae708f092fe420dd into 1e23d8a6bf2b1e5c9e5073a317f3f70b0b5ce88e\n"
+          "timestamp": "2026-11-03T04:08:45Z",
+          "message": "Merge aff9b377b58123510f1c072f2aeee7e9c2b5e038 into 45d5d1e8852fca64ed242810be9361c168d539be\n"
+        },
+        {
+          "sha": "aff9b377b58123510f1c072f2aeee7e9c2b5e038",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T21:08:34-07:00",
+          "message": "fix(launch): pipe events stamp on the daemon's clock, share the event hold's answered rule, keep a viewer open across count changes; a pipe-error run is its own outcome (candybar-testing-0x6u.0dh)\n"
         },
         {
           "sha": "783f8536d0b341d981edd666ae708f092fe420dd",

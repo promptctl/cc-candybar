@@ -22943,6 +22943,9 @@ function eventHoldAt(event, holdS, at, render3) {
   if (at < event.at + holdS) return "held";
   return render3 === "request" && !event.answered ? "owed" : "over";
 }
+function answeredBy(last2, shown) {
+  return last2 !== null && !last2.answered && last2.at === shown.at && last2.text === shown.text;
+}
 
 // src/utils/instant.ts
 init_globals();
@@ -23058,15 +23061,14 @@ function pipeEvent(state, kind, category) {
   const text4 = `a launched program's pipe outlived its launch: ${said.join("; ")}`;
   state.pipeEvent = {
     text: text4,
-    at: instantOf(new Date(state.scope.clock.now())),
+    at: state.scope.now(),
     answered: false
   };
   state.scope.observeWarnings({ kind: "launch-pipes", text: text4 });
 }
 function answeredPipeEvent(state, event) {
   const last2 = state.pipeEvent;
-  if (last2 === null || last2.answered) return;
-  if (last2.at !== event.at || last2.text !== event.text) return;
+  if (last2 === null || !answeredBy(last2, event)) return;
   state.pipeEvent = { ...last2, answered: true };
   state.pipeCounts.clear();
 }
@@ -23654,6 +23656,7 @@ function launcherWithState(owner, clock) {
         if (message !== null) process_default.emitWarning(message);
       },
       signal: new AbortController().signal,
+      now: () => instantOf(new Date(clock.now())),
       ...owner,
       clock
     },
@@ -23774,8 +23777,7 @@ function holdClickError(state, sessionId2, text4, at) {
 }
 function answeredClickError(state, sessionId2, error) {
   const last2 = lastClickError(state, sessionId2);
-  const same2 = last2?.at === error.at && last2.text === error.text;
-  if (!same2 || last2.answered) return;
+  if (last2 === null || !answeredBy(last2, error)) return;
   state.set(sessionId2, KEY, JSON.stringify({ ...last2, answered: true }));
 }
 function lastClickError(state, sessionId2) {
@@ -71135,10 +71137,12 @@ function outcomeOf(result) {
     case "spawn-error":
     case "rate-limited":
     case "signal-refused":
-    case "pipe-error":
       return "launch";
     case "output-limit":
       return "output-limit";
+    // It ran: the launcher ended it because a pipe failed to read.
+    case "pipe-error":
+      return "pipe";
   }
 }
 function exitOf(result) {
@@ -71146,7 +71150,7 @@ function exitOf(result) {
   return result.exitCode === null ? "-" : String(result.exitCode);
 }
 function failureText(action2, outcome, result, timeoutMs) {
-  const stderr2 = outcome === "output-limit" ? "" : result.stderr.trim();
+  const stderr2 = outcome === "output-limit" || outcome === "pipe" ? "" : result.stderr.trim();
   const reason = outcome === "timeout" ? `timed out after ${timeoutMs / 1e3} s` : outcome === "exit" ? `exited ${exitOf(result)}` : (result.ok ? "" : result.error) || "could not be started";
   return `run ${action2}: ${stderr2 === "" ? reason : stderr2}`;
 }
@@ -76167,14 +76171,13 @@ function drawRender(parts, setup, drawing2) {
     drawing2.by,
     errors2,
     [...updates, ...questions],
+    // A standing warning is one per kind whose words change as it does (a
+    // pipe event's counts), so its kind alone is what it is about: a viewer
+    // open on it stays open. A render warning is about its words.
     [
-      ...standing,
-      ...renderWarnings.ofSession(sessionId2, drawing2.by, scope)
-    ].map((w) => ({
-      about: `${w.kind}\0${w.message}`,
-      text: w.message,
-      copy: w.message
-    }))
+      ...standing.map((w) => ({ about: w.kind, message: w.message })),
+      ...renderWarnings.ofSession(sessionId2, drawing2.by, scope).map((w) => ({ about: `${w.kind}\0${w.message}`, message: w.message }))
+    ].map((w) => ({ about: w.about, text: w.message, copy: w.message }))
   );
   const projected = {
     diagnostics: diagnosticsProjection(diagnostics),
@@ -84323,6 +84326,9 @@ function createDaemon(inputs) {
     inherited: host.env,
     stats: stats.launchStats,
     signal: closing.signal,
+    // [LAW:one-source-of-truth] Pipe events are stamped on the clock renders
+    // hold them against.
+    now: instant,
     // [LAW:no-silent-failure] Each change in whether what the daemon launches
     // dies with it, and each pipe event, is said in daemon.log, and every feed
     // redraws, so its warning comes on frames too.
