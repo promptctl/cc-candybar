@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-588",
+      "ref": "refs/pull/588/merge",
+      "sha": "a248ac3bcdb6a2b90ed5b7b35e99eabde313d89d",
+      "timestamp": "2026-11-03T00:42:21.001Z",
+      "commits": [
+        {
+          "sha": "a248ac3bcdb6a2b90ed5b7b35e99eabde313d89d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T00:41:25Z",
+          "message": "Merge 37d3fda03bc6b370d4fe28266a30e14e72ee9dbc into e16e4d82cca128b9a22e0c6bc6cf69fc30529654\n"
+        },
+        {
+          "sha": "37d3fda03bc6b370d4fe28266a30e14e72ee9dbc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T17:31:19-07:00",
+          "message": "fix(daemon): a disposed view's declaration throws through its holds again (candybar-testing-ihvy.dbg)\n\nReview: the disposed-view guard was unreachable in production (a disposed\nview is never served a request) and only hid the closed-holds throw.\n"
+        },
+        {
+          "sha": "5e9368965467b1e50bd8efdb675dbea7ccdd4bcc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T17:11:40-07:00",
+          "message": "fix(daemon): a disposed view declares nothing, and a closed usage store builds no day set (candybar-testing-ihvy.dbg)\n\nReview: an owner builds its entry before a closed Holds refuses the hold,\nso a declaration reaching a disposed view orphaned state in every owner.\n"
+        },
+        {
+          "sha": "ffd579bbac161075306cab5ec6db212754782836",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T16:52:58-07:00",
+          "message": "fix(sources): a closed keyed source answers a late declaration as closed, as the git cache does (candybar-testing-ihvy.dbg)\n\nReview: tmux, host, managed storage and usage reach the same late\ndeclaration through KeyedSource, whose close set no closed state.\n"
+        },
+        {
+          "sha": "98a28beec2fcbde7d6a655525c5ae4962a1dbd3c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T16:27:33-07:00",
+          "message": "fix(git): a closed git cache answers a late declaration as closed, so no period re-arms after close (candybar-testing-ihvy.dbg)\n\nA render mid-wait at close declared after close had dropped every repo,\nbuilt a fresh state on the closed cache, and that state's period re-armed\nafter every pass: hundreds of timers armed after daemon.close() returned.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-592",
       "ref": "refs/pull/592/merge",
       "sha": "2fa3ebe97e1fbf42f092fe4feab06f1c448a44e8",
@@ -20,49 +63,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T17:33:35-07:00",
           "message": "test(daemon-boots): a worktree with no dist/ is told to build, not given a raw ENOENT (candybar-testing-0x6u.7eq)\n\ndaemon-build-currency-e2e is a process-tier suite: it spawns the built bundle and\nchecks first that dist/index.mjs carries the current source digest, with a message\nnaming the remedy. A fresh worktree has no dist/, and the check's readFileSync threw\nENOENT before reaching that message. Not a product bug: with a build from the\ncurrent source all three cases pass (CI builds before this tier).\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-588",
-      "ref": "refs/pull/588/merge",
-      "sha": "acbc4105f5e1faa57bab95cde3bf11307bcff5b3",
-      "timestamp": "2026-11-03T00:32:26.847Z",
-      "commits": [
-        {
-          "sha": "acbc4105f5e1faa57bab95cde3bf11307bcff5b3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T00:31:33Z",
-          "message": "Merge dfb15036a9d86cc1d667c9baa9dac484727f42f8 into e16e4d82cca128b9a22e0c6bc6cf69fc30529654\n"
-        },
-        {
-          "sha": "dfb15036a9d86cc1d667c9baa9dac484727f42f8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T17:31:19-07:00",
-          "message": "fix(daemon): a disposed view's declaration throws through its holds again (candybar-testing-ihvy.dbg)\n\nReview: the disposed-view guard was unreachable in production (a disposed\nview is never served a request) and only hid the closed-holds throw.\n"
-        },
-        {
-          "sha": "2ba92d72c4dc6db2f030bbc1a226a56564efd710",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T17:11:40-07:00",
-          "message": "fix(daemon): a disposed view declares nothing, and a closed usage store builds no day set (candybar-testing-ihvy.dbg)\n\nReview: an owner builds its entry before a closed Holds refuses the hold,\nso a declaration reaching a disposed view orphaned state in every owner.\n"
-        },
-        {
-          "sha": "49df890babad8c24b19754ea2cae24b41cbd56a5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T16:52:58-07:00",
-          "message": "fix(sources): a closed keyed source answers a late declaration as closed, as the git cache does (candybar-testing-ihvy.dbg)\n\nReview: tmux, host, managed storage and usage reach the same late\ndeclaration through KeyedSource, whose close set no closed state.\n"
-        },
-        {
-          "sha": "c2e17351ef472727862029915b92805aed158b38",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T16:27:33-07:00",
-          "message": "fix(git): a closed git cache answers a late declaration as closed, so no period re-arms after close (candybar-testing-ihvy.dbg)\n\nA render mid-wait at close declared after close had dropped every repo,\nbuilt a fresh state on the closed cache, and that state's period re-armed\nafter every pass: hundreds of timers armed after daemon.close() returned.\n"
         }
       ]
     },
