@@ -179,7 +179,7 @@ export function fakeUsage(
       usage: (hookData: ClaudeHookData | undefined) =>
         getUsageInfo(sessionId, hookData),
       speed: (nowMs: number) => observeSpeed(sessionId, transcriptPath, nowMs),
-      today: async (_today: Lane<FakeSet>) => {
+      today: async () => {
         todayRefreshed.add(sessionId);
       },
     }),
@@ -189,7 +189,6 @@ export function fakeUsage(
       claudeConfigDir: string | undefined,
     ): Lane<FakeSet> => settledLane(ok({ claudeConfigDir })),
     refreshToday: async (
-      _today: Lane<FakeSet>,
       hookData: ClaudeHookData | undefined,
     ): Promise<void> => {
       todayRefreshed.add(hookData?.session_id ?? "");

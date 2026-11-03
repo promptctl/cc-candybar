@@ -5,8 +5,9 @@ import type { Instant } from "../../src/utils/instant";
 import { pendingOf } from "../../src/utils/outcome";
 import { laneOutcome } from "../../src/utils/reading";
 
-// `today` as a request reads it: the set declared, its first scan and the
-// session's own refresh awaited, then the day of the sums at `at`.
+// `today` once its set's first scan has landed: the set declared, the
+// session's own refresh and the scan awaited here (a request awaits only the
+// refresh), then the day of the sums at `at`.
 export async function todayInfo(
   store: SessionUsageStore,
   holds: Holds,
@@ -15,7 +16,7 @@ export async function todayInfo(
   at: Instant,
 ) {
   const lane = store.declareToday(holds, claudeConfigDir);
-  await store.refreshToday(lane, hookData);
+  await store.refreshToday(hookData);
   const set = await laneOutcome(lane);
   return set.kind === "ok" ? store.todayAt(set.value, hookData, at) : set;
 }

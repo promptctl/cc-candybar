@@ -40,7 +40,7 @@ import {
 } from "../../utils/outcome";
 import { quietLogger, type DaemonLogger } from "../../utils/logger";
 import { dateOf, type Instant } from "../../utils/instant";
-import { laneOutcome, settledLane, type Lane } from "../../utils/reading";
+import { settledLane, type Lane } from "../../utils/reading";
 import { valueOf } from "../../utils/logfmt";
 import type { Holds } from "../../utils/holds";
 import { KeyedSource, type KeyedSourceStats } from "../../utils/keyed-source";
@@ -192,7 +192,7 @@ interface SessionRefresh {
 export interface SessionRequest {
   usage(hookData: ClaudeHookData | undefined): Promise<Outcome<UsageInfo>>;
   speed(nowMs: number): Promise<Outcome<SpeedObservation>>;
-  today(today: Lane<DaySums>): Promise<void>;
+  today(): Promise<void>;
 }
 
 // What one caller's ingests did. Renders share the store's running tally — the
@@ -624,13 +624,12 @@ export class SessionUsageStore {
         );
       },
       speed: (nowMs) => this.observed(sessionId, once, nowMs),
-      // [LAW:no-ambient-temporal-coupling] The scan first, then the
-      // session's own refresh: run together, a seed's ingest of this session
-      // and the request's are two cold parses at two stamps, and whichever
-      // lands second is not stored — the request's own, newer fold among
-      // them. A refresh another lane already started is the one awaited.
-      today: async (today) => {
-        await laneOutcome(today);
+      // [LAW:no-ambient-temporal-coupling] `today` sums the session's own
+      // record, so it waits for the request's one refresh of it and for
+      // nothing else: the directory set's scan is no part of the request,
+      // since the day sums are pending until it lands and land through the
+      // observable they are read from.
+      today: async () => {
         await once().record;
       },
     };
@@ -697,18 +696,14 @@ export class SessionUsageStore {
   // over the sessions that had asked, would move with which other sessions
   // happened to have rendered.
   //
-  // A request's refresh of `today`: the active session's own record — so
-  // `today` keeps up with the cost it was sent with (short only by what a
-  // rescan's fold of the same session stores first, `ingest`) — once the
-  // directory set's first scan, which `today`'s lane waits on, has landed.
-  refreshToday(
-    today: Lane<DaySums>,
-    hookData: ClaudeHookData | undefined,
-  ): Promise<void> {
+  // A request's refresh of `today`: the active session's own record, so
+  // `today` keeps up with the cost it was sent with. The directory set's
+  // scan is not waited for (`declareToday`).
+  refreshToday(hookData: ClaudeHookData | undefined): Promise<void> {
     return this.request(
       hookData?.session_id ?? "",
       hookData?.transcript_path,
-    ).today(today);
+    ).today();
   }
 
   // [LAW:single-enforcer] A view's declaration of `today` (declareLanes in

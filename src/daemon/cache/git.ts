@@ -24,7 +24,8 @@ import {
 import { boundKey, boundOf } from "../../utils/folder-identity";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../../time";
 import { TrailingEdge } from "../../utils/trailing-edge";
-import { Period, periodOf, type Every } from "../../utils/period";
+import { Limiter } from "../../utils/limiter";
+import { Period, backedOffMs, type Every } from "../../utils/period";
 import {
   answerPending,
   currentOf,
@@ -86,6 +87,15 @@ const PASS = "pass";
 // branch and the remote), so a branch switch or a re-pointed origin is a fresh
 // lookup, never the old branch's answer.
 export const PR_PERIOD: Every = { okMs: 5 * 60_000, failedMs: 45_000 };
+// A key whose lookups keep failing (the forge down, the CLI logged out) is
+// retried at a doubling interval from `failedMs` up to the ok period, so an
+// outage costs one spawn per ok period at most, and the first success
+// returns the key to its ok period.
+const PR_BACKOFF_CEILING_MS = PR_PERIOD.okMs;
+// How many forge lookups may be out at once across every repo: each is a
+// spawned CLI and a network call, and a daemon holding many repos would
+// otherwise start one per repo in the same turn.
+const DEFAULT_PR_LOOKUPS = 2;
 // How many of a repo's PR keys keep their latest answer: the branches a user
 // switches between, each answered from its own last lookup on the way back.
 const PR_KEYS_KEPT = 16;
@@ -133,6 +143,13 @@ interface PrSource extends Readable<PullRequest> {
 interface PrAnswer {
   readonly outcome: Outcome<PullRequest>;
   readonly at: Monotonic;
+  // Lookups of this key that have failed in a row, this one included; zero
+  // for an answer that did not fail.
+  readonly failures: number;
+}
+
+function prPeriodOf({ failures }: PrAnswer): number {
+  return backedOffMs(PR_PERIOD, failures, PR_BACKOFF_CEILING_MS);
 }
 
 // What a pass did to the PR's key, for its refresh event: no PR source, the
@@ -332,6 +349,7 @@ export class GitDataProvider {
   private readonly inner: GitService;
   private readonly periodMs: number;
   private readonly maxRepos: number;
+  private readonly forgeLookups: Limiter;
   private readonly watchers: WatcherRegistry;
   private readonly ownsWatchers: boolean;
   private readonly logger: GitProviderLogger;
@@ -343,6 +361,8 @@ export class GitDataProvider {
     clock: Pick<Timekeeper, "monotonic" | "after">;
     periodMs?: number;
     maxRepos?: number;
+    // How many forge lookups may be out at once, across every repo.
+    maxPrLookups?: number;
     inner: GitService;
     watchers?: WatcherRegistry;
     // [LAW:single-enforcer] One injection point. Daemon passes its log;
@@ -355,6 +375,7 @@ export class GitDataProvider {
     this.clock = opts.clock;
     this.periodMs = opts.periodMs ?? GIT_PERIOD_MS;
     this.maxRepos = opts.maxRepos ?? DEFAULT_MAX_REPOS;
+    this.forgeLookups = new Limiter(opts.maxPrLookups ?? DEFAULT_PR_LOOKUPS);
     this.logger = opts.logger ?? quietLogger;
     const ledger = opts.ledger ?? new RefreshLedger(this.logger);
     this.gitRefreshes = ledger.declare({
@@ -811,7 +832,7 @@ export class GitDataProvider {
       pr.seen.set(key, known);
       pr.missed = false;
       settle(pr, known.outcome);
-      pr.period.landed(periodOf(PR_PERIOD, known.outcome), known.at);
+      pr.period.landed(prPeriodOf(known), known.at);
       return "recalled";
     }
     if (pr.holders === 0) {
@@ -835,11 +856,16 @@ export class GitDataProvider {
     const key = pr.key;
     if (pr.inFlight?.key === key) return pr.inFlight.done;
     const remote = pr.remote;
-    const startedAt = this.clock.monotonic();
+    // The lookup's own time: taken when it gets its slot, since the logged
+    // duration is the forge's, not the wait behind other repos' lookups.
+    let startedAt = this.clock.monotonic();
     const lookup: Promise<Outcome<PullRequest>> =
       remote.kind === "ok"
-        ? this.inner
-            .resolvePullRequest(state.root, remote.value)
+        ? this.forgeLookups
+            .run(() => {
+              startedAt = this.clock.monotonic();
+              return this.inner.resolvePullRequest(state.root, remote.value);
+            })
             .catch(threw("PR lookup"))
         : Promise.resolve(remote.kind === "failed" ? remote : ABSENT);
     const done = lookup.then((outcome) => {
@@ -853,15 +879,21 @@ export class GitDataProvider {
       );
       // Kept under its own key whether or not the PR has moved on since.
       const at = this.clock.monotonic();
+      const answer: PrAnswer = {
+        outcome,
+        at,
+        failures:
+          outcome.kind === "failed" ? (pr.seen.get(key)?.failures ?? 0) + 1 : 0,
+      };
       pr.seen.delete(key);
-      pr.seen.set(key, { outcome, at });
+      pr.seen.set(key, answer);
       for (const oldest of pr.seen.keys()) {
         if (pr.seen.size <= PR_KEYS_KEPT) break;
         pr.seen.delete(oldest);
       }
       if (pr.key !== key || pr.missed) return;
       settle(pr, outcome);
-      pr.period.landed(periodOf(PR_PERIOD, outcome), at);
+      pr.period.landed(prPeriodOf(answer), at);
     });
     pr.inFlight = { key, done };
     return done;

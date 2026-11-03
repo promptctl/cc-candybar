@@ -1084,7 +1084,7 @@ export async function refreshPayload(
   };
   await Promise.all([
     lane("session", want.session, () => session.usage(hookData)),
-    lane("today", want.today, () => session.today(deps.lanes().today)),
+    lane("today", want.today, () => session.today()),
     lane("context", want.context, () =>
       deps.contextProvider.getContextInfo(hookData),
     ),
@@ -1343,22 +1343,23 @@ function readLanes(inputs: PayloadInputs): Lanes {
 }
 
 // The landings a request waits on before it draws: every declared lane whose
-// key has never answered, the branch's PR included. A lane the daemon itself
-// superseded (a click's move) is not waited on: it draws its loading cell, and
-// its landing reaches the next frame.
+// key has never answered, except the two whose first answer is slow and
+// external: today's day sums (a scan of every transcript under the Claude Code
+// directory) and the branch's PR (a forge's network call). A first bar that
+// waited on them would be as slow as the slowest, and a bar with every
+// built-in placed always reads both, so they draw pending and land through
+// the observables their owners store them in. A lane the daemon itself
+// superseded (a click's move) is not waited on either: it draws its loading
+// cell, and its landing reaches the next frame.
 function waitsOf(lanes: DeclaredLanes): Array<Promise<void>> {
-  const git = lanes.git.current();
-  const pr = git.kind === "ok" ? git.value.pullRequest : undefined;
   // [LAW:dataflow-not-control-flow] One test over every lane: why it is
   // pending decides, never which lane it is.
   return [
-    git,
+    lanes.git.current(),
     lanes.tmux.current(),
     lanes.hostName.current(),
     lanes.hostUser.current(),
-    lanes.today.current(),
     ...[...lanes.sources.values()].map((lane) => lane.current()),
-    ...(pr === undefined ? [] : [pr]),
   ].flatMap((lane) =>
     lane.kind === "pending" && lane.why === "unread" ? [lane.landed] : [],
   );
@@ -1704,8 +1705,8 @@ export function todayOf(
 }
 
 // A statusline request's wait (rule 1 of the model): it refreshes what its
-// arrival triggers, then waits for the first value of every keyed lane its
-// view declared that has not answered yet. The answer is then drawn from the
+// arrival triggers, then waits for the first value of the keyed lanes its
+// view declared that have not answered yet (`waitsOf`). The answer is then drawn from the
 // view's payload, which those landings moved — the same values a frame drawn
 // after it reads.
 export async function settlePayload(
