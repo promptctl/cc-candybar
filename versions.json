@@ -4,22 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "c0943ea0205fc68b6c59b0134dd79a75552b2f10",
-      "timestamp": "2026-11-03T01:33:42.801Z",
+      "sha": "c63e8bcefa93b28ab53cf599d14d916dda71e551",
+      "timestamp": "2026-11-03T01:34:38.731Z",
       "commits": [
         {
-          "sha": "c0943ea0205fc68b6c59b0134dd79a75552b2f10",
+          "sha": "c63e8bcefa93b28ab53cf599d14d916dda71e551",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T18:32:54-07:00",
-          "message": "fix(launch): a waited launch keeps at most 16 MiB per stream and ends the child past it (candybar-testing-0x6u.ndy) (#590)\n\n* fix(launch): a waited launch keeps at most 16 MiB per stream and ends the child past it (candybar-testing-0x6u.ndy)\n\nA child writing without end grew the capture string until V8 threw\n'Invalid string length' from the data listener; the uncaughtException\nhandler then shut the daemon down. capture now stops at\nMAX_CAPTURED_BYTES and launchWaited ends the child through terminate with\na new reason, output-limit, so a truncated capture is never ok.\nterminate keeps the first cause.\n\n* fix(launch): a flooding run reports the output limit, not the flood, and a shell source names the reason over the exit code (candybar-testing-0x6u.ndy)\n\noutput-limit is its own run outcome, so the bar and the run log say the child\nflooded instead of that it could not start, and the 16 MiB capture never\nbecomes the bar's error. A shell source reads reason, not exitCode, to tell\nthe child's own exit from one the launcher ended, so a child that traps TERM\nand exits with a code no longer hides the limit (or the timeout).\n\n* fix(launch): a flooding run reports the output limit, not the flood, and a shell source names the reason over the exit code (candybar-testing-0x6u.ndy)\n\noutput-limit is its own run outcome, so the bar and the run log say the child\nflooded instead of that it could not start, and the 16 MiB capture never\nbecomes the bar's error. A shell source reads reason, not exitCode, to tell\nthe child's own exit from one the launcher ended, so a child that traps TERM\nand exits with a code no longer hides the limit (or the timeout).\n\n* refactor(runs): the failed count is every run that is not ok, aborted or timed out; the launch bound's trap is in memory (candybar-testing-0x6u.ndy)"
-        },
-        {
-          "sha": "8b23a558ca80eb27c92e05a931e56f0267be820f",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-03T01:06:15Z",
-          "message": "chore(release): set `package.json` to 1.180.7 [skip ci]\n\n## [1.180.7](https://github.com/promptctl/cc-candybar/compare/v1.180.6...v1.180.7) (2026-11-03)\n\n### Bug Fixes\n\n* **git:** a closed git cache answers a late declaration as closed, so no period re-arms after close (candybar-testing-ihvy.dbg) ([#588](https://github.com/promptctl/cc-candybar/issues/588)) ([2b674e3](https://github.com/promptctl/cc-candybar/commit/2b674e303614d5b76f88596aa59060f2319c8233))\n"
+          "timestamp": "2026-11-02T18:32:56-07:00",
+          "message": "fix(test): the turn-per-draw feed case runs on held time (candybar-testing-0x6u.e2d) (#593)\n\n* fix(test): the turn-per-draw feed case runs on held time, so a stalled loop cannot skip a turn (candybar-testing-0x6u.e2d)\n\n* test(frame-feed): the turn-per-draw case reads every shortfall on every run, and its exact-count siblings run on held time too (candybar-testing-0x6u.e2d)\n\n* test(frame-feed): wall readings cycle a fixed shortfall sequence, so one reading can disagree with the next, and the stepped-back case runs on held time (candybar-testing-0x6u.e2d)\n\n* test(frame-feed): the stepped-back case bounds each frame against the wall it was drawn at, and mixed shortfall sequences have prime lengths (candybar-testing-0x6u.e2d)"
         }
       ]
     },
