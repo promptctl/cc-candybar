@@ -26,6 +26,10 @@
 // daemon left beside its socket would make this app a second enforcer
 // [LAW:single-enforcer] of that directory's trust check and of the daemon's
 // spawn-storm protections.
+//
+// The binary runs only inside its .app bundle: the notification center aborts
+// the process at launch outside one, and no click can reach a bare binary
+// anyway, because Launch Services delivers URLs to bundles.
 
 import AppKit
 import UserNotifications
@@ -147,11 +151,13 @@ func notifyLost(_ why: String) {
       return
     }
     if !granted {
-      log.error("notification not shown: the user has not allowed notifications for this app")
+      // A user's choice, not this app's failure: notice, not error.
+      log.notice("notification not shown: the user has not allowed notifications for this app")
       return
     }
     let content = UNMutableNotificationContent()
-    content.title = "cc-candybar: click not delivered"
+    // The product's name is the banner's header, from the bundle's display name.
+    content.title = "Click not delivered"
     content.body = why
     let request = UNNotificationRequest(
       identifier: lostClickNotice, content: content, trigger: nil)
