@@ -23094,22 +23094,55 @@ function leaderRefuses(pid2) {
     return err.code === "EPERM";
   }
 }
-function capture(stream, full) {
+function capture(state, category, stream, full) {
+  const { stats } = state.scope;
   const decoder = new import_node_string_decoder.StringDecoder("utf8");
   let text4 = "";
   let bytes = 0;
-  const read2 = (chunk3) => {
-    const kept = chunk3.subarray(0, MAX_CAPTURED_BYTES - bytes);
-    bytes += kept.length;
-    text4 += decoder.write(kept);
-    if (kept.length < chunk3.length) full();
-  };
-  stream?.on("data", read2);
-  return () => {
-    stream?.off("data", read2);
-    const whole = text4 + decoder.end();
-    text4 = "";
-    return whole;
+  let dropped = 0;
+  let onFull = full;
+  let end = "closed";
+  stream?.on("error", () => stats?.onPipeError(category));
+  stream?.on("data", (chunk3) => {
+    if (onFull === null) {
+      dropped += chunk3.length;
+      stats?.onDrainRead(category, chunk3.length);
+      if (dropped <= MAX_CAPTURED_BYTES) return;
+      end = "cut";
+      stream.destroy();
+      return;
+    }
+    const room = Math.max(0, MAX_CAPTURED_BYTES - bytes);
+    text4 += decoder.write(chunk3.subarray(0, room));
+    bytes += chunk3.length;
+    if (bytes > MAX_CAPTURED_BYTES) onFull();
+  });
+  return {
+    take: () => {
+      if (onFull === null) return "";
+      onFull = null;
+      const whole = text4 + decoder.end();
+      text4 = "";
+      return whole;
+    },
+    // Whatever outlives the launch — a refused child, a descendant that left
+    // the group — keeps its pipes: a destroyed one would kill it with SIGPIPE
+    // at its next write. So the pipe stays open, unref'd, and is held and
+    // metered in one place while it does.
+    drain: () => {
+      if (stream === null || stream.destroyed || stream.readableEnded) return;
+      if (state.scope.signal.aborted) {
+        stream.destroy();
+        return;
+      }
+      stream.once("close", () => {
+        state.drains.delete(stream);
+        stats?.onDrainClose(category, end);
+      });
+      stream.unref();
+      state.drains.add(stream);
+      stats?.onDrainOpen(category);
+    }
   };
 }
 async function launchWaited(state, opts) {
@@ -23144,9 +23177,9 @@ async function launchWaited(state, opts) {
     if (group !== void 0) guard(state, group);
     const exited = new Promise((end) => child.once("exit", end));
     const full = () => terminate("output-limit");
-    const stdout2 = capture(child.stdout, full);
-    const stderr2 = capture(child.stderr, full);
-    const output = () => ({ stdout: stdout2(), stderr: stderr2() });
+    const stdout2 = capture(state, opts.category, child.stdout, full);
+    const stderr2 = capture(state, opts.category, child.stderr, full);
+    const output = () => ({ stdout: stdout2.take(), stderr: stderr2.take() });
     let settled3 = false;
     let timer = null;
     let killTimer = null;
@@ -23166,9 +23199,10 @@ async function launchWaited(state, opts) {
       unlisten();
       if (group !== void 0) unguard(state, group);
       stats?.onEnd(opts.category, clock.now() - t0);
-      for (const pipe of [child.stdout, child.stderr]) {
-        pipe?.unref();
-      }
+      child.off("close", conclude);
+      child.off("error", onError);
+      stdout2.drain();
+      stderr2.drain();
       deliver();
     };
     const settle3 = (r) => finish(() => resolve(r));
@@ -23225,7 +23259,7 @@ async function launchWaited(state, opts) {
         signal(pid2, "SIGTERM");
       }
     };
-    child.on("error", (err) => {
+    const onError = (err) => {
       settle3({
         ok: false,
         reason: "spawn-error",
@@ -23234,7 +23268,8 @@ async function launchWaited(state, opts) {
         signal: null,
         error: spawnErrorText(err, opts.cwd)
       });
-    });
+    };
+    child.on("error", onError);
     const conclude = (code, signal2) => {
       if (terminated !== null) {
         settle3({
@@ -23542,12 +23577,14 @@ function launcherWithState(owner, clock) {
     lifeline: null,
     fault: null,
     ending: /* @__PURE__ */ new Set(),
-    unreaped: /* @__PURE__ */ new Map()
+    unreaped: /* @__PURE__ */ new Map(),
+    drains: /* @__PURE__ */ new Set()
   };
   state.scope.signal.addEventListener(
     "abort",
     () => {
       state.inFlight.forEach((end) => end());
+      state.drains.forEach((pipe) => pipe.destroy());
       endLifeline(state);
     },
     { once: true }
@@ -23781,7 +23818,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.180.8";
+var PACKAGE_VERSION = "1.180.9";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -69255,6 +69292,10 @@ var RuntimeStats = class _RuntimeStats {
   // function of that data, not of which call site fired.
   subprocessTotal = 0;
   subprocessInFlight = 0;
+  subprocessDraining = 0;
+  subprocessDrainedBytes = 0;
+  subprocessDrainsCut = 0;
+  subprocessPipeErrors = 0;
   // Launches asked for that started nothing: the launcher had closed, the
   // category's interval had not passed, or the caller had aborted first.
   subprocessRefusals = /* @__PURE__ */ new Map();
@@ -69290,6 +69331,19 @@ var RuntimeStats = class _RuntimeStats {
         category,
         (this.subprocessRefusals.get(category) ?? 0) + 1
       );
+    },
+    onDrainOpen: () => {
+      this.subprocessDraining++;
+    },
+    onDrainRead: (_category, bytes) => {
+      this.subprocessDrainedBytes += bytes;
+    },
+    onDrainClose: (_category, end) => {
+      this.subprocessDraining--;
+      if (end === "cut") this.subprocessDrainsCut++;
+    },
+    onPipeError: () => {
+      this.subprocessPipeErrors++;
     }
   };
   recordRollingNow() {
@@ -69346,6 +69400,10 @@ var RuntimeStats = class _RuntimeStats {
       lastMinute,
       byCategory,
       refused: Object.fromEntries(this.subprocessRefused),
+      draining: this.subprocessDraining,
+      drainedBytes: this.subprocessDrainedBytes,
+      drainsCut: this.subprocessDrainsCut,
+      pipeErrors: this.subprocessPipeErrors,
       p50DurationMs: p50,
       p99DurationMs: p99
     };

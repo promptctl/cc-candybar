@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "a79a66523b3e7763ab4abce2c4a79c4a9fd4443f",
+      "timestamp": "2026-11-03T02:30:06.701Z",
+      "commits": [
+        {
+          "sha": "a79a66523b3e7763ab4abce2c4a79c4a9fd4443f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T19:29:06-07:00",
+          "message": "fix(launch): a launch's drained pipes have one owner, one bound and a stat (candybar-testing-0x6u.yzt) (#595)\n\n* fix(launch): a launch's drained pipes have one owner, one bound and a stat (candybar-testing-0x6u.yzt)\n\nA pipe a descendant holds past its launch is read by the launch's own capture\nfor its whole life: one byte count against MAX_CAPTURED_BYTES, cut past it so a\nchatty holder dies at its next write. The launcher holds every open drain,\ndestroys them when its scope closes, and meters draining/drainedBytes/drainsCut\ninto the subprocess stats. Settle drops the child's listeners, so the launch's\nclosure and output go with its result.\n\n* fix(launch): a drain is bounded and counted from settle, holds nothing of the launch, and shows in daemon-stats (candybar-testing-0x6u.yzt)\n\nHigh review of #595: clamp the kept window so no byte past the bound is kept\nbefore the end lands; destroy a drain handed over after the launcher closed;\ncount and bound a drain from settle with its end (closed/cut/errored) as data;\nrelease the launch's full callback at settle; listen for a held pipe's error;\nprint the drain row in daemon-stats.\n\n* fix(launch): a captured pipe's read error is counted for its whole life, not only once drained (candybar-testing-0x6u.yzt)\n\nMedium review of #595. The drain tests assert end kinds, not bytes a group-end\nsettle may move, and the abort case proves the holder's pipe is destroyed.\n\n* fix(launch): drain bytes count as read and pipe errors count in either phase (candybar-testing-0x6u.yzt)\n\nSecond high review of #595. A capture knows its category and stats from the\nstart, so a read error is counted whether or not the stream is drained, and a\ndrain's dropped bytes show while it is still open. A drain's end is one value.\nComments no longer claim the launch's scope goes at settle, or that only a\ndescendant outside the group is drained."
+        },
+        {
+          "sha": "d1d24e6e5710535d86e5d015200f9f12a13535fc",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-03T02:19:48Z",
+          "message": "chore(release): set `package.json` to 1.180.9 [skip ci]\n\n## [1.180.9](https://github.com/promptctl/cc-candybar/compare/v1.180.8...v1.180.9) (2026-11-03)\n\n### Bug Fixes\n\n* **test:** the frame-feed cases run on one held clock (candybar-testing-0x6u.fs0) ([#596](https://github.com/promptctl/cc-candybar/issues/596)) ([669df92](https://github.com/promptctl/cc-candybar/commit/669df9209449d3ac4080a21d3a7144477fa78a73))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-597",
       "ref": "refs/pull/597/merge",
       "sha": "2e73812846ec4912d70869adcd1f0794099d91b5",
@@ -84,71 +106,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T18:16:36-07:00",
           "message": "feat(url-handler): a resident Swift forwarder sends the raw link to the daemon, which does all parsing (candybar-daemon-health-ajx0.co4)\n\nThe URL handler app is a Swift agent (url-handler/main.swift) that forwards each\ncc-candybar:// link as one url frame, versioned by itself, and reads no answer.\nThe daemon classifies inbound frames once, splits the verb itself, and writes a\nclick event for every url frame, refused ones included. clientVersion leaves the\nwire; a click's arrival carries who delivered it, and the doctor judges by that.\nInstall assembles the .app around the prebuilt binary, ad-hoc signs it, quits the\nresident instance and registers the scheme. CI builds a universal binary on macOS\ninto both darwin packages; check-protocol pins the Swift frame and socket path.\nurl-handle remains the tmux status line's route only.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-595",
-      "ref": "refs/pull/595/merge",
-      "sha": "be80bafa4291d1e4046cca417efb4152496adb0d",
-      "timestamp": "2026-11-03T02:22:04.830Z",
-      "commits": [
-        {
-          "sha": "be80bafa4291d1e4046cca417efb4152496adb0d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T02:20:31Z",
-          "message": "Merge 4fcb3e26c999d8e7429bcb89d23df61f7d176d4c into d1d24e6e5710535d86e5d015200f9f12a13535fc\n"
-        },
-        {
-          "sha": "4fcb3e26c999d8e7429bcb89d23df61f7d176d4c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T18:57:27-07:00",
-          "message": "fix(launch): drain bytes count as read and pipe errors count in either phase (candybar-testing-0x6u.yzt)\n\nSecond high review of #595. A capture knows its category and stats from the\nstart, so a read error is counted whether or not the stream is drained, and a\ndrain's dropped bytes show while it is still open. A drain's end is one value.\nComments no longer claim the launch's scope goes at settle, or that only a\ndescendant outside the group is drained.\n"
-        },
-        {
-          "sha": "fdebeedc7ee176855b5ad900a06e8c491e9a72cb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T18:51:22-07:00",
-          "message": "fix(launch): a captured pipe's read error is counted for its whole life, not only once drained (candybar-testing-0x6u.yzt)\n\nMedium review of #595. The drain tests assert end kinds, not bytes a group-end\nsettle may move, and the abort case proves the holder's pipe is destroyed.\n"
-        },
-        {
-          "sha": "d089a272e09270463115ea80024f0597f4b37bab",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T18:47:17-07:00",
-          "message": "fix(launch): a drain is bounded and counted from settle, holds nothing of the launch, and shows in daemon-stats (candybar-testing-0x6u.yzt)\n\nHigh review of #595: clamp the kept window so no byte past the bound is kept\nbefore the end lands; destroy a drain handed over after the launcher closed;\ncount and bound a drain from settle with its end (closed/cut/errored) as data;\nrelease the launch's full callback at settle; listen for a held pipe's error;\nprint the drain row in daemon-stats.\n"
-        },
-        {
-          "sha": "0d61de08a3183a2193ff841b7924b6286f780e4d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T18:41:08-07:00",
-          "message": "fix(launch): a launch's drained pipes have one owner, one bound and a stat (candybar-testing-0x6u.yzt)\n\nA pipe a descendant holds past its launch is read by the launch's own capture\nfor its whole life: one byte count against MAX_CAPTURED_BYTES, cut past it so a\nchatty holder dies at its next write. The launcher holds every open drain,\ndestroys them when its scope closes, and meters draining/drainedBytes/drainsCut\ninto the subprocess stats. Settle drops the child's listeners, so the launch's\nclosure and output go with its result.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "669df9209449d3ac4080a21d3a7144477fa78a73",
-      "timestamp": "2026-11-03T02:08:06.155Z",
-      "commits": [
-        {
-          "sha": "669df9209449d3ac4080a21d3a7144477fa78a73",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T19:07:17-07:00",
-          "message": "fix(test): the frame-feed cases run on one held clock (candybar-testing-0x6u.fs0) (#596)\n\n* fix(test): the frame-feed cases run on one held clock, so no draw count reads real time (candybar-testing-0x6u.fs0)\n\nEvery case in test/frame-feed.test.ts built its feed on the system clock, a\nper-describe jest fake, or a busy-wait, so a stalled CI loop skipped a turn\nand failed an exact draw count. The harness now owns a heldClock and returns\nit; a case moves time with clock.advance, and a render that takes renderMs\nburns that much of the clock (new HeldClock.burn), so a render slower than its\nperiod runs back to back instead of looping at one held moment. HeldClock also\ngains pending() and never moves time back after a burn. Loose bounds that only\na loaded box needed are the exact counts the periods give.\n\n* fix(test): a repeating held timer runs once after a burn, a held span is refused unless finite and non-negative (candybar-testing-0x6u.fs0)\n\n* docs(test): advance names its inclusive end and the clock a burning callback carries past it (candybar-testing-0x6u.fs0)"
-        },
-        {
-          "sha": "e7ee7542655b493942757800b257dc4accd601f1",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-03T01:43:27Z",
-          "message": "chore(release): set `package.json` to 1.180.8 [skip ci]\n\n## [1.180.8](https://github.com/promptctl/cc-candybar/compare/v1.180.7...v1.180.8) (2026-11-03)\n\n### Bug Fixes\n\n* **launch:** a waited launch keeps at most 16 MiB per stream and ends the child past it (candybar-testing-0x6u.ndy) ([#590](https://github.com/promptctl/cc-candybar/issues/590)) ([c0943ea](https://github.com/promptctl/cc-candybar/commit/c0943ea0205fc68b6c59b0134dd79a75552b2f10))\n* **test:** the turn-per-draw feed case runs on held time (candybar-testing-0x6u.e2d) ([#593](https://github.com/promptctl/cc-candybar/issues/593)) ([c63e8bc](https://github.com/promptctl/cc-candybar/commit/c63e8bcefa93b28ab53cf599d14d916dda71e551))\n"
         }
       ]
     }
