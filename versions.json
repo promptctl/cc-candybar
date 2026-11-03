@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-597",
+      "ref": "refs/pull/597/merge",
+      "sha": "d42a3ea4c94f0309dbc708810d3257dd0eb351d2",
+      "timestamp": "2026-11-03T02:18:00.969Z",
+      "commits": [
+        {
+          "sha": "d42a3ea4c94f0309dbc708810d3257dd0eb351d2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T02:17:04Z",
+          "message": "Merge 6ed7be3ec1dd34adc8f921118791596ac36bfb55 into 669df9209449d3ac4080a21d3a7144477fa78a73\n"
+        },
+        {
+          "sha": "6ed7be3ec1dd34adc8f921118791596ac36bfb55",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T19:16:51-07:00",
+          "message": "fix(test): a render that never reads its held config fails on its reply, and the memory line keeps only the reason (candybar-testing-0x6u.8vd)\n"
+        },
+        {
+          "sha": "588dc506690556046b902034aa3f441e307345dd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T19:12:06-07:00",
+          "message": "fix(test): a render is held past the request backstop by a pipe the test writes, not by a compile's speed (candybar-testing-0x6u.8vd)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-595",
       "ref": "refs/pull/595/merge",
       "sha": "081f0aa39da70ceb6098c3f585f19c28352f7a03",
@@ -91,28 +120,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T18:16:36-07:00",
           "message": "feat(url-handler): a resident Swift forwarder sends the raw link to the daemon, which does all parsing (candybar-daemon-health-ajx0.co4)\n\nThe URL handler app is a Swift agent (url-handler/main.swift) that forwards each\ncc-candybar:// link as one url frame, versioned by itself, and reads no answer.\nThe daemon classifies inbound frames once, splits the verb itself, and writes a\nclick event for every url frame, refused ones included. clientVersion leaves the\nwire; a click's arrival carries who delivered it, and the doctor judges by that.\nInstall assembles the .app around the prebuilt binary, ad-hoc signs it, quits the\nresident instance and registers the scheme. CI builds a universal binary on macOS\ninto both darwin packages; check-protocol pins the Swift frame and socket path.\nurl-handle remains the tmux status line's route only.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-597",
-      "ref": "refs/pull/597/merge",
-      "sha": "bcf15e9964782c1a227635c20e52cc3c572afc4b",
-      "timestamp": "2026-11-03T02:13:40.037Z",
-      "commits": [
-        {
-          "sha": "bcf15e9964782c1a227635c20e52cc3c572afc4b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T19:12:24-07:00",
-          "message": "Merge 588dc506690556046b902034aa3f441e307345dd into 669df9209449d3ac4080a21d3a7144477fa78a73\n"
-        },
-        {
-          "sha": "588dc506690556046b902034aa3f441e307345dd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T19:12:06-07:00",
-          "message": "fix(test): a render is held past the request backstop by a pipe the test writes, not by a compile's speed (candybar-testing-0x6u.8vd)\n"
         }
       ]
     },
