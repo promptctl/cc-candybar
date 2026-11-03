@@ -620,6 +620,12 @@ function capture(stream: Readable | null, full: () => void): Captured {
   // Released at settle, so a drain holds nothing of the launch.
   let onFull: (() => void) | null = full;
   let cut = false;
+  let errored = false;
+  // [LAW:no-silent-failure] A pipe's read error ends the stream and is
+  // counted at a drain's close, never thrown into the launcher's loop.
+  stream?.on("error", () => {
+    errored = true;
+  });
   stream?.on("data", (chunk: Buffer) => {
     if (onFull === null) {
       dropped += chunk.length;
@@ -657,12 +663,6 @@ function capture(stream: Readable | null, full: () => void): Captured {
         return;
       }
       const { stats } = state.scope;
-      let errored = false;
-      // [LAW:no-silent-failure] A held pipe's read error ends the drain and
-      // is counted at its close, never thrown into the launcher's loop.
-      stream.on("error", () => {
-        errored = true;
-      });
       stream.once("close", () => {
         state.drains.delete(stream);
         stats?.onDrainClose(

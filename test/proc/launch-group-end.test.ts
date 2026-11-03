@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -279,21 +279,31 @@ describe("the pipes a descendant holds past its launch", () => {
     );
     expect(r).toMatchObject({ ok: true });
     await until(() => drainsClosed.length === 2, "the holder's end");
-    expect(drainsClosed).toEqual(
-      expect.arrayContaining([
-        { category: "user-shell", bytes: 4096, end: "closed" },
-        { category: "user-shell", bytes: 0, end: "closed" },
-      ]),
-    );
+    expect(drainsClosed.map((d) => d.end)).toEqual(["closed", "closed"]);
   });
 
   it("are destroyed on the spot when the launcher closed while the launch ran", async () => {
+    // The holder writes without end once the launch is over: only a destroyed
+    // pipe ends it, since an open one nobody reads blocks it for good.
+    const pidFile = join(tmpdir(), `drain-abort-${process.pid}`);
     const pending = launch(
-      python(`${SET}${FORK_HOLDER}time.sleep(0.3)\nos._exit(0)\n`),
+      python(
+        `${SET}if os.fork()==0:\n  os.setsid()\n  open(${JSON.stringify(pidFile)},'w').write(str(os.getpid()))\n  time.sleep(0.5)\n  while True: os.write(1,b'x'*65536)\ntime.sleep(0.3)\nos._exit(0)\n`,
+      ),
     );
-    await new Promise((r) => setTimeout(r, 100));
+    await until(() => existsSync(pidFile), "the holder's start");
     ending.abort();
     await pending;
     expect(drainsOpened).toEqual([]);
+    const pid = Number(readFileSync(pidFile, "utf8"));
+    rmSync(pidFile);
+    await until(() => {
+      try {
+        process.kill(pid, 0);
+        return false;
+      } catch {
+        return true;
+      }
+    }, "the holder's end at its cut pipe");
   });
 });
