@@ -16,7 +16,7 @@ import type {
   PermanentOutcome,
 } from "../daemon/client-transport";
 import { obtainDaemonKick } from "../daemon/acquire";
-import { parseHandlerUrl, URL_SCHEME } from "../click/wire";
+import { APP_NAME, parseHandlerUrl, URL_SCHEME } from "../click/wire";
 import { DOOR_GLYPH } from "../config/disclosure";
 import { PACKAGE_VERSION } from "../version";
 import { shellWord, singleQuoted } from "../shell-word";
@@ -39,9 +39,6 @@ import {
 import { PLATFORM_PACKAGES } from "./platforms";
 
 const BUNDLE_ID = "com.cccandybar.url-handler";
-// [LAW:one-source-of-truth] The app's name is its process name: install quits
-// it by this name, and the click benchmark quits it to measure a cold click.
-export const APP_NAME = "CCCandybarURLHandler";
 // The forwarder binary's name in a darwin platform package's `bin/`, as
 // .github/workflows/release.yml stages it.
 const FORWARDER_BIN = "cc-candybar-url-handler";
