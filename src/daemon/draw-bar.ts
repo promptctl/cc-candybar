@@ -493,7 +493,7 @@ export function drawRender(
   // [LAW:one-source-of-truth] The width is `renderWidth` of the turn's hints —
   // the client's cols, else the default, less Claude Code's reserve — which
   // its payload carries as `term.cols`.
-  const { hints } = view.facts();
+  const hints = view.source.hints();
   const width = payload.term.cols;
   noteFacts(facts, { width: String(width) });
   // [LAW:no-ambient-temporal-coupling] The click error dispatch held for this

@@ -1465,9 +1465,16 @@ export type ComposeInputs = Pick<
 // a template: the payload carries what the owners hold, never when it first
 // differed, which only the document keeps.
 const unstamped = <T>(fact: Fact<T>): Reading<T> => {
-  if (fact.kind === "pending") return fact;
-  const { at: _at, ...reading } = fact;
-  return reading as Reading<T>;
+  switch (fact.kind) {
+    case "pending":
+      return fact;
+    case "absent":
+      return ABSENT;
+    case "ok":
+      return ok(fact.value);
+    case "failed":
+      return failed(fact.reason, fact.failedAt);
+  }
 };
 
 // [LAW:one-source-of-truth] The one assembly of a view's payload: the facts

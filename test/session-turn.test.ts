@@ -130,6 +130,38 @@ describe("a turn that cannot be stamped", () => {
   });
 });
 
+describe("a fault that persists", () => {
+  test("is one turn: a later move wakes nobody and logs nothing again", async () => {
+    const broken = observable.box(false);
+    const depth = observable.box(0);
+    const logged: string[] = [];
+    const changed: string[] = [];
+    const rig = sessionRig(dir, cleanups, {
+      source: {
+        history: () => ({ undo: depth.get(), redo: 0, sinceEdit: 0 }),
+        update: () => {
+          if (broken.get()) throw new Error("update watch exploded");
+          return pendingOf("unread");
+        },
+      },
+      log: (level, message) => logged.push(`${level} ${message}`),
+      observers: { onViewChanged: (sid) => changed.push(sid) },
+    });
+    const view = await openSettled(rig, dir, cleanups, null);
+
+    runInAction(() => broken.set(true));
+    const payload = view.source.payload();
+    const lines = logged.length;
+    const woken = changed.length;
+
+    runInAction(() => depth.set(1));
+    expect(view.source.failure()).toContain("update watch exploded");
+    expect(view.source.payload()).toBe(payload);
+    expect(logged.length).toBe(lines);
+    expect(changed.length).toBe(woken);
+  });
+});
+
 describe("a view that fails to open", () => {
   test("is reported, and what it began is released: a later pick declares nothing", () => {
     const rig = sessionRig(dir, cleanups, {

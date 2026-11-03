@@ -52,6 +52,10 @@ export interface SessionSource extends ViewSource {
   // The session's facts document (src/facts/session-facts.ts), restamped in
   // the turn an owner's reading moves; the view's source is its one holder.
   readonly facts: () => SessionFacts;
+  // The client's hints the turn was composed from: what a draw takes of the
+  // client beside the payload, so it never pairs a turn with a request it was
+  // not composed from.
+  readonly hints: () => ComposeInputs["hints"];
   // Why the turn after the one every read above is of could not be stamped, or
   // null when the latest turn completed: while it is set the bar is drawn from
   // the last turn that did, and says so.
@@ -79,6 +83,13 @@ type TurnInputs =
     }
   | { readonly kind: "failed"; readonly reason: string };
 
+// [LAW:one-source-of-truth] A turn that fails for the reason it already failed
+// for is that turn: a fault that persists must not mint a new turn per owner
+// landing, which would recompose the payload, wake the view and log again for
+// a bar that has not changed.
+const failedWith = (prior: Turn, reason: string): Turn =>
+  prior.failure === reason ? prior : { ...prior, failure: reason };
+
 // [LAW:single-enforcer] The one stamp of a turn, against the turn it replaces.
 // The prior turn itself is returned when nothing it holds moved (the document's
 // identity is `restamp`'s verdict), so nothing holding it is touched; a turn
@@ -92,7 +103,7 @@ function stamped(
   at: Instant,
   session: SessionId,
 ): Turn {
-  if (moved.kind === "failed") return { ...prior, failure: moved.reason };
+  if (moved.kind === "failed") return failedWith(prior, moved.reason);
   try {
     const document = assembleFacts(
       prior.document,
@@ -113,7 +124,7 @@ function stamped(
           failure: null,
         };
   } catch (e) {
-    return { ...prior, failure: `stamping the facts document: ${String(e)}` };
+    return failedWith(prior, `stamping the facts document: ${String(e)}`);
   }
 }
 
@@ -242,13 +253,9 @@ export function sessionSource(
         },
         (moved) =>
           runInAction(() => {
-            const next = stamped(
-              turn.get(),
-              moved,
-              instantAt(clock),
-              sessionId,
-            );
-            if (next.failure !== null) {
+            const prior = turn.get();
+            const next = stamped(prior, moved, instantAt(clock), sessionId);
+            if (next.failure !== null && next !== prior) {
               // [LAW:no-silent-failure] Told to the log as well as to the bar.
               deps.providers.log(
                 "error",
@@ -277,6 +284,7 @@ export function sessionSource(
       payload: () => payload.read(),
       effective: () => turn.get().draw.effective,
       facts: () => turn.get().document,
+      hints: () => turn.get().compose.hints,
       failure: () => turn.get().failure,
       selections: () => turn.get().draw.effective,
     };
