@@ -4,32 +4,32 @@
     {
       "version": "pr-603",
       "ref": "refs/pull/603/merge",
-      "sha": "9045c4e7c63f74c1b1c41a1b22eb3e893c2a155c",
-      "timestamp": "2026-11-03T04:43:21.402Z",
+      "sha": "146bba48d74b88a220b54dd5e1dada3b7f91c5bc",
+      "timestamp": "2026-11-03T04:44:54.948Z",
       "commits": [
         {
-          "sha": "9045c4e7c63f74c1b1c41a1b22eb3e893c2a155c",
+          "sha": "146bba48d74b88a220b54dd5e1dada3b7f91c5bc",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T04:42:28Z",
-          "message": "Merge 28e7a1bb8cc965d317d99c40319a5504b962ac1e into e2b84658bbaa52f486f36c248e2c7a45e88eda88\n"
+          "timestamp": "2026-11-03T04:43:53Z",
+          "message": "Merge a2df142f0287fb0ebfe973502a86fac2ee17c837 into e2b84658bbaa52f486f36c248e2c7a45e88eda88\n"
         },
         {
-          "sha": "28e7a1bb8cc965d317d99c40319a5504b962ac1e",
+          "sha": "a2df142f0287fb0ebfe973502a86fac2ee17c837",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T21:42:16-07:00",
           "message": "fix(bench): the logfmt reader tokenizes, a rotation is told by inode, and the probe click is asked once (candybar-url-handler-uy01.05x)\n\nMedium review of #603. A field spelled inside an earlier quoted value\nshadowed the real field, so the reader walks the line's tokens and a\nquoted value is consumed whole; it yields every field, so the click\nsuite reads the problems field without a prefilter that could throw on\na line that only mentions it. A rotated log was told by its size\nshrinking, which a busy daemon undoes within the wait; the inode tells\nit. A line with no timestamp fails naming the line. The probe click and\nits event land once a process, not once a benchmark, and the cold\nbenchmark's `about` says it quits the live handler app.\n"
         },
         {
-          "sha": "cc763a8c4cdfe279fbb6643bde3a038f4e10b825",
+          "sha": "c3e8730ed6a5c39a00b7fb41e8eddcff81db24e0",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T21:34:40-07:00",
           "message": "fix(bench): the click suite proves the daemon by a round trip, reads the log from the click on, and matches the whole problem (candybar-url-handler-uy01.05x)\n\nReview of #603. A socket file was taken as a live daemon, so a daemon dead\nwithout unlinking ran the bench into a notification on the user's screen;\na stats round trip over the default socket proves it. Each poll read every\nlog generation from byte 0; the event can only be past where the file\nstood at the click, so the read starts there and follows one rotation.\nThe event match was an unterminated prefix (`-1` matched `-10`); the\nproblems field is now decoded and compared whole, through one logfmt\nfield reader beside the encoder, which the daemon world's render reader\nshares too (its own read a quoted value's first word). A lost event names\nthe log searched, since this shell's state dir need not be the daemon's.\nThe app's name moves beside the scheme so the bench imports nothing of\nthe installer. Live run: 15 of 15 events found, cold p50 172 ms, warm\n99 ms under load 33.\n"
         },
         {
-          "sha": "fd33ee15b75b6fb767af764d92681420bff93e8b",
+          "sha": "277f94c9a7e0163465fbcf88ad89fa2810c4ca78",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T21:18:59-07:00",
