@@ -23101,6 +23101,10 @@ function capture(stream, full) {
   let dropped = 0;
   let onFull = full;
   let cut = false;
+  let errored = false;
+  stream?.on("error", () => {
+    errored = true;
+  });
   stream?.on("data", (chunk3) => {
     if (onFull === null) {
       dropped += chunk3.length;
@@ -23133,10 +23137,6 @@ function capture(stream, full) {
         return;
       }
       const { stats } = state.scope;
-      let errored = false;
-      stream.on("error", () => {
-        errored = true;
-      });
       stream.once("close", () => {
         state.drains.delete(stream);
         stats?.onDrainClose(
