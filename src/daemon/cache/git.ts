@@ -856,11 +856,16 @@ export class GitDataProvider {
     const key = pr.key;
     if (pr.inFlight?.key === key) return pr.inFlight.done;
     const remote = pr.remote;
-    const startedAt = this.clock.monotonic();
+    // The lookup's own time: taken when it gets its slot, since the logged
+    // duration is the forge's, not the wait behind other repos' lookups.
+    let startedAt = this.clock.monotonic();
     const lookup: Promise<Outcome<PullRequest>> =
       remote.kind === "ok"
         ? this.forgeLookups
-            .run(() => this.inner.resolvePullRequest(state.root, remote.value))
+            .run(() => {
+              startedAt = this.clock.monotonic();
+              return this.inner.resolvePullRequest(state.root, remote.value);
+            })
             .catch(threw("PR lookup"))
         : Promise.resolve(remote.kind === "failed" ? remote : ABSENT);
     const done = lookup.then((outcome) => {
