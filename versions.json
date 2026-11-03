@@ -4,15 +4,22 @@
     {
       "version": "pr-606",
       "ref": "refs/pull/606/merge",
-      "sha": "a20ea59ab1e1823b6798b08e07b5bda84b40a0dd",
-      "timestamp": "2026-11-03T07:58:46.902Z",
+      "sha": "cf81f14e446680ae09d5893cd7ef5f02a8788981",
+      "timestamp": "2026-11-03T08:07:54.348Z",
       "commits": [
         {
-          "sha": "a20ea59ab1e1823b6798b08e07b5bda84b40a0dd",
+          "sha": "cf81f14e446680ae09d5893cd7ef5f02a8788981",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T07:57:50Z",
-          "message": "Merge 617e282b7bf5412e0d802975e3197872e047ea04 into 04d058325f14b84fc80d66fc432ae7583f3ceb7d\n"
+          "timestamp": "2026-11-03T08:07:02Z",
+          "message": "Merge 0623126f647d39bf0afcb9d608779bb7d186e443 into 04d058325f14b84fc80d66fc432ae7583f3ceb7d\n"
+        },
+        {
+          "sha": "0623126f647d39bf0afcb9d608779bb7d186e443",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T01:06:52-07:00",
+          "message": "test: lower the daemon-boot ratchet to the 204 cases left after #605 removed ten\n"
         },
         {
           "sha": "617e282b7bf5412e0d802975e3197872e047ea04",
