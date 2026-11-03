@@ -4,15 +4,22 @@
     {
       "version": "pr-615",
       "ref": "refs/pull/615/merge",
-      "sha": "3b4e58335870064a4418718667dd8f3cfcc29cd3",
-      "timestamp": "2026-11-03T16:53:34.866Z",
+      "sha": "c387b8ceb72da9e512d42d79c119a72b589ef97b",
+      "timestamp": "2026-11-03T17:02:58.166Z",
       "commits": [
         {
-          "sha": "3b4e58335870064a4418718667dd8f3cfcc29cd3",
+          "sha": "c387b8ceb72da9e512d42d79c119a72b589ef97b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T16:51:32Z",
-          "message": "Merge b51d7a34a000fd9cf2f08bfd230eec839d2b369a into 847071c25ae39f8f9af52d1ab5b46f3a54b872e1\n"
+          "timestamp": "2026-11-03T17:01:50Z",
+          "message": "Merge ede557a39f674268dd26ade8518686b80f69aa50 into 847071c25ae39f8f9af52d1ab5b46f3a54b872e1\n"
+        },
+        {
+          "sha": "ede557a39f674268dd26ade8518686b80f69aa50",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T10:01:37-07:00",
+          "message": "fix(launch): a failure says the first and last lines of what its child said, bounded where it is built (candybar-gather-renderer-76bb.6pj.dr2)\n\nSecond high review: the live daemon wires no segment-error viewer, so the bar's\n⚠ cell is the only place a failure shows and clipping it there hid the cause.\nThe cell draws whole again; the describer bounds the said text instead, which\nalso keeps megabytes of stderr out of the store and the memory-report log.\nLane failures summarize stdout the same way and drop it for floods and cut\npipes. The handoff's timeout no longer names a bound it did not set. Install\nand tmux's rate-limit go through the describer.\n"
         },
         {
           "sha": "b51d7a34a000fd9cf2f08bfd230eec839d2b369a",

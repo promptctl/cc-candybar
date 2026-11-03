@@ -23002,8 +23002,25 @@ function whyFailed(r) {
       return r.error === void 0 ? r.reason : `${r.reason}: ${r.error}`;
   }
 }
+var SAID_LINE_CHARS = 200;
+var clipped = (line) => {
+  const kept = [];
+  for (const ch of line) {
+    if (kept.length === SAID_LINE_CHARS) return `${kept.join("")}\u2026`;
+    kept.push(ch);
+  }
+  return line;
+};
+function saidBy(r, text4) {
+  if (r.reason === "output-limit" || r.reason === "pipe-error") return "";
+  const t2 = text4.trim();
+  const firstEnd = t2.search(/[\r\n]/);
+  if (firstEnd === -1) return clipped(t2);
+  const lastStart = Math.max(t2.lastIndexOf("\n"), t2.lastIndexOf("\r")) + 1;
+  return `${clipped(t2.slice(0, firstEnd).trim())} \u2026 ${clipped(t2.slice(lastStart).trim())}`;
+}
 function failureText(r, where = "") {
-  const said = r.reason === "output-limit" || r.reason === "pipe-error" ? "" : r.stderr.trim();
+  const said = saidBy(r, r.stderr);
   return `${whyFailed(r)}${where}${said === "" ? "" : `: ${said}`}`;
 }
 var refusedAsAborted = ({ reason }) => ({
@@ -65919,7 +65936,7 @@ function invocation(hint, category, args, stdinInput) {
 function tmuxRun(result, args) {
   if (result.ok) return { kind: "ok", stdout: result.stdout };
   if (result.reason === "rate-limited") {
-    return { kind: "rate-limited", reason: result.error ?? "rate-limited" };
+    return { kind: "rate-limited", reason: failureText(result) };
   }
   return {
     kind: "failed",
@@ -70363,9 +70380,9 @@ function oneArg(value) {
   return decodeWire(() => decodeURIComponent(value));
 }
 var CLICK_PROGRAM_TIMEOUT_MS = 5e3;
-function clickFailed(r, category, what, log) {
+function clickFailed(r, what, log) {
   if (r.reason === "rate-limited") {
-    log("warn", `${category} ${failureText(r)}`);
+    log("warn", failureText(r));
     return;
   }
   if (r.reason === "aborted") throw new DaemonClosing(what);
@@ -70377,7 +70394,7 @@ async function clickLaunch(launcher, opts, what, log) {
     timeoutMs: CLICK_PROGRAM_TIMEOUT_MS
   });
   if (result.ok) return;
-  clickFailed(result, opts.category, what, log);
+  clickFailed(result, what, log);
 }
 var HANDOFF_POLL_MS = 50;
 async function clickHandoff(launcher, opts, what, log, boundMs, tmp) {
@@ -70393,7 +70410,6 @@ async function clickHandoff(launcher, opts, what, log, boundMs, tmp) {
     if (!job.ok) {
       clickFailed(
         { ...job, stdout: "", stderr: "", exitCode: null, signal: null },
-        opts.category,
         what,
         log
       );
@@ -70420,10 +70436,8 @@ async function clickHandoff(launcher, opts, what, log, boundMs, tmp) {
             stdout: "",
             stderr: "",
             exitCode: null,
-            signal: null,
-            error: timedOutError(boundMs)
+            signal: null
           },
-          opts.category,
           what,
           log
         );
@@ -74645,13 +74659,9 @@ function waitingRows(node, scope, ctx, variable, palette, bodyOpen, layoutOf) {
 function cellsWidth(cells) {
   return cells.reduce((width, cell3) => width + cell3.cellLength, 0);
 }
-var BROKEN_CELL_CHARS = 240;
 function brokenSegment(node, scope, ctx, message) {
   ctx.onSegmentError?.(node.id, message);
-  const oneLine = sanitizeAndTruncate(
-    message.replace(/\s*[\r\n]\s*/g, " "),
-    BROKEN_CELL_CHARS
-  );
+  const oneLine = message.replace(/\s*\n\s*/g, " ");
   return [
     {
       cells: applySegmentLayout(
@@ -85819,7 +85829,7 @@ async function tmux2(launcher, hint, args, stdinInput) {
 }
 function ran(what, result) {
   if (result.ok) return result.stdout;
-  const told = result.stderr.trim() === "" ? result.stdout.trim() : "";
+  const told = saidBy(result, result.stdout);
   throw new Error(
     `${what} failed (${failureText(result)}${told === "" ? "" : `: ${told}`})`
   );
