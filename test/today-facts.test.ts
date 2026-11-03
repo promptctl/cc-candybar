@@ -13,7 +13,6 @@ import {
   type DayUsage,
   type TodayFacts,
 } from "../src/daemon/cache/today-facts";
-import { RefreshFaults } from "../src/daemon/refresh-faults";
 import { todayOf, todayReading } from "../src/daemon/render-payload";
 import { dateOf, instantOf } from "../src/utils/instant";
 import {
@@ -98,7 +97,6 @@ describe("todayReading", () => {
     const store = usage(ok(own));
     const fact = todayReading(
       settledLane(ok(SET)),
-      new RefreshFaults(),
       store,
       SID,
     );
@@ -109,7 +107,6 @@ describe("todayReading", () => {
   test("a session with no days outside the set has none of its own", () => {
     const fact = todayReading(
       settledLane(ok(SET)),
-      new RefreshFaults(),
       usage(ABSENT),
       SID,
     );
@@ -120,25 +117,17 @@ describe("todayReading", () => {
     const fault = failed("transcript unreadable", "read");
     const fact = todayReading(
       settledLane(ok(SET)),
-      new RefreshFaults(),
       usage(fault),
       SID,
     );
     expect(fact).toEqual(fault);
   });
 
-  test("the refresh's fault comes before the lane, and the lane before the session", () => {
-    const faults = new RefreshFaults();
-    faults.refreshed(SID, "today", "scan threw");
-    expect(
-      todayReading(settledLane(ok(SET)), faults, usage(ok(own)), SID),
-    ).toEqual(failed("scan threw", "read"));
-
+  test("the lane's own failure comes before the session's", () => {
     const scan = failed("usage scan: broke", "read");
     expect(
       todayReading(
         settledLane(scan),
-        new RefreshFaults(),
         usage(failed("transcript unreadable", "read")),
         SID,
       ),

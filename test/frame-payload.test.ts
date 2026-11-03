@@ -17,7 +17,7 @@ import {
   renderWidth,
   settlePayload,
   todayOf,
-  todayReading,
+  readingsOf,
   type PayloadInputs,
   type RenderPayloadDeps,
 } from "../src/daemon/render-payload";
@@ -25,7 +25,7 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { globalsFor } from "./helpers/selection";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf } from "../src/utils/instant";
-import { ABSENT, pendingOf, ok } from "../src/utils/outcome";
+import { ABSENT, failed, pendingOf, ok } from "../src/utils/outcome";
 import type { ClientHints } from "../src/daemon/protocol";
 import { sessionIdOf } from "../src/daemon/session-id";
 import type { ClaudeHookData } from "../src/utils/claude";
@@ -145,15 +145,7 @@ function counted(pr?: unknown) {
   };
   // `today` as a draw at `at` projects it.
   const today = (at = AT) =>
-    todayOf(
-      todayReading(
-        deps.lanes().today,
-        deps.faults,
-        deps.usageStore,
-        HOOK.session_id,
-      ),
-      at,
-    );
+    todayOf(readingsOf(inputs(), new Map()).today, at);
   return { reads, inputs, request, today, deps, logs };
 }
 
@@ -220,6 +212,32 @@ describe("a frame's payload", () => {
     expect(logs).toContainEqual(
       expect.stringMatching(/^error context read threw: Error: context bug/),
     );
+  });
+
+  test("a `today` read that throws is today's failure, logged; the rest of the frame draws", async () => {
+    const { inputs, request, deps, logs } = counted();
+    await request();
+    deps.usageStore.daysOutside = () => {
+      throw new Error("days bug");
+    };
+    expect(readingsOf(inputs(), new Map()).today).toMatchObject({
+      kind: "failed",
+    });
+    expect(payloadOf(inputs(), DRAW).git).toMatchObject({ branch: "main" });
+    expect(logs).toContainEqual(
+      expect.stringMatching(/^error today read threw: Error: days bug/),
+    );
+  });
+
+  test("a `today` whose refresh threw is that failure, before the lane is read", async () => {
+    const { inputs, reads, request, deps } = counted();
+    await request();
+    const before = reads["today"];
+    deps.faults.refreshed(HOOK.session_id, "today", "scan threw");
+    expect(readingsOf(inputs(), new Map()).today).toEqual(
+      failed("scan threw", "read"),
+    );
+    expect(reads["today"]).toBe(before);
   });
 
   test("a frame reading the context window and no autocompact draws no autocompact", () => {

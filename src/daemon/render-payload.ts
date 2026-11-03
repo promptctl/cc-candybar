@@ -1384,7 +1384,9 @@ export function readingsOf(
   };
   return {
     lanes: laneReadings,
-    today: todayReading(lanes.today, deps.faults, deps.usageStore, sessionId),
+    today: read("today", want.today, () =>
+      todayReading(lanes.today, deps.usageStore, sessionId),
+    ),
     gathered: want,
     declaredSources: [...declared.keys()],
     faults: REFRESH_LANES.flatMap((lane) => {
@@ -1394,18 +1396,17 @@ export function readingsOf(
   };
 }
 
-// [LAW:single-enforcer] Today's facts as the session reads them: the refresh's
-// fault if it threw, else the directory set's day sums with the session's own
-// days beside them, failing if the session's last ingest did. The draw's
-// projection (`todayOf`) and the facts document read through this one
-// definition.
+// [LAW:single-enforcer] Today's facts as the session reads them: the directory
+// set's day sums with the session's own days beside them, failing if the
+// session's last ingest did. The draw's projection (`todayOf`) and the facts
+// document read through this one definition, behind `readingsOf`'s `read`
+// (the refresh's fault, a throw).
 export function todayReading(
   lane: Lane<DaySums>,
-  faults: RefreshFaults,
   usage: Pick<SessionUsageStore, "daysOutside">,
   sessionId: string,
 ): Current<TodayFacts> {
-  const set = faults.of(sessionId, "today") ?? lane.current();
+  const set = lane.current();
   if (set.kind !== "ok") return set;
   const own = usage.daysOutside(sessionId, set.value.roots);
   if (own.kind === "failed") return own;

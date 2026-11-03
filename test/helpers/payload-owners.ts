@@ -45,7 +45,6 @@ import {
   readingsOf,
   settlePayload,
   todayOf,
-  todayReading,
   type ConfigFileFacts,
   type DrawnPayload,
   type KeyedOwners,
@@ -341,15 +340,7 @@ export async function requestPayload(
   return {
     ...payload,
     feeds: UNFOLLOWED_FEEDS,
-    today: todayOf(
-      todayReading(
-        lanes.today,
-        deps.faults,
-        deps.usageStore,
-        hookData.session_id,
-      ),
-      at,
-    ),
+    today: todayOf(readingsOf(inputs, new Map()).today, at),
   };
 }
 

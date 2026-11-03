@@ -3,7 +3,6 @@ import type {
   SessionUsageStore,
 } from "../../src/daemon/cache/session-usage-store";
 import { oneDay, projectToday } from "../../src/daemon/cache/today-facts";
-import { RefreshFaults } from "../../src/daemon/refresh-faults";
 import { todayReading } from "../../src/daemon/render-payload";
 import type { ClaudeHookData } from "../../src/utils/claude";
 import type { Holds } from "../../src/utils/holds";
@@ -49,12 +48,7 @@ function projected(
   hookData: ClaudeHookData | undefined,
   at: Instant,
 ) {
-  const fact = todayReading(
-    lane,
-    new RefreshFaults(),
-    store,
-    hookData?.session_id ?? "",
-  );
+  const fact = todayReading(lane, store, hookData?.session_id ?? "");
   return fact.kind === "ok" ? projectToday(fact.value, at) : fact;
 }
 
