@@ -4,15 +4,22 @@
     {
       "version": "pr-590",
       "ref": "refs/pull/590/merge",
-      "sha": "234c0832803bd33607734784441a96b9ecdf07ed",
-      "timestamp": "2026-11-03T00:05:57.149Z",
+      "sha": "54a227605c110640fac51c48058d1f8009b8143c",
+      "timestamp": "2026-11-03T00:06:47.266Z",
       "commits": [
         {
-          "sha": "234c0832803bd33607734784441a96b9ecdf07ed",
+          "sha": "54a227605c110640fac51c48058d1f8009b8143c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T00:05:06Z",
-          "message": "Merge cb7f531197f3833779a32e813827265014e7435a into c566bb07016fbae3ad97df6abf6cc28e94fc129b\n"
+          "timestamp": "2026-11-03T00:05:35Z",
+          "message": "Merge a3db0b08bcb5d859232b7f33ee7f9cff62664d59 into c566bb07016fbae3ad97df6abf6cc28e94fc129b\n"
+        },
+        {
+          "sha": "a3db0b08bcb5d859232b7f33ee7f9cff62664d59",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T17:05:20-07:00",
+          "message": "fix(launch): a flooding run reports the output limit, not the flood, and a shell source names the reason over the exit code (candybar-testing-0x6u.ndy)\n\noutput-limit is its own run outcome, so the bar and the run log say the child\nflooded instead of that it could not start, and the 16 MiB capture never\nbecomes the bar's error. A shell source reads reason, not exitCode, to tell\nthe child's own exit from one the launcher ended, so a child that traps TERM\nand exits with a code no longer hides the limit (or the timeout).\n"
         },
         {
           "sha": "cb7f531197f3833779a32e813827265014e7435a",
