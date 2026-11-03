@@ -68,7 +68,7 @@ The gap is listed per proposal section: what the code does today, what the backl
 
 **Change.**
 - New ticket: *A renderer has one home.* `RendererHome = { name, root }` with path functions for socket, state, config, link key and log; two constructors (today's XDG layout for the main renderer, a directory for any other); `paths.ts` and the Rust client compute from it; `prepareIsolatedDaemonEnv` collapses to one value. Depends on `.y10`, because the watched store's families are where the paths are read.
-- New ticket: *No stored path is absolute.* Settings history, `render-origin`, `config-override`, doctor stores and repo-config books hold paths relative to the home's root; the undo path cannot name a file outside it. The isolation draft's survey of every `configDir()`, `stateDir()`, `homedir()` and `XDG_*` read is this ticket's first step. Depends on the home ticket.
+- New ticket: *No stored path is absolute.* Settings history, `render-origin`, `config-override`, doctor stores and repo-config books hold paths relative to the home's root; the undo path cannot name a file outside it. The isolation draft's survey of every `configDir()`, `stateDir()`, `homedir()` and `XDG_*` read is this ticket's first step. The bundle path in the lease and in the tmux and bar-pane commands is the one absolute path left, because it names the running code and not a home file (spec §17). Depends on the home ticket.
 - Edit `.65c`: acquire's decision takes the home, not the socket, so a client spawning the bundle beside it spawns it for the right home.
 
 ## §7 A session reaches a renderer by starting with its values
