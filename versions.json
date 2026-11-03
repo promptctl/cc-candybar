@@ -4,15 +4,22 @@
     {
       "version": "pr-598",
       "ref": "refs/pull/598/merge",
-      "sha": "710541aff4e58bc89300d51a9fdf7c35fd28e025",
-      "timestamp": "2026-11-03T02:44:08.947Z",
+      "sha": "1659024fc8a4a8df50268139714f1fb831d151df",
+      "timestamp": "2026-11-03T02:47:35.858Z",
       "commits": [
         {
-          "sha": "710541aff4e58bc89300d51a9fdf7c35fd28e025",
+          "sha": "1659024fc8a4a8df50268139714f1fb831d151df",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T02:43:13Z",
-          "message": "Merge 63994133fa15ccd05337b5ee0697764d719fd580 into 0b82ee794b36b93e687f43f4fe214418d8d83c9e\n"
+          "timestamp": "2026-11-03T02:46:28Z",
+          "message": "Merge 71a9e0c2534dfe2b3cc0eb19a7e27e6336831f1a into 0b82ee794b36b93e687f43f4fe214418d8d83c9e\n"
+        },
+        {
+          "sha": "71a9e0c2534dfe2b3cc0eb19a7e27e6336831f1a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T19:46:11-07:00",
+          "message": "fix(launch): a held input's end is built outside the launch, and its tests count the input (candybar-testing-0x6u.3zo)\n"
         },
         {
           "sha": "63994133fa15ccd05337b5ee0697764d719fd580",

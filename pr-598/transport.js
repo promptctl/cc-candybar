@@ -23149,6 +23149,7 @@ function hold(state, category, pipe, end) {
   state.drains.add(pipe);
   stats?.onDrainOpen(category);
 }
+var inputEnd = () => "closed";
 function feed(input, text4) {
   input.on("error", () => {
   });
@@ -23215,7 +23216,7 @@ async function launchWaited(state, opts) {
       stdout2.drain();
       stderr2.drain();
       if (input !== null && !input.destroyed && !input.writableFinished)
-        hold(state, opts.category, input, () => "closed");
+        hold(state, opts.category, input, inputEnd);
       deliver();
     };
     const settle3 = (r) => finish(() => resolve(r));
