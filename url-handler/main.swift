@@ -139,6 +139,10 @@ func forward(_ url: String) -> Forward {
 // fact it is. Authorization is asked for on every lost click: the request
 // completes without a prompt once the user has answered, so the app keeps no
 // state about it, and a user who never loses a click never sees the prompt.
+// The banner shows only because this app is never frontmost: macOS hides a
+// frontmost app's notifications unless its delegate asks for them, and a
+// background-only app is never activated, so no delegate is needed. An app
+// that Launch Services can activate again loses its banner silently.
 // One fixed identifier, because there is one condition: a run of lost clicks
 // is one notice carrying the latest observation, not a stack of copies.
 // [LAW:no-silent-failure] A post the center refuses (notifications denied for
