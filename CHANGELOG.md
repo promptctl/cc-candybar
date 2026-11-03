@@ -1,3 +1,9 @@
+## [1.180.10](https://github.com/promptctl/cc-candybar/compare/v1.180.9...v1.180.10) (2026-11-03)
+
+### Bug Fixes
+
+* **launch:** a launch's drained pipes have one owner, one bound and a stat (candybar-testing-0x6u.yzt) ([#595](https://github.com/promptctl/cc-candybar/issues/595)) ([a79a665](https://github.com/promptctl/cc-candybar/commit/a79a66523b3e7763ab4abce2c4a79c4a9fd4443f))
+
 ## [1.180.9](https://github.com/promptctl/cc-candybar/compare/v1.180.8...v1.180.9) (2026-11-03)
 
 ### Bug Fixes
