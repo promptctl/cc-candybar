@@ -2,24 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-605",
-      "ref": "refs/pull/605/merge",
-      "sha": "0821ecc8977da2656b850094bf2630a8047250a5",
-      "timestamp": "2026-11-03T06:03:10.303Z",
+      "version": "pr-606",
+      "ref": "refs/pull/606/merge",
+      "sha": "10f6de54be8f8539f478ae1ad2084764a078ccb7",
+      "timestamp": "2026-11-03T07:56:30.060Z",
       "commits": [
         {
-          "sha": "0821ecc8977da2656b850094bf2630a8047250a5",
+          "sha": "10f6de54be8f8539f478ae1ad2084764a078ccb7",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T23:02:10-07:00",
-          "message": "Merge 8273a6107bece1b2805997d6918a888b7e99e57c into 6f35f84d13b40a5e30d3e41150a025c0cc994233\n"
+          "timestamp": "2026-11-03T00:55:37-07:00",
+          "message": "Merge 1eda524241b9bda60adcf5191cfa3e800bbfa19d into 04d058325f14b84fc80d66fc432ae7583f3ceb7d\n"
         },
         {
-          "sha": "8273a6107bece1b2805997d6918a888b7e99e57c",
+          "sha": "1eda524241b9bda60adcf5191cfa3e800bbfa19d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T23:00:45-07:00",
-          "message": "Remove bad tests\n"
+          "timestamp": "2026-11-03T00:55:18-07:00",
+          "message": "fix(url-handler): a click no longer takes the terminal's keyboard focus (candybar-daemon-health-ajx0.p04)\n\nThe forwarder was an agent app (LSUIElement). Launch Services activates an\nagent to deliver a link, and a resident app keeps the focus it was given, so\nevery click on a bar link took keyboard focus from the user's terminal and\nbroke the settings menu. The old applet quit after each click, which returned\nfocus to the previous app and hid this.\n\nThe Info.plist now declares the app background-only, which Launch Services\nnever activates. A background-only copy still received and forwarded links,\nand still raised the notification-authorization prompt for a lost click.\n\nThe notification delegate existed only because the app was frontmost when it\nposted, and macOS hides a frontmost app's banner. The app is never frontmost\nnow, so the delegate and its comment are removed.\n"
         }
       ]
     },
