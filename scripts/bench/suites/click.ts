@@ -38,7 +38,7 @@ import { fetchStats } from "../../../src/daemon/client-stats.js";
 import { describeFailure } from "../../../src/daemon/client-transport.js";
 import { logPath } from "../../../src/daemon/paths.js";
 import { processWorld } from "../../../src/host.js";
-import { fieldOf } from "../../../src/utils/logfmt.js";
+import { fieldOf, fieldsOf } from "../../../src/utils/logfmt.js";
 import { atOf, msOf } from "../log-event.js";
 import { sleep } from "../measure.js";
 import {
@@ -76,17 +76,26 @@ async function quitForwarder(): Promise<void> {
   }
 }
 
-function sizeOf(file: string): number {
+// Where the log stands: its size, and the inode that tells one generation
+// from the next. A log not yet written is empty under no inode.
+interface Mark {
+  readonly size: number;
+  readonly ino: number | null;
+}
+
+function markOf(file: string): Mark {
   try {
-    return fs.statSync(file).size;
+    const st = fs.statSync(file);
+    return { size: st.size, ino: st.ino };
   } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === "ENOENT") return 0;
+    if ((e as NodeJS.ErrnoException).code === "ENOENT")
+      return { size: 0, ino: null };
     throw e;
   }
 }
 
 function readFrom(file: string, offset: number): string {
-  const size = sizeOf(file);
+  const size = markOf(file).size;
   if (size <= offset) return "";
   const fd = fs.openSync(file, "r");
   try {
@@ -98,30 +107,31 @@ function readFrom(file: string, offset: number): string {
   }
 }
 
-// The log's whole lines written since it held `offset` bytes. The event can
-// only be past where the file stood at the click, and the older generations
-// cannot hold a verb minted this run, so nothing before `offset` is read. A
-// log that shrank rotated under the wait: the lines since then are the end
-// of the rotated file and all of the new one.
-function linesSince(log: string, offset: number): string[] {
+// The log's whole lines written since it stood at `mark`. The event can only
+// be past where the file stood at the click, and the older generations cannot
+// hold a verb minted this run, so nothing before the mark is read. A log whose
+// inode changed rotated under the wait, and the lines since are the end of the
+// rotated file and all of the new one; the inode, not the size, says so,
+// because a busy daemon refills a fresh log past the mark within the wait.
+function linesSince(log: string, mark: Mark): string[] {
   const text =
-    sizeOf(log) < offset
-      ? readFrom(`${log}.1`, offset) + readFrom(log, 0)
-      : readFrom(log, offset);
+    markOf(log).ino === mark.ino
+      ? readFrom(log, mark.size)
+      : readFrom(`${log}.1`, mark.size) + readFrom(log, 0);
   return text.split("\n").slice(0, -1);
 }
 
 async function click(log: string, verb: string): Promise<Click> {
   const url = `${URL_SCHEME}://${verb}/1`;
   const problem = `unknown click verb: ${verb}`;
-  const offset = sizeOf(log);
+  const mark = markOf(log);
   const t0 = Date.now();
   execFileSync("/usr/bin/open", ["-g", url], { stdio: "pipe" });
   const openMs = Date.now() - t0;
   const until = t0 + EVENT_WAIT_MS;
   for (;;) {
-    const line = linesSince(log, offset).find(
-      (l) => l.includes("problems=") && fieldOf(l, "problems") === problem,
+    const line = linesSince(log, mark).find(
+      (l) => fieldsOf(l).get("problems") === problem,
     );
     if (line !== undefined) {
       return {
@@ -141,24 +151,29 @@ async function click(log: string, verb: string): Promise<Click> {
 // Why this machine cannot be measured, or null when it can: a daemon answers
 // on the default socket and some app claims the scheme. The round trip goes
 // where a click goes, the default socket, whatever this shell's override
-// says. `open` with no handler says so and exits non-zero.
-async function cannotMeasure(): Promise<string | null> {
-  if (process.platform !== "darwin") return "the scheme is macOS-only";
-  const { host, clock } = processWorld();
-  const { CC_CANDYBAR_SOCKET: _override, ...env } = host.env;
-  const stats = await fetchStats({ host: { ...host, env }, clock });
-  if (stats.kind !== "ok")
-    return `no daemon on the default socket: ${describeFailure(stats)}`;
-  const probe = spawnSync(
-    "/usr/bin/open",
-    ["-g", `${URL_SCHEME}://bench-probe/1`],
-    {
-      encoding: "utf8",
-    },
-  );
-  if (probe.status !== 0)
-    return `no handler for ${URL_SCHEME}://: ${probe.stderr.trim()}`;
-  return null;
+// says. `open` with no handler says so and exits non-zero; with one, the
+// probe is a click on the live daemon, so it is asked once a process, not
+// once a benchmark.
+let verdict: Promise<string | null> | null = null;
+
+function cannotMeasure(): Promise<string | null> {
+  verdict ??= (async () => {
+    if (process.platform !== "darwin") return "the scheme is macOS-only";
+    const { host, clock } = processWorld();
+    const { CC_CANDYBAR_SOCKET: _override, ...env } = host.env;
+    const stats = await fetchStats({ host: { ...host, env }, clock });
+    if (stats.kind !== "ok")
+      return `no daemon on the default socket: ${describeFailure(stats)}`;
+    const probe = spawnSync(
+      "/usr/bin/open",
+      ["-g", `${URL_SCHEME}://bench-probe/1`],
+      { encoding: "utf8" },
+    );
+    if (probe.status !== 0)
+      return `no handler for ${URL_SCHEME}://: ${probe.stderr.trim()}`;
+    return null;
+  })();
+  return verdict;
 }
 
 async function clicks(
@@ -187,7 +202,8 @@ export const CLICKS: readonly Benchmark[] = [
   {
     id: "click.cold",
     group: "click",
-    about: "a click that starts the handler app, to the daemon's event",
+    about:
+      "a click that starts the handler app (the live one is quit first), to the daemon's event",
     samples: 5,
     run: (plan) => clicks(plan, quitForwarder),
   },

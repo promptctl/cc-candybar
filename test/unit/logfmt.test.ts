@@ -1,4 +1,4 @@
-import { fieldOf, valueOf } from "../../src/utils/logfmt";
+import { fieldOf, fieldsOf, valueOf } from "../../src/utils/logfmt";
 
 describe("logfmt fieldOf", () => {
   it("reads back what valueOf wrote, bare or quoted", () => {
@@ -7,6 +7,12 @@ describe("logfmt fieldOf", () => {
     expect(fieldOf(line, "via")).toBe("forwarder");
     expect(fieldOf(line, "problems")).toBe(problem);
     expect(fieldOf(line, "took")).toBe("3ms");
+    expect(fieldsOf(line).has("y")).toBe(false);
+  });
+
+  it("is not shadowed by a field spelled inside an earlier quoted value", () => {
+    const line = `click problems=${valueOf("x via=cli")} via=forwarder`;
+    expect(fieldOf(line, "via")).toBe("forwarder");
   });
 
   it("matches a whole key, not a suffix of another", () => {
