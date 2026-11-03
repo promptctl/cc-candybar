@@ -4,15 +4,22 @@
     {
       "version": "pr-595",
       "ref": "refs/pull/595/merge",
-      "sha": "290d17ca830f02043d4e247b3e18817b0f671d5c",
-      "timestamp": "2026-11-03T01:42:10.689Z",
+      "sha": "7c214f1bc9ec021e3f2efbdbd95c8948e9d4b728",
+      "timestamp": "2026-11-03T01:48:21.921Z",
       "commits": [
         {
-          "sha": "290d17ca830f02043d4e247b3e18817b0f671d5c",
+          "sha": "7c214f1bc9ec021e3f2efbdbd95c8948e9d4b728",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T18:41:18-07:00",
-          "message": "Merge 281b2f8de3c3444f52c50e096d3ca3589446919c into c63e8bcefa93b28ab53cf599d14d916dda71e551\n"
+          "timestamp": "2026-11-03T01:47:27Z",
+          "message": "Merge 051787cde01bc72433e46af8aefcf1377b416ad5 into e7ee7542655b493942757800b257dc4accd601f1\n"
+        },
+        {
+          "sha": "051787cde01bc72433e46af8aefcf1377b416ad5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T18:47:17-07:00",
+          "message": "fix(launch): a drain is bounded and counted from settle, holds nothing of the launch, and shows in daemon-stats (candybar-testing-0x6u.yzt)\n\nHigh review of #595: clamp the kept window so no byte past the bound is kept\nbefore the end lands; destroy a drain handed over after the launcher closed;\ncount and bound a drain from settle with its end (closed/cut/errored) as data;\nrelease the launch's full callback at settle; listen for a held pipe's error;\nprint the drain row in daemon-stats.\n"
         },
         {
           "sha": "281b2f8de3c3444f52c50e096d3ca3589446919c",

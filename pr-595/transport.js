@@ -23098,19 +23098,26 @@ function capture(stream, full) {
   const decoder = new import_node_string_decoder.StringDecoder("utf8");
   let text4 = "";
   let bytes = 0;
-  let taken = false;
+  let dropped = 0;
+  let onFull = full;
+  let cut = false;
   stream?.on("data", (chunk3) => {
-    if (!taken)
-      text4 += decoder.write(chunk3.subarray(0, MAX_CAPTURED_BYTES - bytes));
+    if (onFull === null) {
+      dropped += chunk3.length;
+      if (dropped <= MAX_CAPTURED_BYTES) return;
+      cut = true;
+      stream.destroy();
+      return;
+    }
+    const room = Math.max(0, MAX_CAPTURED_BYTES - bytes);
+    text4 += decoder.write(chunk3.subarray(0, room));
     bytes += chunk3.length;
-    if (bytes <= MAX_CAPTURED_BYTES) return;
-    if (taken) stream.destroy();
-    else full();
+    if (bytes > MAX_CAPTURED_BYTES) onFull();
   });
   return {
     take: () => {
-      if (taken) return "";
-      taken = true;
+      if (onFull === null) return "";
+      onFull = null;
       const whole = text4 + decoder.end();
       text4 = "";
       return whole;
@@ -23121,10 +23128,22 @@ function capture(stream, full) {
     // metered in one place while it does.
     drain: (state, category) => {
       if (stream === null || stream.destroyed || stream.readableEnded) return;
+      if (state.scope.signal.aborted) {
+        stream.destroy();
+        return;
+      }
       const { stats } = state.scope;
+      let errored = false;
+      stream.on("error", () => {
+        errored = true;
+      });
       stream.once("close", () => {
         state.drains.delete(stream);
-        stats?.onDrainClose(category, bytes, bytes > MAX_CAPTURED_BYTES);
+        stats?.onDrainClose(
+          category,
+          dropped,
+          cut ? "cut" : errored ? "errored" : "closed"
+        );
       });
       stream.unref();
       state.drains.add(stream);
@@ -23805,7 +23824,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.180.7";
+var PACKAGE_VERSION = "1.180.8";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -69282,6 +69301,7 @@ var RuntimeStats = class _RuntimeStats {
   subprocessDraining = 0;
   subprocessDrainedBytes = 0;
   subprocessDrainsCut = 0;
+  subprocessDrainsErrored = 0;
   // Launches asked for that started nothing: the launcher had closed, the
   // category's interval had not passed, or the caller had aborted first.
   subprocessRefusals = /* @__PURE__ */ new Map();
@@ -69321,10 +69341,11 @@ var RuntimeStats = class _RuntimeStats {
     onDrainOpen: () => {
       this.subprocessDraining++;
     },
-    onDrainClose: (_category, bytes, cut) => {
+    onDrainClose: (_category, bytes, end) => {
       this.subprocessDraining--;
       this.subprocessDrainedBytes += bytes;
-      if (cut) this.subprocessDrainsCut++;
+      if (end === "cut") this.subprocessDrainsCut++;
+      if (end === "errored") this.subprocessDrainsErrored++;
     }
   };
   recordRollingNow() {
@@ -69384,6 +69405,7 @@ var RuntimeStats = class _RuntimeStats {
       draining: this.subprocessDraining,
       drainedBytes: this.subprocessDrainedBytes,
       drainsCut: this.subprocessDrainsCut,
+      drainsErrored: this.subprocessDrainsErrored,
       p50DurationMs: p50,
       p99DurationMs: p99
     };
