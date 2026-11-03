@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-603",
+      "ref": "refs/pull/603/merge",
+      "sha": "ee821703002f54118ef48ae6305dfd7486561e0d",
+      "timestamp": "2026-11-03T05:35:32.587Z",
+      "commits": [
+        {
+          "sha": "ee821703002f54118ef48ae6305dfd7486561e0d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T05:34:31Z",
+          "message": "Merge a790d1320b98572adcf17e75e1106c36e4794546 into fda163a193a024faa5e9bcf8071a8c26d772a997\n"
+        },
+        {
+          "sha": "a790d1320b98572adcf17e75e1106c36e4794546",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T21:42:16-07:00",
+          "message": "fix(bench): the logfmt reader tokenizes, a rotation is told by inode, and the probe click is asked once (candybar-url-handler-uy01.05x)\n\nMedium review of #603. A field spelled inside an earlier quoted value\nshadowed the real field, so the reader walks the line's tokens and a\nquoted value is consumed whole; it yields every field, so the click\nsuite reads the problems field without a prefilter that could throw on\na line that only mentions it. A rotated log was told by its size\nshrinking, which a busy daemon undoes within the wait; the inode tells\nit. A line with no timestamp fails naming the line. The probe click and\nits event land once a process, not once a benchmark, and the cold\nbenchmark's `about` says it quits the live handler app.\n"
+        },
+        {
+          "sha": "749391744457ac8fed14262d9f52d244ba5a0ec3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T21:34:40-07:00",
+          "message": "fix(bench): the click suite proves the daemon by a round trip, reads the log from the click on, and matches the whole problem (candybar-url-handler-uy01.05x)\n\nReview of #603. A socket file was taken as a live daemon, so a daemon dead\nwithout unlinking ran the bench into a notification on the user's screen;\na stats round trip over the default socket proves it. Each poll read every\nlog generation from byte 0; the event can only be past where the file\nstood at the click, so the read starts there and follows one rotation.\nThe event match was an unterminated prefix (`-1` matched `-10`); the\nproblems field is now decoded and compared whole, through one logfmt\nfield reader beside the encoder, which the daemon world's render reader\nshares too (its own read a quoted value's first word). A lost event names\nthe log searched, since this shell's state dir need not be the daemon's.\nThe app's name moves beside the scheme so the bench imports nothing of\nthe installer. Live run: 15 of 15 events found, cold p50 172 ms, warm\n99 ms under load 33.\n"
+        },
+        {
+          "sha": "76e1ef0ab1ab5ec63003436614bc02f5fdd8f58b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T21:18:59-07:00",
+          "message": "feat(bench): a click's whole time, Launch Services included, is measured for the applet and the forwarder (candybar-url-handler-uy01.05x)\n\nA click suite in the benchmark: open to the daemon's own click event,\ncold (handler app quit first) and warm, with the handler that answered\nread off the event. Measured on Brandon's Mac: the retired applet\n~0.53-0.59 s every click (it exits after each), the forwarder ~0.23 s\ncold and ~0.07 s warm. Numbers on the ticket and the epic.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "baf8dfde2d7d28a78fc76247adf9889e7c7fb742",
@@ -13,42 +49,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T22:16:37-07:00",
           "message": "fix(time): spans read the monotonic clock (candybar-testing-ihvy.98i) (#604)\n\n* fix(time): spans read the Timekeeper's monotonic clock, so a wall step cannot make a duration negative or huge (candybar-testing-ihvy.98i)\n\nEvery span in src that subtracted two now() readings reads monotonic():\nlaunch stats and rate limit, refresh ledgers' took=, runs, draw-bar,\nlock waits, spawn-lock contention, tmux patience. A refresh's took= is\nrounded once in the ledger, since monotonic reads fractions. The plugin\nstorage sweep keeps a wall cutoff, because it compares against mtimes.\n\nLeft on the wall clock on purpose: the daemon's uptime and file events'\nmissed= span, which mean elapsed real time including sleep, which the\nmonotonic clock on macOS does not count.\n\n* fix(time): deadlines, the refresh period, the launch window and uptime read the monotonic clock; one helper rounds every span (candybar-testing-ihvy.98i)\n\n* fix(time): a monotonic reading is its own type; the git-dir window is a span; callers round every refresh time; uptime stays wall time since start (candybar-testing-ihvy.98i)\n\n* fix(time): spans take branded readings at every stored start and through one span helper; providers drop the wall clock they no longer read (candybar-testing-ihvy.98i)"
-        }
-      ]
-    },
-    {
-      "version": "pr-603",
-      "ref": "refs/pull/603/merge",
-      "sha": "146bba48d74b88a220b54dd5e1dada3b7f91c5bc",
-      "timestamp": "2026-11-03T04:44:54.948Z",
-      "commits": [
-        {
-          "sha": "146bba48d74b88a220b54dd5e1dada3b7f91c5bc",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T04:43:53Z",
-          "message": "Merge a2df142f0287fb0ebfe973502a86fac2ee17c837 into e2b84658bbaa52f486f36c248e2c7a45e88eda88\n"
-        },
-        {
-          "sha": "a2df142f0287fb0ebfe973502a86fac2ee17c837",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T21:42:16-07:00",
-          "message": "fix(bench): the logfmt reader tokenizes, a rotation is told by inode, and the probe click is asked once (candybar-url-handler-uy01.05x)\n\nMedium review of #603. A field spelled inside an earlier quoted value\nshadowed the real field, so the reader walks the line's tokens and a\nquoted value is consumed whole; it yields every field, so the click\nsuite reads the problems field without a prefilter that could throw on\na line that only mentions it. A rotated log was told by its size\nshrinking, which a busy daemon undoes within the wait; the inode tells\nit. A line with no timestamp fails naming the line. The probe click and\nits event land once a process, not once a benchmark, and the cold\nbenchmark's `about` says it quits the live handler app.\n"
-        },
-        {
-          "sha": "c3e8730ed6a5c39a00b7fb41e8eddcff81db24e0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T21:34:40-07:00",
-          "message": "fix(bench): the click suite proves the daemon by a round trip, reads the log from the click on, and matches the whole problem (candybar-url-handler-uy01.05x)\n\nReview of #603. A socket file was taken as a live daemon, so a daemon dead\nwithout unlinking ran the bench into a notification on the user's screen;\na stats round trip over the default socket proves it. Each poll read every\nlog generation from byte 0; the event can only be past where the file\nstood at the click, so the read starts there and follows one rotation.\nThe event match was an unterminated prefix (`-1` matched `-10`); the\nproblems field is now decoded and compared whole, through one logfmt\nfield reader beside the encoder, which the daemon world's render reader\nshares too (its own read a quoted value's first word). A lost event names\nthe log searched, since this shell's state dir need not be the daemon's.\nThe app's name moves beside the scheme so the bench imports nothing of\nthe installer. Live run: 15 of 15 events found, cold p50 172 ms, warm\n99 ms under load 33.\n"
-        },
-        {
-          "sha": "277f94c9a7e0163465fbcf88ad89fa2810c4ca78",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T21:18:59-07:00",
-          "message": "feat(bench): a click's whole time, Launch Services included, is measured for the applet and the forwarder (candybar-url-handler-uy01.05x)\n\nA click suite in the benchmark: open to the daemon's own click event,\ncold (handler app quit first) and warm, with the handler that answered\nread off the event. Measured on Brandon's Mac: the retired applet\n~0.53-0.59 s every click (it exits after each), the forwarder ~0.23 s\ncold and ~0.07 s warm. Numbers on the ticket and the epic.\n"
         }
       ]
     }
