@@ -1,3 +1,9 @@
+## [1.184.1](https://github.com/promptctl/cc-candybar/compare/v1.184.0...v1.184.1) (2026-11-03)
+
+### Bug Fixes
+
+* **url-handler:** a click no longer takes the terminal's keyboard focus ([#606](https://github.com/promptctl/cc-candybar/issues/606)) ([8005d08](https://github.com/promptctl/cc-candybar/commit/8005d083220ec5eb217749c74c3caf1a246f2bc5)), closes [#605](https://github.com/promptctl/cc-candybar/issues/605)
+
 ## [1.184.0](https://github.com/promptctl/cc-candybar/compare/v1.183.1...v1.184.0) (2026-11-03)
 
 ### Features
