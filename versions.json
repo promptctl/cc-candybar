@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-595",
+      "ref": "refs/pull/595/merge",
+      "sha": "2ea974ef7caf58c0afbdca1719c3aadeddd231e8",
+      "timestamp": "2026-11-03T01:59:29.355Z",
+      "commits": [
+        {
+          "sha": "2ea974ef7caf58c0afbdca1719c3aadeddd231e8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T01:57:54Z",
+          "message": "Merge eec2331f98ecebe3065a7a1b418c9914190c1076 into e7ee7542655b493942757800b257dc4accd601f1\n"
+        },
+        {
+          "sha": "eec2331f98ecebe3065a7a1b418c9914190c1076",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T18:57:27-07:00",
+          "message": "fix(launch): drain bytes count as read and pipe errors count in either phase (candybar-testing-0x6u.yzt)\n\nSecond high review of #595. A capture knows its category and stats from the\nstart, so a read error is counted whether or not the stream is drained, and a\ndrain's dropped bytes show while it is still open. A drain's end is one value.\nComments no longer claim the launch's scope goes at settle, or that only a\ndescendant outside the group is drained.\n"
+        },
+        {
+          "sha": "2a7505acc30f476b77708bbeb5be478e45e6bcb3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T18:51:22-07:00",
+          "message": "fix(launch): a captured pipe's read error is counted for its whole life, not only once drained (candybar-testing-0x6u.yzt)\n\nMedium review of #595. The drain tests assert end kinds, not bytes a group-end\nsettle may move, and the abort case proves the holder's pipe is destroyed.\n"
+        },
+        {
+          "sha": "051787cde01bc72433e46af8aefcf1377b416ad5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T18:47:17-07:00",
+          "message": "fix(launch): a drain is bounded and counted from settle, holds nothing of the launch, and shows in daemon-stats (candybar-testing-0x6u.yzt)\n\nHigh review of #595: clamp the kept window so no byte past the bound is kept\nbefore the end lands; destroy a drain handed over after the launcher closed;\ncount and bound a drain from settle with its end (closed/cut/errored) as data;\nrelease the launch's full callback at settle; listen for a held pipe's error;\nprint the drain row in daemon-stats.\n"
+        },
+        {
+          "sha": "281b2f8de3c3444f52c50e096d3ca3589446919c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T18:41:08-07:00",
+          "message": "fix(launch): a launch's drained pipes have one owner, one bound and a stat (candybar-testing-0x6u.yzt)\n\nA pipe a descendant holds past its launch is read by the launch's own capture\nfor its whole life: one byte count against MAX_CAPTURED_BYTES, cut past it so a\nchatty holder dies at its next write. The launcher holds every open drain,\ndestroys them when its scope closes, and meters draining/drainedBytes/drainsCut\ninto the subprocess stats. Settle drops the child's listeners, so the launch's\nclosure and output go with its result.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-594",
       "ref": "refs/pull/594/merge",
       "sha": "f3cf2ed0a11754ae1d680e34ef45b18b937ec407",
@@ -77,42 +120,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T18:48:56-07:00",
           "message": "fix(test): the frame-feed cases run on one held clock, so no draw count reads real time (candybar-testing-0x6u.fs0)\n\nEvery case in test/frame-feed.test.ts built its feed on the system clock, a\nper-describe jest fake, or a busy-wait, so a stalled CI loop skipped a turn\nand failed an exact draw count. The harness now owns a heldClock and returns\nit; a case moves time with clock.advance, and a render that takes renderMs\nburns that much of the clock (new HeldClock.burn), so a render slower than its\nperiod runs back to back instead of looping at one held moment. HeldClock also\ngains pending() and never moves time back after a burn. Loose bounds that only\na loaded box needed are the exact counts the periods give.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-595",
-      "ref": "refs/pull/595/merge",
-      "sha": "30b758b44f86b4db2c2483c86fb0fb66cb1dfc6d",
-      "timestamp": "2026-11-03T01:52:29.389Z",
-      "commits": [
-        {
-          "sha": "30b758b44f86b4db2c2483c86fb0fb66cb1dfc6d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T01:51:35Z",
-          "message": "Merge 2a7505acc30f476b77708bbeb5be478e45e6bcb3 into e7ee7542655b493942757800b257dc4accd601f1\n"
-        },
-        {
-          "sha": "2a7505acc30f476b77708bbeb5be478e45e6bcb3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T18:51:22-07:00",
-          "message": "fix(launch): a captured pipe's read error is counted for its whole life, not only once drained (candybar-testing-0x6u.yzt)\n\nMedium review of #595. The drain tests assert end kinds, not bytes a group-end\nsettle may move, and the abort case proves the holder's pipe is destroyed.\n"
-        },
-        {
-          "sha": "051787cde01bc72433e46af8aefcf1377b416ad5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T18:47:17-07:00",
-          "message": "fix(launch): a drain is bounded and counted from settle, holds nothing of the launch, and shows in daemon-stats (candybar-testing-0x6u.yzt)\n\nHigh review of #595: clamp the kept window so no byte past the bound is kept\nbefore the end lands; destroy a drain handed over after the launcher closed;\ncount and bound a drain from settle with its end (closed/cut/errored) as data;\nrelease the launch's full callback at settle; listen for a held pipe's error;\nprint the drain row in daemon-stats.\n"
-        },
-        {
-          "sha": "281b2f8de3c3444f52c50e096d3ca3589446919c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T18:41:08-07:00",
-          "message": "fix(launch): a launch's drained pipes have one owner, one bound and a stat (candybar-testing-0x6u.yzt)\n\nA pipe a descendant holds past its launch is read by the launch's own capture\nfor its whole life: one byte count against MAX_CAPTURED_BYTES, cut past it so a\nchatty holder dies at its next write. The launcher holds every open drain,\ndestroys them when its scope closes, and meters draining/drainedBytes/drainsCut\ninto the subprocess stats. Settle drops the child's listeners, so the launch's\nclosure and output go with its result.\n"
         }
       ]
     },

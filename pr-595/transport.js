@@ -23094,22 +23094,21 @@ function leaderRefuses(pid2) {
     return err.code === "EPERM";
   }
 }
-function capture(stream, full) {
+function capture(state, category, stream, full) {
+  const { stats } = state.scope;
   const decoder = new import_node_string_decoder.StringDecoder("utf8");
   let text4 = "";
   let bytes = 0;
   let dropped = 0;
   let onFull = full;
-  let cut = false;
-  let errored = false;
-  stream?.on("error", () => {
-    errored = true;
-  });
+  let end = "closed";
+  stream?.on("error", () => stats?.onPipeError(category));
   stream?.on("data", (chunk3) => {
     if (onFull === null) {
       dropped += chunk3.length;
+      stats?.onDrainRead(category, chunk3.length);
       if (dropped <= MAX_CAPTURED_BYTES) return;
-      cut = true;
+      end = "cut";
       stream.destroy();
       return;
     }
@@ -23130,20 +23129,15 @@ function capture(stream, full) {
     // the group — keeps its pipes: a destroyed one would kill it with SIGPIPE
     // at its next write. So the pipe stays open, unref'd, and is held and
     // metered in one place while it does.
-    drain: (state, category) => {
+    drain: () => {
       if (stream === null || stream.destroyed || stream.readableEnded) return;
       if (state.scope.signal.aborted) {
         stream.destroy();
         return;
       }
-      const { stats } = state.scope;
       stream.once("close", () => {
         state.drains.delete(stream);
-        stats?.onDrainClose(
-          category,
-          dropped,
-          cut ? "cut" : errored ? "errored" : "closed"
-        );
+        stats?.onDrainClose(category, end);
       });
       stream.unref();
       state.drains.add(stream);
@@ -23183,8 +23177,8 @@ async function launchWaited(state, opts) {
     if (group !== void 0) guard(state, group);
     const exited = new Promise((end) => child.once("exit", end));
     const full = () => terminate("output-limit");
-    const stdout2 = capture(child.stdout, full);
-    const stderr2 = capture(child.stderr, full);
+    const stdout2 = capture(state, opts.category, child.stdout, full);
+    const stderr2 = capture(state, opts.category, child.stderr, full);
     const output = () => ({ stdout: stdout2.take(), stderr: stderr2.take() });
     let settled3 = false;
     let timer = null;
@@ -23207,8 +23201,8 @@ async function launchWaited(state, opts) {
       stats?.onEnd(opts.category, clock.now() - t0);
       child.off("close", conclude);
       child.off("error", onError);
-      stdout2.drain(state, opts.category);
-      stderr2.drain(state, opts.category);
+      stdout2.drain();
+      stderr2.drain();
       deliver();
     };
     const settle3 = (r) => finish(() => resolve(r));
@@ -69301,7 +69295,7 @@ var RuntimeStats = class _RuntimeStats {
   subprocessDraining = 0;
   subprocessDrainedBytes = 0;
   subprocessDrainsCut = 0;
-  subprocessDrainsErrored = 0;
+  subprocessPipeErrors = 0;
   // Launches asked for that started nothing: the launcher had closed, the
   // category's interval had not passed, or the caller had aborted first.
   subprocessRefusals = /* @__PURE__ */ new Map();
@@ -69341,11 +69335,15 @@ var RuntimeStats = class _RuntimeStats {
     onDrainOpen: () => {
       this.subprocessDraining++;
     },
-    onDrainClose: (_category, bytes, end) => {
-      this.subprocessDraining--;
+    onDrainRead: (_category, bytes) => {
       this.subprocessDrainedBytes += bytes;
+    },
+    onDrainClose: (_category, end) => {
+      this.subprocessDraining--;
       if (end === "cut") this.subprocessDrainsCut++;
-      if (end === "errored") this.subprocessDrainsErrored++;
+    },
+    onPipeError: () => {
+      this.subprocessPipeErrors++;
     }
   };
   recordRollingNow() {
@@ -69405,7 +69403,7 @@ var RuntimeStats = class _RuntimeStats {
       draining: this.subprocessDraining,
       drainedBytes: this.subprocessDrainedBytes,
       drainsCut: this.subprocessDrainsCut,
-      drainsErrored: this.subprocessDrainsErrored,
+      pipeErrors: this.subprocessPipeErrors,
       p50DurationMs: p50,
       p99DurationMs: p99
     };
