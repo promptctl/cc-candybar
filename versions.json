@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-591",
+      "ref": "refs/pull/591/merge",
+      "sha": "2f64163036ed081cffddd932dd3d23ed8ea6c2e4",
+      "timestamp": "2026-11-03T00:25:00.590Z",
+      "commits": [
+        {
+          "sha": "2f64163036ed081cffddd932dd3d23ed8ea6c2e4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T00:24:07Z",
+          "message": "Merge 8fd809a4f8406d09f39a5f8becb1a200323fc0f7 into e441e0b2b811339c5e3219670b1f0688f08132e1\n"
+        },
+        {
+          "sha": "8fd809a4f8406d09f39a5f8becb1a200323fc0f7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T17:15:08-07:00",
+          "message": "fix(pricing): the cap's comment says bytes, and each fetch test starts with no reads (candybar-testing-0x6u.61o)\n"
+        },
+        {
+          "sha": "43037d75e05c06c625d7d293757efa536d548d01",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T17:13:55-07:00",
+          "message": "fix(pricing): the response size cap counts bytes, and the tests pin the abort (candybar-testing-0x6u.61o)\n"
+        },
+        {
+          "sha": "4ef91a7f198ea7417d8044f89e5007390f57999a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T17:11:34-07:00",
+          "message": "fix(pricing): the pricing fetch decodes the response as a stream, so a character split across reads arrives whole (candybar-testing-0x6u.61o)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-590",
       "ref": "refs/pull/590/merge",
       "sha": "9a825dd71ea7d0337249b7d2bc939c9c2c1a0efd",
@@ -56,42 +92,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T17:17:08-07:00",
           "message": "docs(design): the isolated daemon, tmux events and browser surface designs (#559)\n\nGoals, architecture, contracts and one document per area, with the surveys and probes behind them. The Frame is recorded as built, and the browser surface is un-parked."
-        }
-      ]
-    },
-    {
-      "version": "pr-591",
-      "ref": "refs/pull/591/merge",
-      "sha": "bd1031c652e7eb07a9277308ccd3f0c9cbd4eec3",
-      "timestamp": "2026-11-03T00:16:48.021Z",
-      "commits": [
-        {
-          "sha": "bd1031c652e7eb07a9277308ccd3f0c9cbd4eec3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T00:15:29Z",
-          "message": "Merge 3f2b279b652b59d9f4a2139b130b08b3599bcc88 into 7ca57ba16e524929f55d99beb41eba44d31a74fb\n"
-        },
-        {
-          "sha": "3f2b279b652b59d9f4a2139b130b08b3599bcc88",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T17:15:08-07:00",
-          "message": "fix(pricing): the cap's comment says bytes, and each fetch test starts with no reads (candybar-testing-0x6u.61o)\n"
-        },
-        {
-          "sha": "7e5138b16179758c1611a8eea6cf25f011fdb441",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T17:13:55-07:00",
-          "message": "fix(pricing): the response size cap counts bytes, and the tests pin the abort (candybar-testing-0x6u.61o)\n"
-        },
-        {
-          "sha": "4039b73205c9d6d7eee26708b8663e7f3869406d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T17:11:34-07:00",
-          "message": "fix(pricing): the pricing fetch decodes the response as a stream, so a character split across reads arrives whole (candybar-testing-0x6u.61o)\n"
         }
       ]
     },
