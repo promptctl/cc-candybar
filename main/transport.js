@@ -22946,6 +22946,7 @@ function answeredBy(last2, shown) {
 init_globals();
 var instantOf = (date2) => date2.getTime() / 1e3;
 var dateOf = (at) => new Date(at * 1e3);
+var instantAt = (clock) => instantOf(new Date(clock.now()));
 
 // src/proc/launch.ts
 function spawnErrorText(err, cwd2) {
@@ -31423,14 +31424,14 @@ var Style = class _Style {
 };
 var NULL_STYLE = new Style();
 var STYLE_NAME_RE = pattern(/^[a-z][a-z0-9._-]*$/);
-function layerStyle(base, over) {
+function layerStyle(base, over2) {
   if (base instanceof Style)
-    return base.add(over);
+    return base.add(over2);
   if (base === "")
-    return over;
+    return over2;
   if (typeof base === "string")
-    return { under: base, over };
-  return { under: base.under, over: base.over.add(over) };
+    return { under: base, over: over2 };
+  return { under: base.under, over: base.over.add(over2) };
 }
 var Theme = class {
   styles;
@@ -34183,8 +34184,8 @@ var JoinedCell = class _JoinedCell {
     const moved = (edge, move) => move === void 0 ? edge : new Style({ color: move.color ?? edge?.color, bgcolor: move.bgcolor ?? edge?.bgcolor });
     const edges = { left: moved(this.edges.left, moves.left), right: moved(this.edges.right, moves.right) };
     const next = new _JoinedCell(this.cell, this.parts, this.neighbours, edges, { ...this.options, colorSystem: depth });
-    const restamp = (level) => ({ ...level, owner: level.owner === this ? next : level.owner, inner: level.inner && restamp(level.inner) });
-    return { colors: next.style, style: style.withAnchor(style.anchor && restamp(style.anchor)) };
+    const restamp2 = (level) => ({ ...level, owner: level.owner === this ? next : level.owner, inner: level.inner && restamp2(level.inner) });
+    return { colors: next.style, style: style.withAnchor(style.anchor && restamp2(style.anchor)) };
   }
 };
 function joinedCell(anchor) {
@@ -38956,28 +38957,28 @@ function mergeWithDefault(raw, dflt) {
     helpers: { ...dflt.helpers, ...raw.helpers ?? {} }
   };
 }
-function segmentDeltas(base, over) {
+function segmentDeltas(base, over2) {
   const byName = (name, field, delta) => delta[field] === void 0 ? delta : { ...delta, [field]: { ...base[name]?.[field], ...delta[field] } };
   return Object.fromEntries(
-    Object.entries(over).map(([name, delta]) => [
+    Object.entries(over2).map(([name, delta]) => [
       name,
       byName(name, "partials", byName(name, "settings", delta))
     ])
   );
 }
-function presetDeltas(base, over) {
+function presetDeltas(base, over2) {
   return Object.fromEntries(
-    Object.entries(over).map(([name, delta]) => [
+    Object.entries(over2).map(([name, delta]) => [
       name,
       delta.globals === void 0 ? delta : { ...delta, globals: { ...base[name]?.globals, ...delta.globals } }
     ])
   );
 }
-function overlayByName(base, over) {
+function overlayByName(base, over2) {
   return {
     ...base,
     ...Object.fromEntries(
-      Object.entries(over).map(([name, delta]) => [
+      Object.entries(over2).map(([name, delta]) => [
         name,
         { ...base[name], ...delta }
       ])
@@ -53481,7 +53482,7 @@ var PAYLOAD_INPUTS = {
   },
   [SESSION_ID_VAR_NAME]: { kind: "input", path: "session_id", default: "" },
   // Transcript path (a top-level hookData field, spread onto the payload
-  // root by payloadOf). Read by the quick-action tray's
+  // root by projectPayload). Read by the quick-action tray's
   // openTranscript action — pass-through, no projection.
   transcript_path: {
     kind: "input",
@@ -54434,16 +54435,16 @@ var SessionEffects = class {
         effect: fromGround(begun.effect, ground)
       };
     };
-    const over = ({ since, done: done2 }) => done2(at - since);
+    const over2 = ({ since, done: done2 }) => done2(at - since);
     const shown = (id2, drawing2, last3) => ({
       drawing: drawing2,
-      passage: before === null ? null : last3 === void 0 || last3.passage?.name === "dissolve" ? begin("fade", id2, drawing2) : last3.passage !== null && !over(last3.passage) ? last3.passage : null
+      passage: before === null ? null : last3 === void 0 || last3.passage?.name === "dissolve" ? begin("fade", id2, drawing2) : last3.passage !== null && !over2(last3.passage) ? last3.passage : null
     });
     const gone = (id2, last3) => {
       if (last3 === void 0 || last3.drawing.opened || last3.drawing.own.length === 0)
         return void 0;
       if (last3.passage?.name === "dissolve")
-        return over(last3.passage) ? void 0 : last3;
+        return over2(last3.passage) ? void 0 : last3;
       const held = { ...last3.drawing, own: last3.drawing.own.map(given2.hold) };
       return { drawing: held, passage: begin("dissolve", id2, held) };
     };
@@ -61770,7 +61771,7 @@ var RAW_DEFAULT_DSL_CONFIG = {
     "glyph.worktree": { kind: "literal", value: "\u22AB" },
     ...GIT_INIT.variables,
     version: { kind: "input", path: "version", default: "" },
-    // home flows through the augmented payload (payloadOf reads
+    // home flows through the augmented payload (projectPayload reads
     // HOME, falling back to USERPROFILE on Windows where HOME is often
     // unset). Sourcing via `kind: "input"` rather than `kind: "env",
     // name: "HOME"` makes the directory `~` collapse work on every
@@ -66394,6 +66395,39 @@ function resumeCommand(workspace, sessionId2, configDir) {
   });
 }
 
+// src/daemon/refresh-faults.ts
+init_globals();
+var REFRESH_LANES = [
+  "session",
+  "today",
+  "context",
+  "metrics",
+  "activity",
+  "cache",
+  "speed",
+  "autocompact"
+];
+var RefreshFaults = class {
+  bySession = observable.map(void 0, { deep: false });
+  // The lane's failure while its last refresh threw; none once one ran clean.
+  of(sessionId2, lane) {
+    const reason = this.bySession.get(sessionId2)?.get(lane);
+    return reason === void 0 ? void 0 : failed(reason, "read");
+  }
+  // What the lane's refresh just did: threw `reason`, or ran clean (null).
+  refreshed(sessionId2, lane, reason) {
+    const held = this.bySession.get(sessionId2);
+    if (reason === null && held?.has(lane) !== true) return;
+    const next = new Map(held);
+    if (reason === null) next.delete(lane);
+    else next.set(lane, reason);
+    runInAction(() => {
+      if (next.size === 0) this.bySession.delete(sessionId2);
+      else this.bySession.set(sessionId2, next);
+    });
+  }
+};
+
 // src/daemon/render-payload.ts
 function renderOptionsOf(effective, width) {
   return {
@@ -66759,7 +66793,7 @@ function declareLanes(owners, holds2, facts, closure, sources) {
   };
   return { lanes, faults };
 }
-function readLanes(inputs) {
+function readingsOf(inputs, declared) {
   const { hookData: hookData2, deps } = inputs;
   const want = wanted(inputs.neededInputPaths);
   const sessionId2 = hookData2.session_id;
@@ -66775,7 +66809,7 @@ function readLanes(inputs) {
       return failed(`${lane}: ${String(e)}`, "read");
     }
   };
-  return {
+  const laneReadings = {
     git: lanes.git.current(),
     usage: read2(
       "session",
@@ -66815,6 +66849,19 @@ function readLanes(inputs) {
       [...lanes.sources].map(([name, lane]) => [name, lane.current()])
     )
   };
+  return {
+    lanes: laneReadings,
+    today: todayReading(lanes.today, deps.faults, sessionId2),
+    gathered: want,
+    declaredSources: [...declared.keys()],
+    faults: REFRESH_LANES.flatMap((lane) => {
+      const fault = deps.faults.of(sessionId2, lane);
+      return fault === void 0 ? [] : [{ lane, reason: fault.reason }];
+    })
+  };
+}
+function todayReading(lane, faults, sessionId2) {
+  return faults.of(sessionId2, "today") ?? lane.current();
 }
 function waitsOf(lanes) {
   return [
@@ -66836,7 +66883,7 @@ function projectPayload(inputs, draw2, lanes) {
   const { effective, configFacts: configFacts2 } = draw2;
   const { configPath, ...settingCounts2 } = configFacts2;
   const want = wanted(inputs.neededInputPaths);
-  const over = (reading, project) => {
+  const over2 = (reading, project) => {
     switch (reading.kind) {
       case "pending":
         return pendingOf(reading.why);
@@ -66860,12 +66907,12 @@ function projectPayload(inputs, draw2, lanes) {
     valueOf3(lanes.usage)?.session.cost,
     valueOf3(lanes.metrics)?.sessionDuration
   );
-  const speedPayload = over(lanes.speed, speedPayloadOf);
-  const sessionPayload = over(
+  const speedPayload = over2(lanes.speed, speedPayloadOf);
+  const sessionPayload = over2(
     lanes.usage,
     (usage) => pickNonNull({ cost: usage.session.cost, tokens: usage.session.tokens })
   );
-  const metricsPayload = over(
+  const metricsPayload = over2(
     lanes.metrics,
     (metrics) => pickNonNull({
       lastResponseTime: metrics.lastResponseTime,
@@ -66877,12 +66924,12 @@ function projectPayload(inputs, draw2, lanes) {
       linesRemoved: metrics.linesRemoved
     })
   );
-  const activityPayload = over(lanes.activity, projectActivity);
-  const contextPayload = over(lanes.context, (context) => ({
+  const activityPayload = over2(lanes.activity, projectActivity);
+  const contextPayload = over2(lanes.context, (context) => ({
     totalTokens: context.totalTokens,
     contextLeft: context.contextLeftPercentage
   }));
-  const cachePayload = over(lanes.cache, (expiresAt) => ({
+  const cachePayload = over2(lanes.cache, (expiresAt) => ({
     expiresAt
   }));
   const home = posixify(inputs.deps.home);
@@ -67001,16 +67048,12 @@ function speedPayloadOf(obs) {
   const history = projectSpeedHistory(obs);
   return rates !== void 0 || history !== void 0 ? { ...rates, ...history !== void 0 && { history } } : void 0;
 }
-function payloadOf(inputs, draw2) {
-  return projectPayload(inputs, draw2, readLanes(inputs));
-}
 function todayOf({
   usageStore,
   faults,
   log
 }, lane, hookData2, at) {
-  if (faults.of(hookData2.session_id, "today") !== void 0) return void 0;
-  const set2 = lane.current();
+  const set2 = todayReading(lane, faults, hookData2.session_id);
   if (set2.kind === "pending") return pendingOf(set2.why);
   if (set2.kind !== "ok") return void 0;
   const read2 = () => {
@@ -68561,7 +68604,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.185.0";
+var PACKAGE_VERSION = "1.185.1";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -70554,7 +70597,7 @@ async function clickGather(ctx, sid, doctor, load) {
     if (e instanceof DoctorBusy) throw new BadVerbArgs(e.message);
     throw e;
   }
-  const gathered = {
+  const gathered2 = {
     facts,
     // The client that drew the bar this click came from, and the daemon the
     // click reached — this process.
@@ -70566,10 +70609,10 @@ async function clickGather(ctx, sid, doctor, load) {
     current: async (now2) => {
       const stands = doctor.loadConfig(sessionOrigin(now2, sid));
       const same2 = stands.config === load.config && stands.error === load.error && stands.warning === load.warning;
-      return same2 ? gathered : clickGather(now2, sid, doctor, stands);
+      return same2 ? gathered2 : clickGather(now2, sid, doctor, stands);
     }
   };
-  return gathered;
+  return gathered2;
 }
 var gatherClick = (ctx, sid) => {
   const doctor = oneAskPerClick(ctx.doctor);
@@ -70580,8 +70623,8 @@ var gatherClick = (ctx, sid) => {
     doctor.loadConfig(sessionOrigin(ctx, sid))
   );
 };
-async function clickFacts(ctx, sid, gathered) {
-  const { facts, install: install2 } = await ctx.gather(gathered.current);
+async function clickFacts(ctx, sid, gathered2) {
+  const { facts, install: install2 } = await ctx.gather(gathered2.current);
   const stores = readStores(ctx.doctorStores);
   const read2 = {
     ...facts,
@@ -70615,8 +70658,8 @@ var doctorRun = {
   gathers: true,
   prepare: async (value, ctx) => {
     const sid = requireSessionId(oneArg(value));
-    const gathered = await gatherClick(ctx, sid);
-    return async (c) => writeReport(c, sid, await clickFacts(c, sid, gathered));
+    const gathered2 = await gatherClick(ctx, sid);
+    return async (c) => writeReport(c, sid, await clickFacts(c, sid, gathered2));
   }
 };
 var doctorProbe = async (value, ctx) => {
@@ -70644,9 +70687,9 @@ var doctorFix = {
     if (check === void 0) {
       throw new BadVerbArgs(`doctor-fix: unknown check "${checkName}"`);
     }
-    const gathered = await gatherClick(ctx, sid);
+    const gathered2 = await gatherClick(ctx, sid);
     return async (c) => {
-      const facts = await clickFacts(c, sid, gathered);
+      const facts = await clickFacts(c, sid, gathered2);
       const verdict = check.probe(facts);
       if (verdict.ok || verdict.fix === void 0) {
         throw new BadVerbArgs(
@@ -70681,9 +70724,9 @@ var doctorMark = {
         `doctor-mark: the mark is ${JSON.stringify(mark)}, not ${GLYPH_MARKS.join(" or ")}`
       );
     }
-    const gathered = await gatherClick(ctx, sid);
+    const gathered2 = await gatherClick(ctx, sid);
     return async (c) => {
-      const facts = await clickFacts(c, sid, gathered);
+      const facts = await clickFacts(c, sid, gathered2);
       const verdict = check.probe(facts);
       if (verdict.ok || verdict.sighting === void 0) {
         throw new BadVerbArgs(
@@ -70937,8 +70980,8 @@ function sessionOfEffects(effects) {
 var hoisted = (verb, value, ctx) => ctx.journalTurns.gathering(() => verb.prepare(value, ctx)).catch(
   (e) => () => Promise.reject(e)
 );
-async function perform(verb, value, ctx, gathered) {
-  const step4 = gathered ?? await ctx.gather((full) => verb.prepare(value, full));
+async function perform(verb, value, ctx, gathered2) {
+  const step4 = gathered2 ?? await ctx.gather((full) => verb.prepare(value, full));
   await step4(ctx);
 }
 async function headGather(rawValue, ctx) {
@@ -70946,7 +70989,7 @@ async function headGather(rawValue, ctx) {
   const leaf = head === void 0 ? void 0 : LEAF_VERBS.get(head.verb);
   return leaf?.gathers ? hoisted(leaf, head.value, ctx) : void 0;
 }
-async function foldEffects(rawValue, ctx, gathered) {
+async function foldEffects(rawValue, ctx, gathered2) {
   const errors2 = [];
   let operational = false;
   const effects = parseEffects(rawValue);
@@ -70958,7 +71001,7 @@ async function foldEffects(rawValue, ctx, gathered) {
       continue;
     }
     try {
-      await perform(leaf, value, ctx, i === 0 ? gathered : void 0);
+      await perform(leaf, value, ctx, i === 0 ? gathered2 : void 0);
     } catch (e) {
       if (e instanceof DaemonClosing) {
         if (errors2.length > 0)
@@ -71073,9 +71116,9 @@ function click(verb, gather, handler) {
         gathered: ctx.gatherTook
       },
       () => gather(value, ctx),
-      (gathered, turn) => journaled(sid, ctx, turn, async (c) => {
+      (gathered2, turn) => journaled(sid, ctx, turn, async (c) => {
         try {
-          await handler(value, c, gathered);
+          await handler(value, c, gathered2);
         } finally {
           if (sid !== null) ctx.clickLanded(sid);
         }
@@ -71090,7 +71133,7 @@ var VERBS = new Map([
       click(
         verb,
         async (value, ctx) => leaf.gathers ? hoisted(leaf, value, ctx) : void 0,
-        (value, ctx, gathered) => perform(leaf, value, ctx, gathered)
+        (value, ctx, gathered2) => perform(leaf, value, ctx, gathered2)
       )
     ]
   ),
@@ -77605,6 +77648,17 @@ function endOverdue(dir, facts, jobs) {
 // src/daemon/update-notice.ts
 init_globals();
 
+// src/facts/fact.ts
+init_globals();
+function restamp(prior, next, at) {
+  if (next.kind === "pending") return pendingOf(next.why);
+  if (prior !== void 0 && prior.kind !== "pending") {
+    const { at: _at, ...held } = prior;
+    if (compareStructural(held, next)) return prior;
+  }
+  return { ...next, at };
+}
+
 // src/utils/keyed-serial-queue.ts
 init_globals();
 var KeyedSerialQueue = class {
@@ -77719,23 +77773,37 @@ function updateNotice(update, act, ctx) {
     }
   ];
 }
-function updateOf(build, release3) {
-  if (build.kind === "stale") {
-    return {
-      kind: "source",
-      root: build.root,
-      newer: build.source,
-      running: build.running
-    };
+function updateReading(build, release3) {
+  if (build.kind === "pending") return build;
+  const b = build.value;
+  switch (b.kind) {
+    case "stale":
+      return ok({
+        kind: "source",
+        root: b.root,
+        newer: b.source,
+        running: b.running
+      });
+    case "current":
+      return ABSENT2;
+    case "unchecked":
+      return failed(`build: unchecked: ${b.reason}`, "read");
+    case "not-source-checkout":
+      return releaseReading(release3);
   }
-  if (build.kind === "not-source-checkout" && release3 !== null && release3.kind === "stale") {
-    return {
-      kind: "release",
-      newer: release3.latest,
-      running: release3.installed
-    };
+}
+function releaseReading(release3) {
+  if (release3.kind === "pending") return release3;
+  const c = release3.value;
+  switch (c.kind) {
+    case "stale":
+      return ok({ kind: "release", newer: c.latest, running: c.installed });
+    case "current":
+    case "ahead":
+      return ABSENT2;
+    case "unchecked":
+      return failed(`release: unchecked: ${c.reason}`, "read");
   }
-  return null;
 }
 var ACT_TIMEOUT_MS = 10 * 60 * 1e3;
 var ACT_POLL_MS = 2e3;
@@ -77774,6 +77842,7 @@ function describeRelease(c) {
 }
 function makeUpdateWatch(opts) {
   const {
+    fact,
     clock,
     launcher,
     probe: probe2,
@@ -77788,8 +77857,8 @@ function makeUpdateWatch(opts) {
     onApplied,
     log
   } = opts;
-  let build = { kind: "unchecked", reason: "not sampled yet" };
-  let release3 = null;
+  let build = pendingOf("unread");
+  let release3 = pendingOf("unread");
   const readStart = async (pid2) => {
     const read2 = await probe2.startTime(pid2);
     if (closed) throw new DaemonClosing("apply-update");
@@ -77807,7 +77876,10 @@ function makeUpdateWatch(opts) {
   const every = (run3, ms) => {
     armed.push(clock.every(ms, run3, { unref: true }));
   };
-  const current = () => closed ? null : updateOf(build, release3);
+  const current = () => {
+    const held = fact.get();
+    return held.kind === "ok" ? held.value : null;
+  };
   function syncGate() {
     const update = current();
     const identity2 = update === null ? null : updateIdentity(update);
@@ -77818,10 +77890,18 @@ function makeUpdateWatch(opts) {
       dispose: gates.state.register(UPDATE_DISMISSED_KEY, [identity2])
     };
   }
-  function sampleBuild() {
-    build = assessBuild(entryUrl, () => bundleStamp(digest2));
-    logBuild(describeBuild(build));
+  function publish() {
+    const reading = closed ? ABSENT2 : updateReading(build, release3);
+    const next = restamp(fact.get(), reading, instantAt(clock));
+    runInAction(() => fact.set(next));
     syncGate();
+  }
+  function sampleBuild() {
+    const sampled = assessBuild(entryUrl, () => bundleStamp(digest2));
+    build = ok(sampled);
+    logBuild(describeBuild(sampled));
+    publish();
+    return sampled;
   }
   async function pollRelease() {
     const latest = await fetchLatestVersion(
@@ -77830,9 +77910,10 @@ function makeUpdateWatch(opts) {
       registryUrl,
       clock
     );
-    release3 = assessCurrency(PACKAGE_VERSION, latest);
-    logRelease(describeRelease(release3));
-    syncGate();
+    const assessed = assessCurrency(PACKAGE_VERSION, latest);
+    release3 = ok(assessed);
+    logRelease(describeRelease(assessed));
+    publish();
   }
   let unreadable = null;
   const logUnreadable = changeLogger(log);
@@ -77888,18 +77969,18 @@ function makeUpdateWatch(opts) {
   }
   return {
     arm() {
-      sampleBuild();
+      const sampled = sampleBuild();
       every(sampleBuild, intervalMs);
       armed.push(() => clearTick?.());
       void tick();
-      if (build.kind === "not-source-checkout") {
+      if (sampled.kind === "not-source-checkout") {
         void pollRelease();
         every(() => void pollRelease(), releaseIntervalMs);
       }
     },
     close() {
       closed = true;
-      syncGate();
+      publish();
       armed.forEach((release4) => release4());
     },
     notice: (ctx) => updateNotice(current(), seen ?? IDLE, ctx),
@@ -77944,6 +78025,12 @@ function makeUpdateWatch(opts) {
       seen = { kind: "running", act: claim.act };
     })
   };
+}
+
+// src/daemon/update-fact.ts
+init_globals();
+function newUpdateFact() {
+  return observable.box(pendingOf("unread"), { deep: false });
 }
 
 // src/daemon/binary-watch.ts
@@ -80786,29 +80873,6 @@ function scanBufferForLastCacheTs(buf, bufStartsAtFileBeginning) {
   return null;
 }
 
-// src/daemon/refresh-faults.ts
-init_globals();
-var RefreshFaults = class {
-  bySession = observable.map(void 0, { deep: false });
-  // The lane's failure while its last refresh threw; none once one ran clean.
-  of(sessionId2, lane) {
-    const reason = this.bySession.get(sessionId2)?.get(lane);
-    return reason === void 0 ? void 0 : failed(reason, "read");
-  }
-  // What the lane's refresh just did: threw `reason`, or ran clean (null).
-  refreshed(sessionId2, lane, reason) {
-    const held = this.bySession.get(sessionId2);
-    if (reason === null && held?.has(lane) !== true) return;
-    const next = new Map(held);
-    if (reason === null) next.delete(lane);
-    else next.set(lane, reason);
-    runInAction(() => {
-      if (next.size === 0) this.bySession.delete(sessionId2);
-      else this.bySession.set(sessionId2, next);
-    });
-  }
-};
-
 // src/daemon/cache/managed-storage.ts
 init_globals();
 var import_node_path38 = __toESM(require_path_browserify(), 1);
@@ -81771,11 +81835,13 @@ function openView(state, cwd2, facts, { sessionState, declare, source: sourceOf,
     (preset) => redeclare(declared.get().facts, preset),
     { fireImmediately: true }
   );
+  const sourceStops = [];
   const source = sourceOf({
     sessionId: sessionId2,
     state,
     store: registry.variableStore,
-    declared: () => declared.get()
+    declared: () => declared.get(),
+    onDispose: (stopSource) => sourceStops.push(stopSource)
   });
   bindView(state.compiled, registry.variableStore, registry, source);
   const stopChanged = reaction(
@@ -81816,6 +81882,7 @@ function openView(state, cwd2, facts, { sessionState, declare, source: sourceOf,
     dispose: () => {
       stop2();
       stopChanged();
+      for (const stopSource of sourceStops) stopSource();
       holds2.close();
       return registry.dispose();
     }
@@ -82543,8 +82610,83 @@ var NavigationHistory = class {
 
 // src/daemon/session-source.ts
 init_globals();
+
+// src/daemon/facts-assembly.ts
+init_globals();
+var FACTS_VERSION = 1;
+var gathered = (on2, reading) => on2 ? reading : pendingOf("unread");
+var over = (reading, project) => reading.kind === "ok" ? ok(project(reading.value)) : reading;
+function prOf(git) {
+  switch (git.kind) {
+    case "pending":
+    case "failed":
+      return git;
+    case "absent":
+      return ABSENT2;
+    case "ok":
+      return git.value.pullRequest ?? pendingOf("unread");
+  }
+}
+var sameFacts = (now2, held) => {
+  const entries = Object.entries(now2);
+  return entries.length === Object.keys(held).length && entries.every(([key, fact]) => Object.is(fact, Reflect.get(held, key)));
+};
+function gitFactsOf({ pullRequest: _pullRequest, ...git }) {
+  return git;
+}
+function assembleFacts(prior, session, readings, update, at) {
+  const { lanes, gathered: on2 } = readings;
+  const git = gathered(on2.git, lanes.git);
+  const stamp2 = (held2, reading) => restamp(held2, reading, at);
+  const held = prior?.builtins;
+  const builtins = {
+    session: stamp2(held?.session, gathered(on2.session, lanes.usage)),
+    today: stamp2(held?.today, gathered(on2.today, readings.today)),
+    speed: stamp2(held?.speed, gathered(on2.speed, lanes.speed)),
+    context: stamp2(held?.context, gathered(on2.context, lanes.context)),
+    metrics: stamp2(held?.metrics, gathered(on2.metrics, lanes.metrics)),
+    activity: stamp2(held?.activity, gathered(on2.activity, lanes.activity)),
+    cache: stamp2(held?.cache, gathered(on2.cache, lanes.cache)),
+    autocompact: stamp2(
+      held?.autocompact,
+      gathered(on2.autocompact, lanes.autoCompact)
+    ),
+    git: stamp2(held?.git, over(git, gitFactsOf)),
+    pr: stamp2(held?.pr, prOf(git)),
+    tmux: stamp2(
+      held?.tmux,
+      over(gathered(on2.tmux, lanes.tmuxSession), (name) => ({ session: name }))
+    ),
+    hostName: stamp2(held?.hostName, gathered(on2.hostName, lanes.hostName)),
+    hostUser: stamp2(held?.hostUser, gathered(on2.hostUser, lanes.hostUser))
+  };
+  const sources = Object.fromEntries(
+    readings.declaredSources.map((name) => [
+      name,
+      stamp2(
+        prior?.sources[name],
+        lanes.sources.get(name) ?? pendingOf("unread")
+      )
+    ])
+  );
+  const parts = { builtins, sources, update, diagnostics: readings.faults };
+  if (prior !== void 0 && sameFacts(builtins, prior.builtins) && sameFacts(sources, prior.sources) && compareStructural(
+    { update, diagnostics: readings.faults },
+    { update: prior.update, diagnostics: prior.diagnostics }
+  )) {
+    return prior;
+  }
+  return {
+    v: FACTS_VERSION,
+    session,
+    seq: prior === void 0 ? 1 : prior.seq + 1,
+    ...parts
+  };
+}
+
+// src/daemon/session-source.ts
 function sessionSource(deps) {
-  return ({ sessionId: sessionId2, state, store, declared }) => {
+  return ({ sessionId: sessionId2, state, store, declared, onDispose }) => {
     const pick2 = (key) => deps.sessionState.get(sessionId2, key);
     const effective = store.derive(
       "session.effective",
@@ -82555,17 +82697,29 @@ function sessionSource(deps) {
         (preset) => state.authoredRoots.has(preset)
       )
     );
-    const payload = store.derive("session.payload", "computed", () => {
-      const { facts, lanes } = declared();
-      const globals = effective.read();
-      return payloadOf(
-        {
+    const inputs = store.derive(
+      "session.inputs",
+      "computed",
+      () => {
+        const { facts, lanes } = declared();
+        return {
           hookData: facts.hookData,
           cwd: facts.cwd,
           hints: facts.hints,
-          neededInputPaths: state.neededInputPaths(globals.preset),
+          neededInputPaths: state.neededInputPaths(effective.read().preset),
           deps: { ...deps.providers, lanes: () => lanes }
-        },
+        };
+      }
+    );
+    const readings = store.derive(
+      "session.readings",
+      "computed",
+      () => readingsOf(inputs.read(), state.sources)
+    );
+    const payload = store.derive("session.payload", "computed", () => {
+      const globals = effective.read();
+      return projectPayload(
+        inputs.read(),
         {
           effective: globals,
           configFacts: {
@@ -82574,12 +82728,49 @@ function sessionSource(deps) {
           },
           history: deps.history(sessionId2),
           back: deps.navigation(sessionId2, state.config)
-        }
+        },
+        readings.read().lanes
       );
     });
+    const clock = deps.providers.clock;
+    const document = observable.box(
+      assembleFacts(
+        void 0,
+        sessionId2,
+        readings.read(),
+        deps.update(),
+        instantAt(clock)
+      ),
+      { deep: false }
+    );
+    onDispose(
+      reaction(
+        () => ({ readings: readings.read(), update: deps.update() }),
+        ({ readings: moved, update }) => runInAction(
+          () => document.set(
+            assembleFacts(
+              document.get(),
+              sessionId2,
+              moved,
+              update,
+              instantAt(clock)
+            )
+          )
+        ),
+        {
+          // [LAW:no-silent-failure] A throw here reaches only the console
+          // MobX prints to, which nobody reads in a detached daemon.
+          onError: (e) => deps.providers.log(
+            "error",
+            `session facts threw sid=${JSON.stringify(sessionId2)}: ${String(e)}`
+          )
+        }
+      )
+    );
     return {
       payload: () => payload.read(),
       effective: () => effective.read(),
+      facts: () => document.get(),
       selections: () => effective.read()
     };
   };
@@ -84174,7 +84365,7 @@ var JournalTurns = class {
   // gather while the turn was awaited, refuses the click; one that left during
   // the gather does not, since a gather outlasts a client's budget through no
   // fault of a re-click. With no gather `left` is false, as it was just read.
-  click(verb, session, { placed: placed2, waited, gone, gathered }, gather, body) {
+  click(verb, session, { placed: placed2, waited, gone, gathered: gathered2 }, gather, body) {
     const arrived3 = this.deps.monotonic();
     const inPlace = async () => {
       placed2(elapsedMs(this.deps, arrived3));
@@ -84182,7 +84373,7 @@ var JournalTurns = class {
       if (gone()) throw new ClickAbandoned(verb);
       const started2 = this.deps.monotonic();
       const gathering = await gather();
-      gathered(elapsedMs(this.deps, started2));
+      gathered2(elapsedMs(this.deps, started2));
       const left = gone();
       return this.take(
         verb,
@@ -84570,6 +84761,7 @@ function createDaemon(inputs) {
     return tmux3 === null || tmux3 === void 0 ? [] : [tmux3.socket];
   }
   const renderWarnings = new RenderWarningRecords();
+  const updateFact = newUpdateFact();
   const renderCache = new RenderCache(
     {
       clock,
@@ -84595,6 +84787,7 @@ function createDaemon(inputs) {
         // through the one ledger, so a view's payload logs none of them.
         providers: payloadProviders,
         sessionState,
+        update: () => updateFact.get(),
         history: (sessionId2) => settingsHistory.depth(sessionId2),
         // Measured against the gate of the config the view draws with.
         navigation: (sessionId2, config2) => navigationHistory.depth(
@@ -84656,6 +84849,7 @@ function createDaemon(inputs) {
     log
   });
   const updateWatch = makeUpdateWatch({
+    fact: updateFact,
     clock,
     launcher,
     probe: probe2,

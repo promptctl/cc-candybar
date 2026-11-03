@@ -2,67 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-611",
-      "ref": "refs/pull/611/merge",
-      "sha": "a209c0bdab0916f40e83d3307fa99f6c5420a03b",
-      "timestamp": "2026-11-03T13:01:37.668Z",
-      "commits": [
-        {
-          "sha": "a209c0bdab0916f40e83d3307fa99f6c5420a03b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T13:00:33Z",
-          "message": "Merge 5e6056c693fcd2ba0fdb595bd97c83c141ae3cf4 into 5138e2c802a9c3baf1fc4756147126024fd36bf0\n"
-        },
-        {
-          "sha": "5e6056c693fcd2ba0fdb595bd97c83c141ae3cf4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T06:00:01-07:00",
-          "message": "review(facts): Wire refuses undefined, projectPayload keeps one header (candybar-gather-renderer-76bb.6pj.af6)\n\nJSON drops an undefined property and nulls an undefined array member, so a\ntype admitting it does not round-trip as itself.\n"
-        },
-        {
-          "sha": "45a2aa9dcb251ab0cd056e7b4fc1f7632514360d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T05:54:49-07:00",
-          "message": "review(facts): equality has one judge, the view derives its inputs once (candybar-gather-renderer-76bb.6pj.af6)\n\nassembleFacts compares builtins and sources by the identity restamp already\nreturns, instead of walking every value a second time. The session source\nderives its payload inputs once for both the payload and the readings.\nStale updateOf comment and a shadowed stop are fixed.\n"
-        },
-        {
-          "sha": "c1cbfa756eb3c7fdee3776d2ade8f74dedbcc34b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T05:43:46-07:00",
-          "message": "docs(facts): the facts document's traps in data-sources memory; payloadOf comments follow its split (candybar-gather-renderer-76bb.6pj.af6)\n"
-        },
-        {
-          "sha": "edd9f2100f1af1e19bd4e2e2983d9771bf4ad1ec",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T05:22:52-07:00",
-          "message": "feat(facts): a session's facts document is assembled from today's providers and restamped against its last (candybar-gather-renderer-76bb.6pj.af6)\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "be10d89d0f489dffdc71e3a67ef2fec37cb70333",
-      "timestamp": "2026-11-03T11:46:22.124Z",
+      "sha": "a7b85c98a60c7c9bc6196f726311fc6a6650e438",
+      "timestamp": "2026-11-03T13:06:25.084Z",
       "commits": [
         {
-          "sha": "be10d89d0f489dffdc71e3a67ef2fec37cb70333",
+          "sha": "a7b85c98a60c7c9bc6196f726311fc6a6650e438",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T04:45:25-07:00",
-          "message": "fix(render): today's day sums and the PR stop blocking the first bar (candybar-gather-renderer-76bb.6pj.2nv) (#610)\n\n* fix(render): today's day sums and the PR stop blocking the first bar; PR lookups are capped and back off (candybar-gather-renderer-76bb.6pj.2nv)\n\nTotality puts every built-in in every first bar, and both of these are slow\nand external. The request's today refresh no longer awaits the directory\nscan, the wait set no longer lists today or the PR, and both draw pending and\nland through the store they are read from.\n\nThe PR source puts every forge lookup through one limiter shared across\nrepos (the limiter moves out of transcript-fs so both use it), and a key\nwhose lookups keep failing is retried at a doubling interval up to the ok\nperiod.\n\nThe e2e render helper asks again after a bar drawn pending only on these two,\nonce their refresh is logged.\n\n* fix(git): a PR lookup's logged duration starts at its slot, not at its place in the queue (candybar-gather-renderer-76bb.6pj.2nv)"
+          "timestamp": "2026-11-03T06:05:34-07:00",
+          "message": "feat(facts): one SessionFacts per session, assembled from today's providers and restamped (candybar-gather-renderer-76bb.6pj.af6) (#611)\n\n* feat(facts): a session's facts document is assembled from today's providers and restamped against its last (candybar-gather-renderer-76bb.6pj.af6)\n\n* docs(facts): the facts document's traps in data-sources memory; payloadOf comments follow its split (candybar-gather-renderer-76bb.6pj.af6)\n\n* review(facts): equality has one judge, the view derives its inputs once (candybar-gather-renderer-76bb.6pj.af6)\n\nassembleFacts compares builtins and sources by the identity restamp already\nreturns, instead of walking every value a second time. The session source\nderives its payload inputs once for both the payload and the readings.\nStale updateOf comment and a shadowed stop are fixed.\n\n* review(facts): Wire refuses undefined, projectPayload keeps one header (candybar-gather-renderer-76bb.6pj.af6)\n\nJSON drops an undefined property and nulls an undefined array member, so a\ntype admitting it does not round-trip as itself."
         },
         {
-          "sha": "7780c8b5a83e6290289f3901555f0b63bf5704e8",
+          "sha": "5138e2c802a9c3baf1fc4756147126024fd36bf0",
           "author_name": "semantic-release-bot",
           "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-03T11:15:12Z",
-          "message": "chore(release): set `package.json` to 1.185.0 [skip ci]\n\n## [1.185.0](https://github.com/promptctl/cc-candybar/compare/v1.184.1...v1.185.0) (2026-11-03)\n\n### Features\n\n* **facts:** Fact<T> and SessionFacts, the seam's type (candybar-gather-renderer-76bb.6pj.cna) ([#609](https://github.com/promptctl/cc-candybar/issues/609)) ([9d75378](https://github.com/promptctl/cc-candybar/commit/9d75378da3169d188c0f6bca1bf8f0e57e2dcb88))\n"
+          "timestamp": "2026-11-03T11:56:35Z",
+          "message": "chore(release): set `package.json` to 1.185.1 [skip ci]\n\n## [1.185.1](https://github.com/promptctl/cc-candybar/compare/v1.185.0...v1.185.1) (2026-11-03)\n\n### Bug Fixes\n\n* **render:** today's day sums and the PR stop blocking the first bar (candybar-gather-renderer-76bb.6pj.2nv) ([#610](https://github.com/promptctl/cc-candybar/issues/610)) ([be10d89](https://github.com/promptctl/cc-candybar/commit/be10d89d0f489dffdc71e3a67ef2fec37cb70333))\n"
         }
       ]
     }
