@@ -66359,6 +66359,49 @@ function settledLane(outcome) {
   return { current: () => outcome };
 }
 
+// src/daemon/cache/today-facts.ts
+init_globals();
+var EMPTY_DAY = {
+  cost: 0,
+  input: 0,
+  output: 0,
+  cacheCreation: 0,
+  cacheRead: 0
+};
+function addDay(into, d) {
+  into.cost += d.cost;
+  into.input += d.input;
+  into.output += d.output;
+  into.cacheCreation += d.cacheCreation;
+  into.cacheRead += d.cacheRead;
+}
+function dayKey(date2) {
+  const year = date2.getFullYear();
+  const month = String(date2.getMonth() + 1).padStart(2, "0");
+  const day = String(date2.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+function projectToday(facts, at) {
+  const today = dayKey(dateOf(at));
+  const inSet = facts.sums[today];
+  const own2 = facts.own[today];
+  if (inSet === void 0 && own2 === void 0) return ABSENT2;
+  const total = { ...EMPTY_DAY };
+  if (inSet !== void 0) addDay(total, inSet);
+  if (own2 !== void 0) addDay(total, own2);
+  return ok({
+    cost: total.cost,
+    tokens: total.input + total.output + total.cacheCreation + total.cacheRead,
+    tokenBreakdown: {
+      input: total.input,
+      output: total.output,
+      cacheCreation: total.cacheCreation,
+      cacheRead: total.cacheRead
+    },
+    date: today
+  });
+}
+
 // src/claude-resume.ts
 init_globals();
 
@@ -66852,7 +66895,11 @@ function readingsOf(inputs, declared) {
   };
   return {
     lanes: laneReadings,
-    today: todayReading(lanes.today, deps.faults, sessionId2),
+    today: read2(
+      "today",
+      want.today,
+      () => todayReading(lanes.today, deps.usageStore, sessionId2)
+    ),
     gathered: want,
     declaredSources: [...declared.keys()],
     faults: REFRESH_LANES.flatMap((lane) => {
@@ -66861,8 +66908,12 @@ function readingsOf(inputs, declared) {
     })
   };
 }
-function todayReading(lane, faults, sessionId2) {
-  return faults.of(sessionId2, "today") ?? lane.current();
+function todayReading(lane, usage, sessionId2) {
+  const set2 = lane.current();
+  if (set2.kind !== "ok") return set2;
+  const own2 = usage.daysOutside(sessionId2, set2.value.roots);
+  if (own2.kind === "failed") return own2;
+  return ok({ sums: set2.value.sums, own: own2.kind === "ok" ? own2.value : {} });
 }
 function waitsOf(lanes) {
   return [
@@ -67017,12 +67068,12 @@ function projectPayload(inputs, draw2, lanes) {
   return payload;
 }
 function sourcesFactOf(sources) {
+  const named3 = Object.entries(sources);
   return {
-    sources: String(sources.size),
-    sourcesPending: [...sources].flatMap(([name, lane]) => {
-      const reading = lane.current();
-      return reading.kind === "pending" ? [`${name}:${reading.why}`] : [];
-    }).join(",") || "-"
+    sources: String(named3.length),
+    sourcesPending: named3.flatMap(
+      ([name, fact]) => fact.kind === "pending" ? [`${name}:${fact.why}`] : []
+    ).join(",") || "-"
   };
 }
 function projectSources(names, read2) {
@@ -67049,24 +67100,10 @@ function speedPayloadOf(obs) {
   const history = projectSpeedHistory(obs);
   return rates !== void 0 || history !== void 0 ? { ...rates, ...history !== void 0 && { history } } : void 0;
 }
-function todayOf({
-  usageStore,
-  faults,
-  log
-}, lane, hookData2, at) {
-  const set2 = todayReading(lane, faults, hookData2.session_id);
-  if (set2.kind === "pending") return pendingOf(set2.why);
-  if (set2.kind !== "ok") return void 0;
-  const read2 = () => {
-    try {
-      return usageStore.todayAt(set2.value, hookData2, at);
-    } catch (e) {
-      log("error", `today read threw: ${inspect(e)}`);
-      return ABSENT2;
-    }
-  };
-  const today = read2();
-  if (today.kind === "pending") return pendingOf(today.why);
+function todayOf(fact, at) {
+  if (fact.kind === "pending") return pendingOf(fact.why);
+  if (fact.kind !== "ok") return void 0;
+  const today = projectToday(fact.value, at);
   return today.kind === "ok" ? { cost: today.value.cost, tokens: today.value.tokens } : void 0;
 }
 async function settlePayload(inputs, at, refreshed) {
@@ -68605,7 +68642,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.186.0";
+var PACKAGE_VERSION = "1.187.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -76291,19 +76328,15 @@ function drawRender(parts, setup, drawing2) {
       ...renderWarnings.ofSession(sessionId2, drawing2.by, scope).map((w) => ({ about: `${w.kind}\0${w.message}`, message: w.message }))
     ].map((w) => ({ about: w.about, text: w.message, copy: w.message }))
   );
+  const document = view.source.facts();
   const projected = {
     diagnostics: diagnosticsProjection(diagnostics),
     drawing: drawing2,
     feeds: frameFeeds.feedsOf(sessionId2, at),
-    today: todayOf(
-      payloadProviders,
-      view.lanes().today,
-      view.facts().hookData,
-      at
-    )
+    today: todayOf(document.builtins.today, at)
   };
   const metrics = isPending(payload.metrics) ? void 0 : payload.metrics;
-  noteFacts(facts, sourcesFactOf(view.lanes().sources));
+  noteFacts(facts, sourcesFactOf(document.sources));
   noteFacts(facts, {
     prompts: String(metrics?.messageCount ?? "-"),
     nonPrompts: String(metrics?.nonPrompts ?? "-"),
@@ -79522,13 +79555,6 @@ var DEFAULT_SWEEP_INTERVAL_MS = 5 * 60 * 1e3;
 var DEFAULT_RESCAN = { okMs: 60 * 1e3, failedMs: 10 * 1e3 };
 var MAX_UNHELD_SCANS = 8;
 var SEED_CONCURRENCY = 8;
-var EMPTY_DAY = {
-  cost: 0,
-  input: 0,
-  output: 0,
-  cacheCreation: 0,
-  cacheRead: 0
-};
 var EMPTY_SESSION_INFO = {
   cost: null,
   calculatedCost: null,
@@ -79536,12 +79562,6 @@ var EMPTY_SESSION_INFO = {
   tokens: null,
   tokenBreakdown: null
 };
-function dayKey(date2) {
-  const year = date2.getFullYear();
-  const month = String(date2.getMonth() + 1).padStart(2, "0");
-  const day = String(date2.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
 function seedCutoffMs(now2) {
   const d = new Date(now2);
   d.setHours(0, 0, 0, 0);
@@ -79585,13 +79605,6 @@ async function foldFile(state, entries, cacheRoot, clock) {
     days.set(key, d);
   }
   return { entries: count, cost, breakdown, days };
-}
-function addDay(into, d) {
-  into.cost += d.cost;
-  into.input += d.input;
-  into.output += d.output;
-  into.cacheCreation += d.cacheCreation;
-  into.cacheRead += d.cacheRead;
 }
 function mergeFolds(files) {
   let count = 0;
@@ -79858,7 +79871,7 @@ var SessionUsageStore = class {
   // src/daemon/render-payload.ts): the directory set's scans, held, so a set
   // no scan has answered starts its first one now — before the request or the
   // frame that reads it. The lane answers the set's day sums once a scan has
-  // answered; which day of them is the draw's (`todayAt`).
+  // answered; which day of them is the draw's (`projectToday`).
   declareToday(holds2, claudeConfigDir2) {
     if (this.closed) return settledLane(failed("usage store closed", "read"));
     const claudePaths = getClaudePaths(claudeConfigDir2, this.host.home);
@@ -79871,32 +79884,22 @@ var SessionUsageStore = class {
       }
     };
   }
-  // The `today` projection as the records stand, for a draw: the directory
-  // set's day sums at the day of `at`, so a frame past midnight sums the new
-  // day with no refresh. The active session's last ingest failing is the
-  // projection's failure.
-  todayAt(set2, hookData2, at) {
-    const active2 = this.sessions.get(hookData2?.session_id ?? "");
-    const failure = active2?.failure.get() ?? null;
+  // The rendering session's own days the set's sums do not hold, as the
+  // records stand, for the `today` fact: no I/O, no fold. A record under the
+  // set's roots is in its sums already, so it has none beyond them.
+  // [LAW:no-silent-failure] The session's last ingest failing is this read
+  // failing, so the fact fails with it and the draw shows a gap, never a total
+  // silently missing the session's own work.
+  daysOutside(sessionId2, roots) {
+    const slot = this.sessions.get(sessionId2);
+    if (slot === void 0) return ABSENT2;
+    const failure = slot.failure.get();
     if (failure !== null) return failed(failure, "read");
-    const today = dayKey(dateOf(at));
-    const total = { ...EMPTY_DAY };
-    const inSet = set2.sums[today];
-    if (inSet !== void 0) addDay(total, inSet);
-    const own2 = under(active2?.record?.transcriptPath, set2.roots) ? void 0 : active2?.record?.days.get(today);
-    if (own2 !== void 0) addDay(total, own2);
-    if (inSet === void 0 && own2 === void 0) return ABSENT2;
-    return ok({
-      cost: total.cost,
-      tokens: total.input + total.output + total.cacheCreation + total.cacheRead,
-      tokenBreakdown: {
-        input: total.input,
-        output: total.output,
-        cacheCreation: total.cacheCreation,
-        cacheRead: total.cacheRead
-      },
-      date: today
-    });
+    const record2 = slot.record;
+    if (record2 === void 0 || under(record2.transcriptPath, roots)) {
+      return ABSENT2;
+    }
+    return ok(Object.fromEntries(record2.days));
   }
   // Take one tok/s observation of the active session: ingest its current
   // cumulative counts, return the prior sample alongside, and record this one as
