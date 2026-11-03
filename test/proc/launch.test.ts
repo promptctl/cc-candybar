@@ -452,6 +452,17 @@ describe("launch (async)", () => {
     }
   });
 
+  it("keeps stdinInput whole for a descendant that reads it after the child exits", async () => {
+    const r = await launch({
+      bin: "sh",
+      args: ["-c", "(sleep 0.2; wc -c) <&0 &"],
+      stdinInput: "x".repeat(10 * 1024 * 1024),
+      category: "user-shell",
+    });
+    expect(r).toMatchObject({ ok: true });
+    if (r.ok) expect(r.stdout.trim()).toBe(String(10 * 1024 * 1024));
+  });
+
   it("calls onStart/onEnd exactly once per launch with the category tag", async () => {
     const { handle, starts, ends } = makeSpyHandle();
     scoped({ stats: handle });

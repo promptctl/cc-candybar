@@ -46,7 +46,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import type { Socket } from "node:net";
-import type { Readable } from "node:stream";
+import type { Readable, Writable } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
 import { types } from "node:util";
 import type { ChildProcess, StdioOptions } from "node:child_process";
@@ -374,7 +374,7 @@ interface LaunchState {
   readonly unreaped: Map<ChildProcess, LaunchCategory>;
   // [LAW:single-enforcer] Pipes that outlived their launch, while they stay
   // open: the one place that holds, bounds and meters them.
-  readonly drains: Set<Readable>;
+  readonly drains: Set<Readable | Writable>;
 }
 
 // [LAW:no-ambient-temporal-coupling] `ending` is the one record of whether what
@@ -715,6 +715,11 @@ async function launchWaited(
     const group = child.pid;
     if (group !== undefined) guard(state, group);
     const exited = new Promise((end) => child.once("exit", end));
+    // Node destroys a child's stdin when the child itself exits, dropping input
+    // a descendant still reads (`(cat > f) <&0 &`). The launch owns the pipe
+    // instead, so it closes when its last reader does.
+    const input = child.stdin;
+    child.stdin = null;
 
     const full = () => terminate("output-limit");
     const stdout = capture(state, opts.category, child.stdout, full);
@@ -753,9 +758,22 @@ async function launchWaited(
       child.off("error", onError);
       stdout.drain();
       stderr.drain();
+      holdInput();
       deliver();
     };
     const settle = (r: LaunchResult) => finish(() => resolve(r));
+    // [LAW:single-enforcer] Input still being written at settle is held with
+    // the drains, so a closed launcher frees it with them.
+    const holdInput = () => {
+      if (input === null || input.destroyed || input.writableFinished) return;
+      if (state.scope.signal.aborted) {
+        input.destroy();
+        return;
+      }
+      input.once("close", () => state.drains.delete(input));
+      (input as Socket).unref();
+      state.drains.add(input);
+    };
     // [LAW:one-type-per-behavior] A group that cannot be signalled (EPERM:
     // the child changed its real uid) is this run's result like any other
     // failure — a `LaunchResult` arm, never a rejection or a throw out of a
@@ -893,8 +911,8 @@ async function launchWaited(
     // [LAW:no-silent-failure] exception: a child may stop reading and still
     // succeed (`head -1`), so its exit is the verdict, and the failed write
     // says nothing that exit does not.
-    child.stdin?.on("error", () => {});
-    child.stdin?.end(opts.stdinInput);
+    input?.on("error", () => {});
+    input?.end(opts.stdinInput);
   });
 }
 
