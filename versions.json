@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "f076fdeb651bcf4d15226703d9e09fdaf17f7ef8",
+      "timestamp": "2026-11-03T04:30:01.406Z",
+      "commits": [
+        {
+          "sha": "f076fdeb651bcf4d15226703d9e09fdaf17f7ef8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T21:29:10-07:00",
+          "message": "feat(launch): a cut drain or a failed launch pipe shows in the ⚠ indicator (candybar-testing-0x6u.0dh) (#601)\n\n* feat(launch): a cut drain or a failed launch pipe shows in the ⚠ indicator (candybar-testing-0x6u.0dh)\n\n* fix(launch): a held input's failed write is its reader stopping, not a pipe event; the cut's warning is asserted in the cut test, which waits for the holder's end (candybar-testing-0x6u.0dh)\n\n* fix(launch): pipe events stamp on the daemon's clock, share the event hold's answered rule, keep a viewer open across count changes; a pipe-error run is its own outcome (candybar-testing-0x6u.0dh)\n\n* fix(launch): a pipe event carries its own counts, logs itself once, and shows its hold in the draw's facts (candybar-testing-0x6u.0dh)"
+        },
+        {
+          "sha": "1778b930898902caf685e0600e9ebe897409cb72",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-03T04:09:07Z",
+          "message": "chore(release): set `package.json` to 1.182.0 [skip ci]\n\n## [1.182.0](https://github.com/promptctl/cc-candybar/compare/v1.181.1...v1.182.0) (2026-11-03)\n\n### Features\n\n* **url-handler:** a click the forwarder could not deliver tells the user (candybar-daemon-health-ajx0.c3x) ([#600](https://github.com/promptctl/cc-candybar/issues/600)) ([45d5d1e](https://github.com/promptctl/cc-candybar/commit/45d5d1e8852fca64ed242810be9361c168d539be))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-602",
       "ref": "refs/pull/602/merge",
       "sha": "5219fc4aff922ddca193b61026205282e73981e2",
@@ -66,56 +88,6 @@
       ]
     },
     {
-      "version": "pr-601",
-      "ref": "refs/pull/601/merge",
-      "sha": "56e8f8015a1432bd394b6230f7a8db06d79832b3",
-      "timestamp": "2026-11-03T04:22:02.638Z",
-      "commits": [
-        {
-          "sha": "56e8f8015a1432bd394b6230f7a8db06d79832b3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T21:19:38-07:00",
-          "message": "Merge 1236fec61c88f9326219457aaeae165036025640 into 1778b930898902caf685e0600e9ebe897409cb72\n"
-        },
-        {
-          "sha": "1236fec61c88f9326219457aaeae165036025640",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T21:19:36-07:00",
-          "message": "Merge branch 'main' into candybar-testing-0x6u.0dh"
-        },
-        {
-          "sha": "ed5cbfb210b2266d9b7a57ec4c5c7b5832aeb53a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T21:18:48-07:00",
-          "message": "fix(launch): a pipe event carries its own counts, logs itself once, and shows its hold in the draw's facts (candybar-testing-0x6u.0dh)\n"
-        },
-        {
-          "sha": "aff9b377b58123510f1c072f2aeee7e9c2b5e038",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T21:08:34-07:00",
-          "message": "fix(launch): pipe events stamp on the daemon's clock, share the event hold's answered rule, keep a viewer open across count changes; a pipe-error run is its own outcome (candybar-testing-0x6u.0dh)\n"
-        },
-        {
-          "sha": "783f8536d0b341d981edd666ae708f092fe420dd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T20:57:12-07:00",
-          "message": "fix(launch): a held input's failed write is its reader stopping, not a pipe event; the cut's warning is asserted in the cut test, which waits for the holder's end (candybar-testing-0x6u.0dh)\n"
-        },
-        {
-          "sha": "9422d14979e67f7efaea1f6651e75b42bd47cd30",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T20:50:44-07:00",
-          "message": "feat(launch): a cut drain or a failed launch pipe shows in the ⚠ indicator (candybar-testing-0x6u.0dh)\n"
-        }
-      ]
-    },
-    {
       "version": "pr-603",
       "ref": "refs/pull/603/merge",
       "sha": "5f3e12518aa70534759f0b6f2cdaa43628d28d8a",
@@ -134,28 +106,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T21:18:59-07:00",
           "message": "feat(bench): a click's whole time, Launch Services included, is measured for the applet and the forwarder (candybar-url-handler-uy01.05x)\n\nA click suite in the benchmark: open to the daemon's own click event,\ncold (handler app quit first) and warm, with the handler that answered\nread off the event. Measured on Brandon's Mac: the retired applet\n~0.53-0.59 s every click (it exits after each), the forwarder ~0.23 s\ncold and ~0.07 s warm. Numbers on the ticket and the epic.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "45d5d1e8852fca64ed242810be9361c168d539be",
-      "timestamp": "2026-11-03T03:59:21.436Z",
-      "commits": [
-        {
-          "sha": "45d5d1e8852fca64ed242810be9361c168d539be",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T20:57:32-07:00",
-          "message": "feat(url-handler): a click the forwarder could not deliver tells the user (candybar-daemon-health-ajx0.c3x) (#600)\n\n* feat(url-handler): a click the forwarder could not deliver tells the user (candybar-daemon-health-ajx0.c3x)\n\nThe forwarder's one visible failure, a frame it could not write, is now\nalso a macOS user notification whose body is the observed error (the\nconnect failure, or the bounded write wait), never a diagnosis. The\ndelivered arm is untouched, so a slow click that landed cannot look lost.\nAuthorization is requested on every lost click (idempotent, no state);\na denied or failed post is logged under the app's subsystem.\n\nThe app is frontmost when it posts, because Launch Services activates it\nto deliver the click, and macOS hides a frontmost app's notifications\nunless its delegate presents them; the delegate asks for the banner.\n\nDecided on the ticket: no launcher beside the socket, the forwarder\nnever starts a daemon.\n\n* fix(url-handler): the lost-click notice is one entry that stays listed, under the product's name\n\nHigh review of PR #600. The notice keeps a Notification Center entry after\nthe banner expires, a run of lost clicks replaces one notice instead of\nstacking copies, and the authorization prompt names cc-candybar via\nCFBundleDisplayName instead of the bundle name. The authorization comment\nstates only what the API documents, and the single-enforcer marker sits\nin the sentence it governs.\n\n* fix(url-handler): the notice carries the product name once, and a denied notification is a notice in the log\n\nMedium review of PR #600. The banner header already names cc-candybar\nfrom the bundle's display name, so the title no longer repeats it; the\ndisplay name is pinned by the install test; a user's denial logs at\nnotice, not error; and the header names the trap that the binary aborts\noutside its bundle."
-        },
-        {
-          "sha": "1e23d8a6bf2b1e5c9e5073a317f3f70b0b5ce88e",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-03T03:43:52Z",
-          "message": "chore(release): set `package.json` to 1.181.1 [skip ci]\n\n## [1.181.1](https://github.com/promptctl/cc-candybar/compare/v1.181.0...v1.181.1) (2026-11-03)\n\n### Bug Fixes\n\n* **launch:** a launch's input outlives its direct child for the descendants that read it (candybar-testing-0x6u.3zo) ([#598](https://github.com/promptctl/cc-candybar/issues/598)) ([100e4fe](https://github.com/promptctl/cc-candybar/commit/100e4fe743b7d0f668a46455fd011db361031ccb))\n* **test:** the compile-retains-nothing heap check reads its snapshot a macrotask after the draw (candybar-testing-0x6u.ed2) ([#599](https://github.com/promptctl/cc-candybar/issues/599)) ([c72e51e](https://github.com/promptctl/cc-candybar/commit/c72e51e1f062fa43bd02971e664d42e7d701432a))\n"
         }
       ]
     }

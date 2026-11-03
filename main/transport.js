@@ -22937,6 +22937,21 @@ var inspect = (v) => {
   }
 };
 
+// src/utils/event-hold.ts
+init_globals();
+function eventHoldAt(event, holdS, at, render3) {
+  if (at < event.at + holdS) return "held";
+  return render3 === "request" && !event.answered ? "owed" : "over";
+}
+function answeredBy(last2, shown) {
+  return !last2.answered && last2.at === shown.at && last2.text === shown.text;
+}
+
+// src/utils/instant.ts
+init_globals();
+var instantOf = (date2) => date2.getTime() / 1e3;
+var dateOf = (at) => new Date(at * 1e3);
+
 // src/proc/launch.ts
 function spawnErrorText(err, cwd2) {
   if (!types.isNativeError(err)) return String(err);
@@ -23025,7 +23040,7 @@ var LIFELINE_PROGRAM = `$1 == "+" { live[$2] = 1; next } $1 == "-" { delete live
 function setFault(state, next) {
   if (next === state.fault) return;
   state.fault = next;
-  state.scope.observeLifeline(next);
+  state.scope.observeWarnings({ kind: "lifeline", fault: next });
 }
 function lose(state, line, reason) {
   if (state.lifeline?.process !== line) return;
@@ -23033,12 +23048,41 @@ function lose(state, line, reason) {
   line.ref();
   setFault(state, reason);
 }
-function lifelineWarnings(state) {
-  return state.fault === null ? [] : [
-    {
-      kind: "lifeline",
-      message: `programs launched now would outlive their launcher if it died: its launch lifeline ${state.fault}, and the next launch starts another`
-    }
+var PIPE_EVENT_HOLD_S = 60;
+var lifelineMessage = (fault) => `programs launched now would outlive their launcher if it died: its launch lifeline ${fault}, and the next launch starts another`;
+var pipeEventWords = (kind) => kind === "cut" ? `output cut at the ${MAX_CAPTURED_BYTES}-byte bound, so the program holding it now fails its writes` : "output failed to read";
+var PIPE_EVENT_LEAD = "a launched program's pipe outlived its launch: ";
+function pipeEvent(state, kind, category) {
+  const last2 = state.pipeEvent;
+  const counts = new Map(last2 === null || last2.answered ? [] : last2.counts);
+  const key = `${kind}\0${category}`;
+  counts.set(key, (counts.get(key) ?? 0) + 1);
+  const said = [...counts].map(([at, n]) => {
+    const [k, c] = at.split("\0");
+    return `${n}\xD7 ${c} ${pipeEventWords(k)}`;
+  });
+  state.pipeEvent = {
+    text: `${PIPE_EVENT_LEAD}${said.join("; ")}`,
+    at: state.scope.now(),
+    answered: false,
+    counts
+  };
+  state.scope.observeWarnings({
+    kind: "launch-pipes",
+    text: `${PIPE_EVENT_LEAD}${category} ${pipeEventWords(kind)}`
+  });
+}
+function answeredPipeEvent(state, event) {
+  const last2 = state.pipeEvent;
+  if (last2 === null || !answeredBy(last2, event)) return;
+  state.pipeEvent = { ...last2, answered: true };
+}
+function launcherWarnings(state, at, render3) {
+  const event = state.pipeEvent;
+  const hold2 = event === null ? "over" : eventHoldAt(event, PIPE_EVENT_HOLD_S, at, render3);
+  return [
+    ...state.fault === null ? [] : [{ kind: "lifeline", message: lifelineMessage(state.fault) }],
+    ...event === null || hold2 === "over" ? [] : [{ kind: "launch-pipes", message: event.text, event, hold: hold2 }]
   ];
 }
 function spawnLifeline(state) {
@@ -23115,33 +23159,38 @@ function leaderRefuses(pid2) {
     return err.code === "EPERM";
   }
 }
-function capture(state, category, stream, full) {
+function capture(state, category, stream, ends) {
   const { stats } = state.scope;
   const decoder = new import_node_string_decoder.StringDecoder("utf8");
   let text4 = "";
   let bytes = 0;
   let dropped = 0;
-  let onFull = full;
+  let onEnd = ends;
   let end = "closed";
-  stream?.on("error", () => stats?.onPipeError(category));
+  stream?.on("error", (err) => {
+    stats?.onPipeError(category);
+    if (onEnd === null) pipeEvent(state, "read-error", category);
+    else onEnd.failed(err);
+  });
   stream?.on("data", (chunk3) => {
-    if (onFull === null) {
+    if (onEnd === null) {
       dropped += chunk3.length;
       stats?.onDrainRead(category, chunk3.length);
       if (dropped <= MAX_CAPTURED_BYTES) return;
       end = "cut";
       stream.destroy();
+      pipeEvent(state, "cut", category);
       return;
     }
     const room = Math.max(0, MAX_CAPTURED_BYTES - bytes);
     text4 += decoder.write(chunk3.subarray(0, room));
     bytes += chunk3.length;
-    if (bytes > MAX_CAPTURED_BYTES) onFull();
+    if (bytes > MAX_CAPTURED_BYTES) onEnd.full();
   });
   return {
     take: () => {
-      if (onFull === null) return "";
-      onFull = null;
+      if (onEnd === null) return "";
+      onEnd = null;
       const whole = text4 + decoder.end();
       text4 = "";
       return whole;
@@ -23209,9 +23258,16 @@ async function launchWaited(state, opts) {
     const exited = new Promise((end) => child.once("exit", end));
     const input = child.stdin;
     child.stdin = null;
-    const full = () => terminate("output-limit");
-    const stdout2 = capture(state, opts.category, child.stdout, full);
-    const stderr2 = capture(state, opts.category, child.stderr, full);
+    let pipeError = null;
+    const ends = {
+      full: () => terminate("output-limit"),
+      failed: (err) => {
+        pipeError ??= err.message;
+        terminate("pipe-error");
+      }
+    };
+    const stdout2 = capture(state, opts.category, child.stdout, ends);
+    const stderr2 = capture(state, opts.category, child.stderr, ends);
     const output = () => ({ stdout: stdout2.take(), stderr: stderr2.take() });
     let settled3 = false;
     let timer = null;
@@ -23313,7 +23369,7 @@ async function launchWaited(state, opts) {
           ...output(),
           exitCode: code,
           signal: signal2,
-          ...terminated === "output-limit" ? { error: OUTPUT_LIMIT_ERROR } : {}
+          ...terminated === "output-limit" ? { error: OUTPUT_LIMIT_ERROR } : terminated === "pipe-error" ? { error: `a pipe failed to read: ${pipeError}` } : {}
         });
         return;
       }
@@ -23579,7 +23635,8 @@ function launcherWithState(owner, clock) {
     launch: (opts) => track(state, launchWaited(state, opts)),
     launchDetachedSync: (opts) => launchOrphan(state, opts),
     launchJobSync: (opts, files) => launchJob(state, opts, files),
-    lifelineWarnings: () => lifelineWarnings(state),
+    launcherWarnings: (at, render3) => launcherWarnings(state, at, render3),
+    answeredPipeEvent: (event) => answeredPipeEvent(state, event),
     settled: async () => {
       await Promise.all(state.ending);
       return { unreaped: [...state.unreaped.values()] };
@@ -23599,8 +23656,12 @@ function launcherWithState(owner, clock) {
     scope: {
       stats: null,
       // A launcher with nobody to tell says the warning on stderr.
-      observeLifeline: () => launcher.lifelineWarnings().forEach((w) => process_default.emitWarning(w.message)),
+      observeWarnings: (change) => {
+        const message = change.kind === "launch-pipes" ? change.text : change.fault === null ? null : lifelineMessage(change.fault);
+        if (message !== null) process_default.emitWarning(message);
+      },
       signal: new AbortController().signal,
+      now: () => instantOf(new Date(clock.now())),
       ...owner,
       clock
     },
@@ -23609,6 +23670,7 @@ function launcherWithState(owner, clock) {
     liveGroups: /* @__PURE__ */ new Set(),
     lifeline: null,
     fault: null,
+    pipeEvent: null,
     ending: /* @__PURE__ */ new Set(),
     unreaped: /* @__PURE__ */ new Map(),
     drains: /* @__PURE__ */ new Set()
@@ -23719,8 +23781,7 @@ function holdClickError(state, sessionId2, text4, at) {
 }
 function answeredClickError(state, sessionId2, error) {
   const last2 = lastClickError(state, sessionId2);
-  const same2 = last2?.at === error.at && last2.text === error.text;
-  if (!same2 || last2.answered) return;
+  if (last2 === null || !answeredBy(last2, error)) return;
   state.set(sessionId2, KEY, JSON.stringify({ ...last2, answered: true }));
 }
 function lastClickError(state, sessionId2) {
@@ -23730,8 +23791,8 @@ function lastClickError(state, sessionId2) {
 function clickErrorAt(state, sessionId2, at, render3) {
   const last2 = lastClickError(state, sessionId2);
   if (last2 === null) return { kind: "none" };
-  if (at < last2.at + CLICK_ERROR_HOLD_S) return { kind: "held", error: last2 };
-  return render3 === "request" && !last2.answered ? { kind: "owed", error: last2 } : { kind: "over" };
+  const kind = eventHoldAt(last2, CLICK_ERROR_HOLD_S, at, render3);
+  return kind === "over" ? { kind } : { kind, error: last2 };
 }
 function recordOf(raw) {
   let value;
@@ -52009,11 +52070,6 @@ function formatterFuncs() {
   };
 }
 
-// src/utils/instant.ts
-init_globals();
-var instantOf = (date2) => date2.getTime() / 1e3;
-var dateOf = (at) => new Date(at * 1e3);
-
 // src/template-engine/engine.ts
 var drawing = null;
 function bindClock(at, timeline) {
@@ -68446,7 +68502,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.181.1";
+var PACKAGE_VERSION = "1.182.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -71088,6 +71144,9 @@ function outcomeOf(result) {
       return "launch";
     case "output-limit":
       return "output-limit";
+    // It ran: the launcher ended it because a pipe failed to read.
+    case "pipe-error":
+      return "pipe";
   }
 }
 function exitOf(result) {
@@ -71095,7 +71154,7 @@ function exitOf(result) {
   return result.exitCode === null ? "-" : String(result.exitCode);
 }
 function failureText(action2, outcome, result, timeoutMs) {
-  const stderr2 = outcome === "output-limit" ? "" : result.stderr.trim();
+  const stderr2 = outcome === "output-limit" || outcome === "pipe" ? "" : result.stderr.trim();
   const reason = outcome === "timeout" ? `timed out after ${timeoutMs / 1e3} s` : outcome === "exit" ? `exited ${exitOf(result)}` : (result.ok ? "" : result.error) || "could not be started";
   return `run ${action2}: ${stderr2 === "" ? reason : stderr2}`;
 }
@@ -76102,9 +76161,12 @@ function drawRender(parts, setup, drawing2) {
     ({ about, text: text4, copy: copy3 }) => about && text4 && copy3 ? [{ about, text: text4, copy: copy3 }] : []
   );
   const configWatch = entry.watch === null ? null : watchFault("config watch", entry.watch, null);
+  const launched = launcher.launcherWarnings(at, drawing2.by);
+  const pipeWarning = launched.find((w) => w.kind === "launch-pipes");
+  const pipeShown = pipeWarning?.event ?? null;
   const standing = [
     ...fileEventsWarnings(fileEvents.delivery()),
-    ...launcher.lifelineWarnings(),
+    ...launched,
     ...configWatch === null ? [] : [{ kind: "config-watch", message: configWatch }],
     ...entry.lastWarning === null ? [] : [{ kind: "load", message: entry.lastWarning }]
   ];
@@ -76114,14 +76176,13 @@ function drawRender(parts, setup, drawing2) {
     drawing2.by,
     errors2,
     [...updates, ...questions],
+    // A standing warning is one per kind whose words change as it does (a
+    // pipe event's counts), so its kind alone is what it is about: a viewer
+    // open on it stays open. A render warning is about its words.
     [
-      ...standing,
-      ...renderWarnings.ofSession(sessionId2, drawing2.by, scope)
-    ].map((w) => ({
-      about: `${w.kind}\0${w.message}`,
-      text: w.message,
-      copy: w.message
-    }))
+      ...standing.map((w) => ({ about: w.kind, message: w.message })),
+      ...renderWarnings.ofSession(sessionId2, drawing2.by, scope).map((w) => ({ about: `${w.kind}\0${w.message}`, message: w.message }))
+    ].map((w) => ({ about: w.about, text: w.message, copy: w.message }))
   );
   const projected = {
     diagnostics: diagnosticsProjection(diagnostics),
@@ -76231,6 +76292,7 @@ function drawRender(parts, setup, drawing2) {
       case "load":
       case "config-watch":
       case "lifeline":
+      case "launch-pipes":
       case "when":
         return w.kind;
     }
@@ -76263,6 +76325,8 @@ function drawRender(parts, setup, drawing2) {
     rules: [...rules].map(([slot, how]) => `${slot}:${how}`).join(",") || "-",
     err: errors2.length > 0 ? "Y" : "N",
     clickError: clickHold.kind === "none" ? "-" : clickHold.kind,
+    // The launcher's pipe event as this frame showed it: `-` for not at all.
+    pipeEvent: pipeWarning?.hold ?? "-",
     upd: String(updates.length),
     // How many repositories the bar asked about.
     ask: String(questions.length),
@@ -76284,6 +76348,7 @@ function drawRender(parts, setup, drawing2) {
     evaluated: evaluated2,
     cellBreaks,
     clickShown,
+    pipeShown,
     delivered,
     lanes
   };
@@ -76373,7 +76438,7 @@ async function drawAnswer(parts, req, at, waitEndsAt, facts) {
       ended,
       refreshed: refreshedFact(refreshed)
     });
-    const { drawn, clickShown, delivered, lanes } = drawRender(
+    const { drawn, clickShown, pipeShown, delivered, lanes } = drawRender(
       parts,
       setup,
       ANSWERING
@@ -76392,6 +76457,7 @@ async function drawAnswer(parts, req, at, waitEndsAt, facts) {
       resp,
       motion: drawn.body.motion,
       clickShown,
+      pipeShown,
       delivered
     };
   } catch (_) {
@@ -76965,14 +77031,14 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       }),
       facts
     ).then(
-      ({ resp, motion, clickShown, delivered }) => {
+      ({ resp, motion, clickShown, pipeShown, delivered }) => {
         sighted(checked.req, motion);
         return {
           outcome: { kind: "ok" },
           resp,
-          // [LAW:single-enforcer] An answer carrying the click error that
-          // reaches its client is the one that delivered it
-          // (src/daemon/click-error.ts).
+          // [LAW:single-enforcer] An answer carrying the click error or the
+          // launcher's pipe event that reaches its client is the one that
+          // delivered it (src/utils/event-hold.ts).
           delivered: () => {
             delivered();
             if (clickShown !== null)
@@ -76981,6 +77047,8 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
                 checked.req.sessionId,
                 clickShown
               );
+            if (pipeShown !== null)
+              parts.launcher.answeredPipeEvent(pipeShown);
           }
         };
       },
@@ -84265,14 +84333,19 @@ function createDaemon(inputs) {
     inherited: host.env,
     stats: stats.launchStats,
     signal: closing.signal,
+    // [LAW:one-source-of-truth] Pipe events are stamped on the clock renders
+    // hold them against.
+    now: instant,
     // [LAW:no-silent-failure] Each change in whether what the daemon launches
-    // dies with it is said in daemon.log, and every feed redraws, so its warning
-    // comes and goes on frames too.
-    observeLifeline: (fault) => {
-      log(
-        fault === null ? "info" : "warn",
-        fault === null ? "launch lifeline running again" : `launch lifeline ${fault}; the next launch starts another`
-      );
+    // dies with it, and each pipe event, is said in daemon.log, and every feed
+    // redraws, so its warning comes on frames too.
+    observeWarnings: (change) => {
+      if (change.kind === "launch-pipes") log("warn", change.text);
+      else
+        log(
+          change.fault === null ? "info" : "warn",
+          change.fault === null ? "launch lifeline running again" : `launch lifeline ${change.fault}; the next launch starts another`
+        );
       frameFeeds.wakeWhere("data", () => true);
     }
   });
