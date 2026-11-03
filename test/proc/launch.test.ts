@@ -463,6 +463,84 @@ describe("launch (async)", () => {
     if (r.ok) expect(r.stdout.trim()).toBe(String(10 * 1024 * 1024));
   });
 
+  // A refused signal settles the launch while its child still reads, so the
+  // input is still being written at settle.
+  const refusingSignals = () =>
+    jest.spyOn(process, "kill").mockImplementation(() => {
+      throw Object.assign(new Error("EPERM"), { code: "EPERM" });
+    });
+  const meteringDrains = () => {
+    const opened: LaunchCategory[] = [];
+    const closed: LaunchCategory[] = [];
+    const { handle } = makeSpyHandle();
+    return {
+      handle: {
+        ...handle,
+        onDrainOpen: (c: LaunchCategory) => opened.push(c),
+        onDrainClose: (c: LaunchCategory) => closed.push(c),
+      },
+      opened,
+      closed,
+    };
+  };
+
+  it("holds and meters input still being written at settle, whole for its reader", async () => {
+    const counted = path.join(scratch, "held-input-count");
+    const drains = meteringDrains();
+    scoped({ stats: drains.handle });
+    const kill = refusingSignals();
+    try {
+      const r = await launch({
+        bin: "/bin/sh",
+        args: ["-c", 'sleep 0.3; wc -c > "$1"', "sh", counted],
+        stdinInput: "x".repeat(1024 * 1024),
+        timeoutMs: 50,
+        category: "user-shell",
+      });
+      expect(r).toMatchObject({ ok: false, reason: "signal-refused" });
+      expect(drains.opened).toContain("user-shell");
+      await until(
+        () => fs.existsSync(counted) && fs.readFileSync(counted, "utf8") !== "",
+        "the reader's count",
+      );
+      expect(fs.readFileSync(counted, "utf8").trim()).toBe(
+        String(1024 * 1024),
+      );
+      await until(
+        () => drains.closed.length === drains.opened.length,
+        "every held pipe closed",
+      );
+    } finally {
+      kill.mockRestore();
+    }
+  });
+
+  it("a closed launcher frees the input it holds", async () => {
+    const closing = new AbortController();
+    const drains = meteringDrains();
+    scoped({ stats: drains.handle, signal: closing.signal });
+    const kill = refusingSignals();
+    try {
+      const r = await launch({
+        bin: "/bin/sh",
+        args: ["-c", "sleep 0.3; exec cat > /dev/null"],
+        stdinInput: "x".repeat(1024 * 1024),
+        timeoutMs: 50,
+        category: "user-shell",
+      });
+      expect(r).toMatchObject({ ok: false, reason: "signal-refused" });
+      const held = drains.opened.length;
+      expect(held).toBeGreaterThan(0);
+      closing.abort();
+      await until(
+        () => drains.closed.length === held,
+        "the held pipes closed with the launcher",
+      );
+    } finally {
+      kill.mockRestore();
+    }
+  });
+
   it("calls onStart/onEnd exactly once per launch with the category tag", async () => {
     const { handle, starts, ends } = makeSpyHandle();
     scoped({ stats: handle });

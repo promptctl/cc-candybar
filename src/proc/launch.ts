@@ -662,20 +662,42 @@ function capture(
     // metered in one place while it does.
     drain: () => {
       if (stream === null || stream.destroyed || stream.readableEnded) return;
-      // Nothing reads a closed launcher's drains, so their fds go with it.
-      if (state.scope.signal.aborted) {
-        stream.destroy();
-        return;
-      }
-      stream.once("close", () => {
-        state.drains.delete(stream);
-        stats?.onDrainClose(category, end);
-      });
-      (stream as Socket).unref();
-      state.drains.add(stream);
-      stats?.onDrainOpen(category);
+      hold(state, category, stream, () => end);
     },
   };
+}
+
+// [LAW:single-enforcer] A pipe still open after settle, in either direction,
+// is held, unref'd and metered here, and goes with a closed launcher. Built at
+// module scope, so its listeners hold the pipe and not the launch.
+function hold(
+  state: LaunchState,
+  category: LaunchCategory,
+  pipe: Readable | Writable,
+  end: () => DrainEnd,
+): void {
+  const { stats } = state.scope;
+  // Nothing reads a closed launcher's drains, so their fds go with it.
+  if (state.scope.signal.aborted) {
+    pipe.destroy();
+    return;
+  }
+  pipe.once("close", () => {
+    state.drains.delete(pipe);
+    stats?.onDrainClose(category, end());
+  });
+  (pipe as Socket).unref();
+  state.drains.add(pipe);
+  stats?.onDrainOpen(category);
+}
+
+// [LAW:no-silent-failure] exception: a child may stop reading and still
+// succeed (`head -1`), so its exit is the verdict, and the failed write says
+// nothing that exit does not. At module scope, so a held input's listener
+// holds nothing of the launch.
+function feed(input: Writable, text: string | undefined): void {
+  input.on("error", () => {});
+  input.end(text);
 }
 
 async function launchWaited(
@@ -758,22 +780,12 @@ async function launchWaited(
       child.off("error", onError);
       stdout.drain();
       stderr.drain();
-      holdInput();
+      // Input still being written at settle is held with the drains.
+      if (input !== null && !input.destroyed && !input.writableFinished)
+        hold(state, opts.category, input, () => "closed");
       deliver();
     };
     const settle = (r: LaunchResult) => finish(() => resolve(r));
-    // [LAW:single-enforcer] Input still being written at settle is held with
-    // the drains, so a closed launcher frees it with them.
-    const holdInput = () => {
-      if (input === null || input.destroyed || input.writableFinished) return;
-      if (state.scope.signal.aborted) {
-        input.destroy();
-        return;
-      }
-      input.once("close", () => state.drains.delete(input));
-      (input as Socket).unref();
-      state.drains.add(input);
-    };
     // [LAW:one-type-per-behavior] A group that cannot be signalled (EPERM:
     // the child changed its real uid) is this run's result like any other
     // failure — a `LaunchResult` arm, never a rejection or a throw out of a
@@ -908,11 +920,7 @@ async function launchWaited(
     opts.signal?.addEventListener("abort", onAbort, { once: true });
     state.inFlight.add(onAbort);
 
-    // [LAW:no-silent-failure] exception: a child may stop reading and still
-    // succeed (`head -1`), so its exit is the verdict, and the failed write
-    // says nothing that exit does not.
-    input?.on("error", () => {});
-    input?.end(opts.stdinInput);
+    if (input !== null) feed(input, opts.stdinInput);
   });
 }
 
