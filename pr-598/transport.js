@@ -22774,6 +22774,27 @@ function splitVerb(s) {
   const i = s.indexOf("/");
   return i === -1 ? { verb: s, value: "" } : { verb: s.slice(0, i), value: s.slice(i + 1) };
 }
+function parseHandlerUrl(rawUrl) {
+  const prefix = `${URL_SCHEME}://`;
+  if (!rawUrl.startsWith(prefix)) {
+    return { ok: false, problem: `expected a ${prefix} link, got: ${rawUrl}` };
+  }
+  const rest2 = rawUrl.slice(prefix.length);
+  const slash2 = rest2.indexOf("/");
+  if (slash2 === -1) {
+    return { ok: true, verb: VERB_COPY, value: rest2 };
+  }
+  const encoded = rest2.slice(0, slash2);
+  try {
+    return {
+      ok: true,
+      verb: decodeURIComponent(encoded),
+      value: rest2.slice(slash2 + 1)
+    };
+  } catch {
+    return { ok: false, problem: `the link's verb is malformed: ${encoded}` };
+  }
+}
 
 // src/host.ts
 init_globals();
@@ -23683,1857 +23704,6 @@ function processWorld() {
 
 // src/click/read.ts
 init_globals();
-
-// src/install/index.ts
-init_globals();
-
-// src/attach-launcher.ts
-init_globals();
-var import_node_path = __toESM(require_path_browserify(), 1);
-
-// src/claude-command-line.ts
-init_globals();
-
-// src/shell-word.ts
-init_globals();
-var SHELL_SAFE = /^[A-Za-z0-9_./,:@%+-][A-Za-z0-9_./,:@%+=-]*$/;
-function singleQuoted(s) {
-  return `'${s.replaceAll("'", `'\\''`)}'`;
-}
-function shellWord(s) {
-  return SHELL_SAFE.test(s) ? s : singleQuoted(s);
-}
-
-// src/claude-command-line.ts
-function claudeCommandLine(command) {
-  const cd = command.dir === void 0 ? "" : `cd ${shellWord(command.dir)} && `;
-  const env2 = command.env.map(([name, value]) => `${name}=${shellWord(value)} `).join("");
-  return `${cd}${env2}${[command.program, ...command.args].map(shellWord).join(" ")}`;
-}
-
-// src/attach-launcher.ts
-var ATTACH_DIR = "cc-extra";
-function attachLauncherOf(bundle) {
-  return import_node_path.default.join(import_node_path.default.dirname(bundle), ATTACH_DIR, "src", "bun-attach.js");
-}
-function moduleGraphReaderOf(launcher) {
-  return import_node_path.default.join(import_node_path.default.dirname(launcher), "bun-graph.js");
-}
-var ATTACH_PRELOAD = "attach-preload.cjs";
-function attachPreloadOf(bundle) {
-  return import_node_path.default.join(import_node_path.default.dirname(bundle), ATTACH_PRELOAD);
-}
-var PRELOAD_VARIABLE = "BUN_OPTIONS";
-function attachCommandLine(preload, command) {
-  return claudeCommandLine({
-    ...command,
-    env: [
-      ...command.env,
-      [PRELOAD_VARIABLE, `--preload ${preload.replace(/[\\\s]/g, "\\$&")}`]
-    ]
-  });
-}
-
-// src/daemon/build-currency.ts
-init_globals();
-var import_node_path3 = __toESM(require_path_browserify(), 1);
-init_url();
-
-// src/source-digest.ts
-init_globals();
-
-// site/shims/crypto.ts
-init_globals();
-var import_buffer3 = __toESM(require_buffer(), 1);
-function fnv(text4) {
-  let h = 2166136261;
-  for (let i = 0; i < text4.length; i++) h = Math.imul(h ^ text4.charCodeAt(i), 16777619) >>> 0;
-  return h.toString(16).padStart(8, "0").repeat(8);
-}
-function createHash(_alg) {
-  let acc = "";
-  const h = {
-    update(d) {
-      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
-      return h;
-    },
-    digest(_enc2) {
-      return fnv(acc);
-    }
-  };
-  return h;
-}
-function createHmac(_alg, key) {
-  let acc = import_buffer3.Buffer.from(key).toString("hex");
-  const h = {
-    update(d) {
-      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
-      return h;
-    },
-    digest() {
-      return import_buffer3.Buffer.from(fnv(acc), "hex");
-    }
-  };
-  return h;
-}
-function timingSafeEqual(a, b) {
-  if (a.length !== b.length) throw new RangeError("Input buffers must have the same byte length");
-  return a.every((byte, i) => byte === b[i]);
-}
-var randomUUID = () => globalThis.crypto.randomUUID();
-var randomBytes = (n) => globalThis.crypto.getRandomValues(new Uint8Array(n));
-var crypto_default = { createHash, createHmac, timingSafeEqual, randomUUID, randomBytes };
-
-// src/source-digest.ts
-var import_node_path2 = __toESM(require_path_browserify(), 1);
-var isSourceEntry = (name) => !name.startsWith(".") && !name.endsWith("~");
-function entryBytes(p2, st) {
-  return st.isSymbolicLink() ? import_buffer.Buffer.from(fs_default.readlinkSync(p2)) : fs_default.readFileSync(p2);
-}
-function sourceEntries(root, dir, keep2 = isSourceEntry) {
-  return fs_default.readdirSync(dir).filter(keep2).sort().flatMap((name) => {
-    const p2 = import_node_path2.default.join(dir, name);
-    const st = fs_default.lstatSync(p2, { throwIfNoEntry: false });
-    if (st === void 0) return [];
-    if (st.isDirectory()) return sourceEntries(root, p2);
-    const rel = import_node_path2.default.relative(root, p2).split(import_node_path2.default.sep).join("/");
-    return [[rel, entryBytes(p2, st)]];
-  });
-}
-function digestOf(entries) {
-  const h = crypto_default.createHash("sha256");
-  for (const [rel, bytes] of entries) {
-    h.update(rel).update("\0").update(bytes).update("\0");
-  }
-  return h.digest("hex");
-}
-function sourceDigest(srcDir) {
-  return digestOf(sourceEntries(srcDir, srcDir));
-}
-var CRATE_SOURCE = ["Cargo.toml", "Cargo.lock", "src"];
-function crateDigest(crateDir) {
-  return digestOf(
-    sourceEntries(
-      crateDir,
-      crateDir,
-      (name) => CRATE_SOURCE.includes(name)
-    )
-  );
-}
-var SHORT_DIGEST_LENGTH = 7;
-var shortDigest = (digest2) => digest2.slice(0, SHORT_DIGEST_LENGTH);
-
-// src/version.ts
-init_globals();
-if (false) {
-  throw new Error(
-    "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
-  );
-}
-var PACKAGE_VERSION = "1.180.10";
-
-// src/daemon/build-currency.ts
-function sourceCheckoutOf(bundlePath) {
-  const root = import_node_path3.default.dirname(import_node_path3.default.dirname(bundlePath));
-  return fs_default.existsSync(import_node_path3.default.join(root, "src")) ? root : null;
-}
-function bundleStamp(digest2) {
-  if (digest2 === null) {
-    throw new Error(
-      "this bundle carries no source digest (build via `pnpm build`, which stamps it)"
-    );
-  }
-  return { version: PACKAGE_VERSION, digest: digest2 };
-}
-function checkoutVersion(root) {
-  const raw = JSON.parse(
-    fs_default.readFileSync(import_node_path3.default.join(root, "package.json"), "utf8")
-  );
-  const version = typeof raw === "object" && raw !== null ? raw.version : void 0;
-  if (typeof version !== "string") {
-    throw new Error(`${import_node_path3.default.join(root, "package.json")} has no version string`);
-  }
-  return version;
-}
-function assessBuild(entryUrl, runningStamp) {
-  try {
-    const root = sourceCheckoutOf(fileURLToPath(entryUrl));
-    if (root === null) return { kind: "not-source-checkout" };
-    const running = runningStamp();
-    const digest2 = sourceDigest(import_node_path3.default.join(root, "src"));
-    if (digest2 === running.digest)
-      return { kind: "current", root, stamp: running };
-    return {
-      kind: "stale",
-      root,
-      source: { version: checkoutVersion(root), digest: digest2 },
-      running
-    };
-  } catch (e) {
-    return { kind: "unchecked", reason: e.message };
-  }
-}
-
-// src/install/index.ts
-var import_node_path10 = __toESM(require_path_browserify(), 1);
-
-// site/shims/unavailable.ts
-init_globals();
-var refuse = (name) => () => {
-  throw new Error(`${name} is not available in the page`);
-};
-var connect = refuse("net.connect");
-var createServer = refuse("net.createServer");
-var createConnection = refuse("net.createConnection");
-var get = refuse("https.get");
-var request = refuse("https.request");
-var createInterface = refuse("readline.createInterface");
-var createRequire = refuse("module.createRequire");
-var json = refuse("stream/consumers.json");
-var text = refuse("stream/consumers.text");
-var writeHeapSnapshot = refuse("v8.writeHeapSnapshot");
-var getHeapStatistics = () => ({ used_heap_size: 0, total_heap_size: 0, heap_size_limit: 0 });
-var unavailable_default = { connect, createServer, createConnection, get, request, createInterface, createRequire, json, text, writeHeapSnapshot, getHeapStatistics };
-
-// src/daemon/paths.ts
-init_globals();
-init_os();
-var import_node_path4 = __toESM(require_path_browserify(), 1);
-function xdgEnv(env2, name) {
-  const v = env2[name];
-  return v && v.length > 0 ? v : void 0;
-}
-function stateDir(host) {
-  const base = xdgEnv(host.env, "XDG_STATE_HOME") ?? import_node_path4.default.join(host.home, ".local", "state");
-  return import_node_path4.default.join(base, "cc-candybar");
-}
-function cacheDir(host) {
-  const base = xdgEnv(host.env, "XDG_CACHE_HOME") ?? import_node_path4.default.join(host.home, ".cache");
-  return import_node_path4.default.join(base, "cc-candybar");
-}
-function socketPath(host) {
-  return host.env.CC_CANDYBAR_SOCKET || defaultSocketPath();
-}
-function defaultSocketPath() {
-  const uid = os_default.userInfo().uid;
-  return import_node_path4.default.join("/tmp", `cc-candybar-${uid}`, "socket");
-}
-function leasePathFor(sockPath) {
-  return `${sockPath}.lease`;
-}
-function leasePath(host) {
-  return leasePathFor(socketPath(host));
-}
-function sessionStatePath(host) {
-  return import_node_path4.default.join(stateDir(host), "session-state.json");
-}
-function settingsHistoryPath(host) {
-  return import_node_path4.default.join(stateDir(host), "settings-history.json");
-}
-function daemonRegistryDir(host) {
-  const override = host.env.CC_CANDYBAR_DAEMON_REGISTRY_DIR;
-  if (override) return override;
-  const uid = os_default.userInfo().uid;
-  return import_node_path4.default.join("/tmp", `cc-candybar-${uid}`, "daemons");
-}
-var SPAWN_BACKOFF_FILE = "spawn.backoff";
-function spawnBackoffPath(host) {
-  return import_node_path4.default.join(stateDir(host), SPAWN_BACKOFF_FILE);
-}
-function watchProbeDir(host) {
-  return import_node_path4.default.join(stateDir(host), "watch-probe");
-}
-function logPath(host) {
-  return import_node_path4.default.join(stateDir(host), "daemon.log");
-}
-function daemonPaths(host) {
-  return {
-    socket: socketPath(host),
-    lease: leasePath(host),
-    state: stateDir(host),
-    registry: daemonRegistryDir(host),
-    log: logPath(host),
-    sessionState: sessionStatePath(host),
-    settingsHistory: settingsHistoryPath(host),
-    watchProbe: watchProbeDir(host),
-    spawnBackoff: spawnBackoffPath(host)
-  };
-}
-function locations(host) {
-  const { env: env2 } = host;
-  const xdgDefault = "/usr/local/share:/usr/share";
-  const defaultDataDirs = process_default.platform === "darwin" ? `${import_node_path4.default.join(xdgEnv(env2, "HOMEBREW_PREFIX") ?? "/opt/homebrew", "share")}:${xdgDefault}` : xdgDefault;
-  return {
-    home: host.home,
-    configHome: xdgEnv(env2, "XDG_CONFIG_HOME") ?? import_node_path4.default.join(host.home, ".config"),
-    dataHome: xdgEnv(env2, "XDG_DATA_HOME") ?? import_node_path4.default.join(host.home, ".local", "share"),
-    dataDirs: (xdgEnv(env2, "XDG_DATA_DIRS") ?? defaultDataDirs).split(":").filter((d) => d !== "")
-  };
-}
-
-// src/utils/atomic-write.ts
-init_globals();
-var import_node_path5 = __toESM(require_path_browserify(), 1);
-function writeAtomic(at, text4, mode) {
-  const file = resolvedTarget(at);
-  fs_default.mkdirSync(import_node_path5.default.dirname(file), { recursive: true });
-  const tmp = `${file}.tmp`;
-  const fileMode = mode ?? fs_default.statSync(file, { throwIfNoEntry: false })?.mode;
-  try {
-    fs_default.writeFileSync(
-      tmp,
-      text4,
-      fileMode === void 0 ? {} : { mode: fileMode }
-    );
-    fs_default.renameSync(tmp, file);
-  } catch (e) {
-    fs_default.rmSync(tmp, { force: true });
-    throw e;
-  }
-}
-function resolvedTarget(at) {
-  return linkChain(at).at(-1);
-}
-function linkChain(at) {
-  const { hops, stopped: stopped2 } = walkLinks(at);
-  if (stopped2 !== null) throw stopped2;
-  return hops;
-}
-function walkLinks(at) {
-  const hops = [at];
-  try {
-    for (let n = 0; n < MAX_LINK_HOPS; n++) {
-      const next = linkTarget(hops[hops.length - 1]);
-      if (next === null) return { hops, stopped: null };
-      hops.push(next);
-    }
-    return {
-      hops,
-      stopped: new Error(`${at}: more than ${MAX_LINK_HOPS} symbolic links`)
-    };
-  } catch (e) {
-    return { hops, stopped: e };
-  }
-}
-function linkTarget(file) {
-  try {
-    if (!fs_default.lstatSync(file).isSymbolicLink()) return null;
-    return import_node_path5.default.resolve(
-      fs_default.realpathSync(import_node_path5.default.dirname(file)),
-      fs_default.readlinkSync(file)
-    );
-  } catch (e) {
-    const { code } = e;
-    if (code === "ENOENT" || code === "ENOTDIR") return null;
-    throw e;
-  }
-}
-var MAX_LINK_HOPS = 40;
-
-// src/daemon/client.ts
-init_globals();
-
-// src/daemon/client-transport.ts
-init_globals();
-
-// src/daemon/protocol.ts
-init_globals();
-var import_node_path6 = __toESM(require_path_browserify(), 1);
-
-// src/terminal-hint.ts
-init_globals();
-var TERMINAL_ENV_VARS = [
-  // iTerm2 (`iTerm.app`), Ghostty (`ghostty`), WezTerm (`WezTerm`), and the
-  // version beside it. Inside tmux it is tmux's own `tmux`.
-  "TERM_PROGRAM",
-  "TERM_PROGRAM_VERSION",
-  // kitty (`xterm-kitty`) and Alacritty (`alacritty`) name themselves here.
-  "TERM",
-  // The iTerm2 profile the session's window was opened with.
-  "ITERM_PROFILE",
-  // Where a terminal that reads a config file (Alacritty) finds it.
-  "XDG_CONFIG_HOME"
-];
-
-// src/client-hint.ts
-init_globals();
-var CLIENT_KINDS = ["native", "node", "frames"];
-
-// src/daemon/protocol.ts
-var PROTOCOL_VERSION = 3;
-var CONNECT_TIMEOUT_MS = 50;
-var TOTAL_BUDGET_MS = 150;
-var RENDER_ENCODINGS = ["ansi", "frame"];
-var CLIENT_HINT_FIELDS = Object.keys({
-  termCols: true,
-  termRows: true,
-  ssh: true,
-  tmux: true,
-  configEnv: true,
-  claudeConfigDir: true,
-  terminalEnv: true,
-  client: true
-});
-function parseClientHints(req) {
-  const termCols = sanitizeTermExtent(req.termCols);
-  const termRows = sanitizeTermExtent(req.termRows);
-  const ssh = sanitizeSsh(req.ssh);
-  const tmux3 = sanitizeTmux(req.tmux);
-  const configEnv = sanitizeAbsolutePath(req.configEnv);
-  const claudeConfigDir2 = sanitizeAbsolutePath(req.claudeConfigDir);
-  const terminalEnv = sanitizeTerminalEnv(req.terminalEnv);
-  const client = sanitizeClient(req.client);
-  return {
-    ...termCols !== void 0 && { termCols },
-    ...termRows !== void 0 && { termRows },
-    ...ssh !== void 0 && { ssh },
-    ...tmux3 !== void 0 && { tmux: tmux3 },
-    ...configEnv !== void 0 && { configEnv },
-    ...claudeConfigDir2 !== void 0 && { claudeConfigDir: claudeConfigDir2 },
-    ...terminalEnv !== void 0 && { terminalEnv },
-    ...client !== void 0 && { client }
-  };
-}
-function refusedHints(req, hints) {
-  return CLIENT_HINT_FIELDS.filter(
-    (k) => req[k] !== void 0 && hints[k] === void 0
-  ).map((hint) => ({ hint, sent: req[hint] }));
-}
-function refusedHintsError(refused) {
-  return refused.length === 0 ? null : `Client hints refused: ${refused.map(({ hint, sent }) => `${hint}=${JSON.stringify(sent)}`).join(
-    ", "
-  )} \u2014 is the statusline client older than the daemon? Reinstall it (\`cc-candybar install\`, or \`just install-rust\` in a checkout).`;
-}
-var REFUSAL_LINES = {
-  unknown: (args) => `Unknown flags: ${args}`,
-  // Only the last `--config` can lack a file, and it wins, so an earlier one
-  // that named a file is not applied either.
-  "no-value": (arg) => `${arg} names no file \u2014 the bar renders with no ${arg}`,
-  positional: (args) => `Unexpected arguments: ${args}`
-};
-function refusedArgsError(refused) {
-  const lines2 = Object.keys(REFUSAL_LINES).flatMap((why2) => {
-    const args = refused.filter((r) => r.why === why2).map((r) => r.arg);
-    return args.length === 0 ? [] : [REFUSAL_LINES[why2](args.join(", "))];
-  });
-  return lines2.length === 0 ? null : lines2.join("\n");
-}
-function sanitizeTerminalEnv(v) {
-  if (typeof v !== "object" || v === null || Array.isArray(v)) return void 0;
-  const o = v;
-  const set2 = TERMINAL_ENV_VARS.filter((name) => o[name] !== void 0);
-  return set2.every((name) => typeof o[name] === "string" && o[name] !== "") ? Object.fromEntries(set2.map((name) => [name, o[name]])) : void 0;
-}
-function sanitizeAbsolutePath(v) {
-  return typeof v === "string" && import_node_path6.default.isAbsolute(v) ? v : void 0;
-}
-function sanitizeTmux(v) {
-  if (v === null) return null;
-  if (typeof v !== "object") return void 0;
-  const o = v;
-  const { socket, pane, truecolor } = o;
-  if (typeof socket !== "string" || socket === "") return void 0;
-  if (typeof pane !== "string" || pane === "") return void 0;
-  if (truecolor !== null && (typeof truecolor !== "string" || truecolor === ""))
-    return void 0;
-  return { socket, pane, truecolor };
-}
-var MAX_TERM_EXTENT = 1e4;
-function sanitizeTermExtent(v) {
-  if (typeof v !== "number") return void 0;
-  if (!Number.isFinite(v)) return void 0;
-  const n = Math.floor(v);
-  if (n <= 0) return void 0;
-  return n > MAX_TERM_EXTENT ? MAX_TERM_EXTENT : n;
-}
-function sanitizeSsh(v) {
-  return typeof v === "boolean" ? v : void 0;
-}
-function sanitizeClientVersion(v) {
-  return typeof v === "string" && v !== "" && v.length <= 64 ? v : null;
-}
-var MAX_FRAME_BYTES = 16 * 1024 * 1024;
-function sanitizeClient(v) {
-  if (typeof v !== "object" || v === null || Array.isArray(v)) return void 0;
-  const { kind, bundle, source } = v;
-  const path42 = sanitizeAbsolutePath(bundle);
-  return CLIENT_KINDS.includes(kind) && path42 !== void 0 && (source === null || typeof source === "string" && source !== "") ? { kind, bundle: path42, source } : void 0;
-}
-
-// src/daemon/request-deadline.ts
-init_globals();
-var REQUEST_TIMEOUT_MS = 200;
-var DRAW_RESERVE_MS = 60;
-function parseClientDeadline(raw) {
-  if (raw === void 0) return { kind: "unstated" };
-  return typeof raw === "number" && Number.isSafeInteger(raw) && raw > 0 ? { kind: "stated", at: raw } : {
-    kind: "refused",
-    problem: `request 'deadline' is not epoch milliseconds: ${JSON.stringify(raw)}`
-  };
-}
-function waitBudgetMs(deadline, acceptedMonoMs, arrival) {
-  const clientEnd = deadline.kind === "stated" ? arrival.monoMs + (deadline.at - arrival.epochMs) : acceptedMonoMs + TOTAL_BUDGET_MS - CONNECT_TIMEOUT_MS;
-  const end = Math.min(clientEnd, acceptedMonoMs + REQUEST_TIMEOUT_MS);
-  return Math.round(end - DRAW_RESERVE_MS - arrival.monoMs);
-}
-
-// src/daemon/client.ts
-var CLICK_BUDGETS = {
-  connectMs: CONNECT_TIMEOUT_MS,
-  budgetMs: REQUEST_TIMEOUT_MS + TOTAL_BUDGET_MS
-};
-
-// src/daemon/acquire.ts
-init_globals();
-var import_node_path8 = __toESM(require_path_browserify(), 1);
-
-// src/daemon/limits.ts
-init_globals();
-var import_node_path7 = __toESM(require_path_browserify(), 1);
-
-// src/daemon/memory-report.ts
-init_globals();
-var PROBE_TIMEOUT_MS = 5e3;
-async function memoryReport(probes) {
-  const refusals = [];
-  for (const probe2 of probes) {
-    const outcome = await probe2.read();
-    if (outcome.kind === "text") {
-      return `# memory report from: ${probe2.name}
-${outcome.text}`;
-    }
-    refusals.push(`# ${probe2.name}: unavailable \u2014 ${outcome.reason}`);
-  }
-  return [
-    "# memory report: no probe answered",
-    ...refusals.length > 0 ? refusals : ["# no probe is known for this platform"]
-  ].join("\n");
-}
-var FOOTPRINT = "/usr/bin/footprint";
-var VMMAP = "/usr/bin/vmmap";
-function platformProbes(launcher, platform3, pid2) {
-  if (platform3 === "darwin") {
-    return [
-      // The whole-process category table: V8's mappings, the MALLOC_* regions
-      // with their reclaimable share, and page tables, each with a size.
-      commandProbe(launcher, FOOTPRINT, ["-p", String(pid2)]),
-      // Same mappings, coarser, but present on hosts where `footprint` is not.
-      commandProbe(launcher, VMMAP, ["--summary", String(pid2)])
-    ];
-  }
-  if (platform3 === "linux") {
-    return [
-      // One line per accounting class for the whole address space — Linux's
-      // answer to `footprint`, and free (no subprocess).
-      fileProbe("/proc/self/smaps_rollup"),
-      // Always present, coarser: VmRSS and friends, so Linux never falls all
-      // the way through to "no probe answered".
-      fileProbe("/proc/self/status")
-    ];
-  }
-  return [];
-}
-function chargeProbe(launcher, platform3, pid2) {
-  return platform3 === "darwin" ? footprintCharge(
-    pid2,
-    (args) => launcher.launch({
-      bin: FOOTPRINT,
-      args,
-      timeoutMs: PROBE_TIMEOUT_MS,
-      category: "limits.charge"
-    })
-  ) : async (rss) => ({ kind: "charged", measure: "rss", bytes: rss });
-}
-function footprintCharge(pid2, run3) {
-  return async (rss) => {
-    const result = await run3([
-      "-p",
-      String(pid2),
-      "--noCategories",
-      "-f",
-      "bytes"
-    ]);
-    if (!result.ok) {
-      return {
-        kind: "stand-in",
-        bytes: rss,
-        unread: `footprint ${result.reason}${result.error !== void 0 ? `: ${result.error}` : ""}${firstLine(result.stderr)}`
-      };
-    }
-    const bytes = physFootprintOf(result.stdout);
-    return bytes === null ? {
-      kind: "stand-in",
-      bytes: rss,
-      unread: "footprint printed no phys_footprint line"
-    } : { kind: "charged", measure: "phys_footprint", bytes };
-  };
-}
-function physFootprintOf(text4) {
-  const m = /^\s*phys_footprint:\s+(\d+) B\s*$/m.exec(text4);
-  return m === null ? null : Number(m[1]);
-}
-function commandProbe(launcher, bin, args) {
-  return {
-    name: `${bin} ${args.join(" ")}`,
-    read: async () => {
-      const result = await launcher.launch({
-        bin,
-        args: [...args],
-        timeoutMs: PROBE_TIMEOUT_MS,
-        category: "limits.memory-report"
-      });
-      if (!result.ok) {
-        return {
-          kind: "unavailable",
-          reason: `${result.reason}${result.error !== void 0 ? `: ${result.error}` : ""}${firstLine(result.stderr)}`
-        };
-      }
-      return result.stdout.trim().length > 0 ? { kind: "text", text: result.stdout } : { kind: "unavailable", reason: "exited 0 but printed nothing" };
-    }
-  };
-}
-function fileProbe(path42) {
-  return {
-    name: path42,
-    read: async () => {
-      try {
-        const text4 = fs_default.readFileSync(path42, "utf8");
-        return text4.trim().length > 0 ? { kind: "text", text: text4 } : { kind: "unavailable", reason: "empty file" };
-      } catch (e) {
-        return { kind: "unavailable", reason: e.message };
-      }
-    }
-  };
-}
-function firstLine(stderr2) {
-  const line = stderr2.split("\n").map((l) => l.trim()).find((l) => l.length > 0);
-  return line === void 0 ? "" : ` (${line})`;
-}
-
-// src/daemon/limits.ts
-var RSS_LIMIT_ENV = "CC_CANDYBAR_RSS_LIMIT_MB";
-var DEFAULT_RSS_LIMIT_MB = 1024;
-function memoryLimitMb(env2) {
-  const raw = env2[RSS_LIMIT_ENV];
-  if (raw === void 0) return DEFAULT_RSS_LIMIT_MB;
-  const mb2 = /^\d+$/.test(raw) ? Number(raw) : NaN;
-  if (!Number.isSafeInteger(mb2) || mb2 <= 0) {
-    throw new Error(
-      `${RSS_LIMIT_ENV} must be a positive integer (MB), got ${JSON.stringify(raw)}`
-    );
-  }
-  return mb2;
-}
-var BYTES_PER_MB = 1024 * 1024;
-var mb = (bytes) => Math.round(bytes / BYTES_PER_MB);
-function memoryLimitBytes(env2) {
-  return memoryLimitMb(env2) * BYTES_PER_MB;
-}
-var DEFAULT_CHECK_INTERVAL = 60 * 1e3;
-var HEAP_SNAPSHOT_KEEP = 3;
-var BREACH_ARTIFACTS = {
-  memoryReport: { prefix: "memory-", suffix: ".txt" },
-  heapSnapshot: { prefix: "heap-", suffix: ".heapsnapshot" }
-};
-function laterIdentity(a, b) {
-  return a > b;
-}
-function readCharge(probed, previous) {
-  if (probed.kind === "charged") return probed;
-  const gap = previous.kind === "unmeasured" ? 0 : previous.charge.kind === "charged" ? previous.rss - previous.charge.bytes : previous.charge.gap;
-  return { ...probed, bytes: probed.bytes - gap, gap };
-}
-var NEAR_LIMIT = 0.75;
-function approachingLimit(bytes, limit) {
-  return bytes > limit * NEAR_LIMIT;
-}
-function artifactFile(dir, kind, identity2) {
-  const { prefix, suffix } = BREACH_ARTIFACTS[kind];
-  return import_node_path7.default.join(dir, `${prefix}${identity2}${suffix}`);
-}
-function breachArtifactOf(base) {
-  for (const kind of Object.keys(BREACH_ARTIFACTS)) {
-    const { prefix, suffix } = BREACH_ARTIFACTS[kind];
-    if (base.startsWith(prefix) && base.endsWith(suffix)) return kind;
-  }
-  return null;
-}
-function makeLimits(deps) {
-  const limit = deps.limitBytes ?? DEFAULT_RSS_LIMIT_MB * BYTES_PER_MB;
-  const keep2 = deps.snapshotsKeep ?? HEAP_SNAPSHOT_KEEP;
-  let triggered = false;
-  let latest = { kind: "unmeasured" };
-  let inFlight = null;
-  let disarmed = false;
-  let clearTimer;
-  function check() {
-    inFlight ??= measure3().finally(() => {
-      inFlight = null;
-    });
-    return inFlight;
-  }
-  async function measure3() {
-    if (triggered) return true;
-    const { rss, heapTotal } = deps.memoryBytes();
-    const charge = readCharge(await deps.memoryCharge(rss), latest);
-    const reading = { kind: "measured", charge, rss, heapTotal };
-    latest = reading;
-    deps.log("info", `memory ${readingFields(reading, limit)}`);
-    if (disarmed || charge.bytes <= limit) return false;
-    triggered = true;
-    deps.log(
-      "warn",
-      `${chargeWords(charge)} > limit ${mb(limit)} MB (rss ${mb(rss)} MB, v8 heap ${mb(heapTotal)} MB); recording memory then shutting down`
-    );
-    const stamp2 = new Date(deps.clock.now()).toISOString().replace(/[:.]/g, "-");
-    const identity2 = `${stamp2}-${deps.pid}`;
-    await attempt(deps.log, "memory report", async () => {
-      const file = artifactFile(deps.snapshotDir, "memoryReport", identity2);
-      const report2 = await deps.captureMemoryReport();
-      if (disarmed) return;
-      deps.writeMemoryReport(file, report2);
-      deps.log("info", `memory report written: ${file}`);
-    });
-    if (disarmed) {
-      deps.log("info", "daemon closed during the breach: no snapshot, no exit");
-      return false;
-    }
-    await attempt(deps.log, "heap snapshot", () => {
-      deps.writeLogNow();
-      const file = artifactFile(deps.snapshotDir, "heapSnapshot", identity2);
-      deps.log(
-        "info",
-        `heap snapshot written: ${deps.writeHeapSnapshot(file)}`
-      );
-    });
-    await attempt(deps.log, "artifact rotation", async () => {
-      for (const { artifacts } of postMortemsOf(deps.listArtifacts()).slice(
-        keep2
-      )) {
-        for (const file of Object.values(artifacts)) {
-          await attempt(
-            deps.log,
-            `evicting ${file}`,
-            () => deps.removeFile(file)
-          );
-        }
-      }
-    });
-    deps.shutdown(0);
-    return true;
-  }
-  function describeNextRestart() {
-    return latest.kind === "measured" && approachingLimit(latest.charge.bytes, limit) ? `${chargeWords(latest.charge)} approaching limit ${mb(limit)} MB (v8 heap ${mb(latest.heapTotal)} MB)` : null;
-  }
-  function serving() {
-    let postMortems;
-    try {
-      postMortems = { kind: "ok", value: postMortemsOf(deps.listArtifacts()) };
-    } catch (e) {
-      postMortems = { kind: "failed", reason: e.message };
-    }
-    return { pid: deps.pid, memory: latest, limit, postMortems };
-  }
-  function arm2(intervalMs = DEFAULT_CHECK_INTERVAL) {
-    const tick = async () => {
-      try {
-        if (await check()) return;
-      } catch (e) {
-        deps.log("warn", `memory check failed: ${e.message}`);
-      }
-      if (disarmed) return;
-      clearTimer = deps.clock.after(intervalMs, () => void tick(), {
-        unref: true
-      });
-    };
-    void tick();
-  }
-  function disarm() {
-    disarmed = true;
-    clearTimer?.();
-  }
-  return { check, describeNextRestart, serving, arm: arm2, disarm };
-}
-function chargeWords(charge) {
-  return charge.kind === "charged" ? `${charge.measure} ${mb(charge.bytes)} MB` : `rss ${mb(charge.bytes + charge.gap)} MB${charge.gap === 0 ? "" : ` less its last ${mb(charge.gap)} MB gap`} (standing in: ${charge.unread})`;
-}
-function measureOf(charge) {
-  return charge.kind === "charged" ? charge.measure : "rss-stand-in";
-}
-function readingFields({ charge, rss, heapTotal }, limit) {
-  const unread2 = charge.kind === "stand-in" ? ` unread=${JSON.stringify(charge.unread)} gap=${mb(charge.gap)}MB` : "";
-  return `measure=${measureOf(charge)} charge=${mb(charge.bytes)}MB rss=${mb(rss)}MB heap=${mb(heapTotal)}MB limit=${mb(limit)}MB${unread2}`;
-}
-async function attempt(log, what, body) {
-  try {
-    await body();
-  } catch (e) {
-    log("warn", `${what} failed: ${e.message}`);
-  }
-}
-function postMortemsOf(files) {
-  const byIdentity = /* @__PURE__ */ new Map();
-  for (const file of files) {
-    const base = import_node_path7.default.basename(file);
-    const kind = breachArtifactOf(base);
-    if (kind === null) continue;
-    const { prefix, suffix } = BREACH_ARTIFACTS[kind];
-    const identity2 = base.slice(prefix.length, base.length - suffix.length);
-    byIdentity.set(identity2, { ...byIdentity.get(identity2), [kind]: file });
-  }
-  const kinds = Object.keys(BREACH_ARTIFACTS);
-  return [...byIdentity].sort(([a], [b]) => laterIdentity(a, b) ? -1 : 1).map(([identity2, found]) => ({
-    identity: identity2,
-    artifacts: Object.fromEntries(
-      kinds.flatMap((k) => found[k] === void 0 ? [] : [[k, found[k]]])
-    )
-  }));
-}
-function realLimitsDeps(startedAtMs, shutdown, owner, overrides = {}) {
-  const dir = owner.snapshotDir;
-  return {
-    clock: owner.clock,
-    pid: process_default.pid,
-    snapshotDir: dir,
-    log: owner.log,
-    memoryBytes: () => {
-      const mem = process_default.memoryUsage();
-      return { rss: mem.rss, heapTotal: mem.heapTotal };
-    },
-    memoryCharge: chargeProbe(owner.launcher, process_default.platform, process_default.pid),
-    captureMemoryReport: () => memoryReport(
-      platformProbes(owner.launcher, process_default.platform, process_default.pid)
-    ),
-    // 0600 like the heap snapshot v8 writes beside it: the pair shares an
-    // identity, so it shares a permission — a post-mortem pair where one half is
-    // world-readable and the other is not invites exactly the "is this
-    // sensitive?" question at the worst moment to be asking it.
-    writeMemoryReport: (file, text4) => fs_default.writeFileSync(file, text4, { mode: 384 }),
-    writeHeapSnapshot: (file) => unavailable_default.writeHeapSnapshot(file),
-    writeLogNow: owner.writeLogNow,
-    // [LAW:no-silent-failure] A directory not yet made holds no breaches;
-    // one that cannot be read is said so — never read as "none".
-    listArtifacts: () => {
-      let names;
-      try {
-        names = fs_default.readdirSync(dir);
-      } catch (e) {
-        if (e.code === "ENOENT") return [];
-        throw e;
-      }
-      return names.filter((f) => breachArtifactOf(f) !== null).map((f) => import_node_path7.default.join(dir, f));
-    },
-    removeFile: (file) => fs_default.unlinkSync(file),
-    shutdown,
-    startedAtMs,
-    ...overrides
-  };
-}
-
-// src/daemon/acquire.ts
-init_process();
-
-// src/claude-settings.ts
-init_globals();
-var import_node_path9 = __toESM(require_path_browserify(), 1);
-
-// src/config/json5-edit.ts
-init_globals();
-var import_json5 = __toESM(require_dist(), 1);
-var Json5EditError = class extends Error {
-  constructor(reason, offset) {
-    super(`${reason} (at offset ${offset})`);
-    this.reason = reason;
-    this.offset = offset;
-    this.name = "Json5EditError";
-  }
-  reason;
-  offset;
-};
-var IDENT_START = /[A-Za-z_$\p{L}]/u;
-var IDENT_PART = /[A-Za-z0-9_$\u200C\u200D\p{L}\p{N}]/u;
-var WORD_PART = /[A-Za-z0-9_$.+\-\p{L}\p{N}]/u;
-var WHITESPACE = /[\t\n\v\f\r \u00A0\uFEFF\u2028\u2029\p{Zs}]/u;
-var Scanner = class {
-  constructor(text4) {
-    this.text = text4;
-  }
-  text;
-  pos = 0;
-  peek() {
-    return this.text[this.pos] ?? "";
-  }
-  fail(message) {
-    throw new Json5EditError(message, this.pos);
-  }
-  skipTrivia() {
-    for (; ; ) {
-      const c = this.peek();
-      if (c === "") return;
-      if (WHITESPACE.test(c)) {
-        this.pos++;
-      } else if (c === "/" && this.text[this.pos + 1] === "/") {
-        const nl = this.text.indexOf("\n", this.pos);
-        this.pos = nl === -1 ? this.text.length : nl;
-      } else if (c === "/" && this.text[this.pos + 1] === "*") {
-        const close = this.text.indexOf("*/", this.pos + 2);
-        if (close === -1) this.fail("unterminated block comment");
-        this.pos = close + 2;
-      } else {
-        return;
-      }
-    }
-  }
-  expect(c) {
-    if (this.peek() !== c) this.fail(`expected "${c}"`);
-    this.pos++;
-  }
-  value() {
-    this.skipTrivia();
-    const c = this.peek();
-    if (c === "{") return this.object();
-    if (c === "[") return this.array();
-    if (c === '"' || c === "'") {
-      const span2 = this.stringSpan();
-      return { kind: "string", span: span2, value: this.decode(span2) };
-    }
-    if (c === "") this.fail("unexpected end of input");
-    const start = this.pos;
-    while (this.pos < this.text.length && WORD_PART.test(this.peek())) {
-      this.pos++;
-    }
-    if (this.pos === start) this.fail(`unexpected character "${c}"`);
-    const span = { start, end: this.pos };
-    const decoded = this.decode(span);
-    if (decoded === null) return { kind: "null", span };
-    if (typeof decoded === "boolean") {
-      return { kind: "boolean", span, value: decoded };
-    }
-    if (typeof decoded === "number") {
-      return { kind: "number", span, value: decoded };
-    }
-    return this.fail(`unexpected word "${this.text.slice(start, this.pos)}"`);
-  }
-  // [LAW:single-enforcer] JSON5 itself decodes every leaf slice.
-  decode(span) {
-    try {
-      return import_json5.default.parse(this.text.slice(span.start, span.end));
-    } catch (e) {
-      throw new Json5EditError(e.message, span.start);
-    }
-  }
-  stringSpan() {
-    const start = this.pos;
-    const quote2 = this.peek();
-    this.pos++;
-    for (; ; ) {
-      const c = this.peek();
-      if (c === "") this.fail("unterminated string");
-      if (c === "\\") {
-        const crlf = this.text.startsWith("\r\n", this.pos + 1);
-        this.pos += crlf ? 3 : 2;
-        continue;
-      }
-      this.pos++;
-      if (c === quote2) return { start, end: this.pos };
-      if (c === "\n") this.fail("unterminated string");
-    }
-  }
-  key() {
-    const c = this.peek();
-    if (c === '"' || c === "'") {
-      const span = this.stringSpan();
-      return { key: this.decode(span), span };
-    }
-    const start = this.pos;
-    if (!IDENT_START.test(c)) this.fail("expected an object key");
-    while (this.pos < this.text.length && IDENT_PART.test(this.peek())) {
-      this.pos++;
-    }
-    return {
-      key: this.text.slice(start, this.pos),
-      span: { start, end: this.pos }
-    };
-  }
-  object() {
-    const start = this.pos;
-    this.expect("{");
-    const entries = [];
-    for (; ; ) {
-      this.skipTrivia();
-      if (this.peek() === "}") break;
-      const { key, span: keySpan } = this.key();
-      if (entries.some((e) => e.key === key)) {
-        throw new Json5EditError(`duplicate key "${key}"`, keySpan.start);
-      }
-      this.skipTrivia();
-      this.expect(":");
-      const value = this.value();
-      entries.push({
-        key,
-        keySpan,
-        value,
-        span: { start: keySpan.start, end: value.span.end }
-      });
-      this.skipTrivia();
-      if (this.peek() === ",") {
-        this.pos++;
-        continue;
-      }
-      if (this.peek() !== "}") this.fail('expected "," or "}"');
-    }
-    this.expect("}");
-    return { kind: "object", span: { start, end: this.pos }, entries };
-  }
-  array() {
-    const start = this.pos;
-    this.expect("[");
-    const elements = [];
-    for (; ; ) {
-      this.skipTrivia();
-      if (this.peek() === "]") break;
-      elements.push(this.value());
-      this.skipTrivia();
-      if (this.peek() === ",") {
-        this.pos++;
-        continue;
-      }
-      if (this.peek() !== "]") this.fail('expected "," or "]"');
-    }
-    this.expect("]");
-    return { kind: "array", span: { start, end: this.pos }, elements };
-  }
-};
-function parseDocument(text4) {
-  const s = new Scanner(text4);
-  const root = s.value();
-  s.skipTrivia();
-  if (s.pos !== text4.length) s.fail("trailing content after the document");
-  return root;
-}
-function entryOf(node, key) {
-  return node.kind === "object" ? node.entries.find((e) => e.key === key) : void 0;
-}
-function nodeAt(root, path42) {
-  let node = root;
-  for (const key of path42) {
-    node = node === void 0 ? void 0 : entryOf(node, key)?.value;
-  }
-  return node;
-}
-function textOf(text4, node) {
-  return text4.slice(node.span.start, node.span.end);
-}
-function movableTextOf(text4, node) {
-  const indent2 = indentOfLine(text4, node.span.start);
-  const literals = literalSpans(node);
-  const inLiteral = (at) => literals.some((s) => s.start < at && at < s.end);
-  let lineStart = node.span.start;
-  return textOf(text4, node).split("\n").map((line, i) => {
-    const at = lineStart;
-    lineStart += line.length + 1;
-    const own2 = i > 0 && !inLiteral(at - 1) && line.startsWith(indent2);
-    return (own2 ? line.slice(indent2.length) : line).replace(/\r$/, "");
-  }).join("\n");
-}
-function literalSpans(node) {
-  switch (node.kind) {
-    case "object":
-      return node.entries.flatMap((e) => [e.keySpan, ...literalSpans(e.value)]);
-    case "array":
-      return node.elements.flatMap(literalSpans);
-    case "string":
-      return [node.span];
-    default:
-      return [];
-  }
-}
-var IDENT_KEY = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
-function keyText(key) {
-  return IDENT_KEY.test(key) ? key : JSON.stringify(key);
-}
-var JSON5_DIALECT = {
-  key: keyText,
-  trailingComma: ",",
-  parse: (text4) => import_json5.default.parse(text4)
-};
-var JSON_DIALECT = {
-  key: (key) => JSON.stringify(key),
-  trailingComma: "",
-  parse: (text4) => JSON.parse(text4)
-};
-function json5Text(value) {
-  if (Array.isArray(value)) {
-    if (value.length === 0) return "[]";
-    const items = value.map((v) => `  ${reindent(json5Text(v), "  ", "\n")},`);
-    return `[
-${items.join("\n")}
-]`;
-  }
-  if (value !== null && typeof value === "object") {
-    const entries = Object.entries(value).filter(
-      ([, v]) => v !== void 0
-    );
-    if (entries.length === 0) return "{}";
-    const items = entries.map(
-      ([k, v]) => `  ${keyText(k)}: ${reindent(json5Text(v), "  ", "\n")},`
-    );
-    return `{
-${items.join("\n")}
-}`;
-  }
-  return JSON.stringify(value);
-}
-function eolOf(text4) {
-  return text4.includes("\r\n") ? "\r\n" : "\n";
-}
-function reindent(valueText, indent2, eol) {
-  return valueText.split("\n").join(`${eol}${indent2}`);
-}
-function entryText(path42, valueText, dialect) {
-  const [head, ...rest2] = path42;
-  const inner = rest2.length === 0 ? valueText : `{
-  ${reindent(entryText(rest2, valueText, dialect), "  ", "\n")}${dialect.trailingComma}
-}`;
-  return `${dialect.key(head)}: ${inner}`;
-}
-function splice(text4, start, end, insert) {
-  return text4.slice(0, start) + insert + text4.slice(end);
-}
-function lineStartOf(text4, offset) {
-  return text4.lastIndexOf("\n", offset - 1) + 1;
-}
-function isBlank(s) {
-  return /^[ \t]*$/.test(s);
-}
-function indentOfLine(text4, offset) {
-  const ls = lineStartOf(text4, offset);
-  return /^[ \t]*/.exec(text4.slice(ls))[0];
-}
-function startsLine(text4, offset) {
-  return isBlank(text4.slice(lineStartOf(text4, offset), offset));
-}
-var LINE_TRAILER = /(?:\/\/[^\n]*?)?(\r\n|\n|$)/y;
-function trailerAfter(text4, end) {
-  let i = end;
-  while (i < text4.length && (text4[i] === " " || text4[i] === "	")) i++;
-  const commaEnd = text4[i] === "," ? i + 1 : -1;
-  if (commaEnd !== -1) i = commaEnd;
-  while (i < text4.length && (text4[i] === " " || text4[i] === "	")) i++;
-  LINE_TRAILER.lastIndex = i;
-  const m = LINE_TRAILER.exec(text4);
-  if (m === null) return { commaEnd, line: null };
-  const next = i + m[0].length;
-  return { commaEnd, line: { at: next - m[1].length, next } };
-}
-function removeMember(text4, span) {
-  const { commaEnd, line } = trailerAfter(text4, span.end);
-  if (startsLine(text4, span.start) && line !== null) {
-    return splice(text4, lineStartOf(text4, span.start), line.next, "");
-  }
-  if (commaEnd !== -1) {
-    let end = commaEnd;
-    while (end < text4.length && text4[end] === " ") end++;
-    return splice(text4, span.start, end, "");
-  }
-  let start = span.start;
-  while (start > 0 && (text4[start - 1] === " " || text4[start - 1] === "	")) {
-    start--;
-  }
-  if (text4[start - 1] === ",") return splice(text4, start - 1, span.end, "");
-  return splice(text4, span.start, span.end, "");
-}
-function insertLineAfter(text4, span, trailer, memberText, indent2) {
-  const hasComma = trailer.commaEnd !== -1;
-  const withComma = hasComma ? text4 : splice(text4, span.end, span.end, ",");
-  const at = trailer.line.at + (hasComma ? 0 : 1);
-  const eol = eolOf(text4);
-  const line = `${eol}${indent2}${reindent(memberText, indent2, eol)}${hasComma ? "," : ""}`;
-  return splice(withComma, at, at, line);
-}
-function appendMember(text4, container, memberText, dialect) {
-  const members = container.kind === "object" ? container.entries : container.elements;
-  const last2 = members[members.length - 1];
-  const baseIndent = indentOfLine(text4, container.span.start);
-  if (last2 === void 0) {
-    const inner = baseIndent + "  ";
-    const eol = eolOf(text4);
-    return splice(
-      text4,
-      container.span.start + 1,
-      container.span.end - 1,
-      `${eol}${inner}${reindent(memberText, inner, eol)}${dialect.trailingComma}${eol}${baseIndent}`
-    );
-  }
-  const { commaEnd, line } = trailerAfter(text4, last2.span.end);
-  if (startsLine(text4, last2.span.start) && line !== null) {
-    const indent2 = text4.slice(
-      lineStartOf(text4, last2.span.start),
-      last2.span.start
-    );
-    return insertLineAfter(
-      text4,
-      last2.span,
-      { commaEnd, line },
-      memberText,
-      indent2
-    );
-  }
-  const at = commaEnd === -1 ? last2.span.end : commaEnd;
-  const sep2 = commaEnd === -1 ? ", " : " ";
-  const tail = commaEnd === -1 ? "" : ",";
-  return splice(text4, at, at, `${sep2}${memberText}${tail}`);
-}
-function setValue(text4, path42, valueText, dialect) {
-  if (path42.length === 0) {
-    throw new Json5EditError("setValue needs a non-empty path", 0);
-  }
-  if (/^\s*$/.test(text4)) {
-    const eol = eolOf(text4);
-    return `{${eol}  ${reindent(entryText(path42, valueText, dialect), "  ", eol)}${dialect.trailingComma}${eol}}${eol}`;
-  }
-  return setBelow(text4, parseDocument(text4), path42, valueText, dialect);
-}
-function setBelow(text4, start, path42, valueText, dialect) {
-  let node = start;
-  for (let i = 0; i < path42.length; i++) {
-    if (node.kind !== "object") {
-      throw new Json5EditError(
-        `cannot set ${path42.join(".")}: ${path42.slice(0, i).join(".") || "the document"} is not an object`,
-        node.span.start
-      );
-    }
-    const entry = entryOf(node, path42[i]);
-    if (entry === void 0) {
-      return appendMember(
-        text4,
-        node,
-        entryText(path42.slice(i), valueText, dialect),
-        dialect
-      );
-    }
-    if (i === path42.length - 1) {
-      const indent2 = indentOfLine(text4, entry.keySpan.start);
-      return splice(
-        text4,
-        entry.value.span.start,
-        entry.value.span.end,
-        reindent(valueText, indent2, eolOf(text4))
-      );
-    }
-    node = entry.value;
-  }
-  throw new Json5EditError("unreachable: path exhausted", 0);
-}
-function deleteValue(text4, path42, keep2 = 0) {
-  if (path42.length === 0) {
-    throw new Json5EditError("deleteValue needs a non-empty path", 0);
-  }
-  if (/^\s*$/.test(text4)) return text4;
-  const parentPath = path42.slice(0, -1);
-  const parent = nodeAt(parseDocument(text4), parentPath);
-  const entry = parent === void 0 ? void 0 : entryOf(parent, path42[path42.length - 1]);
-  if (entry === void 0 || parent?.kind !== "object") return text4;
-  const pruned = removeMember(text4, entry.span);
-  return parentPath.length > keep2 && parent.entries.length === 1 ? deleteValue(pruned, parentPath, keep2) : pruned;
-}
-var CHILD_KEYS = ["h", "v", "children"];
-function placementIdOf(node) {
-  if (node.kind === "string") return node.value;
-  if (node.kind !== "object") return void 0;
-  const seg2 = entryOf(node, "seg")?.value;
-  const kind = entryOf(node, "kind")?.value;
-  const name = entryOf(node, "name")?.value;
-  const segName = seg2?.kind === "string" ? seg2.value : kind?.kind === "string" && kind.value === "segment" && name?.kind === "string" ? name.value : void 0;
-  if (segName === void 0) return void 0;
-  const id2 = entryOf(node, "id")?.value;
-  return id2?.kind === "string" ? id2.value : segName;
-}
-function childArraysOf(node) {
-  if (node.kind !== "object") return [];
-  return CHILD_KEYS.map((k) => entryOf(node, k)?.value).filter(
-    (v) => v?.kind === "array"
-  );
-}
-function rowEntriesOf(node) {
-  const rows = entryOf(node, "rows")?.value;
-  return rows?.kind === "object" ? rows.entries : null;
-}
-function restagesFragment(node) {
-  if (node.kind !== "object") return true;
-  const rows = rowEntriesOf(node);
-  return rows === null || rows.length > 0 || node.entries.some((entry) => entry.key !== "rows");
-}
-function* nodesIn(node, bareAt) {
-  yield { node, bareAt };
-  for (const array of childArraysOf(node)) {
-    for (const child of array.elements) yield* nodesIn(child, null);
-  }
-  for (const row2 of rowEntriesOf(node) ?? []) {
-    yield* nodesIn(
-      row2.value,
-      bareAt === null ? null : [...bareAt, "rows", row2.key]
-    );
-  }
-}
-function hasSegmentRef(root, id2) {
-  for (const { node } of nodesIn(root, null)) {
-    if (placementIdOf(node) === id2) return true;
-  }
-  return false;
-}
-function refAt(text4, rootPath, id2) {
-  const root = nodeAt(parseDocument(text4), rootPath);
-  if (root === void 0) return null;
-  for (const { node, bareAt } of nodesIn(root, rootPath)) {
-    if (placementIdOf(node) !== id2) continue;
-    if (bareAt === null) return { text: text4, ref: node };
-    const wrapped = setValue(
-      text4,
-      bareAt,
-      `{ h: [${textOf(text4, node)}] }`,
-      JSON5_DIALECT
-    );
-    return refAt(wrapped, rootPath, id2);
-  }
-  return null;
-}
-function removeSegmentRef(text4, rootPath, target) {
-  const hit = refAt(text4, rootPath, target);
-  return hit === null ? null : removeMember(hit.text, hit.ref.span);
-}
-function insertSegmentRef(text4, rootPath, placement, anchor, relation) {
-  const hit = refAt(text4, rootPath, anchor);
-  if (hit === null) return null;
-  const { text: src, ref } = hit;
-  const newText = placement.id === void 0 ? JSON.stringify(placement.seg) : `{ seg: ${JSON.stringify(placement.seg)}, id: ${JSON.stringify(placement.id)} }`;
-  const { commaEnd, line } = trailerAfter(src, ref.span.end);
-  if (startsLine(src, ref.span.start) && line !== null) {
-    const indent2 = src.slice(lineStartOf(src, ref.span.start), ref.span.start);
-    return relation === "after" ? insertLineAfter(src, ref.span, { commaEnd, line }, newText, indent2) : splice(
-      src,
-      ref.span.start,
-      ref.span.start,
-      `${newText},${eolOf(src)}${indent2}`
-    );
-  }
-  const refText = textOf(src, ref);
-  const pair = relation === "before" ? `${newText}, ${refText}` : `${refText}, ${newText}`;
-  return splice(src, ref.span.start, ref.span.end, pair);
-}
-function setPlacementSetting(text4, rootPath, id2, setting, valueText) {
-  const hit = refAt(text4, rootPath, id2);
-  if (hit === null) return null;
-  const { text: src, ref } = hit;
-  const settings = `{ ${keyText(setting)}: ${valueText} }`;
-  if (ref.kind === "string") {
-    return splice(
-      src,
-      ref.span.start,
-      ref.span.end,
-      `{ seg: ${JSON.stringify(ref.value)}, settings: ${settings} }`
-    );
-  }
-  return entryOf(ref, "settings") === void 0 ? setBelow(src, ref, ["settings"], settings, JSON5_DIALECT) : setBelow(src, ref, ["settings", setting], valueText, JSON5_DIALECT);
-}
-
-// src/utils/transcript-fs.ts
-init_globals();
-
-// site/shims/fs-promises.ts
-init_globals();
-var import_memfs2 = __toESM(require_lib8(), 1);
-var p = import_memfs2.fs.promises;
-var { readFile, writeFile, stat, lstat, readdir, mkdir, rm, unlink, rename, open, access, appendFile, realpath, mkdtemp, copyFile } = p;
-
-// src/utils/outcome.ts
-init_globals();
-function ok(value) {
-  return { kind: "ok", value };
-}
-var ABSENT = { kind: "absent" };
-function failed(reason) {
-  return { kind: "failed", reason };
-}
-function orElse(outcome, fallback) {
-  return outcome?.kind === "ok" ? outcome.value : fallback;
-}
-var PENDING = { kind: "pending" };
-function isPending(value) {
-  return value === PENDING;
-}
-
-// src/utils/logger.ts
-init_globals();
-var debugEnabled = false;
-var debugOn = () => debugEnabled;
-function debug(message, ...args) {
-  if (debugOn()) {
-    console.error(`[DEBUG] ${message}`, ...args);
-  }
-}
-function changeLogger(log) {
-  let last2 = null;
-  return ([level, msg]) => {
-    if (msg === last2) return;
-    last2 = msg;
-    log(level, msg);
-  };
-}
-var quietLogger = (_level, message) => debug(message);
-
-// src/utils/transcript-fs.ts
-function statStamp(filePath2) {
-  if (!filePath2) return "";
-  try {
-    return stampOf(statSync(filePath2));
-  } catch {
-    return "";
-  }
-}
-function stampOf(st) {
-  return `${st.mtimeMs}:${st.size}`;
-}
-var TRANSCRIPT_FS_CONCURRENCY = 8;
-var Limiter = class {
-  slots;
-  // FIFO wait queue as a singly-linked list: enqueue at `tail`, dequeue at
-  // `head`, both O(1) with no array reindexing (Array.shift would be O(n), so a
-  // drain of the thousands-of-queued-ops burst this limiter exists to absorb
-  // would be O(n²) on the render hot path). A dequeued node is immediately
-  // unreferenced, so a continuously-saturated queue retains only the waiters
-  // currently parked — no consumed-prefix accumulates, unlike a head-index
-  // array that only reclaims on full drain.
-  head = null;
-  tail = null;
-  constructor(max2) {
-    this.slots = max2;
-  }
-  async run(task) {
-    await this.acquire();
-    try {
-      return await task();
-    } finally {
-      this.release();
-    }
-  }
-  async acquire() {
-    if (this.slots > 0) {
-      this.slots--;
-      return;
-    }
-    await new Promise((wake) => {
-      const node = { wake, next: null };
-      if (this.tail) this.tail.next = node;
-      else this.head = node;
-      this.tail = node;
-    });
-  }
-  release() {
-    const node = this.head;
-    if (!node) {
-      this.slots++;
-      return;
-    }
-    this.head = node.next;
-    if (!this.head) this.tail = null;
-    node.wake();
-  }
-};
-var gate = new Limiter(TRANSCRIPT_FS_CONCURRENCY);
-function gated(fn) {
-  return ((...args) => gate.run(() => fn(...args)));
-}
-var readdir2 = gated(readdir);
-var stat2 = gated(stat);
-var FOLD_WINDOW_BYTES = 512 * 1024;
-var totals = { reads: 0, bytes: 0, longLines: 0, largestLine: 0 };
-function transcriptReads() {
-  return { ...totals };
-}
-var windows = [];
-function giveBack(window2) {
-  if (windows.length < TRANSCRIPT_FS_CONCURRENCY) windows.push(window2);
-}
-async function readAppended(path42, prior, until2) {
-  return gate.run(async () => {
-    const window2 = windows.pop() ?? import_buffer.Buffer.allocUnsafe(FOLD_WINDOW_BYTES);
-    const read2 = await readWholeLines(path42, prior, until2, window2);
-    if (read2.kind !== "ok") {
-      giveBack(window2);
-      return read2;
-    }
-    let lent = window2;
-    return ok({
-      ...read2.value,
-      [Symbol.dispose]: () => {
-        if (lent !== void 0) giveBack(lent);
-        lent = void 0;
-      }
-    });
-  });
-}
-function decodeLines(read2, decode) {
-  var _stack = [];
-  try {
-    const lent = __using(_stack, read2);
-    return decode(lent.lines);
-  } catch (_) {
-    var _error = _, _hasError = true;
-  } finally {
-    __callDispose(_stack, _error, _hasError);
-  }
-}
-async function readWholeLines(path42, prior, until2, window2) {
-  let fh = null;
-  try {
-    fh = await open(path42, "r");
-    const st = await fh.stat();
-    const { size, ino } = st;
-    const stamp2 = stampOf(st);
-    const reset = prior !== void 0 && (ino !== prior.ino || size < prior.offset);
-    const start = reset || prior === void 0 ? 0 : prior.offset;
-    const end = reset || until2 === void 0 ? size : Math.min(size, until2);
-    let bytesRead = 0;
-    const first2 = await readInto(fh, window2.subarray(0, end - start), start);
-    bytesRead += first2.length;
-    let lastNl = first2.lastIndexOf(10);
-    let reached = start + first2.length;
-    let shortRead = first2.length < Math.min(window2.length, end - start);
-    while (lastNl < 0 && reached < end && !shortRead) {
-      const next = await readInto(
-        fh,
-        window2.subarray(0, end - reached),
-        reached
-      );
-      bytesRead += next.length;
-      const nl = next.indexOf(10);
-      if (nl >= 0) lastNl = reached - start + nl;
-      shortRead = next.length < Math.min(window2.length, end - reached);
-      reached += next.length;
-    }
-    const bytes = lastNl + 1;
-    const longLine = bytes > window2.length ? bytes : 0;
-    const wholeLines = longLine > 0 ? await readInto(fh, import_buffer.Buffer.allocUnsafe(bytes), start) : first2.subarray(0, bytes);
-    bytesRead += longLine > 0 ? wholeLines.length : 0;
-    const complete = wholeLines.length === bytes;
-    totals.reads++;
-    totals.bytes += bytesRead;
-    totals.longLines += longLine > 0 ? 1 : 0;
-    totals.largestLine = Math.max(totals.largestLine, longLine);
-    return ok({
-      lines: complete ? wholeLines : wholeLines.subarray(0, 0),
-      start,
-      // A long line was found by its newline alone, so lines after it may
-      // still be unread; otherwise the read saw everything up to its end.
-      atEnd: !complete || (longLine > 0 ? start + bytes >= end : reached >= end || shortRead),
-      size,
-      stamp: stamp2,
-      ino,
-      reset,
-      longLine
-    });
-  } catch (e) {
-    if (e.code === "ENOENT") return ABSENT;
-    return failed(
-      `readAppended ${path42}: ${e instanceof Error ? e.message : String(e)}`
-    );
-  } finally {
-    await fh?.close().catch((e) => {
-      debug(
-        `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
-      );
-    });
-  }
-}
-async function readInto(fh, buf, position) {
-  let off = 0;
-  while (off < buf.length) {
-    const { bytesRead } = await fh.read(
-      buf,
-      off,
-      buf.length - off,
-      position + off
-    );
-    if (bytesRead === 0) break;
-    off += bytesRead;
-  }
-  return buf.subarray(0, off);
-}
-async function readTail(path42, maxBytes) {
-  return gate.run(async () => {
-    let fh = null;
-    try {
-      fh = await open(path42, "r");
-      const { size } = await fh.stat();
-      const start = Math.max(0, size - maxBytes);
-      return ok({
-        buf: await readInto(fh, import_buffer.Buffer.alloc(size - start), start),
-        fromStart: start === 0
-      });
-    } catch (e) {
-      if (e.code === "ENOENT") return ABSENT;
-      return failed(
-        `readTail ${path42}: ${e instanceof Error ? e.message : String(e)}`
-      );
-    } finally {
-      await fh?.close().catch((e) => {
-        debug(
-          `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
-        );
-      });
-    }
-  });
-}
-function readTailSync(path42, maxBytes) {
-  let fd;
-  try {
-    fd = openSync(path42, constants.O_RDONLY | constants.O_NONBLOCK);
-  } catch (e) {
-    const { code } = e;
-    if (code === "ENOENT" || code === "ENOTDIR") return ABSENT;
-    return failed(e instanceof Error ? e.message : String(e));
-  }
-  try {
-    const stat3 = fstatSync(fd, { bigint: true });
-    if (!stat3.isFile()) return failed("not a regular file");
-    const size = Number(stat3.size);
-    const start = Math.max(0, size - maxBytes);
-    const buf = import_buffer.Buffer.alloc(size - start);
-    let off = 0;
-    while (off < buf.length) {
-      const n = readSync(fd, buf, off, buf.length - off, start + off);
-      if (n === 0) break;
-      off += n;
-    }
-    return ok({
-      buf: buf.subarray(0, off),
-      fromStart: start === 0,
-      file: `${stat3.dev}:${stat3.ino}`
-    });
-  } catch (e) {
-    return failed(e instanceof Error ? e.message : String(e));
-  } finally {
-    try {
-      closeSync(fd);
-    } catch (e) {
-      debug(
-        `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
-      );
-    }
-  }
-}
-
-// src/claude-settings.ts
-var CLAUDE_CONFIG_DIR_ENV = "CLAUDE_CONFIG_DIR";
-function claudeConfigDir(detected, home) {
-  return detected ?? import_node_path9.default.join(home, ".claude");
-}
-function claudeSettingsPath(configDir) {
-  return import_node_path9.default.join(configDir, "settings.json");
-}
-function readSettingsFile(settingsPath) {
-  const read2 = readTailSync(settingsPath, Number.MAX_SAFE_INTEGER);
-  switch (read2.kind) {
-    case "absent":
-      return null;
-    case "failed":
-      throw new Error(`cannot read ${settingsPath}: ${read2.reason}`);
-    case "ok":
-      return { text: read2.value.buf.toString("utf8"), file: read2.value.file };
-  }
-}
-var cannotRead = (settingsPath, e) => new Error(`cannot read ${settingsPath}: ${messageOf(e)}`, { cause: e });
-function readClaudeSettingsText(settingsPath) {
-  return readSettingsFile(settingsPath)?.text ?? "";
-}
-function readClaudeSettings(settingsPath) {
-  return parseSettings(settingsPath, readClaudeSettingsText(settingsPath));
-}
-function parseSettings(settingsPath, text4) {
-  let parsed2;
-  try {
-    if (/^\s*$/.test(text4)) return {};
-    parsed2 = JSON_DIALECT.parse(text4);
-  } catch (e) {
-    throw cannotRead(settingsPath, e);
-  }
-  if (!isJsonObject(parsed2)) {
-    throw new Error(`cannot read ${settingsPath}: not a JSON object`);
-  }
-  return parsed2;
-}
-function claudeManagedSettingsDir(platform3) {
-  switch (platform3) {
-    case "darwin":
-      return "/Library/Application Support/ClaudeCode";
-    case "win32":
-      return "C:\\Program Files\\ClaudeCode";
-    default:
-      return "/etc/claude-code";
-  }
-}
-var projectLocalSettingsFile = (projectDir) => import_node_path9.default.join(projectDir, ".claude", "settings.local.json");
-function readSettingsChain(at) {
-  const dropIns = import_node_path9.default.join(at.managedDir, "managed-settings.d");
-  const located = [
-    ...visibleJsonFiles(dropIns).reverse().map((name) => ({
-      scope: "managed",
-      path: import_node_path9.default.join(dropIns, name)
-    })),
-    {
-      scope: "managed",
-      path: import_node_path9.default.join(at.managedDir, "managed-settings.json")
-    },
-    {
-      scope: "project-local",
-      path: projectLocalSettingsFile(at.projectDir)
-    },
-    {
-      scope: "project",
-      path: import_node_path9.default.join(at.projectDir, ".claude", "settings.json")
-    },
-    { scope: "user", path: at.userFile }
-  ];
-  const read2 = located.flatMap((l) => {
-    const file = readSettingsFile(l.path);
-    if (file === null) return [];
-    const settings = parseSettings(l.path, file.text);
-    const { env: env2 = {} } = settings;
-    if (!isJsonObject(env2)) {
-      throw new Error(`cannot read ${l.path}: \`env\` is not an object`);
-    }
-    return [{ source: { ...l, settings, env: env2 }, file: file.file }];
-  });
-  const user = read2.find((r) => r.source.scope === "user");
-  return read2.filter((r) => r.source.scope !== "project" || r.file !== user?.file).map((r) => r.source);
-}
-function visibleJsonFiles(dir) {
-  try {
-    return fs_default.readdirSync(dir).filter((name) => !name.startsWith(".") && name.endsWith(".json")).sort();
-  } catch (e) {
-    if (e.code === "ENOENT") return [];
-    throw cannotRead(dir, e);
-  }
-}
-var isJsonObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
-var messageOf = (e) => e instanceof Error ? e.message : String(e);
-
-// src/install/currency.ts
-init_globals();
-var RELEASE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
-function parseReleaseVersion(text4) {
-  const m = RELEASE_VERSION.exec(text4);
-  return m ? { kind: "ok", value: [Number(m[1]), Number(m[2]), Number(m[3])] } : {
-    kind: "failed",
-    reason: `"${text4}" is not a release version (expected MAJOR.MINOR.PATCH)`
-  };
-}
-function formatVersion(v) {
-  return v.join(".");
-}
-function compareVersions([aMajor, aMinor, aPatch], [bMajor, bMinor, bPatch]) {
-  return aMajor - bMajor || aMinor - bMinor || aPatch - bPatch;
-}
-var REGISTRY_URL = "https://registry.npmjs.org";
-var PACKAGE_NAME = "@promptctl/cc-candybar";
-var REGISTRY_TIMEOUT_MS = 5e3;
-async function fetchLatestVersion(packageName, fetchImpl, registryUrl, clock) {
-  const url = `${registryUrl}/-/package/${encodeURIComponent(packageName)}/dist-tags`;
-  try {
-    const res = await fetchImpl(url, {
-      signal: timeoutSignal(clock, REGISTRY_TIMEOUT_MS)
-    });
-    if (!res.ok) {
-      return failed(`registry responded ${res.status} for ${url}`);
-    }
-    const tags = await res.json();
-    if (typeof tags.latest !== "string") {
-      return ABSENT;
-    }
-    return parseReleaseVersion(tags.latest);
-  } catch (err) {
-    return failed(err instanceof Error ? err.message : String(err));
-  }
-}
-function assessCurrency(stamp2, latest) {
-  const installed = parseReleaseVersion(stamp2);
-  if (installed.kind === "failed") {
-    return { kind: "unchecked", installed: stamp2, reason: installed.reason };
-  }
-  switch (latest.kind) {
-    case "failed":
-      return { kind: "unchecked", installed: stamp2, reason: latest.reason };
-    case "absent":
-      return {
-        kind: "unchecked",
-        installed: stamp2,
-        reason: "the registry lists no `latest` dist-tag"
-      };
-    case "ok": {
-      const order2 = compareVersions(installed.value, latest.value);
-      if (order2 < 0) {
-        return {
-          kind: "stale",
-          installed: installed.value,
-          latest: latest.value
-        };
-      }
-      if (order2 > 0) {
-        return {
-          kind: "ahead",
-          installed: installed.value,
-          latest: latest.value
-        };
-      }
-      return { kind: "current", installed: installed.value };
-    }
-  }
-}
-
-// src/install/platforms.ts
-init_globals();
-var PLATFORM_PACKAGES = {
-  "darwin-arm64": "@promptctl/cc-candybar-darwin-arm64",
-  "darwin-x64": "@promptctl/cc-candybar-darwin-x64",
-  "linux-x64": "@promptctl/cc-candybar-linux-x64",
-  "linux-arm64": "@promptctl/cc-candybar-linux-arm64"
-};
-function shipsNative(platform3, arch2) {
-  return `${platform3}-${arch2}` in PLATFORM_PACKAGES;
-}
-
-// src/install/index.ts
-function supportDir(host) {
-  if (process_default.platform === "darwin") {
-    return import_node_path10.default.join(host.home, "Library", "Application Support", "CCCandybar");
-  }
-  return import_node_path10.default.join(locations(host).dataHome, "cc-candybar");
-}
-function stagedDistPath(dir) {
-  return import_node_path10.default.join(dir, "dist", "index.mjs");
-}
-function stableAttachPreload(runningBundle, host) {
-  const checkout = sourceCheckoutOf(runningBundle);
-  return attachPreloadOf(
-    checkout === null ? stagedDistPath(supportDir(host)) : import_node_path10.default.join(checkout, "dist", "index.mjs")
-  );
-}
-function parseHandlerUrl(rawUrl, scheme = URL_SCHEME) {
-  const prefix = `${scheme}://`;
-  if (!rawUrl.startsWith(prefix)) {
-    throw new Error(`expected ${prefix} scheme, got: ${rawUrl}`);
-  }
-  const rest2 = rawUrl.slice(prefix.length);
-  const slash2 = rest2.indexOf("/");
-  if (slash2 === -1) {
-    return { verb: VERB_COPY, value: rest2 };
-  }
-  return {
-    verb: decodeURIComponent(rest2.slice(0, slash2)),
-    value: rest2.slice(slash2 + 1)
-  };
-}
 
 // src/daemon/verbs/index.ts
 init_globals();
@@ -35749,7 +33919,7 @@ function parsePaint(raw, absent, refuse4) {
   return refuse4(`has a colour that is not a Paint: ${JSON.stringify(raw)}`);
 }
 var parseColor = (raw, absent, refuse4) => raw === "ground" ? raw : parsePaint(raw, absent, refuse4);
-var ABSENT2 = { seam: void 0, lead: "left", tail: "right" };
+var ABSENT = { seam: void 0, lead: "left", tail: "right" };
 var AUTHORED_IN = { seam: "seam", lead: "caps", tail: "caps" };
 function parseCell(cell3, form, part, refuse4) {
   const glyph = cell3.glyph;
@@ -35768,8 +33938,8 @@ function parseCell(cell3, form, part, refuse4) {
     refuse4("is not ASCII");
   return Object.freeze({
     glyph: typeof cell3.glyph === "string" ? cell3.glyph : Object.freeze({ oneOf: Object.freeze([...glyphs]) }),
-    fg: parseColor(cell3.fg, ABSENT2[part], refuse4),
-    bg: parseColor(cell3.bg, ABSENT2[part], refuse4)
+    fg: parseColor(cell3.fg, ABSENT[part], refuse4),
+    bg: parseColor(cell3.bg, ABSENT[part], refuse4)
   });
 }
 function parseCells(raw, form, part, parseOne) {
@@ -37364,7 +35534,7 @@ init_globals();
 function blank(glyph) {
   return " ".repeat(cellLen(glyph));
 }
-function text2(cells) {
+function text(cells) {
   const ends = /* @__PURE__ */ new Map();
   for (const cell3 of cells.filter((c) => inked(c.glyph)))
     ends.set(cell3.row, { first: ends.get(cell3.row)?.first ?? cell3.index, last: cell3.index });
@@ -37393,7 +35563,7 @@ function typewriter(timing) {
   const phase = Phase.once(0, timing.seconds);
   const ease = settled(timing.ease);
   return transition(timing.seconds, ({ cells }) => {
-    const { length, place } = text2(cells);
+    const { length, place } = text(cells);
     return Animation.continuous((t2) => {
       const typed = arrived(length, ease(phase(t2)));
       return (cell3) => (place.get(cell3.index) ?? -1) < typed ? cell3.glyph : blank(cell3.glyph);
@@ -37408,7 +35578,7 @@ function scramble(timing, z) {
   const ease = settled(timing.ease);
   const flicker = stepped(FLICKER)((step4) => step4, 0);
   return transition(timing.seconds, ({ cells }) => {
-    const { length, place } = text2(cells);
+    const { length, place } = text(cells);
     return Animation.continuous((t2) => {
       const resolved = arrived(length, ease(phase(t2)));
       const step4 = flicker.at(t2);
@@ -37424,7 +35594,7 @@ function backspace(timing) {
   const phase = Phase.once(0, timing.seconds);
   const ease = settled(timing.ease);
   return transition(timing.seconds, ({ cells }) => {
-    const { length, place } = text2(cells);
+    const { length, place } = text(cells);
     return Animation.continuous((t2) => {
       const kept = length - arrived(length, ease(phase(t2)));
       return (cell3) => (place.get(cell3.index) ?? -1) < kept ? cell3.glyph : blank(cell3.glyph);
@@ -37438,7 +35608,7 @@ function scrambleOut(timing, z) {
   const ease = settled(timing.ease);
   const flicker = stepped(FLICKER)((step4) => step4, 0);
   return transition(timing.seconds, ({ cells }) => {
-    const { length, place } = text2(cells);
+    const { length, place } = text(cells);
     return Animation.continuous((t2) => {
       const p2 = ease(phase(t2));
       const churning = arrived(length, p2 / (1 - CHURN));
@@ -37988,13 +36158,13 @@ var DISTRIBUTIONS = {
 };
 var DEFAULT_DISTRIBUTION = "van-der-corput";
 var placedBy = (name) => DISTRIBUTIONS[name ?? DEFAULT_DISTRIBUTION];
-function entryOf2(step4, size) {
+function entryOf(step4, size) {
   if (step4 === void 0) return 0;
   const { place, quantize } = step4.distribution;
   return quantize(place(step4.index, step4.count), size);
 }
 function vocabularySelect(vocabulary, step4) {
-  const entry = vocabulary[entryOf2(step4, vocabulary.length)];
+  const entry = vocabulary[entryOf(step4, vocabulary.length)];
   if (entry === void 0)
     throw new Error("vocabularySelect: empty vocabulary");
   return entry;
@@ -38005,7 +36175,7 @@ function rowAndCell(address) {
   const rows = at === -1 ? address : address.slice(0, at);
   return { row: rows.at(-1), cell: address.findLast(isCell) };
 }
-var rowStart = (variation, row2) => entryOf2(row2, variation.hues.length);
+var rowStart = (variation, row2) => entryOf(row2, variation.hues.length);
 function decorEntryFor(palette, decor, address, drawnAt) {
   const { row: row2, cell: cell3 } = rowAndCell(address);
   if (cell3 === void 0) return dealtAt(palette, decor, row2, cell3, drawnAt);
@@ -38610,10 +36780,512 @@ init_globals();
 
 // src/config/loader/validate-core.ts
 init_globals();
-var import_node_path11 = __toESM(require_path_browserify(), 1);
+var import_node_path = __toESM(require_path_browserify(), 1);
 
 // src/config/loader/diagnostics.ts
 init_globals();
+
+// src/config/json5-edit.ts
+init_globals();
+var import_json5 = __toESM(require_dist(), 1);
+var Json5EditError = class extends Error {
+  constructor(reason, offset) {
+    super(`${reason} (at offset ${offset})`);
+    this.reason = reason;
+    this.offset = offset;
+    this.name = "Json5EditError";
+  }
+  reason;
+  offset;
+};
+var IDENT_START = /[A-Za-z_$\p{L}]/u;
+var IDENT_PART = /[A-Za-z0-9_$\u200C\u200D\p{L}\p{N}]/u;
+var WORD_PART = /[A-Za-z0-9_$.+\-\p{L}\p{N}]/u;
+var WHITESPACE = /[\t\n\v\f\r \u00A0\uFEFF\u2028\u2029\p{Zs}]/u;
+var Scanner = class {
+  constructor(text4) {
+    this.text = text4;
+  }
+  text;
+  pos = 0;
+  peek() {
+    return this.text[this.pos] ?? "";
+  }
+  fail(message) {
+    throw new Json5EditError(message, this.pos);
+  }
+  skipTrivia() {
+    for (; ; ) {
+      const c = this.peek();
+      if (c === "") return;
+      if (WHITESPACE.test(c)) {
+        this.pos++;
+      } else if (c === "/" && this.text[this.pos + 1] === "/") {
+        const nl = this.text.indexOf("\n", this.pos);
+        this.pos = nl === -1 ? this.text.length : nl;
+      } else if (c === "/" && this.text[this.pos + 1] === "*") {
+        const close = this.text.indexOf("*/", this.pos + 2);
+        if (close === -1) this.fail("unterminated block comment");
+        this.pos = close + 2;
+      } else {
+        return;
+      }
+    }
+  }
+  expect(c) {
+    if (this.peek() !== c) this.fail(`expected "${c}"`);
+    this.pos++;
+  }
+  value() {
+    this.skipTrivia();
+    const c = this.peek();
+    if (c === "{") return this.object();
+    if (c === "[") return this.array();
+    if (c === '"' || c === "'") {
+      const span2 = this.stringSpan();
+      return { kind: "string", span: span2, value: this.decode(span2) };
+    }
+    if (c === "") this.fail("unexpected end of input");
+    const start = this.pos;
+    while (this.pos < this.text.length && WORD_PART.test(this.peek())) {
+      this.pos++;
+    }
+    if (this.pos === start) this.fail(`unexpected character "${c}"`);
+    const span = { start, end: this.pos };
+    const decoded = this.decode(span);
+    if (decoded === null) return { kind: "null", span };
+    if (typeof decoded === "boolean") {
+      return { kind: "boolean", span, value: decoded };
+    }
+    if (typeof decoded === "number") {
+      return { kind: "number", span, value: decoded };
+    }
+    return this.fail(`unexpected word "${this.text.slice(start, this.pos)}"`);
+  }
+  // [LAW:single-enforcer] JSON5 itself decodes every leaf slice.
+  decode(span) {
+    try {
+      return import_json5.default.parse(this.text.slice(span.start, span.end));
+    } catch (e) {
+      throw new Json5EditError(e.message, span.start);
+    }
+  }
+  stringSpan() {
+    const start = this.pos;
+    const quote2 = this.peek();
+    this.pos++;
+    for (; ; ) {
+      const c = this.peek();
+      if (c === "") this.fail("unterminated string");
+      if (c === "\\") {
+        const crlf = this.text.startsWith("\r\n", this.pos + 1);
+        this.pos += crlf ? 3 : 2;
+        continue;
+      }
+      this.pos++;
+      if (c === quote2) return { start, end: this.pos };
+      if (c === "\n") this.fail("unterminated string");
+    }
+  }
+  key() {
+    const c = this.peek();
+    if (c === '"' || c === "'") {
+      const span = this.stringSpan();
+      return { key: this.decode(span), span };
+    }
+    const start = this.pos;
+    if (!IDENT_START.test(c)) this.fail("expected an object key");
+    while (this.pos < this.text.length && IDENT_PART.test(this.peek())) {
+      this.pos++;
+    }
+    return {
+      key: this.text.slice(start, this.pos),
+      span: { start, end: this.pos }
+    };
+  }
+  object() {
+    const start = this.pos;
+    this.expect("{");
+    const entries = [];
+    for (; ; ) {
+      this.skipTrivia();
+      if (this.peek() === "}") break;
+      const { key, span: keySpan } = this.key();
+      if (entries.some((e) => e.key === key)) {
+        throw new Json5EditError(`duplicate key "${key}"`, keySpan.start);
+      }
+      this.skipTrivia();
+      this.expect(":");
+      const value = this.value();
+      entries.push({
+        key,
+        keySpan,
+        value,
+        span: { start: keySpan.start, end: value.span.end }
+      });
+      this.skipTrivia();
+      if (this.peek() === ",") {
+        this.pos++;
+        continue;
+      }
+      if (this.peek() !== "}") this.fail('expected "," or "}"');
+    }
+    this.expect("}");
+    return { kind: "object", span: { start, end: this.pos }, entries };
+  }
+  array() {
+    const start = this.pos;
+    this.expect("[");
+    const elements = [];
+    for (; ; ) {
+      this.skipTrivia();
+      if (this.peek() === "]") break;
+      elements.push(this.value());
+      this.skipTrivia();
+      if (this.peek() === ",") {
+        this.pos++;
+        continue;
+      }
+      if (this.peek() !== "]") this.fail('expected "," or "]"');
+    }
+    this.expect("]");
+    return { kind: "array", span: { start, end: this.pos }, elements };
+  }
+};
+function parseDocument(text4) {
+  const s = new Scanner(text4);
+  const root = s.value();
+  s.skipTrivia();
+  if (s.pos !== text4.length) s.fail("trailing content after the document");
+  return root;
+}
+function entryOf2(node, key) {
+  return node.kind === "object" ? node.entries.find((e) => e.key === key) : void 0;
+}
+function nodeAt(root, path42) {
+  let node = root;
+  for (const key of path42) {
+    node = node === void 0 ? void 0 : entryOf2(node, key)?.value;
+  }
+  return node;
+}
+function textOf(text4, node) {
+  return text4.slice(node.span.start, node.span.end);
+}
+function movableTextOf(text4, node) {
+  const indent2 = indentOfLine(text4, node.span.start);
+  const literals = literalSpans(node);
+  const inLiteral = (at) => literals.some((s) => s.start < at && at < s.end);
+  let lineStart = node.span.start;
+  return textOf(text4, node).split("\n").map((line, i) => {
+    const at = lineStart;
+    lineStart += line.length + 1;
+    const own2 = i > 0 && !inLiteral(at - 1) && line.startsWith(indent2);
+    return (own2 ? line.slice(indent2.length) : line).replace(/\r$/, "");
+  }).join("\n");
+}
+function literalSpans(node) {
+  switch (node.kind) {
+    case "object":
+      return node.entries.flatMap((e) => [e.keySpan, ...literalSpans(e.value)]);
+    case "array":
+      return node.elements.flatMap(literalSpans);
+    case "string":
+      return [node.span];
+    default:
+      return [];
+  }
+}
+var IDENT_KEY = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+function keyText(key) {
+  return IDENT_KEY.test(key) ? key : JSON.stringify(key);
+}
+var JSON5_DIALECT = {
+  key: keyText,
+  trailingComma: ",",
+  parse: (text4) => import_json5.default.parse(text4)
+};
+var JSON_DIALECT = {
+  key: (key) => JSON.stringify(key),
+  trailingComma: "",
+  parse: (text4) => JSON.parse(text4)
+};
+function json5Text(value) {
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "[]";
+    const items = value.map((v) => `  ${reindent(json5Text(v), "  ", "\n")},`);
+    return `[
+${items.join("\n")}
+]`;
+  }
+  if (value !== null && typeof value === "object") {
+    const entries = Object.entries(value).filter(
+      ([, v]) => v !== void 0
+    );
+    if (entries.length === 0) return "{}";
+    const items = entries.map(
+      ([k, v]) => `  ${keyText(k)}: ${reindent(json5Text(v), "  ", "\n")},`
+    );
+    return `{
+${items.join("\n")}
+}`;
+  }
+  return JSON.stringify(value);
+}
+function eolOf(text4) {
+  return text4.includes("\r\n") ? "\r\n" : "\n";
+}
+function reindent(valueText, indent2, eol) {
+  return valueText.split("\n").join(`${eol}${indent2}`);
+}
+function entryText(path42, valueText, dialect) {
+  const [head, ...rest2] = path42;
+  const inner = rest2.length === 0 ? valueText : `{
+  ${reindent(entryText(rest2, valueText, dialect), "  ", "\n")}${dialect.trailingComma}
+}`;
+  return `${dialect.key(head)}: ${inner}`;
+}
+function splice(text4, start, end, insert) {
+  return text4.slice(0, start) + insert + text4.slice(end);
+}
+function lineStartOf(text4, offset) {
+  return text4.lastIndexOf("\n", offset - 1) + 1;
+}
+function isBlank(s) {
+  return /^[ \t]*$/.test(s);
+}
+function indentOfLine(text4, offset) {
+  const ls = lineStartOf(text4, offset);
+  return /^[ \t]*/.exec(text4.slice(ls))[0];
+}
+function startsLine(text4, offset) {
+  return isBlank(text4.slice(lineStartOf(text4, offset), offset));
+}
+var LINE_TRAILER = /(?:\/\/[^\n]*?)?(\r\n|\n|$)/y;
+function trailerAfter(text4, end) {
+  let i = end;
+  while (i < text4.length && (text4[i] === " " || text4[i] === "	")) i++;
+  const commaEnd = text4[i] === "," ? i + 1 : -1;
+  if (commaEnd !== -1) i = commaEnd;
+  while (i < text4.length && (text4[i] === " " || text4[i] === "	")) i++;
+  LINE_TRAILER.lastIndex = i;
+  const m = LINE_TRAILER.exec(text4);
+  if (m === null) return { commaEnd, line: null };
+  const next = i + m[0].length;
+  return { commaEnd, line: { at: next - m[1].length, next } };
+}
+function removeMember(text4, span) {
+  const { commaEnd, line } = trailerAfter(text4, span.end);
+  if (startsLine(text4, span.start) && line !== null) {
+    return splice(text4, lineStartOf(text4, span.start), line.next, "");
+  }
+  if (commaEnd !== -1) {
+    let end = commaEnd;
+    while (end < text4.length && text4[end] === " ") end++;
+    return splice(text4, span.start, end, "");
+  }
+  let start = span.start;
+  while (start > 0 && (text4[start - 1] === " " || text4[start - 1] === "	")) {
+    start--;
+  }
+  if (text4[start - 1] === ",") return splice(text4, start - 1, span.end, "");
+  return splice(text4, span.start, span.end, "");
+}
+function insertLineAfter(text4, span, trailer, memberText, indent2) {
+  const hasComma = trailer.commaEnd !== -1;
+  const withComma = hasComma ? text4 : splice(text4, span.end, span.end, ",");
+  const at = trailer.line.at + (hasComma ? 0 : 1);
+  const eol = eolOf(text4);
+  const line = `${eol}${indent2}${reindent(memberText, indent2, eol)}${hasComma ? "," : ""}`;
+  return splice(withComma, at, at, line);
+}
+function appendMember(text4, container, memberText, dialect) {
+  const members = container.kind === "object" ? container.entries : container.elements;
+  const last2 = members[members.length - 1];
+  const baseIndent = indentOfLine(text4, container.span.start);
+  if (last2 === void 0) {
+    const inner = baseIndent + "  ";
+    const eol = eolOf(text4);
+    return splice(
+      text4,
+      container.span.start + 1,
+      container.span.end - 1,
+      `${eol}${inner}${reindent(memberText, inner, eol)}${dialect.trailingComma}${eol}${baseIndent}`
+    );
+  }
+  const { commaEnd, line } = trailerAfter(text4, last2.span.end);
+  if (startsLine(text4, last2.span.start) && line !== null) {
+    const indent2 = text4.slice(
+      lineStartOf(text4, last2.span.start),
+      last2.span.start
+    );
+    return insertLineAfter(
+      text4,
+      last2.span,
+      { commaEnd, line },
+      memberText,
+      indent2
+    );
+  }
+  const at = commaEnd === -1 ? last2.span.end : commaEnd;
+  const sep2 = commaEnd === -1 ? ", " : " ";
+  const tail = commaEnd === -1 ? "" : ",";
+  return splice(text4, at, at, `${sep2}${memberText}${tail}`);
+}
+function setValue(text4, path42, valueText, dialect) {
+  if (path42.length === 0) {
+    throw new Json5EditError("setValue needs a non-empty path", 0);
+  }
+  if (/^\s*$/.test(text4)) {
+    const eol = eolOf(text4);
+    return `{${eol}  ${reindent(entryText(path42, valueText, dialect), "  ", eol)}${dialect.trailingComma}${eol}}${eol}`;
+  }
+  return setBelow(text4, parseDocument(text4), path42, valueText, dialect);
+}
+function setBelow(text4, start, path42, valueText, dialect) {
+  let node = start;
+  for (let i = 0; i < path42.length; i++) {
+    if (node.kind !== "object") {
+      throw new Json5EditError(
+        `cannot set ${path42.join(".")}: ${path42.slice(0, i).join(".") || "the document"} is not an object`,
+        node.span.start
+      );
+    }
+    const entry = entryOf2(node, path42[i]);
+    if (entry === void 0) {
+      return appendMember(
+        text4,
+        node,
+        entryText(path42.slice(i), valueText, dialect),
+        dialect
+      );
+    }
+    if (i === path42.length - 1) {
+      const indent2 = indentOfLine(text4, entry.keySpan.start);
+      return splice(
+        text4,
+        entry.value.span.start,
+        entry.value.span.end,
+        reindent(valueText, indent2, eolOf(text4))
+      );
+    }
+    node = entry.value;
+  }
+  throw new Json5EditError("unreachable: path exhausted", 0);
+}
+function deleteValue(text4, path42, keep2 = 0) {
+  if (path42.length === 0) {
+    throw new Json5EditError("deleteValue needs a non-empty path", 0);
+  }
+  if (/^\s*$/.test(text4)) return text4;
+  const parentPath = path42.slice(0, -1);
+  const parent = nodeAt(parseDocument(text4), parentPath);
+  const entry = parent === void 0 ? void 0 : entryOf2(parent, path42[path42.length - 1]);
+  if (entry === void 0 || parent?.kind !== "object") return text4;
+  const pruned = removeMember(text4, entry.span);
+  return parentPath.length > keep2 && parent.entries.length === 1 ? deleteValue(pruned, parentPath, keep2) : pruned;
+}
+var CHILD_KEYS = ["h", "v", "children"];
+function placementIdOf(node) {
+  if (node.kind === "string") return node.value;
+  if (node.kind !== "object") return void 0;
+  const seg2 = entryOf2(node, "seg")?.value;
+  const kind = entryOf2(node, "kind")?.value;
+  const name = entryOf2(node, "name")?.value;
+  const segName = seg2?.kind === "string" ? seg2.value : kind?.kind === "string" && kind.value === "segment" && name?.kind === "string" ? name.value : void 0;
+  if (segName === void 0) return void 0;
+  const id2 = entryOf2(node, "id")?.value;
+  return id2?.kind === "string" ? id2.value : segName;
+}
+function childArraysOf(node) {
+  if (node.kind !== "object") return [];
+  return CHILD_KEYS.map((k) => entryOf2(node, k)?.value).filter(
+    (v) => v?.kind === "array"
+  );
+}
+function rowEntriesOf(node) {
+  const rows = entryOf2(node, "rows")?.value;
+  return rows?.kind === "object" ? rows.entries : null;
+}
+function restagesFragment(node) {
+  if (node.kind !== "object") return true;
+  const rows = rowEntriesOf(node);
+  return rows === null || rows.length > 0 || node.entries.some((entry) => entry.key !== "rows");
+}
+function* nodesIn(node, bareAt) {
+  yield { node, bareAt };
+  for (const array of childArraysOf(node)) {
+    for (const child of array.elements) yield* nodesIn(child, null);
+  }
+  for (const row2 of rowEntriesOf(node) ?? []) {
+    yield* nodesIn(
+      row2.value,
+      bareAt === null ? null : [...bareAt, "rows", row2.key]
+    );
+  }
+}
+function hasSegmentRef(root, id2) {
+  for (const { node } of nodesIn(root, null)) {
+    if (placementIdOf(node) === id2) return true;
+  }
+  return false;
+}
+function refAt(text4, rootPath, id2) {
+  const root = nodeAt(parseDocument(text4), rootPath);
+  if (root === void 0) return null;
+  for (const { node, bareAt } of nodesIn(root, rootPath)) {
+    if (placementIdOf(node) !== id2) continue;
+    if (bareAt === null) return { text: text4, ref: node };
+    const wrapped = setValue(
+      text4,
+      bareAt,
+      `{ h: [${textOf(text4, node)}] }`,
+      JSON5_DIALECT
+    );
+    return refAt(wrapped, rootPath, id2);
+  }
+  return null;
+}
+function removeSegmentRef(text4, rootPath, target) {
+  const hit = refAt(text4, rootPath, target);
+  return hit === null ? null : removeMember(hit.text, hit.ref.span);
+}
+function insertSegmentRef(text4, rootPath, placement, anchor, relation) {
+  const hit = refAt(text4, rootPath, anchor);
+  if (hit === null) return null;
+  const { text: src, ref } = hit;
+  const newText = placement.id === void 0 ? JSON.stringify(placement.seg) : `{ seg: ${JSON.stringify(placement.seg)}, id: ${JSON.stringify(placement.id)} }`;
+  const { commaEnd, line } = trailerAfter(src, ref.span.end);
+  if (startsLine(src, ref.span.start) && line !== null) {
+    const indent2 = src.slice(lineStartOf(src, ref.span.start), ref.span.start);
+    return relation === "after" ? insertLineAfter(src, ref.span, { commaEnd, line }, newText, indent2) : splice(
+      src,
+      ref.span.start,
+      ref.span.start,
+      `${newText},${eolOf(src)}${indent2}`
+    );
+  }
+  const refText = textOf(src, ref);
+  const pair = relation === "before" ? `${newText}, ${refText}` : `${refText}, ${newText}`;
+  return splice(src, ref.span.start, ref.span.end, pair);
+}
+function setPlacementSetting(text4, rootPath, id2, setting, valueText) {
+  const hit = refAt(text4, rootPath, id2);
+  if (hit === null) return null;
+  const { text: src, ref } = hit;
+  const settings = `{ ${keyText(setting)}: ${valueText} }`;
+  if (ref.kind === "string") {
+    return splice(
+      src,
+      ref.span.start,
+      ref.span.end,
+      `{ seg: ${JSON.stringify(ref.value)}, settings: ${settings} }`
+    );
+  }
+  return entryOf2(ref, "settings") === void 0 ? setBelow(src, ref, ["settings"], settings, JSON5_DIALECT) : setBelow(src, ref, ["settings", setting], valueText, JSON5_DIALECT);
+}
+
+// src/config/loader/diagnostics.ts
 var ConfigError = class extends Error {
   file;
   issues;
@@ -38682,7 +37354,7 @@ function elementPathLine(source, document, pathParts) {
   let indexed = false;
   for (const part of pathParts) {
     const element = node.kind === "array" && /^\d+$/.test(part);
-    const next = node.kind === "array" ? element ? node.elements[Number(part)] : void 0 : entryOf(node, part)?.value;
+    const next = node.kind === "array" ? element ? node.elements[Number(part)] : void 0 : entryOf2(node, part)?.value;
     if (next === void 0) break;
     indexed ||= element;
     node = next;
@@ -39064,7 +37736,7 @@ function requireStringSpec() {
   };
 }
 function absolutePathProblem(where, value) {
-  return (0, import_node_path11.isAbsolute)(value) ? null : `${where} must be an absolute path (\`~\` and relative paths are not expanded), got ${JSON.stringify(value)}`;
+  return (0, import_node_path.isAbsolute)(value) ? null : `${where} must be an absolute path (\`~\` and relative paths are not expanded), got ${JSON.stringify(value)}`;
 }
 function requireAbsolutePathSpec() {
   return {
@@ -39269,7 +37941,7 @@ function selection(sessionKey, spec, domain, shown, extra = {}) {
     themeDefault: extra.themeDefault ?? false
   };
 }
-var text3 = (spec) => ({
+var text2 = (spec) => ({
   kind: "text",
   spec
 });
@@ -39495,13 +38167,13 @@ var GLOBAL_FIELDS = {
     floor: "truecolor"
   },
   // The text segments render when their value is empty.
-  default_empty_value: text3(optionalStringSpec()),
+  default_empty_value: text2(optionalStringSpec()),
   // The cell separator `plain` draws between segments. Absent means the glyph
   // rich-js's bundled `plain` joiner owns — no floor here, since naming one
   // would be a second copy of a constant that lives in rich-js.
-  default_separator: text3(optionalStringSpec()),
+  default_separator: text2(optionalStringSpec()),
   // The settings menu's door glyph (🍫 by default, synthesized by the menu).
-  menuGlyph: text3(menuGlyphSpec)
+  menuGlyph: text2(menuGlyphSpec)
 };
 var ROWS = Object.entries(GLOBAL_FIELDS);
 var VALUED_FIELDS = ROWS.filter(
@@ -39926,7 +38598,7 @@ function insertCells(root, cells) {
         return acc;
       const held = placed2.find((node2) => placementId(node2) === id2);
       if (held !== void 0)
-        return refuse2(
+        return refuse(
           acc,
           cell3,
           `as "${id2}", but placement "${id2}" is already segment "${held.name}" \u2014 give the cell its own id`
@@ -39952,7 +38624,7 @@ function insertCells(root, cells) {
             rows.map(([name, row2, placed3]) => [name, placed3 ?? row2])
           )
         }
-      } : refuse2(
+      } : refuse(
         acc,
         cell3,
         `${cell3.relation} "${cell3.anchor}", but there is no placement "${cell3.anchor}"`
@@ -39961,7 +38633,7 @@ function insertCells(root, cells) {
     { root, unplaced: [] }
   );
 }
-function refuse2(acc, cell3, reason) {
+function refuse(acc, cell3, reason) {
   return { ...acc, unplaced: [...acc.unplaced, { cell: cell3, reason }] };
 }
 function besideRow(row2, anchor, cell3, relation) {
@@ -45284,7 +43956,7 @@ function staticDictEntries(arg) {
   }
   return dict(...values2);
 }
-function get2(d, key) {
+function get(d, key) {
   return d[key];
 }
 function hasKey(d, key) {
@@ -45341,7 +44013,7 @@ function sprigDicts() {
       }
     },
     get: {
-      fn: (d, k) => get2(d, k),
+      fn: (d, k) => get(d, k),
       argTypes: ["dict", "string"],
       arity: { kind: "exact" }
     },
@@ -46897,7 +45569,7 @@ function editModeArtifacts() {
 
 // src/config/edit-chrome.ts
 init_globals();
-var import_node_path16 = __toESM(require_path_browserify(), 1);
+var import_node_path9 = __toESM(require_path_browserify(), 1);
 
 // src/config/synthesis-inputs.ts
 init_globals();
@@ -47250,14 +45922,98 @@ init_globals();
 // src/var-system/sources.ts
 init_globals();
 
+// src/utils/logger.ts
+init_globals();
+var debugEnabled = false;
+var debugOn = () => debugEnabled;
+function debug(message, ...args) {
+  if (debugOn()) {
+    console.error(`[DEBUG] ${message}`, ...args);
+  }
+}
+function changeLogger(log) {
+  let last2 = null;
+  return ([level, msg]) => {
+    if (msg === last2) return;
+    last2 = msg;
+    log(level, msg);
+  };
+}
+var quietLogger = (_level, message) => debug(message);
+
+// site/shims/fs-promises.ts
+init_globals();
+var import_memfs2 = __toESM(require_lib8(), 1);
+var p = import_memfs2.fs.promises;
+var { readFile, writeFile, stat, lstat, readdir, mkdir, rm, unlink, rename, open, access, appendFile, realpath, mkdtemp, copyFile } = p;
+
 // src/daemon/cache/watchers.ts
 init_globals();
-var import_node_path13 = __toESM(require_path_browserify(), 1);
+var import_node_path4 = __toESM(require_path_browserify(), 1);
 
 // src/utils/logfmt.ts
 init_globals();
 var BARE = /^[^\s"=\\]+$/;
 var valueOf = (value) => BARE.test(value) ? value : JSON.stringify(value);
+
+// src/utils/atomic-write.ts
+init_globals();
+var import_node_path2 = __toESM(require_path_browserify(), 1);
+function writeAtomic(at, text4, mode) {
+  const file = resolvedTarget(at);
+  fs_default.mkdirSync(import_node_path2.default.dirname(file), { recursive: true });
+  const tmp = `${file}.tmp`;
+  const fileMode = mode ?? fs_default.statSync(file, { throwIfNoEntry: false })?.mode;
+  try {
+    fs_default.writeFileSync(
+      tmp,
+      text4,
+      fileMode === void 0 ? {} : { mode: fileMode }
+    );
+    fs_default.renameSync(tmp, file);
+  } catch (e) {
+    fs_default.rmSync(tmp, { force: true });
+    throw e;
+  }
+}
+function resolvedTarget(at) {
+  return linkChain(at).at(-1);
+}
+function linkChain(at) {
+  const { hops, stopped: stopped2 } = walkLinks(at);
+  if (stopped2 !== null) throw stopped2;
+  return hops;
+}
+function walkLinks(at) {
+  const hops = [at];
+  try {
+    for (let n = 0; n < MAX_LINK_HOPS; n++) {
+      const next = linkTarget(hops[hops.length - 1]);
+      if (next === null) return { hops, stopped: null };
+      hops.push(next);
+    }
+    return {
+      hops,
+      stopped: new Error(`${at}: more than ${MAX_LINK_HOPS} symbolic links`)
+    };
+  } catch (e) {
+    return { hops, stopped: e };
+  }
+}
+function linkTarget(file) {
+  try {
+    if (!fs_default.lstatSync(file).isSymbolicLink()) return null;
+    return import_node_path2.default.resolve(
+      fs_default.realpathSync(import_node_path2.default.dirname(file)),
+      fs_default.readlinkSync(file)
+    );
+  } catch (e) {
+    const { code } = e;
+    if (code === "ENOENT" || code === "ENOTDIR") return null;
+    throw e;
+  }
+}
+var MAX_LINK_HOPS = 40;
 
 // src/utils/folder-identity.ts
 init_globals();
@@ -47285,16 +46041,16 @@ var bindsFolder = (bound) => typeof bound !== "string" && "ino" in bound;
 
 // src/utils/watch-target.ts
 init_globals();
-var import_node_path12 = __toESM(require_path_browserify(), 1);
+var import_node_path3 = __toESM(require_path_browserify(), 1);
 function nearestWatchTarget(candidate) {
-  let name = import_node_path12.default.basename(candidate);
-  let dir = import_node_path12.default.dirname(candidate);
+  let name = import_node_path3.default.basename(candidate);
+  let dir = import_node_path3.default.dirname(candidate);
   for (; ; ) {
     const real = canonicalDirectory(dir);
     if (real !== null)
-      return { dir: real, name, leaf: dir === import_node_path12.default.dirname(candidate) };
-    name = import_node_path12.default.basename(dir);
-    dir = import_node_path12.default.dirname(dir);
+      return { dir: real, name, leaf: dir === import_node_path3.default.dirname(candidate) };
+    name = import_node_path3.default.basename(dir);
+    dir = import_node_path3.default.dirname(dir);
   }
 }
 function canonicalDirectory(p2) {
@@ -47366,7 +46122,7 @@ function folded(window2, next) {
   for (const p2 of next.paths) window2.paths.add(p2);
   return window2;
 }
-var namedOf = (dir, filename) => filename === null ? { kind: "unknown" } : { kind: "changed", paths: /* @__PURE__ */ new Set([import_node_path13.default.join(dir, filename)]) };
+var namedOf = (dir, filename) => filename === null ? { kind: "unknown" } : { kind: "changed", paths: /* @__PURE__ */ new Set([import_node_path4.default.join(dir, filename)]) };
 var failedOf = (d) => ({
   kind: "failed",
   reason: `${d.path}: ${d.reason}`
@@ -47580,7 +46336,7 @@ var WatcherRegistry = class {
   heard(dir, handle, changed) {
     const { state } = dir;
     if (!heldBy(state, handle)) return;
-    const moved = changed === import_node_path13.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== state.bound;
+    const moved = changed === import_node_path4.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== state.bound;
     for (const { slot, filter } of dir.listeners) {
       if (filter === null || changed === null || filter.has(changed) || moved)
         this.fire(slot, namedOf(dir.path, changed));
@@ -47680,7 +46436,7 @@ var WatcherRegistry = class {
 
 // src/daemon/cache/file-events.ts
 init_globals();
-var import_node_path14 = __toESM(require_path_browserify(), 1);
+var import_node_path5 = __toESM(require_path_browserify(), 1);
 var PROBE_EVERY_MS = 3e4;
 var STALL_AFTER = 2;
 var PROBE_FILE = "probe";
@@ -47856,7 +46612,7 @@ var FileEventDelivery = class {
     }
     try {
       await fs_default.promises.writeFile(
-        import_node_path14.default.join(inst.folder, PROBE_FILE),
+        import_node_path5.default.join(inst.folder, PROBE_FILE),
         String(at)
       );
     } catch (e) {
@@ -52158,6 +50914,25 @@ function readPending(e) {
 
 // src/var-system/store.ts
 init_globals();
+
+// src/utils/outcome.ts
+init_globals();
+function ok(value) {
+  return { kind: "ok", value };
+}
+var ABSENT2 = { kind: "absent" };
+function failed(reason) {
+  return { kind: "failed", reason };
+}
+function orElse(outcome, fallback) {
+  return outcome?.kind === "ok" ? outcome.value : fallback;
+}
+var PENDING = { kind: "pending" };
+function isPending(value) {
+  return value === PENDING;
+}
+
+// src/var-system/store.ts
 var unwritten = (value) => value === PENDING;
 var BoxNode = class {
   constructor(name, type3, initial2, clock) {
@@ -54211,7 +52986,7 @@ var SourceRegistry = class _SourceRegistry {
     this.cleanups.push(() => clearSettling?.());
     return (raw) => {
       clearSettling?.();
-      const read2 = raw.kind === "ok" && raw.value.trim() === "" ? ABSENT : raw;
+      const read2 = raw.kind === "ok" && raw.value.trim() === "" ? ABSENT2 : raw;
       const outcome = parsed(read2, jsonParser, where);
       this.noteOutcome(name, outcome);
       const next = outcome.kind === "ok" || read2.kind === "ok" || varDefault === void 0 ? outcome : fallback;
@@ -55249,9 +54024,10 @@ Subcommands:
                            ~/.claude/settings.json. Re-run to update.
   install-url-handler      Just stage the runtime and create + register the URL
                            handler app (macOS only).
-  url-handle URL           Internal \u2014 invoked by the URL handler app on
-                           cmd-click. Parses cc-candybar://<verb>/<value> and
-                           dispatches (currently: copy to clipboard).
+  url-handle URL           Internal \u2014 the tmux status line's click binding
+                           runs it. Sends a cc-candybar:// link to the daemon
+                           as a click. A link clicked in a terminal goes
+                           through the URL handler app instead.
   plugin install SOURCE    Install a repository's plugins into
                            $XDG_DATA_HOME/cc-candybar/plugins: SOURCE is a
                            local path, a GitHub slug (owner/repo) or a git URL,
@@ -55337,12 +54113,12 @@ init_globals();
 
 // src/utils/user-path.ts
 init_globals();
-var import_node_path15 = __toESM(require_path_browserify(), 1);
+var import_node_path6 = __toESM(require_path_browserify(), 1);
 function expandHome(p2, home) {
   return p2 === "~" || p2.startsWith("~/") || p2.startsWith("~\\") ? home + p2.slice(1) : p2;
 }
 function resolveUserPath(base, p2, home) {
-  return import_node_path15.default.resolve(base, expandHome(p2, home));
+  return import_node_path6.default.resolve(base, expandHome(p2, home));
 }
 function explicitConfigPath(base, p2, home) {
   return typeof p2 === "string" && p2 !== "" ? resolveUserPath(base, p2, home) : void 0;
@@ -56043,6 +54819,348 @@ function renderStripCells(cells, options) {
   );
 }
 
+// src/claude-settings.ts
+init_globals();
+var import_node_path7 = __toESM(require_path_browserify(), 1);
+
+// src/utils/transcript-fs.ts
+init_globals();
+function statStamp(filePath2) {
+  if (!filePath2) return "";
+  try {
+    return stampOf(statSync(filePath2));
+  } catch {
+    return "";
+  }
+}
+function stampOf(st) {
+  return `${st.mtimeMs}:${st.size}`;
+}
+var TRANSCRIPT_FS_CONCURRENCY = 8;
+var Limiter = class {
+  slots;
+  // FIFO wait queue as a singly-linked list: enqueue at `tail`, dequeue at
+  // `head`, both O(1) with no array reindexing (Array.shift would be O(n), so a
+  // drain of the thousands-of-queued-ops burst this limiter exists to absorb
+  // would be O(n²) on the render hot path). A dequeued node is immediately
+  // unreferenced, so a continuously-saturated queue retains only the waiters
+  // currently parked — no consumed-prefix accumulates, unlike a head-index
+  // array that only reclaims on full drain.
+  head = null;
+  tail = null;
+  constructor(max2) {
+    this.slots = max2;
+  }
+  async run(task) {
+    await this.acquire();
+    try {
+      return await task();
+    } finally {
+      this.release();
+    }
+  }
+  async acquire() {
+    if (this.slots > 0) {
+      this.slots--;
+      return;
+    }
+    await new Promise((wake) => {
+      const node = { wake, next: null };
+      if (this.tail) this.tail.next = node;
+      else this.head = node;
+      this.tail = node;
+    });
+  }
+  release() {
+    const node = this.head;
+    if (!node) {
+      this.slots++;
+      return;
+    }
+    this.head = node.next;
+    if (!this.head) this.tail = null;
+    node.wake();
+  }
+};
+var gate = new Limiter(TRANSCRIPT_FS_CONCURRENCY);
+function gated(fn) {
+  return ((...args) => gate.run(() => fn(...args)));
+}
+var readdir2 = gated(readdir);
+var stat2 = gated(stat);
+var FOLD_WINDOW_BYTES = 512 * 1024;
+var totals = { reads: 0, bytes: 0, longLines: 0, largestLine: 0 };
+function transcriptReads() {
+  return { ...totals };
+}
+var windows = [];
+function giveBack(window2) {
+  if (windows.length < TRANSCRIPT_FS_CONCURRENCY) windows.push(window2);
+}
+async function readAppended(path42, prior, until2) {
+  return gate.run(async () => {
+    const window2 = windows.pop() ?? import_buffer.Buffer.allocUnsafe(FOLD_WINDOW_BYTES);
+    const read2 = await readWholeLines(path42, prior, until2, window2);
+    if (read2.kind !== "ok") {
+      giveBack(window2);
+      return read2;
+    }
+    let lent = window2;
+    return ok({
+      ...read2.value,
+      [Symbol.dispose]: () => {
+        if (lent !== void 0) giveBack(lent);
+        lent = void 0;
+      }
+    });
+  });
+}
+function decodeLines(read2, decode) {
+  var _stack = [];
+  try {
+    const lent = __using(_stack, read2);
+    return decode(lent.lines);
+  } catch (_) {
+    var _error = _, _hasError = true;
+  } finally {
+    __callDispose(_stack, _error, _hasError);
+  }
+}
+async function readWholeLines(path42, prior, until2, window2) {
+  let fh = null;
+  try {
+    fh = await open(path42, "r");
+    const st = await fh.stat();
+    const { size, ino } = st;
+    const stamp2 = stampOf(st);
+    const reset = prior !== void 0 && (ino !== prior.ino || size < prior.offset);
+    const start = reset || prior === void 0 ? 0 : prior.offset;
+    const end = reset || until2 === void 0 ? size : Math.min(size, until2);
+    let bytesRead = 0;
+    const first2 = await readInto(fh, window2.subarray(0, end - start), start);
+    bytesRead += first2.length;
+    let lastNl = first2.lastIndexOf(10);
+    let reached = start + first2.length;
+    let shortRead = first2.length < Math.min(window2.length, end - start);
+    while (lastNl < 0 && reached < end && !shortRead) {
+      const next = await readInto(
+        fh,
+        window2.subarray(0, end - reached),
+        reached
+      );
+      bytesRead += next.length;
+      const nl = next.indexOf(10);
+      if (nl >= 0) lastNl = reached - start + nl;
+      shortRead = next.length < Math.min(window2.length, end - reached);
+      reached += next.length;
+    }
+    const bytes = lastNl + 1;
+    const longLine = bytes > window2.length ? bytes : 0;
+    const wholeLines = longLine > 0 ? await readInto(fh, import_buffer.Buffer.allocUnsafe(bytes), start) : first2.subarray(0, bytes);
+    bytesRead += longLine > 0 ? wholeLines.length : 0;
+    const complete = wholeLines.length === bytes;
+    totals.reads++;
+    totals.bytes += bytesRead;
+    totals.longLines += longLine > 0 ? 1 : 0;
+    totals.largestLine = Math.max(totals.largestLine, longLine);
+    return ok({
+      lines: complete ? wholeLines : wholeLines.subarray(0, 0),
+      start,
+      // A long line was found by its newline alone, so lines after it may
+      // still be unread; otherwise the read saw everything up to its end.
+      atEnd: !complete || (longLine > 0 ? start + bytes >= end : reached >= end || shortRead),
+      size,
+      stamp: stamp2,
+      ino,
+      reset,
+      longLine
+    });
+  } catch (e) {
+    if (e.code === "ENOENT") return ABSENT2;
+    return failed(
+      `readAppended ${path42}: ${e instanceof Error ? e.message : String(e)}`
+    );
+  } finally {
+    await fh?.close().catch((e) => {
+      debug(
+        `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
+      );
+    });
+  }
+}
+async function readInto(fh, buf, position) {
+  let off = 0;
+  while (off < buf.length) {
+    const { bytesRead } = await fh.read(
+      buf,
+      off,
+      buf.length - off,
+      position + off
+    );
+    if (bytesRead === 0) break;
+    off += bytesRead;
+  }
+  return buf.subarray(0, off);
+}
+async function readTail(path42, maxBytes) {
+  return gate.run(async () => {
+    let fh = null;
+    try {
+      fh = await open(path42, "r");
+      const { size } = await fh.stat();
+      const start = Math.max(0, size - maxBytes);
+      return ok({
+        buf: await readInto(fh, import_buffer.Buffer.alloc(size - start), start),
+        fromStart: start === 0
+      });
+    } catch (e) {
+      if (e.code === "ENOENT") return ABSENT2;
+      return failed(
+        `readTail ${path42}: ${e instanceof Error ? e.message : String(e)}`
+      );
+    } finally {
+      await fh?.close().catch((e) => {
+        debug(
+          `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
+        );
+      });
+    }
+  });
+}
+function readTailSync(path42, maxBytes) {
+  let fd;
+  try {
+    fd = openSync(path42, constants.O_RDONLY | constants.O_NONBLOCK);
+  } catch (e) {
+    const { code } = e;
+    if (code === "ENOENT" || code === "ENOTDIR") return ABSENT2;
+    return failed(e instanceof Error ? e.message : String(e));
+  }
+  try {
+    const stat3 = fstatSync(fd, { bigint: true });
+    if (!stat3.isFile()) return failed("not a regular file");
+    const size = Number(stat3.size);
+    const start = Math.max(0, size - maxBytes);
+    const buf = import_buffer.Buffer.alloc(size - start);
+    let off = 0;
+    while (off < buf.length) {
+      const n = readSync(fd, buf, off, buf.length - off, start + off);
+      if (n === 0) break;
+      off += n;
+    }
+    return ok({
+      buf: buf.subarray(0, off),
+      fromStart: start === 0,
+      file: `${stat3.dev}:${stat3.ino}`
+    });
+  } catch (e) {
+    return failed(e instanceof Error ? e.message : String(e));
+  } finally {
+    try {
+      closeSync(fd);
+    } catch (e) {
+      debug(
+        `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
+      );
+    }
+  }
+}
+
+// src/claude-settings.ts
+var CLAUDE_CONFIG_DIR_ENV = "CLAUDE_CONFIG_DIR";
+function claudeConfigDir(detected, home) {
+  return detected ?? import_node_path7.default.join(home, ".claude");
+}
+function claudeSettingsPath(configDir) {
+  return import_node_path7.default.join(configDir, "settings.json");
+}
+function readSettingsFile(settingsPath) {
+  const read2 = readTailSync(settingsPath, Number.MAX_SAFE_INTEGER);
+  switch (read2.kind) {
+    case "absent":
+      return null;
+    case "failed":
+      throw new Error(`cannot read ${settingsPath}: ${read2.reason}`);
+    case "ok":
+      return { text: read2.value.buf.toString("utf8"), file: read2.value.file };
+  }
+}
+var cannotRead = (settingsPath, e) => new Error(`cannot read ${settingsPath}: ${messageOf(e)}`, { cause: e });
+function readClaudeSettingsText(settingsPath) {
+  return readSettingsFile(settingsPath)?.text ?? "";
+}
+function readClaudeSettings(settingsPath) {
+  return parseSettings(settingsPath, readClaudeSettingsText(settingsPath));
+}
+function parseSettings(settingsPath, text4) {
+  let parsed2;
+  try {
+    if (/^\s*$/.test(text4)) return {};
+    parsed2 = JSON_DIALECT.parse(text4);
+  } catch (e) {
+    throw cannotRead(settingsPath, e);
+  }
+  if (!isJsonObject(parsed2)) {
+    throw new Error(`cannot read ${settingsPath}: not a JSON object`);
+  }
+  return parsed2;
+}
+function claudeManagedSettingsDir(platform3) {
+  switch (platform3) {
+    case "darwin":
+      return "/Library/Application Support/ClaudeCode";
+    case "win32":
+      return "C:\\Program Files\\ClaudeCode";
+    default:
+      return "/etc/claude-code";
+  }
+}
+var projectLocalSettingsFile = (projectDir) => import_node_path7.default.join(projectDir, ".claude", "settings.local.json");
+function readSettingsChain(at) {
+  const dropIns = import_node_path7.default.join(at.managedDir, "managed-settings.d");
+  const located = [
+    ...visibleJsonFiles(dropIns).reverse().map((name) => ({
+      scope: "managed",
+      path: import_node_path7.default.join(dropIns, name)
+    })),
+    {
+      scope: "managed",
+      path: import_node_path7.default.join(at.managedDir, "managed-settings.json")
+    },
+    {
+      scope: "project-local",
+      path: projectLocalSettingsFile(at.projectDir)
+    },
+    {
+      scope: "project",
+      path: import_node_path7.default.join(at.projectDir, ".claude", "settings.json")
+    },
+    { scope: "user", path: at.userFile }
+  ];
+  const read2 = located.flatMap((l) => {
+    const file = readSettingsFile(l.path);
+    if (file === null) return [];
+    const settings = parseSettings(l.path, file.text);
+    const { env: env2 = {} } = settings;
+    if (!isJsonObject(env2)) {
+      throw new Error(`cannot read ${l.path}: \`env\` is not an object`);
+    }
+    return [{ source: { ...l, settings, env: env2 }, file: file.file }];
+  });
+  const user = read2.find((r) => r.source.scope === "user");
+  return read2.filter((r) => r.source.scope !== "project" || r.file !== user?.file).map((r) => r.source);
+}
+function visibleJsonFiles(dir) {
+  try {
+    return fs_default.readdirSync(dir).filter((name) => !name.startsWith(".") && name.endsWith(".json")).sort();
+  } catch (e) {
+    if (e.code === "ENOENT") return [];
+    throw cannotRead(dir, e);
+  }
+}
+var isJsonObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+var messageOf = (e) => e instanceof Error ? e.message : String(e);
+
 // src/daemon/render-sightings.ts
 init_globals();
 
@@ -56105,6 +55223,367 @@ var RenderSightings = class {
     return this.list(now2).filter((s) => s.sessionId === sessionId2);
   }
 };
+
+// src/daemon/limits.ts
+init_globals();
+var import_node_path8 = __toESM(require_path_browserify(), 1);
+
+// site/shims/unavailable.ts
+init_globals();
+var refuse2 = (name) => () => {
+  throw new Error(`${name} is not available in the page`);
+};
+var connect = refuse2("net.connect");
+var createServer = refuse2("net.createServer");
+var createConnection = refuse2("net.createConnection");
+var get2 = refuse2("https.get");
+var request = refuse2("https.request");
+var createInterface = refuse2("readline.createInterface");
+var createRequire = refuse2("module.createRequire");
+var json = refuse2("stream/consumers.json");
+var text3 = refuse2("stream/consumers.text");
+var writeHeapSnapshot = refuse2("v8.writeHeapSnapshot");
+var getHeapStatistics = () => ({ used_heap_size: 0, total_heap_size: 0, heap_size_limit: 0 });
+var unavailable_default = { connect, createServer, createConnection, get: get2, request, createInterface, createRequire, json, text: text3, writeHeapSnapshot, getHeapStatistics };
+
+// src/daemon/memory-report.ts
+init_globals();
+var PROBE_TIMEOUT_MS = 5e3;
+async function memoryReport(probes) {
+  const refusals = [];
+  for (const probe2 of probes) {
+    const outcome = await probe2.read();
+    if (outcome.kind === "text") {
+      return `# memory report from: ${probe2.name}
+${outcome.text}`;
+    }
+    refusals.push(`# ${probe2.name}: unavailable \u2014 ${outcome.reason}`);
+  }
+  return [
+    "# memory report: no probe answered",
+    ...refusals.length > 0 ? refusals : ["# no probe is known for this platform"]
+  ].join("\n");
+}
+var FOOTPRINT = "/usr/bin/footprint";
+var VMMAP = "/usr/bin/vmmap";
+function platformProbes(launcher, platform3, pid2) {
+  if (platform3 === "darwin") {
+    return [
+      // The whole-process category table: V8's mappings, the MALLOC_* regions
+      // with their reclaimable share, and page tables, each with a size.
+      commandProbe(launcher, FOOTPRINT, ["-p", String(pid2)]),
+      // Same mappings, coarser, but present on hosts where `footprint` is not.
+      commandProbe(launcher, VMMAP, ["--summary", String(pid2)])
+    ];
+  }
+  if (platform3 === "linux") {
+    return [
+      // One line per accounting class for the whole address space — Linux's
+      // answer to `footprint`, and free (no subprocess).
+      fileProbe("/proc/self/smaps_rollup"),
+      // Always present, coarser: VmRSS and friends, so Linux never falls all
+      // the way through to "no probe answered".
+      fileProbe("/proc/self/status")
+    ];
+  }
+  return [];
+}
+function chargeProbe(launcher, platform3, pid2) {
+  return platform3 === "darwin" ? footprintCharge(
+    pid2,
+    (args) => launcher.launch({
+      bin: FOOTPRINT,
+      args,
+      timeoutMs: PROBE_TIMEOUT_MS,
+      category: "limits.charge"
+    })
+  ) : async (rss) => ({ kind: "charged", measure: "rss", bytes: rss });
+}
+function footprintCharge(pid2, run3) {
+  return async (rss) => {
+    const result = await run3([
+      "-p",
+      String(pid2),
+      "--noCategories",
+      "-f",
+      "bytes"
+    ]);
+    if (!result.ok) {
+      return {
+        kind: "stand-in",
+        bytes: rss,
+        unread: `footprint ${result.reason}${result.error !== void 0 ? `: ${result.error}` : ""}${firstLine(result.stderr)}`
+      };
+    }
+    const bytes = physFootprintOf(result.stdout);
+    return bytes === null ? {
+      kind: "stand-in",
+      bytes: rss,
+      unread: "footprint printed no phys_footprint line"
+    } : { kind: "charged", measure: "phys_footprint", bytes };
+  };
+}
+function physFootprintOf(text4) {
+  const m = /^\s*phys_footprint:\s+(\d+) B\s*$/m.exec(text4);
+  return m === null ? null : Number(m[1]);
+}
+function commandProbe(launcher, bin, args) {
+  return {
+    name: `${bin} ${args.join(" ")}`,
+    read: async () => {
+      const result = await launcher.launch({
+        bin,
+        args: [...args],
+        timeoutMs: PROBE_TIMEOUT_MS,
+        category: "limits.memory-report"
+      });
+      if (!result.ok) {
+        return {
+          kind: "unavailable",
+          reason: `${result.reason}${result.error !== void 0 ? `: ${result.error}` : ""}${firstLine(result.stderr)}`
+        };
+      }
+      return result.stdout.trim().length > 0 ? { kind: "text", text: result.stdout } : { kind: "unavailable", reason: "exited 0 but printed nothing" };
+    }
+  };
+}
+function fileProbe(path42) {
+  return {
+    name: path42,
+    read: async () => {
+      try {
+        const text4 = fs_default.readFileSync(path42, "utf8");
+        return text4.trim().length > 0 ? { kind: "text", text: text4 } : { kind: "unavailable", reason: "empty file" };
+      } catch (e) {
+        return { kind: "unavailable", reason: e.message };
+      }
+    }
+  };
+}
+function firstLine(stderr2) {
+  const line = stderr2.split("\n").map((l) => l.trim()).find((l) => l.length > 0);
+  return line === void 0 ? "" : ` (${line})`;
+}
+
+// src/daemon/limits.ts
+var RSS_LIMIT_ENV = "CC_CANDYBAR_RSS_LIMIT_MB";
+var DEFAULT_RSS_LIMIT_MB = 1024;
+function memoryLimitMb(env2) {
+  const raw = env2[RSS_LIMIT_ENV];
+  if (raw === void 0) return DEFAULT_RSS_LIMIT_MB;
+  const mb2 = /^\d+$/.test(raw) ? Number(raw) : NaN;
+  if (!Number.isSafeInteger(mb2) || mb2 <= 0) {
+    throw new Error(
+      `${RSS_LIMIT_ENV} must be a positive integer (MB), got ${JSON.stringify(raw)}`
+    );
+  }
+  return mb2;
+}
+var BYTES_PER_MB = 1024 * 1024;
+var mb = (bytes) => Math.round(bytes / BYTES_PER_MB);
+function memoryLimitBytes(env2) {
+  return memoryLimitMb(env2) * BYTES_PER_MB;
+}
+var DEFAULT_CHECK_INTERVAL = 60 * 1e3;
+var HEAP_SNAPSHOT_KEEP = 3;
+var BREACH_ARTIFACTS = {
+  memoryReport: { prefix: "memory-", suffix: ".txt" },
+  heapSnapshot: { prefix: "heap-", suffix: ".heapsnapshot" }
+};
+function laterIdentity(a, b) {
+  return a > b;
+}
+function readCharge(probed, previous) {
+  if (probed.kind === "charged") return probed;
+  const gap = previous.kind === "unmeasured" ? 0 : previous.charge.kind === "charged" ? previous.rss - previous.charge.bytes : previous.charge.gap;
+  return { ...probed, bytes: probed.bytes - gap, gap };
+}
+var NEAR_LIMIT = 0.75;
+function approachingLimit(bytes, limit) {
+  return bytes > limit * NEAR_LIMIT;
+}
+function artifactFile(dir, kind, identity2) {
+  const { prefix, suffix } = BREACH_ARTIFACTS[kind];
+  return import_node_path8.default.join(dir, `${prefix}${identity2}${suffix}`);
+}
+function breachArtifactOf(base) {
+  for (const kind of Object.keys(BREACH_ARTIFACTS)) {
+    const { prefix, suffix } = BREACH_ARTIFACTS[kind];
+    if (base.startsWith(prefix) && base.endsWith(suffix)) return kind;
+  }
+  return null;
+}
+function makeLimits(deps) {
+  const limit = deps.limitBytes ?? DEFAULT_RSS_LIMIT_MB * BYTES_PER_MB;
+  const keep2 = deps.snapshotsKeep ?? HEAP_SNAPSHOT_KEEP;
+  let triggered = false;
+  let latest = { kind: "unmeasured" };
+  let inFlight = null;
+  let disarmed = false;
+  let clearTimer;
+  function check() {
+    inFlight ??= measure3().finally(() => {
+      inFlight = null;
+    });
+    return inFlight;
+  }
+  async function measure3() {
+    if (triggered) return true;
+    const { rss, heapTotal } = deps.memoryBytes();
+    const charge = readCharge(await deps.memoryCharge(rss), latest);
+    const reading = { kind: "measured", charge, rss, heapTotal };
+    latest = reading;
+    deps.log("info", `memory ${readingFields(reading, limit)}`);
+    if (disarmed || charge.bytes <= limit) return false;
+    triggered = true;
+    deps.log(
+      "warn",
+      `${chargeWords(charge)} > limit ${mb(limit)} MB (rss ${mb(rss)} MB, v8 heap ${mb(heapTotal)} MB); recording memory then shutting down`
+    );
+    const stamp2 = new Date(deps.clock.now()).toISOString().replace(/[:.]/g, "-");
+    const identity2 = `${stamp2}-${deps.pid}`;
+    await attempt(deps.log, "memory report", async () => {
+      const file = artifactFile(deps.snapshotDir, "memoryReport", identity2);
+      const report2 = await deps.captureMemoryReport();
+      if (disarmed) return;
+      deps.writeMemoryReport(file, report2);
+      deps.log("info", `memory report written: ${file}`);
+    });
+    if (disarmed) {
+      deps.log("info", "daemon closed during the breach: no snapshot, no exit");
+      return false;
+    }
+    await attempt(deps.log, "heap snapshot", () => {
+      deps.writeLogNow();
+      const file = artifactFile(deps.snapshotDir, "heapSnapshot", identity2);
+      deps.log(
+        "info",
+        `heap snapshot written: ${deps.writeHeapSnapshot(file)}`
+      );
+    });
+    await attempt(deps.log, "artifact rotation", async () => {
+      for (const { artifacts } of postMortemsOf(deps.listArtifacts()).slice(
+        keep2
+      )) {
+        for (const file of Object.values(artifacts)) {
+          await attempt(
+            deps.log,
+            `evicting ${file}`,
+            () => deps.removeFile(file)
+          );
+        }
+      }
+    });
+    deps.shutdown(0);
+    return true;
+  }
+  function describeNextRestart() {
+    return latest.kind === "measured" && approachingLimit(latest.charge.bytes, limit) ? `${chargeWords(latest.charge)} approaching limit ${mb(limit)} MB (v8 heap ${mb(latest.heapTotal)} MB)` : null;
+  }
+  function serving() {
+    let postMortems;
+    try {
+      postMortems = { kind: "ok", value: postMortemsOf(deps.listArtifacts()) };
+    } catch (e) {
+      postMortems = { kind: "failed", reason: e.message };
+    }
+    return { pid: deps.pid, memory: latest, limit, postMortems };
+  }
+  function arm2(intervalMs = DEFAULT_CHECK_INTERVAL) {
+    const tick = async () => {
+      try {
+        if (await check()) return;
+      } catch (e) {
+        deps.log("warn", `memory check failed: ${e.message}`);
+      }
+      if (disarmed) return;
+      clearTimer = deps.clock.after(intervalMs, () => void tick(), {
+        unref: true
+      });
+    };
+    void tick();
+  }
+  function disarm() {
+    disarmed = true;
+    clearTimer?.();
+  }
+  return { check, describeNextRestart, serving, arm: arm2, disarm };
+}
+function chargeWords(charge) {
+  return charge.kind === "charged" ? `${charge.measure} ${mb(charge.bytes)} MB` : `rss ${mb(charge.bytes + charge.gap)} MB${charge.gap === 0 ? "" : ` less its last ${mb(charge.gap)} MB gap`} (standing in: ${charge.unread})`;
+}
+function measureOf(charge) {
+  return charge.kind === "charged" ? charge.measure : "rss-stand-in";
+}
+function readingFields({ charge, rss, heapTotal }, limit) {
+  const unread2 = charge.kind === "stand-in" ? ` unread=${JSON.stringify(charge.unread)} gap=${mb(charge.gap)}MB` : "";
+  return `measure=${measureOf(charge)} charge=${mb(charge.bytes)}MB rss=${mb(rss)}MB heap=${mb(heapTotal)}MB limit=${mb(limit)}MB${unread2}`;
+}
+async function attempt(log, what, body) {
+  try {
+    await body();
+  } catch (e) {
+    log("warn", `${what} failed: ${e.message}`);
+  }
+}
+function postMortemsOf(files) {
+  const byIdentity = /* @__PURE__ */ new Map();
+  for (const file of files) {
+    const base = import_node_path8.default.basename(file);
+    const kind = breachArtifactOf(base);
+    if (kind === null) continue;
+    const { prefix, suffix } = BREACH_ARTIFACTS[kind];
+    const identity2 = base.slice(prefix.length, base.length - suffix.length);
+    byIdentity.set(identity2, { ...byIdentity.get(identity2), [kind]: file });
+  }
+  const kinds = Object.keys(BREACH_ARTIFACTS);
+  return [...byIdentity].sort(([a], [b]) => laterIdentity(a, b) ? -1 : 1).map(([identity2, found]) => ({
+    identity: identity2,
+    artifacts: Object.fromEntries(
+      kinds.flatMap((k) => found[k] === void 0 ? [] : [[k, found[k]]])
+    )
+  }));
+}
+function realLimitsDeps(startedAtMs, shutdown, owner, overrides = {}) {
+  const dir = owner.snapshotDir;
+  return {
+    clock: owner.clock,
+    pid: process_default.pid,
+    snapshotDir: dir,
+    log: owner.log,
+    memoryBytes: () => {
+      const mem = process_default.memoryUsage();
+      return { rss: mem.rss, heapTotal: mem.heapTotal };
+    },
+    memoryCharge: chargeProbe(owner.launcher, process_default.platform, process_default.pid),
+    captureMemoryReport: () => memoryReport(
+      platformProbes(owner.launcher, process_default.platform, process_default.pid)
+    ),
+    // 0600 like the heap snapshot v8 writes beside it: the pair shares an
+    // identity, so it shares a permission — a post-mortem pair where one half is
+    // world-readable and the other is not invites exactly the "is this
+    // sensitive?" question at the worst moment to be asking it.
+    writeMemoryReport: (file, text4) => fs_default.writeFileSync(file, text4, { mode: 384 }),
+    writeHeapSnapshot: (file) => unavailable_default.writeHeapSnapshot(file),
+    writeLogNow: owner.writeLogNow,
+    // [LAW:no-silent-failure] A directory not yet made holds no breaches;
+    // one that cannot be read is said so — never read as "none".
+    listArtifacts: () => {
+      let names;
+      try {
+        names = fs_default.readdirSync(dir);
+      } catch (e) {
+        if (e.code === "ENOENT") return [];
+        throw e;
+      }
+      return names.filter((f) => breachArtifactOf(f) !== null).map((f) => import_node_path8.default.join(dir, f));
+    },
+    removeFile: (file) => fs_default.unlinkSync(file),
+    shutdown,
+    startedAtMs,
+    ...overrides
+  };
+}
 
 // src/doctor/terminal.ts
 init_globals();
@@ -56471,10 +55950,10 @@ function handlerAppProblems(opener) {
   if (opener.value === null) {
     return [`no app is registered for cc-candybar:// \u2014 ${REINSTALL}`];
   }
-  const { app, missing } = opener.value;
-  return missing.kind === "failed" ? [`${app} opens cc-candybar://, but ${missing.reason} \u2014 ${REINSTALL}`] : missing.value.map(
-    (file) => `${file} is missing, and ${app} runs it \u2014 ${REINSTALL}`
-  );
+  const { app, forwarder } = opener.value;
+  return forwarder ? [] : [
+    `${app} opens cc-candybar://, but it is not the forwarder app \`cc-candybar install\` builds \u2014 ${REINSTALL}`
+  ];
 }
 var urlHandler = {
   name: "urlHandler",
@@ -56487,10 +55966,14 @@ var urlHandler = {
       case "unprobed":
         return { ok: false, reason: urlHandler2.reason };
       case "arrived":
-        if (urlHandler2.handler === urlHandler2.bar) return { ok: true };
+        if (urlHandler2.delivery.kind === "forwarder") return { ok: true };
         return {
           ok: false,
-          reason: urlHandler2.handler === null ? `the URL handler does not report its version, so it is older than the bar (${urlHandler2.bar}) \u2014 ${REINSTALL}` : `the URL handler runs cc-candybar ${urlHandler2.handler}; the bar runs ${urlHandler2.bar} \u2014 ${REINSTALL}`
+          // What is known: a click request brought it, which is what the
+          // retired applet runs — and a hand-run `cc-candybar url-handle`,
+          // or the browser page. Which app Launch Services opens the scheme
+          // with is the opener's row to say (handlerAppProblems).
+          reason: `the link was delivered by a click request (\`cc-candybar url-handle\`), not the forwarder app \u2014 ${REINSTALL}`
         };
       case "lost":
         return problemsVerdict([
@@ -58128,7 +57611,7 @@ function editableUnit(child, spliced, first2, ctx) {
   ];
 }
 function fileLabel(file) {
-  return import_node_path16.default.join(import_node_path16.default.basename(import_node_path16.default.dirname(file)), import_node_path16.default.basename(file));
+  return import_node_path9.default.join(import_node_path9.default.basename(import_node_path9.default.dirname(file)), import_node_path9.default.basename(file));
 }
 function insertedUnit(child, insertedBy, spliced, ctx) {
   const decl = ctx.segments[child.name];
@@ -58369,7 +57852,7 @@ function synthesizeEditChrome(config2) {
 
 // src/config/loader/actions.ts
 init_globals();
-var import_node_path17 = __toESM(require_path_browserify(), 1);
+var import_node_path10 = __toESM(require_path_browserify(), 1);
 function validateActions(ctx, raw, home) {
   if (raw === void 0) return {};
   if (!isPlainObject(raw)) {
@@ -58424,7 +57907,7 @@ function validateActionDecl(ctx, path42, raw, home) {
 }
 function actionHomeOf(filePath2) {
   if (filePath2 === "<default>") return { dir: null };
-  return import_node_path17.default.isAbsolute(filePath2) ? { dir: import_node_path17.default.dirname(filePath2) } : { text: filePath2 };
+  return import_node_path10.default.isAbsolute(filePath2) ? { dir: import_node_path10.default.dirname(filePath2) } : { text: filePath2 };
 }
 var actionArms = (home) => ({
   set: (ctx, path42, raw) => valueSourceAction(ctx, path42, raw, "set", SET_ARMS),
@@ -59485,7 +58968,7 @@ function templateInstants(basis) {
 
 // src/config/loader/plugins.ts
 init_globals();
-var import_node_path18 = __toESM(require_path_browserify(), 1);
+var import_node_path11 = __toESM(require_path_browserify(), 1);
 var import_json52 = __toESM(require_dist(), 1);
 function droppedPluginNotice(d) {
   return `plugin ${d.path} was not loaded: ${d.reason}`;
@@ -59501,7 +58984,7 @@ var DEFINITION_KEYS = /* @__PURE__ */ new Set([
 var DEFINITION_FILE = "plugin.json5";
 var PLUGIN_NAME = /^[a-z][a-z0-9_]*$/;
 function pluginDefinition(definition, scope) {
-  const name = import_node_path18.default.basename(import_node_path18.default.dirname(definition));
+  const name = import_node_path11.default.basename(import_node_path11.default.dirname(definition));
   return PLUGIN_NAME.test(name) ? { path: definition, scope, name } : { path: definition, scope, name: void 0 };
 }
 function pluginDataVar(ns) {
@@ -59528,7 +59011,7 @@ function reasonOf(err) {
 }
 function listedPlugins(refs, from, scope, home) {
   return refs.map(
-    (ref) => pluginDefinition(resolveUserPath(import_node_path18.default.dirname(from), ref, home), scope)
+    (ref) => pluginDefinition(resolveUserPath(import_node_path11.default.dirname(from), ref, home), scope)
   );
 }
 function applyPlugins(definitions, ctx, base, validate) {
@@ -59547,7 +59030,7 @@ function applyPlugins(definitions, ctx, base, validate) {
           dropped: [...layer.dropped, { ...definition, reason }]
         };
       };
-      if (import_node_path18.default.basename(file) !== DEFINITION_FILE) {
+      if (import_node_path11.default.basename(file) !== DEFINITION_FILE) {
         const reason = `a plugin is a folder holding its ${DEFINITION_FILE}, and the folder's name is the plugin's: move this file to <dir>/<name>/${DEFINITION_FILE} and list that`;
         return drop2(
           reason,
@@ -59559,7 +59042,7 @@ function applyPlugins(definitions, ctx, base, validate) {
       }
       if (definition.name === void 0 || ns === void 0) {
         return drop2(
-          `its folder "${import_node_path18.default.basename(import_node_path18.default.dirname(file))}" is not a plugin name (one matching ${PLUGIN_NAME}: it prefixes every name the plugin declares)`,
+          `its folder "${import_node_path11.default.basename(import_node_path11.default.dirname(file))}" is not a plugin name (one matching ${PLUGIN_NAME}: it prefixes every name the plugin declares)`,
           layer.config
         );
       }
@@ -59808,7 +59291,7 @@ function fragmentOf(file, id2, { source, json: json2 }, { checkout, home }) {
     if (!DEFINITION_KEYS.has(key)) {
       issues.push({
         path: key,
-        message: key === "plugin" ? `a plugin definition does not name itself: its name is its folder's ("${import_node_path18.default.basename(import_node_path18.default.dirname(file))}") \u2014 remove "plugin"` : `a plugin definition may not declare "${key}". Expected only: ${[...DEFINITION_KEYS].join(", ")}`
+        message: key === "plugin" ? `a plugin definition does not name itself: its name is its folder's ("${import_node_path11.default.basename(import_node_path11.default.dirname(file))}") \u2014 remove "plugin"` : `a plugin definition may not declare "${key}". Expected only: ${[...DEFINITION_KEYS].join(", ")}`
       });
     }
   }
@@ -59878,7 +59361,7 @@ function fragmentOf(file, id2, { source, json: json2 }, { checkout, home }) {
       setKeysUnder(
         ns,
         validateActions(ctx, json2.actions, {
-          dir: fs_default.realpathSync(import_node_path18.default.dirname(file))
+          dir: fs_default.realpathSync(import_node_path11.default.dirname(file))
         })
       )
     )
@@ -60092,8 +59575,8 @@ function sourcesOf(sources, file, issues) {
     });
     return {};
   }
-  const storage = import_node_path18.default.join(
-    fs_default.realpathSync(import_node_path18.default.dirname(file)),
+  const storage = import_node_path11.default.join(
+    fs_default.realpathSync(import_node_path11.default.dirname(file)),
     STORAGE_FOLDER
   );
   const built = JSON.stringify(BUILT_SOURCE);
@@ -60135,7 +59618,7 @@ function requireOneSourcePerFile(file, plugin, config2) {
   if (issues.length > 0) throw new ConfigError(file, issues);
 }
 function sourceFileOf(source) {
-  return import_node_path18.default.join(source.storage, sessionFileName("<session id>"));
+  return import_node_path11.default.join(source.storage, sessionFileName("<session id>"));
 }
 function unbuilt(authored, built, at) {
   if (!isPlainObject(built) || !isPlainObject(authored)) {
@@ -60152,11 +59635,11 @@ function unbuilt(authored, built, at) {
 }
 function dataPathOf(data, file, checkout, home, issues) {
   if (typeof data === "string" && data !== "") {
-    return resolveUserPath(import_node_path18.default.dirname(file), data, home);
+    return resolveUserPath(import_node_path11.default.dirname(file), data, home);
   }
   if (isPlainObject(data) && Object.keys(data).length === 1 && typeof data.checkout === "string" && data.checkout !== "") {
     const rel = data.checkout;
-    if (import_node_path18.default.isAbsolute(rel) || rel.startsWith("~") || import_node_path18.default.normalize(rel).split(import_node_path18.default.sep)[0] === "..") {
+    if (import_node_path11.default.isAbsolute(rel) || rel.startsWith("~") || import_node_path11.default.normalize(rel).split(import_node_path11.default.sep)[0] === "..") {
       issues.push({
         path: "data.checkout",
         message: `data.checkout "${rel}" must be a path inside the checkout, relative to its root (like ".lit/statusline.json"): no absolute path, "~" or ".."`
@@ -60170,7 +59653,7 @@ function dataPathOf(data, file, checkout, home, issues) {
       });
       return void 0;
     }
-    return import_node_path18.default.resolve(checkout.root, rel);
+    return import_node_path11.default.resolve(checkout.root, rel);
   }
   if (isPlainObject(data) && "project" in data) {
     issues.push({
@@ -61125,21 +60608,21 @@ function validateNoNesting(ctx, cfg, names) {
 
 // src/config/loader/plugin-folders.ts
 init_globals();
-var import_node_path19 = __toESM(require_path_browserify(), 1);
+var import_node_path12 = __toESM(require_path_browserify(), 1);
 function pluginRoots(locs, repo2) {
   const installed = [
-    ...[...locs.dataDirs].reverse().map((d) => import_node_path19.default.join(d, "cc-candybar", "plugins")),
+    ...[...locs.dataDirs].reverse().map((d) => import_node_path12.default.join(d, "cc-candybar", "plugins")),
     userPluginRoot(locs)
   ];
   return [
     ...installed.filter((r, i) => installed.lastIndexOf(r) === i).map((dir) => ({ dir, scope: "plugins" })),
-    ...repo2 === null ? [] : [{ dir: import_node_path19.default.join(repo2, REPO_PLUGIN_DIR), scope: "repo" }]
+    ...repo2 === null ? [] : [{ dir: import_node_path12.default.join(repo2, REPO_PLUGIN_DIR), scope: "repo" }]
   ];
 }
 function userPluginRoot(locs) {
-  return import_node_path19.default.join(locs.dataHome, "cc-candybar", "plugins");
+  return import_node_path12.default.join(locs.dataHome, "cc-candybar", "plugins");
 }
-var REPO_PLUGIN_DIR = import_node_path19.default.join(".cc-candybar", "plugins");
+var REPO_PLUGIN_DIR = import_node_path12.default.join(".cc-candybar", "plugins");
 function installedPlugins(locs, repo2) {
   const roots = pluginRoots(locs, repo2);
   const byNs = /* @__PURE__ */ new Map();
@@ -61153,7 +60636,7 @@ function installedPlugins(locs, repo2) {
     }
     for (const name of listed.folders) {
       const definition = pluginDefinition(
-        import_node_path19.default.join(root, name, DEFINITION_FILE),
+        import_node_path12.default.join(root, name, DEFINITION_FILE),
         scope
       );
       const key = `${scope}\0${name}`;
@@ -61162,10 +60645,10 @@ function installedPlugins(locs, repo2) {
     }
     for (const file of listed.files) {
       strays.push({
-        path: import_node_path19.default.join(root, file),
+        path: import_node_path12.default.join(root, file),
         scope,
         name: void 0,
-        reason: `a plugin is a folder holding its ${DEFINITION_FILE}: move this file to ${import_node_path19.default.join(root, "<name>", DEFINITION_FILE)}`
+        reason: `a plugin is a folder holding its ${DEFINITION_FILE}: move this file to ${import_node_path12.default.join(root, "<name>", DEFINITION_FILE)}`
       });
     }
   }
@@ -61191,7 +60674,7 @@ function listFolders(root) {
 function isDirectoryLink(root, e) {
   if (!e.isSymbolicLink()) return false;
   try {
-    return fs_default.statSync(import_node_path19.default.join(root, e.name)).isDirectory();
+    return fs_default.statSync(import_node_path12.default.join(root, e.name)).isDirectory();
   } catch {
     return true;
   }
@@ -61199,45 +60682,45 @@ function isDirectoryLink(root, e) {
 
 // src/utils/git-root.ts
 init_globals();
-var import_node_path20 = __toESM(require_path_browserify(), 1);
+var import_node_path13 = __toESM(require_path_browserify(), 1);
 function holdsGit(dir) {
-  return fs_default.existsSync(import_node_path20.default.join(dir, ".git"));
+  return fs_default.existsSync(import_node_path13.default.join(dir, ".git"));
 }
 function gitRootOf(start) {
-  let dir = import_node_path20.default.resolve(start);
+  let dir = import_node_path13.default.resolve(start);
   for (; ; ) {
     if (holdsGit(dir)) return dir;
-    const parent = import_node_path20.default.dirname(dir);
+    const parent = import_node_path13.default.dirname(dir);
     if (parent === dir) return void 0;
     dir = parent;
   }
 }
 function checkoutOf(cwd2) {
   const root = gitRootOf(cwd2);
-  return root === void 0 ? { root: import_node_path20.default.resolve(cwd2), git: false } : { root, git: true };
+  return root === void 0 ? { root: import_node_path13.default.resolve(cwd2), git: false } : { root, git: true };
 }
 function probe(read2) {
   try {
     return ok(read2());
   } catch (e) {
-    return e.code === "ENOENT" ? ABSENT : failed(e.message);
+    return e.code === "ENOENT" ? ABSENT2 : failed(e.message);
   }
 }
 var realDir = (p2) => probe(() => fs_default.realpathSync.native(p2));
 var why = (what, o) => o.kind === "absent" ? `${what} is not there` : o.reason;
 function gitDirNamed(root) {
-  const text4 = probe(() => fs_default.readFileSync(import_node_path20.default.join(root, ".git"), "utf-8"));
+  const text4 = probe(() => fs_default.readFileSync(import_node_path13.default.join(root, ".git"), "utf-8"));
   if (text4.kind !== "ok") return text4;
   const named3 = text4.value.match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
-  return named3 === void 0 ? failed(`${import_node_path20.default.join(root, ".git")} names no gitdir`) : ok(import_node_path20.default.resolve(root, named3));
+  return named3 === void 0 ? failed(`${import_node_path13.default.join(root, ".git")} names no gitdir`) : ok(import_node_path13.default.resolve(root, named3));
 }
 function commonDirOf(gitDir) {
   const text4 = probe(
-    () => fs_default.readFileSync(import_node_path20.default.join(gitDir, "commondir"), "utf-8")
+    () => fs_default.readFileSync(import_node_path13.default.join(gitDir, "commondir"), "utf-8")
   );
   if (text4.kind !== "ok") return text4;
   const common = text4.value.trim();
-  return common === "" ? failed(`${import_node_path20.default.join(gitDir, "commondir")} is empty`) : ok(import_node_path20.default.resolve(gitDir, common));
+  return common === "" ? failed(`${import_node_path13.default.join(gitDir, "commondir")} is empty`) : ok(import_node_path13.default.resolve(gitDir, common));
 }
 var UNLINKED = { kind: "unlinked" };
 var unproven = (reason) => ({
@@ -61247,7 +60730,7 @@ var unproven = (reason) => ({
 function worktreeLink(dir) {
   const root = gitRootOf(dir);
   if (root === void 0) return UNLINKED;
-  const dotGit = import_node_path20.default.join(root, ".git");
+  const dotGit = import_node_path13.default.join(root, ".git");
   const followed = probe(() => fs_default.statSync(dotGit));
   if (followed.kind === "ok" && followed.value.isDirectory()) return UNLINKED;
   const entry = probe(() => fs_default.lstatSync(dotGit));
@@ -61262,34 +60745,34 @@ function worktreeLink(dir) {
   if (common.kind === "failed") return unproven(common.reason);
   const realCommon = realDir(common.value);
   if (realCommon.kind !== "ok") return unproven(why(common.value, realCommon));
-  if (import_node_path20.default.dirname(gitDir.value) !== import_node_path20.default.join(realCommon.value, "worktrees")) {
+  if (import_node_path13.default.dirname(gitDir.value) !== import_node_path13.default.join(realCommon.value, "worktrees")) {
     return unproven(`${gitDir.value} is not a worktree of ${realCommon.value}`);
   }
-  const backFile = import_node_path20.default.join(gitDir.value, "gitdir");
+  const backFile = import_node_path13.default.join(gitDir.value, "gitdir");
   const back2 = probe(() => fs_default.readFileSync(backFile, "utf-8"));
   if (back2.kind !== "ok") return unproven(why(backFile, back2));
-  const pointer = import_node_path20.default.resolve(gitDir.value, back2.value.trim());
-  const pointerDir = realDir(import_node_path20.default.dirname(pointer));
-  if (import_node_path20.default.basename(pointer) !== ".git" || pointerDir.kind !== "ok" || pointerDir.value !== root) {
+  const pointer = import_node_path13.default.resolve(gitDir.value, back2.value.trim());
+  const pointerDir = realDir(import_node_path13.default.dirname(pointer));
+  if (import_node_path13.default.basename(pointer) !== ".git" || pointerDir.kind !== "ok" || pointerDir.value !== root) {
     return unproven(
       `${gitDir.value} is the worktree at ${pointer}, not ${root}`
     );
   }
-  const main = import_node_path20.default.basename(realCommon.value) === ".git" ? import_node_path20.default.dirname(realCommon.value) : realCommon.value;
-  return { kind: "linked", main: import_node_path20.default.join(main, import_node_path20.default.relative(root, dir)) };
+  const main = import_node_path13.default.basename(realCommon.value) === ".git" ? import_node_path13.default.dirname(realCommon.value) : realCommon.value;
+  return { kind: "linked", main: import_node_path13.default.join(main, import_node_path13.default.relative(root, dir)) };
 }
 function checkoutLocation(dir) {
   const real = realDir(dir);
-  const at = real.kind === "ok" ? real.value : import_node_path20.default.resolve(dir);
+  const at = real.kind === "ok" ? real.value : import_node_path13.default.resolve(dir);
   const root = gitRootOf(at);
   if (root === void 0)
     return { main: "", worktree: "", subpath: "", noRepo: true };
-  const sub2 = import_node_path20.default.relative(root, at);
-  const subpath = sub2 === "" ? "" : `/${sub2.split(import_node_path20.default.sep).join("/")}`;
+  const sub2 = import_node_path13.default.relative(root, at);
+  const subpath = sub2 === "" ? "" : `/${sub2.split(import_node_path13.default.sep).join("/")}`;
   const link = worktreeLink(at);
   return link.kind === "linked" ? {
-    main: import_node_path20.default.resolve(link.main, import_node_path20.default.relative(at, root)),
-    worktree: import_node_path20.default.basename(root),
+    main: import_node_path13.default.resolve(link.main, import_node_path13.default.relative(at, root)),
+    worktree: import_node_path13.default.basename(root),
     subpath,
     noRepo: false
   } : { main: root, worktree: "", subpath, noRepo: false };
@@ -61297,7 +60780,7 @@ function checkoutLocation(dir) {
 
 // src/config/loader/discovery.ts
 init_globals();
-var import_node_path21 = __toESM(require_path_browserify(), 1);
+var import_node_path14 = __toESM(require_path_browserify(), 1);
 
 // src/utils/presence.ts
 init_globals();
@@ -61382,10 +60865,10 @@ function dslConfigCandidatePaths(locs, projectDir, cwd2, configFile) {
   return [
     .../* @__PURE__ */ new Set([
       ...projectDir ? CONFIG_EXTENSIONS.map(
-        (ext) => import_node_path21.default.join(projectDir, `${REPO_CONFIG_BASE}.${ext}`)
+        (ext) => import_node_path14.default.join(projectDir, `${REPO_CONFIG_BASE}.${ext}`)
       ) : [],
       ...CONFIG_EXTENSIONS.map(
-        (ext) => import_node_path21.default.join(effectiveCwd, `${REPO_CONFIG_BASE}.${ext}`)
+        (ext) => import_node_path14.default.join(effectiveCwd, `${REPO_CONFIG_BASE}.${ext}`)
       ),
       ...CONFIG_EXTENSIONS.map((ext) => `${xdgConfigBase(locs)}.${ext}`)
     ])
@@ -61393,7 +60876,7 @@ function dslConfigCandidatePaths(locs, projectDir, cwd2, configFile) {
 }
 var REPO_CONFIG_BASE = ".cc-candybar";
 function xdgConfigBase(locs) {
-  return import_node_path21.default.join(locs.configHome, "cc-candybar", "config");
+  return import_node_path14.default.join(locs.configHome, "cc-candybar", "config");
 }
 function homeLayer(path42) {
   return { path: path42, scope: "plugins" };
@@ -61413,10 +60896,10 @@ function resolveDslConfig(locs, answers, projectDir, cwd2, configFile) {
       unchecked.push(p2);
       continue;
     }
-    const dir = fs_default.realpathSync.native(import_node_path21.default.dirname(candidate));
-    const location = import_node_path21.default.join(
+    const dir = fs_default.realpathSync.native(import_node_path14.default.dirname(candidate));
+    const location = import_node_path14.default.join(
       dir,
-      import_node_path21.default.basename(candidate).replace(/\.(json5|json)$/, "")
+      import_node_path14.default.basename(candidate).replace(/\.(json5|json)$/, "")
     );
     if (!atLocation.has(location)) {
       atLocation.set(location, {
@@ -61463,7 +60946,7 @@ function repoProject(projectDir) {
   if (projectDir === void 0 || presence(projectDir) !== "present") {
     return null;
   }
-  const listed = listFolders(import_node_path21.default.join(projectDir, REPO_PLUGIN_DIR));
+  const listed = listFolders(import_node_path14.default.join(projectDir, REPO_PLUGIN_DIR));
   const dir = fs_default.realpathSync.native(projectDir);
   return {
     dir,
@@ -61511,9 +60994,9 @@ function detectConfigCollisions(locs, projectDir, cwd2) {
   );
   const groups = /* @__PURE__ */ new Map();
   for (const candidate of existing) {
-    const dir = import_node_path21.default.dirname(candidate);
-    const base = import_node_path21.default.basename(candidate).replace(/\.(json5|json)$/, "");
-    const key = import_node_path21.default.join(dir, base);
+    const dir = import_node_path14.default.dirname(candidate);
+    const base = import_node_path14.default.basename(candidate).replace(/\.(json5|json)$/, "");
+    const key = import_node_path14.default.join(dir, base);
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(candidate);
   }
@@ -64534,7 +64017,7 @@ function spliceOp(text4, path42, op, rendered) {
 
 // src/daemon/settings-history.ts
 init_globals();
-var import_node_path22 = __toESM(require_path_browserify(), 1);
+var import_node_path15 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/session-state.ts
 init_globals();
@@ -65180,7 +64663,7 @@ function fileHistoryStorage(file, logger) {
     },
     save: (state) => {
       try {
-        fs_default.mkdirSync(import_node_path22.default.dirname(file), { recursive: true });
+        fs_default.mkdirSync(import_node_path15.default.dirname(file), { recursive: true });
         writeAtomic(file, JSON.stringify(state), 384);
       } catch (e) {
         const message = `settings-history write failed \u2014 the change landed but is not undoable: ${e.message}`;
@@ -65193,13 +64676,13 @@ function fileHistoryStorage(file, logger) {
 
 // src/daemon/repo-configs.ts
 init_globals();
-var import_node_path24 = __toESM(require_path_browserify(), 1);
+var import_node_path17 = __toESM(require_path_browserify(), 1);
 
 // src/doctor/state-file.ts
 init_globals();
-var import_node_path23 = __toESM(require_path_browserify(), 1);
+var import_node_path16 = __toESM(require_path_browserify(), 1);
 function stateFile(dir, name, empty2, parse3) {
-  const file = import_node_path23.default.join(dir, name);
+  const file = import_node_path16.default.join(dir, name);
   const read2 = () => {
     let text4;
     try {
@@ -65239,6 +64722,50 @@ function stateFile(dir, name, empty2, parse3) {
 
 // src/render/diagnostics.ts
 init_globals();
+
+// site/shims/crypto.ts
+init_globals();
+var import_buffer3 = __toESM(require_buffer(), 1);
+function fnv(text4) {
+  let h = 2166136261;
+  for (let i = 0; i < text4.length; i++) h = Math.imul(h ^ text4.charCodeAt(i), 16777619) >>> 0;
+  return h.toString(16).padStart(8, "0").repeat(8);
+}
+function createHash(_alg) {
+  let acc = "";
+  const h = {
+    update(d) {
+      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
+      return h;
+    },
+    digest(_enc2) {
+      return fnv(acc);
+    }
+  };
+  return h;
+}
+function createHmac(_alg, key) {
+  let acc = import_buffer3.Buffer.from(key).toString("hex");
+  const h = {
+    update(d) {
+      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
+      return h;
+    },
+    digest() {
+      return import_buffer3.Buffer.from(fnv(acc), "hex");
+    }
+  };
+  return h;
+}
+function timingSafeEqual(a, b) {
+  if (a.length !== b.length) throw new RangeError("Input buffers must have the same byte length");
+  return a.every((byte, i) => byte === b[i]);
+}
+var randomUUID = () => globalThis.crypto.randomUUID();
+var randomBytes = (n) => globalThis.crypto.getRandomValues(new Uint8Array(n));
+var crypto_default = { createHash, createHmac, timingSafeEqual, randomUUID, randomBytes };
+
+// src/render/diagnostics.ts
 var ERROR_SEVERITY = {
   level: "error",
   glyph: "\u26A0",
@@ -65471,10 +64998,10 @@ function channelRows(message, opts, trailing) {
 var REPO_CONFIGS_FILE = "repo-configs.json";
 var REPO_CONFIGS_DIR = "repo-configs";
 function repoConfigsDir(dir) {
-  return import_node_path24.default.join(dir, REPO_CONFIGS_DIR);
+  return import_node_path17.default.join(dir, REPO_CONFIGS_DIR);
 }
 function repoConfigsPath(dir) {
-  return import_node_path24.default.join(repoConfigsDir(dir), REPO_CONFIGS_FILE);
+  return import_node_path17.default.join(repoConfigsDir(dir), REPO_CONFIGS_FILE);
 }
 var repoConfigs = (dir) => {
   const book = stateFile(
@@ -65572,6 +65099,133 @@ function sessionEnv(facts) {
   };
 }
 
+// src/daemon/protocol.ts
+init_globals();
+var import_node_path18 = __toESM(require_path_browserify(), 1);
+
+// src/terminal-hint.ts
+init_globals();
+var TERMINAL_ENV_VARS = [
+  // iTerm2 (`iTerm.app`), Ghostty (`ghostty`), WezTerm (`WezTerm`), and the
+  // version beside it. Inside tmux it is tmux's own `tmux`.
+  "TERM_PROGRAM",
+  "TERM_PROGRAM_VERSION",
+  // kitty (`xterm-kitty`) and Alacritty (`alacritty`) name themselves here.
+  "TERM",
+  // The iTerm2 profile the session's window was opened with.
+  "ITERM_PROFILE",
+  // Where a terminal that reads a config file (Alacritty) finds it.
+  "XDG_CONFIG_HOME"
+];
+
+// src/client-hint.ts
+init_globals();
+var CLIENT_KINDS = ["native", "node", "frames"];
+
+// src/daemon/protocol.ts
+var PROTOCOL_VERSION = 3;
+var CONNECT_TIMEOUT_MS = 50;
+var TOTAL_BUDGET_MS = 150;
+var RENDER_ENCODINGS = ["ansi", "frame"];
+var CLIENT_HINT_FIELDS = Object.keys({
+  termCols: true,
+  termRows: true,
+  ssh: true,
+  tmux: true,
+  configEnv: true,
+  claudeConfigDir: true,
+  terminalEnv: true,
+  client: true
+});
+function parseClientHints(req) {
+  const termCols = sanitizeTermExtent(req.termCols);
+  const termRows = sanitizeTermExtent(req.termRows);
+  const ssh = sanitizeSsh(req.ssh);
+  const tmux3 = sanitizeTmux(req.tmux);
+  const configEnv = sanitizeAbsolutePath(req.configEnv);
+  const claudeConfigDir2 = sanitizeAbsolutePath(req.claudeConfigDir);
+  const terminalEnv = sanitizeTerminalEnv(req.terminalEnv);
+  const client = sanitizeClient(req.client);
+  return {
+    ...termCols !== void 0 && { termCols },
+    ...termRows !== void 0 && { termRows },
+    ...ssh !== void 0 && { ssh },
+    ...tmux3 !== void 0 && { tmux: tmux3 },
+    ...configEnv !== void 0 && { configEnv },
+    ...claudeConfigDir2 !== void 0 && { claudeConfigDir: claudeConfigDir2 },
+    ...terminalEnv !== void 0 && { terminalEnv },
+    ...client !== void 0 && { client }
+  };
+}
+function refusedHints(req, hints) {
+  return CLIENT_HINT_FIELDS.filter(
+    (k) => req[k] !== void 0 && hints[k] === void 0
+  ).map((hint) => ({ hint, sent: req[hint] }));
+}
+function refusedHintsError(refused) {
+  return refused.length === 0 ? null : `Client hints refused: ${refused.map(({ hint, sent }) => `${hint}=${JSON.stringify(sent)}`).join(
+    ", "
+  )} \u2014 is the statusline client older than the daemon? Reinstall it (\`cc-candybar install\`, or \`just install-rust\` in a checkout).`;
+}
+var REFUSAL_LINES = {
+  unknown: (args) => `Unknown flags: ${args}`,
+  // Only the last `--config` can lack a file, and it wins, so an earlier one
+  // that named a file is not applied either.
+  "no-value": (arg) => `${arg} names no file \u2014 the bar renders with no ${arg}`,
+  positional: (args) => `Unexpected arguments: ${args}`
+};
+function refusedArgsError(refused) {
+  const lines2 = Object.keys(REFUSAL_LINES).flatMap((why2) => {
+    const args = refused.filter((r) => r.why === why2).map((r) => r.arg);
+    return args.length === 0 ? [] : [REFUSAL_LINES[why2](args.join(", "))];
+  });
+  return lines2.length === 0 ? null : lines2.join("\n");
+}
+function sanitizeTerminalEnv(v) {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return void 0;
+  const o = v;
+  const set2 = TERMINAL_ENV_VARS.filter((name) => o[name] !== void 0);
+  return set2.every((name) => typeof o[name] === "string" && o[name] !== "") ? Object.fromEntries(set2.map((name) => [name, o[name]])) : void 0;
+}
+function sanitizeAbsolutePath(v) {
+  return typeof v === "string" && import_node_path18.default.isAbsolute(v) ? v : void 0;
+}
+function sanitizeTmux(v) {
+  if (v === null) return null;
+  if (typeof v !== "object") return void 0;
+  const o = v;
+  const { socket, pane, truecolor } = o;
+  if (typeof socket !== "string" || socket === "") return void 0;
+  if (typeof pane !== "string" || pane === "") return void 0;
+  if (truecolor !== null && (typeof truecolor !== "string" || truecolor === ""))
+    return void 0;
+  return { socket, pane, truecolor };
+}
+var MAX_TERM_EXTENT = 1e4;
+function sanitizeTermExtent(v) {
+  if (typeof v !== "number") return void 0;
+  if (!Number.isFinite(v)) return void 0;
+  const n = Math.floor(v);
+  if (n <= 0) return void 0;
+  return n > MAX_TERM_EXTENT ? MAX_TERM_EXTENT : n;
+}
+function sanitizeSsh(v) {
+  return typeof v === "boolean" ? v : void 0;
+}
+var URL_FRAME_VERSION = 1;
+var EARLIER_URL_FRAME_VERSIONS = [];
+var URL_FRAME_VERSIONS = /* @__PURE__ */ new Set([
+  ...EARLIER_URL_FRAME_VERSIONS,
+  URL_FRAME_VERSION
+]);
+var MAX_FRAME_BYTES = 16 * 1024 * 1024;
+function sanitizeClient(v) {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return void 0;
+  const { kind, bundle, source } = v;
+  const path42 = sanitizeAbsolutePath(bundle);
+  return CLIENT_KINDS.includes(kind) && path42 !== void 0 && (source === null || typeof source === "string" && source !== "") ? { kind, bundle: path42, source } : void 0;
+}
+
 // src/doctor/mark-book.ts
 init_globals();
 var isRecord = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -65634,7 +65288,7 @@ var barsOf = (scope, sightings) => inScope(scope, sightings).map(
 // src/doctor/edge.ts
 init_globals();
 init_os();
-var import_node_path29 = __toESM(require_path_browserify(), 1);
+var import_node_path25 = __toESM(require_path_browserify(), 1);
 
 // src/proc/process-table.ts
 init_globals();
@@ -65685,7 +65339,7 @@ async function runTmuxAsync(launcher, hint, category, args, stdinInput) {
 
 // src/segments/git.ts
 init_globals();
-var import_node_path25 = __toESM(require_path_browserify(), 1);
+var import_node_path19 = __toESM(require_path_browserify(), 1);
 function trackingOf(upstream, aheadBehind) {
   if (upstream.kind === "absent") return ok("none");
   if (upstream.kind === "failed") return upstream;
@@ -65731,9 +65385,9 @@ function gitInfoFailures(info) {
 }
 function classify(label2, result, nonZero) {
   if (result.ok) return ok(result.stdout);
-  if (result.reason === "non-zero" && nonZero === "absent") return ABSENT;
+  if (result.reason === "non-zero" && nonZero === "absent") return ABSENT2;
   if (result.reason === "non-zero" && nonZero === result.exitCode)
-    return ABSENT;
+    return ABSENT2;
   return failed(launchFailure(label2, result));
 }
 function launchFailure(label2, result) {
@@ -65750,12 +65404,12 @@ function firstLine2(s) {
 function derived2(from, project) {
   if (from.kind !== "ok") return from;
   const value = project(from.value);
-  return value === null ? ABSENT : ok(value);
+  return value === null ? ABSENT2 : ok(value);
 }
 function nonEmpty(o) {
   if (o.kind !== "ok") return o;
   const v = o.value.trim();
-  return v ? ok(v) : ABSENT;
+  return v ? ok(v) : ABSENT2;
 }
 var FORGE_CLI = {
   github: "gh",
@@ -65858,9 +65512,9 @@ function repoWebUrl(remotes) {
 }
 function classifyForgePr(label2, result, noPrPattern, parse3) {
   if (result.ok) return parse3(result.stdout);
-  if (isMissingCommand(result)) return ABSENT;
+  if (isMissingCommand(result)) return ABSENT2;
   if (result.reason === "non-zero" && noPrPattern.test(result.stderr))
-    return ABSENT;
+    return ABSENT2;
   const detail = [
     result.reason,
     result.exitCode != null ? `exit ${result.exitCode}` : null,
@@ -65873,9 +65527,9 @@ function isRecord2(v) {
 }
 function parseStatusV2(stdout2) {
   let branch = "detached";
-  let oid = ABSENT;
-  let upstream = ABSENT;
-  let aheadBehind = ABSENT;
+  let oid = ABSENT2;
+  let upstream = ABSENT2;
+  let aheadBehind = ABSENT2;
   let staged = 0;
   let unstaged = 0;
   let untracked2 = 0;
@@ -65886,7 +65540,7 @@ function parseStatusV2(stdout2) {
       const rest2 = line.slice(2);
       if (rest2.startsWith("branch.oid ")) {
         const v = rest2.slice("branch.oid ".length).trim();
-        oid = v === "(initial)" ? ABSENT : ok(v);
+        oid = v === "(initial)" ? ABSENT2 : ok(v);
       } else if (rest2.startsWith("branch.head ")) {
         const v = rest2.slice("branch.head ".length).trim();
         branch = v === "(detached)" ? "detached" : v;
@@ -66061,7 +65715,7 @@ var GitService = class {
   // one here would be a new answer for an unchanged question.
   findGitRoot(workingDir) {
     const root = gitRootOf(workingDir);
-    return root === void 0 ? ABSENT : ok(root);
+    return root === void 0 ? ABSENT2 : ok(root);
   }
   // [LAW:one-source-of-truth] No inner cache here. The daemon-side
   // GitDataProvider (src/daemon/cache/git.ts) is the single cache. Layering
@@ -66137,19 +65791,19 @@ var GitService = class {
   // A `.git` that names nothing readable (a directory, an unreadable or
   // malformed file) watches the dotGit path, so callers always get a string.
   resolveGitDir(workingDir) {
-    return orElse(gitDirNamed(workingDir), import_node_path25.default.join(workingDir, ".git"));
+    return orElse(gitDirNamed(workingDir), import_node_path19.default.join(workingDir, ".git"));
   }
   getOngoingOperation(workingDir) {
     try {
       const gitDir = this.resolveGitDir(workingDir);
-      if (fs_default.existsSync(import_node_path25.default.join(gitDir, "MERGE_HEAD"))) return ok("MERGE");
-      if (fs_default.existsSync(import_node_path25.default.join(gitDir, "CHERRY_PICK_HEAD")))
+      if (fs_default.existsSync(import_node_path19.default.join(gitDir, "MERGE_HEAD"))) return ok("MERGE");
+      if (fs_default.existsSync(import_node_path19.default.join(gitDir, "CHERRY_PICK_HEAD")))
         return ok("CHERRY-PICK");
-      if (fs_default.existsSync(import_node_path25.default.join(gitDir, "REVERT_HEAD"))) return ok("REVERT");
-      if (fs_default.existsSync(import_node_path25.default.join(gitDir, "BISECT_LOG"))) return ok("BISECT");
-      if (fs_default.existsSync(import_node_path25.default.join(gitDir, "rebase-merge")) || fs_default.existsSync(import_node_path25.default.join(gitDir, "rebase-apply")))
+      if (fs_default.existsSync(import_node_path19.default.join(gitDir, "REVERT_HEAD"))) return ok("REVERT");
+      if (fs_default.existsSync(import_node_path19.default.join(gitDir, "BISECT_LOG"))) return ok("BISECT");
+      if (fs_default.existsSync(import_node_path19.default.join(gitDir, "rebase-merge")) || fs_default.existsSync(import_node_path19.default.join(gitDir, "rebase-apply")))
         return ok("REBASE");
-      return ABSENT;
+      return ABSENT2;
     } catch (e) {
       return failed(
         `git operation probe: ${e instanceof Error ? e.message : String(e)}`
@@ -66285,7 +65939,7 @@ var GitService = class {
   // unrepresentable. Sync, because reading one small file is not worth a
   // microtask: its former `Promise.all` partner is the only spawn left.
   getStashCount(workingDir) {
-    const reflog = import_node_path25.default.join(
+    const reflog = import_node_path19.default.join(
       this.resolveCommonGitDir(this.resolveGitDir(workingDir)),
       "logs",
       "refs",
@@ -66351,7 +66005,7 @@ var GitService = class {
   // yields no stamp and therefore no memo, so an unreadable config re-reads rather
   // than freezing an answer.
   async getRemotesAsync(workingDir) {
-    const configPath = import_node_path25.default.join(
+    const configPath = import_node_path19.default.join(
       this.resolveCommonGitDir(this.resolveGitDir(workingDir)),
       "config"
     );
@@ -66400,7 +66054,7 @@ var GitService = class {
   // remotes read stays failed at the call site instead of borrowing this rule.
   repoNameFrom(remotes, workingDir) {
     const url = repoRemoteUrl(remotes);
-    return (url === null ? null : repoNameFromUrl(url)) ?? import_node_path25.default.basename(workingDir);
+    return (url === null ? null : repoNameFromUrl(url)) ?? import_node_path19.default.basename(workingDir);
   }
   // [LAW:locality-or-seam] Public so the daemon's GitDataProvider can read the
   // remote to fold into its PR cache key (the PR value depends on the remote; a
@@ -66418,7 +66072,7 @@ var GitService = class {
     const remotes = await this.getRemotesAsync(workingDir);
     if (remotes.kind !== "ok") return remotes;
     const url = forgeRemoteUrl(remotes.value);
-    return url === null ? ABSENT : ok(url);
+    return url === null ? ABSENT2 : ok(url);
   }
   // [LAW:single-enforcer] One boundary for forge-CLI spawns. Mirrors
   // execGitAsync but carries the "forge" launch category and a longer timeout
@@ -66470,11 +66124,11 @@ var GitService = class {
         parseGitlabMr
       );
     }
-    return ABSENT;
+    return ABSENT2;
   }
   isWorktree(workingDir) {
     try {
-      const gitDir = import_node_path25.default.join(workingDir, ".git");
+      const gitDir = import_node_path19.default.join(workingDir, ".git");
       if (fs_default.existsSync(gitDir) && fs_default.statSync(gitDir).isFile()) {
         return true;
       }
@@ -66510,7 +66164,7 @@ init_globals();
 
 // src/daemon/render-payload.ts
 init_globals();
-var import_node_path26 = __toESM(require_path_browserify(), 1);
+var import_node_path20 = __toESM(require_path_browserify(), 1);
 
 // src/utils/terminal-width.ts
 init_globals();
@@ -66589,6 +66243,28 @@ function laneOutcome(lane) {
 
 // src/claude-resume.ts
 init_globals();
+
+// src/claude-command-line.ts
+init_globals();
+
+// src/shell-word.ts
+init_globals();
+var SHELL_SAFE = /^[A-Za-z0-9_./,:@%+-][A-Za-z0-9_./,:@%+=-]*$/;
+function singleQuoted(s) {
+  return `'${s.replaceAll("'", `'\\''`)}'`;
+}
+function shellWord(s) {
+  return SHELL_SAFE.test(s) ? s : singleQuoted(s);
+}
+
+// src/claude-command-line.ts
+function claudeCommandLine(command) {
+  const cd = command.dir === void 0 ? "" : `cd ${shellWord(command.dir)} && `;
+  const env2 = command.env.map(([name, value]) => `${name}=${shellWord(value)} `).join("");
+  return `${cd}${env2}${[command.program, ...command.args].map(shellWord).join(" ")}`;
+}
+
+// src/claude-resume.ts
 function resumeCommand(workspace, sessionId2, configDir) {
   return claudeCommandLine({
     dir: workspace.project_dir,
@@ -66914,7 +66590,7 @@ function declareLanes(owners, holds2, facts, closure, sources) {
   const pane = facts.hints.tmux ?? null;
   const faults = [];
   const declare = (lane, needed, take) => {
-    if (!needed) return settledLane(ABSENT);
+    if (!needed) return settledLane(ABSENT2);
     try {
       return take();
     } catch (e) {
@@ -66973,7 +66649,7 @@ function readLanes(inputs) {
   const sessionId2 = hookData2.session_id;
   const lanes = deps.lanes();
   const read2 = (lane, needed, value) => {
-    if (!needed) return ABSENT;
+    if (!needed) return ABSENT2;
     const fault = deps.faults.of(sessionId2, lane);
     if (fault !== void 0) return fault;
     try {
@@ -67229,7 +66905,7 @@ function todayOf({
       return usageStore.todayAt(set2.value, hookData2, at);
     } catch (e) {
       log("error", `today read threw: ${inspect(e)}`);
-      return ABSENT;
+      return ABSENT2;
     }
   };
   const today = read2();
@@ -67300,7 +66976,7 @@ function pickNonNull(src) {
 }
 function posixify(s) {
   if (s === void 0 || s.length === 0) return s;
-  if (import_node_path26.default.sep !== "\\") return s;
+  if (import_node_path20.default.sep !== "\\") return s;
   return s.replace(/\\/g, "/");
 }
 function projectGitInfo(outcome, pending2) {
@@ -67403,7 +67079,7 @@ function dataNeeds(config2, preset) {
 
 // src/utils/claude.ts
 init_globals();
-var import_node_path27 = __toESM(require_path_browserify(), 1);
+var import_node_path21 = __toESM(require_path_browserify(), 1);
 
 // src/utils/transcript-activity.ts
 init_globals();
@@ -67477,19 +67153,19 @@ function entryActivity(parsed2, userEntry) {
 // src/utils/claude.ts
 function getClaudePaths(detected, homeDir) {
   if (detected !== void 0) return [detected];
-  return [(0, import_node_path27.join)(homeDir, ".config", "claude"), (0, import_node_path27.join)(homeDir, ".claude")].filter(
+  return [(0, import_node_path21.join)(homeDir, ".config", "claude"), (0, import_node_path21.join)(homeDir, ".claude")].filter(
     (dir) => existsSync(dir)
   );
 }
 async function findProjectPaths(claudePaths) {
   const projectPaths = [];
   for (const claudePath of claudePaths) {
-    const projectsDir = (0, import_node_path27.join)(claudePath, "projects");
+    const projectsDir = (0, import_node_path21.join)(claudePath, "projects");
     const entries = await unlessGone(
       readdir2(projectsDir, { withFileTypes: true })
     );
     for (const entry of entries ?? []) {
-      if (entry.isDirectory()) projectPaths.push((0, import_node_path27.join)(projectsDir, entry.name));
+      if (entry.isDirectory()) projectPaths.push((0, import_node_path21.join)(projectsDir, entry.name));
     }
   }
   return projectPaths;
@@ -67505,14 +67181,14 @@ async function unlessGone(read2) {
 async function findAgentTranscripts(sessionId2, projectPath, verified) {
   const paths2 = [];
   let longLines = [];
-  const subagentsDir = (0, import_node_path27.join)(projectPath, sessionId2, "subagents");
+  const subagentsDir = (0, import_node_path21.join)(projectPath, sessionId2, "subagents");
   try {
     const files = await readdir2(subagentsDir);
     const agentFileNames = files.filter(
       (f) => f.startsWith("agent-") && f.endsWith(".jsonl")
     );
     for (const fileName2 of agentFileNames) {
-      const filePath2 = (0, import_node_path27.join)(subagentsDir, fileName2);
+      const filePath2 = (0, import_node_path21.join)(subagentsDir, fileName2);
       if (verified?.has(filePath2)) {
         paths2.push(filePath2);
         continue;
@@ -67658,7 +67334,7 @@ async function foldAppended(filePath2, prior, empty2, step4) {
 
 // src/doctor/font-edge.ts
 init_globals();
-var import_node_path28 = __toESM(require_path_browserify(), 1);
+var import_node_path22 = __toESM(require_path_browserify(), 1);
 
 // node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/index.js
 init_globals();
@@ -68631,12 +68307,12 @@ function coverage(launcher, ref, glyphs) {
   return process_default.platform === "darwin" ? macCoverage(launcher, ref, glyphs) : fcCoverage(launcher, ref.name, glyphs);
 }
 function alacrittyConfigPaths(home, xdgConfigHome) {
-  const xdg = xdgConfigHome || import_node_path28.default.join(home, ".config");
+  const xdg = xdgConfigHome || import_node_path22.default.join(home, ".config");
   return [
-    import_node_path28.default.join(xdg, "alacritty", "alacritty.toml"),
-    import_node_path28.default.join(xdg, "alacritty.toml"),
-    import_node_path28.default.join(home, ".config", "alacritty", "alacritty.toml"),
-    import_node_path28.default.join(home, ".alacritty.toml")
+    import_node_path22.default.join(xdg, "alacritty", "alacritty.toml"),
+    import_node_path22.default.join(xdg, "alacritty.toml"),
+    import_node_path22.default.join(home, ".config", "alacritty", "alacritty.toml"),
+    import_node_path22.default.join(home, ".alacritty.toml")
   ];
 }
 function alacrittyDefaultFamily(platform3) {
@@ -68678,7 +68354,7 @@ function alacrittyFamilyIn(file, home, depth) {
   if (depth === 5) return { kind: "ok", value: null };
   let found = null;
   for (const imported of own2.imports) {
-    const target = imported.startsWith("~/") ? import_node_path28.default.join(home, imported.slice(2)) : import_node_path28.default.resolve(import_node_path28.default.dirname(file), imported);
+    const target = imported.startsWith("~/") ? import_node_path22.default.join(home, imported.slice(2)) : import_node_path22.default.resolve(import_node_path22.default.dirname(file), imported);
     if (!fs_default.existsSync(target)) continue;
     const inner = alacrittyFamilyIn(target, home, depth + 1);
     if (inner.kind === "failed") return inner;
@@ -68716,6 +68392,114 @@ var READERS = {
 };
 function fontInUse(launcher, terminal, env2, glyphs, home) {
   return READERS[terminal.name](launcher, terminal.version, env2, glyphs, home);
+}
+
+// src/daemon/build-currency.ts
+init_globals();
+var import_node_path24 = __toESM(require_path_browserify(), 1);
+init_url();
+
+// src/source-digest.ts
+init_globals();
+var import_node_path23 = __toESM(require_path_browserify(), 1);
+var isSourceEntry = (name) => !name.startsWith(".") && !name.endsWith("~");
+function entryBytes(p2, st) {
+  return st.isSymbolicLink() ? import_buffer.Buffer.from(fs_default.readlinkSync(p2)) : fs_default.readFileSync(p2);
+}
+function sourceEntries(root, dir, keep2 = isSourceEntry) {
+  return fs_default.readdirSync(dir).filter(keep2).sort().flatMap((name) => {
+    const p2 = import_node_path23.default.join(dir, name);
+    const st = fs_default.lstatSync(p2, { throwIfNoEntry: false });
+    if (st === void 0) return [];
+    if (st.isDirectory()) return sourceEntries(root, p2);
+    const rel = import_node_path23.default.relative(root, p2).split(import_node_path23.default.sep).join("/");
+    return [[rel, entryBytes(p2, st)]];
+  });
+}
+function digestOf(entries) {
+  const h = crypto_default.createHash("sha256");
+  for (const [rel, bytes] of entries) {
+    h.update(rel).update("\0").update(bytes).update("\0");
+  }
+  return h.digest("hex");
+}
+function sourceDigest(srcDir) {
+  return digestOf(sourceEntries(srcDir, srcDir));
+}
+var CRATE_SOURCE = ["Cargo.toml", "Cargo.lock", "src"];
+function crateDigest(crateDir) {
+  return digestOf(
+    sourceEntries(
+      crateDir,
+      crateDir,
+      (name) => CRATE_SOURCE.includes(name)
+    )
+  );
+}
+var SHORT_DIGEST_LENGTH = 7;
+var shortDigest = (digest2) => digest2.slice(0, SHORT_DIGEST_LENGTH);
+
+// src/version.ts
+init_globals();
+if (false) {
+  throw new Error(
+    "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
+  );
+}
+var PACKAGE_VERSION = "1.180.10";
+
+// src/daemon/build-currency.ts
+function sourceCheckoutOf(bundlePath) {
+  const root = import_node_path24.default.dirname(import_node_path24.default.dirname(bundlePath));
+  return fs_default.existsSync(import_node_path24.default.join(root, "src")) ? root : null;
+}
+function bundleStamp(digest2) {
+  if (digest2 === null) {
+    throw new Error(
+      "this bundle carries no source digest (build via `pnpm build`, which stamps it)"
+    );
+  }
+  return { version: PACKAGE_VERSION, digest: digest2 };
+}
+function checkoutVersion(root) {
+  const raw = JSON.parse(
+    fs_default.readFileSync(import_node_path24.default.join(root, "package.json"), "utf8")
+  );
+  const version = typeof raw === "object" && raw !== null ? raw.version : void 0;
+  if (typeof version !== "string") {
+    throw new Error(`${import_node_path24.default.join(root, "package.json")} has no version string`);
+  }
+  return version;
+}
+function assessBuild(entryUrl, runningStamp) {
+  try {
+    const root = sourceCheckoutOf(fileURLToPath(entryUrl));
+    if (root === null) return { kind: "not-source-checkout" };
+    const running = runningStamp();
+    const digest2 = sourceDigest(import_node_path24.default.join(root, "src"));
+    if (digest2 === running.digest)
+      return { kind: "current", root, stamp: running };
+    return {
+      kind: "stale",
+      root,
+      source: { version: checkoutVersion(root), digest: digest2 },
+      running
+    };
+  } catch (e) {
+    return { kind: "unchecked", reason: e.message };
+  }
+}
+
+// src/install/platforms.ts
+init_globals();
+var PLATFORM_PACKAGES = {
+  "darwin-arm64": "@promptctl/cc-candybar-darwin-arm64",
+  "darwin-x64": "@promptctl/cc-candybar-darwin-x64",
+  "linux-x64": "@promptctl/cc-candybar-linux-x64",
+  "linux-arm64": "@promptctl/cc-candybar-linux-arm64"
+};
+function shipsNative(platform3, arch2) {
+  return `${platform3}-${arch2}` in PLATFORM_PACKAGES;
 }
 
 // src/doctor/post-mortems-read.ts
@@ -68764,7 +68548,7 @@ function installFacts(edge, daemonBundle, clients) {
         bundle: bundle.value,
         checkout: root === null ? null : {
           root,
-          rustSource: edge.digest(import_node_path29.default.join(root, "rust-client"))
+          rustSource: edge.digest(import_node_path25.default.join(root, "rust-client"))
         }
       },
       nativeShipped: edge.nativeShipped,
@@ -68884,7 +68668,7 @@ function ownsEntry(entry) {
     return false;
   }
   const root = DAEMON_ENTRY.exec(real)?.[1];
-  return root !== void 0 && fs_default.existsSync(import_node_path29.default.join(root, "bin", "cc-candybar"));
+  return root !== void 0 && fs_default.existsSync(import_node_path25.default.join(root, "bin", "cc-candybar"));
 }
 async function daemons(launcher) {
   const run3 = await launcher.launch({
@@ -69122,11 +68906,7 @@ async function terminalFacts(edge, identity2, hints, glyphs) {
 function clickArrived(arrival) {
   switch (arrival.via) {
     case "link":
-      return {
-        kind: "arrived",
-        handler: arrival.handler,
-        bar: PACKAGE_VERSION
-      };
+      return { kind: "arrived", delivery: arrival.delivery };
     case "tmux-status":
       return {
         kind: "unprobed",
@@ -69263,6 +69043,85 @@ function applyFix(stores, fix, facts) {
 
 // src/doctor/handler-probe.ts
 init_globals();
+
+// src/daemon/client-transport.ts
+init_globals();
+
+// src/daemon/paths.ts
+init_globals();
+init_os();
+var import_node_path26 = __toESM(require_path_browserify(), 1);
+function xdgEnv(env2, name) {
+  const v = env2[name];
+  return v && v.length > 0 ? v : void 0;
+}
+function stateDir(host) {
+  const base = xdgEnv(host.env, "XDG_STATE_HOME") ?? import_node_path26.default.join(host.home, ".local", "state");
+  return import_node_path26.default.join(base, "cc-candybar");
+}
+function cacheDir(host) {
+  const base = xdgEnv(host.env, "XDG_CACHE_HOME") ?? import_node_path26.default.join(host.home, ".cache");
+  return import_node_path26.default.join(base, "cc-candybar");
+}
+function socketPath(host) {
+  return host.env.CC_CANDYBAR_SOCKET || defaultSocketPath();
+}
+function defaultSocketPath() {
+  const uid = os_default.userInfo().uid;
+  return import_node_path26.default.join("/tmp", `cc-candybar-${uid}`, "socket");
+}
+function leasePathFor(sockPath) {
+  return `${sockPath}.lease`;
+}
+function leasePath(host) {
+  return leasePathFor(socketPath(host));
+}
+function sessionStatePath(host) {
+  return import_node_path26.default.join(stateDir(host), "session-state.json");
+}
+function settingsHistoryPath(host) {
+  return import_node_path26.default.join(stateDir(host), "settings-history.json");
+}
+function daemonRegistryDir(host) {
+  const override = host.env.CC_CANDYBAR_DAEMON_REGISTRY_DIR;
+  if (override) return override;
+  const uid = os_default.userInfo().uid;
+  return import_node_path26.default.join("/tmp", `cc-candybar-${uid}`, "daemons");
+}
+var SPAWN_BACKOFF_FILE = "spawn.backoff";
+function spawnBackoffPath(host) {
+  return import_node_path26.default.join(stateDir(host), SPAWN_BACKOFF_FILE);
+}
+function watchProbeDir(host) {
+  return import_node_path26.default.join(stateDir(host), "watch-probe");
+}
+function logPath(host) {
+  return import_node_path26.default.join(stateDir(host), "daemon.log");
+}
+function daemonPaths(host) {
+  return {
+    socket: socketPath(host),
+    lease: leasePath(host),
+    state: stateDir(host),
+    registry: daemonRegistryDir(host),
+    log: logPath(host),
+    sessionState: sessionStatePath(host),
+    settingsHistory: settingsHistoryPath(host),
+    watchProbe: watchProbeDir(host),
+    spawnBackoff: spawnBackoffPath(host)
+  };
+}
+function locations(host) {
+  const { env: env2 } = host;
+  const xdgDefault = "/usr/local/share:/usr/share";
+  const defaultDataDirs = process_default.platform === "darwin" ? `${import_node_path26.default.join(xdgEnv(env2, "HOMEBREW_PREFIX") ?? "/opt/homebrew", "share")}:${xdgDefault}` : xdgDefault;
+  return {
+    home: host.home,
+    configHome: xdgEnv(env2, "XDG_CONFIG_HOME") ?? import_node_path26.default.join(host.home, ".config"),
+    dataHome: xdgEnv(env2, "XDG_DATA_HOME") ?? import_node_path26.default.join(host.home, ".local", "share"),
+    dataDirs: (xdgEnv(env2, "XDG_DATA_DIRS") ?? defaultDataDirs).split(":").filter((d) => d !== "")
+  };
+}
 
 // src/daemon/client-stats.ts
 init_globals();
@@ -69568,6 +69427,157 @@ var RuntimeStats = class _RuntimeStats {
 
 // src/daemon/client-stats.ts
 var STATS_FIELDS = Object.keys(RuntimeStats.referenceSnapshot());
+
+// src/install/index.ts
+init_globals();
+
+// src/attach-launcher.ts
+init_globals();
+var import_node_path27 = __toESM(require_path_browserify(), 1);
+var ATTACH_DIR = "cc-extra";
+function attachLauncherOf(bundle) {
+  return import_node_path27.default.join(import_node_path27.default.dirname(bundle), ATTACH_DIR, "src", "bun-attach.js");
+}
+function moduleGraphReaderOf(launcher) {
+  return import_node_path27.default.join(import_node_path27.default.dirname(launcher), "bun-graph.js");
+}
+var ATTACH_PRELOAD = "attach-preload.cjs";
+function attachPreloadOf(bundle) {
+  return import_node_path27.default.join(import_node_path27.default.dirname(bundle), ATTACH_PRELOAD);
+}
+var PRELOAD_VARIABLE = "BUN_OPTIONS";
+function attachCommandLine(preload, command) {
+  return claudeCommandLine({
+    ...command,
+    env: [
+      ...command.env,
+      [PRELOAD_VARIABLE, `--preload ${preload.replace(/[\\\s]/g, "\\$&")}`]
+    ]
+  });
+}
+
+// src/install/index.ts
+var import_node_path29 = __toESM(require_path_browserify(), 1);
+
+// src/daemon/client.ts
+init_globals();
+
+// src/daemon/request-deadline.ts
+init_globals();
+var REQUEST_TIMEOUT_MS = 200;
+var DRAW_RESERVE_MS = 60;
+function parseClientDeadline(raw) {
+  if (raw === void 0) return { kind: "unstated" };
+  return typeof raw === "number" && Number.isSafeInteger(raw) && raw > 0 ? { kind: "stated", at: raw } : {
+    kind: "refused",
+    problem: `request 'deadline' is not epoch milliseconds: ${JSON.stringify(raw)}`
+  };
+}
+function waitBudgetMs(deadline, acceptedMonoMs, arrival) {
+  const clientEnd = deadline.kind === "stated" ? arrival.monoMs + (deadline.at - arrival.epochMs) : acceptedMonoMs + TOTAL_BUDGET_MS - CONNECT_TIMEOUT_MS;
+  const end = Math.min(clientEnd, acceptedMonoMs + REQUEST_TIMEOUT_MS);
+  return Math.round(end - DRAW_RESERVE_MS - arrival.monoMs);
+}
+
+// src/daemon/client.ts
+var CLICK_BUDGETS = {
+  connectMs: CONNECT_TIMEOUT_MS,
+  budgetMs: REQUEST_TIMEOUT_MS + TOTAL_BUDGET_MS
+};
+
+// src/daemon/acquire.ts
+init_globals();
+var import_node_path28 = __toESM(require_path_browserify(), 1);
+init_process();
+
+// src/install/currency.ts
+init_globals();
+var RELEASE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+function parseReleaseVersion(text4) {
+  const m = RELEASE_VERSION.exec(text4);
+  return m ? { kind: "ok", value: [Number(m[1]), Number(m[2]), Number(m[3])] } : {
+    kind: "failed",
+    reason: `"${text4}" is not a release version (expected MAJOR.MINOR.PATCH)`
+  };
+}
+function formatVersion(v) {
+  return v.join(".");
+}
+function compareVersions([aMajor, aMinor, aPatch], [bMajor, bMinor, bPatch]) {
+  return aMajor - bMajor || aMinor - bMinor || aPatch - bPatch;
+}
+var REGISTRY_URL = "https://registry.npmjs.org";
+var PACKAGE_NAME = "@promptctl/cc-candybar";
+var REGISTRY_TIMEOUT_MS = 5e3;
+async function fetchLatestVersion(packageName, fetchImpl, registryUrl, clock) {
+  const url = `${registryUrl}/-/package/${encodeURIComponent(packageName)}/dist-tags`;
+  try {
+    const res = await fetchImpl(url, {
+      signal: timeoutSignal(clock, REGISTRY_TIMEOUT_MS)
+    });
+    if (!res.ok) {
+      return failed(`registry responded ${res.status} for ${url}`);
+    }
+    const tags = await res.json();
+    if (typeof tags.latest !== "string") {
+      return ABSENT2;
+    }
+    return parseReleaseVersion(tags.latest);
+  } catch (err) {
+    return failed(err instanceof Error ? err.message : String(err));
+  }
+}
+function assessCurrency(stamp2, latest) {
+  const installed = parseReleaseVersion(stamp2);
+  if (installed.kind === "failed") {
+    return { kind: "unchecked", installed: stamp2, reason: installed.reason };
+  }
+  switch (latest.kind) {
+    case "failed":
+      return { kind: "unchecked", installed: stamp2, reason: latest.reason };
+    case "absent":
+      return {
+        kind: "unchecked",
+        installed: stamp2,
+        reason: "the registry lists no `latest` dist-tag"
+      };
+    case "ok": {
+      const order2 = compareVersions(installed.value, latest.value);
+      if (order2 < 0) {
+        return {
+          kind: "stale",
+          installed: installed.value,
+          latest: latest.value
+        };
+      }
+      if (order2 > 0) {
+        return {
+          kind: "ahead",
+          installed: installed.value,
+          latest: latest.value
+        };
+      }
+      return { kind: "current", installed: installed.value };
+    }
+  }
+}
+
+// src/install/index.ts
+function supportDir(host) {
+  if (process_default.platform === "darwin") {
+    return import_node_path29.default.join(host.home, "Library", "Application Support", "CCCandybar");
+  }
+  return import_node_path29.default.join(locations(host).dataHome, "cc-candybar");
+}
+function stagedDistPath(dir) {
+  return import_node_path29.default.join(dir, "dist", "index.mjs");
+}
+function stableAttachPreload(runningBundle, host) {
+  const checkout = sourceCheckoutOf(runningBundle);
+  return attachPreloadOf(
+    checkout === null ? stagedDistPath(supportDir(host)) : import_node_path29.default.join(checkout, "dist", "index.mjs")
+  );
+}
 
 // src/doctor/handler-probe.ts
 var ARRIVALS_KEPT = 16;
@@ -70497,11 +70507,11 @@ var doctorProbe = async (value, ctx) => {
   }
   if (ctx.arrival.via !== "link")
     throw new BadVerbArgs("doctor-probe: a probe arrives only as a link");
-  const { handler } = ctx.arrival;
-  ctx.probes.arrive({ nonce, handler });
+  const { delivery } = ctx.arrival;
+  ctx.probes.arrive({ nonce, delivery });
   ctx.log(
     "info",
-    `doctor-probe: arrived nonce=${nonce} handler=${handler ?? "unreported"}`
+    `doctor-probe: arrived nonce=${nonce} delivery=${delivery.kind}`
   );
 };
 var doctorFix = {
@@ -71028,8 +71038,13 @@ function decodeArgs(verb, value) {
   }
   return [decodeURIComponent(value)];
 }
+function clickOf(url) {
+  const link = parseHandlerUrl(url);
+  if (!link.ok) throw new Error(link.problem);
+  return { verb: link.verb, value: link.value };
+}
 function effectsOf(url) {
-  const { verb, value } = parseHandlerUrl(url);
+  const { verb, value } = clickOf(url);
   if (verb !== VERB_DISPATCH) return [{ verb, args: decodeArgs(verb, value) }];
   return parseEffects(value).map((e) => ({
     verb: e.verb,
@@ -76786,7 +76801,15 @@ function subscription(req) {
     );
   return { kind: "subscribe", sessionId: sessionId2.id, lane };
 }
-async function handleRequest(parts, req, timedOut, accepted, clientLeft) {
+async function handleRequest(parts, inbound, timedOut, accepted, clientLeft) {
+  if (inbound.kind === "url") {
+    return replied(
+      stay(
+        await urlClick(parts, inbound.frame, timedOut, accepted, clientLeft)
+      )
+    );
+  }
+  const req = inbound.req;
   if (!req || typeof req !== "object" || typeof req.v !== "number") {
     return refuse3("BAD_REQUEST", "malformed request");
   }
@@ -76990,26 +77013,15 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     };
   }
   if (req.kind === "click") {
-    const t0 = clock.monotonic();
-    const facts = [["queued", `${Math.round(t0 - accepted)}ms`]];
-    const outcome = await clickOutcome(
-      parts,
-      req,
-      facts,
-      () => timedOut() || clientLeft()
+    return stay(
+      await clickEvent(
+        parts,
+        accepted,
+        timedOut,
+        clientLeft,
+        (facts, gone) => clickOutcome(parts, req, facts, gone)
+      )
     );
-    noteFacts(facts, {
-      timedOut: timedOut() ? "Y" : "N",
-      clientLeft: clientLeft() ? "Y" : "N"
-    });
-    const { level, line } = requestEvent(
-      "click",
-      facts,
-      outcome,
-      Math.round(clock.monotonic() - t0)
-    );
-    parts.log(level, line);
-    return stay(clickReply(outcome));
   }
   if (req.kind === "debug") {
     if (!isDebugWhat(req.what)) {
@@ -77106,7 +77118,28 @@ function serializeSegmentCells(cells, colorCompatibility) {
   }
   return out;
 }
-async function clickOutcome(parts, req, facts, clientGone) {
+async function clickEvent(parts, accepted, timedOut, clientLeft, run3) {
+  const { clock } = parts;
+  const t0 = clock.monotonic();
+  const facts = [["queued", `${Math.round(t0 - accepted)}ms`]];
+  const gone = () => timedOut() || clientLeft();
+  const outcome = await run3(facts, gone);
+  noteFacts(facts, {
+    timedOut: timedOut() ? "Y" : "N",
+    clientLeft: clientLeft() ? "Y" : "N"
+  });
+  const { level, line } = requestEvent(
+    "click",
+    facts,
+    outcome,
+    Math.round(clock.monotonic() - t0)
+  );
+  parts.log(level, line);
+  return clickReply(outcome);
+}
+async function clickOutcome(parts, req, facts, gone) {
+  const arrival = { via: "link", delivery: { kind: "cli" } };
+  noteFacts(facts, { via: "cli" });
   const { verb, value } = req;
   if (typeof verb !== "string" || typeof value !== "string") {
     return {
@@ -77116,15 +77149,46 @@ async function clickOutcome(parts, req, facts, clientGone) {
       ]
     };
   }
+  return clickRan(() => handleClick(parts, verb, value, arrival, facts, gone));
+}
+async function urlClick(parts, frame2, timedOut, accepted, clientLeft) {
+  return clickEvent(
+    parts,
+    accepted,
+    timedOut,
+    clientLeft,
+    async (facts, gone) => {
+      const { urlV, url } = frame2;
+      noteFacts(facts, { via: "forwarder", urlV: String(urlV) });
+      if (typeof urlV !== "number" || !URL_FRAME_VERSIONS.has(urlV)) {
+        return {
+          kind: "bad-request",
+          problems: [
+            `the URL handler's frame version ${inspect(urlV)} is not one this daemon speaks (${[...URL_FRAME_VERSIONS].join(", ")})`
+          ]
+        };
+      }
+      if (typeof url !== "string") {
+        return {
+          kind: "bad-request",
+          problems: [`the URL handler's frame carries no url string`]
+        };
+      }
+      const link = parseHandlerUrl(url);
+      if (!link.ok) return { kind: "bad-request", problems: [link.problem] };
+      const arrival = {
+        via: "link",
+        delivery: { kind: "forwarder", urlV }
+      };
+      return clickRan(
+        () => handleClick(parts, link.verb, link.value, arrival, facts, gone)
+      );
+    }
+  );
+}
+async function clickRan(click3) {
   try {
-    return await handleClick(
-      parts,
-      verb,
-      value,
-      { via: "link", handler: sanitizeClientVersion(req.clientVersion) },
-      facts,
-      clientGone
-    );
+    return await click3();
   } catch (error) {
     if (error instanceof BadVerbArgs)
       return { kind: "bad-request", problems: [error.message] };
@@ -77196,7 +77260,8 @@ async function statusLineClick(parts, value, facts, clientGone) {
   if (click3.kind === "refused") return refused(click3.reason);
   noteFacts(facts, { link: click3.url });
   if (click3.url.startsWith("cc-candybar://")) {
-    const parsed2 = decodeWire(() => parseHandlerUrl(click3.url));
+    const parsed2 = parseHandlerUrl(click3.url);
+    if (!parsed2.ok) return refused(parsed2.problem);
     if (parsed2.verb === VERB_TMUX_STATUS_CLICK)
       return refused("a status-line link names another status-line click");
     return handleClick(
@@ -77780,7 +77845,7 @@ function mtimeOf(path42, stat3) {
     return ok(stat3(path42).mtimeMs);
   } catch (e) {
     const code = e.code;
-    return code === "ENOENT" || code === "ENOTDIR" ? ABSENT : failed(e.message);
+    return code === "ENOENT" || code === "ENOTDIR" ? ABSENT2 : failed(e.message);
   }
 }
 function sameStamp(a, b) {
@@ -77949,7 +78014,7 @@ function owe(pr) {
 }
 function unkeyedPr(pr, failures) {
   if (pr.missed && pr.reading.get().kind === "pending") {
-    settle(pr, failures.size > 0 ? failed([...failures].join("; ")) : ABSENT);
+    settle(pr, failures.size > 0 ? failed([...failures].join("; ")) : ABSENT2);
   }
   return "unkeyed";
 }
@@ -78319,7 +78384,7 @@ var GitDataProvider = class {
       // Its key is the first pass's to set.
       missed: true,
       key: "",
-      remote: ABSENT,
+      remote: ABSENT2,
       reading: unread(),
       inFlight: null
     };
@@ -78368,7 +78433,7 @@ var GitDataProvider = class {
     if (pr.inFlight?.key === key) return pr.inFlight.done;
     const remote = pr.remote;
     const startedAt = this.clock.now();
-    const lookup = remote.kind === "ok" ? this.inner.resolvePullRequest(state.root, remote.value).catch(threw("PR lookup")) : Promise.resolve(remote.kind === "failed" ? remote : ABSENT);
+    const lookup = remote.kind === "ok" ? this.inner.resolvePullRequest(state.root, remote.value).catch(threw("PR lookup")) : Promise.resolve(remote.kind === "failed" ? remote : ABSENT2);
     const done2 = lookup.then((outcome) => {
       if (pr.inFlight?.key === key) pr.inFlight = null;
       if (this.repos.get(state.root) !== state) return;
@@ -78741,7 +78806,7 @@ var PricingService = class {
   static async fetchPricingData() {
     return new Promise((resolve) => {
       const parsedUrl = new U(this.GITHUB_PRICING_URL);
-      const request2 = get(
+      const request2 = get2(
         {
           hostname: parsedUrl.hostname,
           path: parsedUrl.pathname,
@@ -79604,7 +79669,7 @@ var SessionUsageStore = class {
     if (inSet !== void 0) addDay(total, inSet);
     const own2 = under(active2?.record?.transcriptPath, set2.roots) ? void 0 : active2?.record?.days.get(today);
     if (own2 !== void 0) addDay(total, own2);
-    if (inSet === void 0 && own2 === void 0) return ABSENT;
+    if (inSet === void 0 && own2 === void 0) return ABSENT2;
     return ok({
       cost: total.cost,
       tokens: total.input + total.output + total.cacheCreation + total.cacheRead,
@@ -79629,7 +79694,7 @@ var SessionUsageStore = class {
   }
   // A request's speed sample, over the request's one refresh of the session.
   async observed(sessionId2, refresh, nowMs) {
-    if (!sessionId2) return ABSENT;
+    if (!sessionId2) return ABSENT2;
     const { stamp: stamp2, record: refreshed } = refresh();
     return this.speedFlight.run(`${sessionId2}:${stamp2}`, async () => {
       const record2 = await refreshed;
@@ -79661,7 +79726,7 @@ var SessionUsageStore = class {
   // The session's speed as its last request observed it, for a draw: a frame
   // takes no sample, so how often the bar is drawn moves no rate.
   speedOf(sessionId2) {
-    if (!sessionId2) return ABSENT;
+    if (!sessionId2) return ABSENT2;
     return this.sessions.get(sessionId2)?.speed.get() ?? PENDING;
   }
   // stamp-gated, coalesced re-parse of ONE session. `ok` is its record,
@@ -79670,13 +79735,13 @@ var SessionUsageStore = class {
   // records are stored; the next render retries, same rule as the git
   // cache). This is the single write-path of a slot's record.
   async ingest(sessionId2, transcriptPath, tally, stamp2) {
-    if (!sessionId2) return ABSENT;
+    if (!sessionId2) return ABSENT2;
     const existing = this.see(sessionId2)?.record;
     if (existing && stamp2 !== "" && existing.transcriptStamp === stamp2) {
       tally.hits++;
       return ok(existing);
     }
-    if (!transcriptPath) return existing ? ok(existing) : ABSENT;
+    if (!transcriptPath) return existing ? ok(existing) : ABSENT2;
     tally.misses++;
     let refolded;
     try {
@@ -80116,7 +80181,7 @@ var ContextProvider = class {
     const totalTokens = read2.value;
     if (totalTokens === void 0) {
       debug("No main chain entries with usage data found");
-      return ABSENT;
+      return ABSENT2;
     }
     debug(
       `Most recent main chain context: ${totalTokens} tokens (limit: ${contextLimit})`
@@ -80191,7 +80256,7 @@ var MetricsProvider = class {
   async getMetricsInfo(sessionId2, hookData2) {
     debug(`Getting metrics from hook data for session: ${sessionId2}`);
     const cost = hookData2.cost;
-    if (!cost) return ABSENT;
+    if (!cost) return ABSENT2;
     return metricsFrom(
       sessionId2,
       cost,
@@ -80201,7 +80266,7 @@ var MetricsProvider = class {
   // The session's metrics as its last refresh left them, for a draw.
   metricsOf(sessionId2, hookData2) {
     const cost = hookData2.cost;
-    if (!cost) return ABSENT;
+    if (!cost) return ABSENT2;
     const answer2 = this.fold.answer(sessionId2);
     return answer2.kind === "pending" ? answer2 : metricsFrom(sessionId2, cost, answer2);
   }
@@ -80377,7 +80442,7 @@ async function askSessionName(launcher, hint) {
   ]);
   if (run3.kind !== "ok") return failed(run3.reason);
   const name = run3.stdout.trim();
-  return name ? ok(name) : ABSENT;
+  return name ? ok(name) : ABSENT2;
 }
 
 // src/segments/host.ts
@@ -80392,7 +80457,7 @@ function shortHostname(hostname2) {
 function syscall(field, read2) {
   try {
     const value = read2();
-    return Promise.resolve(value === "" ? ABSENT : ok(value));
+    return Promise.resolve(value === "" ? ABSENT2 : ok(value));
   } catch (e) {
     return Promise.resolve(failed(`host.${field}: ${String(e)}`));
   }
@@ -80573,9 +80638,9 @@ async function findLastCacheActivityTs(transcriptPath) {
     if (tail.kind !== "ok") return tail;
     const ts = scanBufferForLastCacheTs(tail.value.buf, tail.value.fromStart);
     if (ts != null) return ok(ts);
-    if (tail.value.fromStart) return ABSENT;
+    if (tail.value.fromStart) return ABSENT2;
   }
-  return ABSENT;
+  return ABSENT2;
 }
 function scanBufferForLastCacheTs(buf, bufStartsAtFileBeginning) {
   const text4 = buf.toString("utf8");
@@ -80918,9 +80983,9 @@ var ManagedStorage = class {
       text4 = await fs_default.promises.readFile(file, "utf8");
     } catch (e) {
       const err = e;
-      return err.code === "ENOENT" ? ABSENT : failed(`${file}: ${err.message}`);
+      return err.code === "ENOENT" ? ABSENT2 : failed(`${file}: ${err.message}`);
     }
-    if (text4.trim() === "") return ABSENT;
+    if (text4.trim() === "") return ABSENT2;
     const parsed2 = jsonParser(text4);
     return parsed2.kind === "failed" ? failed(`${file}: ${parsed2.reason}`) : parsed2;
   }
@@ -86013,10 +86078,10 @@ async function click2(url, size) {
     const refused2 = copiesOnly ? await copy2(effects.map((e) => e.args.join("/")).join("\n")) : `not sent: on a real machine this ${host.map((e) => HOST_VERBS.get(e.verb)).join(", ")}`;
     return { ...await render2(size), refused: refused2 };
   }
-  const { verb, value } = parseHandlerUrl(url);
+  const { verb, value } = clickOf(url);
   let refused = null;
   try {
-    await daemon2({ v: PROTOCOL_VERSION, kind: "click", verb, value, clientVersion: PACKAGE_VERSION });
+    await daemon2({ v: PROTOCOL_VERSION, kind: "click", verb, value });
   } catch (e) {
     refused = e instanceof Error ? e.message : String(e);
   }
