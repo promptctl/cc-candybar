@@ -1,12 +1,15 @@
-import net from "node:net";
-import { hostOf } from "./helpers/host";
-import fs from "node:fs";
-import path from "node:path";
-import os from "node:os";
+import type { Duplex } from "node:stream";
+import { heldClock } from "./helpers/held-clock";
+import { memoryConnection } from "./helpers/memory-connection";
+import { RENDER_BUDGETS } from "../src/daemon/client";
+import { exchangeOutcome } from "../src/daemon/client-transport";
 import { formatPermanentGlyph } from "../src/render/error-glyph";
 import type { PermanentOutcome } from "../src/daemon/client-transport";
-import { PROTOCOL_VERSION, encodeFrame, makeFrameReader } from "../src/daemon/protocol";
-import { systemTimekeeper } from "../src/time";
+import {
+  PROTOCOL_VERSION,
+  encodeFrame,
+  makeFrameReader,
+} from "../src/daemon/protocol";
 
 // [LAW:behavior-not-structure] These tests assert the contract — the glyph's
 // visible text, single-line shape, prefix, and reset tail — not the
@@ -123,7 +126,7 @@ describe("formatPermanentGlyph (kz8.5 ch.2)", () => {
   });
 });
 
-// --- end-to-end: stubbed daemon → tryRenderViaDaemon → formatPermanentGlyph ---
+// --- end-to-end: daemon's answer → exchangeOutcome → formatPermanentGlyph ---
 //
 // [LAW:behavior-not-structure] The pipeline contract: a daemon that returns
 // VERSION_MISMATCH causes the client to produce a permanent/version_mismatch
@@ -131,86 +134,73 @@ describe("formatPermanentGlyph (kz8.5 ch.2)", () => {
 // numbers in its visible text. This is the load-bearing path — the whole
 // point of chunk 2 is that this end-to-end flow produces a readable error
 // instead of a blank statusline.
+//
+// [LAW:locality-or-seam] The daemon is the other end of an in-memory
+// connection and the client's clock is held, so the request, the frame reader
+// and the classification run as shipped with no listener or budget for a
+// loaded loop to miss.
 
-function spinUpMismatchSocket(
-  sockPath: string,
-  daemonV: number,
-): Promise<net.Server> {
-  return new Promise((resolve) => {
-    const server = net.createServer((sock) => {
-      const reader = makeFrameReader(
-        (frame) => {
-          const req = frame as { v?: number };
-          // The stubbed daemon always answers VERSION_MISMATCH (with daemonV
-          // echoed) regardless of the actual request version — we want to
-          // observe what happens when the daemon disagrees with the client.
-          sock.write(
-            encodeFrame({
-              ok: false,
-              error: `protocol v${req.v ?? "?"} not supported (daemon at v${daemonV})`,
-              code: "VERSION_MISMATCH",
-              daemonV,
-            }),
-          );
-          sock.end();
-        },
-        () => {
-          /* parse error ignored on daemon side */
-        },
-      );
-      sock.on("data", reader);
-    });
-    server.listen(sockPath, () => resolve(server));
-  });
+// The stubbed daemon always answers VERSION_MISMATCH (with daemonV echoed)
+// regardless of the actual request version — we want to observe what happens
+// when the daemon disagrees with the client.
+function mismatchingDaemonEnd(daemonEnd: Duplex, daemonV: number): void {
+  daemonEnd.on(
+    "data",
+    makeFrameReader(
+      (frame) => {
+        const req = frame as { v?: number };
+        daemonEnd.write(
+          encodeFrame({
+            ok: false,
+            error: `protocol v${req.v ?? "?"} not supported (daemon at v${daemonV})`,
+            code: "VERSION_MISMATCH",
+            daemonV,
+          }),
+        );
+        daemonEnd.end();
+      },
+      () => {
+        /* parse error ignored on daemon side */
+      },
+    ),
+  );
 }
 
-describe("end-to-end: VERSION_MISMATCH wire → permanent outcome → glyph", () => {
+describe("VERSION_MISMATCH wire → permanent outcome → glyph", () => {
   test("stubbed daemon at a different protocol version yields a glyph that names both versions", async () => {
-    const tmpRoot = fs.mkdtempSync(
-      path.join(os.tmpdir(), "cc-candybar-glyph-"),
-    );
-    const stateDir = path.join(tmpRoot, "cc-candybar");
-    fs.mkdirSync(stateDir, { recursive: true });
-    const sockPath = path.join(stateDir, "socket");
     const daemonV = PROTOCOL_VERSION + 7; // arbitrary "other" version
+    const { daemonEnd, client } = memoryConnection();
+    mismatchingDaemonEnd(daemonEnd, daemonV);
 
-    const server = await spinUpMismatchSocket(sockPath, daemonV);
-    const host = hostOf({
-      ...process.env,
-      XDG_STATE_HOME: tmpRoot,
-      CC_CANDYBAR_SOCKET: sockPath,
-    });
-    try {
-      const { tryRenderViaDaemon } = await import("../src/daemon/client");
-      const outcome = await tryRenderViaDaemon({ host, clock: systemTimekeeper }, 
-        {
+    const outcome = await exchangeOutcome(
+      client,
+      heldClock(new Date()),
+      (deadline) => ({
+        kind: "render",
+        hookData: {
           session_id: "test-glyph-session",
           workspace: { project_dir: "/tmp" },
           model: { id: "x", display_name: "X" },
         } as never,
-        ["cc-candybar"],
-        "/tmp",
-        {},
-      );
-      expect(outcome.kind).toBe("permanent");
-      if (outcome.kind !== "permanent") return;
-      expect(outcome.cause).toBe("version_mismatch");
-      if (outcome.cause !== "version_mismatch") return;
-      expect(outcome.clientV).toBe(PROTOCOL_VERSION);
-      expect(outcome.daemonV).toBe(daemonV);
+        args: ["cc-candybar"],
+        cwd: "/tmp",
+        deadline,
+      }),
+      RENDER_BUDGETS,
+      // The daemon never answers ok here, so nothing is projected.
+      (): string | undefined => undefined,
+    );
+    expect(outcome.kind).toBe("permanent");
+    if (outcome.kind !== "permanent") return;
+    expect(outcome.cause).toBe("version_mismatch");
+    if (outcome.cause !== "version_mismatch") return;
+    expect(outcome.clientV).toBe(PROTOCOL_VERSION);
+    expect(outcome.daemonV).toBe(daemonV);
 
-      const glyph = formatPermanentGlyph(outcome);
-      expect(glyph).toContain(`client v${PROTOCOL_VERSION}`);
-      expect(glyph).toContain(`daemon v${daemonV}`);
-      expect(glyph.startsWith(OPEN)).toBe(true);
-      expect(glyph.endsWith(TAIL)).toBe(true);
-    } finally {
-      await new Promise<void>((r) => server.close(() => r()));
-      try {
-        fs.rmSync(tmpRoot, { recursive: true, force: true });
-      } catch {
-        /* tmpdir cleanup best-effort */
-      }
-    }
+    const glyph = formatPermanentGlyph(outcome);
+    expect(glyph).toContain(`client v${PROTOCOL_VERSION}`);
+    expect(glyph).toContain(`daemon v${daemonV}`);
+    expect(glyph.startsWith(OPEN)).toBe(true);
+    expect(glyph.endsWith(TAIL)).toBe(true);
   });
 });

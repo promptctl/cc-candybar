@@ -13,6 +13,7 @@
 // branch.
 
 import net from "node:net";
+import type { Duplex } from "node:stream";
 import type { World } from "../host";
 import { socketPath } from "./paths";
 import {
@@ -98,28 +99,47 @@ export async function requestOutcome<T>(
   budgets: RoundTripBudgets,
   project: (resp: OkResponse) => T | undefined,
 ): Promise<RoundTripOutcome<T>> {
-  let sock: net.Socket | null = null;
+  let sock: net.Socket;
   try {
     sock = await connectWithTimeout(
       socketPath(world.host),
       budgets.connectMs,
       world.clock,
     );
+  } catch (e) {
+    return interpretException(e);
+  }
+  return exchangeOutcome(sock, world.clock, request, budgets, project);
+}
+
+// [LAW:locality-or-seam] The round trip over a connection already made, which
+// is the part of a request that decides what the client saw. The socket is the
+// process boundary and stays in requestOutcome; a test hands this a stream and
+// a held clock, and reaches the real deadline, framing and classification
+// without a listener whose accept can land late. Closes `sock` when done.
+export async function exchangeOutcome<T>(
+  sock: Duplex,
+  clock: Pick<Timekeeper, "now" | "after">,
+  request: (deadline: number) => UnversionedRequest,
+  budgets: RoundTripBudgets,
+  project: (resp: OkResponse) => T | undefined,
+): Promise<RoundTripOutcome<T>> {
+  try {
     // [LAW:one-source-of-truth] One instant: the one the request states and
     // the one the client's own timer gives up at.
-    const deadline = world.clock.now() + budgets.budgetMs;
+    const deadline = clock.now() + budgets.budgetMs;
     const req = request(deadline);
     const resp: Response = await sendOne(
       sock,
       { v: PROTOCOL_VERSION, ...req },
       deadline,
-      world.clock,
+      clock,
     );
     return interpretResponse(req.kind, resp, project);
   } catch (e) {
     return interpretException(e);
   } finally {
-    if (sock) sock.destroy();
+    sock.destroy();
   }
 }
 
