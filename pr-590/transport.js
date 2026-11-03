@@ -53599,7 +53599,7 @@ function shellReader(launcher, command, cwd2, signal) {
       if (!r.ok && r.reason === "aborted" && signal.aborted)
         throw signal.reason;
       if (r.ok) return ok(r.stdout);
-      const why2 = r.exitCode === null ? [r.reason, r.error].filter((s) => s !== void 0).join(": ") : `exited with code ${r.exitCode}`;
+      const why2 = r.reason === "non-zero" ? `exited with code ${r.exitCode}` : [r.reason, r.error].filter((s) => s !== void 0).join(": ");
       return failed(`shell "${command}" ${why2} in ${cwd2}`);
     }
   };
@@ -71000,8 +71000,9 @@ function outcomeOf(result) {
     case "spawn-error":
     case "rate-limited":
     case "signal-refused":
-    case "output-limit":
       return "launch";
+    case "output-limit":
+      return "output-limit";
   }
 }
 function exitOf(result) {
@@ -71009,7 +71010,7 @@ function exitOf(result) {
   return result.exitCode === null ? "-" : String(result.exitCode);
 }
 function failureText(action2, outcome, result, timeoutMs) {
-  const stderr2 = result.stderr.trim();
+  const stderr2 = outcome === "output-limit" ? "" : result.stderr.trim();
   const reason = outcome === "timeout" ? `timed out after ${timeoutMs / 1e3} s` : outcome === "exit" ? `exited ${exitOf(result)}` : (result.ok ? "" : result.error) || "could not be started";
   return `run ${action2}: ${stderr2 === "" ? reason : stderr2}`;
 }
@@ -71086,7 +71087,8 @@ var Runs = class {
       `run sid=${valueOf(run3.sessionId)} action=${valueOf(run3.action)} program=${valueOf(run3.argv[0])} outcome=${outcome} exit=${exitOf(result)} took=${took} refreshed=${run3.refreshes.map((r) => r.name).join(",") || "-"}`
     );
     if (outcome === "timeout") this.timedOut++;
-    if (outcome === "exit" || outcome === "launch") this.failed++;
+    if (outcome === "exit" || outcome === "launch" || outcome === "output-limit")
+      this.failed++;
     if (outcome === "ok" || outcome === "aborted") return;
     holdClickError(
       this.deps.state,
