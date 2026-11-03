@@ -382,9 +382,6 @@ interface LaunchState {
   // cut at the bound, or a held pipe that failed — and what it says, read by
   // every render through the event hold. Null before the first.
   pipeEvent: PipeEvent | null;
-  // What the record says: each kind and category since an answer last carried
-  // one, so a second event before anyone saw the first adds to it.
-  readonly pipeCounts: Map<string, number>;
   // What has not ended: each launch in flight and each lifeline.
   readonly ending: Set<Promise<unknown>>;
   // [LAW:no-silent-failure] Launches the OS would not let this launcher end,
@@ -504,13 +501,19 @@ export interface LifelineWarning {
 // reader stopped reading, which `feed` already says is no fault.
 type PipeEventKind = "cut" | "read-error";
 
-export type PipeEvent = HeldEvent;
+export interface PipeEvent extends HeldEvent {
+  // What its text counts: each kind and category since an answer last carried
+  // one, so a second event before anyone saw the first adds to it.
+  readonly counts: ReadonlyMap<string, number>;
+}
 
 export interface LaunchPipesWarning {
   readonly kind: "launch-pipes";
   readonly message: string;
   // The record the warning shows, which an answer carrying it marks answered.
   readonly event: PipeEvent;
+  // Why this render shows it: inside the hold, or owed past it.
+  readonly hold: "held" | "owed";
 }
 
 export type LauncherWarning = LifelineWarning | LaunchPipesWarning;
@@ -532,24 +535,32 @@ const pipeEventWords = (kind: PipeEventKind): string =>
     ? `output cut at the ${MAX_CAPTURED_BYTES}-byte bound, so the program holding it now fails its writes`
     : "output failed to read";
 
+const PIPE_EVENT_LEAD = "a launched program's pipe outlived its launch: ";
+
 function pipeEvent(
   state: LaunchState,
   kind: PipeEventKind,
   category: LaunchCategory,
 ): void {
+  const last = state.pipeEvent;
+  const counts = new Map(last === null || last.answered ? [] : last.counts);
   const key = `${kind}\0${category}`;
-  state.pipeCounts.set(key, (state.pipeCounts.get(key) ?? 0) + 1);
-  const said = [...state.pipeCounts].map(([at, n]) => {
+  counts.set(key, (counts.get(key) ?? 0) + 1);
+  const said = [...counts].map(([at, n]) => {
     const [k, c] = at.split("\0") as [PipeEventKind, LaunchCategory];
     return `${n}× ${c} ${pipeEventWords(k)}`;
   });
-  const text = `a launched program's pipe outlived its launch: ${said.join("; ")}`;
   state.pipeEvent = {
-    text,
+    text: `${PIPE_EVENT_LEAD}${said.join("; ")}`,
     at: state.scope.now(),
     answered: false,
+    counts,
   };
-  state.scope.observeWarnings({ kind: "launch-pipes", text });
+  // The observer hears this event alone, so the log says each once.
+  state.scope.observeWarnings({
+    kind: "launch-pipes",
+    text: `${PIPE_EVENT_LEAD}${category} ${pipeEventWords(kind)}`,
+  });
 }
 
 // [LAW:single-enforcer] The one write after a pipe event: an answer carrying
@@ -558,7 +569,6 @@ function answeredPipeEvent(state: LaunchState, event: PipeEvent): void {
   const last = state.pipeEvent;
   if (last === null || !answeredBy(last, event)) return;
   state.pipeEvent = { ...last, answered: true };
-  state.pipeCounts.clear();
 }
 
 // What the launcher warns a render at `at`: the lifeline's fault while it
@@ -569,16 +579,15 @@ function launcherWarnings(
   render: Drawing["by"],
 ): LauncherWarning[] {
   const event = state.pipeEvent;
-  const shown =
-    event !== null &&
-    eventHoldAt(event, PIPE_EVENT_HOLD_S, at, render) !== "over";
+  const hold =
+    event === null ? "over" : eventHoldAt(event, PIPE_EVENT_HOLD_S, at, render);
   return [
     ...(state.fault === null
       ? []
       : [{ kind: "lifeline" as const, message: lifelineMessage(state.fault) }]),
-    ...(shown
-      ? [{ kind: "launch-pipes" as const, message: event.text, event }]
-      : []),
+    ...(event === null || hold === "over"
+      ? []
+      : [{ kind: "launch-pipes" as const, message: event.text, event, hold }]),
   ];
 }
 
@@ -1540,7 +1549,6 @@ function launcherWithState(
     lifeline: null,
     fault: null,
     pipeEvent: null,
-    pipeCounts: new Map(),
     ending: new Set(),
     unreaped: new Map(),
     drains: new Set(),

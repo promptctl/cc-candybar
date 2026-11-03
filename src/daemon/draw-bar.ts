@@ -547,11 +547,11 @@ export function drawRender(
   // A stall is no reason of this watch's: it has the bar's own row.
   const configWatch =
     entry.watch === null ? null : watchFault("config watch", entry.watch, null);
-  // [LAW:no-ambient-temporal-coupling] The launcher's warnings at this draw's instant
-  // and for whom it draws, by the same event hold as the click error.
+  // [LAW:no-ambient-temporal-coupling] The launcher's warnings at this draw's
+  // instant and for whom it draws, by the same event hold as the click error.
   const launched = launcher.launcherWarnings(at, drawing.by);
-  const pipeShown =
-    launched.find((w) => w.kind === "launch-pipes")?.event ?? null;
+  const pipeWarning = launched.find((w) => w.kind === "launch-pipes");
+  const pipeShown = pipeWarning?.event ?? null;
   const standing: readonly StandingWarning[] = [
     ...fileEventsWarnings(fileEvents.delivery()),
     ...launched,
@@ -769,6 +769,8 @@ export function drawRender(
     rules: [...rules].map(([slot, how]) => `${slot}:${how}`).join(",") || "-",
     err: errors.length > 0 ? "Y" : "N",
     clickError: clickHold.kind === "none" ? "-" : clickHold.kind,
+    // The launcher's pipe event as this frame showed it: `-` for not at all.
+    pipeEvent: pipeWarning?.hold ?? "-",
     upd: String(updates.length),
     // How many repositories the bar asked about.
     ask: String(questions.length),

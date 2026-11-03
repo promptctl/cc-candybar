@@ -39,11 +39,6 @@ export function eventHoldAt(
 
 // [LAW:single-enforcer] The one rule for which answer marks an event: one that
 // carried the latest event, not yet marked. A newer event since stays unmarked.
-export function answeredBy(last: HeldEvent | null, shown: HeldEvent): boolean {
-  return (
-    last !== null &&
-    !last.answered &&
-    last.at === shown.at &&
-    last.text === shown.text
-  );
+export function answeredBy(last: HeldEvent, shown: HeldEvent): boolean {
+  return !last.answered && last.at === shown.at && last.text === shown.text;
 }

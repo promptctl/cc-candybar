@@ -32,7 +32,6 @@ test("past the hold an answered event is over for every render", () => {
 test("an answer marks the latest event it carried, once, and never a newer one", () => {
   expect(answeredBy(fresh, fresh)).toBe(true);
   expect(answeredBy(answered, fresh)).toBe(false);
-  expect(answeredBy(null, fresh)).toBe(false);
   expect(answeredBy({ ...fresh, at: at(101) }, fresh)).toBe(false);
   expect(answeredBy({ ...fresh, text: "2× e" }, fresh)).toBe(false);
 });

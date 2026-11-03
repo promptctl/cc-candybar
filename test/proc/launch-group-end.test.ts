@@ -13,7 +13,7 @@ import {
 import type { DrainEnd, LaunchStatsHandle } from "../../src/proc/stats-handle";
 import { until } from "../helpers/until";
 import { systemTimekeeper } from "../../src/time";
-import type { Instant } from "../../src/utils/instant";
+import { instantOf, type Instant } from "../../src/utils/instant";
 
 // What these cases launch leaves its process group with setsid, which only
 // python reaches portably: macOS has no setsid command.
@@ -286,12 +286,13 @@ describe("the pipes a descendant holds past its launch", () => {
     // an answer carries it.
     expect(heard.some((c) => c.kind === "launch-pipes")).toBe(true);
     // What a render at `t` seconds after the event shows of it.
-    // Found by kind: a lifeline fault under load would list first.
+    // Found by kind, read now, inside its hold: a lifeline fault under load
+    // would list first.
     const pipes = launcher
-      .launcherWarnings(0 as Instant, "feed")
+      .launcherWarnings(instantOf(new Date()), "feed")
       .find((w) => w.kind === "launch-pipes");
-    expect(pipes).toBeDefined();
-    if (pipes?.kind !== "launch-pipes") return;
+    if (pipes?.kind !== "launch-pipes")
+      throw new Error("no pipe event shown inside its hold");
     const event = pipes.event;
     const shown = (t: number, render: "feed" | "request") =>
       launcher
