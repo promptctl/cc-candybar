@@ -18,12 +18,21 @@
 // thread, which is the thread Launch Services delivers the next click on.
 //
 // [LAW:no-silent-failure] A frame that could not be written is the one failure
-// this app can see, and it is written to the unified log under the app's
-// subsystem (`log stream --predicate 'subsystem == "com.cccandybar.url-handler"'`).
-// The click is lost by design: the app never starts a daemon, because that
-// would need the paths that age. Telling the user is the next ticket.
+// this app can see. It is written to the unified log under the app's subsystem
+// (`log stream --predicate 'subsystem == "com.cccandybar.url-handler"'`) and
+// told to the user as a macOS user notification carrying what was observed,
+// never a diagnosis. The click is lost by design: the app never starts a
+// daemon, because that would need the paths that age, and a launcher the
+// daemon left beside its socket would make this app a second enforcer
+// [LAW:single-enforcer] of that directory's trust check and of the daemon's
+// spawn-storm protections.
+//
+// The binary runs only inside its .app bundle: the notification center aborts
+// the process at launch outside one, and no click can reach a bare binary
+// anyway, because Launch Services delivers URLs to bundles.
 
 import AppKit
+import UserNotifications
 import os
 
 // Mirrored: src/daemon/protocol.ts FRAME_HEADER_BYTES, URL_FRAME_KIND and
@@ -122,7 +131,59 @@ func forward(_ url: String) -> Forward {
   }
 }
 
-final class Handler: NSObject, NSApplicationDelegate {
+// Tells the user a click was lost, in a form that needs no daemon. The body is
+// the observed failure as the forward reported it; the user reads it as the
+// fact it is. Authorization is asked for on every lost click: the request
+// completes without a prompt once the user has answered, so the app keeps no
+// state about it, and a user who never loses a click never sees the prompt.
+// One fixed identifier, because there is one condition: a run of lost clicks
+// is one notice carrying the latest observation, not a stack of copies.
+// [LAW:no-silent-failure] A post the center refuses (notifications denied for
+// the app, or an OS error) is logged under the subsystem; the user who denied
+// them chose not to be told this way, and there is no second channel.
+let lostClickNotice = "lost-click"
+
+func notifyLost(_ why: String) {
+  let center = UNUserNotificationCenter.current()
+  center.requestAuthorization(options: [.alert]) { granted, error in
+    if let error = error {
+      log.error("notification authorization failed: \(error.localizedDescription, privacy: .public)")
+      return
+    }
+    if !granted {
+      // A user's choice, not this app's failure: notice, not error.
+      log.notice("notification not shown: the user has not allowed notifications for this app")
+      return
+    }
+    let content = UNMutableNotificationContent()
+    // The product's name is the banner's header, from the bundle's display name.
+    content.title = "Click not delivered"
+    content.body = why
+    let request = UNNotificationRequest(
+      identifier: lostClickNotice, content: content, trigger: nil)
+    center.add(request) { error in
+      if let error = error {
+        log.error("notification not shown: \(error.localizedDescription, privacy: .public)")
+      }
+    }
+  }
+}
+
+final class Handler: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+  // Launch Services activates this app to deliver a click, so the app is
+  // frontmost at the moment it posts, and macOS hides a frontmost app's
+  // notifications unless its delegate asks for the banner. Verified on
+  // macOS 15: without this the post succeeds and the user sees nothing. The
+  // list entry stays after the banner expires, so a user who looked away still
+  // finds the lost click in Notification Center.
+  func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    willPresent notification: UNNotification,
+    withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+  ) {
+    completionHandler([.banner, .list])
+  }
+
   func application(_ application: NSApplication, open urls: [URL]) {
     for url in urls {
       let link = url.absoluteString
@@ -137,6 +198,7 @@ final class Handler: NSObject, NSApplicationDelegate {
         log.notice("forwarded \(link, privacy: .private)")
       case .failed(let why):
         log.error("lost \(link, privacy: .private): \(why, privacy: .public)")
+        notifyLost(why)
       }
     }
   }
@@ -145,4 +207,5 @@ final class Handler: NSObject, NSApplicationDelegate {
 let app = NSApplication.shared
 let handler = Handler()
 app.delegate = handler
+UNUserNotificationCenter.current().delegate = handler
 app.run()

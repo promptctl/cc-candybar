@@ -324,6 +324,11 @@ function infoPlist(): string {
     `  <string>${BUNDLE_ID}</string>`,
     "  <key>CFBundleName</key>",
     `  <string>${APP_NAME}</string>`,
+    // The name macOS puts on the notification-authorization prompt the app
+    // raises on its first lost click; the user knows the product, not the
+    // bundle.
+    "  <key>CFBundleDisplayName</key>",
+    "  <string>cc-candybar</string>",
     "  <key>CFBundleExecutable</key>",
     `  <string>${APP_NAME}</string>`,
     "  <key>CFBundlePackageType</key>",
