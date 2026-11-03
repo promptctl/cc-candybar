@@ -1,3 +1,9 @@
+## [1.182.0](https://github.com/promptctl/cc-candybar/compare/v1.181.1...v1.182.0) (2026-11-03)
+
+### Features
+
+* **url-handler:** a click the forwarder could not deliver tells the user (candybar-daemon-health-ajx0.c3x) ([#600](https://github.com/promptctl/cc-candybar/issues/600)) ([45d5d1e](https://github.com/promptctl/cc-candybar/commit/45d5d1e8852fca64ed242810be9361c168d539be))
+
 ## [1.181.1](https://github.com/promptctl/cc-candybar/compare/v1.181.0...v1.181.1) (2026-11-03)
 
 ### Bug Fixes
