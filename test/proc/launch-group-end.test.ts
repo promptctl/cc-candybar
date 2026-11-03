@@ -282,19 +282,9 @@ describe("the pipes a descendant holds past its launch", () => {
     expect(cut?.bytes).toBeGreaterThan(MAX_CAPTURED_BYTES);
     // The holder died writing to the cut pipe, so its stderr closed too.
     await until(() => drainsClosed.length === 2, "the holder's end");
-  });
-
-  it("show a cut in the launcher's warnings, held for every render and owed to a request until answered", async () => {
-    const r = await launch(
-      python(
-        `${SET}if os.fork()==0:\n  os.setsid()\n  time.sleep(0.3)\n  while True: os.write(1,b'x'*65536)\nos._exit(0)\n`,
-      ),
-    );
-    expect(r.ok).toBe(true);
-    await until(
-      () => heard.some((c) => c.kind === "launch-pipes"),
-      "the cut heard",
-    );
+    // The cut is a pipe event: held for every render, owed to a request until
+    // an answer carries it.
+    expect(heard.some((c) => c.kind === "launch-pipes")).toBe(true);
     // What a render at `t` seconds after the event shows of it.
     const [first] = launcher.launcherWarnings(0 as Instant, "feed");
     expect(first?.kind).toBe("launch-pipes");

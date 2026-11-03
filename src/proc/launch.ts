@@ -495,9 +495,10 @@ export interface LifelineWarning {
 }
 
 // [LAW:no-silent-failure] What a pipe that outlived its launch met: a drain
-// cut at the bound (its holder's writes fail from then on, often fatally), a
-// drain that failed to read, or a held input that failed to write.
-type PipeEventKind = "cut" | "read-error" | "write-error";
+// cut at the bound (its holder's writes fail from then on, often fatally), or
+// a drain that failed to read. A held input's failed write is not one: its
+// reader stopped reading, which `feed` already says is no fault.
+type PipeEventKind = "cut" | "read-error";
 
 export interface PipeEvent extends HeldEvent {
   readonly text: string;
@@ -527,9 +528,7 @@ const lifelineMessage = (fault: string): string =>
 const pipeEventWords = (kind: PipeEventKind): string =>
   kind === "cut"
     ? `output cut at the ${MAX_CAPTURED_BYTES}-byte bound, so the program holding it now fails its writes`
-    : kind === "read-error"
-      ? "output failed to read"
-      : "input failed to write";
+    : "output failed to read";
 
 function pipeEvent(
   state: LaunchState,
@@ -800,18 +799,6 @@ function hold(
 // An input is written, never cut, so it always ends "closed".
 const inputEnd = (): DrainEnd => "closed";
 
-// [LAW:no-silent-failure] A held input's write error comes after the launch's
-// verdict, so unlike one during the launch (`feed`) it is a pipe event: what
-// the descendant reading it was handed stopped short.
-function holdInput(
-  state: LaunchState,
-  category: LaunchCategory,
-  input: Writable,
-): void {
-  input.on("error", () => pipeEvent(state, "write-error", category));
-  hold(state, category, input, inputEnd);
-}
-
 // At module scope, so a held input's listener holds nothing of the launch.
 function feed(input: Writable, text: string | Buffer | undefined): void {
   // [LAW:no-silent-failure] exception: a reader may stop reading and still
@@ -911,7 +898,7 @@ async function launchWaited(
       stderr.drain();
       // Input still being written at settle is held with the drains.
       if (input !== null && !input.destroyed && !input.writableFinished)
-        holdInput(state, opts.category, input);
+        hold(state, opts.category, input, inputEnd);
       deliver();
     };
     const settle = (r: LaunchResult) => finish(() => resolve(r));
