@@ -4,15 +4,22 @@
     {
       "version": "pr-598",
       "ref": "refs/pull/598/merge",
-      "sha": "7459b3f71f0e931886a7934e96fe8c9b2d42963f",
-      "timestamp": "2026-11-03T02:42:38.514Z",
+      "sha": "710541aff4e58bc89300d51a9fdf7c35fd28e025",
+      "timestamp": "2026-11-03T02:44:08.947Z",
       "commits": [
         {
-          "sha": "7459b3f71f0e931886a7934e96fe8c9b2d42963f",
+          "sha": "710541aff4e58bc89300d51a9fdf7c35fd28e025",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T02:41:35Z",
-          "message": "Merge 8514367e5ab3ffc1a7cb9a683c756dd991becb47 into 0b82ee794b36b93e687f43f4fe214418d8d83c9e\n"
+          "timestamp": "2026-11-03T02:43:13Z",
+          "message": "Merge 63994133fa15ccd05337b5ee0697764d719fd580 into 0b82ee794b36b93e687f43f4fe214418d8d83c9e\n"
+        },
+        {
+          "sha": "63994133fa15ccd05337b5ee0697764d719fd580",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T19:42:52-07:00",
+          "message": "fix(launch): feed takes the input's Buffer form too (candybar-testing-0x6u.3zo)\n"
         },
         {
           "sha": "8514367e5ab3ffc1a7cb9a683c756dd991becb47",
