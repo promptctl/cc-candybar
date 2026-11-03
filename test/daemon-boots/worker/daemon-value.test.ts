@@ -31,6 +31,7 @@ import {
   settingsHistoryPath,
 } from "../../../src/daemon/paths";
 import {
+  classifyInbound,
   PROTOCOL_VERSION,
   type ReaderRenderRequest,
   type Response,
@@ -143,7 +144,7 @@ describe("the daemon is a value", () => {
     req: Parameters<Daemon["reply"]>[0],
   ): Promise<Response> => {
     const handled = await daemon.handle(
-      req,
+      classifyInbound(req),
       () => false,
       daemon.clock.monotonic(),
       () => false,
@@ -390,7 +391,7 @@ describe("the daemon is a value", () => {
     // A render waiting on the slow source as the daemon closes.
     await until(() => existsSync(ran), "the slow source running");
     const midWait = daemon.handle(
-      renderRequest("value-close", 20_000),
+      classifyInbound(renderRequest("value-close", 20_000)),
       () => false,
       daemon.clock.monotonic(),
       () => false,

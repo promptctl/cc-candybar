@@ -123,19 +123,46 @@ function resolveForwarder(sourceDist: string): string {
     }
     return built;
   }
-  const key = `${process.platform}-${process.arch}`;
-  const pkgName = PLATFORM_PACKAGES[key];
-  if (pkgName === undefined) {
-    throw new Error(
-      `install: no URL handler app ships for ${key}; the scheme is macOS-only.`,
-    );
+  const shipped = platformPackageFile(sourceDist, `bin/${FORWARDER_BIN}`);
+  switch (shipped.kind) {
+    case "found":
+      return shipped.path;
+    case "no-package":
+      throw new Error(
+        `install: no URL handler app ships for ${shipped.platform}; the scheme is macOS-only.`,
+      );
+    case "missing":
+      throw new Error(
+        `install: the URL handler app was not found in ${shipped.pkgName} (bin/${FORWARDER_BIN}). The optional platform package is missing or older than this release: reinstall the package.`,
+      );
   }
+}
+
+// [LAW:one-source-of-truth] One lookup of a file the running platform's
+// package ships, for everything install stages from it: the package is named
+// by platform and arch (PLATFORM_PACKAGES) and resolved from the installed
+// bundle's own node_modules, where the optional dependency lives — anchored
+// to the bundle's real location, not this module's compiled form (which
+// ts-jest loads as CJS where import.meta is illegal).
+type PlatformPackageFile =
+  | { kind: "found"; path: string }
+  | { kind: "no-package"; platform: string }
+  | { kind: "missing"; pkgName: string };
+
+function platformPackageFile(
+  sourceDist: string,
+  file: string,
+): PlatformPackageFile {
+  const platform = `${process.platform}-${process.arch}`;
+  const pkgName = PLATFORM_PACKAGES[platform];
+  if (pkgName === undefined) return { kind: "no-package", platform };
   try {
-    return createRequire(sourceDist).resolve(`${pkgName}/bin/${FORWARDER_BIN}`);
+    return {
+      kind: "found",
+      path: createRequire(sourceDist).resolve(`${pkgName}/${file}`),
+    };
   } catch {
-    throw new Error(
-      `install: the URL handler app was not found in ${pkgName} (bin/${FORWARDER_BIN}). The optional platform package is missing or older than this release: reinstall the package.`,
-    );
+    return { kind: "missing", pkgName };
   }
 }
 
@@ -148,24 +175,13 @@ type RenderEntry =
   | { kind: "node-shim"; sourcePath: string };
 
 function resolveRenderEntry(sourceDist: string): RenderEntry {
-  const key = `${process.platform}-${process.arch}`;
-  const pkgName = PLATFORM_PACKAGES[key];
-  if (pkgName) {
-    // Anchored to the bundle's real location, not this module's compiled
-    // form (which ts-jest loads as CJS where import.meta is illegal) — the
-    // platform package lives in node_modules beside the installed dist.
-    const require = createRequire(sourceDist);
-    try {
-      return {
-        kind: "native",
-        sourcePath: require.resolve(`${pkgName}/bin/cc-candybar`),
-      };
-    } catch {
-      // Optional dependency absent (unsupported install, pruned optionals).
-      // Falls through to the node shim — announced by the caller, never
-      // silent. [LAW:no-silent-failure]
-    }
+  const shipped = platformPackageFile(sourceDist, "bin/cc-candybar");
+  if (shipped.kind === "found") {
+    return { kind: "native", sourcePath: shipped.path };
   }
+  // No package for this platform, or the optional dependency absent (pruned
+  // optionals): the node shim — announced by the caller, never silent.
+  // [LAW:no-silent-failure]
   return {
     kind: "node-shim",
     sourcePath: path.resolve(

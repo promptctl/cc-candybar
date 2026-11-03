@@ -5,7 +5,7 @@ import { inspect } from "node:util";
 import { locations, type DaemonPaths } from "./paths";
 import type { Host } from "../host";
 import type { DaemonLog } from "./log";
-import type { Request } from "./protocol";
+import type { Inbound } from "./protocol";
 import type { DaemonParts } from "./daemon-parts.js";
 import { lanesAt, laneClicked, renderFrame, viewLanes } from "./draw-bar.js";
 import {
@@ -191,7 +191,7 @@ export interface Daemon {
   // The request handling a connection calls. `accepted` is when its connection
   // came in, on `clock`'s monotonic reading.
   readonly handle: (
-    req: Request,
+    inbound: Inbound,
     timedOut: () => boolean,
     accepted: number,
     clientLeft: () => boolean,

@@ -68,7 +68,6 @@ const TS_GLYPH = "src/render/error-glyph.ts";
 const TS_DIAG_TEXT = "src/render/diagnostic-text.ts";
 const TS_STYLE = "src/render/diagnostic-style.ts";
 const TS_PATHS = "src/daemon/paths.ts";
-const TS_PROTOCOL_PATHS = TS_PATHS;
 const TS_ACQUIRE = "src/daemon/acquire.ts";
 const TS_LIMITS_TEST = "test/daemon-limits.test.ts";
 const TS_LIMITS = "src/daemon/limits.ts";
@@ -198,7 +197,7 @@ const CHECKS = [
   {
     label: "the default socket path, as the URL handler derives it",
     ts: markers(
-      TS_PROTOCOL_PATHS,
+      TS_PATHS,
       [/path\.join\("\/tmp", `cc-candybar-\$\{uid\}`, "socket"\)/],
       "/tmp/cc-candybar-<uid>/socket",
     ),
@@ -589,6 +588,13 @@ const MIRRORS = { rust: "Rust", push: "statusline push", swift: "Swift URL handl
 const failures = [];
 for (const row of CHECKS) {
   const key = Object.keys(MIRRORS).find((k) => k in row);
+  // [LAW:no-silent-failure] A row naming no mirror is a mistake in this file,
+  // said by its label, not a TypeError from calling what it lacks.
+  if (key === undefined) {
+    throw new Error(
+      `check-protocol: row "${row.label}" names no mirror (one of ${Object.keys(MIRRORS).join(", ")})`,
+    );
+  }
   const [mirrorName, mirror] = [MIRRORS[key], row[key]];
   const tsValue = row.ts();
   const mirrorValue = mirror();

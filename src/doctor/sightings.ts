@@ -30,15 +30,6 @@ export type ClickArrival =
   | { readonly via: "link"; readonly delivery: Delivery }
   | { readonly via: "tmux-status" };
 
-// [LAW:dataflow-not-control-flow] Whether the client that brought the click
-// stays for the answer, as a fact of its arrival: the forwarder writes its
-// frame and hangs up by design, so its leaving says nothing about the click,
-// which still waits for its turn. Every other client holds the socket until
-// answered, so its leaving abandons a click still queued.
-export function clientWaits(arrival: ClickArrival): boolean {
-  return arrival.via === "tmux-status" || arrival.delivery.kind === "cli";
-}
-
 // [LAW:types-are-the-program] One session's bar, however long it has been
 // idle — `clicked`: a click on its 🩺, so the bar is cc-candybar's and on
 // screen, arrived `via` a link or the tmux status line; `shell`: a shell

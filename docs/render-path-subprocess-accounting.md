@@ -24,7 +24,7 @@ Current categories (13):
 - `git`, `user-shell`, `tmux` — render-related (cache-policy-driven)
 - `forge` — the gh/glab PR lookup, network-bound, metered apart from `git`
 - `click.pbcopy`, `click.open` — user-initiated (rate-limited at 1/sec each)
-- `install.plutil`, `install.osacompile`, `install.lsregister`, `install.pbcopy`, `install.open` — install-time only
+- `install.codesign`, `install.killall`, `install.lsregister`, `install.pbcopy`, `install.open` — install-time only
 - `daemon-spawn` — bootstrap
 - `process-fingerprint` — `ps -o lstart=` for socket-lease liveness, at daemon start and EADDRINUSE arbitration only
 

@@ -12,11 +12,12 @@ import { NOTHING_DELIVERED, renderFailed } from "./draw-bar.js";
 import { LANE_FRAMES } from "./lane-frames";
 import {
   PROTOCOL_VERSION,
+  classifyInbound,
   encodeFrame,
   encodeJsonFrame,
   makeFrameReader,
 } from "./protocol";
-import type { Request, Response } from "./protocol";
+import type { Response } from "./protocol";
 import { type Lane } from "../config/lanes.js";
 import { newestWins } from "../utils/newest-wins.js";
 import { REQUEST_TIMEOUT_MS } from "./request-deadline.js";
@@ -126,14 +127,24 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
     );
   });
 
+  // [LAW:dataflow-not-control-flow] Whether a client waits for the answer is a
+  // fact of what it sent. The URL handler app writes its frame and hangs up by
+  // design, so for a url frame the socket's close is not a peer leaving: the
+  // frame stays in flight, under the same deadline every request has, until
+  // its click is handled (a click past the deadline is refused, so a repeat
+  // click cannot revert it, src/daemon/journal-turns.ts), and no one is said
+  // to have left. Every other client holds the socket until answered.
+  let waits = true;
   const reader = makeFrameReader(
     (frame) => {
+      const inbound = classifyInbound(frame);
+      waits = inbound.kind === "request";
       void daemon
         .handle(
-          frame as Request,
+          inbound,
           () => timedOut,
           accepted,
-          () => sock.destroyed,
+          () => waits && sock.destroyed,
         )
         .then((r) =>
           r.kind === "reply"
@@ -143,6 +154,11 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
         .catch((err: unknown) => {
           daemon.log("error", `handler threw: ${inspect(err)}`);
           respond(renderFailed(err), null, NOTHING_DELIVERED);
+        })
+        .finally(() => {
+          if (waits) return;
+          clearBackstop();
+          leaveInFlight();
         });
     },
     (err) => {
@@ -199,6 +215,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
     daemon.log("warn", `socket error: ${err.message}`);
   });
   sock.on("close", () => {
+    if (!waits) return;
     clearBackstop();
     leaveInFlight();
   });

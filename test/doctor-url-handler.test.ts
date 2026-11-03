@@ -22,7 +22,6 @@ import {
 } from "../src/doctor/handler-probe";
 import { clickArrived } from "../src/doctor/edge";
 import {
-  clientWaits,
   type ClickArrival,
   type Delivery,
 } from "../src/doctor/sightings";
@@ -457,14 +456,5 @@ describe("the daemon's side of the round trip", () => {
       kind: "arrived",
       delivery: FORWARDED,
     });
-  });
-
-  // [LAW:dataflow-not-control-flow] The forwarder hangs up after its write by
-  // design, so its leaving must not refuse the click it brought; every other
-  // client holds the socket for the answer.
-  test("only the forwarder's leaving says nothing about its click", async () => {
-    expect(clientWaits(link(FORWARDED))).toBe(false);
-    expect(clientWaits(link(CLI))).toBe(true);
-    expect(clientWaits({ via: "tmux-status" })).toBe(true);
   });
 });

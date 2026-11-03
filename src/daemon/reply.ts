@@ -8,17 +8,13 @@ import {
   checkRenderRequest,
   type CheckedRenderRequest,
 } from "./render-checkpoint.js";
-import {
-  classifyInbound,
-  PROTOCOL_VERSION,
-  URL_FRAME_VERSIONS,
-} from "./protocol";
+import { PROTOCOL_VERSION, URL_FRAME_VERSIONS } from "./protocol";
 import type {
   ClickRequest,
+  Inbound,
   Request,
   Response,
   SubscribeRequest,
-  UrlFrame,
 } from "./protocol";
 import { parseSessionId, type SessionId } from "./session-id";
 import { type SourceSnapshots } from "./stats";
@@ -32,7 +28,7 @@ import {
 import { ClickAbandoned, DaemonClosing } from "./verb-error";
 import { transcriptReads } from "../utils/transcript-fs.js";
 import { readStores } from "../doctor/edge";
-import { clientWaits, type ClickArrival } from "../doctor/sightings";
+import type { ClickArrival } from "../doctor/sightings";
 import { transcriptSaid, type FrameSeen } from "./render-sightings";
 import { claudeConfigDir } from "../claude-settings";
 import { buildDebugSnapshot } from "./debug";
@@ -133,16 +129,15 @@ function subscription(req: SubscribeRequest): HandledRequest {
 
 export async function handleRequest(
   parts: DaemonParts,
-  raw: Request,
+  inbound: Inbound,
   timedOut: () => boolean,
   accepted: number,
   clientLeft: () => boolean,
 ): Promise<HandledRequest> {
-  // [LAW:parse-dont-validate] The one classification of an inbound frame: the
-  // URL handler's, which carries its own version and is judged by the click
-  // path (every one of them writes a click event, refused ones included), or
-  // a request, which the `v` gate below admits.
-  const inbound = classifyInbound(raw);
+  // The connection classified the frame (classifyInbound): the URL handler's,
+  // which carries its own version and is judged by the click path (every one
+  // of them writes a click event, refused ones included), or a request, which
+  // the `v` gate below admits.
   if (inbound.kind === "url") {
     return replied(
       stay(
@@ -595,23 +590,20 @@ async function clickEvent(
   accepted: number,
   timedOut: () => boolean,
   clientLeft: () => boolean,
-  run: (
-    facts: RequestFacts,
-    gone: (arrival: ClickArrival) => () => boolean,
-  ) => Promise<RequestOutcome>,
+  run: (facts: RequestFacts, gone: () => boolean) => Promise<RequestOutcome>,
 ): Promise<Response> {
   const { clock } = parts;
   const t0 = clock.monotonic();
   const facts: RequestFacts = [["queued", `${Math.round(t0 - accepted)}ms`]];
-  // [LAW:dataflow-not-control-flow] When a click still waiting for its turn
-  // is refused: the daemon's own deadline always, the client's hang-up only
-  // from a client that waits for the answer (clientWaits).
-  const gone = (arrival: ClickArrival) => () =>
-    timedOut() || (clientWaits(arrival) && clientLeft());
+  // When a click still waiting for its turn is refused: the daemon's deadline,
+  // or a client that waited for the answer leaving. The connection knows which
+  // clients wait (the forwarder does not), so its `clientLeft` already says so.
+  const gone = () => timedOut() || clientLeft();
   const outcome = await run(facts, gone);
-  // Whether the client was told TIMEOUT, and whether it hung up, while the
-  // click ran: its effect lands though the client reported a failure. One
-  // still waiting for its turn at either moment was refused (`abandoned`).
+  // Whether the client was told TIMEOUT, and whether a client that waited
+  // hung up, while the click ran: its effect lands though the client reported
+  // a failure. One still waiting for its turn at either moment was refused
+  // (`abandoned`).
   noteFacts(facts, {
     timedOut: timedOut() ? "Y" : "N",
     clientLeft: clientLeft() ? "Y" : "N",
@@ -636,7 +628,7 @@ async function clickOutcome(
   parts: DaemonParts,
   req: ClickRequest,
   facts: RequestFacts,
-  gone: (arrival: ClickArrival) => () => boolean,
+  gone: () => boolean,
 ): Promise<RequestOutcome> {
   const arrival: ClickArrival = { via: "link", delivery: { kind: "cli" } };
   noteFacts(facts, { via: "cli" });
@@ -649,9 +641,7 @@ async function clickOutcome(
       ],
     };
   }
-  return clickRan(() =>
-    handleClick(parts, verb, value, arrival, facts, gone(arrival)),
-  );
+  return clickRan(() => handleClick(parts, verb, value, arrival, facts, gone));
 }
 
 // [LAW:parse-dont-validate][LAW:no-silent-failure] The URL handler's frame run
@@ -661,7 +651,7 @@ async function clickOutcome(
 // here, as a bad request on the event, never dropped.
 async function urlClick(
   parts: DaemonParts,
-  frame: Partial<UrlFrame>,
+  frame: Record<string, unknown>,
   timedOut: () => boolean,
   accepted: number,
   clientLeft: () => boolean,
@@ -672,7 +662,7 @@ async function urlClick(
     timedOut,
     clientLeft,
     async (facts, gone) => {
-      const { urlV, url } = frame as { urlV: unknown; url: unknown };
+      const { urlV, url } = frame;
       noteFacts(facts, { via: "forwarder", urlV: String(urlV) });
       if (typeof urlV !== "number" || !URL_FRAME_VERSIONS.has(urlV)) {
         return {
@@ -695,14 +685,7 @@ async function urlClick(
         delivery: { kind: "forwarder", urlV },
       };
       return clickRan(() =>
-        handleClick(
-          parts,
-          link.verb,
-          link.value,
-          arrival,
-          facts,
-          gone(arrival),
-        ),
+        handleClick(parts, link.verb, link.value, arrival, facts, gone),
       );
     },
   );

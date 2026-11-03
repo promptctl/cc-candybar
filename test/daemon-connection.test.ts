@@ -69,13 +69,16 @@ const open = (daemon: ConnectionDaemon): Opened => {
 const held = () => {
   let answer!: (handled: HandledRequest) => void;
   let told: (() => boolean) | undefined;
+  let left: (() => boolean) | undefined;
   return {
-    handle: (async (_req, timedOut) => {
+    handle: (async (_req, timedOut, _accepted, clientLeft) => {
       told = timedOut;
+      left = clientLeft;
       return new Promise<HandledRequest>((resolve) => (answer = resolve));
     }) as ConnectionDaemon["handle"],
     answer: (handled: HandledRequest) => answer(handled),
     timedOut: () => told!(),
+    clientLeft: () => left!(),
   };
 };
 
@@ -194,6 +197,33 @@ describe("a connection over a stream", () => {
     expect(log.mock.calls.filter(([level]) => level !== "info")).toEqual([]);
   });
 
+  // [LAW:dataflow-not-control-flow] The forwarder's hang-up is its design, not
+  // a client leaving: a url frame stays in flight until handled, no one is
+  // said to have left, and the request deadline still holds over it — so a
+  // click that waited past the deadline is refused, as every client's is
+  // (src/daemon/journal-turns.ts), and a repeat click cannot revert it.
+  test("a url frame whose writer hung up stays in flight, under the deadline, with no client gone", async () => {
+    const request = held();
+    const daemon = standIn({ handle: request.handle });
+    const { client } = open(daemon);
+    client.end(encodeFrame({ kind: "url", urlV: 1, url: "cc-candybar://x" }));
+    await settled();
+    expect(daemon.stats.inFlight).toBe(1);
+    expect(request.clientLeft()).toBe(false);
+    expect(request.timedOut()).toBe(false);
+
+    jest.advanceTimersByTime(REQUEST_TIMEOUT_MS);
+    await settled();
+    expect(request.timedOut()).toBe(true);
+    expect(request.clientLeft()).toBe(false);
+    expect(daemon.stats.requestsTimedOut).toBe(1);
+    expect(daemon.stats.inFlight).toBe(1);
+
+    request.answer(replyWith());
+    await settled();
+    expect(daemon.stats.inFlight).toBe(0);
+  });
+
   test("a client that half-closes before its answer is answered to no one", async () => {
     const request = held();
     const daemon = standIn({ handle: request.handle });
@@ -292,10 +322,10 @@ describe("a connection over a stream", () => {
     const request = held();
     const { client, send, received, ended } = open(
       standIn({
-        handle: async (req, timedOut, accepted) =>
-          req.kind === "subscribe"
+        handle: async (inbound, timedOut, accepted) =>
+          inbound.kind === "request" && inbound.req.kind === "subscribe"
             ? SUBSCRIBED
-            : request.handle(req, timedOut, accepted, () => false),
+            : request.handle(inbound, timedOut, accepted, () => false),
       }),
     );
     send(STATS);

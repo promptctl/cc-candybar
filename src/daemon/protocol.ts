@@ -375,20 +375,22 @@ export interface UrlFrame {
   url: string;
 }
 
-// [LAW:parse-dont-validate] What came in over the wire, classified once at
-// the checkpoint: the URL handler's frame, or a request the `v` gate judges.
-// A url frame of any shape goes to the click path, which refuses what it
-// cannot read with the click event that says so; nothing about it is judged
-// here.
+// [LAW:parse-dont-validate] What came in over the wire, classified once, by
+// the connection that read it: the URL handler's frame, or a request the `v`
+// gate judges. The connection needs the kind too, since a url frame's writer
+// hangs up at once by design, so its socket's close says nothing about its
+// click. A url frame's fields stay untrusted JSON here (not a Partial that
+// claims their types): the click path reads them, and refuses what it cannot
+// read with the click event that says so.
 export type Inbound =
-  | { readonly kind: "url"; readonly frame: Partial<UrlFrame> }
+  | { readonly kind: "url"; readonly frame: Record<string, unknown> }
   | { readonly kind: "request"; readonly req: Request };
 
 export function classifyInbound(raw: unknown): Inbound {
   return typeof raw === "object" &&
     raw !== null &&
     (raw as { kind?: unknown }).kind === URL_FRAME_KIND
-    ? { kind: "url", frame: raw as Partial<UrlFrame> }
+    ? { kind: "url", frame: raw as Record<string, unknown> }
     : { kind: "request", req: raw as Request };
 }
 
