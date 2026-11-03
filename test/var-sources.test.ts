@@ -22,7 +22,8 @@ import {
   type SourceParse,
 } from "../src/var-system";
 import { SessionState } from "../src/daemon/session-state";
-import { createLauncher, MAX_CAPTURED_BYTES } from "../src/proc/launch";
+import { systemLauncher } from "../src/proc/system-launcher";
+import { MAX_CAPTURED_BYTES } from "../src/proc/launch";
 import { readPending } from "../src/var-system/types";
 import { PENDING } from "../src/utils/outcome";
 import { drawingAt } from "./helpers/test-engine";
@@ -597,7 +598,7 @@ describe("SourceRegistry — shell: basic", () => {
     const closing = new AbortController();
     closing.abort(new Error("the daemon closed"));
     const registry = new SourceRegistry(
-      createLauncher(
+      systemLauncher(
         { inherited: process.env, signal: closing.signal },
         systemTimekeeper,
       ),

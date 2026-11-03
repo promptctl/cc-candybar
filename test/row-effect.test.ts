@@ -1,5 +1,5 @@
 import { plainOf, textOf, type Frame, type Run } from "../src/render/frame";
-import { processLauncher } from "./helpers/host";
+import { unscriptedLauncher } from "./helpers/fake-launcher";
 import { runUnder, sameDraw } from "./helpers/frame";
 // [LAW:verifiable-goals] brandon-effects-2gka.d2i: the whole bar wears a looping
 // effect chosen by `globals.effect`. An effect changes colours and nothing else,
@@ -85,7 +85,7 @@ function renderer(
   readonly dispose: () => void;
 } {
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
+  const registry = new SourceRegistry(unscriptedLauncher, store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
   const opts = {
     endcaps: "powerline" as const,

@@ -4,10 +4,11 @@ import tsparser from "@typescript-eslint/parser";
 import prettierConfig from "eslint-config-prettier";
 import prettierPlugin from "eslint-plugin-prettier";
 
-// [LAW:single-enforcer] (kz8.2) src/proc/launch.ts is the only file allowed to
+// [LAW:single-enforcer] (kz8.2) src/proc/spawner.ts is the only file allowed to
 // import node:child_process directly. Every other spawn site routes through a
-// Launcher. This rule keeps the invariant load-bearing: a future regression
-// fails lint, not just a manual grep.
+// Launcher, which reaches the OS through that Spawner. This rule keeps the
+// invariant load-bearing: a future regression fails lint, not just a manual grep.
+const SPAWNER_FILE = "src/proc/spawner.ts";
 const CHILD_PROCESS_PATHS = ["child_process", "node:child_process"].map(
   (name) => ({
     name,
@@ -31,6 +32,30 @@ const CLOCK_PROPERTIES = [
   { object: "process", property: "uptime", message: CLOCK_MESSAGE },
   { object: "AbortSignal", property: "timeout", message: CLOCK_MESSAGE },
 ];
+// [LAW:single-enforcer] A signal sent to a pid or its group, or signal 0 asking
+// whether it is there, is read of the process table: src/proc/spawner.ts owns
+// it for a launch's groups and the ProcessProbe for a pid. The three files
+// below are exceptions, each owned by the ticket that gives its program a port;
+// the list may shrink and no other file joins it.
+//   src/utils/cache.ts       pricing's lock holder (candybar-testing-ihvy.89p)
+//   src/daemon/lane-edge.ts  SIGTERM to Claude Code (candybar-testing-ihvy.dcv)
+//   src/daemon/server.ts     the daemon's own SIGKILL (the Lifetime piece)
+const KILL_EXCEPTIONS = [
+  "src/utils/cache.ts",
+  "src/daemon/lane-edge.ts",
+  "src/daemon/server.ts",
+];
+const KILL_OWNERS = [
+  "src/proc/spawner.ts",
+  "src/daemon/process-fingerprint.ts",
+  ...KILL_EXCEPTIONS,
+];
+const KILL_PROPERTY = {
+  object: "process",
+  property: "kill",
+  message:
+    "Signals and liveness reads go through a Spawner (a launch's group) or a ProcessProbe (a pid). [LAW:single-enforcer]",
+};
 const CLOCK_SYNTAX = [
   {
     selector: "NewExpression[callee.name='Date'][arguments.length=0]",
@@ -74,20 +99,46 @@ const PATHS = [
   "**/paths.js",
 ];
 
+// [LAW:single-enforcer] A fake exists to be scripted by a test; no src file
+// names one, so a stand-in cannot reach a daemon that runs for a person.
+const FAKE_IMPORTS = [
+  {
+    group: [
+      "**/spawner-fake",
+      "**/spawner-fake.js",
+      "**/process-probe-fake",
+      "**/process-probe-fake.js",
+    ],
+    message:
+      "A fake is a test's: src never imports one. [LAW:single-enforcer]",
+  },
+];
+
 const OWNED_IMPORTS = {
   // The process's one launcher, built beside the host it inherits from: a
   // process main takes it from `processWorld`, and everything else is handed it.
-  createOneShotLauncher: {
-    group: ["**/proc/launch", "**/proc/launch.js"],
+  systemOneShotLauncher: {
+    group: ["**/proc/system-launcher", "**/proc/system-launcher.js"],
     owners: ["src/host.ts"],
     message:
       "The process has its one-shot launcher: take the one you are given.",
   },
   // The composition root of the one owner that is not the process.
-  createLauncher: {
-    group: ["**/proc/launch", "**/proc/launch.js"],
+  systemLauncher: {
+    group: ["**/proc/system-launcher", "**/proc/system-launcher.js"],
     owners: ["src/daemon/production-adapters.ts"],
     message: "A Launcher is an owner's: take the one you are handed.",
+  },
+  // A launcher over a Spawner other than the machine's is a test's to build.
+  createOneShotLauncher: {
+    group: ["**/proc/launch", "**/proc/launch.js"],
+    owners: [],
+    message: "A launcher over the machine is system-launcher's to build.",
+  },
+  createLauncher: {
+    group: ["**/proc/launch", "**/proc/launch.js"],
+    owners: [],
+    message: "A launcher over the machine is system-launcher's to build.",
   },
   // The process's one real clock, built beside its host and launcher.
   systemTimekeeper: {
@@ -273,6 +324,7 @@ function restrictedImports(file, rowPatterns = []) {
             message: `${message} [LAW:single-enforcer]`,
           })),
         ...HOST_NAMED_IMPORTS,
+        ...FAKE_IMPORTS,
         ...rowPatterns,
       ],
     },
@@ -289,10 +341,23 @@ function ownedImportBlocks() {
       ignores: ["src/proc/**", CLOCK_FILE],
       rules: { "no-restricted-imports": restrictedImports(null) },
     },
-    // src/proc/launch.ts alone may import child_process, so this block keeps the
-    // clock's paths and leaves that one out.
+    // src/proc/spawner.ts alone may import child_process, so the rest of
+    // src/proc keeps it with the clock's paths, and the spawner only the clock's.
     {
       files: ["src/proc/**/*.{ts,mts}"],
+      ignores: [SPAWNER_FILE],
+      rules: {
+        "no-restricted-imports": [
+          "error",
+          {
+            paths: [...CHILD_PROCESS_PATHS, ...CLOCK_IMPORT_PATHS],
+            patterns: FAKE_IMPORTS,
+          },
+        ],
+      },
+    },
+    {
+      files: [SPAWNER_FILE],
       rules: {
         "no-restricted-imports": ["error", { paths: CLOCK_IMPORT_PATHS }],
       },
@@ -386,7 +451,18 @@ export default [
   // alias of `process` itself is the one it cannot see.
   {
     files: ["src/**/*.{ts,mts}"],
-    ignores: [...HOST_READERS, CLOCK_FILE],
+    ignores: [...HOST_READERS, CLOCK_FILE, ...KILL_OWNERS],
+    rules: {
+      "no-restricted-properties": [
+        "error",
+        ...HOST_PROPERTIES,
+        ...CLOCK_PROPERTIES,
+        KILL_PROPERTY,
+      ],
+    },
+  },
+  {
+    files: KILL_OWNERS,
     rules: {
       "no-restricted-properties": [
         "error",
@@ -397,11 +473,19 @@ export default [
   },
   {
     files: HOST_READERS,
-    rules: { "no-restricted-properties": ["error", ...CLOCK_PROPERTIES] },
+    rules: {
+      "no-restricted-properties": [
+        "error",
+        ...CLOCK_PROPERTIES,
+        KILL_PROPERTY,
+      ],
+    },
   },
   {
     files: [CLOCK_FILE],
-    rules: { "no-restricted-properties": ["error", ...HOST_PROPERTIES] },
+    rules: {
+      "no-restricted-properties": ["error", ...HOST_PROPERTIES, KILL_PROPERTY],
+    },
   },
   // Every file but the clock's: the timer globals, and `new Date()` with no
   // argument. The blocks after this one repeat CLOCK_SYNTAX and CLOCK_GLOBALS

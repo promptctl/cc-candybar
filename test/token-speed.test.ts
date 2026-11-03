@@ -12,7 +12,8 @@
 // default → "—"), never a stale or divide-by-zero number.
 
 import { textOf } from "../src/render/frame";
-import { HOST, processLauncher } from "./helpers/host";
+import { HOST } from "./helpers/host";
+import { unscriptedLauncher } from "./helpers/fake-launcher";
 import { drawPayload } from "./helpers/draw-payload";
 import type { Frame } from "../src/render/frame";
 import { TEST_SIGNER } from "./helpers/link-signer";
@@ -479,7 +480,7 @@ function renderSpeed(payload: Record<string, unknown>): Frame {
   // DEFAULT_DSL_CONFIG-based render helper) or it silently fails to declare
   // and speed's own `when` renders an unrelated ⚠ error cell.
   const registry = new SourceRegistry(
-    processLauncher,
+    unscriptedLauncher,
     store,
     "",
     new SessionState(),

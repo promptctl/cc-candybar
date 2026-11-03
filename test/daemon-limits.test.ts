@@ -1,5 +1,5 @@
 import { until } from "./helpers/until";
-import { processLauncher } from "./helpers/host";
+import { unscriptedLauncher } from "./helpers/fake-launcher";
 import {
   makeLimits,
   type LimitsDeps,
@@ -692,7 +692,7 @@ describe("post-mortems", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "pm-"));
     try {
       expect(realLimitsDeps(0, () => {}, {
-        launcher: processLauncher,
+        launcher: unscriptedLauncher,
         log: () => {},
         clock: systemTimekeeper,
         snapshotDir: path.join(root, "absent"),
@@ -700,7 +700,7 @@ describe("post-mortems", () => {
       }).listArtifacts()).toEqual([]);
       fs.writeFileSync(path.join(root, "file"), "");
       expect(() => realLimitsDeps(0, () => {}, {
-        launcher: processLauncher,
+        launcher: unscriptedLauncher,
         log: () => {},
         clock: systemTimekeeper,
         snapshotDir: path.join(root, "file"),

@@ -1,5 +1,5 @@
-import process from "node:process";
 import type { Timekeeper } from "../time";
+import type { ProcessProbe } from "./process-fingerprint";
 
 // [LAW:single-enforcer] One owner of the invariant "I must not outlive the
 // process that spawned me." A *production* daemon is spawned detached and is
@@ -55,7 +55,7 @@ export interface ParentWatchdogDeps {
   // The machine's clock: the poll runs in real time, beside a real process.
   clock: Pick<Timekeeper, "every">;
   anchor: LivenessAnchor;
-  isAlive: (pid: number) => boolean;
+  probe: Pick<ProcessProbe, "alive">;
   onOrphaned: (reason: string) => void;
   intervalMs?: number;
 }
@@ -72,22 +72,9 @@ export function armParentWatchdog(deps: ParentWatchdogDeps): {
   const disarm = deps.clock.every(
     deps.intervalMs ?? DEFAULT_POLL_INTERVAL_MS,
     () => {
-      if (!deps.isAlive(pid)) deps.onOrphaned(`spawner pid ${pid} gone`);
+      if (!deps.probe.alive(pid)) deps.onOrphaned(`spawner pid ${pid} gone`);
     },
     { unref: true },
   );
   return { disarm };
-}
-
-export function pidAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (e) {
-    // ESRCH: the process is gone — orphaned, trip the watchdog. EPERM: a live
-    // process we don't own (the pid was reused by another user) — treat as
-    // alive so a reused pid can never make us shut down a daemon whose real
-    // spawner is still running.
-    return (e as NodeJS.ErrnoException).code === "EPERM";
-  }
 }

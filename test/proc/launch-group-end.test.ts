@@ -2,8 +2,8 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { systemLauncher } from "../../src/proc/system-launcher";
 import {
-  createLauncher,
   MAX_CAPTURED_BYTES,
   PIPE_EVENT_HOLD_S,
   type LaunchCategory,
@@ -55,7 +55,7 @@ beforeEach(() => {
       drainsClosed.push({ category, bytes: drainRead, end }),
     onPipeError: () => {},
   };
-  launcher = createLauncher(
+  launcher = systemLauncher(
     {
       inherited: process.env,
       signal: ending.signal,

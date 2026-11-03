@@ -1,6 +1,6 @@
 import { systemTimekeeper } from "../src/time";
 import fs from "node:fs";
-import { processLauncher } from "./helpers/host";
+import { unscriptedLauncher } from "./helpers/fake-launcher";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -146,7 +146,7 @@ function makeCache(
     throwOn?: string;
   } = {},
 ) {
-  const inner = new StubGitService(processLauncher);
+  const inner = new StubGitService(unscriptedLauncher);
   const logs: string[] = [];
   let throwOn = opts.throwOn;
   const svc = new GitDataProvider({
@@ -1412,7 +1412,7 @@ describe("GitDataProvider PR keys, drops and refresh events", () => {
 // never the watch.
 describe("GitDataProvider holds a repo's watch across its values", () => {
   function counted(opts: { maxRepos?: number; periodMs?: number } = {}) {
-    const inner = new StubGitService(processLauncher);
+    const inner = new StubGitService(unscriptedLauncher);
     const counters = {
       watchersOpened: 0,
       watchersClosed: 0,

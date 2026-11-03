@@ -3,7 +3,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { pidAlive, PARENT_PID_ENV } from "../../../src/daemon/parent-watchdog";
+import { PARENT_PID_ENV } from "../../../src/daemon/parent-watchdog";
+import { processProbe } from "../../helpers/host";
 import { spawnTestDaemon } from "../../helpers/spawn-test-daemon";
 import { until } from "../../helpers/until";
 
@@ -109,6 +110,6 @@ describe("daemon dies with its spawner (integration)", () => {
     clearTimeout(deadline);
 
     expect(exitedInTime).toBe(true);
-    expect(pidAlive(daemon.pid!)).toBe(false);
+    expect(processProbe.alive(daemon.pid!)).toBe(false);
   }, 20000);
 });

@@ -28,6 +28,7 @@ import type { DaemonLogger } from "../utils/logger";
 import { actsDir } from "./update-act";
 import type { Gates } from "./foundations/gates";
 import { makeUpdateWatch } from "./update-notice";
+import type { ProcessProbe } from "./process-fingerprint";
 import { makeBinaryWatch, type BundleStat } from "./binary-watch";
 import { stableAttachPreload } from "../install/index.js";
 import { type RenderOrigin } from "../config-hint";
@@ -124,12 +125,16 @@ export interface DaemonAdapters {
     host: Host,
   ) => DoctorEdge;
   readonly claudeInput: (launcher: Launcher) => ClaudeInputEdge;
+  // What the daemon asks the machine about a pid: whether a process is there, and
+  // when it started.
+  readonly probe: (launcher: Launcher) => ProcessProbe;
   // What turning an animation lane on or off does to the machine: it is told
   // which lanes a session's feed follows, and ends its waits with the daemon.
   readonly laneEdge: (
     launcher: Launcher,
     following: (sessionId: string) => ReadonlySet<Lane>,
     closing: AbortSignal,
+    probe: ProcessProbe,
   ) => LaneEdge;
   // The one signer of every `run` link this daemon draws.
   readonly linkSigner: LinkSigner;
@@ -277,6 +282,10 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       frameFeeds.wakeWhere("data", () => true);
     },
   });
+  // [LAW:one-source-of-truth] The update watch and the lane edge read a pid
+  // through this one probe, so a probe handed in reaches both. The process entry
+  // (server.ts) asks its own before this daemon exists.
+  const probe = inputs.probe(launcher);
   // Before every owner that arms a timer: storage that cannot be read refuses
   // the build with nothing running.
   const storage = inputs.storage(log);
@@ -381,6 +390,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       launcher,
       (sessionId) => frameFeeds.following(sessionId),
       closing.signal,
+      probe,
     ),
     // A bar pane runs this bundle under the node running it now, with the
     // flags it runs with (tsx's loader, under the test harness).
@@ -599,6 +609,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const updateWatch = makeUpdateWatch({
     clock,
     launcher,
+    probe,
     entryUrl: bundle.entryUrl,
     digest: bundle.digest,
     // [LAW:one-source-of-truth] Keyed by the bundle the act rewrites, the one

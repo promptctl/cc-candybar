@@ -4,7 +4,7 @@
 // short, and a key that draw does not list is refused loudly.
 
 import { type LaunchOpts } from "../src/proc/launch";
-import { processLauncher } from "./helpers/host";
+import { unscriptedLauncher } from "./helpers/fake-launcher";
 import { collectDiagnostics, copyKeys } from "../src/render/diagnostics";
 import { SessionState } from "../src/daemon/session-state";
 import { DroppedFileError } from "../src/config/loader/diagnostics";
@@ -12,7 +12,7 @@ import { clickUrl, testVerbContext } from "./helpers/click";
 
 const launched: LaunchOpts[] = [];
 const recording = {
-  ...processLauncher,
+  ...unscriptedLauncher,
   launch: async (opts: LaunchOpts) => {
     launched.push(opts);
     return { ok: true as const, exitCode: 0, stdout: "", stderr: "" };

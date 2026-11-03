@@ -1,5 +1,5 @@
 import { plainOf, textOf, type Frame, type Run } from "../src/render/frame";
-import { processLauncher } from "./helpers/host";
+import { unscriptedLauncher } from "./helpers/fake-launcher";
 import { sameDraw } from "./helpers/frame";
 // [LAW:verifiable-goals] brandon-effects-2gka.bm1: a placement can carry its own
 // effect. Its `effect` setting moves that placement's cells and the seams that
@@ -76,7 +76,7 @@ function renderer(
   const store = new VariableStore(systemTimekeeper);
   const session = new SessionState();
   for (const [key, value] of Object.entries(state)) session.set("s", key, value);
-  const registry = new SourceRegistry(processLauncher, store, "", session);
+  const registry = new SourceRegistry(unscriptedLauncher, store, "", session);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
   const opts = {
     endcaps: "powerline" as const,

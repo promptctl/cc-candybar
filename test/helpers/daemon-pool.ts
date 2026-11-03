@@ -37,7 +37,7 @@ import {
   sameLiveProcess,
   type ProcessIdentity,
 } from "../../src/daemon/process-fingerprint";
-import { pidAlive } from "../../src/daemon/parent-watchdog";
+import { processProbe } from "./host";
 
 type SlotRecord = ProcessIdentity;
 
@@ -103,14 +103,8 @@ function readSlot(p: string): SlotRecord | null {
   }
 }
 
-const readTheStartTime = (pid: number) =>
-  readStartTime(pid, processLauncher.launch);
-
 function isSlotLive(record: SlotRecord): Promise<boolean> {
-  return sameLiveProcess(record.pid, record.startTime, {
-    readStartTime: readTheStartTime,
-    pidAlive,
-  });
+  return sameLiveProcess(record.pid, record.startTime, processProbe);
 }
 
 export function createDaemonPool(dir: string, size: number): DaemonPool {
@@ -164,7 +158,7 @@ export function createDaemonPool(dir: string, size: number): DaemonPool {
     const timeoutMs = opts.timeoutMs ?? DEFAULT_ACQUIRE_TIMEOUT_MS;
     const retryIntervalMs = opts.retryIntervalMs ?? DEFAULT_RETRY_INTERVAL_MS;
     const myPid = process.pid;
-    const myStartTime = await readOwnStartTime(myPid, readTheStartTime);
+    const myStartTime = await readOwnStartTime(myPid, processProbe.startTime);
     const deadline = Date.now() + timeoutMs;
     // [LAW:no-silent-failure] Never spawn past the ceiling by falling back
     // silently — a full pool means the caller MUST fail loudly so the

@@ -1,7 +1,8 @@
 import os from "node:os";
 import { locations } from "../../src/daemon/paths";
 import type { Host, World } from "../../src/host";
-import { createOneShotLauncher } from "../../src/proc/launch";
+import { systemOneShotLauncher } from "../../src/proc/system-launcher";
+import { systemProbe } from "../../src/daemon/process-fingerprint";
 import { systemTimekeeper } from "../../src/time";
 
 // [LAW:effects-at-boundaries] The machine a test runs on, as src is handed it:
@@ -27,7 +28,7 @@ export function hostOf(
 export function worldOf(host: Host): World {
   return {
     host,
-    launcher: createOneShotLauncher({ inherited: host.env }, systemTimekeeper),
+    launcher: systemOneShotLauncher({ inherited: host.env }, systemTimekeeper),
     clock: systemTimekeeper,
   };
 }
@@ -36,6 +37,9 @@ export const WORLD: World = worldOf(HOST);
 
 // The launcher a test that spawns for real holds: the worker's own world's.
 export const processLauncher = WORLD.launcher;
+
+// The probe a test that means real processes holds: this worker's own machine.
+export const processProbe = systemProbe(processLauncher);
 
 // Where config and plugins live for this worker's host, read when asked.
 export const locs = () => locations(HOST);

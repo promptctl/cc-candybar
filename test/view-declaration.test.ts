@@ -8,7 +8,8 @@
 // after the last draw that did.
 
 import { TEST_SIGNER } from "./helpers/link-signer";
-import { HOST, locs, processLauncher } from "./helpers/host";
+import { HOST, locs } from "./helpers/host";
+import { unscriptedLauncher } from "./helpers/fake-launcher";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -106,7 +107,7 @@ test("a preset click that newly places the PR starts its lookup with no draw; sw
       },
     }),
   );
-  const inner = new OneRepo(processLauncher);
+  const inner = new OneRepo(unscriptedLauncher);
   const git = new GitDataProvider({
     clock: systemTimekeeper,
     inner,
@@ -132,7 +133,7 @@ test("a preset click that newly places the PR starts its lookup with no draw; sw
       stateDir: stateDir(HOST),
       locations: locs(),
       env: HOST.env,
-      launcher: processLauncher,
+      launcher: unscriptedLauncher,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
@@ -258,7 +259,7 @@ function gitCache() {
     path.join(dir, ".cc-candybar.json5"),
     JSON.stringify({ root: { h: ["gitaculous"] } }),
   );
-  const inner = new OneRepo(processLauncher);
+  const inner = new OneRepo(unscriptedLauncher);
   const git = new GitDataProvider({
     clock: systemTimekeeper,
     inner,
@@ -281,7 +282,7 @@ function gitCache() {
       stateDir: stateDir(HOST),
       locations: locs(),
       env: HOST.env,
-      launcher: processLauncher,
+      launcher: unscriptedLauncher,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),

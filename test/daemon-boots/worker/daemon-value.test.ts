@@ -24,7 +24,7 @@ import type { RenderOrigin } from "../../../src/config-hint";
 import { LANES } from "../../../src/config/lanes";
 import type { Daemon } from "../../../src/daemon/daemon";
 import { systemTimekeeper, type Timekeeper } from "../../../src/time";
-import { pidAlive } from "../../../src/daemon/parent-watchdog";
+import { processProbe } from "../../helpers/host";
 import {
   daemonPaths,
   sessionStatePath,
@@ -386,7 +386,7 @@ describe("the daemon is a value", () => {
     expect(refused).not.toHaveBeenCalled();
     await until(() => existsSync(pidFile), "the claude stub started");
     const claudePid = Number(readFileSync(pidFile, "utf8").trim());
-    expect(pidAlive(claudePid)).toBe(true);
+    expect(processProbe.alive(claudePid)).toBe(true);
 
     // A render waiting on the slow source as the daemon closes.
     await until(() => existsSync(ran), "the slow source running");
@@ -404,7 +404,7 @@ describe("the daemon is a value", () => {
     const closedWith = readFileSync(sessionFile, "utf8");
 
     expect(await closing).toEqual({ unreaped: [] });
-    expect(pidAlive(claudePid)).toBe(false);
+    expect(processProbe.alive(claudePid)).toBe(false);
     await midWait;
 
     // Turns, not timers: a wait of this test's own would be in the record.

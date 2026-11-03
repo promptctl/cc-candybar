@@ -28,6 +28,54 @@ export const ENV_WRITES = [
   "CallExpression[callee.object.name='Object'][callee.property.name='assign'][arguments.0.object.name='process'][arguments.0.property.name='env']",
 ].map((selector) => ({ selector, message: WRITE_MESSAGE }));
 
+// [LAW:effects-at-boundaries] [LAW:single-enforcer] A test that is not testing
+// the launcher's adapter does not start a real program: it scripts its programs
+// on a fake (test/helpers/fake-launcher.ts) and holds a clock. The machine's
+// launcher is imported only by the adapter tiers (integration, the launcher's
+// own tests, the process tier), by the harness that builds it, and by the files
+// below. Each exception is owned by the ticket that gives its program a port or
+// a script; the list may shrink and no file joins it.
+//   the repository tools   candybar-testing-ihvy.31f, candybar-testing-ihvy.xp7
+//   tmux                   candybar-testing-ihvy.dcv
+//   shell sources, verbs, jobs, ps   candybar-testing-ihvy.fvw.1dl
+const REAL_LAUNCHER_ADAPTERS = [
+  "test/integration/**",
+  "test/proc/**",
+  "test/daemon-boots/process/**",
+  "test/helpers/host.ts",
+  "test/helpers/daemon-pool.ts",
+  "test/daemon-pool.test.ts",
+];
+const REAL_LAUNCHER_EXCEPTIONS = [
+  // the repository tools
+  "test/git-root-ascent.test.ts",
+  "test/git-service-outcomes.test.ts",
+  "test/git-spawn-budget.test.ts",
+  "test/git-stash-count.test.ts",
+  "test/git-worktree.test.ts",
+  "test/daemon-watchers.test.ts",
+  "test/doctor-segment-data.test.ts",
+  // tmux
+  "test/claude-input.test.ts",
+  "test/click-order.test.ts",
+  "test/segments-tmux-cache.test.ts",
+  "test/lane-edge-bar-pane.process.test.ts",
+  // shell sources, verbs, jobs, ps
+  "test/click-launch.test.ts",
+  "test/daemon-process-fingerprint.test.ts",
+  "test/derived-payload.test.ts",
+  "test/journal-turns.test.ts",
+  "test/memory-report.test.ts",
+  "test/plugin-sources.test.ts",
+  "test/plugins.test.ts",
+  "test/run-action.test.ts",
+  "test/session-views.test.ts",
+  "test/update-act.test.ts",
+  "test/var-sources.test.ts",
+];
+const REAL_LAUNCHER_MESSAGE =
+  "Script the program on a fake launcher (test/helpers/fake-launcher.ts), or test the adapter under test/integration. [LAW:effects-at-boundaries]";
+
 export default [
   {
     files: ["test/**/*.{ts,mts}"],
@@ -40,5 +88,34 @@ export default [
     ],
     languageOptions: { parser: tsparser, ecmaVersion: "latest", sourceType: "module" },
     rules: { "no-restricted-syntax": ["error", ...ENV_WRITES] },
+  },
+  {
+    files: ["test/**/*.{ts,mts}"],
+    ignores: [...REAL_LAUNCHER_ADAPTERS, ...REAL_LAUNCHER_EXCEPTIONS],
+    languageOptions: { parser: tsparser, ecmaVersion: "latest", sourceType: "module" },
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["**/helpers/host"],
+              importNames: ["processLauncher"],
+              message: REAL_LAUNCHER_MESSAGE,
+            },
+            {
+              group: ["**/proc/system-launcher", "**/proc/system-launcher.js"],
+              importNames: ["systemLauncher", "systemOneShotLauncher"],
+              message: REAL_LAUNCHER_MESSAGE,
+            },
+            {
+              group: ["**/proc/spawner", "**/proc/spawner.js"],
+              importNames: ["systemSpawner"],
+              message: REAL_LAUNCHER_MESSAGE,
+            },
+          ],
+        },
+      ],
+    },
   },
 ];

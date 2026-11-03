@@ -3,12 +3,11 @@ import path from "node:path";
 
 import { ensureOwnedPrivateDir } from "./paths";
 import {
-  readStartTime,
   sameLiveProcess,
+  systemProbe,
   type ProcessIdentity,
 } from "./process-fingerprint";
 import type { World } from "../host";
-import { pidAlive } from "./parent-watchdog";
 
 // ─── Daemon-side fork-bomb circuit breaker ───────────────────────────────────
 //
@@ -236,7 +235,7 @@ export async function admitDaemon(deps: BreakerDeps): Promise<BreakerResult> {
     // entry is always either a stale pid-recycled ghost from a past
     // incarnation, or moot (we haven't written our own entry yet). This
     // matters specifically when `ps` is unavailable: `isSameLiveProcess`'s
-    // fallback (bare `pidAlive`) would read OUR OWN pid as alive and
+    // fallback (the bare liveness answer) would read OUR OWN pid as alive and
     // misclassify the ghost as a live sibling, consuming a ceiling slot and
     // risking a spurious refusal of the one daemon that pid actually names.
     // Excluding it here means it never reaches that ambiguous check at all.
@@ -296,10 +295,7 @@ export function realBreakerDeps(
     pid: process.pid,
     startTime: myStartTime,
     isSameLiveProcess: (pid, startTime) =>
-      sameLiveProcess(pid, startTime, {
-        readStartTime: (candidate) => readStartTime(candidate, launcher.launch),
-        pidAlive,
-      }),
+      sameLiveProcess(pid, startTime, systemProbe(launcher)),
     listFiles: listRegistryFiles,
     readEntry: readRegistryEntry,
     removeFile: (filePath) => {

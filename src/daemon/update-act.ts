@@ -20,8 +20,6 @@ import os from "node:os";
 import path from "node:path";
 
 import {
-  endJob,
-  jobGroupAlive,
   type JobEnding,
   readJobEnd,
   type JobEnd,
@@ -176,9 +174,10 @@ const bootedAt = (clock: Pick<Timekeeper, "now">): number =>
 export async function isRecordedJob(
   record: ActRecord,
   read: (pid: number) => Promise<StartTimeRead>,
+  jobs: Pick<Launcher, "jobGroupAlive">,
   boot: number,
 ): Promise<boolean> {
-  if (record.started <= boot || !jobGroupAlive(record.pid)) return false;
+  if (record.started <= boot || !jobs.jobGroupAlive(record.pid)) return false;
   const leader = await read(record.pid);
   return (
     record.startTime === null ||
@@ -225,6 +224,7 @@ const sameJob = (a: ActRecord, b: ActRecord): boolean =>
 export function makeActReader(
   dir: string,
   read: (pid: number) => Promise<StartTimeRead>,
+  jobs: Pick<Launcher, "jobGroupAlive">,
   clock: Pick<Timekeeper, "now">,
 ): ActReader {
   let known: Known | null = null;
@@ -237,12 +237,12 @@ export function makeActReader(
     if (known === null || !sameJob(known.record, record)) {
       known = {
         record,
-        ours: await isRecordedJob(record, read, bootedAt(clock)),
+        ours: await isRecordedJob(record, read, jobs, bootedAt(clock)),
         final: null,
       };
     }
     if (known.final !== null) return known.final;
-    known.ours = known.ours && jobGroupAlive(record.pid);
+    known.ours = known.ours && jobs.jobGroupAlive(record.pid);
     const files = filesOf(actDir);
     const end = readJobEnd(files.status);
     const lastLine =
@@ -365,8 +365,8 @@ const CLAIMED_FIRST: Claim = {
 export function endOverdue(
   dir: string,
   facts: ActFacts,
-  clock: Pick<Timekeeper, "after">,
+  jobs: Pick<Launcher, "endJob">,
 ): JobEnding {
   const status = filesOf(path.join(dir, String(facts.act))).status;
-  return endJob(facts.record.pid, status, { kind: "timeout" }, clock);
+  return jobs.endJob(facts.record.pid, status, { kind: "timeout" });
 }

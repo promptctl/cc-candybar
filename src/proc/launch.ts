@@ -1,7 +1,8 @@
 // [LAW:single-enforcer] Every subprocess in the Node runtime goes through one
-// boundary. The primitive owns the import of `node:child_process`; every other
-// module launches through a `Launcher` from here. The ESLint config (and the
-// kz8.2 DoD grep) enforces this.
+// boundary. Every module launches through a `Launcher` from here, and this file
+// decides each launch; the OS's side of it (starting a child, signalling its
+// group) is a `Spawner` (src/proc/spawner.ts), the one file that names
+// `node:child_process`. The ESLint config (and the kz8.2 DoD grep) enforces this.
 //
 // [LAW:no-shared-mutable-globals] A launch carries its owner: everything a
 // launch reads or leaves behind is held by the `Launcher` it went through, so a
@@ -37,7 +38,6 @@
 // timeout, its caller's `signal`, its own exit, or the lifeline (below) when
 // the process that launched it ends.
 
-import { spawn, spawnSync } from "node:child_process";
 import {
   existsSync,
   linkSync,
@@ -49,11 +49,11 @@ import type { Socket } from "node:net";
 import type { Readable, Writable } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
 import { types } from "node:util";
-import type { ChildProcess, StdioOptions } from "node:child_process";
 import type { Timekeeper } from "../time";
 import type { Drawing } from "../config/lanes";
 import { answeredBy, eventHoldAt, type HeldEvent } from "../utils/event-hold";
 import { instantOf, type Instant } from "../utils/instant";
+import type { SpawnedChild, Spawner } from "./spawner";
 
 import type { DrainEnd, LaunchStatsHandle } from "./stats-handle";
 
@@ -356,6 +356,8 @@ export interface LaunchScope {
 // see each other's limits, children or lifeline.
 interface LaunchState {
   readonly scope: LaunchScope;
+  // The OS this launcher's children live on.
+  readonly spawner: Spawner;
   // Last-attempt timestamp per category: the data the rate-limit decision
   // reads. Recorded for every attempted spawn (success or spawn-error);
   // rate-limit rejections do NOT update this, because no spawn was attempted.
@@ -386,7 +388,7 @@ interface LaunchState {
   readonly ending: Set<Promise<unknown>>;
   // [LAW:no-silent-failure] Launches the OS would not let this launcher end,
   // while their children live: a result was delivered, and they still run.
-  readonly unreaped: Map<ChildProcess, LaunchCategory>;
+  readonly unreaped: Map<SpawnedChild, LaunchCategory>;
   // [LAW:single-enforcer] Pipes that outlived their launch, while they stay
   // open: the one place that holds, bounds and meters them.
   readonly drains: Set<Readable | Writable>;
@@ -462,7 +464,7 @@ const GROUP_END_POLL_MAX_MS = 1000;
 // [LAW:no-silent-failure] exception: kill's stderr goes nowhere, because a
 // group that ended on its own (ESRCH) is the state this exists to reach, and
 // the launcher it would report to is gone.
-const LIFELINE_PROGRAM =
+export const LIFELINE_PROGRAM =
   `$1 == "+" { live[$2] = 1; next } ` +
   `$1 == "-" { delete live[$2]; next } ` +
   `END { for (g in live) groups = groups " -" g; ` +
@@ -472,7 +474,7 @@ const LIFELINE_PROGRAM =
 // The lifeline's process and the write end of its pipe, which only this
 // process holds.
 interface Lifeline {
-  readonly process: ChildProcess;
+  readonly process: SpawnedChild;
   readonly pipe: Socket;
 }
 
@@ -482,7 +484,7 @@ function setFault(state: LaunchState, next: string | null): void {
   state.scope.observeWarnings({ kind: "lifeline", fault: next });
 }
 
-function lose(state: LaunchState, line: ChildProcess, reason: string): void {
+function lose(state: LaunchState, line: SpawnedChild, reason: string): void {
   if (state.lifeline?.process !== line) return;
   state.lifeline = null;
   // `settled` waits on this end too.
@@ -600,9 +602,9 @@ function spawnLifeline(state: LaunchState): Lifeline | null {
   const { stats, clock } = state.scope;
   stats?.onStart("lifeline");
   const t0 = clock.now();
-  let line: ChildProcess;
+  let line: SpawnedChild;
   try {
-    line = spawn("awk", [LIFELINE_PROGRAM], {
+    line = state.spawner.spawn("awk", [LIFELINE_PROGRAM], {
       stdio: ["pipe", "ignore", "ignore"],
       detached: true,
     });
@@ -668,34 +670,6 @@ type Terminated = "timeout" | "aborted" | "output-limit" | "pipe-error";
 // not the caller's, so every waited launch is total.
 export const MAX_CAPTURED_BYTES = 16 * 1024 * 1024;
 const OUTPUT_LIMIT_ERROR = `output exceeded ${MAX_CAPTURED_BYTES} bytes`;
-
-// Signal a waited child's whole process group (it leads its own; see the
-// header). [LAW:no-silent-failure] exception: ESRCH is the group already gone
-// — the state this call exists to reach; any other failure propagates, but for
-// a group's EPERM that its leader does not back.
-function signalGroup(pid: number, sig: NodeJS.Signals): void {
-  try {
-    process.kill(-pid, sig);
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code !== "ESRCH" && !(code === "EPERM" && !leaderRefuses(pid))) {
-      throw err;
-    }
-  }
-}
-
-// Darwin answers EPERM for a group with nothing left to signal: its members
-// are zombies, or still in their exit teardown. That is the same answer as a
-// refusal, so the leader tells them apart: only one that changed its real uid
-// refuses signal 0. An ended leader answers it as a zombie, or is gone.
-function leaderRefuses(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return false;
-  } catch (err) {
-    return (err as NodeJS.ErrnoException).code === "EPERM";
-  }
-}
 
 // [LAW:single-enforcer] One reader per stream for the stream's whole life, and
 // one count of its bytes against MAX_CAPTURED_BYTES. While the launch runs it
@@ -829,9 +803,10 @@ async function launchWaited(
   stats?.onStart(opts.category);
 
   return new Promise<LaunchResult>((resolve) => {
-    let child: ChildProcess;
+    const { spawner } = state;
+    let child: SpawnedChild;
     try {
-      child = spawn(opts.bin, opts.args ?? [], {
+      child = spawner.spawn(opts.bin, opts.args ?? [], {
         cwd: opts.cwd,
         env: childEnv(state.scope, opts),
         stdio: ["pipe", "pipe", "pipe"],
@@ -918,7 +893,7 @@ async function launchWaited(
     // timer callback, so the single-enforcer primitive stays total.
     const signal = (pid: number, sig: NodeJS.Signals) => {
       try {
-        signalGroup(pid, sig);
+        spawner.signalGroup(pid, sig);
       } catch (err) {
         state.unreaped.set(child, opts.category);
         void exited.then(() => state.unreaped.delete(child));
@@ -942,7 +917,7 @@ async function launchWaited(
     if (group !== undefined) {
       const awaitGroupEnd = (delayMs: number) => {
         if (settled) return;
-        if (groupGone(group)) {
+        if (spawner.groupGone(group)) {
           clock.defer(concludeWithGroup);
           return;
         }
@@ -973,7 +948,7 @@ async function launchWaited(
       // may no longer be the launch's. It did not time out; an abort and an
       // overflow, which happened, still stand.
       const ended = child.exitCode !== null || child.signalCode !== null;
-      if (ended && group !== undefined && groupGone(group)) {
+      if (ended && group !== undefined && spawner.groupGone(group)) {
         terminated = cause === "timeout" ? null : cause;
         clock.defer(concludeWithGroup);
         return;
@@ -1061,15 +1036,14 @@ function launchBlocking(state: LaunchState, opts: LaunchOpts): LaunchResult {
   const t0 = clock.now();
   stats?.onStart(opts.category);
 
-  const stdio: StdioOptions = ["pipe", "pipe", "pipe"];
   try {
-    const result = spawnSync(opts.bin, opts.args ?? [], {
+    const result = state.spawner.spawnSync(opts.bin, opts.args ?? [], {
       cwd: opts.cwd,
       env: childEnv(state.scope, opts),
       input: opts.stdinInput,
       timeout:
         opts.timeoutMs && opts.timeoutMs > 0 ? opts.timeoutMs : undefined,
-      stdio,
+      stdio: ["pipe", "pipe", "pipe"],
       encoding: "utf8",
     });
 
@@ -1138,20 +1112,20 @@ function launchOrphan(state: LaunchState, opts: LaunchOpts): LaunchResult {
   if (refused !== null) return refused;
   const t0 = clock.now();
   stats?.onStart(opts.category);
-  const result = launchDetachedSyncInner(state.scope, opts);
+  const result = launchDetachedSyncInner(state, opts);
   stats?.onEnd(opts.category, clock.now() - t0);
   return result;
 }
 
 function launchDetachedSyncInner(
-  scope: LaunchScope,
+  state: LaunchState,
   opts: LaunchOpts,
 ): LaunchResult {
   let child;
   try {
-    child = spawn(opts.bin, opts.args ?? [], {
+    child = state.spawner.spawn(opts.bin, opts.args ?? [], {
       cwd: opts.cwd,
-      env: childEnv(scope, opts),
+      env: childEnv(state.scope, opts),
       detached: true,
       stdio: "ignore",
     });
@@ -1169,7 +1143,7 @@ function launchDetachedSyncInner(
     };
   }
   // [LAW:no-silent-failure] spawn() with ENOENT (e.g. missing binary) does
-  // *not* throw — it returns a ChildProcess with pid=undefined that emits
+  // *not* throw — it returns a child with pid=undefined that emits
   // 'error' asynchronously. Two things matter here:
   //   1. The 'error' must have a listener or Node crashes the process.
   //   2. The synchronous return must reflect that the spawn failed.
@@ -1268,9 +1242,9 @@ function launchJob(
     return { ok: false, reason: refused.reason, error: refused.error };
   const t0 = clock.now();
   stats?.onStart(opts.category);
-  let child: ChildProcess;
+  let child: SpawnedChild;
   try {
-    child = spawn(
+    child = state.spawner.spawn(
       "/bin/sh",
       [
         "-c",
@@ -1341,44 +1315,6 @@ export function readJobEnd(status: string): JobEnd | null {
   throw new Error(`${status}: not a job verdict: ${JSON.stringify(text)}`);
 }
 
-// Signals a job's process group; true when the group took it. A job runs as its
-// launcher's user, so a group the launcher may not signal (EPERM) is someone
-// else's under a recycled id, on darwin holds nothing left running, or holds
-// only a member that changed its uid, which no signal of ours could reach.
-// [LAW:no-silent-failure] exception: the false is the whole report. `endJob`
-// hands SIGTERM's to its caller; the SIGKILL's lands in a timer with no caller,
-// and the launcher has nothing further to try either way.
-function signalJob(pid: number, sig: NodeJS.Signals | 0): boolean {
-  try {
-    process.kill(-pid, sig);
-    return true;
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === "ESRCH" || code === "EPERM") return false;
-    throw err;
-  }
-}
-
-// Whether anything of the job's process group the launcher can still signal is
-// running. The group outlives its leader while the program runs, so a sh killed
-// on its own does not read as an ended job.
-export function jobGroupAlive(pid: number): boolean {
-  return signalJob(pid, 0);
-}
-
-// Whether a group has no member left, zombies included. Unlike `jobGroupAlive`,
-// EPERM is not an end here: it is also the answer for a live member that changed
-// its uid, whose pipes a launch must keep reading. Signal 0 to a valid group has
-// no other errors, so anything but ESRCH is that "not gone".
-function groupGone(pid: number): boolean {
-  try {
-    process.kill(-pid, 0);
-    return false;
-  } catch (err) {
-    return (err as NodeJS.ErrnoException).code === "ESRCH";
-  }
-}
-
 // What `endJob` did: whether the launcher's verdict is the one that stands, and
 // whether the group took the SIGTERM. Only a group that took it gets the SIGKILL,
 // since an id that answered nothing may no longer be the job's by the grace's end.
@@ -1392,11 +1328,12 @@ export interface JobEnding {
 // a group that outlives its verdict (a child the program left) is ended all the
 // same. A status whose directory is gone belongs to a job whose files were
 // removed once it had ended, so there is nothing left to end.
-export function endJob(
+function endJob(
+  spawner: Spawner,
+  clock: Pick<Timekeeper, "after">,
   pid: number,
   status: string,
   end: JobEnd,
-  clock: Pick<Timekeeper, "after">,
 ): JobEnding {
   const staged = `${status}.${process.pid}`;
   try {
@@ -1416,11 +1353,15 @@ export function endJob(
   } finally {
     rmSync(staged, { force: true });
   }
-  const signalled = signalJob(pid, "SIGTERM");
+  const signalled = spawner.signalJob(pid, "SIGTERM");
   if (signalled) {
-    clock.after(TIMEOUT_KILL_GRACE_MS, () => signalJob(pid, "SIGKILL"), {
-      unref: true,
-    });
+    clock.after(
+      TIMEOUT_KILL_GRACE_MS,
+      () => spawner.signalJob(pid, "SIGKILL"),
+      {
+        unref: true,
+      },
+    );
   }
   return { stands, signalled };
 }
@@ -1434,6 +1375,13 @@ export interface Launcher {
   launch(opts: AsyncLaunchOpts): Promise<LaunchResult>;
   launchDetachedSync(opts: LaunchOpts): LaunchResult;
   launchJobSync(opts: LaunchOpts, files: JobFiles): JobLaunch;
+  // Whether anything of the job's process group the launcher can still signal is
+  // running. The group outlives its leader while the program runs, so a sh killed
+  // on its own does not read as an ended job.
+  jobGroupAlive(pid: number): boolean;
+  // Ends a job's group with the timeout's own escalation, and gives it a verdict
+  // of the launcher's unless its own landed first (see `endJob`).
+  endJob(pid: number, status: string, end: JobEnd): JobEnding;
   // What the launcher warns a render drawn at `at` for `render`.
   launcherWarnings(at: Instant, render: Drawing["by"]): LauncherWarning[];
   // An answer carrying `event` reached its client.
@@ -1482,8 +1430,9 @@ export type LaunchOwner = Pick<LaunchScope, "inherited"> &
 export function createLauncher(
   owner: LaunchOwner,
   clock: Timekeeper,
+  spawner: Spawner,
 ): TestableLauncher {
-  return launcherWithState(owner, clock).launcher;
+  return launcherWithState(owner, clock, spawner).launcher;
 }
 
 // The same launcher, with its blocking form added: for the process's one-shot
@@ -1491,14 +1440,16 @@ export function createLauncher(
 export function createOneShotLauncher(
   owner: LaunchOwner,
   clock: Timekeeper,
+  spawner: Spawner,
 ): TestableLauncher & OneShotLauncher {
-  const { launcher, state } = launcherWithState(owner, clock);
+  const { launcher, state } = launcherWithState(owner, clock, spawner);
   return { ...launcher, launchSync: (opts) => launchBlocking(state, opts) };
 }
 
 function launcherWithState(
   owner: LaunchOwner,
   clock: Timekeeper,
+  spawner: Spawner,
 ): {
   launcher: TestableLauncher;
   state: LaunchState;
@@ -1508,6 +1459,8 @@ function launcherWithState(
     launch: (opts) => track(state, launchWaited(state, opts)),
     launchDetachedSync: (opts) => launchOrphan(state, opts),
     launchJobSync: (opts, files) => launchJob(state, opts, files),
+    jobGroupAlive: (pid) => spawner.signalJob(pid, 0),
+    endJob: (pid, status, end) => endJob(spawner, clock, pid, status, end),
     launcherWarnings: (at, render) => launcherWarnings(state, at, render),
     answeredPipeEvent: (event) => answeredPipeEvent(state, event),
     settled: async () => {
@@ -1526,6 +1479,7 @@ function launcherWithState(
     },
   };
   const state: LaunchState = {
+    spawner,
     scope: {
       stats: null,
       // A launcher with nobody to tell says the warning on stderr.

@@ -10,7 +10,7 @@
 // transform.
 
 import { drawPayload } from "./helpers/draw-payload";
-import { processLauncher } from "./helpers/host";
+import { unscriptedLauncher } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { TEST_SIGNER } from "./helpers/link-signer";
@@ -82,7 +82,7 @@ function renderDirRaw(paths: DirPaths): Frame {
     root: dirOnlyRoot,
   };
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
+  const registry = new SourceRegistry(unscriptedLauncher, store, "", new SessionState());
   try {
     const compiled = registerDslConfig(parsed, registry, {
       signer: TEST_SIGNER,
@@ -234,7 +234,7 @@ describe("configurability seam: user template override restores full path", () =
       }),
     };
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
+    const registry = new SourceRegistry(unscriptedLauncher, store, "", new SessionState());
     try {
       const compiled = registerDslConfig(overridden, registry, {
         signer: TEST_SIGNER,

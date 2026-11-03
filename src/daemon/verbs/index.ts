@@ -21,7 +21,6 @@
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import {
-  jobGroupAlive,
   readJobEnd,
   type LaunchOpts,
   type LaunchResult,
@@ -502,7 +501,7 @@ export async function clickHandoff(
     for (;;) {
       // Liveness before the verdict: the sh writes its verdict before it exits,
       // so a group seen gone and then no verdict means none is coming.
-      const alive = jobGroupAlive(job.pid);
+      const alive = launcher.jobGroupAlive(job.pid);
       const end = readJobEnd(files.status);
       if (end !== null) {
         if (end.kind === "exit" && end.code === 0) return;

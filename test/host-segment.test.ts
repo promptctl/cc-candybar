@@ -15,7 +15,7 @@
 // what lands in the payload, and whether the bundled segment renders.
 
 import { textOf } from "../src/render/frame";
-import { processLauncher } from "./helpers/host";
+import { unscriptedLauncher } from "./helpers/fake-launcher";
 import { drawPayload } from "./helpers/draw-payload";
 import type { Frame } from "../src/render/frame";
 import { TEST_SIGNER } from "./helpers/link-signer";
@@ -219,7 +219,7 @@ describe("the bundled host segment", () => {
   function render(host: Record<string, unknown>): Frame {
     const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(
-      processLauncher,
+      unscriptedLauncher,
       store,
       "",
       new SessionState(),

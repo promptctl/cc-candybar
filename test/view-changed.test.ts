@@ -5,7 +5,8 @@
 // nothing, so a still source under a fast period wakes no feed.
 
 import fs from "node:fs";
-import { HOST, locs, processLauncher } from "./helpers/host";
+import { HOST, locs } from "./helpers/host";
+import { unscriptedLauncher } from "./helpers/fake-launcher";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -85,7 +86,7 @@ function setUp() {
       stateDir: stateDir(HOST),
       locations: locs(),
       env: HOST.env,
-      launcher: processLauncher,
+      launcher: unscriptedLauncher,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),

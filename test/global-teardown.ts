@@ -20,7 +20,7 @@ import {
   judgeDaemonStarts,
   parseLedger,
 } from "./helpers/process-tier.cjs";
-import { pidAlive } from "../src/daemon/parent-watchdog";
+import { processProbe } from "./helpers/host";
 
 // [LAW:one-source-of-truth] A directory under this prefix is in use while the
 // worker its name carries is alive: another run's daemons and in-worker cases
@@ -29,7 +29,7 @@ import { pidAlive } from "../src/daemon/parent-watchdog";
 // ends every worker before this runs.
 function inUse(name: string, sweeper: number): boolean {
   const owner = jestTmpOwner(name);
-  return owner !== null && owner !== sweeper && pidAlive(owner);
+  return owner !== null && owner !== sweeper && processProbe.alive(owner);
 }
 
 // A single readdirSync + in-memory prefix filter, run once per full `pnpm test`

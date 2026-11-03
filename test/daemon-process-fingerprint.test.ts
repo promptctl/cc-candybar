@@ -122,8 +122,8 @@ describe("sameLiveProcess (pure fold over injected reads)", () => {
   ): Parameters<typeof sameLiveProcess>[2] & { pidAliveCalls: number } => {
     const d = {
       pidAliveCalls: 0,
-      readStartTime: async () => read,
-      pidAlive: () => {
+      startTime: async () => read,
+      alive: () => {
         d.pidAliveCalls++;
         return alive;
       },
@@ -166,7 +166,7 @@ describe("sameLiveProcess (pure fold over injected reads)", () => {
       kind: "unavailable",
       detail: "unused",
     }));
-    const d = { readStartTime: read, pidAlive: () => true };
+    const d = { startTime: read, alive: () => true };
     expect(
       await sameLiveProcess(10, null, d)).toBe(true);
     expect(read).not.toHaveBeenCalled();

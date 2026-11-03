@@ -7,7 +7,8 @@
 // `sessionSource`.
 
 import { linkUrls } from "./helpers/frame";
-import { createLauncher, MAX_CAPTURED_BYTES } from "../src/proc/launch";
+import { systemLauncher } from "../src/proc/system-launcher";
+import { MAX_CAPTURED_BYTES } from "../src/proc/launch";
 import { HOST, WORLD, locs, processLauncher } from "./helpers/host";
 import { type Launcher } from "../src/proc/launch";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
@@ -785,7 +786,7 @@ describe("a click on a run link", () => {
 
   test("the program runs in its declaring file's directory and sees the session, never the daemon", async () => {
     const r = rig(
-      createLauncher({ inherited: daemonSessionEnv() }, systemTimekeeper)
+      systemLauncher({ inherited: daemonSessionEnv() }, systemTimekeeper)
         .launch,
     );
     const { view, link } = await drawnLink(r);
@@ -981,7 +982,7 @@ describe("the session's process environment", () => {
     const childSees = async (
       facts: Parameters<typeof sessionEnv>[0],
     ): Promise<Record<string, string>> => {
-      const ran = await createLauncher(
+      const ran = await systemLauncher(
         { inherited: daemon },
         systemTimekeeper,
       ).launch({

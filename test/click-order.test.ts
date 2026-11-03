@@ -25,7 +25,8 @@ import {
   encodeSegments,
 } from "../src/click/wire";
 import { ClickAbandoned } from "../src/daemon/verb-error";
-import { createLauncher, type Launcher, type LaunchResult } from "../src/proc/launch";
+import { systemLauncher } from "../src/proc/system-launcher";
+import { type Launcher, type LaunchResult } from "../src/proc/launch";
 import { productionEdge, type DoctorEdge } from "../src/doctor/edge";
 import { instantOf } from "../src/utils/instant";
 import {
@@ -326,7 +327,7 @@ describe("a gather is a snapshot of one config", () => {
   });
 
   test("the re-gather asks the real rate limiter nothing twice", async () => {
-    const launcher = createLauncher({ inherited: process.env }, systemTimekeeper);
+    const launcher = systemLauncher({ inherited: process.env }, systemTimekeeper);
     let load = LOAD;
     const real = productionEdge(launcher, () => load, HOST);
     const parked = gate();

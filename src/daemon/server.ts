@@ -22,9 +22,9 @@ import {
   type SocketIdentity,
 } from "./socket-ownership";
 import {
-  readStartTime,
   readOwnStartTime,
   sameLiveProcess,
+  systemProbe,
 } from "./process-fingerprint";
 import {
   admitDaemon,
@@ -46,7 +46,7 @@ import { handleConnection } from "./connection.js";
 import { REGISTRY_URL } from "../install/currency";
 import { PROTOCOL_VERSION } from "./protocol";
 import { mb, memoryLimitBytes } from "./limits";
-import { armParentWatchdog, anchorFromEnv, pidAlive } from "./parent-watchdog";
+import { armParentWatchdog, anchorFromEnv } from "./parent-watchdog";
 import { resetSpawnBackoff } from "./acquire";
 
 // Daemon entry point. Tries to bind the Unix socket — atomic bind() is the
@@ -166,8 +166,9 @@ async function boot(): Promise<void> {
   // must be read first: it is both this check's identity and the lease's
   // fingerprint later, so it is read exactly once and threaded through both
   // (see realBreakerDeps' doc comment).
-  myStartTime = await readOwnStartTime(process.pid, (pid) =>
-    readStartTime(pid, world.launcher.launch),
+  myStartTime = await readOwnStartTime(
+    process.pid,
+    systemProbe(world.launcher).startTime,
   );
   const admission = await admitDaemon(
     realBreakerDeps(world, myStartTime, paths.registry),
@@ -214,7 +215,7 @@ async function boot(): Promise<void> {
   armParentWatchdog({
     clock: world.clock,
     anchor: anchorFromEnv(host.env),
-    isAlive: pidAlive,
+    probe: systemProbe(world.launcher),
     onOrphaned: (reason) => {
       serverLog("info", `parent watchdog: ${reason}; shutting down`);
       shutdown(0);
@@ -275,7 +276,7 @@ function bindOrAttachAndExit(
 // and the ownership self-check are what recover a lost race.
 //
 // [LAW:effects-at-boundaries] The decision is the arbitrateSocket fold
-// over the lease read + injected pidAlive; the kill / unlink / rebind effects
+// over the lease read + the injected probe; the kill / unlink / rebind effects
 // are performed here at the edge.
 async function handleAddressInUse(
   daemon: Daemon,
@@ -288,11 +289,7 @@ async function handleAddressInUse(
   const decision = await arbitrateSocket(
     readLease(leasePathFor(sockPath)),
     (pid, startTime) =>
-      sameLiveProcess(pid, startTime, {
-        readStartTime: (candidate) =>
-          readStartTime(candidate, daemon.launcher.launch),
-        pidAlive,
-      }),
+      sameLiveProcess(pid, startTime, systemProbe(daemon.launcher)),
   );
   if (decision.kind === "attach-and-exit") {
     serverLog("info", `EADDRINUSE: ${decision.reason} — exiting`);

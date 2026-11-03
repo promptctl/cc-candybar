@@ -1,5 +1,5 @@
 import { textOf } from "../src/render/frame";
-import { processLauncher } from "./helpers/host";
+import { unscriptedLauncher } from "./helpers/fake-launcher";
 // [LAW:behavior-not-structure] The gate for brandon-activity-ue7: what the bar
 // SAYS Claude is doing, for a given transcript. Every test writes real JSONL and
 // reads either the provider's record, the payload the daemon would send, or the
@@ -632,7 +632,7 @@ describe("the bundled activity segment renders the payload", () => {
     );
     const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(
-      processLauncher,
+      unscriptedLauncher,
       store,
       "",
       new SessionState(),
