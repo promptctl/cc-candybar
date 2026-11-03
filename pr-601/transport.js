@@ -22944,7 +22944,7 @@ function eventHoldAt(event, holdS, at, render3) {
   return render3 === "request" && !event.answered ? "owed" : "over";
 }
 function answeredBy(last2, shown) {
-  return last2 !== null && !last2.answered && last2.at === shown.at && last2.text === shown.text;
+  return !last2.answered && last2.at === shown.at && last2.text === shown.text;
 }
 
 // src/utils/instant.ts
@@ -23051,33 +23051,38 @@ function lose(state, line, reason) {
 var PIPE_EVENT_HOLD_S = 60;
 var lifelineMessage = (fault) => `programs launched now would outlive their launcher if it died: its launch lifeline ${fault}, and the next launch starts another`;
 var pipeEventWords = (kind) => kind === "cut" ? `output cut at the ${MAX_CAPTURED_BYTES}-byte bound, so the program holding it now fails its writes` : "output failed to read";
+var PIPE_EVENT_LEAD = "a launched program's pipe outlived its launch: ";
 function pipeEvent(state, kind, category) {
+  const last2 = state.pipeEvent;
+  const counts = new Map(last2 === null || last2.answered ? [] : last2.counts);
   const key = `${kind}\0${category}`;
-  state.pipeCounts.set(key, (state.pipeCounts.get(key) ?? 0) + 1);
-  const said = [...state.pipeCounts].map(([at, n]) => {
+  counts.set(key, (counts.get(key) ?? 0) + 1);
+  const said = [...counts].map(([at, n]) => {
     const [k, c] = at.split("\0");
     return `${n}\xD7 ${c} ${pipeEventWords(k)}`;
   });
-  const text4 = `a launched program's pipe outlived its launch: ${said.join("; ")}`;
   state.pipeEvent = {
-    text: text4,
+    text: `${PIPE_EVENT_LEAD}${said.join("; ")}`,
     at: state.scope.now(),
-    answered: false
+    answered: false,
+    counts
   };
-  state.scope.observeWarnings({ kind: "launch-pipes", text: text4 });
+  state.scope.observeWarnings({
+    kind: "launch-pipes",
+    text: `${PIPE_EVENT_LEAD}${category} ${pipeEventWords(kind)}`
+  });
 }
 function answeredPipeEvent(state, event) {
   const last2 = state.pipeEvent;
   if (last2 === null || !answeredBy(last2, event)) return;
   state.pipeEvent = { ...last2, answered: true };
-  state.pipeCounts.clear();
 }
 function launcherWarnings(state, at, render3) {
   const event = state.pipeEvent;
-  const shown = event !== null && eventHoldAt(event, PIPE_EVENT_HOLD_S, at, render3) !== "over";
+  const hold2 = event === null ? "over" : eventHoldAt(event, PIPE_EVENT_HOLD_S, at, render3);
   return [
     ...state.fault === null ? [] : [{ kind: "lifeline", message: lifelineMessage(state.fault) }],
-    ...shown ? [{ kind: "launch-pipes", message: event.text, event }] : []
+    ...event === null || hold2 === "over" ? [] : [{ kind: "launch-pipes", message: event.text, event, hold: hold2 }]
   ];
 }
 function spawnLifeline(state) {
@@ -23666,7 +23671,6 @@ function launcherWithState(owner, clock) {
     lifeline: null,
     fault: null,
     pipeEvent: null,
-    pipeCounts: /* @__PURE__ */ new Map(),
     ending: /* @__PURE__ */ new Set(),
     unreaped: /* @__PURE__ */ new Map(),
     drains: /* @__PURE__ */ new Set()
@@ -68498,7 +68502,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.181.1";
+var PACKAGE_VERSION = "1.182.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -76158,7 +76162,8 @@ function drawRender(parts, setup, drawing2) {
   );
   const configWatch = entry.watch === null ? null : watchFault("config watch", entry.watch, null);
   const launched = launcher.launcherWarnings(at, drawing2.by);
-  const pipeShown = launched.find((w) => w.kind === "launch-pipes")?.event ?? null;
+  const pipeWarning = launched.find((w) => w.kind === "launch-pipes");
+  const pipeShown = pipeWarning?.event ?? null;
   const standing = [
     ...fileEventsWarnings(fileEvents.delivery()),
     ...launched,
@@ -76320,6 +76325,8 @@ function drawRender(parts, setup, drawing2) {
     rules: [...rules].map(([slot, how]) => `${slot}:${how}`).join(",") || "-",
     err: errors2.length > 0 ? "Y" : "N",
     clickError: clickHold.kind === "none" ? "-" : clickHold.kind,
+    // The launcher's pipe event as this frame showed it: `-` for not at all.
+    pipeEvent: pipeWarning?.hold ?? "-",
     upd: String(updates.length),
     // How many repositories the bar asked about.
     ask: String(questions.length),
