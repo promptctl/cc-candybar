@@ -38,7 +38,6 @@ There are now always at least two processes, so the memory backstop divides. `.c
 ## To probe
 
 - **Spawn path.** Read `src/daemon/acquire.ts` to confirm that a client spawns the bundle beside it. This doc relies on the memory docs for that.
-- **Gather's memory.** Unmeasured. It holds the data, not the compile, so its limit differs from a renderer's.
 - **Which build should run Gather.** If a worktree's Gather causes trouble in practice, it may need to come from the installed bundle instead. Try it before settling.
 - **Fork-bomb breaker and spawn locks.** `src/daemon/fork-bomb-breaker.ts` treats `CC_CANDYBAR_SOCKET` as a separate population. Check it holds with two process kinds.
 - **Update flow.** `apply-update`, the binary watch and restart-on-rebuild across both kinds.
