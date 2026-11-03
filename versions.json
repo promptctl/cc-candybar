@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "c72e51e1f062fa43bd02971e664d42e7d701432a",
+      "timestamp": "2026-11-03T03:26:02.277Z",
+      "commits": [
+        {
+          "sha": "c72e51e1f062fa43bd02971e664d42e7d701432a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T20:24:56-07:00",
+          "message": "fix(test): the compile-retains-nothing heap check reads its snapshot a macrotask after the draw (candybar-testing-0x6u.ed2) (#599)\n\n* fix(test): the compile-retains-nothing heap check reads its snapshot a macrotask after the draw (candybar-testing-0x6u.ed2)\n\n* fix(test): the retainer helper yields a macrotask before it writes its snapshot (candybar-testing-0x6u.ed2)\n\n* docs(memory): the heap-snapshot yield line holds the trap, the helper holds the mechanism (candybar-testing-0x6u.ed2)"
+        },
+        {
+          "sha": "655b66f27d8428032ab364e4f8fc9446c0749d26",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-03T03:15:09Z",
+          "message": "chore(release): set `package.json` to 1.181.0 [skip ci]\n\n## [1.181.0](https://github.com/promptctl/cc-candybar/compare/v1.180.10...v1.181.0) (2026-11-03)\n\n### Features\n\n* **url-handler:** a resident Swift forwarder sends the raw link to the daemon (candybar-daemon-health-ajx0.co4) ([#594](https://github.com/promptctl/cc-candybar/issues/594)) ([587196c](https://github.com/promptctl/cc-candybar/commit/587196cbaa9d6ccd67cf50cb1c7598a88730d3b6))\n\n### Bug Fixes\n\n* **test:** a render is held past the request backstop by a pipe the test writes (candybar-testing-0x6u.8vd) ([#597](https://github.com/promptctl/cc-candybar/issues/597)) ([1971f87](https://github.com/promptctl/cc-candybar/commit/1971f872ffd6e2d3f793d966800cc9ea93c56738))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-598",
       "ref": "refs/pull/598/merge",
       "sha": "d0e455721aff6aebd7030faff5654e097e7fe462",
@@ -55,57 +77,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T19:31:33-07:00",
           "message": "fix(launch): a launch's input outlives its direct child for the descendants that read it (candybar-testing-0x6u.3zo)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-599",
-      "ref": "refs/pull/599/merge",
-      "sha": "e12368bf6836359f99a16c009f49c86158f1d939",
-      "timestamp": "2026-11-03T03:17:27.966Z",
-      "commits": [
-        {
-          "sha": "e12368bf6836359f99a16c009f49c86158f1d939",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T03:15:30Z",
-          "message": "Merge 9f6352ccab591db46bca825e4111443b06893b49 into 655b66f27d8428032ab364e4f8fc9446c0749d26\n"
-        },
-        {
-          "sha": "9f6352ccab591db46bca825e4111443b06893b49",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T20:14:51-07:00",
-          "message": "docs(memory): the heap-snapshot yield line holds the trap, the helper holds the mechanism (candybar-testing-0x6u.ed2)\n"
-        },
-        {
-          "sha": "4dd7f586a556c72befe542933ae17a71215a5f8c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T20:13:57-07:00",
-          "message": "fix(test): the retainer helper yields a macrotask before it writes its snapshot (candybar-testing-0x6u.ed2)\n"
-        },
-        {
-          "sha": "7ab854980af86d2de5c4304497e8510af35dfc43",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T20:11:11-07:00",
-          "message": "fix(test): the compile-retains-nothing heap check reads its snapshot a macrotask after the draw (candybar-testing-0x6u.ed2)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "587196cbaa9d6ccd67cf50cb1c7598a88730d3b6",
-      "timestamp": "2026-11-03T03:06:36.368Z",
-      "commits": [
-        {
-          "sha": "587196cbaa9d6ccd67cf50cb1c7598a88730d3b6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T20:05:41-07:00",
-          "message": "feat(url-handler): a resident Swift forwarder sends the raw link to the daemon (candybar-daemon-health-ajx0.co4) (#594)\n\n* feat(url-handler): a resident Swift forwarder sends the raw link to the daemon, which does all parsing (candybar-daemon-health-ajx0.co4)\n\nThe URL handler app is a Swift agent (url-handler/main.swift) that forwards each\ncc-candybar:// link as one url frame, versioned by itself, and reads no answer.\nThe daemon classifies inbound frames once, splits the verb itself, and writes a\nclick event for every url frame, refused ones included. clientVersion leaves the\nwire; a click's arrival carries who delivered it, and the doctor judges by that.\nInstall assembles the .app around the prebuilt binary, ad-hoc signs it, quits the\nresident instance and registers the scheme. CI builds a universal binary on macOS\ninto both darwin packages; check-protocol pins the Swift frame and socket path.\nurl-handle remains the tmux status line's route only.\n\n* test(click-event): the click event's via field is expected on every click (candybar-daemon-health-ajx0.co4)\n\n* fix(connection): a url frame stays in flight under the deadline, and the connection classifies the frame once (candybar-daemon-health-ajx0.co4)\n\nThe forwarder hangs up after its write by design. The connection treated\nthat close as a vanished peer: it cleared the request backstop and left\nin-flight while the click was still queued, so a forwarded click had no\ndeadline (a repeat click could revert a toggle) and stats under-counted.\nNow the connection classifies the inbound frame once (Inbound), passes it\nto the daemon, and for a url frame keeps the backstop and the in-flight\ncount until the click is handled, with no client said to have left.\n\nAlso from the high review: install's platform-package lookup is one\nhelper for the render entry and the forwarder; check-protocol refuses a\nrow naming no mirror by label; the spawn-category docs name codesign and\nkillall instead of the retired osacompile and plutil.\n\n* fix(url-handler): a url frame is answered to no one, the app writes a long frame whole, and install resolves the forwarder before staging (candybar-daemon-health-ajx0.co4)\n\nFrom the medium review. The connection no longer writes a url frame's\nanswer: its writer closed by design, and on a real socket the write was\nonly an error event logged as a warning per click. The Swift app loops\nits write with a bounded poll, so a link longer than the socket buffer\nlands whole instead of being dropped as a short write; the link is\nprivate in the unified log, since a copy link carries the text copied.\nInstall resolves the forwarder before the runtime is staged, so a\ncheckout with no build fails with nothing half done. The doctor's row\nfor a click request says what it knows (not the forwarder) and leaves\nnaming the applet to the opener's row. The doctor e2e test forwards as\nthe app does: one frame, hang up, read the click event.\n\n* fix(url-handler): the app is replaced whole, EPIPE is reported not fatal, and the doctor parses an old daemon's arrivals (candybar-daemon-health-ajx0.co4)\n\nFrom the second high review. Install assembles and signs the app beside\nits place and renames it over the old one, so a failed sign leaves the\nhandler the user had. The forwarder sets SO_NOSIGPIPE, so a daemon that\nends the socket mid-write is an EPIPE it logs, not a SIGPIPE that ends\nthe app silently. The doctor's CLI probe parses each arrival off the\ndaemon's stats and tells a daemon from before the forwarder (no\ndelivery) apart as skew instead of dereferencing it. The set of frame\nversions the daemon speaks is derived from the current version, and the\nconnection declares `waits` above the backstop that reads it."
         }
       ]
     }
