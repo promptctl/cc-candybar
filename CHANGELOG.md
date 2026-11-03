@@ -1,3 +1,9 @@
+## [1.185.0](https://github.com/promptctl/cc-candybar/compare/v1.184.1...v1.185.0) (2026-11-03)
+
+### Features
+
+* **facts:** Fact<T> and SessionFacts, the seam's type (candybar-gather-renderer-76bb.6pj.cna) ([#609](https://github.com/promptctl/cc-candybar/issues/609)) ([9d75378](https://github.com/promptctl/cc-candybar/commit/9d75378da3169d188c0f6bca1bf8f0e57e2dcb88))
+
 ## [1.184.1](https://github.com/promptctl/cc-candybar/compare/v1.184.0...v1.184.1) (2026-11-03)
 
 ### Bug Fixes
