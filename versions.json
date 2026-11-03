@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-598",
+      "ref": "refs/pull/598/merge",
+      "sha": "7ccf1de6c1a141d390300c1cf827f4cc0abc93a1",
+      "timestamp": "2026-11-03T02:32:47.189Z",
+      "commits": [
+        {
+          "sha": "7ccf1de6c1a141d390300c1cf827f4cc0abc93a1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T19:31:45-07:00",
+          "message": "Merge 792c2860e000d1d95b420936aa2ef097d2c5f1b2 into a79a66523b3e7763ab4abce2c4a79c4a9fd4443f\n"
+        },
+        {
+          "sha": "792c2860e000d1d95b420936aa2ef097d2c5f1b2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T19:31:33-07:00",
+          "message": "fix(launch): a launch's input outlives its direct child for the descendants that read it (candybar-testing-0x6u.3zo)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "a79a66523b3e7763ab4abce2c4a79c4a9fd4443f",
