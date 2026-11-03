@@ -188,6 +188,7 @@ describe("CacheExpiryProvider", () => {
       entries: 1,
       refreshes: { request: 1 },
       failures: 0,
+      abandoned: 0,
       lastMs: expect.any(Number),
     });
   });

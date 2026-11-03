@@ -43,7 +43,11 @@ import {
   type FileEvents,
 } from "../daemon/cache/file-events.js";
 import type { Holds } from "../utils/holds.js";
-import { KeyedSource, type KeyedSourceStats } from "../utils/keyed-source.js";
+import {
+  KeyedSource,
+  NO_WATCH,
+  type KeyedSourceStats,
+} from "../utils/keyed-source.js";
 import { quietLogger, type DaemonLogger } from "../utils/logger.js";
 import { ABSENT, failed, ok, type Outcome } from "../utils/outcome.js";
 import type { Current } from "../utils/reading.js";
@@ -486,7 +490,7 @@ export class SourceRuns {
             ? { okMs: refresh.durationMs, failedMs: refresh.durationMs }
             : null,
         watch: (identity, changed) => {
-          if (identity.refresh.kind !== "watch_file") return () => {};
+          if (identity.refresh.kind !== "watch_file") return NO_WATCH();
           const digest = digestOf(identity);
           const unsubscribe = this.watchMgr.subscribe(
             identity.refresh.path,

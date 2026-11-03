@@ -25,6 +25,7 @@ const SOURCES: SourceSnapshots = {
       scope: "pane",
       refreshes: { first: 2, period: 7, change: 0, supersede: 0 },
       failures: 1,
+      abandoned: 0,
       lastMs: 3,
     },
     {
@@ -32,6 +33,7 @@ const SOURCES: SourceSnapshots = {
       scope: "session",
       refreshes: { request: 3 },
       failures: 1,
+      abandoned: 0,
       lastMs: 0,
     },
   ],
@@ -64,6 +66,28 @@ const FILE_EVENTS = {
   probeFailures: 1,
 } as const;
 
+// The declared sources' runs: a shell entry held by two homes, one read
+// abandoned; no file run yet; one path watched.
+const SOURCE_RUNS = {
+  shell: {
+    entries: 1,
+    held: 1,
+    refreshes: { first: 1, period: 4, change: 0, supersede: 0 },
+    failures: 1,
+    abandoned: 1,
+    lastMs: 12,
+  },
+  file: {
+    entries: 0,
+    held: 0,
+    refreshes: { first: 0, period: 0, change: 0, supersede: 0 },
+    failures: 0,
+    abandoned: 0,
+    lastMs: null,
+  },
+  watches: 1,
+} as const;
+
 describe("RuntimeStats.snapshot", () => {
   test("produces a stable shape with extras merged in", () => {
     const stats = new RuntimeStats(systemTimekeeper);
@@ -91,6 +115,7 @@ describe("RuntimeStats.snapshot", () => {
       usageCache: { size: 10, hits: 50, misses: 5, sweeps: 1 },
       sources: SOURCES,
       fileEvents: FILE_EVENTS,
+      sourceRuns: SOURCE_RUNS,
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
       renderCache: {
         size: 3,
@@ -298,6 +323,7 @@ describe("formatStats", () => {
       usageCache: { size: 3, hits: 40, misses: 10, sweeps: 0 },
       sources: SOURCES,
       fileEvents: FILE_EVENTS,
+      sourceRuns: SOURCE_RUNS,
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
       renderCache: {
         size: 4,
@@ -384,6 +410,13 @@ describe("formatStats", () => {
     expect(out).toContain(
       "fileEvents    stalled unvouched since 2026-10-27T04:00:00.000Z stalls=2 catchUps=1 probes=7 probeFailures=1",
     );
+    expect(out).toContain(
+      "runs.shell    entries=1 held=1 failures=1 abandoned=1 last=12ms",
+    );
+    expect(out).toContain(
+      "runs.file     entries=0 held=0 failures=0 abandoned=0 last=-",
+    );
+    expect(out).toContain("runs.watches  1");
     expect(out).toContain("refused       1");
     expect(out).toContain("errors        3");
     expect(out).toContain("active        5");
@@ -439,6 +472,7 @@ describe("formatStats", () => {
       usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
       sources: RuntimeStats.referenceSnapshot().sources,
       fileEvents: RuntimeStats.referenceSnapshot().fileEvents,
+      sourceRuns: RuntimeStats.referenceSnapshot().sourceRuns,
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
       renderCache: {
         size: 0,
@@ -453,7 +487,7 @@ describe("formatStats", () => {
       },
       effectCache: { sessions: 0, effects: 0 },
       menuIdle: { sessions: 0, armed: 0, pending: 0 },
-  journalTurns: { holder: null, heldMs: 0, queued: 0, gathers: 0 },
+      journalTurns: { holder: null, heldMs: 0, queued: 0, gathers: 0 },
       runs: { started: 0, failed: 0, timedOut: 0, refused: 0, running: 0 },
       sessionState: { sessions: 0, observers: 0, revision: 0 },
       frameFeeds: {

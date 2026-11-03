@@ -12,6 +12,17 @@ import type { GitCacheStats } from "./cache/git";
 import type { SourceRecord, SourceScope } from "../utils/refresh-ledger";
 import type { ManagedStorageStats } from "./cache/managed-storage";
 import type { FileEventsStats } from "./cache/file-events";
+import type { SourceRunsStats } from "../var-system/source-runs";
+
+// A read kind no run of which has happened yet.
+const NO_RUNS: SourceRunsStats["shell"] = {
+  entries: 0,
+  held: 0,
+  refreshes: {},
+  failures: 0,
+  abandoned: 0,
+  lastMs: null,
+};
 import type { JournalTurnStats } from "./journal-turns";
 import type { ProbeArrival } from "../doctor/handler-probe";
 import type { RenderSighting } from "./render-sightings";
@@ -105,6 +116,10 @@ export interface StatsSnapshot {
   // [LAW:nothing-unseen] Whether the OS is delivering file events, and since
   // when the daemon cannot vouch that it heard every one.
   fileEvents: FileEventsStats;
+  // [LAW:nothing-unseen] The declared sources' runs: per read kind, the
+  // entries, how many are held, and the ledger's tallies; and the path
+  // watches armed for them.
+  sourceRuns: SourceRunsStats;
   // [LAW:nothing-unseen] Every forward transcript read since start: gated
   // reads, bytes off disk, lines longer than the fold window read whole and
   // the longest of them — what bounds a fold's memory beyond its window
@@ -405,6 +420,11 @@ export class RuntimeStats {
         probes: 0,
         probeFailures: 0,
       },
+      sourceRuns: {
+        shell: NO_RUNS,
+        file: NO_RUNS,
+        watches: 0,
+      },
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
       renderCache: {
         size: 0,
@@ -457,6 +477,7 @@ export class RuntimeStats {
     usageCache: StatsSnapshot["usageCache"];
     sources: SourceSnapshots;
     fileEvents: FileEventsStats;
+    sourceRuns: SourceRunsStats;
     transcriptReads: TranscriptReads;
     renderCache: StatsSnapshot["renderCache"];
     effectCache: StatsSnapshot["effectCache"];
@@ -502,6 +523,7 @@ export class RuntimeStats {
       usageCache: extras.usageCache,
       sources: extras.sources,
       fileEvents: extras.fileEvents,
+      sourceRuns: extras.sourceRuns,
       transcriptReads: extras.transcriptReads,
       renderCache: extras.renderCache,
       effectCache: extras.effectCache,

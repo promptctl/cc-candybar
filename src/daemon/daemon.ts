@@ -741,6 +741,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     journalTurns,
     linkSigner,
     runs,
+    sourceRuns,
     laneSetups,
     tmuxStatusLines,
     frameFeeds,

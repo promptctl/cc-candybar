@@ -980,6 +980,7 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
           scope: "daemon",
           refreshes: { first: 0, period: 0, change: 0, supersede: 0 },
           failures: 0,
+          abandoned: 0,
           lastMs: null,
         },
         {
@@ -992,6 +993,7 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
             supersede: 0,
           },
           failures: 0,
+          abandoned: 0,
           lastMs: expect.any(Number),
         },
       ]);
@@ -1744,7 +1746,14 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
       const events = handDelivery();
       const store = new VariableStore(systemTimekeeper);
       const runs = runsOver({ fileEvents: events });
-      const registry = registryOver(store, "", undefined, null, undefined, runs);
+      const registry = registryOver(
+        store,
+        "",
+        undefined,
+        null,
+        undefined,
+        runs,
+      );
       const view = registry.view();
       live.add(view);
       registry.declareFile("home", f, {
