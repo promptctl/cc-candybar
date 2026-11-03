@@ -18,7 +18,7 @@ import { CONFIG_ENV, chainName, type ConfigTarget } from "../config-hint.js";
 import { LANE_NAMES } from "../config/lanes.js";
 import type { ClientKind } from "../client-hint.js";
 import { DEFAULT_TERMINAL_WIDTH } from "../render/strip.js";
-import type { Outcome } from "../utils/outcome.js";
+import type { Asked, Outcome } from "../utils/outcome.js";
 import {
   isJsonObject,
   projectLocalSettingsFile,
@@ -73,12 +73,7 @@ export interface TmuxClient extends TmuxClientTerm {
   readonly utf8: boolean;
 }
 
-// A question put to the system: it answers or it fails, never "no opinion".
-// The doctor's own vocabulary, not a provider's `Outcome`: a probe has no read
-// or parse phase to carry, only the reason it could not answer.
-export type Asked<T> =
-  | { readonly kind: "ok"; readonly value: T }
-  | { readonly kind: "failed"; readonly reason: string };
+export type { Asked };
 
 // [LAW:types-are-the-program] The tmux facts have THREE states and each is a
 // different truth the check must say: the client that rendered last carried

@@ -27,13 +27,22 @@ export type Outcome<T> =
 
 export type Ok<T> = Extract<Outcome<T>, { kind: "ok" }>;
 
+// A question put to a system that answers or fails, never "no opinion", and
+// whose failure has no read or parse phase to carry: the doctor's probes and
+// the state files it shares with the daemon.
+export type Asked<T> =
+  | { readonly kind: "ok"; readonly value: T }
+  | { readonly kind: "failed"; readonly reason: string };
+
 export function ok<T>(value: T): Ok<T> {
   return { kind: "ok", value };
 }
 
 export const ABSENT: Outcome<never> = { kind: "absent" };
 
-export function failed(reason: string, failedAt: FailedAt): Outcome<never> {
+export type Failed = Extract<Outcome<never>, { kind: "failed" }>;
+
+export function failed(reason: string, failedAt: FailedAt): Failed {
   return { kind: "failed", reason, failedAt };
 }
 
@@ -74,10 +83,9 @@ export function pendingOf(why: PendingWhy): Pending {
   return PENDINGS[why];
 }
 
-// What a position the daemon built can hold. `unknown` is not among them: a
+// What a payload node the daemon built can be. `unknown` is not among them: a
 // user's JSON (a source's `ok` value) is tested by no one, because a document
 // that reads `{"kind":"pending"}` is a value.
-// What a payload node the daemon built can be.
 export type PayloadNode =
   | object
   | string

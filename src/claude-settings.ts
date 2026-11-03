@@ -2,7 +2,7 @@ import fs from "node:fs";
 
 import path from "node:path";
 import { JSON_DIALECT } from "./config/json5-edit.js";
-import { failed, ok, type Outcome } from "./utils/outcome.js";
+import { failed, ok, type Failed, type Ok } from "./utils/outcome.js";
 import { readTailSync } from "./utils/transcript-fs.js";
 
 // [LAW:one-source-of-truth] The variable that moves Claude Code's
@@ -91,7 +91,9 @@ export function readClaudeSettingsText(settingsPath: string): string {
 export function readClaudeSettings(
   settingsPath: string,
 ): Readonly<Record<string, unknown>> {
-  return parseSettings(settingsPath, readClaudeSettingsText(settingsPath));
+  const settings = readClaudeSettingsOutcome(settingsPath);
+  if (settings.kind === "failed") throw new Error(settings.reason);
+  return settings.value;
 }
 
 // The same reading as an outcome that says which phase failed: the file could
@@ -99,7 +101,7 @@ export function readClaudeSettings(
 // phase (src/utils/outcome.ts), and the two are different repairs.
 export function readClaudeSettingsOutcome(
   settingsPath: string,
-): Outcome<Readonly<Record<string, unknown>>> {
+): Ok<Readonly<Record<string, unknown>>> | Failed {
   const reason = (e: unknown): string =>
     e instanceof Error ? e.message : String(e);
   let text: string;
