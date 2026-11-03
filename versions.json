@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-616",
+      "ref": "refs/pull/616/merge",
+      "sha": "76672e66b47b95f90f1c7d6be16e205c2233caf4",
+      "timestamp": "2026-11-03T16:21:07.203Z",
+      "commits": [
+        {
+          "sha": "76672e66b47b95f90f1c7d6be16e205c2233caf4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T09:20:05-07:00",
+          "message": "Merge 63d9ce3e3e9e4768108741184f96634afdffb1ff into b744cf603e403a589c9d9d397312a7fdece6ad65\n"
+        },
+        {
+          "sha": "63d9ce3e3e9e4768108741184f96634afdffb1ff",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T09:18:48-07:00",
+          "message": "test(facts): payload tests assert an unread lane as pending, not a missing key (candybar-gather-renderer-76bb.6pj.83l)\n"
+        },
+        {
+          "sha": "417535d9c102cc5f9d66875d6867d457c49479f1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T09:00:29-07:00",
+          "message": "docs(claude-md): checks run on the code under review, never on another commit to second-guess a threshold\n"
+        },
+        {
+          "sha": "86be4efd648b2f49a74012b044b5791df0827891",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T08:30:56-07:00",
+          "message": "feat(facts): the payload a template reads is composed from the document (candybar-gather-renderer-76bb.6pj.83l)\n\nThe payload, the globals a draw builds its options from and the facts document\nare one turn, stamped together in one reaction, so a draw never mixes a\ndocument with a request or a pick it was not composed from. A turn takes its\nclosure and lanes from the view's one declaration. A turn that cannot be\nstamped keeps the last one and surfaces as a warning in the bar's indicator.\nA view that fails to open releases what it began. The check command stamps a\nfixture document and composes through the same function; its hand-written\npayload and checkToday are gone.\n"
+        },
+        {
+          "sha": "f5ced7e107bd672139fdf66cfa9bab21d86c4e8a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T08:00:23-07:00",
+          "message": "test(facts): pin the bar, the view's payload and check's payload per preset (candybar-gather-renderer-76bb.6pj.83l)\n\nDrawn from the daemon's session source over fixed owners at a fixed instant, so\ncomposing the payload from the document can be judged against bytes: the bar\nmust not move, and the payload snapshot's diff is where the accepted\ndifferences show. The payload-owners fakes hold their answers in observables,\nas the real owners do, so a view's computed sees a lane land.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-615",
       "ref": "refs/pull/615/merge",
       "sha": "d442ca7003ba0cf7a58cf2fba4f2233d6dab821b",
