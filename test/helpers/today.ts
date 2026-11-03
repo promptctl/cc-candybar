@@ -1,14 +1,13 @@
-import {
-  dayKey,
-  projectToday,
-  type DaySums,
-  type SessionUsageStore,
+import type {
+  DaySums,
+  SessionUsageStore,
 } from "../../src/daemon/cache/session-usage-store";
+import { oneDay, projectToday } from "../../src/daemon/cache/today-facts";
 import { RefreshFaults } from "../../src/daemon/refresh-faults";
 import { todayReading } from "../../src/daemon/render-payload";
 import type { ClaudeHookData } from "../../src/utils/claude";
 import type { Holds } from "../../src/utils/holds";
-import { dateOf, type Instant } from "../../src/utils/instant";
+import type { Instant } from "../../src/utils/instant";
 import { pendingOf } from "../../src/utils/outcome";
 import { laneOutcome } from "../../src/utils/reading";
 
@@ -62,16 +61,5 @@ function projected(
 // The day sums of a directory set holding one day: `cost` and `tokens` on the
 // day `at` falls in, with no roots.
 export function sumsOf(at: Instant, cost: number, tokens: number): DaySums {
-  return {
-    roots: [],
-    sums: {
-      [dayKey(dateOf(at))]: {
-        cost,
-        input: tokens,
-        output: 0,
-        cacheCreation: 0,
-        cacheRead: 0,
-      },
-    },
-  };
+  return { roots: [], sums: oneDay(at, cost, tokens) };
 }

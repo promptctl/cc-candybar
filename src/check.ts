@@ -67,7 +67,7 @@ import { ansiOf, type Frame } from "./render/frame.js";
 import type { Gates } from "./daemon/foundations/gates.js";
 import { daemonGates } from "./daemon/update-keys.js";
 import { resumeCommand } from "./claude-resume.js";
-import { dateOf, instantOf, type Instant } from "./utils/instant.js";
+import { instantOf, type Instant } from "./utils/instant.js";
 import { perSetting } from "./config/setting-projections.js";
 import { effectivePresetName, presetNames } from "./config/presets.js";
 import {
@@ -78,7 +78,7 @@ import {
   type RenderPayload,
   type ViewPayload,
 } from "./daemon/render-payload.js";
-import { dayKey, type TodayFacts } from "./daemon/cache/session-usage-store.js";
+import { oneDay, type TodayFacts } from "./daemon/cache/today-facts.js";
 import { ABSENT, ok } from "./utils/outcome.js";
 import {
   resolveEffectiveGlobals,
@@ -316,19 +316,7 @@ export function checkPayload(
 // sums, so `check` spells that number the way the document spells it.
 export function checkToday(at: Instant) {
   return todayOf(
-    ok<TodayFacts>({
-      roots: [],
-      sums: {
-        [dayKey(dateOf(at))]: {
-          cost: 12.5,
-          input: 3_400_000,
-          output: 0,
-          cacheCreation: 0,
-          cacheRead: 0,
-        },
-      },
-      session: null,
-    }),
+    ok<TodayFacts>({ sums: oneDay(at, 12.5, 3_400_000), own: {} }),
     at,
   );
 }

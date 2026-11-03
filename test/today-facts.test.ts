@@ -1,17 +1,18 @@
-// The `today` fact (src/daemon/cache/session-usage-store.ts, TodayFacts) is
+// The `today` fact (src/daemon/cache/today-facts.ts, TodayFacts) is
 // everything a draw's `today` reads, so the draw's day is a pure function of
 // the document's fact and the draw's instant. These tests state that
-// contract: the sum, the rendering session counted once wherever its
-// transcript lives, the day turning over with no owner moving, and the one
-// order in which the fact fails.
+// contract: the sum, the rendering session's days beside the set's, the day
+// turning over with no owner moving, and the one order in which the fact
+// fails. That a session under the set's roots is not counted twice is the
+// store's read (test/daemon-session-usage-store.test.ts).
 
+import type { DaySums } from "../src/daemon/cache/session-usage-store";
 import {
   dayKey,
   projectToday,
-  type DaySums,
-  type SessionDays,
+  type DayUsage,
   type TodayFacts,
-} from "../src/daemon/cache/session-usage-store";
+} from "../src/daemon/cache/today-facts";
 import { RefreshFaults } from "../src/daemon/refresh-faults";
 import { todayOf, todayReading } from "../src/daemon/render-payload";
 import { dateOf, instantOf } from "../src/utils/instant";
@@ -43,7 +44,7 @@ const SET: DaySums = {
 
 describe("projectToday", () => {
   test("sums the day of the draw's instant out of the set", () => {
-    const today = projectToday({ ...SET, session: null }, NOON);
+    const today = projectToday({ sums: SET.sums, own: {} }, NOON);
     expect(today).toMatchObject({
       kind: "ok",
       value: { cost: 4, tokens: 40, date: key(NOON) },
@@ -51,51 +52,27 @@ describe("projectToday", () => {
   });
 
   test("the day turning over moves it with no owner moving", () => {
-    const facts: TodayFacts = { ...SET, session: null };
+    const facts: TodayFacts = { sums: SET.sums, own: {} };
     expect(projectToday(facts, NOON)).toMatchObject({ value: { cost: 4 } });
     expect(projectToday(facts, NEXT_DAY)).toMatchObject({ value: { cost: 1 } });
   });
 
   test("a day nothing was recorded on is absent", () => {
     const later = instantOf(new Date(2031, 0, 9, 12, 0, 0));
-    expect(projectToday({ ...SET, session: null }, later)).toEqual(ABSENT);
+    expect(projectToday({ sums: SET.sums, own: {} }, later)).toEqual(ABSENT);
   });
 
-  test("a session outside the set's roots adds its own day", () => {
+  test("the session's own day adds to the set's", () => {
     const today = projectToday(
-      {
-        ...SET,
-        session: {
-          transcriptPath: "/elsewhere/own.jsonl",
-          days: { [key(NOON)]: day(0.5, 5) },
-        },
-      },
+      { sums: SET.sums, own: { [key(NOON)]: day(0.5, 5) } },
       NOON,
     );
     expect(today).toMatchObject({ value: { cost: 4.5, tokens: 45 } });
   });
 
-  test("a session under the roots is in the sums already, so counts once", () => {
+  test("the session's own day counts when the set holds none", () => {
     const today = projectToday(
-      {
-        ...SET,
-        session: {
-          transcriptPath: "/claude/projects/p/own.jsonl",
-          days: { [key(NOON)]: day(0.5, 5) },
-        },
-      },
-      NOON,
-    );
-    expect(today).toMatchObject({ value: { cost: 4, tokens: 40 } });
-  });
-
-  test("a session with no transcript path counts its own day", () => {
-    const today = projectToday(
-      {
-        roots: SET.roots,
-        sums: {},
-        session: { transcriptPath: null, days: { [key(NOON)]: day(2, 20) } },
-      },
+      { sums: {}, own: { [key(NOON)]: day(2, 20) } },
       NOON,
     );
     expect(today).toMatchObject({ value: { cost: 2, tokens: 20 } });
@@ -104,30 +81,39 @@ describe("projectToday", () => {
 
 describe("todayReading", () => {
   const SID = "s1";
-  const own = {
-    transcriptPath: "/elsewhere/own.jsonl",
-    days: { [key(NOON)]: day(0.5, 5) },
+  const own = { [key(NOON)]: day(0.5, 5) };
+  // A usage store that answers `days`, and says which roots it was asked about.
+  const usage = (days: Outcome<Readonly<Record<string, DayUsage>>>) => {
+    const asked: Array<readonly string[]> = [];
+    return {
+      asked,
+      daysOutside: (_session: string, roots: readonly string[]) => {
+        asked.push(roots);
+        return days;
+      },
+    };
   };
-  const usage = (days: Outcome<SessionDays>) => ({ daysOf: () => days });
 
-  test("folds the set with the session's own days", () => {
+  test("folds the set with the session's days outside its roots", () => {
+    const store = usage(ok(own));
     const fact = todayReading(
       settledLane(ok(SET)),
       new RefreshFaults(),
-      usage(ok(own)),
+      store,
       SID,
     );
-    expect(fact).toEqual(ok({ ...SET, session: own }));
+    expect(fact).toEqual(ok({ sums: SET.sums, own }));
+    expect(store.asked).toEqual([SET.roots]);
   });
 
-  test("a session with no record has no days of its own", () => {
+  test("a session with no days outside the set has none of its own", () => {
     const fact = todayReading(
       settledLane(ok(SET)),
       new RefreshFaults(),
       usage(ABSENT),
       SID,
     );
-    expect(fact).toEqual(ok({ ...SET, session: null }));
+    expect(fact).toEqual(ok({ sums: SET.sums, own: {} }));
   });
 
   test("the session's ingest failing is the fact failing", () => {
@@ -161,7 +147,7 @@ describe("todayReading", () => {
 });
 
 describe("todayOf", () => {
-  const facts: TodayFacts = { ...SET, session: null };
+  const facts: TodayFacts = { sums: SET.sums, own: {} };
 
   test("an ok fact is the day's cost and tokens", () => {
     expect(todayOf(ok(facts), NOON)).toEqual({ cost: 4, tokens: 40 });

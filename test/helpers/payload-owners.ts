@@ -207,7 +207,7 @@ export function fakeUsage(
         },
       };
     },
-    daysOf: (): Outcome<never> => ABSENT,
+    daysOutside: (): Outcome<never> => ABSENT,
     refreshToday: async (
       hookData: ClaudeHookData | undefined,
     ): Promise<void> => {

@@ -39,7 +39,6 @@ import {
   type Reading,
 } from "../../utils/outcome";
 import { quietLogger, type DaemonLogger } from "../../utils/logger";
-import { dateOf, type Instant } from "../../utils/instant";
 import { settledLane, type Lane } from "../../utils/reading";
 import { valueOf } from "../../utils/logfmt";
 import type { Holds } from "../../utils/holds";
@@ -48,6 +47,7 @@ import { RefreshLedger, type Refreshes } from "../../utils/refresh-ledger";
 import type { Every } from "../../utils/period";
 import { elapsedMs, type Timekeeper } from "../../time";
 import { Kept } from "../../var-system/store";
+import { addDay, dayKey, EMPTY_DAY, type DayUsage } from "./today-facts";
 
 // [LAW:one-source-of-truth] The daemon's single owner of per-session usage.
 // Per-session records are canonical; the `session` projection (whole-session
@@ -73,15 +73,6 @@ import { Kept } from "../../var-system/store";
 // records live in an observable map, and each directory's day sums are a kept
 // computed over it, so a frame's `today` is one lookup that changes in the
 // turn a record does (brandon-unfiled-3248.8ro6, step 3).
-
-// [LAW:types-are-the-program] An `ok` TodayInfo always carries real totals —
-// "no usage recorded today" is the `absent` outcome arm, not a bag of nulls.
-export interface TodayInfo {
-  cost: number;
-  tokens: number;
-  tokenBreakdown: TokenBreakdown;
-  date: string;
-}
 
 // [LAW:one-source-of-truth] One observation of the active session's cumulative
 // token counts at a single instant. tok/s is the delta between two of these —
@@ -127,17 +118,6 @@ function speedSampleOf(
     : 0;
   const output = breakdown ? breakdown.output : 0;
   return { input, output, total: input + output, atMs };
-}
-
-// Per-(session, day) scalar contribution — the only granularity the today fold
-// needs. Raw entries are discarded after bucketing, so per-session retained
-// memory is O(retained-days), not O(entries).
-export interface DayUsage {
-  cost: number;
-  input: number;
-  output: number;
-  cacheCreation: number;
-  cacheRead: number;
 }
 
 interface SessionRecord {
@@ -225,14 +205,6 @@ const MAX_UNHELD_SCANS = 8;
 // unbounded burst gn4 exists to kill.
 const SEED_CONCURRENCY = 8;
 
-const EMPTY_DAY: DayUsage = {
-  cost: 0,
-  input: 0,
-  output: 0,
-  cacheCreation: 0,
-  cacheRead: 0,
-};
-
 const EMPTY_SESSION_INFO: SessionInfo = {
   cost: null,
   calculatedCost: null,
@@ -240,13 +212,6 @@ const EMPTY_SESSION_INFO: SessionInfo = {
   tokens: null,
   tokenBreakdown: null,
 };
-
-export function dayKey(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
 
 // Files modified before this can hold no entry that lands in "today", so the
 // seed never parses them. A full day of slack absorbs timezone/rollover skew.
@@ -333,14 +298,6 @@ async function foldFile(
   return { entries: count, cost, breakdown, days };
 }
 
-function addDay(into: DayUsage, d: DayUsage): void {
-  into.cost += d.cost;
-  into.input += d.input;
-  into.output += d.output;
-  into.cacheCreation += d.cacheCreation;
-  into.cacheRead += d.cacheRead;
-}
-
 // [LAW:effects-at-boundaries] Pure merge of a session's file folds into the
 // derived record shape the read path serves. `entries === 0` across all files is
 // the empty session (all-null SessionInfo, whose fields the payload drops) — the
@@ -386,40 +343,6 @@ function under(path: string | undefined, roots: readonly string[]): boolean {
   return path !== undefined && roots.some((root) => path.startsWith(root));
 }
 
-// [LAW:one-source-of-truth] The `today` projection at a draw's instant: the
-// day of the set's sums the instant is in, so a frame past midnight sums the
-// new day with no refresh and no owner moving. The rendering session counts
-// wherever its transcript lives; under the set's roots it is already in the
-// sums. `absent` when the day holds nothing.
-export function projectToday(
-  facts: TodayFacts,
-  at: Instant,
-): Outcome<TodayInfo> {
-  const today = dayKey(dateOf(at));
-  const total: DayUsage = { ...EMPTY_DAY };
-  const inSet = facts.sums[today];
-  if (inSet !== undefined) addDay(total, inSet);
-  const own =
-    facts.session === null ||
-    under(facts.session.transcriptPath ?? undefined, facts.roots)
-      ? undefined
-      : facts.session.days[today];
-  if (own !== undefined) addDay(total, own);
-
-  if (inSet === undefined && own === undefined) return ABSENT;
-  return ok({
-    cost: total.cost,
-    tokens: total.input + total.output + total.cacheCreation + total.cacheRead,
-    tokenBreakdown: {
-      input: total.input,
-      output: total.output,
-      cacheCreation: total.cacheCreation,
-      cacheRead: total.cacheRead,
-    },
-    date: today,
-  });
-}
-
 // [LAW:effects-at-boundaries] One directory set's day sums: each day some
 // record under its roots holds a bucket for, the sum of those buckets. Keyed
 // by the records' own days, so it reads no clock — the day `today` reads off
@@ -455,22 +378,6 @@ interface DaySet {
 export interface DaySums {
   readonly roots: readonly string[];
   readonly sums: Readonly<Record<string, DayUsage>>;
-}
-
-// The rendering session's own days: its transcript's place and its day
-// buckets, as plain records (a Map does not survive JSON).
-export interface SessionDays {
-  readonly transcriptPath: string | null;
-  readonly days: Readonly<Record<string, DayUsage>>;
-}
-
-// [LAW:types-are-the-program] Everything the `today` projection reads, so the
-// projection is a pure function of this and the draw's instant (`projectToday`):
-// the directory set's day sums, and the rendering session's own days (`null`
-// for a session with no record). The session's ingest failing is not a field,
-// it is the fact failing.
-export interface TodayFacts extends DaySums {
-  readonly session: SessionDays | null;
 }
 
 // Bounded-concurrency fan-out for the seed: at most `limit` parses in flight.
@@ -781,22 +688,25 @@ export class SessionUsageStore {
     };
   }
 
-  // The rendering session's own days as the records stand, for the `today`
-  // fact: no I/O, no fold. [LAW:no-silent-failure] The session's last ingest
-  // failing is this read failing, so the fact fails with it and the draw shows
-  // a gap, never a total silently missing the session's own work. A session
-  // with no record has no days of its own.
-  daysOf(sessionId: string): Outcome<SessionDays> {
+  // The rendering session's own days the set's sums do not hold, as the
+  // records stand, for the `today` fact: no I/O, no fold. A record under the
+  // set's roots is in its sums already, so it has none beyond them.
+  // [LAW:no-silent-failure] The session's last ingest failing is this read
+  // failing, so the fact fails with it and the draw shows a gap, never a total
+  // silently missing the session's own work.
+  daysOutside(
+    sessionId: string,
+    roots: readonly string[],
+  ): Outcome<Readonly<Record<string, DayUsage>>> {
     const slot = this.sessions.get(sessionId);
     if (slot === undefined) return ABSENT;
     const failure = slot.failure.get();
     if (failure !== null) return failed(failure, "read");
     const record = slot.record;
-    if (record === undefined) return ABSENT;
-    return ok({
-      transcriptPath: record.transcriptPath ?? null,
-      days: Object.fromEntries(record.days),
-    });
+    if (record === undefined || under(record.transcriptPath, roots)) {
+      return ABSENT;
+    }
+    return ok(Object.fromEntries(record.days));
   }
 
   // Take one tok/s observation of the active session: ingest its current

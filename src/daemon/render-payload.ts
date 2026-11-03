@@ -68,13 +68,12 @@ import {
 } from "../utils/reading.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import { isBundledPreset } from "./bundled-presets.js";
-import {
-  projectToday,
-  type DaySums,
-  type SessionUsageStore,
-  type SpeedObservation,
-  type TodayFacts,
+import type {
+  DaySums,
+  SessionUsageStore,
+  SpeedObservation,
 } from "./cache/session-usage-store.js";
+import { projectToday, type TodayFacts } from "./cache/today-facts.js";
 import type { ContextInfo, ContextProvider } from "../segments/context.js";
 import type { MetricsInfo, MetricsProvider } from "../segments/metrics.js";
 import type { UsageInfo } from "../segments/session.js";
@@ -1403,14 +1402,14 @@ export function readingsOf(
 export function todayReading(
   lane: Lane<DaySums>,
   faults: RefreshFaults,
-  usage: Pick<SessionUsageStore, "daysOf">,
+  usage: Pick<SessionUsageStore, "daysOutside">,
   sessionId: string,
 ): Current<TodayFacts> {
   const set = faults.of(sessionId, "today") ?? lane.current();
   if (set.kind !== "ok") return set;
-  const own = usage.daysOf(sessionId);
+  const own = usage.daysOutside(sessionId, set.value.roots);
   if (own.kind === "failed") return own;
-  return ok({ ...set.value, session: own.kind === "ok" ? own.value : null });
+  return ok({ sums: set.value.sums, own: own.kind === "ok" ? own.value : {} });
 }
 
 // The landings a request waits on before it draws: every declared lane whose
