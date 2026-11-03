@@ -2,32 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "847071c25ae39f8f9af52d1ab5b46f3a54b872e1",
-      "timestamp": "2026-11-03T16:49:58.018Z",
-      "commits": [
-        {
-          "sha": "847071c25ae39f8f9af52d1ab5b46f3a54b872e1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T09:47:52-07:00",
-          "message": "feat(facts): the payload a template reads is composed from the document (#616)\n\n* test(facts): pin the bar, the view's payload and check's payload per preset (candybar-gather-renderer-76bb.6pj.83l)\n\nDrawn from the daemon's session source over fixed owners at a fixed instant, so\ncomposing the payload from the document can be judged against bytes: the bar\nmust not move, and the payload snapshot's diff is where the accepted\ndifferences show. The payload-owners fakes hold their answers in observables,\nas the real owners do, so a view's computed sees a lane land.\n\n* feat(facts): the payload a template reads is composed from the document (candybar-gather-renderer-76bb.6pj.83l)\n\nThe payload, the globals a draw builds its options from and the facts document\nare one turn, stamped together in one reaction, so a draw never mixes a\ndocument with a request or a pick it was not composed from. A turn takes its\nclosure and lanes from the view's one declaration. A turn that cannot be\nstamped keeps the last one and surfaces as a warning in the bar's indicator.\nA view that fails to open releases what it began. The check command stamps a\nfixture document and composes through the same function; its hand-written\npayload and checkToday are gone.\n\n* docs(claude-md): checks run on the code under review, never on another commit to second-guess a threshold\n\n* test(facts): payload tests assert an unread lane as pending, not a missing key (candybar-gather-renderer-76bb.6pj.83l)\n\n* fix(facts): a draw reads the client's hints off its turn; a repeated failure is one turn; unstamped projects its arms (candybar-gather-renderer-76bb.6pj.83l)\n\n* test(facts): a failed stamp and its recovery each wake the view (candybar-gather-renderer-76bb.6pj.83l)\n\n* test(facts): the session rig holds the source runs main moved onto RenderDeps (candybar-gather-renderer-76bb.6pj.83l)"
-        }
-      ]
-    },
-    {
       "version": "pr-615",
       "ref": "refs/pull/615/merge",
-      "sha": "fe144928414e7821720ce9e09fc0b8b59006e1bc",
-      "timestamp": "2026-11-03T16:43:04.561Z",
+      "sha": "3b4e58335870064a4418718667dd8f3cfcc29cd3",
+      "timestamp": "2026-11-03T16:53:34.866Z",
       "commits": [
         {
-          "sha": "fe144928414e7821720ce9e09fc0b8b59006e1bc",
+          "sha": "3b4e58335870064a4418718667dd8f3cfcc29cd3",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T16:41:57Z",
-          "message": "Merge 761becb52498335c83c2d2ca9cf0434769cc8983 into b744cf603e403a589c9d9d397312a7fdece6ad65\n"
+          "timestamp": "2026-11-03T16:51:32Z",
+          "message": "Merge b51d7a34a000fd9cf2f08bfd230eec839d2b369a into 847071c25ae39f8f9af52d1ab5b46f3a54b872e1\n"
+        },
+        {
+          "sha": "b51d7a34a000fd9cf2f08bfd230eec839d2b369a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T09:51:20-07:00",
+          "message": "refactor(launch): failures carry whole stderr and the ⚠ cell bounds its line; clicks, plugin install and the handler probe share the describer (candybar-gather-renderer-76bb.6pj.dr2)\n\nMedium review: keeping only stderr's last line lost git's fatal and ps's\nerror before its usage; the display bound belongs where the line is drawn,\nso the broken cell clips through the render layer's sanitizer and the viewer\nkeeps the whole text. Lane failures keep stdout, where their tools explain.\nSpawn errors drop the internal tag; clicks and handoffs say why one way.\n"
         },
         {
           "sha": "761becb52498335c83c2d2ca9cf0434769cc8983",
@@ -42,6 +34,21 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-03T09:15:48-07:00",
           "message": "feat(sources): a failed shell read carries the command's stderr; the launcher names its timeout (candybar-gather-renderer-76bb.6pj.dr2)\n\nA shell source's failed read now ends in what the command wrote to\nstderr, trimmed and shown by its last 2000 characters, on every arm but\nan output flood or a failed pipe. A timeout result carries\n`timed out after N s` from the launch's own bound, so the shell reader\nand the daemon's runs read it instead of spelling it from constants of\ntheir own.\n"
+        }
+      ]
+    },
+    {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "847071c25ae39f8f9af52d1ab5b46f3a54b872e1",
+      "timestamp": "2026-11-03T16:49:58.018Z",
+      "commits": [
+        {
+          "sha": "847071c25ae39f8f9af52d1ab5b46f3a54b872e1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T09:47:52-07:00",
+          "message": "feat(facts): the payload a template reads is composed from the document (#616)\n\n* test(facts): pin the bar, the view's payload and check's payload per preset (candybar-gather-renderer-76bb.6pj.83l)\n\nDrawn from the daemon's session source over fixed owners at a fixed instant, so\ncomposing the payload from the document can be judged against bytes: the bar\nmust not move, and the payload snapshot's diff is where the accepted\ndifferences show. The payload-owners fakes hold their answers in observables,\nas the real owners do, so a view's computed sees a lane land.\n\n* feat(facts): the payload a template reads is composed from the document (candybar-gather-renderer-76bb.6pj.83l)\n\nThe payload, the globals a draw builds its options from and the facts document\nare one turn, stamped together in one reaction, so a draw never mixes a\ndocument with a request or a pick it was not composed from. A turn takes its\nclosure and lanes from the view's one declaration. A turn that cannot be\nstamped keeps the last one and surfaces as a warning in the bar's indicator.\nA view that fails to open releases what it began. The check command stamps a\nfixture document and composes through the same function; its hand-written\npayload and checkToday are gone.\n\n* docs(claude-md): checks run on the code under review, never on another commit to second-guess a threshold\n\n* test(facts): payload tests assert an unread lane as pending, not a missing key (candybar-gather-renderer-76bb.6pj.83l)\n\n* fix(facts): a draw reads the client's hints off its turn; a repeated failure is one turn; unstamped projects its arms (candybar-gather-renderer-76bb.6pj.83l)\n\n* test(facts): a failed stamp and its recovery each wake the view (candybar-gather-renderer-76bb.6pj.83l)\n\n* test(facts): the session rig holds the source runs main moved onto RenderDeps (candybar-gather-renderer-76bb.6pj.83l)"
         }
       ]
     }

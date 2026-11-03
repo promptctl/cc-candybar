@@ -22996,20 +22996,14 @@ function whyFailed(r) {
     case "output-limit":
     case "rate-limited":
     case "pipe-error":
+    case "spawn-error":
       return r.error ?? r.reason;
     default:
       return r.error === void 0 ? r.reason : `${r.reason}: ${r.error}`;
   }
 }
-var STDERR_SHOWN_CHARS = 200;
-var lastStderrLine = (r) => {
-  if (r.reason === "output-limit" || r.reason === "pipe-error") return "";
-  const lines2 = r.stderr.trim().split("\n");
-  const chars = Array.from(lines2[lines2.length - 1].trim());
-  return chars.length <= STDERR_SHOWN_CHARS ? chars.join("") : `\u2026${chars.slice(-STDERR_SHOWN_CHARS).join("")}`;
-};
 function failureText(r, where = "") {
-  const said = lastStderrLine(r);
+  const said = r.reason === "output-limit" || r.reason === "pipe-error" ? "" : r.stderr.trim();
   return `${whyFailed(r)}${where}${said === "" ? "" : `: ${said}`}`;
 }
 var refusedAsAborted = ({ reason }) => ({
@@ -35873,9 +35867,9 @@ var FrameSequence = class {
 };
 function textFrameAt(animation, t2, motion) {
   const shown = shownAt(animation, t2, motion);
-  const stamped = shown.value.copy();
-  stamped.style = layerStyle(stamped.style, stamp(holdOf(shown, t2)));
-  return stamped;
+  const stamped2 = shown.value.copy();
+  stamped2.style = layerStyle(stamped2.style, stamp(holdOf(shown, t2)));
+  return stamped2;
 }
 
 // node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/flexStrip.js
@@ -67356,11 +67350,38 @@ function firstPending(...lanes) {
   const lane = lanes.find((l) => l?.kind === "pending");
   return lane?.kind === "pending" ? pendingOf(lane.why) : void 0;
 }
-function projectPayload(inputs, draw2, lanes) {
+var unstamped = (fact) => {
+  switch (fact.kind) {
+    case "pending":
+      return fact;
+    case "absent":
+      return ABSENT2;
+    case "ok":
+      return ok(fact.value);
+    case "failed":
+      return failed(fact.reason, fact.failedAt);
+  }
+};
+function composePayload(facts, inputs, draw2) {
   const { hookData: hookData2, hints } = inputs;
   const { effective, configFacts: configFacts2 } = draw2;
   const { configPath, ...settingCounts2 } = configFacts2;
   const want = wanted(inputs.neededInputPaths);
+  const built = facts.builtins;
+  const lanes = {
+    usage: unstamped(built.session),
+    context: unstamped(built.context),
+    metrics: unstamped(built.metrics),
+    activity: unstamped(built.activity),
+    cache: unstamped(built.cache),
+    speed: unstamped(built.speed),
+    autoCompact: unstamped(built.autocompact),
+    git: unstamped(built.git),
+    pr: unstamped(built.pr),
+    tmux: unstamped(built.tmux),
+    hostName: unstamped(built.hostName),
+    hostUser: unstamped(built.hostUser)
+  };
   const over2 = (reading, project) => {
     switch (reading.kind) {
       case "pending":
@@ -67374,8 +67395,8 @@ function projectPayload(inputs, draw2, lanes) {
   };
   const valueOf3 = (reading) => reading.kind === "ok" ? reading.value : void 0;
   const tmuxPane = hints.tmux ?? null;
-  const git = lanes.git.kind === "pending" ? pendingOf(lanes.git.why) : projectGitInfo(lanes.git, pendingOf);
-  const tmuxValue = lanes.tmuxSession.kind === "pending" ? pendingOf(lanes.tmuxSession.why) : valueOf3(lanes.tmuxSession);
+  const git = lanes.git.kind === "pending" ? pendingOf(lanes.git.why) : lanes.git.kind === "ok" ? projectGitInfo(lanes.git.value, lanes.pr, pendingOf) : void 0;
+  const tmuxValue = lanes.tmux.kind === "pending" ? pendingOf(lanes.tmux.why) : valueOf3(lanes.tmux)?.session;
   const hostName = lanes.hostName.kind === "pending" ? pendingOf(lanes.hostName.why) : valueOf3(lanes.hostName);
   const hostUser = lanes.hostUser.kind === "pending" ? pendingOf(lanes.hostUser.why) : valueOf3(lanes.hostUser);
   const autoCompactValue = firstPending(want.autocompact ? lanes.context : void 0) ?? projectAutoCompact(lanes.autoCompact, valueOf3(lanes.context)?.maxTokens);
@@ -67410,7 +67431,7 @@ function projectPayload(inputs, draw2, lanes) {
   const cachePayload = over2(lanes.cache, (expiresAt) => ({
     expiresAt
   }));
-  const home = posixify(inputs.deps.home);
+  const home = posixify(inputs.home);
   const workspace = hookData2.workspace ? {
     ...hookData2.workspace,
     current_dir: posixify(hookData2.workspace.current_dir) ?? "",
@@ -67486,8 +67507,8 @@ function projectPayload(inputs, draw2, lanes) {
     ...autoCompactValue !== void 0 && { autocompact: autoCompactValue },
     // The storage owner logs each read that failed: a failure here is a value,
     // drawn by the template reading it.
-    ...projectSources(lanes.sources.keys(), (name) => {
-      const reading = lanes.sources.get(name);
+    ...projectSources(Object.keys(facts.sources), (name) => {
+      const reading = unstamped(facts.sources[name]);
       return reading.kind === "pending" ? pendingOf(reading.why) : reading;
     })
   };
@@ -67601,9 +67622,7 @@ function posixify(s) {
   if (import_node_path21.default.sep !== "\\") return s;
   return s.replace(/\\/g, "/");
 }
-function projectGitInfo(outcome, pending2) {
-  if (outcome.kind !== "ok") return void 0;
-  const info = outcome.value;
+function projectGitInfo(info, pullRequest, pending2) {
   const field = (oc) => oc?.kind === "ok" ? oc.value : void 0;
   const aheadBehind = field(info.aheadBehind);
   const sha = field(info.sha);
@@ -67614,9 +67633,9 @@ function projectGitInfo(outcome, pending2) {
   const tracking = info.upstream === void 0 ? void 0 : field(trackingOf(info.upstream, info.aheadBehind));
   const repoName = field(info.repoName);
   const repoUrl = field(info.repoUrl);
-  const pr = info.pullRequest === void 0 ? void 0 : info.pullRequest.kind === "pending" ? info.pullRequest : prOfHead(info.pullRequest, info.head);
+  const pr = pullRequest.kind === "pending" ? pullRequest : prOfHead(pullRequest, info.head);
   let prFields = {};
-  switch (pr?.kind) {
+  switch (pr.kind) {
     case "pending": {
       const p2 = pending2(pr.why);
       prFields = {
@@ -67642,7 +67661,6 @@ function projectGitInfo(outcome, pending2) {
       prFields = { prEarlier: pr.value.state };
       break;
     case "absent":
-    case void 0:
       break;
   }
   return {
@@ -70345,15 +70363,13 @@ function oneArg(value) {
   return decodeWire(() => decodeURIComponent(value));
 }
 var CLICK_PROGRAM_TIMEOUT_MS = 5e3;
-function clickFailed(end, category, what, log) {
-  if (end.reason === "rate-limited") {
-    log("warn", `${category} rate-limited: ${end.said}`);
+function clickFailed(r, category, what, log) {
+  if (r.reason === "rate-limited") {
+    log("warn", `${category} ${failureText(r)}`);
     return;
   }
-  if (end.reason === "aborted") throw new DaemonClosing(what);
-  throw new Error(
-    `${what} failed (${end.reason}, exit ${end.exitCode ?? "null"})${end.said === "" ? "" : `: ${end.said}`}`
-  );
+  if (r.reason === "aborted") throw new DaemonClosing(what);
+  throw new Error(`${what} failed (${failureText(r)})`);
 }
 async function clickLaunch(launcher, opts, what, log) {
   const result = await launcher.launch({
@@ -70361,16 +70377,7 @@ async function clickLaunch(launcher, opts, what, log) {
     timeoutMs: CLICK_PROGRAM_TIMEOUT_MS
   });
   if (result.ok) return;
-  clickFailed(
-    {
-      reason: result.reason,
-      exitCode: result.exitCode,
-      said: result.error ?? result.stderr.trim()
-    },
-    opts.category,
-    what,
-    log
-  );
+  clickFailed(result, opts.category, what, log);
 }
 var HANDOFF_POLL_MS = 50;
 async function clickHandoff(launcher, opts, what, log, boundMs, tmp) {
@@ -70385,7 +70392,7 @@ async function clickHandoff(launcher, opts, what, log, boundMs, tmp) {
     const job = launcher.launchJobSync(opts, files);
     if (!job.ok) {
       clickFailed(
-        { reason: job.reason, exitCode: null, said: job.error },
+        { ...job, stdout: "", stderr: "", exitCode: null, signal: null },
         opts.category,
         what,
         log
@@ -70401,10 +70408,21 @@ async function clickHandoff(launcher, opts, what, log, boundMs, tmp) {
         if (end.kind === "exit" && end.code === 0) return;
         clickFailed(
           end.kind === "exit" ? {
+            ok: false,
             reason: "non-zero",
+            stdout: "",
+            stderr: readFileSync(files.stderr, "utf8"),
             exitCode: end.code,
-            said: readFileSync(files.stderr, "utf8").trim()
-          } : { reason: "timeout", exitCode: null, said: "" },
+            signal: null
+          } : {
+            ok: false,
+            reason: "timeout",
+            stdout: "",
+            stderr: "",
+            exitCode: null,
+            signal: null,
+            error: timedOutError(boundMs)
+          },
           opts.category,
           what,
           log
@@ -74627,9 +74645,13 @@ function waitingRows(node, scope, ctx, variable, palette, bodyOpen, layoutOf) {
 function cellsWidth(cells) {
   return cells.reduce((width, cell3) => width + cell3.cellLength, 0);
 }
+var BROKEN_CELL_CHARS = 240;
 function brokenSegment(node, scope, ctx, message) {
   ctx.onSegmentError?.(node.id, message);
-  const oneLine = message.replace(/\s*\n\s*/g, " ");
+  const oneLine = sanitizeAndTruncate(
+    message.replace(/\s*[\r\n]\s*/g, " "),
+    BROKEN_CELL_CHARS
+  );
   return [
     {
       cells: applySegmentLayout(
@@ -76662,15 +76684,16 @@ function drawRender(parts, setup, drawing2) {
     launcher
   } = parts;
   const { req, at, facts, sessionId: sessionId2, entry, state, view, hintsError } = setup;
+  const payload = view.source.payload();
   const effective = view.source.effective();
-  const lanes = laneSwitches(effective, inTmux(view.facts().hints.tmux));
+  const failure = view.source.failure();
+  const lanes = laneSwitches(effective, payload.tmux !== void 0);
   noteFacts(facts, {
     lanes: LANE_NAMES.filter((lane) => lanes[lane]).join(",") || "-"
   });
-  const { hints } = view.facts();
-  const width = renderWidth(hints);
+  const hints = view.source.hints();
+  const width = payload.term.cols;
   noteFacts(facts, { width: String(width) });
-  const payload = view.source.payload();
   const clickHold = clickErrorAt(sessionState, sessionId2, at, drawing2.by);
   const clickShown = clickHold.kind === "held" || clickHold.kind === "owed" ? clickHold.error : null;
   const updates = updateWatch.notice({
@@ -76707,7 +76730,15 @@ function drawRender(parts, setup, drawing2) {
     ...fileEventsWarnings(fileEvents.delivery()),
     ...launched,
     ...configWatch === null ? [] : [{ kind: "config-watch", message: configWatch }],
-    ...entry.lastWarning === null ? [] : [{ kind: "load", message: entry.lastWarning }]
+    ...entry.lastWarning === null ? [] : [{ kind: "load", message: entry.lastWarning }],
+    // [LAW:no-silent-failure] A turn that could not be stamped leaves the bar
+    // drawn from the last one that was, so the bar says it is behind.
+    ...failure === null ? [] : [
+      {
+        kind: "facts",
+        message: `the bar is drawn from the last facts that were read; the next could not be stamped: ${failure}`
+      }
+    ]
   ];
   const scope = { config: state.config };
   const diagnostics = collectDiagnostics(
@@ -76825,6 +76856,7 @@ function drawRender(parts, setup, drawing2) {
       case "file-events":
         return `${w.kind}:${w.state}`;
       case "load":
+      case "facts":
       case "config-watch":
       case "lifeline":
       case "launch-pipes":
@@ -81953,27 +81985,33 @@ function openView(state, cwd2, facts, { sessionState, declare, source: sourceOf,
     { fireImmediately: true }
   );
   const sourceStops = [];
-  const source = sourceOf({
-    sessionId: sessionId2,
-    state,
-    store: registry.variableStore,
-    declared: () => declared.get(),
-    onDispose: (stopSource) => sourceStops.push(stopSource)
-  });
+  const release3 = () => {
+    stop2();
+    for (const stopSource of sourceStops) stopSource();
+    holds2.close();
+    return registry.dispose();
+  };
+  let source;
+  try {
+    source = sourceOf({
+      sessionId: sessionId2,
+      state,
+      store: registry.variableStore,
+      declared: () => declared.get(),
+      onDispose: (stopSource) => sourceStops.push(stopSource)
+    });
+  } catch (e) {
+    release3();
+    throw e;
+  }
   bindView(state.compiled, registry.variableStore, registry, source);
   const stopChanged = reaction(
-    () => {
-      const { sources, ...keyed } = declared.get().lanes;
-      return [
-        source.payload(),
-        source.selections(),
-        registry.published(),
-        state.registry.published(),
-        ...[...Object.values(keyed), ...sources.values()].map(
-          (lane) => lane.current()
-        )
-      ];
-    },
+    () => [
+      source.payload(),
+      source.selections(),
+      registry.published(),
+      state.registry.published()
+    ],
     () => changed(sessionId2),
     {
       equals: compareShallow,
@@ -81997,11 +82035,8 @@ function openView(state, cwd2, facts, { sessionState, declare, source: sourceOf,
     lastRenderCellsBySegment: /* @__PURE__ */ new Map(),
     retire: stopChanged,
     dispose: () => {
-      stop2();
       stopChanged();
-      for (const stopSource of sourceStops) stopSource();
-      holds2.close();
-      return registry.dispose();
+      return release3();
     }
   };
 }
@@ -82802,6 +82837,27 @@ function assembleFacts(prior, session, readings, update, at) {
 }
 
 // src/daemon/session-source.ts
+var failedWith = (prior, reason) => prior.failure === reason ? prior : { ...prior, failure: reason };
+function stamped(prior, moved, at, session) {
+  if (moved.kind === "failed") return failedWith(prior, moved.reason);
+  try {
+    const document = assembleFacts(
+      prior.document,
+      session,
+      moved.readings,
+      moved.update,
+      at
+    );
+    return prior.failure === null && document === prior.document && moved.compose === prior.compose && moved.draw === prior.draw ? prior : {
+      document,
+      compose: moved.compose,
+      draw: moved.draw,
+      failure: null
+    };
+  } catch (e) {
+    return failedWith(prior, `stamping the facts document: ${String(e)}`);
+  }
+}
 function sessionSource(deps) {
   return ({ sessionId: sessionId2, state, store, declared, onDispose }) => {
     const pick2 = (key) => deps.sessionState.get(sessionId2, key);
@@ -82818,12 +82874,12 @@ function sessionSource(deps) {
       "session.inputs",
       "computed",
       () => {
-        const { facts, lanes } = declared();
+        const { facts, lanes, preset } = declared();
         return {
           hookData: facts.hookData,
           cwd: facts.cwd,
           hints: facts.hints,
-          neededInputPaths: state.neededInputPaths(effective.read().preset),
+          neededInputPaths: state.neededInputPaths(preset),
           deps: { ...deps.providers, lanes: () => lanes }
         };
       }
@@ -82833,62 +82889,97 @@ function sessionSource(deps) {
       "computed",
       () => readingsOf(inputs.read(), state.sources)
     );
-    const payload = store.derive("session.payload", "computed", () => {
-      const globals = effective.read();
-      return projectPayload(
-        inputs.read(),
-        {
-          effective: globals,
-          configFacts: {
-            ...settingCounts(state.config, state.fileHeldSettings, pick2),
-            configPath: state.configPath
-          },
-          history: deps.history(sessionId2),
-          back: deps.navigation(sessionId2, state.config)
+    const compose = store.derive(
+      "session.compose",
+      "computed",
+      () => {
+        const { hookData: hookData2, hints, neededInputPaths } = inputs.read();
+        return {
+          hookData: hookData2,
+          hints,
+          neededInputPaths,
+          home: deps.providers.home
+        };
+      }
+    );
+    const draw2 = store.derive(
+      "session.draw",
+      "computed",
+      () => ({
+        effective: effective.read(),
+        configFacts: {
+          ...settingCounts(state.config, state.fileHeldSettings, pick2),
+          configPath: state.configPath
         },
-        readings.read().lanes
-      );
-    });
+        history: deps.history(sessionId2),
+        back: deps.navigation(sessionId2, state.config)
+      })
+    );
     const clock = deps.providers.clock;
-    const document = observable.box(
-      assembleFacts(
-        void 0,
-        sessionId2,
-        readings.read(),
-        deps.update(),
-        instantAt(clock)
-      ),
+    const turn = observable.box(
+      {
+        document: assembleFacts(
+          void 0,
+          sessionId2,
+          readings.read(),
+          deps.update(),
+          instantAt(clock)
+        ),
+        compose: compose.read(),
+        draw: draw2.read(),
+        failure: null
+      },
       { deep: false }
     );
     onDispose(
       reaction(
-        () => ({ readings: readings.read(), update: deps.update() }),
-        ({ readings: moved, update }) => runInAction(
-          () => document.set(
-            assembleFacts(
-              document.get(),
-              sessionId2,
-              moved,
-              update,
-              instantAt(clock)
-            )
-          )
-        ),
+        () => {
+          try {
+            return {
+              kind: "read",
+              readings: readings.read(),
+              update: deps.update(),
+              compose: compose.read(),
+              draw: draw2.read()
+            };
+          } catch (e) {
+            return {
+              kind: "failed",
+              reason: `reading the owners: ${String(e)}`
+            };
+          }
+        },
+        (moved) => runInAction(() => {
+          const prior = turn.get();
+          const next = stamped(prior, moved, instantAt(clock), sessionId2);
+          if (next.failure !== null && next !== prior) {
+            deps.providers.log(
+              "error",
+              `session facts sid=${JSON.stringify(sessionId2)}: ${next.failure}`
+            );
+          }
+          turn.set(next);
+        }),
         {
-          // [LAW:no-silent-failure] A throw here reaches only the console
-          // MobX prints to, which nobody reads in a detached daemon.
+          // The expression above cannot throw; the effect's catch is `stamped`.
           onError: (e) => deps.providers.log(
             "error",
-            `session facts threw sid=${JSON.stringify(sessionId2)}: ${String(e)}`
+            `session turn threw sid=${JSON.stringify(sessionId2)}: ${String(e)}`
           )
         }
       )
     );
+    const payload = store.derive("session.payload", "computed", () => {
+      const { document, compose: composed2, draw: drawn } = turn.get();
+      return composePayload(document, composed2, drawn);
+    });
     return {
       payload: () => payload.read(),
-      effective: () => effective.read(),
-      facts: () => document.get(),
-      selections: () => effective.read()
+      effective: () => turn.get().draw.effective,
+      facts: () => turn.get().document,
+      hints: () => turn.get().compose.hints,
+      failure: () => turn.get().failure,
+      selections: () => turn.get().draw.effective
     };
   };
 }
@@ -85728,7 +85819,10 @@ async function tmux2(launcher, hint, args, stdinInput) {
 }
 function ran(what, result) {
   if (result.ok) return result.stdout;
-  throw new Error(`${what} failed (${failureText(result)})`);
+  const told = result.stderr.trim() === "" ? result.stdout.trim() : "";
+  throw new Error(
+    `${what} failed (${failureText(result)}${told === "" ? "" : `: ${told}`})`
+  );
 }
 function refusalOf2(stdout2) {
   try {
