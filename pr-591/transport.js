@@ -78673,7 +78673,7 @@ var PricingService = class {
           const MAX_SIZE = 1024 * 1024;
           response.setEncoding("utf8");
           response.on("data", (chunk3) => {
-            size += chunk3.length;
+            size += import_buffer.Buffer.byteLength(chunk3);
             if (size > MAX_SIZE) {
               debug("Response too large");
               request2.destroy();

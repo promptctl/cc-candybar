@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-591",
+      "ref": "refs/pull/591/merge",
+      "sha": "bd5748f575099363a6d18765247b44a7cdf6c794",
+      "timestamp": "2026-11-03T00:15:18.336Z",
+      "commits": [
+        {
+          "sha": "bd5748f575099363a6d18765247b44a7cdf6c794",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T00:14:27Z",
+          "message": "Merge 7e5138b16179758c1611a8eea6cf25f011fdb441 into 7ca57ba16e524929f55d99beb41eba44d31a74fb\n"
+        },
+        {
+          "sha": "7e5138b16179758c1611a8eea6cf25f011fdb441",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T17:13:55-07:00",
+          "message": "fix(pricing): the response size cap counts bytes, and the tests pin the abort (candybar-testing-0x6u.61o)\n"
+        },
+        {
+          "sha": "4039b73205c9d6d7eee26708b8663e7f3869406d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T17:11:34-07:00",
+          "message": "fix(pricing): the pricing fetch decodes the response as a stream, so a character split across reads arrives whole (candybar-testing-0x6u.61o)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-588",
       "ref": "refs/pull/588/merge",
       "sha": "d7b59d2f32eca1c7b3a266756acfe09a2e9c7aba",
@@ -34,28 +63,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T16:27:33-07:00",
           "message": "fix(git): a closed git cache answers a late declaration as closed, so no period re-arms after close (candybar-testing-ihvy.dbg)\n\nA render mid-wait at close declared after close had dropped every repo,\nbuilt a fresh state on the closed cache, and that state's period re-armed\nafter every pass: hundreds of timers armed after daemon.close() returned.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-591",
-      "ref": "refs/pull/591/merge",
-      "sha": "ac9bdb743ecdf84178bab7a3f5c0f4272894dea9",
-      "timestamp": "2026-11-03T00:12:59.086Z",
-      "commits": [
-        {
-          "sha": "ac9bdb743ecdf84178bab7a3f5c0f4272894dea9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T17:11:49-07:00",
-          "message": "Merge 4039b73205c9d6d7eee26708b8663e7f3869406d into 7ca57ba16e524929f55d99beb41eba44d31a74fb\n"
-        },
-        {
-          "sha": "4039b73205c9d6d7eee26708b8663e7f3869406d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T17:11:34-07:00",
-          "message": "fix(pricing): the pricing fetch decodes the response as a stream, so a character split across reads arrives whole (candybar-testing-0x6u.61o)\n"
         }
       ]
     },
