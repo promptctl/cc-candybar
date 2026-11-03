@@ -4,13 +4,16 @@
 // test/daemon-render-event-e2e.test.ts's, in the worker.
 
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { constants, mkdtempSync, rmSync } from "node:fs";
 import { open } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
-import { PROTOCOL_VERSION, TOTAL_BUDGET_MS } from "../../../src/daemon/protocol";
+import {
+  PROTOCOL_VERSION,
+  TOTAL_BUDGET_MS,
+} from "../../../src/daemon/protocol";
 import { REQUEST_TIMEOUT_MS } from "../../../src/daemon/request-deadline";
 import { killAndWait, renderBody } from "../../helpers/daemon-e2e";
 import { sendDaemonRequest } from "../../helpers/daemon-wire";
@@ -66,15 +69,25 @@ test("a render that outlives its request timeout writes timedOut=Y", async () =>
     // open resolving is the daemon's loop stopping in its read. A render that
     // never reads its config leaves the open waiting for good, so the
     // request's own end is raced against it: the case fails on that reply, not
-    // on the test timeout.
+    // on the test timeout. The open still waiting is then released by a
+    // reader of its own, so no threadpool thread stays blocked on the pipe.
+    const writer = open(config, "w");
     const pipe = await Promise.race([
-      open(config, "w"),
+      writer,
       answered.then((reply) => {
         throw new Error(
           `the render answered before reading its config: ${JSON.stringify(reply)}`,
         );
       }),
-    ]);
+    ]).catch(async (e: unknown) => {
+      const reader = await open(
+        config,
+        constants.O_RDONLY | constants.O_NONBLOCK,
+      );
+      await (await writer).close();
+      await reader.close();
+      throw e;
+    });
     await sleep(REQUEST_TIMEOUT_MS * 2);
     await pipe.writeFile(JSON.stringify({ segments: {}, root: { h: [] } }));
     await pipe.close();
