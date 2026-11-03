@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-615",
+      "ref": "refs/pull/615/merge",
+      "sha": "fe144928414e7821720ce9e09fc0b8b59006e1bc",
+      "timestamp": "2026-11-03T16:43:04.561Z",
+      "commits": [
+        {
+          "sha": "fe144928414e7821720ce9e09fc0b8b59006e1bc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T16:41:57Z",
+          "message": "Merge 761becb52498335c83c2d2ca9cf0434769cc8983 into b744cf603e403a589c9d9d397312a7fdece6ad65\n"
+        },
+        {
+          "sha": "761becb52498335c83c2d2ca9cf0434769cc8983",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T09:41:42-07:00",
+          "message": "refactor(launch): one describer says why a launch failed and what the child said, for every caller (candybar-gather-renderer-76bb.6pj.dr2)\n\nReview findings: callers ranked stderr, reason and error differently, so a\ntimed-out click dropped the timeout, a timed-out tmux or doctor probe dropped\nits stderr, a rate-limited read repeated its tag, a signal kill named no\nsignal, and a failed read could draw 2000 characters inline. The launcher now\nowns the text: why, plus the last stderr line bounded by code point.\n"
+        },
+        {
+          "sha": "59bc128bd7342d5f76cc7c327b7f94569e479bfb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T09:15:48-07:00",
+          "message": "feat(sources): a failed shell read carries the command's stderr; the launcher names its timeout (candybar-gather-renderer-76bb.6pj.dr2)\n\nA shell source's failed read now ends in what the command wrote to\nstderr, trimmed and shown by its last 2000 characters, on every arm but\nan output flood or a failed pipe. A timeout result carries\n`timed out after N s` from the launch's own bound, so the shell reader\nand the daemon's runs read it instead of spelling it from constants of\ntheir own.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-616",
       "ref": "refs/pull/616/merge",
       "sha": "ebbd1ae1af9f05b44d3e9615f8760bf36f1e39e4",
@@ -62,28 +91,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-03T08:00:23-07:00",
           "message": "test(facts): pin the bar, the view's payload and check's payload per preset (candybar-gather-renderer-76bb.6pj.83l)\n\nDrawn from the daemon's session source over fixed owners at a fixed instant, so\ncomposing the payload from the document can be judged against bytes: the bar\nmust not move, and the payload snapshot's diff is where the accepted\ndifferences show. The payload-owners fakes hold their answers in observables,\nas the real owners do, so a view's computed sees a lane land.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-615",
-      "ref": "refs/pull/615/merge",
-      "sha": "d442ca7003ba0cf7a58cf2fba4f2233d6dab821b",
-      "timestamp": "2026-11-03T16:17:02.754Z",
-      "commits": [
-        {
-          "sha": "d442ca7003ba0cf7a58cf2fba4f2233d6dab821b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T09:16:11-07:00",
-          "message": "Merge 59bc128bd7342d5f76cc7c327b7f94569e479bfb into b744cf603e403a589c9d9d397312a7fdece6ad65\n"
-        },
-        {
-          "sha": "59bc128bd7342d5f76cc7c327b7f94569e479bfb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T09:15:48-07:00",
-          "message": "feat(sources): a failed shell read carries the command's stderr; the launcher names its timeout (candybar-gather-renderer-76bb.6pj.dr2)\n\nA shell source's failed read now ends in what the command wrote to\nstderr, trimmed and shown by its last 2000 characters, on every arm but\nan output flood or a failed pipe. A timeout result carries\n`timed out after N s` from the launch's own bound, so the shell reader\nand the daemon's runs read it instead of spelling it from constants of\ntheir own.\n"
         }
       ]
     },

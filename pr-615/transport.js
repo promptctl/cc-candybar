@@ -22985,6 +22985,33 @@ function checkRateLimit(lastStartAt, category, now2) {
 function childEnv(scope, opts) {
   return { ...scope.inherited, ...opts.envOverlay };
 }
+function whyFailed(r) {
+  switch (r.reason) {
+    case "non-zero":
+      return `exited with code ${r.exitCode}`;
+    case "signal":
+      return `killed by ${r.signal ?? "a signal"}`;
+    // These are whole sentences: the launcher wrote them.
+    case "timeout":
+    case "output-limit":
+    case "rate-limited":
+    case "pipe-error":
+      return r.error ?? r.reason;
+    default:
+      return r.error === void 0 ? r.reason : `${r.reason}: ${r.error}`;
+  }
+}
+var STDERR_SHOWN_CHARS = 200;
+var lastStderrLine = (r) => {
+  if (r.reason === "output-limit" || r.reason === "pipe-error") return "";
+  const lines2 = r.stderr.trim().split("\n");
+  const chars = Array.from(lines2[lines2.length - 1].trim());
+  return chars.length <= STDERR_SHOWN_CHARS ? chars.join("") : `\u2026${chars.slice(-STDERR_SHOWN_CHARS).join("")}`;
+};
+function failureText(r, where = "") {
+  const said = lastStderrLine(r);
+  return `${whyFailed(r)}${where}${said === "" ? "" : `: ${said}`}`;
+}
 var refusedAsAborted = ({ reason }) => ({
   ok: false,
   reason: "aborted",
@@ -52954,11 +52981,6 @@ function keyHashOf(value) {
   return crypto_default.createHash("sha256").update(value).digest("hex");
 }
 var whereOf = (read2) => read2.kind === "shell" ? `output of "${read2.command}" in ${read2.cwd}` : `"${read2.path}"`;
-var STDERR_SHOWN_CHARS = 2e3;
-var boundedStderr = (stderr2) => {
-  const t2 = stderr2.trim();
-  return t2.length <= STDERR_SHOWN_CHARS ? t2 : `\u2026${t2.slice(-STDERR_SHOWN_CHARS)}`;
-};
 function shellReader(launcher, command, cwd2, signal) {
   return {
     where: whereOf({ kind: "shell", command, cwd: cwd2 }),
@@ -52972,10 +52994,8 @@ function shellReader(launcher, command, cwd2, signal) {
         signal
       });
       if (r.ok) return ok(r.stdout);
-      const why2 = r.reason === "non-zero" ? `exited with code ${r.exitCode}` : r.reason === "timeout" && r.error !== void 0 ? r.error : [r.reason, r.error].filter((s) => s !== void 0).join(": ");
-      const said = r.reason === "output-limit" || r.reason === "pipe-error" ? "" : boundedStderr(r.stderr);
       return failed(
-        `shell "${command}" ${why2} in ${cwd2}${said === "" ? "" : `: ${said}`}`,
+        `shell "${command}" ${failureText(r, ` in ${cwd2}`)}`,
         "read"
       );
     }
@@ -55943,7 +55963,7 @@ function footprintCharge(pid2, run3) {
       return {
         kind: "stand-in",
         bytes: rss,
-        unread: `footprint ${result.reason}${result.error !== void 0 ? `: ${result.error}` : ""}${firstLine(result.stderr)}`
+        unread: `footprint ${failureText(result)}`
       };
     }
     const bytes = physFootprintOf(result.stdout);
@@ -55971,7 +55991,7 @@ function commandProbe(launcher, bin, args) {
       if (!result.ok) {
         return {
           kind: "unavailable",
-          reason: `${result.reason}${result.error !== void 0 ? `: ${result.error}` : ""}${firstLine(result.stderr)}`
+          reason: failureText(result)
         };
       }
       return result.stdout.trim().length > 0 ? { kind: "text", text: result.stdout } : { kind: "unavailable", reason: "exited 0 but printed nothing" };
@@ -55990,10 +56010,6 @@ function fileProbe(path42) {
       }
     }
   };
-}
-function firstLine(stderr2) {
-  const line = stderr2.split("\n").map((l) => l.trim()).find((l) => l.length > 0);
-  return line === void 0 ? "" : ` (${line})`;
 }
 
 // src/daemon/limits.ts
@@ -65911,8 +65927,10 @@ function tmuxRun(result, args) {
   if (result.reason === "rate-limited") {
     return { kind: "rate-limited", reason: result.error ?? "rate-limited" };
   }
-  const detail = result.error ?? [result.reason, result.stderr.trim()].filter((s) => s !== "").join(": ");
-  return { kind: "failed", reason: `tmux ${args[0]} failed (${detail})` };
+  return {
+    kind: "failed",
+    reason: `tmux ${args[0]} failed (${failureText(result)})`
+  };
 }
 async function runTmuxAsync(launcher, hint, category, args, stdinInput) {
   return tmuxRun(
@@ -65979,11 +65997,11 @@ function launchFailure(label2, result) {
   const detail = [
     result.reason,
     result.exitCode != null ? `exit ${result.exitCode}` : null,
-    result.error ?? firstLine2(result.stderr)
+    result.error ?? firstLine(result.stderr)
   ].filter(Boolean).join(", ");
   return `${label2}: ${detail}`;
 }
-function firstLine2(s) {
+function firstLine(s) {
   return s.trim().split("\n", 1)[0] ?? "";
 }
 function derived2(from, project) {
@@ -66103,7 +66121,7 @@ function classifyForgePr(label2, result, noPrPattern, parse3) {
   const detail = [
     result.reason,
     result.exitCode != null ? `exit ${result.exitCode}` : null,
-    result.error ?? firstLine2(result.stderr)
+    result.error ?? firstLine(result.stderr)
   ].filter(Boolean).join(", ");
   return failed(`${label2}: ${detail}`, "read");
 }
@@ -68776,7 +68794,7 @@ async function jxa(launcher, args) {
   });
   if (!run3.ok) {
     if (run3.reason === "rate-limited") throw new DoctorBusy("the font");
-    const detail = run3.error ?? `${run3.reason}: ${run3.stderr.trim()}`;
+    const detail = failureText(run3);
     return { kind: "failed", reason: `osascript failed (${detail})` };
   }
   let answer2;
@@ -68902,7 +68920,7 @@ async function fcCoverage(launcher, family, glyphs) {
   });
   if (!run3.ok) {
     if (run3.reason === "rate-limited") throw new DoctorBusy("the font");
-    const detail = run3.error ?? `${run3.reason}: ${run3.stderr.trim()}`;
+    const detail = failureText(run3);
     return { kind: "failed", reason: `fc-match failed (${detail})` };
   }
   return fcMatchCoverage(run3.stdout, glyphs);
@@ -69200,7 +69218,7 @@ async function remoteLogin(launcher, pid2) {
   });
   if (!run3.ok) {
     if (run3.reason === "rate-limited") throw new DoctorBusy("the processes");
-    const detail = run3.error ?? `${run3.reason}: ${run3.stderr.trim()}`;
+    const detail = failureText(run3);
     return { kind: "failed", reason: `ps failed (${detail})` };
   }
   return descendsFromRemoteLogin(run3.stdout, pid2);
@@ -69251,7 +69269,7 @@ async function daemons(launcher) {
     envOverlay: { LC_ALL: "C", TZ: "UTC" }
   });
   if (!run3.ok) {
-    const detail = run3.error ?? `${run3.reason}: ${run3.stderr.trim()}`;
+    const detail = failureText(run3);
     return { kind: "failed", reason: `ps failed (${detail})` };
   }
   return { kind: "ok", value: daemonProcesses(run3.stdout, ownsEntry) };
@@ -69364,7 +69382,7 @@ function forgeLoginOf(cli, host, nonZero, run3) {
   if (run3.ok) return login("ready");
   if (isMissingCommand(run3)) return login("missing");
   if (run3.reason === "non-zero" && nonZero === "logged-out") {
-    return login({ loggedOut: firstLine2(run3.stderr) });
+    return login({ loggedOut: firstLine(run3.stderr) });
   }
   return { kind: "failed", reason: launchFailure(cli, run3) };
 }
@@ -71679,11 +71697,6 @@ function exitOf(result) {
   if (!result.ok && result.signal !== null) return result.signal;
   return result.exitCode === null ? "-" : String(result.exitCode);
 }
-function failureText(action2, outcome, result) {
-  const stderr2 = outcome === "output-limit" || outcome === "pipe" ? "" : result.stderr.trim();
-  const reason = outcome === "exit" ? `exited ${exitOf(result)}` : (result.ok ? "" : result.error) || "could not be started";
-  return `run ${action2}: ${stderr2 === "" ? reason : stderr2}`;
-}
 var Runs = class {
   deps;
   timeoutMs;
@@ -71757,12 +71770,12 @@ var Runs = class {
       `run sid=${valueOf(run3.sessionId)} action=${valueOf(run3.action)} program=${valueOf(run3.argv[0])} outcome=${outcome} exit=${exitOf(result)} took=${took} refreshed=${run3.refreshes.map((r) => r.name).join(",") || "-"}`
     );
     if (outcome === "timeout") this.timedOut++;
-    if (outcome === "ok" || outcome === "aborted") return;
+    if (result.ok || outcome === "aborted") return;
     if (outcome !== "timeout") this.failed++;
     holdClickError(
       this.deps.state,
       run3.sessionId,
-      failureText(run3.action, outcome, result),
+      `run ${run3.action}: ${failureText(result)}`,
       this.deps.now()
     );
   }
@@ -85715,8 +85728,7 @@ async function tmux2(launcher, hint, args, stdinInput) {
 }
 function ran(what, result) {
   if (result.ok) return result.stdout;
-  const detail = result.error ?? [result.reason, result.stderr.trim(), result.stdout.trim()].filter((s) => s !== "").join(": ");
-  throw new Error(`${what} failed (${detail})`);
+  throw new Error(`${what} failed (${failureText(result)})`);
 }
 function refusalOf2(stdout2) {
   try {
