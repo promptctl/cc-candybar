@@ -99,6 +99,14 @@ export type CachePolicy =
 // silently overlap and stack up). [LAW:no-mode-explosion] not a config knob.
 export const MIN_SHELL_TTL_MS = 500;
 
+// [LAW:no-silent-failure] How long one run of a shell source may take. The
+// launcher's output bound ends a child that writes without end; this ends one
+// that never writes, which would otherwise hold its source open for the life
+// of the daemon, and once a source's identity is shared, for every renderer
+// sharing it. A run past it is failed in its read phase, naming the bound.
+// [LAW:no-mode-explosion] Not a config knob: one bound, named where chosen.
+export const SHELL_READ_TIMEOUT_MS = 10_000;
+
 // [LAW:single-enforcer] Apply the shell-source TTL floor at declare-time.
 // If the policy is anything other than `ttl`, the input is returned unchanged
 // — the floor only applies to time-driven shell refresh. If `ttl.durationMs`
@@ -223,6 +231,7 @@ function shellReader(
         args: ["-c", command],
         cwd,
         category: "user-shell",
+        timeoutMs: SHELL_READ_TIMEOUT_MS,
         signal,
       });
       // Only the source's own abort ends a run. The launcher's is a daemon
@@ -235,7 +244,9 @@ function shellReader(
       const why =
         r.reason === "non-zero"
           ? `exited with code ${r.exitCode}`
-          : [r.reason, r.error].filter((s) => s !== undefined).join(": ");
+          : r.reason === "timeout"
+            ? `timed out after ${SHELL_READ_TIMEOUT_MS / 1000} s`
+            : [r.reason, r.error].filter((s) => s !== undefined).join(": ");
       return failed(`shell "${command}" ${why} in ${cwd}`, "read");
     },
   };
