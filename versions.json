@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-601",
+      "ref": "refs/pull/601/merge",
+      "sha": "e23510c57a2448ab9dcb39e3ef4346fa9e01cd40",
+      "timestamp": "2026-11-03T03:59:26.090Z",
+      "commits": [
+        {
+          "sha": "e23510c57a2448ab9dcb39e3ef4346fa9e01cd40",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T20:57:26-07:00",
+          "message": "Merge 783f8536d0b341d981edd666ae708f092fe420dd into 1e23d8a6bf2b1e5c9e5073a317f3f70b0b5ce88e\n"
+        },
+        {
+          "sha": "783f8536d0b341d981edd666ae708f092fe420dd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T20:57:12-07:00",
+          "message": "fix(launch): a held input's failed write is its reader stopping, not a pipe event; the cut's warning is asserted in the cut test, which waits for the holder's end (candybar-testing-0x6u.0dh)\n"
+        },
+        {
+          "sha": "9422d14979e67f7efaea1f6651e75b42bd47cd30",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T20:50:44-07:00",
+          "message": "feat(launch): a cut drain or a failed launch pipe shows in the ⚠ indicator (candybar-testing-0x6u.0dh)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "45d5d1e8852fca64ed242810be9361c168d539be",
