@@ -4,15 +4,22 @@
     {
       "version": "pr-608",
       "ref": "refs/pull/608/merge",
-      "sha": "0e38919f4fae05e011470650658d8163263e0527",
-      "timestamp": "2026-11-03T09:17:51.740Z",
+      "sha": "d722334fd609865d21bd266bcc104d3f05dc021a",
+      "timestamp": "2026-11-03T09:19:03.308Z",
       "commits": [
         {
-          "sha": "0e38919f4fae05e011470650658d8163263e0527",
+          "sha": "d722334fd609865d21bd266bcc104d3f05dc021a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T09:16:43Z",
-          "message": "Merge 3ae378e1c473f6aee935223340b4019dcd90a93b into 31c5d2195388883cb31ad3aa739719db744242fb\n"
+          "timestamp": "2026-11-03T09:18:04Z",
+          "message": "Merge c2a12a321be2520eb5113275f04fb90adeb7a31d into 31c5d2195388883cb31ad3aa739719db744242fb\n"
+        },
+        {
+          "sha": "c2a12a321be2520eb5113275f04fb90adeb7a31d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T02:17:53-07:00",
+          "message": "fix(capture-heap): the snapshot is the daemon's by pid, and zero turns is a valid baseline (candybar-gather-renderer-76bb.5d1)\n"
         },
         {
           "sha": "3ae378e1c473f6aee935223340b4019dcd90a93b",
