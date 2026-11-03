@@ -2,53 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-607",
-      "ref": "refs/pull/607/merge",
-      "sha": "2b480dca506776c2ef6efc60a26b5ac622eeeadc",
-      "timestamp": "2026-11-03T08:39:33.319Z",
-      "commits": [
-        {
-          "sha": "2b480dca506776c2ef6efc60a26b5ac622eeeadc",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T08:38:18Z",
-          "message": "Merge f802f828beab069422497d672e1b3c94408196ed into 4092f8362180c58c88a3776fb3241e3e46fe144c\n"
-        },
-        {
-          "sha": "f802f828beab069422497d672e1b3c94408196ed",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T01:21:52-07:00",
-          "message": "docs(design): the name bound, the empty-name click, the link-id table's bound and the browser-surface supersession, from the medium review (candybar-gather-renderer-76bb.yl3)\n"
-        },
-        {
-          "sha": "026f737fbc555750936c4ab772441a77fdfe3f9b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T01:20:28-07:00",
-          "message": "docs(design): settle the socket rule, link ids, key changes, bundle path, breaker and recording kinds the high review found (candybar-gather-renderer-76bb.yl3)\n"
-        },
-        {
-          "sha": "fbf0523949bc0a7921b053946631d2a5992a3212",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T01:14:33-07:00",
-          "message": "docs(design): the gather/renderer and scene/browser proposals as the specs the epic cites (candybar-gather-renderer-76bb.yl3)\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "8005d083220ec5eb217749c74c3caf1a246f2bc5",
-      "timestamp": "2026-11-03T08:13:33.919Z",
+      "sha": "31c5d2195388883cb31ad3aa739719db744242fb",
+      "timestamp": "2026-11-03T08:45:41.969Z",
       "commits": [
         {
-          "sha": "8005d083220ec5eb217749c74c3caf1a246f2bc5",
+          "sha": "31c5d2195388883cb31ad3aa739719db744242fb",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T01:12:26-07:00",
-          "message": "fix(url-handler): a click no longer takes the terminal's keyboard focus (#606)\n\n* fix(url-handler): a click no longer takes the terminal's keyboard focus (candybar-daemon-health-ajx0.p04)\n\nThe forwarder was an agent app (LSUIElement). Launch Services activates an\nagent to deliver a link, and a resident app keeps the focus it was given, so\nevery click on a bar link took keyboard focus from the user's terminal and\nbroke the settings menu. The old applet quit after each click, which returned\nfocus to the previous app and hid this.\n\nThe Info.plist now declares the app background-only, which Launch Services\nnever activates. A background-only copy still received and forwarded links,\nand still raised the notification-authorization prompt for a lost click.\n\nThe notification delegate existed only because the app was frontmost when it\nposted, and macOS hides a frontmost app's banner. The app is never frontmost\nnow, so the delegate and its comment are removed.\n\n* docs(url-handler): say why the lost-click banner needs the app never frontmost (candybar-daemon-health-ajx0.p04)\n\n* test: lower the daemon-boot ratchet to the 204 cases left after #605 removed ten"
+          "timestamp": "2026-11-03T01:44:42-07:00",
+          "message": "docs(design): the gather/renderer and scene/browser proposals as the specs the epic cites (candybar-gather-renderer-76bb.yl3) (#607)\n\n* docs(design): the gather/renderer and scene/browser proposals as the specs the epic cites (candybar-gather-renderer-76bb.yl3)\n\n* docs(design): settle the socket rule, link ids, key changes, bundle path, breaker and recording kinds the high review found (candybar-gather-renderer-76bb.yl3)\n\n* docs(design): the name bound, the empty-name click, the link-id table's bound and the browser-surface supersession, from the medium review (candybar-gather-renderer-76bb.yl3)"
+        },
+        {
+          "sha": "4092f8362180c58c88a3776fb3241e3e46fe144c",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-03T08:22:45Z",
+          "message": "chore(release): set `package.json` to 1.184.1 [skip ci]\n\n## [1.184.1](https://github.com/promptctl/cc-candybar/compare/v1.184.0...v1.184.1) (2026-11-03)\n\n### Bug Fixes\n\n* **url-handler:** a click no longer takes the terminal's keyboard focus ([#606](https://github.com/promptctl/cc-candybar/issues/606)) ([8005d08](https://github.com/promptctl/cc-candybar/commit/8005d083220ec5eb217749c74c3caf1a246f2bc5)), closes [#605](https://github.com/promptctl/cc-candybar/issues/605)\n"
         }
       ]
     }
