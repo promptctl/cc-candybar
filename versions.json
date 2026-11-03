@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-605",
+      "ref": "refs/pull/605/merge",
+      "sha": "0821ecc8977da2656b850094bf2630a8047250a5",
+      "timestamp": "2026-11-03T06:03:10.303Z",
+      "commits": [
+        {
+          "sha": "0821ecc8977da2656b850094bf2630a8047250a5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T23:02:10-07:00",
+          "message": "Merge 8273a6107bece1b2805997d6918a888b7e99e57c into 6f35f84d13b40a5e30d3e41150a025c0cc994233\n"
+        },
+        {
+          "sha": "8273a6107bece1b2805997d6918a888b7e99e57c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T23:00:45-07:00",
+          "message": "Remove bad tests\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "04d058325f14b84fc80d66fc432ae7583f3ceb7d",
