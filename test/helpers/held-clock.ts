@@ -6,9 +6,11 @@ import type { Timekeeper } from "../../src/time";
 // whose clients state their deadlines on it: a request's budget is that deadline
 // less this clock's arrival.
 export interface HeldClock extends Timekeeper {
-  // Moves time forward, running each timer that falls due at its own moment. A
-  // timer already due, and a deferred run, wait for it too: `advance(0)` runs
-  // them. Nothing here takes a turn of the real loop, so a case decides when.
+  // Moves time forward, running each timer that falls due at its own moment,
+  // one due exactly at the end included. A timer already due, and a deferred
+  // run, wait for it too: `advance(0)` runs them. A callback that burns time
+  // carries the clock past the end asked for. Nothing here takes a turn of the
+  // real loop, so a case decides when.
   advance(ms: number): void;
   // Time a synchronous piece of work uses: moves time forward without firing
   // any timer, so what fell due while it ran waits for the next `advance`, as
