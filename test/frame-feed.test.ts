@@ -58,7 +58,7 @@ type Motion = "moving" | "unseen" | "still";
 // `beatMs`, when given, makes the bar turn on every multiple of it on the
 // wall clock and say so, as a template's `frames` does: each frame shows the
 // beat it was drawn in and next changes at the next one. The wall clock the
-// feed reads is the real one, moved by `wallOffsetS` and read short by
+// feed reads is Date.now(), real or held, moved by `wallOffsetS` and read short by
 // the next of `shortsMs` in turn, read by read (a reading truncated to the
 // millisecond, a timer fired early).
 function harness(opts: {
@@ -99,6 +99,8 @@ function harness(opts: {
     delivered: [] as string[],
     // The instant each render was drawn for, in order.
     ats: [] as Instant[],
+    // The wall each render was drawn at, in ms, in order.
+    walls: [] as number[],
     wallOffsetS: 0,
     shortsMs: [0],
     reads: 0,
@@ -129,6 +131,7 @@ function harness(opts: {
       state.renders++;
       state.rates.push(fps);
       state.ats.push(at);
+      state.walls.push(Date.now());
       if (opts.renderMs !== undefined) block(opts.renderMs);
       const during = state.duringRender;
       state.duringRender = null;
@@ -1266,16 +1269,19 @@ describe("a feed draws when its bar next changes", () => {
 
     // Offset 0.3 ms long and short by 0, 1 or 2 ms, the wall reads 0.3 ms
     // long, 0.7 ms short or 1.7 ms short: each alone for a whole run, and
-    // in turn so that one reading disagrees with the next.
-    test.each([[[0]], [[1]], [[2]], [[0, 2, 1]], [[2, 0, 1, 1]]])(
+    // in turn so that one reading disagrees with the next. The mixed
+    // sequences have prime lengths, so every reading of a draw meets every
+    // shortfall however many readings a draw takes.
+    test.each([[[0]], [[1]], [[2]], [[0, 2, 1]], [[2, 0, 1, 1, 0]]])(
       "a frame set for a turn is drawn for it, the wall read short within the timer's resolution (short by %j ms), and each turn costs one draw",
       (shortsMs: number[]) => {
         const RUN_MS = 1550;
+        const OFFSET_MS = 0.3;
         const { feeds, note, state } = harness({
           motion: "moving",
           beatMs: 100,
         });
-        state.wallOffsetS = 0.0003;
+        state.wallOffsetS = OFFSET_MS / 1000;
         state.shortsMs = shortsMs;
         note("s", "bar");
         const close = feeds.subscribe(
@@ -1291,7 +1297,7 @@ describe("a feed draws when its bar next changes", () => {
         expect(beats).toEqual(beats.map((_, i) => beats[0]! + i));
         // The first is for a turn the wall read at subscribing, short or not.
         expect(
-          shortsMs.map((short) => beatAt(START_MS + 0.3 - short)),
+          shortsMs.map((short) => beatAt(START_MS + OFFSET_MS - short)),
         ).toContain(beats[0]);
         expect(beats.at(-1)).toBe(beatAt(START_MS + RUN_MS));
       },
@@ -1362,16 +1368,30 @@ describe("a feed draws when its bar next changes", () => {
         "s",
         sub(() => {}),
       );
-      jest.advanceTimersByTime(250);
-      state.wallOffsetS = -10;
+      const BEFORE_MS = 250;
+      const AFTER_MS = 1200;
+      const STEP_MS = -10_000;
+      jest.advanceTimersByTime(BEFORE_MS);
+      state.wallOffsetS = STEP_MS / 1000;
       const before = state.renders;
-      jest.advanceTimersByTime(1200);
+      jest.advanceTimersByTime(AFTER_MS);
       close();
       const after = beatsOf(state.ats.slice(before));
       // Once the wall steps back, a turn of the stepped wall at a time,
       // ending on the turn it reads at the last, never 10 s ahead of it.
       expect(after).toEqual(after.map((_, i) => after[0]! + i));
-      expect(after.at(-1)).toBe(beatAt(START_MS + 1450 - 10_000));
+      expect(after.at(-1)).toBe(
+        beatAt(START_MS + BEFORE_MS + AFTER_MS + STEP_MS),
+      );
+      // Each drawn within the timer's resolution of the stepped wall it was
+      // drawn at.
+      state.ats
+        .slice(before)
+        .forEach((at, i) =>
+          expect(at * 1000 - (state.walls[before + i]! + STEP_MS)).toBeLessThan(
+            10,
+          ),
+        );
     });
   });
 });
@@ -1387,7 +1407,9 @@ test("a frame whose render threw is the failure's Frame, a still bar in the erro
     },
   } as unknown as DaemonParts;
   const frame = renderFrame(parts, "s", 30, nowAt())!;
-  expect(frame.bar).toEqual(renderFailedFrame("the view would not open"));
+  expect(frame.bar).toEqual(
+    renderFailedFrame("the view would not open"),
+  );
   expect(frame.bar.nextChange).toBe(Infinity);
   expect(frame.resp).toMatchObject({
     ok: false,
