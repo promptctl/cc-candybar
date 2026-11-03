@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-609",
+      "ref": "refs/pull/609/merge",
+      "sha": "3fb0c96ede2b44ba13d5103a60e5e6a7ee97c99d",
+      "timestamp": "2026-11-03T10:47:34.638Z",
+      "commits": [
+        {
+          "sha": "3fb0c96ede2b44ba13d5103a60e5e6a7ee97c99d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T03:45:44-07:00",
+          "message": "Merge 229eac10740b30581c272e3deceb40461d72f141 into 00161160468582e48082f373f82dcbae3d28bf6a\n"
+        },
+        {
+          "sha": "229eac10740b30581c272e3deceb40461d72f141",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T03:45:14-07:00",
+          "message": "feat(facts): Fact<T> and SessionFacts, the seam's type (candybar-gather-renderer-76bb.6pj.cna)\n\nA fact is a Reading with an instant on each answered arm; restamp is the one\nplace that instant is defined (the moment an answer first differed), so no owner\nstores a time. SessionFacts is the spec's document over the value types the\nowners already produce, and the compiler refuses any field JSON would corrupt:\nthe day sums are a record, and the git fact is the read before the PR is\ncomposed onto it. parseFact is the one door a fact arrives by from outside.\n"
+        },
+        {
+          "sha": "597d9f95151979455d547154360343bb1920effb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T03:35:51-07:00",
+          "message": "refactor(outcome): pending is a value recognised by its discriminator (candybar-gather-renderer-76bb.6pj.cna)\n\nPENDING, the identity-compared singleton, is gone. A pending reading is a plain\n{kind, why} that survives JSON, and the owners' held form is flat: a Reading\nwhose pending arm also carries the landing a waiter awaits. A path walk stops\ntesting for pending inside a source's document, so a file that spells pending\nis a value. One structural comparison decides a box write.\n"
+        },
+        {
+          "sha": "38959f98153ac708b7bfe2edeb5a2b9b832c06f4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T03:10:51-07:00",
+          "message": "refactor(outcome): a failed outcome names the phase it failed in (candybar-gather-renderer-76bb.6pj.cna)\n\nfailed(reason, failedAt) takes read | parse as a required argument, so every\nproducer states the phase it knows and the compiler finds the ones that did\nnot. The settings reader splits the two phases it used to throw as one.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "00161160468582e48082f373f82dcbae3d28bf6a",
