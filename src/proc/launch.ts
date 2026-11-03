@@ -695,7 +695,7 @@ function hold(
 // succeed (`head -1`), so its exit is the verdict, and the failed write says
 // nothing that exit does not. At module scope, so a held input's listener
 // holds nothing of the launch.
-function feed(input: Writable, text: string | undefined): void {
+function feed(input: Writable, text: string | Buffer | undefined): void {
   input.on("error", () => {});
   input.end(text);
 }
