@@ -182,7 +182,33 @@ async function daemonView(world: ClientWorld): Promise<Asked<DaemonView>> {
   // the probe: told by the one shape comparison daemon-stats makes.
   const skew = shapeSkew(outcome.value, ["handlerProbes"]);
   if (skew !== null) return failed(skew);
-  return ok({ arrivals: outcome.value.handlerProbes });
+  // [LAW:parse-dont-validate] An arrival is read off the wire here, once: a
+  // daemon from before the forwarder lists its probes with no delivery, and
+  // that is told as the skew it is, never carried on as one.
+  const arrivals: ProbeArrival[] = [];
+  for (const raw of outcome.value.handlerProbes) {
+    const arrival = parseArrival(raw);
+    if (arrival === null) {
+      return failed(
+        "the daemon lists its probe arrivals without who delivered them, so it is from a build before the forwarder app — restart it to run the installed one",
+      );
+    }
+    arrivals.push(arrival);
+  }
+  return ok({ arrivals });
+}
+
+export function parseArrival(raw: unknown): ProbeArrival | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const { nonce, delivery } = raw as { nonce?: unknown; delivery?: unknown };
+  if (typeof nonce !== "string") return null;
+  if (typeof delivery !== "object" || delivery === null) return null;
+  const { kind, urlV } = delivery as { kind?: unknown; urlV?: unknown };
+  if (kind === "cli") return { nonce, delivery: { kind: "cli" } };
+  if (kind === "forwarder" && typeof urlV === "number") {
+    return { nonce, delivery: { kind: "forwarder", urlV } };
+  }
+  return null;
 }
 
 export function productionHandlerProbeEdge(

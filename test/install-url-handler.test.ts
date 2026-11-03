@@ -8,7 +8,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { __test__ as install, forwarderExecutable } from "../src/install/index";
-import type { LaunchOpts, LaunchResult, OneShotLauncher } from "../src/proc/launch";
+import type {
+  LaunchOpts,
+  LaunchResult,
+  OneShotLauncher,
+} from "../src/proc/launch";
 import type { World } from "../src/host";
 import { URL_SCHEME } from "../src/click/wire";
 
@@ -40,7 +44,10 @@ describe("assembling the URL handler app", () => {
     }
     fs.writeFileSync(path.join(root, "dist", "index.mjs"), "// bundle\n");
     if (forwarder !== null) {
-      fs.writeFileSync(path.join(root, "bin", "cc-candybar-url-handler-native"), forwarder);
+      fs.writeFileSync(
+        path.join(root, "bin", "cc-candybar-url-handler-native"),
+        forwarder,
+      );
     }
     return path.join(root, "dist", "index.mjs");
   };
@@ -79,17 +86,37 @@ describe("assembling the URL handler app", () => {
     const exe = forwarderExecutable(app());
     expect(fs.readFileSync(exe, "utf8")).toBe("MACHO");
     expect(fs.statSync(exe).mode & 0o111).toBe(0o111);
-    const plist = fs.readFileSync(path.join(app(), "Contents", "Info.plist"), "utf8");
+    const plist = fs.readFileSync(
+      path.join(app(), "Contents", "Info.plist"),
+      "utf8",
+    );
     expect(plist).toContain(`<string>${URL_SCHEME}</string>`);
     expect(plist).toContain("<key>LSUIElement</key>");
     expect(plist).toContain("<string>com.cccandybar.url-handler</string>");
     expect(plist).toContain("<string>CCCandybarURLHandler</string>");
     expect(ran).toEqual([
-      `codesign --force --sign - ${app()}`,
+      `codesign --force --sign - ${app()}.installing`,
       "killall CCCandybarURLHandler",
       `lsregister -f ${app()}`,
     ]);
+    expect(fs.existsSync(`${app()}.installing`)).toBe(false);
     expect(out.join("")).toContain("CCCandybarURLHandler was not running");
+  });
+
+  // [LAW:effects-at-boundaries] The app is assembled and signed beside its
+  // place and renamed over the old one, so a sign that fails leaves the
+  // handler the user had, whole.
+  test("a sign that fails leaves the previous bundle whole and no staging behind", () => {
+    const { launcher: l } = launcher();
+    install.installUrlHandlerFrom(checkout("OLD"), world(l));
+    const { launcher: failing } = launcher({
+      codesign: { ok: false, stderr: "no identity\n", reason: "non-zero" },
+    });
+    expect(() =>
+      install.installUrlHandlerFrom(checkout("NEW"), world(failing)),
+    ).toThrow(/codesign failed/);
+    expect(fs.readFileSync(forwarderExecutable(app()), "utf8")).toBe("OLD");
+    expect(fs.existsSync(`${app()}.installing`)).toBe(false);
   });
 
   // [LAW:no-ambient-temporal-coupling] Launch Services never relaunches a
@@ -105,7 +132,13 @@ describe("assembling the URL handler app", () => {
   });
 
   test("a previous bundle is replaced whole", () => {
-    const stale = path.join(app(), "Contents", "Resources", "Scripts", "main.scpt");
+    const stale = path.join(
+      app(),
+      "Contents",
+      "Resources",
+      "Scripts",
+      "main.scpt",
+    );
     fs.mkdirSync(path.dirname(stale), { recursive: true });
     fs.writeFileSync(stale, "applet");
     const { launcher: l } = launcher();
@@ -118,7 +151,9 @@ describe("assembling the URL handler app", () => {
     const { ran, launcher: l } = launcher();
     expect(() =>
       install.installUrlHandlerFrom(checkout(null), world(l)),
-    ).toThrow(/not built at .*bin\/cc-candybar-url-handler-native\. Run `just install-url-handler`/);
+    ).toThrow(
+      /not built at .*bin\/cc-candybar-url-handler-native\. Run `just install-url-handler`/,
+    );
     expect(fs.existsSync(app())).toBe(false);
     expect(ran).toEqual([]);
   });
@@ -130,13 +165,21 @@ describe("assembling the URL handler app", () => {
       expect(() =>
         install.installUrlHandlerFrom(
           checkout("MACHO"),
-          world(launcher({ codesign: { ok: false, reason: "non-zero", exitCode: 1 } }).launcher),
+          world(
+            launcher({
+              codesign: { ok: false, reason: "non-zero", exitCode: 1 },
+            }).launcher,
+          ),
         ),
       ).toThrow("codesign failed (non-zero)");
       expect(() =>
         install.installUrlHandlerFrom(
           checkout("MACHO"),
-          world(launcher({ killall: { ok: false, reason: "timeout", exitCode: null } }).launcher),
+          world(
+            launcher({
+              killall: { ok: false, reason: "timeout", exitCode: null },
+            }).launcher,
+          ),
         ),
       ).toThrow("killall CCCandybarURLHandler failed (timeout)");
     } finally {
@@ -146,7 +189,9 @@ describe("assembling the URL handler app", () => {
 
   test("the Info.plist is a whole, well-formed property list", () => {
     const plist = install.infoPlist();
-    expect(plist.startsWith('<?xml version="1.0" encoding="UTF-8"?>')).toBe(true);
+    expect(plist.startsWith('<?xml version="1.0" encoding="UTF-8"?>')).toBe(
+      true,
+    );
     expect(plist.trimEnd().endsWith("</plist>")).toBe(true);
     expect((plist.match(/<key>/g) ?? []).length).toBe(
       (plist.match(/<\/key>/g) ?? []).length,

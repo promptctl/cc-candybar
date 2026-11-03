@@ -367,7 +367,13 @@ export interface ClickRequest {
 // scripts/check-protocol.mjs.
 export const URL_FRAME_KIND = "url";
 export const URL_FRAME_VERSION = 1;
-export const URL_FRAME_VERSIONS: ReadonlySet<number> = new Set([1]);
+// Every version a shipped forwarder has written: the ones before the current,
+// then the current itself, so a bump cannot refuse the frame it ships.
+const EARLIER_URL_FRAME_VERSIONS: readonly number[] = [];
+export const URL_FRAME_VERSIONS: ReadonlySet<number> = new Set([
+  ...EARLIER_URL_FRAME_VERSIONS,
+  URL_FRAME_VERSION,
+]);
 
 export interface UrlFrame {
   kind: typeof URL_FRAME_KIND;

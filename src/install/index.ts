@@ -373,23 +373,34 @@ function installUrlHandlerFrom(sourceDist: string, world: World): void {
 // package with no binary fails with nothing staged. [LAW:effects-at-boundaries]
 function installUrlHandler(forwarder: string, { host, launcher }: World): void {
   const bundle = appBundlePath(host);
-  const executable = forwarderExecutable(bundle);
 
+  // [LAW:effects-at-boundaries] The app is assembled and signed beside its
+  // place, then renamed over the old one: a copy or a sign that fails leaves
+  // the handler the user had, registered and whole, not a half bundle.
+  const staging = `${bundle}.installing`;
+  const executable = forwarderExecutable(staging);
   process.stdout.write(`Building ${bundle}\n`);
-  fs.rmSync(bundle, { recursive: true, force: true });
-  fs.mkdirSync(path.dirname(executable), { recursive: true });
-  fs.copyFileSync(forwarder, executable);
-  fs.chmodSync(executable, 0o755);
-  fs.writeFileSync(path.join(bundle, "Contents", "Info.plist"), infoPlist());
+  fs.rmSync(staging, { recursive: true, force: true });
+  try {
+    fs.mkdirSync(path.dirname(executable), { recursive: true });
+    fs.copyFileSync(forwarder, executable);
+    fs.chmodSync(executable, 0o755);
+    fs.writeFileSync(path.join(staging, "Contents", "Info.plist"), infoPlist());
 
-  const signed = launcher.launchSync({
-    bin: "/usr/bin/codesign",
-    args: ["--force", "--sign", "-", bundle],
-    category: "install.codesign",
-  });
-  if (!signed.ok) {
-    process.stderr.write(signed.stderr);
-    throw new Error(`codesign failed (${signed.reason})`);
+    const signed = launcher.launchSync({
+      bin: "/usr/bin/codesign",
+      args: ["--force", "--sign", "-", staging],
+      category: "install.codesign",
+    });
+    if (!signed.ok) {
+      process.stderr.write(signed.stderr);
+      throw new Error(`codesign failed (${signed.reason})`);
+    }
+    fs.rmSync(bundle, { recursive: true, force: true });
+    fs.renameSync(staging, bundle);
+  } catch (error) {
+    fs.rmSync(staging, { recursive: true, force: true });
+    throw error;
   }
 
   // killall exits 1 when no process matches, which is the other legal state

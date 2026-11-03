@@ -16,15 +16,13 @@ import {
 import { checkByName, type UrlHandlerFacts } from "../src/doctor/checks";
 import {
   ProbeArrivals,
+  parseArrival,
   probeUrlHandler,
   type DaemonView,
   type HandlerProbeEdge,
 } from "../src/doctor/handler-probe";
 import { clickArrived } from "../src/doctor/edge";
-import {
-  type ClickArrival,
-  type Delivery,
-} from "../src/doctor/sightings";
+import { type ClickArrival, type Delivery } from "../src/doctor/sightings";
 import { VERB_DOCTOR_PROBE, VERB_DOCTOR_RUN } from "../src/click/wire";
 import { BadVerbArgs, VERBS, type VerbContext } from "../src/daemon/verbs";
 import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
@@ -33,7 +31,17 @@ import { doctorReportKeys } from "../src/doctor/report";
 import { forwarderExecutable } from "../src/install/index";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { recordRender, testVerbContext } from "./helpers/click";
-import { emptyStores, HEALTHY_FACTS, healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, healthyClient, renderSaid } from "./helpers/doctor-facts";
+import {
+  emptyStores,
+  HEALTHY_FACTS,
+  healthyDaemonEdge,
+  healthyDataEdge,
+  noManagedSettings,
+  HEALTHY_SERVING,
+  HEALTHY_INSTALL_EDGE,
+  healthyClient,
+  renderSaid,
+} from "./helpers/doctor-facts";
 
 const probe = checkByName("urlHandler")!.probe;
 const verdict = (urlHandler: UrlHandlerFacts) =>
@@ -305,12 +313,38 @@ describe("probeUrlHandler", () => {
       delivery: CLI,
     });
   });
+
+  // [LAW:parse-dont-validate] An arrival off the wire: a daemon from before
+  // the forwarder lists its probes with `handler`, not `delivery`, and is
+  // told apart here, never dereferenced as one of ours.
+  test("an arrival is parsed off the daemon's stats, and an older daemon's shape is not one", () => {
+    expect(parseArrival({ nonce: NONCE, delivery: CLI })).toEqual({
+      nonce: NONCE,
+      delivery: CLI,
+    });
+    expect(parseArrival({ nonce: NONCE, delivery: FORWARDED })).toEqual({
+      nonce: NONCE,
+      delivery: FORWARDED,
+    });
+    expect(parseArrival({ nonce: NONCE, handler: "1.179.0" })).toBeNull();
+    expect(
+      parseArrival({ nonce: NONCE, delivery: { kind: "forwarder" } }),
+    ).toBeNull();
+    expect(
+      parseArrival({ nonce: NONCE, delivery: { kind: "applet" } }),
+    ).toBeNull();
+    expect(parseArrival({ delivery: CLI })).toBeNull();
+    expect(parseArrival(null)).toBeNull();
+  });
 });
 
 // ─── The daemon's side ───────────────────────────────────────────────────────
 
 describe("the daemon's side of the round trip", () => {
-  const link = (delivery: Delivery): ClickArrival => ({ via: "link", delivery });
+  const link = (delivery: Delivery): ClickArrival => ({
+    via: "link",
+    delivery,
+  });
 
   function daemon(arrival: ClickArrival) {
     const sessionState = new SessionState();
@@ -344,7 +378,13 @@ describe("the daemon's side of the round trip", () => {
         ...noManagedSettings(),
         probeTmux: async () => ({
           kind: "ok",
-          value: { features: [], termtype: "", termname: "", pid: 4242, utf8: true },
+          value: {
+            features: [],
+            termtype: "",
+            termname: "",
+            pid: 4242,
+            utf8: true,
+          },
         }),
         remoteLogin: async () => {
           throw new Error("remoteLogin must not run in this case");
@@ -386,7 +426,9 @@ describe("the daemon's side of the round trip", () => {
 
   test("a value that is not a probe nonce is refused and records nothing", async () => {
     const d = daemon(link(FORWARDED));
-    await expect(d.click(VERB_DOCTOR_PROBE, "../../etc")).rejects.toThrow(BadVerbArgs);
+    await expect(d.click(VERB_DOCTOR_PROBE, "../../etc")).rejects.toThrow(
+      BadVerbArgs,
+    );
     expect(d.probes.list()).toEqual([]);
   });
 
@@ -406,7 +448,16 @@ describe("the daemon's side of the round trip", () => {
     recordRender(d.sessionState, "s1");
     // The session's own Claude Code directory (test/setup.ts's empty one):
     // with none, the doctor reads ~/.claude, the host's real settings.
-    d.sessionState.set("s1", SESSION_CLIENT_HINTS_KEY, JSON.stringify({ tmux: null, claudeConfigDir: process.env.CLAUDE_CONFIG_DIR, terminalEnv: { TERM_PROGRAM: "ghostty" }, termCols: 148 }));
+    d.sessionState.set(
+      "s1",
+      SESSION_CLIENT_HINTS_KEY,
+      JSON.stringify({
+        tmux: null,
+        claudeConfigDir: process.env.CLAUDE_CONFIG_DIR,
+        terminalEnv: { TERM_PROGRAM: "ghostty" },
+        termCols: 148,
+      }),
+    );
     await d.click(VERB_DOCTOR_RUN, "s1");
     const keys = doctorReportKeys("urlHandler");
     return {
@@ -447,7 +498,9 @@ describe("the daemon's side of the round trip", () => {
 
   test("a probe cannot arrive from the tmux status line", async () => {
     const d = daemon({ via: "tmux-status" });
-    await expect(d.click(VERB_DOCTOR_PROBE, NONCE)).rejects.toThrow(BadVerbArgs);
+    await expect(d.click(VERB_DOCTOR_PROBE, NONCE)).rejects.toThrow(
+      BadVerbArgs,
+    );
     expect(d.probes.list()).toEqual([]);
   });
 

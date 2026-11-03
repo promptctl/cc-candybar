@@ -112,6 +112,9 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   // more than one scan per key to orphan. Cancellation would be both messier
   // and wasteful here (the in-flight scan is exactly what the next tick needs).
   let timedOut = false;
+  // Whether a client waits for the answer, decided when its frame is read
+  // (below); declared here because the backstop reads it.
+  let waits = true;
   const clearBackstop = daemon.clock.after(REQUEST_TIMEOUT_MS, () => {
     timedOut = true;
     daemon.stats.requestsTimedOut++;
@@ -135,7 +138,6 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   // its click is handled (a click past the deadline is refused, so a repeat
   // click cannot revert it, src/daemon/journal-turns.ts), and no one is said
   // to have left. Every other client holds the socket until answered.
-  let waits = true;
   const reader = makeFrameReader(
     (frame) => {
       const inbound = classifyInbound(frame);

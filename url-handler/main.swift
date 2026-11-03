@@ -71,6 +71,13 @@ func forward(_ url: String) -> Forward {
   if fd < 0 { return .failed(errnoText("socket")) }
   defer { close(fd) }
   if fcntl(fd, F_SETFL, O_NONBLOCK) < 0 { return .failed(errnoText("fcntl")) }
+  // A daemon that ends the socket mid-write (it exited, or refused the frame)
+  // must be an EPIPE this function reports, never a SIGPIPE that ends the app
+  // with nothing logged. [LAW:no-silent-failure]
+  var one: Int32 = 1
+  if setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, socklen_t(MemoryLayout<Int32>.size)) < 0 {
+    return .failed(errnoText("setsockopt SO_NOSIGPIPE"))
+  }
 
   var addr = sockaddr_un()
   addr.sun_family = sa_family_t(AF_UNIX)
