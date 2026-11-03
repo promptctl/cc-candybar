@@ -2,46 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-610",
-      "ref": "refs/pull/610/merge",
-      "sha": "0d189f697064e5bb0ee8241af8c69d1faf8fd86d",
-      "timestamp": "2026-11-03T11:39:37.580Z",
-      "commits": [
-        {
-          "sha": "0d189f697064e5bb0ee8241af8c69d1faf8fd86d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T11:38:50Z",
-          "message": "Merge d132d1378eecfaeb131cf889f64148053920d02c into 7780c8b5a83e6290289f3901555f0b63bf5704e8\n"
-        },
-        {
-          "sha": "d132d1378eecfaeb131cf889f64148053920d02c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T04:32:22-07:00",
-          "message": "fix(git): a PR lookup's logged duration starts at its slot, not at its place in the queue (candybar-gather-renderer-76bb.6pj.2nv)\n"
-        },
-        {
-          "sha": "f9d4d2af5812022d284b8f74b0a646933516f5f6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T04:28:42-07:00",
-          "message": "fix(render): today's day sums and the PR stop blocking the first bar; PR lookups are capped and back off (candybar-gather-renderer-76bb.6pj.2nv)\n\nTotality puts every built-in in every first bar, and both of these are slow\nand external. The request's today refresh no longer awaits the directory\nscan, the wait set no longer lists today or the PR, and both draw pending and\nland through the store they are read from.\n\nThe PR source puts every forge lookup through one limiter shared across\nrepos (the limiter moves out of transcript-fs so both use it), and a key\nwhose lookups keep failing is retried at a doubling interval up to the ok\nperiod.\n\nThe e2e render helper asks again after a bar drawn pending only on these two,\nonce their refresh is logged.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "9d75378da3169d188c0f6bca1bf8f0e57e2dcb88",
-      "timestamp": "2026-11-03T11:05:15.993Z",
+      "sha": "be10d89d0f489dffdc71e3a67ef2fec37cb70333",
+      "timestamp": "2026-11-03T11:46:22.124Z",
       "commits": [
         {
-          "sha": "9d75378da3169d188c0f6bca1bf8f0e57e2dcb88",
+          "sha": "be10d89d0f489dffdc71e3a67ef2fec37cb70333",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T04:04:20-07:00",
-          "message": "feat(facts): Fact<T> and SessionFacts, the seam's type (candybar-gather-renderer-76bb.6pj.cna) (#609)\n\n* refactor(outcome): a failed outcome names the phase it failed in (candybar-gather-renderer-76bb.6pj.cna)\n\nfailed(reason, failedAt) takes read | parse as a required argument, so every\nproducer states the phase it knows and the compiler finds the ones that did\nnot. The settings reader splits the two phases it used to throw as one.\n\n* refactor(outcome): pending is a value recognised by its discriminator (candybar-gather-renderer-76bb.6pj.cna)\n\nPENDING, the identity-compared singleton, is gone. A pending reading is a plain\n{kind, why} that survives JSON, and the owners' held form is flat: a Reading\nwhose pending arm also carries the landing a waiter awaits. A path walk stops\ntesting for pending inside a source's document, so a file that spells pending\nis a value. One structural comparison decides a box write.\n\n* feat(facts): Fact<T> and SessionFacts, the seam's type (candybar-gather-renderer-76bb.6pj.cna)\n\nA fact is a Reading with an instant on each answered arm; restamp is the one\nplace that instant is defined (the moment an answer first differed), so no owner\nstores a time. SessionFacts is the spec's document over the value types the\nowners already produce, and the compiler refuses any field JSON would corrupt:\nthe day sums are a record, and the git fact is the read before the PR is\ncomposed onto it. parseFact is the one door a fact arrives by from outside.\n\n* refactor(facts): fold failures keep their phase, Asked and the settings reader have one home (candybar-gather-renderer-76bb.6pj.cna)"
+          "timestamp": "2026-11-03T04:45:25-07:00",
+          "message": "fix(render): today's day sums and the PR stop blocking the first bar (candybar-gather-renderer-76bb.6pj.2nv) (#610)\n\n* fix(render): today's day sums and the PR stop blocking the first bar; PR lookups are capped and back off (candybar-gather-renderer-76bb.6pj.2nv)\n\nTotality puts every built-in in every first bar, and both of these are slow\nand external. The request's today refresh no longer awaits the directory\nscan, the wait set no longer lists today or the PR, and both draw pending and\nland through the store they are read from.\n\nThe PR source puts every forge lookup through one limiter shared across\nrepos (the limiter moves out of transcript-fs so both use it), and a key\nwhose lookups keep failing is retried at a doubling interval up to the ok\nperiod.\n\nThe e2e render helper asks again after a bar drawn pending only on these two,\nonce their refresh is logged.\n\n* fix(git): a PR lookup's logged duration starts at its slot, not at its place in the queue (candybar-gather-renderer-76bb.6pj.2nv)"
+        },
+        {
+          "sha": "7780c8b5a83e6290289f3901555f0b63bf5704e8",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-03T11:15:12Z",
+          "message": "chore(release): set `package.json` to 1.185.0 [skip ci]\n\n## [1.185.0](https://github.com/promptctl/cc-candybar/compare/v1.184.1...v1.185.0) (2026-11-03)\n\n### Features\n\n* **facts:** Fact<T> and SessionFacts, the seam's type (candybar-gather-renderer-76bb.6pj.cna) ([#609](https://github.com/promptctl/cc-candybar/issues/609)) ([9d75378](https://github.com/promptctl/cc-candybar/commit/9d75378da3169d188c0f6bca1bf8f0e57e2dcb88))\n"
         }
       ]
     }

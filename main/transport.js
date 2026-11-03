@@ -54921,18 +54921,9 @@ var import_node_path7 = __toESM(require_path_browserify(), 1);
 
 // src/utils/transcript-fs.ts
 init_globals();
-function statStamp(filePath2) {
-  if (!filePath2) return "";
-  try {
-    return stampOf(statSync(filePath2));
-  } catch {
-    return "";
-  }
-}
-function stampOf(st) {
-  return `${st.mtimeMs}:${st.size}`;
-}
-var TRANSCRIPT_FS_CONCURRENCY = 8;
+
+// src/utils/limiter.ts
+init_globals();
 var Limiter = class {
   slots;
   // FIFO wait queue as a singly-linked list: enqueue at `tail`, dequeue at
@@ -54978,6 +54969,20 @@ var Limiter = class {
     node.wake();
   }
 };
+
+// src/utils/transcript-fs.ts
+function statStamp(filePath2) {
+  if (!filePath2) return "";
+  try {
+    return stampOf(statSync(filePath2));
+  } catch {
+    return "";
+  }
+}
+function stampOf(st) {
+  return `${st.mtimeMs}:${st.size}`;
+}
+var TRANSCRIPT_FS_CONCURRENCY = 8;
 var gate = new Limiter(TRANSCRIPT_FS_CONCURRENCY);
 function gated(fn) {
   return ((...args) => gate.run(() => fn(...args)));
@@ -66351,9 +66356,6 @@ function waitWithin(work, ms, late, after) {
 function settledLane(outcome) {
   return { current: () => outcome };
 }
-function laneOutcome(lane) {
-  return answered(() => lane.current());
-}
 
 // src/claude-resume.ts
 init_globals();
@@ -66644,7 +66646,7 @@ async function refreshPayload(inputs, at, refreshed) {
   };
   await Promise.all([
     lane("session", want.session, () => session.usage(hookData2)),
-    lane("today", want.today, () => session.today(deps.lanes().today)),
+    lane("today", want.today, () => session.today()),
     lane(
       "context",
       want.context,
@@ -66815,16 +66817,12 @@ function readLanes(inputs) {
   };
 }
 function waitsOf(lanes) {
-  const git = lanes.git.current();
-  const pr = git.kind === "ok" ? git.value.pullRequest : void 0;
   return [
-    git,
+    lanes.git.current(),
     lanes.tmux.current(),
     lanes.hostName.current(),
     lanes.hostUser.current(),
-    lanes.today.current(),
-    ...[...lanes.sources.values()].map((lane) => lane.current()),
-    ...pr === void 0 ? [] : [pr]
+    ...[...lanes.sources.values()].map((lane) => lane.current())
   ].flatMap(
     (lane) => lane.kind === "pending" && lane.why === "unread" ? [lane.landed] : []
   );
@@ -68563,7 +68561,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.184.1";
+var PACKAGE_VERSION = "1.185.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -78032,6 +78030,9 @@ init_globals();
 function periodOf(every, outcome) {
   return outcome.kind === "failed" ? every.failedMs : every.okMs;
 }
+function backedOffMs(every, failures, ceilingMs) {
+  return failures === 0 ? every.okMs : Math.min(every.failedMs * 2 ** (failures - 1), ceilingMs);
+}
 var Period = class {
   constructor(tick, clock) {
     this.tick = tick;
@@ -78088,7 +78089,12 @@ var RESOLUTION_TTL_MS = 3e4;
 var DEFAULT_MAX_REPOS = 64;
 var PASS = "pass";
 var PR_PERIOD = { okMs: 5 * 6e4, failedMs: 45e3 };
+var PR_BACKOFF_CEILING_MS = PR_PERIOD.okMs;
+var DEFAULT_PR_LOOKUPS = 2;
 var PR_KEYS_KEPT = 16;
+function prPeriodOf({ failures }) {
+  return backedOffMs(PR_PERIOD, failures, PR_BACKOFF_CEILING_MS);
+}
 function triggerOf(asked2) {
   if (asked2.includes("first") || asked2.includes("pr")) return "first";
   return asked2.length === 0 ? "period" : "change";
@@ -78159,6 +78165,7 @@ var GitDataProvider = class {
   inner;
   periodMs;
   maxRepos;
+  forgeLookups;
   watchers;
   ownsWatchers;
   logger;
@@ -78168,6 +78175,7 @@ var GitDataProvider = class {
     this.clock = opts.clock;
     this.periodMs = opts.periodMs ?? GIT_PERIOD_MS;
     this.maxRepos = opts.maxRepos ?? DEFAULT_MAX_REPOS;
+    this.forgeLookups = new Limiter(opts.maxPrLookups ?? DEFAULT_PR_LOOKUPS);
     this.logger = opts.logger ?? quietLogger;
     const ledger = opts.ledger ?? new RefreshLedger(this.logger);
     this.gitRefreshes = ledger.declare({
@@ -78526,7 +78534,7 @@ var GitDataProvider = class {
       pr.seen.set(key, known);
       pr.missed = false;
       settle(pr, known.outcome);
-      pr.period.landed(periodOf(PR_PERIOD, known.outcome), known.at);
+      pr.period.landed(prPeriodOf(known), known.at);
       return "recalled";
     }
     if (pr.holders === 0) {
@@ -78545,8 +78553,11 @@ var GitDataProvider = class {
     const key = pr.key;
     if (pr.inFlight?.key === key) return pr.inFlight.done;
     const remote = pr.remote;
-    const startedAt = this.clock.monotonic();
-    const lookup = remote.kind === "ok" ? this.inner.resolvePullRequest(state.root, remote.value).catch(threw("PR lookup")) : Promise.resolve(remote.kind === "failed" ? remote : ABSENT2);
+    let startedAt = this.clock.monotonic();
+    const lookup = remote.kind === "ok" ? this.forgeLookups.run(() => {
+      startedAt = this.clock.monotonic();
+      return this.inner.resolvePullRequest(state.root, remote.value);
+    }).catch(threw("PR lookup")) : Promise.resolve(remote.kind === "failed" ? remote : ABSENT2);
     const done2 = lookup.then((outcome) => {
       if (pr.inFlight?.key === key) pr.inFlight = null;
       if (this.repos.get(state.root) !== state) return;
@@ -78557,15 +78568,20 @@ var GitDataProvider = class {
         elapsedMs(this.clock, startedAt)
       );
       const at = this.clock.monotonic();
+      const answer2 = {
+        outcome,
+        at,
+        failures: outcome.kind === "failed" ? (pr.seen.get(key)?.failures ?? 0) + 1 : 0
+      };
       pr.seen.delete(key);
-      pr.seen.set(key, { outcome, at });
+      pr.seen.set(key, answer2);
       for (const oldest of pr.seen.keys()) {
         if (pr.seen.size <= PR_KEYS_KEPT) break;
         pr.seen.delete(oldest);
       }
       if (pr.key !== key || pr.missed) return;
       settle(pr, outcome);
-      pr.period.landed(periodOf(PR_PERIOD, outcome), at);
+      pr.period.landed(prPeriodOf(answer2), at);
     });
     pr.inFlight = { key, done: done2 };
     return done2;
@@ -79681,13 +79697,12 @@ var SessionUsageStore = class {
         );
       },
       speed: (nowMs) => this.observed(sessionId2, once2, nowMs),
-      // [LAW:no-ambient-temporal-coupling] The scan first, then the
-      // session's own refresh: run together, a seed's ingest of this session
-      // and the request's are two cold parses at two stamps, and whichever
-      // lands second is not stored — the request's own, newer fold among
-      // them. A refresh another lane already started is the one awaited.
-      today: async (today) => {
-        await laneOutcome(today);
+      // [LAW:no-ambient-temporal-coupling] `today` sums the session's own
+      // record, so it waits for the request's one refresh of it and for
+      // nothing else: the directory set's scan is no part of the request,
+      // since the day sums are pending until it lands and land through the
+      // observable they are read from.
+      today: async () => {
         await once2().record;
       }
     };
@@ -79742,15 +79757,14 @@ var SessionUsageStore = class {
   // over the sessions that had asked, would move with which other sessions
   // happened to have rendered.
   //
-  // A request's refresh of `today`: the active session's own record — so
-  // `today` keeps up with the cost it was sent with (short only by what a
-  // rescan's fold of the same session stores first, `ingest`) — once the
-  // directory set's first scan, which `today`'s lane waits on, has landed.
-  refreshToday(today, hookData2) {
+  // A request's refresh of `today`: the active session's own record, so
+  // `today` keeps up with the cost it was sent with. The directory set's
+  // scan is not waited for (`declareToday`).
+  refreshToday(hookData2) {
     return this.request(
       hookData2?.session_id ?? "",
       hookData2?.transcript_path
-    ).today(today);
+    ).today();
   }
   // [LAW:single-enforcer] A view's declaration of `today` (declareLanes in
   // src/daemon/render-payload.ts): the directory set's scans, held, so a set
