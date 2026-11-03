@@ -4,15 +4,22 @@
     {
       "version": "pr-593",
       "ref": "refs/pull/593/merge",
-      "sha": "6cfcc8248d1eb5e3a258ede2606bf763e4022a17",
-      "timestamp": "2026-11-03T01:12:31.880Z",
+      "sha": "dd1f7d010cef77054ca011326c22970a3e33d788",
+      "timestamp": "2026-11-03T01:17:21.119Z",
       "commits": [
         {
-          "sha": "6cfcc8248d1eb5e3a258ede2606bf763e4022a17",
+          "sha": "dd1f7d010cef77054ca011326c22970a3e33d788",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T01:11:29Z",
-          "message": "Merge 7df1f7b7de750708d475fb360c5656880fcb07f6 into 8b23a558ca80eb27c92e05a931e56f0267be820f\n"
+          "timestamp": "2026-11-03T01:16:14Z",
+          "message": "Merge 472659ba99adbefa58b3a2278ada0c9c62f7cf06 into 8b23a558ca80eb27c92e05a931e56f0267be820f\n"
+        },
+        {
+          "sha": "472659ba99adbefa58b3a2278ada0c9c62f7cf06",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T18:15:54-07:00",
+          "message": "test(frame-feed): the stepped-back case bounds each frame against the wall it was drawn at, and mixed shortfall sequences have prime lengths (candybar-testing-0x6u.e2d)\n"
         },
         {
           "sha": "7df1f7b7de750708d475fb360c5656880fcb07f6",
