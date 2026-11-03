@@ -1,12 +1,19 @@
 // Every benchmark there is, in the order a tick pays for them.
 
 import type { Benchmark } from "../types.js";
+import { CLICKS } from "./click.js";
 import { CLIENTS } from "./client.js";
 import { SOURCES } from "./sources.js";
 import { STAGES } from "./stages.js";
 import { WIRE } from "./wire.js";
 
-export const BENCHMARKS: readonly Benchmark[] = [...STAGES, ...SOURCES, ...WIRE, ...CLIENTS];
+export const BENCHMARKS: readonly Benchmark[] = [
+  ...STAGES,
+  ...SOURCES,
+  ...WIRE,
+  ...CLIENTS,
+  ...CLICKS,
+];
 
 // [LAW:single-enforcer] The one place ids are checked: a report row is keyed
 // by its id, so two benchmarks sharing one would silently overwrite each other
