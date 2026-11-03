@@ -1436,10 +1436,6 @@ function firstPending(
   return lane?.kind === "pending" ? pendingOf(lane.why) : undefined;
 }
 
-// [LAW:effects-at-boundaries] The projections are pure folds returning data
-// (payload fragment + failure descriptions); the log effect is the caller's.
-// A value not answered yet is pending, which the draw takes as its own
-// outcome.
 // [LAW:one-source-of-truth] The one assembly of a view's payload: every
 // source as its owner holds it now, a value not answered yet as pending —
 // which the draw takes as its own outcome (the placement's loading cell).

@@ -31,7 +31,7 @@ type Unwireable =
   | PromiseLike<unknown>
   | Date;
 
-export type Wire<T> = T extends string | number | boolean | null | undefined
+export type Wire<T> = T extends string | number | boolean | null
   ? T
   : T extends Unwireable
     ? never
