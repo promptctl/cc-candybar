@@ -79339,6 +79339,7 @@ var SessionUsageStore = class {
   usage;
   sweeps = 0;
   stopSweep = null;
+  closed = false;
   clock;
   constructor(opts) {
     this.host = opts.host;
@@ -79497,6 +79498,7 @@ var SessionUsageStore = class {
   // answered; which day of them is the draw's (`todayAt`).
   declareToday(holds2, claudeConfigDir2) {
     const claudePaths = getClaudePaths(claudeConfigDir2, this.host.home);
+    if (this.closed) return settledLane(failed("usage store closed"));
     const scans = this.scans.declare(holds2, claudePaths);
     const set2 = this.daySet(claudePaths);
     return {
@@ -79795,6 +79797,7 @@ var SessionUsageStore = class {
     return dropped;
   }
   close() {
+    this.closed = true;
     this.stopSweep?.();
     this.stopSweep = null;
     this.scans.close();
@@ -81478,7 +81481,9 @@ function openView(state, cwd2, facts, { sessionState, declare, source: sourceOf,
   const declared = observable.box(declaration(facts, presetNow()), {
     deep: false
   });
+  let disposed = false;
   const redeclare = (facts2, preset) => {
+    if (disposed) return;
     const now2 = declared.get();
     if (facts2 === now2.facts && preset === now2.preset) return;
     const next = declaration(facts2, preset);
@@ -81532,6 +81537,7 @@ function openView(state, cwd2, facts, { sessionState, declare, source: sourceOf,
     lastRenderCellsBySegment: /* @__PURE__ */ new Map(),
     retire: stopChanged,
     dispose: () => {
+      disposed = true;
       stop2();
       stopChanged();
       holds2.close();

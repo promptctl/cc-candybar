@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-588",
+      "ref": "refs/pull/588/merge",
+      "sha": "d7b59d2f32eca1c7b3a266756acfe09a2e9c7aba",
+      "timestamp": "2026-11-03T00:13:42.798Z",
+      "commits": [
+        {
+          "sha": "d7b59d2f32eca1c7b3a266756acfe09a2e9c7aba",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T00:11:51Z",
+          "message": "Merge 2ba92d72c4dc6db2f030bbc1a226a56564efd710 into 7ca57ba16e524929f55d99beb41eba44d31a74fb\n"
+        },
+        {
+          "sha": "2ba92d72c4dc6db2f030bbc1a226a56564efd710",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T17:11:40-07:00",
+          "message": "fix(daemon): a disposed view declares nothing, and a closed usage store builds no day set (candybar-testing-ihvy.dbg)\n\nReview: an owner builds its entry before a closed Holds refuses the hold,\nso a declaration reaching a disposed view orphaned state in every owner.\n"
+        },
+        {
+          "sha": "49df890babad8c24b19754ea2cae24b41cbd56a5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T16:52:58-07:00",
+          "message": "fix(sources): a closed keyed source answers a late declaration as closed, as the git cache does (candybar-testing-ihvy.dbg)\n\nReview: tmux, host, managed storage and usage reach the same late\ndeclaration through KeyedSource, whose close set no closed state.\n"
+        },
+        {
+          "sha": "c2e17351ef472727862029915b92805aed158b38",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T16:27:33-07:00",
+          "message": "fix(git): a closed git cache answers a late declaration as closed, so no period re-arms after close (candybar-testing-ihvy.dbg)\n\nA render mid-wait at close declared after close had dropped every repo,\nbuilt a fresh state on the closed cache, and that state's period re-armed\nafter every pass: hundreds of timers armed after daemon.close() returned.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-591",
       "ref": "refs/pull/591/merge",
       "sha": "ac9bdb743ecdf84178bab7a3f5c0f4272894dea9",
@@ -100,35 +136,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T17:07:03-07:00",
           "message": "fix(test): the client's answer cases run over a memory connection on a held clock (candybar-testing-ihvy.5q4) (#589)\n\n* fix(test): the client's answer cases run over a memory connection on a held clock (candybar-testing-ihvy.5q4)\n\nThree stub-daemon cases took the statusline's 50 ms connect and 150 ms total\nbudgets against a net server on the worker's own loop, so a loaded runner read\nCONNECT_TIMEOUT or busy in place of the stub's reply (error-glyph: 1 of 40\nloaded runs). What they prove is a decision, not an effect.\n\nrequestOutcome splits at the connect: exchangeOutcome is the round trip over a\nstream already made, and requestOutcome is the connect plus that call. The\nwire-code cases call renderOutcomeOf; the raw-bytes and glyph cases run\nexchangeOutcome over memoryConnection() with a held clock. No socket, no wall\nclock, no budget left to miss.\n\n* fix(test): review of the memory-connection cases: prettier, a title that claims only what it runs, and the load note as its mechanism (candybar-testing-ihvy.5q4)"
-        }
-      ]
-    },
-    {
-      "version": "pr-588",
-      "ref": "refs/pull/588/merge",
-      "sha": "3576f499df6d85755cc2b67bc24f9114aaacdd6e",
-      "timestamp": "2026-11-02T23:55:14.996Z",
-      "commits": [
-        {
-          "sha": "3576f499df6d85755cc2b67bc24f9114aaacdd6e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T23:53:15Z",
-          "message": "Merge 49df890babad8c24b19754ea2cae24b41cbd56a5 into e4792ac42dfcce8f3f64975e904729a8bf7ff51b\n"
-        },
-        {
-          "sha": "49df890babad8c24b19754ea2cae24b41cbd56a5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T16:52:58-07:00",
-          "message": "fix(sources): a closed keyed source answers a late declaration as closed, as the git cache does (candybar-testing-ihvy.dbg)\n\nReview: tmux, host, managed storage and usage reach the same late\ndeclaration through KeyedSource, whose close set no closed state.\n"
-        },
-        {
-          "sha": "c2e17351ef472727862029915b92805aed158b38",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T16:27:33-07:00",
-          "message": "fix(git): a closed git cache answers a late declaration as closed, so no period re-arms after close (candybar-testing-ihvy.dbg)\n\nA render mid-wait at close declared after close had dropped every repo,\nbuilt a fresh state on the closed cache, and that state's period re-armed\nafter every pass: hundreds of timers armed after daemon.close() returned.\n"
         }
       ]
     }
