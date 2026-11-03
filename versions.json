@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "669df9209449d3ac4080a21d3a7144477fa78a73",
+      "timestamp": "2026-11-03T02:08:06.155Z",
+      "commits": [
+        {
+          "sha": "669df9209449d3ac4080a21d3a7144477fa78a73",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T19:07:17-07:00",
+          "message": "fix(test): the frame-feed cases run on one held clock (candybar-testing-0x6u.fs0) (#596)\n\n* fix(test): the frame-feed cases run on one held clock, so no draw count reads real time (candybar-testing-0x6u.fs0)\n\nEvery case in test/frame-feed.test.ts built its feed on the system clock, a\nper-describe jest fake, or a busy-wait, so a stalled CI loop skipped a turn\nand failed an exact draw count. The harness now owns a heldClock and returns\nit; a case moves time with clock.advance, and a render that takes renderMs\nburns that much of the clock (new HeldClock.burn), so a render slower than its\nperiod runs back to back instead of looping at one held moment. HeldClock also\ngains pending() and never moves time back after a burn. Loose bounds that only\na loaded box needed are the exact counts the periods give.\n\n* fix(test): a repeating held timer runs once after a burn, a held span is refused unless finite and non-negative (candybar-testing-0x6u.fs0)\n\n* docs(test): advance names its inclusive end and the clock a burning callback carries past it (candybar-testing-0x6u.fs0)"
+        },
+        {
+          "sha": "e7ee7542655b493942757800b257dc4accd601f1",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-03T01:43:27Z",
+          "message": "chore(release): set `package.json` to 1.180.8 [skip ci]\n\n## [1.180.8](https://github.com/promptctl/cc-candybar/compare/v1.180.7...v1.180.8) (2026-11-03)\n\n### Bug Fixes\n\n* **launch:** a waited launch keeps at most 16 MiB per stream and ends the child past it (candybar-testing-0x6u.ndy) ([#590](https://github.com/promptctl/cc-candybar/issues/590)) ([c0943ea](https://github.com/promptctl/cc-candybar/commit/c0943ea0205fc68b6c59b0134dd79a75552b2f10))\n* **test:** the turn-per-draw feed case runs on held time (candybar-testing-0x6u.e2d) ([#593](https://github.com/promptctl/cc-candybar/issues/593)) ([c63e8bc](https://github.com/promptctl/cc-candybar/commit/c63e8bcefa93b28ab53cf599d14d916dda71e551))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-595",
       "ref": "refs/pull/595/merge",
       "sha": "41975e507dc408cd814da5f81e2068c3f367a3dd",
@@ -45,42 +67,6 @@
       ]
     },
     {
-      "version": "pr-596",
-      "ref": "refs/pull/596/merge",
-      "sha": "b572bb613de1bedc2a69639d81d86a8b6da72b46",
-      "timestamp": "2026-11-03T02:02:55.978Z",
-      "commits": [
-        {
-          "sha": "b572bb613de1bedc2a69639d81d86a8b6da72b46",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T02:01:35Z",
-          "message": "Merge 7acb1f19459c4c86064e9f423bd2e72d86e80c2a into e7ee7542655b493942757800b257dc4accd601f1\n"
-        },
-        {
-          "sha": "7acb1f19459c4c86064e9f423bd2e72d86e80c2a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T18:53:56-07:00",
-          "message": "docs(test): advance names its inclusive end and the clock a burning callback carries past it (candybar-testing-0x6u.fs0)\n"
-        },
-        {
-          "sha": "b4c150b9ec557760c666c4244530dc0f6aec464b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T18:52:47-07:00",
-          "message": "fix(test): a repeating held timer runs once after a burn, a held span is refused unless finite and non-negative (candybar-testing-0x6u.fs0)\n"
-        },
-        {
-          "sha": "c763eafe1fa6b8c345182cb0391fb46dede79dac",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T18:48:56-07:00",
-          "message": "fix(test): the frame-feed cases run on one held clock, so no draw count reads real time (candybar-testing-0x6u.fs0)\n\nEvery case in test/frame-feed.test.ts built its feed on the system clock, a\nper-describe jest fake, or a busy-wait, so a stalled CI loop skipped a turn\nand failed an exact draw count. The harness now owns a heldClock and returns\nit; a case moves time with clock.advance, and a render that takes renderMs\nburns that much of the clock (new HeldClock.burn), so a render slower than its\nperiod runs back to back instead of looping at one held moment. HeldClock also\ngains pending() and never moves time back after a burn. Loose bounds that only\na loaded box needed are the exact counts the periods give.\n"
-        }
-      ]
-    },
-    {
       "version": "pr-594",
       "ref": "refs/pull/594/merge",
       "sha": "f3cf2ed0a11754ae1d680e34ef45b18b937ec407",
@@ -120,21 +106,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T18:16:36-07:00",
           "message": "feat(url-handler): a resident Swift forwarder sends the raw link to the daemon, which does all parsing (candybar-daemon-health-ajx0.co4)\n\nThe URL handler app is a Swift agent (url-handler/main.swift) that forwards each\ncc-candybar:// link as one url frame, versioned by itself, and reads no answer.\nThe daemon classifies inbound frames once, splits the verb itself, and writes a\nclick event for every url frame, refused ones included. clientVersion leaves the\nwire; a click's arrival carries who delivered it, and the doctor judges by that.\nInstall assembles the .app around the prebuilt binary, ad-hoc signs it, quits the\nresident instance and registers the scheme. CI builds a universal binary on macOS\ninto both darwin packages; check-protocol pins the Swift frame and socket path.\nurl-handle remains the tmux status line's route only.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "c63e8bcefa93b28ab53cf599d14d916dda71e551",
-      "timestamp": "2026-11-03T01:34:38.731Z",
-      "commits": [
-        {
-          "sha": "c63e8bcefa93b28ab53cf599d14d916dda71e551",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T18:32:56-07:00",
-          "message": "fix(test): the turn-per-draw feed case runs on held time (candybar-testing-0x6u.e2d) (#593)\n\n* fix(test): the turn-per-draw feed case runs on held time, so a stalled loop cannot skip a turn (candybar-testing-0x6u.e2d)\n\n* test(frame-feed): the turn-per-draw case reads every shortfall on every run, and its exact-count siblings run on held time too (candybar-testing-0x6u.e2d)\n\n* test(frame-feed): wall readings cycle a fixed shortfall sequence, so one reading can disagree with the next, and the stepped-back case runs on held time (candybar-testing-0x6u.e2d)\n\n* test(frame-feed): the stepped-back case bounds each frame against the wall it was drawn at, and mixed shortfall sequences have prime lengths (candybar-testing-0x6u.e2d)"
         }
       ]
     }
