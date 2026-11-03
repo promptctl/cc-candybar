@@ -55920,7 +55920,11 @@ var urlHandler = {
         if (urlHandler2.delivery.kind === "forwarder") return { ok: true };
         return {
           ok: false,
-          reason: `the link was delivered by \`cc-candybar url-handle\`, not the forwarder app, so the URL handler is the retired AppleScript applet \u2014 ${REINSTALL}`
+          // What is known: a click request brought it, which is what the
+          // retired applet runs — and a hand-run `cc-candybar url-handle`,
+          // or the browser page. Which app Launch Services opens the scheme
+          // with is the opener's row to say (handlerAppProblems).
+          reason: `the link was delivered by a click request (\`cc-candybar url-handle\`), not the forwarder app \u2014 ${REINSTALL}`
         };
       case "lost":
         return problemsVerdict([
@@ -68388,7 +68392,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.180.7";
+var PACKAGE_VERSION = "1.180.8";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
