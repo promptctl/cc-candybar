@@ -132,9 +132,9 @@ export interface DaemonAdapters {
   // which lanes a session's feed follows, and ends its waits with the daemon.
   readonly laneEdge: (
     launcher: Launcher,
-    probe: ProcessProbe,
     following: (sessionId: string) => ReadonlySet<Lane>,
     closing: AbortSignal,
+    probe: ProcessProbe,
   ) => LaneEdge;
   // The one signer of every `run` link this daemon draws.
   readonly linkSigner: LinkSigner;
@@ -277,8 +277,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       frameFeeds.wakeWhere("data", () => true);
     },
   });
-  // [LAW:one-source-of-truth] What this daemon knows of a pid comes from this one
-  // probe, for the update watch and the lane edge alike.
+  // [LAW:one-source-of-truth] The update watch and the lane edge read a pid
+  // through this one probe, so a probe handed in reaches both. The process entry
+  // (server.ts) asks its own before this daemon exists.
   const probe = inputs.probe(launcher);
   // Before every owner that arms a timer: storage that cannot be read refuses
   // the build with nothing running.
@@ -382,9 +383,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const laneSetups = new LaneSetups({
     edge: inputs.laneEdge(
       launcher,
-      probe,
       (sessionId) => frameFeeds.following(sessionId),
       closing.signal,
+      probe,
     ),
     // A bar pane runs this bundle under the node running it now, with the
     // flags it runs with (tsx's loader, under the test harness).

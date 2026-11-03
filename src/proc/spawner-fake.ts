@@ -151,7 +151,8 @@ export function fakeSpawner(clock: Timekeeper): FakeSpawner {
           new Writable({
             write(chunk: Buffer, _enc, done) {
               stdinText.push(chunk);
-              record.stdin += chunk.toString();
+              // Decoded whole, so a character split across chunks is not.
+              record.stdin = Buffer.concat(stdinText).toString();
               done();
             },
           }),
