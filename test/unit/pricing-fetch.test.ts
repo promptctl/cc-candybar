@@ -37,6 +37,7 @@ const inTwoReads = (body: Buffer) => [
 ];
 
 beforeEach(() => {
+  mockReads = [];
   mockDestroy.mockClear();
 });
 
