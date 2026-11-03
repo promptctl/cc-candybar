@@ -401,6 +401,7 @@ describe("every render request writes one render event, whatever its outcome", (
     expect(opened.level).toBe("info");
     expect(opened.fields.map(([key]) => key)).toEqual([
       "queued",
+      "via",
       "verb",
       "sid",
       "placeWait",
@@ -411,6 +412,9 @@ describe("every render request writes one render event, whatever its outcome", (
       "took",
       "outcome",
     ]);
+    // A `click` request is the CLI's delivery; the forwarder's frame says so
+    // on its own event (daemon-doctor-e2e.test.ts beside this file).
+    expect(field(opened, "via")).toBe("cli");
     expect(field(opened, "verb")).toBe("dispatch");
     expect(field(opened, "queued")).toMatch(/^\d+ms$/);
     expect(field(opened, "took")).toMatch(/^\d+ms$/);
@@ -422,6 +426,7 @@ describe("every render request writes one render event, whatever its outcome", (
     expect(unknownVerb.level).toBe("warn");
     expect(unknownVerb.fields.map(([key]) => key)).toEqual([
       "queued",
+      "via",
       "timedOut",
       "clientLeft",
       "took",
@@ -436,6 +441,7 @@ describe("every render request writes one render event, whatever its outcome", (
     const unparsed = only(refusedBy(lines, "session id"));
     expect(unparsed.fields.map(([key]) => key)).toEqual([
       "queued",
+      "via",
       "verb",
       "placeWait",
       "gather",
@@ -484,6 +490,7 @@ describe("every render request writes one render event, whatever its outcome", (
     expect(fields.level).toBe("warn");
     expect(fields.fields.map(([key]) => key)).toEqual([
       "queued",
+      "via",
       "timedOut",
       "clientLeft",
       "took",
