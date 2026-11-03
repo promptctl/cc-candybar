@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "7ca57ba16e524929f55d99beb41eba44d31a74fb",
+      "timestamp": "2026-11-03T00:07:56.124Z",
+      "commits": [
+        {
+          "sha": "7ca57ba16e524929f55d99beb41eba44d31a74fb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T17:07:03-07:00",
+          "message": "fix(test): the client's answer cases run over a memory connection on a held clock (candybar-testing-ihvy.5q4) (#589)\n\n* fix(test): the client's answer cases run over a memory connection on a held clock (candybar-testing-ihvy.5q4)\n\nThree stub-daemon cases took the statusline's 50 ms connect and 150 ms total\nbudgets against a net server on the worker's own loop, so a loaded runner read\nCONNECT_TIMEOUT or busy in place of the stub's reply (error-glyph: 1 of 40\nloaded runs). What they prove is a decision, not an effect.\n\nrequestOutcome splits at the connect: exchangeOutcome is the round trip over a\nstream already made, and requestOutcome is the connect plus that call. The\nwire-code cases call renderOutcomeOf; the raw-bytes and glyph cases run\nexchangeOutcome over memoryConnection() with a held clock. No socket, no wall\nclock, no budget left to miss.\n\n* fix(test): review of the memory-connection cases: prettier, a title that claims only what it runs, and the load note as its mechanism (candybar-testing-ihvy.5q4)"
+        }
+      ]
+    },
+    {
       "version": "pr-590",
       "ref": "refs/pull/590/merge",
       "sha": "54a227605c110640fac51c48058d1f8009b8143c",
@@ -60,35 +75,6 @@
       ]
     },
     {
-      "version": "pr-589",
-      "ref": "refs/pull/589/merge",
-      "sha": "b07777110b9ffafa8a5c9b9fb229efd523590690",
-      "timestamp": "2026-11-03T00:02:40.765Z",
-      "commits": [
-        {
-          "sha": "b07777110b9ffafa8a5c9b9fb229efd523590690",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T00:01:29Z",
-          "message": "Merge f850d8a12f23fdfa5d8f90b4b5b3208f1ed33d47 into c566bb07016fbae3ad97df6abf6cc28e94fc129b\n"
-        },
-        {
-          "sha": "f850d8a12f23fdfa5d8f90b4b5b3208f1ed33d47",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T16:49:36-07:00",
-          "message": "fix(test): review of the memory-connection cases: prettier, a title that claims only what it runs, and the load note as its mechanism (candybar-testing-ihvy.5q4)\n"
-        },
-        {
-          "sha": "52ab99905fba239cdacd4f96d490fc7a8d1a6868",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T16:46:32-07:00",
-          "message": "fix(test): the client's answer cases run over a memory connection on a held clock (candybar-testing-ihvy.5q4)\n\nThree stub-daemon cases took the statusline's 50 ms connect and 150 ms total\nbudgets against a net server on the worker's own loop, so a loaded runner read\nCONNECT_TIMEOUT or busy in place of the stub's reply (error-glyph: 1 of 40\nloaded runs). What they prove is a decision, not an effect.\n\nrequestOutcome splits at the connect: exchangeOutcome is the round trip over a\nstream already made, and requestOutcome is the connect plus that call. The\nwire-code cases call renderOutcomeOf; the raw-bytes and glyph cases run\nexchangeOutcome over memoryConnection() with a held clock. No socket, no wall\nclock, no budget left to miss.\n"
-        }
-      ]
-    },
-    {
       "version": "pr-588",
       "ref": "refs/pull/588/merge",
       "sha": "3576f499df6d85755cc2b67bc24f9114aaacdd6e",
@@ -114,28 +100,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T16:27:33-07:00",
           "message": "fix(git): a closed git cache answers a late declaration as closed, so no period re-arms after close (candybar-testing-ihvy.dbg)\n\nA render mid-wait at close declared after close had dropped every repo,\nbuilt a fresh state on the closed cache, and that state's period re-armed\nafter every pass: hundreds of timers armed after daemon.close() returned.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "c566bb07016fbae3ad97df6abf6cc28e94fc129b",
-      "timestamp": "2026-11-02T23:54:46.046Z",
-      "commits": [
-        {
-          "sha": "c566bb07016fbae3ad97df6abf6cc28e94fc129b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T16:53:25-07:00",
-          "message": "test(rig): render tests build through one buildRig, and buildRuntime is gone (candybar-testing-ihvy.4k6) (#587)\n\n* test(rig): buildRig assembles a render rig with a default for every field (candybar-testing-ihvy.4k6)\n\nFoundation: test/helpers/rig.ts, its test, colour-256's measurement helpers in their own module, and dsl-groups, dsl-picker and colour-256 on the rig.\n\n* test(rig): 26 more test files build through buildRig, and buildRuntime is gone (candybar-testing-ihvy.4k6)\n\nEach file keeps its own vocabulary as a thin wrapper over buildRig and no longer repeats the parse, store, registry, compile, draw and click assembly.\n\n* test(rig): review fixes — undo-redo keeps its seeded origin, rig records its cwd, configure-mode keeps width 200 (candybar-testing-ihvy.4k6)\n\n* test(rig): the parse cache keys on the registered option domains (candybar-testing-ihvy.4k6)\n\n* test(rig): the parse cache keys on each registered domain's members, rigs that seed an origin draw as that session, and the testing memory line is true again (candybar-testing-ihvy.4k6)\n\n* test(rig): a rig records a render origin only when its session has none, so a seeded origin is never overwritten (candybar-testing-ihvy.4k6)"
-        },
-        {
-          "sha": "e4792ac42dfcce8f3f64975e904729a8bf7ff51b",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-02T23:40:38Z",
-          "message": "chore(release): set `package.json` to 1.180.4 [skip ci]\n\n## [1.180.4](https://github.com/promptctl/cc-candybar/compare/v1.180.3...v1.180.4) (2026-11-02)\n\n### Bug Fixes\n\n* **bar-pane:** a frame overwrites its rows and lands whole, so the pane stops flickering ([#558](https://github.com/promptctl/cc-candybar/issues/558)) ([3b03eb3](https://github.com/promptctl/cc-candybar/commit/3b03eb3ede4c45763df73f0f81301f74444e40a3))\n"
         }
       ]
     }
