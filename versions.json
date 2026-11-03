@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-603",
+      "ref": "refs/pull/603/merge",
+      "sha": "3f158829664d997cafa8e1cd0ffc7ba84f4f806b",
+      "timestamp": "2026-11-03T04:36:04.410Z",
+      "commits": [
+        {
+          "sha": "3f158829664d997cafa8e1cd0ffc7ba84f4f806b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T04:35:01Z",
+          "message": "Merge cc763a8c4cdfe279fbb6643bde3a038f4e10b825 into f076fdeb651bcf4d15226703d9e09fdaf17f7ef8\n"
+        },
+        {
+          "sha": "cc763a8c4cdfe279fbb6643bde3a038f4e10b825",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T21:34:40-07:00",
+          "message": "fix(bench): the click suite proves the daemon by a round trip, reads the log from the click on, and matches the whole problem (candybar-url-handler-uy01.05x)\n\nReview of #603. A socket file was taken as a live daemon, so a daemon dead\nwithout unlinking ran the bench into a notification on the user's screen;\na stats round trip over the default socket proves it. Each poll read every\nlog generation from byte 0; the event can only be past where the file\nstood at the click, so the read starts there and follows one rotation.\nThe event match was an unterminated prefix (`-1` matched `-10`); the\nproblems field is now decoded and compared whole, through one logfmt\nfield reader beside the encoder, which the daemon world's render reader\nshares too (its own read a quoted value's first word). A lost event names\nthe log searched, since this shell's state dir need not be the daemon's.\nThe app's name moves beside the scheme so the bench imports nothing of\nthe installer. Live run: 15 of 15 events found, cold p50 172 ms, warm\n99 ms under load 33.\n"
+        },
+        {
+          "sha": "fd33ee15b75b6fb767af764d92681420bff93e8b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T21:18:59-07:00",
+          "message": "feat(bench): a click's whole time, Launch Services included, is measured for the applet and the forwarder (candybar-url-handler-uy01.05x)\n\nA click suite in the benchmark: open to the daemon's own click event,\ncold (handler app quit first) and warm, with the handler that answered\nread off the event. Measured on Brandon's Mac: the retired applet\n~0.53-0.59 s every click (it exits after each), the forwarder ~0.23 s\ncold and ~0.07 s warm. Numbers on the ticket and the epic.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "f076fdeb651bcf4d15226703d9e09fdaf17f7ef8",
@@ -84,28 +113,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T20:40:13-07:00",
           "message": "refactor(proc): a launch reaches the OS through a Spawner (candybar-testing-ihvy.5t2)\n\nlaunch.ts decided every launch and also named node:child_process and\nprocess.kill. The OS side is now a Spawner port (spawn, spawnSync, signalGroup,\ngroupGone, signalJob) whose real adapter is the moved code, so a test can run\nthe launch decisions over a child it scripts. jobGroupAlive and endJob become\nLauncher members, since they signal through the same seam. Real launchers are\nbuilt in system-launcher.ts; child_process lint now allows spawner.ts alone.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-603",
-      "ref": "refs/pull/603/merge",
-      "sha": "5f3e12518aa70534759f0b6f2cdaa43628d28d8a",
-      "timestamp": "2026-11-03T04:20:57.897Z",
-      "commits": [
-        {
-          "sha": "5f3e12518aa70534759f0b6f2cdaa43628d28d8a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T21:19:15-07:00",
-          "message": "Merge fd33ee15b75b6fb767af764d92681420bff93e8b into 1778b930898902caf685e0600e9ebe897409cb72\n"
-        },
-        {
-          "sha": "fd33ee15b75b6fb767af764d92681420bff93e8b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T21:18:59-07:00",
-          "message": "feat(bench): a click's whole time, Launch Services included, is measured for the applet and the forwarder (candybar-url-handler-uy01.05x)\n\nA click suite in the benchmark: open to the daemon's own click event,\ncold (handler app quit first) and warm, with the handler that answered\nread off the event. Measured on Brandon's Mac: the retired applet\n~0.53-0.59 s every click (it exits after each), the forwarder ~0.23 s\ncold and ~0.07 s warm. Numbers on the ticket and the epic.\n"
         }
       ]
     }
