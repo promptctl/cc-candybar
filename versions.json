@@ -4,15 +4,22 @@
     {
       "version": "pr-610",
       "ref": "refs/pull/610/merge",
-      "sha": "2dfb4097359191705dcd806720f2585a8c46717d",
-      "timestamp": "2026-11-03T11:30:15.124Z",
+      "sha": "5fd0839109cb91ec65bbb1fdc50ea05284381e9c",
+      "timestamp": "2026-11-03T11:33:28.282Z",
       "commits": [
         {
-          "sha": "2dfb4097359191705dcd806720f2585a8c46717d",
+          "sha": "5fd0839109cb91ec65bbb1fdc50ea05284381e9c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T04:29:26-07:00",
-          "message": "Merge 73bec3fe07f172471c207878ee3019c578deb5c5 into 7780c8b5a83e6290289f3901555f0b63bf5704e8\n"
+          "timestamp": "2026-11-03T11:32:36Z",
+          "message": "Merge 22df0f37e87b4a7f8f14536aaf97f4a8e9523009 into 7780c8b5a83e6290289f3901555f0b63bf5704e8\n"
+        },
+        {
+          "sha": "22df0f37e87b4a7f8f14536aaf97f4a8e9523009",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T04:32:22-07:00",
+          "message": "fix(git): a PR lookup's logged duration starts at its slot, not at its place in the queue (candybar-gather-renderer-76bb.6pj.2nv)\n"
         },
         {
           "sha": "73bec3fe07f172471c207878ee3019c578deb5c5",

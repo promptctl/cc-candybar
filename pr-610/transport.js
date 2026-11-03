@@ -78553,8 +78553,11 @@ var GitDataProvider = class {
     const key = pr.key;
     if (pr.inFlight?.key === key) return pr.inFlight.done;
     const remote = pr.remote;
-    const startedAt = this.clock.monotonic();
-    const lookup = remote.kind === "ok" ? this.forgeLookups.run(() => this.inner.resolvePullRequest(state.root, remote.value)).catch(threw("PR lookup")) : Promise.resolve(remote.kind === "failed" ? remote : ABSENT2);
+    let startedAt = this.clock.monotonic();
+    const lookup = remote.kind === "ok" ? this.forgeLookups.run(() => {
+      startedAt = this.clock.monotonic();
+      return this.inner.resolvePullRequest(state.root, remote.value);
+    }).catch(threw("PR lookup")) : Promise.resolve(remote.kind === "failed" ? remote : ABSENT2);
     const done2 = lookup.then((outcome) => {
       if (pr.inFlight?.key === key) pr.inFlight = null;
       if (this.repos.get(state.root) !== state) return;
