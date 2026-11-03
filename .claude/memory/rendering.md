@@ -2,7 +2,7 @@
 
 ## One path
 
-The daemon draws every bar. The check command, the demo and the tests call the same functions. The demo pushes a faked hook event through the daemon's own state, payload and render functions, so it has no payload of its own to drift. There is no parallel renderer and no fallback computation.
+The daemon draws every bar. The check command, the demo and the tests call the same functions. The demo pushes a faked hook event through the daemon's own state, payload and render functions, so it has no payload of its own to drift. The check command stamps a fixture document and composes its payload through the daemon's own composition, so a field the daemon's payload needs is a compile error in the fixture. There is no parallel renderer and no fallback computation.
 
 ## One instant per render
 
@@ -18,7 +18,7 @@ Every template a draw evaluates is a derived part of the view's store, and it is
 
 ## A draw writes no input
 
-A session view's payload is derived from its declaration, the session's picks and the histories' depths, and its inputs derive from it, so a cache policy over the payload reruns in the turn its fact moves (a request's arrival, a lane's landing, a click), never inside a draw. What moves with the instant (`today`, `feeds`, `drawing`) cannot live in the payload, since it would change every frame, so each draw projects it for itself. A selection's `.effective` comes from its slot, outside the payload, so a rule reading any `.effective` would read its own answer, and the loader refuses it. A refresh that throws stores nothing of its own, so its failure is kept per session and lane; without that, the lane would read as not answered forever.
+A session view's payload is composed from its facts document, the hook, the hints, the session's picks and the histories' depths, stamped as one turn, and its inputs derive from it, so a cache policy over the payload reruns in the turn its fact moves (a request's arrival, a lane's landing, a click), never inside a draw. What moves with the instant (`today`, `feeds`, `drawing`) cannot live in the payload, since it would change every frame, so each draw projects it for itself. A selection's `.effective` comes from its slot, outside the payload, so a rule reading any `.effective` would read its own answer, and the loader refuses it. A refresh that throws stores nothing of its own, so its failure is kept per session and lane; without that, the lane would read as not answered forever.
 
 ## Templates
 

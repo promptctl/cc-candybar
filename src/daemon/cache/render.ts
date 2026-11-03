@@ -1418,37 +1418,47 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
   // [LAW:single-enforcer] The view's inputs and slots read its source from
   // here on (src/dsl/parts.ts): no draw writes one.
   const sourceStops: Array<() => void> = [];
-  const source = sourceOf({
-    sessionId,
-    state,
-    store: registry.variableStore,
-    declared: () => declared.get(),
-    onDispose: (stopSource) => sourceStops.push(stopSource),
-  });
+  // What the view took, released whole: by its disposal, and by an opening
+  // that fails after taking it.
+  const release = () => {
+    stop();
+    for (const stopSource of sourceStops) stopSource();
+    holds.close();
+    return registry.dispose();
+  };
+  // [LAW:no-silent-failure] A source that throws in its opening turn fails the
+  // open, which the cache records and reports; what the open took is released
+  // first, so a session that keeps failing to open leaks nothing.
+  let source: S;
+  try {
+    source = sourceOf({
+      sessionId,
+      state,
+      store: registry.variableStore,
+      declared: () => declared.get(),
+      onDispose: (stopSource) => sourceStops.push(stopSource),
+    });
+  } catch (e) {
+    release();
+    throw e;
+  }
   bindView(state.compiled, registry.variableStore, registry, source);
   // [LAW:single-enforcer] The view's one say that what it draws from moved:
-  // its payload (its request, its picks), every lane it declared, plugin
-  // sources included (`today`'s day sums, which only a draw's projection
-  // reads, among them), its
-  // selections, or what its own or its directory's sources published. Told
-  // as it opens, since a view opening is what its session's bar draws from
-  // changing. The draw writes none of these (step 4e), so no frame wakes the
-  // next one.
+  // its payload (a fold of its turn: the document with every lane the view
+  // declared, plugin sources and `today`'s day sums among them, its request,
+  // its picks and the depths of its histories), its selections, or what its
+  // own or its directory's sources published. Told as it opens, since a view
+  // opening is what its session's bar draws from changing. The draw writes
+  // none of these (step 4e), so no frame wakes the next one.
   // [LAW:no-silent-failure] A tracked read that throws is logged: a reaction
   // that let it go would reach only the console MobX prints to.
   const stopChanged = reaction(
-    () => {
-      const { sources, ...keyed } = declared.get().lanes;
-      return [
-        source.payload(),
-        source.selections(),
-        registry.published(),
-        state.registry.published(),
-        ...[...Object.values(keyed), ...sources.values()].map((lane) =>
-          lane.current(),
-        ),
-      ];
-    },
+    () => [
+      source.payload(),
+      source.selections(),
+      registry.published(),
+      state.registry.published(),
+    ],
     () => changed(sessionId),
     {
       equals: compareShallow,
@@ -1473,11 +1483,8 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
     lastRenderCellsBySegment: new Map<string, readonly RichText[]>(),
     retire: stopChanged,
     dispose: () => {
-      stop();
       stopChanged();
-      for (const stopSource of sourceStops) stopSource();
-      holds.close();
-      return registry.dispose();
+      return release();
     },
   };
 }

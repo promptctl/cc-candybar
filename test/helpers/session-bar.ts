@@ -12,7 +12,7 @@ import type { RichText } from "@promptctl/rich-js";
 import { DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
 import { resolveEffectiveGlobals } from "../../src/config/effective-globals";
 import { perSetting } from "../../src/config/setting-projections";
-import { checkPayload, checkToday } from "../../src/check";
+import { checkPayload } from "../../src/check";
 import { renderOptionsOf } from "../../src/daemon/render-payload";
 import type { Frame } from "../../src/render/frame";
 import { SessionState } from "../../src/daemon/session-state";
@@ -68,7 +68,7 @@ export function sessionBar(configSource: string, cols: number): SessionBar {
     render: (at, shown = (payload) => payload) => {
       const effective = resolveEffectiveGlobals(config, (key) => session.get(SID, key), () => false);
       const payload = {
-        ...shown({ ...checkPayload(config, effective, null, at), today: checkToday(at) }),
+        ...shown(checkPayload(config, effective, null, at)),
         resettable: perSetting(() => false),
         unsaved: 0,
         history: { undo: 0, redo: 0 },

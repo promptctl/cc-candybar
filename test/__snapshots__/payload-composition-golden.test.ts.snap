@@ -15,10 +15,6 @@ exports[`\`check\`'s representative payload preset compact: the payload and its 
       "lower": 300000,
       "window": 400000,
     },
-    "block": {
-      "nativeUtilization": 63,
-      "resetsAt": 1700007200,
-    },
     "cache": {
       "expiresAt": 1700000900,
     },
@@ -84,6 +80,7 @@ exports[`\`check\`'s representative payload preset compact: the payload and its 
       "linesAdded": 512,
       "linesRemoved": 88,
       "messageCount": 8,
+      "nonPrompts": 0,
       "responseTime": 4.2,
       "sessionDuration": 930,
     },
@@ -102,6 +99,16 @@ exports[`\`check\`'s representative payload preset compact: the payload and its 
       "bundled": true,
       "customized": false,
       "effective": "compact",
+    },
+    "rate_limits": {
+      "five_hour": {
+        "resets_at": 1700007200,
+        "used_percentage": 63,
+      },
+      "seven_day": {
+        "resets_at": 1700432000,
+        "used_percentage": 21,
+      },
     },
     "renderer": {
       "effective": "claude",
@@ -256,6 +263,7 @@ exports[`\`check\`'s representative payload preset default: the payload and its 
       "linesAdded": 512,
       "linesRemoved": 88,
       "messageCount": 8,
+      "nonPrompts": 0,
       "responseTime": 4.2,
       "sessionDuration": 930,
     },
@@ -274,6 +282,16 @@ exports[`\`check\`'s representative payload preset default: the payload and its 
       "bundled": true,
       "customized": false,
       "effective": "default",
+    },
+    "rate_limits": {
+      "five_hour": {
+        "resets_at": 1700007200,
+        "used_percentage": 63,
+      },
+      "seven_day": {
+        "resets_at": 1700432000,
+        "used_percentage": 21,
+      },
     },
     "renderer": {
       "effective": "claude",
@@ -428,6 +446,7 @@ exports[`\`check\`'s representative payload preset dense: the payload and its da
       "linesAdded": 512,
       "linesRemoved": 88,
       "messageCount": 8,
+      "nonPrompts": 0,
       "responseTime": 4.2,
       "sessionDuration": 930,
     },
@@ -446,6 +465,16 @@ exports[`\`check\`'s representative payload preset dense: the payload and its da
       "bundled": true,
       "customized": false,
       "effective": "dense",
+    },
+    "rate_limits": {
+      "five_hour": {
+        "resets_at": 1700007200,
+        "used_percentage": 63,
+      },
+      "seven_day": {
+        "resets_at": 1700432000,
+        "used_percentage": 21,
+      },
     },
     "renderer": {
       "effective": "claude",
@@ -531,10 +560,6 @@ exports[`\`check\`'s representative payload preset git: the payload and its day 
       "lower": 300000,
       "window": 400000,
     },
-    "block": {
-      "nativeUtilization": 63,
-      "resetsAt": 1700007200,
-    },
     "cache": {
       "expiresAt": 1700000900,
     },
@@ -600,6 +625,7 @@ exports[`\`check\`'s representative payload preset git: the payload and its day 
       "linesAdded": 512,
       "linesRemoved": 88,
       "messageCount": 8,
+      "nonPrompts": 0,
       "responseTime": 4.2,
       "sessionDuration": 930,
     },
@@ -618,6 +644,16 @@ exports[`\`check\`'s representative payload preset git: the payload and its day 
       "bundled": true,
       "customized": false,
       "effective": "git",
+    },
+    "rate_limits": {
+      "five_hour": {
+        "resets_at": 1700007200,
+        "used_percentage": 63,
+      },
+      "seven_day": {
+        "resets_at": 1700432000,
+        "used_percentage": 21,
+      },
     },
     "renderer": {
       "effective": "claude",
@@ -707,6 +743,9 @@ exports[`\`check\`'s representative payload preset usage: the payload and its da
       "nativeUtilization": 63,
       "resetsAt": 1700007200,
     },
+    "burn": {
+      "costPerHour": 1.5096774193548388,
+    },
     "cache": {
       "expiresAt": 1700000900,
     },
@@ -772,6 +811,7 @@ exports[`\`check\`'s representative payload preset usage: the payload and its da
       "linesAdded": 512,
       "linesRemoved": 88,
       "messageCount": 8,
+      "nonPrompts": 0,
       "responseTime": 4.2,
       "sessionDuration": 930,
     },
@@ -790,6 +830,16 @@ exports[`\`check\`'s representative payload preset usage: the payload and its da
       "bundled": true,
       "customized": false,
       "effective": "usage",
+    },
+    "rate_limits": {
+      "five_hour": {
+        "resets_at": 1700007200,
+        "used_percentage": 63,
+      },
+      "seven_day": {
+        "resets_at": 1700432000,
+        "used_percentage": 21,
+      },
     },
     "renderer": {
       "effective": "claude",
@@ -879,6 +929,9 @@ exports[`\`check\`'s representative payload preset verbose: the payload and its 
       "nativeUtilization": 63,
       "resetsAt": 1700007200,
     },
+    "burn": {
+      "costPerHour": 1.5096774193548388,
+    },
     "cache": {
       "expiresAt": 1700000900,
     },
@@ -944,6 +997,7 @@ exports[`\`check\`'s representative payload preset verbose: the payload and its 
       "linesAdded": 512,
       "linesRemoved": 88,
       "messageCount": 8,
+      "nonPrompts": 0,
       "responseTime": 4.2,
       "sessionDuration": 930,
     },
@@ -962,6 +1016,16 @@ exports[`\`check\`'s representative payload preset verbose: the payload and its 
       "bundled": true,
       "customized": false,
       "effective": "verbose",
+    },
+    "rate_limits": {
+      "five_hour": {
+        "resets_at": 1700007200,
+        "used_percentage": 63,
+      },
+      "seven_day": {
+        "resets_at": 1700432000,
+        "used_percentage": 21,
+      },
     },
     "renderer": {
       "effective": "claude",
@@ -1047,10 +1111,6 @@ exports[`\`check\`'s representative payload preset zen: the payload and its day 
       "lower": 300000,
       "window": 400000,
     },
-    "block": {
-      "nativeUtilization": 63,
-      "resetsAt": 1700007200,
-    },
     "cache": {
       "expiresAt": 1700000900,
     },
@@ -1116,6 +1176,7 @@ exports[`\`check\`'s representative payload preset zen: the payload and its day 
       "linesAdded": 512,
       "linesRemoved": 88,
       "messageCount": 8,
+      "nonPrompts": 0,
       "responseTime": 4.2,
       "sessionDuration": 930,
     },
@@ -1134,6 +1195,16 @@ exports[`\`check\`'s representative payload preset zen: the payload and its day 
       "bundled": true,
       "customized": false,
       "effective": "zen",
+    },
+    "rate_limits": {
+      "five_hour": {
+        "resets_at": 1700007200,
+        "used_percentage": 63,
+      },
+      "seven_day": {
+        "resets_at": 1700432000,
+        "used_percentage": 21,
+      },
     },
     "renderer": {
       "effective": "claude",
@@ -1208,6 +1279,10 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset com
 
 exports[`a session's view, drawn from fixed owners at a fixed instant preset compact: the payload a template reads 1`] = `
 {
+  "activity": {
+    "kind": "pending",
+    "why": "unread",
+  },
   "animationSpeed": {
     "effective": "1x",
   },
@@ -1219,6 +1294,10 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset com
     "higher": 500000,
     "lower": 300000,
     "window": 400000,
+  },
+  "cache": {
+    "kind": "pending",
+    "why": "unread",
   },
   "colorCompatibility": {
     "effective": "truecolor",
@@ -1263,9 +1342,22 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset com
   },
   "home": "/home/tester",
   "hook_event_name": "Status",
-  "host": {},
+  "host": {
+    "name": {
+      "kind": "pending",
+      "why": "unread",
+    },
+    "user": {
+      "kind": "pending",
+      "why": "unread",
+    },
+  },
   "menuTimeout": {
     "effective": 120,
+  },
+  "metrics": {
+    "kind": "pending",
+    "why": "unread",
   },
   "model": {
     "display_name": "M",
@@ -1317,9 +1409,17 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset com
     "variation": false,
   },
   "resumeCommand": "cd /home/tester/code/project && claude --resume golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
+  "session": {
+    "kind": "pending",
+    "why": "unread",
+  },
   "session_id": "golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
   "shade": {
     "effective": "middle",
+  },
+  "speed": {
+    "kind": "pending",
+    "why": "unread",
   },
   "term": {
     "cols": 118,
@@ -1329,6 +1429,10 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset com
   },
   "tmux": {
     "pane": "%7",
+    "session": {
+      "kind": "pending",
+      "why": "unread",
+    },
   },
   "transcript_path": "/home/tester/code/project/golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a.jsonl",
   "transitions": {
@@ -1430,6 +1534,10 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset def
   "menuTimeout": {
     "effective": 120,
   },
+  "metrics": {
+    "kind": "pending",
+    "why": "unread",
+  },
   "model": {
     "display_name": "M",
     "id": "m",
@@ -1480,9 +1588,17 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset def
     "variation": false,
   },
   "resumeCommand": "cd /home/tester/code/project && claude --resume golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
+  "session": {
+    "kind": "pending",
+    "why": "unread",
+  },
   "session_id": "golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
   "shade": {
     "effective": "middle",
+  },
+  "speed": {
+    "kind": "pending",
+    "why": "unread",
   },
   "term": {
     "cols": 118,
@@ -1492,6 +1608,10 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset def
   },
   "tmux": {
     "pane": "%7",
+    "session": {
+      "kind": "pending",
+      "why": "unread",
+    },
   },
   "transcript_path": "/home/tester/code/project/golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a.jsonl",
   "transitions": {
@@ -1593,6 +1713,10 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset den
   "menuTimeout": {
     "effective": 120,
   },
+  "metrics": {
+    "kind": "pending",
+    "why": "unread",
+  },
   "model": {
     "display_name": "M",
     "id": "m",
@@ -1651,6 +1775,10 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset den
   "shade": {
     "effective": "middle",
   },
+  "speed": {
+    "kind": "pending",
+    "why": "unread",
+  },
   "term": {
     "cols": 118,
   },
@@ -1659,6 +1787,10 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset den
   },
   "tmux": {
     "pane": "%7",
+    "session": {
+      "kind": "pending",
+      "why": "unread",
+    },
   },
   "transcript_path": "/home/tester/code/project/golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a.jsonl",
   "transitions": {
@@ -1702,6 +1834,10 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset git
     "higher": 500000,
     "lower": 300000,
     "window": 400000,
+  },
+  "cache": {
+    "kind": "pending",
+    "why": "unread",
   },
   "colorCompatibility": {
     "effective": "truecolor",
@@ -1753,6 +1889,10 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset git
   "menuTimeout": {
     "effective": 120,
   },
+  "metrics": {
+    "kind": "pending",
+    "why": "unread",
+  },
   "model": {
     "display_name": "M",
     "id": "m",
@@ -1803,9 +1943,17 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset git
     "variation": false,
   },
   "resumeCommand": "cd /home/tester/code/project && claude --resume golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
+  "session": {
+    "kind": "pending",
+    "why": "unread",
+  },
   "session_id": "golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
   "shade": {
     "effective": "middle",
+  },
+  "speed": {
+    "kind": "pending",
+    "why": "unread",
   },
   "term": {
     "cols": 118,
@@ -1815,6 +1963,10 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset git
   },
   "tmux": {
     "pane": "%7",
+    "session": {
+      "kind": "pending",
+      "why": "unread",
+    },
   },
   "transcript_path": "/home/tester/code/project/golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a.jsonl",
   "transitions": {
@@ -1916,6 +2068,10 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset nul
   "menuTimeout": {
     "effective": 120,
   },
+  "metrics": {
+    "kind": "pending",
+    "why": "unread",
+  },
   "model": {
     "display_name": "M",
     "id": "m",
@@ -1966,9 +2122,17 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset nul
     "variation": false,
   },
   "resumeCommand": "cd /home/tester/code/project && claude --resume golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
+  "session": {
+    "kind": "pending",
+    "why": "unread",
+  },
   "session_id": "golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
   "shade": {
     "effective": "middle",
+  },
+  "speed": {
+    "kind": "pending",
+    "why": "unread",
   },
   "term": {
     "cols": 118,
@@ -1978,6 +2142,10 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset nul
   },
   "tmux": {
     "pane": "%7",
+    "session": {
+      "kind": "pending",
+      "why": "unread",
+    },
   },
   "transcript_path": "/home/tester/code/project/golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a.jsonl",
   "transitions": {
@@ -2011,6 +2179,10 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset usa
 
 exports[`a session's view, drawn from fixed owners at a fixed instant preset usage: the payload a template reads 1`] = `
 {
+  "activity": {
+    "kind": "pending",
+    "why": "unread",
+  },
   "animationSpeed": {
     "effective": "1x",
   },
@@ -2076,7 +2248,16 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset usa
   },
   "home": "/home/tester",
   "hook_event_name": "Status",
-  "host": {},
+  "host": {
+    "name": {
+      "kind": "pending",
+      "why": "unread",
+    },
+    "user": {
+      "kind": "pending",
+      "why": "unread",
+    },
+  },
   "menuTimeout": {
     "effective": 120,
   },
@@ -2154,6 +2335,10 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset usa
   },
   "tmux": {
     "pane": "%7",
+    "session": {
+      "kind": "pending",
+      "why": "unread",
+    },
   },
   "transcript_path": "/home/tester/code/project/golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a.jsonl",
   "transitions": {
@@ -2188,6 +2373,10 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset ver
 
 exports[`a session's view, drawn from fixed owners at a fixed instant preset verbose: the payload a template reads 1`] = `
 {
+  "activity": {
+    "kind": "pending",
+    "why": "unread",
+  },
   "animationSpeed": {
     "effective": "1x",
   },
@@ -2253,7 +2442,16 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset ver
   },
   "home": "/home/tester",
   "hook_event_name": "Status",
-  "host": {},
+  "host": {
+    "name": {
+      "kind": "pending",
+      "why": "unread",
+    },
+    "user": {
+      "kind": "pending",
+      "why": "unread",
+    },
+  },
   "menuTimeout": {
     "effective": 120,
   },
@@ -2331,6 +2529,10 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset ver
   },
   "tmux": {
     "pane": "%7",
+    "session": {
+      "kind": "pending",
+      "why": "unread",
+    },
   },
   "transcript_path": "/home/tester/code/project/golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a.jsonl",
   "transitions": {
@@ -2360,6 +2562,10 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset zen
 
 exports[`a session's view, drawn from fixed owners at a fixed instant preset zen: the payload a template reads 1`] = `
 {
+  "activity": {
+    "kind": "pending",
+    "why": "unread",
+  },
   "animationSpeed": {
     "effective": "1x",
   },
@@ -2371,6 +2577,10 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset zen
     "higher": 500000,
     "lower": 300000,
     "window": 400000,
+  },
+  "cache": {
+    "kind": "pending",
+    "why": "unread",
   },
   "colorCompatibility": {
     "effective": "truecolor",
@@ -2415,9 +2625,22 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset zen
   },
   "home": "/home/tester",
   "hook_event_name": "Status",
-  "host": {},
+  "host": {
+    "name": {
+      "kind": "pending",
+      "why": "unread",
+    },
+    "user": {
+      "kind": "pending",
+      "why": "unread",
+    },
+  },
   "menuTimeout": {
     "effective": 120,
+  },
+  "metrics": {
+    "kind": "pending",
+    "why": "unread",
   },
   "model": {
     "display_name": "M",
@@ -2469,9 +2692,17 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset zen
     "variation": false,
   },
   "resumeCommand": "cd /home/tester/code/project && claude --resume golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
+  "session": {
+    "kind": "pending",
+    "why": "unread",
+  },
   "session_id": "golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
   "shade": {
     "effective": "middle",
+  },
+  "speed": {
+    "kind": "pending",
+    "why": "unread",
   },
   "term": {
     "cols": 118,
@@ -2481,6 +2712,10 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset zen
   },
   "tmux": {
     "pane": "%7",
+    "session": {
+      "kind": "pending",
+      "why": "unread",
+    },
   },
   "transcript_path": "/home/tester/code/project/golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a.jsonl",
   "transitions": {

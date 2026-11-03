@@ -47,7 +47,6 @@ import {
 } from "../render/frame.js";
 import {
   renderOptionsOf,
-  renderWidth,
   gitOptionsFromClosure,
   prFactOf,
   sourcesFactOf,
@@ -478,22 +477,25 @@ export function drawRender(
   // readers, so a label can never disagree with the bar. The precedence
   // the resolver applies, and why each rung sits where it does, lives
   // with the chain (resolveEffectiveGlobals, and src/config/presets.ts).
+  // [LAW:one-source-of-truth] One turn of the view's source: the payload, the
+  // globals and the document are all of the same stamped turn, and what the
+  // draw takes of the client from it (its tmux pane, its width) is read off
+  // the payload, so a draw never mixes a turn with a request it was not
+  // composed from.
+  const payload = view.source.payload();
   const effective = view.source.effective();
+  const failure = view.source.failure();
   // Which animation lanes this session's settings switch on, as drawn.
-  const lanes = laneSwitches(effective, inTmux(view.facts().hints.tmux));
+  const lanes = laneSwitches(effective, payload.tmux !== undefined);
   noteFacts(facts, {
     lanes: LANE_NAMES.filter((lane) => lanes[lane]).join(",") || "-",
   });
-  // [LAW:one-source-of-truth] The width is `renderWidth` of the hints the
-  // view draws by — the client's cols, else the default, less Claude Code's
-  // reserve — the same request its payload carries as `term.cols`.
+  // [LAW:one-source-of-truth] The width is `renderWidth` of the turn's hints —
+  // the client's cols, else the default, less Claude Code's reserve — which
+  // its payload carries as `term.cols`.
   const { hints } = view.facts();
-  const width = renderWidth(hints);
+  const width = payload.term.cols;
   noteFacts(facts, { width: String(width) });
-  // [LAW:one-source-of-truth] What the view keeps, and the facts of this
-  // draw's own instant (DRAW_PROJECTIONS): who it is for, the frames each
-  // lane was sent in the second up to it, and the day `today` sums.
-  const payload = view.source.payload();
   // [LAW:no-ambient-temporal-coupling] The click error dispatch held for this
   // session, at this draw's instant and for whom it draws: shown by every
   // render inside its hold, and past it by a request until an answer has
@@ -562,6 +564,16 @@ export function drawRender(
     ...(entry.lastWarning === null
       ? []
       : [{ kind: "load" as const, message: entry.lastWarning }]),
+    // [LAW:no-silent-failure] A turn that could not be stamped leaves the bar
+    // drawn from the last one that was, so the bar says it is behind.
+    ...(failure === null
+      ? []
+      : [
+          {
+            kind: "facts" as const,
+            message: `the bar is drawn from the last facts that were read; the next could not be stamped: ${failure}`,
+          },
+        ]),
   ];
   // [LAW:one-source-of-truth] ONE list per draw, built before it: the door's
   // indicator reads it as the `diagnostics` projection and the viewer pages
@@ -731,6 +743,7 @@ export function drawRender(
       case "file-events":
         return `${w.kind}:${w.state}`;
       case "load":
+      case "facts":
       case "config-watch":
       case "lifeline":
       case "launch-pipes":
@@ -810,12 +823,20 @@ interface ConfigWatchWarning {
   readonly message: string;
 }
 
+// The facts the bar is drawn from are behind: the latest turn could not be
+// stamped.
+interface FactsWarning {
+  readonly kind: "facts";
+  readonly message: string;
+}
+
 // What stands before a draw, whatever the draw then meets.
 type StandingWarning =
   | FileEventsWarning
   | LauncherWarning
   | ConfigWatchWarning
-  | LoadWarning;
+  | LoadWarning
+  | FactsWarning;
 
 // What one render drew: the body — the bar, or the viewer in its place — and
 // what the statusline's handoff line is drawn from: whether the body is the

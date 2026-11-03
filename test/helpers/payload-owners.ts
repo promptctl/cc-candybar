@@ -40,13 +40,16 @@ import {
 } from "../../src/utils/outcome";
 import { settledLane, type Current, type Lane } from "../../src/utils/reading";
 import { HostService } from "../../src/segments/host";
+import { assembleFacts } from "../../src/daemon/facts-assembly";
+import { instantOf } from "../../src/utils/instant";
 import {
+  composePayload,
   declareLanes,
-  projectPayload,
   readingsOf,
   settlePayload,
   todayOf,
   type ConfigFileFacts,
+  type DrawInputs,
   type DrawnPayload,
   type KeyedOwners,
   type PayloadInputs,
@@ -131,13 +134,30 @@ export function fakeGit(
 }
 
 // The payload a view's source derives, over the owners the inputs name and the
-// sources a config declares (none, unless given).
+// sources a config declares (none, unless given): the facts document stamped
+// from what the owners hold, and the payload composed from it.
 export function payloadOf(
   inputs: PayloadInputs,
-  draw: Parameters<typeof projectPayload>[1],
+  draw: DrawInputs,
   declared: Parameters<typeof readingsOf>[1] = new Map(),
 ) {
-  return projectPayload(inputs, draw, readingsOf(inputs, declared).lanes);
+  const document = assembleFacts(
+    undefined,
+    sessionIdOf(inputs.hookData.session_id),
+    readingsOf(inputs, declared),
+    pendingOf("unread"),
+    instantOf(new Date(0)),
+  );
+  return composePayload(
+    document,
+    {
+      hookData: inputs.hookData,
+      hints: inputs.hints,
+      neededInputPaths: inputs.neededInputPaths,
+      home: inputs.deps.home,
+    },
+    draw,
+  );
 }
 
 export function fakeTmux(read: (holds: Holds, hint: TmuxHint) => Loose) {
