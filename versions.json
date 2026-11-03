@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-613",
+      "ref": "refs/pull/613/merge",
+      "sha": "74a3907f216e0044ced7ace7e1f9eca1a719689f",
+      "timestamp": "2026-11-03T14:11:07.405Z",
+      "commits": [
+        {
+          "sha": "74a3907f216e0044ced7ace7e1f9eca1a719689f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T07:10:07-07:00",
+          "message": "Merge f7fe34974b133653dea928cd26bd8d4cf8121d88 into d05718f5dc3d1b63c32060d3455f649c9af05c8a\n"
+        },
+        {
+          "sha": "f7fe34974b133653dea928cd26bd8d4cf8121d88",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T07:09:54-07:00",
+          "message": "feat(facts): the draw's today and sources count are read from the document (candybar-gather-renderer-76bb.6pj.ktv)\n\nThe today fact now carries everything the draw's day projection reads: the\ndirectory's day sums and the rendering session's own days, with the session's\ningest failure as the fact failing. projectToday is a pure function of that\nfact and the draw's instant, so todayOf takes no store, lane or ledger, and\nthe draw and the demo read the view's document. The render event's source\ncounts read the document's sources too. check projects a fixture fact through\nthe same todayOf, so CHECK_TODAY is gone.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-612",
       "ref": "refs/pull/612/merge",
       "sha": "3301190ae3b872ba8988621fddbaeaa40a6b76a4",
