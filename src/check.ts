@@ -48,7 +48,6 @@ import {
 } from "./config/dsl-loader.js";
 import { chainName, cliConfigTarget } from "./config-hint.js";
 import { explicitConfigPath } from "./utils/user-path.js";
-import { autoCompactControls } from "./segments/autocompact.js";
 import type { ValidatedConfig } from "./config/dsl-types.js";
 import { DEFAULT_DSL_CONFIG } from "./config/default-dsl-config.js";
 import { VariableStore } from "./var-system/store.js";
@@ -67,18 +66,27 @@ import {
 import { ansiOf, type Frame } from "./render/frame.js";
 import type { Gates } from "./daemon/foundations/gates.js";
 import { daemonGates } from "./daemon/update-keys.js";
-import { resumeCommand } from "./claude-resume.js";
 import { instantOf, type Instant } from "./utils/instant.js";
 import { perSetting } from "./config/setting-projections.js";
 import { effectivePresetName, presetNames } from "./config/presets.js";
 import {
-  effectiveInputs,
-  projectSources,
+  buildNeededPrefixes,
+  composePayload,
   renderOptionsOf,
   todayOf,
+  type Readings,
   type RenderPayload,
   type ViewPayload,
 } from "./daemon/render-payload.js";
+import { assembleFacts } from "./daemon/facts-assembly.js";
+import { sessionIdOf } from "./daemon/session-id.js";
+import type { ClientHints } from "./daemon/protocol.js";
+import type { ClaudeHookData } from "./utils/claude.js";
+import type { GitInfo } from "./segments/git.js";
+import type { UsageInfo } from "./segments/session.js";
+import type { ContextInfo } from "./segments/context.js";
+import type { MetricsInfo } from "./segments/metrics.js";
+import type { AutoCompactWindow } from "./segments/autocompact.js";
 import { oneDay, type TodayFacts } from "./daemon/cache/today-facts.js";
 import { ABSENT, ok } from "./utils/outcome.js";
 import {
@@ -160,20 +168,18 @@ function bindPass(
     compiled,
     store,
     registry,
-    {
-      ...checkPayload(config, effective, layers.at(-1) ?? null, at),
-      today: checkToday(at),
-    },
+    checkPayload(config, effective, layers.at(-1) ?? null, at),
     opts,
     effective,
   );
   return { drawn, opts };
 }
 
-// One faked Claude Code hook event, shaped like the daemon's augmented payload
-// (see src/daemon/render-payload.ts) — the `input` vars read out of it by their
-// dotted `path`. [LAW:verifiable-goals] It is deliberately RICH (dirty git with
-// every worktree count, an upstream, a stash, a recent commit; home set; live
+// What `check` composes its representative payload from: one faked Claude Code
+// session whose owners all answer, as typed readings, through the same
+// composition (`composePayload`) the daemon's view draws through.
+// [LAW:verifiable-goals] It is deliberately RICH (dirty git with every
+// worktree count, an upstream, a stash, a recent commit; home set; live
 // session/today/context/metrics/rate-limit data) so gated segments actually
 // RENDER their content instead of gating off. A minimal payload would let a
 // field-name typo in the git/directory/metrics/budget branches slip through —
@@ -188,35 +194,36 @@ function bindPass(
 // values (780s → "◷ 13m", cost $0.39, version 1.15.0, …); changing one here
 // fails that suite loudly rather than drifting silently.
 //
-// [LAW:types-are-the-program] Typed as the payload a view draws from, less
-// `term`, which the draw writes from its width (bindPayload): a field the
-// daemon's payload requires — every declared source's reading among them — is
-// a compile error here until the fixture carries it.
-export type CheckPayload = Omit<ViewPayload, "term">;
+// [LAW:types-are-the-program] The readings are the owners' own types, so a
+// field the daemon's payload requires is a compile error here until the
+// fixture carries it. `term` is the draw's (bindPayload writes it from the
+// width), so it is left out; `today` is the draw's projection of the
+// document's `today` fact, handed beside the payload as a draw hands it.
+export type CheckPayload = Omit<ViewPayload, "term"> & {
+  readonly today: ReturnType<typeof todayOf>;
+};
 
-export function checkPayload(
-  config: Pick<ValidatedConfig, "variables">,
-  effective: EffectiveGlobals,
-  configPath: string | null,
-  // The instant the render this payload feeds is drawn at, so its reset times
-  // sit where the render's own countdowns measure them from.
-  at: Instant,
-): CheckPayload {
-  const home = "/home/tester";
+const CHECK_HOME = "/home/tester";
+const CHECK_SESSION = sessionIdOf("test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b");
+
+// The hints the fixture's client sends: in tmux pane `%0`, and `ssh: true` for
+// the same reason `tmux.session` is populated — this fixture deliberately
+// satisfies every gate so a when-gated segment RENDERS and its template gets
+// checked. A local-looking fixture would gate the host segment off and let a
+// typo inside it ship.
+const CHECK_HINTS: ClientHints = {
+  tmux: { socket: "/tmp/tmux.sock", pane: "%0", truecolor: null },
+  ssh: true,
+};
+
+function checkHook(at: Instant): ClaudeHookData {
   const nowSec = Math.floor(at);
-  const sessionId = "test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b";
-  const workspace = {
-    current_dir: `${home}/code/cc-candybar/src`,
-    project_dir: `${home}/code/cc-candybar`,
-    added_dirs: [],
-  };
   return {
     hook_event_name: "Status",
-    session_id: sessionId,
+    session_id: CHECK_SESSION,
     version: "1.15.0",
-    home,
-    cwd: `${home}/code/cc-candybar/src`,
-    transcript_path: `${home}/.claude/projects/x/test.jsonl`,
+    cwd: `${CHECK_HOME}/code/cc-candybar/src`,
+    transcript_path: `${CHECK_HOME}/.claude/projects/x/test.jsonl`,
     model: { id: "claude-opus-4-8", display_name: "Opus 4.8" },
     // An effort level, so the model cell draws its effort gauge and gets that
     // template checked. Not max: max climbs a frame a second, and `check`
@@ -224,102 +231,169 @@ export function checkPayload(
     // it) would change from one second to the next. Every level computes
     // max's bubble, so xhigh evaluates it too.
     effort: { level: "xhigh" },
-    workspace,
-    git: {
-      repoName: "cc-candybar",
-      repoUrl: "https://github.com/promptctl/cc-candybar",
-      branch: "main",
-      sha: "abc1234",
-      ahead: 2,
-      behind: 1,
-      staged: 3,
-      unstaged: 2,
-      untracked: 1,
-      conflicts: 0,
-      upstream: "origin/main",
-      tracking: "tracked",
-      stash: 1,
-      status: "dirty",
-      operation: "rebase",
-      committedAt: nowSec - 780,
+    workspace: {
+      current_dir: `${CHECK_HOME}/code/cc-candybar/src`,
+      project_dir: `${CHECK_HOME}/code/cc-candybar`,
+      added_dirs: [],
     },
-    session: { cost: 0.39, tokens: 241400 },
-    context: { totalTokens: 48487, contextLeft: 24 },
-    metrics: {
-      lastResponseTime: 8.2,
-      responseTime: 4.2,
-      sessionDuration: 930,
-      messageCount: 8,
-      linesAdded: 512,
-      linesRemoved: 88,
+    rate_limits: {
+      five_hour: { used_percentage: 63, resets_at: nowSec + 2 * 3600 },
+      seven_day: { used_percentage: 21, resets_at: nowSec + 5 * 86400 },
     },
-    block: { nativeUtilization: 63, resetsAt: nowSec + 2 * 3600 },
-    weekly: { percentage: 21, resetsAt: nowSec + 5 * 86400 },
-    cache: { expiresAt: nowSec + 15 * 60 },
-    tmux: { pane: "%0", session: "work" },
-    // `ssh: true` for the same reason `tmux.session` is populated: this
-    // fixture deliberately satisfies every gate so a when-gated segment
-    // RENDERS and its template gets checked. A local-looking fixture would
-    // gate the host segment off and let a typo inside it ship.
-    host: { name: "tester-box", user: "tester", ssh: true },
-    // A set window with a step each way, through the daemon's own projection,
-    // so the when-gated `autocompact` control renders all of its cells.
-    autocompact: autoCompactControls(400_000, 1_000_000),
-    // [LAW:one-source-of-truth] The daemon's own projection of the resolved
-    // globals, so a `.preset.effective`/`.endcaps.effective` label is checked
-    // against the value it will actually show, never its declared default.
-    ...effectiveInputs(effective),
-    // One step each way, one change made since edit mode opened, one unsaved
-    // setting and every setting resettable, so every part of the settings
-    // menu's save cell, each control's ↺, and edit mode's save and cancel
-    // cells, each gated on having something to do, renders and gets its
-    // template checked.
-    history: { undo: 1, redo: 1, sinceEdit: 1 },
-    navigation: { back: 1 },
-    unsaved: 1,
-    resettable: perSetting(() => true) satisfies RenderPayload["resettable"],
-    // The field the theme gear's `⤓ default for <theme>` reads, spelled as the
-    // daemon spells it (themeDefaultSave, src/daemon/setting-drafts.ts): the
-    // theme in force, whose swatch the cell draws, and no save under a
-    // rule-chosen theme. Check opens no trigger, so it never draws the cell; a
-    // render that opens the gear over this payload does (settings-menu-seams).
-    themeDefault:
-      effective.theme.kind === "decided"
-        ? { differs: true, theme: effective.theme.name }
-        : { differs: false },
-    // A resume command (the daemon's own projection) and a config file, so
-    // the quick-action tray's value-gated `⎘ resume` and `↗ config` render
-    // and get checked. The config file is the one being checked, as the
-    // daemon's is the one it loaded, so a template that reads its siblings
-    // (the demo configs' switcher) is checked against where it really is;
-    // the bundled default has no file, and a stand-in keeps `↗ config` drawn.
-    resumeCommand: resumeCommand(workspace, sessionId, undefined),
-    configPath: configPath ?? `${home}/.config/cc-candybar/config.json5`,
-    // [LAW:one-source-of-truth] Every source the config declares reads
-    // absent, through the daemon's own projection: `check` runs no plugin
-    // program and has no session, and absent is what a session reads before
-    // its program first writes. So a segment gated on `hasKey` is hidden, and
-    // an unguarded read fails the check with the missing-field error that
-    // session's bar would draw.
-    ...projectSources(
-      Object.entries(config.variables).flatMap(([name, decl]) =>
-        decl.kind === "source" ? [name] : [],
-      ),
-      () => ABSENT,
-    ),
   };
 }
 
-// `today` is a fact of the draw's own instant, not of the view's payload
-// (DRAW_PROJECTIONS), so the fixture hands it to the draw beside the payload,
-// as the demo hands its draws theirs. [LAW:one-source-of-truth] It is the
-// daemon's own projection (`todayOf`) of a `today` fact holding one day's
-// sums, so `check` spells that number the way the document spells it.
-export function checkToday(at: Instant) {
-  return todayOf(
-    ok<TodayFacts>({ sums: oneDay(at, 12.5, 3_400_000), own: {} }),
+// What every owner reads for the fixture's session, each in the type the owner
+// gives it. Every declared source reads absent: `check` runs no plugin program
+// and has no session, and absent is what a session reads before its program
+// first writes. So a segment gated on `hasKey` is hidden, and an unguarded
+// read fails the check with the missing-field error that session's bar would
+// draw.
+function checkReadings(
+  config: Pick<ValidatedConfig, "variables">,
+  at: Instant,
+): Readings {
+  const nowSec = Math.floor(at);
+  const sources = Object.entries(config.variables).flatMap(([name, decl]) =>
+    decl.kind === "source" ? [name] : [],
+  );
+  return {
+    lanes: {
+      git: ok<GitInfo>({
+        branch: "main",
+        status: "dirty",
+        aheadBehind: ok({ ahead: 2, behind: 1 }),
+        head: ok("abc1234def5678"),
+        workingTree: { staged: 3, unstaged: 2, untracked: 1, conflicts: 0 },
+        sha: ok("abc1234"),
+        operation: ok("rebase"),
+        committedAt: ok(nowSec - 780),
+        stashCount: ok(1),
+        upstream: ok("origin/main"),
+        repoName: ok("cc-candybar"),
+        repoUrl: ok("https://github.com/promptctl/cc-candybar"),
+        // A branch with no PR: no PR keys, as the fixture has always had none.
+        pullRequest: ABSENT,
+      }),
+      usage: ok<UsageInfo>({
+        session: {
+          cost: 0.39,
+          calculatedCost: 0.39,
+          officialCost: null,
+          tokens: 241400,
+          tokenBreakdown: null,
+        },
+      }),
+      context: ok<ContextInfo>({
+        totalTokens: 48487,
+        percentage: 76,
+        contextLeftPercentage: 24,
+        maxTokens: 1_000_000,
+      }),
+      metrics: ok<MetricsInfo>({
+        lastResponseTime: 8.2,
+        responseTime: 4.2,
+        sessionDuration: 930,
+        messageCount: 8,
+        nonPrompts: 0,
+        linesAdded: 512,
+        linesRemoved: 88,
+      }),
+      activity: ABSENT,
+      tmuxSession: ok("work"),
+      hostName: ok("tester-box"),
+      hostUser: ok("tester"),
+      cache: ok(nowSec + 15 * 60),
+      speed: ABSENT,
+      // A set window with a step each way, so the when-gated `autocompact`
+      // control renders all of its cells.
+      autoCompact: ok<AutoCompactWindow>(400_000),
+      sources: new Map(sources.map((name) => [name, ABSENT])),
+    },
+    // [LAW:one-source-of-truth] One day's sums, which the draw projects to its
+    // own day (`todayOf`) as the daemon's draw does.
+    today: ok<TodayFacts>({ sums: oneDay(at, 12.5, 3_400_000), own: {} }),
+    gathered: {
+      git: true,
+      session: true,
+      today: true,
+      context: true,
+      metrics: true,
+      activity: true,
+      tmux: true,
+      hostName: true,
+      hostUser: true,
+      cache: true,
+      speed: true,
+      autocompact: true,
+    },
+    declaredSources: sources,
+    faults: [],
+  };
+}
+
+export function checkPayload(
+  config: ValidatedConfig,
+  effective: EffectiveGlobals,
+  configPath: string | null,
+  // The instant the render this payload feeds is drawn at, so its reset times
+  // sit where the render's own countdowns measure them from.
+  at: Instant,
+): CheckPayload {
+  const hookData = checkHook(at);
+  // [LAW:one-source-of-truth] The document is the session's, stamped once, and
+  // both the payload and the draw's `today` are read from it.
+  const document = assembleFacts(
+    undefined,
+    CHECK_SESSION,
+    checkReadings(config, at),
+    { ...ABSENT, at },
     at,
   );
+  const { term: _term, ...payload } = composePayload(
+    document,
+    {
+      hookData,
+      hints: CHECK_HINTS,
+      // The checked config's own closure, as the daemon gates by its own.
+      neededInputPaths: buildNeededPrefixes(config, effective.preset),
+      home: CHECK_HOME,
+    },
+    {
+      effective,
+      configFacts: {
+        // One change made since edit mode opened, one unsaved setting and every
+        // setting resettable, so every part of the settings menu's save cell,
+        // each control's ↺, and edit mode's save and cancel cells, each gated
+        // on having something to do, renders and gets its template checked.
+        unsaved: 1,
+        resettable: perSetting(
+          () => true,
+        ) satisfies RenderPayload["resettable"],
+        // The field the theme gear's `⤓ default for <theme>` reads, spelled as
+        // the daemon spells it (themeDefaultSave, src/daemon/setting-drafts.ts):
+        // the theme in force, whose swatch the cell draws, and no save under a
+        // rule-chosen theme. Check opens no trigger, so it never draws the cell;
+        // a render that opens the gear over this payload does
+        // (settings-menu-seams).
+        themeDefault:
+          effective.theme.kind === "decided"
+            ? { differs: true, theme: effective.theme.name }
+            : { differs: false },
+        // The config file is the one being checked, as the daemon's is the one
+        // it loaded, so a template that reads its siblings (the demo configs'
+        // switcher) is checked against where it really is; the bundled default
+        // has no file, and a stand-in keeps the quick-action tray's `↗ config`
+        // drawn.
+        configPath:
+          configPath ?? `${CHECK_HOME}/.config/cc-candybar/config.json5`,
+      },
+      // One step each way, so undo, redo and back render.
+      history: { undo: 1, redo: 1, sinceEdit: 1 },
+      back: 1,
+    },
+  );
+  return { ...payload, today: todayOf(document.builtins.today, at) };
 }
 
 // [LAW:dataflow-not-control-flow] The check result is DATA — a pure function of

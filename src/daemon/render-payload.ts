@@ -45,6 +45,7 @@ import {
   type GitInfo,
   type GitInfoOptions,
   type PrState,
+  type PullRequest,
   type Tracking,
 } from "../segments/git.js";
 import {
@@ -106,7 +107,12 @@ import {
   type RefreshLane,
 } from "./refresh-faults.js";
 import type { Fact } from "../facts/fact.js";
-import type { FactsDiagnostic, SourceValue } from "../facts/session-facts.js";
+import type {
+  FactsDiagnostic,
+  GitFacts as DocumentGitFacts,
+  SessionFacts,
+  SourceValue,
+} from "../facts/session-facts.js";
 import type { SessionId } from "./session-id.js";
 import type { ManagedStorage, StorageKey } from "./cache/managed-storage.js";
 import type { JsonValue } from "../var-system/types.js";
@@ -1446,21 +1452,62 @@ function firstPending(
   return lane?.kind === "pending" ? pendingOf(lane.why) : undefined;
 }
 
-// [LAW:one-source-of-truth] The one assembly of a view's payload: every
-// source as its owner holds it now, a value not answered yet as pending —
-// which the draw takes as its own outcome (the placement's loading cell).
-// Performs no I/O, refreshes nothing and reads no instant, so the session's
-// view keeps it as one computed (src/daemon/session-source.ts), recomputed in
-// the turn a fact it reads moves.
-export function projectPayload(
-  inputs: PayloadInputs,
+// What a payload is composed from besides the document: the hook's
+// instantaneous fields, the client's hints, the user's home and the closure
+// the config reads (which still gates what the document cannot, `burn`,
+// `block` and the autocompact wait).
+export type ComposeInputs = Pick<
+  PayloadInputs,
+  "hookData" | "hints" | "neededInputPaths"
+> & { readonly home: string | undefined };
+
+// [LAW:single-enforcer] The one place a fact's instant is dropped on the way to
+// a template: the payload carries what the owners hold, never when it first
+// differed, which only the document keeps.
+const unstamped = <T>(fact: Fact<T>): Reading<T> => {
+  switch (fact.kind) {
+    case "pending":
+      return fact;
+    case "absent":
+      return ABSENT;
+    case "ok":
+      return ok(fact.value);
+    case "failed":
+      return failed(fact.reason, fact.failedAt);
+  }
+};
+
+// [LAW:one-source-of-truth] The one assembly of a view's payload: the facts
+// document as its owners held it when it was stamped, a value not answered yet
+// as pending — which the draw takes as its own outcome (the placement's
+// loading cell). Performs no I/O, refreshes nothing and reads no instant, so
+// the session's view keeps it as one computed over its turn
+// (src/daemon/session-source.ts), and `check` composes its fixture document
+// through it.
+export function composePayload(
+  facts: SessionFacts,
+  inputs: ComposeInputs,
   draw: DrawInputs,
-  lanes: Lanes,
 ): ViewPayload {
   const { hookData, hints } = inputs;
   const { effective, configFacts } = draw;
   const { configPath, ...settingCounts } = configFacts;
   const want = wanted(inputs.neededInputPaths);
+  const built = facts.builtins;
+  const lanes = {
+    usage: unstamped(built.session),
+    context: unstamped(built.context),
+    metrics: unstamped(built.metrics),
+    activity: unstamped(built.activity),
+    cache: unstamped(built.cache),
+    speed: unstamped(built.speed),
+    autoCompact: unstamped(built.autocompact),
+    git: unstamped(built.git),
+    pr: unstamped(built.pr),
+    tmux: unstamped(built.tmux),
+    hostName: unstamped(built.hostName),
+    hostUser: unstamped(built.hostUser),
+  };
   // `over` is the total fold of one lane's reading into its payload field:
   // ok → its projection, absent or failed → undefined, pending → the payload's
   // pending spelling. [LAW:no-silent-failure] A failed lane was logged by the
@@ -1492,11 +1539,13 @@ export function projectPayload(
   const git =
     lanes.git.kind === "pending"
       ? pendingOf(lanes.git.why)
-      : projectGitInfo(lanes.git, pendingOf);
+      : lanes.git.kind === "ok"
+        ? projectGitInfo(lanes.git.value, lanes.pr, pendingOf)
+        : undefined;
   const tmuxValue =
-    lanes.tmuxSession.kind === "pending"
-      ? pendingOf(lanes.tmuxSession.why)
-      : valueOf(lanes.tmuxSession);
+    lanes.tmux.kind === "pending"
+      ? pendingOf(lanes.tmux.why)
+      : valueOf(lanes.tmux)?.session;
   const hostName =
     lanes.hostName.kind === "pending"
       ? pendingOf(lanes.hostName.why)
@@ -1570,7 +1619,7 @@ export function projectPayload(
   // (current_dir = "C:\Users\Alice") would never match a forward-slash
   // home prefix. Normalize *here*, not in the template — keeps DSL
   // templates platform-agnostic by construction.
-  const home = posixify(inputs.deps.home);
+  const home = posixify(inputs.home);
   const workspace = hookData.workspace
     ? {
         ...hookData.workspace,
@@ -1651,8 +1700,8 @@ export function projectPayload(
     ...(autoCompactValue !== undefined && { autocompact: autoCompactValue }),
     // The storage owner logs each read that failed: a failure here is a value,
     // drawn by the template reading it.
-    ...projectSources(lanes.sources.keys(), (name) => {
-      const reading = lanes.sources.get(name)!;
+    ...projectSources(Object.keys(facts.sources), (name) => {
+      const reading = unstamped(facts.sources[name]!);
       return reading.kind === "pending" ? pendingOf(reading.why) : reading;
     }),
   };
@@ -1881,12 +1930,10 @@ function posixify(s: string | undefined): string | undefined {
 // performs no effect ([LAW:effects-at-boundaries]): the git refresh that read a
 // failure is what logged it.
 function projectGitInfo<P>(
-  outcome: Outcome<GitInfo>,
+  info: DocumentGitFacts,
+  pullRequest: Reading<PullRequest>,
   pending: (why: PendingWhy) => P,
-): GitPayloadOf<P> | undefined {
-  if (outcome.kind !== "ok") return undefined;
-
-  const info = outcome.value;
+): GitPayloadOf<P> {
   const field = <T>(oc: Outcome<T> | undefined): T | undefined =>
     oc?.kind === "ok" ? oc.value : undefined;
 
@@ -1912,13 +1959,11 @@ function projectGitInfo<P>(
   // A PR not answered yet is every PR field not answered: the cell it draws
   // waits at its width while the rest of git draws as it stands.
   const pr =
-    info.pullRequest === undefined
-      ? undefined
-      : info.pullRequest.kind === "pending"
-        ? info.pullRequest
-        : prOfHead(info.pullRequest, info.head);
+    pullRequest.kind === "pending"
+      ? pullRequest
+      : prOfHead(pullRequest, info.head);
   let prFields: PrPayload | PrPendingOf<P> = {};
-  switch (pr?.kind) {
+  switch (pr.kind) {
     case "pending": {
       const p = pending(pr.why);
       prFields = {
@@ -1944,7 +1989,6 @@ function projectGitInfo<P>(
       prFields = { prEarlier: pr.value.state };
       break;
     case "absent":
-    case undefined:
       break;
   }
 

@@ -11,6 +11,7 @@
 // reads it the way it reads the daemon's. `requestPayload` below declares
 // the lanes over the fakes as a view's declaration does.
 
+import { observable, runInAction } from "mobx";
 import type { Holds } from "../../src/utils/holds";
 import { HOST } from "./host";
 import type { ClaudeHookData } from "../../src/utils/claude";
@@ -39,13 +40,16 @@ import {
 } from "../../src/utils/outcome";
 import { settledLane, type Current, type Lane } from "../../src/utils/reading";
 import { HostService } from "../../src/segments/host";
+import { assembleFacts } from "../../src/daemon/facts-assembly";
+import { instantOf } from "../../src/utils/instant";
 import {
+  composePayload,
   declareLanes,
-  projectPayload,
   readingsOf,
   settlePayload,
   todayOf,
   type ConfigFileFacts,
+  type DrawInputs,
   type DrawnPayload,
   type KeyedOwners,
   type PayloadInputs,
@@ -68,33 +72,37 @@ type Loose = Answer<unknown>;
 const lane = <T>(answer: Loose): Answer<T> => answer as Answer<T>;
 
 // One keyed source: its value per key, pending from the key's first read until
-// its reader lands.
+// its reader lands. The values are observable, as every real owner's are, so a
+// view's computed over a lane is recomputed when the reader lands; the first
+// read of a key (which stores) is therefore made where a lane is declared,
+// outside any derivation.
 function keyed<A extends unknown[], T>(
   read: (holds: Holds, ...args: A) => Loose,
 ) {
-  const values = new Map<string, Current<T>>();
+  const values = observable.map<string, Current<T>>({}, { deep: false });
   return (holds: Holds, ...args: A): Current<T> => {
     const key = JSON.stringify(args);
     const known = values.get(key);
     if (known !== undefined) return known;
     const landed = Promise.resolve(lane<T>(read(holds, ...args))).then(
       (outcome) => {
-        values.set(key, outcome);
+        runInAction(() => values.set(key, outcome));
       },
     );
     const pending: Current<T> = { kind: "pending", why: "unread", landed };
-    values.set(key, pending);
+    runInAction(() => values.set(key, pending));
     return pending;
   };
 }
 
-// One request lane: what its last refresh's reader answered, per session.
+// One request lane: what its last refresh's reader answered, per session. The
+// store is observable, as the real owners' are.
 function refreshed<T>() {
-  const stored = new Map<string, Outcome<T>>();
+  const stored = observable.map<string, Outcome<T>>({}, { deep: false });
   return {
     store: async (sessionId: string, answer: Loose): Promise<Outcome<T>> => {
       const outcome = await lane<T>(answer);
-      stored.set(sessionId, outcome);
+      runInAction(() => stored.set(sessionId, outcome));
       return outcome;
     },
     read: (sessionId: string): Reading<T> =>
@@ -126,13 +134,30 @@ export function fakeGit(
 }
 
 // The payload a view's source derives, over the owners the inputs name and the
-// sources a config declares (none, unless given).
+// sources a config declares (none, unless given): the facts document stamped
+// from what the owners hold, and the payload composed from it.
 export function payloadOf(
   inputs: PayloadInputs,
-  draw: Parameters<typeof projectPayload>[1],
+  draw: DrawInputs,
   declared: Parameters<typeof readingsOf>[1] = new Map(),
 ) {
-  return projectPayload(inputs, draw, readingsOf(inputs, declared).lanes);
+  const document = assembleFacts(
+    undefined,
+    sessionIdOf(inputs.hookData.session_id),
+    readingsOf(inputs, declared),
+    pendingOf("unread"),
+    instantOf(new Date(0)),
+  );
+  return composePayload(
+    document,
+    {
+      hookData: inputs.hookData,
+      hints: inputs.hints,
+      neededInputPaths: inputs.neededInputPaths,
+      home: inputs.deps.home,
+    },
+    draw,
+  );
 }
 
 export function fakeTmux(read: (holds: Holds, hint: TmuxHint) => Loose) {
@@ -160,7 +185,7 @@ export function fakeUsage(
   const usage = refreshed<UsageInfo>();
   // The sessions whose request refreshed `today`: before one has, a draw
   // reads it as not answered yet.
-  const todayRefreshed = new Set<string>();
+  const todayRefreshed = observable.set<string>();
   const speed = refreshed<SpeedObservation>();
   const getUsageInfo = (sessionId: string, hookData?: ClaudeHookData) =>
     usage.store(sessionId, readers.usage?.(sessionId, hookData) ?? ABSENT);
@@ -181,7 +206,7 @@ export function fakeUsage(
         getUsageInfo(sessionId, hookData),
       speed: (nowMs: number) => observeSpeed(sessionId, transcriptPath, nowMs),
       today: async () => {
-        todayRefreshed.add(sessionId);
+        runInAction(() => todayRefreshed.add(sessionId));
       },
     }),
     usageOf: (sessionId: string): Reading<UsageInfo> => usage.read(sessionId),
@@ -210,7 +235,7 @@ export function fakeUsage(
     refreshToday: async (
       hookData: ClaudeHookData | undefined,
     ): Promise<void> => {
-      todayRefreshed.add(hookData?.session_id ?? "");
+      runInAction(() => todayRefreshed.add(hookData?.session_id ?? ""));
     },
     observeSpeed,
     speedOf: (sessionId: string): Reading<SpeedObservation> =>
@@ -266,11 +291,14 @@ export function fakeCacheExpiry(
 export function fakeAutoCompact(
   read: (settingsPath: string) => Outcome<unknown>,
 ) {
-  const stored = new Map<string, Outcome<AutoCompactWindow>>();
+  const stored = observable.map<string, Outcome<AutoCompactWindow>>(
+    {},
+    { deep: false },
+  );
   return {
     window: (settingsPath: string): Outcome<AutoCompactWindow> => {
       const outcome = read(settingsPath) as Outcome<AutoCompactWindow>;
-      stored.set(settingsPath, outcome);
+      runInAction(() => stored.set(settingsPath, outcome));
       return outcome;
     },
     stored: (settingsPath: string): Reading<AutoCompactWindow> =>

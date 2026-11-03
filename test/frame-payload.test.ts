@@ -240,7 +240,7 @@ describe("a frame's payload", () => {
     expect(reads["today"]).toBe(before);
   });
 
-  test("a frame reading the context window and no autocompact draws no autocompact", () => {
+  test("a frame reading the context window and no autocompact leaves autocompact pending unread", () => {
     const { inputs } = counted();
     const contextOnly = {
       ...inputs(),
@@ -248,7 +248,7 @@ describe("a frame's payload", () => {
     };
     const payload = payloadOf(contextOnly, DRAW);
     expect(payload.context).toEqual(pendingOf("unread"));
-    expect(payload.autocompact).toBeUndefined();
+    expect(payload.autocompact).toEqual(pendingOf("unread"));
   });
 
   test("autocompact's controls are not answered while the context window they are capped to is not", async () => {
