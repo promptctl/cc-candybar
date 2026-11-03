@@ -2,32 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "7ca57ba16e524929f55d99beb41eba44d31a74fb",
-      "timestamp": "2026-11-03T00:07:56.124Z",
-      "commits": [
-        {
-          "sha": "7ca57ba16e524929f55d99beb41eba44d31a74fb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T17:07:03-07:00",
-          "message": "fix(test): the client's answer cases run over a memory connection on a held clock (candybar-testing-ihvy.5q4) (#589)\n\n* fix(test): the client's answer cases run over a memory connection on a held clock (candybar-testing-ihvy.5q4)\n\nThree stub-daemon cases took the statusline's 50 ms connect and 150 ms total\nbudgets against a net server on the worker's own loop, so a loaded runner read\nCONNECT_TIMEOUT or busy in place of the stub's reply (error-glyph: 1 of 40\nloaded runs). What they prove is a decision, not an effect.\n\nrequestOutcome splits at the connect: exchangeOutcome is the round trip over a\nstream already made, and requestOutcome is the connect plus that call. The\nwire-code cases call renderOutcomeOf; the raw-bytes and glyph cases run\nexchangeOutcome over memoryConnection() with a held clock. No socket, no wall\nclock, no budget left to miss.\n\n* fix(test): review of the memory-connection cases: prettier, a title that claims only what it runs, and the load note as its mechanism (candybar-testing-ihvy.5q4)"
-        }
-      ]
-    },
-    {
       "version": "pr-590",
       "ref": "refs/pull/590/merge",
-      "sha": "54a227605c110640fac51c48058d1f8009b8143c",
-      "timestamp": "2026-11-03T00:06:47.266Z",
+      "sha": "b79077c06957c01f422c9020deb454d27af49734",
+      "timestamp": "2026-11-03T00:10:01.664Z",
       "commits": [
         {
-          "sha": "54a227605c110640fac51c48058d1f8009b8143c",
+          "sha": "b79077c06957c01f422c9020deb454d27af49734",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T00:05:35Z",
-          "message": "Merge a3db0b08bcb5d859232b7f33ee7f9cff62664d59 into c566bb07016fbae3ad97df6abf6cc28e94fc129b\n"
+          "timestamp": "2026-11-03T00:09:13Z",
+          "message": "Merge ca7b1dfa58c44bfe3c6b6a14335f319a8404d101 into 7ca57ba16e524929f55d99beb41eba44d31a74fb\n"
+        },
+        {
+          "sha": "ca7b1dfa58c44bfe3c6b6a14335f319a8404d101",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T17:08:20-07:00",
+          "message": "refactor(runs): the failed count is every run that is not ok, aborted or timed out; the launch bound's trap is in memory (candybar-testing-0x6u.ndy)\n"
         },
         {
           "sha": "a3db0b08bcb5d859232b7f33ee7f9cff62664d59",
@@ -49,6 +41,21 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T17:00:09-07:00",
           "message": "fix(launch): a waited launch keeps at most 16 MiB per stream and ends the child past it (candybar-testing-0x6u.ndy)\n\nA child writing without end grew the capture string until V8 threw\n'Invalid string length' from the data listener; the uncaughtException\nhandler then shut the daemon down. capture now stops at\nMAX_CAPTURED_BYTES and launchWaited ends the child through terminate with\na new reason, output-limit, so a truncated capture is never ok.\nterminate keeps the first cause.\n"
+        }
+      ]
+    },
+    {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "7ca57ba16e524929f55d99beb41eba44d31a74fb",
+      "timestamp": "2026-11-03T00:07:56.124Z",
+      "commits": [
+        {
+          "sha": "7ca57ba16e524929f55d99beb41eba44d31a74fb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T17:07:03-07:00",
+          "message": "fix(test): the client's answer cases run over a memory connection on a held clock (candybar-testing-ihvy.5q4) (#589)\n\n* fix(test): the client's answer cases run over a memory connection on a held clock (candybar-testing-ihvy.5q4)\n\nThree stub-daemon cases took the statusline's 50 ms connect and 150 ms total\nbudgets against a net server on the worker's own loop, so a loaded runner read\nCONNECT_TIMEOUT or busy in place of the stub's reply (error-glyph: 1 of 40\nloaded runs). What they prove is a decision, not an effect.\n\nrequestOutcome splits at the connect: exchangeOutcome is the round trip over a\nstream already made, and requestOutcome is the connect plus that call. The\nwire-code cases call renderOutcomeOf; the raw-bytes and glyph cases run\nexchangeOutcome over memoryConnection() with a held clock. No socket, no wall\nclock, no budget left to miss.\n\n* fix(test): review of the memory-connection cases: prettier, a title that claims only what it runs, and the load note as its mechanism (candybar-testing-ihvy.5q4)"
         }
       ]
     },

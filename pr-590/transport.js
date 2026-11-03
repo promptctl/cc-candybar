@@ -71087,9 +71087,8 @@ var Runs = class {
       `run sid=${valueOf(run3.sessionId)} action=${valueOf(run3.action)} program=${valueOf(run3.argv[0])} outcome=${outcome} exit=${exitOf(result)} took=${took} refreshed=${run3.refreshes.map((r) => r.name).join(",") || "-"}`
     );
     if (outcome === "timeout") this.timedOut++;
-    if (outcome === "exit" || outcome === "launch" || outcome === "output-limit")
-      this.failed++;
     if (outcome === "ok" || outcome === "aborted") return;
+    if (outcome !== "timeout") this.failed++;
     holdClickError(
       this.deps.state,
       run3.sessionId,
