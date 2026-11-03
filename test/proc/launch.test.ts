@@ -455,7 +455,9 @@ describe("launch (async)", () => {
   it("keeps stdinInput whole for a descendant that reads it after the child exits", async () => {
     const r = await launch({
       bin: "sh",
-      args: ["-c", "(sleep 0.2; wc -c) <&0 &"],
+      // dash points a background job's stdin at /dev/null before its own
+      // redirections, so the input goes through an fd of its own.
+      args: ["-c", "exec 3<&0; (sleep 0.2; wc -c <&3) &"],
       stdinInput: "x".repeat(10 * 1024 * 1024),
       category: "user-shell",
     });
