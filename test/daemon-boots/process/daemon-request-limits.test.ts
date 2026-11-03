@@ -63,8 +63,18 @@ test("a render that outlives its request timeout writes timedOut=Y", async () =>
       TEST_TIMEOUT_MS,
     );
     // A pipe opens for writing only once a reader has opened it, so this
-    // open resolving is the daemon's loop stopping in its read.
-    const pipe = await open(config, "w");
+    // open resolving is the daemon's loop stopping in its read. A render that
+    // never reads its config leaves the open waiting for good, so the
+    // request's own end is raced against it: the case fails on that reply, not
+    // on the test timeout.
+    const pipe = await Promise.race([
+      open(config, "w"),
+      answered.then((reply) => {
+        throw new Error(
+          `the render answered before reading its config: ${JSON.stringify(reply)}`,
+        );
+      }),
+    ]);
     await sleep(REQUEST_TIMEOUT_MS * 2);
     await pipe.writeFile(JSON.stringify({ segments: {}, root: { h: [] } }));
     await pipe.close();
