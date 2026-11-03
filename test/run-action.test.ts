@@ -825,7 +825,10 @@ describe("the run owner", () => {
 
   // A run of `script` under /bin/sh, refreshing one source whose supersedes
   // and resumes are recorded.
-  function owner(timeoutMs?: number) {
+  function owner(
+    timeoutMs?: number,
+    launch: Launcher["launch"] = processLauncher.launch,
+  ) {
     const lines: string[] = [];
     const sessionState = new SessionState();
     const held: string[] = [];
@@ -835,7 +838,7 @@ describe("the run owner", () => {
         held.push(`supersede ${key.folder} ${sid}`);
         return () => held.push(`resume ${key.folder} ${sid}`);
       },
-      launch: processLauncher.launch,
+      launch,
       state: sessionState,
       log: (level, message) => lines.push(`${level} ${message}`),
       now: () => instantOf(new Date()),
@@ -911,6 +914,25 @@ describe("the run owner", () => {
     expect(o.lines).toContainEqual(
       expect.stringContaining("outcome=output-limit"),
     );
+  });
+
+  test("a run its launcher ended for a failed pipe puts the pipe's error in the bar, not its cut-short words", async () => {
+    const o = owner(undefined, async () => ({
+      ok: false,
+      reason: "pipe-error",
+      stdout: "",
+      stderr: "partial warn",
+      exitCode: null,
+      signal: "SIGTERM",
+      error: "a pipe failed to read: EIO",
+    }));
+    o.runs.start(o.run(""));
+    await until(() => o.runs.stats().running === 0, "the run's end");
+    expect(lastClickError(o.sessionState, SID)?.text).toBe(
+      "run act: a pipe failed to read: EIO",
+    );
+    expect(o.runs.stats()).toMatchObject({ failed: 1 });
+    expect(o.lines).toContainEqual(expect.stringContaining("outcome=pipe"));
   });
 
   test("a program that cannot start puts why in the bar, and counts as failed", async () => {

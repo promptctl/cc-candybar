@@ -8,7 +8,7 @@ import {
   fileEventsWarnings,
   type FileEventsWarning,
 } from "./cache/file-events";
-import type { LifelineWarning } from "../proc/launch";
+import type { LauncherWarning, PipeEvent } from "../proc/launch";
 import type { CheckedRenderRequest } from "./render-checkpoint.js";
 import { UPDATE_DISMISSED_KEY } from "./update-keys";
 import { type RenderOrigin } from "../config-hint";
@@ -445,6 +445,9 @@ export function drawRender(
   evaluated: number;
   cellBreaks: number;
   clickShown: ClickErrorRecord | null;
+  // The launcher's pipe event this draw showed, which an answer carrying it
+  // marks answered.
+  pipeShown: PipeEvent | null;
   // Records what the frame's copy clicks copy, once it reached its client.
   delivered: () => void;
   // Which animation lanes the session's settings switch on, as drawn.
@@ -544,9 +547,14 @@ export function drawRender(
   // A stall is no reason of this watch's: it has the bar's own row.
   const configWatch =
     entry.watch === null ? null : watchFault("config watch", entry.watch, null);
+  // [LAW:no-ambient-temporal-coupling] The launcher's warnings at this draw's
+  // instant and for whom it draws, by the same event hold as the click error.
+  const launched = launcher.launcherWarnings(at, drawing.by);
+  const pipeWarning = launched.find((w) => w.kind === "launch-pipes");
+  const pipeShown = pipeWarning?.event ?? null;
   const standing: readonly StandingWarning[] = [
     ...fileEventsWarnings(fileEvents.delivery()),
-    ...launcher.lifelineWarnings(),
+    ...launched,
     ...(configWatch === null
       ? []
       : [{ kind: "config-watch" as const, message: configWatch }]),
@@ -566,14 +574,15 @@ export function drawRender(
     drawing.by,
     errors,
     [...updates, ...questions],
+    // A standing warning is one per kind whose words change as it does (a
+    // pipe event's counts), so its kind alone is what it is about: a viewer
+    // open on it stays open. A render warning is about its words.
     [
-      ...standing,
-      ...renderWarnings.ofSession(sessionId, drawing.by, scope),
-    ].map((w) => ({
-      about: `${w.kind}\0${w.message}`,
-      text: w.message,
-      copy: w.message,
-    })),
+      ...standing.map((w) => ({ about: w.kind, message: w.message })),
+      ...renderWarnings
+        .ofSession(sessionId, drawing.by, scope)
+        .map((w) => ({ about: `${w.kind}\0${w.message}`, message: w.message })),
+    ].map((w) => ({ about: w.about, text: w.message, copy: w.message })),
   );
   const projected = {
     diagnostics: diagnosticsProjection(diagnostics),
@@ -727,6 +736,7 @@ export function drawRender(
       case "load":
       case "config-watch":
       case "lifeline":
+      case "launch-pipes":
       case "when":
         return w.kind;
     }
@@ -759,6 +769,8 @@ export function drawRender(
     rules: [...rules].map(([slot, how]) => `${slot}:${how}`).join(",") || "-",
     err: errors.length > 0 ? "Y" : "N",
     clickError: clickHold.kind === "none" ? "-" : clickHold.kind,
+    // The launcher's pipe event as this frame showed it: `-` for not at all.
+    pipeEvent: pipeWarning?.hold ?? "-",
     upd: String(updates.length),
     // How many repositories the bar asked about.
     ask: String(questions.length),
@@ -783,6 +795,7 @@ export function drawRender(
     evaluated,
     cellBreaks,
     clickShown,
+    pipeShown,
     delivered,
     lanes,
   };
@@ -803,7 +816,7 @@ interface ConfigWatchWarning {
 // What stands before a draw, whatever the draw then meets.
 type StandingWarning =
   | FileEventsWarning
-  | LifelineWarning
+  | LauncherWarning
   | ConfigWatchWarning
   | LoadWarning;
 
@@ -856,6 +869,7 @@ interface RequestAnswer {
   resp: Response;
   motion: DrawnMotion;
   clickShown: ClickErrorRecord | null;
+  pipeShown: PipeEvent | null;
   // Records what the answer's copy clicks copy, once it reached its client.
   delivered: () => void;
 }
@@ -988,7 +1002,7 @@ async function drawAnswer(
     ended,
     refreshed: refreshedFact(refreshed),
   });
-  const { drawn, clickShown, delivered, lanes } = drawRender(
+  const { drawn, clickShown, pipeShown, delivered, lanes } = drawRender(
     parts,
     setup,
     ANSWERING,
@@ -1013,6 +1027,7 @@ async function drawAnswer(
     resp,
     motion: drawn.body.motion,
     clickShown,
+    pipeShown,
     delivered,
   };
 }

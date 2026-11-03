@@ -5,12 +5,15 @@ import { join } from "node:path";
 import {
   createLauncher,
   MAX_CAPTURED_BYTES,
+  PIPE_EVENT_HOLD_S,
   type LaunchCategory,
-  type Launcher,
+  type TestableLauncher,
+  type WarningChange,
 } from "../../src/proc/launch";
 import type { DrainEnd, LaunchStatsHandle } from "../../src/proc/stats-handle";
 import { until } from "../helpers/until";
 import { systemTimekeeper } from "../../src/time";
+import { instantOf, type Instant } from "../../src/utils/instant";
 
 // What these cases launch leaves its process group with setsid, which only
 // python reaches portably: macOS has no setsid command.
@@ -30,7 +33,8 @@ interface DrainClose {
 let drainRead: number;
 
 let ending: AbortController;
-let launcher: Launcher;
+let launcher: TestableLauncher;
+let heard: WarningChange[];
 let drainsOpened: LaunchCategory[];
 let drainsClosed: DrainClose[];
 beforeEach(() => {
@@ -38,6 +42,7 @@ beforeEach(() => {
   drainsOpened = [];
   drainsClosed = [];
   drainRead = 0;
+  heard = [];
   const stats: LaunchStatsHandle = {
     onStart: () => {},
     onEnd: () => {},
@@ -51,7 +56,12 @@ beforeEach(() => {
     onPipeError: () => {},
   };
   launcher = createLauncher(
-    { inherited: process.env, signal: ending.signal, stats },
+    {
+      inherited: process.env,
+      signal: ending.signal,
+      stats,
+      observeWarnings: (change) => heard.push(change),
+    },
     systemTimekeeper,
   );
 });
@@ -272,6 +282,30 @@ describe("the pipes a descendant holds past its launch", () => {
     expect(cut?.bytes).toBeGreaterThan(MAX_CAPTURED_BYTES);
     // The holder died writing to the cut pipe, so its stderr closed too.
     await until(() => drainsClosed.length === 2, "the holder's end");
+    // The cut is a pipe event: held for every render, owed to a request until
+    // an answer carries it.
+    expect(heard.some((c) => c.kind === "launch-pipes")).toBe(true);
+    // What a render at `t` seconds after the event shows of it.
+    // Found by kind, read now, inside its hold: a lifeline fault under load
+    // would list first.
+    const pipes = launcher
+      .launcherWarnings(instantOf(new Date()), "feed")
+      .find((w) => w.kind === "launch-pipes");
+    if (pipes?.kind !== "launch-pipes")
+      throw new Error("no pipe event shown inside its hold");
+    const event = pipes.event;
+    const shown = (t: number, render: "feed" | "request") =>
+      launcher
+        .launcherWarnings((event.at + t) as Instant, render)
+        .filter((w) => w.kind === "launch-pipes");
+    expect(event.text).toContain("user-shell output cut at the");
+    expect(event.text).toContain("now fails its writes");
+    expect(shown(PIPE_EVENT_HOLD_S - 1, "feed")).toHaveLength(1);
+    expect(shown(PIPE_EVENT_HOLD_S + 1, "feed")).toEqual([]);
+    expect(shown(PIPE_EVENT_HOLD_S + 600, "request")).toHaveLength(1);
+    launcher.answeredPipeEvent(event);
+    expect(shown(PIPE_EVENT_HOLD_S - 1, "feed")).toHaveLength(1);
+    expect(shown(PIPE_EVENT_HOLD_S + 1, "request")).toEqual([]);
   });
 
   it("count only what the holder writes after the launch, against a bound of their own", async () => {
