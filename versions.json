@@ -4,22 +4,22 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "ab5468dce0ade1b535714d8a83a1647cdb840481",
-      "timestamp": "2026-11-03T05:44:27.297Z",
+      "sha": "04d058325f14b84fc80d66fc432ae7583f3ceb7d",
+      "timestamp": "2026-11-03T06:03:04.888Z",
       "commits": [
         {
-          "sha": "ab5468dce0ade1b535714d8a83a1647cdb840481",
+          "sha": "04d058325f14b84fc80d66fc432ae7583f3ceb7d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T22:43:29-07:00",
-          "message": "feat(bench): a click's whole time, Launch Services included, is measured for the applet and the forwarder (candybar-url-handler-uy01.05x) (#603)\n\n* feat(bench): a click's whole time, Launch Services included, is measured for the applet and the forwarder (candybar-url-handler-uy01.05x)\n\nA click suite in the benchmark: open to the daemon's own click event,\ncold (handler app quit first) and warm, with the handler that answered\nread off the event. Measured on Brandon's Mac: the retired applet\n~0.53-0.59 s every click (it exits after each), the forwarder ~0.23 s\ncold and ~0.07 s warm. Numbers on the ticket and the epic.\n\n* fix(bench): the click suite proves the daemon by a round trip, reads the log from the click on, and matches the whole problem (candybar-url-handler-uy01.05x)\n\nReview of #603. A socket file was taken as a live daemon, so a daemon dead\nwithout unlinking ran the bench into a notification on the user's screen;\na stats round trip over the default socket proves it. Each poll read every\nlog generation from byte 0; the event can only be past where the file\nstood at the click, so the read starts there and follows one rotation.\nThe event match was an unterminated prefix (`-1` matched `-10`); the\nproblems field is now decoded and compared whole, through one logfmt\nfield reader beside the encoder, which the daemon world's render reader\nshares too (its own read a quoted value's first word). A lost event names\nthe log searched, since this shell's state dir need not be the daemon's.\nThe app's name moves beside the scheme so the bench imports nothing of\nthe installer. Live run: 15 of 15 events found, cold p50 172 ms, warm\n99 ms under load 33.\n\n* fix(bench): the logfmt reader tokenizes, a rotation is told by inode, and the probe click is asked once (candybar-url-handler-uy01.05x)\n\nMedium review of #603. A field spelled inside an earlier quoted value\nshadowed the real field, so the reader walks the line's tokens and a\nquoted value is consumed whole; it yields every field, so the click\nsuite reads the problems field without a prefilter that could throw on\na line that only mentions it. A rotated log was told by its size\nshrinking, which a busy daemon undoes within the wait; the inode tells\nit. A line with no timestamp fails naming the line. The probe click and\nits event land once a process, not once a benchmark, and the cold\nbenchmark's `about` says it quits the live handler app."
+          "timestamp": "2026-11-02T23:02:16-07:00",
+          "message": "Remove bad tests (#605)"
         },
         {
-          "sha": "fda163a193a024faa5e9bcf8071a8c26d772a997",
+          "sha": "6f35f84d13b40a5e30d3e41150a025c0cc994233",
           "author_name": "semantic-release-bot",
           "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-03T05:26:20Z",
-          "message": "chore(release): set `package.json` to 1.183.1 [skip ci]\n\n## [1.183.1](https://github.com/promptctl/cc-candybar/compare/v1.183.0...v1.183.1) (2026-11-03)\n\n### Bug Fixes\n\n* **time:** spans read the monotonic clock (candybar-testing-ihvy.98i) ([#604](https://github.com/promptctl/cc-candybar/issues/604)) ([baf8dfd](https://github.com/promptctl/cc-candybar/commit/baf8dfde2d7d28a78fc76247adf9889e7c7fb742))\n"
+          "timestamp": "2026-11-03T05:53:08Z",
+          "message": "chore(release): set `package.json` to 1.184.0 [skip ci]\n\n## [1.184.0](https://github.com/promptctl/cc-candybar/compare/v1.183.1...v1.184.0) (2026-11-03)\n\n### Features\n\n* **bench:** a click's whole time, Launch Services included, is measured for the applet and the forwarder (candybar-url-handler-uy01.05x) ([#603](https://github.com/promptctl/cc-candybar/issues/603)) ([ab5468d](https://github.com/promptctl/cc-candybar/commit/ab5468dce0ade1b535714d8a83a1647cdb840481))\n"
         }
       ]
     }
