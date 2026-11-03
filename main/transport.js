@@ -52469,6 +52469,7 @@ var Refreshes = class {
 // src/var-system/sources.ts
 var TORN_WRITE_SETTLE_MS = 250;
 var MIN_SHELL_TTL_MS = 500;
+var SHELL_READ_TIMEOUT_MS = 1e4;
 function clampShellCache(name, policy) {
   if (policy.kind !== "ttl") return policy;
   if (policy.durationMs >= MIN_SHELL_TTL_MS) return policy;
@@ -52507,12 +52508,12 @@ function shellReader(launcher, command, cwd2, signal) {
         args: ["-c", command],
         cwd: cwd2,
         category: "user-shell",
+        timeoutMs: SHELL_READ_TIMEOUT_MS,
         signal
       });
-      if (!r.ok && r.reason === "aborted" && signal.aborted)
-        throw signal.reason;
+      if (signal.aborted) throw signal.reason;
       if (r.ok) return ok(r.stdout);
-      const why2 = r.reason === "non-zero" ? `exited with code ${r.exitCode}` : [r.reason, r.error].filter((s) => s !== void 0).join(": ");
+      const why2 = r.reason === "non-zero" ? `exited with code ${r.exitCode}` : r.reason === "timeout" ? `timed out after ${SHELL_READ_TIMEOUT_MS / 1e3} s` : [r.reason, r.error].filter((s) => s !== void 0).join(": ");
       return failed(`shell "${command}" ${why2} in ${cwd2}`, "read");
     }
   };
@@ -68604,7 +68605,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.185.1";
+var PACKAGE_VERSION = "1.186.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {

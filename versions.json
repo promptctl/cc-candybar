@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "4a53ad24cd95fa2ed074025955271337c3bf3653",
+      "timestamp": "2026-11-03T14:20:59.600Z",
+      "commits": [
+        {
+          "sha": "4a53ad24cd95fa2ed074025955271337c3bf3653",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T07:19:49-07:00",
+          "message": "feat(sources): the shell reader has a read timeout (candybar-gather-renderer-76bb.6pj.dal) (#612)\n\n* feat(sources): the shell reader has a read timeout, and a run past it is failed in its read phase (candybar-gather-renderer-76bb.6pj.dal)\n\nOne parameter, 10 s, named beside the shell TTL floor and passed on the shell\nreader's launch, so the launcher's one timeout path ends a command that never\nwrites and never exits. Its read fails naming the bound, in the read phase, and\nthe next period's run starts clean. Spec: docs/design/gather-and-renderer.md\nsection 19.\n\n* fix(sources): a shell run the timeout ends under a disposed registry publishes nothing (candybar-gather-renderer-76bb.6pj.dal)\n\nThe launcher keeps the first cause that ended a child, so a run the timeout\nsignalled before dispose is reaped as a timeout with the source's abort set.\nThe reader gated the abort on the launcher's reason too, and published the\ntimeout's failure into the torn-down registry. It now throws the abort on\nthe signal alone, as the file reader does.\n\n* docs(segments): a helper a shell command backgrounds ends with the run's process group (candybar-gather-renderer-76bb.6pj.dal)"
+        },
+        {
+          "sha": "d05718f5dc3d1b63c32060d3455f649c9af05c8a",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-03T13:16:48Z",
+          "message": "chore(release): set `package.json` to 1.186.0 [skip ci]\n\n## [1.186.0](https://github.com/promptctl/cc-candybar/compare/v1.185.1...v1.186.0) (2026-11-03)\n\n### Features\n\n* **facts:** one SessionFacts per session, assembled from today's providers and restamped (candybar-gather-renderer-76bb.6pj.af6) ([#611](https://github.com/promptctl/cc-candybar/issues/611)) ([a7b85c9](https://github.com/promptctl/cc-candybar/commit/a7b85c98a60c7c9bc6196f726311fc6a6650e438))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-613",
       "ref": "refs/pull/613/merge",
       "sha": "4da822bda82a1b30b99a3a7e3607e27c944909d4",
@@ -27,64 +49,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-03T07:09:54-07:00",
           "message": "feat(facts): the draw's today and sources count are read from the document (candybar-gather-renderer-76bb.6pj.ktv)\n\nThe today fact now carries everything the draw's day projection reads: the\ndirectory's day sums and the rendering session's own days, with the session's\ningest failure as the fact failing. projectToday is a pure function of that\nfact and the draw's instant, so todayOf takes no store, lane or ledger, and\nthe draw and the demo read the view's document. The render event's source\ncounts read the document's sources too. check projects a fixture fact through\nthe same todayOf, so CHECK_TODAY is gone.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-612",
-      "ref": "refs/pull/612/merge",
-      "sha": "bb744a1917e3bdafc0feb8e5510e8af8c6f731e5",
-      "timestamp": "2026-11-03T14:12:03.107Z",
-      "commits": [
-        {
-          "sha": "bb744a1917e3bdafc0feb8e5510e8af8c6f731e5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T14:11:01Z",
-          "message": "Merge 80a2e0d37fddd69afbc3928f61b74c19ce6f68de into d05718f5dc3d1b63c32060d3455f649c9af05c8a\n"
-        },
-        {
-          "sha": "80a2e0d37fddd69afbc3928f61b74c19ce6f68de",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T07:10:46-07:00",
-          "message": "docs(segments): a helper a shell command backgrounds ends with the run's process group (candybar-gather-renderer-76bb.6pj.dal)\n"
-        },
-        {
-          "sha": "3366319f49f69b86bb83f6457b3f430a3d6451d8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T07:05:48-07:00",
-          "message": "fix(sources): a shell run the timeout ends under a disposed registry publishes nothing (candybar-gather-renderer-76bb.6pj.dal)\n\nThe launcher keeps the first cause that ended a child, so a run the timeout\nsignalled before dispose is reaped as a timeout with the source's abort set.\nThe reader gated the abort on the launcher's reason too, and published the\ntimeout's failure into the torn-down registry. It now throws the abort on\nthe signal alone, as the file reader does.\n"
-        },
-        {
-          "sha": "88ea3373ac682ce629d3f5bbb12c2fe7e5e8de31",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T06:57:41-07:00",
-          "message": "feat(sources): the shell reader has a read timeout, and a run past it is failed in its read phase (candybar-gather-renderer-76bb.6pj.dal)\n\nOne parameter, 10 s, named beside the shell TTL floor and passed on the shell\nreader's launch, so the launcher's one timeout path ends a command that never\nwrites and never exits. Its read fails naming the bound, in the read phase, and\nthe next period's run starts clean. Spec: docs/design/gather-and-renderer.md\nsection 19.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "a7b85c98a60c7c9bc6196f726311fc6a6650e438",
-      "timestamp": "2026-11-03T13:06:25.084Z",
-      "commits": [
-        {
-          "sha": "a7b85c98a60c7c9bc6196f726311fc6a6650e438",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T06:05:34-07:00",
-          "message": "feat(facts): one SessionFacts per session, assembled from today's providers and restamped (candybar-gather-renderer-76bb.6pj.af6) (#611)\n\n* feat(facts): a session's facts document is assembled from today's providers and restamped against its last (candybar-gather-renderer-76bb.6pj.af6)\n\n* docs(facts): the facts document's traps in data-sources memory; payloadOf comments follow its split (candybar-gather-renderer-76bb.6pj.af6)\n\n* review(facts): equality has one judge, the view derives its inputs once (candybar-gather-renderer-76bb.6pj.af6)\n\nassembleFacts compares builtins and sources by the identity restamp already\nreturns, instead of walking every value a second time. The session source\nderives its payload inputs once for both the payload and the readings.\nStale updateOf comment and a shadowed stop are fixed.\n\n* review(facts): Wire refuses undefined, projectPayload keeps one header (candybar-gather-renderer-76bb.6pj.af6)\n\nJSON drops an undefined property and nulls an undefined array member, so a\ntype admitting it does not round-trip as itself."
-        },
-        {
-          "sha": "5138e2c802a9c3baf1fc4756147126024fd36bf0",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-03T11:56:35Z",
-          "message": "chore(release): set `package.json` to 1.185.1 [skip ci]\n\n## [1.185.1](https://github.com/promptctl/cc-candybar/compare/v1.185.0...v1.185.1) (2026-11-03)\n\n### Bug Fixes\n\n* **render:** today's day sums and the PR stop blocking the first bar (candybar-gather-renderer-76bb.6pj.2nv) ([#610](https://github.com/promptctl/cc-candybar/issues/610)) ([be10d89](https://github.com/promptctl/cc-candybar/commit/be10d89d0f489dffdc71e3a67ef2fec37cb70333))\n"
         }
       ]
     }
