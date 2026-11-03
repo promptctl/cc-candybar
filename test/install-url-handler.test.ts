@@ -91,7 +91,9 @@ describe("assembling the URL handler app", () => {
       "utf8",
     );
     expect(plist).toContain(`<string>${URL_SCHEME}</string>`);
-    expect(plist).toContain("<key>LSUIElement</key>");
+    // Never activated, so a click never takes focus from the terminal.
+    expect(plist).toContain("<key>LSBackgroundOnly</key>");
+    expect(plist).not.toContain("<key>LSUIElement</key>");
     expect(plist).toContain("<string>com.cccandybar.url-handler</string>");
     expect(plist).toContain("<string>CCCandybarURLHandler</string>");
     // The name on the notification-authorization prompt a lost click raises.
