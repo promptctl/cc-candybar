@@ -715,10 +715,10 @@ export class SessionUsageStore {
     holds: Holds,
     claudeConfigDir: string | undefined,
   ): Lane<DaySums> {
-    const claudePaths = getClaudePaths(claudeConfigDir, this.host.home);
     // [LAW:single-enforcer] A closed store builds no day set: a set built
     // after close is one close never releases.
     if (this.closed) return settledLane(failed("usage store closed"));
+    const claudePaths = getClaudePaths(claudeConfigDir, this.host.home);
     const scans = this.scans.declare(holds, claudePaths);
     const set = this.daySet(claudePaths);
     return {

@@ -1412,11 +1412,7 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
     deep: false,
   });
   // [LAW:single-enforcer] A (request, preset) pair is declared once.
-  // [LAW:single-enforcer] A disposed view declares nothing: its holds are
-  // closed, and an owner would build an entry before the hold refuses it.
-  let disposed = false;
   const redeclare = (facts: F, preset: string): void => {
-    if (disposed) return;
     const now = declared.get();
     if (facts === now.facts && preset === now.preset) return;
     const next = declaration(facts, preset);
@@ -1485,7 +1481,6 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
     lastRenderCellsBySegment: new Map<string, readonly RichText[]>(),
     retire: stopChanged,
     dispose: () => {
-      disposed = true;
       stop();
       stopChanged();
       holds.close();
