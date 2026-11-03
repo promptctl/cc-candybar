@@ -4,15 +4,22 @@
     {
       "version": "pr-600",
       "ref": "refs/pull/600/merge",
-      "sha": "6981e78eca20b16a01bbd65c59071fbfea88e514",
-      "timestamp": "2026-11-03T03:39:31.998Z",
+      "sha": "8262496ec9a68443507d06767a7940b0f051344c",
+      "timestamp": "2026-11-03T03:45:16.917Z",
       "commits": [
         {
-          "sha": "6981e78eca20b16a01bbd65c59071fbfea88e514",
+          "sha": "8262496ec9a68443507d06767a7940b0f051344c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T03:38:00Z",
-          "message": "Merge 5221f7987d469b96e1795025c9f929cb78f7aff4 into 100e4fe743b7d0f668a46455fd011db361031ccb\n"
+          "timestamp": "2026-11-03T03:44:20Z",
+          "message": "Merge b1b500245fa7de8a35ae160784fcaed75e2a5567 into 1e23d8a6bf2b1e5c9e5073a317f3f70b0b5ce88e\n"
+        },
+        {
+          "sha": "b1b500245fa7de8a35ae160784fcaed75e2a5567",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T20:42:59-07:00",
+          "message": "fix(url-handler): the notice carries the product name once, and a denied notification is a notice in the log\n\nMedium review of PR #600. The banner header already names cc-candybar\nfrom the bundle's display name, so the title no longer repeats it; the\ndisplay name is pinned by the install test; a user's denial logs at\nnotice, not error; and the header names the trap that the binary aborts\noutside its bundle.\n"
         },
         {
           "sha": "5221f7987d469b96e1795025c9f929cb78f7aff4",
