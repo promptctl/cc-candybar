@@ -41,7 +41,8 @@ import { settledLane, type Current, type Lane } from "../../src/utils/reading";
 import { HostService } from "../../src/segments/host";
 import {
   declareLanes,
-  payloadOf,
+  projectPayload,
+  readingsOf,
   settlePayload,
   todayOf,
   type ConfigFileFacts,
@@ -122,6 +123,16 @@ export function fakeGit(
       current: () => current(holds, workingDir, options, projectDir),
     }),
   };
+}
+
+// The payload a view's source derives, over the owners the inputs name and the
+// sources a config declares (none, unless given).
+export function payloadOf(
+  inputs: PayloadInputs,
+  draw: Parameters<typeof projectPayload>[1],
+  declared: Parameters<typeof readingsOf>[1] = new Map(),
+) {
+  return projectPayload(inputs, draw, readingsOf(inputs, declared).lanes);
 }
 
 export function fakeTmux(read: (holds: Holds, hint: TmuxHint) => Loose) {

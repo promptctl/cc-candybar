@@ -99,7 +99,12 @@ import {
   type ValuedGlobals,
 } from "../config/globals-fields.js";
 import { dateOf, type Instant } from "../utils/instant.js";
-import type { RefreshFaults, RefreshLane } from "./refresh-faults.js";
+import {
+  REFRESH_LANES,
+  type RefreshFaults,
+  type RefreshLane,
+} from "./refresh-faults.js";
+import type { FactsDiagnostic } from "../facts/session-facts.js";
 import type { SessionId } from "./session-id.js";
 import type { ManagedStorage, StorageKey } from "./cache/managed-storage.js";
 import type { JsonValue } from "../var-system/types.js";
@@ -596,8 +601,8 @@ export interface RenderPayloadDeps {
   // The log for a session lane whose refresh threw: a bug no owner saw.
   readonly log: DaemonLogger;
   // [LAW:effects-at-boundaries] The daemon's clock, which times each lane's
-  // refresh.
-  readonly clock: Pick<Timekeeper, "monotonic">;
+  // refresh and stamps its facts.
+  readonly clock: Pick<Timekeeper, "monotonic" | "now">;
   // Each session lane whose refresh threw, until one runs clean.
   readonly faults: RefreshFaults;
   // The lanes the view's latest declaration handed it (`declareLanes`), read
@@ -1113,7 +1118,7 @@ export async function refreshPayload(
 // are `Current`: a value not answered yet carries its landing.
 // `today` is no lane of the payload: the day it sums is the draw's
 // (`todayOf`).
-interface Lanes {
+export interface Lanes {
   readonly git: Current<GitInfo>;
   readonly usage: Reading<UsageInfo>;
   readonly context: Reading<ContextInfo>;
@@ -1126,6 +1131,38 @@ interface Lanes {
   readonly speed: Reading<SpeedObservation>;
   readonly autoCompact: Reading<AutoCompactWindow>;
   readonly sources: ReadonlyMap<string, Current<JsonValue>>;
+}
+
+// [LAW:types-are-the-program] Which built-ins the config's closure gathers:
+// one that is not has no reading (it answers `ABSENT` to the payload), which
+// a facts document must not spell as a read that found nothing.
+export type Gathered = Pick<
+  Wanted,
+  | "git"
+  | "session"
+  | "today"
+  | "context"
+  | "metrics"
+  | "activity"
+  | "tmux"
+  | "hostName"
+  | "hostUser"
+  | "cache"
+  | "speed"
+  | "autocompact"
+>;
+
+// [LAW:one-source-of-truth] Everything a session's readers read of its owners
+// in one turn: the lanes as the payload folds them, today's day sums, what the
+// closure gathered, every source the config declares (the lanes hold those the
+// closure reaches), and the session's faults. The payload and the facts
+// document are both folds of this one record.
+export interface Readings {
+  readonly lanes: Lanes;
+  readonly today: Current<DaySums>;
+  readonly gathered: Gathered;
+  readonly declaredSources: readonly string[];
+  readonly faults: readonly FactsDiagnostic[];
 }
 
 // What a view's declaration reads of the request its renders draw by: the
@@ -1288,7 +1325,10 @@ export function declareLanes(
 // [LAW:effects-at-boundaries] No I/O, and no write: every read takes what its
 // owner stored, so the view's payload computed over it is recomputed in the
 // turn an owner stores a new value.
-function readLanes(inputs: PayloadInputs): Lanes {
+export function readingsOf(
+  inputs: PayloadInputs,
+  declared: DeclaredSources,
+): Readings {
   const { hookData, deps } = inputs;
   const want = wanted(inputs.neededInputPaths);
   const sessionId = hookData.session_id;
@@ -1312,7 +1352,7 @@ function readLanes(inputs: PayloadInputs): Lanes {
       return failed(`${lane}: ${String(e)}`, "read");
     }
   };
-  return {
+  const laneReadings: Lanes = {
     git: lanes.git.current(),
     usage: read("session", want.session, () =>
       deps.usageStore.usageOf(sessionId, hookData),
@@ -1340,6 +1380,27 @@ function readLanes(inputs: PayloadInputs): Lanes {
       [...lanes.sources].map(([name, lane]) => [name, lane.current()]),
     ),
   };
+  return {
+    lanes: laneReadings,
+    today: todayReading(lanes.today, deps.faults, sessionId),
+    gathered: want,
+    declaredSources: [...declared.keys()],
+    faults: REFRESH_LANES.flatMap((lane) => {
+      const fault = deps.faults.of(sessionId, lane);
+      return fault === undefined ? [] : [{ lane, reason: fault.reason }];
+    }),
+  };
+}
+
+// [LAW:single-enforcer] Today's day sums as the session reads them: the
+// refresh's fault if it threw, else what the lane holds. The draw's projection
+// (`todayOf`) and the facts document read through this one definition.
+export function todayReading(
+  lane: Lane<DaySums>,
+  faults: RefreshFaults,
+  sessionId: string,
+): Current<DaySums> {
+  return faults.of(sessionId, "today") ?? lane.current();
 }
 
 // The landings a request waits on before it draws: every declared lane whose
@@ -1379,7 +1440,13 @@ function firstPending(
 // (payload fragment + failure descriptions); the log effect is the caller's.
 // A value not answered yet is pending, which the draw takes as its own
 // outcome.
-function projectPayload(
+// [LAW:one-source-of-truth] The one assembly of a view's payload: every
+// source as its owner holds it now, a value not answered yet as pending —
+// which the draw takes as its own outcome (the placement's loading cell).
+// Performs no I/O, refreshes nothing and reads no instant, so the session's
+// view keeps it as one computed (src/daemon/session-source.ts), recomputed in
+// the turn a fact it reads moves.
+export function projectPayload(
   inputs: PayloadInputs,
   draw: DrawInputs,
   lanes: Lanes,
@@ -1657,19 +1724,6 @@ function speedPayloadOf(obs: SpeedObservation): SpeedPayload | undefined {
     : undefined;
 }
 
-// [LAW:one-source-of-truth] The one assembly of a view's payload: every
-// source as its owner holds it now, a value not answered yet as pending —
-// which the draw takes as its own outcome (the placement's loading cell).
-// Performs no I/O, refreshes
-// nothing and reads no instant, so the session's view keeps it as one computed
-// (src/daemon/session-source.ts), recomputed in the turn a fact it reads moves.
-export function payloadOf(
-  inputs: PayloadInputs,
-  draw: DrawInputs,
-): ViewPayload {
-  return projectPayload(inputs, draw, readLanes(inputs));
-}
-
 // [LAW:one-source-of-truth] `today` at a draw's instant: the day of the
 // declared set's sums the draw is at. A projection of the draw, never of the
 // view's payload, since the day turns over at midnight with no source moving
@@ -1685,8 +1739,7 @@ export function todayOf(
   hookData: ClaudeHookData,
   at: Instant,
 ): TodayPayload | Pending | undefined {
-  if (faults.of(hookData.session_id, "today") !== undefined) return undefined;
-  const set = lane.current();
+  const set = todayReading(lane, faults, hookData.session_id);
   if (set.kind === "pending") return pendingOf(set.why);
   if (set.kind !== "ok") return undefined;
   const read = (): Reading<TodayInfo> => {

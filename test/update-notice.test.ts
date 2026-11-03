@@ -10,7 +10,8 @@ import {
   viewerRows,
 } from "../src/render/diagnostics";
 import { plainOf } from "../src/render/frame";
-import { describeStamp, factsOf, updateIdentity, updateNotice, updateOf, type Update } from "../src/daemon/update-notice";
+import { describeStamp, factsOf, updateIdentity, updateNotice, updateReading, type Update } from "../src/daemon/update-notice";
+import { ABSENT, failed, ok, pendingOf, type Sampled } from "../src/utils/outcome";
 import { UPDATE_DISMISSED_KEY, UPDATE_NOTICE_FIELD, UPDATE_NOTICE_SESSION_KEY } from "../src/daemon/update-keys";
 import type { ActState } from "../src/daemon/update-act";
 import type { BuildCurrency, SourceStamp } from "../src/daemon/build-currency";
@@ -68,22 +69,53 @@ const ctx = (over: Partial<Parameters<typeof updateNotice>[2]> = {}) => ({
   ...over,
 });
 
-describe("updateOf", () => {
+const sampled = <T,>(value: T): Sampled<T> => ok(value);
+const UNPOLLED: Sampled<Currency> = pendingOf("unread");
+
+describe("updateReading", () => {
   test("a stale checkout is a source update; the registry is not its business", () => {
-    expect(updateOf(STALE_BUILD, STALE_RELEASE)).toEqual(SOURCE);
-    expect(updateOf(CURRENT_BUILD, STALE_RELEASE)).toBeNull();
+    expect(updateReading(sampled(STALE_BUILD), sampled(STALE_RELEASE))).toEqual(
+      ok(SOURCE),
+    );
+    expect(
+      updateReading(sampled(CURRENT_BUILD), sampled(STALE_RELEASE)),
+    ).toEqual(ABSENT);
   });
 
   test("a published install behind the registry is a release update", () => {
-    expect(updateOf(INSTALL, STALE_RELEASE)).toEqual(RELEASE);
-    expect(updateOf(INSTALL, CURRENT_RELEASE)).toBeNull();
-    expect(updateOf(INSTALL, null)).toBeNull();
+    expect(updateReading(sampled(INSTALL), sampled(STALE_RELEASE))).toEqual(
+      ok(RELEASE),
+    );
+    expect(updateReading(sampled(INSTALL), sampled(CURRENT_RELEASE))).toEqual(
+      ABSENT,
+    );
+    expect(
+      updateReading(sampled(INSTALL), sampled({ kind: "ahead", installed: [2, 0, 0], latest: [1, 0, 0] })),
+    ).toEqual(ABSENT);
   });
 
-  test("an unchecked build is nothing to notice", () => {
+  test("a sample not taken yet is pending, never nothing newer", () => {
+    expect(updateReading(pendingOf("unread"), UNPOLLED)).toEqual(
+      pendingOf("unread"),
+    );
+    // an install whose registry has not answered yet
+    expect(updateReading(sampled(INSTALL), UNPOLLED)).toEqual(
+      pendingOf("unread"),
+    );
+    // a checkout never asks the registry, so its pending release is no matter
+    expect(updateReading(sampled(CURRENT_BUILD), UNPOLLED)).toEqual(ABSENT);
+  });
+
+  test("a sample that could not be assessed is a failed read, naming which", () => {
     expect(
-      updateOf({ kind: "unchecked", reason: "x" }, STALE_RELEASE),
-    ).toBeNull();
+      updateReading(sampled({ kind: "unchecked", reason: "x" }), sampled(STALE_RELEASE)),
+    ).toEqual(failed("build: unchecked: x", "read"));
+    expect(
+      updateReading(
+        sampled(INSTALL),
+        sampled({ kind: "unchecked", installed: "1.2.3", reason: "offline" }),
+      ),
+    ).toEqual(failed("release: unchecked: offline", "read"));
   });
 });
 

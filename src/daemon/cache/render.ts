@@ -1294,10 +1294,14 @@ export interface ViewDeclared<F extends ViewFacts = ViewFacts> {
 // the view's own store (a source's kept derivations are released with it),
 // and its declaration, observable.
 export interface SourcedView {
-  readonly sessionId: string;
+  readonly sessionId: SessionId;
   readonly state: DslRenderState;
   readonly store: VariableStore;
   readonly declared: () => ViewDeclared;
+  // [LAW:single-enforcer] The view's one teardown also stops what its source
+  // runs outside the store (a reaction): a source hands its stop here, and
+  // `dispose` calls each. A source with nothing to stop never calls it.
+  readonly onDispose: (stop: () => void) => void;
 }
 
 export type SourceOf<S extends ViewSource> = (view: SourcedView) => S;
@@ -1428,11 +1432,13 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
   );
   // [LAW:single-enforcer] The view's inputs and slots read its source from
   // here on (src/dsl/parts.ts): no draw writes one.
+  const sourceStops: Array<() => void> = [];
   const source = sourceOf({
     sessionId,
     state,
     store: registry.variableStore,
     declared: () => declared.get(),
+    onDispose: (stop) => sourceStops.push(stop),
   });
   bindView(state.compiled, registry.variableStore, registry, source);
   // [LAW:single-enforcer] The view's one say that what it draws from moved:
@@ -1484,6 +1490,7 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
     dispose: () => {
       stop();
       stopChanged();
+      for (const stopSource of sourceStops) stopSource();
       holds.close();
       return registry.dispose();
     },

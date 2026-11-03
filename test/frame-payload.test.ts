@@ -13,7 +13,6 @@
 
 import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import {
-  payloadOf,
   renderWidth,
   settlePayload,
   todayOf,
@@ -39,6 +38,7 @@ import {
   fakeMetrics,
   fakeTmux,
   fakeUsage,
+  payloadOf,
 } from "./helpers/payload-owners";
 
 const EFFECTIVE = globalsFor(DEFAULT_DSL_CONFIG);

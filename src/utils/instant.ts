@@ -1,3 +1,5 @@
+import type { Timekeeper } from "../time";
+
 // The instant a render is drawn at: seconds since the Unix epoch, fractional,
 // the unit rich-js effects take their `t` in. Wall-clock time rather than a
 // daemon-relative clock, because the daemon restarts routinely (a rebuilt
@@ -10,6 +12,12 @@ export const instantOf = (date: Date): Instant =>
   (date.getTime() / 1000) as Instant;
 
 export const dateOf = (at: Instant): Date => new Date(at * 1000);
+
+// [LAW:single-enforcer] The clock's wall reading (epoch milliseconds) as the
+// instant a stamp carries (epoch seconds): the one conversion, so a stamp is
+// never a millisecond count.
+export const instantAt = (clock: Pick<Timekeeper, "now">): Instant =>
+  instantOf(new Date(clock.now()));
 
 // A time on a session's ANIMATION clock (brandon-menus-sjhy.nt2): seconds,
 // like an Instant, but advancing at the session's animation speed — equal to
