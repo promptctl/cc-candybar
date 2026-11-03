@@ -227,10 +227,12 @@ function shellReader(
       if (!r.ok && r.reason === "aborted" && signal.aborted)
         throw signal.reason;
       if (r.ok) return ok(r.stdout);
+      // The reason, not the exit code, says which: a child the launcher ended
+      // (timeout, output-limit) can still exit with a code of its own.
       const why =
-        r.exitCode === null
-          ? [r.reason, r.error].filter((s) => s !== undefined).join(": ")
-          : `exited with code ${r.exitCode}`;
+        r.reason === "non-zero"
+          ? `exited with code ${r.exitCode}`
+          : [r.reason, r.error].filter((s) => s !== undefined).join(": ");
       return failed(`shell "${command}" ${why} in ${cwd}`);
     },
   };

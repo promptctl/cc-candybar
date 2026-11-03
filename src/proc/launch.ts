@@ -266,6 +266,9 @@ export type LaunchResult =
       // — no child process was launched. "signal-refused" means the OS
       // refused the termination signal (EPERM: the child changed its real
       // uid), so the child is NOT reaped; `error` carries the errno.
+      // "output-limit" means a stream passed MAX_CAPTURED_BYTES: the child was
+      // terminated and `stdout`/`stderr` hold the first MAX_CAPTURED_BYTES of
+      // it, so a truncated capture is never an `ok` one.
       reason:
         | "timeout"
         | "aborted"
@@ -273,7 +276,8 @@ export type LaunchResult =
         | "spawn-error"
         | "non-zero"
         | "rate-limited"
-        | "signal-refused";
+        | "signal-refused"
+        | "output-limit";
       stdout: string;
       stderr: string;
       exitCode: number | null;
@@ -552,7 +556,14 @@ function endLifeline(state: LaunchState): void {
 
 // A termination the launcher itself initiated — carried as data because the
 // OS reports only the signal, never why it was sent.
-type Terminated = "timeout" | "aborted";
+type Terminated = "timeout" | "aborted" | "output-limit";
+
+// The most a waited launch keeps of each of its streams. A string cannot grow
+// without end (V8 throws past ~512 MiB), and a child that writes without end
+// (`cat /dev/zero`) would take the process with it; the bound is the launch's,
+// not the caller's, so every waited launch is total.
+export const MAX_CAPTURED_BYTES = 16 * 1024 * 1024;
+const OUTPUT_LIMIT_ERROR = `output exceeded ${MAX_CAPTURED_BYTES} bytes`;
 
 // Signal a waited child's whole process group (it leads its own; see the
 // header). [LAW:no-silent-failure] exception: ESRCH is the group already gone
@@ -586,12 +597,18 @@ function leaderRefuses(pid: number): boolean {
 // the capture: later output is drained unread and the text is released, whatever
 // outlives the launch. An owned decoder, not setEncoding: a launch can end before
 // EOF, and only this one can be flushed then, so a character cut short still
-// shows as U+FFFD.
-function capture(stream: Readable | null): () => string {
+// shows as U+FFFD. It keeps at most MAX_CAPTURED_BYTES: past that it reads and
+// drops, and says `full` each time, so the pipe still drains while the launch
+// ends the child.
+function capture(stream: Readable | null, full: () => void): () => string {
   const decoder = new StringDecoder("utf8");
   let text = "";
+  let bytes = 0;
   const read = (chunk: Buffer) => {
-    text += decoder.write(chunk);
+    const kept = chunk.subarray(0, MAX_CAPTURED_BYTES - bytes);
+    bytes += kept.length;
+    text += decoder.write(kept);
+    if (kept.length < chunk.length) full();
   };
   stream?.on("data", read);
   return () => {
@@ -640,8 +657,9 @@ async function launchWaited(
     if (group !== undefined) guard(state, group);
     const exited = new Promise((end) => child.once("exit", end));
 
-    const stdout = capture(child.stdout);
-    const stderr = capture(child.stderr);
+    const full = () => terminate("output-limit");
+    const stdout = capture(child.stdout, full);
+    const stderr = capture(child.stderr, full);
     const output = () => ({ stdout: stdout(), stderr: stderr() });
     let settled = false;
     // What clears each timer the launch has armed.
@@ -726,7 +744,8 @@ async function launchWaited(
     // `conclude` resolve once the child is actually gone, so the promise
     // never resolves while the child is still alive. SIGTERM first; SIGKILL
     // after a grace period if the child ignores it. One termination per
-    // child: the other trigger is disarmed so the cause cannot be rewritten.
+    // child: the first cause stands, so a later trigger cannot rewrite it or
+    // re-arm the escalation.
     //
     // [LAW:dataflow-not-control-flow] `child.pid` is undefined when the spawn
     // failed asynchronously (ENOENT) — there is no process to signal and the
@@ -734,11 +753,13 @@ async function launchWaited(
     // wrong target (verified: it can terminate the caller), so escalation is
     // gated on the pid actually existing.
     const terminate = (cause: Terminated) => {
+      if (terminated !== null) return;
       // A group that ended between polls has nothing left to signal, and its id
-      // may no longer be the launch's. It did not time out; an abort still stands.
+      // may no longer be the launch's. It did not time out; an abort and an
+      // overflow, which happened, still stand.
       const ended = child.exitCode !== null || child.signalCode !== null;
       if (ended && group !== undefined && groupGone(group)) {
-        terminated = cause === "aborted" ? cause : null;
+        terminated = cause === "timeout" ? null : cause;
         clock.defer(concludeWithGroup);
         return;
       }
@@ -781,6 +802,9 @@ async function launchWaited(
           ...output(),
           exitCode: code,
           signal,
+          ...(terminated === "output-limit"
+            ? { error: OUTPUT_LIMIT_ERROR }
+            : {}),
         });
         return;
       }
