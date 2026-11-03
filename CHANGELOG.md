@@ -1,3 +1,9 @@
+## [1.185.1](https://github.com/promptctl/cc-candybar/compare/v1.185.0...v1.185.1) (2026-11-03)
+
+### Bug Fixes
+
+* **render:** today's day sums and the PR stop blocking the first bar (candybar-gather-renderer-76bb.6pj.2nv) ([#610](https://github.com/promptctl/cc-candybar/issues/610)) ([be10d89](https://github.com/promptctl/cc-candybar/commit/be10d89d0f489dffdc71e3a67ef2fec37cb70333))
+
 ## [1.185.0](https://github.com/promptctl/cc-candybar/compare/v1.184.1...v1.185.0) (2026-11-03)
 
 ### Features
