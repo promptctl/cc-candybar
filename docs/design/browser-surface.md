@@ -1,5 +1,7 @@
 # Browser surface
 
+`scene-and-browser.md` supersedes this document where they differ.
+
 Status: design, nothing built. [The Frame](areas/frame.md) it depends on is built. Tickets: `candybar-browser-surface-97sw`.
 
 ## Goal
