@@ -4,15 +4,22 @@
     {
       "version": "pr-617",
       "ref": "refs/pull/617/merge",
-      "sha": "d2038381129a35bcadfb4f45277268f6856b3e89",
-      "timestamp": "2026-11-03T17:10:02.709Z",
+      "sha": "dfbd9d1c26e15edecde0bf5d4ea0716a1c3e5478",
+      "timestamp": "2026-11-03T17:14:46.542Z",
       "commits": [
         {
-          "sha": "d2038381129a35bcadfb4f45277268f6856b3e89",
+          "sha": "dfbd9d1c26e15edecde0bf5d4ea0716a1c3e5478",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T10:07:33-07:00",
-          "message": "Merge d9bef5d7d9a1d752a1fb184065b026fc12da60d9 into 847071c25ae39f8f9af52d1ab5b46f3a54b872e1\n"
+          "timestamp": "2026-11-03T17:13:17Z",
+          "message": "Merge bdd44b3d217645e24337c2704f05febc960f579f into 847071c25ae39f8f9af52d1ab5b46f3a54b872e1\n"
+        },
+        {
+          "sha": "bdd44b3d217645e24337c2704f05febc960f579f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T10:12:58-07:00",
+          "message": "fix(facts): the wait's comment names every session; the doctor's namespace-read test returns (candybar-gather-renderer-76bb.6pj.xb3)\n"
         },
         {
           "sha": "d9bef5d7d9a1d752a1fb184065b026fc12da60d9",
