@@ -4,15 +4,22 @@
     {
       "version": "pr-597",
       "ref": "refs/pull/597/merge",
-      "sha": "d42a3ea4c94f0309dbc708810d3257dd0eb351d2",
-      "timestamp": "2026-11-03T02:18:00.969Z",
+      "sha": "53f41dc79ad39275262d80104280858f6698ee92",
+      "timestamp": "2026-11-03T02:19:30.913Z",
       "commits": [
         {
-          "sha": "d42a3ea4c94f0309dbc708810d3257dd0eb351d2",
+          "sha": "53f41dc79ad39275262d80104280858f6698ee92",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T02:17:04Z",
-          "message": "Merge 6ed7be3ec1dd34adc8f921118791596ac36bfb55 into 669df9209449d3ac4080a21d3a7144477fa78a73\n"
+          "timestamp": "2026-11-03T02:18:17Z",
+          "message": "Merge 3e0f2e2240e9efc408042e839de30319e5ca9e65 into 669df9209449d3ac4080a21d3a7144477fa78a73\n"
+        },
+        {
+          "sha": "3e0f2e2240e9efc408042e839de30319e5ca9e65",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T19:18:05-07:00",
+          "message": "fix(test): a held-config case that fails releases the writer open it left waiting on the pipe (candybar-testing-0x6u.8vd)\n"
         },
         {
           "sha": "6ed7be3ec1dd34adc8f921118791596ac36bfb55",
