@@ -4,15 +4,22 @@
     {
       "version": "pr-607",
       "ref": "refs/pull/607/merge",
-      "sha": "3740a9794ef91870713c3ea01b424d31975bb28f",
-      "timestamp": "2026-11-03T08:16:47.588Z",
+      "sha": "b24eec9cc0918b47fc3ac8bc498e8fed59811b7e",
+      "timestamp": "2026-11-03T08:22:14.068Z",
       "commits": [
         {
-          "sha": "3740a9794ef91870713c3ea01b424d31975bb28f",
+          "sha": "b24eec9cc0918b47fc3ac8bc498e8fed59811b7e",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T01:15:52-07:00",
-          "message": "Merge 841a4484043f4ba21aaed38cdd70db077fa82e6a into 8005d083220ec5eb217749c74c3caf1a246f2bc5\n"
+          "timestamp": "2026-11-03T08:20:38Z",
+          "message": "Merge dd7bc5b33f1c0782dcc0477c5e593a9e77c1df25 into 8005d083220ec5eb217749c74c3caf1a246f2bc5\n"
+        },
+        {
+          "sha": "dd7bc5b33f1c0782dcc0477c5e593a9e77c1df25",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T01:20:28-07:00",
+          "message": "docs(design): settle the socket rule, link ids, key changes, bundle path, breaker and recording kinds the high review found (candybar-gather-renderer-76bb.yl3)\n"
         },
         {
           "sha": "841a4484043f4ba21aaed38cdd70db077fa82e6a",
