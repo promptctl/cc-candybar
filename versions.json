@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-590",
+      "ref": "refs/pull/590/merge",
+      "sha": "ac136bc57f414be9b2872e6e9438adcf386cd7ee",
+      "timestamp": "2026-11-03T00:01:43.384Z",
+      "commits": [
+        {
+          "sha": "ac136bc57f414be9b2872e6e9438adcf386cd7ee",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T17:00:52-07:00",
+          "message": "Merge d74f5a50332396e8b9022fa8e4ced0d585b33f9e into c566bb07016fbae3ad97df6abf6cc28e94fc129b\n"
+        },
+        {
+          "sha": "d74f5a50332396e8b9022fa8e4ced0d585b33f9e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T17:00:09-07:00",
+          "message": "fix(launch): a waited launch keeps at most 16 MiB per stream and ends the child past it (candybar-testing-0x6u.ndy)\n\nA child writing without end grew the capture string until V8 threw\n'Invalid string length' from the data listener; the uncaughtException\nhandler then shut the daemon down. capture now stops at\nMAX_CAPTURED_BYTES and launchWaited ends the child through terminate with\na new reason, output-limit, so a truncated capture is never ok.\nterminate keeps the first cause.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-588",
       "ref": "refs/pull/588/merge",
       "sha": "3576f499df6d85755cc2b67bc24f9114aaacdd6e",
