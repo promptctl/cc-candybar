@@ -22800,84 +22800,11 @@ function parseHandlerUrl(rawUrl) {
 init_globals();
 init_os();
 
-// src/proc/launch.ts
+// src/proc/system-launcher.ts
 init_globals();
 
-// site/shims/child_process.ts
+// src/proc/launch.ts
 init_globals();
-var import_buffer2 = __toESM(require_buffer(), 1);
-var import_events2 = __toESM(require_events(), 1);
-var RESIDENT = "resident";
-var programs = /* @__PURE__ */ new Map();
-var enoent = (cmd) => Object.assign(new Error(`spawn ${cmd} ENOENT`), { code: "ENOENT", errno: -2, syscall: `spawn ${cmd}`, path: cmd });
-var Stream = class extends import_events2.EventEmitter {
-  encoding = null;
-  setEncoding(encoding) {
-    this.encoding = encoding;
-    return this;
-  }
-  chunk(text4) {
-    this.emit("data", this.encoding === null ? import_buffer2.Buffer.from(text4) : text4);
-  }
-  pipe() {
-    return this;
-  }
-  destroy() {
-  }
-  end() {
-  }
-  write() {
-    return true;
-  }
-  resume() {
-    return this;
-  }
-  unref() {
-    return this;
-  }
-};
-var nextPid = 5e3;
-function spawn(cmd, args = [], opts = {}) {
-  const program = programs.get(cmd.split("/").pop());
-  const child = Object.assign(new import_events2.EventEmitter(), {
-    // As in Node, a program that cannot start has no pid (src/proc/launch.ts reads that).
-    pid: program === void 0 ? void 0 : nextPid++,
-    stdout: new Stream(),
-    stderr: new Stream(),
-    stdin: new Stream(),
-    exitCode: null,
-    signalCode: null,
-    killed: false,
-    kill: () => true,
-    unref: () => {
-    },
-    ref: () => {
-    }
-  });
-  setTimeout(() => {
-    if (program === void 0) {
-      child.emit("error", enoent(cmd));
-      return;
-    }
-    const run3 = program(args, opts.cwd);
-    if (run3 === RESIDENT) return;
-    if (run3.stdout) child.stdout.chunk(run3.stdout);
-    if (run3.stderr) child.stderr.chunk(run3.stderr);
-    child.exitCode = run3.code;
-    child.stdout.emit("end");
-    child.stderr.emit("end");
-    child.emit("exit", run3.code, null);
-    child.emit("close", run3.code, null);
-  }, 0);
-  return child;
-}
-function spawnSync(cmd, args = [], opts = {}) {
-  const program = programs.get(cmd.split("/").pop());
-  if (program === void 0) return { pid: 0, status: null, signal: null, stdout: "", stderr: "", output: [], error: enoent(cmd) };
-  const run3 = program(args, opts.cwd);
-  if (run3 === RESIDENT) throw new Error(`${cmd} runs as long as the page does; a sync run of it would never return`);
-  return { pid: nextPid++, status: run3.code, signal: null, stdout: run3.stdout, stderr: run3.stderr ?? "", output: [null, run3.stdout, run3.stderr ?? ""] };
-}
 
 // site/shims/fs.ts
 init_globals();
@@ -23091,7 +23018,7 @@ function spawnLifeline(state) {
   const t0 = clock.now();
   let line;
   try {
-    line = spawn("awk", [LIFELINE_PROGRAM], {
+    line = state.spawner.spawn("awk", [LIFELINE_PROGRAM], {
       stdio: ["pipe", "ignore", "ignore"],
       detached: true
     });
@@ -23141,24 +23068,6 @@ function endLifeline(state) {
 }
 var MAX_CAPTURED_BYTES = 16 * 1024 * 1024;
 var OUTPUT_LIMIT_ERROR = `output exceeded ${MAX_CAPTURED_BYTES} bytes`;
-function signalGroup(pid2, sig) {
-  try {
-    process_default.kill(-pid2, sig);
-  } catch (err) {
-    const code = err.code;
-    if (code !== "ESRCH" && !(code === "EPERM" && !leaderRefuses(pid2))) {
-      throw err;
-    }
-  }
-}
-function leaderRefuses(pid2) {
-  try {
-    process_default.kill(pid2, 0);
-    return false;
-  } catch (err) {
-    return err.code === "EPERM";
-  }
-}
 function capture(state, category, stream, ends) {
   const { stats } = state.scope;
   const decoder = new import_node_string_decoder.StringDecoder("utf8");
@@ -23232,9 +23141,10 @@ async function launchWaited(state, opts) {
   const t0 = clock.now();
   stats?.onStart(opts.category);
   return new Promise((resolve) => {
+    const { spawner } = state;
     let child;
     try {
-      child = spawn(opts.bin, opts.args ?? [], {
+      child = spawner.spawn(opts.bin, opts.args ?? [], {
         cwd: opts.cwd,
         env: childEnv(state.scope, opts),
         stdio: ["pipe", "pipe", "pipe"],
@@ -23299,7 +23209,7 @@ async function launchWaited(state, opts) {
     const settle3 = (r) => finish(() => resolve(r));
     const signal = (pid2, sig) => {
       try {
-        signalGroup(pid2, sig);
+        spawner.signalGroup(pid2, sig);
       } catch (err) {
         state.unreaped.set(child, opts.category);
         void exited.then(() => state.unreaped.delete(child));
@@ -23317,7 +23227,7 @@ async function launchWaited(state, opts) {
     if (group !== void 0) {
       const awaitGroupEnd = (delayMs) => {
         if (settled3) return;
-        if (groupGone(group)) {
+        if (spawner.groupGone(group)) {
           clock.defer(concludeWithGroup);
           return;
         }
@@ -23333,7 +23243,7 @@ async function launchWaited(state, opts) {
     const terminate = (cause) => {
       if (terminated !== null) return;
       const ended = child.exitCode !== null || child.signalCode !== null;
-      if (ended && group !== void 0 && groupGone(group)) {
+      if (ended && group !== void 0 && spawner.groupGone(group)) {
         terminated = cause === "timeout" ? null : cause;
         clock.defer(concludeWithGroup);
         return;
@@ -23401,14 +23311,13 @@ function launchBlocking(state, opts) {
   if (refused !== null) return refused;
   const t0 = clock.now();
   stats?.onStart(opts.category);
-  const stdio = ["pipe", "pipe", "pipe"];
   try {
-    const result = spawnSync(opts.bin, opts.args ?? [], {
+    const result = state.spawner.spawnSync(opts.bin, opts.args ?? [], {
       cwd: opts.cwd,
       env: childEnv(state.scope, opts),
       input: opts.stdinInput,
       timeout: opts.timeoutMs && opts.timeoutMs > 0 ? opts.timeoutMs : void 0,
-      stdio,
+      stdio: ["pipe", "pipe", "pipe"],
       encoding: "utf8"
     });
     stats?.onEnd(opts.category, clock.now() - t0);
@@ -23458,16 +23367,16 @@ function launchOrphan(state, opts) {
   if (refused !== null) return refused;
   const t0 = clock.now();
   stats?.onStart(opts.category);
-  const result = launchDetachedSyncInner(state.scope, opts);
+  const result = launchDetachedSyncInner(state, opts);
   stats?.onEnd(opts.category, clock.now() - t0);
   return result;
 }
-function launchDetachedSyncInner(scope, opts) {
+function launchDetachedSyncInner(state, opts) {
   let child;
   try {
-    child = spawn(opts.bin, opts.args ?? [], {
+    child = state.spawner.spawn(opts.bin, opts.args ?? [], {
       cwd: opts.cwd,
-      env: childEnv(scope, opts),
+      env: childEnv(state.scope, opts),
       detached: true,
       stdio: "ignore"
     });
@@ -23509,7 +23418,7 @@ function launchJob(state, opts, files) {
   stats?.onStart(opts.category);
   let child;
   try {
-    child = spawn(
+    child = state.spawner.spawn(
       "/bin/sh",
       [
         "-c",
@@ -23573,28 +23482,7 @@ function readJobEnd(status) {
   if (text4 === "timeout") return { kind: "timeout" };
   throw new Error(`${status}: not a job verdict: ${JSON.stringify(text4)}`);
 }
-function signalJob(pid2, sig) {
-  try {
-    process_default.kill(-pid2, sig);
-    return true;
-  } catch (err) {
-    const code = err.code;
-    if (code === "ESRCH" || code === "EPERM") return false;
-    throw err;
-  }
-}
-function jobGroupAlive(pid2) {
-  return signalJob(pid2, 0);
-}
-function groupGone(pid2) {
-  try {
-    process_default.kill(-pid2, 0);
-    return false;
-  } catch (err) {
-    return err.code === "ESRCH";
-  }
-}
-function endJob(pid2, status, end, clock) {
+function endJob(spawner, clock, pid2, status, end) {
   const staged = `${status}.${process_default.pid}`;
   try {
     writeFileSync(staged, `${formatJobEnd(end)}
@@ -23614,27 +23502,33 @@ function endJob(pid2, status, end, clock) {
   } finally {
     rmSync(staged, { force: true });
   }
-  const signalled = signalJob(pid2, "SIGTERM");
+  const signalled = spawner.signalJob(pid2, "SIGTERM");
   if (signalled) {
-    clock.after(TIMEOUT_KILL_GRACE_MS, () => signalJob(pid2, "SIGKILL"), {
-      unref: true
-    });
+    clock.after(
+      TIMEOUT_KILL_GRACE_MS,
+      () => spawner.signalJob(pid2, "SIGKILL"),
+      {
+        unref: true
+      }
+    );
   }
   return { stands, signalled };
 }
-function createLauncher(owner, clock) {
-  return launcherWithState(owner, clock).launcher;
+function createLauncher(owner, clock, spawner) {
+  return launcherWithState(owner, clock, spawner).launcher;
 }
-function createOneShotLauncher(owner, clock) {
-  const { launcher, state } = launcherWithState(owner, clock);
+function createOneShotLauncher(owner, clock, spawner) {
+  const { launcher, state } = launcherWithState(owner, clock, spawner);
   return { ...launcher, launchSync: (opts) => launchBlocking(state, opts) };
 }
-function launcherWithState(owner, clock) {
+function launcherWithState(owner, clock, spawner) {
   const launcher = {
     clock,
     launch: (opts) => track(state, launchWaited(state, opts)),
     launchDetachedSync: (opts) => launchOrphan(state, opts),
     launchJobSync: (opts, files) => launchJob(state, opts, files),
+    jobGroupAlive: (pid2) => spawner.signalJob(pid2, 0),
+    endJob: (pid2, status, end) => endJob(spawner, clock, pid2, status, end),
     launcherWarnings: (at, render3) => launcherWarnings(state, at, render3),
     answeredPipeEvent: (event) => answeredPipeEvent(state, event),
     settled: async () => {
@@ -23653,6 +23547,7 @@ function launcherWithState(owner, clock) {
     }
   };
   const state = {
+    spawner,
     scope: {
       stats: null,
       // A launcher with nobody to tell says the warning on stderr.
@@ -23686,6 +23581,131 @@ function launcherWithState(owner, clock) {
   );
   return { launcher, state };
 }
+
+// src/proc/spawner.ts
+init_globals();
+
+// site/shims/child_process.ts
+init_globals();
+var import_buffer2 = __toESM(require_buffer(), 1);
+var import_events2 = __toESM(require_events(), 1);
+var RESIDENT = "resident";
+var programs = /* @__PURE__ */ new Map();
+var enoent = (cmd) => Object.assign(new Error(`spawn ${cmd} ENOENT`), { code: "ENOENT", errno: -2, syscall: `spawn ${cmd}`, path: cmd });
+var Stream = class extends import_events2.EventEmitter {
+  encoding = null;
+  setEncoding(encoding) {
+    this.encoding = encoding;
+    return this;
+  }
+  chunk(text4) {
+    this.emit("data", this.encoding === null ? import_buffer2.Buffer.from(text4) : text4);
+  }
+  pipe() {
+    return this;
+  }
+  destroy() {
+  }
+  end() {
+  }
+  write() {
+    return true;
+  }
+  resume() {
+    return this;
+  }
+  unref() {
+    return this;
+  }
+};
+var nextPid = 5e3;
+function spawn(cmd, args = [], opts = {}) {
+  const program = programs.get(cmd.split("/").pop());
+  const child = Object.assign(new import_events2.EventEmitter(), {
+    // As in Node, a program that cannot start has no pid (src/proc/launch.ts reads that).
+    pid: program === void 0 ? void 0 : nextPid++,
+    stdout: new Stream(),
+    stderr: new Stream(),
+    stdin: new Stream(),
+    exitCode: null,
+    signalCode: null,
+    killed: false,
+    kill: () => true,
+    unref: () => {
+    },
+    ref: () => {
+    }
+  });
+  setTimeout(() => {
+    if (program === void 0) {
+      child.emit("error", enoent(cmd));
+      return;
+    }
+    const run3 = program(args, opts.cwd);
+    if (run3 === RESIDENT) return;
+    if (run3.stdout) child.stdout.chunk(run3.stdout);
+    if (run3.stderr) child.stderr.chunk(run3.stderr);
+    child.exitCode = run3.code;
+    child.stdout.emit("end");
+    child.stderr.emit("end");
+    child.emit("exit", run3.code, null);
+    child.emit("close", run3.code, null);
+  }, 0);
+  return child;
+}
+function spawnSync(cmd, args = [], opts = {}) {
+  const program = programs.get(cmd.split("/").pop());
+  if (program === void 0) return { pid: 0, status: null, signal: null, stdout: "", stderr: "", output: [], error: enoent(cmd) };
+  const run3 = program(args, opts.cwd);
+  if (run3 === RESIDENT) throw new Error(`${cmd} runs as long as the page does; a sync run of it would never return`);
+  return { pid: nextPid++, status: run3.code, signal: null, stdout: run3.stdout, stderr: run3.stderr ?? "", output: [null, run3.stdout, run3.stderr ?? ""] };
+}
+
+// src/proc/spawner.ts
+function leaderRefuses(pid2) {
+  try {
+    process_default.kill(pid2, 0);
+    return false;
+  } catch (err) {
+    return err.code === "EPERM";
+  }
+}
+var systemSpawner = {
+  spawn: (bin, args, options) => spawn(bin, args, options),
+  spawnSync: (bin, args, options) => spawnSync(bin, args, options),
+  signalGroup: (pid2, sig) => {
+    try {
+      process_default.kill(-pid2, sig);
+    } catch (err) {
+      const code = err.code;
+      if (code !== "ESRCH" && !(code === "EPERM" && !leaderRefuses(pid2))) {
+        throw err;
+      }
+    }
+  },
+  groupGone: (pid2) => {
+    try {
+      process_default.kill(-pid2, 0);
+      return false;
+    } catch (err) {
+      return err.code === "ESRCH";
+    }
+  },
+  signalJob: (pid2, sig) => {
+    try {
+      process_default.kill(-pid2, sig);
+      return true;
+    } catch (err) {
+      const code = err.code;
+      if (code === "ESRCH" || code === "EPERM") return false;
+      throw err;
+    }
+  }
+};
+
+// src/proc/system-launcher.ts
+var systemLauncher = (owner, clock) => createLauncher(owner, clock, systemSpawner);
+var systemOneShotLauncher = (owner, clock) => createOneShotLauncher(owner, clock, systemSpawner);
 
 // src/time.ts
 init_globals();
@@ -23759,7 +23779,7 @@ function processWorld() {
   const clock = systemTimekeeper;
   return {
     host,
-    launcher: createOneShotLauncher({ inherited: process_default.env }, clock),
+    launcher: systemOneShotLauncher({ inherited: process_default.env }, clock),
     clock
   };
 }
@@ -68502,7 +68522,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.182.0";
+var PACKAGE_VERSION = "1.183.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -69851,7 +69871,7 @@ async function clickHandoff(launcher, opts, what, log, boundMs, tmp) {
     job.release();
     const deadline = launcher.clock.monotonic() + boundMs;
     for (; ; ) {
-      const alive = jobGroupAlive(job.pid);
+      const alive = launcher.jobGroupAlive(job.pid);
       const end = readJobEnd(files.status);
       if (end !== null) {
         if (end.kind === "exit" && end.code === 0) return;
@@ -77430,8 +77450,8 @@ function removeAct(dir, act) {
   fs_default.rmSync(leaving, { recursive: true, force: true });
 }
 var bootedAt = (clock) => clock.now() - os_default.uptime() * 1e3;
-async function isRecordedJob(record2, read2, boot) {
-  if (record2.started <= boot || !jobGroupAlive(record2.pid)) return false;
+async function isRecordedJob(record2, read2, jobs, boot) {
+  if (record2.started <= boot || !jobs.jobGroupAlive(record2.pid)) return false;
   const leader = await read2(record2.pid);
   return record2.startTime === null || leader.kind === "unavailable" || leader.token === record2.startTime;
 }
@@ -77444,7 +77464,7 @@ function readRecord(actDir) {
   }
 }
 var sameJob = (a, b) => a.pid === b.pid && a.startTime === b.startTime;
-function makeActReader(dir, read2, clock) {
+function makeActReader(dir, read2, jobs, clock) {
   let known = null;
   async function factsOf2(act) {
     const actDir = import_node_path34.default.join(dir, String(act));
@@ -77453,12 +77473,12 @@ function makeActReader(dir, read2, clock) {
     if (known === null || !sameJob(known.record, record2)) {
       known = {
         record: record2,
-        ours: await isRecordedJob(record2, read2, bootedAt(clock)),
+        ours: await isRecordedJob(record2, read2, jobs, bootedAt(clock)),
         final: null
       };
     }
     if (known.final !== null) return known.final;
-    known.ours = known.ours && jobGroupAlive(record2.pid);
+    known.ours = known.ours && jobs.jobGroupAlive(record2.pid);
     const files = filesOf(actDir);
     const end = readJobEnd(files.status);
     const lastLine = end === null ? null : lastLineOf(files.stderr) ?? lastLineOf(files.stdout);
@@ -77534,37 +77554,13 @@ var CLAIMED_FIRST = {
   ok: false,
   reason: "another act claimed this bundle first"
 };
-function endOverdue(dir, facts, clock) {
+function endOverdue(dir, facts, jobs) {
   const status = filesOf(import_node_path34.default.join(dir, String(facts.act))).status;
-  return endJob(facts.record.pid, status, { kind: "timeout" }, clock);
+  return jobs.endJob(facts.record.pid, status, { kind: "timeout" });
 }
 
 // src/daemon/update-notice.ts
 init_globals();
-
-// src/daemon/process-fingerprint.ts
-init_globals();
-async function readStartTime(pid2, launch) {
-  const res = await launch({
-    bin: "ps",
-    args: ["-o", "lstart=", "-p", String(pid2)],
-    category: "process-fingerprint",
-    timeoutMs: 2e3,
-    // [FRAMING:representation] Pin BOTH locale and timezone so the token is
-    // deterministic across daemons — the writer and reader must render the same
-    // process identically for opaque string equality to be sound. LC_ALL=C fixes
-    // the strftime format; TZ=UTC fixes localtime(), so DST / TZ / tzdata changes
-    // can't make one live process render two different start-time strings.
-    envOverlay: { LC_ALL: "C", TZ: "UTC" }
-  });
-  if (res.ok) {
-    const token = res.stdout.trim();
-    if (token.length > 0) return { kind: "start", token };
-    return { kind: "unavailable", detail: "ps produced no start-time" };
-  }
-  const detail = res.reason === "spawn-error" ? res.error ?? "ps spawn failed" : `ps ${res.reason} (exit ${res.exitCode})`;
-  return { kind: "unavailable", detail };
-}
 
 // src/utils/keyed-serial-queue.ts
 init_globals();
@@ -77737,6 +77733,7 @@ function makeUpdateWatch(opts) {
   const {
     clock,
     launcher,
+    probe: probe2,
     entryUrl,
     digest: digest2,
     actsDir: actsDir2,
@@ -77751,11 +77748,11 @@ function makeUpdateWatch(opts) {
   let build = { kind: "unchecked", reason: "not sampled yet" };
   let release3 = null;
   const readStart = async (pid2) => {
-    const read2 = await readStartTime(pid2, launcher.launch);
+    const read2 = await probe2.startTime(pid2);
     if (closed) throw new DaemonClosing("apply-update");
     return read2;
   };
-  const acts = makeActReader(actsDir2, readStart, clock);
+  const acts = makeActReader(actsDir2, readStart, launcher, clock);
   let seen = null;
   let gate2 = null;
   const logBuild = changeLogger(log);
@@ -77812,7 +77809,7 @@ function makeUpdateWatch(opts) {
   }
   function endIfOverdue(facts) {
     if (!facts?.alive || clock.now() <= facts.record.deadline) return;
-    const { stands, signalled } = endOverdue(actsDir2, facts, clock);
+    const { stands, signalled } = endOverdue(actsDir2, facts, launcher);
     const why2 = stands ? "timed out" : "outlived its verdict";
     const ending = signalled ? "ending it" : "its group took no signal";
     log("error", `apply-update: act ${facts.act} ${why2}; ${ending}`);
@@ -84349,6 +84346,7 @@ function createDaemon(inputs) {
       frameFeeds.wakeWhere("data", () => true);
     }
   });
+  const probe2 = inputs.probe(launcher);
   const storage = inputs.storage(log);
   const sessionState = new SessionState(storage.session);
   const settingsHistory = new SettingsHistory(
@@ -84419,7 +84417,8 @@ function createDaemon(inputs) {
     edge: inputs.laneEdge(
       launcher,
       (sessionId2) => frameFeeds.following(sessionId2),
-      closing.signal
+      closing.signal,
+      probe2
     ),
     // A bar pane runs this bundle under the node running it now, with the
     // flags it runs with (tsx's loader, under the test harness).
@@ -84592,6 +84591,7 @@ function createDaemon(inputs) {
   const updateWatch = makeUpdateWatch({
     clock,
     launcher,
+    probe: probe2,
     entryUrl: bundle.entryUrl,
     digest: bundle.digest,
     // [LAW:one-source-of-truth] Keyed by the bundle the act rewrites, the one
@@ -85068,6 +85068,43 @@ var DaemonLog = class {
 // src/daemon/production-adapters.ts
 init_globals();
 
+// src/daemon/process-fingerprint.ts
+init_globals();
+async function readStartTime(pid2, launch) {
+  const res = await launch({
+    bin: "ps",
+    args: ["-o", "lstart=", "-p", String(pid2)],
+    category: "process-fingerprint",
+    timeoutMs: 2e3,
+    // [FRAMING:representation] Pin BOTH locale and timezone so the token is
+    // deterministic across daemons — the writer and reader must render the same
+    // process identically for opaque string equality to be sound. LC_ALL=C fixes
+    // the strftime format; TZ=UTC fixes localtime(), so DST / TZ / tzdata changes
+    // can't make one live process render two different start-time strings.
+    envOverlay: { LC_ALL: "C", TZ: "UTC" }
+  });
+  if (res.ok) {
+    const token = res.stdout.trim();
+    if (token.length > 0) return { kind: "start", token };
+    return { kind: "unavailable", detail: "ps produced no start-time" };
+  }
+  const detail = res.reason === "spawn-error" ? res.error ?? "ps spawn failed" : `ps ${res.reason} (exit ${res.exitCode})`;
+  return { kind: "unavailable", detail };
+}
+function systemProbe(launcher) {
+  return {
+    alive: (pid2) => {
+      try {
+        process_default.kill(pid2, 0);
+        return true;
+      } catch (e) {
+        return e.code === "EPERM";
+      }
+    },
+    startTime: (pid2) => readStartTime(pid2, launcher.launch)
+  };
+}
+
 // src/daemon/file-storage.ts
 init_globals();
 
@@ -85250,18 +85287,6 @@ function fileStorage(paths2, log, clock) {
 // src/daemon/lane-edge.ts
 init_globals();
 
-// src/daemon/parent-watchdog.ts
-init_globals();
-init_process();
-function pidAlive(pid2) {
-  try {
-    process_default.kill(pid2, 0);
-    return true;
-  } catch (e) {
-    return e.code === "EPERM";
-  }
-}
-
 // src/path-search.ts
 init_globals();
 var import_node_path44 = __toESM(require_path_browserify(), 1);
@@ -85443,7 +85468,7 @@ async function paneClaude(launcher, hint) {
   };
 }
 var FOLLOW_POLL_MS = 200;
-function productionLaneEdge(launcher, following, closing, clock) {
+function productionLaneEdge(launcher, following, closing, clock, probe2) {
   const wait = (ms) => sleep(clock, ms, closing);
   return {
     claudeInput: productionClaudeInputEdge(launcher),
@@ -85565,7 +85590,7 @@ function productionLaneEdge(launcher, following, closing, clock) {
     },
     exited: async (pid2, withinMs) => {
       const until2 = clock.now() + withinMs;
-      while (pidAlive(pid2)) {
+      while (probe2.alive(pid2)) {
         if (clock.now() > until2) return false;
         await wait(EXIT_POLL_MS);
       }
@@ -85661,12 +85686,13 @@ function create(file) {
 function productionAdapters(paths2, daemonLog, machine) {
   return {
     daemonLog,
-    launcher: (own2) => createLauncher(own2, machine),
+    launcher: (own2) => systemLauncher(own2, machine),
     storage: (log) => fileStorage(paths2, log, machine),
     doctorStores: fileStores(paths2.state),
     doctorEdge: productionEdge,
     claudeInput: productionClaudeInputEdge,
-    laneEdge: (launcher, following, closing) => productionLaneEdge(launcher, following, closing, machine),
+    probe: systemProbe,
+    laneEdge: (launcher, following, closing, probe2) => productionLaneEdge(launcher, following, closing, machine, probe2),
     linkSigner: linkSignerFromKeyFile(linkKeyFile(paths2.state)),
     limits: ({ startedAtMs, exit: exit2, launcher, log }) => realLimitsDeps(startedAtMs, exit2, {
       launcher,
