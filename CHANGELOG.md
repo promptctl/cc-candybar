@@ -1,3 +1,10 @@
+## [1.180.8](https://github.com/promptctl/cc-candybar/compare/v1.180.7...v1.180.8) (2026-11-03)
+
+### Bug Fixes
+
+* **launch:** a waited launch keeps at most 16 MiB per stream and ends the child past it (candybar-testing-0x6u.ndy) ([#590](https://github.com/promptctl/cc-candybar/issues/590)) ([c0943ea](https://github.com/promptctl/cc-candybar/commit/c0943ea0205fc68b6c59b0134dd79a75552b2f10))
+* **test:** the turn-per-draw feed case runs on held time (candybar-testing-0x6u.e2d) ([#593](https://github.com/promptctl/cc-candybar/issues/593)) ([c63e8bc](https://github.com/promptctl/cc-candybar/commit/c63e8bcefa93b28ab53cf599d14d916dda71e551))
+
 ## [1.180.7](https://github.com/promptctl/cc-candybar/compare/v1.180.6...v1.180.7) (2026-11-03)
 
 ### Bug Fixes
