@@ -126,6 +126,7 @@ export function loadConfigOnce(
   const state =
     loaded.state ?? fallbackState(origin.cwd, loaded.repos.plugins, deps);
   state.registry.dispose();
+  deps.runs.close();
   return {
     layers: loaded.layers,
     // [LAW:no-silent-failure] A placement the bar drew past is still the

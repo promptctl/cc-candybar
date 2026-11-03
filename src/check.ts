@@ -510,6 +510,8 @@ export interface PreparedConfig {
   readonly compiled: CompiledConfig;
   readonly store: VariableStore;
   readonly registry: SourceRegistry;
+  // The check's own owner of its sources' runs, closed with the registry.
+  readonly runs: SourceRuns;
 }
 
 // The repository a chain loads with: its approved project.
@@ -546,9 +548,11 @@ export async function prepareConfig(
 
   const store = new VariableStore(world.clock);
   // [LAW:single-enforcer] A one-shot's own owner of its sources' runs: no
-  // daemon shares them, and the check disposes the registry that holds them.
+  // daemon shares them, and the check closes them with the registry that
+  // holds them.
+  const runs = new SourceRuns({ launcher: world.launcher, clock: world.clock });
   const registry = new SourceRegistry(
-    new SourceRuns({ launcher: world.launcher, clock: world.clock }),
+    runs,
     store,
     config.globals.default_empty_value ?? "",
     new SessionState(),
@@ -598,9 +602,11 @@ export async function prepareConfig(
       compiled,
       store,
       registry,
+      runs,
     };
   } catch (e) {
     registry.dispose();
+    runs.close();
     throw e;
   }
 }
@@ -848,6 +854,7 @@ async function loadRegisterRender(
     // declared (timers, fs watchers); a one-shot check must
     // not leak them past the verdict.
     prepared.registry.dispose();
+    prepared.runs.close();
   }
 }
 

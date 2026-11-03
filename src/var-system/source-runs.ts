@@ -54,6 +54,7 @@ import type { Current } from "../utils/reading.js";
 import { RefreshLedger } from "../utils/refresh-ledger.js";
 import { valueOf } from "../utils/logfmt.js";
 import { shortDigest } from "../source-digest.js";
+import { digestOf as plainDigestOf } from "../utils/plain.js";
 import type { Timekeeper } from "../time";
 import { jsonParser, regexParser, textParser, type Parser } from "./parse.js";
 
@@ -103,26 +104,10 @@ export interface SourceIdentity {
   readonly refresh: RunRefresh;
 }
 
-// sha256 hex over the identity's canonical JSON: keys sorted at every level,
-// so two identities built in any field order digest alike. Lowercase hex.
-export function digestOf(identity: SourceIdentity): string {
-  return crypto
-    .createHash("sha256")
-    .update(JSON.stringify(canonical(identity)))
-    .digest("hex");
-}
-
-function canonical(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonical);
-  if (typeof value === "object" && value !== null) {
-    return Object.fromEntries(
-      Object.entries(value)
-        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-        .map(([k, v]) => [k, canonical(v)]),
-    );
-  }
-  return value;
-}
+// [LAW:one-source-of-truth] The identity's digest is the one digest of a
+// plain value (src/utils/plain.ts): lowercase sha256 hex of its canonical JSON.
+export const digestOf = (identity: SourceIdentity): string =>
+  plainDigestOf(identity);
 
 // [LAW:one-source-of-truth] The one hash of a key's value, the `key` message's
 // `keyHash` on the wire (spec section 13).
@@ -195,11 +180,14 @@ function fileReader(
         return ok(
           readMode === "first-line" ? (raw.split(/\r?\n/)[0] ?? "") : raw,
         );
-      } catch {
+      } catch (e) {
+        // [LAW:no-silent-failure] The errno says which mistake: a file not
+        // there yet, a directory, a permission, a link loop.
+        const code = (e as NodeJS.ErrnoException).code ?? String(e);
         return failed(
           signal.aborted
             ? `file read aborted: ${String(signal.reason)}`
-            : `file unreadable: ${filePath}`,
+            : `file unreadable (${code}): ${filePath}`,
           "read",
         );
       }

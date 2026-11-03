@@ -13,16 +13,6 @@ import type { SourceRecord, SourceScope } from "../utils/refresh-ledger";
 import type { ManagedStorageStats } from "./cache/managed-storage";
 import type { FileEventsStats } from "./cache/file-events";
 import type { SourceRunsStats } from "../var-system/source-runs";
-
-// A read kind no run of which has happened yet.
-const NO_RUNS: SourceRunsStats["shell"] = {
-  entries: 0,
-  held: 0,
-  refreshes: {},
-  failures: 0,
-  abandoned: 0,
-  lastMs: null,
-};
 import type { JournalTurnStats } from "./journal-turns";
 import type { ProbeArrival } from "../doctor/handler-probe";
 import type { RenderSighting } from "./render-sightings";
@@ -33,6 +23,16 @@ import type { LaunchStatsHandle } from "../proc/stats-handle";
 import { PROTOCOL_VERSION } from "./protocol";
 import { PACKAGE_VERSION } from "../version";
 import type { Monotonic, Timekeeper } from "../time";
+
+// A read kind no run of which has happened yet.
+const NO_RUNS: SourceRunsStats["shell"] = {
+  entries: 0,
+  held: 0,
+  refreshes: {},
+  failures: 0,
+  abandoned: 0,
+  lastMs: null,
+};
 
 // Rolling window for "last minute" counts. Keep timestamps for each launch in
 // a ring buffer; eviction happens lazily on read.

@@ -284,19 +284,13 @@ export class KeyedSource<I, T> {
           this.refreshes.abandoned(fields, by, ms);
           return;
         }
-        // Every read that ran is an event, one that found another flight in
-        // place included: its answer is not stored, but it ran, and a failure
-        // it met is still a fact.
-        const stored = entry.flight === flight;
+        // The flight that answered is the entry's: every path that replaces
+        // one (a supersede, a drop) aborts it first, so a read not aborted
+        // is the one whose answer is stored.
         try {
-          this.refreshes.recorded(
-            `${fields} stored=${stored ? "Y" : "N"}`,
-            by,
-            outcome,
-            ms,
-          );
+          this.refreshes.recorded(fields, by, outcome, ms);
         } finally {
-          if (stored) this.store(entry, outcome);
+          this.store(entry, outcome);
         }
       })
       .catch((e: unknown) => {

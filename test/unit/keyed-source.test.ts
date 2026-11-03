@@ -196,7 +196,7 @@ describe("KeyedSource", () => {
         /^info fake refresh key=a by=first abandoned took=\d+ms$/,
       ),
       expect.stringMatching(
-        /^info fake refresh key=a stored=Y by=supersede outcome=ok took=\d+ms$/,
+        /^info fake refresh key=a by=supersede outcome=ok took=\d+ms$/,
       ),
     ]);
     expect(source.stats()).toMatchObject({
@@ -460,7 +460,7 @@ describe("KeyedSource", () => {
       {
         level: "warn",
         msg: expect.stringMatching(
-          /^fake refresh key=a stored=Y by=first outcome=failed reason="no server" took=\d+ms$/,
+          /^fake refresh key=a by=first outcome=failed reason="no server" took=\d+ms$/,
         ),
       },
     ]);
