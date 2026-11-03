@@ -309,10 +309,13 @@ export function runStageRuntime(
   };
 }
 
-// The app's Info.plist, whole: an agent app (no Dock icon, no menu bar) that
-// claims the scheme. [LAW:one-source-of-truth] The scheme and the bundle id
-// are spelled here, from the constants the rest of the code reads; the Swift
-// source spells neither.
+// The app's Info.plist, whole: a background-only app that claims the scheme.
+// Background-only, not an agent (LSUIElement): Launch Services activates an
+// agent to deliver a link, and a resident app keeps the focus it was given, so
+// every click took keyboard focus from the user's terminal. Nothing ever
+// activates a background-only app. [LAW:one-source-of-truth] The scheme and
+// the bundle id are spelled here, from the constants the rest of the code
+// reads; the Swift source spells neither.
 function infoPlist(): string {
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
@@ -338,7 +341,7 @@ function infoPlist(): string {
     `  <string>${PACKAGE_VERSION}</string>`,
     "  <key>LSMinimumSystemVersion</key>",
     "  <string>12.0</string>",
-    "  <key>LSUIElement</key>",
+    "  <key>LSBackgroundOnly</key>",
     "  <true/>",
     "  <key>CFBundleURLTypes</key>",
     "  <array>",

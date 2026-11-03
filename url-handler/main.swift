@@ -1,6 +1,9 @@
-// The cc-candybar URL handler: a resident macOS agent app that forwards every
-// `cc-candybar://` link Launch Services hands it to the daemon, as one frame,
-// and does nothing else. The daemon parses the link; this app never reads it.
+// The cc-candybar URL handler: a resident macOS background-only app that
+// forwards every `cc-candybar://` link Launch Services hands it to the daemon,
+// as one frame, and does nothing else. The daemon parses the link; this app
+// never reads it. Background-only (the Info.plist install writes) is what
+// keeps a click from taking the terminal's keyboard focus: Launch Services
+// never activates such an app.
 //
 // [LAW:one-source-of-truth] The app knows two wire facts, both mirrored from
 // src/daemon/protocol.ts and src/daemon/paths.ts and pinned by
@@ -136,6 +139,10 @@ func forward(_ url: String) -> Forward {
 // fact it is. Authorization is asked for on every lost click: the request
 // completes without a prompt once the user has answered, so the app keeps no
 // state about it, and a user who never loses a click never sees the prompt.
+// The banner shows only because this app is never frontmost: macOS hides a
+// frontmost app's notifications unless its delegate asks for them, and a
+// background-only app is never activated, so no delegate is needed. An app
+// that Launch Services can activate again loses its banner silently.
 // One fixed identifier, because there is one condition: a run of lost clicks
 // is one notice carrying the latest observation, not a stack of copies.
 // [LAW:no-silent-failure] A post the center refuses (notifications denied for
@@ -169,21 +176,7 @@ func notifyLost(_ why: String) {
   }
 }
 
-final class Handler: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
-  // Launch Services activates this app to deliver a click, so the app is
-  // frontmost at the moment it posts, and macOS hides a frontmost app's
-  // notifications unless its delegate asks for the banner. Verified on
-  // macOS 15: without this the post succeeds and the user sees nothing. The
-  // list entry stays after the banner expires, so a user who looked away still
-  // finds the lost click in Notification Center.
-  func userNotificationCenter(
-    _ center: UNUserNotificationCenter,
-    willPresent notification: UNNotification,
-    withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
-  ) {
-    completionHandler([.banner, .list])
-  }
-
+final class Handler: NSObject, NSApplicationDelegate {
   func application(_ application: NSApplication, open urls: [URL]) {
     for url in urls {
       let link = url.absoluteString
@@ -207,5 +200,4 @@ final class Handler: NSObject, NSApplicationDelegate, UNUserNotificationCenterDe
 let app = NSApplication.shared
 let handler = Handler()
 app.delegate = handler
-UNUserNotificationCenter.current().delegate = handler
 app.run()
