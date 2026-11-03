@@ -1,3 +1,11 @@
+## [1.189.0](https://github.com/promptctl/cc-candybar/compare/v1.188.0...v1.189.0) (2026-11-03)
+
+### Features
+
+* **facts:** the payload a template reads is composed from the document ([#616](https://github.com/promptctl/cc-candybar/issues/616)) ([847071c](https://github.com/promptctl/cc-candybar/commit/847071c25ae39f8f9af52d1ab5b46f3a54b872e1))
+* **sources:** a failed shell read carries the command's stderr; the launcher names its timeout (candybar-gather-renderer-76bb.6pj.dr2) ([#615](https://github.com/promptctl/cc-candybar/issues/615)) ([b120955](https://github.com/promptctl/cc-candybar/commit/b12095582b9b3ee1b1a2e4daea06ab759bc385e3))
+* **sources:** a source's identity is a digest, one digest is one run (candybar-gather-renderer-76bb.6pj.5dx) ([#614](https://github.com/promptctl/cc-candybar/issues/614)) ([b744cf6](https://github.com/promptctl/cc-candybar/commit/b744cf603e403a589c9d9d397312a7fdece6ad65))
+
 ## [1.188.0](https://github.com/promptctl/cc-candybar/compare/v1.187.0...v1.188.0) (2026-11-03)
 
 ### Features
