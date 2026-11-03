@@ -4,15 +4,22 @@
     {
       "version": "pr-617",
       "ref": "refs/pull/617/merge",
-      "sha": "dfbd9d1c26e15edecde0bf5d4ea0716a1c3e5478",
-      "timestamp": "2026-11-03T17:14:46.542Z",
+      "sha": "be7d5fee6339ca732732c59384a5af6b7b9d0af8",
+      "timestamp": "2026-11-03T17:17:28.501Z",
       "commits": [
         {
-          "sha": "dfbd9d1c26e15edecde0bf5d4ea0716a1c3e5478",
+          "sha": "be7d5fee6339ca732732c59384a5af6b7b9d0af8",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T17:13:17Z",
-          "message": "Merge bdd44b3d217645e24337c2704f05febc960f579f into 847071c25ae39f8f9af52d1ab5b46f3a54b872e1\n"
+          "timestamp": "2026-11-03T17:16:16Z",
+          "message": "Merge 545a3d7b3b41660364607b0d245e64821498618c into 847071c25ae39f8f9af52d1ab5b46f3a54b872e1\n"
+        },
+        {
+          "sha": "545a3d7b3b41660364607b0d245e64821498618c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T10:16:04-07:00",
+          "message": "test(facts): name the doctor's closure tests for what they protect (candybar-gather-renderer-76bb.6pj.xb3)\n"
         },
         {
           "sha": "bdd44b3d217645e24337c2704f05febc960f579f",
