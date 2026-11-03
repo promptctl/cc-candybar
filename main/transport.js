@@ -22985,6 +22985,44 @@ function checkRateLimit(lastStartAt, category, now2) {
 function childEnv(scope, opts) {
   return { ...scope.inherited, ...opts.envOverlay };
 }
+function whyFailed(r) {
+  switch (r.reason) {
+    case "non-zero":
+      return `exited with code ${r.exitCode}`;
+    case "signal":
+      return `killed by ${r.signal ?? "a signal"}`;
+    // These are whole sentences: the launcher wrote them.
+    case "timeout":
+    case "output-limit":
+    case "rate-limited":
+    case "pipe-error":
+    case "spawn-error":
+      return r.error ?? r.reason;
+    default:
+      return r.error === void 0 ? r.reason : `${r.reason}: ${r.error}`;
+  }
+}
+var SAID_LINE_CHARS = 200;
+var clipped = (line) => {
+  const kept = [];
+  for (const ch of line) {
+    if (kept.length === SAID_LINE_CHARS) return `${kept.join("")}\u2026`;
+    kept.push(ch);
+  }
+  return line;
+};
+function saidBy(r, text4) {
+  if (r.reason === "output-limit" || r.reason === "pipe-error") return "";
+  const t2 = text4.trim();
+  const firstEnd = t2.search(/[\r\n]/);
+  if (firstEnd === -1) return clipped(t2);
+  const lastStart = Math.max(t2.lastIndexOf("\n"), t2.lastIndexOf("\r")) + 1;
+  return `${clipped(t2.slice(0, firstEnd).trim())} \u2026 ${clipped(t2.slice(lastStart).trim())}`;
+}
+function failureText(r, where = "") {
+  const said = saidBy(r, r.stderr);
+  return `${whyFailed(r)}${where}${said === "" ? "" : `: ${said}`}`;
+}
 var refusedAsAborted = ({ reason }) => ({
   ok: false,
   reason: "aborted",
@@ -23137,6 +23175,7 @@ function endLifeline(state) {
 }
 var MAX_CAPTURED_BYTES = 16 * 1024 * 1024;
 var OUTPUT_LIMIT_ERROR = `output exceeded ${MAX_CAPTURED_BYTES} bytes`;
+var timedOutError = (timeoutMs) => `timed out after ${timeoutMs / 1e3} s`;
 function capture(state, category, stream, ends) {
   const { stats } = state.scope;
   const decoder = new import_node_string_decoder.StringDecoder("utf8");
@@ -23348,7 +23387,9 @@ async function launchWaited(state, opts) {
           ...output(),
           exitCode: code,
           signal: signal2,
-          ...terminated === "output-limit" ? { error: OUTPUT_LIMIT_ERROR } : terminated === "pipe-error" ? { error: `a pipe failed to read: ${pipeError}` } : {}
+          // [LAW:one-source-of-truth] The launcher enforced the bound, so it
+          // names it; callers never spell it from a constant of their own.
+          ...terminated === "timeout" ? { error: timedOutError(opts.timeoutMs ?? 0) } : terminated === "output-limit" ? { error: OUTPUT_LIMIT_ERROR } : terminated === "pipe-error" ? { error: `a pipe failed to read: ${pipeError}` } : {}
         });
         return;
       }
@@ -23402,7 +23443,7 @@ function launchBlocking(state, opts) {
         stderr: stderr2,
         exitCode: null,
         signal: result.signal ?? null,
-        error: spawnErrorText(result.error, opts.cwd)
+        error: reason2 === "timeout" ? timedOutError(opts.timeoutMs ?? 0) : spawnErrorText(result.error, opts.cwd)
       };
     }
     if (result.status === 0) {
@@ -52964,8 +53005,10 @@ function shellReader(launcher, command, cwd2, signal) {
         signal
       });
       if (r.ok) return ok(r.stdout);
-      const why2 = r.reason === "non-zero" ? `exited with code ${r.exitCode}` : r.reason === "timeout" ? `timed out after ${SHELL_READ_TIMEOUT_MS / 1e3} s` : [r.reason, r.error].filter((s) => s !== void 0).join(": ");
-      return failed(`shell "${command}" ${why2} in ${cwd2}`, "read");
+      return failed(
+        `shell "${command}" ${failureText(r, ` in ${cwd2}`)}`,
+        "read"
+      );
     }
   };
 }
@@ -55931,7 +55974,7 @@ function footprintCharge(pid2, run3) {
       return {
         kind: "stand-in",
         bytes: rss,
-        unread: `footprint ${result.reason}${result.error !== void 0 ? `: ${result.error}` : ""}${firstLine(result.stderr)}`
+        unread: `footprint ${failureText(result)}`
       };
     }
     const bytes = physFootprintOf(result.stdout);
@@ -55959,7 +56002,7 @@ function commandProbe(launcher, bin, args) {
       if (!result.ok) {
         return {
           kind: "unavailable",
-          reason: `${result.reason}${result.error !== void 0 ? `: ${result.error}` : ""}${firstLine(result.stderr)}`
+          reason: failureText(result)
         };
       }
       return result.stdout.trim().length > 0 ? { kind: "text", text: result.stdout } : { kind: "unavailable", reason: "exited 0 but printed nothing" };
@@ -55978,10 +56021,6 @@ function fileProbe(path42) {
       }
     }
   };
-}
-function firstLine(stderr2) {
-  const line = stderr2.split("\n").map((l) => l.trim()).find((l) => l.length > 0);
-  return line === void 0 ? "" : ` (${line})`;
 }
 
 // src/daemon/limits.ts
@@ -65897,10 +65936,12 @@ function invocation(hint, category, args, stdinInput) {
 function tmuxRun(result, args) {
   if (result.ok) return { kind: "ok", stdout: result.stdout };
   if (result.reason === "rate-limited") {
-    return { kind: "rate-limited", reason: result.error ?? "rate-limited" };
+    return { kind: "rate-limited", reason: failureText(result) };
   }
-  const detail = result.error ?? [result.reason, result.stderr.trim()].filter((s) => s !== "").join(": ");
-  return { kind: "failed", reason: `tmux ${args[0]} failed (${detail})` };
+  return {
+    kind: "failed",
+    reason: `tmux ${args[0]} failed (${failureText(result)})`
+  };
 }
 async function runTmuxAsync(launcher, hint, category, args, stdinInput) {
   return tmuxRun(
@@ -65967,11 +66008,11 @@ function launchFailure(label2, result) {
   const detail = [
     result.reason,
     result.exitCode != null ? `exit ${result.exitCode}` : null,
-    result.error ?? firstLine2(result.stderr)
+    result.error ?? firstLine(result.stderr)
   ].filter(Boolean).join(", ");
   return `${label2}: ${detail}`;
 }
-function firstLine2(s) {
+function firstLine(s) {
   return s.trim().split("\n", 1)[0] ?? "";
 }
 function derived2(from, project) {
@@ -66091,7 +66132,7 @@ function classifyForgePr(label2, result, noPrPattern, parse3) {
   const detail = [
     result.reason,
     result.exitCode != null ? `exit ${result.exitCode}` : null,
-    result.error ?? firstLine2(result.stderr)
+    result.error ?? firstLine(result.stderr)
   ].filter(Boolean).join(", ");
   return failed(`${label2}: ${detail}`, "read");
 }
@@ -68788,7 +68829,7 @@ async function jxa(launcher, args) {
   });
   if (!run3.ok) {
     if (run3.reason === "rate-limited") throw new DoctorBusy("the font");
-    const detail = run3.error ?? `${run3.reason}: ${run3.stderr.trim()}`;
+    const detail = failureText(run3);
     return { kind: "failed", reason: `osascript failed (${detail})` };
   }
   let answer2;
@@ -68914,7 +68955,7 @@ async function fcCoverage(launcher, family, glyphs) {
   });
   if (!run3.ok) {
     if (run3.reason === "rate-limited") throw new DoctorBusy("the font");
-    const detail = run3.error ?? `${run3.reason}: ${run3.stderr.trim()}`;
+    const detail = failureText(run3);
     return { kind: "failed", reason: `fc-match failed (${detail})` };
   }
   return fcMatchCoverage(run3.stdout, glyphs);
@@ -69212,7 +69253,7 @@ async function remoteLogin(launcher, pid2) {
   });
   if (!run3.ok) {
     if (run3.reason === "rate-limited") throw new DoctorBusy("the processes");
-    const detail = run3.error ?? `${run3.reason}: ${run3.stderr.trim()}`;
+    const detail = failureText(run3);
     return { kind: "failed", reason: `ps failed (${detail})` };
   }
   return descendsFromRemoteLogin(run3.stdout, pid2);
@@ -69263,7 +69304,7 @@ async function daemons(launcher) {
     envOverlay: { LC_ALL: "C", TZ: "UTC" }
   });
   if (!run3.ok) {
-    const detail = run3.error ?? `${run3.reason}: ${run3.stderr.trim()}`;
+    const detail = failureText(run3);
     return { kind: "failed", reason: `ps failed (${detail})` };
   }
   return { kind: "ok", value: daemonProcesses(run3.stdout, ownsEntry) };
@@ -69376,7 +69417,7 @@ function forgeLoginOf(cli, host, nonZero, run3) {
   if (run3.ok) return login("ready");
   if (isMissingCommand(run3)) return login("missing");
   if (run3.reason === "non-zero" && nonZero === "logged-out") {
-    return login({ loggedOut: firstLine2(run3.stderr) });
+    return login({ loggedOut: firstLine(run3.stderr) });
   }
   return { kind: "failed", reason: launchFailure(cli, run3) };
 }
@@ -70339,15 +70380,13 @@ function oneArg(value) {
   return decodeWire(() => decodeURIComponent(value));
 }
 var CLICK_PROGRAM_TIMEOUT_MS = 5e3;
-function clickFailed(end, category, what, log) {
-  if (end.reason === "rate-limited") {
-    log("warn", `${category} rate-limited: ${end.said}`);
+function clickFailed(r, what, log) {
+  if (r.reason === "rate-limited") {
+    log("warn", failureText(r));
     return;
   }
-  if (end.reason === "aborted") throw new DaemonClosing(what);
-  throw new Error(
-    `${what} failed (${end.reason}, exit ${end.exitCode ?? "null"})${end.said === "" ? "" : `: ${end.said}`}`
-  );
+  if (r.reason === "aborted") throw new DaemonClosing(what);
+  throw new Error(`${what} failed (${failureText(r)})`);
 }
 async function clickLaunch(launcher, opts, what, log) {
   const result = await launcher.launch({
@@ -70355,16 +70394,7 @@ async function clickLaunch(launcher, opts, what, log) {
     timeoutMs: CLICK_PROGRAM_TIMEOUT_MS
   });
   if (result.ok) return;
-  clickFailed(
-    {
-      reason: result.reason,
-      exitCode: result.exitCode,
-      said: result.error ?? result.stderr.trim()
-    },
-    opts.category,
-    what,
-    log
-  );
+  clickFailed(result, what, log);
 }
 var HANDOFF_POLL_MS = 50;
 async function clickHandoff(launcher, opts, what, log, boundMs, tmp) {
@@ -70379,8 +70409,7 @@ async function clickHandoff(launcher, opts, what, log, boundMs, tmp) {
     const job = launcher.launchJobSync(opts, files);
     if (!job.ok) {
       clickFailed(
-        { reason: job.reason, exitCode: null, said: job.error },
-        opts.category,
+        { ...job, stdout: "", stderr: "", exitCode: null, signal: null },
         what,
         log
       );
@@ -70395,11 +70424,20 @@ async function clickHandoff(launcher, opts, what, log, boundMs, tmp) {
         if (end.kind === "exit" && end.code === 0) return;
         clickFailed(
           end.kind === "exit" ? {
+            ok: false,
             reason: "non-zero",
+            stdout: "",
+            stderr: readFileSync(files.stderr, "utf8"),
             exitCode: end.code,
-            said: readFileSync(files.stderr, "utf8").trim()
-          } : { reason: "timeout", exitCode: null, said: "" },
-          opts.category,
+            signal: null
+          } : {
+            ok: false,
+            reason: "timeout",
+            stdout: "",
+            stderr: "",
+            exitCode: null,
+            signal: null
+          },
           what,
           log
         );
@@ -71691,11 +71729,6 @@ function exitOf(result) {
   if (!result.ok && result.signal !== null) return result.signal;
   return result.exitCode === null ? "-" : String(result.exitCode);
 }
-function failureText(action2, outcome, result, timeoutMs) {
-  const stderr2 = outcome === "output-limit" || outcome === "pipe" ? "" : result.stderr.trim();
-  const reason = outcome === "timeout" ? `timed out after ${timeoutMs / 1e3} s` : outcome === "exit" ? `exited ${exitOf(result)}` : (result.ok ? "" : result.error) || "could not be started";
-  return `run ${action2}: ${stderr2 === "" ? reason : stderr2}`;
-}
 var Runs = class {
   deps;
   timeoutMs;
@@ -71769,12 +71802,12 @@ var Runs = class {
       `run sid=${valueOf(run3.sessionId)} action=${valueOf(run3.action)} program=${valueOf(run3.argv[0])} outcome=${outcome} exit=${exitOf(result)} took=${took} refreshed=${run3.refreshes.map((r) => r.name).join(",") || "-"}`
     );
     if (outcome === "timeout") this.timedOut++;
-    if (outcome === "ok" || outcome === "aborted") return;
+    if (result.ok || outcome === "aborted") return;
     if (outcome !== "timeout") this.failed++;
     holdClickError(
       this.deps.state,
       run3.sessionId,
-      failureText(run3.action, outcome, result, this.timeoutMs),
+      `run ${run3.action}: ${failureText(result)}`,
       this.deps.now()
     );
   }
@@ -85796,8 +85829,10 @@ async function tmux2(launcher, hint, args, stdinInput) {
 }
 function ran(what, result) {
   if (result.ok) return result.stdout;
-  const detail = result.error ?? [result.reason, result.stderr.trim(), result.stdout.trim()].filter((s) => s !== "").join(": ");
-  throw new Error(`${what} failed (${detail})`);
+  const told = saidBy(result, result.stdout);
+  throw new Error(
+    `${what} failed (${failureText(result)}${told === "" ? "" : `: ${told}`})`
+  );
 }
 function refusalOf2(stdout2) {
   try {

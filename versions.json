@@ -2,45 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-615",
-      "ref": "refs/pull/615/merge",
-      "sha": "c47d92d8bdb75e0777892daad121f874727fa2bd",
-      "timestamp": "2026-11-03T17:32:46.796Z",
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "b12095582b9b3ee1b1a2e4daea06ab759bc385e3",
+      "timestamp": "2026-11-03T17:41:07.728Z",
       "commits": [
         {
-          "sha": "c47d92d8bdb75e0777892daad121f874727fa2bd",
+          "sha": "b12095582b9b3ee1b1a2e4daea06ab759bc385e3",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T17:30:36Z",
-          "message": "Merge 6a6916f12f495a2381e8c4f17a32777bbd1484d4 into 847071c25ae39f8f9af52d1ab5b46f3a54b872e1\n"
-        },
-        {
-          "sha": "6a6916f12f495a2381e8c4f17a32777bbd1484d4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T10:01:37-07:00",
-          "message": "fix(launch): a failure says the first and last lines of what its child said, bounded where it is built (candybar-gather-renderer-76bb.6pj.dr2)\n\nSecond high review: the live daemon wires no segment-error viewer, so the bar's\n⚠ cell is the only place a failure shows and clipping it there hid the cause.\nThe cell draws whole again; the describer bounds the said text instead, which\nalso keeps megabytes of stderr out of the store and the memory-report log.\nLane failures summarize stdout the same way and drop it for floods and cut\npipes. The handoff's timeout no longer names a bound it did not set. Install\nand tmux's rate-limit go through the describer.\n"
-        },
-        {
-          "sha": "b9ef3edbf132fc33ae80211835b33dcb136b6282",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T09:51:20-07:00",
-          "message": "refactor(launch): failures carry whole stderr and the ⚠ cell bounds its line; clicks, plugin install and the handler probe share the describer (candybar-gather-renderer-76bb.6pj.dr2)\n\nMedium review: keeping only stderr's last line lost git's fatal and ps's\nerror before its usage; the display bound belongs where the line is drawn,\nso the broken cell clips through the render layer's sanitizer and the viewer\nkeeps the whole text. Lane failures keep stdout, where their tools explain.\nSpawn errors drop the internal tag; clicks and handoffs say why one way.\n"
-        },
-        {
-          "sha": "29e7a3e8c2db5cac0579f10e5658d54bcfe9dcbd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T09:41:42-07:00",
-          "message": "refactor(launch): one describer says why a launch failed and what the child said, for every caller (candybar-gather-renderer-76bb.6pj.dr2)\n\nReview findings: callers ranked stderr, reason and error differently, so a\ntimed-out click dropped the timeout, a timed-out tmux or doctor probe dropped\nits stderr, a rate-limited read repeated its tag, a signal kill named no\nsignal, and a failed read could draw 2000 characters inline. The launcher now\nowns the text: why, plus the last stderr line bounded by code point.\n"
-        },
-        {
-          "sha": "dd8208e1103b501ea5850ac8e5ae0dc3eb33f99b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T09:15:48-07:00",
-          "message": "feat(sources): a failed shell read carries the command's stderr; the launcher names its timeout (candybar-gather-renderer-76bb.6pj.dr2)\n\nA shell source's failed read now ends in what the command wrote to\nstderr, trimmed and shown by its last 2000 characters, on every arm but\nan output flood or a failed pipe. A timeout result carries\n`timed out after N s` from the launch's own bound, so the shell reader\nand the daemon's runs read it instead of spelling it from constants of\ntheir own.\n"
+          "timestamp": "2026-11-03T10:39:40-07:00",
+          "message": "feat(sources): a failed shell read carries the command's stderr; the launcher names its timeout (candybar-gather-renderer-76bb.6pj.dr2) (#615)\n\n* feat(sources): a failed shell read carries the command's stderr; the launcher names its timeout (candybar-gather-renderer-76bb.6pj.dr2)\n\nA shell source's failed read now ends in what the command wrote to\nstderr, trimmed and shown by its last 2000 characters, on every arm but\nan output flood or a failed pipe. A timeout result carries\n`timed out after N s` from the launch's own bound, so the shell reader\nand the daemon's runs read it instead of spelling it from constants of\ntheir own.\n\n* refactor(launch): one describer says why a launch failed and what the child said, for every caller (candybar-gather-renderer-76bb.6pj.dr2)\n\nReview findings: callers ranked stderr, reason and error differently, so a\ntimed-out click dropped the timeout, a timed-out tmux or doctor probe dropped\nits stderr, a rate-limited read repeated its tag, a signal kill named no\nsignal, and a failed read could draw 2000 characters inline. The launcher now\nowns the text: why, plus the last stderr line bounded by code point.\n\n* refactor(launch): failures carry whole stderr and the ⚠ cell bounds its line; clicks, plugin install and the handler probe share the describer (candybar-gather-renderer-76bb.6pj.dr2)\n\nMedium review: keeping only stderr's last line lost git's fatal and ps's\nerror before its usage; the display bound belongs where the line is drawn,\nso the broken cell clips through the render layer's sanitizer and the viewer\nkeeps the whole text. Lane failures keep stdout, where their tools explain.\nSpawn errors drop the internal tag; clicks and handoffs say why one way.\n\n* fix(launch): a failure says the first and last lines of what its child said, bounded where it is built (candybar-gather-renderer-76bb.6pj.dr2)\n\nSecond high review: the live daemon wires no segment-error viewer, so the bar's\n⚠ cell is the only place a failure shows and clipping it there hid the cause.\nThe cell draws whole again; the describer bounds the said text instead, which\nalso keeps megabytes of stderr out of the store and the memory-report log.\nLane failures summarize stdout the same way and drop it for floods and cut\npipes. The handoff's timeout no longer names a bound it did not set. Install\nand tmux's rate-limit go through the describer."
         }
       ]
     },
@@ -77,21 +49,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-03T10:07:10-07:00",
           "message": "chore(facts): delete the wants closure (candybar-gather-renderer-76bb.6pj.xb3)\n\nThe facts document is total, so the question \"which fields does this config\nread\" has no caller with a reason. Every session now gathers every built-in:\ngit runs one constant option set (forge lookup included), every declared\nplugin source is held, and burn, block and autocompact's context cap are always\ncomposed. A view's declaration depends on the request alone, so a preset pick\nmoves no hold.\n\nDeleted: the wants function, the needed-prefix builders, the sources-read walk,\nthe closure parameter through declare/refresh/read/project, the PR reads gate,\nthe git options derived from the closure, `Gathered`, `declaredSources`, and the\nview's preset reaction. The doctor's data-needs walk stays and now owns its own\nper-segment path closure, since it answers what a config would read.\n\nThe bar is byte-identical; the payload golden gains the keys that were gated\n(block, burn, metrics, activity, tmux and the like on presets that did not read\nthem). Tests that asserted gating are deleted; the fold-edge cases they covered\n(partials, helpers handed a dict) move to the doctor's path closure.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "847071c25ae39f8f9af52d1ab5b46f3a54b872e1",
-      "timestamp": "2026-11-03T16:49:58.018Z",
-      "commits": [
-        {
-          "sha": "847071c25ae39f8f9af52d1ab5b46f3a54b872e1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T09:47:52-07:00",
-          "message": "feat(facts): the payload a template reads is composed from the document (#616)\n\n* test(facts): pin the bar, the view's payload and check's payload per preset (candybar-gather-renderer-76bb.6pj.83l)\n\nDrawn from the daemon's session source over fixed owners at a fixed instant, so\ncomposing the payload from the document can be judged against bytes: the bar\nmust not move, and the payload snapshot's diff is where the accepted\ndifferences show. The payload-owners fakes hold their answers in observables,\nas the real owners do, so a view's computed sees a lane land.\n\n* feat(facts): the payload a template reads is composed from the document (candybar-gather-renderer-76bb.6pj.83l)\n\nThe payload, the globals a draw builds its options from and the facts document\nare one turn, stamped together in one reaction, so a draw never mixes a\ndocument with a request or a pick it was not composed from. A turn takes its\nclosure and lanes from the view's one declaration. A turn that cannot be\nstamped keeps the last one and surfaces as a warning in the bar's indicator.\nA view that fails to open releases what it began. The check command stamps a\nfixture document and composes through the same function; its hand-written\npayload and checkToday are gone.\n\n* docs(claude-md): checks run on the code under review, never on another commit to second-guess a threshold\n\n* test(facts): payload tests assert an unread lane as pending, not a missing key (candybar-gather-renderer-76bb.6pj.83l)\n\n* fix(facts): a draw reads the client's hints off its turn; a repeated failure is one turn; unstamped projects its arms (candybar-gather-renderer-76bb.6pj.83l)\n\n* test(facts): a failed stamp and its recovery each wake the view (candybar-gather-renderer-76bb.6pj.83l)\n\n* test(facts): the session rig holds the source runs main moved onto RenderDeps (candybar-gather-renderer-76bb.6pj.83l)"
         }
       ]
     }
