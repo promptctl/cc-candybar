@@ -500,5 +500,6 @@ describe("KeyedSource", () => {
     await jest.advanceTimersByTimeAsync(EVERY.okMs * 5);
     expect(f.calls).toHaveLength(0);
     expect(source.stats()).toMatchObject({ entries: 0, held: 0 });
+    expect(jest.getTimerCount()).toBe(0);
   });
 });

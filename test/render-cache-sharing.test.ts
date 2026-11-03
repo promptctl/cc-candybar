@@ -558,3 +558,24 @@ const MENU_WALK = [
   "⚡ session",
   "✖",
 ];
+
+test("a disposed view declares nothing: a request reaching it after dispose builds no lane", () => {
+  const { cache } = makeCache(Number.MAX_SAFE_INTEGER);
+  file(".claude-candybar.json", "{}");
+  const { state } = cache.getOrCreate(dir, dir, undefined);
+  let declarations = 0;
+  const view = openView(state, dir, viewFacts(dir, "s"), {
+    sessionState: new SessionState(),
+    source: SOURCES_NOTHING,
+    declare: (...args) => {
+      declarations++;
+      return DECLARES_NOTHING(...args);
+    },
+    changed: () => {},
+    log: () => {},
+  });
+  const opened = declarations;
+  view.dispose();
+  view.requested(viewFacts(dir, "s"));
+  expect(declarations).toBe(opened);
+});

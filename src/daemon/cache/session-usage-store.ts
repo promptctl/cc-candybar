@@ -40,7 +40,7 @@ import {
 } from "../../utils/outcome";
 import { quietLogger, type DaemonLogger } from "../../utils/logger";
 import { dateOf, type Instant } from "../../utils/instant";
-import { laneOutcome, type Lane } from "../../utils/reading";
+import { laneOutcome, settledLane, type Lane } from "../../utils/reading";
 import { valueOf } from "../../utils/logfmt";
 import type { Holds } from "../../utils/holds";
 import { KeyedSource, type KeyedSourceStats } from "../../utils/keyed-source";
@@ -507,6 +507,7 @@ export class SessionUsageStore {
   private readonly usage: Refreshes<"request">;
   private sweeps = 0;
   private stopSweep: (() => void) | null = null;
+  private closed = false;
   private readonly clock: Pick<Timekeeper, "now" | "after" | "every">;
 
   constructor(opts: {
@@ -715,6 +716,9 @@ export class SessionUsageStore {
     claudeConfigDir: string | undefined,
   ): Lane<DaySums> {
     const claudePaths = getClaudePaths(claudeConfigDir, this.host.home);
+    // [LAW:single-enforcer] A closed store builds no day set: a set built
+    // after close is one close never releases.
+    if (this.closed) return settledLane(failed("usage store closed"));
     const scans = this.scans.declare(holds, claudePaths);
     const set = this.daySet(claudePaths);
     return {
@@ -1147,6 +1151,7 @@ export class SessionUsageStore {
   }
 
   close(): void {
+    this.closed = true;
     this.stopSweep?.();
     this.stopSweep = null;
     this.scans.close();
