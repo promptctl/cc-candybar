@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-618",
+      "ref": "refs/pull/618/merge",
+      "sha": "9e28f6691f3f7ed59953fd6176c5d205f3f295ca",
+      "timestamp": "2026-11-05T10:09:37.808Z",
+      "commits": [
+        {
+          "sha": "9e28f6691f3f7ed59953fd6176c5d205f3f295ca",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T03:08:30-07:00",
+          "message": "Merge 2fffd99f5fc33f3e94398c6ded90002d4288e5da into ec44d114ee641f87a70a1c9754bb01d590a80853\n"
+        },
+        {
+          "sha": "2fffd99f5fc33f3e94398c6ded90002d4288e5da",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T03:08:08-07:00",
+          "message": "feat(apply): every click, idle close and request reaches state through one exhaustive arm table (candybar-gather-renderer-76bb.1dh.scr)\n\nA closed Event union (request, click, menu-idle) and ARMS, an arm record keyed\nby every kind, are the one consumer of the journal's turn. A new kind fails to\nbuild until its arm exists. The request takes no turn yet: a click holds the\nturn across its launches, so its writes join once launches become effects.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "b12095582b9b3ee1b1a2e4daea06ab759bc385e3",
