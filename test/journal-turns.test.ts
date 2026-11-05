@@ -299,7 +299,7 @@ describe("close", () => {
 
 describe("the click path", () => {
   function parts(ctx: VerbContext, linkUrl = "") {
-    const { arrival: _a, turnWaited: _t, clientGone: _g, ...verbCtx } = ctx;
+    const { arrival: _a, asker: _k, ...verbCtx } = ctx;
     const events: string[] = [];
     const given = {
       clock: { monotonic: () => performance.now(), now: () => Date.now() },

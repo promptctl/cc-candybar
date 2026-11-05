@@ -31,6 +31,11 @@ export interface Timekeeper {
   defer(fire: () => void): () => void;
 }
 
+// The monotonic reading `ms` after `from`.
+export function plusMs(from: Monotonic, ms: number): Monotonic {
+  return (from + ms) as Monotonic;
+}
+
 // [LAW:single-enforcer] A span in whole milliseconds between two monotonic
 // readings: every duration src records or prints is one of these.
 export function spanMs(from: Monotonic, to: Monotonic): number {
