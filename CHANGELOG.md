@@ -1,3 +1,9 @@
+## [1.190.0](https://github.com/promptctl/cc-candybar/compare/v1.189.0...v1.190.0) (2026-11-05)
+
+### Features
+
+* **apply:** the closed Event union and its one arm table (candybar-gather-renderer-76bb.1dh.scr) ([#618](https://github.com/promptctl/cc-candybar/issues/618)) ([6e15ada](https://github.com/promptctl/cc-candybar/commit/6e15adacbcc9130dc4d651aec67c94627d9e7680))
+
 ## [1.189.0](https://github.com/promptctl/cc-candybar/compare/v1.188.0...v1.189.0) (2026-11-03)
 
 ### Features
