@@ -4,15 +4,22 @@
     {
       "version": "pr-618",
       "ref": "refs/pull/618/merge",
-      "sha": "9e28f6691f3f7ed59953fd6176c5d205f3f295ca",
-      "timestamp": "2026-11-05T10:09:37.808Z",
+      "sha": "1e2d8ee667c83a2d98fe15de2bad8f7b8bbc16c2",
+      "timestamp": "2026-11-05T10:17:05.771Z",
       "commits": [
         {
-          "sha": "9e28f6691f3f7ed59953fd6176c5d205f3f295ca",
+          "sha": "1e2d8ee667c83a2d98fe15de2bad8f7b8bbc16c2",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T03:08:30-07:00",
-          "message": "Merge 2fffd99f5fc33f3e94398c6ded90002d4288e5da into ec44d114ee641f87a70a1c9754bb01d590a80853\n"
+          "timestamp": "2026-11-05T10:15:56Z",
+          "message": "Merge e24f40bfeee475a91d912242829c2547efeb14a1 into ec44d114ee641f87a70a1c9754bb01d590a80853\n"
+        },
+        {
+          "sha": "e24f40bfeee475a91d912242829c2547efeb14a1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T03:15:45-07:00",
+          "message": "fix(apply): the click arm owns its idle bracket; one asker spelling; branded click verb; monotonic wait end (candybar-gather-renderer-76bb.1dh.scr)\n"
         },
         {
           "sha": "2fffd99f5fc33f3e94398c6ded90002d4288e5da",

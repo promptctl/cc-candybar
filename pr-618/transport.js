@@ -71579,12 +71579,7 @@ function click(verb, gather, handler) {
     return ctx.journalTurns.click(
       verb,
       sid,
-      {
-        placed: ctx.placeWaited,
-        waited: ctx.turnWaited,
-        gone: ctx.clientGone,
-        gathered: ctx.gatherTook
-      },
+      ctx.asker,
       () => gather(value, ctx),
       (gathered2, turn) => journaled(sid, ctx, turn, async (c) => {
         try {
@@ -71616,8 +71611,7 @@ var VERB_NAMES = Object.freeze([
   ...VERBS.keys()
 ]);
 function clickVerb(name) {
-  const run3 = VERBS.get(name);
-  return run3 === void 0 ? null : { name, run: run3 };
+  return VERBS.get(name) ?? null;
 }
 function closeIdleMenus(sid, idle, ctx) {
   return ctx.journalTurns.take(
@@ -77073,14 +77067,16 @@ var ARMS = {
   // would stall the bar; the writes join the turn once launches leave it as
   // effects.
   request: ({ req, at, waitEndsAt, facts }, parts) => answerRequest(parts, req, at, waitEndsAt, facts),
-  click: ({ verb, value, arrival, asker }, { verbCtx }) => verb.run(value, {
-    ...verbCtx,
-    arrival,
-    placeWaited: asker.placed,
-    gatherTook: asker.gathered,
-    turnWaited: asker.waited,
-    clientGone: asker.gone
-  }),
+  // [LAW:single-enforcer] The click's whole bracket on its menus' idle clock
+  // is here, so the timer cannot close a menu under any click Apply carries.
+  click: async ({ verb, value, arrival, pending: pending2, asker }, { verbCtx, menuIdle }) => {
+    if (pending2 !== null) menuIdle.clickArrived(pending2);
+    try {
+      await verb(value, { ...verbCtx, arrival, asker });
+    } finally {
+      if (pending2 !== null) menuIdle.clickSettled(pending2);
+    }
+  },
   "menu-idle": ({ session, idle }, { verbCtx }) => closeIdleMenus(session, idle, verbCtx)
 };
 function apply(event, parts) {
@@ -77880,7 +77876,6 @@ var VERB_FACT = {
   "tmux-status": "linkVerb"
 };
 async function handleClick(parts, verb, value, arrival, facts, clientGone) {
-  const { menuIdle } = parts;
   if (verb === VERB_TMUX_STATUS_CLICK) {
     noteFacts(facts, { verb });
     return statusLineClick(parts, value, facts, clientGone);
@@ -77895,27 +77890,23 @@ async function handleClick(parts, verb, value, arrival, facts, clientGone) {
   if (session === null) noteFacts(facts, { sid: "-" });
   else if (pending2 !== null) {
     noteFacts(facts, { sid: pending2 });
-    menuIdle.clickArrived(pending2);
   }
-  try {
-    await apply(
-      {
-        kind: "click",
-        verb: resolved,
-        value,
-        arrival,
-        asker: {
-          placed: (ms) => noteFacts(facts, { placeWait: `${ms}ms` }),
-          gathered: (ms) => noteFacts(facts, { gather: `${ms}ms` }),
-          waited: (ms) => noteFacts(facts, { turnWait: `${ms}ms` }),
-          gone: clientGone
-        }
-      },
-      parts
-    );
-  } finally {
-    if (pending2 !== null) menuIdle.clickSettled(pending2);
-  }
+  await apply(
+    {
+      kind: "click",
+      verb: resolved,
+      value,
+      arrival,
+      pending: pending2,
+      asker: {
+        placed: (ms) => noteFacts(facts, { placeWait: `${ms}ms` }),
+        gathered: (ms) => noteFacts(facts, { gather: `${ms}ms` }),
+        waited: (ms) => noteFacts(facts, { turnWait: `${ms}ms` }),
+        gone: clientGone
+      }
+    },
+    parts
+  );
   return { kind: "ok" };
 }
 function clickReply(outcome) {
