@@ -294,13 +294,9 @@ export interface VerbContext extends DaemonContext {
   // status-line range — the one per-click fact here; the daemon's dispatcher
   // sets it on each click.
   readonly arrival: ClickArrival;
-  // [LAW:nothing-unseen] How long THIS click waited for its place in its
-  // session, gathered, and waited for its turn, for its event.
-  readonly placeWaited: (ms: number) => void;
-  readonly gatherTook: (ms: number) => void;
-  readonly turnWaited: (ms: number) => void;
-  // Whether the client that sent THIS click has left.
-  readonly clientGone: () => boolean;
+  // [LAW:nothing-unseen] Where THIS click's waits are reported, and whether
+  // its client has left.
+  readonly asker: ClickAsker;
 }
 
 // What only the turn may wait on: a handler reaches a launch through `launch`,
@@ -364,7 +360,7 @@ const inTurn = (handler: VerbHandler): Verb => ({
   prepare: async (value) => (ctx) => handler(value, ctx),
 });
 
-import type { JournalTurn, JournalTurns } from "../journal-turns";
+import type { ClickAsker, JournalTurn, JournalTurns } from "../journal-turns";
 import { BadVerbArgs, DaemonClosing, decodeWire } from "../verb-error";
 import {
   parseSessionId,
@@ -2309,12 +2305,7 @@ function click(
     return ctx.journalTurns.click(
       verb,
       sid,
-      {
-        placed: ctx.placeWaited,
-        waited: ctx.turnWaited,
-        gone: ctx.clientGone,
-        gathered: ctx.gatherTook,
-      },
+      ctx.asker,
       () => gather(value, ctx),
       (gathered, turn) =>
         journaled(sid, ctx, turn, async (c) => {
@@ -2359,15 +2350,14 @@ export const VERB_NAMES: readonly string[] = Object.freeze([
 
 // [LAW:types-are-the-program] A verb the table has, as a click event carries
 // it (src/daemon/apply.ts): resolved where the click arrives, so an unknown
-// verb is refused there and never becomes an event.
-export interface ClickVerb {
-  readonly name: string;
-  readonly run: (value: string, ctx: VerbContext) => Promise<void>;
-}
+// verb is refused there and never becomes an event. Branded, so only the
+// lookup below makes one.
+export type ClickVerb = ((value: string, ctx: VerbContext) => Promise<void>) & {
+  readonly __clickVerb: true;
+};
 
 export function clickVerb(name: string): ClickVerb | null {
-  const run = VERBS.get(name);
-  return run === undefined ? null : { name, run };
+  return (VERBS.get(name) as ClickVerb | undefined) ?? null;
 }
 
 // How long a session's menus sat with no click before its timer closed them.

@@ -1,7 +1,7 @@
 // One render of a session, a request's or a frame's, and what it records.
 
 import path from "node:path";
-import { elapsedMs } from "../time.js";
+import { elapsedMs, type Monotonic } from "../time.js";
 import { checkoutLocation } from "../utils/git-root.js";
 import { inTmux } from "../tmux-hint.js";
 import { inspect } from "node:util";
@@ -896,7 +896,7 @@ export async function answerRequest(
   parts: DaemonParts,
   req: CheckedRenderRequest,
   at: Instant,
-  waitEndsAt: number,
+  waitEndsAt: Monotonic,
   facts: RequestFacts,
 ): Promise<RequestAnswer> {
   recordRequest(parts, req);
@@ -971,7 +971,7 @@ async function drawAnswer(
   parts: DaemonParts,
   req: CheckedRenderRequest,
   at: Instant,
-  waitEndsAt: number,
+  waitEndsAt: Monotonic,
   facts: RequestFacts,
 ): Promise<RequestAnswer> {
   const { clock, frameFeeds, log } = parts;

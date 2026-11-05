@@ -6,8 +6,18 @@ import { ARMS, type ApplyArms, type Event } from "../src/daemon/apply";
 
 type Widened = Event | { readonly kind: "extra" };
 
-// @ts-expect-error -- no arm handles "extra", so the widened table is incomplete.
+// The one arm a widened table asks for that ARMS lacks is exactly "extra":
+// both directions of the equality fail to build if it is anything else.
+type Missing = Exclude<keyof ApplyArms<Widened>, keyof typeof ARMS>;
+const missing: Missing = "extra";
+const onlyExtra: "extra" extends Missing
+  ? Missing extends "extra"
+    ? true
+    : never
+  : never = true;
+// @ts-expect-error -- the arm named above is missing, so the table is incomplete.
 const incomplete: ApplyArms<Widened> = ARMS;
+void incomplete;
 
 test("the arm table has one arm per kind of event, and no other", () => {
   const kinds: Record<Event["kind"], true> = {
@@ -16,5 +26,5 @@ test("the arm table has one arm per kind of event, and no other", () => {
     "menu-idle": true,
   };
   expect(Object.keys(ARMS).sort()).toEqual(Object.keys(kinds).sort());
-  expect(incomplete).toBe(ARMS);
+  expect([missing, onlyExtra]).toEqual(["extra", true]);
 });

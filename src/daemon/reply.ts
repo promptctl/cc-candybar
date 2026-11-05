@@ -365,15 +365,14 @@ export async function replyTo(
             kind: "request",
             req: checked.req,
             at,
-          // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
-          // fixed at its arrival: early enough before its client hangs up to
-          // draw (src/daemon/request-deadline.ts).
-            waitEndsAt:
-              t0 +
+            // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
+            // fixed at its arrival: early enough before its client hangs up to
+            // draw (src/daemon/request-deadline.ts).
+            waitEndsAt: (t0 +
               waitBudgetMs(checked.req.deadline, accepted, {
                 epochMs: started.getTime(),
                 monoMs: t0,
-              }),
+              })) as Monotonic,
             facts,
           },
           parts,
@@ -743,7 +742,6 @@ async function handleClick(
   facts: RequestFacts,
   clientGone: () => boolean,
 ): Promise<RequestOutcome> {
-  const { menuIdle } = parts;
   if (verb === VERB_TMUX_STATUS_CLICK) {
     noteFacts(facts, { verb });
     return statusLineClick(parts, value, facts, clientGone);
@@ -761,27 +759,23 @@ async function handleClick(
   if (session === null) noteFacts(facts, { sid: "-" });
   else if (pending !== null) {
     noteFacts(facts, { sid: pending });
-    menuIdle.clickArrived(pending);
   }
-  try {
-    await apply(
-      {
-        kind: "click",
-        verb: resolved,
-        value,
-        arrival,
-        asker: {
-          placed: (ms) => noteFacts(facts, { placeWait: `${ms}ms` }),
-          gathered: (ms) => noteFacts(facts, { gather: `${ms}ms` }),
-          waited: (ms) => noteFacts(facts, { turnWait: `${ms}ms` }),
-          gone: clientGone,
-        },
+  await apply(
+    {
+      kind: "click",
+      verb: resolved,
+      value,
+      arrival,
+      pending,
+      asker: {
+        placed: (ms) => noteFacts(facts, { placeWait: `${ms}ms` }),
+        gathered: (ms) => noteFacts(facts, { gather: `${ms}ms` }),
+        waited: (ms) => noteFacts(facts, { turnWait: `${ms}ms` }),
+        gone: clientGone,
       },
-      parts,
-    );
-  } finally {
-    if (pending !== null) menuIdle.clickSettled(pending);
-  }
+    },
+    parts,
+  );
   return { kind: "ok" };
 }
 

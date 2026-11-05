@@ -152,7 +152,7 @@ describe("a gather holds no turn", () => {
   test("a doctor click whose client left during the gather still files its report", async () => {
     const { held, doctor, ctx, reports } = setup();
     let gone = false;
-    const a = doctor(A, { ...ctx, clientGone: () => gone });
+    const a = doctor(A, { ...ctx, asker: { ...ctx.asker, gone: () => gone } });
     await drain();
     gone = true;
     held.open();
@@ -163,7 +163,7 @@ describe("a gather holds no turn", () => {
   test("a `do` of doctor then a write whose client left during the gather lands both", async () => {
     const { held, doDoctorThen, ctx, toggled, reports } = setup();
     let gone = false;
-    const a = doDoctorThen({ ...ctx, clientGone: () => gone });
+    const a = doDoctorThen({ ...ctx, asker: { ...ctx.asker, gone: () => gone } });
     await drain();
     gone = true;
     held.open();
@@ -193,7 +193,7 @@ describe("a gather holds no turn", () => {
     expect(turns.getStats().holder).toBe(VERB_COPY);
     await VERBS.get(VERB_DOCTOR_PROBE)!(NONCE, {
       ...ctx,
-      clientGone: () => true,
+      asker: { ...ctx.asker, gone: () => true },
       arrival: { via: "link", delivery: { kind: "cli" } },
     });
     expect(ctx.probes.list().map((p) => p.nonce)).toEqual([NONCE]);
@@ -248,7 +248,7 @@ describe("one session's order", () => {
   test("a later click whose client left while queued behind the gather is refused, and writes nothing", async () => {
     const { held, doctor, toggle, ctx, toggled } = setup();
     const a = doctor(A);
-    const later = toggle(A, { ...ctx, clientGone: () => true });
+    const later = toggle(A, { ...ctx, asker: { ...ctx.asker, gone: () => true } });
     const refused = expect(later).rejects.toBeInstanceOf(ClickAbandoned);
     held.open();
     await a;
@@ -263,7 +263,7 @@ describe("one session's order", () => {
     const launcher = { ...ctx.launcher, launch: () => parked.wait.then(() => LAUNCHED) } as Launcher;
     const holding = VERBS.get(VERB_COPY)!("x", { ...ctx, launcher });
     await drain();
-    const a = doDoctorThen({ ...ctx, clientGone: () => gone });
+    const a = doDoctorThen({ ...ctx, asker: { ...ctx.asker, gone: () => gone } });
     held.open();
     await drain();
     gone = true;
@@ -499,7 +499,7 @@ test("the click path counts a click pending from arrival, through a refusal, and
     close: async () => {},
     failed: () => {},
   });
-  const { arrival: _a, turnWaited: _t, placeWaited: _p, gatherTook: _g, clientGone: _c, ...verbCtx } = ctx;
+  const { arrival: _a, asker: _k, ...verbCtx } = ctx;
   const events: string[] = [];
   const parts = {
     clock: { monotonic: () => performance.now(), now: () => Date.now() },
@@ -544,7 +544,7 @@ test("a click waiting behind its session's gather reports the wait; a menu with 
   const { held, doctor, toggle, ctx } = setup();
   const waits: number[] = [];
   const a = doctor(A);
-  const later = toggle(A, { ...ctx, placeWaited: (ms) => waits.push(ms) });
+  const later = toggle(A, { ...ctx, asker: { ...ctx.asker, placed: (ms) => waits.push(ms) } });
   await new Promise((r) => setTimeout(r, 20));
   held.open();
   await Promise.all([a, later]);

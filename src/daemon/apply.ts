@@ -9,7 +9,8 @@
 // An arm joins the union when its source is routed through Apply, and not
 // before: an arm with no producer is a handler nothing can reach.
 
-import type { ClickArrival } from "../doctor/sightings";
+import type { ClickArrival } from "../doctor/sightings.js";
+import type { Monotonic } from "../time.js";
 import type { Instant } from "../utils/instant.js";
 import type { DaemonParts } from "./daemon-parts.js";
 import { answerRequest, type RequestAnswer } from "./draw-bar.js";
@@ -28,7 +29,7 @@ export type Event =
       readonly req: CheckedRenderRequest;
       readonly at: Instant;
       // When the request's wait ends (src/daemon/request-deadline.ts).
-      readonly waitEndsAt: number;
+      readonly waitEndsAt: Monotonic;
       readonly facts: RequestFacts;
     }
   | {
@@ -36,6 +37,9 @@ export type Event =
       readonly verb: ClickVerb;
       readonly value: string;
       readonly arrival: ClickArrival;
+      // The session the click names, once it passed the session-id
+      // checkpoint: pending on its menus' idle clock until the click settles.
+      readonly pending: string | null;
       // Where the click's waits are reported, and whether its client left.
       readonly asker: ClickAsker;
     }
@@ -51,6 +55,11 @@ interface Applied {
   readonly click: void;
   readonly "menu-idle": void;
 }
+
+// [LAW:types-are-the-program] A kind with no answer above fails to build here,
+// rather than as a `never` on its arm.
+const answered: Event["kind"] extends keyof Applied ? true : never = true;
+void answered;
 
 // [LAW:types-are-the-program] One arm per kind of `E`, none missing and none
 // extra: a union widened by an arm fails to build an `ApplyArms` until the arm
@@ -70,15 +79,19 @@ export const ARMS: ApplyArms<Event> = {
   // effects.
   request: ({ req, at, waitEndsAt, facts }, parts) =>
     answerRequest(parts, req, at, waitEndsAt, facts),
-  click: ({ verb, value, arrival, asker }, { verbCtx }) =>
-    verb.run(value, {
-      ...verbCtx,
-      arrival,
-      placeWaited: asker.placed,
-      gatherTook: asker.gathered,
-      turnWaited: asker.waited,
-      clientGone: asker.gone,
-    }),
+  // [LAW:single-enforcer] The click's whole bracket on its menus' idle clock
+  // is here, so the timer cannot close a menu under any click Apply carries.
+  click: async (
+    { verb, value, arrival, pending, asker },
+    { verbCtx, menuIdle },
+  ) => {
+    if (pending !== null) menuIdle.clickArrived(pending);
+    try {
+      await verb(value, { ...verbCtx, arrival, asker });
+    } finally {
+      if (pending !== null) menuIdle.clickSettled(pending);
+    }
+  },
   "menu-idle": ({ session, idle }, { verbCtx }) =>
     closeIdleMenus(session, idle, verbCtx),
 };
