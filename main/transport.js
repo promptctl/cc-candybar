@@ -20321,10 +20321,10 @@ var require_primordials2 = __commonJS({
       getOwnPropertyDescriptor: ReflectGetOwnPropertyDescriptor,
       ownKeys: ReflectOwnKeys
     } = Reflect;
-    var { apply, bind, call } = Function.prototype;
+    var { apply: apply2, bind, call } = Function.prototype;
     var uncurryThis = bind.bind(call);
     primordials.uncurryThis = uncurryThis;
-    var applyBind = bind.bind(apply);
+    var applyBind = bind.bind(apply2);
     primordials.applyBind = applyBind;
     var varargsMethods = [
       // 'ArrayPrototypeConcat' is omitted, because it performs the spread
@@ -22867,6 +22867,9 @@ var inspect = (v) => {
 // src/time.ts
 init_globals();
 init_timers();
+function plusMs(from, ms) {
+  return from + ms;
+}
 function spanMs(from, to) {
   return Math.round(to - from);
 }
@@ -45591,11 +45594,11 @@ function checkMenuDecls(ctx, out) {
     }
   }
 }
-function identityIssue(apply) {
-  if (apply === "") {
+function identityIssue(apply2) {
+  if (apply2 === "") {
     return `with an empty apply-action name \u2014 an empty member aliases the absent-state sentinel ("") so the menu would render open before any click. Name the apply action`;
   }
-  if (menuMember(apply) === DISCLOSURE_CLOSED) {
+  if (menuMember(apply2) === DISCLOSURE_CLOSED) {
     return `whose apply action is named "${DISCLOSURE_CLOSED}", which collides with the menu's closed-state sentinel and leaves it unopenable. Rename the action`;
   }
   return void 0;
@@ -45628,11 +45631,11 @@ function synthesizePlacementMenus(config2, issues) {
         if (call.kind === "issue" || identityIssue(call.apply) !== void 0) {
           continue;
         }
-        const { apply, options } = call;
-        const member = menuMember(apply);
-        const stateKey = menuStateKey(id2, apply, options.key);
+        const { apply: apply2, options } = call;
+        const member = menuMember(apply2);
+        const stateKey = menuStateKey(id2, apply2, options.key);
         const pageKey = menuPageKey(stateKey);
-        const owner = options.key !== void 0 ? `key ${options.key}` : `ind ${id2} ${apply}`;
+        const owner = options.key !== void 0 ? `key ${options.key}` : `ind ${id2} ${apply2}`;
         const clashKey = [stateKey, pageKey].find((k) => {
           const prior2 = ownerBySynthKey.get(k);
           return prior2 !== void 0 && prior2 !== owner;
@@ -45652,7 +45655,7 @@ function synthesizePlacementMenus(config2, issues) {
         if (prior !== void 0 && prior !== claimant) {
           issue3(
             node.name,
-            `two {{ menu }} disclosures resolve to the same identity ("${identity2}") \u2014 ${options.key !== void 0 ? `menus sharing key "${options.key}" must have distinct apply actions` : `a segment cannot contain two menus over the same apply action "${apply}"`}.`
+            `two {{ menu }} disclosures resolve to the same identity ("${identity2}") \u2014 ${options.key !== void 0 ? `menus sharing key "${options.key}" must have distinct apply actions` : `a segment cannot contain two menus over the same apply action "${apply2}"`}.`
           );
           continue;
         }
@@ -69063,7 +69066,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.188.0";
+var PACKAGE_VERSION = "1.189.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -71579,12 +71582,7 @@ function click(verb, gather, handler) {
     return ctx.journalTurns.click(
       verb,
       sid,
-      {
-        placed: ctx.placeWaited,
-        waited: ctx.turnWaited,
-        gone: ctx.clientGone,
-        gathered: ctx.gatherTook
-      },
+      ctx.asker,
       () => gather(value, ctx),
       (gathered2, turn) => journaled(sid, ctx, turn, async (c) => {
         try {
@@ -71615,6 +71613,9 @@ var VERBS = new Map([
 var VERB_NAMES = Object.freeze([
   ...VERBS.keys()
 ]);
+function clickVerb(name) {
+  return VERBS.get(name) ?? null;
+}
 function closeIdleMenus(sid, idle, ctx) {
   return ctx.journalTurns.take(
     "menu-idle",
@@ -73397,15 +73398,15 @@ function requireOptionKind(runtime, name, helper) {
   }
   return action2;
 }
-function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint, closeStyle, steps2 = []) {
+function renderPicker(applyName, apply2, page2, close, paged, runtime, itemPaint, closeStyle, steps2 = []) {
   const declared = runtime.compiled.get(applyName);
   const store = renderBinding(runtime, "picker").store;
   const sessionId2 = readVar(store, "session.id");
-  const current = "stateVar" in apply ? readVar(store, apply.stateVar) : void 0;
+  const current = "stateVar" in apply2 ? readVar(store, apply2.stateVar) : void 0;
   const optionFace = (i, label2) => {
-    const option = apply.options[i];
+    const option = apply2.options[i];
     return itemPaint(
-      { index: i, count: apply.options.length },
+      { index: i, count: apply2.options.length },
       option,
       label2,
       option === current
@@ -73413,12 +73414,12 @@ function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint,
   };
   const available = !paged ? Infinity : close.kind === "led" ? ledRowBudget(runtime) : rowBudget(runtime);
   const navReserve = (close.kind === "led" ? 0 : cellWidth2(DISCLOSURE_GLYPH_CLOSE) + 1) + steps2.reduce((cols, step4) => cols + cellWidth2(step4.glyph) + 1, 0);
-  const catalogue = apply.library && {
-    groups: apply.library.groups,
-    entries: apply.options.map(apply.library.entry)
+  const catalogue = apply2.library && {
+    groups: apply2.library.groups,
+    entries: apply2.options.map(apply2.library.entry)
   };
-  const labelOf = apply.labelOf ?? ((option) => option);
-  const gridFaces = catalogue === void 0 ? apply.options.map((option, i) => optionFace(i, labelOf(option))) : [];
+  const labelOf = apply2.labelOf ?? ((option) => option);
+  const gridFaces = catalogue === void 0 ? apply2.options.map((option, i) => optionFace(i, labelOf(option))) : [];
   const pages = catalogue !== void 0 ? libraryLayout(catalogue.entries, catalogue.groups, paged) : gridPages(
     gridFaces.map((face) => face.cellLength),
     available,
@@ -73432,7 +73433,7 @@ function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint,
     )
   );
   const holding2 = pageHolding(
-    current === void 0 ? -1 : apply.options.indexOf(current)
+    current === void 0 ? -1 : apply2.options.indexOf(current)
   );
   const pageIdx = !Number.isInteger(rawPage) ? 0 : rawPage < 0 ? holding2 : Math.min(rawPage, pages.length - 1);
   const pageSections = pages[pageIdx] ?? [];
@@ -73450,7 +73451,7 @@ function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint,
     ...realize(declared, option, option, store, sessionId2, runtime.signer).effects,
     ...closeEffects
   ]);
-  const optionCell = (face, i) => linkOver(face, optionUrl(apply.options[i]));
+  const optionCell = (face, i) => linkOver(face, optionUrl(apply2.options[i]));
   const nav = close.kind === "led" ? [] : [
     linkFragment(
       DISCLOSURE_GLYPH_CLOSE,
@@ -73470,7 +73471,7 @@ function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint,
             args: [
               sessionId2,
               page2.key,
-              String(pageHolding(apply.options.indexOf(option)))
+              String(pageHolding(apply2.options.indexOf(option)))
             ]
           }
         ]),
@@ -73501,10 +73502,10 @@ function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint,
       lines2.push(assemble([new RichText(section.label, { style: bold })]));
     }
     const nameWidth = Math.max(
-      ...section.indices.map((i) => cellWidth2(labelOf(apply.options[i])))
+      ...section.indices.map((i) => cellWidth2(labelOf(apply2.options[i])))
     );
     for (const i of section.indices) {
-      const name = labelOf(apply.options[i]);
+      const name = labelOf(apply2.options[i]);
       const authored = catalogue.entries[i].description;
       const description = authored === void 0 ? void 0 : sanitizeText(authored);
       const gap = " ".repeat(nameWidth - cellWidth2(name) + 2);
@@ -73537,7 +73538,7 @@ function pickerFuncs(runtime, activeSegment) {
             `{{ picker "${applyName}" \u2026 }} sets both closeOnPick and inBody; a picker in a body is closed by the body's \u2715, so it has no close to fold into a pick`
           );
         }
-        const apply = requireOptionKind(runtime, applyName, "picker");
+        const apply2 = requireOptionKind(runtime, applyName, "picker");
         const active2 = requireActiveSegment(activeSegment, "{{ picker }}");
         if (active2.bg === void 0) {
           throw new Error(
@@ -73547,7 +73548,7 @@ function pickerFuncs(runtime, activeSegment) {
         const drawnAt = activeSegment.drawnAt();
         const draw2 = (ground) => renderPicker(
           applyName,
-          apply,
+          apply2,
           { key: page2.key, stateVar: page2.stateVar },
           inBody === true ? { kind: "led" } : {
             kind: "own",
@@ -73563,14 +73564,14 @@ function pickerFuncs(runtime, activeSegment) {
             active2,
             placedBy(void 0),
             renderLook(runtime, "{{ picker }}"),
-            apply.paletteOf,
+            apply2.paletteOf,
             drawnAt,
             ground
           ),
           closeOn(active2.palette, ground, drawnAt)
         );
         const band = bandFor(active2.palette, active2.disclosure, drawnAt);
-        const [, ...rows] = apply.library === void 0 ? [] : draw2(band.plane);
+        const [, ...rows] = apply2.library === void 0 ? [] : draw2(band.plane);
         if (rows.length === 0) return draw2(active2.bg)[0];
         active2.drops.push(...rows);
         return draw2(band.state)[0];
@@ -73591,23 +73592,23 @@ function ringAround(options, current) {
   const centre = Math.max(options.indexOf(current), 0);
   return (offset) => ((centre + offset) % count + count) % count;
 }
-function renderCarousel(applyName, apply, openName, label2, runtime) {
-  if (!("stateVar" in apply)) {
+function renderCarousel(applyName, apply2, openName, label2, runtime) {
+  if (!("stateVar" in apply2)) {
     throw new Error(
       `carousel references action "${applyName}", which inserts a segment and holds no current value to centre on \u2014 a carousel needs a { set, from } or { persist, from } action`
     );
   }
   const store = renderBinding(runtime, "carousel").store;
-  if (!store.has(apply.stateVar)) {
+  if (!store.has(apply2.stateVar)) {
     throw new Error(
-      `carousel references action "${applyName}", whose key "${apply.stateVar}" no variable reads back, so there is no current value to centre on \u2014 declare { kind: "state", key: "${apply.stateVar}" } among the variables`
+      `carousel references action "${applyName}", whose key "${apply2.stateVar}" no variable reads back, so there is no current value to centre on \u2014 declare { kind: "state", key: "${apply2.stateVar}" } among the variables`
     );
   }
   const declared = runtime.compiled.get(applyName);
   const sessionId2 = readVar(store, "session.id");
-  const { options } = apply;
+  const { options } = apply2;
   if (options.length === 0) return assemble([]);
-  const indexAt = ringAround(options, readVar(store, apply.stateVar));
+  const indexAt = ringAround(options, readVar(store, apply2.stateVar));
   const ring = (offset) => options[indexAt(offset)];
   const step4 = (offset) => effectsUrl(
     realize(
@@ -73627,7 +73628,7 @@ function renderCarousel(applyName, apply, openName, label2, runtime) {
       // when the domain is colour-valued.
       labelPaint(
         renderLook(runtime, "{{ carousel }}"),
-        apply.paletteOf,
+        apply2.paletteOf,
         ring(0),
         label2
       ),
@@ -73684,18 +73685,18 @@ init_globals();
 init_globals();
 var SWATCHES_RANDOM = "?";
 function requireSwatchable(runtime, applyName, helper) {
-  const apply = requireOptionKind(runtime, applyName, helper);
-  if (!("stateVar" in apply)) {
+  const apply2 = requireOptionKind(runtime, applyName, helper);
+  if (!("stateVar" in apply2)) {
     throw new Error(
       `${helper} references action "${applyName}", which inserts a segment and holds no current value \u2014 a ${helper} needs a { set, from } or { persist, from } action`
     );
   }
-  if (apply.paletteOf === void 0) {
+  if (apply2.paletteOf === void 0) {
     throw new Error(
       `${helper} references action "${applyName}", whose options are not colour-valued \u2014 a swatch draws the palette an option puts in force, as the "themes", "placementThemes" and "styles" domains do`
     );
   }
-  return apply;
+  return apply2;
 }
 function randomOther(seed, count, centre) {
   let h = Math.imul(seed ^ seed >>> 16, 73244475);
@@ -73704,14 +73705,14 @@ function randomOther(seed, count, centre) {
   return (centre + 1 + (h >>> 0) % Math.max(count - 1, 1)) % count;
 }
 function optionPalette(runtime, applyName, helper, chosen) {
-  const apply = requireSwatchable(runtime, applyName, helper);
-  const option = chosen ?? readVar(renderBinding(runtime, helper).store, apply.stateVar);
-  if (!apply.options.includes(option)) {
+  const apply2 = requireSwatchable(runtime, applyName, helper);
+  const option = chosen ?? readVar(renderBinding(runtime, helper).store, apply2.stateVar);
+  if (!apply2.options.includes(option)) {
     throw new Error(
       `${helper} "${applyName}": "${option}" is not one of its options, so it has no palette to draw`
     );
   }
-  return apply.paletteOf(option, renderLook(runtime, `{{ ${helper} }}`));
+  return apply2.paletteOf(option, renderLook(runtime, `{{ ${helper} }}`));
 }
 function swatchFuncs(runtime) {
   return {
@@ -73736,7 +73737,7 @@ function swatchesFuncs(runtime, activeSegment, clock) {
   return {
     swatches: {
       fn: (applyName, pageName) => {
-        const apply = requireSwatchable(runtime, applyName, "swatches");
+        const apply2 = requireSwatchable(runtime, applyName, "swatches");
         const page2 = requireKind(
           runtime,
           pageName,
@@ -73751,12 +73752,12 @@ function swatchesFuncs(runtime, activeSegment, clock) {
           );
         }
         const drawnAt = activeSegment.drawnAt();
-        const { options } = apply;
+        const { options } = apply2;
         const count = options.length;
         const steps2 = () => {
           const at = ringAround(
             options,
-            readVar(renderBinding(runtime, "swatches").store, apply.stateVar)
+            readVar(renderBinding(runtime, "swatches").store, apply2.stateVar)
           );
           return [
             { glyph: CAROUSEL_PREV, option: options[at(-1)] },
@@ -73769,7 +73770,7 @@ function swatchesFuncs(runtime, activeSegment, clock) {
         };
         const [line] = renderPicker(
           applyName,
-          apply,
+          apply2,
           { key: page2.key, stateVar: page2.stateVar },
           { kind: "led" },
           true,
@@ -73777,7 +73778,7 @@ function swatchesFuncs(runtime, activeSegment, clock) {
           swatchPaint(
             active2,
             renderLook(runtime, "{{ swatches }}"),
-            apply.paletteOf,
+            apply2.paletteOf,
             drawnAt,
             active2.bg
           ),
@@ -73979,10 +73980,10 @@ function renderMenu(applyName, displays, options, runtime) {
       placement.disclosure,
       drawnAt
     ).plane;
-    const apply = requireOptionKind(action2, applyName, "menu");
+    const apply2 = requireOptionKind(action2, applyName, "menu");
     return renderPicker(
       applyName,
-      apply,
+      apply2,
       { key: pageKey, stateVar: pageKey },
       {
         kind: "own",
@@ -74003,7 +74004,7 @@ function renderMenu(applyName, displays, options, runtime) {
         placement,
         options.distribution,
         renderLook(action2, "{{ menu }}"),
-        apply.paletteOf,
+        apply2.paletteOf,
         drawnAt,
         plane
       ),
@@ -77060,6 +77061,32 @@ function statuslineOf(sessionId2, drawn, elsewhere) {
 init_globals();
 init_process();
 
+// src/daemon/apply.ts
+init_globals();
+var ARMS = {
+  // [LAW:single-enforcer] exception: the request takes no turn yet, so its
+  // writes (the session's render origin and client hints) still land outside
+  // one. A click holds the turn across its launches, and a render behind it
+  // would stall the bar; the writes join the turn once launches leave it as
+  // effects.
+  request: ({ req, at, waitEndsAt, facts }, parts) => answerRequest(parts, req, at, waitEndsAt, facts),
+  // [LAW:single-enforcer] The click's whole bracket on its menus' idle clock
+  // is here, so the timer cannot close a menu under any click Apply carries.
+  click: async ({ verb, value, arrival, pending: pending2, asker }, { verbCtx, menuIdle }) => {
+    if (pending2 !== null) menuIdle.clickArrived(pending2);
+    try {
+      await verb(value, { ...verbCtx, arrival, asker });
+    } finally {
+      if (pending2 !== null) menuIdle.clickSettled(pending2);
+    }
+  },
+  "menu-idle": ({ session, idle }, { verbCtx }) => closeIdleMenus(session, idle, verbCtx)
+};
+function apply(event, parts) {
+  const arm2 = ARMS[event.kind];
+  return arm2(event, parts);
+}
+
 // src/daemon/render-checkpoint.ts
 init_globals();
 var import_node_path33 = __toESM(require_path_browserify(), 1);
@@ -77597,18 +77624,24 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       sighted(checked.req, "drawing");
       frameFeeds.note(checked.req.sessionId, checked.req, order2);
     }
-    const rendered = !checked.ok ? refusedRender(checked.problems) : await answerRequest(
-      parts,
-      checked.req,
-      at,
-      // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
-      // fixed at its arrival: early enough before its client hangs up to
-      // draw (src/daemon/request-deadline.ts).
-      t0 + waitBudgetMs(checked.req.deadline, accepted, {
-        epochMs: started2.getTime(),
-        monoMs: t0
-      }),
-      facts
+    const rendered = !checked.ok ? refusedRender(checked.problems) : await apply(
+      {
+        kind: "request",
+        req: checked.req,
+        at,
+        // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
+        // fixed at its arrival: early enough before its client hangs up to
+        // draw (src/daemon/request-deadline.ts).
+        waitEndsAt: plusMs(
+          t0,
+          waitBudgetMs(checked.req.deadline, accepted, {
+            epochMs: started2.getTime(),
+            monoMs: t0
+          })
+        ),
+        facts
+      },
+      parts
     ).then(
       ({ resp, motion, clickShown, pipeShown, delivered }) => {
         sighted(checked.req, motion);
@@ -77849,35 +77882,35 @@ var VERB_FACT = {
   "tmux-status": "linkVerb"
 };
 async function handleClick(parts, verb, value, arrival, facts, clientGone) {
-  const { menuIdle, verbCtx } = parts;
   if (verb === VERB_TMUX_STATUS_CLICK) {
     noteFacts(facts, { verb });
     return statusLineClick(parts, value, facts, clientGone);
   }
-  const handler = VERBS.get(verb);
-  if (!handler) {
+  const resolved = clickVerb(verb);
+  if (resolved === null) {
     return { kind: "bad-request", problems: [`unknown click verb: ${verb}`] };
   }
   noteFacts(facts, { [VERB_FACT[arrival.via]]: verb });
   const session = clickSessionOf(verb, value);
   const pending2 = session?.ok ? session.id : null;
   if (session === null) noteFacts(facts, { sid: "-" });
-  else if (pending2 !== null) {
-    noteFacts(facts, { sid: pending2 });
-    menuIdle.clickArrived(pending2);
-  }
-  try {
-    await handler(value, {
-      ...verbCtx,
+  else if (pending2 !== null) noteFacts(facts, { sid: pending2 });
+  await apply(
+    {
+      kind: "click",
+      verb: resolved,
+      value,
       arrival,
-      placeWaited: (ms) => noteFacts(facts, { placeWait: `${ms}ms` }),
-      gatherTook: (ms) => noteFacts(facts, { gather: `${ms}ms` }),
-      turnWaited: (ms) => noteFacts(facts, { turnWait: `${ms}ms` }),
-      clientGone
-    });
-  } finally {
-    if (pending2 !== null) menuIdle.clickSettled(pending2);
-  }
+      pending: pending2,
+      asker: {
+        placed: (ms) => noteFacts(facts, { placeWait: `${ms}ms` }),
+        gathered: (ms) => noteFacts(facts, { gather: `${ms}ms` }),
+        waited: (ms) => noteFacts(facts, { turnWait: `${ms}ms` }),
+        gone: clientGone
+      }
+    },
+    parts
+  );
   return { kind: "ok" };
 }
 function clickReply(outcome) {
@@ -84882,7 +84915,7 @@ function createDaemon(inputs) {
   const menuIdle = new MenuIdle({
     clock,
     now: instant,
-    close: (sessionId2, idle) => closeIdleMenus(sessionId2, idle, verbCtx),
+    close: (session, idle) => apply({ kind: "menu-idle", session, idle }, parts),
     failed: (sessionId2, error) => log(
       error instanceof DaemonClosing ? "info" : "error",
       `menu-idle: close failed (session=${sessionId2}): ${inspect(error)}`
