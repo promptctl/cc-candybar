@@ -4,15 +4,22 @@
     {
       "version": "pr-618",
       "ref": "refs/pull/618/merge",
-      "sha": "1e2d8ee667c83a2d98fe15de2bad8f7b8bbc16c2",
-      "timestamp": "2026-11-05T10:17:05.771Z",
+      "sha": "a439237ee89e2eef09cfe28b45d5ed7977b0caad",
+      "timestamp": "2026-11-05T10:19:45.458Z",
       "commits": [
         {
-          "sha": "1e2d8ee667c83a2d98fe15de2bad8f7b8bbc16c2",
+          "sha": "a439237ee89e2eef09cfe28b45d5ed7977b0caad",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T10:15:56Z",
-          "message": "Merge e24f40bfeee475a91d912242829c2547efeb14a1 into ec44d114ee641f87a70a1c9754bb01d590a80853\n"
+          "timestamp": "2026-11-05T10:18:33Z",
+          "message": "Merge 3847c61af2524a6d0e37da5bb27cf80207fe8c8f into ec44d114ee641f87a70a1c9754bb01d590a80853\n"
+        },
+        {
+          "sha": "3847c61af2524a6d0e37da5bb27cf80207fe8c8f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T03:18:20-07:00",
+          "message": "fix(apply): monotonic deadline via plusMs; two-way answer check; journal-turns header names its takers (candybar-gather-renderer-76bb.1dh.scr)\n"
         },
         {
           "sha": "e24f40bfeee475a91d912242829c2547efeb14a1",

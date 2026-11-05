@@ -22867,6 +22867,9 @@ var inspect = (v) => {
 // src/time.ts
 init_globals();
 init_timers();
+function plusMs(from, ms) {
+  return from + ms;
+}
 function spanMs(from, to) {
   return Math.round(to - from);
 }
@@ -77629,10 +77632,13 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
         // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
         // fixed at its arrival: early enough before its client hangs up to
         // draw (src/daemon/request-deadline.ts).
-        waitEndsAt: t0 + waitBudgetMs(checked.req.deadline, accepted, {
-          epochMs: started2.getTime(),
-          monoMs: t0
-        }),
+        waitEndsAt: plusMs(
+          t0,
+          waitBudgetMs(checked.req.deadline, accepted, {
+            epochMs: started2.getTime(),
+            monoMs: t0
+          })
+        ),
         facts
       },
       parts
@@ -77888,9 +77894,7 @@ async function handleClick(parts, verb, value, arrival, facts, clientGone) {
   const session = clickSessionOf(verb, value);
   const pending2 = session?.ok ? session.id : null;
   if (session === null) noteFacts(facts, { sid: "-" });
-  else if (pending2 !== null) {
-    noteFacts(facts, { sid: pending2 });
-  }
+  else if (pending2 !== null) noteFacts(facts, { sid: pending2 });
   await apply(
     {
       kind: "click",
