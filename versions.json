@@ -4,32 +4,32 @@
     {
       "version": "pr-618",
       "ref": "refs/pull/618/merge",
-      "sha": "a439237ee89e2eef09cfe28b45d5ed7977b0caad",
-      "timestamp": "2026-11-05T10:19:45.458Z",
+      "sha": "4f8fb69dad126e695ceebe82512d28b3bf62ed8c",
+      "timestamp": "2026-11-05T10:27:08.008Z",
       "commits": [
         {
-          "sha": "a439237ee89e2eef09cfe28b45d5ed7977b0caad",
+          "sha": "4f8fb69dad126e695ceebe82512d28b3bf62ed8c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T10:18:33Z",
-          "message": "Merge 3847c61af2524a6d0e37da5bb27cf80207fe8c8f into ec44d114ee641f87a70a1c9754bb01d590a80853\n"
+          "timestamp": "2026-11-05T10:26:20Z",
+          "message": "Merge 49f9ca79d6bba90a823dd48303d4d4c69b587185 into ec44d114ee641f87a70a1c9754bb01d590a80853\n"
         },
         {
-          "sha": "3847c61af2524a6d0e37da5bb27cf80207fe8c8f",
+          "sha": "49f9ca79d6bba90a823dd48303d4d4c69b587185",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-05T03:18:20-07:00",
           "message": "fix(apply): monotonic deadline via plusMs; two-way answer check; journal-turns header names its takers (candybar-gather-renderer-76bb.1dh.scr)\n"
         },
         {
-          "sha": "e24f40bfeee475a91d912242829c2547efeb14a1",
+          "sha": "81eefb8c5c8f8c7d50736ae25ed89a02eaa97143",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-05T03:15:45-07:00",
           "message": "fix(apply): the click arm owns its idle bracket; one asker spelling; branded click verb; monotonic wait end (candybar-gather-renderer-76bb.1dh.scr)\n"
         },
         {
-          "sha": "2fffd99f5fc33f3e94398c6ded90002d4288e5da",
+          "sha": "edea476f43aa0b549020b22fa3a1f9fdd968f047",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-05T03:08:08-07:00",
