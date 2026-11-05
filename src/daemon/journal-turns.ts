@@ -2,9 +2,10 @@
 // a journal is open. A handler that awaits gives up the loop between its
 // journal's begin and commit, so run-to-completion no longer keeps two journals
 // apart: each takes a turn here, daemon-wide and not per session, because a
-// session's history is its own but the config files it writes are shared. The
-// turn is taken only around a journal (`click` and `closeIdleMenus`,
-// src/daemon/verbs/index.ts), which never nests, so a turn never waits on itself.
+// session's history is its own but the config files it writes are shared. Its
+// one consumer is Apply (src/daemon/apply.ts), whose click and menu-idle arms
+// take a turn only around a journal (src/daemon/verbs/index.ts), which never
+// nests, so a turn never waits on itself.
 //
 // A click's read-only launches come before its turn (`click`), so a slow doctor
 // gather holds up no other session. What keeps one session's clicks in arrival

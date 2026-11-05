@@ -3,7 +3,8 @@
 import process from "node:process";
 import { inspect } from "node:util";
 import type { DaemonParts } from "./daemon-parts.js";
-import { answerRequest, NOTHING_DELIVERED, renderFailed } from "./draw-bar.js";
+import { apply } from "./apply.js";
+import { NOTHING_DELIVERED, renderFailed } from "./draw-bar.js";
 import {
   checkRenderRequest,
   type CheckedRenderRequest,
@@ -19,7 +20,7 @@ import type {
 import { parseSessionId, type SessionId } from "./session-id";
 import { type SourceSnapshots } from "./stats";
 import {
-  VERBS,
+  clickVerb,
   CLICK_PROGRAM_TIMEOUT_MS,
   clickHandoff,
   clickSessionOf,
@@ -359,19 +360,23 @@ export async function replyTo(
       delivered: () => void;
     } = !checked.ok
       ? refusedRender(checked.problems)
-      : await answerRequest(
-          parts,
-          checked.req,
-          at,
+      : await apply(
+          {
+            kind: "request",
+            req: checked.req,
+            at,
           // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
           // fixed at its arrival: early enough before its client hangs up to
           // draw (src/daemon/request-deadline.ts).
-          t0 +
-            waitBudgetMs(checked.req.deadline, accepted, {
-              epochMs: started.getTime(),
-              monoMs: t0,
-            }),
-          facts,
+            waitEndsAt:
+              t0 +
+              waitBudgetMs(checked.req.deadline, accepted, {
+                epochMs: started.getTime(),
+                monoMs: t0,
+              }),
+            facts,
+          },
+          parts,
         ).then(
           ({ resp, motion, clickShown, pipeShown, delivered }) => {
             sighted(checked.req, motion);
@@ -738,13 +743,13 @@ async function handleClick(
   facts: RequestFacts,
   clientGone: () => boolean,
 ): Promise<RequestOutcome> {
-  const { menuIdle, verbCtx } = parts;
+  const { menuIdle } = parts;
   if (verb === VERB_TMUX_STATUS_CLICK) {
     noteFacts(facts, { verb });
     return statusLineClick(parts, value, facts, clientGone);
   }
-  const handler = VERBS.get(verb);
-  if (!handler) {
+  const resolved = clickVerb(verb);
+  if (resolved === null) {
     return { kind: "bad-request", problems: [`unknown click verb: ${verb}`] };
   }
   noteFacts(facts, { [VERB_FACT[arrival.via]]: verb });
@@ -759,14 +764,21 @@ async function handleClick(
     menuIdle.clickArrived(pending);
   }
   try {
-    await handler(value, {
-      ...verbCtx,
-      arrival,
-      placeWaited: (ms) => noteFacts(facts, { placeWait: `${ms}ms` }),
-      gatherTook: (ms) => noteFacts(facts, { gather: `${ms}ms` }),
-      turnWaited: (ms) => noteFacts(facts, { turnWait: `${ms}ms` }),
-      clientGone,
-    });
+    await apply(
+      {
+        kind: "click",
+        verb: resolved,
+        value,
+        arrival,
+        asker: {
+          placed: (ms) => noteFacts(facts, { placeWait: `${ms}ms` }),
+          gathered: (ms) => noteFacts(facts, { gather: `${ms}ms` }),
+          waited: (ms) => noteFacts(facts, { turnWait: `${ms}ms` }),
+          gone: clientGone,
+        },
+      },
+      parts,
+    );
   } finally {
     if (pending !== null) menuIdle.clickSettled(pending);
   }

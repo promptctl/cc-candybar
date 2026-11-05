@@ -881,7 +881,7 @@ function recordRequest(parts: DaemonParts, req: CheckedRenderRequest): void {
 }
 
 // A render request's answer: what it said is recorded, and the bar is drawn.
-interface RequestAnswer {
+export interface RequestAnswer {
   // What this request's client is answered with: the statusline's answer to
   // Claude Code's statusline, the bar to a client drawing it itself.
   resp: Response;

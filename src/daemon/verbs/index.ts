@@ -2357,6 +2357,19 @@ export const VERB_NAMES: readonly string[] = Object.freeze([
   ...VERBS.keys(),
 ]) as readonly string[];
 
+// [LAW:types-are-the-program] A verb the table has, as a click event carries
+// it (src/daemon/apply.ts): resolved where the click arrives, so an unknown
+// verb is refused there and never becomes an event.
+export interface ClickVerb {
+  readonly name: string;
+  readonly run: (value: string, ctx: VerbContext) => Promise<void>;
+}
+
+export function clickVerb(name: string): ClickVerb | null {
+  const run = VERBS.get(name);
+  return run === undefined ? null : { name, run };
+}
+
 // How long a session's menus sat with no click before its timer closed them.
 export interface IdleClose {
   readonly idleS: number;

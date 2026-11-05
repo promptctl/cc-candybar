@@ -49,7 +49,7 @@ import { makeLimits, type LimitsDeps } from "./limits";
 import { SessionState } from "./session-state";
 import { SettingsHistory } from "./settings-history";
 import { NavigationHistory } from "./navigation-history";
-import { closeIdleMenus } from "./verbs";
+import { apply } from "./apply.js";
 import type { DoctorEdge, DoctorStores } from "../doctor/edge";
 import { ProbeArrivals } from "../doctor/handler-probe";
 import { RenderSightings } from "./render-sightings";
@@ -375,7 +375,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const menuIdle = new MenuIdle({
     clock,
     now: instant,
-    close: (sessionId, idle) => closeIdleMenus(sessionId, idle, verbCtx),
+    close: (session, idle) =>
+      apply({ kind: "menu-idle", session, idle }, parts),
     failed: (sessionId, error) =>
       log(
         error instanceof DaemonClosing ? "info" : "error",
