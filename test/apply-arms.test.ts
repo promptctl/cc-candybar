@@ -17,7 +17,7 @@ const onlyExtra: "extra" extends Missing
   : never = true;
 // @ts-expect-error -- the arm named above is missing, so the table is incomplete.
 const incomplete: ApplyArms<Widened> = ARMS;
-void incomplete;
+void [missing, onlyExtra, incomplete];
 
 test("the arm table has one arm per kind of event, and no other", () => {
   const kinds: Record<Event["kind"], true> = {
@@ -26,5 +26,4 @@ test("the arm table has one arm per kind of event, and no other", () => {
     "menu-idle": true,
   };
   expect(Object.keys(ARMS).sort()).toEqual(Object.keys(kinds).sort());
-  expect([missing, onlyExtra]).toEqual(["extra", true]);
 });

@@ -27,7 +27,7 @@ import {
   BadVerbArgs,
 } from "./verbs";
 import { ClickAbandoned, DaemonClosing } from "./verb-error";
-import { elapsedMs, spanMs, type Monotonic } from "../time.js";
+import { elapsedMs, plusMs, spanMs, type Monotonic } from "../time.js";
 import { transcriptReads } from "../utils/transcript-fs.js";
 import { readStores } from "../doctor/edge";
 import type { ClickArrival } from "../doctor/sightings";
@@ -368,11 +368,13 @@ export async function replyTo(
             // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
             // fixed at its arrival: early enough before its client hangs up to
             // draw (src/daemon/request-deadline.ts).
-            waitEndsAt: (t0 +
+            waitEndsAt: plusMs(
+              t0,
               waitBudgetMs(checked.req.deadline, accepted, {
                 epochMs: started.getTime(),
                 monoMs: t0,
-              })) as Monotonic,
+              }),
+            ),
             facts,
           },
           parts,
@@ -757,9 +759,7 @@ async function handleClick(
   const session = clickSessionOf(verb, value);
   const pending = session?.ok ? session.id : null;
   if (session === null) noteFacts(facts, { sid: "-" });
-  else if (pending !== null) {
-    noteFacts(facts, { sid: pending });
-  }
+  else if (pending !== null) noteFacts(facts, { sid: pending });
   await apply(
     {
       kind: "click",

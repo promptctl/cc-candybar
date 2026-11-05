@@ -56,9 +56,13 @@ interface Applied {
   readonly "menu-idle": void;
 }
 
-// [LAW:types-are-the-program] A kind with no answer above fails to build here,
-// rather than as a `never` on its arm.
-const answered: Event["kind"] extends keyof Applied ? true : never = true;
+// [LAW:types-are-the-program] The answers name exactly the union's kinds: a
+// kind with no answer, or an answer with no kind, fails to build here.
+const answered: [Event["kind"]] extends [keyof Applied]
+  ? [keyof Applied] extends [Event["kind"]]
+    ? true
+    : never
+  : never = true;
 void answered;
 
 // [LAW:types-are-the-program] One arm per kind of `E`, none missing and none
