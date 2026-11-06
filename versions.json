@@ -2,6 +2,70 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-651",
+      "ref": "refs/pull/651/merge",
+      "sha": "474a5a9132104c61c814dd1bef5e85f9a4df4469",
+      "timestamp": "2026-11-06T20:43:30.576Z",
+      "commits": [
+        {
+          "sha": "474a5a9132104c61c814dd1bef5e85f9a4df4469",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T20:41:06Z",
+          "message": "Merge d4016f70fb825eea184d072813a2807e42c8f705 into 25a3827641cb21d3ec9541e2f1e9f87ea4d9be07\n"
+        },
+        {
+          "sha": "d4016f70fb825eea184d072813a2807e42c8f705",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:40:29-07:00",
+          "message": "Merge main into candybar-testing-ihvy.geg\n"
+        },
+        {
+          "sha": "55550962d7537bc859e7b88a32e75d6fad11a918",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:40:07-07:00",
+          "message": "test(workflows): a positive control on the real disk; dead bench env and stale comments go (candybar-testing-ihvy.geg)\n"
+        },
+        {
+          "sha": "8034170c25a236f4aed45d759ff5a7629a676dcd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:33:05-07:00",
+          "message": "docs(limits): rewrap (candybar-testing-ihvy.geg)\n"
+        },
+        {
+          "sha": "950c923d570948a843f3649c3196aac0268c8cd2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:32:52-07:00",
+          "message": "docs(limits): wrap the default's comment (candybar-testing-ihvy.geg)\n"
+        },
+        {
+          "sha": "78cfb5c2fe315f61b3b17818933fb27d23888220",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:32:34-07:00",
+          "message": "docs(limits): the default's margin and the reserve's assumption are stated; Gather's limit waits for a derivation (candybar-testing-ihvy.geg)\n"
+        },
+        {
+          "sha": "0701eaf05ef00233296eeaaf739286a8a6c18fb6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:29:29-07:00",
+          "message": "chore(testing): no limit, script or doc rests on a load run; the excuse list and capture-heap go (candybar-testing-ihvy.geg)\n"
+        },
+        {
+          "sha": "2a31f2b6649d09e9ee3bf31e0bac71aa79ba6538",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:23:26-07:00",
+          "message": "chore(testing): no job puts the machine under load to judge cost; the load gate and feed criterion are gone (candybar-testing-ihvy.geg)\n\nA stress run reports conditions far past the negligible-load requirement, so\nits numbers steer work away from the real cost. The rule is in CLAUDE.md and\nthe testing memory; comments and docs that justified a limit by a load run now\nstate the reason from the code. `Load gate` is off main-protection's required\nchecks.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-649",
       "ref": "refs/pull/649/merge",
       "sha": "0a2cae121f8af08a2cbcd5f9f20f04e38ab5fc40",
@@ -70,63 +134,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T13:19:48-07:00",
           "message": "fix(click): copy and open clicks name their session, so a menu's idle clock counts them (brandon-menus-sjhy.182)\n\nThe idle close counts a click as activity in the session the click names.\nCopy and open links carried only their text, so clicking ⎘ id or ↗ proj\nin a menu left the clock running and the menu closed under the user.\n\nBoth verbs now carry `[sessionId, argument]` and join the session-first\nand segmented sets, so the daemon reads their session at the one\ncheckpoint every click crosses. A copy whose pbcopy fails now shows on\nthe session's bar instead of only in the log.\n\nThey also take new wire names, `copy-text` and `open-in-vscode`. A\nsession id is nearly any slash-free string, so a link drawn when copy\ncarried only its text, read under the old name, would have its text\ntaken for a session. Under the new names an earlier link is an unknown\nverb that names no session, refused and logged. Keeping the earlier\nform working would be the second grammar the ticket rules out.\n\nThe page's copy path and the link words read the text from the second\nargument. The byte snapshots change only in those links and their OSC 8\nids.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-651",
-      "ref": "refs/pull/651/merge",
-      "sha": "560d5cc6f7166f320c8c46c041f433552fa55c7f",
-      "timestamp": "2026-11-06T20:41:14.910Z",
-      "commits": [
-        {
-          "sha": "560d5cc6f7166f320c8c46c041f433552fa55c7f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T20:40:15Z",
-          "message": "Merge 55550962d7537bc859e7b88a32e75d6fad11a918 into 25a3827641cb21d3ec9541e2f1e9f87ea4d9be07\n"
-        },
-        {
-          "sha": "55550962d7537bc859e7b88a32e75d6fad11a918",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:40:07-07:00",
-          "message": "test(workflows): a positive control on the real disk; dead bench env and stale comments go (candybar-testing-ihvy.geg)\n"
-        },
-        {
-          "sha": "8034170c25a236f4aed45d759ff5a7629a676dcd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:33:05-07:00",
-          "message": "docs(limits): rewrap (candybar-testing-ihvy.geg)\n"
-        },
-        {
-          "sha": "950c923d570948a843f3649c3196aac0268c8cd2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:32:52-07:00",
-          "message": "docs(limits): wrap the default's comment (candybar-testing-ihvy.geg)\n"
-        },
-        {
-          "sha": "78cfb5c2fe315f61b3b17818933fb27d23888220",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:32:34-07:00",
-          "message": "docs(limits): the default's margin and the reserve's assumption are stated; Gather's limit waits for a derivation (candybar-testing-ihvy.geg)\n"
-        },
-        {
-          "sha": "0701eaf05ef00233296eeaaf739286a8a6c18fb6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:29:29-07:00",
-          "message": "chore(testing): no limit, script or doc rests on a load run; the excuse list and capture-heap go (candybar-testing-ihvy.geg)\n"
-        },
-        {
-          "sha": "2a31f2b6649d09e9ee3bf31e0bac71aa79ba6538",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:23:26-07:00",
-          "message": "chore(testing): no job puts the machine under load to judge cost; the load gate and feed criterion are gone (candybar-testing-ihvy.geg)\n\nA stress run reports conditions far past the negligible-load requirement, so\nits numbers steer work away from the real cost. The rule is in CLAUDE.md and\nthe testing memory; comments and docs that justified a limit by a load run now\nstate the reason from the code. `Load gate` is off main-protection's required\nchecks.\n"
         }
       ]
     },
