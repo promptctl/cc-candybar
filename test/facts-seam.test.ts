@@ -27,7 +27,8 @@ import {
   recordingFacts,
   type Facts,
 } from "../src/daemon/facts-source";
-import { locations, stateDir } from "../src/daemon/paths";
+import { homeOf } from "../src/daemon/home";
+import { cacheDir, locations, stateDir } from "../src/daemon/paths";
 import { createPayloadProviders } from "../src/daemon/payload-providers";
 import { parseClientHints } from "../src/daemon/protocol";
 import { renderOptionsOf, todayOf, type ViewFacts } from "../src/daemon/render-payload";
@@ -210,10 +211,12 @@ function rig(
     lines.push(`${level} ${message}`);
   };
   const watchers = new WatcherRegistry({ clock, logger: log });
+  const home = homeOf(host);
   const providers = createPayloadProviders({
     clock,
     launcher,
     host,
+    cacheDir: cacheDir(home),
     watchers,
     fileEvents: NO_FILE_EVENTS,
     logger: log,
@@ -225,8 +228,8 @@ function rig(
   const cache = new RenderCache<SessionSource>(
     {
       clock,
-      stateDir: stateDir(host),
-      locations: locations(host),
+      stateDir: stateDir(home),
+      locations: locations(host, home),
       runs,
       sessionState,
       watchers,
