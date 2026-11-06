@@ -235,8 +235,18 @@ export function inProcessFacts({
         }
         return lanes;
       };
+      // A declaration that throws whole fails the follow having released
+      // what it took before the throw: a holds declaration that does not
+      // return keeps those, and only a close lets them go.
+      let opening: DeclaredLanes;
+      try {
+        opening = lanesFor(facts, declaration);
+      } catch (e) {
+        holds.close();
+        throw e;
+      }
       const declared = observable.box<Declared>(
-        { facts, declaration, lanes: lanesFor(facts, declaration) },
+        { facts, declaration, lanes: opening },
         { deep: false },
       );
       // [LAW:one-source-of-truth] What the owners are read by: the request

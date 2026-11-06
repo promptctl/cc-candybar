@@ -127,6 +127,23 @@ describe("the in-process arm", () => {
     expect(released).toEqual(["/a"]);
   });
 
+  test("a follow whose declaration throws whole throws, having released the holds it took before the throw", () => {
+    const { providers, held, released } = owners();
+    // The git lane's hold is taken before the sources are walked.
+    const sources: FollowDeclaration["sources"] = new Map();
+    sources.keys = () => {
+      throw new Error("sources bug");
+    };
+    expect(() =>
+      arm(providers).follow(viewFacts("/a"), {
+        closure: new Set(["git.branch"]),
+        sources,
+      }),
+    ).toThrow("sources bug");
+    expect(held).toEqual(["/a"]);
+    expect(released).toEqual(["/a"]);
+  });
+
   test("a fault of the source is a value beside the last document, cleared by the next good stamp, and kept across a turn in which nothing moved", () => {
     const { providers, lines } = owners();
     const broken = observable.box(false);
