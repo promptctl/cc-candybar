@@ -64,7 +64,11 @@ import {
   type Lane,
   type LaneSwitches,
 } from "../config/lanes.js";
-import { clickErrorAt, type ClickErrorRecord } from "./click-error.js";
+import {
+  clickErrorAt,
+  toAnswer,
+  type ClickErrorRecord,
+} from "./click-error.js";
 import { type LaneSession } from "./lane-setup.js";
 import { handedOffTo, laneHandoff } from "./lane-handoff.js";
 import {
@@ -418,7 +422,9 @@ export function drawRender(
   drawn: DrawnBar;
   evaluated: number;
   cellBreaks: number;
-  clickShown: ClickErrorRecord | null;
+  // The click error an answer carrying this draw marks answered
+  // (src/daemon/click-error.ts).
+  answersClick: ClickErrorRecord | null;
   // The launcher's pipe event this draw showed, which an answer carrying it
   // marks answered.
   pipeShown: PipeEvent | null;
@@ -782,7 +788,7 @@ export function drawRender(
     },
     evaluated,
     cellBreaks,
-    clickShown,
+    answersClick: toAnswer(clickHold),
     pipeShown,
     delivered,
     lanes,
@@ -832,7 +838,7 @@ export interface RequestAnswer {
   // Claude Code's statusline, the bar to a client drawing it itself.
   resp: Response;
   motion: DrawnMotion;
-  clickShown: ClickErrorRecord | null;
+  answersClick: ClickErrorRecord | null;
   pipeShown: PipeEvent | null;
   // Records what the answer's copy clicks copy, once it reached its client.
   delivered: () => void;
@@ -965,7 +971,7 @@ export async function drawAnswer(
     ended,
     refreshed: refreshedFact(settling.refreshed),
   });
-  const { drawn, clickShown, pipeShown, delivered, lanes } = drawRender(
+  const { drawn, answersClick, pipeShown, delivered, lanes } = drawRender(
     parts,
     setup,
     ANSWERING,
@@ -989,7 +995,7 @@ export async function drawAnswer(
   return {
     resp,
     motion: drawn.body.motion,
-    clickShown,
+    answersClick,
     pipeShown,
     delivered,
   };

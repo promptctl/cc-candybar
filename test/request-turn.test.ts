@@ -86,7 +86,7 @@ interface Drawn {
 const ANSWER: RequestAnswer = {
   resp: { ok: true, output: "" },
   motion: "still",
-  clickShown: null,
+  answersClick: null,
   pipeShown: null,
   delivered: () => {},
 };

@@ -380,7 +380,9 @@ export async function replyTo(
           },
           parts,
         ).then(
-          ({ answer: { resp, motion, clickShown, pipeShown, delivered } }) => {
+          ({
+            answer: { resp, motion, answersClick, pipeShown, delivered },
+          }) => {
             sighted(checked.req, motion);
             return {
               outcome: { kind: "ok" } as const,
@@ -391,12 +393,12 @@ export async function replyTo(
               // is a write, so it is an event the arm makes in a turn.
               delivered: () => {
                 delivered();
-                if (clickShown !== null)
+                if (answersClick !== null)
                   void applyUnanswered(
                     {
                       kind: "answered",
                       session: checked.req.sessionId,
-                      error: clickShown,
+                      error: answersClick,
                     },
                     parts,
                     `sid=${checked.req.sessionId}`,
@@ -411,7 +413,7 @@ export async function replyTo(
           (error: unknown) => {
             sighted(checked.req, "failed");
             return {
-              outcome: thrownOutcome(error),
+              outcome: daemonOutcome(error),
               resp: renderFailed(error),
               delivered: NOTHING_DELIVERED,
             };
@@ -722,15 +724,23 @@ async function clickRan(
   }
 }
 
-// [LAW:single-enforcer] What a request whose work threw became, by the
-// error's class, for a render as for a click: a render refused at its turn by
-// the daemon's close is `closing`, as a click is.
+// What a click whose verb threw became: a refusal of its arguments is the
+// client's, and one whose client left is abandoned. Anything else is the
+// daemon's, as a render's is.
 function thrownOutcome(error: unknown): RequestOutcome {
   if (error instanceof BadVerbArgs)
     return { kind: "bad-request", problems: [error.message] };
-  if (error instanceof DaemonClosing) return { kind: "closing", error };
   if (error instanceof ClickAbandoned) return { kind: "abandoned", error };
-  return { kind: "threw", error };
+  return daemonOutcome(error);
+}
+
+// [LAW:single-enforcer] What a request's work that threw became, for a
+// render as for a click: the daemon's close refusing it is `closing`, and
+// anything else is the daemon's failure.
+function daemonOutcome(error: unknown): RequestOutcome {
+  return error instanceof DaemonClosing
+    ? { kind: "closing", error }
+    : { kind: "threw", error };
 }
 
 // [LAW:dataflow-not-control-flow] The dispatcher is a table lookup. The verb

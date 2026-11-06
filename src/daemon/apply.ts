@@ -272,8 +272,8 @@ export const ARMS: ApplyArms<Event> = {
   },
 };
 
-// [LAW:one-source-of-truth] What a render request said, recorded in its turn
-// and never by a frame, which only draws. The STAMPED hints: a click arrives
+// [LAW:effects-at-boundaries][LAW:one-source-of-truth] What a render request
+// said, recorded in its turn and never by a frame, which only draws. The STAMPED hints: a click arrives
 // with no hints of its own, so the doctor (verbs/index.ts) reads the facts of
 // this session's last request from here, re-parsed through the same
 // checkpoint. The client itself is not recorded: which client drew a
