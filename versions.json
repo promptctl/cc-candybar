@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-654",
+      "ref": "refs/pull/654/merge",
+      "sha": "81d287257f2f8af165187e45593955cdfed9d7da",
+      "timestamp": "2026-11-06T21:40:28.530Z",
+      "commits": [
+        {
+          "sha": "81d287257f2f8af165187e45593955cdfed9d7da",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T14:39:35-07:00",
+          "message": "Merge 63b1e1aec9b9b8b7f1959a5e024d951868df0aaf into 4f8902896b866dd001944102be7ed0716f005520\n"
+        },
+        {
+          "sha": "63b1e1aec9b9b8b7f1959a5e024d951868df0aaf",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T14:39:17-07:00",
+          "message": "fix(test): the parent-watchdog case waits for a serving daemon under the shared readiness budget, and for its exit by name (brandon-menus-sjhy.26f)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "4f8902896b866dd001944102be7ed0716f005520",
