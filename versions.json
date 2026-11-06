@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-650",
+      "ref": "refs/pull/650/merge",
+      "sha": "ce464cf42a42004c6f6ca2985f158ac9e6ed1040",
+      "timestamp": "2026-11-06T20:45:54.294Z",
+      "commits": [
+        {
+          "sha": "ce464cf42a42004c6f6ca2985f158ac9e6ed1040",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:45:04-07:00",
+          "message": "Merge 501348c07e347e574f26f1c861d5cda602a11716 into 25a3827641cb21d3ec9541e2f1e9f87ea4d9be07\n"
+        },
+        {
+          "sha": "501348c07e347e574f26f1c861d5cda602a11716",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:40:59-07:00",
+          "message": "fix(click): the link reader names a retired verb before reading its value (brandon-menus-sjhy.182)\n\nThe reader refuses an unknown verb before decoding its value, as the\ndaemon does, so a retired copy link with a malformed escape reads as the\nverb it is. The decode test pins the single-argument codec again, and\nthe Effect comment says every leaf verb leads with its session.\n"
+        },
+        {
+          "sha": "4de0f9a291d15b8f3f27c79945a9b85da6480924",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:35:08-07:00",
+          "message": "fix(click): a click's session is its first leaf effect's, and a retired verb reads as refused (brandon-menus-sjhy.182)\n\nThe session-first set had become a copy of the leaf table's keys; the\ntable is now the one place a verb's first segment is its session. The\nframe reader refuses a verb the daemon has not, as the daemon does, so\nan old copy link reads as refused. Stale verb names fixed in comments\nand docs; the failed copy test pins its warning again.\n"
+        },
+        {
+          "sha": "aee39474c3b91e437c4749258c94b45a7a735727",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:19:48-07:00",
+          "message": "fix(click): copy and open clicks name their session, so a menu's idle clock counts them (brandon-menus-sjhy.182)\n\nThe idle close counts a click as activity in the session the click names.\nCopy and open links carried only their text, so clicking ⎘ id or ↗ proj\nin a menu left the clock running and the menu closed under the user.\n\nBoth verbs now carry `[sessionId, argument]` and join the session-first\nand segmented sets, so the daemon reads their session at the one\ncheckpoint every click crosses. A copy whose pbcopy fails now shows on\nthe session's bar instead of only in the log.\n\nThey also take new wire names, `copy-text` and `open-in-vscode`. A\nsession id is nearly any slash-free string, so a link drawn when copy\ncarried only its text, read under the old name, would have its text\ntaken for a session. Under the new names an earlier link is an unknown\nverb that names no session, refused and logged. Keeping the earlier\nform working would be the second grammar the ticket rules out.\n\nThe page's copy path and the link words read the text from the second\nargument. The byte snapshots change only in those links and their OSC 8\nids.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-646",
       "ref": "refs/pull/646/merge",
       "sha": "44be1565279de8ecdeb51949cd89ae9e6f474c91",
@@ -141,42 +177,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T12:51:37-07:00",
           "message": "fix(facts): a replay draws the lane feeds and diagnostics the live draw was handed, and the frames a lane drew (candybar-gather-renderer-76bb.6pj.0se)\n\nA replay drew every frame with every lane idle, no open viewer, and only\nthe request answers, so a recording of a session with a lane following or\nthe warnings viewer open replayed a bar the user never saw.\n\n- A draw line is one draw of the view, an answer or a lane's frame: it\n  carries the instant it was drawn at and what it was handed (who it drew\n  for, each lane's feed, the diagnostics list). A lane's frames write the\n  view's frame memory and the session's effect memory, so the recorder\n  notes each one, to every recording of the session, and the replay draws\n  them in the file's order at their exact instants. RECORDING_VERSION 6.\n- The daemon and the demo draw a view through one function (draw-view),\n  which derives every draw projection from what the draw was handed and\n  stands the open viewer in for the bar. The demo's own drawDsl call goes.\n- A recording that holds only lane frames is kept and replays; `record`\n  reports answers and lane frames.\n- The seam test's live side is the daemon's draw throughout, and a new case\n  replays a standing warning, a following lane, its toggles and the open\n  viewer, compared whole.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-650",
-      "ref": "refs/pull/650/merge",
-      "sha": "688c8c5d3787ff3f96eb199d9bde7f1408d45925",
-      "timestamp": "2026-11-06T20:42:11.262Z",
-      "commits": [
-        {
-          "sha": "688c8c5d3787ff3f96eb199d9bde7f1408d45925",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T20:41:07Z",
-          "message": "Merge 2c7bf0f6a077e1b370b7b297ba5e1f0c71f6035a into 25a3827641cb21d3ec9541e2f1e9f87ea4d9be07\n"
-        },
-        {
-          "sha": "2c7bf0f6a077e1b370b7b297ba5e1f0c71f6035a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:40:59-07:00",
-          "message": "fix(click): the link reader names a retired verb before reading its value (brandon-menus-sjhy.182)\n\nThe reader refuses an unknown verb before decoding its value, as the\ndaemon does, so a retired copy link with a malformed escape reads as the\nverb it is. The decode test pins the single-argument codec again, and\nthe Effect comment says every leaf verb leads with its session.\n"
-        },
-        {
-          "sha": "418b0d6670a16a5a17577d53571e8b5fbe16ae44",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:35:08-07:00",
-          "message": "fix(click): a click's session is its first leaf effect's, and a retired verb reads as refused (brandon-menus-sjhy.182)\n\nThe session-first set had become a copy of the leaf table's keys; the\ntable is now the one place a verb's first segment is its session. The\nframe reader refuses a verb the daemon has not, as the daemon does, so\nan old copy link reads as refused. Stale verb names fixed in comments\nand docs; the failed copy test pins its warning again.\n"
-        },
-        {
-          "sha": "9a6499870a3a77075cf8511a23ecb862270dfd00",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:19:48-07:00",
-          "message": "fix(click): copy and open clicks name their session, so a menu's idle clock counts them (brandon-menus-sjhy.182)\n\nThe idle close counts a click as activity in the session the click names.\nCopy and open links carried only their text, so clicking ⎘ id or ↗ proj\nin a menu left the clock running and the menu closed under the user.\n\nBoth verbs now carry `[sessionId, argument]` and join the session-first\nand segmented sets, so the daemon reads their session at the one\ncheckpoint every click crosses. A copy whose pbcopy fails now shows on\nthe session's bar instead of only in the log.\n\nThey also take new wire names, `copy-text` and `open-in-vscode`. A\nsession id is nearly any slash-free string, so a link drawn when copy\ncarried only its text, read under the old name, would have its text\ntaken for a session. Under the new names an earlier link is an unknown\nverb that names no session, refused and logged. Keeping the earlier\nform working would be the second grammar the ticket rules out.\n\nThe page's copy path and the link words read the text from the second\nargument. The byte snapshots change only in those links and their OSC 8\nids.\n"
         }
       ]
     },
