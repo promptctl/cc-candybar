@@ -4,39 +4,39 @@
     {
       "version": "pr-639",
       "ref": "refs/pull/639/merge",
-      "sha": "01f43a0b3360d3022db257c07786cd2860211499",
-      "timestamp": "2026-11-06T12:07:41.704Z",
+      "sha": "b89e64f853aa408b82a05eec1c400f1f0ce5dafd",
+      "timestamp": "2026-11-06T12:19:03.354Z",
       "commits": [
         {
-          "sha": "01f43a0b3360d3022db257c07786cd2860211499",
+          "sha": "b89e64f853aa408b82a05eec1c400f1f0ce5dafd",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:06:51Z",
-          "message": "Merge 7dba03d8b2ee843d4f4d14d5d62fb30ab8a6cd1a into 5b7989a64a1f6bc3a423a4869e89dbf55505a6f4\n"
+          "timestamp": "2026-11-06T05:18:03-07:00",
+          "message": "Merge 0f41f7ccc20416381aabb9572ccf7a9b4e1fbd3f into 09bf7a07c277d77ba521aba00c7d13b8cc3bb634\n"
         },
         {
-          "sha": "7dba03d8b2ee843d4f4d14d5d62fb30ab8a6cd1a",
+          "sha": "0f41f7ccc20416381aabb9572ccf7a9b4e1fbd3f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T05:02:53-07:00",
           "message": "fix(facts): the replay's depths compare every history field; the design states what a draw line carries (candybar-gather-renderer-76bb.6pj.gs4)\n"
         },
         {
-          "sha": "77cf46aef7e357f1fb3836de10bf24f5d3ddbcf5",
+          "sha": "ed3d8fa9ba2bf4a71f478026932eee8a16ad669f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T04:54:02-07:00",
           "message": "fix(facts): a session the store's file holds empty is not taken up, so a recorded state holds the store's revision rule; the replay restores under its view's session (candybar-gather-renderer-76bb.6pj.gs4)\n"
         },
         {
-          "sha": "4837be3b78270cff7a8d75d653fe41d6a184f070",
+          "sha": "b7c61541a3515cbd262b1710a41195554d07b161",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T04:43:45-07:00",
           "message": "fix(facts): a recorded draw state the store could not have held is refused; a replayed draw whose depths held moves nothing (candybar-gather-renderer-76bb.6pj.gs4)\n"
         },
         {
-          "sha": "0a0b4c943b9bc7cbf23cf51bce1f2375104a6ebc",
+          "sha": "319635dc182d5761c3da8abf340fbc781fb28636",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T04:27:19-07:00",
