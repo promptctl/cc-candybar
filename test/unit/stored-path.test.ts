@@ -110,6 +110,15 @@ describe("a stored path under a root named through a link", () => {
     });
   });
 
+  test("a file reached through a link from outside into the home's tree is the home's", () => {
+    const linkedIn = rootAt("/home", { "/presets-link": "/home/presets" });
+    expect(storedPathOf(linkedIn, "/presets-link/x.json5")).toEqual({
+      kind: "home",
+      path: "presets/x.json5",
+    });
+    expect(homeSpelling(linkedIn, "/presets-link/x.json5")).toBe("/home/presets/x.json5");
+  });
+
   test("a file beside the home is the world's, as given", () => {
     expect(storedPathOf(root, "/real/other.json5")).toEqual({ kind: "world", path: "/real/other.json5" });
     expect(homeSpelling(root, "/real/other.json5")).toBe("/real/other.json5");

@@ -41,9 +41,10 @@ export function oneReading(root: StoredRoot): StoredRoot {
 }
 
 // [LAW:one-source-of-truth] Whose a file is: the home's when a directory on
-// its path, as named, is the root directory, and then its path from there.
-// Directories are compared in their on-disk spelling, read now, so a file
-// named through a link above the root (macOS's /tmp, a dotfiles ~/.config) or
+// its path, as named, is the root directory or one inside it, and then its
+// path from there. Directories are compared in their on-disk spelling, read
+// now, so a file named through a link above the root (macOS's /tmp, a
+// dotfiles ~/.config), through a link from outside into the home's tree, or
 // in another letter case is the home's, as one named through a link inside
 // the home (its config/ pointing elsewhere) is, where resolving the file
 // itself would send it to the world. `file` is absolute. A file named under
@@ -54,10 +55,15 @@ function homeRelative(root: StoredRoot, file: string): string | null {
   return underRoot(root.dir, file) ?? namedThrough(root, file);
 }
 
+// The nearest directory on the way is asked first, so a file is placed by the
+// deepest directory that lies in the home.
 function namedThrough(root: StoredRoot, file: string): string | null {
   const home = root.onDisk(root.dir);
-  const at = ancestors(file).find((dir) => root.onDisk(dir) === home);
-  return at === undefined ? null : path.relative(at, file);
+  for (const dir of ancestors(file)) {
+    const inside = within(home, root.onDisk(dir));
+    if (inside !== null) return path.join(inside, path.relative(dir, file));
+  }
+  return null;
 }
 
 // The directories `file` names on its way, nearest first.
@@ -66,16 +72,20 @@ function ancestors(file: string): string[] {
   return dir === file ? [] : [dir, ...ancestors(dir)];
 }
 
+// The plain path of `p` from `root`, "" for the root itself, or null when
+// `p` lies outside it.
+function within(root: string, p: string): string | null {
+  const rel = path.relative(root, p);
+  return rel === ".." || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)
+    ? null
+    : rel;
+}
+
 // The lexical test: the plain path of `file` under the root as the root is
 // spelled, or null. It is also the shape a stored home path is checked by.
 function underRoot(root: string, file: string): string | null {
-  const rel = path.relative(root, file);
-  return rel === "" ||
-    rel === ".." ||
-    rel.startsWith(`..${path.sep}`) ||
-    path.isAbsolute(rel)
-    ? null
-    : rel;
+  const rel = within(root, file);
+  return rel === "" ? null : rel;
 }
 
 // Total over an absolute path: the spelling a store writes.
