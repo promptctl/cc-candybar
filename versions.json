@@ -2,38 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-660",
-      "ref": "refs/pull/660/merge",
-      "sha": "22dda79355bdbb358873cf9030cfa8af54fd65fa",
-      "timestamp": "2026-11-06T23:41:33.936Z",
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "873a8e0e0be2d843b7d0b4c308831e2d20b5bde1",
+      "timestamp": "2026-11-06T23:47:50.420Z",
       "commits": [
         {
-          "sha": "22dda79355bdbb358873cf9030cfa8af54fd65fa",
+          "sha": "873a8e0e0be2d843b7d0b4c308831e2d20b5bde1",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T23:40:42Z",
-          "message": "Merge f63cf077d2034adf7a9242d79097d7d875bc094b into d8a5b19a71575bb8d1069ee4caebfcb8133bb6a1\n"
+          "timestamp": "2026-11-06T16:46:47-07:00",
+          "message": "fix(lanes): a restart refuses a Claude Code that now holds another session, instead of resuming the old one over it (candybar-gather-renderer-76bb.1dh.9ix) (#660)\n\n* fix(lanes): a restart refuses a pane that now runs another session, instead of resuming the old one over it (candybar-gather-renderer-76bb.1dh.9ix)\n\nA statusline restart resumes the session its setup was settled for. After\na `/clear` or `/resume` in the pane, Claude Code is the same process, so the\npid check before the kill passed and the line typed `--resume <old id>`\nover the live session.\n\nThe restart now reads whose session the pane runs (the newest request\nnaming the pane, among each session's latest) directly before SIGTERM,\nafter its last wait, and refuses naming that session when it is not the\none being restarted, or saying no held request names the pane.\n\nThat read is built once in the daemon and handed to the tmux status line\nand lane setup, over one `namesPane` predicate the pane-session reply\nuses too; the predicate was spelled inline twice before.\n\n* fix(lanes): a restart reads the session its Claude Code holds from the process's own record (candybar-gather-renderer-76bb.1dh.9ix)\n\nThe newest request naming the pane lags a /clear by the new session's\nfirst statusline tick, and any client run inside the pane names the pane\ntoo. Claude Code rewrites its per-process record in its configuration\ndirectory when the session changes, so the restart reads that, for the\npid it is about to kill, synchronously before the kill. A record that is\nmissing or unreadable refuses the restart and says why.\n\n* fix(lanes): the session record is found under the directory the process's own environment names, and a missing one names its remedy (candybar-gather-renderer-76bb.1dh.9ix)"
         },
         {
-          "sha": "f63cf077d2034adf7a9242d79097d7d875bc094b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T16:21:53-07:00",
-          "message": "fix(lanes): the session record is found under the directory the process's own environment names, and a missing one names its remedy (candybar-gather-renderer-76bb.1dh.9ix)\n"
-        },
-        {
-          "sha": "e9592d30e0c0349bc2afce2763ae8bd4471677dc",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T16:14:12-07:00",
-          "message": "fix(lanes): a restart reads the session its Claude Code holds from the process's own record (candybar-gather-renderer-76bb.1dh.9ix)\n\nThe newest request naming the pane lags a /clear by the new session's\nfirst statusline tick, and any client run inside the pane names the pane\ntoo. Claude Code rewrites its per-process record in its configuration\ndirectory when the session changes, so the restart reads that, for the\npid it is about to kill, synchronously before the kill. A record that is\nmissing or unreadable refuses the restart and says why.\n"
-        },
-        {
-          "sha": "848bd0c175eadebcac0531bc3f7e9b3fd5ba7f93",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T16:01:22-07:00",
-          "message": "fix(lanes): a restart refuses a pane that now runs another session, instead of resuming the old one over it (candybar-gather-renderer-76bb.1dh.9ix)\n\nA statusline restart resumes the session its setup was settled for. After\na `/clear` or `/resume` in the pane, Claude Code is the same process, so the\npid check before the kill passed and the line typed `--resume <old id>`\nover the live session.\n\nThe restart now reads whose session the pane runs (the newest request\nnaming the pane, among each session's latest) directly before SIGTERM,\nafter its last wait, and refuses naming that session when it is not the\none being restarted, or saying no held request names the pane.\n\nThat read is built once in the daemon and handed to the tmux status line\nand lane setup, over one `namesPane` predicate the pane-session reply\nuses too; the predicate was spelled inline twice before.\n"
+          "sha": "d8a5b19a71575bb8d1069ee4caebfcb8133bb6a1",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-06T23:39:48Z",
+          "message": "chore(release): set `package.json` to 1.208.2 [skip ci]\n\n## [1.208.2](https://github.com/promptctl/cc-candybar/compare/v1.208.1...v1.208.2) (2026-11-06)\n\n### Bug Fixes\n\n* **facts:** a replay draws the lane feeds and diagnostics the live draw was handed, and the frames a lane drew (candybar-gather-renderer-76bb.6pj.0se) ([#649](https://github.com/promptctl/cc-candybar/issues/649)) ([86bb0ba](https://github.com/promptctl/cc-candybar/commit/86bb0ba47f70ca3b852845b916d66bb727486aae))\n"
         }
       ]
     },
@@ -70,28 +56,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T16:23:05-07:00",
           "message": "fix(testing): every budgeted wait in a test is cut to what its case has left, so a slow run fails by the wait's name (brandon-menus-sjhy.r62)\n\nA real-daemon case spent a pool slot wait (20 s), readiness (12 s) and its\nown waits inside one Jest timeout (30 s), each sized alone, so their sum\ncould pass it and Jest's anonymous timeout fired first. The test\nenvironment now keeps the running hook's or test's deadline, computed as\njest-circus arms its timer, and every budgeted wait (the pool, readiness,\nuntil, throughout, sendDaemonRequest) is bounded by the smaller of its own\nbudget and that time, less a margin derived from the longest step a wait\ntakes between deadline checks. The process tier's copies of the 30 s go.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "86bb0ba47f70ca3b852845b916d66bb727486aae",
-      "timestamp": "2026-11-06T23:31:20.285Z",
-      "commits": [
-        {
-          "sha": "86bb0ba47f70ca3b852845b916d66bb727486aae",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T16:30:09-07:00",
-          "message": "fix(facts): a replay draws the lane feeds and diagnostics the live draw was handed, and the frames a lane drew (candybar-gather-renderer-76bb.6pj.0se) (#649)\n\n* fix(facts): a replay draws the lane feeds and diagnostics the live draw was handed, and the frames a lane drew (candybar-gather-renderer-76bb.6pj.0se)\n\nA replay drew every frame with every lane idle, no open viewer, and only\nthe request answers, so a recording of a session with a lane following or\nthe warnings viewer open replayed a bar the user never saw.\n\n- A draw line is one draw of the view, an answer or a lane's frame: it\n  carries the instant it was drawn at and what it was handed (who it drew\n  for, each lane's feed, the diagnostics list). A lane's frames write the\n  view's frame memory and the session's effect memory, so the recorder\n  notes each one, to every recording of the session, and the replay draws\n  them in the file's order at their exact instants. RECORDING_VERSION 6.\n- The daemon and the demo draw a view through one function (draw-view),\n  which derives every draw projection from what the draw was handed and\n  stands the open viewer in for the bar. The demo's own drawDsl call goes.\n- A recording that holds only lane frames is kept and replays; `record`\n  reports answers and lane frames.\n- The seam test's live side is the daemon's draw throughout, and a new case\n  replays a standing warning, a following lane, its toggles and the open\n  viewer, compared whole.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* refactor(draw): a view's draw returns the lane switches it drew under; two comments name lane frames (candybar-gather-renderer-76bb.6pj.0se)\n\n* fix(draw): a frame's lanes are noted before its walk, so a frame that throws still says which lanes it drew for (candybar-gather-renderer-76bb.6pj.0se)\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
-        },
-        {
-          "sha": "5bb40dbee6d8d25c54fff764ee0387a438043749",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-06T23:20:12Z",
-          "message": "chore(release): set `package.json` to 1.208.1 [skip ci]\n\n## [1.208.1](https://github.com/promptctl/cc-candybar/compare/v1.208.0...v1.208.1) (2026-11-06)\n\n### Bug Fixes\n\n* **click:** a leaf verb receives its click's session parsed, and a step naming another session is refused (brandon-menus-sjhy.vxi) ([#658](https://github.com/promptctl/cc-candybar/issues/658)) ([d742dce](https://github.com/promptctl/cc-candybar/commit/d742dceaaf1d3f10894fce9f4bbe605089ba7a7d))\n"
         }
       ]
     },
