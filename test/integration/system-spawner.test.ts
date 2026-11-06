@@ -8,8 +8,8 @@ const quoted = (s: string): string => `'${s.replace(/'/g, `'\\''`)}'`;
 // its own group when spawned detached, as a launch's child does, and the
 // contract ends a hung one by that group.
 function script(b: Behaviour): string {
-  const steps: string[] = [];
-  if (b.ignores?.includes("SIGTERM")) steps.push("trap '' TERM");
+  // The traps come before any output, so output says every trap is set.
+  const steps = (b.ignores ?? []).map((sig) => `trap '' ${sig.replace(/^SIG/, "")}`);
   if (b.stdout) steps.push(`printf %s ${quoted(b.stdout)}`);
   if (b.stderr) steps.push(`printf %s ${quoted(b.stderr)} >&2`);
   if (b.floods) steps.push(`head -c ${b.floods} /dev/zero | tr '\\0' x`);
