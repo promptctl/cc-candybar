@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-629",
+      "ref": "refs/pull/629/merge",
+      "sha": "8d8d41f9305d82fea1e0f089525da38eca966a78",
+      "timestamp": "2026-11-06T07:45:56.315Z",
+      "commits": [
+        {
+          "sha": "8d8d41f9305d82fea1e0f089525da38eca966a78",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T07:45:01Z",
+          "message": "Merge 89e4c3a4f09dc076399c6ed5450364f98c77833e into fb1f9e3561dce957792b8bb02c28e81aaab80b29\n"
+        },
+        {
+          "sha": "89e4c3a4f09dc076399c6ed5450364f98c77833e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T00:44:41-07:00",
+          "message": "fix(facts): a replay's clock starts at its first request, a recording no request arrived in leaves no file, a write-ended recording is the daemon's failure, and a recording follows a view entered inside a batch (candybar-gather-renderer-76bb.6pj.qg5)\n\nThe recorder's reaction fires immediately again and owns its disposer\nthrough the effect's own handle, so neither a failed first write nor a\nbatch loses a document. The README and help name the config a replay\nneeds, and say a config's own shell and file sources are not in a\nrecording (the cure is candybar-gather-renderer-76bb.6pj.d8n).\n"
+        },
+        {
+          "sha": "7cec1dea4fb0b4381f2b5e3f9bab10d2d42fd8be",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T00:26:18-07:00",
+          "message": "fix(facts): a recording lets go of its view when a write ends it, stops when its client leaves, writes whole lines, and refuses a span no timer holds (candybar-gather-renderer-76bb.6pj.qg5)\n\nA failed first write ended the recording before its reaction's disposer\nwas the recording's, so the reaction outlived it. The client's hang-up now\naborts the held work; a close's error is the recording's; appendFileSync\nwrites the whole line; one parse of a recording's span serves CLI and\ndaemon and caps it at what setTimeout holds; a request line of another\nsession is refused; the README says the config's own sources still run.\n"
+        },
+        {
+          "sha": "6bb6f314dbf467ac504980d2b0d0ab669d3db0a3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T00:10:49-07:00",
+          "message": "feat(facts): record writes a session's stream out of the daemon, the demo replays the file frame by frame, and another facts version is refused (candybar-gather-renderer-76bb.6pj.qg5)\n\nA recording is a header, then documents and requests with their instants.\nThe session recorder follows the render cache's current view (one writer of\nthe cache's view map fires the observer), request lines are noted where the\nrequest path settles a view, and the file is created new and closed after\nN seconds or at daemon close. The wire verb is a held request the connection\nstarts only while its client waits. The demo splits into load and play, one\nview-and-print path, with --recording choosing the recording arm on a held\nclock (moved to src/). cc-candybar record exits 1 when no request arrived.\n\nTests run on the render-cache rig rather than an in-worker daemon, because\nthe boot ratchet only falls.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-630",
       "ref": "refs/pull/630/merge",
       "sha": "f11de859077a4747322d390d6f6250d398a1d1bb",
@@ -63,35 +99,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-06T07:29:23Z",
           "message": "chore(release): set `package.json` to 1.197.0 [skip ci]\n\n## [1.197.0](https://github.com/promptctl/cc-candybar/compare/v1.196.1...v1.197.0) (2026-11-06)\n\n### Features\n\n* **apply:** a request takes its turn; its writes are one batch in the request arm, and the answered mark is an event (candybar-gather-renderer-76bb.1dh.1ql) ([#627](https://github.com/promptctl/cc-candybar/issues/627)) ([aaaac50](https://github.com/promptctl/cc-candybar/commit/aaaac5005ccf33de93f39158f1320619bed67657))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-629",
-      "ref": "refs/pull/629/merge",
-      "sha": "a673f5424831e2b573a7eb861460d5f56ebcc40b",
-      "timestamp": "2026-11-06T07:27:52.005Z",
-      "commits": [
-        {
-          "sha": "a673f5424831e2b573a7eb861460d5f56ebcc40b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T07:26:56Z",
-          "message": "Merge 7cec1dea4fb0b4381f2b5e3f9bab10d2d42fd8be into aaaac5005ccf33de93f39158f1320619bed67657\n"
-        },
-        {
-          "sha": "7cec1dea4fb0b4381f2b5e3f9bab10d2d42fd8be",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T00:26:18-07:00",
-          "message": "fix(facts): a recording lets go of its view when a write ends it, stops when its client leaves, writes whole lines, and refuses a span no timer holds (candybar-gather-renderer-76bb.6pj.qg5)\n\nA failed first write ended the recording before its reaction's disposer\nwas the recording's, so the reaction outlived it. The client's hang-up now\naborts the held work; a close's error is the recording's; appendFileSync\nwrites the whole line; one parse of a recording's span serves CLI and\ndaemon and caps it at what setTimeout holds; a request line of another\nsession is refused; the README says the config's own sources still run.\n"
-        },
-        {
-          "sha": "6bb6f314dbf467ac504980d2b0d0ab669d3db0a3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T00:10:49-07:00",
-          "message": "feat(facts): record writes a session's stream out of the daemon, the demo replays the file frame by frame, and another facts version is refused (candybar-gather-renderer-76bb.6pj.qg5)\n\nA recording is a header, then documents and requests with their instants.\nThe session recorder follows the render cache's current view (one writer of\nthe cache's view map fires the observer), request lines are noted where the\nrequest path settles a view, and the file is created new and closed after\nN seconds or at daemon close. The wire verb is a held request the connection\nstarts only while its client waits. The demo splits into load and play, one\nview-and-print path, with --recording choosing the recording arm on a held\nclock (moved to src/). cc-candybar record exits 1 when no request arrived.\n\nTests run on the render-cache rig rather than an in-worker daemon, because\nthe boot ratchet only falls.\n"
         }
       ]
     },
