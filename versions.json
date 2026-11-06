@@ -4,15 +4,22 @@
     {
       "version": "pr-640",
       "ref": "refs/pull/640/merge",
-      "sha": "4e9e669cfee18ba8c0642a01ae7cab4b26ea6b75",
-      "timestamp": "2026-11-06T12:53:58.287Z",
+      "sha": "94b079677382fd93faa94310255fa6aa73a54adc",
+      "timestamp": "2026-11-06T12:56:39.817Z",
       "commits": [
         {
-          "sha": "4e9e669cfee18ba8c0642a01ae7cab4b26ea6b75",
+          "sha": "94b079677382fd93faa94310255fa6aa73a54adc",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:51:36Z",
-          "message": "Merge 7c49d1b449f135002ab492ebb816a36c99b882f8 into 92b37b434431196653866fb703390e57bf15d948\n"
+          "timestamp": "2026-11-06T12:55:40Z",
+          "message": "Merge e9132cb9e70bb3d1932d6e4b1463b0159df49827 into 92b37b434431196653866fb703390e57bf15d948\n"
+        },
+        {
+          "sha": "e9132cb9e70bb3d1932d6e4b1463b0159df49827",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T05:55:29-07:00",
+          "message": "fix(links): a status row's table evicts once a frame is drawn, never a link the frame holds (candybar-gather-renderer-76bb.b2l.e1n)\n\nA row of more links than the cap kept evicting its own earlier links, so\nevery frame minted them again. The cap's comment says what it is for: a\nclick resolves against the frame the row last drew, not the table. The\ninventory docs stop naming the digest and the old tmuxStatusFrame call.\n"
         },
         {
           "sha": "7c49d1b449f135002ab492ebb816a36c99b882f8",

@@ -83881,12 +83881,12 @@ function directive({ fg, bg, attrs = [] }) {
   });
   return `#[${["none", `fg=${tmuxColor(fg)}`, `bg=${tmuxColor(bg)}`, ...attributes].join(",")}]`;
 }
-function encode2(frame2, ids) {
+function encode2(frame2, rangeOf2) {
   const links2 = {};
   const drawn = (run3) => {
     const text4 = directive(run3) + escaped(run3.text);
     if (run3.link === void 0) return text4;
-    const range = ids.rangeOf(run3.link);
+    const range = rangeOf2(run3.link);
     if (range === null) return text4;
     links2[range] = run3.link;
     return `#[range=user|${range}]${text4}#[norange]`;
@@ -83895,7 +83895,9 @@ function encode2(frame2, ids) {
   return { rows, links: links2 };
 }
 function tmuxStatusFrame(frame2, ids) {
-  return laneEncoded((drawn) => encode2(drawn, ids), frame2);
+  return ids.frame(
+    (rangeOf2) => laneEncoded((drawn) => encode2(drawn, rangeOf2), frame2)
+  );
 }
 
 // src/tmux-status/link-ids.ts
@@ -83910,6 +83912,22 @@ var LinkIds = class {
   source;
   cap;
   ranges = /* @__PURE__ */ new Map();
+  // [LAW:no-ambient-temporal-coupling] One frame drawn through the table:
+  // `draw` names each link's range with `rangeOf`, and eviction waits until
+  // the frame is drawn, so it never takes a link the frame holds.
+  frame(draw2) {
+    const drawn = /* @__PURE__ */ new Set();
+    const drawnAs = draw2((url) => {
+      drawn.add(url);
+      return this.rangeOf(url);
+    });
+    for (const oldest of this.ranges.keys()) {
+      if (this.ranges.size <= this.cap || drawn.has(oldest)) break;
+      this.ranges.delete(oldest);
+      this.source.evicted();
+    }
+    return drawnAs;
+  }
   // The range id `url` is drawn under, or null while the counter can issue
   // none.
   rangeOf(url) {
@@ -83924,11 +83942,6 @@ var LinkIds = class {
     if (id2 === null) return null;
     const range = RANGE_PREFIX + id2.toString(36);
     this.ranges.set(url, range);
-    for (const oldest of this.ranges.keys()) {
-      if (this.ranges.size <= this.cap) break;
-      this.ranges.delete(oldest);
-      this.source.evicted();
-    }
     return range;
   }
 };
