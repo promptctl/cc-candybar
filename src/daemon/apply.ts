@@ -114,7 +114,8 @@ export interface ClickRefusal {
 
 // What applying each kind answers its source with.
 interface Answers {
-  readonly request: RequestAnswer;
+  // The draw, begun once the request's turn is over.
+  readonly request: Promise<RequestAnswer>;
   readonly click: ClickRefusal | null;
   readonly "menu-idle": void;
   // How the effect went, as it landed.
@@ -166,23 +167,30 @@ const NO_EFFECTS: readonly Effect[] = [];
 export const ARMS: ApplyArms<Event> = {
   // [LAW:single-enforcer] The request's writes take their turn as a click's
   // do: what it said of its client and the config inputs it named land in one
-  // batch in a journal turn, and the draw begins once the turn is over. A turn
-  // is synchronous (src/daemon/journal-turns.ts), so the request waits behind
-  // no other session's work, and no draw, this one or a feed's, can read a
-  // click half landed. The revision its turn left goes on the request's line,
-  // the render event, which is its record and opens with the session the edge
-  // noted.
+  // batch in a journal turn, with what its arrival settles (the lane setups
+  // its session's clicks owed, described as the turn's effects), and the draw
+  // begins once the turn is over. A turn is synchronous
+  // (src/daemon/journal-turns.ts), so the request waits behind no other
+  // session's work, and no draw, this one or a feed's, can read a click half
+  // landed. The revision its turn left goes on the request's line, the render
+  // event, which is its record and opens with the session the edge noted.
+  // [LAW:no-ambient-temporal-coupling] The arm answers with the draw under
+  // way, so its turn's effects join the session's order as the turn ends,
+  // ahead of any later event's, and are performed however the draw ends.
   request: async ({ req, at, waitEndsAt, facts }, { verbCtx, draw }) => {
-    const revision = verbCtx.journalTurns.take("request", () => {
+    const turn = verbCtx.journalTurns.take("request", () => {
       recordRequest(verbCtx.sessionState, req);
-      return verbCtx.sessionState.revision(req.sessionId);
+      return {
+        effects: verbCtx.lanes.arrived(req),
+        revision: verbCtx.sessionState.revision(req.sessionId),
+      };
     });
-    noteFacts(facts, { revision: String(revision) });
-    const answer = await draw(req, at, waitEndsAt, facts);
-    // [LAW:effects-at-boundaries] What the request's arrival settled (the
-    // lane setups its session's clicks owed) is performed as a click's
-    // effects are, after the arm has answered.
-    return { answer, effects: answer.effects, facts: [] };
+    noteFacts(facts, { revision: String(turn.revision) });
+    return {
+      answer: draw(req, at, waitEndsAt, facts),
+      effects: turn.effects,
+      facts: [],
+    };
   },
   // The turn hands its effects over once it has committed (`described`), and
   // a refused step is answered beside them; a click whose client has left is

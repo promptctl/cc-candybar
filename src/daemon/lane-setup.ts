@@ -193,9 +193,10 @@ export interface LaneSession {
   readonly answered: Answered;
 }
 
-// [LAW:types-are-the-program] What a lane's setup came to: finished in the
-// click, or a part still running once the click is answered — B's restart
-// waits for Claude Code to exit — whose own outcome lands later.
+// [LAW:types-are-the-program] What a lane's setup came to: finished when
+// its plan answers, or a part still running then — B's restart waits for
+// Claude Code to exit — said as it starts, and its own ending said once it
+// has finished.
 export type LaneOutcome =
   | { readonly kind: "done"; readonly said: string }
   | {

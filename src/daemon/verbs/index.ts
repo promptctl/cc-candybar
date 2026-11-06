@@ -40,6 +40,7 @@ import {
 } from "../../config/disclosure-nest";
 import { DISCLOSURE_CLOSED } from "../../config/disclosure";
 import type { Drawing, LaneSwitches } from "../../config/lanes";
+import type { CheckedRenderRequest } from "../render-checkpoint";
 import { closingView } from "../closing-view";
 import { configKeySeed } from "./key-seeds";
 import type { Gates } from "../foundations/gates";
@@ -277,10 +278,11 @@ export interface DaemonContext {
   readonly runs: Pick<Runs, "superseded" | "run" | "refused">;
   // [LAW:effects-at-boundaries] A session's animation-lane switches over the
   // config it renders with (`of`, looked up like `configFor`), and what
-  // follows a click of that session (`clicked`): the click path measures
-  // them before each click and after its commit (`journaled`), and the
-  // daemon hands both to the one owner of lane setup
-  // (src/daemon/lane-setup.ts) and of the tmux status line.
+  // follows a click of that session (`clicked`) or a request's arrival
+  // (`arrived`): the click path measures them before each click and after
+  // its commit (`journaled`), the request's arm in its turn
+  // (src/daemon/apply.ts), and the daemon hands each to the one owner of lane
+  // setup (src/daemon/lane-setup.ts) and of the tmux status line.
   readonly lanes: {
     readonly of: (origin: RenderOrigin, sessionId: string) => LaneSwitches;
     // The lane setups the click settles, as effects of its turn.
@@ -289,6 +291,8 @@ export interface DaemonContext {
       before: LaneSwitches,
       after: LaneSwitches,
     ) => readonly Effect[];
+    // The lane setups the request's arrival settles, as effects of its turn.
+    readonly arrived: (req: CheckedRenderRequest) => readonly Effect[];
     // The performer's run of one setup (src/daemon/lane-setup.ts).
     readonly setup: LaneSetups["setup"];
   };

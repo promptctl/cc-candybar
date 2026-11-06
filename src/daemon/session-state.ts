@@ -306,7 +306,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   // promoted, since every interaction is a recency signal, uniform with get()
   // [LAW:one-type-per-behavior].
   private commit(sessionId: string, write: (session: Session) => void): void {
-    this.held(`a write of ${JSON.stringify(sessionId)}`);
+    this.held(sessionId);
     runInAction(() => {
       const session = this.sessions.get(sessionId) ?? {
         values: new Map<string, string>(),
@@ -325,9 +325,11 @@ export class SessionState implements SessionStateReader, SessionStateRW {
 
   // [LAW:single-enforcer][LAW:no-silent-failure] The one check that a write
   // is a turn's: every write passes `commit`, which asks here.
-  private held(what: string): void {
+  private held(sessionId: string): void {
     if (this.turns.inTurn() === null) {
-      throw new Error(`session state: ${what} outside any turn`);
+      throw new Error(
+        `session state: a write of ${JSON.stringify(sessionId)} outside any turn`,
+      );
     }
   }
 

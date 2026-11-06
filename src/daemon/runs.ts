@@ -71,6 +71,9 @@ export interface RunStats {
   readonly refused: number;
   // In flight now.
   readonly running: number;
+  // Superseded by their click and not launched yet: their sources read
+  // pending while they wait behind the session's earlier effects.
+  readonly queued: number;
 }
 
 export interface RunsDeps {
@@ -199,6 +202,7 @@ export class Runs {
       timedOut: this.timedOut,
       refused: this.refusals,
       running: this.inFlight.size,
+      queued: this.held.size,
     };
   }
 

@@ -807,7 +807,7 @@ describe("a click on a run link", () => {
     expect(r.runs.stats()).toMatchObject({ started: 1, running: 0 });
   });
 
-  test("a run clicked behind its session's effect underway reads pending from the click, and its program starts once that effect has ended", async () => {
+  test("a run clicked behind its session's effect underway reads pending from the click and is counted queued, and its program starts once that effect has ended", async () => {
     const program = heldLaunch();
     const r = rig(program.launch);
     const { view, link } = await drawnLink(r);
@@ -828,10 +828,12 @@ describe("a click on a run link", () => {
       kind: "pending",
       why: "superseded",
     });
-    expect(r.runs.stats()).toMatchObject({ started: 0 });
+    // [LAW:nothing-unseen] The wait is seen: the run is queued, not running.
+    expect(r.runs.stats()).toMatchObject({ started: 0, running: 0, queued: 1 });
     release();
     await update.performed;
     await until(() => r.runs.stats().running === 1, "the program's start");
+    expect(r.runs.stats()).toMatchObject({ queued: 0 });
     programWrites(SID, { home: "/h/new" });
     program.exit();
     await ran.performed;

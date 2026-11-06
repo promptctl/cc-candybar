@@ -233,27 +233,41 @@ export function viewLanes(
 // (laneClicked). A session this daemon has no request from has no pane fact
 // yet, so its switches are its settings alone: what the click moves is owed
 // to its first request, which settles it against the pane that request
-// reports (`arrived`), so a session outside tmux is owed nothing it can run.
+// reports (`requestArrived`), so a session outside tmux is owed nothing it
+// can run.
 export function lanesAt(
   parts: DaemonParts,
   origin: RenderOrigin,
   sessionId: string,
 ): LaneSwitches {
-  const { renderCache, frameFeeds } = parts;
-  using hold = renderCache.hold(
-    origin.projectDir,
-    origin.cwd,
-    origin.target.path,
-  );
-  const latest = frameFeeds.latest(sessionId);
+  const latest = parts.frameFeeds.latest(sessionId);
   // [LAW:dataflow-not-control-flow] exception: a click with no request on
   // record (none since a restart, or its last one evicted) has no hint, and is measured as if in
   // tmux so a tmux session's click owes its setup; the owed setup is settled
   // against the session's own hint when its next event arrives.
-  return laneSwitches(
-    sessionGlobals(parts, sessionId, hold.state),
+  return switchesAt(
+    parts,
+    origin,
+    sessionId,
     latest === null || inTmux(latest.hints.tmux),
   );
+}
+
+// [LAW:one-source-of-truth] The one measure of a session's switches, a
+// click's and a request's: its globals over the config `origin` resolves to,
+// as the render cache holds it.
+function switchesAt(
+  parts: DaemonParts,
+  origin: RenderOrigin,
+  sessionId: string,
+  tmux: boolean,
+): LaneSwitches {
+  using hold = parts.renderCache.hold(
+    origin.projectDir,
+    origin.cwd,
+    origin.target.path,
+  );
+  return laneSwitches(sessionGlobals(parts, sessionId, hold.state), tmux);
 }
 
 // What a render of a checked request draws with, resolved once and held for
@@ -868,9 +882,6 @@ export interface RequestAnswer {
   pipeShown: PipeEvent | null;
   // Records what the answer's copy clicks copy, once it reached its client.
   delivered: () => void;
-  // What the request's arrival settled for the performer: the lane setups
-  // its session's clicks owed (`arrived`).
-  effects: readonly Effect[];
 }
 
 // [LAW:effects-at-boundaries] The daemon's draw of a request, as its arm
@@ -884,25 +895,26 @@ export type RequestDraw = (
   facts: RequestFacts,
 ) => Promise<RequestAnswer>;
 
-// [LAW:effects-at-boundaries] What a request's arrival starts beyond its
-// own answer, as its draw begins once its turn is over, by the lanes its
-// session's settings switch on then: the setups its session's clicks owe
-// (src/daemon/lane-setup.ts), answered as effects its arm describes, and the
-// tmux status line its switch and pane hold (src/daemon/tmux-status.ts) —
+// [LAW:single-enforcer] What a request's arrival settles beyond its own
+// answer, in its turn (src/daemon/apply.ts), by the lanes its session's
+// settings switch on there in the pane it reports: the setups its session's
+// clicks owe (src/daemon/lane-setup.ts), described as the turn's effects, and
+// the tmux status line its switch and pane hold (src/daemon/tmux-status.ts) —
 // held again here after `answered` released it, and by nothing between
 // requests, so a status line another session's save turned off is never
 // re-taken from a remembered switch. No draw starts either.
-function arrived(
+export function requestArrived(
   parts: DaemonParts,
   req: CheckedRenderRequest,
-  lanes: LaneSwitches,
 ): readonly Effect[] {
   const { laneSetups, tmuxStatusLines } = parts;
-  tmuxStatusLines.observe(
-    req.hookData.session_id,
-    req.hints.tmux,
-    lanes.tmuxStatus,
+  const lanes = switchesAt(
+    parts,
+    req.requested,
+    req.sessionId,
+    inTmux(req.hints.tmux),
   );
+  tmuxStatusLines.observe(req.sessionId, req.hints.tmux, lanes.tmuxStatus);
   return laneSetups.noted(laneSessionOf(req), lanes);
 }
 
@@ -966,11 +978,6 @@ export async function drawAnswer(
 ): Promise<RequestAnswer> {
   const { clock, frameFeeds, log } = parts;
   using setup = setUpRender(parts, req, at, facts);
-  const effects = arrived(
-    parts,
-    req,
-    laneSwitches(setup.view.source.effective(), inTmux(req.hints.tmux)),
-  );
   // Rules 1 and 2 of the model: the answer shows what this request carried,
   // so it waits for the refreshes its arrival triggers, the first value of
   // every keyed lane its view declared, and every run of its view's sources
@@ -1043,7 +1050,6 @@ export async function drawAnswer(
     answersClick,
     pipeShown,
     delivered,
-    effects,
   };
 }
 

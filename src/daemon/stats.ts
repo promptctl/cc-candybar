@@ -142,7 +142,7 @@ export interface StatsSnapshot {
   journalTurns: JournalTurnStats;
   // `run` clicks (src/daemon/runs.ts): programs started, those that failed
   // (a non-zero exit or no start), timed out, links refused before anything
-  // ran, and runs in flight now.
+  // ran, runs in flight now, and runs waiting to launch.
   runs: RunStats;
   // The per-session click store: how many sessions it holds, how many
   // derivations are subscribed to it, and its revision — how many changes it
@@ -444,7 +444,14 @@ export class RuntimeStats {
       effectCache: { sessions: 0, effects: 0 },
       menuIdle: { sessions: 0, armed: 0 },
       journalTurns: { gathers: 0 },
-      runs: { started: 0, failed: 0, timedOut: 0, refused: 0, running: 0 },
+      runs: {
+        started: 0,
+        failed: 0,
+        timedOut: 0,
+        refused: 0,
+        running: 0,
+        queued: 0,
+      },
       sessionState: { sessions: 0, observers: 0, revision: 0 },
       frameFeeds: {
         feeds: 0,

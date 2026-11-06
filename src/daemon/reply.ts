@@ -471,46 +471,46 @@ export async function replyTo(
             facts,
           },
           parts,
-        ).then(
-          ({
-            answer: { resp, motion, answersClick, pipeShown, delivered },
-          }) => {
-            sighted(checked.req, motion);
-            return {
-              outcome: { kind: "ok" } as const,
-              resp,
-              // [LAW:single-enforcer] An answer carrying the click error or the
-              // launcher's pipe event that reaches its client is the one that
-              // delivered it (src/utils/event-hold.ts). The click error's mark
-              // is a write, so it is an event the arm makes in a turn.
-              delivered: () => {
-                delivered();
-                if (answersClick.length > 0)
-                  void applyUnanswered(
-                    {
-                      kind: "answered",
-                      session: checked.req.sessionId,
-                      errors: answersClick,
-                    },
-                    parts,
-                    `sid=${checked.req.sessionId}`,
-                  );
-                // Daemon-wide: one session's answer having shown the
-                // launcher's pipe event is what makes it not silent.
-                if (pipeShown !== null)
-                  parts.launcher.answeredPipeEvent(pipeShown);
-              },
-            };
-          },
-          (error: unknown) => {
-            sighted(checked.req, "failed");
-            return {
-              outcome: daemonOutcome(error),
-              resp: renderFailed(error),
-              delivered: NOTHING_DELIVERED,
-            };
-          },
-        );
+        )
+          .then(({ answer }) => answer)
+          .then(
+            ({ resp, motion, answersClick, pipeShown, delivered }) => {
+              sighted(checked.req, motion);
+              return {
+                outcome: { kind: "ok" } as const,
+                resp,
+                // [LAW:single-enforcer] An answer carrying the click error or the
+                // launcher's pipe event that reaches its client is the one that
+                // delivered it (src/utils/event-hold.ts). The click error's mark
+                // is a write, so it is an event the arm makes in a turn.
+                delivered: () => {
+                  delivered();
+                  if (answersClick.length > 0)
+                    void applyUnanswered(
+                      {
+                        kind: "answered",
+                        session: checked.req.sessionId,
+                        errors: answersClick,
+                      },
+                      parts,
+                      `sid=${checked.req.sessionId}`,
+                    );
+                  // Daemon-wide: one session's answer having shown the
+                  // launcher's pipe event is what makes it not silent.
+                  if (pipeShown !== null)
+                    parts.launcher.answeredPipeEvent(pipeShown);
+                },
+              };
+            },
+            (error: unknown) => {
+              sighted(checked.req, "failed");
+              return {
+                outcome: daemonOutcome(error),
+                resp: renderFailed(error),
+                delivered: NOTHING_DELIVERED,
+              };
+            },
+          );
     if (rendered.outcome.kind !== "ok") stats.requestsErrored++;
     // Whether the client was already told TIMEOUT while this render ran on,
     // and how long the request was queued, from the connection's accept,

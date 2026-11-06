@@ -11,6 +11,7 @@ import {
   drawAnswer,
   lanesAt,
   laneClicked,
+  requestArrived,
   renderFrame,
   viewLanes,
 } from "./draw-bar.js";
@@ -756,6 +757,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         lanesAt(parts, origin, sessionId),
       clicked: (sessionId: string, before: LaneSwitches, after: LaneSwitches) =>
         laneClicked(parts, sessionId, before, after),
+      arrived: (req: CheckedRenderRequest) => requestArrived(parts, req),
       setup: (effect: LaneSetupEffect) => laneSetups.setup(effect),
     },
     diagnosticCopy: (sessionId: string, by: Drawing["by"], key: string) =>

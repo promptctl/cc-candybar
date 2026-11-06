@@ -27,6 +27,9 @@ import type { RequestFacts } from "../src/daemon/request-event";
 import { sessionIdOf } from "../src/daemon/session-id";
 import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { DaemonClosing } from "../src/daemon/verb-error";
+import type { LaneSetupEffect } from "../src/daemon/effect";
+import { PERFORMED } from "../src/daemon/effect-outcome";
+import type { LaneSession } from "../src/daemon/lane-setup";
 import { doctorReportKeys } from "../src/doctor/report";
 import type { VerbContext } from "../src/daemon/verbs";
 import type { DoctorEdge } from "../src/doctor/edge";
@@ -96,7 +99,6 @@ const ANSWER: RequestAnswer = {
   answersClick: [],
   pipeShown: null,
   delivered: () => {},
-  effects: [],
 };
 
 // The click path over a doctor edge whose process probe parks on a gate, and
@@ -168,7 +170,7 @@ function rig() {
         facts,
       },
       parts,
-    );
+    ).then(({ answer }) => answer);
     return { answered, facts };
   };
   const waitOn = (wait: Promise<void>) => (sources = wait);
@@ -254,5 +256,82 @@ describe("a request takes its turn", () => {
     expect(r.persisted.saves).toBe(saves);
     expect(r.sessionState.revision(SID)).toBe(revision);
     expect(facts).toEqual([["revision", String(revision)]]);
+  });
+});
+
+// [LAW:no-ambient-temporal-coupling] What a request's arrival settles is its
+// turn's: the lane setups its session's clicks owed join the session's order
+// as the turn ends, so a click made while the draw waits is performed after
+// them, and a draw that fails loses none.
+describe("a request's arrival settles in its turn", () => {
+  const setup = (on: boolean, by: LaneSetupEffect["by"]): LaneSetupEffect => ({
+    kind: "lane-setup",
+    session: { sessionId: SID } as unknown as LaneSession,
+    lane: "statusline",
+    on,
+    by,
+  });
+
+  function arrivalRig(draw: () => Promise<RequestAnswer>) {
+    const clock = heldClock(START);
+    const sessionState = new SessionState(SINGLE_RUN);
+    recordRender(sessionState, SID, DIR);
+    const turns = new JournalTurns();
+    const performed: string[] = [];
+    // The request settles the setup its session's earlier click owed; the
+    // click after it moves the lane back.
+    let owed: readonly LaneSetupEffect[] = [setup(true, "owed")];
+    const base = testVerbContext(sessionState, undefined, EMPTY_DEFAULT, undefined, turns);
+    const ctx: VerbContext = {
+      ...base,
+      lanes: {
+        ...base.lanes,
+        arrived: () => {
+          const settled = owed;
+          owed = [];
+          return settled;
+        },
+        clicked: () => [setup(false, "click")],
+        setup: async ({ on, by }) => {
+          performed.push(`${on ? "on" : "off"} by=${by}`);
+          return PERFORMED;
+        },
+      },
+    };
+    const { arrival: _arrival, described: _described, ...verbCtx } = ctx;
+    const render = () =>
+      apply(
+        { kind: "request", req: request(60), at: AT, waitEndsAt: clock.monotonic(), facts: [] },
+        { verbCtx, log: ctx.log, draw },
+      );
+    return { ctx, performed, render };
+  }
+
+  test("a click made while the request's draw waits is performed after the setups the request settled", async () => {
+    const sources = gate();
+    const r = arrivalRig(async () => {
+      await sources.wait;
+      return ANSWER;
+    });
+    const request = await r.render();
+    await drain();
+    // The draw still waits, and the setup it settled is already performed.
+    expect(r.performed).toEqual(["on by=owed"]);
+    const click = await applyClick(effectsUrl(MAIN_NAME, [toggle]), r.ctx);
+    await click.performed;
+    sources.open();
+    await request.answer;
+    await request.performed;
+    expect(r.performed).toEqual(["on by=owed", "off by=click"]);
+  });
+
+  test("a draw that fails loses none of the setups its request settled", async () => {
+    const r = arrivalRig(async () => {
+      throw new Error("the draw failed");
+    });
+    const request = await r.render();
+    await expect(request.answer).rejects.toThrow("the draw failed");
+    await request.performed;
+    expect(r.performed).toEqual(["on by=owed"]);
   });
 });
