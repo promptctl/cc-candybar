@@ -52749,7 +52749,8 @@ async function answered(read2) {
 }
 function waitWithin(work, ms, late, after) {
   const wait = new AbortController();
-  const clear = after(Math.max(0, ms), () => wait.abort());
+  const abort = () => wait.abort();
+  const clear = ms > 0 ? after(ms, abort) : whenDrained(abort);
   const ended = new Promise((resolve, reject2) => {
     wait.signal.addEventListener("abort", () => resolve("deadline"));
     void work(wait.signal).then(
@@ -52763,6 +52764,11 @@ function waitWithin(work, ms, late, after) {
     clear();
     wait.abort();
   });
+}
+function whenDrained(fn) {
+  void Promise.resolve().then(() => process_default.nextTick(fn));
+  return () => {
+  };
 }
 function settledLane(outcome) {
   return { current: () => outcome };
@@ -65025,6 +65031,14 @@ function storedPathOf(root, file) {
 var StoredPathRefused = class extends Error {
 };
 function resolveStoredPath(root, raw) {
+  if (typeof raw === "string") {
+    if (!import_node_path17.default.isAbsolute(raw)) {
+      throw new StoredPathRefused(
+        `an older build's stored path ${JSON.stringify(raw)} is not absolute`
+      );
+    }
+    return resolveStoredPath(root, storedPathOf(root, raw));
+  }
   if (raw === null || typeof raw !== "object") {
     throw new StoredPathRefused(
       `stored path is not an object: ${JSON.stringify(raw)}`
@@ -70879,10 +70893,7 @@ function parseRenderOrigin(raw, root) {
   }
   let file;
   try {
-    file = configFile === null ? null : resolveStoredPath(
-      root,
-      typeof configFile === "string" ? { kind: "world", path: configFile } : configFile
-    );
+    file = configFile === null ? null : resolveStoredPath(root, configFile);
   } catch (e) {
     if (!(e instanceof StoredPathRefused)) throw e;
     throw new BadVerbArgs(`render origin: ${e.message}`);
