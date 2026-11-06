@@ -147,8 +147,9 @@ export function bindClick(user: CommandList | null): string[] {
 }
 
 // [LAW:no-ambient-temporal-coupling] Putting the user's binding back, decided
-// by tmux in the call that writes it: only while no session names a renderer,
-// so one that named itself since the listing was read keeps its clicks.
+// by tmux in the call that writes it: while any session names a renderer the
+// call only reports it held, so one that named itself since the listing was
+// read keeps its clicks; otherwise the binding is put back.
 export function restoreBinding(user: CommandList | null): string[] {
   const put =
     user === null
