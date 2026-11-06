@@ -92,6 +92,7 @@ const DESCRIPTIONS: Readonly<Record<string, string>> = {
   EEXIST: "file already exists",
   EMFILE: "too many open files",
   ENOSPC: "no space left on device",
+  ENOTEMPTY: "directory not empty",
 };
 
 // Node's spelling of a failed call, so a fake's message reads as the disk's.
@@ -170,8 +171,13 @@ export function filesystemFake(opts: {
         const isLast = i === rest.length - 1;
         if (next.kind === "symlink" && (!isLast || last)) {
           if (++hops > MAX_LINK_HOPS) throw failure("ELOOP", syscall, at);
-          const target = path.resolve(pathOf(dir) ?? "/", next.target);
-          dir = descend(root, parts(target), true);
+          // A relative target walks from the link's directory, and a `..`
+          // in it climbs from wherever the walk has got to, as the kernel's.
+          dir = descend(
+            next.target.startsWith("/") ? root : dir,
+            names(next.target),
+            true,
+          );
         } else dir = next;
       }
       return dir;
@@ -179,11 +185,12 @@ export function filesystemFake(opts: {
     return descend(root, parts(at), follow);
   }
 
+  const names = (at: string): string[] =>
+    at.split("/").filter((p) => p !== "" && p !== ".");
+  // The path's names from the root, with `..` kept for the walk to apply
+  // after following the link before it.
   const parts = (at: string): string[] =>
-    path
-      .resolve(at)
-      .split("/")
-      .filter((p) => p !== "" && p !== ".");
+    names(path.isAbsolute(at) ? at : `${process.cwd()}/${at}`);
 
   const directoryAt = (at: string, syscall: string): Directory => {
     const entry = walk(at, true, syscall);
@@ -277,7 +284,21 @@ export function filesystemFake(opts: {
     changed(dir, name, "rename");
   }
 
-  function detach(entry: Entry): void {
+  // Every directory under `dir`, by its path under `at`.
+  function* below(dir: Directory, at: string): Generator<[Directory, string]> {
+    for (const child of dir.children.values())
+      if (child.kind === "directory") {
+        const childAt = path.join(at, child.name);
+        yield [child, childAt];
+        yield* below(child, childAt);
+      }
+  }
+
+  // A removal leaves every folder under the entry gone, so each one's watch
+  // hears it. A move leaves a path-bound watch (macOS) under it without its
+  // folder, while an inode-bound one (Linux) moves with its folder and hears
+  // nothing.
+  function detach(entry: Entry, how: "remove" | "move"): void {
     const dir = entry.parent!;
     const at = pathOf(entry)!;
     dir.children.delete(entry.name);
@@ -285,10 +306,31 @@ export function filesystemFake(opts: {
     touch(dir);
     changed(dir, entry.name, "rename");
     left(entry, at);
-    if (entry.kind === "directory")
-      for (const child of entry.children.values())
-        if (child.kind === "directory") left(child, path.join(at, child.name));
+    if (
+      entry.kind === "directory" &&
+      (how === "remove" || platform === "darwin")
+    )
+      for (const [child, childAt] of below(entry, at)) left(child, childAt);
   }
+
+  const linkAt = (at: string, syscall: string): Symlink | null => {
+    try {
+      const entry = walk(at, false, syscall);
+      return entry.kind === "symlink" ? entry : null;
+    } catch (e) {
+      if ((e as FilesystemError).code === "ENOENT") return null;
+      throw e;
+    }
+  };
+  const exists = (at: string): boolean => {
+    try {
+      walk(at, true, "stat");
+      return true;
+    } catch (e) {
+      if ((e as FilesystemError).code === "ENOENT") return false;
+      throw e;
+    }
+  };
 
   // The directory a new entry at `at` goes into, and its name there.
   const slot = (at: string, syscall: string) => {
@@ -299,6 +341,16 @@ export function filesystemFake(opts: {
 
   function writeText(at: string, text: string, syscall: string): void {
     checkFault(at, syscall);
+    const link = linkAt(at, syscall);
+    // A write through a link whose target is missing creates the target.
+    if (link !== null && !exists(at))
+      return writeText(
+        link.target.startsWith("/")
+          ? link.target
+          : `${path.dirname(path.resolve(at))}/${link.target}`,
+        text,
+        syscall,
+      );
     let existing: Entry | null = null;
     try {
       existing = walk(at, true, syscall);
@@ -363,7 +415,7 @@ export function filesystemFake(opts: {
     unlink: async (at) => {
       const entry = walk(at, false, "unlink");
       if (entry.kind === "directory") throw failure("EISDIR", "unlink", at);
-      detach(entry);
+      detach(entry, "remove");
     },
     watch: (at, { recursive }, listener): Watch => {
       const refused = refusals.get(at);
@@ -384,7 +436,8 @@ export function filesystemFake(opts: {
       return {
         close: () => {
           w.closed = true;
-          watches.splice(watches.indexOf(w), 1);
+          const open = watches.indexOf(w);
+          if (open !== -1) watches.splice(open, 1);
         },
         onError: (l) => void w.errors.push(l),
       };
@@ -401,11 +454,20 @@ export function filesystemFake(opts: {
       const entry = walk(from, false, "rename");
       const { dir, name } = slot(to, "rename");
       const replaced = dir.children.get(name);
-      if (replaced !== undefined) detach(replaced);
-      detach(entry);
+      if (replaced !== undefined && replaced !== entry) {
+        // The kernel's checks on the destination it replaces.
+        if (entry.kind === "directory" && replaced.kind !== "directory")
+          throw failure("ENOTDIR", "rename", to);
+        if (entry.kind !== "directory" && replaced.kind === "directory")
+          throw failure("EISDIR", "rename", to);
+        if (replaced.kind === "directory" && replaced.children.size > 0)
+          throw failure("ENOTEMPTY", "rename", to);
+        detach(replaced, "remove");
+      }
+      detach(entry, "move");
       attach(dir, name, entry);
     },
-    remove: (at) => detach(walk(at, false, "rm")),
+    remove: (at) => detach(walk(at, false, "rm"), "remove"),
     fault: (at, code) =>
       void (code === null ? faults.delete(at) : faults.set(at, code)),
     refuseWatch: (at, code) => void refusals.set(at, code),

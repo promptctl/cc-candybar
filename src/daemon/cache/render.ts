@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import path from "node:path";
 import { nearestWatchTarget } from "../../utils/watch-target.js";
 import { chainName } from "../../config-hint.js";
@@ -1512,7 +1511,8 @@ export class RenderCache<
     this.budgetBytes = opts.budgetBytes;
     this.maxEntries = opts.maxEntries ?? MAX_ENTRIES;
     this.observers = opts.observers ?? {};
-    fs.mkdirSync(repoConfigsDir(deps.stateDir), { recursive: true });
+    // [LAW:one-source-of-truth] The folder is made on the tree that watches it.
+    deps.watchers.filesystem.mkdirSync(repoConfigsDir(deps.stateDir));
     const { dir, name } = nearestWatchTarget(
       deps.watchers.filesystem,
       repoConfigsPath(deps.stateDir),

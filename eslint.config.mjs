@@ -112,7 +112,6 @@ const FS_READERS = [
   "src/config/loader/plugins.ts",
   "src/daemon/acquire.ts",
   "src/daemon/build-currency.ts",
-  "src/daemon/cache/render.ts",
   "src/daemon/config-file-store.ts",
   "src/daemon/fork-bomb-breaker.ts",
   "src/daemon/lane-edge.ts",
@@ -158,6 +157,8 @@ const FS_MODULE = "/^(node:)?fs(\\u002Fpromises)?$/";
 const FS_SYNTAX = [
   `ImportDeclaration[source.value=${FS_MODULE}]`,
   `ExportNamedDeclaration[source.value=${FS_MODULE}]`,
+  `ExportAllDeclaration[source.value=${FS_MODULE}]`,
+  `TSImportEqualsDeclaration[moduleReference.expression.value=${FS_MODULE}]`,
   `ImportExpression[source.value=${FS_MODULE}]`,
   `CallExpression[callee.name='require'][arguments.0.value=${FS_MODULE}]`,
 ].map((selector) => ({ selector, message: FS_MESSAGE }));
@@ -203,6 +204,22 @@ const OWNED_IMPORTS = {
     group: ["**/proc/launch", "**/proc/launch.js"],
     owners: [],
     message: "A launcher over the machine is system-launcher's to build.",
+  },
+  // The real disk, handed to a daemon by its adapters. The other owners still
+  // reach for it ambiently, and the list only shrinks as they take it as a port.
+  systemFilesystem: {
+    group: ["**/disk/system-filesystem", "**/disk/system-filesystem.js"],
+    owners: [
+      "src/daemon/production-adapters.ts",
+      "src/daemon/cache/git.ts",
+      "src/daemon/config-file-store.ts",
+      "src/daemon/paths.ts",
+      "src/demo/dsl.ts",
+      "src/plugin-install.ts",
+      "src/utils/atomic-write.ts",
+      "src/var-system/source-runs.ts",
+    ],
+    message: "A Filesystem is a daemon's: take the one you are handed.",
   },
   // The process's one real clock, built beside its host and launcher.
   systemTimekeeper: {

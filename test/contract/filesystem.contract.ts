@@ -127,6 +127,23 @@ export function filesystemContract(name: string, make: () => Subject): void {
       });
     });
 
+    it("writes through a dangling link to create its target", async () => {
+      s.world.mkdir(at("d"));
+      s.world.symlink("target", at("d", "link"));
+      await s.filesystem.writeFile(at("d", "link"), "hi");
+      expect(s.filesystem.lstatSync(at("d", "link")).kind).toBe("symlink");
+      expect(await s.filesystem.readFile(at("d", "target"))).toBe("hi");
+    });
+
+    it("applies a `..` after the link before it", () => {
+      s.world.mkdir(at("p", "q", "r"));
+      s.world.symlink(at("p", "q", "r"), at("s"));
+      // Spelled by hand: a join would fold the `..` away before the walk.
+      expect(s.filesystem.realpathSync(`${at("s")}/..`)).toBe(
+        s.filesystem.realpathSync(at("p", "q")),
+      );
+    });
+
     describe("watch", () => {
       const opened: Array<{ close(): void }> = [];
       afterEach(() => {
@@ -176,6 +193,21 @@ export function filesystemContract(name: string, make: () => Subject): void {
         await s.hear(
           () => {},
           () => names.includes("w"),
+        );
+      });
+
+      it("closes a watch twice without touching another", async () => {
+        s.world.mkdir(at("b"));
+        s.world.mkdir(at("c"));
+        const names: string[] = [];
+        const w = watch(at("b"), false, []);
+        watch(at("c"), false, names);
+        w.close();
+        w.close();
+        let n = 0;
+        await s.hear(
+          () => s.world.write(at("c", "f"), String(n++)),
+          () => names.includes("f"),
         );
       });
 

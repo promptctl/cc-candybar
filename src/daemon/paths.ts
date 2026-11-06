@@ -66,11 +66,10 @@ export function storedRoot(home: RendererHome): StoredRoot {
 
 // [LAW:effects-at-boundaries] The disk's spelling is bound here, where every
 // stored root is made; nothing reads it until a stored path is decided.
+// One binding, so every stored root carries the same spelling of the disk.
+const onSystemDisk = (at: string) => onDiskDirectory(systemFilesystem, at);
 export function storedRootAt(dir: string): StoredRoot {
-  return {
-    dir,
-    onDisk: (at) => onDiskDirectory(systemFilesystem, at),
-  };
+  return { dir, onDisk: onSystemDisk };
 }
 
 // [LAW:one-source-of-truth] The socket IS the renderer's identity on the wire:
