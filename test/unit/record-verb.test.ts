@@ -104,7 +104,7 @@ describe("the record command", () => {
     });
   });
 
-  test("says what it wrote and exits 0, or exits 1 when no request was answered", () => {
+  test("says what it wrote and exits 0, or exits 1 when nothing was drawn", () => {
     expect(
       recordPlan(
         {
@@ -113,13 +113,34 @@ describe("the record command", () => {
             path: "/w/bar.jsonl",
             lines: 9,
             answers: 3,
+            frames: 0,
             daemonClosed: false,
           },
         },
         10,
       ),
     ).toEqual({
-      stdout: "/w/bar.jsonl: 9 lines, 3 answers\n",
+      stdout: "/w/bar.jsonl: 9 lines, 3 answers, 0 lane frames\n",
+      stderr: "",
+      code: 0,
+    });
+    // A lane drawing while Claude Code polled nothing is a recording too.
+    expect(
+      recordPlan(
+        {
+          kind: "ok",
+          value: {
+            path: "/w/bar.jsonl",
+            lines: 6,
+            answers: 0,
+            frames: 4,
+            daemonClosed: false,
+          },
+        },
+        10,
+      ),
+    ).toEqual({
+      stdout: "/w/bar.jsonl: 6 lines, 0 answers, 4 lane frames\n",
       stderr: "",
       code: 0,
     });
@@ -130,6 +151,7 @@ describe("the record command", () => {
           path: "/w/bar.jsonl",
           lines: 2,
           answers: 0,
+          frames: 0,
           daemonClosed: false,
         },
       },
@@ -138,7 +160,7 @@ describe("the record command", () => {
     expect(idle.code).toBe(1);
     expect(idle.stdout).toBe("");
     expect(idle.stderr).toMatch(
-      /^record: \/w\/bar\.jsonl: no request was answered in 10s, so there is nothing to replay: the session was idle/,
+      /^record: \/w\/bar\.jsonl: no request was answered and no lane drew a frame in 10s, so there is nothing to replay: the session was idle/,
     );
   });
 
@@ -150,13 +172,14 @@ describe("the record command", () => {
           path: "/w/bar.jsonl",
           lines: 9,
           answers: 3,
+          frames: 0,
           daemonClosed: true,
         },
       },
       10,
     );
     expect(short).toMatchObject({
-      stdout: "/w/bar.jsonl: 9 lines, 3 answers\n",
+      stdout: "/w/bar.jsonl: 9 lines, 3 answers, 0 lane frames\n",
       code: 0,
     });
     expect(short.stderr).toBe(
@@ -169,6 +192,7 @@ describe("the record command", () => {
           path: "/w/bar.jsonl",
           lines: 2,
           answers: 0,
+          frames: 0,
           daemonClosed: true,
         },
       },
@@ -176,7 +200,7 @@ describe("the record command", () => {
     );
     expect(empty.code).toBe(1);
     expect(empty.stderr).toMatch(
-      /^record: \/w\/bar\.jsonl: the daemon closed before 10s ran out, and no request had been answered/,
+      /^record: \/w\/bar\.jsonl: the daemon closed before 10s ran out, and nothing had been drawn/,
     );
     expect(empty.stderr).not.toMatch(/idle/);
   });

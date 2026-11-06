@@ -50,15 +50,25 @@ import {
   type SessionSource,
 } from "../src/daemon/session-source";
 import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
-import { observable, runInAction, type IObservableValue } from "mobx";
+import {
+  observable,
+  reaction,
+  runInAction,
+  type IObservableValue,
+} from "mobx";
 import { MenuIdle } from "../src/daemon/menu-idle";
-import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/door";
+import {
+  DIAGNOSTICS_VIEWING,
+  SETTINGS_ANCHOR,
+  SETTINGS_OPEN,
+} from "../src/config/door";
+import { drawView } from "../src/daemon/draw-view";
+import { diagnosticsProjection } from "../src/render/diagnostics";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import { flashBegins, MENU_TIMEOUT_DEFAULT } from "../src/config/menu-timeout";
 import { SETTINGS } from "../src/config/setting-projections";
 import { newUpdateFact, type UpdateFact } from "../src/daemon/update-fact";
 import {
-  drawDemoFrame,
   heldArrival,
   loadDemo,
   NEVER_CLICKED,
@@ -67,6 +77,8 @@ import {
   playDemo,
   playOf,
   readRecording,
+  type DemoStep,
+  type RecordingPlay,
   RecordingUnreadable,
   type Arrive,
 } from "../src/demo/play";
@@ -90,15 +102,22 @@ import {
   type Behaviour,
 } from "../src/proc/spawner-fake";
 import { EffectSessions, SessionEffects } from "../src/render/effect";
-import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
+import { type Lane } from "../src/config/lanes";
 import type { DaemonParts } from "../src/daemon/daemon-parts";
-import { drawForAnswer, type RenderSetup } from "../src/daemon/draw-bar";
+import {
+  drawForAnswer,
+  renderFrame,
+  viewLanes,
+  type RenderSetup,
+} from "../src/daemon/draw-bar";
+import { FEED_PERIODS, FrameFeeds } from "../src/daemon/frame-feed";
+import type { LaneEncoders } from "../src/daemon/lane-frames";
 import type { CheckedRenderRequest } from "../src/daemon/render-checkpoint";
 import { RenderWarningRecords } from "../src/daemon/render-warnings";
 import type { Frame } from "../src/render/frame";
 import { textOf } from "../src/render/frame";
 import type { Timekeeper } from "../src/time";
-import { instantAt } from "../src/utils/instant";
+import { instantAt, msOf } from "../src/utils/instant";
 import type { DaemonLogger } from "../src/utils/logger";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import { offlinePricing } from "../src/segments/pricing";
@@ -432,7 +451,9 @@ interface Pace {
 const HELD: Pace = { runsMs: 0, stepMs: 0 };
 
 // A live session over the in-process arm: its directory, its home, its held
-// clock and scripted programs, and its rig.
+// clock and scripted programs, its rig, and the frame feed its lanes follow
+// through. Every frame it draws, an answer or a lane's, is the daemon's own
+// draw (src/daemon/draw-bar.ts), kept in the order drawn.
 function liveSession({ runsMs, stepMs }: Pace = HELD) {
   const dir = sessionDir();
   const { home, claudeConfigDir } = homeDir();
@@ -447,12 +468,82 @@ function liveSession({ runsMs, stepMs }: Pace = HELD) {
       inProcessFacts({ providers, update: () => update.get(), runs }),
     path.join(home, "fails"),
   );
-  const effects = new SessionEffects<RenderedLine>(SID);
-  const drawn = warnings();
+  // Every frame drawn, in the order drawn: each answer, and each frame a lane
+  // drew between them.
+  const drawn: Frame[] = [];
+  const ledger = new RefreshLedger();
+  // The daemon's frame feed, built over the parts below.
+  let feeds: FrameFeeds<CheckedRenderRequest> | null = null;
+  // [LAW:single-enforcer] The parts the daemon's draw reads: the rig's own,
+  // the daemon's frame feed over them, and a stand-in for each that has
+  // nothing to warn of here (no update, no link-id fault, no launch), so the
+  // diagnostics are the daemon's own list over what this session's view says.
+  const parts = {
+    rendererName: "seam",
+    clock,
+    recorder: live.recorder,
+    sessionState: live.sessionState,
+    renderCache: live.cache,
+    payloadProviders: live.providers,
+    menuIdle: live.menuIdle,
+    links: TEST_LINKS,
+    fileEvents: NO_FILE_EVENTS,
+    renderWarnings: new RenderWarningRecords(),
+    effectSessions: new EffectSessions<RenderedLine>(),
+    updateWatch: { notice: () => [], error: () => null },
+    linkIds: { error: () => null },
+    launcher: { launcherWarnings: () => [] },
+    get frameFeeds() {
+      if (feeds === null) throw new Error("a draw read the feed before it was built");
+      return feeds;
+    },
+  } as unknown as DaemonParts;
+  // Each lane is handed the answer as the feed serialized it.
+  const passed = () => (_bar: Frame, json: string) => ({ json, value: null });
+  // [LAW:single-enforcer] The daemon's frame feed (src/daemon/daemon.ts), its
+  // frames the daemon's own, on the session's held clock, with its pane shown.
+  const feed = new FrameFeeds<CheckedRenderRequest>({
+    render: (sessionId, fps, at) => {
+      const frame = renderFrame(parts, sessionId, fps, at);
+      if (frame !== null) drawn.push(frame.bar);
+      return frame;
+    },
+    watch: (sessionId, onChange) =>
+      reaction(() => live.sessionState.revision(sessionId), onChange),
+    lanes: (sessionId) => viewLanes(parts, sessionId),
+    pin: (sessionId) => live.cache.pin(sessionId),
+    shown: () => true,
+    watching: () => () => {},
+    refreshes: () => ledger.totals(),
+    periods: FEED_PERIODS,
+    encoders: {
+      band: passed,
+      statusline: passed,
+      pane: passed,
+      tmuxStatus: passed,
+    } as unknown as LaneEncoders,
+    clock,
+    instant: () => instantAt(clock),
+    log: () => {},
+  });
+  feeds = feed;
+  cleanups.push(() => feed.close());
+  // A subscriber to `lane` of the session's frames, which draws each one it is
+  // sent; returns its leave.
+  const follow = (lane: Lane): (() => void) =>
+    feed.subscribe(SID, {
+      lane,
+      frame: () => {},
+      refused: (resp) => {
+        throw new Error(`the ${lane} lane was refused: ${JSON.stringify(resp)}`);
+      },
+      drawing: () => true,
+    });
   // One request of the session's from `cwd`, at the clock's instant, as the
   // daemon's request path takes one: the view declared with it, the request
-  // noted and its view settled. Its answer, once every fact landed, is drawn
-  // from the view it holds and noted, and the hold released.
+  // noted and its view settled. Its answer, once every fact landed, is the
+  // daemon's draw of the view it holds, noted for its recordings, and the
+  // hold released.
   const arrive = (
     cwd: string,
     configFile: string,
@@ -463,12 +554,10 @@ function liveSession({ runsMs, stepMs }: Pace = HELD) {
     // What the request path spends between reading the request's instant and
     // declaring its view: what that declaration stamps is later than `at`.
     clock.burn(burnMs);
-    const held = live.cache.holdSession(
-      cwd,
-      cwd,
-      configFile,
-      request(cwd, home, claudeConfigDir, model),
-    );
+    // The view is declared with the request as the daemon's checkpoint
+    // passes it on, which a lane's frame draws by: no argument refused.
+    const req = { ...request(cwd, home, claudeConfigDir, model), refusedArgs: [] };
+    const held = live.cache.holdSession(cwd, cwd, configFile, req);
     const settling = settleRequest(live.recorder, held.view, at);
     return {
       view: held.view,
@@ -476,28 +565,21 @@ function liveSession({ runsMs, stepMs }: Pace = HELD) {
         using _held = held;
         await landed(clock, held.view, stepMs);
         await settling.landed;
-        // [LAW:single-enforcer] Under the session's idle clock, as the
-        // daemon's draw is.
-        // The demo's draw owes its reader nothing: no list, as the replay's
-        // recorded one is then.
-        return drawRequest(live.recorder, held.view, settling.arrival, () => ({
-          ...live.menuIdle.drawn(
-            SID,
-            at,
-            held.view.source.effective().menuTimeout,
-            (idleSince) => ({
-              frame: drawDemoFrame(
-                held.view,
-                at,
-                effects,
-                idleSince,
-                [],
-                drawn.warn,
-              ),
-            }),
-          ),
-          diagnostics: [],
-        })).frame;
+        // The setup the daemon's request path makes, over this request.
+        const setup: RenderSetup = {
+          req: req as unknown as CheckedRenderRequest,
+          at,
+          facts: [],
+          sessionId: req.sessionId,
+          entry: held.entry,
+          state: held.state,
+          view: held.view as unknown as RenderSetup["view"],
+          hintsError: null,
+          [Symbol.dispose]: () => {},
+        };
+        const frame = drawForAnswer(parts, setup, settling.arrival).drawn.body;
+        drawn.push(frame);
+        return frame;
       },
     };
   };
@@ -507,56 +589,6 @@ function liveSession({ runsMs, stepMs }: Pace = HELD) {
     burnMs = 0,
     model?: string,
   ): Promise<Frame> => arrive(cwd, configFile, burnMs, model).answer();
-  // [LAW:single-enforcer] The parts the daemon's draw reads: the rig's own,
-  // and a stand-in for each that has nothing to warn of here (no update, no
-  // feed, no link-id fault, no launch), so the diagnostics are the daemon's
-  // own list over what this session's view says.
-  const parts = {
-    rendererName: "seam",
-    recorder: live.recorder,
-    sessionState: live.sessionState,
-    renderCache: live.cache,
-    payloadProviders: live.providers,
-    menuIdle: live.menuIdle,
-    links: TEST_LINKS,
-    fileEvents: NO_FILE_EVENTS,
-    renderWarnings: new RenderWarningRecords(),
-    effectSessions: new EffectSessions<RenderedLine>(),
-    frameFeeds: { feedsOf: () => UNFOLLOWED_FEEDS },
-    updateWatch: { notice: () => [], error: () => null },
-    linkIds: { error: () => null },
-    launcher: { launcherWarnings: () => [] },
-  } as unknown as DaemonParts;
-  // One request answered by the daemon's own draw (src/daemon/draw-bar.ts):
-  // the bar with its door's indicator over the list the draw built, noted for
-  // its recordings as the daemon notes it.
-  const requestByDaemon = async (
-    cwd: string,
-    configFile: string,
-    model?: string,
-  ): Promise<Frame> => {
-    const at = instantAt(clock);
-    const req = request(cwd, home, claudeConfigDir, model);
-    using held = live.cache.holdSession(cwd, cwd, configFile, req);
-    const settling = settleRequest(live.recorder, held.view, at);
-    await landed(clock, held.view, stepMs);
-    await settling.landed;
-    // The setup the daemon's request path makes, over this request: the
-    // daemon's draw reads only its refused arguments beyond what the view
-    // was declared with.
-    const setup: RenderSetup = {
-      req: { ...req, refusedArgs: [] } as unknown as CheckedRenderRequest,
-      at,
-      facts: [],
-      sessionId: req.sessionId,
-      entry: held.entry,
-      state: held.state,
-      view: held.view as unknown as RenderSetup["view"],
-      hintsError: null,
-      [Symbol.dispose]: () => {},
-    };
-    return drawForAnswer(parts, setup, settling.arrival).drawn.body;
-  };
   const after = async (ms: number): Promise<void> => {
     clock.advance(ms);
     await turns();
@@ -568,12 +600,16 @@ function liveSession({ runsMs, stepMs }: Pace = HELD) {
     launcher: launcher.spawner,
     live,
     drawn,
+    follow,
     arrive,
     requestFrom,
-    requestByDaemon,
     after,
   };
 }
+
+// Whether any of `frames` shows the door's `⚠`: what a draw could not honour.
+const warned = (frames: readonly Frame[]): boolean =>
+  frames.some((frame) => textOf(frame).includes("⚠"));
 
 // Every read call of fs and fs/promises, with no allow-list: a read inside a
 // draw is a failure whoever makes it.
@@ -618,6 +654,7 @@ async function replayFile(
   file: string,
   configFile: string,
   arriveOn: (clock: HeldClock) => Arrive = heldArrival,
+  stepsOf: (play: RecordingPlay) => readonly DemoStep[] = (play) => play.steps,
 ): Promise<{
   frames: Frame[];
   reads: string[];
@@ -630,7 +667,9 @@ async function replayFile(
     opening: recording.opening.document,
     lines: recording.lines,
   });
-  const { startMs, opening, steps } = playOf(recording, facts);
+  const play = playOf(recording, facts);
+  const { startMs, opening } = play;
+  const steps = stepsOf(play);
   const clock = heldClock(new Date(startMs));
   const launcher = fakeLauncher(clock);
   const replayHome = tempDir("ccb-seam-replay-");
@@ -659,6 +698,7 @@ async function replayFile(
     opening,
     steps,
     arrive: arriveOn(clock),
+    to: TEST_LINKS.to,
     frame: (frame) => frames.push(frame),
   });
   const read = reads();
@@ -690,7 +730,7 @@ function drawnFrom(
   return recording.lines.flatMap((line) => {
     if (line.kind === "facts") document = line.at;
     if (line.kind === "turn") document = line.document.at;
-    return line.kind === "draw" ? [{ request: line.request, document }] : [];
+    return line.kind === "draw" ? [{ request: line.at, document }] : [];
   });
 }
 
@@ -726,7 +766,7 @@ test("a session recorded out of the cache replays through the demo into the bars
   expect(liveText[0]).toContain("status=/h/seam");
   // The replaying machine's home is another: the frames are drawn with this.
   expect(liveText[0]).toContain(`home=${s.home}`);
-  expect(s.drawn.said).toEqual([]);
+  expect(warned(liveFrames)).toBe(false);
 
   const replay = await replayFile(file, s.configFile);
   expect(replay.reads).toEqual([]);
@@ -821,7 +861,7 @@ test("a session's shell and file sources, recorded live, replay with what each r
       "shell=from-the-shell file=from-the-file keyed=keyed-sonnet",
     ),
   ]);
-  expect(s.drawn.said).toEqual([]);
+  expect(warned(liveFrames)).toBe(false);
   // Each run crossed the recording in its documents.
   const recording = readRecording(file);
   expect(
@@ -966,7 +1006,7 @@ test("a session recorded with a pick made and a menu open replays with the pick 
   expect(states[1]!.values).toEqual(states[0]!.values);
   expect(states[1]!.revision).not.toBe(states[0]!.revision);
   expect(states[0]!.values[SETTINGS.theme.sessionKey]).toBe("nord");
-  expect(s.drawn.said).toEqual([]);
+  expect(warned(liveFrames)).toBe(false);
 
   const replay = await replayFile(file, configFile);
   expect(replay.reads).toEqual([]);
@@ -1016,7 +1056,19 @@ test("a recording made on a moving clock replays each frame from what its answer
   );
 });
 
-test("a play draws each answer at the instant its arm says the request arrived at, not at the request's offset", async () => {
+// The play's steps with each answer drawn as the live arm draws one: at the
+// instant its request arrived at, found by the request's offset, since the
+// live arm learns that instant only as the request arrives.
+const asLiveAnswers = ({ startMs, steps }: RecordingPlay): DemoStep[] =>
+  steps.map((step) =>
+    step.kind === "draw" &&
+    step.handed.drawing.by === "request" &&
+    "instant" in step.at
+      ? { ...step, at: { request: msOf(step.at.instant) - startMs } }
+      : step,
+  );
+
+test("a play draws the live arm's answer at the instant its arm says the request arrived at, not at the request's offset", async () => {
   const s = liveSession();
   await s.requestFrom(s.cwd, s.configFile);
   const file = path.join(tempDir("ccb-seam-arrive-"), "bar.jsonl");
@@ -1058,7 +1110,7 @@ test("a play draws each answer at the instant its arm says the request arrived a
       (at, n) =>
         `s=${String((Math.floor(at) + 7 * (n + 1)) % 60).padStart(2, "0")}`,
     );
-  const replay = await replayFile(file, clockConfig, late);
+  const replay = await replayFile(file, clockConfig, late, asLiveAnswers);
   expect(replay.said).toEqual([]);
   expect(
     replay.frames.map((frame) => /s=\d\d/.exec(textOf(frame))?.[0]),
@@ -1446,14 +1498,16 @@ test("a recording of a session's facts replays through a second cache into the b
     } else {
       restoreDraw(replay.sessionState, replay.depths, SID, line.state);
       replayFrames.push(
-        drawDemoFrame(
+        drawView(
           held.view,
-          line.request,
+          line,
+          line.at,
           effects,
           line.state.idleSince,
-          line.diagnostics,
-          drawn.warn,
-        ),
+          replay.sessionState.get(SID, DIAGNOSTICS_VIEWING),
+          TEST_LINKS.to,
+          ({ message }) => drawn.warn(message),
+        ).body,
       );
     }
   }
@@ -1503,7 +1557,7 @@ function modelConfig(s: ReturnType<typeof liveSession>): string {
 async function recordHeld(
   s: ReturnType<typeof liveSession>,
   name: string,
-  during: () => Promise<Frame[]>,
+  during: (file: string) => Promise<Frame[]>,
 ): Promise<{ file: string; liveFrames: Frame[] }> {
   const file = path.join(tempDir("ccb-seam-out-"), name);
   const leave = new AbortController();
@@ -1515,7 +1569,7 @@ async function recordHeld(
     600,
     leave.signal,
   );
-  const liveFrames = await during();
+  const liveFrames = await during(file);
   leave.abort();
   const { answers } = await recorded;
   expect(answers).toBe(liveFrames.length);
@@ -1540,19 +1594,19 @@ async function expectReplayed(
 test("a session recorded across a turn that could not be taken replays the daemon's frames: the held turn's request and picks, and its ⚠", async () => {
   const s = liveSession();
   const configFile = modelConfig(s);
-  await s.requestByDaemon(s.cwd, configFile);
+  await s.requestFrom(s.cwd, configFile);
   const { file, liveFrames } = await recordHeld(s, "held.jsonl", async () => {
     const frames: Frame[] = [];
     await s.after(1000);
-    frames.push(await s.requestByDaemon(s.cwd, configFile));
+    frames.push(await s.requestFrom(s.cwd, configFile));
     // The turn's inputs stop reading, and a pick lands while they do.
     held(s, HELD_REASON);
     pick(s, [{ key: SETTINGS.theme.sessionKey, value: "nord" }]);
     await s.after(1000);
-    frames.push(await s.requestByDaemon(s.cwd, configFile, "Opus 5"));
+    frames.push(await s.requestFrom(s.cwd, configFile, 0, "Opus 5"));
     held(s, null);
     await s.after(1000);
-    frames.push(await s.requestByDaemon(s.cwd, configFile, "Opus 5"));
+    frames.push(await s.requestFrom(s.cwd, configFile, 0, "Opus 5"));
     return frames;
   });
   const [before, during, after] = liveFrames.map(textOf);
@@ -1571,17 +1625,17 @@ test("a session recorded across a turn that could not be taken replays the daemo
 test("a session recorded from inside a held turn opens on the held turn, and replays the daemon's frames", async () => {
   const s = liveSession();
   const configFile = modelConfig(s);
-  await s.requestByDaemon(s.cwd, configFile);
+  await s.requestFrom(s.cwd, configFile);
   // The ⚠ is up before the recording starts, as a bug report's is.
   held(s, HELD_REASON);
   pick(s, [{ key: SETTINGS.theme.sessionKey, value: "nord" }]);
   const { file, liveFrames } = await recordHeld(s, "inside.jsonl", async () => {
     const frames: Frame[] = [];
     await s.after(1000);
-    frames.push(await s.requestByDaemon(s.cwd, configFile, "Opus 5"));
+    frames.push(await s.requestFrom(s.cwd, configFile, 0, "Opus 5"));
     held(s, null);
     await s.after(1000);
-    frames.push(await s.requestByDaemon(s.cwd, configFile, "Opus 5"));
+    frames.push(await s.requestFrom(s.cwd, configFile, 0, "Opus 5"));
     return frames;
   });
   const [during, after] = liveFrames.map(textOf);
@@ -1595,11 +1649,11 @@ test("a session recorded from inside a held turn opens on the held turn, and rep
 
 test("a click between draws, before the turn is held, replays in the held frames: the picks and depths the held turn was taken over", async () => {
   const s = liveSession();
-  await s.requestByDaemon(s.cwd, s.configFile);
+  await s.requestFrom(s.cwd, s.configFile);
   const { file, liveFrames } = await recordHeld(s, "click.jsonl", async () => {
     const frames: Frame[] = [];
     await s.after(1000);
-    frames.push(await s.requestByDaemon(s.cwd, s.configFile));
+    frames.push(await s.requestFrom(s.cwd, s.configFile));
     // A click with no request after it: the theme picked, the settings menu
     // open, two steps to undo. The live turn is taken over it.
     pick(s, [
@@ -1614,10 +1668,10 @@ test("a click between draws, before the turn is held, replays in the held frames
     );
     held(s, HELD_REASON);
     await s.after(1000);
-    frames.push(await s.requestByDaemon(s.cwd, s.configFile, "Opus 5"));
+    frames.push(await s.requestFrom(s.cwd, s.configFile, 0, "Opus 5"));
     held(s, null);
     await s.after(1000);
-    frames.push(await s.requestByDaemon(s.cwd, s.configFile, "Opus 5"));
+    frames.push(await s.requestFrom(s.cwd, s.configFile, 0, "Opus 5"));
     return frames;
   });
   const during = liveFrames[1]!;
@@ -1695,4 +1749,89 @@ test("a click on a state variable a source is keyed on, before the recording sta
   expect(replay.started).toEqual([]);
   expect(replay.said).toEqual([]);
   expect(replay.frames.map(textOf)).toEqual(liveFrames.map(textOf));
+});
+
+// A frame compared whole: what it draws, when it next changes, and whether it
+// can move.
+const whole = (frame: Frame) => ({
+  rows: frame.rows,
+  nextChange: frame.nextChange,
+  motion: frame.motion,
+});
+
+test("a session recorded with a standing warning and a lane following replays the daemon's answers and the lane's frames whole: the lane toggles reading the feeds, and the viewer open on the warning", async () => {
+  const s = liveSession();
+  // The pane lane switched on, by a key written twice: the settings menu
+  // cannot edit the file, which the load warns of from then on.
+  const configFile = path.join(path.dirname(s.configFile), "lane.json5");
+  fs.writeFileSync(
+    configFile,
+    CONFIG.replace(
+      "segments: {",
+      "globals: { experimentalPane: true, experimentalPane: true },\n  segments: {",
+    ),
+  );
+  await s.requestFrom(s.cwd, configFile);
+  cleanups.push(s.follow("pane"));
+  const from = s.drawn.length;
+  const { file, liveFrames: answers } = await recordHeld(
+    s,
+    "lane.jsonl",
+    async (file) => {
+      const frames: Frame[] = [];
+      await s.after(1000);
+      frames.push(await s.requestFrom(s.cwd, configFile));
+      // The settings menu open on its 🧪 toggles, where each lane's toggle
+      // reads that lane's feed.
+      pick(s, [
+        { key: SETTINGS_ANCHOR, value: SETTINGS_OPEN },
+        { key: "candybar.tab", value: "config" },
+        { key: "menus.candybar_pickers", value: "toggles" },
+      ]);
+      await s.after(1000);
+      frames.push(await s.requestFrom(s.cwd, configFile));
+      // The viewer opened on the warning, standing in for the bar, as the
+      // indicator's click opens it: on the first message of the list the
+      // daemon's draw built, which the recording holds so far.
+      const answered = readRecording(file).lines.findLast(
+        (line) => line.kind === "draw",
+      );
+      if (answered?.kind !== "draw") throw new Error("no draw recorded yet");
+      pick(s, [
+        {
+          key: DIAGNOSTICS_VIEWING,
+          value: diagnosticsProjection(answered.diagnostics).open,
+        },
+      ]);
+      await s.after(1000);
+      frames.push(await s.requestFrom(s.cwd, configFile));
+      await s.after(500);
+      return frames;
+    },
+  );
+  const liveFrames = s.drawn.slice(from);
+  const [plain, toggles, viewer] = answers.map(textOf);
+  expect(plain).toContain("⚠ 1");
+  expect(toggles).toMatch(/pane[^\n]* \d+ fps/u);
+  expect(viewer).toContain("duplicate key");
+  // The lane drew frames of its own between the answers, through the same
+  // views, and the recording carries them with the feeds they read.
+  const draws = readRecording(file).lines.flatMap((line) =>
+    line.kind === "draw" ? [line] : [],
+  );
+  expect(draws.map((line) => line.drawing.by)).toEqual(
+    liveFrames.map((frame) =>
+      answers.includes(frame) ? "request" : "feed",
+    ),
+  );
+  expect(draws.filter((line) => line.drawing.by === "feed").length).toBeGreaterThan(
+    answers.length,
+  );
+  expect(draws.every((line) => line.feeds.pane.subscribers === 1)).toBe(true);
+  const replay = await replayFile(file, configFile);
+  expect(replay.reads).toEqual([]);
+  expect(replay.started).toEqual([]);
+  // The demo says the load's warning, as `check` does.
+  expect(replay.said).toEqual([expect.stringContaining("duplicate key")]);
+  expect(replay.frames.map(whole)).toEqual(liveFrames.map(whole));
 });

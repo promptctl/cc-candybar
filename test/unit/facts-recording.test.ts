@@ -17,7 +17,7 @@ import {
   type RequestLine,
 } from "../../src/facts/recording";
 import { FACTS_VERSION } from "../../src/facts/session-facts";
-import { playOf } from "../../src/demo/play";
+import { playOf, type DemoStep } from "../../src/demo/play";
 import { parseClientHints } from "../../src/daemon/protocol";
 import { sessionIdOf } from "../../src/daemon/session-id";
 import { instantOf, type Instant } from "../../src/utils/instant";
@@ -28,6 +28,11 @@ import {
 } from "../../src/render/diagnostics";
 import { pendingFacts } from "../helpers/facts";
 import { TEST_LINKS } from "../helpers/link-signer";
+import {
+  ANSWERING,
+  UNFOLLOWED_FEEDS,
+  type LaneFeeds,
+} from "../../src/config/lanes";
 
 const SESSION = sessionIdOf("rec-session");
 const AT = instantOf(new Date(1_700_000_000_000));
@@ -114,15 +119,34 @@ const DIAGNOSTICS: DiagnosticList = collectDiagnostics(
   [],
   [{ about: "facts", text: "the bar is drawn from older facts", copy: "x" }],
 );
+// What each lane's feed was doing: the pane lane followed by one subscriber,
+// sent 24 frames in the last second while its pane is on a screen.
+const FEEDS: LaneFeeds = {
+  ...UNFOLLOWED_FEEDS,
+  pane: { subscribers: 1, fps: 24, shown: true },
+};
+// An answer to the request at `s`.
 const drawn = (
   s: number,
   state: DrawState = STATE,
   diagnostics: DiagnosticList = DIAGNOSTICS,
 ): RecordingLine => ({
   kind: "draw",
-  request: at(s),
+  at: at(s),
+  drawing: ANSWERING,
+  feeds: FEEDS,
   state,
   diagnostics,
+});
+// A frame the pane lane's feed drew at `s`, between whole milliseconds as a
+// feed's frames are.
+const framed = (s: number): RecordingLine => ({
+  kind: "draw",
+  at: at(s),
+  drawing: { by: "feed", fps: 30 },
+  feeds: FEEDS,
+  state: STATE,
+  diagnostics: DIAGNOSTICS,
 });
 // The clicks' state a turn was taken over.
 const CLICKS: ClickState = {
@@ -170,7 +194,9 @@ test("what the recorder writes reads back as itself, opening on the turn the bar
       { kind: "facts", at: at(1.5), facts: document(3) },
       {
         kind: "draw",
-        request: at(0.5),
+        at: at(0.5),
+        drawing: ANSWERING,
+        feeds: FEEDS,
         state: STATE,
         diagnostics: DIAGNOSTICS,
       },
@@ -278,7 +304,9 @@ test("a draw carries the session's state it read, and an idle period not begun r
   );
   expect(lines.at(-1)).toEqual({
     kind: "draw",
-    request: at(1),
+    at: at(1),
+    drawing: ANSWERING,
+    feeds: FEEDS,
     state: idle,
     diagnostics: DIAGNOSTICS,
   });
@@ -287,7 +315,7 @@ test("a draw carries the session's state it read, and an idle period not begun r
 test("a draw whose state is missing or malformed is refused by its line, naming what is wrong", () => {
   const drawWith = (state: unknown): string =>
     text(header, turned(0, 1), requested(1)) +
-    `${JSON.stringify({ kind: "draw", request: at(1), state })}\n`;
+    `${JSON.stringify({ kind: "draw", at: at(1), drawing: ANSWERING, state })}\n`;
   const wire = { ...STATE, idleSince: at(0.5) };
   expect(() => parseRecording(drawWith(undefined))).toThrow(
     /^line 4: has no `state` object/,
@@ -499,10 +527,65 @@ test("a draw answers a request before it that is not drawn already, and requests
       text(header, turned(0, 1), requested(1)) +
         `${JSON.stringify({ kind: "draw" })}\n`,
     ),
-  ).toThrow(/^line 4: has no finite `request`/);
+  ).toThrow(/^line 4: has no finite `at`/);
 });
 
-test("a declaration restates a request ahead of a draw: read back as itself, never an arrival, and refused before any request", () => {
+test("a lane's frame answers no request: it needs none before it, and an answer at its instant still has its request to draw", () => {
+  const alone = parseRecording(text(header, turned(0, 1), framed(0.0337)));
+  expect(alone.lines).toEqual([
+    {
+      kind: "draw",
+      at: at(0.0337),
+      drawing: { by: "feed", fps: 30 },
+      feeds: FEEDS,
+      state: STATE,
+      diagnostics: DIAGNOSTICS,
+    },
+  ]);
+  const beside = parseRecording(
+    text(header, turned(0, 1), requested(1), framed(1), drawn(1)),
+  );
+  expect(beside.lines.filter((line) => line.kind === "draw")).toHaveLength(2);
+});
+
+test("what a draw was handed is refused by its line when malformed, naming the field", () => {
+  const raw = JSON.parse(formatLine(framed(1))) as Record<string, unknown>;
+  const line = (patch: Record<string, unknown>): string =>
+    text(header, turned(0, 1)) + `${JSON.stringify({ ...raw, ...patch })}\n`;
+  expect(() => parseRecording(line({ drawing: undefined }))).toThrow(
+    /^line 3: has no `drawing` object/,
+  );
+  expect(() => parseRecording(line({ drawing: { by: "tmux" } }))).toThrow(
+    /^line 3: has no `drawing.by` that is request or feed/,
+  );
+  expect(() =>
+    parseRecording(line({ drawing: { by: "feed", fps: 0.5 } })),
+  ).toThrow(/^line 3: has no count `drawing.fps`/);
+  expect(() => parseRecording(line({ feeds: undefined }))).toThrow(
+    /^line 3: has no `feeds` object/,
+  );
+  expect(() =>
+    parseRecording(line({ feeds: { ...FEEDS, sidecar: FEEDS.pane } })),
+  ).toThrow(
+    /^line 3: has a feed of lane "sidecar", which this build does not draw/,
+  );
+  const { band: _band, ...noBand } = FEEDS;
+  expect(() => parseRecording(line({ feeds: noBand }))).toThrow(
+    /^line 3: has no `feeds.band` object/,
+  );
+  expect(() =>
+    parseRecording(
+      line({ feeds: { ...FEEDS, pane: { ...FEEDS.pane, subscribers: -1 } } }),
+    ),
+  ).toThrow(/^line 3: has no count `feeds.pane.subscribers`/);
+  expect(() =>
+    parseRecording(
+      line({ feeds: { ...FEEDS, pane: { ...FEEDS.pane, shown: 1 } } }),
+    ),
+  ).toThrow(/^line 3: has no `feeds.pane.shown` that is true or false/);
+});
+
+test("a declaration restates a request ahead of a draw: read back as itself, never an arrival, and ahead of a lane's frame before any request", () => {
   const declared: RecordingLine = { kind: "declared", request: request() };
   const { lines } = parseRecording(
     text(header, turned(0, 1), requested(1), declared, drawn(1)),
@@ -514,20 +597,19 @@ test("a declaration restates a request ahead of a draw: read back as itself, nev
       text(header, turned(0, 1), requested(1), declared, drawn(1), drawn(1)),
     ),
   ).toThrow(/^line 6: draws the answer to a request at /);
-  expect(() =>
-    parseRecording(
-      text(header, turned(0, 1), declared, requested(1), drawn(1)),
-    ),
-  ).toThrow(/^line 3: is a declaration before any request/);
+  // A lane's frame can restate its view's declaration before any request.
+  expect(
+    parseRecording(text(header, turned(0, 1), declared, framed(0.5))).lines,
+  ).toEqual([declared, framed(0.5)]);
 });
 
-test("a recording no answer was drawn in is refused: a replay draws one frame per answer", () => {
-  for (const unanswered of [
+test("a recording nothing was drawn in is refused: a replay draws one frame per draw", () => {
+  for (const undrawn of [
     text(header, turned(0, 1), facts(1, 2)),
     text(header, turned(0, 1), requested(1), facts(2, 2)),
   ]) {
-    expect(() => parseRecording(unanswered)).toThrow(
-      /^the recording: holds no answered request: none was answered while it was recorded/,
+    expect(() => parseRecording(undrawn)).toThrow(
+      /^the recording: holds no draw: no request was answered and no lane drew a frame while it was recorded/,
     );
   }
 });
@@ -593,6 +675,18 @@ test("a pending that crossed as JSON is a pending, not a value", () => {
   expect(parsed.builtins.git.kind).toBe("ok");
 });
 
+// Where a play's step is drawn or arrives, from the clock's start.
+const stepOf = (step: DemoStep): string =>
+  step.kind === "request"
+    ? `request +${step.offsetMs}`
+    : step.kind === "draw"
+      ? "instant" in step.at
+        ? `${step.handed.drawing.by} at ${step.at.instant}`
+        : `answer of +${step.at.request}`
+      : step.kind === "turn"
+        ? `turn${step.turn.held ? " held" : ""}`
+        : "document";
+
 test("a replay's clock starts at the first request, however long the view sat before it, and its steps keep the file's order, a turn's among them", () => {
   const reached: FactsLine[] = [];
   const play = playOf(
@@ -613,23 +707,13 @@ test("a replay's clock starts at the first request, however long the view sat be
   // The view opens on the opening turn, before any step.
   expect(play.opening).toMatchObject({ held: false, state: CLICKS });
   expect(play.startMs).toBe(Math.round(at(7200) * 1000));
-  expect(
-    play.steps.map((step) =>
-      step.kind === "request"
-        ? `request +${step.offsetMs}`
-        : step.kind === "draw"
-          ? `draw of +${step.requestOffsetMs}`
-          : step.kind === "turn"
-            ? `turn${step.turn.held ? " held" : ""}`
-            : "document",
-    ),
-  ).toEqual([
+  expect(play.steps.map(stepOf)).toEqual([
     "request +0",
     "request +1000",
     "document",
-    "draw of +0",
+    `request at ${at(7200)}`,
     "turn held",
-    "draw of +1000",
+    `request at ${at(7201)}`,
   ]);
   // A document step reaches the arm when it is taken, not when it is built.
   expect(reached).toEqual([]);
@@ -639,5 +723,26 @@ test("a replay's clock starts at the first request, however long the view sat be
   expect(reached).toEqual([
     { kind: "facts", at: at(7201.5), facts: document(2) },
     { at: at(7201.7), facts: document(2) },
+  ]);
+});
+
+test("a lane's frame is drawn at its own instant, exactly, and a recording that opens on one starts its clock there", () => {
+  const play = playOf(
+    parseRecording(
+      text(
+        header,
+        turned(0, 1),
+        framed(7199.9337),
+        requested(7200),
+        drawn(7200),
+      ),
+    ),
+    { reach: () => {} },
+  );
+  expect(play.startMs).toBe(Math.round(at(7199.9337) * 1000));
+  expect(play.steps.map(stepOf)).toEqual([
+    `feed at ${at(7199.9337)}`,
+    "request +66",
+    `request at ${at(7200)}`,
   ]);
 });

@@ -504,6 +504,7 @@ describe("a connection over a stream", () => {
         path: "/r.jsonl",
         lines: 4,
         answers: 1,
+        frames: 0,
         daemonClosed: false,
       },
     };

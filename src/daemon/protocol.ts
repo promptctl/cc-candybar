@@ -484,14 +484,16 @@ export function parseRecordSeconds(
       };
 }
 
-// What a recording that ended wrote: its file, its lines, and how many
-// answers it drew, which are the frames a replay draws — none means it has
-// nothing to draw — and whether the daemon's close ended it before its span
-// ran out.
+// What a recording that ended wrote: its file, its lines, how many answers it
+// drew and how many frames a lane's feed drew, which together are the frames a
+// replay draws — none of either means it has nothing to draw — and whether
+// the daemon's close ended it before its span ran out.
 export interface Recorded {
   readonly path: string;
   readonly lines: number;
   readonly answers: number;
+  // The frames a lane's feed drew while it recorded.
+  readonly frames: number;
   readonly daemonClosed: boolean;
 }
 

@@ -46,6 +46,7 @@ import { inProcessFacts, recordingFacts } from "../daemon/facts-source.js";
 import { sessionIdOf } from "../daemon/session-id.js";
 import { newUpdateFact } from "../daemon/update-fact.js";
 import { ansiOf } from "../render/frame.js";
+import { ANSWERING, UNFOLLOWED_FEEDS, type Drawing } from "../config/lanes.js";
 import type { ClaudeHookData } from "../utils/claude.js";
 import { debug, setDebug } from "../utils/logger.js";
 import {
@@ -179,10 +180,14 @@ function liveArm(): Arm {
   const answered = (i: number) =>
     ({
       kind: "draw",
-      requestOffsetMs: i * FRAME_INTERVAL_MS,
+      at: { request: i * FRAME_INTERVAL_MS },
       state: NEVER_CLICKED,
-      // A faked event is warned of nothing.
-      diagnostics: [],
+      // An answer no lane follows, to a faked event warned of nothing.
+      handed: {
+        drawing: ANSWERING,
+        feeds: UNFOLLOWED_FEEDS,
+        diagnostics: [],
+      },
     }) as const;
   return {
     world: machine,
@@ -227,7 +232,7 @@ function liveArm(): Arm {
 }
 
 // A recording's lines, played under a held clock started at its first
-// request: the documents and the home are the recording's, so no owner is
+// request or draw: the documents and the home are the recording's, so no owner is
 // built and nothing is read or spawned for them.
 function recordingArm(path: string): Arm {
   const recording = readRecording(path);
@@ -253,14 +258,20 @@ function recordingArm(path: string): Arm {
 async function main(): Promise<void> {
   const { configPath, recording } = parseArgs(process.argv.slice(2));
   const arm = recording === null ? liveArm() : recordingArm(recording);
+  // How many of the play's draws were drawn for `by`.
+  const draws = (by: Drawing["by"]): number =>
+    arm.steps.filter(
+      (step) => step.kind === "draw" && step.handed.drawing.by === by,
+    ).length;
   try {
+    const links = {
+      to: machine.home.name,
+      signer: linkSignerFromKeyFile(linkKeyFile(stateDir(machine.home))),
+    };
     using loaded = loadDemo({
       world: arm.world,
       stateDir: stateDir(machine.home),
-      links: {
-        to: machine.home.name,
-        signer: linkSignerFromKeyFile(linkKeyFile(stateDir(machine.home))),
-      },
+      links,
       configPath,
       cwd,
       warn: (message) => log("warn", message),
@@ -271,12 +282,13 @@ async function main(): Promise<void> {
           ? `  one faked status-line request, rendered by the daemon's own functions\n` +
             `  ${FRAMES} renders, one per status-line tick — watch the clock move:\n\n`
           : `  ${recording}, replayed by the daemon's own functions\n` +
-            `  ${arm.steps.filter((step) => step.kind === "draw").length} renders, one per answer the session was drawn:\n\n`),
+            `  ${draws("request")} answers and ${draws("feed")} lane frames, each drawn as the session drew it:\n\n`),
     );
     await playDemo({
       ...arm,
       loaded,
       log,
+      to: links.to,
       frame: (drawn) =>
         process.stdout.write(
           ansiOf(drawn)

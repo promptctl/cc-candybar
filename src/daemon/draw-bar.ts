@@ -32,7 +32,7 @@ import {
 } from "./cache/render";
 import { watchFault } from "./cache/watchers";
 import { answeredOf, roleOf } from "./foundations/sighting-roles";
-import { drawDsl, type RenderWarning } from "../dsl/render.js";
+import { type RenderWarning } from "../dsl/render.js";
 import type { DrawnMotion } from "../render/drawn-motion.js";
 import {
   composeBar,
@@ -41,14 +41,13 @@ import {
   type Frame,
 } from "../render/frame.js";
 import {
-  renderOptionsOf,
   prFactOf,
   runsFactOf,
   sourcesFactOf,
   refreshedFact,
-  todayOf,
 } from "./render-payload.js";
 import { type SessionSource } from "./session-source.js";
+import { drawnLanes, drawView, type Handed } from "./draw-view.js";
 import { isPending } from "../utils/outcome.js";
 import {
   laneSwitches,
@@ -60,7 +59,6 @@ import type { Effect } from "./effect.js";
 import { feedsFact, type FeedFrame, type Refusal } from "./frame-feed.js";
 import {
   LANE_NAMES,
-  LANES,
   ANSWERING,
   type Drawing,
   type Lane,
@@ -78,12 +76,8 @@ import {
   collectDiagnostics,
   copyKeys,
   type SourcedText,
-  diagnosticsProjection,
   handoffRows,
   type DiagnosticList,
-  viewedIndex,
-  viewerRowCap,
-  viewerRows,
   type DiagnosticGeometry,
 } from "../render/diagnostics.js";
 import { DIAGNOSTICS_VIEWING } from "../config/door.js";
@@ -93,6 +87,7 @@ import { noteFacts, requestEvent, type RequestFacts } from "./request-event.js";
 
 import type { DaemonParts } from "./daemon-parts.js";
 import {
+  drawFeedFrame,
   drawRequest,
   settleRequest,
   type Arrival,
@@ -147,10 +142,11 @@ export function renderFrame(
   try {
     using setup = setUpFrame(parts, sessionId, at, facts);
     if (setup === null) return null;
-    const { drawn, evaluated, cellBreaks, delivered, lanes } = drawRender(
-      parts,
-      setup,
-      { by: "feed", fps },
+    const { drawn, evaluated, cellBreaks, delivered, lanes } = drawFeedFrame(
+      parts.recorder,
+      setup.view,
+      at,
+      () => drawRender(parts, setup, { by: "feed", fps }),
     );
     const answer = RENDER_ANSWERS.ansi(drawn.body);
     const statusline = statuslineOf(
@@ -457,6 +453,8 @@ export function drawRender(
   lanes: LaneSwitches;
   // When the session's menus' idle period began, as the draw was handed it.
   idleSince: Instant | undefined;
+  // What the draw was handed beside its view, which a recording notes.
+  handed: Handed;
 } {
   const {
     sessionState,
@@ -492,16 +490,11 @@ export function drawRender(
   const effective = view.source.effective();
   const failure = view.source.failure();
   // Which animation lanes this session's settings switch on, as drawn.
-  const lanes = laneSwitches(effective, payload.tmux !== undefined);
+  const lanes = drawnLanes(view.source);
   noteFacts(facts, {
     lanes: LANE_NAMES.filter((lane) => lanes[lane]).join(",") || "-",
   });
-  // [LAW:one-source-of-truth] The width is `renderWidth` of the turn's hints —
-  // the client's cols, else the default, less Claude Code's reserve — which
-  // its payload carries as `term.cols`.
-  const hints = view.source.hints();
-  const width = payload.term.cols;
-  noteFacts(facts, { width: String(width) });
+  noteFacts(facts, { width: String(payload.term.cols) });
   // [LAW:no-ambient-temporal-coupling] The click errors held for this
   // session, at this draw's instant and for whom it draws: each shown by every
   // render inside its own hold, and past it by a request until an answer has
@@ -612,11 +605,12 @@ export function drawRender(
     ].map((w) => ({ about: w.about, text: w.message, copy: w.message })),
   );
   const document = view.source.facts();
-  const projected = {
-    diagnostics: diagnosticsProjection(diagnostics),
+  // [LAW:one-source-of-truth] What this draw is handed beside its view: the
+  // values a recording notes for it, so a replay is handed the same.
+  const handed: Handed = {
     drawing,
     feeds: frameFeeds.feedsOf(sessionId, at),
-    today: todayOf(document.builtins.today, at),
+    diagnostics,
   };
   const metrics = isPending(payload.metrics) ? undefined : payload.metrics;
   noteFacts(facts, sourcesFactOf(document.sources));
@@ -628,51 +622,29 @@ export function drawRender(
     prompts: String(metrics?.messageCount ?? "-"),
     nonPrompts: String(metrics?.nonPrompts ?? "-"),
     pr: prFactOf(payload.git),
-    feeds: feedsFact(projected.feeds),
+    feeds: feedsFact(handed.feeds),
   });
   // [LAW:no-silent-failure] What drawDsl had to settle for itself and could
   // not honour (`RenderWarning`): this frame's own, recorded for its renderer
   // after the walk, so the bar still renders and the indicator counts them.
   const drawnWarnings: RenderWarning[] = [];
-  // [LAW:one-source-of-truth] The options drawDsl draws with are the SAME
-  // `effective` struct the payload was just built from, projected by the one
-  // `renderOptionsOf` every renderer shares — no second `?? DEFAULT_X`
-  // computation to drift from it.
-  const renderOpts = renderOptionsOf(effective, width);
   const effects = effectSessions.of(sessionId);
   // [LAW:single-enforcer] The view's inputs read its source (`bindView`, at
   // its opening): the draw hands only its own instant's facts. What this
   // frame draws is what the session's close timer follows.
-  const { frame, evaluated, cellBreaks, rules, idleSince } = menuIdle.drawn(
-    sessionId,
-    at,
-    effective.menuTimeout,
-    (idleSince) =>
-      drawDsl(
-        state.config,
-        state.compiled,
-        view.store,
-        view.registry,
-        projected,
+  const { body, viewing, geometry, evaluated, cellBreaks, rules, idleSince } =
+    menuIdle.drawn(sessionId, at, effective.menuTimeout, (idleSince) =>
+      drawView(
+        view,
+        handed,
         at,
-        renderOpts,
-        // [LAW:single-enforcer] The per-segment StripCell sink for the
-        // `debug segments` projection. Its identity stays stable for the
-        // view's lifetime; drawDsl clears + repopulates it
-        // in place. Cells are cheap (already computed during the render);
-        // the per-segment ANSI serialization happens lazily inside the
-        // debug handler so normal renders pay no extra serializer cost.
-        {
-          perSegmentSink: view.lastRenderCellsBySegment,
-          onRenderWarning: (warning) => drawnWarnings.push(warning),
-        },
-        // [LAW:one-source-of-truth] The draw's own settings and the session's
-        // effect memory. The theme, style and effect are not among them: the
-        // view's slots settle those names (src/dsl/parts.ts), the same ones its
-        // payload's `.effective` fields read.
-        { ...effective, effects, idleSince },
+        effects,
+        idleSince,
+        sessionState.get(sessionId, DIAGNOSTICS_VIEWING),
+        links.to,
+        (warning) => drawnWarnings.push(warning),
       ),
-  );
+    );
   // [LAW:one-source-of-truth] What each copy click this frame mints copies,
   // read back when the click runs (the copy-diagnostic verb): the list this
   // renderer last delivered, never text carried in the link. Recorded when
@@ -701,43 +673,6 @@ export function drawRender(
     scope,
     drawnWarnings,
   );
-  const geometry: DiagnosticGeometry = {
-    width,
-    // A feed's one frame is shown by every lane switched on, so it pages
-    // within the shortest of their surfaces.
-    rows: viewerRowCap(
-      hints.termRows,
-      drawing.by === "feed"
-        ? LANE_NAMES.flatMap((lane) => {
-            const rows = LANES[lane].rows;
-            return lanes[lane] && rows !== null ? [rows] : [];
-          })
-        : [],
-    ),
-    // [LAW:one-source-of-truth] What stands in the frame's place is drawn at
-    // the depth the frame is encoded at.
-    colorCompatibility: frame.depth,
-  };
-  // [LAW:dataflow-not-control-flow] The viewer, while open, takes the body's
-  // place: open only while the message it was opened on is in this list.
-  const viewing = viewedIndex(
-    sessionState.get(sessionId, DIAGNOSTICS_VIEWING),
-    diagnostics,
-  );
-  const body: Frame =
-    viewing === null
-      ? frame
-      : standIn(
-          frame,
-          viewerRows(
-            diagnostics,
-            viewing,
-            links.to,
-            sessionId,
-            drawing.by,
-            geometry,
-          ),
-        );
   const g = payloadProviders.gitProvider.getStats();
   const u = payloadProviders.usageStore.getStats();
   const fx = effects.lastFrame();
@@ -832,6 +767,7 @@ export function drawRender(
     delivered,
     lanes,
     idleSince,
+    handed,
   };
 }
 
@@ -926,10 +862,9 @@ export function drawForAnswer(
   setup: RenderSetup,
   arrival: Arrival,
 ): ReturnType<typeof drawRender> {
-  return drawRequest(parts.recorder, setup.view, arrival, () => {
-    const drew = drawRender(parts, setup, ANSWERING);
-    return { ...drew, diagnostics: drew.drawn.diagnostics };
-  });
+  return drawRequest(parts.recorder, setup.view, arrival, () =>
+    drawRender(parts, setup, ANSWERING),
+  );
 }
 
 // [LAW:one-source-of-truth] A session as a lane's setup needs it: what its
