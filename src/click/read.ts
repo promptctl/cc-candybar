@@ -78,20 +78,24 @@ export function drawnClickOf(url: string): DrawnClick {
   // A dispatch carries leaf verbs; a link may name any verb the daemon has.
   const known = verb === VERB_DISPATCH ? LEAF_VERB_NAMES : VERBS;
   try {
-    const effects =
-      verb === VERB_DISPATCH
-        ? parseEffects(value).map((e) => ({
-            verb: e.verb,
-            args: decodeArgs(e.verb, e.value),
-          }))
-        : [{ verb, args: decodeArgs(verb, value) }];
-    const unknown = effects.find((e) => !known.has(e.verb));
-    return unknown === undefined
-      ? { ok: true, effects }
-      : {
-          ok: false,
-          problem: `the daemon has no verb "${unknown.verb}": ${url}`,
-        };
+    const raw =
+      verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
+    // The verb is read before its value, as the daemon reads it: a verb it
+    // has not is refused whatever its value holds.
+    const unknown = raw.find((e) => !known.has(e.verb));
+    if (unknown !== undefined) {
+      return {
+        ok: false,
+        problem: `the daemon has no verb "${unknown.verb}": ${url}`,
+      };
+    }
+    return {
+      ok: true,
+      effects: raw.map((e) => ({
+        verb: e.verb,
+        args: decodeArgs(e.verb, e.value),
+      })),
+    };
   } catch (error) {
     return {
       ok: false,

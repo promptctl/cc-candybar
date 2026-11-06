@@ -208,7 +208,8 @@ export const VERB_RANGE = "range";
 
 // [LAW:types-are-the-program] An effect to EMIT: a verb plus its raw (unencoded)
 // positional args. The wire owns all encoding — callers never percent-encode.
-// set-state's args are `[sessionId, key, value, …]`; copy/open carry one arg.
+// Every leaf verb's args lead with its session: set-state's are
+// `[sessionId, key, value, …]`, copy-text's `[sessionId, text]`.
 export interface Effect {
   readonly verb: EffectVerb;
   readonly args: readonly string[];

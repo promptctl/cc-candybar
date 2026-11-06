@@ -168,6 +168,10 @@ describe("describeLink", () => {
     expect(describeLink({ text: "x", url: dispatched }, "s")).toBe(
       `refused: the daemon has no verb "copy": ${dispatched}`,
     );
+    // Its value is never read, so a malformed escape in it is not the reason.
+    expect(describeLink({ text: "x", url: "cc-candybar://to/main/copy/100%" }, "s")).toBe(
+      'refused: the daemon has no verb "copy": cc-candybar://to/main/copy/100%',
+    );
   });
 
   test("an addressed link reads as its effects, and an outside link as opened", () => {
