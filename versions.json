@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-659",
+      "ref": "refs/pull/659/merge",
+      "sha": "e0fd433f28e73c73fb68ee14fcc22613174dbddf",
+      "timestamp": "2026-11-06T22:55:59.951Z",
+      "commits": [
+        {
+          "sha": "e0fd433f28e73c73fb68ee14fcc22613174dbddf",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T15:55:07-07:00",
+          "message": "Merge 56873614f3f25c04f5f9fdb6dec42c91f3577ceb into ff33713e3ee28648caa5b5c8c615a4187cdcc5ba\n"
+        },
+        {
+          "sha": "56873614f3f25c04f5f9fdb6dec42c91f3577ceb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T15:54:57-07:00",
+          "message": "test(error-glyph): the pipeline test's daemon end writes the version gate's real VERSION_MISMATCH reply (candybar-testing-ihvy.fvw.b78)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "ff33713e3ee28648caa5b5c8c615a4187cdcc5ba",
