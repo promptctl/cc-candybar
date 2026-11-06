@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-632",
+      "ref": "refs/pull/632/merge",
+      "sha": "b1c28d8652f57e0f08cf0407165cb4df940b7a29",
+      "timestamp": "2026-11-06T09:20:17.843Z",
+      "commits": [
+        {
+          "sha": "b1c28d8652f57e0f08cf0407165cb4df940b7a29",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T09:19:03Z",
+          "message": "Merge a794f3d17fe74a3a0230c886b6efff308ee795d3 into 537c926e6cca1e7f2bed89f42058b490482fde86\n"
+        },
+        {
+          "sha": "a794f3d17fe74a3a0230c886b6efff308ee795d3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T02:06:57-07:00",
+          "message": "fix(links): review — a template literal is read as a link's head, so a retired verb it ends on is still refused at load, and the compile holds its renderer's links where the draw reads them (candybar-gather-renderer-76bb.b2l.7q7)\n"
+        },
+        {
+          "sha": "15896d656944c240182ef91442609de36868ba0d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T01:36:30-07:00",
+          "message": "fix(links): review — a template's link verb is read by the click's own link parse, the URL handler's refusal never quotes the link, the doctor's and the verb table's words match the addressed grammar, and the protocol check reads each side once (candybar-gather-renderer-76bb.b2l.7q7)\n"
+        },
+        {
+          "sha": "620ba3d1d4dbe3739cdb009468f0811c8523f36a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T01:20:50-07:00",
+          "message": "feat(links): a click reaches the renderer that drew it, by name: links are minted as cc-candybar://to/<name>/dispatch/…, the daemon's three click intakes share one link parse and one address check, and the URL handler dials the socket the name selects (candybar-gather-renderer-76bb.b2l.7q7)\n\n- The minter takes the renderer's address first, so no link can be minted\n  without one. The name sits outside every signature: it only picks which\n  process verifies.\n- The renderer's link identity is one value, RendererLinks { to, signer },\n  carried where the signer was: the compile, the render cache, the daemon's\n  parts and the verbs' context.\n- The parser returns `to` as a name or null. Old grammars and config-spelled\n  links name none, and run where they arrive until b2l.eul and b2l.x87.\n- url-handle relays the raw link. The click request carries `url` in place\n  of verb and value. The version rule states why an in-bundle kind changes\n  shape without a bump.\n- One daemon helper refuses a link named for another renderer, on the url\n  frame, the click request and the tmux range. Every click event records\n  `to` (or `linkTo` for a range's link).\n- Swift: address.swift holds the name rule and the socket file a link\n  selects, checked before any path forms. main.swift logs the chosen file\n  publicly. address-test.swift runs in CI's macOS job and `just\n  test-url-handler`.\n- check-protocol compares TS against every mirror a row names, not only\n  the first. The Swift name rule, length, socket files, main's name and the\n  address segment are pinned. The name vectors drop \"main\": they are the\n  name rule's lists.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-635",
       "ref": "refs/pull/635/merge",
       "sha": "3d1f7248735ad9e830b5b8ad50dff6c2ac527d9c",
