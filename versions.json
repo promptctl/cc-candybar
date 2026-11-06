@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "b3a94823776445b5ab510fe52ab4c622b2f80cff",
+      "timestamp": "2026-11-06T19:05:02.188Z",
+      "commits": [
+        {
+          "sha": "b3a94823776445b5ab510fe52ab4c622b2f80cff",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T12:02:51-07:00",
+          "message": "feat(apply): no turn awaits a launch; a doctor step is an effect, and a held click error accumulates (candybar-gather-renderer-76bb.1dh.c3l) (#633)\n\n* feat(apply): no turn awaits a launch; a doctor step is an effect gathered in no turn; each click failure is its own held message (candybar-gather-renderer-76bb.1dh.c3l)\n\n* test(apply): a dispatch's refused step and its failed launch are two held failures, proven on the click path (candybar-gather-renderer-76bb.1dh.c3l)\n\n* test(doctor): the round trip's click names its renderer, as every link now does (candybar-gather-renderer-76bb.1dh.c3l)\n\n* fix(doctor): a gather that reads the whole session record is refused, so only keys read by name are stamped (candybar-gather-renderer-76bb.1dh.c3l)"
+        }
+      ]
+    },
+    {
       "version": "pr-637",
       "ref": "refs/pull/637/merge",
       "sha": "8e8bc5c3f60483440ecd9c0d8c689d0de4ee0831",
@@ -142,28 +157,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T11:56:58-07:00",
           "message": "feat(band): a switched-off band lane holds no follower process (candybar-animation-wbxz.w33)\n\nThe band mod stops its follow child on the daemon's SWITCHED_OFF answer\ninstead of keeping it alive to re-ask every 5s, and turning band (A) off\nuninstalls the mod so sessions started afterwards never load it. An\nuninstall of a mod that is not installed is the state off asks for, so it\nis said rather than thrown.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "0af5d1f4ce463b0bebbbe6a4b6107d2943900c54",
-      "timestamp": "2026-11-06T15:39:34.800Z",
-      "commits": [
-        {
-          "sha": "0af5d1f4ce463b0bebbbe6a4b6107d2943900c54",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T08:38:28-07:00",
-          "message": "feat(links): the one MouseDown1Status binding is constant text; each session carries its renderer's click (candybar-gather-renderer-76bb.b2l.5v7) (#642)\n\n* feat(links): the one MouseDown1Status binding is constant text; each session carries its renderer's click (candybar-gather-renderer-76bb.b2l.5v7)\n\nEvery renderer on a tmux server now binds the same text, so no renderer owns\nthe binding and two renderers no longer fight over it. What differs per\nrenderer (its url-handle command under its home, its name, its binding mac)\nrides on the session it draws, as @cc-candybar-click beside\n@cc-candybar-renderer. The binding runs that option on a ccb range, shows a\ntmux message where a session carries no click, and runs the user's own\nbinding otherwise.\n\nThe user's binding lives only in the binding's else-branch, read back from\nlist-keys as a command list, so the @cc-candybar-binding-prior record goes\n(the bind unsets one an older build left). Ours is recognised by shape, and\nevery one of ours chained over the user's is peeled off. The restore is one\ntmux call that tmux guards on whether any session still names a renderer,\nand it runs once per bound period.\n\nThe status-line click verb is now `range`.\n\n* fix(links): a tmux `{ … }` block is one word of the user's binding; the binding restore is a counted write (candybar-gather-renderer-76bb.b2l.5v7)\n\nA user MouseDown1Status written with command blocks was split at the `;`\ninside the braces, so the else-branch ran a broken command and the restore\nfailed with too many arguments. A word is now a string or a block, read and\nwritten back as tmux prints it, so the restored listing is the user's.\n\nThe binding restore goes through the write path and is counted in the\nwrite stat. The doc and the no-renderer message name the case that shows it:\na row an older build drew. A renderer that died leaves its click, which\nstarts its daemon again.\n\n* fix(links): the binding restore counts a session by whether it names a renderer at all; a taken-over daemon's binding is owed back (candybar-gather-renderer-76bb.b2l.5v7)\n\ntmux reads a renderer name such as `0` as false, so the restore's guard put\nthe user's binding back while renderer `0` still drew. It now tests for a\nname's presence.\n\nA daemon that takes over a dead one's layouts now owes that daemon's\nbinding a restore, even if it never binds itself. The server's binding\nstate is none, owed or bound.\n\nAn else-branch of no commands now reads as none. The doc says how a dead\nrenderer's click fails: tmux shows the failure over the pane.\n\n* fix(links): the bind lands only while a session names a renderer; `~` and a block's `;` argument round-trip (candybar-gather-renderer-76bb.b2l.5v7)\n\nThe bind now runs under the same tmux guard as the restore, so a bind still\nin flight when the shutdown restores lands on nothing, as a draw does. It\nsays which way tmux went. A restore tmux refused now says so whatever was\nlogged before it.\n\nA quoted word escapes `~`, which tmux expands even inside double quotes.\nInside a `{ … }` block a lone `\\;` is a `;` argument, not a separator.\n\nThe tmux edge's stdin parameter has no writer left, so it is gone."
-        },
-        {
-          "sha": "076adf43025869c9a3bc87d567166f7a7add59dd",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-06T14:40:38Z",
-          "message": "chore(release): set `package.json` to 1.203.0 [skip ci]\n\n## [1.203.0](https://github.com/promptctl/cc-candybar/compare/v1.202.0...v1.203.0) (2026-11-06)\n\n### Features\n\n* **facts:** a session's shell and file sources run into its facts document, and a recording replays them with nothing read or spawned (candybar-gather-renderer-76bb.6pj.d8n) ([#641](https://github.com/promptctl/cc-candybar/issues/641)) ([9c90c3b](https://github.com/promptctl/cc-candybar/commit/9c90c3b99f998a33415660abd7f7cf035941219e))\n"
         }
       ]
     }
