@@ -49,9 +49,8 @@ import { until } from "../../helpers/until";
 
 jest.setTimeout(30_000);
 
-// What can outlive a close. Enabled before the file's first launch, so it sees
-// the lifeline. `getActiveResourcesInfo` can't show this: it omits what is
-// unref'd, which is nearly every timer the daemon holds.
+// What can outlive a close. `getActiveResourcesInfo` can't show this: it omits
+// what is unref'd, which is nearly every timer the daemon holds.
 const WATCHED = new Set([
   "Timeout",
   "FSEVENTWRAP",
@@ -59,18 +58,14 @@ const WATCHED = new Set([
   "PROCESSWRAP",
   "PIPEWRAP",
 ]);
-// [LAW:one-source-of-truth] Only what the case's own work arms is the daemon's
-// to end: the hook sees every timer in the worker, and a provider another
-// file left open (a period re-arms after every pass) keeps arming its own, so
-// a resource counts when it was made from inside a case that asked for it.
-// A resource carries the store of whatever made it, and no store crosses from
-// a leaked chain into this one.
+// [LAW:no-shared-mutable-globals] The hook sees every timer in the worker, and
+// a provider another file left open keeps arming its own. A resource counts
+// only when the case's own async work made it: it carries that work's store.
 const ownWork = new AsyncLocalStorage<true>();
 const asOwnWork = (body: () => Promise<void>) => () => ownWork.run(true, body);
 const live = new Map<number, Error>();
 // From a close's return on: `init` and `before` run as the timer is armed and
 // as it fires, where `destroy` lands some turns later. Null until then.
-let baseline = new Set<number>();
 let afterClose: { armed: Error[]; fired: Error[] } | null = null;
 const resources = createHook({
   init: (id, type) => {
@@ -81,9 +76,7 @@ const resources = createHook({
   },
   before: (id) => {
     const origin = live.get(id);
-    if (origin?.message === "Timeout" && !baseline.has(id)) {
-      afterClose?.fired.push(origin);
-    }
+    if (origin?.message === "Timeout") afterClose?.fired.push(origin);
   },
   destroy: (id) => {
     live.delete(id);
@@ -352,8 +345,6 @@ describe("the daemon is a value", () => {
       root: { h: ['mark'] },
     }`);
 
-    const settled = [...live.keys()];
-    baseline = new Set(settled);
     const daemon = construct();
     daemon.arm();
 
@@ -404,8 +395,7 @@ describe("the daemon is a value", () => {
     await midWait;
 
     // Turns, not timers: a wait of this test's own would be in the record.
-    const leftover = () =>
-      [...live].filter(([id]) => !settled.includes(id)).map(([, held]) => held);
+    const leftover = () => [...live.values()];
     const quietBy = Date.now() + 5_000;
     while (leftover().length > 0 && Date.now() < quietBy) {
       await new Promise((turn) => setImmediate(turn));

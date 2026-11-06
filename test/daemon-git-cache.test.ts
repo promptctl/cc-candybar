@@ -137,11 +137,9 @@ class StubGitService extends GitService {
   }
 }
 
-// [LAW:effects-at-boundaries] Every provider a case builds, closed after it:
-// a held repo's period re-arms after every pass, so a provider a case never
-// closed (or closed after an assertion threw) keeps passing in the worker
-// and its timers land in whatever file runs next, among them the daemon
-// value's close case, which reads every timer the worker arms.
+// [LAW:no-shared-mutable-globals] A held repo's period re-arms after every
+// pass, so a provider left open lands its timers in whichever file runs next
+// in the worker. Every provider a case builds is closed after it.
 const built: GitDataProvider[] = [];
 
 function makeCache(
@@ -227,7 +225,16 @@ async function tick(times = 5): Promise<void> {
 
 afterEach(() => {
   jest.useRealTimers();
-  for (const svc of built.splice(0)) svc.close();
+  // One provider failing to close must not leave the rest open.
+  const failures: unknown[] = [];
+  for (const svc of built.splice(0)) {
+    try {
+      svc.close();
+    } catch (failure) {
+      failures.push(failure);
+    }
+  }
+  if (failures.length > 0) throw failures[0];
 });
 
 describe("GitDataProvider", () => {

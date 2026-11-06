@@ -1123,10 +1123,13 @@ describe("GitDataProvider + watchers integration", () => {
     const repo = makeRepo();
     const inner = new StubInner(repo);
     const svc = new GitDataProvider({ clock: systemTimekeeper, inner });
-    await laneOutcome(svc.declare(new Holds(), repo, {}));
-    expect(svc.getStats().watchers).toBe(1);
-    svc.close();
+    try {
+      await laneOutcome(svc.declare(new Holds(), repo, {}));
+      expect(svc.getStats().watchers).toBe(1);
+    } finally {
+      svc.close();
+      rmrf(repo);
+    }
     expect(svc.getStats().watchers).toBe(0);
-    rmrf(repo);
   });
 });
