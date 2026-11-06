@@ -1,3 +1,9 @@
+## [1.208.2](https://github.com/promptctl/cc-candybar/compare/v1.208.1...v1.208.2) (2026-11-06)
+
+### Bug Fixes
+
+* **facts:** a replay draws the lane feeds and diagnostics the live draw was handed, and the frames a lane drew (candybar-gather-renderer-76bb.6pj.0se) ([#649](https://github.com/promptctl/cc-candybar/issues/649)) ([86bb0ba](https://github.com/promptctl/cc-candybar/commit/86bb0ba47f70ca3b852845b916d66bb727486aae))
+
 ## [1.208.1](https://github.com/promptctl/cc-candybar/compare/v1.208.0...v1.208.1) (2026-11-06)
 
 ### Bug Fixes
