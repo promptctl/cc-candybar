@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-627",
+      "ref": "refs/pull/627/merge",
+      "sha": "25d2c741074bcc3675dd18943b3714715cb8512b",
+      "timestamp": "2026-11-06T05:38:52.509Z",
+      "commits": [
+        {
+          "sha": "25d2c741074bcc3675dd18943b3714715cb8512b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T22:37:52-07:00",
+          "message": "Merge f7416c94141db4d1678ca4f9936b60fac3e88f3f into 9b6790b0d73afbdd6c683accf7b693cffe16c89e\n"
+        },
+        {
+          "sha": "f7416c94141db4d1678ca4f9936b60fac3e88f3f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T22:37:33-07:00",
+          "message": "feat(apply): a request takes its turn; its two writes are one batch in the request arm, and the answered mark is an event (candybar-gather-renderer-76bb.1dh.1ql)\n\nThe request arm records what the client said (client-hints, render-origin)\nas one setBatch inside a journal turn and draws once the turn is over, so a\nrequest that arrives while a click's turn is held draws the click whole,\nnever its first write beside the request's hints. The turn waits behind\nturns alone: a click's head gather holds none. The click error's answered\nmark, the one other request-path write, is an `answered` event whose arm\ntakes a turn; the delivery edge applies it as the performer applies\neffect-done, with a refusal said in the log.\n\nThe render line gains renderer=main, factsSeq, turnWait and revision; the\nrequest's apply line stays null, since the render event is its one record.\nThe daemon's draw is a port on the request arm's parts, so the arm is\ndriven below the daemon. The daemon's adapters gain `sessionWrites`: the\nproduction daemon writes the store, every daemon built in a worker writes\nthrough the write-outside-turn instrument. A run's ending and a lane\nsetup's failure still write the store outside a turn (the next story).\n\nTests: test/request-turn.test.ts races a request against a click whose\ndoctor gathers inside its turn under a held clock, and against one parked\nin its head gather; apply-effects covers the answered mark's turn. The\nboot ratchet forbids a new in-worker case, so the race lives at the root\nover Apply and the real journal turns.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-626",
       "ref": "refs/pull/626/merge",
       "sha": "d22481de4fdd38e6e5ef02202226886b7548b784",
