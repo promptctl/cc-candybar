@@ -56,14 +56,15 @@ export function tmuxPaneOf(
   return { kind: "pane", hint: tmux };
 }
 
+// [LAW:parse-dont-validate] Takes a pane, never a maybe: a caller that holds
+// the client's hint folds it through `tmuxPaneOf` first, where a session with
+// no pane is refused before anything is read. The read here is the guard for
+// the typing, and runs beside it so nothing lands between them.
 export async function typeSlash(
   edge: ClaudeInputEdge,
-  hint: ClientHints["tmux"],
+  tmux: TmuxHint,
   line: SlashLine,
 ): Promise<TypeResult> {
-  const pane = tmuxPaneOf(hint);
-  if (pane.kind === "refused") return pane;
-  const tmux = pane.hint;
   const state = promptState(await edge.read(tmux));
   if (state.kind !== "ready") {
     return { kind: "refused", reason: REFUSALS[state.kind] };

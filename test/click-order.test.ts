@@ -26,7 +26,6 @@ import {
 } from "../src/click/wire";
 import { ClickAbandoned } from "../src/daemon/verb-error";
 import { systemLauncher } from "../src/proc/system-launcher";
-import { type Launcher, type LaunchResult } from "../src/proc/launch";
 import { productionEdge, type DoctorEdge } from "../src/doctor/edge";
 import { instantOf } from "../src/utils/instant";
 import {
@@ -36,7 +35,7 @@ import {
   HEALTHY_INSTALL_EDGE,
   noManagedSettings,
 } from "./helpers/doctor-facts";
-import { recordRender, testVerbContext } from "./helpers/click";
+import { applyClick, recordRender, testVerbContext } from "./helpers/click";
 import { EMPTY_DEFAULT, parseAndValidate } from "./helpers/parse-and-validate";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
@@ -49,7 +48,6 @@ const IDLE_SCREEN = ["⏺ Done.", "", "", `${RULE} probe ─`, "❯ ", RULE, "  
 const NONCE = "01234567-89ab-cdef-0123-456789abcdef";
 const A = "session-a";
 const B = "session-b";
-const LAUNCHED = { ok: true, stdout: "", stderr: "", exitCode: 0 } as LaunchResult;
 type Load = ReturnType<DoctorEdge["loadConfig"]>;
 const LOAD = { layers: [], error: null, warning: null, unused: [], config: EMPTY_DEFAULT } as unknown as Load;
 // As production: a reload that fails keeps the config it had.
@@ -91,8 +89,7 @@ function setup(over: Partial<DoctorEdge> = {}) {
   const healthy = healthyDaemonEdge().daemons;
   const gathers: string[] = [];
   const ctx: VerbContext = {
-    ...testVerbContext(sessionState, undefined, EMPTY_DEFAULT),
-    journalTurns: turns,
+    ...testVerbContext(sessionState, undefined, EMPTY_DEFAULT, undefined, turns),
     log: (_level, line) => logged.push(line),
     doctorStores: emptyStores(),
     doctor: edge({
@@ -117,7 +114,19 @@ function setup(over: Partial<DoctorEdge> = {}) {
     return VERBS.get(VERB_DISPATCH)!(url.slice(url.lastIndexOf("/") + 1), c);
   };
   const reports = () => logged.filter((l) => l.startsWith("doctor: "));
-  return { sessionState, logged, turns, held, gathers, ctx, toggled, doctor, toggle, doDoctorThen, reports };
+  // A click of `sid` that holds the turn while `parked` is: a doctor run
+  // behind a write gathers inside the turn, the one await a handler has left.
+  const holdTurn = (sid: string, parked: Promise<unknown> = held.wait) => {
+    const url = effectsUrl([
+      { verb: VERB_TOOLBAR_TOGGLE, args: [sid] },
+      { verb: VERB_DOCTOR_RUN, args: [sid] },
+    ]);
+    return VERBS.get(VERB_DISPATCH)!(url.slice(url.lastIndexOf("/") + 1), {
+      ...ctx,
+      doctor: edge({ daemons: () => parked.then(healthy) }),
+    });
+  };
+  return { sessionState, logged, turns, held, gathers, ctx, toggled, doctor, toggle, doDoctorThen, reports, holdTurn };
 }
 
 describe("a gather holds no turn", () => {
@@ -185,20 +194,18 @@ describe("a gather holds no turn", () => {
   });
 
   test("doctor-probe answers at once with the turn held", async () => {
-    const { ctx, turns } = setup();
-    const parked = gate();
-    const launcher = { ...ctx.launcher, launch: () => parked.wait.then(() => LAUNCHED) } as Launcher;
-    const holding = VERBS.get(VERB_COPY)!("x", { ...ctx, launcher });
+    const { ctx, turns, held, holdTurn } = setup();
+    const holding = holdTurn(B);
     await drain();
-    expect(turns.getStats().holder).toBe(VERB_COPY);
+    expect(turns.getStats().holder).toBe(VERB_DISPATCH);
     await VERBS.get(VERB_DOCTOR_PROBE)!(NONCE, {
       ...ctx,
       asker: { ...ctx.asker, gone: () => true },
       arrival: { via: "link", delivery: { kind: "cli" } },
     });
     expect(ctx.probes.list().map((p) => p.nonce)).toEqual([NONCE]);
-    expect(turns.getStats().holder).toBe(VERB_COPY);
-    parked.open();
+    expect(turns.getStats().holder).toBe(VERB_DISPATCH);
+    held.open();
     await holding;
   });
 });
@@ -257,11 +264,11 @@ describe("one session's order", () => {
   });
 
   test("a `do` of doctor then toggle whose client leaves in the turn wait, after its gather, is refused", async () => {
-    const { held, doDoctorThen, ctx, toggled, reports } = setup();
+    const { held, doDoctorThen, ctx, toggled, reports, holdTurn } = setup();
     const parked = gate();
     let gone = false;
-    const launcher = { ...ctx.launcher, launch: () => parked.wait.then(() => LAUNCHED) } as Launcher;
-    const holding = VERBS.get(VERB_COPY)!("x", { ...ctx, launcher });
+    // Another session holds the turn, parked in its own gather.
+    const holding = holdTurn(B, parked.wait);
     await drain();
     const a = doDoctorThen({ ...ctx, asker: { ...ctx.asker, gone: () => gone } });
     held.open();
@@ -271,7 +278,8 @@ describe("one session's order", () => {
     parked.open();
     await holding;
     await refused;
-    expect(reports()).toEqual([]);
+    expect(reports()).toHaveLength(1);
+    expect(reports()[0]).toContain(`(session=${B})`);
     expect(toggled(A)).toBeNull();
   });
 });
@@ -373,7 +381,7 @@ test("a `do` of doctor then toggle with a failed probe still toggles and shows t
   expect(sessionState.get(A, "click.error")).toContain("ps broke");
 });
 
-test("a slash click re-checks nothing outside the turn: read and typing share it", async () => {
+test("a slash click's pane read and typing run together, after its turn", async () => {
   const { ctx, turns, sessionState } = setup();
   sessionState.set(
     A,
@@ -386,43 +394,37 @@ test("a slash click re-checks nothing outside the turn: read and typing share it
     ALLOWED,
     DEFAULT_DSL_CONFIG,
   );
-  const holders: Array<string | null> = [];
-  await VERBS.get(VERB_SLASH)!(encodeSegments([A, "/compact"]), {
-    ...ctx,
-    configFor: () => config,
-    claudeInput: {
-      read: async () => {
-        holders.push(turns.getStats().holder);
-        return { inMode: false, screen: IDLE_SCREEN };
-      },
-      type: async () => {
-        holders.push(turns.getStats().holder);
-        return { kind: "typed" };
+  const seen: string[] = [];
+  const typing = gate();
+  const { performed } = await applyClick(
+    `cc-candybar://${VERB_SLASH}/${encodeSegments([A, "/compact"])}`,
+    {
+      ...ctx,
+      configFor: () => config,
+      claudeInput: {
+        read: async () => {
+          seen.push(`read holder=${turns.getStats().holder}`);
+          return { inMode: false, screen: IDLE_SCREEN };
+        },
+        type: async () => {
+          seen.push(`type holder=${turns.getStats().holder}`);
+          await typing.wait;
+          return { kind: "typed" };
+        },
       },
     },
-  });
-  expect(holders).toEqual([VERB_SLASH, VERB_SLASH]);
-});
-
-test("a watcher reload during a parked pbcopy starts no `by=click` setup", async () => {
-  const { ctx } = setup();
-  const parked = gate();
-  const quiet = { band: false } as never as ReturnType<VerbContext["lanes"]["of"]>;
-  const moved = { band: true } as never as typeof quiet;
-  let now = quiet;
-  const moves: unknown[][] = [];
-  const launcher = { ...ctx.launcher, launch: () => parked.wait.then(() => LAUNCHED) } as Launcher;
-  const copying = VERBS.get(VERB_COPY_DIAGNOSTIC)!(encodeSegments([A, "request", "k"]), {
-    ...ctx,
-    launcher,
-    diagnosticCopy: () => "text",
-    lanes: { of: () => now, clicked: (...args) => moves.push(args) },
-  });
+  );
+  // The click has answered with the typing still under way, and both the read
+  // and the typing ran in no turn: the read guards the typing, so nothing of
+  // the daemon's lands between them.
+  let reported = false;
+  void performed.then(() => (reported = true));
   await drain();
-  now = moved;
-  parked.open();
-  await copying;
-  expect(moves).toEqual([[A, moved, moved]]);
+  expect(seen).toEqual(["read holder=null", "type holder=null"]);
+  expect(reported).toBe(false);
+  typing.open();
+  await performed;
+  expect(reported).toBe(true);
 });
 
 describe("the idle clock", () => {
@@ -522,7 +524,7 @@ test("the click path counts a click pending from arrival, through a refusal, and
   held.open();
   await sent;
   expect(idle.getStats().pending).toBe(0);
-  expect(events[0]).toMatch(/ gather=\d+ms /);
+  expect(events.find((l) => l.startsWith("click "))).toMatch(/ gather=\d+ms /);
   await send(() => true);
   expect(idle.getStats().pending).toBe(0);
   idle.dispose();

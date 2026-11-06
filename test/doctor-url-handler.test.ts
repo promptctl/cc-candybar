@@ -402,8 +402,9 @@ describe("the daemon's side of the round trip", () => {
         }),
       },
     };
-    const click = async (verb: string, value: string): Promise<void> =>
+    const click = async (verb: string, value: string): Promise<void> => {
       await VERBS.get(verb)!(value, ctx);
+    };
     return { sessionState, probes, logs, click };
   }
 

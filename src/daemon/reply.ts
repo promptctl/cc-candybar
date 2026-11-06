@@ -379,7 +379,7 @@ export async function replyTo(
           },
           parts,
         ).then(
-          ({ resp, motion, clickShown, pipeShown, delivered }) => {
+          ({ answer: { resp, motion, clickShown, pipeShown, delivered } }) => {
             sighted(checked.req, motion);
             return {
               outcome: { kind: "ok" } as const,

@@ -9,7 +9,8 @@ import { SessionState } from "../src/daemon/session-state";
 import { VERBS, VERB_NAMES, BadVerbArgs } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
 import { encodeSegments, VERB_STEP_STATE, VERB_APPLY_UPDATE } from "../src/click/wire";
-import { recordRender, testVerbContext } from "./helpers/click";
+import { applyClick, clickUrl, recordRender, testVerbContext } from "./helpers/click";
+import { lastClickError } from "../src/daemon/click-error";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 import type { DslConfig } from "../src/config/dsl-types";
 
@@ -138,33 +139,45 @@ describe("click protocol", () => {
 
 describe("apply-update verb", () => {
   // [LAW:effects-at-boundaries] The wire carries only the session id; the
-  // handler's whole job is reaching the daemon's update watch through ctx.
-  test("a session id reaches ctx.applyUpdate once; a missing or unsafe one is BadVerbArgs and never does", async () => {
-    let calls = 0;
+  // handler's whole job is describing the act, which the performer reaches
+  // through ctx once the click has answered.
+  const url = (sid: string) =>
+    `cc-candybar://${VERB_APPLY_UPDATE}/${encodeURIComponent(sid)}`;
+
+  test("a session id reaches ctx.applyUpdate once, outside the turn and unawaited by the click; a missing or unsafe one is BadVerbArgs and never does", async () => {
+    const holders: Array<string | null> = [];
+    let release = (): void => {};
+    const acting = new Promise<void>((resolve) => (release = resolve));
     const ctx: VerbContext = {
       ...testVerbContext(new SessionState()),
-      applyUpdate: async () => {
-        calls++;
+      applyUpdate: () => {
+        holders.push(ctx.journalTurns.getStats().holder);
+        return acting;
       },
     };
-    const handler = VERBS.get(VERB_APPLY_UPDATE)!;
-    await handler(encodeURIComponent("sess-1"), ctx);
-    expect(calls).toBe(1);
-    await expect(handler("", ctx)).rejects.toThrow(BadVerbArgs);
-    await expect(handler(encodeURIComponent("../etc"), ctx)).rejects.toThrow(BadVerbArgs);
-    expect(calls).toBe(1);
+    // The click answers while the act is still running, and the act ran in
+    // no turn.
+    const { performed } = await applyClick(url("sess-1"), ctx);
+    expect(holders).toEqual([null]);
+    release();
+    await performed;
+    await expect(applyClick(url(""), ctx)).rejects.toThrow(BadVerbArgs);
+    await expect(applyClick(url("../etc"), ctx)).rejects.toThrow(BadVerbArgs);
+    expect(holders).toEqual([null]);
   });
 
-  test("an act refused rejects through the verb, for the click to answer with", async () => {
+  test("an act refused is the effect's failure: held for the session's bar, with the act's own words", async () => {
+    const sessionState = new SessionState();
     const ctx: VerbContext = {
-      ...testVerbContext(new SessionState()),
+      ...testVerbContext(sessionState),
       applyUpdate: async () => {
         throw new BadVerbArgs("apply-update: already rebuilding…");
       },
     };
-    await expect(
-      VERBS.get(VERB_APPLY_UPDATE)!(encodeURIComponent("sess-1"), ctx),
-    ).rejects.toThrow("already rebuilding");
+    await clickUrl(url("sess-1"), ctx);
+    expect(lastClickError(sessionState, "sess-1")?.text).toBe(
+      "apply-update: already rebuilding…",
+    );
   });
 });
 
@@ -241,8 +254,9 @@ describe("step-state handler", () => {
     recordRender(sessionState, "s1");
     const ctx: VerbContext = testVerbContext(sessionState, undefined, config);
     const step = VERBS.get(VERB_STEP_STATE)!;
-    const click = async (by: number): Promise<void> =>
+    const click = async (by: number): Promise<void> => {
       await step(encodeSegments(["s1", KEY, String(by)]), ctx);
+    };
     return { sessionState, ctx, click };
   }
   const setup = () => session(stepper("14"));

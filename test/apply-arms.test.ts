@@ -24,6 +24,7 @@ test("the arm table has one arm per kind of event, and no other", () => {
     request: true,
     click: true,
     "menu-idle": true,
+    "effect-done": true,
   };
   expect(Object.keys(ARMS).sort()).toEqual(Object.keys(kinds).sort());
 });

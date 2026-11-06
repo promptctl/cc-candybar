@@ -44,10 +44,15 @@ function setup() {
   };
   // The update notice's dismissal is the daemon's own key, not a config's.
   const dispose = ctx.gates.state.register(UPDATE_DISMISSED_KEY, ["1.2.3"]);
-  const set = async (...pairs: string[]): Promise<void> =>
+  const set = async (...pairs: string[]): Promise<void> => {
     await VERBS.get(VERB_SET_STATE)!(encodeSegments(["s1", ...pairs]), ctx);
-  const back = async (): Promise<void> => await VERBS.get(VERB_BACK)!(encodeSegments(["s1"]), ctx);
-  const undo = async (): Promise<void> => await VERBS.get(VERB_UNDO)!(encodeSegments(["s1"]), ctx);
+  };
+  const back = async (): Promise<void> => {
+    await VERBS.get(VERB_BACK)!(encodeSegments(["s1"]), ctx);
+  };
+  const undo = async (): Promise<void> => {
+    await VERBS.get(VERB_UNDO)!(encodeSegments(["s1"]), ctx);
+  };
   return {
     sessionState,
     // What the bar's ◁ counts: measured against the gate of the config the

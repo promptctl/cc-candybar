@@ -1,6 +1,7 @@
-// Journals across an awaited handler. A click is a real `dispatch` parked on
-// its `copy` launch; the click-path cases drive `replyTo`, the daemon's real
-// click arm.
+// Journals across an awaited handler. A click is a real `dispatch` parked in
+// its turn on a doctor gather (the one await a handler has left, now that a
+// launch is an effect performed after the turn); the click-path cases drive
+// `replyTo`, the daemon's real click arm.
 
 import { JournalTurns } from "../src/daemon/journal-turns";
 import { MenuIdle } from "../src/daemon/menu-idle";
@@ -8,6 +9,7 @@ import type { DaemonParts } from "../src/daemon/daemon-parts";
 import { replyTo } from "../src/daemon/reply";
 import { DaemonClosing } from "../src/daemon/verb-error";
 import { SessionState } from "../src/daemon/session-state";
+import { SettingsHistory } from "../src/daemon/settings-history";
 import { closeIdleMenus, VERBS, type VerbContext } from "../src/daemon/verbs";
 import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
 import {
@@ -19,14 +21,14 @@ import {
   effectsUrl,
   encodeSegments,
 } from "../src/click/wire";
-import type { Launcher, LaunchResult } from "../src/proc/launch";
+import type { Launcher } from "../src/proc/launch";
 import { instantOf } from "../src/utils/instant";
 import { systemLauncher } from "../src/proc/system-launcher";
 import { DoctorBusy } from "../src/doctor/busy";
 import type { DoctorEdge } from "../src/doctor/edge";
 import { emptyStores, healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_INSTALL_EDGE } from "./helpers/doctor-facts";
 import { VERB_DOCTOR_RUN } from "../src/click/wire";
-import { recordRender, testVerbContext } from "./helpers/click";
+import { clickUrl, recordRender, testVerbContext } from "./helpers/click";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 import { systemTimekeeper } from "../src/time";
 
@@ -39,12 +41,34 @@ function gate(): { wait: Promise<void>; open: () => void } {
   return { wait, open };
 }
 
-const LAUNCHED: LaunchResult = {
-  ok: true,
-  stdout: "",
-  stderr: "",
-  exitCode: 0,
-} as LaunchResult;
+const edge = (over: Partial<DoctorEdge>): DoctorEdge =>
+  ({
+    install: HEALTHY_INSTALL_EDGE,
+    ...healthyDaemonEdge(),
+    ...healthyDataEdge(),
+    ...noManagedSettings(),
+    loadConfig: () => ({ layers: [], error: null, warning: null, unused: [], config: EMPTY_DEFAULT }),
+    probeTmux: async () => ({ kind: "failed", reason: "no tmux" }),
+    ...over,
+  }) as DoctorEdge;
+
+// A doctor run after another step gathers inside the turn: the daemons probe
+// is where it parks.
+const parkedEdge = (parked: Promise<unknown>): DoctorEdge =>
+  edge({ daemons: () => parked.then(() => healthyDaemonEdge().daemons()) });
+
+// A click of another session that holds the turn while `parked` is.
+const OTHER = "s2";
+function holdTurn(ctx: VerbContext, parked: Promise<unknown>): Promise<void> {
+  const url = effectsUrl([
+    { verb: VERB_SET_STATE, args: [OTHER, "theme", "nord"] },
+    { verb: VERB_DOCTOR_RUN, args: [OTHER] },
+  ]);
+  return VERBS.get(VERB_DISPATCH)!(url.slice(url.lastIndexOf("/") + 1), {
+    ...ctx,
+    doctor: parkedEdge(parked),
+  }).then(() => undefined);
+}
 
 function parkedClick(
   ctx: VerbContext,
@@ -54,33 +78,40 @@ function parkedClick(
 ): Promise<void> {
   const url = effectsUrl([
     { verb: VERB_SET_STATE, args: [SID, "theme", theme] },
-    { verb: VERB_COPY, args: ["x"] },
+    { verb: VERB_DOCTOR_RUN, args: [SID] },
     { verb: VERB_SET_STATE, args: [SID, "endcaps", style] },
   ]);
-  const launcher = {
-    ...ctx.launcher,
-    launch: () => parked.then(() => LAUNCHED),
-  } as Launcher;
   return VERBS.get(VERB_DISPATCH)!(url.slice(url.lastIndexOf("/") + 1), {
     ...ctx,
-    launcher,
-  });
+    doctor: parkedEdge(parked),
+  }).then(() => undefined);
 }
 
-function setup() {
+// `rawHistory`: a history over the store itself, outside the write-in-turn
+// instrument, for a case that undoes after the turns have closed.
+function setup({ rawHistory = false } = {}) {
   const sessionState = new SessionState();
-  recordRender(sessionState, SID);
+  for (const sid of [SID, OTHER]) {
+    recordRender(sessionState, sid);
+    sessionState.set(sid, SESSION_CLIENT_HINTS_KEY, "{}");
+  }
   const logged: string[] = [];
   const turns = new JournalTurns({
     log: (_level, msg) => logged.push(msg),
     monotonic: () => systemTimekeeper.monotonic(),
   });
   const ctx: VerbContext = {
-    ...testVerbContext(sessionState, undefined, EMPTY_DEFAULT),
-    journalTurns: turns,
+    ...testVerbContext(
+      sessionState,
+      rawHistory ? new SettingsHistory(sessionState, () => {}) : undefined,
+      EMPTY_DEFAULT,
+      undefined,
+      turns,
+    ),
     log: (_level, msg) => logged.push(msg),
+    doctorStores: emptyStores(),
   };
-  // A click writing `theme`, parked on `parked` in a launch before it writes
+  // A click writing `theme`, parked on `parked` in a gather before it writes
   // `style`.
   const click = (theme: string, style: string, parked: Promise<unknown>) =>
     parkedClick(ctx, theme, style, parked);
@@ -109,7 +140,7 @@ describe("journals take turns", () => {
     expect(sessionState.get(SID, "theme")).toBe("dracula");
     expect(sessionState.get(SID, "endcaps")).toBe("powerline");
     expect(undoDepth(ctx)).toBe(2);
-    ctx.history.undo(SID);
+    await VERBS.get(VERB_UNDO)!(encodeSegments([SID]), ctx);
     expect(sessionState.get(SID, "theme")).toBe("nord");
     expect(sessionState.get(SID, "endcaps")).toBe("plain");
   });
@@ -138,7 +169,7 @@ describe("the idle close decides in its turn", () => {
     const idle = new MenuIdle({ clock: systemTimekeeper,
       now: () => instantOf(new Date(now * 1000)),
       close: async (sid, closing) => {
-        const running = closeIdleMenus(sid, closing, ctx);
+        const running = closeIdleMenus(sid, closing, ctx).then(() => {});
         fired.push(running);
         return running;
       },
@@ -164,13 +195,7 @@ describe("the idle close decides in its turn", () => {
     m.idle.observe(SID, m.at(), true, 30);
     const held = gate();
     // Another session holds the turn past this session's deadline.
-    const other = VERBS.get(VERB_COPY)!("x", {
-      ...ctx,
-      launcher: {
-        ...ctx.launcher,
-        launch: () => held.wait.then(() => LAUNCHED),
-      } as Launcher,
-    });
+    const other = holdTurn(ctx, held.wait);
     await drain();
     m.advance(30);
     expect(m.fired).toHaveLength(1);
@@ -189,13 +214,7 @@ describe("the idle close decides in its turn", () => {
     const m = idleOver(ctx);
     const held = gate();
     m.idle.observe(SID, m.at(), true, 30);
-    const other = VERBS.get(VERB_COPY)!("x", {
-      ...ctx,
-      launcher: {
-        ...ctx.launcher,
-        launch: () => held.wait.then(() => LAUNCHED),
-      } as Launcher,
-    });
+    const other = holdTurn(ctx, held.wait);
     await drain();
     m.advance(30);
     for (let i = 0; i < 256; i++) m.idle.clicked(`other${i}`, m.at());
@@ -226,7 +245,9 @@ describe("the idle close decides in its turn", () => {
 });
 
 test("a navigation commit that throws leaves the settings journal committed", async () => {
-  const { sessionState, ctx } = setup();
+  // Every navigation commit throws here, an undo click's too, so the history
+  // is read back directly, over the store itself.
+  const { sessionState, ctx } = setup({ rawHistory: true });
   const begin = ctx.navigation.begin.bind(ctx.navigation);
   jest.spyOn(ctx.navigation, "begin").mockImplementation((store) => ({
     ...begin(store),
@@ -256,7 +277,7 @@ test("a verb stamps its session's landing, though its handler threw", async () =
 
 describe("close", () => {
   test("a click in flight stays undoable as one step, its verb logged, and is not committed again", async () => {
-    const { sessionState, ctx, turns, logged, click } = setup();
+    const { sessionState, ctx, turns, logged, click } = setup({ rawHistory: true });
     const held = gate();
     const cut = click("nord", "plain", held.wait);
     await drain();
@@ -267,6 +288,7 @@ describe("close", () => {
     await expect(cut).rejects.toBeInstanceOf(DaemonClosing);
     expect(sessionState.get(SID, "endcaps")).toBeNull();
     expect(undoDepth(ctx)).toBe(1);
+    // The turns are closed, so the history is read back directly.
     ctx.history.undo(SID);
     expect(sessionState.get(SID, "theme")).toBeNull();
   });
@@ -419,17 +441,6 @@ test("stats name the holder and what waits", async () => {
 });
 
 describe("a doctor click", () => {
-  const edge = (over: Partial<DoctorEdge>): DoctorEdge =>
-    ({
-      install: HEALTHY_INSTALL_EDGE,
-      ...healthyDaemonEdge(),
-      ...healthyDataEdge(),
-      ...noManagedSettings(),
-      loadConfig: () => ({ layers: [], error: null, advisories: [], config: EMPTY_DEFAULT }),
-      probeTmux: async () => ({ kind: "failed", reason: "no tmux" }),
-      ...over,
-    }) as DoctorEdge;
-
   test("cut during its probes files nothing", async () => {
     const { sessionState, ctx, turns } = setup();
     sessionState.set(SID, SESSION_CLIENT_HINTS_KEY, "{}");
@@ -466,18 +477,22 @@ describe("a doctor click", () => {
 });
 
 describe("a click's real launch", () => {
-  test("hung, it times out and gives the turn back", async () => {
-    const { ctx, turns } = setup();
+  const COPY = `cc-candybar://${VERB_COPY}/x`;
+
+  test("hung, it times out, holding no turn, and its effect says so", async () => {
+    const { ctx, turns, logged } = setup();
     const launcher = systemLauncher({ inherited: process.env }, systemTimekeeper);
     const hung = {
       ...launcher,
-      launch: (opts: Parameters<Launcher["launch"]>[0]) =>
-        launcher.launch({ ...opts, bin: "/bin/sleep", args: ["30"], timeoutMs: 100, stdinInput: undefined }),
+      launch: (opts: Parameters<Launcher["launch"]>[0]) => {
+        expect(turns.getStats().holder).toBeNull();
+        return launcher.launch({ ...opts, bin: "/bin/sleep", args: ["30"], timeoutMs: 100, stdinInput: undefined });
+      },
     } as Launcher;
-    await expect(
-      VERBS.get(VERB_COPY)!("x", { ...ctx, launcher: hung }),
-    ).rejects.toThrow(/pbcopy failed/);
-    expect(turns.getStats().holder).toBeNull();
+    await clickUrl(COPY, { ...ctx, launcher: hung });
+    expect(logged.filter((l) => l.startsWith("apply kind=effect-done"))).toEqual([
+      expect.stringMatching(/ effect=launch:pbcopy outcome=failed said="pbcopy failed \(timed out/),
+    ]);
   });
 
   test("a setsid descendant holding stdout leaves the loop answering while it lives", async () => {
@@ -492,7 +507,7 @@ describe("a click's real launch", () => {
     let ticks = 0;
     const ticking = setInterval(() => ticks++, 10);
     const started = performance.now();
-    await VERBS.get(VERB_COPY)!("x", { ...ctx, launcher: holder });
+    await clickUrl(COPY, { ...ctx, launcher: holder });
     clearInterval(ticking);
     expect(performance.now() - started).toBeLessThan(2500);
     expect(ticks).toBeGreaterThan(0);

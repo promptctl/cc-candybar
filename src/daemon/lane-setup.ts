@@ -340,11 +340,11 @@ async function installBand(
   };
   await edge.claude(["plugin", "marketplace", "add", checkout], facts);
   await edge.claude(["plugin", "install", BAND_PLUGIN], facts);
-  const typed = await typeSlash(
-    edge.claudeInput,
-    session.hints.tmux,
-    RELOAD_PLUGINS,
-  );
+  const pane = tmuxPaneOf(session.hints.tmux);
+  const typed =
+    pane.kind === "refused"
+      ? pane
+      : await typeSlash(edge.claudeInput, pane.hint, RELOAD_PLUGINS);
   if (typed.kind === "refused") {
     throw new Error(
       `the band mod is installed, but /reload-plugins was not typed: ${typed.reason} — or type /reload-plugins yourself`,

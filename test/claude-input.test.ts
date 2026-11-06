@@ -264,7 +264,11 @@ describe("a slash click", () => {
       ],
     ]);
     expect(fs.readFileSync(path.join(dir, "stdin"), "utf8")).toBe("/model opus");
-    expect(rt.logged).toContain("slash: typed /model opus into %7 (session=s1)");
+    // The typing is the click's effect: its apply line names the pane.
+    expect(rt.logged.filter((l) => l.startsWith("apply "))).toEqual([
+      expect.stringMatching(/^apply kind=click verb=dispatch sid=s1 effects="type-slash:\/model opus" revision=\d+$/),
+      expect.stringMatching(/^apply kind=effect-done verb=dispatch sid=s1 effect="type-slash:\/model opus" outcome=ok said="typed into %7" turnWait=\d+ms effects=- revision=\d+$/),
+    ]);
   });
 
   test("a line ending in `;` is typed whole: tmux never parses it as a separator", async () => {
@@ -275,19 +279,24 @@ describe("a slash click", () => {
     expect(invocations()[1]).not.toContain("/compact keep the api;");
   });
 
+  // A refusal the pane itself gives is the typing effect's outcome: the click
+  // has answered by then, and the bar shows it as the held click error.
   test("a double-click types once: the second is refused in the bar, typing nothing", async () => {
     serve(SCREENS.idle);
     const rt = runtime(HINT);
     await clickUrl(rt.urls[0]!, rt.ctx);
-    await expect(clickUrl(rt.urls[0]!, rt.ctx)).rejects.toThrow(/typed a command moments ago/);
-    expect(lastClickError(rt.sessionState, "s1")?.text ?? null).toMatch(/\/compact was not typed/);
+    await clickUrl(rt.urls[0]!, rt.ctx);
+    expect(lastClickError(rt.sessionState, "s1")?.text ?? null).toMatch(
+      /^\/compact was not typed: .*typed a command moments ago/,
+    );
     expect(invocations().map((argv) => argv[2])).toEqual(["display", "load-buffer", "display"]);
   });
 
   test("a click the pane refused types nothing, so clicking again at once goes through", async () => {
     serve(SCREENS.permission);
     const rt = runtime(HINT);
-    await expect(clickUrl(rt.urls[0]!, rt.ctx)).rejects.toThrow(/not at its prompt/);
+    await clickUrl(rt.urls[0]!, rt.ctx);
+    expect(lastClickError(rt.sessionState, "s1")?.text ?? null).toMatch(/not at its prompt/);
     serve(SCREENS.idle);
     await clickUrl(rt.urls[0]!, rt.ctx);
     expect(invocations().map((argv) => argv[2])).toEqual(["display", "display", "load-buffer"]);
@@ -310,7 +319,8 @@ describe("a slash click", () => {
   ])("%s: read, refused, nothing typed", async (_, screen, inMode, reason) => {
     serve(screen, inMode);
     const rt = runtime(HINT);
-    await expect(clickUrl(rt.urls[0]!, rt.ctx)).rejects.toThrow(reason);
+    await clickUrl(rt.urls[0]!, rt.ctx);
+    expect(lastClickError(rt.sessionState, "s1")?.text ?? null).toMatch(reason);
     expect(invocations().map((argv) => argv[2])).toEqual(["display"]);
   });
 

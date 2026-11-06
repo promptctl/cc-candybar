@@ -16,10 +16,12 @@
 // `close` ends the turns for good: what is queued is refused as its turn
 // arrives, and what is in flight is committed there and then, so writes already
 // landed stay undoable as one step when the daemon's launches abort under them,
-// and goes no further than its next `landed`. A click's launches are bounded
-// (`clickLaunch`), so a turn comes back unless a child outlives SIGKILL, in
-// uninterruptible sleep: its launch never settles, and `getStats` shows the
-// holder's `heldMs` growing.
+// and goes no further than its next `landed`. A turn's one await is a gather in
+// it (a doctor's probes), whose launches are bounded, so a turn comes back
+// unless a child outlives SIGKILL, in uninterruptible sleep: its launch never
+// settles, and `getStats` shows the holder's `heldMs` growing. What a click
+// launches for its own sake is an effect, performed after its turn
+// (src/daemon/apply.ts), and holds no turn at all.
 
 import { elapsedMs, spanMs, type Monotonic } from "../time.js";
 import { KeyedSerialQueue } from "../utils/keyed-serial-queue.js";

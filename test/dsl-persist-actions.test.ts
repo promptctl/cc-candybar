@@ -953,11 +953,12 @@ describe("a durable click lands in the file the next reload reads", () => {
       config,
       durable.host,
     );
-    const click = async (palette: string): Promise<void> =>
+    const click = async (palette: string): Promise<void> => {
       await VERBS.get("set-config")!(
         encodeSegments(["s1", "palette", palette]),
         ctx,
       );
+    };
     expect(durable.text()).toBeNull();
     await click("nord");
     expect(durable.parsed()).toEqual({ globals: { palette: "nord" } });
