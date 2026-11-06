@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-647",
+      "ref": "refs/pull/647/merge",
+      "sha": "49d702dbd411e2ac72942d35b697b3ab286adef3",
+      "timestamp": "2026-11-06T19:48:52.754Z",
+      "commits": [
+        {
+          "sha": "49d702dbd411e2ac72942d35b697b3ab286adef3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T19:48:04Z",
+          "message": "Merge 98ce2f24cad76fe5243f6d6fe3d516f4fbd45436 into 2bb7660eaf484d4c41e6cdc671e6415f0cccc8fa\n"
+        },
+        {
+          "sha": "98ce2f24cad76fe5243f6d6fe3d516f4fbd45436",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T12:47:52-07:00",
+          "message": "fix(tmux): the restore guard's comment and the fake's guard check say one condition (candybar-gather-renderer-76bb.x07)\n"
+        },
+        {
+          "sha": "680c000e169cdb6506d3cddc021e55ae1184b1a4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T12:42:29-07:00",
+          "message": "fix(tmux): the restore guard reads on tmux before 3.5, which has no #{!:} (candybar-gather-renderer-76bb.x07)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "2bb7660eaf484d4c41e6cdc671e6415f0cccc8fa",
@@ -13,28 +42,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T12:46:06-07:00",
           "message": "feat(links): the doctor probe is minted by the minter as the probe link kind (candybar-gather-renderer-76bb.b2l.mxk) (#644)\n\n* feat(links): the doctor probe is minted by the minter as the probe link kind, and Launch Services is asked about the link it opened (candybar-gather-renderer-76bb.b2l.mxk)\n\nThe probe link is cc-candybar://to/<name>/probe/<nonce>, built by probeLink\nbeside effectsUrl, so the doctor no longer assembles a verb and a tail itself.\nThe verb is `probe`, as spec section 18 names it. The doctor's lost-link\ndiagnosis asks NSWorkspace which app opens that same link rather than a\nhand-spelled cc-candybar://probe.\n\n* fix(links): a probe is a link kind, never an effect; a link lost at another build's daemon says so (candybar-gather-renderer-76bb.b2l.mxk)\n\n- The probe leaves the leaf table, so a dispatch carrying it is refused as an\n  unknown effect verb, as the minter's comment says it is.\n- probeLink spells the nonce with encodeURIComponent, the codec the probe\n  verb's one-argument read reverses.\n- The lost verdict names a daemon of another build: a link this build mints\n  may be one it does not read, so a healthy handler is not blamed for it.\n- Comments that said the diagnosis asks about the scheme now say the link.\n\n* fix(doctor): a lost link's build row compares builds by value and shows only for a link that opened (candybar-gather-renderer-76bb.b2l.mxk)\n\n- otherBuild decides on the version and the full digest, not on the labels,\n  and hands the two labels back as data; the verdict owns the sentence.\n- A link that never opened was lost before any daemon saw it, so its verdict\n  carries no build row.\n\n* test(links): the tmux row case aims its window-list press after a's rows stand again (candybar-gather-renderer-76bb.b2l.mxk)\n\nBack on session a, its status is one line until its rows are drawn again,\nand the window list moves up when they land. The case aimed its press as soon\nas the window list showed, so on CI's runner the rows usually landed between\nthe aim and the press and the press hit a row instead: the case failed on\nnearly every CI run, main included. It now waits for a's rows as it already\ndid for b's."
-        }
-      ]
-    },
-    {
-      "version": "pr-647",
-      "ref": "refs/pull/647/merge",
-      "sha": "c0a066a937b43d5fbb5d21fc5a817e9f2e2f9bea",
-      "timestamp": "2026-11-06T19:43:52.044Z",
-      "commits": [
-        {
-          "sha": "c0a066a937b43d5fbb5d21fc5a817e9f2e2f9bea",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:42:56-07:00",
-          "message": "Merge 680c000e169cdb6506d3cddc021e55ae1184b1a4 into 308429c8f33e9cfe4e0983ab8f29bb1d25c3fe55\n"
-        },
-        {
-          "sha": "680c000e169cdb6506d3cddc021e55ae1184b1a4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:42:29-07:00",
-          "message": "fix(tmux): the restore guard reads on tmux before 3.5, which has no #{!:} (candybar-gather-renderer-76bb.x07)\n"
         }
       ]
     },
