@@ -2,45 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-654",
-      "ref": "refs/pull/654/merge",
-      "sha": "41fcccead5e8f8bf22fcbfd7c39b2440c1b793d9",
-      "timestamp": "2026-11-06T21:56:36.055Z",
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "0345c0ff3dc537298327e838f5410e5b53301804",
+      "timestamp": "2026-11-06T22:03:41.061Z",
       "commits": [
         {
-          "sha": "41fcccead5e8f8bf22fcbfd7c39b2440c1b793d9",
+          "sha": "0345c0ff3dc537298327e838f5410e5b53301804",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T14:54:06-07:00",
-          "message": "Merge 35c29be1310ea2ac2cad1a9214a122955f5b8508 into 0357f4ada680aa4f6a80a0dd47cacc620c017e4b\n"
+          "timestamp": "2026-11-06T15:02:32-07:00",
+          "message": "fix(test): the parent-watchdog case waits for a serving daemon under the shared readiness budget, and for its exit by name (brandon-menus-sjhy.26f) (#654)\n\n* fix(test): the parent-watchdog case waits for a serving daemon under the shared readiness budget, and for its exit by name (brandon-menus-sjhy.26f)\n\n* fix(test): the parent-watchdog case waits for the anchor's reap and the daemon's whole group, and proves the watchdog ended it (brandon-menus-sjhy.26f)\n\n* fix(test): the parent-watchdog case reads the daemon's death from the wrapper's exit and the watchdog's line for its own anchor (brandon-menus-sjhy.26f)\n\n* fix(test): the parent-watchdog case proves a clean exit through the one shared exit read (brandon-menus-sjhy.26f)"
         },
         {
-          "sha": "35c29be1310ea2ac2cad1a9214a122955f5b8508",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T14:53:22-07:00",
-          "message": "fix(test): the parent-watchdog case proves a clean exit through the one shared exit read (brandon-menus-sjhy.26f)\n"
-        },
-        {
-          "sha": "125e11c1ff6fd599f0942bd0dad0bbaf86d28b47",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T14:49:38-07:00",
-          "message": "fix(test): the parent-watchdog case reads the daemon's death from the wrapper's exit and the watchdog's line for its own anchor (brandon-menus-sjhy.26f)\n"
-        },
-        {
-          "sha": "dd3bd3b9712d9685910dc66199560fe15572bf48",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T14:45:17-07:00",
-          "message": "fix(test): the parent-watchdog case waits for the anchor's reap and the daemon's whole group, and proves the watchdog ended it (brandon-menus-sjhy.26f)\n"
-        },
-        {
-          "sha": "0f0ce94ba41164d415a9c4102b5293efaf851c6c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T14:39:17-07:00",
-          "message": "fix(test): the parent-watchdog case waits for a serving daemon under the shared readiness budget, and for its exit by name (brandon-menus-sjhy.26f)\n"
+          "sha": "0357f4ada680aa4f6a80a0dd47cacc620c017e4b",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-06T21:45:00Z",
+          "message": "chore(release): set `package.json` to 1.206.0 [skip ci]\n\n## [1.206.0](https://github.com/promptctl/cc-candybar/compare/v1.205.1...v1.206.0) (2026-11-06)\n\n### Features\n\n* **apply:** session state has one writer; a run and a lane setup are effects (candybar-gather-renderer-76bb.1dh.9kk) ([#646](https://github.com/promptctl/cc-candybar/issues/646)) ([dec17fe](https://github.com/promptctl/cc-candybar/commit/dec17fec2a409d867f331d5898b3ab81d111b5ea))\n\n### Bug Fixes\n\n* **test:** the launch-group abort case reaches its window by what it observes, not a sleep (brandon-menus-sjhy.irc) ([#653](https://github.com/promptctl/cc-candybar/issues/653)) ([4f89028](https://github.com/promptctl/cc-candybar/commit/4f8902896b866dd001944102be7ed0716f005520))\n"
         }
       ]
     },
@@ -77,21 +56,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T14:38:27-07:00",
           "message": "feat(dial): the client reaches its daemon through one dialer port, and no test hand-rolls a socket (candybar-testing-ihvy.5em)\n\nA Dialer port (src/dial/) with one adapter over a unix socket, an in-memory fake that listens and holds paths on a clock, and one contract both pass. The round trip, the frame stream and acquire's probe dial through the World's dialer; a dial's refusal is typed at the adapter, so interpretException reads no errno out of a message. Lint keeps net in the adapter and the daemon's listener, in src and in tests. The nine test files that stood up their own sockets listen on the fake; the kernel bind cases move to test/integration.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "4f8902896b866dd001944102be7ed0716f005520",
-      "timestamp": "2026-11-06T21:34:43.650Z",
-      "commits": [
-        {
-          "sha": "4f8902896b866dd001944102be7ed0716f005520",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T14:33:45-07:00",
-          "message": "fix(test): the launch-group abort case reaches its window by what it observes, not a sleep (brandon-menus-sjhy.irc) (#653)\n\n* fix(test): the launch-group abort case reaches its window by what it observes, not a sleep (brandon-menus-sjhy.irc)\n\nThe case means one state: the child ended, its group is gone, and the launch\nhas not yet sampled the group. A 1300 ms sleep aimed at it, so a loaded\nmachine saw the launch's own sample land first and read ok:true.\n\nThe case now launches on a held clock, so the launch samples the group only\nwhen the case advances it. It waits, by condition, for the child's pidfile,\nfor the group's end, and for the launch to have seen the exit, then aborts\nand advances. The holder outside the group, which keeps the child's close\nfrom concluding first, lives until the case removes its directory, not for\n3 s of real time.\n\nThe launcher's owner moves into launcherOn(clock), shared by the beforeEach\nand this case.\n\n* fix(test): the launch-group cases end their holders by removing a path, and the timeout case samples a live group on a held clock (brandon-menus-sjhy.irc)\n\nThe abort and timeout cases each sample the group alive, end its member, then\nact before the next poll. Every holder waits on the case's directory, which\nafterEach removes, so no case bets on a holder's lifetime in real time.\n\n* fix(test): the exit-code case arms a timeout it never reaches, and each loop run's holder ends with its run (brandon-menus-sjhy.irc)\n\nA fired timeout concludes on the gone group as ok, so a timeout inside the\ncase's life hid a launch that waited for its holder."
         }
       ]
     },
