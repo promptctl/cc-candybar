@@ -24,6 +24,8 @@ export function linkSignerFromKeyFile(file: string): LinkSigner {
   return {
     sign: (fields) => loaded().sign(fields),
     verify: (fields, mac) => loaded().verify(fields, mac),
+    signBinding: (socket) => loaded().signBinding(socket),
+    verifyBinding: (socket, mac) => loaded().verifyBinding(socket, mac),
   };
 }
 

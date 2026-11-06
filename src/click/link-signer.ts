@@ -7,6 +7,7 @@
 // state directory's key file, a test's fixed bytes) is the caller's.
 
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { VERB_TMUX_STATUS_CLICK } from "./wire.js";
 
 // HMAC-SHA256 takes a key of any length; the key file holds this many random
 // bytes.
@@ -31,35 +32,48 @@ export interface LinkSigner {
   readonly sign: (fields: SignedFields) => string;
   // Whether `mac` is the one `sign` gives `fields`, compared in constant time.
   readonly verify: (fields: SignedFields, mac: string) => boolean;
+  // The mac a tmux server's status-line click binding carries, over the
+  // server's socket: a click names a range id, a counter anyone can guess, so
+  // the click proves it came from a binding this daemon wrote.
+  readonly signBinding: (socket: string) => string;
+  readonly verifyBinding: (socket: string, mac: string) => boolean;
 }
 
-// [LAW:types-are-the-program] The fields are joined as one JSON array, so no
-// choice of field text makes two different sets sign alike.
-function digest(key: Buffer, fields: SignedFields): Buffer {
-  return createHmac("sha256", key)
-    .update(
-      JSON.stringify([
-        fields.sessionId,
-        fields.action,
-        fields.declaration,
-        fields.evaluated,
-      ]),
-    )
-    .digest();
+// [LAW:types-are-the-program] What is signed is joined as one JSON array, so
+// no choice of field text makes two different sets sign alike, and a
+// binding's two entries never sign as a link's four.
+function digest(key: Buffer, signed: readonly string[]): Buffer {
+  return createHmac("sha256", key).update(JSON.stringify(signed)).digest();
 }
+
+const linkFields = (fields: SignedFields): readonly string[] => [
+  fields.sessionId,
+  fields.action,
+  fields.declaration,
+  fields.evaluated,
+];
+
+const bindingFields = (socket: string): readonly string[] => [
+  VERB_TMUX_STATUS_CLICK,
+  socket,
+];
 
 export function linkSigner(key: Buffer): LinkSigner {
   if (key.length !== LINK_KEY_BYTES) {
     throw new Error(`a link key is ${LINK_KEY_BYTES} bytes, got ${key.length}`);
   }
+  const sign = (signed: readonly string[]): string =>
+    digest(key, signed).toString("hex");
+  // Spelled exactly as `sign` spells one: Buffer's hex decode stops at the
+  // first character that is not hex, so a mac with text after it would
+  // otherwise decode to the mac.
+  const verify = (signed: readonly string[], mac: string): boolean =>
+    MAC_SPELLING.test(mac) &&
+    timingSafeEqual(Buffer.from(mac, "hex"), digest(key, signed));
   return {
-    sign: (fields) => digest(key, fields).toString("hex"),
-    verify: (fields, mac) => {
-      // Spelled exactly as `sign` spells one: Buffer's hex decode stops at
-      // the first character that is not hex, so a mac with text after it
-      // would otherwise decode to the mac.
-      if (!MAC_SPELLING.test(mac)) return false;
-      return timingSafeEqual(Buffer.from(mac, "hex"), digest(key, fields));
-    },
+    sign: (fields) => sign(linkFields(fields)),
+    verify: (fields, mac) => verify(linkFields(fields), mac),
+    signBinding: (socket) => sign(bindingFields(socket)),
+    verifyBinding: (socket, mac) => verify(bindingFields(socket), mac),
   };
 }

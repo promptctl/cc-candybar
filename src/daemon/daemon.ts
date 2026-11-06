@@ -494,6 +494,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     // gather-and-renderer.md, section 17): a click on a row this renderer
     // holds is resolved to this renderer's socket from the name alone.
     name: home.name,
+    signer: inputs.linkSigner,
     log,
   });
   // [LAW:one-source-of-truth] The home's link-id counter, which every tmux

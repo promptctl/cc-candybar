@@ -18,9 +18,10 @@ export function writeAtomic(at: string, text: string, mode?: number): void {
   const tmp = `${file}.tmp`;
   const fileMode = mode ?? fs.statSync(file, { throwIfNoEntry: false })?.mode;
   try {
-    // Flushed before the rename, so a crash leaves the old file or the new
-    // one: a rename can reach the disk before contents still in the page
-    // cache, and the file then reads empty.
+    // Flushed before the rename, so a system crash leaves the old file or the
+    // new one: a rename can reach the disk before contents still in the page
+    // cache, and the file then reads empty. A plain fsync reaches the drive's
+    // own cache, which a power loss can still lose on macOS.
     const fd = fs.openSync(tmp, "w", fileMode);
     try {
       fs.writeFileSync(fd, text);

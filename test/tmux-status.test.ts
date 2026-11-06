@@ -18,8 +18,12 @@ import type { StatusLines } from "../src/daemon/pane-visibility";
 import type { TmuxRun } from "../src/proc/tmux";
 import { barOf } from "./helpers/drawn-frame";
 import { countedIds } from "./helpers/link-ids";
+import { TEST_SIGNER } from "./helpers/link-signer";
 
 const SOCKET = "/tmp/tmux-test/default";
+// What the binding's URL carries for a click on `range` of pane `%<pane>`.
+const clickOn = (pane: string, range: string, mac = TEST_SIGNER.signBinding(SOCKET)) =>
+  [SOCKET, mac, pane, range].map(encodeURIComponent).join("/");
 const OWNER = "/tmp/cc-candybar-test/socket";
 const ok = (stdout = ""): TmuxRun => ({ kind: "ok", stdout });
 const DEFAULT_BINDING = "bind-key -T root MouseDown1Status switch-client -t =";
@@ -182,6 +186,7 @@ function harness(ids: readonly string[] = ["$1"]) {
     handler: "cc-candybar url-handle",
     owner: OWNER,
     name: "main",
+    signer: TEST_SIGNER,
     log: (_level, msg) => logs.push(msg),
   });
   const hold = (sessionId: string, pane: string): void => {
@@ -356,7 +361,7 @@ describe("TmuxStatusLines", () => {
     await h.answer({ "%1": "$1" }, { $1: "%1" });
     const url = "cc-candybar://to/main/copy/hi";
     const [range] = Object.keys((await h.frame("s1", frameOf("x", url))).links);
-    const value = `${encodeURIComponent(SOCKET)}/1/${range}`;
+    const value = clickOn("1", range!);
     expect(h.owner.linkAt(value)).toEqual({ kind: "link", url });
     // Redrawn as it animates, the link keeps its range.
     await h.frame("s1", frameOf("x!", url));
@@ -373,9 +378,37 @@ describe("TmuxStatusLines", () => {
     const after = await h.frame("s1", frameOf("x", "cc-candybar://to/main/copy/two"));
     const [old] = Object.keys(before.links);
     expect(Object.keys(after.links)).not.toContain(old);
-    expect(h.owner.linkAt(`${encodeURIComponent(SOCKET)}/1/${old}`).kind).toBe(
-      "refused",
-    );
+    expect(h.owner.linkAt(clickOn("1", old!)).kind).toBe("refused");
+  });
+
+  // Any web page can open a `cc-candybar://` URL, and a range id is a counter
+  // anyone can guess: the binding's mac is what a click proves it came from.
+  test("a click is honoured only with the mac the binding carries, so a guessed range on a drawn link runs nothing", async () => {
+    const h = harness();
+    h.hold("s1", "%1");
+    await h.answer({ "%1": "$1" }, { $1: "%1" });
+    const url = "cc-candybar://to/main/copy/hi";
+    const [range] = Object.keys((await h.frame("s1", frameOf("x", url))).links);
+    const mac = TEST_SIGNER.signBinding(SOCKET);
+    expect(h.tmux.binding).toContain(`/${mac}/`);
+    expect(h.owner.linkAt(clickOn("1", range!))).toEqual({ kind: "link", url });
+    const forged = h.owner.linkAt(clickOn("1", range!, "0".repeat(64)));
+    expect(forged).toMatchObject({ kind: "refused", reason: expect.stringMatching(/mac/) });
+    // A mac signed for another server is not this one's.
+    const elsewhere = TEST_SIGNER.signBinding("/tmp/tmux-test/other");
+    expect(h.owner.linkAt(clickOn("1", range!, elsewhere)).kind).toBe("refused");
+    // Without its mac the click has a segment too few.
+    const bare = [SOCKET, "1", range!].map(encodeURIComponent).join("/");
+    expect(h.owner.linkAt(bare).kind).toBe("refused");
+  });
+
+  test("a range that names a property every object has finds no link", async () => {
+    const h = harness();
+    h.hold("s1", "%1");
+    await h.answer({ "%1": "$1" }, { $1: "%1" });
+    await h.frame("s1", frameOf("x", "cc-candybar://to/main/copy/hi"));
+    for (const range of ["constructor", "toString", "__proto__"])
+      expect(h.owner.linkAt(clickOn("1", range)).kind).toBe("refused");
   });
 
   test("the daemon's shutdown puts back everything it laid out, at once", async () => {

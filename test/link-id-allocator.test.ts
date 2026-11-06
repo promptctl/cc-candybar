@@ -141,3 +141,24 @@ test("closed, a faulted counter leaves no timer armed", () => {
   clock.advance(RETRY_MS * 5);
   expect(ids.stats().faults).toBe(1);
 });
+
+// After its daemon's close the file may be the next daemon's.
+test("closed, a counter issues no id and writes nothing, its block spent or not", () => {
+  const ids = allocator();
+  mint(ids, LINK_ID_BLOCK);
+  const held = fs.readFileSync(file, "utf8");
+  ids.close();
+  expect(ids.next()).toBeNull();
+  expect(ids.error()).toBeNull();
+  expect(fs.readFileSync(file, "utf8")).toBe(held);
+  expect(ids.stats().reservations).toBe(1);
+});
+
+test("a count too near the last one for another block is a fault, and the file is left as it was", () => {
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(file, `${10 ** 15 - LINK_ID_BLOCK}\n`);
+  const ids = allocator();
+  expect(ids.next()).toBeNull();
+  expect(ids.error()).toMatch(/too near the last count .*remove it/);
+  expect(fs.readFileSync(file, "utf8")).toBe(`${10 ** 15 - LINK_ID_BLOCK}\n`);
+});

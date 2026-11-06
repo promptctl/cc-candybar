@@ -26,6 +26,7 @@ import {
   VERB_TMUX_STATUS_CLICK,
 } from "../../../src/click/wire";
 import { sendDaemonRequest } from "../../helpers/daemon-wire";
+import { linkKeyFile, linkSignerFromKeyFile } from "../../../src/daemon/link-key";
 import { LANES, type Lane } from "../../../src/config/lanes";
 import { GLOBAL_FIELDS } from "../../../src/config/globals-fields";
 import { PROTOCOL_VERSION, type ClientHints } from "../../../src/daemon/protocol";
@@ -183,9 +184,13 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
       ([, url]) => url === link,
     )?.[0];
     expect(range).toBeDefined();
-    const at = [`/tmp/lane-e2e-${sid}`, "7", range!]
-      .map(encodeURIComponent)
-      .join("/");
+    // The click as the daemon's binding on that server would make it, signed
+    // with the home's link key.
+    const socket = `/tmp/lane-e2e-${sid}`;
+    const mac = linkSignerFromKeyFile(
+      linkKeyFile(daemon.paths.state),
+    ).signBinding(socket);
+    const at = [socket, mac, "7", range!].map(encodeURIComponent).join("/");
     const statusClick = addressedLink(daemon.name, VERB_TMUX_STATUS_CLICK, at);
     // Refused until the status line has drawn its first frame, which runs
     // nothing; the first click it answers runs the link.

@@ -14,8 +14,14 @@ export const LINK_ID_BLOCK = 1024;
 
 // [LAW:parse-dont-validate] A count of at most fifteen digits, so a block past
 // it is still a safe integer and `ccb` with its base36 id stays within tmux's
-// 15-byte range id.
+// 15-byte range id. A block that would end past the last such count is not
+// reserved, so the file never holds a count its own reader refuses.
 const COUNT = /^\d{1,15}\n?$/;
+const LAST_COUNT = 10 ** 15 - 1;
+
+// What a broken counter's ⚠ tells the user to do, and what it costs.
+const REMEDY =
+  "remove it and a new one is made, starting again from 0 (a click on a status row drawn before then may run a link drawn since)";
 
 export interface LinkIdStats {
   // Ids issued, and linked runs drawn under an id their link already held
@@ -45,15 +51,17 @@ export interface LinkIdAllocatorDeps {
 }
 
 // [LAW:no-ambient-temporal-coupling] Issuing ids from a block the file already
-// holds past them, or faulted: no id issued, and the one timer that tries the
-// file again armed.
+// holds past them; faulted: no id issued, and the one timer that tries the
+// file again armed; or closed: no id issued and nothing written, since after
+// its daemon's close the file may be the next daemon's.
 type State =
   | { readonly kind: "ready"; next: number }
   | {
       readonly kind: "faulted";
       readonly reason: string;
       readonly clear: () => void;
-    };
+    }
+  | { readonly kind: "closed" };
 
 // [LAW:no-shared-mutable-globals] The one owner of the file: the socket lease
 // makes one daemon per home, and each daemon has one allocator. Hi/lo: the file
@@ -76,10 +84,15 @@ export function linkIdAllocator(deps: LinkIdAllocatorDeps): LinkIdAllocator {
   const reserve = (): State => {
     try {
       const base = Math.max(readCount(file), reserved);
+      const end = base + LINK_ID_BLOCK;
+      if (end > LAST_COUNT)
+        throw new Error(
+          `${file} holds ${base}, too near the last count for another block: ${REMEDY}`,
+        );
       // [LAW:single-enforcer] Renamed over the count whole, so a reader sees
       // the old count or the new one, and a crash leaves one of them.
-      writeAtomic(file, `${base + LINK_ID_BLOCK}\n`, 0o600);
-      reserved = base + LINK_ID_BLOCK;
+      writeAtomic(file, `${end}\n`, 0o600);
+      reserved = end;
       reservations++;
       if (state.kind === "faulted")
         log("info", `link ids: ${file} reserved again`);
@@ -105,7 +118,7 @@ export function linkIdAllocator(deps: LinkIdAllocatorDeps): LinkIdAllocator {
   return {
     next() {
       if (state.kind === "ready" && state.next === reserved) state = reserve();
-      if (state.kind === "faulted") return null;
+      if (state.kind !== "ready") return null;
       minted++;
       return state.next++;
     },
@@ -115,6 +128,7 @@ export function linkIdAllocator(deps: LinkIdAllocatorDeps): LinkIdAllocator {
     stats: () => ({ minted, reused, evicted, reservations, faults }),
     close() {
       if (state.kind === "faulted") state.clear();
+      state = { kind: "closed" };
     },
   };
 }
@@ -131,7 +145,7 @@ function readCount(file: string): number {
   }
   if (!COUNT.test(text)) {
     throw new Error(
-      `${file} holds ${JSON.stringify(text.slice(0, 40))}, not a count: remove it and a new one is made, starting again from 0 (a click on a status row drawn before then may run a link drawn since)`,
+      `${file} holds ${JSON.stringify(text.slice(0, 40))}, not a count: ${REMEDY}`,
     );
   }
   return Number(text.trim());
