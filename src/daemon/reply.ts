@@ -10,7 +10,11 @@ import {
   checkRenderRequest,
   type CheckedRenderRequest,
 } from "./render-checkpoint.js";
-import { PROTOCOL_VERSION, URL_FRAME_VERSIONS } from "./protocol";
+import {
+  parseRecordSeconds,
+  PROTOCOL_VERSION,
+  URL_FRAME_VERSIONS,
+} from "./protocol";
 import type {
   ClickRequest,
   Inbound,
@@ -78,11 +82,12 @@ export interface Reply {
 // answered when its file closes).
 // [LAW:effects-at-boundaries] Held work is a description: the connection
 // starts it only once it knows a client still waits for the answer, so a
-// request the backstop already answered starts nothing.
+// request the backstop already answered starts nothing, and `left` aborts
+// when that client hangs up, so its work stops with it.
 export type HandledRequest =
   | ({ kind: "reply" } & Reply)
   | { kind: "subscribe"; sessionId: SessionId; lane: Lane }
-  | { kind: "held"; start: () => Promise<Reply> };
+  | { kind: "held"; start: (left: AbortSignal) => Promise<Reply> };
 
 const stay = (resp: Response): Reply => ({
   resp,
@@ -162,17 +167,14 @@ export function parseRecordRequest(req: RecordRequest):
       problem: `record's path is not an absolute path: ${JSON.stringify(path)}`,
     };
   }
-  if (
-    typeof seconds !== "number" ||
-    !Number.isFinite(seconds) ||
-    seconds <= 0
-  ) {
+  const span = parseRecordSeconds(seconds);
+  if (!span.ok) {
     return {
       ok: false,
-      problem: `record's seconds is not a positive number: ${JSON.stringify(seconds)}`,
+      problem: `record's seconds ${JSON.stringify(seconds)} ${span.problem}`,
     };
   }
-  return { ok: true, session: id.id, path, seconds };
+  return { ok: true, session: id.id, path, seconds: span.seconds };
 }
 
 // A record request past the connection's checkpoint: the recording it starts
@@ -185,8 +187,15 @@ function recording(parts: DaemonParts, req: RecordRequest): HandledRequest {
   const { session, path, seconds } = parsed;
   return {
     kind: "held",
-    start: () =>
-      recordToFile(parts.recorder, parts.clock, session, path, seconds).then(
+    start: (left) =>
+      recordToFile(
+        parts.recorder,
+        parts.clock,
+        session,
+        path,
+        seconds,
+        left,
+      ).then(
         (recorded) => stay({ ok: true, recorded }),
         (e: unknown) =>
           stay({

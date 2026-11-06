@@ -151,6 +151,18 @@ test("a recording is one session's, each kind of line in time order, with a docu
   expect(() => parseRecording(text(header, facts(0, 1), foreign))).toThrow(
     /^line 3: is session "another"'s document, and the recording is of "rec-session"/,
   );
+  const elsewhere = request();
+  const strayed: RecordingLine = {
+    kind: "request",
+    at: at(1),
+    request: {
+      ...elsewhere,
+      hookData: { ...elsewhere.hookData, session_id: "another" },
+    },
+  };
+  expect(() => parseRecording(text(header, facts(0, 1), strayed))).toThrow(
+    /^line 3: is session "another"'s request, and the recording is of "rec-session"/,
+  );
   expect(() =>
     parseRecording(text(header, facts(2, 1), requested(3), facts(1, 2))),
   ).toThrow(

@@ -9,6 +9,7 @@ import {
   recordPlan,
 } from "../../src/daemon/client-record";
 import {
+  MAX_RECORD_SECONDS,
   PROTOCOL_VERSION,
   type RecordRequest,
 } from "../../src/daemon/protocol";
@@ -41,11 +42,11 @@ describe("a record request off the wire", () => {
       ok: false,
       problem: 'record\'s path is not an absolute path: "bar.jsonl"',
     });
-    for (const seconds of [0, -1, Number.NaN, "10"]) {
+    for (const seconds of [0, -1, Number.NaN, "10", MAX_RECORD_SECONDS + 1]) {
       expect(parseRecordRequest(wire({ seconds }))).toMatchObject({
         ok: false,
         problem: expect.stringMatching(
-          /^record's seconds is not a positive number/,
+          /^record.s seconds .* is not a span of seconds above 0 and at most /,
         ),
       });
     }
@@ -84,8 +85,15 @@ describe("the record command", () => {
     });
     expect(parseRecordArgs([SID, "a", "--seconds", "soon"], "/work")).toEqual({
       ok: false,
-      problem: '--seconds needs a positive number, got "soon"',
+      problem: `--seconds "soon" is not a span of seconds above 0 and at most ${MAX_RECORD_SECONDS}`,
     });
+    // A span no timer holds would fire at once, so it is refused here.
+    expect(
+      parseRecordArgs(
+        [SID, "a", "--seconds", String(MAX_RECORD_SECONDS + 1)],
+        "/work",
+      ),
+    ).toMatchObject({ ok: false });
     expect(parseRecordArgs([SID, "a", "--loud"], "/work")).toEqual({
       ok: false,
       problem: 'unexpected argument "--loud"',

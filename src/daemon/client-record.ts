@@ -11,7 +11,7 @@ import {
   type ClientWorld,
   type RoundTripOutcome,
 } from "./client-transport";
-import type { Recorded } from "./protocol";
+import { parseRecordSeconds, type Recorded } from "./protocol";
 
 export const DEFAULT_RECORD_SECONDS = 10;
 
@@ -41,14 +41,14 @@ export function parseRecordArgs(
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === "--seconds") {
-      const n = Number(args[++i]);
-      if (!Number.isFinite(n) || n <= 0) {
+      const span = parseRecordSeconds(Number(args[++i]));
+      if (!span.ok) {
         return {
           ok: false,
-          problem: `--seconds needs a positive number, got ${JSON.stringify(args[i])}`,
+          problem: `--seconds ${JSON.stringify(args[i])} ${span.problem}`,
         };
       }
-      seconds = n;
+      seconds = span.seconds;
     } else if (arg !== undefined && !arg.startsWith("-")) {
       positional.push(arg);
     } else {

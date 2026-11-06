@@ -453,6 +453,27 @@ export interface RecordRequest {
   seconds: number;
 }
 
+// The longest span a recording may last: what the timers on both ends can
+// hold, the client's wait being the span with a margin. Node fires a timer
+// longer than 2^31-1 ms at once.
+export const MAX_RECORD_SECONDS = Math.floor((2 ** 31 - 1) / 1000) - 60;
+
+// [LAW:single-enforcer] A recording's span, parsed once for the CLI and the
+// daemon alike. The problem reads after the value, which each side names in
+// its own words.
+export function parseRecordSeconds(
+  n: unknown,
+):
+  | { readonly ok: true; readonly seconds: number }
+  | { readonly ok: false; readonly problem: string } {
+  return typeof n === "number" && n > 0 && n <= MAX_RECORD_SECONDS
+    ? { ok: true, seconds: n }
+    : {
+        ok: false,
+        problem: `is not a span of seconds above 0 and at most ${MAX_RECORD_SECONDS}`,
+      };
+}
+
 // What a recording that ended wrote: its file, its lines, and how many of
 // them are requests — none means the replay has nothing to draw.
 export interface Recorded {

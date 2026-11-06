@@ -108,6 +108,9 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
+// A client that waits for its recording to the end.
+const stays = (): AbortSignal => new AbortController().signal;
+
 function tempDir(prefix: string): string {
   const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
   cleanups.push(() => fs.rmSync(dir, { recursive: true, force: true }));
@@ -473,6 +476,7 @@ test("a session recorded out of the cache replays through the demo into the bars
     sessionIdOf(SID),
     file,
     7,
+    stays(),
   );
   const liveFrames: Frame[] = [];
   for (const offset of [1000, 2000, 2000]) {
@@ -514,6 +518,7 @@ test("a recording follows the session to the view a request from another directo
     sessionIdOf(SID),
     file,
     10,
+    stays(),
   );
   await s.after(1000);
   await s.requestFrom(s.cwd, s.configFile);
@@ -579,11 +584,37 @@ test("a recording the daemon's close ends is whole: its counts are the file's, a
     sessionIdOf(SID),
     file,
     60,
+    stays(),
   );
   await s.after(1000);
   await s.requestFrom(s.cwd, s.configFile);
   s.live.recorder.close();
   const { lines, requests } = await recorded;
+  const text = fs.readFileSync(file, "utf8");
+  expect(text.split("\n").filter((l) => l !== "")).toHaveLength(lines);
+  expect(requests).toBe(1);
+  expect(parseRecording(text).requests).toHaveLength(1);
+});
+
+test("a recording whose client leaves ends there, whole, and writes nothing after", async () => {
+  const s = liveSession();
+  await s.requestFrom(s.cwd, s.configFile);
+  const file = path.join(tempDir("ccb-seam-out-"), "left.jsonl");
+  const client = new AbortController();
+  const recorded = recordToFile(
+    s.live.recorder,
+    s.clock,
+    sessionIdOf(SID),
+    file,
+    60,
+    client.signal,
+  );
+  await s.after(1000);
+  await s.requestFrom(s.cwd, s.configFile);
+  client.abort();
+  const { lines, requests } = await recorded;
+  await s.after(1000);
+  await s.requestFrom(s.cwd, s.configFile);
   const text = fs.readFileSync(file, "utf8");
   expect(text.split("\n").filter((l) => l !== "")).toHaveLength(lines);
   expect(requests).toBe(1);
@@ -602,13 +633,20 @@ test("a recording is refused for a session with no view, and onto a file that ex
     }),
   ).toThrow(/no view of session "nobody" is open in this daemon/);
   await expect(
-    recordToFile(s.live.recorder, s.clock, sessionIdOf("nobody"), nobody, 1),
+    recordToFile(
+      s.live.recorder,
+      s.clock,
+      sessionIdOf("nobody"),
+      nobody,
+      1,
+      stays(),
+    ),
   ).rejects.toThrow(/no view of session "nobody"/);
   expect(fs.existsSync(nobody)).toBe(false);
   const kept = path.join(out, "kept.jsonl");
   fs.writeFileSync(kept, "keep\n");
   await expect(
-    recordToFile(s.live.recorder, s.clock, sessionIdOf(SID), kept, 1),
+    recordToFile(s.live.recorder, s.clock, sessionIdOf(SID), kept, 1, stays()),
   ).rejects.toThrow(`${kept} already exists`);
   expect(fs.readFileSync(kept, "utf8")).toBe("keep\n");
 });

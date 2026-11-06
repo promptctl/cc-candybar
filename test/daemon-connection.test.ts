@@ -563,5 +563,19 @@ describe("a connection over a stream", () => {
       await settled();
       expect(job.start).not.toHaveBeenCalled();
     });
+
+    test("one whose client hangs up while it runs is told the client left", async () => {
+      const held = work();
+      const { client, send } = open(
+        standIn({ handle: async () => held.handled }),
+      );
+      send(STATS);
+      await settled();
+      const [left] = held.start.mock.calls[0] as unknown as [AbortSignal];
+      expect(left.aborted).toBe(false);
+      client.destroy();
+      await settled();
+      expect(left.aborted).toBe(true);
+    });
   });
 });

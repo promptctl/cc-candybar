@@ -179,6 +179,14 @@ function parseRequest(
     ),
   ];
   if (wrong.length > 0) throw new FactParseError(where, wrong.join("; "));
+  // The payload reads the session from the hook's own field, so one naming
+  // another session would draw this one's view with that one's hook data.
+  if (data.session_id !== session) {
+    throw new FactParseError(
+      where,
+      `is session ${JSON.stringify(data.session_id)}'s request, and the recording is of ${JSON.stringify(session)}`,
+    );
+  }
   const { cwd } = json;
   if (cwd !== undefined && (typeof cwd !== "string" || !isAbsolute(cwd))) {
     throw new FactParseError(where, "has a `cwd` that is not an absolute path");

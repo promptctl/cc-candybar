@@ -12,10 +12,11 @@
 // sequence again, which a replay shows at its instant as the live bar did.
 
 import { inspect } from "node:util";
-import { closeSync, openSync, unlinkSync, writeSync } from "node:fs";
+import { appendFileSync, closeSync, openSync, unlinkSync } from "node:fs";
 import { reaction } from "mobx";
 import {
   formatLine,
+  type FactsLine,
   type RecordingLine,
   type RequestLine,
 } from "../facts/recording.js";
@@ -84,16 +85,20 @@ export function sessionRecorder(
   };
   // The session's current view, written from: its document now, then each it
   // takes. With no view, nothing, until the cache enters one.
+  // [LAW:no-ambient-temporal-coupling] The reaction is the recording's before
+  // the document now is written, so a write that ends the recording disposes
+  // the reaction it ended: a reaction firing at once would write before its
+  // disposer was anyone's.
   const attach = (sessionId: string, rec: Open): void => {
     const view = views.sessionView(sessionId);
-    rec.detach =
-      view === null
-        ? () => {}
-        : reaction(
-            () => view.followed.stamped(),
-            (line) => write(sessionId, rec, { kind: "facts", ...line }),
-            { fireImmediately: true },
-          );
+    if (view === null) {
+      rec.detach = () => {};
+      return;
+    }
+    const facts = (line: FactsLine): void =>
+      write(sessionId, rec, { kind: "facts", ...line });
+    rec.detach = reaction(() => view.followed.stamped(), facts);
+    facts(view.followed.stamped());
   };
   return {
     record(session, sink) {
@@ -177,13 +182,16 @@ export function settleRequest(
 // mistyped path wipes nothing and two recordings never write one file;
 // written line by line, synchronously, so the file holds every line in the
 // order taken and a write that fails ends the recording with its error; and
-// closed after `seconds` on the clock, or when the recorder closes.
+// closed after `seconds` on the clock, when the client that asked for it
+// leaves, or when the recorder closes. A close that fails is the recording's
+// error too: the file may not hold what was written to it.
 export function recordToFile(
   recorder: Pick<SessionRecorder, "record">,
   clock: Pick<Timekeeper, "after">,
   session: SessionId,
   path: string,
   seconds: number,
+  left: AbortSignal,
 ): Promise<Recorded> {
   return new Promise((resolve, reject) => {
     let fd: number;
@@ -203,22 +211,32 @@ export function recordToFile(
     let requests = 0;
     let stop = (): void => {};
     const clearTimer = clock.after(seconds * 1000, () => stop());
+    const leave = (): void => stop();
     const sink: RecordingSink = {
+      // A whole line or the write's error: one write call may take part of it.
       write: (line) => {
-        writeSync(fd, formatLine(line));
+        appendFileSync(fd, formatLine(line));
         lines++;
         if (line.kind === "request") requests++;
       },
       end: (failure) => {
         clearTimer();
-        closeSync(fd);
-        if (failure === null) resolve({ path, lines, requests });
-        else reject(new Error(`writing ${path}: ${String(failure)}`));
+        left.removeEventListener("abort", leave);
+        let ended = failure;
+        try {
+          closeSync(fd);
+        } catch (e) {
+          ended ??= e;
+        }
+        if (ended === null) resolve({ path, lines, requests });
+        else reject(new Error(`writing ${path}: ${String(ended)}`));
       },
     };
+    left.addEventListener("abort", leave, { once: true });
     try {
       stop = recorder.record(session, sink);
     } catch (e) {
+      left.removeEventListener("abort", leave);
       // Nothing was written: the file this call created goes with it.
       clearTimer();
       closeSync(fd);

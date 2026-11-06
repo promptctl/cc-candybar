@@ -223,12 +223,15 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   // recording, answered when its file closes). Its work starts only while a
   // client waits for it: a request the timer already answered TIMEOUT, or
   // whose client hung up before it was handled, starts nothing — that client
-  // was told, or is gone.
-  const hold = (start: () => Promise<Reply>): void => {
+  // was told, or is gone. One that hangs up later stops the work it started,
+  // as a stream's close ends its subscription.
+  const hold = (start: (left: AbortSignal) => Promise<Reply>): void => {
     if (responded) return;
     if (sock.destroyed) return;
     clearBackstop();
-    start().then(
+    const left = new AbortController();
+    sock.on("close", () => left.abort());
+    start(left.signal).then(
       (r) => respond(r.resp, r.exitAfterFlush, r.delivered),
       (err: unknown) => {
         daemon.log("error", `held request threw: ${inspect(err)}`);
