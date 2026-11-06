@@ -4,32 +4,32 @@
     {
       "version": "pr-656",
       "ref": "refs/pull/656/merge",
-      "sha": "de61273d426a400cd15b1b7aa2c8c5a9aa8eab47",
-      "timestamp": "2026-11-06T22:34:49.026Z",
+      "sha": "fea7f7e2b1f7b616a58acc1a4420e11b6240fe0e",
+      "timestamp": "2026-11-06T22:38:56.594Z",
       "commits": [
         {
-          "sha": "de61273d426a400cd15b1b7aa2c8c5a9aa8eab47",
+          "sha": "fea7f7e2b1f7b616a58acc1a4420e11b6240fe0e",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T22:33:49Z",
-          "message": "Merge b5507a05ffb0a98021421131d59839191756eacc into 3bd757912554568f0bf3b622640edbe789c7ba04\n"
+          "timestamp": "2026-11-06T15:37:43-07:00",
+          "message": "Merge f0a54ac1f5a85a755878ca338a056132ab3623f8 into 3bd757912554568f0bf3b622640edbe789c7ba04\n"
         },
         {
-          "sha": "b5507a05ffb0a98021421131d59839191756eacc",
+          "sha": "f0a54ac1f5a85a755878ca338a056132ab3623f8",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T15:33:35-07:00",
           "message": "fix(apply): a pane step tells a session gone from one outside tmux, so a bar pane close fails for the first (candybar-gather-renderer-76bb.1dh.y9b)\n\nThe doctor keeps its click's order by the origin, as every session key does;\npane on says what was not opened; the performer's and the order's comments\nname performInOrder and the setups-last exception to a do's order.\n"
         },
         {
-          "sha": "32ccc8f77c46f05f3c951e21ed447fcbf1a365a5",
+          "sha": "edb509b8e83fde932c6fab8dc9d07731c2921b4b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T15:26:35-07:00",
           "message": "fix(apply): a pane step's refusal is data, a split holds the pane, and the order a step takes late is the effect table's (candybar-gather-renderer-76bb.1dh.y9b)\n\nAn evicted session's band install says the mod is installed and what to type;\na bar pane split or close takes the pane's order, since it resizes what a\nrestart reads; whether an effect takes a pane's place when reached is a field\nof the ordering table, which the one performer partitions on; a move between\npanes is logged; pane identity lives in tmux-hint; the lane-setup harness\ndrives the real performer.\n"
         },
         {
-          "sha": "81b4f007f01f29a88501b59f4f198c243e7127bf",
+          "sha": "8b11826bbfb8939ed1af510ebc0b3a2403ca884a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T14:51:02-07:00",
