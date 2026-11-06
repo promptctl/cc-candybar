@@ -167,11 +167,11 @@ function liveArm(): Arm {
 }
 
 // A recording's requests, drawn under a held clock started at its first
-// document, each at its offset: the documents are the recording's, so no
+// request, each at its offset: the documents are the recording's, so no
 // owner is built and nothing is read or spawned for them.
 function recordingArm(path: string): Arm {
-  const { recording, ticks } = readRecording(path);
-  const clock = heldClock(new Date(recording.facts[0].at * 1000));
+  const { recording, startMs, ticks } = readRecording(path);
+  const clock = heldClock(new Date(startMs));
   return {
     world: { ...machine, clock },
     facts: recordingFacts(recording, clock),

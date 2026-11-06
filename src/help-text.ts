@@ -150,10 +150,10 @@ Subcommands:
                            Write the session's stream out of the running
                            daemon into a new file PATH for N seconds (default
                            10): the facts its bar drew from and the requests
-                           it was drawn by. Send it with a bug report; in a
-                           checkout, \`pnpm demo --recording PATH\` replays it
-                           frame by frame. SESSION is the id ⌗ copies. Does
-                           not spawn a daemon.
+                           it was drawn by. Send it and your config with a bug
+                           report; in a checkout, \`pnpm demo --recording PATH
+                           CONFIG\` replays it frame by frame. SESSION is the
+                           id ⌗ copies. Does not spawn a daemon.
   frames --lane LANE [--config PATH]
                            One session's bar as the daemon pushes it — up to
                            30 frames a second while it moves, at once on a

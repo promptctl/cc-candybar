@@ -76,3 +76,23 @@ test("a recording that fails on the document of the view it moved to is ended, a
   first.move(2);
   expect(offered).toEqual(["recording", "facts", "facts"]);
 });
+
+test("a view entered inside a batch is written from as the batch leaves it: a document it stamps before the batch ends is not lost", () => {
+  const first = view();
+  const second = view();
+  let current = first;
+  const recorder = sessionRecorder({ sessionView: () => current }, () => {});
+  const seqs: unknown[] = [];
+  recorder.record(SID, {
+    write: (line) => {
+      if (line.kind === "facts") seqs.push(line.facts.seq);
+    },
+    end: () => {},
+  });
+  runInAction(() => {
+    current = second;
+    recorder.moved(SID);
+    second.move(2);
+  });
+  expect(seqs).toEqual([1, 2]);
+});

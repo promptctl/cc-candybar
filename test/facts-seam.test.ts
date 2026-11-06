@@ -429,8 +429,8 @@ async function replayFile(
   started: readonly unknown[];
   said: string[];
 }> {
-  const { recording, ticks } = readRecording(file);
-  const clock = heldClock(new Date(recording.facts[0].at * 1000));
+  const { recording, startMs, ticks } = readRecording(file);
+  const clock = heldClock(new Date(startMs));
   const launcher = fakeLauncher(clock);
   const replayHome = tempDir("ccb-seam-replay-");
   const host = hostOf({}, { home: replayHome, tmp: replayHome });
@@ -594,6 +594,23 @@ test("a recording the daemon's close ends is whole: its counts are the file's, a
   expect(text.split("\n").filter((l) => l !== "")).toHaveLength(lines);
   expect(requests).toBe(1);
   expect(parseRecording(text).requests).toHaveLength(1);
+});
+
+test("a recording no request arrived in leaves no file, so the same path records again", async () => {
+  const s = liveSession();
+  await s.requestFrom(s.cwd, s.configFile);
+  const file = path.join(tempDir("ccb-seam-out-"), "idle.jsonl");
+  const idle = recordToFile(
+    s.live.recorder,
+    s.clock,
+    sessionIdOf(SID),
+    file,
+    1,
+    stays(),
+  );
+  await s.after(1000);
+  expect(await idle).toMatchObject({ path: file, requests: 0 });
+  expect(fs.existsSync(file)).toBe(false);
 });
 
 test("a recording whose client leaves ends there, whole, and writes nothing after", async () => {

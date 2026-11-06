@@ -24,7 +24,7 @@ import type {
   SubscribeRequest,
 } from "./protocol";
 import { parseSessionId, type SessionId } from "./session-id";
-import { recordToFile } from "./session-recorder.js";
+import { RecordingFailed, recordToFile } from "./session-recorder.js";
 import { type SourceSnapshots } from "./stats";
 import {
   clickVerb,
@@ -201,7 +201,10 @@ function recording(parts: DaemonParts, req: RecordRequest): HandledRequest {
           stay({
             ok: false,
             error: e instanceof Error ? e.message : String(e),
-            code: "BAD_REQUEST",
+            // [LAW:types-are-the-program] A recording a write ended is the
+            // daemon failing; one refused before it began, the request.
+            code:
+              e instanceof RecordingFailed ? "RENDER_FAILED" : "BAD_REQUEST",
             daemonV: PROTOCOL_VERSION,
           }),
       ),

@@ -16,7 +16,6 @@ import { appendFileSync, closeSync, openSync, unlinkSync } from "node:fs";
 import { reaction } from "mobx";
 import {
   formatLine,
-  type FactsLine,
   type RecordingLine,
   type RequestLine,
 } from "../facts/recording.js";
@@ -85,20 +84,23 @@ export function sessionRecorder(
   };
   // The session's current view, written from: its document now, then each it
   // takes. With no view, nothing, until the cache enters one.
-  // [LAW:no-ambient-temporal-coupling] The reaction is the recording's before
-  // the document now is written, so a write that ends the recording disposes
-  // the reaction it ended: a reaction firing at once would write before its
-  // disposer was anyone's.
+  // [LAW:no-ambient-temporal-coupling] Each write is made holding its own
+  // reaction's handle, so a write that ends the recording disposes the
+  // reaction that made it — the first one included, which runs before
+  // `reaction` has returned, or at the end of the batch it was entered in.
   const attach = (sessionId: string, rec: Open): void => {
     const view = views.sessionView(sessionId);
-    if (view === null) {
-      rec.detach = () => {};
-      return;
-    }
-    const facts = (line: FactsLine): void =>
-      write(sessionId, rec, { kind: "facts", ...line });
-    rec.detach = reaction(() => view.followed.stamped(), facts);
-    facts(view.followed.stamped());
+    rec.detach =
+      view === null
+        ? () => {}
+        : reaction(
+            () => view.followed.stamped(),
+            (line, _prior, self) => {
+              rec.detach = () => self.dispose();
+              write(sessionId, rec, { kind: "facts", ...line });
+            },
+            { fireImmediately: true },
+          );
   };
   return {
     record(session, sink) {
@@ -178,6 +180,12 @@ export function settleRequest(
   return view.settle(at);
 }
 
+// A recording that started and that a write or the close ended: the daemon
+// failing, where a recording refused before it began is the request's fault.
+export class RecordingFailed extends Error {
+  override name = "RecordingFailed";
+}
+
 // [LAW:effects-at-boundaries] A recording into a file: created new, so a
 // mistyped path wipes nothing and two recordings never write one file;
 // written line by line, synchronously, so the file holds every line in the
@@ -225,11 +233,14 @@ export function recordToFile(
         let ended = failure;
         try {
           closeSync(fd);
+          // A recording no request arrived in is one the parser refuses, and
+          // it would refuse the same path to the next try: it is not kept.
+          if (ended === null && requests === 0) unlinkSync(path);
         } catch (e) {
           ended ??= e;
         }
         if (ended === null) resolve({ path, lines, requests });
-        else reject(new Error(`writing ${path}: ${String(ended)}`));
+        else reject(new RecordingFailed(`writing ${path}: ${String(ended)}`));
       },
     };
     left.addEventListener("abort", leave, { once: true });

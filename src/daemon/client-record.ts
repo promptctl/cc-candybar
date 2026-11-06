@@ -87,7 +87,7 @@ export function recordPlan(
   return requests === 0
     ? {
         stdout: "",
-        stderr: `record: ${path}: no request arrived in ${seconds}s, so there is nothing to replay: the session was idle, or its statusline is not drawn by this daemon. Remove the file before recording again.\n`,
+        stderr: `record: ${path}: no request arrived in ${seconds}s, so there is nothing to replay: the session was idle, or its statusline is not drawn by this daemon. No file was left.\n`,
         code: 1,
       }
     : {

@@ -14,6 +14,7 @@ import {
   type RequestLine,
 } from "../../src/facts/recording";
 import { FACTS_VERSION } from "../../src/facts/session-facts";
+import { playOf } from "../../src/demo/play";
 import { parseClientHints } from "../../src/daemon/protocol";
 import { sessionIdOf } from "../../src/daemon/session-id";
 import { instantOf, type Instant } from "../../src/utils/instant";
@@ -248,4 +249,12 @@ test("a pending that crossed as JSON is a pending, not a value", () => {
   );
   expect(parsed.builtins.session).toEqual({ kind: "pending", why: "unread" });
   expect(parsed.builtins.git.kind).toBe("ok");
+});
+
+test("a replay's clock starts at the first request, however long the view sat before it", () => {
+  const play = playOf(
+    parseRecording(text(header, facts(0, 1), requested(7200), requested(7201))),
+  );
+  expect(play.startMs).toBe(Math.round(at(7200) * 1000));
+  expect(play.ticks.map((t) => t.offsetMs)).toEqual([0, 1000]);
 });

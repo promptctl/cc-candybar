@@ -150,10 +150,14 @@ export class RecordingUnreadable extends Error {
   }
 }
 
-// A recording as the demo plays it: its requests, at their offsets from its
-// first document, the instant the held clock it replays under starts at.
+// A recording as the demo plays it: the instant its held clock starts at, in
+// whole milliseconds as the clock reads them, and its requests at their
+// offsets from it. The clock starts at the first request, not the first
+// document: the document a recording opens with is the view's latest when it
+// began, which can be hours old, and the arm serves it at any later reading.
 export interface RecordingPlay {
   readonly recording: Recording;
+  readonly startMs: number;
   readonly ticks: readonly [DemoTick, ...DemoTick[]];
 }
 
@@ -167,13 +171,19 @@ export function readRecording(path: string): RecordingPlay {
   } catch (e) {
     throw new RecordingUnreadable(path, e);
   }
-  const at0 = recording.facts[0].at;
+  return playOf(recording);
+}
+
+// The ticks a parsed recording plays by, from its first request.
+export function playOf(recording: Recording): RecordingPlay {
+  const [opening, ...later] = recording.requests;
+  const msOf = (at: Instant): number => Math.round(at * 1000);
+  const startMs = msOf(opening.at);
   const tick = ({ at, request }: Recording["requests"][number]): DemoTick => ({
-    offsetMs: Math.round((at - at0) * 1000),
+    offsetMs: msOf(at) - startMs,
     request,
   });
-  const [opening, ...later] = recording.requests;
-  return { recording, ticks: [tick(opening), ...later.map(tick)] };
+  return { recording, startMs, ticks: [tick(opening), ...later.map(tick)] };
 }
 
 // One request of the session, and when it arrives, from the clock's reading
