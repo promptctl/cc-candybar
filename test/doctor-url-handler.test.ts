@@ -135,8 +135,7 @@ describe("urlHandler probe", () => {
         kind: "lost",
         unopened: null,
         opener: { kind: "ok", value: { app: APP, forwarder: true } },
-        otherBuild:
-          "the daemon (1.0.0 [aaaa]) is another build than this client (1.0.0 [bbbb])",
+        otherBuild: { theirs: "1.0.0 [aaaa]", mine: "1.0.0 [bbbb]" },
       }),
     ).toEqual({
       ok: false,
@@ -145,6 +144,22 @@ describe("urlHandler probe", () => {
       more: [
         "a cc-candybar:// link was opened and did not arrive at the daemon",
       ],
+    });
+  });
+
+  test("a link that never opened has no build row: no daemon saw it", async () => {
+    expect(
+      verdict({
+        kind: "lost",
+        unopened: "No application knows how to open URL",
+        opener: { kind: "ok", value: { app: APP, forwarder: true } },
+        otherBuild: { theirs: "1.0.0 [aaaa]", mine: "1.0.0 [bbbb]" },
+      }),
+    ).toEqual({
+      ok: false,
+      reason:
+        "a cc-candybar:// link could not be opened — No application knows how to open URL",
+      more: [],
     });
   });
 
@@ -277,8 +292,7 @@ describe("probeUrlHandler", () => {
   });
 
   test("a link lost at a daemon of another build carries that build to the diagnosis", async () => {
-    const skew =
-      "the daemon (1.0.0 [aaaa]) is another build than this client (1.0.0 [bbbb])";
+    const skew = { theirs: "1.0.0 [aaaa]", mine: "1.0.0 [bbbb]" };
     const { edge } = fakeEdge({
       daemon: async () => ({
         kind: "ok",

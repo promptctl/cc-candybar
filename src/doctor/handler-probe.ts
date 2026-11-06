@@ -17,7 +17,12 @@ import { sleep, type Monotonic } from "../time.js";
 import fs from "node:fs";
 import { probeLink } from "../click/wire.js";
 import { describeFailure } from "../daemon/client-transport.js";
-import { fetchStats, otherBuild, shapeSkew } from "../daemon/client-stats.js";
+import {
+  fetchStats,
+  otherBuild,
+  shapeSkew,
+  type Builds,
+} from "../daemon/client-stats.js";
 import type { ClientWorld } from "../daemon/client-transport.js";
 import type { RendererAddress } from "../daemon/home.js";
 import { handlerSocketPath, socketPath } from "../daemon/paths.js";
@@ -65,7 +70,7 @@ export function parseProbeNonce(value: string): string | null {
 // whether it is this CLI's build.
 export interface DaemonView {
   readonly arrivals: readonly ProbeArrival[];
-  readonly otherBuild: string | null;
+  readonly otherBuild: Builds | null;
 }
 
 export interface HandlerProbeEdge {

@@ -34,6 +34,7 @@ import {
 } from "../daemon/render-sightings.js";
 import type { DeclKind, UnusedDecl } from "../config/unused.js";
 import type { Delivery, SightingScope } from "./sightings.js";
+import type { Builds } from "../daemon/client-stats.js";
 import {
   approachingLimit,
   chargeWords,
@@ -137,8 +138,8 @@ export type UrlHandlerFacts =
       // Why the link could not be opened at all, or null: it was opened.
       readonly unopened: string | null;
       readonly opener: Asked<HandlerApp | null>;
-      // The daemon is another build than this CLI, or null: one build.
-      readonly otherBuild: string | null;
+      // The daemon's build and this CLI's when they differ, or null: one build.
+      readonly otherBuild: Builds | null;
     };
 
 // [LAW:types-are-the-program] The `statusLine` Claude Code runs, as the
@@ -861,6 +862,17 @@ function handlerAppProblems(opener: Asked<HandlerApp | null>): string[] {
 // "The URL handler works" (brandon-doctor-v62x.a1z): a `cc-candybar://` link
 // comes back through the forwarder app. In the bar the doctor's own click is
 // that link; the CLI opens one and asks the daemon whether it arrived.
+// A daemon of another build may not read the link this build sends, so a
+// healthy handler's link is lost there too. A link that never opened was lost
+// before any daemon, so its verdict has no build row.
+function otherBuildProblems(builds: Builds | null): string[] {
+  return builds === null
+    ? []
+    : [
+        `the daemon (${builds.theirs}) is another build than this client (${builds.mine}), so it may not read the link this build sends`,
+      ];
+}
+
 const urlHandler: Check = {
   name: "urlHandler",
   label: "URL handler",
@@ -884,16 +896,14 @@ const urlHandler: Check = {
       case "lost":
         return problemsVerdict([
           ...handlerAppProblems(urlHandler.opener),
-          // A daemon of another build may not know the link this build sends,
-          // so a healthy handler's link is lost there too.
-          ...(urlHandler.otherBuild === null
-            ? []
+          ...(urlHandler.unopened === null
+            ? [
+                ...otherBuildProblems(urlHandler.otherBuild),
+                "a cc-candybar:// link was opened and did not arrive at the daemon",
+              ]
             : [
-                `${urlHandler.otherBuild}, so it may not read the link this build sends`,
+                `a cc-candybar:// link could not be opened — ${urlHandler.unopened}`,
               ]),
-          urlHandler.unopened === null
-            ? "a cc-candybar:// link was opened and did not arrive at the daemon"
-            : `a cc-candybar:// link could not be opened — ${urlHandler.unopened}`,
         ]);
     }
   },

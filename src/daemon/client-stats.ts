@@ -90,25 +90,33 @@ export function shapeSkew(
   return `the daemon (${theirs}) reports no ${missing.join(", ")}; it is another build than this client (${mine}), and restarts only when its own bundle changes`;
 }
 
-// The daemon's build as this client names it, or null when the two are one
-// build. Refuses nothing (a shape that matches is read whatever the build): it
-// is what a reader says when the daemon's words may not be this build's.
-export function otherBuild(s: StatsSnapshot): string | null {
-  const { theirs, mine } = builds(s);
-  return theirs === mine
-    ? null
-    : `the daemon (${theirs}) is another build than this client (${mine})`;
+// The daemon's build and this client's, each as `daemon-stats` labels it.
+export interface Builds {
+  readonly theirs: string;
+  readonly mine: string;
 }
 
-function builds(s: StatsSnapshot): { theirs: string; mine: string } {
+// The two builds when the daemon is not this client's build, or null when it
+// is: decided on the version and the full digest, never on the labels. Refuses
+// nothing (a shape that matches is read whatever the build); it is for a
+// reader whose diagnosis turns on whether the daemon speaks this build's words.
+export function otherBuild(s: StatsSnapshot): Builds | null {
+  return s.version === PACKAGE_VERSION && theirDigest(s) === bakedDigest()
+    ? null
+    : builds(s);
+}
+
+function builds(s: StatsSnapshot): Builds {
   return {
-    // [LAW:no-defensive-null-guards] exception: trust boundary — the snapshot
-    // is an unchecked cast from socket JSON, and an older daemon's carries no
-    // digest field.
-    theirs: buildLabel(s.version, s.sourceDigest ?? null),
+    theirs: buildLabel(s.version, theirDigest(s)),
     mine: buildLabel(PACKAGE_VERSION, bakedDigest()),
   };
 }
+
+// [LAW:no-defensive-null-guards] exception: trust boundary — the snapshot is
+// an unchecked cast from socket JSON, and an older daemon's carries no digest
+// field.
+const theirDigest = (s: StatsSnapshot): string | null => s.sourceDigest ?? null;
 
 const STATS_FIELDS = Object.keys(RuntimeStats.referenceSnapshot()) as Array<
   keyof StatsSnapshot
