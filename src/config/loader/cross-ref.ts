@@ -99,7 +99,7 @@ import { authoredRules, instantReadOf, projectionsOf } from "./projections.js";
 import {
   declaredVariables,
   templateActionRefs,
-  templateLinkProblems,
+  templateUnaddressedLinks,
   templateReads,
   refResolves,
   templateScopeOf,
@@ -1168,11 +1168,14 @@ function checkTemplateRefs(
   // [LAW:no-silent-failure] A string literal spelling a link no click runs is
   // the file's error at load, not the bar's at the click — at the helper that
   // spells it, as an unknown variable is.
-  for (const { problem, via } of templateLinkProblems(
+  for (const { literal, via } of templateUnaddressedLinks(
     template,
     scope.helpers,
   )) {
-    report(`Template spells a link no click runs: ${problem}`, via);
+    report(
+      `Template spells a link in a grammar older than names, which names no renderer: "${literal}"`,
+      via,
+    );
   }
 }
 

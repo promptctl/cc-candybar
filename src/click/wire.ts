@@ -41,7 +41,7 @@ import {
   MENU_NS,
   MENU_PAGE_NS,
 } from "../config/reserved-names.js";
-import { URL_SCHEME } from "./scheme.js";
+import { isBarLink, URL_SCHEME } from "./scheme.js";
 import { parseRendererAddress, type RendererAddress } from "../daemon/home.js";
 
 // [LAW:one-source-of-truth] The segment that marks a link's address, mirrored
@@ -487,6 +487,19 @@ export function parseHandlerUrl(rawUrl: string): HandlerUrl {
   } catch (error) {
     return { ok: false, problem: (error as Error).message };
   }
+}
+
+// [LAW:single-enforcer] Whether text a config spells opens a bar link that
+// can never name a renderer, whatever the draw joins to it: it opens with
+// neither the address nor a start of it (`cc-candybar://`, `…://t`). Text is
+// read as a head here, not as a whole link, because a literal may be only a
+// link's start, its name, verb or tail computed at the draw; whether a whole
+// link clicks is the parse's to say, at the click.
+export function spellsUnaddressedLink(text: string): boolean {
+  if (!isBarLink(text)) return false;
+  const rest = text.slice(`${URL_SCHEME}://`.length);
+  const addressed = `${LINK_TO}/`;
+  return !rest.startsWith(addressed) && !addressed.startsWith(rest);
 }
 
 // A `<verb>/<tail>` run as a click addressed to `to`.

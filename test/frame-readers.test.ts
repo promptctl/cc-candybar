@@ -2,7 +2,7 @@
 // from a Frame, with no bytes in between: its links, its text, and what stands
 // in for it.
 
-import { linksOf } from "../src/click/read";
+import { describeLink, linksOf } from "../src/click/read";
 import {
   composeBar,
   parseFrame,
@@ -136,5 +136,22 @@ describe("standIn", () => {
       "can-move",
     );
     expect(standIn({ ...moving, motion: "still" }, rows).motion).toBe("still");
+  });
+});
+
+describe("describeLink", () => {
+  // A config can compute a link at the draw that the daemon refuses; a reader
+  // shows the refusal, which is what its click does, rather than failing.
+  test("a drawn link the daemon refuses reads as its refusal", () => {
+    expect(describeLink({ text: "x", url: "cc-candybar://copy/x" }, "s")).toMatch(
+      /^refused: the link is in the direct verb form .*, which names no renderer: cc-candybar:\/\/copy\/x$/,
+    );
+  });
+
+  test("an addressed link reads as its effects, and an outside link as opened", () => {
+    expect(
+      describeLink({ text: "x", url: "cc-candybar://to/main/copy/s" }, "s"),
+    ).toBe("copy <session>");
+    expect(describeLink({ text: "x", url: B }, "s")).toBe(`opens ${B}`);
   });
 });

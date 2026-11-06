@@ -73,7 +73,16 @@ export function clickOf(url: string): { verb: string; value: string } {
 
 /** A click URL's ordered effect list (verb + decoded args); a link whose verb is not dispatch is the one-effect case. */
 export function effectsOf(url: string): DecodedEffect[] {
-  const { verb, value } = clickOf(url);
+  return effectsOfClick(clickOf(url));
+}
+
+function effectsOfClick({
+  verb,
+  value,
+}: {
+  verb: string;
+  value: string;
+}): DecodedEffect[] {
   if (verb !== VERB_DISPATCH) return [{ verb, args: decodeArgs(verb, value) }];
   return parseEffects(value).map((e) => ({
     verb: e.verb,
@@ -84,7 +93,11 @@ export function effectsOf(url: string): DecodedEffect[] {
 /** The effects a click on `link` fires, `verb arg…` each, `;` between; `sessionId` reads as `<session>`. */
 export function describeLink(link: DrawnLink, sessionId: string): string {
   if (!isBarLink(link.url)) return `opens ${link.url}`;
-  return effectsOf(link.url)
+  // A link a config computes at the draw can be one the daemon refuses, and
+  // the refusal is what its click does.
+  const click = parseHandlerUrl(link.url);
+  if (!click.ok) return `refused: ${click.problem}`;
+  return effectsOfClick(click)
     .map(({ verb, args }) =>
       [verb, ...args.map((a) => (a === sessionId ? "<session>" : a))].join(" "),
     )

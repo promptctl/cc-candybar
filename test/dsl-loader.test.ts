@@ -1722,31 +1722,37 @@ describe("loadDslConfig — root rows fragment", () => {
 });
 
 describe("loadDslConfig — cross-references", () => {
-  // [LAW:no-silent-failure] A string literal spelling a link no click runs is
-  // refused at load with the click's own reason, at the template or at the
-  // helper that spells it: a link in a grammar older than names is no click.
-  test("a template spelling a link that names no renderer is refused at load, naming its form", () => {
+  // [LAW:no-silent-failure] A string literal spelling a link in a grammar older
+  // than names is refused at load, quoted as written, at the template or at
+  // the helper that spells it.
+  test("a template spelling a link that names no renderer is refused at load, quoting the literal", () => {
     const linked = `{ segments: { a: { template: '{{ link (printf "cc-candybar://load-config/%s/" .session.id) "normal" }}' } }, root: { h: ['a'] } }`;
     expectIssue(linked, {
       path: "segments.a.template",
       message:
-        /^Template spells a link no click runs: the link is in the direct verb form cc-candybar:\/\/<verb>\/…, which names no renderer: cc-candybar:\/\/load-config\/%s\/\/$/,
+        /^Template spells a link in a grammar older than names, which names no renderer: "cc-candybar:\/\/load-config\/%s\/"$/,
     });
     const viaHelper = `{ helpers: { h: '{{ link "cc-candybar://open-vscode/x/" "pick" }}' }, segments: { a: { template: '{{ template "h" . }}' } }, root: { h: ['a'] } }`;
-    expectIssue(viaHelper, { path: "helpers.h", message: "the direct verb form" });
+    expectIssue(viaHelper, { path: "helpers.h", message: '"cc-candybar://open-vscode/x/"' });
     // A literal may be only a link's head, joined to a computed tail.
     const head = `{ segments: { a: { template: '{{ link (printf "%s/%s/" "cc-candybar://load-config" .session.id) "pick" }}' } }, root: { h: ['a'] } }`;
-    expectIssue(head, { path: "segments.a.template", message: "the direct verb form" });
+    expectIssue(head, { path: "segments.a.template", message: '"cc-candybar://load-config"' });
     const bare = `{ segments: { a: { template: '{{ link "cc-candybar://hello" "copy" }}' } }, root: { h: ['a'] } }`;
-    // Read as a possible head, a bare literal is a direct link's start; either
-    // way it names no renderer.
-    expectIssue(bare, { path: "segments.a.template", message: "which names no renderer" });
+    expectIssue(bare, { path: "segments.a.template", message: /names no renderer: "cc-candybar:\/\/hello"$/ });
   });
 
-  test("a template spelling an addressed link, or a literal that is no link, loads", () => {
-    for (const literal of ["cc-candybar://to/main/x/1", "https://example.com/cc-candybar://x"]) {
+  // A literal that opens the address, or stops before it, can still be joined
+  // into a link that clicks; one that is no bar link is no link at all.
+  test("a template whose literals open an addressed link, or are no link, loads", () => {
+    for (const template of [
+      '{{ link "cc-candybar://to/main/x/1" "go" }}',
+      '{{ link (printf "%s/copy/%s" "cc-candybar://to/main" "x") "go" }}',
+      '{{ link (printf "cc-candybar://to/%s/copy/%s" "main" "x") "go" }}',
+      '{{ if hasPrefix "x" "cc-candybar://" }}x{{ end }}',
+      '{{ link "https://example.com/cc-candybar://x" "go" }}',
+    ]) {
       expect(() =>
-        parseAndValidate(FILE, `{ segments: { a: { template: '{{ link "${literal}" "go" }}' } }, root: { h: ['a'] } }`),
+        parseAndValidate(FILE, `{ segments: { a: { template: '${template}' } }, root: { h: ['a'] } }`),
       ).not.toThrow();
     }
   });
