@@ -67231,17 +67231,6 @@ async function refreshPayload(inputs, at, refreshed) {
 function sourcesRead(closure, sources) {
   return [...sources.keys()].filter((name) => closure.has(name));
 }
-function settledLanes(outcome, sources) {
-  const lane = settledLane(outcome);
-  return {
-    git: lane,
-    tmux: lane,
-    hostName: lane,
-    hostUser: lane,
-    today: lane,
-    sources: new Map(sources.map((name) => [name, lane]))
-  };
-}
 function gitAt({ cwd: cwd2, hookData: hookData2 }, closure) {
   return [
     cwd2 ?? hookData2.workspace?.current_dir,
@@ -82118,7 +82107,15 @@ function openView(state, cwd2, facts, {
   const stop2 = reaction(
     presetNow,
     (preset) => redeclare(declared.get().facts, preset),
-    { fireImmediately: true }
+    {
+      fireImmediately: true,
+      // [LAW:no-silent-failure] A follow that throws on a pick reaches only
+      // the console MobX prints to, which nobody reads in a detached daemon.
+      onError: (e) => log(
+        "error",
+        `session view follow threw on a pick sid=${JSON.stringify(sessionId2)}: ${String(e)}`
+      )
+    }
   );
   const sourceStops = [];
   const release3 = () => {
@@ -82978,34 +82975,23 @@ function inProcessFacts({
       const holds2 = new Holds();
       const sid = JSON.stringify(session);
       const lanesFor = (facts2, { closure, sources }) => {
-        try {
-          const {
-            result: { lanes, faults },
-            acquired,
-            released
-          } = holds2.declare(
-            () => declareLanes(providers, holds2, facts2, closure, sources)
-          );
-          for (const fault of faults) {
-            log("error", `session view declaration threw sid=${sid} ${fault}`);
-          }
-          if (acquired + released > 0) {
-            log(
-              "info",
-              `session view declared sid=${sid} acquired=${acquired} released=${released} held=${holds2.size}`
-            );
-          }
-          return lanes;
-        } catch (e) {
+        const {
+          result: { lanes, faults },
+          acquired,
+          released
+        } = holds2.declare(
+          () => declareLanes(providers, holds2, facts2, closure, sources)
+        );
+        for (const fault of faults) {
+          log("error", `session view declaration threw sid=${sid} ${fault}`);
+        }
+        if (acquired + released > 0) {
           log(
-            "error",
-            `session view declaration threw sid=${sid}: ${String(e)}`
-          );
-          return settledLanes(
-            failed(`view declaration threw: ${String(e)}`, "read"),
-            [...sources.keys()]
+            "info",
+            `session view declared sid=${sid} acquired=${acquired} released=${released} held=${holds2.size}`
           );
         }
+        return lanes;
       };
       const declared = observable.box(
         { facts, declaration, lanes: lanesFor(facts, declaration) },
