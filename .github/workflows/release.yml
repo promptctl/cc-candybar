@@ -90,21 +90,23 @@ jobs:
       # counted from the two booting runs' records. `always()` so a red test run
       # still says what the count was, and before the report so the records it
       # reads exist. Each of the three trailing steps also waits for the tiers
-      # whose records it reads: a step skipped by an earlier failure left no
-      # records, and the throw for that only restates the failure.
+      # whose records it reads to have run: a tier skipped or cancelled by an
+      # earlier failure left no complete records, and the throw for that only
+      # restates the failure. So a red worker run reports no count: the process
+      # tier never ran.
       - name: Daemon-boot cases equal the ratchet
-        if: always() && steps.worker.outcome != 'skipped' && steps.process.outcome != 'skipped'
+        if: always() && !contains(fromJSON('["skipped","cancelled"]'), steps.worker.outcome) && !contains(fromJSON('["skipped","cancelled"]'), steps.process.outcome)
         run: node scripts/check-boot-ratchet.mjs --runs worker,process
 
       # One record per test file, kept so a number about the suite is read from
       # a run and not remembered. `always()` because a red run is the one whose
       # records matter most, and last so a failed report cannot skip a gate.
       - name: Report tests by layer
-        if: always() && steps.unit.outcome != 'skipped' && steps.worker.outcome != 'skipped' && steps.process.outcome != 'skipped'
+        if: always() && !contains(fromJSON('["skipped","cancelled"]'), steps.unit.outcome) && !contains(fromJSON('["skipped","cancelled"]'), steps.worker.outcome) && !contains(fromJSON('["skipped","cancelled"]'), steps.process.outcome)
         run: pnpm test:report --runs unit,worker,process
 
       - name: Keep the test records
-        if: always() && steps.unit.outcome != 'skipped'
+        if: always() && !contains(fromJSON('["skipped","cancelled"]'), steps.unit.outcome)
         uses: actions/upload-artifact@v4
         with:
           name: test-records
