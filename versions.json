@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-624",
+      "ref": "refs/pull/624/merge",
+      "sha": "84d29cca1c76d67a3284269fd351e7ebc5edd2a6",
+      "timestamp": "2026-11-06T05:11:57.967Z",
+      "commits": [
+        {
+          "sha": "84d29cca1c76d67a3284269fd351e7ebc5edd2a6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T05:11:05Z",
+          "message": "Merge 4ce50c2b05a290d69ede19ca901ed92bf84fda9c into 9b6790b0d73afbdd6c683accf7b693cffe16c89e\n"
+        },
+        {
+          "sha": "4ce50c2b05a290d69ede19ca901ed92bf84fda9c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T22:10:44-07:00",
+          "message": "fix(facts): the recording arm stands where the clock does, the recorder tells the log a line it could not write, the owners are read once per follow, and the draw reads the turn's closure (candybar-gather-renderer-76bb.6pj.go2)\n"
+        },
+        {
+          "sha": "790eaee5361e7c4929de237b2fb08150439bdd30",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T21:12:57-07:00",
+          "message": "feat(facts): a view follows its session through the Facts interface, with an in-process arm, a recording arm and the seam test (candybar-gather-renderer-76bb.6pj.go2)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "2e39515c37ff054e142819a3e4ee02f881e22940",
@@ -20,28 +49,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-06T04:47:15Z",
           "message": "chore(release): set `package.json` to 1.193.0 [skip ci]\n\n## [1.193.0](https://github.com/promptctl/cc-candybar/compare/v1.192.0...v1.193.0) (2026-11-06)\n\n### Features\n\n* **apply:** a click's launches are effects, performed after its turn and reported as effect-done (candybar-gather-renderer-76bb.1dh.g2l) ([#621](https://github.com/promptctl/cc-candybar/issues/621)) ([8bb9728](https://github.com/promptctl/cc-candybar/commit/8bb9728f028615d94483db40d614a14926ef1468))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-624",
-      "ref": "refs/pull/624/merge",
-      "sha": "9c4a7d3573544e9c4fb13c79d47f5f2f7af27613",
-      "timestamp": "2026-11-06T04:47:09.307Z",
-      "commits": [
-        {
-          "sha": "9c4a7d3573544e9c4fb13c79d47f5f2f7af27613",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T04:46:14Z",
-          "message": "Merge 790eaee5361e7c4929de237b2fb08150439bdd30 into 8bb9728f028615d94483db40d614a14926ef1468\n"
-        },
-        {
-          "sha": "790eaee5361e7c4929de237b2fb08150439bdd30",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T21:12:57-07:00",
-          "message": "feat(facts): a view follows its session through the Facts interface, with an in-process arm, a recording arm and the seam test (candybar-gather-renderer-76bb.6pj.go2)\n"
         }
       ]
     },

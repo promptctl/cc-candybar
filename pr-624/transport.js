@@ -39325,6 +39325,26 @@ function retiredGitKindMessage(raw) {
   const note = field.note === void 0 ? "" : ` (${field.note})`;
   return `${head} read ${field.read} where it was read${note}, or declare ${json5Of(field.declare)} under a name of your own`;
 }
+var RETIRED_ENV_NAMES = new Map(
+  [
+    ["HOME", "home"],
+    ["USER", "host.user"],
+    ["LOGNAME", "host.user"],
+    ["HOSTNAME", "host.name"]
+  ].map(([name, path42]) => [
+    name,
+    { read: `.${path42}`, declare: { kind: "input", path: path42, default: "" } }
+  ])
+);
+function retiredEnvKindMessage(raw) {
+  const read2 = typeof raw.name === "string" ? ` (this one read $${raw.name})` : "";
+  const head = `kind "env" is removed${read2}: the renderer's environment belongs to whichever shell spawned it, not to the session it draws for, so an env variable was never a session fact \u2014 drop this declaration`;
+  const field = typeof raw.name === "string" ? RETIRED_ENV_NAMES.get(raw.name) : void 0;
+  if (field === void 0) {
+    return `${head}; a value the payload lacks is read from a file by a "file" source or computed by a "shell" source, and not by echoing the variable there, since a "shell" source runs in the renderer too`;
+  }
+  return `${head} and read ${field.read} where it was read, or declare ${json5Of(field.declare)} under a name of your own`;
+}
 var RETIRED_LINK_VERBS = /* @__PURE__ */ new Map([
   [
     "load-config",
@@ -39496,10 +39516,6 @@ var INPUT_FIELDS = {
   type: optionalEnumSpec(["string", "number", "boolean"]),
   default: typedDefaultSpec()
 };
-var ENV_FIELDS = {
-  name: requireStringSpec(),
-  default: optionalStringSpec()
-};
 var FILE_FIELDS = {
   path: requireAbsolutePathSpec(),
   readMode: optionalEnumSpec(["whole", "first-line"]),
@@ -39561,14 +39577,13 @@ var VARIABLE_SCHEMA = {
     // is one field map like every other arm — `arm()` derives both `parse` and
     // `json` from INPUT_FIELDS, no hand-authored schema to keep in sync.
     input: arm("input", INPUT_FIELDS),
-    env: arm("env", ENV_FIELDS),
     file: arm("file", FILE_FIELDS),
     shell: arm("shell", SHELL_FIELDS),
     template: arm("template", TEMPLATE_FIELDS, TEMPLATE_VAR_REMOVED),
     time: arm("time", TIME_FIELDS, TIME_VAR_REMOVED),
     state: arm("state", STATE_FIELDS)
   },
-  retired: { git: retiredGitKindMessage }
+  retired: { git: retiredGitKindMessage, env: retiredEnvKindMessage }
 };
 function variableDeclJson() {
   return taggedUnionJson(VARIABLE_SCHEMA);
@@ -53410,19 +53425,17 @@ var SourceRegistry = class _SourceRegistry {
   // sessionState lets the daemon inject its singleton so state-kind variables
   // share one MobX atom and one disk-persistence layer with the click verbs.
   // Omitted in tests that don't exercise state vars.
-  constructor(runs, store, defaultEmptyValue = "", sessionState, parent = null, env2 = {}) {
+  constructor(runs, store, defaultEmptyValue = "", sessionState, parent = null) {
     this.runs = runs;
     this.store = store;
     this.defaultEmptyValue = defaultEmptyValue;
     this.parent = parent;
-    this.env = env2;
     this.sessionState = sessionState;
   }
   runs;
   store;
   defaultEmptyValue;
   parent;
-  env;
   lastErrors = /* @__PURE__ */ new Map();
   // A cache policy that cannot fire is a STANDING fault, not a read's
   // outcome: a read that succeeds afterwards says nothing about whether the
@@ -53513,8 +53526,7 @@ var SourceRegistry = class _SourceRegistry {
       new VariableStore(this.store.clock, this.store),
       this.defaultEmptyValue,
       this.sessionState,
-      this,
-      this.env
+      this
     );
   }
   // [LAW:one-source-of-truth] The registry IS the owner of its store — every
@@ -53598,18 +53610,6 @@ var SourceRegistry = class _SourceRegistry {
         e instanceof Error ? e.message : String(e)
       );
     }
-  }
-  // env: resolved once at declaration from the registry's environment; box written once, never again.
-  // type is always 'string' — env vars are text by nature.
-  declareEnv(name, envVar, varDefault) {
-    const raw = this.env[envVar];
-    if (raw !== void 0) {
-      this.store.defineBox(name, "string", raw);
-      return;
-    }
-    const fallback = varDefault !== void 0 ? varDefault : typeof this.defaultEmptyValue === "string" ? this.defaultEmptyValue : "";
-    this.store.defineBox(name, "string", fallback);
-    this.recordError(name, `env var "${envVar}" is not set`);
   }
   // ─── Async source kinds ───────────────────────────────────────────────────
   // shell: spawn command in /bin/sh, its stdout is the text the parser sees.
@@ -62349,9 +62349,8 @@ var RAW_DEFAULT_DSL_CONFIG = {
     version: { kind: "input", path: "version", default: "" },
     // home flows through the augmented payload (projectPayload reads
     // HOME, falling back to USERPROFILE on Windows where HOME is often
-    // unset). Sourcing via `kind: "input"` rather than `kind: "env",
-    // name: "HOME"` makes the directory `~` collapse work on every
-    // platform without per-platform config edits.
+    // unset), so the directory `~` collapse works on every platform
+    // without per-platform config edits.
     home: { kind: "input", path: "home", default: "" },
     // The tmux session name of the pane this session's client reported flows
     // through the daemon's augmented payload (TmuxService asks at most once
@@ -62363,9 +62362,9 @@ var RAW_DEFAULT_DSL_CONFIG = {
     "tmux.session": { kind: "input", path: "tmux.session", default: "" },
     // Host identity — which machine this session is on, and whether the user
     // arrived over SSH. All three come through the augmented payload rather
-    // than `kind: "env"` / `kind: "shell"`, and that is not a style choice:
+    // than a `kind: "shell"` source, and that is not a style choice:
     //
-    //   • `host.ssh` CANNOT be an env var here. Variables are evaluated in the
+    //   • `host.ssh` is no fact of the daemon's. Variables are evaluated in the
     //     DAEMON, which is detached and serves every session for this user at
     //     once — its `SSH_*` env describes whichever shell happened to spawn
     //     it. The fact is captured by the live client and carried as a wire
@@ -69095,7 +69094,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.192.0";
+var PACKAGE_VERSION = "1.194.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -74180,7 +74179,6 @@ var KIND_SCOPE = {
   template: "view",
   time: "view",
   literal: "directory",
-  env: "directory",
   dropped: "directory",
   // A plugin source is read per session: its reading is the session's own
   // file, which reaches the view through its payload.
@@ -75340,9 +75338,6 @@ function declareOne(registry, name, decl, cwd2, derivation) {
         decl.default,
         derivation
       );
-      break;
-    case "env":
-      registry.declareEnv(name, decl.name, decl.default);
       break;
     case "file":
       registry.declareFile(name, decl.path, {
@@ -76719,9 +76714,11 @@ function drawRender(parts, setup, drawing2) {
   noteFacts(facts, {
     prompts: String(metrics?.messageCount ?? "-"),
     nonPrompts: String(metrics?.nonPrompts ?? "-"),
+    // [LAW:one-source-of-truth] The closure the payload's git fact was read
+    // under is the turn's, beside the payload, not one resolved again here.
     pr: prFactOf(
       payload.git,
-      gitOptionsFromClosure(setup.state.neededInputPaths(effective.preset)).showPullRequest === true
+      gitOptionsFromClosure(view.source.closure()).showPullRequest === true
     ),
     feeds: feedsFact(projected.feeds)
   });
@@ -81939,9 +81936,7 @@ function buildRenderState(load, deps) {
     deps.runs,
     store,
     config2.globals.default_empty_value ?? "",
-    deps.sessionState,
-    null,
-    deps.env
+    deps.sessionState
   );
   let registration;
   try {
@@ -83025,28 +83020,6 @@ function inProcessFacts({
         () => readingsOf(inputs.get(), declared.get().declaration.sources)
       );
       let box;
-      try {
-        const at = instantAt(clock);
-        box = observable.box(
-          {
-            line: {
-              at,
-              facts: assembleFacts(
-                void 0,
-                session,
-                readings.get(),
-                update(),
-                at
-              )
-            },
-            failure: null
-          },
-          { deep: false }
-        );
-      } catch (e) {
-        holds2.close();
-        throw e;
-      }
       const stop2 = reaction(
         () => {
           try {
@@ -83071,6 +83044,29 @@ function inProcessFacts({
           onError: (e) => log("error", `session facts threw sid=${sid}: ${inspect(e)}`)
         }
       );
+      try {
+        const at = instantAt(clock);
+        box = observable.box(
+          {
+            line: {
+              at,
+              facts: assembleFacts(
+                void 0,
+                session,
+                readings.get(),
+                update(),
+                at
+              )
+            },
+            failure: null
+          },
+          { deep: false }
+        );
+      } catch (e) {
+        stop2();
+        holds2.close();
+        throw e;
+      }
       return {
         stamped: () => box.get().line,
         failure: () => box.get().failure,
@@ -83200,6 +83196,7 @@ function sessionSource(deps) {
       effective: () => turn.get().draw.effective,
       facts: () => turn.get().document,
       hints: () => turn.get().compose.hints,
+      closure: () => turn.get().compose.neededInputPaths,
       failure: () => turn.get().failure,
       selections: () => turn.get().draw.effective
     };
@@ -85237,7 +85234,6 @@ function createDaemon(inputs) {
       runs: sourceRuns,
       stateDir: paths2.state,
       locations: locs,
-      env: host.env,
       sessionState,
       watchers: watcherRegistry,
       log,
