@@ -21,7 +21,7 @@ Scanned at `10f26ceb`. Root for everything below: `/Users/bmf/code/cc-candybar/.
 
 **In `src/` (runs in the daemon or in-process)**
 - `src/band/frames.ts`: `bandFrame` decodes with `new AnsiDecoder()`, reading `line.plain` and `line.spans`, to build `BandRun`s. `bandResponse` gets its ANSI from `planOutcome(renderOutcomeOf(resp)).output`. It must take Frame rows. Called from `lane-frames.ts`; asserted by `test/band-frames.test.ts`.
-- `src/tmux-status/frames.ts`: `tmuxStatusFrame` does the same decode to build `#[...]` directives and the range-to-link map. Called from `src/daemon/tmux-status.ts` (`entry.frame = tmuxStatusResponse(resp)`) and `lane-frames.ts`; asserted by `test/tmux-status-frames.test.ts`.
+- `src/tmux-status/frames.ts`: `tmuxStatusFrame` does the same decode to build `#[...]` directives and the range-to-link map. Called only from the tmux status encoder in `lane-frames.ts`, which a feed runs once a frame; asserted by `test/tmux-status-frames.test.ts`.
 - `src/click/read.ts`: `links()` uses `osc8Sequences`, `drawnLinks()` builds on it, and `stripAnsi` uses `INVISIBLE`. The non-ANSI half (`effectsOf`, `describeLink`, `isBarLink`, `HOST_VERBS`) stays.
 - `src/render/diagnostic-style.ts`: `hexOfSgr` regexes the hex out of SGR literals. It is a small decoder and should be inverted, so colours are the source and SGR is derived. `scripts/check-protocol.mjs` diffs these literals against Rust, so it must change too.
 
@@ -178,7 +178,6 @@ These are word matches across the 301 test files. `links(` is a heuristic, and t
 - `statusLineClick` in `src/daemon/server.ts`: hand-spelled `startsWith`.
 - `isBarLink` in `src/click/read.ts`.
 - `follow()` in `scripts/bar-web/index.html`: hand-spelled.
-- `rangeOf` in `src/tmux-status/frames.ts`: digests the whole URL, so the prefix changes range ids.
 - `wire.ts` documents that old direct URLs stay accepted, so the parser must take both forms.
 
 **Can one function own the prefix?** Yes, for every link the bar draws from effects. `linkFragment`, `linkOver` and `withLink` receive URL strings, so `effectsUrl` is the one mint.

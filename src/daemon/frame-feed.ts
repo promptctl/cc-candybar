@@ -31,6 +31,7 @@ import {
 } from "../config/lanes";
 import { laneOffReason } from "../config/menu-places";
 import type { Timekeeper } from "../time";
+import type { LaneEncoder, LaneEncoders, LaneOut } from "./lane-frames";
 
 // What one frame of the feed drew: the bar, the responses its subscribers
 // receive, and — for a render that threw — the render event describing it,
@@ -98,21 +99,21 @@ const RATE_WINDOW_S = 1;
 // stepped back is followed at the next draw.
 const TIMER_RESOLUTION_S = 0.002;
 
-// A subscriber: each frame's bar, which a lane drawing it elsewhere encodes,
-// and its lane's answer as the feed serialized it once for every subscriber of
-// that lane.
-export type Sink = (bar: Frame, json: string) => void;
-
 export type Refusal = Extract<Response, { ok: false }>;
 
-// One subscription: the lane it serves, where its frames go, where its
-// refusal goes — the last thing it receives, since a refused subscription is
-// over — and whether it draws the bar where its lane puts it now. A client's
+// One subscription: the lane it serves, where its frames go — each as its
+// lane encoded it, once for every subscriber of the lane — where its refusal
+// goes — the last thing it receives, since a refused subscription is over —
+// and whether it draws the bar where its lane puts it now. A client's
 // subscription draws whatever it is sent; the daemon's own tmux status line
 // draws a session only while that status line shows the session's pane.
-export interface Subscriber {
-  readonly lane: Lane;
-  readonly frame: Sink;
+export interface Subscriber<L extends Lane = Lane> {
+  readonly lane: L;
+  // [LAW:types-are-the-program] exception: a method, so a subscriber of one
+  // lane is held among the feed's subscribers of every lane. The feed hands
+  // each only its own lane's encoding (`send`), a pairing the compiler cannot
+  // follow through the map.
+  frame(out: LaneOut<L>): void;
   readonly refused: (resp: Refusal) => void;
   readonly drawing: () => boolean;
 }
@@ -159,6 +160,9 @@ export interface FeedDeps<Req> {
   // it drew, so a feed that drew without refreshing anything is seen to.
   refreshes(): Readonly<Record<RefreshTrigger, number>>;
   periods: FeedPeriods;
+  // Each lane's encoder, one made for each lane a session's subscribers follow
+  // (src/daemon/lane-frames.ts).
+  encoders: LaneEncoders;
   // The wall clock: the instant a frame is drawn for, which its cells' next
   // change is a time on.
   instant(): Instant;
@@ -183,16 +187,32 @@ type Phase =
     }
   | { readonly kind: "drawing" };
 
+// A lane some subscriber of the session follows: kept from the lane's first
+// subscriber joining to its last leaving, which is how long the renderer holds
+// the session's surface.
+interface LaneFeed {
+  // The instant of each frame of the last RATE_WINDOW_S that went out to the
+  // lane, oldest first, not counting the frame a subscriber is handed as it
+  // joins, which is the bar as it stood, not one more frame.
+  readonly rate: Instant[];
+  // [LAW:single-enforcer] The lane's one encoder for the session, and what it
+  // keeps (the tmux status line's link ids).
+  readonly encode: LaneEncoder<Lane>;
+  // The last frame pushed, as the lane encoded it; null until one was.
+  out: LaneOut<Lane> | null;
+}
+
+// A subscriber's lane, and the bytes it was last sent: a lane whose encoding a
+// frame left as it was is not sent it again.
+interface Follower {
+  readonly lane: LaneFeed;
+  sent: string | null;
+}
+
 interface Feed {
   readonly sessionId: string;
-  // Each subscriber, with the bytes it was last sent: a lane whose answer a
-  // frame left as it was is not sent it again.
-  readonly followers: Map<Subscriber, string | null>;
-  // The instant of each frame of the last RATE_WINDOW_S that went out to each lane a
-  // subscriber follows, oldest first: kept from the lane's first subscriber
-  // joining to its last leaving, and not counting the frame a subscriber is
-  // handed as it joins, which is the bar as it stood, not one more frame.
-  readonly rates: Map<Lane, Instant[]>;
+  readonly followers: Map<Subscriber, Follower>;
+  readonly lanes: Map<Lane, LaneFeed>;
   readonly unwatch: () => void;
   readonly unpin: () => void;
   phase: Phase;
@@ -200,7 +220,8 @@ interface Feed {
   // wake's next frame is spaced from.
   lastStart: number;
   // The last frame pushed: its answers as serialized, so an unchanged frame is
-  // never pushed twice, and its bar, so a new subscriber gets the bar at once.
+  // never pushed twice, and its bar, so a lane a new subscriber brings is
+  // handed the bar at once.
   last: {
     readonly bar: Frame;
     readonly answers: Answers;
@@ -351,7 +372,7 @@ export class FrameFeeds<Req> {
   // lane the session's settings switch off is refused here before any feed
   // opens, and one whose lane is switched off while it streams is ended in
   // `push`. A session with no view yet waits, and its first frame decides.
-  subscribe(sessionId: string, sub: Subscriber): () => void {
+  subscribe<L extends Lane>(sessionId: string, sub: Subscriber<L>): () => void {
     const lanes = this.deps.lanes(sessionId);
     if (lanes !== null && !lanes[sub.lane]) {
       this.refuse(sessionId, sub);
@@ -359,20 +380,42 @@ export class FrameFeeds<Req> {
     }
     const held = this.feeds.get(sessionId);
     const feed = held ?? this.open(sessionId);
-    feed.followers.set(sub, null);
-    if (!feed.rates.has(sub.lane)) feed.rates.set(sub.lane, []);
+    const follower: Follower = {
+      lane: this.laneOf(feed, sub.lane),
+      sent: null,
+    };
+    feed.followers.set(sub, follower);
     // [LAW:no-ambient-temporal-coupling] A feed's clock starts when it opens:
     // its first frame falls due as a wake's would, in a later turn than the
     // subscribe, so a subscribe draws nothing in its caller's turn. A later
     // subscriber is handed the frame as it stands, and the next is brought
     // forward: who follows the session is drawn into it (`following`).
-    if (held !== undefined) this.send(feed, sub);
+    this.send(sub, follower);
     this.hasten(feed);
     this.deps.log(
       "info",
       `feed sid=${JSON.stringify(sessionId)} subscribed lane=${sub.lane} subscribers=${feed.followers.size} view=${lanes === null ? "N" : "Y"}`,
     );
     return () => this.unsubscribe(feed, sub);
+  }
+
+  // The feed's `lane`, made with its encoder as the lane's first subscriber
+  // joins. A feed that already pushed a frame encodes it for the lane then,
+  // once, so the subscriber is handed the bar as it stands.
+  private laneOf(feed: Feed, lane: Lane): LaneFeed {
+    const held = feed.lanes.get(lane);
+    if (held !== undefined) return held;
+    const encode: LaneEncoder<Lane> = this.deps.encoders[lane]();
+    const made: LaneFeed = {
+      rate: [],
+      encode,
+      out:
+        feed.last === null
+          ? null
+          : encode(feed.last.bar, answerOf(feed.last.answers, lane)),
+    };
+    feed.lanes.set(lane, made);
+    return made;
   }
 
   // The lanes whose subscribers follow the session's frames and draw them now.
@@ -440,7 +483,7 @@ export class FrameFeeds<Req> {
     const since = at - RATE_WINDOW_S;
     const shown = this.shown(feed);
     return perLane((lane) => {
-      const rate = feed.rates.get(lane);
+      const rate = feed.lanes.get(lane)?.rate;
       if (rate === undefined) return UNFOLLOWED;
       let subscribers = 0;
       for (const sub of feed.followers.keys())
@@ -470,7 +513,7 @@ export class FrameFeeds<Req> {
     const feed: Feed = {
       sessionId,
       followers: new Map(),
-      rates: new Map(),
+      lanes: new Map(),
       unwatch: this.deps.watch(sessionId, () => this.wake(sessionId, "state")),
       unpin: this.deps.pin(sessionId),
       phase: { kind: "waiting" },
@@ -507,8 +550,11 @@ export class FrameFeeds<Req> {
 
   private unsubscribe(feed: Feed, sub: Subscriber): void {
     if (!feed.followers.delete(sub)) return;
+    // [LAW:one-source-of-truth] The lane's last subscriber leaving is the
+    // renderer letting go of the session's surface: the lane's encoder goes
+    // with it, and so does what it kept.
     if (![...feed.followers.keys()].some((s) => s.lane === sub.lane))
-      feed.rates.delete(sub.lane);
+      feed.lanes.delete(sub.lane);
     // Who follows the session is drawn into its frame (`following`).
     if (feed.followers.size > 0) {
       this.hasten(feed);
@@ -713,12 +759,23 @@ export class FrameFeeds<Req> {
       resp: JSON.stringify(frame.resp),
       statusline: JSON.stringify(frame.statusline),
     };
+    // [LAW:single-enforcer] Each lane is encoded once a frame, whoever follows
+    // it: what its encoder mints for the frame is minted once.
+    const outs = [...feed.lanes].map(([lane, held]) => ({
+      held,
+      out: held.encode(frame.bar, answerOf(answers, lane)),
+    }));
+    // [LAW:one-source-of-truth] A frame is unchanged only when every lane
+    // encodes it as it did the last: an encoding reads what the answers do
+    // not (the tmux status line's ids, none while the counter is faulted), so
+    // a still bar whose row was drawn without ranges gets them back at its
+    // next frame.
     if (
       feed.last?.answers.resp === answers.resp &&
-      feed.last.answers.statusline === answers.statusline
+      feed.last.answers.statusline === answers.statusline &&
+      outs.every(({ held, out }) => held.out?.json === out.json)
     )
       return;
-    const before = feed.last?.answers ?? null;
     feed.last = { bar: frame.bar, answers };
     this.pushed++;
     feed.pushed++;
@@ -727,19 +784,19 @@ export class FrameFeeds<Req> {
     // same bytes, which are not pushed again, and the summary counts it.
     if (frame.failure !== null)
       this.deps.log(frame.failure.level, frame.failure.line);
-    for (const [lane, rate] of feed.rates)
-      if (before === null || answerOf(before, lane) !== answerOf(answers, lane))
-        noteSent(rate, at);
-    for (const sub of feed.followers.keys()) this.send(feed, sub);
+    for (const { held, out } of outs) {
+      if (held.out?.json !== out.json) noteSent(held.rate, at);
+      held.out = out;
+    }
+    for (const [sub, follower] of feed.followers) this.send(sub, follower);
   }
 
-  // The last frame's answer for `sub`'s lane, unless it was sent that already.
-  private send(feed: Feed, sub: Subscriber): void {
-    if (feed.last === null) return;
-    const json = answerOf(feed.last.answers, sub.lane);
-    if (feed.followers.get(sub) === json) return;
-    sub.frame(feed.last.bar, json);
-    feed.followers.set(sub, json);
+  // The last frame as `sub`'s lane encoded it, unless it was sent that already.
+  private send(sub: Subscriber, follower: Follower): void {
+    const { out } = follower.lane;
+    if (out === null || follower.sent === out.json) return;
+    sub.frame(out);
+    follower.sent = out.json;
   }
 
   // A subscription its lane's toggle refuses, told why.

@@ -20,7 +20,8 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
-import { LANE_FRAMES } from "../src/daemon/lane-frames";
+import { laneEncoders } from "../src/daemon/lane-frames";
+import { countedIds } from "./helpers/link-ids";
 import { textOf, ansiOf, renderFailedFrame, type Frame } from "../src/render/frame";
 import {
   COLOR_COMPATIBILITIES,
@@ -52,6 +53,14 @@ const PAYLOAD = {
   },
 };
 
+// A frame as a lane's subscribers are sent it, from a lane encoder of its own,
+// so a link's range id is the same whichever case runs first.
+const laneJson = (
+  lane: "band" | "tmuxStatus",
+  frame: Frame,
+  json: string,
+): string => laneEncoders(countedIds())[lane]()(frame, json).json;
+
 // What a subscriber of each lane that draws runs receives for a bar, beside the
 // bar's bytes. `json` is the response the daemon sends: a bar and its newline
 // (`composeBar`).
@@ -60,8 +69,8 @@ function lanes(frame: Frame) {
   const json = JSON.stringify({ ok: true, output: `${ansi}\n` });
   return {
     ansi,
-    band: LANE_FRAMES.band(frame, json),
-    tmuxStatus: LANE_FRAMES.tmuxStatus(frame, json),
+    band: laneJson("band", frame, json),
+    tmuxStatus: laneJson("tmuxStatus", frame, json),
   };
 }
 
@@ -243,10 +252,10 @@ describe("a render that failed", () => {
   const json = JSON.stringify({ ok: false, error, code: "RENDER_FAILED" });
 
   test("the band draws the statusline's error glyph", () => {
-    expect(LANE_FRAMES.band(bar, json)).toMatchSnapshot();
+    expect(laneJson("band", bar, json)).toMatchSnapshot();
   });
 
   test("the tmux status line draws it too", () => {
-    expect(LANE_FRAMES.tmuxStatus(bar, json)).toMatchSnapshot();
+    expect(laneJson("tmuxStatus", bar, json)).toMatchSnapshot();
   });
 });

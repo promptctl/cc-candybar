@@ -65,6 +65,8 @@ import { recordedCache } from "./session-recorder.js";
 import { sessionSource, type SessionSource } from "./session-source.js";
 import { EffectSessions } from "../render/effect.js";
 import { FEED_PERIODS, FrameFeeds } from "./frame-feed.js";
+import { laneEncoders } from "./lane-frames.js";
+import { linkIdAllocator } from "./link-id-allocator.js";
 import { type Drawing, type Lane, type LaneSwitches } from "../config/lanes.js";
 import {
   LIST_CLIENTS_FORMAT,
@@ -492,6 +494,16 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     // gather-and-renderer.md, section 17): a click on a row this renderer
     // holds is resolved to this renderer's socket from the name alone.
     name: home.name,
+    signer: inputs.linkSigner,
+    log,
+  });
+  // [LAW:one-source-of-truth] The home's link-id counter, which every tmux
+  // status line's range ids are minted from. A fault is tried again once a
+  // still period, the longest a bar's ⚠ waits to say it has gone.
+  const linkIds = linkIdAllocator({
+    file: paths.linkIds,
+    clock,
+    retryMs: FEED_PERIODS.still,
     log,
   });
   // Each subscribed session's frames, drawn from its latest render request
@@ -518,6 +530,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     watching: () => paneVisibility.follow(),
     refreshes: () => refreshLedger.totals(),
     periods: FEED_PERIODS,
+    encoders: laneEncoders(linkIds),
     clock,
     instant,
     log,
@@ -797,6 +810,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     laneSetups,
     tmuxStatusLines,
     frameFeeds,
+    linkIds,
     renderWarnings,
     renderCache,
     recorder,
@@ -855,6 +869,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         // launcher's lifeline goes.
         ["launches abort", () => closing.abort(new Error("the daemon closed"))],
         ["frameFeeds close", () => frameFeeds.close()],
+        ["linkIds close", () => linkIds.close()],
         ["menuIdle dispose", () => menuIdle.dispose()],
         ["updateWatch close", () => updateWatch.close()],
         ["binaryWatch close", () => binaryWatch.close()],

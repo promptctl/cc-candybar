@@ -41,11 +41,9 @@ import {
   encodeSegments,
   VERB_TMUX_STATUS_CLICK,
 } from "../click/wire.js";
-import {
-  RANGE_PREFIX,
-  tmuxStatusFrame,
-  type TmuxStatusBar,
-} from "../tmux-status/frames.js";
+import type { LinkSigner } from "../click/link-signer.js";
+import type { TmuxStatusBar } from "../tmux-status/frames.js";
+import { RANGE_PREFIX } from "../tmux-status/link-ids.js";
 
 export const MAX_STATUS_ROWS = LANES.tmuxStatus.rows;
 export const PRIOR_OPTION = "@cc-candybar-status-prior";
@@ -404,14 +402,15 @@ export function boundOf(listKeys: string): Bound | null {
 
 // [LAW:one-source-of-truth] The link a status-line click runs, addressed to
 // the renderer that binds it, as this module writes it into the binding and
-// reads it back in `linkAt`: tmux expands the pane (its `%` stripped, which a
-// URL would read as an escape) and the range, shell-quoted, before the shell
+// reads it back in `linkAt`: the server's socket and the mac the renderer
+// signs it with, then the pane (its `%` stripped, which a URL would read as an
+// escape) and the range, which tmux expands, shell-quoted, before the shell
 // runs the line.
-const clickUrl = (name: RendererAddress, socket: string): string =>
+const clickUrl = (name: RendererAddress, socket: string, mac: string): string =>
   addressedLink(
     name,
     VERB_TMUX_STATUS_CLICK,
-    `${encodeSegments([socket])}/#{s/%//:pane_id}/#{q:mouse_status_range}`,
+    `${encodeSegments([socket, mac])}/#{s/%//:pane_id}/#{q:mouse_status_range}`,
   );
 
 // A binding a cc-candybar daemon wrote — this one or any other, of any name
@@ -474,7 +473,10 @@ export type TmuxAtExit = (
 
 export interface TmuxStatusDeps {
   readonly edge: TmuxStatusEdge;
-  readonly subscribe: (sessionId: string, sub: Subscriber) => () => void;
+  readonly subscribe: (
+    sessionId: string,
+    sub: Subscriber<"tmuxStatus">,
+  ) => () => void;
   // The session whose statusline last rendered from `pane`, as the daemon
   // holds it — a /clear or a new Claude Code in the pane takes it over.
   readonly sessionInPane: (socket: string, pane: string) => string | null;
@@ -486,6 +488,10 @@ export interface TmuxStatusDeps {
   // This renderer's name, as the sessions it draws carry it in RENDERER_OPTION
   // and the click its binding runs is addressed to.
   readonly name: RendererAddress;
+  // [LAW:single-enforcer] The renderer's link signer: the binding carries its
+  // mac, and a click is honoured only with it, because any web page can open
+  // a `cc-candybar://` URL and a range id is a counter.
+  readonly signer: Pick<LinkSigner, "signBinding" | "verifyBinding">;
   readonly log: (level: "info" | "warn", msg: string) => void;
 }
 
@@ -600,8 +606,10 @@ export class TmuxStatusLines {
     // a request's other refreshes do: started in its turn, awaited in none.
     entry.unsubscribe = this.deps.subscribe(sessionId, {
       lane: "tmuxStatus",
-      frame: (bar) => {
-        entry.frame = tmuxStatusFrame(bar);
+      // The bar as the feed encoded it for this lane, its ranges named from
+      // the session's link-id table (src/tmux-status/link-ids.ts).
+      frame: (out) => {
+        entry.frame = out.value;
         this.reconcile(entry.socket);
       },
       refused: (resp) => {
@@ -675,26 +683,39 @@ export class TmuxStatusLines {
   }
 
   // A click on the range `<range>` of pane `%<n>` on the server `<socket>`
-  // (segments, as the binding's URL carries them): the link the frame the
-  // daemon drew there marks it with.
+  // (segments, as the binding's URL carries them, after the mac the binding
+  // was signed with): the link the frame the daemon drew there marks it with.
   linkAt(value: string): StatusClick {
     const segments = segmentsOf(value);
-    const [socket, pane, range, ...extra] = segments ?? [];
+    const [socket, mac, pane, range, ...extra] = segments ?? [];
     if (
       segments === null ||
       socket === undefined ||
+      mac === undefined ||
       pane === undefined ||
       range === undefined ||
       extra.length > 0
     )
       return {
         kind: "refused",
-        reason: `tmux-status-click needs <socket>/<pane>/<range>, got ${JSON.stringify(value)}`,
+        reason: `tmux-status-click needs <socket>/<mac>/<pane>/<range>, got ${JSON.stringify(value)}`,
+      };
+    // [LAW:no-silent-failure] Refused, naming why: a click no binding of this
+    // renderer's could have made runs nothing.
+    if (!this.deps.signer.verifyBinding(socket, mac))
+      return {
+        kind: "refused",
+        reason: `a status-line click on ${JSON.stringify(socket)} whose mac is not this renderer's binding's`,
       };
     const held = [...this.held.values()].find(
       (h) => h.socket === socket && h.pane === `%${pane}`,
     );
-    const url = held?.frame?.links[range];
+    // Its own entries only: a range is whatever the click's URL said.
+    const links = held?.frame?.links;
+    const url =
+      links !== undefined && Object.hasOwn(links, range)
+        ? links[range]
+        : undefined;
     return url === undefined
       ? {
           kind: "refused",
@@ -1016,7 +1037,7 @@ export class TmuxStatusLines {
         "if-shell",
         "-F",
         `#{m:${RANGE_PREFIX}*,#{mouse_status_range}}`,
-        `run-shell -b ${tmuxQuoted(`${this.deps.handler} ${clickUrl(this.deps.name, socket)}`)}`,
+        `run-shell -b ${tmuxQuoted(`${this.deps.handler} ${clickUrl(this.deps.name, socket, this.deps.signer.signBinding(socket))}`)}`,
         ...(prior === null ? [] : [prior.command]),
       ],
       ["set-option", "-g", BINDING_OPTION, JSON.stringify(record)],

@@ -94,7 +94,7 @@ export interface RenderRequest {
 // [LAW:no-mode-explosion] How a render is answered: the bytes a terminal
 // prints, or the Frame. The cap is these two, and the second has no exit, since
 // a reader holding one render's answer has no other way to read the bar once
-// decoding is ruled out. A new surface is a lane (LANES, LANE_FRAMES), which
+// decoding is ruled out. A new surface is a lane (LANES, LaneEncoders), which
 // names its own encoding, so a subscription takes none.
 export const RENDER_ENCODINGS = ["ansi", "frame"] as const;
 export type RenderEncoding = (typeof RENDER_ENCODINGS)[number];

@@ -25,7 +25,7 @@ The browser is one more surface. The page is a Frame painter with no renderer of
 
 `browser` is a `LANES` entry with `handsOff: false`, so closing a tab never touches Claude Code's bar, and `inTmux: false`. Its setup does no relaunch: turning it on reports the URL.
 
-Adding a surface touches `LANES`, `LANE_FRAMES`, `LANE_SETUP` and `LANE_HELP`, which the compiler enforces, and these by hand: `LANE_NAMES` in `rust-client/src/follow.rs` (policed by `check-protocol`), the schema, and `docs/interaction-authoring.md`.
+Adding a surface touches `LANES`, `laneEncoders`, `LANE_SETUP` and `LANE_HELP`, which the compiler enforces, and these by hand: `LANE_NAMES` in `rust-client/src/follow.rs` (policed by `check-protocol`), the schema, and `docs/interaction-authoring.md`.
 
 ### One feed, the session's width and depth
 

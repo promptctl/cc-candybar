@@ -159,6 +159,8 @@ export async function statsOf(daemon: Daemon): Promise<StatsSnapshot> {
 
 export interface InWorkerDaemon extends DaemonEndpoint {
   readonly daemon: Daemon;
+  // Every path the daemon touches, as its home derives them.
+  readonly paths: DaemonPaths;
   // A client's end of a new connection.
   connect(): Duplex;
   // Serves a real socket too, for a client that opens one itself: the frame
@@ -260,6 +262,7 @@ export function startDaemon(
 
   return {
     daemon,
+    paths,
     log: paths.log,
     name: home.name,
     now: () => daemon.clock.now(),

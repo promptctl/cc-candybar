@@ -10,7 +10,7 @@ These docs use the standard graphics terms. The code predates them, so it still 
 |---|---|---|
 | Renderer | The process that turns facts and state into a Frame | "the daemon" |
 | Frame | One rendered bar, the renderer's output | `Frame` |
-| Encoder | Turns a Frame into what one surface accepts | `LANE_FRAMES` entries |
+| Encoder | Turns a Frame into what one surface accepts | `laneEncoders` entries |
 | Surface | Where a Frame appears: the band, Claude Code's statusline, a tmux pane, tmux's status row, a browser page | Lane, and the `renderer` setting |
 | Built-in source | A fact Gather always reads: session, metrics, activity, context, git | Lane, in the payload |
 

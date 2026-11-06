@@ -5,7 +5,8 @@
 
 import type { Attribute } from "../../src/render/frame";
 import { bandFrame } from "../../src/band/frames";
-import { LANE_FRAMES } from "../../src/daemon/lane-frames";
+import { laneEncoders } from "../../src/daemon/lane-frames";
+import { countedIds } from "../helpers/link-ids";
 import { DIAGNOSTIC_ERROR_COLORS } from "../../src/render/diagnostic-style";
 import { renderFailedFrame } from "../../src/render/frame";
 import { barOf } from "../helpers/drawn-frame";
@@ -137,28 +138,36 @@ describe("the lane's refusal", () => {
   );
 });
 
-describe("LANE_FRAMES", () => {
+describe("laneEncoders", () => {
+  const encoders = laneEncoders(countedIds());
   const bar = barOf([{ text: "a" }]);
   const json = JSON.stringify({ ok: true, output: "a\n" });
+  const band = (frame: typeof bar): string => encoders.band()(frame, json).json;
 
   test("a band-lane subscriber receives the bar as its rows of runs", () => {
-    expect(JSON.parse(LANE_FRAMES.band(bar, json))).toEqual(bandFrame(bar));
+    expect(JSON.parse(band(bar))).toEqual(bandFrame(bar));
   });
 
   test("a band-lane subscriber receives a failed render as the statusline's error glyph", () => {
-    expect(LANE_FRAMES.band(renderFailedFrame("boom"), json)).toContain(
-      "render failed: boom",
-    );
+    expect(band(renderFailedFrame("boom"))).toContain("render failed: boom");
   });
 
   test("a bar the band cannot draw goes out as the frame saying why, never a throw", () => {
-    expect(
-      LANE_FRAMES.band(barOf([{ text: "x", attrs: ["blink"] }]), json),
-    ).toContain("the band cannot draw blink text");
+    expect(band(barOf([{ text: "x", attrs: ["blink"] }]))).toContain(
+      "the band cannot draw blink text",
+    );
   });
 
   test("the statusline and pane lanes receive the frame as the feed serialized it", () => {
-    expect(LANE_FRAMES.statusline(bar, json)).toBe(json);
-    expect(LANE_FRAMES.pane(bar, json)).toBe(json);
+    expect(encoders.statusline()(bar, json).json).toBe(json);
+    expect(encoders.pane()(bar, json).json).toBe(json);
+  });
+
+  test("a tmux status line subscriber in the daemon reads the bar its client is sent", () => {
+    const out = encoders.tmuxStatus()(
+      barOf([{ text: "a", link: "cc-candybar://copy/a" }]),
+      json,
+    );
+    expect(JSON.parse(out.json)).toEqual({ ok: true, tmuxStatus: out.value });
   });
 });

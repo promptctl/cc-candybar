@@ -155,6 +155,7 @@ describe("the main home is today's layout", () => {
       storedRoot: storedRootAt("/home/u/.config/cc-candybar"),
       watchProbe: "/home/u/.local/state/cc-candybar/watch-probe",
       spawnBackoff: "/home/u/.local/state/cc-candybar/spawn.backoff",
+      linkIds: "/home/u/.local/state/cc-candybar/link-ids",
       cache: "/home/u/.cache/cc-candybar",
       config: "/home/u/.config/cc-candybar",
     });
@@ -176,6 +177,7 @@ describe("the main home is today's layout", () => {
       storedRoot: storedRootAt("/x/config/cc-candybar"),
       watchProbe: "/x/state/cc-candybar/watch-probe",
       spawnBackoff: "/x/state/cc-candybar/spawn.backoff",
+      linkIds: "/x/state/cc-candybar/link-ids",
       cache: "/x/cache/cc-candybar",
       config: "/x/config/cc-candybar",
     });

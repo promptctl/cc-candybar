@@ -9,25 +9,63 @@
 // draws, so the encoding is a value keyed by it, not a field of the subscribe.
 // [LAW:one-source-of-truth] Keyed by Lane: a lane removed from LANES leaves
 // its entry an excess property the compiler names.
+// [LAW:single-enforcer] A feed encodes each lane once a frame, through the one
+// encoder it made for the lane (src/daemon/frame-feed.ts), and hands every
+// subscriber of the lane that encoding: the tmux status line's ids are minted
+// once, and `frames --lane tmuxStatus` shows the ids tmux was given.
 
 import type { BandOff } from "../../mod/types";
 import { bandFrame } from "../band/frames";
 import type { Frame } from "../render/frame";
-import { tmuxStatusFrame } from "../tmux-status/frames";
+import { tmuxStatusFrame, type TmuxStatusBar } from "../tmux-status/frames";
+import { LinkIds, type LinkIdSource } from "../tmux-status/link-ids";
 import type { Lane } from "../config/lanes";
 import type { Response } from "./protocol";
 
-// A frame's JSON as its lane's subscriber receives it: from the bar, or the
-// JSON the feed serialized once for every subscriber of the lane.
-type LaneFrame = (bar: Frame, json: string) => string;
+// What a lane's subscriber in the daemon reads beside the JSON a client is
+// sent: only the tmux status line has one.
+export interface LaneValues {
+  readonly band: null;
+  readonly statusline: null;
+  readonly pane: null;
+  readonly tmuxStatus: TmuxStatusBar;
+}
 
-export const LANE_FRAMES: Readonly<Record<Lane, LaneFrame>> = {
-  band: (bar) => JSON.stringify(bandFrame(bar)),
-  statusline: (_bar, json) => json,
-  pane: (_bar, json) => json,
-  tmuxStatus: (bar) =>
-    JSON.stringify({ ok: true, tmuxStatus: tmuxStatusFrame(bar) }),
-};
+// One frame as its lane's subscribers receive it.
+export interface LaneOut<L extends Lane> {
+  readonly json: string;
+  readonly value: LaneValues[L];
+}
+
+// A lane's encoder over a frame's bar and the answer the feed serialized for
+// the lane. An instance holds what the lane keeps for the session: the tmux
+// status line's link ids.
+export type LaneEncoder<L extends Lane> = (
+  bar: Frame,
+  json: string,
+) => LaneOut<L>;
+
+// For each lane, a new encoder: a feed makes one when the lane's first
+// subscriber joins and drops it when the last leaves.
+export type LaneEncoders = { readonly [L in Lane]: () => LaneEncoder<L> };
+
+export function laneEncoders(ids: LinkIdSource): LaneEncoders {
+  return {
+    band: () => (bar) => ({
+      json: JSON.stringify(bandFrame(bar)),
+      value: null,
+    }),
+    statusline: () => (_bar, json) => ({ json, value: null }),
+    pane: () => (_bar, json) => ({ json, value: null }),
+    tmuxStatus: () => {
+      const table = new LinkIds(ids);
+      return (bar) => {
+        const value = tmuxStatusFrame(bar, table);
+        return { json: JSON.stringify({ ok: true, tmuxStatus: value }), value };
+      };
+    },
+  };
+}
 
 // [LAW:types-are-the-program] The band's lane-off line is the daemon's own
 // SWITCHED_OFF refusal, relayed as it was sent: a refusal arm `BandOff` does

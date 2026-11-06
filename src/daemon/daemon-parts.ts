@@ -5,6 +5,7 @@ import type { WatcherRegistry } from "./cache/watchers";
 import type { CheckedRenderRequest } from "./render-checkpoint.js";
 import type { FrameFeeds } from "./frame-feed.js";
 import type { LaneSetups } from "./lane-setup.js";
+import type { LinkIdAllocator } from "./link-id-allocator.js";
 import type { LimitsHandle } from "./limits";
 import type { RendererLinks } from "../click/renderer-links.js";
 import type { MenuIdle } from "./menu-idle.js";
@@ -81,6 +82,9 @@ export interface DaemonParts {
   readonly laneSetups: LaneSetups;
   readonly tmuxStatusLines: TmuxStatusLines;
   readonly frameFeeds: FrameFeeds<CheckedRenderRequest>;
+  // The home's link-id counter: its fault is every bar's ⚠, and its counts are
+  // the stats reply's.
+  readonly linkIds: LinkIdAllocator;
   readonly renderWarnings: RenderWarningRecords;
   readonly renderCache: RenderCache<SessionSource, CheckedRenderRequest>;
   // The sessions' recordings, over the render cache's views

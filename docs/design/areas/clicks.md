@@ -89,7 +89,6 @@ Limits: this used a whole daemon behind a bridge script, and the timing excludes
 
 - **Notification from the handler app.** Whether it needs a permission grant, and whether it appears at all.
 - **Handler update path.** How a staged handler is replaced on upgrade, and what a click does between a new Gather and an old handler.
-- **Range id characters.** `range=user|…` has only carried hex here. Base 36 needs a check; hex still works, with counters that run out sooner.
 - **Link session at routing time.** Whether `clickSessionOf` works on an addressed link, for raising a refusal on its bar.
 
 ## Done when
