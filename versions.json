@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-633",
+      "ref": "refs/pull/633/merge",
+      "sha": "d6ad4151c914d74a96657a2c41b9006388db06e8",
+      "timestamp": "2026-11-06T09:28:08.446Z",
+      "commits": [
+        {
+          "sha": "d6ad4151c914d74a96657a2c41b9006388db06e8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T09:27:16Z",
+          "message": "Merge 36dcaba1d4153d7201b6192d4040e2df2c3bdc5f into 5bc4b1644438e6c6202cedb3b5da327ab8e07bfd\n"
+        },
+        {
+          "sha": "36dcaba1d4153d7201b6192d4040e2df2c3bdc5f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T02:20:56-07:00",
+          "message": "refactor(apply): a synchronous click needs no in-flight bracket on the idle clock; journaled refuses an async handler (candybar-gather-renderer-76bb.1dh.c3l)\n"
+        },
+        {
+          "sha": "509691aadec75f841ce256af5428021770e4b5eb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T02:10:19-07:00",
+          "message": "fix(apply): a probe link is refused by no client's leaving; the doctor stamps the hints it reads; the click error keeps its record's shape (candybar-gather-renderer-76bb.1dh.c3l)\n"
+        },
+        {
+          "sha": "8b83f4a46536c7430b04027edb790630d19999d7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T01:41:11-07:00",
+          "message": "fix(apply): each click failure is its own held message; a fault's stack reaches the log; no gather starts after close (candybar-gather-renderer-76bb.1dh.c3l)\n"
+        },
+        {
+          "sha": "1a8b52e2236d421174f9749e318ae7c500b6834b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T01:19:30-07:00",
+          "message": "feat(apply): no turn awaits a launch; a doctor step is an effect, and a held click error accumulates (candybar-gather-renderer-76bb.1dh.c3l)\n\nA turn is a synchronous call: its body cannot be async (Synchronous<T>), a\nrender request never waits behind another session's probes, and no draw can\nread a click half landed. A doctor step describes an effect; the performer\ngathers after the click's turn through a recording view, and the landing\nchecks the gather's read set and config in the turn that writes the report.\nLands yth: a click error held while the last is live joins it.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "5bc4b1644438e6c6202cedb3b5da327ab8e07bfd",
@@ -20,49 +63,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-06T08:59:34Z",
           "message": "chore(release): set `package.json` to 1.199.1 [skip ci]\n\n## [1.199.1](https://github.com/promptctl/cc-candybar/compare/v1.199.0...v1.199.1) (2026-11-06)\n\n### Bug Fixes\n\n* **test:** the daemon close case counts only its own timers, and no file leaves a git provider open (candybar-testing-0x6u.6f3) ([#631](https://github.com/promptctl/cc-candybar/issues/631)) ([1ad2084](https://github.com/promptctl/cc-candybar/commit/1ad208491233c500feb1dce4da7f3eb61a288b1d))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-633",
-      "ref": "refs/pull/633/merge",
-      "sha": "2900a8c20cfcc3490d89bc8d51ffe6b6ff3e4677",
-      "timestamp": "2026-11-06T09:22:32.077Z",
-      "commits": [
-        {
-          "sha": "2900a8c20cfcc3490d89bc8d51ffe6b6ff3e4677",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T09:21:09Z",
-          "message": "Merge bce9b608ea9d9bc6f69fc6711a4c819846f2fa29 into 537c926e6cca1e7f2bed89f42058b490482fde86\n"
-        },
-        {
-          "sha": "bce9b608ea9d9bc6f69fc6711a4c819846f2fa29",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T02:20:56-07:00",
-          "message": "refactor(apply): a synchronous click needs no in-flight bracket on the idle clock; journaled refuses an async handler (candybar-gather-renderer-76bb.1dh.c3l)\n"
-        },
-        {
-          "sha": "437b6bb64fa67371613cf7741da593ee7aab24bb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T02:10:19-07:00",
-          "message": "fix(apply): a probe link is refused by no client's leaving; the doctor stamps the hints it reads; the click error keeps its record's shape (candybar-gather-renderer-76bb.1dh.c3l)\n"
-        },
-        {
-          "sha": "a1792b3f8aae36b997048b800515e0666e1c2545",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T01:41:11-07:00",
-          "message": "fix(apply): each click failure is its own held message; a fault's stack reaches the log; no gather starts after close (candybar-gather-renderer-76bb.1dh.c3l)\n"
-        },
-        {
-          "sha": "37abc98a9aeb4508d77b6f0fda70c9e18fe3ab73",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T01:19:30-07:00",
-          "message": "feat(apply): no turn awaits a launch; a doctor step is an effect, and a held click error accumulates (candybar-gather-renderer-76bb.1dh.c3l)\n\nA turn is a synchronous call: its body cannot be async (Synchronous<T>), a\nrender request never waits behind another session's probes, and no draw can\nread a click half landed. A doctor step describes an effect; the performer\ngathers after the click's turn through a recording view, and the landing\nchecks the gather's read set and config in the turn that writes the report.\nLands yth: a click error held while the last is live joins it.\n"
         }
       ]
     },

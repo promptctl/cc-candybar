@@ -44425,9 +44425,9 @@ function omit(d, ...drop2) {
   for (const [k, v] of Object.entries(d)) if (!set2.has(k)) out[k] = v;
   return out;
 }
-function pick(d, ...wanted2) {
+function pick(d, ...wanted) {
   const out = {};
-  for (const key of wanted2) if (key in d) out[key] = d[key];
+  for (const key of wanted) if (key in d) out[key] = d[key];
   return out;
 }
 function pluck(key, ...dicts) {
@@ -62514,9 +62514,8 @@ var RAW_DEFAULT_DSL_CONFIG = {
     // through the daemon's augmented payload (TmuxService asks at most once
     // per pane per 30 s, so this stays cheap; `tmux.pane` itself is in
     // PAYLOAD_INPUTS). A `kind: "shell"` declaration would
-    // spawn the subprocess at every cache-entry creation regardless of
-    // whether the tmux segment is in the active layout — buildNeededPrefixes
-    // gates the input variant so unused segments cost nothing.
+    // spawn the subprocess at every cache-entry creation; the input variant
+    // reads the one lookup the daemon's tmux owner already makes per pane.
     "tmux.session": { kind: "input", path: "tmux.session", default: "" },
     // Host identity — which machine this session is on, and whether the user
     // arrived over SSH. All three come through the augmented payload rather
@@ -67246,8 +67245,7 @@ var PR_FIELDS = {
   prError: true,
   prEarlier: true
 };
-function prFactOf(git, readsPr) {
-  if (!readsPr) return "-";
+function prFactOf(git) {
   if (isPending(git)) return "pending";
   const { prState, prError, prEarlier } = git ?? {};
   if (isPending(prState)) return "pending";
@@ -67320,124 +67318,6 @@ function projectSpeedHistory(obs) {
   if (rates.length === 0) return void 0;
   return rates.join(",");
 }
-function buildNeededPrefixes(config2, preset) {
-  const declared = presetGlobals(config2, preset);
-  const rules = EXPRESSION_SLOTS.flatMap((slot) => {
-    const authored = declared[slot];
-    return isExpression(authored) ? [authored] : [];
-  });
-  const seeds = [...rules];
-  for (const node of walkNodes(presetRoot(config2, preset).node)) {
-    if (node.when) seeds.push(node.when);
-    if (node.kind !== "segment") continue;
-    seeds.push(...segmentTemplates(config2, node.name));
-  }
-  return inputClosure(config2, seeds);
-}
-function segmentTemplates(config2, name) {
-  const seg2 = config2.segments[name];
-  if (!seg2) return [];
-  return [
-    ...[seg2.template, seg2.when, seg2.bg, seg2.fg].flatMap(
-      (src) => src ? [src] : []
-    ),
-    ...Object.values(seg2.partials ?? {})
-  ];
-}
-function segmentInputPaths(config2, name, whens) {
-  return inputClosure(config2, [...segmentTemplates(config2, name), ...whens]);
-}
-function inputClosure(config2, seeds) {
-  const reads = valueReadsOf(config2);
-  const decls = new Map(declaredVariables(config2));
-  const frontier = seeds.flatMap(
-    (template) => reads.ofTemplate(template).flatMap(({ reaches }) => reaches)
-  );
-  const visited = /* @__PURE__ */ new Set();
-  const inputPaths = /* @__PURE__ */ new Set();
-  while (frontier.length > 0) {
-    const name = frontier.pop();
-    if (visited.has(name)) continue;
-    visited.add(name);
-    const decl = decls.get(name);
-    const read2 = payloadPathOf(name, decl);
-    if (read2 !== void 0) inputPaths.add(read2);
-    for (const { reaches } of reads.ofVariable(decl)) frontier.push(...reaches);
-  }
-  return inputPaths;
-}
-function neededPrefixesByPreset(config2) {
-  const byPreset = /* @__PURE__ */ new Map();
-  return (preset) => {
-    const cached = byPreset.get(preset);
-    if (cached !== void 0) return cached;
-    const needed = buildNeededPrefixes(config2, preset);
-    byPreset.set(preset, needed);
-    return needed;
-  };
-}
-function anyPathStartsWith(paths2, prefix) {
-  for (const p2 of paths2) {
-    if (p2 === prefix || p2.startsWith(prefix + ".")) return true;
-  }
-  return false;
-}
-function gitOptionsFromClosure(needed) {
-  const has3 = (path44) => needed.has(path44);
-  const wantsWorkingTree = has3("git.staged") || has3("git.unstaged") || has3("git.untracked") || has3("git.conflicts");
-  return {
-    ...has3("git.sha") && { showSha: true },
-    ...wantsWorkingTree && { showWorkingTree: true },
-    ...has3("git.stash") && { showStashCount: true },
-    ...(has3("git.upstream") || has3("git.tracking")) && {
-      showUpstream: true
-    },
-    ...has3("git.repoName") && { showRepoName: true },
-    ...has3("git.repoUrl") && { showRepoUrl: true },
-    ...has3("git.operation") && { showOperation: true },
-    ...has3("git.committedAt") && { showCommittedAt: true },
-    // Any PR field laid out turns on the (network) forge lookup.
-    ...Object.keys(PR_FIELDS).some((f) => has3(`git.${f}`)) && {
-      showPullRequest: true
-    }
-  };
-}
-var wantedOf = /* @__PURE__ */ new WeakMap();
-function wanted(neededInputPaths) {
-  let want = wantedOf.get(neededInputPaths);
-  if (want === void 0) {
-    want = wantsOf(neededInputPaths);
-    wantedOf.set(neededInputPaths, want);
-  }
-  return want;
-}
-function wantsOf(neededInputPaths) {
-  const wants = (prefix) => anyPathStartsWith(neededInputPaths, prefix);
-  return {
-    git: wants("git"),
-    // The burn segment reads `burn.costPerHour`, a derivative of session cost
-    // and metrics duration — so wanting `burn` pulls in exactly the two lanes
-    // it is folded from.
-    session: wants("session.cost") || wants("session.tokens") || wants("burn"),
-    today: wants("today"),
-    // autocompact's controls are capped to the model's context window, so the
-    // lane runs for either family, as metrics runs for burn.
-    context: wants("context") || wants("autocompact"),
-    metrics: wants("metrics") || wants("burn"),
-    burn: wants("burn"),
-    activity: wants("activity"),
-    // Only the session NAME costs a spawn; `tmux.pane` is the hint itself, so
-    // a config that reads only the pane (every slash gate) runs nothing here.
-    tmux: wants("tmux.session"),
-    // `host.ssh` is the hint itself; the name and the user are each a read.
-    hostName: wants("host.name"),
-    hostUser: wants("host.user"),
-    cache: wants("cache"),
-    speed: wants("speed"),
-    autocompact: wants("autocompact"),
-    block: wants("block")
-  };
-}
 function renderWidth(hints) {
   return applyClaudeCodeReserve(hints.termCols ?? DEFAULT_TERMINAL_WIDTH);
 }
@@ -67449,11 +67329,9 @@ function refreshedFact(refreshed) {
 }
 async function refreshPayload(inputs, at, refreshed) {
   const { hookData: hookData2, deps, hints } = inputs;
-  const want = wanted(inputs.neededInputPaths);
   const sessionId2 = hookData2.session_id;
   const session = deps.usageStore.request(sessionId2, hookData2.transcript_path);
-  const lane = async (name, needed, run3) => {
-    if (!needed) return;
+  const lane = async (name, run3) => {
     const startedAt = deps.clock.monotonic();
     refreshed.set(name, null);
     let threw2 = null;
@@ -67467,43 +67345,32 @@ async function refreshPayload(inputs, at, refreshed) {
     deps.faults.refreshed(sessionId2, name, threw2);
   };
   await Promise.all([
-    lane("session", want.session, () => session.usage(hookData2)),
-    lane("today", want.today, () => session.today()),
-    lane(
-      "context",
-      want.context,
-      () => deps.contextProvider.getContextInfo(hookData2)
-    ),
+    lane("session", () => session.usage(hookData2)),
+    lane("today", () => session.today()),
+    lane("context", () => deps.contextProvider.getContextInfo(hookData2)),
     lane(
       "metrics",
-      want.metrics,
       () => deps.metricsProvider.getMetricsInfo(sessionId2, hookData2)
     ),
     lane(
       "activity",
-      want.activity,
       () => deps.activityProvider.getActivityInfo(sessionId2, hookData2)
     ),
     // Prompt-cache expiry: a bounded tail-read through the gated transcript-fs
     // seam, made only when the transcript's stamp moved.
     lane(
       "cache",
-      want.cache,
       () => deps.cacheExpiry.refresh(sessionId2, hookData2.transcript_path)
     ),
     // [LAW:one-source-of-truth] tok/s folds from the SAME store the session
     // lane reads, one sample per request: a frame takes none, so how often the
     // bar is drawn moves no rate.
-    lane("speed", want.speed, () => session.speed(dateOf(at).getTime())),
+    lane("speed", () => session.speed(dateOf(at).getTime())),
     lane(
       "autocompact",
-      want.autocompact,
       async () => deps.autoCompact.window(settingsPathOf(hints, deps.home))
     )
   ]);
-}
-function sourcesRead(closure, sources) {
-  return [...sources.keys()].filter((name) => closure.has(name));
 }
 function settledLanes(outcome, sources) {
   const lane = settledLane(outcome);
@@ -67516,19 +67383,31 @@ function settledLanes(outcome, sources) {
     sources: new Map(sources.map((name) => [name, lane]))
   };
 }
-function gitAt({ cwd: cwd2, hookData: hookData2 }, closure) {
+var GIT_READS = {
+  showSha: true,
+  showWorkingTree: true,
+  showStashCount: true,
+  showUpstream: true,
+  showRepoName: true,
+  showRepoUrl: true,
+  showOperation: true,
+  showCommittedAt: true,
+  showPullRequest: true
+};
+function gitAt({
+  cwd: cwd2,
+  hookData: hookData2
+}) {
   return [
     cwd2 ?? hookData2.workspace?.current_dir,
-    gitOptionsFromClosure(closure),
+    GIT_READS,
     hookData2.workspace?.project_dir
   ];
 }
-function declareLanes(owners, holds2, facts, closure, sources) {
-  const want = wanted(closure);
+function declareLanes(owners, holds2, facts, sources) {
   const pane = facts.hints.tmux ?? null;
   const faults = [];
-  const declare = (lane, needed, take) => {
-    if (!needed) return settledLane(ABSENT2);
+  const declare = (lane, take) => {
     try {
       return take();
     } catch (e) {
@@ -67539,55 +67418,34 @@ function declareLanes(owners, holds2, facts, closure, sources) {
   const lanes = {
     git: declare(
       "git",
-      want.git,
-      () => owners.gitProvider.declare(holds2, ...gitAt(facts, closure))
+      () => owners.gitProvider.declare(holds2, ...gitAt(facts))
     ),
-    tmux: declare(
-      "tmux",
-      want.tmux && pane !== null,
-      () => owners.tmuxService.declare(holds2, pane)
-    ),
-    hostName: declare(
-      "host.name",
-      want.hostName,
-      () => owners.hostService.declareName(holds2)
-    ),
-    hostUser: declare(
-      "host.user",
-      want.hostUser,
-      () => owners.hostService.declareUser(holds2)
-    ),
+    tmux: pane === null ? settledLane(ABSENT2) : declare("tmux", () => owners.tmuxService.declare(holds2, pane)),
+    hostName: declare("host.name", () => owners.hostService.declareName(holds2)),
+    hostUser: declare("host.user", () => owners.hostService.declareUser(holds2)),
     today: declare(
       "today",
-      want.today,
       () => owners.usageStore.declareToday(holds2, facts.hints.claudeConfigDir)
     ),
     // [LAW:one-source-of-truth] Each source's hold at (its folder's storage
     // key, the session the checkpoint parsed).
     sources: new Map(
-      sourcesRead(closure, sources).map((name) => [
+      [...sources].map(([name, key]) => [
         name,
         declare(
           name,
-          true,
-          () => owners.managedStorage.declare(
-            holds2,
-            sources.get(name),
-            facts.sessionId
-          )
+          () => owners.managedStorage.declare(holds2, key, facts.sessionId)
         )
       ])
     )
   };
   return { lanes, faults };
 }
-function readingsOf(inputs, declared) {
+function readingsOf(inputs) {
   const { hookData: hookData2, deps } = inputs;
-  const want = wanted(inputs.neededInputPaths);
   const sessionId2 = hookData2.session_id;
   const lanes = deps.lanes();
-  const read2 = (lane, needed, value) => {
-    if (!needed) return ABSENT2;
+  const read2 = (lane, value) => {
     const fault = deps.faults.of(sessionId2, lane);
     if (fault !== void 0) return fault;
     try {
@@ -67599,38 +67457,23 @@ function readingsOf(inputs, declared) {
   };
   const laneReadings = {
     git: lanes.git.current(),
-    usage: read2(
-      "session",
-      want.session,
-      () => deps.usageStore.usageOf(sessionId2, hookData2)
-    ),
-    context: read2(
-      "context",
-      want.context,
-      () => deps.contextProvider.contextOf(hookData2)
-    ),
+    usage: read2("session", () => deps.usageStore.usageOf(sessionId2, hookData2)),
+    context: read2("context", () => deps.contextProvider.contextOf(hookData2)),
     metrics: read2(
       "metrics",
-      want.metrics,
       () => deps.metricsProvider.metricsOf(sessionId2, hookData2)
     ),
     activity: read2(
       "activity",
-      want.activity,
       () => deps.activityProvider.activityOf(sessionId2)
     ),
     tmuxSession: lanes.tmux.current(),
     hostName: lanes.hostName.current(),
     hostUser: lanes.hostUser.current(),
-    cache: read2(
-      "cache",
-      want.cache,
-      () => deps.cacheExpiry.expiryOf(sessionId2)
-    ),
-    speed: read2("speed", want.speed, () => deps.usageStore.speedOf(sessionId2)),
+    cache: read2("cache", () => deps.cacheExpiry.expiryOf(sessionId2)),
+    speed: read2("speed", () => deps.usageStore.speedOf(sessionId2)),
     autoCompact: read2(
       "autocompact",
-      want.autocompact,
       () => deps.autoCompact.stored(settingsPathOf(inputs.hints, deps.home))
     ),
     sources: new Map(
@@ -67641,11 +67484,8 @@ function readingsOf(inputs, declared) {
     lanes: laneReadings,
     today: read2(
       "today",
-      want.today,
       () => todayReading(lanes.today, deps.usageStore, sessionId2)
     ),
-    gathered: want,
-    declaredSources: [...declared.keys()],
     faults: REFRESH_LANES.flatMap((lane) => {
       const fault = deps.faults.of(sessionId2, lane);
       return fault === void 0 ? [] : [{ lane, reason: fault.reason }];
@@ -67690,7 +67530,6 @@ function composePayload(facts, inputs, draw2) {
   const { hookData: hookData2, hints } = inputs;
   const { effective, configFacts: configFacts2 } = draw2;
   const { configPath, ...settingCounts2 } = configFacts2;
-  const want = wanted(inputs.neededInputPaths);
   const built = facts.builtins;
   const lanes = {
     usage: unstamped(built.session),
@@ -67723,10 +67562,10 @@ function composePayload(facts, inputs, draw2) {
   const tmuxValue = lanes.tmux.kind === "pending" ? pendingOf(lanes.tmux.why) : valueOf3(lanes.tmux)?.session;
   const hostName = lanes.hostName.kind === "pending" ? pendingOf(lanes.hostName.why) : valueOf3(lanes.hostName);
   const hostUser = lanes.hostUser.kind === "pending" ? pendingOf(lanes.hostUser.why) : valueOf3(lanes.hostUser);
-  const autoCompactValue = firstPending(want.autocompact ? lanes.context : void 0) ?? projectAutoCompact(lanes.autoCompact, valueOf3(lanes.context)?.maxTokens);
+  const autoCompactValue = firstPending(lanes.context) ?? projectAutoCompact(lanes.autoCompact, valueOf3(lanes.context)?.maxTokens);
   const fiveHour = hookData2.rate_limits?.five_hour;
   const sevenDay = hookData2.rate_limits?.seven_day;
-  const burn = !want.burn ? void 0 : firstPending(lanes.usage, lanes.metrics) ?? burnOf(
+  const burn = firstPending(lanes.usage, lanes.metrics) ?? burnOf(
     valueOf3(lanes.usage)?.session.cost,
     valueOf3(lanes.metrics)?.sessionDuration
   );
@@ -67794,8 +67633,8 @@ function composePayload(facts, inputs, draw2) {
     },
     // [LAW:one-source-of-truth] Always present — the daemon resolves every
     // one of these each render (for BuildLineOptions/basePalette), and these
-    // are those exact values. No `wants` gate: each costs nothing (already in
-    // hand) and a config reading e.g. `.padding.effective` must always find it.
+    // are those exact values: each costs nothing (already in hand) and a config
+    // reading e.g. `.padding.effective` must always find it.
     ...effectiveInputs(effective),
     history: draw2.history,
     navigation: { back: draw2.back },
@@ -67808,7 +67647,7 @@ function composePayload(facts, inputs, draw2) {
     ...sessionPayload !== void 0 && { session: sessionPayload },
     ...burn !== void 0 && { burn },
     ...speedPayload !== void 0 && { speed: speedPayload },
-    ...want.block && fiveHour !== void 0 && {
+    ...fiveHour !== void 0 && {
       block: {
         // [LAW:one-source-of-truth] Both fields read straight from the
         // hookData rate-limit window; the DSL composes minutesUntilReset
@@ -68014,9 +67853,44 @@ function projectGitInfo(info, pullRequest, pending2) {
 
 // src/doctor/data-needs.ts
 var READS = {
-  pullRequests: (paths2) => gitOptionsFromClosure(paths2).showPullRequest === true,
+  pullRequests: (paths2) => Object.keys(PR_FIELDS).some((field) => paths2.has(`git.${field}`)),
   rateLimits: (paths2) => anyPathStartsWith(paths2, "block") || anyPathStartsWith(paths2, "weekly")
 };
+function anyPathStartsWith(paths2, prefix) {
+  for (const p2 of paths2) {
+    if (p2 === prefix || p2.startsWith(prefix + ".")) return true;
+  }
+  return false;
+}
+function segmentTemplates(config2, name) {
+  const seg2 = config2.segments[name];
+  if (!seg2) return [];
+  return [
+    ...[seg2.template, seg2.when, seg2.bg, seg2.fg].flatMap(
+      (src) => src ? [src] : []
+    ),
+    ...Object.values(seg2.partials ?? {})
+  ];
+}
+function segmentInputPaths(config2, name, whens) {
+  const reads = valueReadsOf(config2);
+  const decls = new Map(declaredVariables(config2));
+  const frontier = [...segmentTemplates(config2, name), ...whens].flatMap(
+    (template) => reads.ofTemplate(template).flatMap(({ reaches }) => reaches)
+  );
+  const visited = /* @__PURE__ */ new Set();
+  const inputPaths = /* @__PURE__ */ new Set();
+  while (frontier.length > 0) {
+    const reached = frontier.pop();
+    if (visited.has(reached)) continue;
+    visited.add(reached);
+    const decl = decls.get(reached);
+    const read2 = payloadPathOf(reached, decl);
+    if (read2 !== void 0) inputPaths.add(read2);
+    for (const { reaches } of reads.ofVariable(decl)) frontier.push(...reaches);
+  }
+  return inputPaths;
+}
 function dataNeeds(config2, preset) {
   const placed2 = /* @__PURE__ */ new Map();
   for (const node of walkNodes(presetRoot(config2, preset).node)) {
@@ -69176,15 +69050,15 @@ function profileReading(p2, version) {
   return { kind: "ok", value: { font: p2.font, from, lacks } };
 }
 var drawsEvery = (r) => r.kind === "ok" && r.value.lacks !== null && r.value.lacks.length === 0;
-function itermFontInUse(profiles, wanted2, version) {
+function itermFontInUse(profiles, wanted, version) {
   if (profiles.length === 0) {
     return {
       kind: "failed",
-      reason: wanted2 === null ? "iTerm2 has no profiles in its preferences" : `iTerm2 has no profile named ${JSON.stringify(wanted2)}`
+      reason: wanted === null ? "iTerm2 has no profiles in its preferences" : `iTerm2 has no profile named ${JSON.stringify(wanted)}`
     };
   }
   const readings = profiles.map((p2) => profileReading(p2, version));
-  if (wanted2 !== null) return readings[0];
+  if (wanted !== null) return readings[0];
   const short = readings.find((r) => !drawsEvery(r));
   if (short !== void 0) {
     return short.kind === "failed" ? short : {
@@ -69213,14 +69087,14 @@ async function itermFont(launcher, version, env2, glyphs) {
   if (process_default.platform !== "darwin") {
     return { kind: "failed", reason: "iTerm2 runs only on macOS" };
   }
-  const wanted2 = env2.ITERM_PROFILE ?? null;
-  const answer2 = await jxa(launcher, ["iterm", wanted2 ?? "", pointsArg(glyphs)]);
+  const wanted = env2.ITERM_PROFILE ?? null;
+  const answer2 = await jxa(launcher, ["iterm", wanted ?? "", pointsArg(glyphs)]);
   if (answer2.kind === "failed") return answer2;
   const profiles = answer2.value.profiles.map((p2) => ({
     ...p2,
     lacks: p2.lacks === null ? null : glyphsOf2(p2.lacks)
   }));
-  return itermFontInUse(profiles, wanted2, version);
+  return itermFontInUse(profiles, wanted, version);
 }
 function fcMatchCoverage(output, glyphs) {
   const lines2 = output.split("\n").filter((l) => l !== "");
@@ -71517,9 +71391,9 @@ var DOCTOR_STEPS = {
     writeReport(ctx, sid, { ...facts, marks });
   }
 };
-function landDoctor(ctx, effect, gathered2) {
+function landDoctor(ctx, effect, gathered) {
   const sid = effect.session;
-  const moved = movedSince(ctx, sid, gathered2.stamp);
+  const moved = movedSince(ctx, sid, gathered.stamp);
   if (moved !== null) {
     throw new BadVerbArgs(
       `doctor: the session's ${moved} changed during the doctor's probes \u2014 click again`
@@ -71529,7 +71403,7 @@ function landDoctor(ctx, effect, gathered2) {
     ctx,
     sid,
     effect.step,
-    landedFacts(ctx, sid, effect.arrival, gathered2)
+    landedFacts(ctx, sid, effect.arrival, gathered)
   );
 }
 function landStep(ctx, sid, step4, facts) {
@@ -77290,12 +77164,7 @@ function drawRender(parts, setup, drawing2) {
     factsSeq: String(document.seq),
     prompts: String(metrics?.messageCount ?? "-"),
     nonPrompts: String(metrics?.nonPrompts ?? "-"),
-    // [LAW:one-source-of-truth] The closure the payload's git fact was read
-    // under is the turn's, beside the payload, not one resolved again here.
-    pr: prFactOf(
-      payload.git,
-      gitOptionsFromClosure(view.source.closure()).showPullRequest === true
-    ),
+    pr: prFactOf(payload.git),
     feeds: feedsFact(projected.feeds)
   });
   const drawnWarnings = [];
@@ -79923,177 +79792,7 @@ var import_node_path41 = __toESM(require_path_browserify(), 1);
 // src/segments/pricing.ts
 init_globals();
 init_url();
-
-// src/utils/cache.ts
-init_globals();
 var import_node_path40 = __toESM(require_path_browserify(), 1);
-var CacheManager = class {
-  // [LAW:one-source-of-truth] Every method takes the cache's root directory
-  // (the host's `cacheDir`), so the layout under it is derived here alone.
-  static usageDir(root) {
-    return import_node_path40.default.join(root, "usage");
-  }
-  static locksDir(root) {
-    return import_node_path40.default.join(root, "locks");
-  }
-  static isLocked(root, name) {
-    const lockFile = import_node_path40.default.join(this.locksDir(root), name);
-    if (!fs_default.existsSync(lockFile)) {
-      return false;
-    }
-    try {
-      const lockContent = fs_default.readFileSync(lockFile, "utf-8");
-      const pid2 = parseInt(lockContent.trim(), 10);
-      if (isNaN(pid2)) {
-        debug(`Invalid PID in lock file ${name}, removing stale lock`);
-        fs_default.unlinkSync(lockFile);
-        return false;
-      }
-      try {
-        process_default.kill(pid2, 0);
-        return true;
-      } catch (error) {
-        if (error.code === "ESRCH") {
-          debug(`Removing stale lock file ${name} for dead process ${pid2}`);
-          fs_default.unlinkSync(lockFile);
-          return false;
-        }
-        debug(`Error checking process ${pid2} for lock ${name}:`, error);
-        return true;
-      }
-    } catch (error) {
-      debug(`Error reading lock file ${name}:`, error);
-      return true;
-    }
-  }
-  static async acquireLock(root, clock, name, timeout = 5e3) {
-    const RETRY_DELAY_MS = 50;
-    const FILE_CREATE_FLAG = "wx";
-    await this.ensureCacheDirectories(root);
-    const lockFile = import_node_path40.default.join(this.locksDir(root), name);
-    const startTime = clock.monotonic();
-    const lockContent = String(process_default.pid);
-    while (clock.monotonic() - startTime < timeout) {
-      try {
-        await fs_default.promises.writeFile(lockFile, lockContent, {
-          flag: FILE_CREATE_FLAG
-        });
-        debug(`Lock acquired for ${name}`);
-        return true;
-      } catch (error) {
-        if (error.code === "EEXIST") {
-          await sleep(clock, RETRY_DELAY_MS);
-        } else {
-          throw error;
-        }
-      }
-    }
-    debug(`Failed to acquire lock for ${name} within ${timeout}ms`);
-    return false;
-  }
-  static async releaseLock(root, name) {
-    const lockFile = import_node_path40.default.join(this.locksDir(root), name);
-    try {
-      await fs_default.promises.unlink(lockFile);
-      debug(`Lock released for ${name}`);
-    } catch (error) {
-      if (error.code !== "ENOENT") {
-        debug(`Error releasing lock for ${name}:`, error);
-      }
-    }
-  }
-  static async ensureCacheDirectories(root) {
-    try {
-      await Promise.all([
-        fs_default.promises.mkdir(root, { recursive: true }),
-        fs_default.promises.mkdir(this.usageDir(root), { recursive: true }),
-        fs_default.promises.mkdir(this.locksDir(root), { recursive: true })
-      ]);
-    } catch (error) {
-      debug("Failed to create cache directories:", error);
-    }
-  }
-  static createProjectHash(projectPath) {
-    return createHash("md5").update(projectPath).digest("hex").substring(0, 8);
-  }
-  static async getUsageCache(root, clock, cacheType, latestMtime) {
-    const MAX_RETRIES = 3;
-    const RETRY_DELAY_MS = 75;
-    const FILE_ENCODING = "utf-8";
-    await this.ensureCacheDirectories(root);
-    const cachePath = import_node_path40.default.join(this.usageDir(root), `${cacheType}.json`);
-    const lockName = `${cacheType}.usage.lock`;
-    for (let attempt4 = 0; attempt4 < MAX_RETRIES; attempt4++) {
-      const isCurrentlyLocked = this.isLocked(root, lockName);
-      if (isCurrentlyLocked) {
-        debug(`Cache for ${cacheType} is locked, waiting...`);
-        await sleep(clock, RETRY_DELAY_MS);
-        continue;
-      }
-      try {
-        const content = await fs_default.promises.readFile(cachePath, FILE_ENCODING);
-        const cached = JSON.parse(content);
-        const cacheIsValid = !latestMtime || cached.timestamp >= latestMtime;
-        if (cacheIsValid) {
-          debug(`[CACHE-HIT] ${cacheType} disk cache: found`);
-          return this.deserializeDates(cached.data);
-        } else {
-          debug(
-            `${cacheType} cache outdated: cache=${cached.timestamp}, latest=${latestMtime}`
-          );
-          return null;
-        }
-      } catch (error) {
-        if (error.code === "ENOENT") {
-          debug(`No shared ${cacheType} usage cache found`);
-          return null;
-        }
-        const attemptNumber = attempt4 + 1;
-        debug(
-          `Attempt ${attemptNumber} failed to read ${cacheType} cache: ${error.message}. Retrying...`
-        );
-        await sleep(clock, RETRY_DELAY_MS);
-      }
-    }
-    debug(`Failed to read ${cacheType} cache after ${MAX_RETRIES} attempts.`);
-    return null;
-  }
-  static deserializeDates(data) {
-    if (Array.isArray(data)) {
-      return data.map((entry) => ({
-        ...entry,
-        timestamp: new Date(entry.timestamp)
-      }));
-    }
-    return data;
-  }
-  static async setUsageCache(root, clock, cacheType, data, latestMtime) {
-    const lockName = `${cacheType}.usage.lock`;
-    const lockAcquired = await this.acquireLock(root, clock, lockName);
-    if (!lockAcquired) {
-      debug(`Could not acquire lock to set usage cache for ${cacheType}`);
-      return;
-    }
-    try {
-      await this.ensureCacheDirectories(root);
-      const cachePath = import_node_path40.default.join(this.usageDir(root), `${cacheType}.json`);
-      const cacheTimestamp = latestMtime || clock.now();
-      const cacheEntry = {
-        data,
-        timestamp: cacheTimestamp
-      };
-      const cacheContent = JSON.stringify(cacheEntry);
-      await fs_default.promises.writeFile(cachePath, cacheContent, "utf-8");
-      debug(`[CACHE-SET] ${cacheType} disk cache stored`);
-    } catch (error) {
-      debug(`Failed to save ${cacheType} usage cache:`, error);
-    } finally {
-      await this.releaseLock(root, lockName);
-    }
-  }
-};
-
-// src/segments/pricing.ts
 var OFFLINE_PRICING_DATA = {
   "claude-haiku-4-5-20251001": {
     name: "Claude Haiku 4.5",
@@ -80216,262 +79915,249 @@ var OFFLINE_PRICING_DATA = {
     cache_read: 0.3
   }
 };
-var PricingService = class {
-  static executionCache = null;
-  static modelPricingCache = /* @__PURE__ */ new Map();
-  static GITHUB_PRICING_URL = "https://raw.githubusercontent.com/promptctl/cc-candybar/main/pricing.json";
-  static async loadDiskCache(cacheRoot, clock) {
-    const TTL_24H = 24 * 60 * 60 * 1e3;
-    const minValidTime = clock.now() - TTL_24H;
-    return await CacheManager.getUsageCache(
-      cacheRoot,
-      clock,
-      "pricing",
-      minValidTime
-    );
-  }
-  static async saveDiskCache(cacheRoot, clock, data) {
-    await CacheManager.setUsageCache(cacheRoot, clock, "pricing", data);
-  }
-  static async fetchPricingData() {
-    return new Promise((resolve) => {
-      const parsedUrl = new U(this.GITHUB_PRICING_URL);
-      const request2 = get2(
-        {
-          hostname: parsedUrl.hostname,
-          path: parsedUrl.pathname,
-          headers: {
-            "User-Agent": "cc-candybar",
-            "Cache-Control": "no-cache"
-          },
-          timeout: 5e3
-        },
-        (response) => {
-          if (response.statusCode !== 200) {
-            debug(`HTTP ${response.statusCode}: ${response.statusMessage}`);
-            resolve(null);
-            return;
-          }
-          let data = "";
-          let size = 0;
-          const MAX_SIZE = 1024 * 1024;
-          response.setEncoding("utf8");
-          response.on("data", (chunk3) => {
-            size += import_buffer.Buffer.byteLength(chunk3);
-            if (size > MAX_SIZE) {
-              debug("Response too large");
-              request2.destroy();
-              resolve(null);
-              return;
-            }
-            data += chunk3;
-          });
-          response.on("end", () => {
-            try {
-              const json2 = JSON.parse(data);
-              const dataObj = json2;
-              const meta = dataObj._meta;
-              const pricingData = {};
-              for (const [key, value] of Object.entries(dataObj)) {
-                if (key !== "_meta") {
-                  pricingData[key] = value;
-                }
-              }
-              if (this.validatePricingData(pricingData)) {
-                debug(
-                  `Fetched fresh pricing from GitHub for ${Object.keys(pricingData).length} models`
-                );
-                debug(`Pricing last updated: ${meta?.updated || "unknown"}`);
-                resolve(pricingData);
-              } else {
-                debug("Invalid pricing data structure");
-                resolve(null);
-              }
-            } catch (error) {
-              debug("Failed to parse JSON:", error);
-              resolve(null);
-            }
-          });
-          response.on("error", (error) => {
-            debug("Response error:", error);
-            resolve(null);
-          });
-        }
-      );
-      request2.on("error", (error) => {
-        debug("Request error:", error);
-        resolve(null);
-      });
-      request2.on("timeout", () => {
-        debug("Request timeout");
-        request2.destroy();
-        resolve(null);
-      });
-      request2.end();
-    });
-  }
-  static async getCurrentPricing(cacheRoot, clock) {
-    if (this.executionCache !== null) {
-      debug(
-        `[CACHE-HIT] Pricing execution cache: ${Object.keys(this.executionCache).length} models`
-      );
-      return this.executionCache;
-    }
-    const diskCached = await this.loadDiskCache(cacheRoot, clock);
-    if (diskCached) {
-      debug(
-        `[CACHE-HIT] Pricing disk cache: ${Object.keys(diskCached).length} models`
-      );
-      this.executionCache = diskCached;
-      debug(
-        `[CACHE-SET] Pricing execution cache stored: ${Object.keys(diskCached).length} models`
-      );
-      return diskCached;
-    }
-    const freshData = await this.fetchPricingData();
-    if (freshData) {
-      await this.saveDiskCache(cacheRoot, clock, freshData);
-      debug(
-        `[CACHE-SET] Pricing disk cache stored: ${Object.keys(freshData).length} models`
-      );
-      this.executionCache = freshData;
-      debug(
-        `[CACHE-SET] Pricing execution cache stored: ${Object.keys(freshData).length} models`
-      );
-      return freshData;
-    }
+var PRICING_URL = new U(
+  "https://raw.githubusercontent.com/promptctl/cc-candybar/main/pricing.json"
+);
+var DISK_TTL_MS = 24 * 60 * 60 * 1e3;
+function livePricing(owner) {
+  let loading = null;
+  return {
+    table: () => owner.closing.aborted ? Promise.resolve(OFFLINE_PRICING_DATA) : loading ??= loadTable(owner).catch((e) => {
+      owner.log("error", `pricing load threw: ${String(e)}`);
+      return OFFLINE_PRICING_DATA;
+    })
+  };
+}
+var diskPath = (cacheRoot) => import_node_path40.default.join(cacheRoot, "usage", "pricing.json");
+async function loadTable(owner) {
+  const cached = await readDisk(owner);
+  if (cached !== null) return cached;
+  const fresh = owner.closing.aborted ? null : await fetchPricingData(owner.closing);
+  if (fresh === null) {
     debug(
       `[CACHE-FALLBACK] Using offline pricing data: ${Object.keys(OFFLINE_PRICING_DATA).length} models`
     );
-    this.executionCache = OFFLINE_PRICING_DATA;
-    debug(
-      `[CACHE-SET] Pricing execution cache stored: ${Object.keys(OFFLINE_PRICING_DATA).length} models`
-    );
     return OFFLINE_PRICING_DATA;
   }
-  static validatePricingData(data) {
-    if (!data || typeof data !== "object") return false;
-    for (const [, value] of Object.entries(data)) {
-      if (!value || typeof value !== "object") return false;
-      const pricing = value;
-      if (typeof pricing.input !== "number" || typeof pricing.output !== "number" || typeof pricing.cache_read !== "number") {
-        return false;
-      }
+  if (!owner.closing.aborted) await writeDisk(owner, fresh);
+  return fresh;
+}
+async function readDisk(owner) {
+  try {
+    const stored = JSON.parse(
+      await fs_default.promises.readFile(diskPath(owner.cacheRoot), "utf8")
+    );
+    const fresh = typeof stored.timestamp === "number" && stored.timestamp >= owner.clock.now() - DISK_TTL_MS;
+    return fresh && validatePricingData(stored.data) ? stored.data : null;
+  } catch (e) {
+    if (e.code !== "ENOENT") {
+      owner.log("warn", `pricing disk cache unreadable: ${String(e)}`);
     }
-    return true;
+    return null;
   }
-  static async getModelPricing(modelId, cacheRoot, clock) {
-    if (this.modelPricingCache.has(modelId)) {
-      debug(`[CACHE-HIT] Model pricing cache: ${modelId}`);
-      return this.modelPricingCache.get(modelId);
-    }
-    const allPricing = await this.getCurrentPricing(cacheRoot, clock);
-    let pricing;
-    if (allPricing[modelId]) {
-      pricing = allPricing[modelId];
-    } else {
-      pricing = this.fuzzyMatchModel(modelId, allPricing);
-    }
-    this.modelPricingCache.set(modelId, pricing);
-    debug(`[CACHE-SET] Model pricing cache: ${modelId}`);
-    return pricing;
+}
+async function writeDisk(owner, table) {
+  const file = diskPath(owner.cacheRoot);
+  const staged = `${file}.${process_default.pid}.${randomUUID()}`;
+  try {
+    await fs_default.promises.mkdir(import_node_path40.default.dirname(file), { recursive: true });
+    await fs_default.promises.writeFile(
+      staged,
+      JSON.stringify({ data: table, timestamp: owner.clock.now() }),
+      "utf8"
+    );
+    await fs_default.promises.rename(staged, file);
+  } catch (e) {
+    owner.log("warn", `pricing disk cache not written: ${String(e)}`);
+    await fs_default.promises.rm(staged, { force: true }).catch(() => {
+    });
   }
-  static fuzzyMatchModel(modelId, allPricing) {
-    const lowerModelId = modelId.toLowerCase();
-    for (const [key, pricing] of Object.entries(allPricing)) {
-      if (key.toLowerCase() === lowerModelId) {
-        return pricing;
-      }
-    }
-    const patterns = [
+}
+function fetchPricingData(closing) {
+  return new Promise((resolve) => {
+    const request2 = get2(
       {
-        pattern: ["opus-4-6", "claude-opus-4-6"],
-        fallback: "claude-opus-4-6-20260205"
+        hostname: PRICING_URL.hostname,
+        path: PRICING_URL.pathname,
+        headers: {
+          "User-Agent": "cc-candybar",
+          "Cache-Control": "no-cache"
+        },
+        timeout: 5e3,
+        agent: false,
+        signal: closing
       },
-      {
-        pattern: ["opus-4-5", "claude-opus-4-5"],
-        fallback: "claude-opus-4-5-20251101"
-      },
-      {
-        pattern: ["opus-4-1", "claude-opus-4-1"],
-        fallback: "claude-opus-4-1-20250805"
-      },
-      {
-        pattern: ["opus-4", "claude-opus-4"],
-        fallback: "claude-opus-4-20250514"
-      },
-      {
-        pattern: ["sonnet-4-6", "sonnet-4.6", "claude-sonnet-4-6"],
-        fallback: "claude-sonnet-4-6"
-      },
-      {
-        pattern: ["sonnet-4.5", "4-5-sonnet", "sonnet-4-5"],
-        fallback: "claude-sonnet-4-5-20250929"
-      },
-      {
-        pattern: ["sonnet-4", "claude-sonnet-4"],
-        fallback: "claude-sonnet-4-20250514"
-      },
-      {
-        pattern: ["haiku-4.5", "4-5-haiku", "haiku-4-5"],
-        fallback: "claude-haiku-4-5-20251001"
-      },
-      { pattern: ["haiku"], fallback: "claude-haiku-4-5-20251001" },
-      { pattern: ["opus"], fallback: "claude-opus-4-20250514" },
-      { pattern: ["sonnet"], fallback: "claude-sonnet-4-5-20250929" }
-    ];
-    for (const { pattern: pattern2, fallback } of patterns) {
-      if (pattern2.some((p2) => lowerModelId.includes(p2))) {
-        if (allPricing[fallback]) {
-          return allPricing[fallback];
+      (response) => {
+        if (response.statusCode !== 200) {
+          debug(`HTTP ${response.statusCode}: ${response.statusMessage}`);
+          response.resume();
+          resolve(null);
+          return;
         }
+        let data = "";
+        let size = 0;
+        const MAX_SIZE = 1024 * 1024;
+        response.setEncoding("utf8");
+        response.on("data", (chunk3) => {
+          size += import_buffer.Buffer.byteLength(chunk3);
+          if (size > MAX_SIZE) {
+            debug("Response too large");
+            request2.destroy();
+            resolve(null);
+            return;
+          }
+          data += chunk3;
+        });
+        response.on("end", () => {
+          try {
+            const json2 = JSON.parse(data);
+            const meta = json2._meta;
+            const pricingData = {};
+            for (const [key, value] of Object.entries(json2)) {
+              if (key !== "_meta") {
+                pricingData[key] = value;
+              }
+            }
+            if (validatePricingData(pricingData)) {
+              debug(
+                `Fetched fresh pricing from GitHub for ${Object.keys(pricingData).length} models`
+              );
+              debug(`Pricing last updated: ${meta?.updated || "unknown"}`);
+              resolve(pricingData);
+            } else {
+              debug("Invalid pricing data structure");
+              resolve(null);
+            }
+          } catch (error) {
+            debug("Failed to parse JSON:", error);
+            resolve(null);
+          }
+        });
+        response.on("error", (error) => {
+          debug("Response error:", error);
+          resolve(null);
+        });
+      }
+    );
+    request2.on("error", (error) => {
+      debug("Request error:", error);
+      resolve(null);
+    });
+    request2.on("timeout", () => {
+      debug("Request timeout");
+      request2.destroy();
+      resolve(null);
+    });
+    request2.end();
+  });
+}
+function validatePricingData(data) {
+  if (!data || typeof data !== "object") return false;
+  for (const [, value] of Object.entries(data)) {
+    if (!value || typeof value !== "object") return false;
+    const pricing = value;
+    if (typeof pricing.input !== "number" || typeof pricing.output !== "number" || typeof pricing.cache_read !== "number" || typeof pricing.cache_write_5m !== "number") {
+      return false;
+    }
+  }
+  return true;
+}
+function modelPricingOf(modelId, allPricing) {
+  const exact = allPricing[modelId];
+  if (exact) return exact;
+  const lowerModelId = modelId.toLowerCase();
+  for (const [key, pricing] of Object.entries(allPricing)) {
+    if (key.toLowerCase() === lowerModelId) {
+      return pricing;
+    }
+  }
+  const patterns = [
+    {
+      pattern: ["opus-4-6", "claude-opus-4-6"],
+      fallback: "claude-opus-4-6-20260205"
+    },
+    {
+      pattern: ["opus-4-5", "claude-opus-4-5"],
+      fallback: "claude-opus-4-5-20251101"
+    },
+    {
+      pattern: ["opus-4-1", "claude-opus-4-1"],
+      fallback: "claude-opus-4-1-20250805"
+    },
+    {
+      pattern: ["opus-4", "claude-opus-4"],
+      fallback: "claude-opus-4-20250514"
+    },
+    {
+      pattern: ["sonnet-4-6", "sonnet-4.6", "claude-sonnet-4-6"],
+      fallback: "claude-sonnet-4-6"
+    },
+    {
+      pattern: ["sonnet-4.5", "4-5-sonnet", "sonnet-4-5"],
+      fallback: "claude-sonnet-4-5-20250929"
+    },
+    {
+      pattern: ["sonnet-4", "claude-sonnet-4"],
+      fallback: "claude-sonnet-4-20250514"
+    },
+    {
+      pattern: ["haiku-4.5", "4-5-haiku", "haiku-4-5"],
+      fallback: "claude-haiku-4-5-20251001"
+    },
+    { pattern: ["haiku"], fallback: "claude-haiku-4-5-20251001" },
+    { pattern: ["opus"], fallback: "claude-opus-4-20250514" },
+    { pattern: ["sonnet"], fallback: "claude-sonnet-4-5-20250929" }
+  ];
+  for (const { pattern: pattern2, fallback } of patterns) {
+    if (pattern2.some((p2) => lowerModelId.includes(p2))) {
+      if (allPricing[fallback]) {
+        return allPricing[fallback];
       }
     }
-    return allPricing["claude-sonnet-4-5-20250929"] || {
-      name: `${modelId} (Unknown Model)`,
-      input: 3,
-      cache_write_5m: 3.75,
-      cache_write_1h: 6,
-      cache_read: 0.3,
-      output: 15
-    };
   }
-  static async calculateCostForEntry(entry, cacheRoot, clock) {
-    const usage = entry.message?.usage;
-    if (!usage) {
-      return 0;
-    }
-    const modelId = this.extractModelId(entry);
-    const pricing = await this.getModelPricing(modelId, cacheRoot, clock);
-    const inputTokens = usage.input_tokens || 0;
-    const outputTokens = usage.output_tokens || 0;
-    const cacheCreationTokens = usage.cache_creation_input_tokens || 0;
-    const cacheReadTokens = usage.cache_read_input_tokens || 0;
-    const inputCost = inputTokens / 1e6 * pricing.input;
-    const outputCost = outputTokens / 1e6 * pricing.output;
-    const cacheReadCost = cacheReadTokens / 1e6 * pricing.cache_read;
-    const cacheCreationCost = cacheCreationTokens / 1e6 * pricing.cache_write_5m;
-    return inputCost + outputCost + cacheCreationCost + cacheReadCost;
+  return allPricing["claude-sonnet-4-5-20250929"] || {
+    name: `${modelId} (Unknown Model)`,
+    input: 3,
+    cache_write_5m: 3.75,
+    cache_write_1h: 6,
+    cache_read: 0.3,
+    output: 15
+  };
+}
+function costOf(table, entry) {
+  const usage = entry.message?.usage;
+  if (!usage) {
+    return 0;
   }
-  static extractModelId(entry) {
-    if (entry.model && typeof entry.model === "string") {
-      return entry.model;
-    }
-    const message = entry.message;
-    if (message?.model) {
-      const model = message.model;
-      if (typeof model === "string") {
-        return model;
-      }
-      const modelObj = model;
-      return (typeof modelObj?.id === "string" ? modelObj.id : null) || "claude-sonnet-4-5-20250929";
-    }
-    if (entry.model_id && typeof entry.model_id === "string") {
-      return entry.model_id;
-    }
-    return "claude-sonnet-4-5-20250929";
+  const pricing = modelPricingOf(modelIdOf(entry), table);
+  const inputTokens = usage.input_tokens || 0;
+  const outputTokens = usage.output_tokens || 0;
+  const cacheCreationTokens = usage.cache_creation_input_tokens || 0;
+  const cacheReadTokens = usage.cache_read_input_tokens || 0;
+  const inputCost = inputTokens / 1e6 * pricing.input;
+  const outputCost = outputTokens / 1e6 * pricing.output;
+  const cacheReadCost = cacheReadTokens / 1e6 * pricing.cache_read;
+  const cacheCreationCost = cacheCreationTokens / 1e6 * pricing.cache_write_5m;
+  return inputCost + outputCost + cacheCreationCost + cacheReadCost;
+}
+function modelIdOf(entry) {
+  if (entry.model && typeof entry.model === "string") {
+    return entry.model;
   }
-};
+  const message = entry.message;
+  if (message?.model) {
+    const model = message.model;
+    if (typeof model === "string") {
+      return model;
+    }
+    const modelObj = model;
+    return (typeof modelObj?.id === "string" ? modelObj.id : null) || "claude-sonnet-4-5-20250929";
+  }
+  if (entry.model_id && typeof entry.model_id === "string") {
+    return entry.model_id;
+  }
+  return "claude-sonnet-4-5-20250929";
+}
 
 // src/utils/single-flight.ts
 init_globals();
@@ -80531,18 +80217,19 @@ var EMPTY_FILE_FOLD = {
   breakdown: emptyBreakdown(),
   days: /* @__PURE__ */ new Map()
 };
-async function foldFile(state, entries, cacheRoot, clock) {
+async function foldFile(state, entries, pricing, clock) {
   const keep2 = dayKey(new Date(seedCutoffMs(clock.now())));
   let count = state.entries;
   let cost = state.cost;
   const breakdown = { ...state.breakdown };
+  let table = null;
   const days = /* @__PURE__ */ new Map();
   for (const [k, v] of state.days) if (k >= keep2) days.set(k, { ...v });
   for (const entry of entries) {
     const u = entry.message?.usage;
     if (!u) continue;
     count++;
-    const priced = entry.costUSD ?? await PricingService.calculateCostForEntry(entry.raw, cacheRoot, clock);
+    const priced = entry.costUSD ?? costOf(table ??= await pricing.table(), entry.raw);
     cost += priced;
     breakdown.input += u.input_tokens || 0;
     breakdown.output += u.output_tokens || 0;
@@ -80662,8 +80349,8 @@ var SessionUsageStore = class {
   staleAgeMs;
   // The machine the store reads: where transcripts live.
   host;
-  // The home's cache directory, where the day's scan is folded.
-  cacheDir;
+  // What prices an entry that carries no cost of its own.
+  pricing;
   log;
   renderTally = { hits: 0, misses: 0 };
   ledger;
@@ -80676,7 +80363,7 @@ var SessionUsageStore = class {
   clock;
   constructor(opts) {
     this.host = opts.host;
-    this.cacheDir = opts.cacheDir;
+    this.pricing = opts.pricing;
     this.clock = opts.clock;
     this.log = opts.logger ?? quietLogger;
     this.ledger = opts.ledger ?? new RefreshLedger(this.log);
@@ -81019,7 +80706,7 @@ var SessionUsageStore = class {
         filePath2,
         priorFold,
         EMPTY_FILE_FOLD,
-        (state, entries) => foldFile(state, entries, this.cacheDir, this.clock)
+        (state, entries) => foldFile(state, entries, this.pricing, this.clock)
       );
       if (read2.kind === "failed") return read2;
       if (read2.kind === "absent") {
@@ -82223,7 +81910,7 @@ function createPayloadProviders(opts) {
     }),
     usageStore: new SessionUsageStore({
       host: opts.host,
-      cacheDir: opts.cacheDir,
+      pricing: opts.pricing,
       clock,
       logger,
       ledger
@@ -82595,7 +82282,6 @@ function buildRenderState(load, deps) {
       store: store2,
       registry,
       compiled: registration.compiled,
-      neededInputPaths: neededPrefixesByPreset(config2),
       // What a reset clears is the home's: resets write nowhere else.
       authoredRoots: authoredRoots(merged, homeRaw),
       fileHeldSettings: fileHeldSettings(homeRaw),
@@ -82702,57 +82388,28 @@ function fallbackState(cwd2, repo2, deps) {
 }
 var DIRECTORY_SCOPE = /* @__PURE__ */ new Set(["directory"]);
 var VIEW_SCOPE = /* @__PURE__ */ new Set(["view"]);
-function openView(state, cwd2, facts, {
-  sessionState,
-  facts: factsSource,
-  source: sourceOf,
-  changed,
-  log
-}) {
+function openView(state, cwd2, facts, { facts: factsSource, source: sourceOf, changed, log }) {
   const { sessionId: sessionId2 } = facts;
   const registry = state.registry.view();
   declareDslVariables(state.config, registry, cwd2, VIEW_SCOPE);
-  const presetNow = () => presetOf(state.config, (key) => sessionState.get(sessionId2, key));
-  const declarationOf = (preset) => ({
-    closure: state.neededInputPaths(preset),
-    sources: state.sources
-  });
-  const opening = presetNow();
+  const declaration = { sources: state.sources };
   let followed;
   try {
-    followed = factsSource.follow(facts, declarationOf(opening));
+    followed = factsSource.follow(facts, declaration);
   } catch (e) {
     registry.dispose();
     throw e;
   }
-  const declared = observable.box(
-    { facts, preset: opening },
-    { deep: false }
-  );
-  const redeclare = (facts2, preset) => {
-    const now2 = declared.get();
-    if (facts2 === now2.facts && preset === now2.preset) return;
+  const declared = observable.box({ facts }, { deep: false });
+  const redeclare = (facts2) => {
+    if (facts2 === declared.get().facts) return;
     runInAction(() => {
-      followed.follow(facts2, declarationOf(preset));
-      declared.set({ facts: facts2, preset });
+      followed.follow(facts2, declaration);
+      declared.set({ facts: facts2 });
     });
   };
-  const stop2 = reaction(
-    presetNow,
-    (preset) => redeclare(declared.get().facts, preset),
-    {
-      fireImmediately: true,
-      // [LAW:no-silent-failure] A follow that throws on a pick reaches only
-      // the console MobX prints to, which nobody reads in a detached daemon.
-      onError: (e) => log(
-        "error",
-        `session view follow threw on a pick sid=${JSON.stringify(sessionId2)}: ${String(e)}`
-      )
-    }
-  );
   const sourceStops = [];
   const release3 = () => {
-    stop2();
     for (const stopSource of sourceStops) stopSource();
     followed.dispose();
     return registry.dispose();
@@ -82795,7 +82452,7 @@ function openView(state, cwd2, facts, {
     store: registry.variableStore,
     registry,
     source,
-    requested: (next) => redeclare(next, presetNow()),
+    requested: redeclare,
     facts: () => declared.get().facts,
     settle: (at) => followed.settle(at),
     followed: { stamped: followed.stamped, failure: followed.failure },
@@ -83054,7 +82711,6 @@ var RenderCache = class {
     let view;
     try {
       view = openView(state, entry.cwd, facts, {
-        sessionState: this.deps.sessionState,
         facts: this.deps.facts,
         source: this.deps.source,
         changed: (sid) => this.observers.onViewChanged?.(sid),
@@ -83519,7 +83175,6 @@ init_globals();
 
 // src/daemon/facts-assembly.ts
 init_globals();
-var gathered = (on2, reading) => on2 ? reading : pendingOf("unread");
 var over = (reading, project) => reading.kind === "ok" ? ok(project(reading.value)) : reading;
 function prOf(git) {
   switch (git.kind) {
@@ -83540,38 +83195,32 @@ function gitFactsOf({ pullRequest: _pullRequest, ...git }) {
   return git;
 }
 function assembleFacts(prior, session, readings, update, at) {
-  const { lanes, gathered: on2 } = readings;
-  const git = gathered(on2.git, lanes.git);
+  const { lanes } = readings;
+  const git = lanes.git;
   const stamp2 = (held2, reading) => restamp(held2, reading, at);
   const held = prior?.builtins;
   const builtins = {
-    session: stamp2(held?.session, gathered(on2.session, lanes.usage)),
-    today: stamp2(held?.today, gathered(on2.today, readings.today)),
-    speed: stamp2(held?.speed, gathered(on2.speed, lanes.speed)),
-    context: stamp2(held?.context, gathered(on2.context, lanes.context)),
-    metrics: stamp2(held?.metrics, gathered(on2.metrics, lanes.metrics)),
-    activity: stamp2(held?.activity, gathered(on2.activity, lanes.activity)),
-    cache: stamp2(held?.cache, gathered(on2.cache, lanes.cache)),
-    autocompact: stamp2(
-      held?.autocompact,
-      gathered(on2.autocompact, lanes.autoCompact)
-    ),
+    session: stamp2(held?.session, lanes.usage),
+    today: stamp2(held?.today, readings.today),
+    speed: stamp2(held?.speed, lanes.speed),
+    context: stamp2(held?.context, lanes.context),
+    metrics: stamp2(held?.metrics, lanes.metrics),
+    activity: stamp2(held?.activity, lanes.activity),
+    cache: stamp2(held?.cache, lanes.cache),
+    autocompact: stamp2(held?.autocompact, lanes.autoCompact),
     git: stamp2(held?.git, over(git, gitFactsOf)),
     pr: stamp2(held?.pr, prOf(git)),
     tmux: stamp2(
       held?.tmux,
-      over(gathered(on2.tmux, lanes.tmuxSession), (name) => ({ session: name }))
+      over(lanes.tmuxSession, (name) => ({ session: name }))
     ),
-    hostName: stamp2(held?.hostName, gathered(on2.hostName, lanes.hostName)),
-    hostUser: stamp2(held?.hostUser, gathered(on2.hostUser, lanes.hostUser))
+    hostName: stamp2(held?.hostName, lanes.hostName),
+    hostUser: stamp2(held?.hostUser, lanes.hostUser)
   };
   const sources = Object.fromEntries(
-    readings.declaredSources.map((name) => [
+    [...lanes.sources].map(([name, reading]) => [
       name,
-      stamp2(
-        prior?.sources[name],
-        lanes.sources.get(name) ?? pendingOf("unread")
-      )
+      stamp2(prior?.sources[name], reading)
     ])
   );
   const parts = { builtins, sources, update, diagnostics: readings.faults };
@@ -83616,14 +83265,14 @@ function inProcessFacts({
       const session = facts.sessionId;
       const holds2 = new Holds();
       const sid = JSON.stringify(session);
-      const lanesFor = (facts2, { closure, sources }) => {
+      const lanesFor = (facts2, { sources }) => {
         try {
           const {
             result: { lanes, faults },
             acquired,
             released
           } = holds2.declare(
-            () => declareLanes(providers, holds2, facts2, closure, sources)
+            () => declareLanes(providers, holds2, facts2, sources)
           );
           for (const fault of faults) {
             log("error", `session view declaration threw sid=${sid} ${fault}`);
@@ -83642,30 +83291,27 @@ function inProcessFacts({
           );
           return settledLanes(
             failed(`view declaration threw: ${String(e)}`, "read"),
-            sourcesRead(closure, sources)
+            [...sources.keys()]
           );
         }
       };
       const declared = observable.box(
-        { facts, declaration, lanes: lanesFor(facts, declaration) },
+        { facts, lanes: lanesFor(facts, declaration) },
         { deep: false }
       );
       const inputs = computed(() => {
-        const { facts: facts2, declaration: declaration2 } = declared.get();
+        const { facts: facts2 } = declared.get();
         return {
           hookData: facts2.hookData,
           cwd: facts2.cwd,
           hints: facts2.hints,
-          neededInputPaths: declaration2.closure,
           // The lanes as declared now, read at each call: a settle in flight
           // waits out the lanes a follow during it took, not the ones it
           // started with.
           deps: { ...providers, lanes: () => declared.get().lanes }
         };
       });
-      const readings = computed(
-        () => readingsOf(inputs.get(), declared.get().declaration.sources)
-      );
+      const readings = computed(() => readingsOf(inputs.get()));
       let box;
       const stop2 = reaction(
         () => {
@@ -83719,7 +83365,7 @@ function inProcessFacts({
         failure: () => box.get().failure,
         follow: (facts2, declaration2) => {
           const lanes = lanesFor(facts2, declaration2);
-          runInAction(() => declared.set({ facts: facts2, declaration: declaration2, lanes }));
+          runInAction(() => declared.set({ facts: facts2, lanes }));
         },
         settle: (at) => {
           const refreshed = /* @__PURE__ */ new Map();
@@ -83764,11 +83410,10 @@ function sessionSource(deps) {
       "session.compose",
       "computed",
       () => {
-        const { facts, preset } = declared();
+        const { facts } = declared();
         return {
           hookData: facts.hookData,
           hints: facts.hints,
-          neededInputPaths: state.neededInputPaths(preset),
           home: deps.providers.home
         };
       }
@@ -83842,7 +83487,6 @@ function sessionSource(deps) {
       effective: () => turn.get().draw.effective,
       facts: () => turn.get().document,
       hints: () => turn.get().compose.hints,
-      closure: () => turn.get().compose.neededInputPaths,
       failure: () => turn.get().failure,
       selections: () => turn.get().draw.effective
     };
@@ -85666,10 +85310,15 @@ function createDaemon(inputs) {
     watchers: watcherRegistry,
     fileEvents
   });
+  const pricing = inputs.pricing({
+    cacheRoot: cacheDir(home),
+    closing: closing.signal,
+    log
+  });
   const payloadProviders = createPayloadProviders({
     launcher,
     host,
-    cacheDir: cacheDir(home),
+    pricing,
     watchers: watcherRegistry,
     fileEvents,
     clock,
@@ -87010,6 +86659,7 @@ function productionAdapters(paths2, daemonLog, machine) {
       writeLogNow: () => daemonLog.writeNow()
     }),
     fetch,
+    pricing: (own2) => livePricing({ ...own2, clock: machine }),
     stat: fs_default.statSync
   };
 }
