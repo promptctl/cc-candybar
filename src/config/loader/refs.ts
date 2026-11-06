@@ -357,6 +357,9 @@ export function templateActionRefs(
 // A verb computed at the draw is no literal, and is the click's to refuse.
 // [LAW:single-enforcer] The verb is read by the one link parse the click runs,
 // so a literal in any grammar a click reads names the verb that click would.
+// A literal may be only a link's head (`"cc-candybar://<verb>"` joined to a
+// computed tail), so it is read with a segment break after it: the verb ends
+// where the literal does at the latest.
 export interface LinkVerbRef {
   readonly verb: string;
   readonly via: string | null;
@@ -368,7 +371,7 @@ export function templateLinkVerbs(
   const refs = new Map<string, LinkVerbRef>();
   for (const { code, via } of callGraph(template, helpers)) {
     for (const s of code.matchAll(STRING_LITERAL_RE)) {
-      const link = parseHandlerUrl(s[0].slice(1, -1));
+      const link = parseHandlerUrl(`${s[0].slice(1, -1)}/`);
       if (!link.ok) continue;
       const { verb } = link;
       const key = `${verb}\0${via ?? "\0"}`;

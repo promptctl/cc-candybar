@@ -1739,6 +1739,8 @@ describe("loadDslConfig — cross-references", () => {
       path: "segments.a.template",
       message: "load-config",
     });
+    const head = `{ segments: { a: { template: '{{ link (printf "%s/%s/" "cc-candybar://load-config" .session.id) "pick" }}' } }, root: { h: ['a'] } }`;
+    expectIssue(head, { path: "segments.a.template", message: "load-config" });
   });
 
   test("root-authored config reports unknown segment under the `root` path", () => {

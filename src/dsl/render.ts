@@ -182,6 +182,8 @@ export interface CompiledConfig {
   readonly roots: ReadonlyMap<string, CompiledNode>;
   // [LAW:locality-or-seam] The menu runtime the engine's `menu` func closes over.
   readonly menuRuntime: MenuRuntime;
+  // What makes every link this compile draws its renderer's.
+  readonly links: RendererLinks;
   // [LAW:one-source-of-truth] The compiled template for every RULE the config
   // authored where a name could go — `style` (brandon-looks-pe6) and `palette`
   // (brandon-themes-dzl) — in every globals fragment the config-default rung
@@ -989,6 +991,7 @@ export function compileDslConfig(
     roots,
     activeSegment,
     menuRuntime,
+    links,
     globalExpressions,
     instant,
     layoutReadsInstant,
@@ -1549,11 +1552,7 @@ export function drawDsl(
       // same store every other affordance's URL does, and is addressed as
       // every link the compile draws is.
       closeDisclosure: (key) =>
-        disclosureCloseFragment(
-          compiled.menuRuntime.action.links.to,
-          store,
-          key,
-        ),
+        disclosureCloseFragment(compiled.links.to, store, key),
       placed: (id, lines) => record.placed(id, motion.placed(id, lines)),
       lastDrawn: (id) => last?.placements.get(id),
       waited: (variable) => waited.add(variable),
