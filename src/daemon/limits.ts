@@ -55,13 +55,12 @@ import type { Timekeeper } from "../time";
 // check-protocol name the constants, so renaming them for wording alone would
 // break that contract for no change in meaning.
 //
-// The default is sized from what a daemon serving a hundred sessions, each
-// drawing from its own checkout, is charged: ~430 MB, about 40% of it, so a
-// leak trips the backstop while it is still a leak. The render cache's share
+// The default leaves a daemon serving a hundred sessions, each drawing from its
+// own checkout, well under the limit, so a leak trips the backstop while it is
+// still a leak. The render cache's share
 // of it holds those hundred (render.ts). Below that the cache cannot hold the
 // directories being rendered from, every render misses, and a miss's config
-// load is longer than the client waits, so every render fails rather than some
-// (the load gate, scripts/load-gate.ts, serves that hundred).
+// load is longer than the client waits, so every render fails rather than some.
 export const RSS_LIMIT_ENV = "CC_CANDYBAR_RSS_LIMIT_MB";
 export const DEFAULT_RSS_LIMIT_MB = 1024;
 export const HEAP_CAP_OVER_RSS = 2;
