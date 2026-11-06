@@ -159,9 +159,13 @@ function stamped(
       moved.update,
       at,
     );
-    return prior.failure === null && facts === prior.line.facts
+    // The line is the document's: a fault clearing over the same document is
+    // the prior line with its failure gone, never a second line of it with
+    // an instant no fact was stamped at, which a recorder would write.
+    const line = facts === prior.line.facts ? prior.line : { at, facts };
+    return line === prior.line && prior.failure === null
       ? prior
-      : { line: { at, facts }, failure: null };
+      : { line, failure: null };
   } catch (e) {
     return failedWith(prior, `stamping the facts document: ${String(e)}`);
   }
@@ -242,13 +246,16 @@ export function inProcessFacts({
       // and the closure and lanes of ONE declaration, never a closure from one
       // paired with another's lanes.
       const inputs = computed((): PayloadInputs => {
-        const { facts, declaration, lanes } = declared.get();
+        const { facts, declaration } = declared.get();
         return {
           hookData: facts.hookData,
           cwd: facts.cwd,
           hints: facts.hints,
           neededInputPaths: declaration.closure,
-          deps: { ...providers, lanes: () => lanes },
+          // The lanes as declared now, read at each call: a settle in flight
+          // waits out the lanes a follow during it took, not the ones it
+          // started with.
+          deps: { ...providers, lanes: () => declared.get().lanes },
         };
       });
       // What the session's owners hold now, read once per turn.
@@ -363,6 +370,18 @@ function recordingOf(lines: readonly FactsLine[]): {
   if (back !== -1) {
     throw new Error(
       `a recording's lines are in time order, and line ${back + 1} (at ${lines[back]!.at}) is before line ${back} (at ${lines[back - 1]!.at})`,
+    );
+  }
+  // One follow's stream: a document's sequence counts its stamps from the
+  // follow's first, so a sequence that does not advance is a second follow of
+  // the session (a view the cache opened beside the one it retires) whose
+  // lines were written into the same recording.
+  const other = lines.findIndex(
+    (line, i) => i > 0 && line.facts.seq <= lines[i - 1]!.facts.seq,
+  );
+  if (other !== -1) {
+    throw new Error(
+      `a recording is one follow's stream, and line ${other + 1} (seq ${lines[other]!.facts.seq}) does not follow line ${other} (seq ${lines[other - 1]!.facts.seq})`,
     );
   }
   return { session: [...sessions][0]!, at0: lines[0]!.at };

@@ -1357,8 +1357,13 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
   const redeclare = (facts: F, preset: string): void => {
     const now = declared.get();
     if (facts === now.facts && preset === now.preset) return;
-    followed.follow(facts, declarationOf(preset));
-    runInAction(() => declared.set({ facts, preset }));
+    // [LAW:one-source-of-truth] One turn: the follow's document under the new
+    // closure and the preset the source composes over land together, so no
+    // turn pairs one preset's document with another's closure.
+    runInAction(() => {
+      followed.follow(facts, declarationOf(preset));
+      declared.set({ facts, preset });
+    });
   };
   // The preset moves with the session's picks, which the reaction tracks: its
   // first run, whenever it comes, declares only a preset moved since.

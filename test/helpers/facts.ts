@@ -5,33 +5,27 @@
 // nothing without an owner.
 import type { SessionId } from "../../src/daemon/session-id";
 import type { Facts } from "../../src/daemon/facts-source";
-import { FACTS_VERSION, type SessionFacts } from "../../src/facts/session-facts";
+import {
+  BUILTIN_FACTS,
+  FACTS_VERSION,
+  type BuiltinFacts,
+  type SessionFacts,
+} from "../../src/facts/session-facts";
 import type { Instant } from "../../src/utils/instant";
 import { pendingOf } from "../../src/utils/outcome";
 
 // The document before any source has answered: total, sequence 0 because no
-// assembly made it.
+// assembly made it. The built-ins are the one list of them, so a built-in
+// added to the document is pending here without an edit.
 export function pendingFacts(session: SessionId): SessionFacts {
   const unread = pendingOf("unread");
   return {
     v: FACTS_VERSION,
     session,
     seq: 0,
-    builtins: {
-      session: unread,
-      today: unread,
-      speed: unread,
-      context: unread,
-      metrics: unread,
-      activity: unread,
-      cache: unread,
-      autocompact: unread,
-      git: unread,
-      pr: unread,
-      tmux: unread,
-      hostName: unread,
-      hostUser: unread,
-    },
+    builtins: Object.fromEntries(
+      BUILTIN_FACTS.map((name) => [name, unread]),
+    ) as unknown as BuiltinFacts,
     sources: {},
     update: unread,
     diagnostics: [],

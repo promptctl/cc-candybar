@@ -149,8 +149,9 @@ describe("the in-process arm", () => {
 
     runInAction(() => broken.set(false));
     expect(followed.failure()).toBeNull();
-    // The document is the one before: no fact moved while the source failed.
-    expect(followed.stamped().facts).toBe(before.facts);
+    // The line is the one before: no fact moved while the source failed, so
+    // the fault clearing stamps nothing a recorder would write.
+    expect(followed.stamped()).toBe(before);
     followed.dispose();
   });
 });
@@ -251,6 +252,15 @@ describe("the recording arm", () => {
       recordingFacts([line(0, 1), line(3, 2), line(2, 3)], clock),
     ).toThrow(
       `a recording's lines are in time order, and line 3 (at ${at(2)}) is before line 2 (at ${at(3)})`,
+    );
+  });
+
+  test("a second follow's lines in one recording are refused by the sequence that does not advance", () => {
+    const clock = heldClock(AT);
+    expect(() =>
+      recordingFacts([line(0, 1), line(1, 2), line(2, 1), line(3, 3)], clock),
+    ).toThrow(
+      "a recording is one follow's stream, and line 3 (seq 1) does not follow line 2 (seq 2)",
     );
   });
 });

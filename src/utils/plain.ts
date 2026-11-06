@@ -22,6 +22,13 @@ export type Plain<T> = unknown extends T
         ? ReadonlyArray<Plain<E>>
         : { readonly [K in keyof T]: Plain<T[K]> };
 
+// A JSON object: what `{}` in a document is, apart from `null` and an array,
+// which `typeof` also calls objects. The one predicate every parser of a JSON
+// shape narrows with.
+export function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
 // [LAW:types-are-the-program] An object written as the projection of a `T`:
 // every key of `T`, optional ones included, and no other. Used with
 // `satisfies`, so a field added to `T` fails to compile until its projection

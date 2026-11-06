@@ -19,6 +19,7 @@ import {
 } from "./session-facts";
 import { FactParseError, parseFact, type Fact } from "./fact";
 import type { Instant } from "../utils/instant";
+import { isPlainObject } from "../utils/plain";
 import { parseSessionId } from "../daemon/session-id";
 import { REFRESH_LANES, type RefreshLane } from "../daemon/refresh-faults";
 
@@ -29,13 +30,10 @@ export interface FactsLine {
   readonly facts: SessionFacts;
 }
 
-const isRecord = (json: unknown): json is Record<string, unknown> =>
-  typeof json === "object" && json !== null && !Array.isArray(json);
-
 const LANES: ReadonlySet<unknown> = new Set<RefreshLane>(REFRESH_LANES);
 
 function parseDiagnostic(json: unknown, where: string): FactsDiagnostic {
-  if (!isRecord(json)) throw new FactParseError(where, "is not an object");
+  if (!isPlainObject(json)) throw new FactParseError(where, "is not an object");
   if (!LANES.has(json.lane)) {
     throw new FactParseError(where, `names lane ${String(json.lane)}`);
   }
@@ -50,7 +48,7 @@ function parseDiagnostic(json: unknown, where: string): FactsDiagnostic {
 // value is (a usage record, a git read) is the owner's shape carried as JSON,
 // which the type names and this parser takes as read.
 export function parseSessionFacts(json: unknown, where: string): SessionFacts {
-  if (!isRecord(json)) throw new FactParseError(where, "is not an object");
+  if (!isPlainObject(json)) throw new FactParseError(where, "is not an object");
   if (json.v !== FACTS_VERSION) {
     throw new FactParseError(
       where,
@@ -64,7 +62,7 @@ export function parseSessionFacts(json: unknown, where: string): SessionFacts {
     throw new FactParseError(where, "has no integer `seq`");
   }
   const builtinsJson = json.builtins;
-  if (!isRecord(builtinsJson)) {
+  if (!isPlainObject(builtinsJson)) {
     throw new FactParseError(where, "has no `builtins`");
   }
   // [LAW:types-are-the-program] Each built-in's value is its owner's shape
@@ -76,7 +74,7 @@ export function parseSessionFacts(json: unknown, where: string): SessionFacts {
       parseFact(builtinsJson[name], `${where} builtins.${name}`),
     ]),
   ) as unknown as BuiltinFacts;
-  if (!isRecord(json.sources)) {
+  if (!isPlainObject(json.sources)) {
     throw new FactParseError(where, "has no `sources`");
   }
   const sources = Object.fromEntries(
@@ -116,7 +114,8 @@ export function parseRecording(text: string): FactsLine[] {
       } catch (e) {
         throw new FactParseError(where, `is not JSON: ${String(e)}`);
       }
-      if (!isRecord(json)) throw new FactParseError(where, "is not an object");
+      if (!isPlainObject(json))
+        throw new FactParseError(where, "is not an object");
       if (typeof json.at !== "number" || !Number.isFinite(json.at)) {
         throw new FactParseError(where, "has no finite `at`");
       }
