@@ -183,12 +183,11 @@ export const NEVER_CLICKED: DrawState = {
 // The histories' depths a replay's turn reads, beside its store.
 export type Depths = Pick<DrawState, "history" | "back">;
 
+// Every field of the settings history's depth, whichever it gains.
 function sameDepths(a: Depths, b: Depths): boolean {
+  const fields = Object.keys(a.history) as Array<keyof Depths["history"]>;
   return (
-    a.back === b.back &&
-    a.history.undo === b.history.undo &&
-    a.history.redo === b.history.redo &&
-    a.history.sinceEdit === b.history.sinceEdit
+    a.back === b.back && fields.every((k) => a.history[k] === b.history[k])
   );
 }
 
