@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-646",
+      "ref": "refs/pull/646/merge",
+      "sha": "6e8899e475c858e145b3aef6275c84e0a71edb1f",
+      "timestamp": "2026-11-06T19:57:26.942Z",
+      "commits": [
+        {
+          "sha": "6e8899e475c858e145b3aef6275c84e0a71edb1f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T19:56:32Z",
+          "message": "Merge 74195dcf571eeb2c8404d966ecd0375c765cdd92 into 1d331bc7612571c272bd1699765d216731683eca\n"
+        },
+        {
+          "sha": "74195dcf571eeb2c8404d966ecd0375c765cdd92",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T12:56:21-07:00",
+          "message": "fix(apply): a request's arrival settles in its turn; a queued run is counted (candybar-gather-renderer-76bb.1dh.9kk)\n\nThe lane setups a request's arrival settles were taken off the owed list\nduring the draw and reached the performer only once the draw had answered,\nso a click made during the wait was performed ahead of them, and a draw that\nthrew lost them. The arrival (owed setups and the tmux status line) now\nsettles in the request's turn, measured as a click's switches are, and the\narm answers with the draw under way, so the turn's effects join the\nsession's order as the turn ends.\n\nA run superseded by its click and still waiting behind the session's earlier\neffects shows in the run stats as queued. The lane outcome's comment says\nwhat underway now means, and a write's refusal text is built only when\nrefused.\n"
+        },
+        {
+          "sha": "9c565b20d453cce0770d25cdaca8a2ca216235bc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T12:35:32-07:00",
+          "message": "feat(apply): session state has one writer; a run and a lane setup are effects (candybar-gather-renderer-76bb.1dh.9kk)\n\nThe session store refuses a write made while no journal turn is held, in\nevery daemon. A turn is synchronous, so a write while one is held is that\nturn's own, and one check at the store's single write path is the whole\nenforcement. The test-only view that refused such writes, its adapter\nseam and the separate gauges field are gone.\n\nThe two writers left outside a turn now report through effect-done:\n\n- A `run` click supersedes its sources in its turn, so they read pending\n  from the click on, and describes the launch as a `run` effect. The\n  performer runs the program behind the session's earlier effects; the\n  run owner answers how it ended and no longer writes the bar.\n- A lane setup is a `lane-setup` effect, settled by the click or the\n  request that owes it and run by the performer. Its own per-session\n  queue and defer are replaced by the performer's per-session order.\n\nThe check command, the demo and the doctor's command line build their\nstore with a holder that always holds, since each is one synchronous run.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-647",
       "ref": "refs/pull/647/merge",
       "sha": "d6cc26433e788ad896c724b71f8f8c8ef55a932e",
@@ -93,28 +122,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T12:46:06-07:00",
           "message": "feat(links): the doctor probe is minted by the minter as the probe link kind (candybar-gather-renderer-76bb.b2l.mxk) (#644)\n\n* feat(links): the doctor probe is minted by the minter as the probe link kind, and Launch Services is asked about the link it opened (candybar-gather-renderer-76bb.b2l.mxk)\n\nThe probe link is cc-candybar://to/<name>/probe/<nonce>, built by probeLink\nbeside effectsUrl, so the doctor no longer assembles a verb and a tail itself.\nThe verb is `probe`, as spec section 18 names it. The doctor's lost-link\ndiagnosis asks NSWorkspace which app opens that same link rather than a\nhand-spelled cc-candybar://probe.\n\n* fix(links): a probe is a link kind, never an effect; a link lost at another build's daemon says so (candybar-gather-renderer-76bb.b2l.mxk)\n\n- The probe leaves the leaf table, so a dispatch carrying it is refused as an\n  unknown effect verb, as the minter's comment says it is.\n- probeLink spells the nonce with encodeURIComponent, the codec the probe\n  verb's one-argument read reverses.\n- The lost verdict names a daemon of another build: a link this build mints\n  may be one it does not read, so a healthy handler is not blamed for it.\n- Comments that said the diagnosis asks about the scheme now say the link.\n\n* fix(doctor): a lost link's build row compares builds by value and shows only for a link that opened (candybar-gather-renderer-76bb.b2l.mxk)\n\n- otherBuild decides on the version and the full digest, not on the labels,\n  and hands the two labels back as data; the verdict owns the sentence.\n- A link that never opened was lost before any daemon saw it, so its verdict\n  carries no build row.\n\n* test(links): the tmux row case aims its window-list press after a's rows stand again (candybar-gather-renderer-76bb.b2l.mxk)\n\nBack on session a, its status is one line until its rows are drawn again,\nand the window list moves up when they land. The case aimed its press as soon\nas the window list showed, so on CI's runner the rows usually landed between\nthe aim and the press and the press hit a row instead: the case failed on\nnearly every CI run, main included. It now waits for a's rows as it already\ndid for b's."
-        }
-      ]
-    },
-    {
-      "version": "pr-646",
-      "ref": "refs/pull/646/merge",
-      "sha": "8e88938fee6fa010a8b221a81fec2c684e164b16",
-      "timestamp": "2026-11-06T19:40:26.546Z",
-      "commits": [
-        {
-          "sha": "8e88938fee6fa010a8b221a81fec2c684e164b16",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:39:30-07:00",
-          "message": "Merge 9c565b20d453cce0770d25cdaca8a2ca216235bc into 308429c8f33e9cfe4e0983ab8f29bb1d25c3fe55\n"
-        },
-        {
-          "sha": "9c565b20d453cce0770d25cdaca8a2ca216235bc",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:35:32-07:00",
-          "message": "feat(apply): session state has one writer; a run and a lane setup are effects (candybar-gather-renderer-76bb.1dh.9kk)\n\nThe session store refuses a write made while no journal turn is held, in\nevery daemon. A turn is synchronous, so a write while one is held is that\nturn's own, and one check at the store's single write path is the whole\nenforcement. The test-only view that refused such writes, its adapter\nseam and the separate gauges field are gone.\n\nThe two writers left outside a turn now report through effect-done:\n\n- A `run` click supersedes its sources in its turn, so they read pending\n  from the click on, and describes the launch as a `run` effect. The\n  performer runs the program behind the session's earlier effects; the\n  run owner answers how it ended and no longer writes the bar.\n- A lane setup is a `lane-setup` effect, settled by the click or the\n  request that owes it and run by the performer. Its own per-session\n  queue and defer are replaced by the performer's per-session order.\n\nThe check command, the demo and the doctor's command line build their\nstore with a holder that always holds, since each is one synchronous run.\n"
         }
       ]
     },

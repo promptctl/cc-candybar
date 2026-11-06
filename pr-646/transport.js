@@ -22773,7 +22773,7 @@ var VERB_APPLY_UPDATE = "apply-update";
 var VERB_DOCTOR_RUN = "doctor-run";
 var VERB_DOCTOR_FIX = "doctor-fix";
 var VERB_DOCTOR_MARK = "doctor-mark";
-var VERB_DOCTOR_PROBE = "doctor-probe";
+var VERB_PROBE = "probe";
 var VERB_SLASH = "slash";
 var VERB_RUN = "run";
 var VERB_REPO_CONFIG = "repo-config";
@@ -26304,8 +26304,8 @@ var Oklch = class {
     let hi = c;
     for (let i = 0; i < 24; i++) {
       const mid = (lo + hi) / 2;
-      const probe2 = this.toLinearRgb(l, mid, h);
-      if (inGamut(probe2.r, probe2.g, probe2.b))
+      const probe3 = this.toLinearRgb(l, mid, h);
+      if (inGamut(probe3.r, probe3.g, probe3.b))
         lo = mid;
       else
         hi = mid;
@@ -56165,13 +56165,13 @@ init_globals();
 var PROBE_TIMEOUT_MS = 5e3;
 async function memoryReport(probes) {
   const refusals = [];
-  for (const probe2 of probes) {
-    const outcome = await probe2.read();
+  for (const probe3 of probes) {
+    const outcome = await probe3.read();
     if (outcome.kind === "text") {
-      return `# memory report from: ${probe2.name}
+      return `# memory report from: ${probe3.name}
 ${outcome.text}`;
     }
-    refusals.push(`# ${probe2.name}: unavailable \u2014 ${outcome.reason}`);
+    refusals.push(`# ${probe3.name}: unavailable \u2014 ${outcome.reason}`);
   }
   return [
     "# memory report: no probe answered",
@@ -56864,6 +56864,11 @@ function handlerAppProblems(opener) {
     `${app} opens cc-candybar://, but it is not the forwarder app \`cc-candybar install\` builds \u2014 ${REINSTALL}`
   ];
 }
+function otherBuildProblems(builds) {
+  return builds === null ? [] : [
+    `the daemon (${builds.theirs}) is another build than this client (${builds.mine}), so it may not read the link this build sends`
+  ];
+}
 var urlHandler = {
   name: "urlHandler",
   label: "URL handler",
@@ -56880,14 +56885,19 @@ var urlHandler = {
           ok: false,
           // What is known: a click request brought it, which is what the
           // retired applet runs — and a hand-run `cc-candybar url-handle`,
-          // or the browser page. Which app Launch Services opens the scheme
+          // or the browser page. Which app Launch Services opens the link
           // with is the opener's row to say (handlerAppProblems).
           reason: `the link was delivered by a click request (\`cc-candybar url-handle\`), not the forwarder app \u2014 ${REINSTALL}`
         };
       case "lost":
         return problemsVerdict([
           ...handlerAppProblems(urlHandler2.opener),
-          urlHandler2.unopened === null ? "a cc-candybar:// link was opened and did not arrive at the daemon" : `a cc-candybar:// link could not be opened \u2014 ${urlHandler2.unopened}`
+          ...urlHandler2.unopened === null ? [
+            ...otherBuildProblems(urlHandler2.otherBuild),
+            "a cc-candybar:// link was opened and did not arrive at the daemon"
+          ] : [
+            `a cc-candybar:// link could not be opened \u2014 ${urlHandler2.unopened}`
+          ]
         ]);
     }
   }
@@ -65101,7 +65111,7 @@ var SessionState = class {
   // promoted, since every interaction is a recency signal, uniform with get()
   // [LAW:one-type-per-behavior].
   commit(sessionId2, write) {
-    this.held(`a write of ${JSON.stringify(sessionId2)}`);
+    this.held(sessionId2);
     runInAction(() => {
       const session = this.sessions.get(sessionId2) ?? {
         values: /* @__PURE__ */ new Map(),
@@ -65119,9 +65129,11 @@ var SessionState = class {
   }
   // [LAW:single-enforcer][LAW:no-silent-failure] The one check that a write
   // is a turn's: every write passes `commit`, which asks here.
-  held(what) {
+  held(sessionId2) {
     if (this.turns.inTurn() === null) {
-      throw new Error(`session state: ${what} outside any turn`);
+      throw new Error(
+        `session state: a write of ${JSON.stringify(sessionId2)} outside any turn`
+      );
     }
   }
   // Move-to-end: re-inserting at the tail makes this the most-recently-used.
@@ -69402,7 +69414,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.203.0";
+var PACKAGE_VERSION = "1.204.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -69737,16 +69749,16 @@ async function forgeLogin(launcher, cwd2) {
   const forge = detectForge(url);
   if (forge === null) return { kind: "ok", value: null };
   const cli = FORGE_CLI[forge];
-  const probe2 = FORGE_PROBE[forge];
-  const host = probe2.loginHost(remoteHost(url));
+  const probe3 = FORGE_PROBE[forge];
+  const host = probe3.loginHost(remoteHost(url));
   const run3 = await launcher.launch({
     bin: cli,
-    args: [...probe2.args(host)],
+    args: [...probe3.args(host)],
     cwd: cwd2,
     timeoutMs: 2e3,
     category: "doctor.forge"
   });
-  return forgeLoginOf(cli, host, probe2.nonZero, run3);
+  return forgeLoginOf(cli, host, probe3.nonZero, run3);
 }
 function forgeLoginOf(cli, host, nonZero, run3) {
   const login = (status) => ({
@@ -70324,7 +70336,14 @@ var RuntimeStats = class _RuntimeStats {
       effectCache: { sessions: 0, effects: 0 },
       menuIdle: { sessions: 0, armed: 0 },
       journalTurns: { gathers: 0 },
-      runs: { started: 0, failed: 0, timedOut: 0, refused: 0, running: 0 },
+      runs: {
+        started: 0,
+        failed: 0,
+        timedOut: 0,
+        refused: 0,
+        running: 0,
+        queued: 0
+      },
       sessionState: { sessions: 0, observers: 0, revision: 0 },
       frameFeeds: {
         feeds: 0,
@@ -70587,7 +70606,6 @@ var NONCE = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 function parseProbeNonce(value) {
   return NONCE.test(value) ? value : null;
 }
-var OPENER_SCRIPT = `ObjC.import("AppKit");var u = $.NSWorkspace.sharedWorkspace.URLForApplicationToOpenURL($.NSURL.URLWithString("${URL_SCHEME}://probe"));u.isNil() ? "" : u.path.js`;
 
 // src/claude-input/edge.ts
 init_globals();
@@ -71584,19 +71602,16 @@ function landStep(ctx, sid, step4, facts) {
 var doctorRun = (value, ctx) => {
   describeDoctor(ctx, requireSessionId(oneArg(value)), { kind: "run" });
 };
-var doctorProbe = (value, ctx) => {
+var probe2 = (value, ctx) => {
   const nonce = parseProbeNonce(oneArg(value));
   if (nonce === null) {
-    throw new BadVerbArgs("doctor-probe: the value is not a probe nonce");
+    throw new BadVerbArgs("probe: the value is not a probe nonce");
   }
   if (ctx.arrival.via !== "link")
-    throw new BadVerbArgs("doctor-probe: a probe arrives only as a link");
+    throw new BadVerbArgs("probe: a probe arrives only as a link");
   const { delivery } = ctx.arrival;
   ctx.probes.arrive({ nonce, delivery });
-  ctx.log(
-    "info",
-    `doctor-probe: arrived nonce=${nonce} delivery=${delivery.kind}`
-  );
+  ctx.log("info", `probe: arrived nonce=${nonce} delivery=${delivery.kind}`);
 };
 var doctorFix = (value, ctx) => {
   const [sessionId2 = "", checkName = ""] = decodeWire(
@@ -71757,7 +71772,6 @@ var LEAF_VERBS = /* @__PURE__ */ new Map([
   [VERB_DOCTOR_RUN, doctorRun],
   [VERB_DOCTOR_FIX, doctorFix],
   [VERB_DOCTOR_MARK, doctorMark],
-  [VERB_DOCTOR_PROBE, doctorProbe],
   [VERB_SLASH, slash],
   [VERB_RUN, run2],
   [VERB_REPO_CONFIG, repoConfig],
@@ -71935,9 +71949,10 @@ var VERBS = new Map([
     ]
   ),
   [VERB_DISPATCH, click(VERB_DISPATCH, foldEffects)],
-  // After the leaves, so it replaces the click they built: a probe writes no
-  // journal, so nothing may refuse it for a turn, and it describes nothing.
-  [VERB_DOCTOR_PROBE, doctorProbe]
+  // A link kind, never a leaf, so no dispatch can carry it as an effect: a
+  // probe writes no journal, so nothing may refuse it for a turn, and it
+  // describes nothing.
+  [VERB_PROBE, probe2]
 ]);
 var VERB_NAMES = Object.freeze([
   ...VERBS.keys()
@@ -72138,7 +72153,8 @@ var Runs = class {
       failed: this.failed,
       timedOut: this.timedOut,
       refused: this.refusals,
-      running: this.inFlight.size
+      running: this.inFlight.size,
+      queued: this.held.size
     };
   }
   // Aborts every run in flight; each resumes its sources once its program is
@@ -77290,19 +77306,23 @@ function viewLanes(parts, sessionId2) {
   }
 }
 function lanesAt(parts, origin, sessionId2) {
+  const latest = parts.frameFeeds.latest(sessionId2);
+  return switchesAt(
+    parts,
+    origin,
+    sessionId2,
+    latest === null || inTmux(latest.hints.tmux)
+  );
+}
+function switchesAt(parts, origin, sessionId2, tmux3) {
   var _stack = [];
   try {
-    const { renderCache, frameFeeds } = parts;
-    const hold2 = __using(_stack, renderCache.hold(
+    const hold2 = __using(_stack, parts.renderCache.hold(
       origin.projectDir,
       origin.cwd,
       origin.target.path
     ));
-    const latest = frameFeeds.latest(sessionId2);
-    return laneSwitches(
-      sessionGlobals2(parts, sessionId2, hold2.state),
-      latest === null || inTmux(latest.hints.tmux)
-    );
+    return laneSwitches(sessionGlobals2(parts, sessionId2, hold2.state), tmux3);
   } catch (_) {
     var _error = _, _hasError = true;
   } finally {
@@ -77328,13 +77348,13 @@ function requestFacts(req, at, facts, renderer) {
   });
   return hintsError;
 }
-function setUpRender(parts, arrived3, at, facts) {
+function setUpRender(parts, arrived2, at, facts) {
   const { renderCache } = parts;
-  const dir = arrived3.hookData.workspace?.current_dir ?? arrived3.cwd;
+  const dir = arrived2.hookData.workspace?.current_dir ?? arrived2.cwd;
   const req = {
-    ...arrived3,
+    ...arrived2,
     hookData: {
-      ...arrived3.hookData,
+      ...arrived2.hookData,
       ...dir !== void 0 && import_node_path36.default.isAbsolute(dir) && { location: checkoutLocation(dir) }
     }
   };
@@ -77652,13 +77672,15 @@ function drawRender(parts, setup, drawing2) {
     idleSince
   };
 }
-function arrived2(parts, req, lanes) {
+function requestArrived(parts, req) {
   const { laneSetups, tmuxStatusLines } = parts;
-  tmuxStatusLines.observe(
-    req.hookData.session_id,
-    req.hints.tmux,
-    lanes.tmuxStatus
+  const lanes = switchesAt(
+    parts,
+    req.requested,
+    req.sessionId,
+    inTmux(req.hints.tmux)
   );
+  tmuxStatusLines.observe(req.sessionId, req.hints.tmux, lanes.tmuxStatus);
   return laneSetups.noted(laneSessionOf(req), lanes);
 }
 function drawForAnswer(parts, setup, arrival) {
@@ -77693,11 +77715,6 @@ async function drawAnswer(parts, req, at, waitEndsAt, facts) {
   try {
     const { clock, frameFeeds, log } = parts;
     const setup = __using(_stack, setUpRender(parts, req, at, facts));
-    const effects = arrived2(
-      parts,
-      req,
-      laneSwitches(setup.view.source.effective(), inTmux(req.hints.tmux))
-    );
     const settling = settleRequest(parts.recorder, setup.view, at);
     const waitFrom = clock.monotonic();
     const budget = waitEndsAt - waitFrom;
@@ -77741,8 +77758,7 @@ async function drawAnswer(parts, req, at, waitEndsAt, facts) {
       motion: drawn.body.motion,
       answersClick,
       pipeShown,
-      delivered,
-      effects
+      delivered
     };
   } catch (_) {
     var _error = _, _hasError = true;
@@ -77792,20 +77808,30 @@ var NO_EFFECTS = [];
 var ARMS = {
   // [LAW:single-enforcer] The request's writes take their turn as a click's
   // do: what it said of its client and the config inputs it named land in one
-  // batch in a journal turn, and the draw begins once the turn is over. A turn
-  // is synchronous (src/daemon/journal-turns.ts), so the request waits behind
-  // no other session's work, and no draw, this one or a feed's, can read a
-  // click half landed. The revision its turn left goes on the request's line,
-  // the render event, which is its record and opens with the session the edge
-  // noted.
+  // batch in a journal turn, with what its arrival settles (the lane setups
+  // its session's clicks owed, described as the turn's effects), and the draw
+  // begins once the turn is over. A turn is synchronous
+  // (src/daemon/journal-turns.ts), so the request waits behind no other
+  // session's work, and no draw, this one or a feed's, can read a click half
+  // landed. The revision its turn left goes on the request's line, the render
+  // event, which is its record and opens with the session the edge noted.
+  // [LAW:no-ambient-temporal-coupling] The arm answers with the draw under
+  // way, so its turn's effects join the session's order as the turn ends,
+  // ahead of any later event's, and are performed however the draw ends.
   request: async ({ req, at, waitEndsAt, facts }, { verbCtx, draw: draw2 }) => {
-    const revision = verbCtx.journalTurns.take("request", () => {
+    const turn = verbCtx.journalTurns.take("request", () => {
       recordRequest(verbCtx.sessionState, req);
-      return verbCtx.sessionState.revision(req.sessionId);
+      return {
+        effects: verbCtx.lanes.arrived(req),
+        revision: verbCtx.sessionState.revision(req.sessionId)
+      };
     });
-    noteFacts(facts, { revision: String(revision) });
-    const answer2 = await draw2(req, at, waitEndsAt, facts);
-    return { answer: answer2, effects: answer2.effects, facts: [] };
+    noteFacts(facts, { revision: String(turn.revision) });
+    return {
+      answer: draw2(req, at, waitEndsAt, facts),
+      effects: turn.effects,
+      facts: []
+    };
   },
   // The turn hands its effects over once it has committed (`described`), and
   // a refused step is answered beside them; a click whose client has left is
@@ -78578,10 +78604,8 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
         facts
       },
       parts
-    ).then(
-      ({
-        answer: { resp, motion, answersClick, pipeShown, delivered }
-      }) => {
+    ).then(({ answer: answer2 }) => answer2).then(
+      ({ resp, motion, answersClick, pipeShown, delivered }) => {
         sighted(checked.req, motion);
         return {
           outcome: { kind: "ok" },
@@ -79300,7 +79324,7 @@ function makeUpdateWatch(opts) {
     fact,
     clock,
     launcher,
-    probe: probe2,
+    probe: probe3,
     entryUrl,
     digest: digest2,
     actsDir: actsDir2,
@@ -79315,7 +79339,7 @@ function makeUpdateWatch(opts) {
   let build = pendingOf("unread");
   let release3 = pendingOf("unread");
   const readStart = async (pid2) => {
-    const read2 = await probe2.startTime(pid2);
+    const read2 = await probe3.startTime(pid2);
     if (closed) throw new DaemonClosing("apply-update");
     return read2;
   };
@@ -82630,9 +82654,9 @@ function buildRenderState(load, deps) {
       DIRECTORY_SCOPE
     );
     warnings.push(...registration.loadWarnings);
-    const probe2 = registry.view(UNREAD_RUNS);
-    warnings.push(...declareDslVariables(config2, probe2, cwd2, VIEW_SCOPE));
-    probe2.dispose();
+    const probe3 = registry.view(UNREAD_RUNS);
+    warnings.push(...declareDslVariables(config2, probe3, cwd2, VIEW_SCOPE));
+    probe3.dispose();
     deps.gates.state.gateFor(config2);
     deps.gates.config.gateFor(config2);
     for (const key of new Set(load.sources.values()))
@@ -86115,7 +86139,7 @@ function createDaemon(inputs) {
       frameFeeds.wakeWhere("data", () => true);
     }
   });
-  const probe2 = inputs.probe(launcher);
+  const probe3 = inputs.probe(launcher);
   const storage = inputs.storage(log);
   const journalTurns = new JournalTurns();
   const sessionState = new SessionState(journalTurns, storage.session);
@@ -86199,7 +86223,7 @@ function createDaemon(inputs) {
       launcher,
       (sessionId2) => frameFeeds.following(sessionId2),
       closing.signal,
-      probe2
+      probe3
     ),
     // A bar pane runs this bundle under the node running it now, with the
     // flags it runs with (tsx's loader, under the test harness).
@@ -86388,7 +86412,7 @@ function createDaemon(inputs) {
     fact: updateFact,
     clock,
     launcher,
-    probe: probe2,
+    probe: probe3,
     entryUrl: bundle.entryUrl,
     digest: bundle.digest,
     // [LAW:one-source-of-truth] Keyed by the bundle the act rewrites, the one
@@ -86456,6 +86480,7 @@ function createDaemon(inputs) {
     lanes: {
       of: (origin, sessionId2) => lanesAt(parts, origin, sessionId2),
       clicked: (sessionId2, before, after) => laneClicked(parts, sessionId2, before, after),
+      arrived: (req) => requestArrived(parts, req),
       setup: (effect) => laneSetups.setup(effect)
     },
     diagnosticCopy: (sessionId2, by, key) => renderCache.drawnCopy(sessionId2, by, key)
@@ -87270,7 +87295,7 @@ async function paneClaude(launcher, hint) {
   };
 }
 var FOLLOW_POLL_MS = 200;
-function productionLaneEdge(launcher, following, closing, clock, probe2) {
+function productionLaneEdge(launcher, following, closing, clock, probe3) {
   const wait = (ms) => sleep(clock, ms, closing);
   return {
     claudeInput: productionClaudeInputEdge(launcher),
@@ -87392,7 +87417,7 @@ function productionLaneEdge(launcher, following, closing, clock, probe2) {
     },
     exited: async (pid2, withinMs) => {
       const until2 = clock.monotonic() + withinMs;
-      while (probe2.alive(pid2)) {
+      while (probe3.alive(pid2)) {
         if (clock.monotonic() > until2) return false;
         await wait(EXIT_POLL_MS);
       }
@@ -87500,7 +87525,7 @@ function productionAdapters(paths2, daemonLog, machine) {
     doctorEdge: productionEdge,
     claudeInput: productionClaudeInputEdge,
     probe: systemProbe,
-    laneEdge: (launcher, following, closing, probe2) => productionLaneEdge(launcher, following, closing, machine, probe2),
+    laneEdge: (launcher, following, closing, probe3) => productionLaneEdge(launcher, following, closing, machine, probe3),
     linkSigner: linkSignerFromKeyFile(linkKeyFile(paths2.state)),
     limits: ({ startedAtMs, exit: exit2, launcher, log }) => realLimitsDeps(startedAtMs, exit2, {
       launcher,
