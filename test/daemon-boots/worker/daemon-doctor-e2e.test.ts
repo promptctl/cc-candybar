@@ -41,6 +41,7 @@ import {
 import { DISCLOSURE_CLOSED } from "../../../src/config/disclosure";
 import { SETTINGS_NS } from "../../../src/config/reserved-names";
 import {
+  addressedLink,
   VERB_DOCTOR_PROBE,
   VERB_DOCTOR_RUN,
 } from "../../../src/click/wire";
@@ -234,14 +235,14 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
     expect(
       await request({
         kind: "click",
-        url: `cc-candybar://${VERB_DOCTOR_PROBE}/${nonce}`,
+        url: addressedLink(daemon.name, VERB_DOCTOR_PROBE, nonce),
       }),
     ).toMatchObject({ ok: true });
     clicks += 1;
     const forwardedNonce = "223e4567-e89b-42d3-a456-426614174000";
     await forwarded({
       urlV: URL_FRAME_VERSION,
-      url: `cc-candybar://${VERB_DOCTOR_PROBE}/${forwardedNonce}`,
+      url: addressedLink(daemon.name, VERB_DOCTOR_PROBE, forwardedNonce),
     });
     expect((await statsOf(daemon.daemon)).handlerProbes).toMatchObject([
       { nonce, delivery: { kind: "cli" } },
@@ -253,16 +254,22 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
     await forwarded({ urlV: 99, url: "cc-candybar://copy/x" });
     await forwarded({ urlV: 1, url: "https://example.com/" });
     await forwarded({ urlV: 1 });
+    // A link in a grammar older than names (a stale forwarder still delivers
+    // one) is refused naming its form, and runs nothing.
+    await forwarded({ urlV: 1, url: `cc-candybar://${VERB_DOCTOR_PROBE}/x` });
+    await forwarded({ urlV: 1, url: "cc-candybar://hello" });
     const events = await loggedLines(
       env,
       clickEvents,
-      (picked) => picked.length >= 5,
-      "five click events",
+      (picked) => picked.length >= 7,
+      "seven click events",
     );
-    expect(events[0]).toMatch(/ via=cli to=- verb=doctor-probe .* outcome=ok/);
-    expect(events[1]).toMatch(
-      / via=forwarder urlV=1 to=- verb=doctor-probe .* outcome=ok/,
+    expect(events[0]).toContain(` via=cli to=${daemon.name} verb=doctor-probe `);
+    expect(events[0]).toContain(" outcome=ok");
+    expect(events[1]).toContain(
+      ` via=forwarder urlV=1 to=${daemon.name} verb=doctor-probe `,
     );
+    expect(events[1]).toContain(" outcome=ok");
     expect(events[2]).toMatch(
       / via=forwarder urlV=99 .* outcome=bad-request problems="the URL handler's frame version 99 is not one this daemon speaks \(1\)"/,
     );
@@ -272,13 +279,19 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
     expect(events[4]).toMatch(
       / via=forwarder urlV=1 .* outcome=bad-request problems="the URL handler's frame carries no url string"/,
     );
+    expect(events[5]).toMatch(
+      / via=forwarder urlV=1 .* outcome=bad-request problems="the link is in the direct verb form cc-candybar:\/\/<verb>\/…, which names no renderer: cc-candybar:\/\/doctor-probe\/x"/,
+    );
+    expect(events[6]).toMatch(
+      / via=forwarder urlV=1 .* outcome=bad-request problems="the link is in the bare copy form cc-candybar:\/\/<value>, which names no renderer: cc-candybar:\/\/hello"/,
+    );
 
     const SID = "doctor-e2e-2";
     await render(daemon, SID, projectDir);
     expect(
       await request({
         kind: "click",
-        url: `cc-candybar://${VERB_DOCTOR_RUN}/${SID}`,
+        url: addressedLink(daemon.name, VERB_DOCTOR_RUN, SID),
       }),
     ).toMatchObject({ ok: true });
     await click(

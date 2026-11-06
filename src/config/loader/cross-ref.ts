@@ -89,7 +89,6 @@ import {
   type SegmentPresence,
 } from "./plugin-scope.js";
 import {
-  retiredLinkVerbMessage,
   retiredReadHint,
   retiredVariableMessage,
 } from "./retired-variables.js";
@@ -100,7 +99,7 @@ import { authoredRules, instantReadOf, projectionsOf } from "./projections.js";
 import {
   declaredVariables,
   templateActionRefs,
-  templateLinkVerbs,
+  templateLinkProblems,
   templateReads,
   refResolves,
   templateScopeOf,
@@ -1166,13 +1165,14 @@ function checkTemplateRefs(
         : retiredReadHint(ref);
     report(`Template references unknown variable ".${ref}"${hint}`, via);
   }
-  // [LAW:no-silent-failure] A string literal spelling a URL for a verb no
-  // click runs is the file's error at load, not the bar's at the click, so the
-  // author reads where what it did now lives (RETIRED_LINK_VERBS) — at the
-  // helper that spells it, as an unknown variable is.
-  for (const { verb, via } of templateLinkVerbs(template, scope.helpers)) {
-    const retired = retiredLinkVerbMessage(verb);
-    if (retired !== undefined) report(retired, via);
+  // [LAW:no-silent-failure] A string literal spelling a link no click runs is
+  // the file's error at load, not the bar's at the click — at the helper that
+  // spells it, as an unknown variable is.
+  for (const { problem, via } of templateLinkProblems(
+    template,
+    scope.helpers,
+  )) {
+    report(`Template spells a link no click runs: ${problem}`, via);
   }
 }
 

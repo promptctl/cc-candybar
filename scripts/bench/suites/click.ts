@@ -34,12 +34,14 @@ import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 
 import { APP_NAME, URL_SCHEME } from "../../../src/click/scheme.js";
+import { addressedLink } from "../../../src/click/wire.js";
 import { fetchStats } from "../../../src/daemon/client-stats.js";
 import { describeFailure } from "../../../src/daemon/client-transport.js";
 import { logPath } from "../../../src/daemon/paths.js";
 import { processWorld } from "../../../src/host.js";
 import {
   HOME_ENV,
+  MAIN_NAME,
   NAME_ENV,
   RUNTIME_DIR_ENV,
   homeOf,
@@ -129,7 +131,7 @@ function linesSince(log: string, mark: Mark): string[] {
 }
 
 async function click(log: string, verb: string): Promise<Click> {
-  const url = `${URL_SCHEME}://${verb}/1`;
+  const url = addressedLink(MAIN_NAME, verb, "1");
   const problem = `unknown click verb: ${verb}`;
   const mark = markOf(log);
   const t0 = Date.now();
@@ -188,7 +190,7 @@ function cannotMeasure(): Promise<string | null> {
       return `no daemon on the default socket: ${describeFailure(stats)}`;
     const probe = spawnSync(
       "/usr/bin/open",
-      ["-g", `${URL_SCHEME}://bench-probe/1`],
+      ["-g", addressedLink(MAIN_NAME, "bench-probe", "1")],
       { encoding: "utf8" },
     );
     if (probe.status !== 0)

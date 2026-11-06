@@ -6,6 +6,7 @@
 // fold over the one call-graph walk (`callGraphBlocks`); a new question is a new
 // fold over it, never a second walker, or it is blind to helpers again.
 
+import { isBarLink } from "../../click/scheme.js";
 import { parseHandlerUrl } from "../../click/wire.js";
 import { ownedBy } from "./plugin-scope.js";
 import { parseArm, type DslConfig, type VariableDecl } from "../dsl-types.js";
@@ -348,34 +349,36 @@ export function templateActionRefs(
   return [...refs.values()];
 }
 
-// [LAW:single-enforcer] The click verbs a template's string literals spell —
-// `"cc-candybar://<verb>/…"`, whole or as a printf format, wherever the literal
-// stands (a `link` argument, a printed text, a comparison: a URL is dead in
-// every position), in its own text or any reachable helper's
+// [LAW:single-enforcer] Why the links a template's string literals spell are
+// no click — a `"cc-candybar://…"` literal, whole or as a printf format,
+// wherever it stands (a `link` argument, a printed text, a comparison: a dead
+// URL is dead in every position), in its own text or any reachable helper's
 // (`callGraphBlocks`), exactly as its action bindings are found — once per
 // body, with the helper whose body spells it (`null` = the template itself).
-// A verb computed at the draw is no literal, and is the click's to refuse.
-// [LAW:single-enforcer] The verb is read by the one link parse the click runs,
-// so a literal in any grammar a click reads names the verb that click would.
-// A literal may be only a link's head (`"cc-candybar://<verb>"` joined to a
-// computed tail), so it is read with a segment break after it: the verb ends
-// where the literal does at the latest.
-export interface LinkVerbRef {
-  readonly verb: string;
+// A link computed at the draw is no literal, and is the click's to refuse.
+// The literal is read by the one link parse the click runs, so it is refused
+// here exactly when the click would refuse it. A literal may be only a link's
+// head (`"cc-candybar://to/main/<verb>"` joined to a computed tail), so it is
+// read with a segment break after it: the verb ends where the literal does at
+// the latest. A literal of any other text is no link.
+export interface LinkProblem {
+  readonly problem: string;
   readonly via: string | null;
 }
-export function templateLinkVerbs(
+export function templateLinkProblems(
   template: string,
   helpers: Readonly<Record<string, string>>,
-): readonly LinkVerbRef[] {
-  const refs = new Map<string, LinkVerbRef>();
+): readonly LinkProblem[] {
+  const refs = new Map<string, LinkProblem>();
   for (const { code, via } of callGraph(template, helpers)) {
     for (const s of code.matchAll(STRING_LITERAL_RE)) {
-      const link = parseHandlerUrl(`${s[0].slice(1, -1)}/`);
-      if (!link.ok) continue;
-      const { verb } = link;
-      const key = `${verb}\0${via ?? "\0"}`;
-      if (!refs.has(key)) refs.set(key, { verb, via });
+      const literal = s[0].slice(1, -1);
+      if (!isBarLink(literal)) continue;
+      const link = parseHandlerUrl(`${literal}/`);
+      if (link.ok) continue;
+      const { problem } = link;
+      const key = `${problem}\0${via ?? "\0"}`;
+      if (!refs.has(key)) refs.set(key, { problem, via });
     }
   }
   return [...refs.values()];

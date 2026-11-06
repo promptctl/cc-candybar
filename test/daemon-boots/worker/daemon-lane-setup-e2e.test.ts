@@ -20,6 +20,7 @@ import os from "node:os";
 import path from "node:path";
 
 import {
+  addressedLink,
   effectsUrl,
   VERB_SET_STATE,
   VERB_TMUX_STATUS_CLICK,
@@ -173,7 +174,7 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     const at = [`/tmp/lane-e2e-${sid}`, "7", rangeOf(link!)]
       .map(encodeURIComponent)
       .join("/");
-    const statusClick = `cc-candybar://${VERB_TMUX_STATUS_CLICK}/${at}`;
+    const statusClick = addressedLink(daemon.name, VERB_TMUX_STATUS_CLICK, at);
     // Refused until the status line has drawn its first frame, which runs
     // nothing; the first click it answers runs the link.
     let refusal = "";
@@ -195,9 +196,9 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     const [event, ...more] = ran();
     expect(more).toEqual([]);
     expect(event).toContain(` link=${JSON.stringify(link)} `);
-    // The binding's URL names no renderer; the link its range marks names
-    // this one. One key each, so neither reads as the other.
-    expect(event).toContain(` to=- verb=${VERB_TMUX_STATUS_CLICK} `);
+    // The binding's URL and the link its range marks both name this
+    // renderer, under one key each, so neither reads as the other.
+    expect(event).toContain(` to=${daemon.name} verb=${VERB_TMUX_STATUS_CLICK} `);
     expect(event).toContain(` linkTo=${daemon.name} linkVerb=dispatch sid=${sid} `);
     expect(event!.match(/ to=/g)).toHaveLength(1);
     expect(event).toContain(" outcome=ok");

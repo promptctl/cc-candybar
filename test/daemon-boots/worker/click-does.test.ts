@@ -10,7 +10,8 @@ import os from "node:os";
 import path from "node:path";
 
 import { DOOR_GLYPH } from "../../../src/config/disclosure";
-import { effectsOf, isBarLink } from "../../../src/click/read";
+import { effectsOf } from "../../../src/click/read";
+import { isBarLink } from "../../../src/click/scheme";
 import {
   linksOf,
   startBar,

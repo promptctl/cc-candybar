@@ -47,10 +47,10 @@ import {
   describeLink as describeWith,
   effectsOf,
   HOST_VERBS,
-  isBarLink,
   linksOf,
   type DrawnLink,
 } from "../../src/click/read";
+import { isBarLink } from "../../src/click/scheme";
 
 const SESSION_ID = BAR_SESSION_ID;
 const REPLY_BUDGET_MS = 10_000;

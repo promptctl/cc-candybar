@@ -51,8 +51,10 @@ struct AddressTest {
 
     expect(target(ofLink: "cc-candybar://to/main\(tail)"), .file("socket"), "a link to main")
     expect(target(ofLink: "cc-candybar://to/dev-bar\(tail)"), .file("dev-bar.sock"), "a link to a named renderer")
-    expect(target(ofLink: "cc-candybar://dispatch/does=x&e=copy%2Fhi"), .file("socket"), "a link with no address")
-    expect(target(ofLink: "cc-candybar://hello"), .file("socket"), "a bare copy")
+    // A link in a grammar older than names reaches no socket, and the refusal
+    // names its form, never the link.
+    expect(target(ofLink: "cc-candybar://dispatch/does=x&e=copy%2Fhi"), .refused("the link is in the direct verb form, which names no renderer"), "a direct verb")
+    expect(target(ofLink: "cc-candybar://hello"), .refused("the link is in the bare copy form, which names no renderer"), "a bare copy")
     // A name is refused before it is any part of a path, and it ends at the
     // first slash, so no link reaches a file outside the directory.
     for bad in ["Dev", "..", "dev%2Dbar"] {

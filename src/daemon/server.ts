@@ -7,7 +7,7 @@ import { inspect } from "node:util";
 import {
   daemonPaths,
   daemonRegistryDir,
-  defaultSocketPath,
+  handlerSocketPath,
   ensureSocketParentSafe,
   leasePathFor,
   type DaemonPaths,
@@ -35,6 +35,7 @@ import {
   readRegistryEntry,
 } from "./fork-bomb-breaker";
 import { bakedDigest } from "./build-currency";
+import { MAIN_NAME } from "./home";
 import { DaemonLog } from "./log";
 import type { LogLevel } from "../utils/logger";
 import type { World } from "../host";
@@ -186,7 +187,7 @@ async function boot(): Promise<void> {
       world,
       myStartTime,
       daemonRegistryDir(host),
-      paths.socket !== defaultSocketPath(),
+      paths.socket !== handlerSocketPath(MAIN_NAME),
     ),
   );
   if (!admission.decision.allow) {

@@ -104,10 +104,9 @@ export function ccCandybarFuncs(): FuncMap {
       arity: { kind: "exact" },
     },
 
-    // [LAW:single-enforcer] One URL-encoding function for click-verb URL
-    // construction in templates. encodeURIComponent matches the legacy
-    // src/segments/renderer.ts toolbar/tray renderers, so DSL-emitted
-    // cc-candybar://verb/<value> URLs are byte-identical to legacy ones.
+    // [LAW:single-enforcer] One URL-encoding function for a URL a template
+    // builds: encodeURIComponent, the codec the click wire encodes its own
+    // segments with.
     // [LAW:types-are-the-program] Domain primitive surfaced by chunk-7/8
     // migration (vhi.3) — the proposal explicitly budgets "may add one or
     // two filters during migration." This is one of those.

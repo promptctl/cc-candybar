@@ -1197,7 +1197,7 @@ describe("save as preset", () => {
     await start(source, { preset: "compact" });
     expect(textOf(r.render())).not.toContain(PRESET_DELETE_GLYPH);
     // The click a stale or hand-built URL could still carry.
-    await expect(r.click(`cc-candybar://delete-preset/${SID}/compact`),
+    await expect(r.click(`cc-candybar://to/main/delete-preset/${SID}/compact`),
     ).rejects.toThrow('cannot delete preset "compact": it is bundled');
     expect(durable.text()).toBe(source);
   });
@@ -1481,7 +1481,7 @@ describe("a theme's default look, set from the bar", () => {
     pick({ shade: "deepest" });
     expect(textOf(r.render())).not.toContain("⤓ default");
     // The click a stale or hand-built URL could still carry.
-    await expect(r.click(`cc-candybar://save-theme-default/${SID}`)).rejects.toThrow(
+    await expect(r.click(`cc-candybar://to/main/save-theme-default/${SID}`)).rejects.toThrow(
       "save-theme-default: the theme is chosen by a rule (globals.palette), so there is no name to save as a theme's default",
     );
     expect(durable.text()).toBe(source);

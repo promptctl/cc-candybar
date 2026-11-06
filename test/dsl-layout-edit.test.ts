@@ -67,12 +67,13 @@ import { authoredFragment } from "../src/daemon/config-file-store";
 import { testVerbContext, effectsOf } from "./helpers/click";
 import { linkClick } from "./helpers/click";
 import {
+  addressedLink,
   encodeSegments,
   parseEffects,
   VERB_DISPATCH,
   VERB_RESET_CONFIG,
 } from "../src/click/wire";
-import { URL_SCHEME } from "../src/click/scheme";
+import { MAIN_NAME } from "../src/daemon/home";
 import { VERBS } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
 import { deriveConfigActionValidators } from "../src/daemon/foundations/config-validators";
@@ -764,7 +765,7 @@ describe("apply-layout-op click → the config file", () => {
     await expect(click(urls[0]!)).rejects.toThrow(undeclared);
     // The reset link is hand-built: the harness filters rendered preset-root
     // resets as edit chrome's own banner, and the verb is what is under test.
-    const resetUrl = `${URL_SCHEME}://${VERB_RESET_CONFIG}/${encodeSegments(["s1", "presets.mine.root"])}`;
+    const resetUrl = addressedLink(MAIN_NAME, VERB_RESET_CONFIG, encodeSegments(["s1", "presets.mine.root"]));
     await expect(click(resetUrl)).rejects.toThrow(undeclared);
     expect(durable.parsed().root).toEqual({
       v: [{ h: ["directory", "git"] }, "bar"],
@@ -796,7 +797,7 @@ describe("apply-layout-op click → the config file", () => {
     }`;
     const { render, click } = buildLayoutRuntime(SRC_PLACED);
     render();
-    const resetUrl = `${URL_SCHEME}://${VERB_RESET_CONFIG}/${encodeSegments(["s1", "presets.mine.root"])}`;
+    const resetUrl = addressedLink(MAIN_NAME, VERB_RESET_CONFIG, encodeSegments(["s1", "presets.mine.root"]));
     await click(resetUrl);
     // The preset the user authored keeps its name: the action still targets it.
     expect(durable.parsed().presets).toEqual({ mine: {} });

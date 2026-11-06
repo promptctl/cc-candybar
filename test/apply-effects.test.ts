@@ -51,8 +51,8 @@ function rig(clock: Timekeeper = systemTimekeeper) {
   return { spawner, started, sessionState, ctx, applyLines, warned };
 }
 
-const COPY = `cc-candybar://${VERB_COPY}/${encodeURIComponent("hello")}`;
-const COPY_DIAGNOSTIC = `cc-candybar://${VERB_COPY_DIAGNOSTIC}/${encodeSegments([SID, "request", "k"])}`;
+const COPY = `cc-candybar://to/main/${VERB_COPY}/${encodeURIComponent("hello")}`;
+const COPY_DIAGNOSTIC = `cc-candybar://to/main/${VERB_COPY_DIAGNOSTIC}/${encodeSegments([SID, "request", "k"])}`;
 
 describe("a copy click's launch is an effect", () => {
   test("the click answers while pbcopy still runs; the text reaches its stdin; the apply lines name the effect and its outcome", async () => {
@@ -152,7 +152,7 @@ describe("a session's effects run in the order their turns committed", () => {
       },
     };
     const update = (sid: string) =>
-      applyClick(`cc-candybar://${VERB_APPLY_UPDATE}/${encodeURIComponent(sid)}`, ctx);
+      applyClick(`cc-candybar://to/main/${VERB_APPLY_UPDATE}/${encodeURIComponent(sid)}`, ctx);
     const first = await update(SID);
     const second = await update(SID);
     const other = await update("s2");
@@ -206,7 +206,7 @@ describe("the write-outside-turn instrument", () => {
         ctx.sessionState.set(SID, "slipped", "1");
       },
     };
-    await clickUrl(`cc-candybar://${VERB_APPLY_UPDATE}/${encodeURIComponent(SID)}`, ctx);
+    await clickUrl(`cc-candybar://to/main/${VERB_APPLY_UPDATE}/${encodeURIComponent(SID)}`, ctx);
     expect(r.sessionState.get(SID, "slipped")).toBeNull();
     expect(lastClickError(r.sessionState, SID)?.text).toMatch(/outside any journal turn: set slipped/);
   });

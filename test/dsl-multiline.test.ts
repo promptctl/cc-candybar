@@ -191,7 +191,7 @@ describe("drawDsl — multi-line layout", () => {
       variables: { x: { kind: 'literal', value: 'UP\\nDN' } },
       segments: {
         s: {
-          template: '{{ link "cc-candybar://x/1" .x }}',
+          template: '{{ link "https://example.com/x" .x }}',
           bg: 'surface', fg: 'foreground',
         },
       },
@@ -201,7 +201,7 @@ describe("drawDsl — multi-line layout", () => {
     expect(out.rows).toHaveLength(2);
     // Each visual line carries a link to the same URL.
     for (const row of out.rows) {
-      expect(linkUrls({ rows: [row] })).toContain("cc-candybar://x/1");
+      expect(linkUrls({ rows: [row] })).toContain("https://example.com/x");
     }
   });
 

@@ -335,7 +335,7 @@ describe("the click path", () => {
     const send = (verb: string, value: string, gone = () => false) =>
       replyTo(
         given,
-        { kind: "click", url: `cc-candybar://${verb}/${value}` } as Parameters<typeof replyTo>[1],
+        { kind: "click", url: `cc-candybar://to/main/${verb}/${value}` } as Parameters<typeof replyTo>[1],
         () => false,
         systemTimekeeper.monotonic(),
         gone,
@@ -360,7 +360,7 @@ describe("the click path", () => {
 
   test("a status-line link naming a verb re-enters without deadlock", async () => {
     const { ctx } = setup();
-    const url = `cc-candybar://${VERB_UNDO}/${encodeSegments([SID])}`;
+    const url = `cc-candybar://to/main/${VERB_UNDO}/${encodeSegments([SID])}`;
     const { send } = parts(ctx, url);
     const { resp } = await send(VERB_TMUX_STATUS_CLICK, "ignored");
     expect(resp).toMatchObject({ ok: false, code: "BAD_REQUEST" });
@@ -483,7 +483,7 @@ describe("a doctor click", () => {
 });
 
 describe("a click's real launch", () => {
-  const COPY = `cc-candybar://${VERB_COPY}/x`;
+  const COPY = `cc-candybar://to/main/${VERB_COPY}/x`;
 
   test("hung, it times out, holding no turn, and its effect says so", async () => {
     const { ctx, turns, logged } = setup();

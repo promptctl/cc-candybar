@@ -24,6 +24,7 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { DaemonAnswer } from "../src/doctor/daemon-answer";
 import type { FrameSeen } from "../src/daemon/render-sightings";
 import { answerRepo } from "./helpers/repo-approval";
+import { MAIN_NAME } from "../src/daemon/home";
 
 // The daemon a healthy bar answers from: its session runs with the Claude
 // Code directory this test's command reports (CLAUDE_CONFIG_DIR, `inDir`).
@@ -84,6 +85,7 @@ const refuse = (): never => {
 };
 const NO_HANDLER: HandlerProbeEdge = {
   platform: "linux",
+  name: MAIN_NAME,
   sockets: { own: "/s", handler: "/s" },
   monotonic: refuse,
   nonce: refuse,

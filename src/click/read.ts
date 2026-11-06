@@ -15,7 +15,7 @@ import {
   VERB_DISPATCH,
   VERB_OPEN_VSCODE,
 } from "./wire";
-import { URL_SCHEME } from "./scheme";
+import { isBarLink } from "./scheme";
 import { SEGMENTED_VERBS } from "../daemon/verbs";
 
 /** One link the bar drew: its visible text and its URL. */
@@ -46,11 +46,6 @@ export function linksOf({ rows }: Pick<Frame, "rows">): DrawnLink[] {
   });
 }
 
-// A link outside the cc-candybar scheme (a repo page, a PR) is the
-// terminal's to open; the daemon never sees a click on it.
-export const isBarLink = (url: string): boolean =>
-  url.startsWith(`${URL_SCHEME}://`);
-
 export interface DecodedEffect {
   readonly verb: string;
   readonly args: string[];
@@ -59,7 +54,7 @@ export interface DecodedEffect {
 // [LAW:one-source-of-truth] Decode an effect's value the way its daemon handler
 // does, from the daemon's own list (src/daemon/verbs SEGMENTED_VERBS): those
 // verbs' values are `/`-separated segments; every other verb takes ONE
-// argument, the whole value decoded once, so a direct `copy/a/b` reports one
+// argument, the whole value decoded once, so a `copy/a/b` link reports one
 // arg "a/b" (exactly what the copy handler copies).
 function decodeArgs(verb: string, value: string): string[] {
   return SEGMENTED_VERBS.has(verb)
@@ -76,7 +71,7 @@ export function clickOf(url: string): { verb: string; value: string } {
   return { verb: link.verb, value: link.value };
 }
 
-/** A click URL's ordered effect list (verb + decoded args); a direct URL is the one-effect case. */
+/** A click URL's ordered effect list (verb + decoded args); a link whose verb is not dispatch is the one-effect case. */
 export function effectsOf(url: string): DecodedEffect[] {
   const { verb, value } = clickOf(url);
   if (verb !== VERB_DISPATCH) return [{ verb, args: decodeArgs(verb, value) }];
