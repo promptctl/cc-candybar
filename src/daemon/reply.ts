@@ -913,12 +913,11 @@ async function handleClick(
   }
   noteFacts(facts, { [VERB_FACT[arrival.via]]: verb });
   // The click's session, as it crossed the one session-id checkpoint: one
-  // that passed is recorded, one that failed is never recorded, and a click
-  // naming none records `sid=-`.
+  // that passed is recorded, and a click naming none, or one that failed, records
+  // `sid=-`, so what a link spelled never reaches the log unchecked.
   const named = clickSessionOf(verb, value);
   const session = named?.ok ? named.id : null;
-  if (named === null) noteFacts(facts, { sid: "-" });
-  else if (session !== null) noteFacts(facts, { sid: session });
+  noteFacts(facts, { sid: session ?? "-" });
   const { answer } = await apply(
     {
       kind: "click",

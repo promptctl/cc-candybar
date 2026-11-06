@@ -34,13 +34,24 @@ export class ClickAbandoned extends Error {
 // one, so it must reach the dispatcher as BadVerbArgs (→ BAD_REQUEST) like every
 // other bad-input shape. Every decode of a click's wire value (the verb codecs,
 // the verb of a link a status-line click runs) funnels through here so the
-// reclassification lives once.
-export function decodeWire<T>(decode: () => T): T {
+// reclassification lives once: as a parse, for a reader that holds a bad
+// escape as one step's refusal, or thrown, for a codec that refuses the click.
+export type WireParse<T> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly problem: string };
+
+export function parseWire<T>(decode: () => T): WireParse<T> {
   try {
-    return decode();
+    return { ok: true, value: decode() };
   } catch (err) {
     if (err instanceof URIError)
-      throw new BadVerbArgs(`malformed wire encoding: ${err.message}`);
+      return { ok: false, problem: `malformed wire encoding: ${err.message}` };
     throw err;
   }
+}
+
+export function decodeWire<T>(decode: () => T): T {
+  const parsed = parseWire(decode);
+  if (!parsed.ok) throw new BadVerbArgs(parsed.problem);
+  return parsed.value;
 }

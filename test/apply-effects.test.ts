@@ -11,6 +11,7 @@ import {
   VERB_APPLY_UPDATE,
   VERB_COPY,
   VERB_COPY_DIAGNOSTIC,
+  VERB_TOOLBAR_TOGGLE,
   effectsUrl,
   encodeSegments,
 } from "../src/click/wire";
@@ -143,6 +144,82 @@ describe("a copy click's launch is an effect", () => {
       expect.stringMatching(/^apply kind=click verb=dispatch sid=s1 outcome=refused said="dispatch: copy-diagnostic: [^"]*" effects=launch:pbcopy revision=\d+$/),
       expect.stringMatching(/^apply kind=effect-done verb=dispatch sid=s1 effect=launch:pbcopy outcome=ok /),
     ]);
+  });
+});
+
+describe("a dispatch acts on the session its click is in", () => {
+  // Spelled by hand: the minter encodes every segment, so it mints neither a
+  // second session nor a malformed escape.
+  const dispatch = (...tails: readonly string[]) =>
+    `cc-candybar://to/main/dispatch/does=copy&${tails.map((t) => `e=${encodeURIComponent(t)}`).join("&")}`;
+
+  test("a step naming another session is refused as bad input, held on the click's bar, and launches nothing", async () => {
+    const r = rig();
+    r.spawner.program(program(PBCOPY), exits(0));
+    const url = dispatch(`${VERB_COPY}/${encodeSegments([SID, "mine"])}`, `${VERB_COPY}/${encodeSegments(["s2", "theirs"])}`);
+    const { answer, performed } = await applyClickAnswered(url, r.ctx);
+    expect(answer?.error).toBeInstanceOf(BadVerbArgs);
+    expect(lastClickError(r.sessionState, SID)?.text).toBe(
+      `${VERB_COPY}: names session s2, not the session its click is in`,
+    );
+    expect(lastClickError(r.sessionState, "s2")).toBeNull();
+    await performed;
+    expect(r.started().map((s) => s.stdin)).toEqual(["mine"]);
+  });
+
+  test("a copy of empty text copies it: an empty last segment is still the argument", async () => {
+    const r = rig();
+    r.spawner.program(program(PBCOPY), exits(0));
+    const { answer, performed } = await applyClickAnswered(dispatch(`${VERB_COPY}/${encodeSegments([SID, ""])}`), r.ctx);
+    expect(answer).toBeNull();
+    await performed;
+    expect(r.started().map((s) => s.stdin)).toEqual([""]);
+  });
+
+  test.each([
+    [VERB_TOOLBAR_TOGGLE, ["junk"], 0],
+    [VERB_COPY, ["text", "junk"], 1],
+    [VERB_COPY, [], 1],
+  ])("a %s link carrying %j, not the count its verb reads, is refused before its handler runs", async (verb, args, reads) => {
+    const r = rig();
+    r.spawner.program(program(PBCOPY), exits(0));
+    const { answer, performed } = await applyClickAnswered(
+      dispatch(`${verb}/${encodeSegments([SID, ...args])}`),
+      r.ctx,
+    );
+    expect(answer?.error).toBeInstanceOf(BadVerbArgs);
+    expect(lastClickError(r.sessionState, SID)?.text).toBe(
+      `${verb}: reads ${reads} after its session, and the link carries ${args.length}`,
+    );
+    await performed;
+    expect(r.sessionState.get(SID, "toolbar-expanded")).toBeNull();
+    expect(r.started()).toEqual([]);
+  });
+
+  test("when the click's own session is refused, every step is refused for that, and nothing launches", async () => {
+    const r = rig();
+    r.spawner.program(program(PBCOPY), exits(0));
+    const url = dispatch(`${VERB_COPY}/%/x`, `${VERB_COPY}/${encodeSegments([SID, "mine"])}`);
+    const { answer, performed } = await applyClickAnswered(url, r.ctx);
+    expect(answer?.error).toBeInstanceOf(BadVerbArgs);
+    expect((answer?.error as Error).message).toContain(
+      `${VERB_COPY}: its click's own session is refused, so no step of it runs`,
+    );
+    await performed;
+    expect(r.started()).toEqual([]);
+  });
+
+  test("a later step's malformed session is that step's refusal; the click still lands its first", async () => {
+    const r = rig();
+    r.spawner.program(program(PBCOPY), exits(0));
+    const url = dispatch(`${VERB_COPY}/${encodeSegments([SID, "mine"])}`, `${VERB_COPY}/%/theirs`);
+    const { answer, performed } = await applyClickAnswered(url, r.ctx);
+    expect(answer?.error).toBeInstanceOf(BadVerbArgs);
+    expect(lastClickError(r.sessionState, SID)?.text).toMatch(
+      new RegExp(`^${VERB_COPY}: session id has malformed wire encoding: `),
+    );
+    await performed;
+    expect(r.started().map((s) => s.stdin)).toEqual(["mine"]);
   });
 });
 

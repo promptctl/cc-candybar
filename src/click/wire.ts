@@ -336,12 +336,6 @@ export function decodeSegments(value: string): string[] {
   return value.length === 0 ? [] : value.split("/").map(decodeURIComponent);
 }
 
-// The first of `value`'s segments, decoded alone, so a reader of the leading
-// segment is never failed by a malformed one after it.
-export function decodeFirstSegment(value: string): string {
-  return decodeURIComponent(value.split("/", 1)[0]!);
-}
-
 // Serialize an effect list to its dispatch URL: the words of what the click does,
 // then one ordered `e` query param per effect carrying `verb/<encoded-args>`,
 // percent-encoded whole so its internal `/`, `&`, `=` survive as data. The

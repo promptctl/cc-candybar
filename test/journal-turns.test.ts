@@ -271,6 +271,18 @@ describe("the click path", () => {
     });
   });
 
+  // [LAW:nothing-unseen] The click line always carries its session, so a
+  // missing field never reads as either case.
+  test.each([
+    ["names no session", ""],
+    ["names one the checkpoint refuses", encodeURIComponent("a/b")],
+  ])("a click that %s records sid=- on its line, never what the link spelled", async (_case, value) => {
+    const { ctx } = setup();
+    const { send, clickLine } = parts(ctx);
+    await send(VERB_UNDO, value);
+    expect(clickLine()).toMatch(/ sid=- /);
+  });
+
   test("a status-line link naming a verb re-enters without deadlock", async () => {
     const { ctx } = setup();
     const url = `cc-candybar://to/main/${VERB_UNDO}/${encodeSegments([SID])}`;

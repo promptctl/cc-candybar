@@ -428,7 +428,7 @@ test("a dispatch's refused step and its doctor's refusal both show on the bar, i
 });
 
 test("tsc refuses `ctx.launcher` in a VerbHandler, and an async handler", () => {
-  const handler: VerbHandler = (_value, ctx) => {
+  const handler: VerbHandler = (_sid, _args, ctx) => {
     // @ts-expect-error A handler reaches launches through the turn alone.
     void ctx.launcher;
     // @ts-expect-error As above.

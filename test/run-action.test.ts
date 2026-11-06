@@ -706,6 +706,48 @@ describe("a click on a run link", () => {
     expect(r.runs.stats()).toMatchObject({ started: 0, refused: 1 });
   });
 
+  // [LAW:nothing-unseen] Refused before the run reads it, and still the run
+  // stats' refusal: its count and its line.
+  test("a link whose session fails the checkpoint is refused and counted, and nothing runs", async () => {
+    const r = rig();
+    const { view, link } = await drawnLink(r);
+    await expect(
+      clickUrl(relink({ ...link, sid: ".." }), clickContext(r, view)),
+    ).rejects.toThrow("names a folder, not a session");
+    expect(r.runs.stats()).toMatchObject({ started: 0, refused: 1 });
+    expect(r.lines).toContainEqual(
+      expect.stringContaining(`run refused sid=- action=${link.name} reason=`),
+    );
+  });
+
+  test("a refused link's line names its action decoded, as the config would name it", async () => {
+    const r = rig();
+    const { view, link } = await drawnLink(r);
+    const name = "plugins.p.gö";
+    await expect(
+      clickUrl(relink({ ...link, name }), clickContext(r, view)),
+    ).rejects.toThrow(BadVerbArgs);
+    expect(r.lines).toContainEqual(
+      expect.stringContaining(`run refused sid=${link.sid} action=${name} reason=`),
+    );
+  });
+
+  test("a dispatch's run step naming another session is refused and counted; its own session's step runs", async () => {
+    const r = rig();
+    const { view, link } = await drawnLink(r);
+    const url = effectsUrl(MAIN_NAME, [
+      { verb: VERB_RUN, args: [link.sid, link.name, link.evaluated, link.mac] },
+      { verb: VERB_RUN, args: ["s2", link.name, link.evaluated, link.mac] },
+    ]);
+    await expect(clickUrl(url, clickContext(r, view))).rejects.toThrow(
+      "names session s2, not the session its click is in",
+    );
+    expect(r.runs.stats()).toMatchObject({ started: 1, refused: 1 });
+    expect(r.lines).toContainEqual(
+      expect.stringContaining(`run refused sid=${link.sid} action=${link.name} reason=`),
+    );
+  });
+
   test("a link drawn before its action was edited is refused, and nothing runs", async () => {
     const r = rig();
     const { view, link } = await drawnLink(r);
