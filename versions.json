@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-637",
+      "ref": "refs/pull/637/merge",
+      "sha": "92c998a0d78d0f8799c543ecd7dfdf419928e6c1",
+      "timestamp": "2026-11-06T09:41:05.644Z",
+      "commits": [
+        {
+          "sha": "92c998a0d78d0f8799c543ecd7dfdf419928e6c1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T02:38:51-07:00",
+          "message": "Merge 04a745483d3759d4ad7011f9110892ff63982371 into 4d66c4136720948fa45456ed742e340dea015963\n"
+        },
+        {
+          "sha": "04a745483d3759d4ad7011f9110892ff63982371",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T02:36:44-07:00",
+          "message": "feat(disk): files and their watch events go through one filesystem port, first used by the watcher registry and the binary watch (candybar-testing-ihvy.y10)\n\nA Filesystem port (src/disk/) with one adapter over fs, an in-memory fake whose writes emit the events a watch would on the clock, and one contract both pass. The watcher registry, its delivery owner, plugin storage, folder identity, the link walk and the binary watch read the disk through it; IdentityRead and BundleStat are gone. A lint rule bans fs outside the adapter, with an allowlist of the files still to move.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "4d66c4136720948fa45456ed742e340dea015963",
