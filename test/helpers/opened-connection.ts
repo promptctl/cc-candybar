@@ -8,7 +8,7 @@ import {
   type Request,
   type Response,
 } from "../../src/daemon/protocol";
-import type { memoryConnection } from "./memory-connection";
+import type { memoryConnection } from "../../src/dial/dialer-fake";
 
 export interface Opened {
   readonly client: ReturnType<typeof memoryConnection>["client"];

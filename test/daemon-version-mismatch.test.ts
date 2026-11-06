@@ -1,9 +1,6 @@
-import net from "node:net";
+import type { Duplex } from "node:stream";
 import { heldClock } from "./helpers/held-clock";
-import { memoryConnection } from "./helpers/memory-connection";
-import fs from "node:fs";
-import path from "node:path";
-import os from "node:os";
+import { memoryConnection } from "../src/dial/dialer-fake";
 import {
   PROTOCOL_VERSION,
   encodeFrame,
@@ -30,173 +27,125 @@ import { planOutcome } from "../src/render/outcome-plan";
 // version-mismatch branch ---
 
 interface MismatchServer {
-  sockPath: string;
+  serve: (daemonEnd: Duplex) => void;
   shutdownObserved: { triggered: boolean };
-  close: () => Promise<void>;
 }
 
-function spinUpMismatchServer(daemonV: number): Promise<MismatchServer> {
-  return new Promise((resolve) => {
-    const shutdownObserved = { triggered: false };
-    const server = net.createServer((sock) => {
-      const reader = makeFrameReader(
-        (frame) => {
-          const req = frame as { v?: number; kind?: string };
-          if (typeof req.v !== "number") {
-            sock.write(
-              encodeFrame({
-                ok: false,
-                error: "malformed request",
-                code: "BAD_REQUEST",
-                daemonV,
-              }),
-            );
-            sock.end();
-            return;
-          }
-          if (req.v !== daemonV) {
-            // [LAW:types-are-the-program] Mirrors the daemon's version-mismatch
-            // asymmetry: only schedule shutdown when the client is *newer* —
-            // never when it is older (that path is the spiral-breaker).
-            if (req.v > daemonV) {
-              shutdownObserved.triggered = true;
-            }
-            sock.write(
-              encodeFrame({
-                ok: false,
-                error: `protocol v${req.v} not supported (daemon at v${daemonV})`,
-                code: "VERSION_MISMATCH",
-                daemonV,
-              }),
-            );
-            sock.end();
-            return;
-          }
-          sock.write(encodeFrame({ ok: true, output: "fake render\n" }));
-          sock.end();
-        },
-        () => {
-          /* parse error ignored — daemon side */
-        },
-      );
-      sock.on("data", reader);
-    });
-
-    const sockPath = path.join(
-      os.tmpdir(),
-      `cc-candybar-vm-${Date.now()}-${Math.random().toString(36).slice(2)}.sock`,
-    );
-    server.listen(sockPath, () => {
-      resolve({
-        sockPath,
-        shutdownObserved,
-        close: () =>
-          new Promise((r) => {
-            server.close(() => {
-              try {
-                fs.unlinkSync(sockPath);
-              } catch {
-                /* unlinked already */
-              }
-              r();
-            });
-          }),
-      });
-    });
-  });
-}
-
-function sendRequest(
-  sockPath: string,
-  req: unknown,
-  timeoutMs = 500,
-): Promise<Response> {
-  return new Promise((resolve, reject) => {
-    const client = net.createConnection({ path: sockPath }, () => {
-      client.write(encodeFrame(req));
-    });
-    const timer = setTimeout(() => {
-      client.destroy();
-      reject(new Error("test request timeout"));
-    }, timeoutMs);
+function mismatchServer(daemonV: number): MismatchServer {
+  const shutdownObserved = { triggered: false };
+  const serve = (sock: Duplex): void => {
     const reader = makeFrameReader(
       (frame) => {
-        clearTimeout(timer);
-        resolve(frame as Response);
-        client.end();
+        const req = frame as { v?: number; kind?: string };
+        if (typeof req.v !== "number") {
+          sock.write(
+            encodeFrame({
+              ok: false,
+              error: "malformed request",
+              code: "BAD_REQUEST",
+              daemonV,
+            }),
+          );
+          sock.end();
+          return;
+        }
+        if (req.v !== daemonV) {
+          // [LAW:types-are-the-program] Mirrors the daemon's version-mismatch
+          // asymmetry: only schedule shutdown when the client is *newer* —
+          // never when it is older (that path is the spiral-breaker).
+          if (req.v > daemonV) {
+            shutdownObserved.triggered = true;
+          }
+          sock.write(
+            encodeFrame({
+              ok: false,
+              error: `protocol v${req.v} not supported (daemon at v${daemonV})`,
+              code: "VERSION_MISMATCH",
+              daemonV,
+            }),
+          );
+          sock.end();
+          return;
+        }
+        sock.write(encodeFrame({ ok: true, output: "fake render\n" }));
+        sock.end();
       },
-      (err) => {
-        clearTimeout(timer);
-        reject(err);
+      () => {
+        /* parse error ignored — daemon side */
       },
     );
-    client.on("data", reader);
-    client.on("error", (err) => {
-      clearTimeout(timer);
-      reject(err);
-    });
+    sock.on("data", reader);
+  };
+  return { serve, shutdownObserved };
+}
+
+// One request over an in-memory connection to `server`, and its one answer.
+function sendRequest(server: MismatchServer, req: unknown): Promise<Response> {
+  const { daemonEnd, client } = memoryConnection();
+  server.serve(daemonEnd);
+  return new Promise((resolve, reject) => {
+    client.on(
+      "data",
+      makeFrameReader(
+        (frame) => {
+          resolve(frame as Response);
+          client.end();
+        },
+        reject,
+      ),
+    );
+    client.on("error", reject);
+    client.write(encodeFrame(req));
   });
 }
 
 describe("daemon version-mismatch trigger asymmetry (kz8.5 chunk 4)", () => {
   test("older client receives VERSION_MISMATCH with daemonV; daemon does NOT trigger shutdown", async () => {
     const daemonV = PROTOCOL_VERSION;
-    const server = await spinUpMismatchServer(daemonV);
-    try {
-      // Client claims an older protocol version (v=daemonV-1).
-      const resp = await sendRequest(server.sockPath, {
-        v: daemonV - 1,
-        kind: "render",
-      });
-      expect(resp.ok).toBe(false);
-      if (!resp.ok) {
-        expect(resp.code).toBe("VERSION_MISMATCH");
-        expect(resp.daemonV).toBe(daemonV);
-      }
-      // [LAW:types-are-the-program] The load-bearing assertion: shutdown is
-      // NOT triggered when the client is stale. Triggering would respawn a
-      // daemon at the same version, which the same client would mismatch
-      // again — the 452-corpse spiral.
-      expect(server.shutdownObserved.triggered).toBe(false);
-    } finally {
-      await server.close();
+    const server = mismatchServer(daemonV);
+    // Client claims an older protocol version (v=daemonV-1).
+    const resp = await sendRequest(server, {
+      v: daemonV - 1,
+      kind: "render",
+    });
+    expect(resp.ok).toBe(false);
+    if (!resp.ok) {
+      expect(resp.code).toBe("VERSION_MISMATCH");
+      expect(resp.daemonV).toBe(daemonV);
     }
+    // [LAW:types-are-the-program] The load-bearing assertion: shutdown is
+    // NOT triggered when the client is stale. Triggering would respawn a
+    // daemon at the same version, which the same client would mismatch
+    // again — the 452-corpse spiral.
+    expect(server.shutdownObserved.triggered).toBe(false);
   });
 
   test("newer client receives VERSION_MISMATCH AND daemon triggers shutdown", async () => {
     const daemonV = PROTOCOL_VERSION;
-    const server = await spinUpMismatchServer(daemonV);
-    try {
-      // Client claims a newer protocol version — meaning the daemon binary
-      // is stale relative to the freshly-installed client. Restart helps.
-      const resp = await sendRequest(server.sockPath, {
-        v: daemonV + 1,
-        kind: "render",
-      });
-      expect(resp.ok).toBe(false);
-      if (!resp.ok) {
-        expect(resp.code).toBe("VERSION_MISMATCH");
-        expect(resp.daemonV).toBe(daemonV);
-      }
-      expect(server.shutdownObserved.triggered).toBe(true);
-    } finally {
-      await server.close();
+    const server = mismatchServer(daemonV);
+    // Client claims a newer protocol version — meaning the daemon binary
+    // is stale relative to the freshly-installed client. Restart helps.
+    const resp = await sendRequest(server, {
+      v: daemonV + 1,
+      kind: "render",
+    });
+    expect(resp.ok).toBe(false);
+    if (!resp.ok) {
+      expect(resp.code).toBe("VERSION_MISMATCH");
+      expect(resp.daemonV).toBe(daemonV);
     }
+    expect(server.shutdownObserved.triggered).toBe(true);
   });
 
   test("matching client sees Ok response, no mismatch path entered", async () => {
     const daemonV = PROTOCOL_VERSION;
-    const server = await spinUpMismatchServer(daemonV);
-    try {
-      const resp = await sendRequest(server.sockPath, {
-        v: daemonV,
-        kind: "render",
-      });
-      expect(resp.ok).toBe(true);
-      expect(server.shutdownObserved.triggered).toBe(false);
-    } finally {
-      await server.close();
-    }
+    const server = mismatchServer(daemonV);
+    const resp = await sendRequest(server, {
+      v: daemonV,
+      kind: "render",
+    });
+    expect(resp.ok).toBe(true);
+    expect(server.shutdownObserved.triggered).toBe(false);
   });
 });
 

@@ -184,8 +184,8 @@ let verdict: Promise<string | null> | null = null;
 function cannotMeasure(): Promise<string | null> {
   verdict ??= (async () => {
     if (process.platform !== "darwin") return "the scheme is macOS-only";
-    const { host, clock } = processWorld();
-    const stats = await fetchStats({ host, home: mainHome(), clock });
+    const { host, clock, dialer } = processWorld();
+    const stats = await fetchStats({ host, home: mainHome(), clock, dialer });
     if (stats.kind !== "ok")
       return `no daemon on the default socket: ${describeFailure(stats)}`;
     const probe = spawnSync(

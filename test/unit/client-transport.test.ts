@@ -9,7 +9,13 @@ import {
   describeFailure,
   interpretException,
   interpretResponse,
+  requestOutcome,
 } from "../../src/daemon/client-transport";
+import { HOME_ENV, NAME_ENV, homeOf } from "../../src/daemon/home";
+import { socketPath } from "../../src/daemon/paths";
+import { dialerFake, type DialerFake } from "../../src/dial/dialer-fake";
+import { heldClock } from "../../src/held-clock";
+import { hostOf } from "../helpers/host";
 import type {
   PermanentOutcome,
   TransientOutcome,
@@ -66,13 +72,56 @@ test("a timeout is told by its type, so a reworded one still classifies and a lo
   }
 });
 
-test("a dead daemon's immediate refusals stay transient", () => {
-  for (const code of ["ECONNREFUSED", "ENOENT"]) {
-    expect(interpretException(new Error(`connect ${code}`))).toMatchObject({
+// [LAW:parse-dont-validate] A connect's refusal is the dialer's to decide, so
+// no message read after the connect names a cause: a refusal's words over an
+// accepted connection are a broken connection.
+test("an error over an accepted connection is io_error, whatever it says", () => {
+  for (const code of ["ECONNREFUSED", "ENOENT", "EPIPE"]) {
+    expect(interpretException(new Error(`write ${code}`))).toEqual({
+      kind: "transient",
+      cause: "io_error",
+      message: `write ${code}`,
+    });
+  }
+});
+
+describe("a round trip's dial", () => {
+  const clock = heldClock(new Date(0));
+  const home = homeOf(hostOf({ [HOME_ENV]: "/fake-home", [NAME_ENV]: "rt" }));
+  const world = (dialer: DialerFake) => ({
+    host: hostOf({}),
+    home,
+    clock,
+    dialer,
+  });
+  const ask = (dialer: DialerFake) =>
+    requestOutcome(
+      world(dialer),
+      () => ({ kind: "stats" }),
+      { connectMs: 50, budgetMs: 50 },
+      () => 1,
+    );
+
+  test("no daemon at the socket is transient and unreachable, so a kick follows", async () => {
+    const outcome = ask(dialerFake(clock));
+    clock.advance(0);
+    expect(await outcome).toMatchObject({
       kind: "transient",
       cause: "unreachable",
     });
-  }
+  });
+
+  test("a listener that never accepts is busy at connect, so nothing is kicked", async () => {
+    const dialer = dialerFake(clock);
+    dialer.hold(socketPath(home));
+    const outcome = ask(dialer);
+    clock.advance(50);
+    expect(await outcome).toEqual({
+      kind: "busy",
+      phase: "connect",
+      message: "CONNECT_TIMEOUT",
+    });
+  });
 });
 
 describe("describeFailure", () => {
@@ -87,7 +136,10 @@ describe("describeFailure", () => {
   });
 
   test("every transient cause a dead daemon explains carries the spawn hint", () => {
-    const causes: TransientOutcome["cause"][] = ["unreachable", "io_error"];
+    const causes: Array<TransientOutcome["cause"]> = [
+      "unreachable",
+      "io_error",
+    ];
     for (const cause of causes) {
       const text = describeFailure({ kind: "transient", cause, message: "x" });
       expect(text).toContain(HINT);

@@ -7,7 +7,6 @@
 import type { TmuxAtExit } from "../../src/daemon/tmux-status";
 import { HOST } from "./host";
 import fs from "node:fs";
-import net from "node:net";
 import path from "node:path";
 import type { Duplex } from "node:stream";
 import { pathToFileURL } from "node:url";
@@ -34,7 +33,8 @@ import { daemonGates } from "../../src/daemon/update-keys";
 import type { DaemonLogger } from "../../src/utils/logger";
 import type { DaemonEndpoint } from "./daemon-wire";
 import type { StartBarDaemon } from "./drive-bar";
-import { memoryConnection } from "./memory-connection";
+import { memoryConnection, type DialerFake } from "../../src/dial/dialer-fake";
+import { fakeDialer } from "./dial";
 import { LEDGER_ENV, TEST_FILE_ENV, recordDaemonStart } from "./process-tier.cjs";
 
 // [LAW:single-enforcer] What a boot here is recorded with. `startDaemon` replaces
@@ -159,10 +159,10 @@ export interface InWorkerDaemon extends DaemonEndpoint {
   readonly paths: DaemonPaths;
   // A client's end of a new connection.
   connect(): Duplex;
-  // Serves a real socket too, for a client that opens one itself: the frame
-  // stream, and the doctor's CLI. Each connection is the daemon's own, as one
-  // from `connect` is.
-  listen(sockPath: string): Promise<void>;
+  // A dialer whose dials of this daemon's socket reach it, for a client that
+  // dials itself: the frame stream, and the doctor's CLI. Each connection is
+  // the daemon's own, as one from `connect` is.
+  readonly dialer: DialerFake;
   stop(): Promise<void>;
 }
 
@@ -242,13 +242,15 @@ export function startDaemon(
   let stopped = false;
   held.starts++;
   const open = new Set<Duplex>();
-  const servers: net.Server[] = [];
 
   const serve = (end: Duplex): void => {
     open.add(end);
     end.once("close", () => open.delete(end));
     handleConnection(daemon, end);
   };
+
+  const dialer = fakeDialer();
+  const stopListening = dialer.listen(paths.socket, serve);
 
   const connect = (): Duplex => {
     const { daemonEnd, client } = memoryConnection();
@@ -263,17 +265,7 @@ export function startDaemon(
     name: home.name,
     now: () => daemon.clock.now(),
     connect,
-    listen: (sockPath) =>
-      new Promise((resolve, reject) => {
-        const server = net.createServer(serve);
-        servers.push(server);
-        server.once("error", reject);
-        server.listen(sockPath, () => {
-          // A server's later error is nobody's rejection: left unheard, it's loud.
-          server.off("error", reject);
-          resolve();
-        });
-      }),
+    dialer,
     send: (req, budgetMs) =>
       sendOne(
         connect(),
@@ -294,10 +286,8 @@ export function startDaemon(
       if (stopped) return;
       stopped = true;
       void daemon.close(NO_TMUX_AT_EXIT);
+      stopListening();
       for (const end of open) end.destroy();
-      await Promise.all(
-        servers.map((server) => new Promise((closed) => server.close(closed))),
-      );
       await daemonLog.drained();
       daemonLog.dispose();
       if (held !== null && --held.starts === 0) {

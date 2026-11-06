@@ -1,4 +1,3 @@
-import type { RendererHome } from "../src/daemon/home";
 // The e2e click helper on a click the daemon answered TIMEOUT. The daemon's
 // guard abandons the reply, not the click, so the helper sends the click once
 // and takes its outcome from the click event the daemon logs once it has run.
@@ -6,7 +5,6 @@ import type { RendererHome } from "../src/daemon/home";
 import { MAIN_NAME, homeOf } from "../src/daemon/home";
 import fs from "node:fs";
 import { hostOf } from "./helpers/host";
-import net from "node:net";
 
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { logLine } from "../src/daemon/log";
@@ -22,11 +20,13 @@ import {
   type RequestOutcome,
 } from "../src/daemon/request-event";
 import { click } from "./helpers/daemon-e2e";
+import { homeEndpoint, type DaemonEndpoint } from "./helpers/daemon-wire";
+import { fakeDialer } from "./helpers/dial";
 import { prepareIsolatedDaemonEnv } from "./helpers/spawn-isolated-daemon";
 
 interface StandIn {
-  readonly home: RendererHome;
-  readonly sockPath: string;
+  // The stand-in as the click helper reaches it, through a fake dialer.
+  readonly target: DaemonEndpoint;
   readonly clicks: () => number;
   close(): Promise<void>;
 }
@@ -43,7 +43,8 @@ async function timingOut(outcome: RequestOutcome): Promise<StandIn> {
   // timer of this file outlives its test.
   const pending = new Set<NodeJS.Timeout>();
   let clicks = 0;
-  const server = net.createServer((sock) => {
+  const dialer = fakeDialer();
+  const stopListening = dialer.listen(sockPath, (sock) => {
     sock.on(
       "data",
       makeFrameReader(
@@ -77,19 +78,13 @@ async function timingOut(outcome: RequestOutcome): Promise<StandIn> {
       ),
     );
   });
-  await new Promise<void>((resolve) => server.listen(sockPath, resolve));
   return {
-    home,
-    sockPath,
+    target: homeEndpoint(home, dialer),
     clicks: () => clicks,
-    close: () => {
+    close: async () => {
       for (const write of pending) clearTimeout(write);
-      return new Promise<void>((resolve) =>
-        server.close(() => {
-          removeTmpDirs();
-          resolve();
-        }),
-      );
+      stopListening();
+      removeTmpDirs();
     },
   };
 }
@@ -101,7 +96,7 @@ const URL = effectsUrl(MAIN_NAME, [
 test("a click answered TIMEOUT lands by the daemon's own event, sent once", async () => {
   const daemon = await timingOut({ kind: "ok" });
   try {
-    await click(daemon.home, URL);
+    await click(daemon.target, URL);
     expect(daemon.clicks()).toBe(1);
   } finally {
     await daemon.close();
@@ -114,7 +109,7 @@ test("a click answered TIMEOUT that the daemon then refused fails with the refus
     problems: ["apply-update: already rebuilding…"],
   });
   try {
-    await expect(click(daemon.home, URL)).rejects.toThrow(
+    await expect(click(daemon.target, URL)).rejects.toThrow(
       /already rebuilding/,
     );
     expect(daemon.clicks()).toBe(1);

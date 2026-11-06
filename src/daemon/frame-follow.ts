@@ -155,6 +155,7 @@ export function followFrames(
 
   const open = (): void => {
     stream = openFrameStream(
+      world.dialer,
       sockPath,
       sessionId,
       lane,

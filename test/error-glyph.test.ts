@@ -1,6 +1,6 @@
 import type { Duplex } from "node:stream";
 import { heldClock } from "./helpers/held-clock";
-import { memoryConnection } from "./helpers/memory-connection";
+import { memoryConnection } from "../src/dial/dialer-fake";
 import { RENDER_BUDGETS } from "../src/daemon/client";
 import { exchangeOutcome } from "../src/daemon/client-transport";
 import { formatPermanentGlyph } from "../src/render/error-glyph";

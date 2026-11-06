@@ -193,7 +193,7 @@ export async function startWorld(config = "{}\n"): Promise<World> {
   const host = { env, home: dirs.home, tmp: machine.host.tmp };
   // What its clients ask the daemon with: this world's host, the machine's clock.
   const home = homeOf(host);
-  const client = { host, home, clock: machine.clock };
+  const client = { host, home, clock: machine.clock, dialer: machine.dialer };
   const log = logPath(home);
 
   // The shipped daemon's own argv, heap cap included. A process group of its

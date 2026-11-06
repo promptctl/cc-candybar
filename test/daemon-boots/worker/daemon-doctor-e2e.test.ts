@@ -324,8 +324,8 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
   }
 });
 
-// The CLI's probe end to end over a real socket, less Launch Services: the
-// production edge, with the one leg this test cannot isolate — macOS handing
+// The CLI's probe end to end over the in-worker daemon's dialer, less Launch
+// Services (the real socket is test/integration's): the production edge, with the one leg this test cannot isolate — macOS handing
 // the link to the forwarder app, which would deliver it to the user's own
 // daemon — replaced by the frame that app writes.
 test("the CLI's probe reads its own link back from the daemon it was delivered to", async () => {
@@ -336,8 +336,7 @@ test("the CLI's probe reads its own link back from the daemon it was delivered t
   // socket is this daemon's.
   const daemon = startDaemon(env);
   try {
-    await daemon.listen(sockPath);
-    const cli = worldOf(hostOf(env));
+    const cli = { ...worldOf(hostOf(env)), dialer: daemon.dialer };
     const facts = await probeUrlHandler({
       ...productionHandlerProbeEdge(cli.launcher, cli),
       platform: "darwin",

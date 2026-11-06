@@ -1,6 +1,7 @@
 import os from "node:os";
 import { HOME_ENV, NAME_ENV, homeOf } from "../../src/daemon/home";
 import { locations } from "../../src/daemon/paths";
+import { systemDialer } from "../../src/dial/system-dialer";
 import type { Host, World } from "../../src/host";
 import { systemOneShotLauncher } from "../../src/proc/system-launcher";
 import { systemProbe } from "../../src/daemon/process-fingerprint";
@@ -44,6 +45,7 @@ export function worldOf(host: Host): World {
     home: homeOf(host),
     launcher: systemOneShotLauncher({ inherited: host.env }, systemTimekeeper),
     clock: systemTimekeeper,
+    dialer: systemDialer,
   };
 }
 

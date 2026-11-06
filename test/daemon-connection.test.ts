@@ -25,7 +25,7 @@ import type { HandledRequest, Reply } from "../src/daemon/reply";
 import { REQUEST_TIMEOUT_MS } from "../src/daemon/request-deadline";
 import { sessionIdOf } from "../src/daemon/session-id";
 import { RuntimeStats } from "../src/daemon/stats";
-import { memoryConnection } from "./helpers/memory-connection";
+import { memoryConnection } from "../src/dial/dialer-fake";
 import { openedOn, type Opened } from "./helpers/opened-connection";
 import { until } from "./helpers/until";
 

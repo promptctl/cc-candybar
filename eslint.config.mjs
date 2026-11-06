@@ -164,6 +164,21 @@ const FS_SYNTAX = [
   `CallExpression[callee.name='require'][arguments.0.value=${FS_MODULE}]`,
 ].map((selector) => ({ selector, message: FS_MESSAGE }));
 
+// [LAW:single-enforcer] [LAW:effects-at-boundaries] A client reaches its
+// daemon through a Dialer (src/dial/dialer.ts); src/dial/system-dialer.ts is
+// the only client-side file that may name `net`, and the daemon's own listener
+// (src/daemon/server.ts) the only other. A type names no effect, so a type
+// import stays open.
+const NET_OWNERS = ["src/dial/system-dialer.ts", "src/daemon/server.ts"];
+const NET_MESSAGE =
+  "Dial the daemon through a Dialer (src/dial/dialer.ts). [LAW:effects-at-boundaries]";
+const NET_MODULE = "/^(node:)?net$/";
+const NET_SYNTAX = [
+  `ImportDeclaration[source.value=${NET_MODULE}][importKind!='type']`,
+  `ImportExpression[source.value=${NET_MODULE}]`,
+  `CallExpression[callee.name='require'][arguments.0.value=${NET_MODULE}]`,
+].map((selector) => ({ selector, message: NET_MESSAGE }));
+
 // [LAW:single-enforcer] A fake exists to be scripted by a test; no src file
 // names one, so a stand-in cannot reach a daemon that runs for a person.
 const FAKE_IMPORTS = [
@@ -175,6 +190,8 @@ const FAKE_IMPORTS = [
       "**/process-probe-fake.js",
       "**/filesystem-fake",
       "**/filesystem-fake.js",
+      "**/dialer-fake",
+      "**/dialer-fake.js",
     ],
     message: "A fake is a test's: src never imports one. [LAW:single-enforcer]",
   },
@@ -667,6 +684,14 @@ export default [
       disk: { rules: { "no-fs": builtinRules.get("no-restricted-syntax") } },
     },
     rules: { "disk/no-fs": ["error", ...FS_SYNTAX] },
+  },
+  {
+    files: ["src/**/*.{ts,mts}"],
+    ignores: NET_OWNERS,
+    plugins: {
+      dial: { rules: { "no-net": builtinRules.get("no-restricted-syntax") } },
+    },
+    rules: { "dial/no-net": ["error", ...NET_SYNTAX] },
   },
   {
     ignores: [
