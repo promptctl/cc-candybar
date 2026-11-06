@@ -239,6 +239,18 @@ describe("a child a renderer starts", () => {
     expect(homeOf(hostOf(shell, { home: "/home/u" }))).toEqual(home);
   });
 
+  test("under a main with XDG overrides, parses the same roots whatever the child's shell carried", () => {
+    const { home, child } = roundTrip({
+      XDG_STATE_HOME: "/x/state",
+      XDG_CACHE_HOME: "/x/cache",
+      XDG_CONFIG_HOME: "/x/config",
+    });
+    expect(child).toEqual(home);
+    // A tmux server whose environment names other roots does not reach the child.
+    const server = { XDG_STATE_HOME: "/srv", XDG_CONFIG_HOME: "/srv", ...homeEnv(home) };
+    expect(homeOf(hostOf(server, { home: "/home/u" }))).toEqual(home);
+  });
+
   test("under a main on the legacy override, passes the override through", () => {
     const { home, child } = roundTrip({ CC_CANDYBAR_SOCKET: "/tmp/dev/s" });
     expect(child).toEqual(home);

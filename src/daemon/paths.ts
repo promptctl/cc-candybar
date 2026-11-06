@@ -1,5 +1,4 @@
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import type { Host } from "../host.js";
 import {
@@ -84,6 +83,11 @@ export function homeEnv(home: RendererHome): Readonly<Record<string, string>> {
         [HOME_ENV]: "",
         [NAME_ENV]: "",
         [RUNTIME_DIR_ENV]: home.runtime,
+        // The resolved roots: the child under the tmux server's environment
+        // derives this renderer's state, cache and config, not the server's.
+        XDG_STATE_HOME: home.roots.state,
+        XDG_CACHE_HOME: home.roots.cache,
+        XDG_CONFIG_HOME: home.roots.config,
         CC_CANDYBAR_SOCKET: home.legacySocket ?? "",
       }
     : {
@@ -124,9 +128,9 @@ export function ensureOwnedPrivateDir(dir: string): void {
   if (!st.isDirectory()) {
     throw new Error(`not a directory: ${dir}`);
   }
-  const myUid = os.userInfo().uid;
-  // getuid is undefined on Windows; we don't ship there, but guard cheaply.
-  if (typeof myUid === "number" && st.uid !== myUid) {
+  // The kernel's uid, as the runtime directory's name reads it (home.ts).
+  const myUid = process.getuid!();
+  if (st.uid !== myUid) {
     throw new Error(
       `directory is not owned by uid ${myUid}: ${dir} (owner uid=${st.uid})`,
     );
@@ -252,9 +256,10 @@ export function logPath(home: RendererHome): string {
 }
 
 // [LAW:effects-at-boundaries] Every path a daemon process touches, derived
-// from its home once and handed down as a value: the daemon's modules take the
-// one they write to, so a daemon under a home writes nowhere else. A process's
-// entry point is the one place that builds it.
+// from its home and handed down as a value: the daemon's modules take the one
+// they write to, so a daemon under a home writes nowhere else. The process's
+// entry and the daemon it hands the home to each derive it, by this one
+// function over the one home, so the two cannot differ.
 // [LAW:one-source-of-truth] Each member is the accessor above of the same name,
 // so the layout is still derived in this file alone.
 export interface DaemonPaths {

@@ -36,6 +36,9 @@ process.env.NODE_OPTIONS = stamp.withStamp(process.env.NODE_OPTIONS);
 process.env[HOME_ENV] = jestTmpDir("home");
 process.env[NAME_ENV] = "jest";
 process.env[RUNTIME_DIR_ENV] = jestTmpDir("run");
+// A named home refuses the legacy socket override beside it (src/daemon/home.ts),
+// so one exported by the shell that runs the suite would refuse every worker.
+delete process.env.CC_CANDYBAR_SOCKET;
 
 // [LAW:single-enforcer] No test daemon ever asks npm what the latest release
 // is: the tsx-harness daemons run `src/index.ts`, whose entry resolves to a

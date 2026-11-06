@@ -44,7 +44,7 @@ There is no special renderer, and no dev mode. Renderers differ only in values: 
 A client connects to a renderer, and that renderer answers it. Nothing selects.
 
 - **The statusline command's path picks the build.** A client spawns the bundle beside it on a daemon miss, which is why the live daemon runs from the main checkout.
-- **`CC_CANDYBAR_SOCKET` picks the socket.**
+- **`CC_CANDYBAR_HOME` and `CC_CANDYBAR_NAME` pick the renderer**: its socket, state, cache and config all follow from the pair. `CC_CANDYBAR_SOCKET` is honoured for one release and warned on at boot.
 
 So a session runs on a worktree's renderer by starting Claude Code with those two values. A restart for that is fine.
 

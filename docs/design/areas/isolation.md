@@ -10,7 +10,7 @@ Renderer values in [../contracts.md](../contracts.md), and making state location
 
 The primitive is an isolated daemon. It runs the same code and the same verbs as any other, and isolation comes from where it reads and writes, not from what it may do. Restricting verbs would be a dev-mode toggle, which is the wrong perspective at its core.
 
-Today `CC_CANDYBAR_SOCKET` isolates only the socket and lease. `XDG_STATE_HOME` and `XDG_CONFIG_HOME` move the rest, as `prepareIsolatedDaemonEnv` already shows for tests. `pnpm bar` runs a real daemon this way, with every click on a config copy.
+A renderer's home isolates it whole: `CC_CANDYBAR_HOME` and `CC_CANDYBAR_NAME` move the socket, lease, state, cache and config together, as `prepareIsolatedDaemonEnv` shows for tests. `CC_CANDYBAR_SOCKET` moved only the socket and lease and is honoured for one release.
 
 ## Design
 

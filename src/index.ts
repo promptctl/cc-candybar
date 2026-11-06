@@ -45,7 +45,19 @@ const RUNNING_BUNDLE = fileURLToPath(import.meta.url);
 // [LAW:effects-at-boundaries] What this process knows of its machine, read once
 // and handed to every subcommand; the debug channel is the one place a switch
 // is set from it.
-const world = processWorld();
+// [LAW:parse-dont-validate] A home the environment misstates is refused here,
+// in one line naming the rule, as the Rust client refuses the same input; the
+// try below has no world yet to report through.
+const world = ((): ReturnType<typeof processWorld> => {
+  try {
+    return processWorld();
+  } catch (error) {
+    process.stderr.write(
+      `cc-candybar: ${error instanceof Error ? error.message : String(error)}\n`,
+    );
+    process.exit(1);
+  }
+})();
 const { host } = world;
 setDebug(Boolean(host.env.CC_CANDYBAR_DEBUG));
 
