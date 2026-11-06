@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "bfb89187e23eda03a7d719a5fba64875b44a3355",
+      "timestamp": "2026-11-06T02:55:21.134Z",
+      "commits": [
+        {
+          "sha": "bfb89187e23eda03a7d719a5fba64875b44a3355",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T19:54:23-07:00",
+          "message": "feat(tmux-status): the renderer names itself on every session whose row it draws (candybar-gather-renderer-76bb.b2l.rwj) (#619)\n\n* feat(tmux-status): the renderer names itself on every session whose row it draws (candybar-gather-renderer-76bb.b2l.rwj)\n\nThe install plan's lay-out write sets `@cc-candybar-renderer` on the tmux\nsession in the same call as the prior record and the status-format array,\nand the restore plan unsets it beside the prior and wrote records. The name\nreaches the lane through its deps; the composition root passes `main`, the\nmain renderer's name, until the home lane carries a name. The install log\nline says which renderer laid the session out.\n\nProved on a private tmux server: the option reads `main` while the row is\ndrawn, SIGTERM returns the session's options to what they were, and a second\ndaemon started after that names itself on the row again.\n\n* fix(tmux-status): a layout taken over names this daemon too, as a fresh one does (candybar-gather-renderer-76bb.b2l.rwj)\n\nEvery install plan carries its commands, so the write after it has no branch:\na taken-over record gets the renderer option, and so does each layout the\nfirst answer adopts from the server's listing. The option's comment names\nwhat it is for rather than a binding that does not exist yet. The unit test\nfile carries only the ticket's change, not a reformat. The process test's\nsetup is back under its try so a tmux refusal still cleans up.\n\n* refactor(tmux-status): the taken-over install plan derives from the record it extends (candybar-gather-renderer-76bb.b2l.rwj)"
+        },
+        {
+          "sha": "6d2fd8d435350e75805014afa1b3568e1119b767",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-05T10:47:31Z",
+          "message": "chore(release): set `package.json` to 1.190.0 [skip ci]\n\n## [1.190.0](https://github.com/promptctl/cc-candybar/compare/v1.189.0...v1.190.0) (2026-11-05)\n\n### Features\n\n* **apply:** the closed Event union and its one arm table (candybar-gather-renderer-76bb.1dh.scr) ([#618](https://github.com/promptctl/cc-candybar/issues/618)) ([6e15ada](https://github.com/promptctl/cc-candybar/commit/6e15adacbcc9130dc4d651aec67c94627d9e7680))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-621",
       "ref": "refs/pull/621/merge",
       "sha": "b0c347eb18bfee1eb369d77499c619b61f642b19",
@@ -56,64 +78,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-05T19:35:43-07:00",
           "message": "feat(click)!: remove the load-config verb; a session's config is what its request names (candybar-gather-renderer-76bb.f00.bju)\n\nThe verb that pointed a session at any absolute path goes, with the\nper-session override it wrote, the \"pick\" arm it added to a session's\nconfig target, and the view-follow hook that ran after every click\nbecause a click might have moved the origin. Nothing but a render\nrequest sets a session's origin now, so the render, every durable click\nand the lane meter read the recorded origin directly.\n\nA config that still writes a `cc-candybar://load-config/…` link is\nrefused at load, at the template or the helper that spells it, with a\nmessage naming --config and CC_CANDYBAR_CONFIG as where a session's\nconfig comes from. The scheme string moves to a leaf module so the\nloader can read it without the config layer depending on the click\ncodec.\n\nBREAKING CHANGE: the load-config click verb and the examples' config\nswitcher are removed; a config linking to the verb fails to load.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-619",
-      "ref": "refs/pull/619/merge",
-      "sha": "558bf4d5c9b345f855f2a79de18d2aca6c34ebf7",
-      "timestamp": "2026-11-06T02:47:54.673Z",
-      "commits": [
-        {
-          "sha": "558bf4d5c9b345f855f2a79de18d2aca6c34ebf7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T02:47:05Z",
-          "message": "Merge 516012fea5165cdfc9bfcb455ee1f5f5ac88c7fd into 6d2fd8d435350e75805014afa1b3568e1119b767\n"
-        },
-        {
-          "sha": "516012fea5165cdfc9bfcb455ee1f5f5ac88c7fd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T19:46:54-07:00",
-          "message": "refactor(tmux-status): the taken-over install plan derives from the record it extends (candybar-gather-renderer-76bb.b2l.rwj)\n"
-        },
-        {
-          "sha": "76f73c84e816d03ec6ea45c86dcbfeaa7d61d667",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T19:43:21-07:00",
-          "message": "fix(tmux-status): a layout taken over names this daemon too, as a fresh one does (candybar-gather-renderer-76bb.b2l.rwj)\n\nEvery install plan carries its commands, so the write after it has no branch:\na taken-over record gets the renderer option, and so does each layout the\nfirst answer adopts from the server's listing. The option's comment names\nwhat it is for rather than a binding that does not exist yet. The unit test\nfile carries only the ticket's change, not a reformat. The process test's\nsetup is back under its try so a tmux refusal still cleans up.\n"
-        },
-        {
-          "sha": "f0796700a7d43c3edfd9e81e7c93951bff174441",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T19:23:23-07:00",
-          "message": "feat(tmux-status): the renderer names itself on every session whose row it draws (candybar-gather-renderer-76bb.b2l.rwj)\n\nThe install plan's lay-out write sets `@cc-candybar-renderer` on the tmux\nsession in the same call as the prior record and the status-format array,\nand the restore plan unsets it beside the prior and wrote records. The name\nreaches the lane through its deps; the composition root passes `main`, the\nmain renderer's name, until the home lane carries a name. The install log\nline says which renderer laid the session out.\n\nProved on a private tmux server: the option reads `main` while the row is\ndrawn, SIGTERM returns the session's options to what they were, and a second\ndaemon started after that names itself on the row again.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "6e15adacbcc9130dc4d651aec67c94627d9e7680",
-      "timestamp": "2026-11-05T10:34:54.627Z",
-      "commits": [
-        {
-          "sha": "6e15adacbcc9130dc4d651aec67c94627d9e7680",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T03:34:06-07:00",
-          "message": "feat(apply): the closed Event union and its one arm table (candybar-gather-renderer-76bb.1dh.scr) (#618)\n\n* feat(apply): every click, idle close and request reaches state through one exhaustive arm table (candybar-gather-renderer-76bb.1dh.scr)\n\nA closed Event union (request, click, menu-idle) and ARMS, an arm record keyed\nby every kind, are the one consumer of the journal's turn. A new kind fails to\nbuild until its arm exists. The request takes no turn yet: a click holds the\nturn across its launches, so its writes join once launches become effects.\n\n* fix(apply): the click arm owns its idle bracket; one asker spelling; branded click verb; monotonic wait end (candybar-gather-renderer-76bb.1dh.scr)\n\n* fix(apply): monotonic deadline via plusMs; two-way answer check; journal-turns header names its takers (candybar-gather-renderer-76bb.1dh.scr)"
-        },
-        {
-          "sha": "ec44d114ee641f87a70a1c9754bb01d590a80853",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-03T17:53:06Z",
-          "message": "chore(release): set `package.json` to 1.189.0 [skip ci]\n\n## [1.189.0](https://github.com/promptctl/cc-candybar/compare/v1.188.0...v1.189.0) (2026-11-03)\n\n### Features\n\n* **facts:** the payload a template reads is composed from the document ([#616](https://github.com/promptctl/cc-candybar/issues/616)) ([847071c](https://github.com/promptctl/cc-candybar/commit/847071c25ae39f8f9af52d1ab5b46f3a54b872e1))\n* **sources:** a failed shell read carries the command's stderr; the launcher names its timeout (candybar-gather-renderer-76bb.6pj.dr2) ([#615](https://github.com/promptctl/cc-candybar/issues/615)) ([b120955](https://github.com/promptctl/cc-candybar/commit/b12095582b9b3ee1b1a2e4daea06ab759bc385e3))\n* **sources:** a source's identity is a digest, one digest is one run (candybar-gather-renderer-76bb.6pj.5dx) ([#614](https://github.com/promptctl/cc-candybar/issues/614)) ([b744cf6](https://github.com/promptctl/cc-candybar/commit/b744cf603e403a589c9d9d397312a7fdece6ad65))\n"
         }
       ]
     },
