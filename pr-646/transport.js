@@ -65155,9 +65155,9 @@ var SessionState = class {
     this.storage.flush();
   }
   // [LAW:no-ambient-temporal-coupling] The daemon's close: what is pending
-  // lands, and anything that lands later (a render that was awaiting, a run
-  // settling) stays in memory, so it can never write over the file a next
-  // daemon has taken up.
+  // lands, and the store persists nothing after, so it can never write over
+  // the file a next daemon has taken up. The closed turns refuse every write
+  // that would follow (`held`).
   close() {
     this.flush();
     this.storage = EPHEMERAL_SESSION_STORAGE;
@@ -72109,7 +72109,7 @@ var Runs = class {
   }
   // The performer's launch of the run `id` superseded, answering how it
   // ended; then every source it superseded is read fresh.
-  run(id2, run3) {
+  async run(id2, run3) {
     if (this.closed) throw new DaemonClosing("run");
     const resumes = this.held.get(id2);
     if (resumes === void 0) {
@@ -72121,23 +72121,24 @@ var Runs = class {
     this.started++;
     const [program, ...args] = run3.argv;
     const startedAt = this.deps.clock.monotonic();
-    return this.deps.launch({
-      // [LAW:types-are-the-program] A relative program path is the
-      // declaring file's, as the directory it runs in is; a bare name is
-      // looked up on PATH.
-      bin: program.includes("/") ? import_node_path34.default.resolve(run3.cwd, program) : program,
-      args,
-      envOverlay: run3.envOverlay,
-      cwd: run3.cwd,
-      timeoutMs: this.timeoutMs,
-      signal: abort.signal,
-      category: "click.run"
-    }).then(
-      (result) => this.ended(run3, result, elapsedMs(this.deps.clock, startedAt))
-    ).finally(() => {
+    try {
+      const result = await this.deps.launch({
+        // [LAW:types-are-the-program] A relative program path is the
+        // declaring file's, as the directory it runs in is; a bare name is
+        // looked up on PATH.
+        bin: program.includes("/") ? import_node_path34.default.resolve(run3.cwd, program) : program,
+        args,
+        envOverlay: run3.envOverlay,
+        cwd: run3.cwd,
+        timeoutMs: this.timeoutMs,
+        signal: abort.signal,
+        category: "click.run"
+      });
+      return this.ended(run3, result, elapsedMs(this.deps.clock, startedAt));
+    } finally {
       this.inFlight.delete(abort);
       for (const resume of resumes) resume();
-    });
+    }
   }
   // A link refused before anything ran: counted, and its one event.
   refused(sessionId2, action2, reason) {
@@ -77809,16 +77810,14 @@ var ARMS = {
   // [LAW:single-enforcer] The request's writes take their turn as a click's
   // do: what it said of its client and the config inputs it named land in one
   // batch in a journal turn, with what its arrival settles (the lane setups
-  // its session's clicks owed, described as the turn's effects), and the draw
-  // begins once the turn is over. A turn is synchronous
+  // its session's clicks owed, described as the turn's effects), and its draw
+  // begins once the turn is over (`applyRequest`). A turn is synchronous
   // (src/daemon/journal-turns.ts), so the request waits behind no other
   // session's work, and no draw, this one or a feed's, can read a click half
-  // landed. The revision its turn left goes on the request's line, the render
-  // event, which is its record and opens with the session the edge noted.
-  // [LAW:no-ambient-temporal-coupling] The arm answers with the draw under
-  // way, so its turn's effects join the session's order as the turn ends,
-  // ahead of any later event's, and are performed however the draw ends.
-  request: async ({ req, at, waitEndsAt, facts }, { verbCtx, draw: draw2 }) => {
+  // landed. The revision its turn left and the effects it described go on the
+  // request's line, the render event, which is its record and opens with the
+  // session the edge noted.
+  request: async ({ req, facts }, { verbCtx }) => {
     const turn = verbCtx.journalTurns.take("request", () => {
       recordRequest(verbCtx.sessionState, req);
       return {
@@ -77826,12 +77825,11 @@ var ARMS = {
         revision: verbCtx.sessionState.revision(req.sessionId)
       };
     });
-    noteFacts(facts, { revision: String(turn.revision) });
-    return {
-      answer: draw2(req, at, waitEndsAt, facts),
-      effects: turn.effects,
-      facts: []
-    };
+    noteFacts(facts, {
+      revision: String(turn.revision),
+      effects: turn.effects.map((e) => describeEffect(e)).join(",") || "-"
+    });
+    return { answer: void 0, effects: turn.effects, facts: [] };
   },
   // The turn hands its effects over once it has committed (`described`), and
   // a refused step is answered beside them; a click whose client has left is
@@ -77972,6 +77970,10 @@ async function apply(event, parts) {
   };
 }
 var NOTHING_PERFORMED = Promise.resolve();
+async function applyRequest(event, parts) {
+  await apply(event, parts);
+  return parts.draw(event.req, event.at, event.waitEndsAt, event.facts);
+}
 var APPLIED = { level: "info", facts: [["outcome", "ok"]] };
 var refused = ({ error }) => ({
   level: "info",
@@ -78586,7 +78588,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       sighted(checked.req, "drawing");
       frameFeeds.note(checked.req.sessionId, checked.req, order2);
     }
-    const rendered = !checked.ok ? refusedRender(checked.problems) : await apply(
+    const rendered = !checked.ok ? refusedRender(checked.problems) : await applyRequest(
       {
         kind: "request",
         req: checked.req,
@@ -78604,7 +78606,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
         facts
       },
       parts
-    ).then(({ answer: answer2 }) => answer2).then(
+    ).then(
       ({ resp, motion, answersClick, pipeShown, delivered }) => {
         sighted(checked.req, motion);
         return {
