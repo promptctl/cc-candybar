@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-656",
+      "ref": "refs/pull/656/merge",
+      "sha": "01f7d11925d0d1079a91c30cd3d27034ce308679",
+      "timestamp": "2026-11-06T22:27:50.836Z",
+      "commits": [
+        {
+          "sha": "01f7d11925d0d1079a91c30cd3d27034ce308679",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T22:26:58Z",
+          "message": "Merge 32ccc8f77c46f05f3c951e21ed447fcbf1a365a5 into 3bd757912554568f0bf3b622640edbe789c7ba04\n"
+        },
+        {
+          "sha": "32ccc8f77c46f05f3c951e21ed447fcbf1a365a5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T15:26:35-07:00",
+          "message": "fix(apply): a pane step's refusal is data, a split holds the pane, and the order a step takes late is the effect table's (candybar-gather-renderer-76bb.1dh.y9b)\n\nAn evicted session's band install says the mod is installed and what to type;\na bar pane split or close takes the pane's order, since it resizes what a\nrestart reads; whether an effect takes a pane's place when reached is a field\nof the ordering table, which the one performer partitions on; a move between\npanes is logged; pane identity lives in tmux-hint; the lane-setup harness\ndrives the real performer.\n"
+        },
+        {
+          "sha": "81b4f007f01f29a88501b59f4f198c243e7127bf",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T14:51:02-07:00",
+          "message": "feat(apply): an effect waits only behind what it acts on; a lane setup holds its pane only while it types (candybar-gather-renderer-76bb.1dh.y9b)\n\nThe performer's order is keyed by what an effect acts on, not by the\nsession: a typed line by its tmux pane, a lane setup by its session's lane,\nand a session's launches, runs, doctor steps and update by that session's\nclicks as they committed. Every effect takes its place when its turn's\neffects are handed over, and an event's effects still run in the order\ndescribed, so a `do` keeps its order and no later click jumps ahead.\n\nA setup's steps that type into the session's pane (the whole statusline\nrestart, the band's /reload-plugins) take the pane's order when they are\nreached, so a copy clicked during a band install is performed at once and a\nslash typed during a restart lands after it. The setup reads the session's\nlatest request as it runs instead of a copy taken at the click.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-657",
       "ref": "refs/pull/657/merge",
       "sha": "7d9d42da139595b267a7a864cfe75e7c920428ce",
@@ -34,28 +63,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T15:14:59-07:00",
           "message": "test(version): the mismatch asymmetry is asserted over the daemon's real reply, and the stand-in that copied it is gone (candybar-testing-ihvy.fvw.xka)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-656",
-      "ref": "refs/pull/656/merge",
-      "sha": "5d4c03c3ab01299387db73dcc39b1efb0997256a",
-      "timestamp": "2026-11-06T22:16:12.228Z",
-      "commits": [
-        {
-          "sha": "5d4c03c3ab01299387db73dcc39b1efb0997256a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T22:15:10Z",
-          "message": "Merge 81b4f007f01f29a88501b59f4f198c243e7127bf into 466c05ac9e0e8203441238a3692bac06838e69a9\n"
-        },
-        {
-          "sha": "81b4f007f01f29a88501b59f4f198c243e7127bf",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T14:51:02-07:00",
-          "message": "feat(apply): an effect waits only behind what it acts on; a lane setup holds its pane only while it types (candybar-gather-renderer-76bb.1dh.y9b)\n\nThe performer's order is keyed by what an effect acts on, not by the\nsession: a typed line by its tmux pane, a lane setup by its session's lane,\nand a session's launches, runs, doctor steps and update by that session's\nclicks as they committed. Every effect takes its place when its turn's\neffects are handed over, and an event's effects still run in the order\ndescribed, so a `do` keeps its order and no later click jumps ahead.\n\nA setup's steps that type into the session's pane (the whole statusline\nrestart, the band's /reload-plugins) take the pane's order when they are\nreached, so a copy clicked during a band install is performed at once and a\nslash typed during a restart lands after it. The setup reads the session's\nlatest request as it runs instead of a copy taken at the click.\n"
         }
       ]
     },
