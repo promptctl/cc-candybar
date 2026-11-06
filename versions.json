@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-650",
+      "ref": "refs/pull/650/merge",
+      "sha": "688c8c5d3787ff3f96eb199d9bde7f1408d45925",
+      "timestamp": "2026-11-06T20:42:11.262Z",
+      "commits": [
+        {
+          "sha": "688c8c5d3787ff3f96eb199d9bde7f1408d45925",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T20:41:07Z",
+          "message": "Merge 2c7bf0f6a077e1b370b7b297ba5e1f0c71f6035a into 25a3827641cb21d3ec9541e2f1e9f87ea4d9be07\n"
+        },
+        {
+          "sha": "2c7bf0f6a077e1b370b7b297ba5e1f0c71f6035a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:40:59-07:00",
+          "message": "fix(click): the link reader names a retired verb before reading its value (brandon-menus-sjhy.182)\n\nThe reader refuses an unknown verb before decoding its value, as the\ndaemon does, so a retired copy link with a malformed escape reads as the\nverb it is. The decode test pins the single-argument codec again, and\nthe Effect comment says every leaf verb leads with its session.\n"
+        },
+        {
+          "sha": "418b0d6670a16a5a17577d53571e8b5fbe16ae44",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:35:08-07:00",
+          "message": "fix(click): a click's session is its first leaf effect's, and a retired verb reads as refused (brandon-menus-sjhy.182)\n\nThe session-first set had become a copy of the leaf table's keys; the\ntable is now the one place a verb's first segment is its session. The\nframe reader refuses a verb the daemon has not, as the daemon does, so\nan old copy link reads as refused. Stale verb names fixed in comments\nand docs; the failed copy test pins its warning again.\n"
+        },
+        {
+          "sha": "9a6499870a3a77075cf8511a23ecb862270dfd00",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:19:48-07:00",
+          "message": "fix(click): copy and open clicks name their session, so a menu's idle clock counts them (brandon-menus-sjhy.182)\n\nThe idle close counts a click as activity in the session the click names.\nCopy and open links carried only their text, so clicking ⎘ id or ↗ proj\nin a menu left the clock running and the menu closed under the user.\n\nBoth verbs now carry `[sessionId, argument]` and join the session-first\nand segmented sets, so the daemon reads their session at the one\ncheckpoint every click crosses. A copy whose pbcopy fails now shows on\nthe session's bar instead of only in the log.\n\nThey also take new wire names, `copy-text` and `open-in-vscode`. A\nsession id is nearly any slash-free string, so a link drawn when copy\ncarried only its text, read under the old name, would have its text\ntaken for a session. Under the new names an earlier link is an unknown\nverb that names no session, refused and logged. Keeping the earlier\nform working would be the second grammar the ticket rules out.\n\nThe page's copy path and the link words read the text from the second\nargument. The byte snapshots change only in those links and their OSC 8\nids.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-651",
       "ref": "refs/pull/651/merge",
       "sha": "560d5cc6f7166f320c8c46c041f433552fa55c7f",
@@ -98,35 +134,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T12:35:32-07:00",
           "message": "feat(apply): session state has one writer; a run and a lane setup are effects (candybar-gather-renderer-76bb.1dh.9kk)\n\nThe session store refuses a write made while no journal turn is held, in\nevery daemon. A turn is synchronous, so a write while one is held is that\nturn's own, and one check at the store's single write path is the whole\nenforcement. The test-only view that refused such writes, its adapter\nseam and the separate gauges field are gone.\n\nThe two writers left outside a turn now report through effect-done:\n\n- A `run` click supersedes its sources in its turn, so they read pending\n  from the click on, and describes the launch as a `run` effect. The\n  performer runs the program behind the session's earlier effects; the\n  run owner answers how it ended and no longer writes the bar.\n- A lane setup is a `lane-setup` effect, settled by the click or the\n  request that owes it and run by the performer. Its own per-session\n  queue and defer are replaced by the performer's per-session order.\n\nThe check command, the demo and the doctor's command line build their\nstore with a holder that always holds, since each is one synchronous run.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-650",
-      "ref": "refs/pull/650/merge",
-      "sha": "77561caf8650bf19a45fc978aeed84ecce590127",
-      "timestamp": "2026-11-06T20:37:00.360Z",
-      "commits": [
-        {
-          "sha": "77561caf8650bf19a45fc978aeed84ecce590127",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T20:35:33Z",
-          "message": "Merge 418b0d6670a16a5a17577d53571e8b5fbe16ae44 into b50d2769df4a08e2616f729d630653a07ec2c676\n"
-        },
-        {
-          "sha": "418b0d6670a16a5a17577d53571e8b5fbe16ae44",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:35:08-07:00",
-          "message": "fix(click): a click's session is its first leaf effect's, and a retired verb reads as refused (brandon-menus-sjhy.182)\n\nThe session-first set had become a copy of the leaf table's keys; the\ntable is now the one place a verb's first segment is its session. The\nframe reader refuses a verb the daemon has not, as the daemon does, so\nan old copy link reads as refused. Stale verb names fixed in comments\nand docs; the failed copy test pins its warning again.\n"
-        },
-        {
-          "sha": "9a6499870a3a77075cf8511a23ecb862270dfd00",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:19:48-07:00",
-          "message": "fix(click): copy and open clicks name their session, so a menu's idle clock counts them (brandon-menus-sjhy.182)\n\nThe idle close counts a click as activity in the session the click names.\nCopy and open links carried only their text, so clicking ⎘ id or ↗ proj\nin a menu left the clock running and the menu closed under the user.\n\nBoth verbs now carry `[sessionId, argument]` and join the session-first\nand segmented sets, so the daemon reads their session at the one\ncheckpoint every click crosses. A copy whose pbcopy fails now shows on\nthe session's bar instead of only in the log.\n\nThey also take new wire names, `copy-text` and `open-in-vscode`. A\nsession id is nearly any slash-free string, so a link drawn when copy\ncarried only its text, read under the old name, would have its text\ntaken for a session. Under the new names an earlier link is an unknown\nverb that names no session, refused and logged. Keeping the earlier\nform working would be the second grammar the ticket rules out.\n\nThe page's copy path and the link words read the text from the second\nargument. The byte snapshots change only in those links and their OSC 8\nids.\n"
         }
       ]
     },

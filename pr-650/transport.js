@@ -69459,7 +69459,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.204.0";
+var PACKAGE_VERSION = "1.205.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -72033,14 +72033,20 @@ function drawnClickOf(url) {
   const { verb, value } = link;
   const known = verb === VERB_DISPATCH ? LEAF_VERB_NAMES : VERBS;
   try {
-    const effects = verb === VERB_DISPATCH ? parseEffects(value).map((e) => ({
-      verb: e.verb,
-      args: decodeArgs(e.verb, e.value)
-    })) : [{ verb, args: decodeArgs(verb, value) }];
-    const unknown = effects.find((e) => !known.has(e.verb));
-    return unknown === void 0 ? { ok: true, effects } : {
-      ok: false,
-      problem: `the daemon has no verb "${unknown.verb}": ${url}`
+    const raw = verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
+    const unknown = raw.find((e) => !known.has(e.verb));
+    if (unknown !== void 0) {
+      return {
+        ok: false,
+        problem: `the daemon has no verb "${unknown.verb}": ${url}`
+      };
+    }
+    return {
+      ok: true,
+      effects: raw.map((e) => ({
+        verb: e.verb,
+        args: decodeArgs(e.verb, e.value)
+      }))
     };
   } catch (error) {
     return {
