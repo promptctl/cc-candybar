@@ -83,6 +83,16 @@ export const HANDOFF_SEVERITY: DiagnosticSeverity = {
   colors: DIAGNOSTIC_WARNING_COLORS,
 };
 
+// Every severity a draw shows a message under: what a recording's messages
+// are read back as.
+export const SEVERITIES: readonly DiagnosticSeverity[] = [
+  ERROR_SEVERITY,
+  WARNING_SEVERITY,
+  UPDATE_SEVERITY,
+  APPROVAL_SEVERITY,
+  HANDOFF_SEVERITY,
+];
+
 // [LAW:parse-dont-validate] A run of words sharing one click, or none: a plain
 // message's first line copies what ⧉ copies and its other lines carry no
 // click, while an update notice's and a repository question's answers each

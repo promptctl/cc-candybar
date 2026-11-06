@@ -532,16 +532,27 @@ export interface RecordingFacts extends Facts {
 // failure naming the run (a config edited since the recording, a source added,
 // a recording across a save replayed against the file from before it), never
 // a pending that will not land.
+//
+// A turn line's document is one the walk reaches too: the replay's turn is
+// taken over it.
 export function recordingFacts({
   session: held,
   opening,
   lines,
-}: Pick<Recording, "session" | "opening"> & {
+}: Pick<Recording, "session"> & {
+  // The document the walk starts at: the opening turn's.
+  readonly opening: FactsLine;
   readonly lines: readonly ReplayLine[];
 }): RecordingFacts {
   const documents = [
     opening,
-    ...lines.flatMap((line) => (line.kind === "facts" ? [line] : [])),
+    ...lines.flatMap((line) =>
+      line.kind === "facts"
+        ? [line]
+        : line.kind === "turn"
+          ? [line.document]
+          : [],
+    ),
   ];
   // Each document's place in the walk, and each run's last document.
   const place = new Map(documents.map((line, i) => [line, i] as const));

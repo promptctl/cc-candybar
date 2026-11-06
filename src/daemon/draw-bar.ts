@@ -91,7 +91,11 @@ import { waitWithin } from "../utils/reading.js";
 import { noteFacts, requestEvent, type RequestFacts } from "./request-event.js";
 
 import type { DaemonParts } from "./daemon-parts.js";
-import { drawRequest, settleRequest } from "./session-recorder.js";
+import {
+  drawRequest,
+  settleRequest,
+  type Arrival,
+} from "./session-recorder.js";
 
 // What a reply's sender records once the client holds a response carrying
 // nothing to record.
@@ -259,7 +263,7 @@ export function lanesAt(
 // [LAW:types-are-the-program] No owner is here: what the request's arrival
 // starts of the facts is the view's follow's (`view.settle`), so nothing on
 // the request path can read one.
-interface RenderSetup extends Disposable {
+export interface RenderSetup extends Disposable {
   readonly req: CheckedRenderRequest;
   readonly at: Instant;
   readonly facts: RequestFacts;
@@ -896,6 +900,20 @@ function arrived(
 
 // [LAW:one-source-of-truth] A session as a lane's setup needs it: what its
 // request `req` reported, and the config inputs it renders from now.
+// [LAW:single-enforcer] A request's answer, drawn and noted for its
+// recordings: the list the draw built is the one a recording carries, which
+// its door's indicator and its viewer read.
+export function drawForAnswer(
+  parts: DaemonParts,
+  setup: RenderSetup,
+  arrival: Arrival,
+): ReturnType<typeof drawRender> {
+  return drawRequest(parts.recorder, setup.view, arrival, () => {
+    const drew = drawRender(parts, setup, ANSWERING);
+    return { ...drew, diagnostics: drew.drawn.diagnostics };
+  });
+}
+
 export function laneSessionOf(req: CheckedRenderRequest): LaneSession {
   return {
     sessionId: req.hookData.session_id,
@@ -988,11 +1006,10 @@ export async function drawAnswer(
     ended,
     refreshed: refreshedFact(settling.refreshed),
   });
-  const { drawn, answersClick, pipeShown, delivered, lanes } = drawRequest(
-    parts.recorder,
-    setup.view,
+  const { drawn, answersClick, pipeShown, delivered, lanes } = drawForAnswer(
+    parts,
+    setup,
     settling.arrival,
-    () => drawRender(parts, setup, ANSWERING),
   );
   const sessionId = req.sessionId;
   const elsewhere = handedOffTo(lanes, frameFeeds.following(sessionId));

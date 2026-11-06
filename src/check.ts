@@ -60,6 +60,7 @@ import {
   bindPayload,
   drawDsl,
   registerDslConfig,
+  type BoundPayload,
   type CompiledConfig,
   type RenderWarning,
 } from "./dsl/render.js";
@@ -161,7 +162,7 @@ function bindPass(
   effective: EffectiveGlobals,
   width: number,
   at: Instant,
-): { drawn: unknown; opts: ReturnType<typeof renderOptionsOf> } {
+): { drawn: BoundPayload; opts: ReturnType<typeof renderOptionsOf> } {
   const opts = renderOptionsOf(effective, width);
   const drawn = bindPayload(
     compiled,

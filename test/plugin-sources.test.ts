@@ -45,6 +45,8 @@ import { drawDsl } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { resolvePath, SourceRegistry } from "../src/var-system/sources";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
+import { diagnosticsProjection } from "../src/render/diagnostics";
+import type { SessionRequest } from "../src/facts/recording";
 import { checkConfig, type CheckOutcome } from "../src/check";
 import { instantOf } from "../src/utils/instant";
 import { ABSENT, ok, pendingOf } from "../src/utils/outcome";
@@ -124,7 +126,7 @@ function programWrites(storage: string, sid: string, doc: unknown): void {
 }
 
 interface Rig {
-  readonly cache: RenderCache<SessionSource>;
+  readonly cache: RenderCache<SessionSource, SessionRequest>;
   readonly providers: ReturnType<typeof createPayloadProviders>;
   readonly counters: WatcherCounters;
   readonly sessionState: SessionState;
@@ -170,7 +172,7 @@ function rig(): Rig {
   const sessionState = new SessionState();
   const updateFact = newUpdateFact();
   const reloads = new ReloadSignal();
-  const cache = new RenderCache<SessionSource>(
+  const cache = new RenderCache<SessionSource, SessionRequest>(
     {
       clock: systemTimekeeper,
       stateDir: stateDir(homeOf(host)),
@@ -227,7 +229,12 @@ function draw(view: SessionView<SessionSource>): {
     view.state.compiled,
     view.store,
     view.registry,
-    { drawing: { by: "request" }, feeds: UNFOLLOWED_FEEDS, today: undefined },
+    {
+      drawing: { by: "request" },
+      feeds: UNFOLLOWED_FEEDS,
+      today: undefined,
+      diagnostics: diagnosticsProjection([]),
+    },
     instantOf(new Date()),
     renderOptionsOf(effective, 200),
     { onSegmentError: (id, message) => errors.push(`${id}: ${message}`) },

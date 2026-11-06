@@ -1,7 +1,7 @@
 // [LAW:parse-dont-validate] A recording's text crosses one unit into a typed
 // recording: a line that is not one is refused naming its number, a recording
-// of another version or of no answered request is refused whole, and what the
-// recorder writes reads back as itself.
+// of another version, of no answered request or opening on anything but a turn
+// is refused whole, and what the recorder writes reads back as itself.
 
 import { restamp } from "../../src/facts/fact";
 import {
@@ -10,6 +10,7 @@ import {
   parseSessionFacts,
   RECORDING_VERSION,
   RecordingVersionError,
+  type ClickState,
   type DrawState,
   type FactsLine,
   type RecordingLine,
@@ -21,7 +22,12 @@ import { parseClientHints } from "../../src/daemon/protocol";
 import { sessionIdOf } from "../../src/daemon/session-id";
 import { instantOf, type Instant } from "../../src/utils/instant";
 import { ok } from "../../src/utils/outcome";
+import {
+  collectDiagnostics,
+  type DiagnosticList,
+} from "../../src/render/diagnostics";
 import { pendingFacts } from "../helpers/facts";
+import { TEST_LINKS } from "../helpers/link-signer";
 
 const SESSION = sessionIdOf("rec-session");
 const AT = instantOf(new Date(1_700_000_000_000));
@@ -98,49 +104,177 @@ const STATE: DrawState = {
   back: 1,
   idleSince: at(0.5),
 };
-const drawn = (s: number, state: DrawState = STATE): RecordingLine => ({
+// What a draw built for its reader: an error and a warning, the error's first
+// line carrying its copy click.
+const DIAGNOSTICS: DiagnosticList = collectDiagnostics(
+  TEST_LINKS.to,
+  SESSION,
+  "request",
+  [{ about: "load", text: "the config failed to load", copy: "fix it" }],
+  [],
+  [{ about: "facts", text: "the bar is drawn from older facts", copy: "x" }],
+);
+const drawn = (
+  s: number,
+  state: DrawState = STATE,
+  diagnostics: DiagnosticList = DIAGNOSTICS,
+): RecordingLine => ({
   kind: "draw",
   request: at(s),
   state,
+  diagnostics,
+});
+// The clicks' state a turn was taken over.
+const CLICKS: ClickState = {
+  values: STATE.values,
+  revision: STATE.revision,
+  history: STATE.history,
+  back: STATE.back,
+};
+// The turn the bar is drawn from, held on or not.
+const turned = (s: number, seq: number, held = false): RecordingLine => ({
+  kind: "turn",
+  held,
+  document: { at: at(s), facts: document(seq) },
+  request: request(),
+  state: CLICKS,
 });
 const text = (...lines: RecordingLine[]): string =>
   lines.map(formatLine).join("");
 
-test("what the recorder writes reads back as itself, opening on the last document before the first request", () => {
+test("what the recorder writes reads back as itself, opening on the turn the bar is drawn from", () => {
   expect(
     parseRecording(
       text(
         header,
-        facts(0, 1),
+        turned(0, 1),
         facts(0.2, 2),
         requested(0.5),
         facts(1.5, 3),
         drawn(0.5),
+        turned(2, 3, true),
       ),
     ),
   ).toEqual({
     session: SESSION,
     home: HOME,
-    opening: { at: at(0.2), facts: document(2) },
+    opening: {
+      held: false,
+      document: { at: at(0), facts: document(1) },
+      request: request(),
+      state: CLICKS,
+    },
     lines: [
+      { kind: "facts", at: at(0.2), facts: document(2) },
       { kind: "request", at: at(0.5), request: request() },
       { kind: "facts", at: at(1.5), facts: document(3) },
-      { kind: "draw", request: at(0.5), state: STATE },
+      {
+        kind: "draw",
+        request: at(0.5),
+        state: STATE,
+        diagnostics: DIAGNOSTICS,
+      },
+      {
+        kind: "turn",
+        held: true,
+        document: { at: at(2), facts: document(3) },
+        request: request(),
+        state: CLICKS,
+      },
     ],
   });
+});
+
+test("a recording opens on a turn, and a turn line is refused by its line when it is not one", () => {
+  expect(() =>
+    parseRecording(text(header, facts(0, 1), requested(1), drawn(1))),
+  ).toThrow(
+    /^line 2: is not a turn: a recording opens on the turn its bar is drawn from/,
+  );
+  expect(() => parseRecording(text(header))).toThrow(
+    /^the recording: holds no turn/,
+  );
+  const raw = JSON.parse(formatLine(turned(0, 1))) as Record<string, unknown>;
+  const opening = (patch: Record<string, unknown>): string =>
+    text(header) +
+    `${JSON.stringify({ ...raw, ...patch })}\n` +
+    text(requested(1), drawn(1));
+  expect(() => parseRecording(opening({ held: "yes" }))).toThrow(
+    /^line 2: has no `held` that is true or false/,
+  );
+  expect(() => parseRecording(opening({ state: undefined }))).toThrow(
+    /^line 2: has no `state` object/,
+  );
+  expect(() => parseRecording(opening({ cwd: "relative" }))).toThrow(
+    /^line 2: has no `cwd` that is an absolute path/,
+  );
+  expect(() => parseRecording(opening({ facts: undefined }))).toThrow(
+    /^line 2 facts: is not an object/,
+  );
+});
+
+test("one revision is one state across turns and draws: a turn over other values than a draw read there is refused", () => {
+  expect(() =>
+    parseRecording(
+      text(
+        header,
+        turned(0, 1),
+        requested(1),
+        drawn(1, { ...STATE, values: { preset: "dracula" } }),
+      ),
+    ),
+  ).toThrow(/^line 4: reads revision 7 over other values/);
+});
+
+test("a draw carries the diagnostics it built, read back to the severities this build draws, and refused by its line when malformed", () => {
+  const { lines } = parseRecording(
+    text(header, turned(0, 1), requested(1), drawn(1)),
+  );
+  expect(lines.at(-1)).toMatchObject({ diagnostics: DIAGNOSTICS });
+  const raw = JSON.parse(formatLine(drawn(1))) as Record<string, unknown>;
+  const message = DIAGNOSTICS[0] as unknown as Record<string, unknown>;
+  const drawWith = (diagnostics: unknown): string =>
+    text(header, turned(0, 1), requested(1)) +
+    `${JSON.stringify({ ...raw, diagnostics })}\n`;
+  expect(() => parseRecording(drawWith(undefined))).toThrow(
+    /^line 4: has no `diagnostics` list/,
+  );
+  expect(() =>
+    parseRecording(
+      drawWith([{ ...message, severity: { level: "error", glyph: "!" } }]),
+    ),
+  ).toThrow(
+    /^line 4 diagnostics\[0\] severity: has a severity this build does not draw/,
+  );
+  expect(() => parseRecording(drawWith([{ ...message, lines: [] }]))).toThrow(
+    /^line 4 diagnostics\[0\]: has no `lines`/,
+  );
+  expect(() =>
+    parseRecording(
+      drawWith([{ ...message, lines: [[{ text: 1, link: null }]] }]),
+    ),
+  ).toThrow(/^line 4 diagnostics\[0\] lines\[0\]\[0\]: has no text `text`/);
+  expect(() => parseRecording(drawWith([{ ...message, copy: 7 }]))).toThrow(
+    /^line 4 diagnostics\[0\]: has no text `copy`/,
+  );
 });
 
 test("a draw carries the session's state it read, and an idle period not begun reads back as none", () => {
   const idle = { ...STATE, idleSince: undefined };
   const { lines } = parseRecording(
-    text(header, facts(0, 1), requested(1), drawn(1, idle)),
+    text(header, turned(0, 1), requested(1), drawn(1, idle)),
   );
-  expect(lines.at(-1)).toEqual({ kind: "draw", request: at(1), state: idle });
+  expect(lines.at(-1)).toEqual({
+    kind: "draw",
+    request: at(1),
+    state: idle,
+    diagnostics: DIAGNOSTICS,
+  });
 });
 
 test("a draw whose state is missing or malformed is refused by its line, naming what is wrong", () => {
   const drawWith = (state: unknown): string =>
-    text(header, facts(0, 1), requested(1)) +
+    text(header, turned(0, 1), requested(1)) +
     `${JSON.stringify({ kind: "draw", request: at(1), state })}\n`;
   const wire = { ...STATE, idleSince: at(0.5) };
   expect(() => parseRecording(drawWith(undefined))).toThrow(
@@ -172,7 +306,7 @@ test("a draw's state the store could not have held is refused by its line", () =
     parseRecording(
       text(
         header,
-        facts(0, 1),
+        turned(0, 1),
         requested(1),
         drawn(1, { ...STATE, revision: 0 }),
       ),
@@ -182,7 +316,7 @@ test("a draw's state the store could not have held is refused by its line", () =
     parseRecording(
       text(
         header,
-        facts(0, 1),
+        turned(0, 1),
         requested(1),
         drawn(1, { ...STATE, values: {} }),
       ),
@@ -192,7 +326,7 @@ test("a draw's state the store could not have held is refused by its line", () =
     parseRecording(
       text(
         header,
-        facts(0, 1),
+        turned(0, 1),
         requested(1),
         drawn(1),
         requested(2),
@@ -203,7 +337,7 @@ test("a draw's state the store could not have held is refused by its line", () =
 });
 
 test("a line that is not JSON, or not a line, is refused by its number", () => {
-  const good = text(header, facts(0, 1));
+  const good = text(header, turned(0, 1));
   expect(() => parseRecording(`${good}{not json\n`)).toThrow(
     /^line 3: is not JSON/,
   );
@@ -224,7 +358,7 @@ test("a line that is not JSON, or not a line, is refused by its number", () => {
 });
 
 test("a file cut inside its last line is refused naming that line, never read as a shorter recording", () => {
-  const whole = text(header, facts(0, 1), requested(1), facts(2, 2));
+  const whole = text(header, turned(0, 1), requested(1), facts(2, 2));
   expect(() => parseRecording(whole.slice(0, -1))).toThrow(
     /^line 4: ends without its newline/,
   );
@@ -254,10 +388,12 @@ test("the first line is the header, and it names this build's recording format",
 test("a recording holding a document of another facts version is refused at that document's line", () => {
   const otherFacts = `${JSON.stringify({ kind: "facts", at: at(0), facts: { ...document(1), v: FACTS_VERSION + 1 } })}\n`;
   expect(() =>
-    parseRecording(text(header) + otherFacts + text(requested(1), drawn(1))),
+    parseRecording(
+      text(header, turned(0, 1)) + otherFacts + text(requested(1), drawn(1)),
+    ),
   ).toThrow(
     new RegExp(
-      `^line 2 facts: is facts version ${FACTS_VERSION + 1}, and this build reads ${FACTS_VERSION}`,
+      `^line 3 facts: is facts version ${FACTS_VERSION + 1}, and this build reads ${FACTS_VERSION}`,
     ),
   );
 });
@@ -265,7 +401,7 @@ test("a recording holding a document of another facts version is refused at that
 test("the header names the home the payloads were composed against, as an absolute path", () => {
   const headed = (home: unknown): string =>
     `${JSON.stringify({ kind: "recording", v: RECORDING_VERSION, session: SESSION, home })}\n` +
-    text(facts(0, 1), requested(1), drawn(1));
+    text(turned(0, 1), requested(1), drawn(1));
   expect(parseRecording(headed(HOME)).home).toBe(HOME);
   for (const home of [undefined, null, "relative/home", 7]) {
     expect(() => parseRecording(headed(home))).toThrow(
@@ -274,13 +410,13 @@ test("the header names the home the payloads were composed against, as an absolu
   }
 });
 
-test("a recording is one session's, read in the file's order, with a document before its first request", () => {
+test("a recording is one session's, read in the file's order", () => {
   const foreign: RecordingLine = {
     kind: "facts",
     at: at(1),
     facts: { ...document(2), session: sessionIdOf("another") },
   };
-  expect(() => parseRecording(text(header, facts(0, 1), foreign))).toThrow(
+  expect(() => parseRecording(text(header, turned(0, 1), foreign))).toThrow(
     /^line 3: is session "another"'s document, and the recording is of "rec-session"/,
   );
   const elsewhere = request();
@@ -292,7 +428,7 @@ test("a recording is one session's, read in the file's order, with a document be
       hookData: { ...elsewhere.hookData, session_id: "another" },
     },
   };
-  expect(() => parseRecording(text(header, facts(0, 1), strayed))).toThrow(
+  expect(() => parseRecording(text(header, turned(0, 1), strayed))).toThrow(
     /^line 3: is session "another"'s request, and the recording is of "rec-session"/,
   );
   // The file's order is the replay's, whatever the instants say: a held
@@ -301,7 +437,7 @@ test("a recording is one session's, read in the file's order, with a document be
   const { lines } = parseRecording(
     text(
       header,
-      facts(2, 1),
+      turned(2, 1),
       requested(3),
       facts(1, 2),
       requested(2),
@@ -316,30 +452,39 @@ test("a recording is one session's, read in the file's order, with a document be
     "draw",
     "draw",
   ]);
-  expect(() => parseRecording(text(header))).toThrow(
-    /^the recording: holds no document/,
-  );
-  expect(() => parseRecording(text(header, requested(0), facts(1, 1)))).toThrow(
-    /^line 2: is a request before any document/,
+  const foreignTurn: RecordingLine = {
+    kind: "turn",
+    held: false,
+    document: {
+      at: at(0),
+      facts: { ...document(1), session: sessionIdOf("another") },
+    },
+    request: request(),
+    state: CLICKS,
+  };
+  expect(() => parseRecording(text(header, foreignTurn))).toThrow(
+    /^line 2: is session "another"'s document/,
   );
 });
 
 test("a draw answers a request before it that is not drawn already, and requests sharing an instant are drawn once each", () => {
   expect(() =>
-    parseRecording(text(header, facts(0, 1), drawn(1), requested(1))),
+    parseRecording(text(header, turned(0, 1), drawn(1), requested(1))),
   ).toThrow(
     /^line 3: draws the answer to a request at .*, and no request line before it arrived then/,
   );
   expect(() =>
-    parseRecording(text(header, facts(0, 1), requested(1), drawn(1), drawn(1))),
+    parseRecording(
+      text(header, turned(0, 1), requested(1), drawn(1), drawn(1)),
+    ),
   ).toThrow(/^line 5: draws the answer to a request at /);
   const twice = parseRecording(
-    text(header, facts(0, 1), requested(1), requested(1), drawn(1), drawn(1)),
+    text(header, turned(0, 1), requested(1), requested(1), drawn(1), drawn(1)),
   );
   expect(twice.lines.filter((line) => line.kind === "draw")).toHaveLength(2);
   expect(() =>
     parseRecording(
-      text(header, facts(0, 1), requested(1)) +
+      text(header, turned(0, 1), requested(1)) +
         `${JSON.stringify({ kind: "draw" })}\n`,
     ),
   ).toThrow(/^line 4: has no finite `request`/);
@@ -348,24 +493,26 @@ test("a draw answers a request before it that is not drawn already, and requests
 test("a declaration restates a request ahead of a draw: read back as itself, never an arrival, and refused before any request", () => {
   const declared: RecordingLine = { kind: "declared", request: request() };
   const { lines } = parseRecording(
-    text(header, facts(0, 1), requested(1), declared, drawn(1)),
+    text(header, turned(0, 1), requested(1), declared, drawn(1)),
   );
   expect(lines[1]).toEqual(declared);
   // Not an arrival: a draw cannot answer it.
   expect(() =>
     parseRecording(
-      text(header, facts(0, 1), requested(1), declared, drawn(1), drawn(1)),
+      text(header, turned(0, 1), requested(1), declared, drawn(1), drawn(1)),
     ),
   ).toThrow(/^line 6: draws the answer to a request at /);
   expect(() =>
-    parseRecording(text(header, facts(0, 1), declared, requested(1), drawn(1))),
+    parseRecording(
+      text(header, turned(0, 1), declared, requested(1), drawn(1)),
+    ),
   ).toThrow(/^line 3: is a declaration before any request/);
 });
 
 test("a recording no answer was drawn in is refused: a replay draws one frame per answer", () => {
   for (const unanswered of [
-    text(header, facts(0, 1), facts(1, 2)),
-    text(header, facts(0, 1), requested(1), facts(2, 2)),
+    text(header, turned(0, 1), facts(1, 2)),
+    text(header, turned(0, 1), requested(1), facts(2, 2)),
   ]) {
     expect(() => parseRecording(unanswered)).toThrow(
       /^the recording: holds no answered request: none was answered while it was recorded/,
@@ -376,7 +523,7 @@ test("a recording no answer was drawn in is refused: a replay draws one frame pe
 test("a request line crosses the hook and hint checkpoints", () => {
   const raw = JSON.parse(formatLine(requested(1))) as Record<string, unknown>;
   const line = (patch: Record<string, unknown>): string =>
-    text(header, facts(0, 1)) + `${JSON.stringify({ ...raw, ...patch })}\n`;
+    text(header, turned(0, 1)) + `${JSON.stringify({ ...raw, ...patch })}\n`;
   expect(() => parseRecording(line({ hookData: { cwd: "/x" } }))).toThrow(
     /^line 3: has no hookData\.session_id/,
   );
@@ -393,18 +540,18 @@ test("a request line crosses the hook and hint checkpoints", () => {
   const parsed = parseRecording(
     line({ hints: { termCols: "wide", ssh: true } }) + formatLine(drawn(1)),
   );
-  expect(parsed.lines[0].request.hints).toEqual({ ssh: true });
+  expect(parsed.lines[0]).toMatchObject({ request: { hints: { ssh: true } } });
 });
 
 test("a partial document is refused naming the field", () => {
   const whole = document(1) as unknown as Record<string, unknown>;
   const { builtins: _builtins, ...withoutBuiltins } = whole;
-  const head = text(header);
+  const head = text(header, turned(0, 1));
   expect(() =>
     parseRecording(
       `${head}${JSON.stringify({ kind: "facts", at: AT, facts: withoutBuiltins })}\n`,
     ),
-  ).toThrow(/^line 2 facts: has no `builtins`/);
+  ).toThrow(/^line 3 facts: has no `builtins`/);
   const broken = {
     ...whole,
     builtins: { ...(whole.builtins as object), git: { kind: "ok", value: 1 } },
@@ -413,7 +560,7 @@ test("a partial document is refused naming the field", () => {
     parseRecording(
       `${head}${JSON.stringify({ kind: "facts", at: AT, facts: broken })}\n`,
     ),
-  ).toThrow(/^line 2 facts builtins.git: has no finite `at`/);
+  ).toThrow(/^line 3 facts builtins.git: has no finite `at`/);
 });
 
 test("a document of another facts version is refused", () => {
@@ -434,22 +581,25 @@ test("a pending that crossed as JSON is a pending, not a value", () => {
   expect(parsed.builtins.git.kind).toBe("ok");
 });
 
-test("a replay's clock starts at the first request, however long the view sat before it, and its steps keep the file's order", () => {
+test("a replay's clock starts at the first request, however long the view sat before it, and its steps keep the file's order, a turn's among them", () => {
   const reached: FactsLine[] = [];
   const play = playOf(
     parseRecording(
       text(
         header,
-        facts(0, 1),
+        turned(0, 1),
         requested(7200),
         requested(7201),
         facts(7201.5, 2),
         drawn(7200),
+        turned(7201.7, 2, true),
         drawn(7201),
       ),
     ),
     { reach: (line) => reached.push(line) },
   );
+  // The view opens on the opening turn, before any step.
+  expect(play.opening).toMatchObject({ held: false, state: CLICKS });
   expect(play.startMs).toBe(Math.round(at(7200) * 1000));
   expect(
     play.steps.map((step) =>
@@ -457,19 +607,25 @@ test("a replay's clock starts at the first request, however long the view sat be
         ? `request +${step.offsetMs}`
         : step.kind === "draw"
           ? `draw of +${step.requestOffsetMs}`
-          : "document",
+          : step.kind === "turn"
+            ? `turn${step.turn.held ? " held" : ""}`
+            : "document",
     ),
   ).toEqual([
     "request +0",
     "request +1000",
     "document",
     "draw of +0",
+    "turn held",
     "draw of +1000",
   ]);
   // A document step reaches the arm when it is taken, not when it is built.
   expect(reached).toEqual([]);
-  for (const step of play.steps) if (step.kind === "document") step.reach();
+  for (const step of play.steps) {
+    if (step.kind === "document" || step.kind === "turn") step.reach();
+  }
   expect(reached).toEqual([
     { kind: "facts", at: at(7201.5), facts: document(2) },
+    { at: at(7201.7), facts: document(2) },
   ]);
 });

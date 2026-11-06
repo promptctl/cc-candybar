@@ -2,9 +2,10 @@
 // recording. A recording is one session's stream as newline-delimited JSON
 // (docs/design/gather-and-renderer.md §14): a header naming its format's version,
 // the session and the home its payloads were composed against, then the
-// documents the session's view took, the requests it was drawn by and the
-// draws of their answers, each with its instant and the session's draw state
-// it read. The session's recorder
+// turn the session's bar is drawn from, then the documents its view took, the
+// requests it was drawn by, the draws of their answers (each with its instant,
+// the session's draw state it read and the diagnostics it built) and the turn
+// again wherever its hold moved. The session's recorder
 // (src/daemon/session-recorder.ts) writes it and this unit reads it back.
 // Everything past this unit holds a `Recording` and asks nothing of its shape
 // again: a malformed or partial line throws naming its line number, as
@@ -17,8 +18,11 @@
 // request's wait, from what the view took during it. A draw line carries what
 // the session's clicks and menus left for that draw, because a replay that
 // opened a session that never clicked would draw every pick absent and every
-// menu closed. The facts arm reads only the documents, so the seam stays
-// facts-only.
+// menu closed. A turn line is there because a turn whose inputs could not be
+// read holds the bar on the last turn taken, whose request and picks the
+// session has since moved past: the replay takes that turn and holds its own
+// over the same lines. The facts arm reads only the documents, so the seam
+// stays facts-only.
 //
 // [LAW:one-way-deps] Pure over text and values: no file, no clock. Where the
 // text comes from is the caller's edge.
@@ -43,6 +47,14 @@ import { parseClientHints } from "../daemon/protocol";
 import type { ViewFacts } from "../daemon/render-payload";
 import { REFRESH_LANES, type RefreshLane } from "../daemon/refresh-faults";
 import type { HistoryDepth } from "../daemon/settings-history";
+import {
+  diagnosticSpan,
+  SEVERITIES,
+  type DiagnosticLine,
+  type DiagnosticList,
+  type DiagnosticMessage,
+  type DiagnosticSeverity,
+} from "../render/diagnostics";
 
 // One pushed document and the instant its stamp was taken at: what the player
 // replays, and what the recorder writes.
@@ -64,25 +76,49 @@ export interface RequestLine {
   readonly request: SessionRequest;
 }
 
-// What a session's clicks and menus left for one draw, beside its view: every
-// value the session store holds for it and the store's revision for it (a
-// frame keeps the last frame's memory only while the revision holds), the
-// depths of its settings history and its back history, and when its menus'
-// idle period began, which the draw counts the closing flash from.
-export interface DrawState {
+// What a session's clicks left: every value the session store holds for it
+// and the store's revision for it (a frame keeps the last frame's memory only
+// while the revision holds), and the depths of its settings history and its
+// back history.
+export interface ClickState {
   readonly values: Readonly<Record<string, string>>;
   readonly revision: number;
   readonly history: HistoryDepth;
   readonly back: number;
+}
+
+// What a session's clicks and menus left for one draw, beside its view: its
+// clicks' state, and when its menus' idle period began, which the draw counts
+// the closing flash from.
+export interface DrawState extends ClickState {
   readonly idleSince: Instant | undefined;
 }
 
 // One answer drawn, once its request's wait was over, from the document the
 // line before it holds: the instant of the request it answers, which is the
-// instant it is drawn at, and the session's draw state it read.
+// instant it is drawn at, the session's draw state it read, and the
+// diagnostics the draw built, which its door's indicator and its viewer read.
 export interface DrawLine {
   readonly request: Instant;
   readonly state: DrawState;
+  readonly diagnostics: DiagnosticList;
+}
+
+// The turn a session's bar is drawn from (src/daemon/session-source.ts): its
+// document with the instant it was stamped at, the request it was composed
+// from, and the clicks' state its globals were resolved over.
+export interface RecordedTurn {
+  readonly document: FactsLine;
+  readonly request: SessionRequest;
+  readonly state: ClickState;
+}
+
+// [LAW:one-type-per-behavior] The bar is drawn from this turn from here on,
+// held on it or not: a recording opens on one, and writes one wherever the
+// hold moves — the held turn as the hold begins, the turn taken as it ends.
+// The hold's reason is the draw's, in its diagnostics.
+export interface TurnLine extends RecordedTurn {
+  readonly held: boolean;
 }
 
 // The request a draw's view was declared with, restated ahead of the draw
@@ -97,14 +133,16 @@ export interface DeclaredLine {
 // [LAW:one-source-of-truth] What the session's view took and its request path
 // did, in the one order a replay follows: the file's. A document is the
 // view's from its line on, a request or a declaration declares the view, and
-// a draw draws it as it stands. Instants cannot order them: a document can be
+// a draw draws it as it stands, and a turn is taken over its line's inputs and
+// held or not. Instants cannot order them: a document can be
 // stamped in the millisecond a draw read the one before it, and under a held
 // clock a request, what lands in its wait and its answer share one instant.
 export type ReplayLine =
   | ({ readonly kind: "facts" } & FactsLine)
   | ({ readonly kind: "request" } & RequestLine)
   | ({ readonly kind: "declared" } & DeclaredLine)
-  | ({ readonly kind: "draw" } & DrawLine);
+  | ({ readonly kind: "draw" } & DrawLine)
+  | ({ readonly kind: "turn" } & TurnLine);
 
 // [LAW:types-are-the-program] A line of the file, by kind: the header first,
 // then the replay's lines in the order the recorder took them.
@@ -118,25 +156,22 @@ export type RecordingLine =
   | ReplayLine;
 
 // [LAW:types-are-the-program] A recording as the parser proved it: one
-// session's, the document its view opens on (the last before its first
-// request), then its lines from that request on, with at least one draw and
-// every draw answering a request before it not drawn already, so a replay
-// has a view to open and a frame to draw.
+// session's, the turn its view opens on, then its lines, with at least one
+// draw and every draw answering a request before it not drawn already, so a
+// replay has a view to open and a frame to draw.
 export interface Recording {
   readonly session: SessionId;
   readonly home: string;
-  readonly opening: FactsLine;
-  readonly lines: readonly [
-    { readonly kind: "request" } & RequestLine,
-    ...ReplayLine[],
-  ];
+  readonly opening: TurnLine;
+  readonly lines: readonly ReplayLine[];
 }
 
 // [LAW:one-source-of-truth] The recording's own format: its header and its
-// request, declared and draw lines, which are the renderer's request path and
-// not the facts protocol. The documents in it carry their own facts version,
-// which each document's parse refuses, so a change of either moves one number.
-export const RECORDING_VERSION = 4;
+// request, declared, draw and turn lines, which are the renderer's request
+// path and not the facts protocol. The documents in it carry their own facts
+// version, which each document's parse refuses, so a change of either moves
+// one number.
+export const RECORDING_VERSION = 5;
 
 // A recording of another format: refused whole, never read line by line
 // against this build's. The version is a value, so the edge that names the
@@ -260,9 +295,8 @@ function sameValues(
   );
 }
 
-// A draw's state as the recorder wrote it: an idle period that had not begun
-// is `null` in the file, the one spelling JSON has for it.
-function parseDrawState(json: unknown, where: string): DrawState {
+// The clicks' state a draw or a turn read, as the recorder wrote it.
+function parseClickState(json: unknown, where: string): ClickState {
   if (!isPlainObject(json)) {
     throw new FactParseError(where, "has no `state` object");
   }
@@ -299,11 +333,117 @@ function parseDrawState(json: unknown, where: string): DrawState {
       ),
     },
     back: parseCount(json.back, where, "state.back"),
-    idleSince:
-      json.idleSince === null
-        ? undefined
-        : parseInstant(json.idleSince, where, "state.idleSince"),
   };
+}
+
+// A draw's state as the recorder wrote it: an idle period that had not begun
+// is `null` in the file, the one spelling JSON has for it.
+function parseDrawState(json: unknown, where: string): DrawState {
+  const { values, revision, history, back } = parseClickState(json, where);
+  const { idleSince } = json as Record<string, unknown>;
+  return {
+    values,
+    revision,
+    history,
+    back,
+    idleSince:
+      idleSince === null
+        ? undefined
+        : parseInstant(idleSince, where, "state.idleSince"),
+  };
+}
+
+// [LAW:parse-dont-validate] A severity is one this build draws, matched by
+// every field it is drawn with, so a replayed message wears the same glyph and
+// colours and counts at the same level.
+function parseSeverity(json: unknown, where: string): DiagnosticSeverity {
+  const known = SEVERITIES.find(
+    (s) =>
+      isPlainObject(json) &&
+      json.level === s.level &&
+      json.glyph === s.glyph &&
+      isPlainObject(json.colors) &&
+      json.colors.fg === s.colors.fg &&
+      json.colors.bg === s.colors.bg,
+  );
+  if (known === undefined) {
+    throw new FactParseError(where, "has a severity this build does not draw");
+  }
+  return known;
+}
+
+function parseText(json: unknown, where: string, field: string): string {
+  if (typeof json !== "string") {
+    throw new FactParseError(where, `has no text \`${field}\``);
+  }
+  return json;
+}
+
+// A viewer line: one or more spans, each its text and its click or none. The
+// text crosses the one span constructor, which sanitizes it.
+function parseDiagnosticLine(json: unknown, where: string): DiagnosticLine {
+  if (!Array.isArray(json) || json.length === 0) {
+    throw new FactParseError(where, "is not a list of spans");
+  }
+  const [first, ...rest] = json.map((span: unknown, i) => {
+    const at = `${where}[${i}]`;
+    if (!isPlainObject(span)) {
+      throw new FactParseError(at, "is not a span object");
+    }
+    if (span.link !== null && typeof span.link !== "string") {
+      throw new FactParseError(at, "has a link that is neither text nor null");
+    }
+    return diagnosticSpan(parseText(span.text, at, "text"), span.link);
+  });
+  return [first!, ...rest];
+}
+
+// One message a draw owed its reader (src/render/diagnostics.ts).
+function parseDiagnosticMessage(
+  json: unknown,
+  where: string,
+): DiagnosticMessage {
+  if (!isPlainObject(json)) throw new FactParseError(where, "is not an object");
+  if (!Array.isArray(json.lines) || json.lines.length === 0) {
+    throw new FactParseError(where, "has no `lines`: a message has one");
+  }
+  const [first, ...rest] = json.lines.map((line: unknown, i) =>
+    parseDiagnosticLine(line, `${where} lines[${i}]`),
+  );
+  return {
+    severity: parseSeverity(json.severity, `${where} severity`),
+    about: parseText(json.about, where, "about"),
+    message: parseText(json.message, where, "message"),
+    copy: parseText(json.copy, where, "copy"),
+    lines: [first!, ...rest],
+  };
+}
+
+function parseDiagnosticList(json: unknown, where: string): DiagnosticList {
+  if (!Array.isArray(json)) {
+    throw new FactParseError(where, "has no `diagnostics` list");
+  }
+  return json.map((m: unknown, i) =>
+    parseDiagnosticMessage(m, `${where} diagnostics[${i}]`),
+  );
+}
+
+// A document with the instant it was stamped at, refused when it is another
+// session's.
+function parseFactsLine(
+  json: Record<string, unknown>,
+  where: string,
+  session: SessionId,
+): FactsLine {
+  const at = parseInstant(json.at, where, "at");
+  const document = parseSessionFacts(json.facts, `${where} facts`);
+  if (document.session !== session) {
+    throw new FactParseError(
+      where,
+      `is session ${JSON.stringify(document.session)}'s document, and the recording is of ${JSON.stringify(session)}`,
+    );
+  }
+  return { at, facts: document };
 }
 
 // A JSON object off one line of the file, or a throw naming the line.
@@ -394,35 +534,74 @@ export function parseRecording(text: string): Recording {
       "has no `home` that is an absolute path",
     );
   }
-  // The document the view holds as the walk reaches each line, and the lines
-  // from the first request on.
-  let opening: FactsLine | null = null;
+  // The turn the view opens on, and the lines after it.
+  let opening: TurnLine | null = null;
   const lines: ReplayLine[] = [];
+  let requested = false;
   // The requests not yet drawn, by instant: requests can share one.
   const undrawn = new Map<Instant, number>();
   let draws = 0;
-  // [LAW:parse-dont-validate] The values each revision a draw read held:
-  // one revision is one state (SessionStateReader), which the replay's
+  // [LAW:parse-dont-validate] The values each revision a draw or a turn read
+  // held: one revision is one state (SessionStateReader), which the replay's
   // restore keeps to, so a revision noted again over other values is refused.
   const held = new Map<number, Readonly<Record<string, string>>>();
+  const oneState = (state: ClickState, where: string): void => {
+    const before = held.get(state.revision) ?? state.values;
+    if (!sameValues(before, state.values)) {
+      throw new FactParseError(
+        where,
+        `reads revision ${state.revision} over other values than a line before it read there`,
+      );
+    }
+    held.set(state.revision, state.values);
+  };
+  const turnOf = (json: Record<string, unknown>, where: string): TurnLine => {
+    if (typeof json.held !== "boolean") {
+      throw new FactParseError(where, "has no `held` that is true or false");
+    }
+    const state = parseClickState(json.state, where);
+    oneState(state, where);
+    return {
+      document: parseFactsLine(json, where, session),
+      request: parseRequest(json, where, session),
+      state: {
+        values: state.values,
+        revision: state.revision,
+        history: state.history,
+        back: state.back,
+      },
+      held: json.held,
+    };
+  };
   for (const [i, row] of body.entries()) {
     const where = `line ${i + 2}`;
     const json = objectOf(row, where);
     const { kind } = json;
-    if (kind === "request") {
-      if (opening === null) {
+    // [LAW:types-are-the-program] The first line after the header is the turn
+    // the view opens on: a replay opens nothing else.
+    if (opening === null) {
+      if (kind !== "turn") {
         throw new FactParseError(
           where,
-          "is a request before any document: a recording opens on its view's document",
+          "is not a turn: a recording opens on the turn its bar is drawn from",
         );
       }
+      opening = turnOf(json, where);
+      continue;
+    }
+    if (kind === "turn") {
+      lines.push({ kind, ...turnOf(json, where) });
+      continue;
+    }
+    if (kind === "request") {
       const at = parseInstant(json.at, where, "at");
       lines.push({ kind, at, request: parseRequest(json, where, session) });
       undrawn.set(at, (undrawn.get(at) ?? 0) + 1);
+      requested = true;
       continue;
     }
     if (kind === "declared") {
-      if (lines.length === 0) {
+      if (!requested) {
         throw new FactParseError(
           where,
           "is a declaration before any request: only a draw restates one",
@@ -443,50 +622,38 @@ export function parseRecording(text: string): Recording {
       undrawn.set(request, waiting - 1);
       draws++;
       const state = parseDrawState(json.state, where);
-      const before = held.get(state.revision) ?? state.values;
-      if (!sameValues(before, state.values)) {
-        throw new FactParseError(
-          where,
-          `reads revision ${state.revision} over other values than a draw before it read there`,
-        );
-      }
-      held.set(state.revision, state.values);
-      lines.push({ kind, request, state });
+      oneState(state, where);
+      lines.push({
+        kind,
+        request,
+        state,
+        diagnostics: parseDiagnosticList(json.diagnostics, where),
+      });
       continue;
     }
     if (kind !== "facts") {
       throw new FactParseError(
         where,
-        `is of kind ${JSON.stringify(kind)}, not "facts", "request", "declared" or "draw"`,
+        `is of kind ${JSON.stringify(kind)}, not "facts", "request", "declared", "draw" or "turn"`,
       );
     }
-    const at = parseInstant(json.at, where, "at");
-    const document = parseSessionFacts(json.facts, `${where} facts`);
-    if (document.session !== session) {
-      throw new FactParseError(
-        where,
-        `is session ${JSON.stringify(document.session)}'s document, and the recording is of ${JSON.stringify(session)}`,
-      );
-    }
-    // Before the first request a later document replaces the opening one: no
-    // draw can read the one it replaced.
-    if (lines.length === 0) opening = { at, facts: document };
-    else lines.push({ kind, at, facts: document });
+    lines.push({ kind, ...parseFactsLine(json, where, session) });
   }
   if (opening === null) {
-    throw new FactParseError("the recording", "holds no document");
+    throw new FactParseError(
+      "the recording",
+      "holds no turn: a recording opens on the turn its bar is drawn from",
+    );
   }
   // A replay draws one frame per answer, so a recording no answer was drawn
-  // in (an idle session's) replays nothing. Every draw answers a request
-  // before it, so the first line is a request.
-  const [first, ...later] = lines;
-  if (first?.kind !== "request" || draws === 0) {
+  // in (an idle session's) replays nothing.
+  if (draws === 0) {
     throw new FactParseError(
       "the recording",
       "holds no answered request: none was answered while it was recorded",
     );
   }
-  return { session, home, opening, lines: [first, ...later] };
+  return { session, home, opening, lines };
 }
 
 function parseInstant(json: unknown, where: string, field: string): Instant {
@@ -494,6 +661,15 @@ function parseInstant(json: unknown, where: string, field: string): Instant {
     throw new FactParseError(where, `has no finite \`${field}\``);
   }
   return json as Instant;
+}
+
+// A request's fields as a line carries them: what `parseRequest` reads.
+function requestFields(request: SessionRequest) {
+  return {
+    hookData: request.hookData,
+    cwd: request.cwd,
+    hints: request.hints,
+  };
 }
 
 // A line as the recorder writes it: one JSON object, one newline.
@@ -513,13 +689,21 @@ export function formatLine(line: RecordingLine): string {
               kind: line.kind,
               request: line.request,
               state: { ...line.state, idleSince: line.state.idleSince ?? null },
+              diagnostics: line.diagnostics,
             }
-          : {
-              kind: line.kind,
-              ...(line.kind === "request" && { at: line.at }),
-              hookData: line.request.hookData,
-              cwd: line.request.cwd,
-              hints: line.request.hints,
-            };
+          : line.kind === "turn"
+            ? {
+                kind: line.kind,
+                held: line.held,
+                at: line.document.at,
+                facts: line.document.facts,
+                ...requestFields(line.request),
+                state: line.state,
+              }
+            : {
+                kind: line.kind,
+                ...(line.kind === "request" && { at: line.at }),
+                ...requestFields(line.request),
+              };
   return `${JSON.stringify(json)}\n`;
 }

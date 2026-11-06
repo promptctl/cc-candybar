@@ -87,7 +87,12 @@ import {
   shell,
   type Behaviour,
 } from "../src/proc/spawner-fake";
-import { SessionEffects } from "../src/render/effect";
+import { EffectSessions, SessionEffects } from "../src/render/effect";
+import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
+import type { DaemonParts } from "../src/daemon/daemon-parts";
+import { drawForAnswer, type RenderSetup } from "../src/daemon/draw-bar";
+import type { CheckedRenderRequest } from "../src/daemon/render-checkpoint";
+import { RenderWarningRecords } from "../src/daemon/render-warnings";
 import type { Frame } from "../src/render/frame";
 import { textOf } from "../src/render/frame";
 import type { Timekeeper } from "../src/time";
@@ -263,7 +268,11 @@ function request(
 interface Rig {
   readonly cache: RenderCache<SessionSource, SessionRequest>;
   readonly recorder: SessionRecorder;
+  readonly providers: ReturnType<typeof createPayloadProviders>;
   readonly lines: string[];
+  // Why the session's turn inputs cannot be read while set: the next turn
+  // cannot be taken, and the bar is held on the last one that was.
+  readonly turnThrows: IObservableValue<string | null>;
   // What the session's clicks leave: its store, the histories' depths, and
   // its menus' idle clock, which every frame is drawn under.
   readonly sessionState: SessionState;
@@ -306,11 +315,16 @@ function rig(
   const update = newUpdateFact();
   const runs = new SourceRuns({ launcher, clock });
   const depths = observable.box<Depths>(NEVER_CLICKED, { deep: false });
+  const turnThrows = observable.box<string | null>(null);
   const source = sessionSource({
     providers,
     sessionState,
     history: () => depths.get().history,
-    navigation: () => depths.get().back,
+    navigation: () => {
+      const reason = turnThrows.get();
+      if (reason !== null) throw new Error(reason);
+      return depths.get().back;
+    },
   });
   // The close a timeout makes is a click's, which no case here reaches.
   const menuIdle = new MenuIdle({
@@ -359,7 +373,16 @@ function rig(
     providers.managedStorage.close();
     watchers.closeAll();
   });
-  return { cache, recorder, lines, sessionState, depths, menuIdle };
+  return {
+    cache,
+    recorder,
+    providers,
+    lines,
+    turnThrows,
+    sessionState,
+    depths,
+    menuIdle,
+  };
 }
 
 // Every fact of the document answered: the owners' children run on the held
@@ -452,8 +475,10 @@ function liveSession({ runsMs, stepMs }: Pace = HELD) {
         await settling.landed;
         // [LAW:single-enforcer] Under the session's idle clock, as the
         // daemon's draw is.
-        return drawRequest(live.recorder, held.view, settling.arrival, () =>
-          live.menuIdle.drawn(
+        // The demo's draw owes its reader nothing: no list, as the replay's
+        // recorded one is then.
+        return drawRequest(live.recorder, held.view, settling.arrival, () => ({
+          ...live.menuIdle.drawn(
             SID,
             at,
             held.view.source.effective().menuTimeout,
@@ -463,11 +488,13 @@ function liveSession({ runsMs, stepMs }: Pace = HELD) {
                 at,
                 effects,
                 idleSince,
+                [],
                 drawn.warn,
               ),
             }),
           ),
-        ).frame;
+          diagnostics: [],
+        })).frame;
       },
     };
   };
@@ -477,6 +504,56 @@ function liveSession({ runsMs, stepMs }: Pace = HELD) {
     burnMs = 0,
     model?: string,
   ): Promise<Frame> => arrive(cwd, configFile, burnMs, model).answer();
+  // [LAW:single-enforcer] The parts the daemon's draw reads: the rig's own,
+  // and a stand-in for each that has nothing to warn of here (no update, no
+  // feed, no link-id fault, no launch), so the diagnostics are the daemon's
+  // own list over what this session's view says.
+  const parts = {
+    rendererName: "seam",
+    recorder: live.recorder,
+    sessionState: live.sessionState,
+    renderCache: live.cache,
+    payloadProviders: live.providers,
+    menuIdle: live.menuIdle,
+    links: TEST_LINKS,
+    fileEvents: NO_FILE_EVENTS,
+    renderWarnings: new RenderWarningRecords(),
+    effectSessions: new EffectSessions<RenderedLine>(),
+    frameFeeds: { feedsOf: () => UNFOLLOWED_FEEDS },
+    updateWatch: { notice: () => [], error: () => null },
+    linkIds: { error: () => null },
+    launcher: { launcherWarnings: () => [] },
+  } as unknown as DaemonParts;
+  // One request answered by the daemon's own draw (src/daemon/draw-bar.ts):
+  // the bar with its door's indicator over the list the draw built, noted for
+  // its recordings as the daemon notes it.
+  const requestByDaemon = async (
+    cwd: string,
+    configFile: string,
+    model?: string,
+  ): Promise<Frame> => {
+    const at = instantAt(clock);
+    const req = request(cwd, home, claudeConfigDir, model);
+    using held = live.cache.holdSession(cwd, cwd, configFile, req);
+    const settling = settleRequest(live.recorder, held.view, at);
+    await landed(clock, held.view, stepMs);
+    await settling.landed;
+    // The setup the daemon's request path makes, over this request: the
+    // daemon's draw reads only its refused arguments beyond what the view
+    // was declared with.
+    const setup: RenderSetup = {
+      req: { ...req, refusedArgs: [] } as unknown as CheckedRenderRequest,
+      at,
+      facts: [],
+      sessionId: req.sessionId,
+      entry: held.entry,
+      state: held.state,
+      view: held.view as unknown as RenderSetup["view"],
+      hintsError: null,
+      [Symbol.dispose]: () => {},
+    };
+    return drawForAnswer(parts, setup, settling.arrival).drawn.body;
+  };
   const after = async (ms: number): Promise<void> => {
     clock.advance(ms);
     await turns();
@@ -490,6 +567,7 @@ function liveSession({ runsMs, stepMs }: Pace = HELD) {
     drawn,
     arrive,
     requestFrom,
+    requestByDaemon,
     after,
   };
 }
@@ -544,8 +622,12 @@ async function replayFile(
   said: string[];
 }> {
   const recording = readRecording(file);
-  const facts = recordingFacts(recording);
-  const { startMs, steps } = playOf(recording, facts);
+  const facts = recordingFacts({
+    session: recording.session,
+    opening: recording.opening.document,
+    lines: recording.lines,
+  });
+  const { startMs, opening, steps } = playOf(recording, facts);
   const clock = heldClock(new Date(startMs));
   const launcher = fakeLauncher(clock);
   const replayHome = tempDir("ccb-seam-replay-");
@@ -571,6 +653,7 @@ async function replayFile(
     home: recording.home,
     log,
     clock,
+    opening,
     steps,
     arrive: arriveOn(clock),
     frame: (frame) => frames.push(frame),
@@ -580,12 +663,18 @@ async function replayFile(
   return { frames, reads: read, started: launcher.started(), said: drawn.said };
 }
 
-// A recording's documents in the order written: the one it opens on, then
-// each document line.
+// A recording's documents in the order written: the turn's it opens on, then
+// each document line's and each turn line's.
 function documentsOf(recording: Recording): FactsLine[] {
   return [
-    recording.opening,
-    ...recording.lines.flatMap((line) => (line.kind === "facts" ? [line] : [])),
+    recording.opening.document,
+    ...recording.lines.flatMap((line) =>
+      line.kind === "facts"
+        ? [line]
+        : line.kind === "turn"
+          ? [line.document]
+          : [],
+    ),
   ];
 }
 
@@ -594,9 +683,10 @@ function documentsOf(recording: Recording): FactsLine[] {
 function drawnFrom(
   recording: Recording,
 ): { request: number; document: number }[] {
-  let document = recording.opening.at;
+  let document = recording.opening.document.at;
   return recording.lines.flatMap((line) => {
     if (line.kind === "facts") document = line.at;
+    if (line.kind === "turn") document = line.document.at;
     return line.kind === "draw" ? [{ request: line.request, document }] : [];
   });
 }
@@ -1137,9 +1227,13 @@ test("a view whose open failed is never recorded, and the recording takes up the
   expect(s.live.cache.sessionView(SID)).toBeNull();
   await s.after(1000);
   await s.requestFrom(s.cwd, s.configFile);
-  // The next view's opening document, then its request and what landed.
+  // The next view's opening turn, then its request and what landed.
   const reopened = written.slice(before);
-  expect(reopened[0]).toMatchObject({ kind: "facts", facts: { seq: 1 } });
+  expect(reopened[0]).toMatchObject({
+    kind: "turn",
+    held: false,
+    document: { facts: { seq: 1 } },
+  });
   expect(reopened.filter((line) => line.kind === "request")).toHaveLength(1);
   expect(ended).toEqual([]);
 });
@@ -1296,11 +1390,17 @@ test("a recording of a session's facts replays through a second cache into the b
   // The recording crosses the text: the lines as the recorder writes them,
   // read back by the one parser, so the format is part of what is proved.
   const recording = parseRecording(written.map(formatLine).join(""));
-  const [opening] = recording.lines;
+  // The clock starts at the first request, the view at the opening turn.
+  const first = recording.lines.find((line) => line.kind === "request");
+  if (first === undefined) throw new Error("the recording holds no request");
   const replayTmp = tempDir("ccb-seam-replay-");
-  const replayClock = heldClock(new Date(opening.at * 1000));
+  const replayClock = heldClock(new Date(first.at * 1000));
   const replayLauncher = fakeLauncher(replayClock);
-  const arm = recordingFacts(recording);
+  const arm = recordingFacts({
+    session: recording.session,
+    opening: recording.opening.document,
+    lines: recording.lines,
+  });
   // A renderer whose home is the recorded one, as a replay is handed it.
   const replay = rig(
     hostOf({}, { home: recording.home, tmp: replayTmp }),
@@ -1315,18 +1415,24 @@ test("a recording of a session's facts replays through a second cache into the b
   const drawn = warnings();
   const replayFrames: Frame[] = [];
   // The lines in the file's order, each request's view held until the next.
+  restoreDraw(replay.sessionState, replay.depths, SID, recording.opening.state);
   let held = replay.cache.holdSession(
     s.cwd,
     s.cwd,
     s.configFile,
-    opening.request,
+    recording.opening.request,
   );
   let elapsed = 0;
   for (const line of recording.lines) {
     if (line.kind === "facts") {
       arm.reach(line);
+    } else if (line.kind === "turn") {
+      // No turn is held in this case: a turn line is taken, never held.
+      restoreDraw(replay.sessionState, replay.depths, SID, line.state);
+      arm.reach(line.document);
+      held.view.requested(line.request);
     } else if (line.kind === "request") {
-      const offset = Math.round((line.at - opening.at) * 1000);
+      const offset = Math.round((line.at - first.at) * 1000);
       replayClock.advance(offset - elapsed);
       elapsed = offset;
       held[Symbol.dispose]();
@@ -1342,6 +1448,7 @@ test("a recording of a session's facts replays through a second cache into the b
           line.request,
           effects,
           line.state.idleSince,
+          line.diagnostics,
           drawn.warn,
         ),
       );
@@ -1355,5 +1462,166 @@ test("a recording of a session's facts replays through a second cache into the b
   expect(replayFrames.map((f) => f.rows)).toEqual(
     liveFrames.map((f) => f.rows),
   );
-  expect(PLUGIN_SOURCE in recording.opening.facts.sources).toBe(true);
+  expect(PLUGIN_SOURCE in recording.opening.document.facts.sources).toBe(true);
+});
+
+// A turn whose inputs cannot be read holds the bar on the last turn taken: its
+// request and its picks, which the session has since moved past, with the
+// failure as the `⚠` beside the settings door. The live side is the daemon's
+// own draw, so the list the recording carries is the one the daemon built.
+const HELD_REASON = "the back history is unreadable";
+const held = (s: ReturnType<typeof liveSession>, reason: string | null) =>
+  runInAction(() => s.live.turnThrows.set(reason));
+const pick = (
+  s: ReturnType<typeof liveSession>,
+  pairs: { key: string; value: string }[],
+) => s.live.sessionState.setBatch(SID, pairs);
+
+// What a replay of a held turn says it did: each hold is the recording's.
+const heldSays = (said: readonly string[]) =>
+  said.every((line) =>
+    line.includes("the recorded session's turn was held here"),
+  );
+
+// The session's config with the model it was drawn for placed, so a frame
+// says which request its turn was composed from.
+function modelConfig(s: ReturnType<typeof liveSession>): string {
+  const file = path.join(path.dirname(s.configFile), "model.json5");
+  fs.writeFileSync(
+    file,
+    CONFIG.replace(
+      "segments: {",
+      "segments: {\n    model: { template: 'model={{ .model.display_name }}' },",
+    ).replace("root: { h: [", 'root: { h: [\n    "model",'),
+  );
+  return file;
+}
+
+async function recordHeld(
+  s: ReturnType<typeof liveSession>,
+  name: string,
+  during: () => Promise<Frame[]>,
+): Promise<{ file: string; liveFrames: Frame[] }> {
+  const file = path.join(tempDir("ccb-seam-out-"), name);
+  const leave = new AbortController();
+  const recorded = recordToFile(
+    s.live.recorder,
+    s.clock,
+    sessionIdOf(SID),
+    file,
+    600,
+    leave.signal,
+  );
+  const liveFrames = await during();
+  leave.abort();
+  const { answers } = await recorded;
+  expect(answers).toBe(liveFrames.length);
+  return { file, liveFrames };
+}
+
+async function expectReplayed(
+  file: string,
+  configFile: string,
+  liveFrames: Frame[],
+): Promise<void> {
+  const replay = await replayFile(file, configFile);
+  expect(replay.reads).toEqual([]);
+  expect(replay.started).toEqual([]);
+  expect(heldSays(replay.said)).toBe(true);
+  expect(replay.frames.map(textOf)).toEqual(liveFrames.map(textOf));
+  expect(replay.frames.map((f) => f.rows)).toEqual(
+    liveFrames.map((f) => f.rows),
+  );
+}
+
+test("a session recorded across a turn that could not be taken replays the daemon's frames: the held turn's request and picks, and its ⚠", async () => {
+  const s = liveSession();
+  const configFile = modelConfig(s);
+  await s.requestByDaemon(s.cwd, configFile);
+  const { file, liveFrames } = await recordHeld(s, "held.jsonl", async () => {
+    const frames: Frame[] = [];
+    await s.after(1000);
+    frames.push(await s.requestByDaemon(s.cwd, configFile));
+    // The turn's inputs stop reading, and a pick lands while they do.
+    held(s, HELD_REASON);
+    pick(s, [{ key: SETTINGS.theme.sessionKey, value: "nord" }]);
+    await s.after(1000);
+    frames.push(await s.requestByDaemon(s.cwd, configFile, "Opus 5"));
+    held(s, null);
+    await s.after(1000);
+    frames.push(await s.requestByDaemon(s.cwd, configFile, "Opus 5"));
+    return frames;
+  });
+  const [before, during, after] = liveFrames.map(textOf);
+  // Held: the older request and the failure shown.
+  expect(during).toContain("model=Opus 4.7");
+  expect(during).toContain("⚠ 1");
+  // Released: the newest request and the pick, and nothing to show.
+  expect(after).toContain("model=Opus 5");
+  expect(after).not.toContain("⚠");
+  expect(before).not.toContain("⚠");
+  // The pick moved the bar's colours only once the turn was taken again.
+  expect(liveFrames[2]!.rows).not.toEqual(liveFrames[1]!.rows);
+  await expectReplayed(file, configFile, liveFrames);
+});
+
+test("a session recorded from inside a held turn opens on the held turn, and replays the daemon's frames", async () => {
+  const s = liveSession();
+  const configFile = modelConfig(s);
+  await s.requestByDaemon(s.cwd, configFile);
+  // The ⚠ is up before the recording starts, as a bug report's is.
+  held(s, HELD_REASON);
+  pick(s, [{ key: SETTINGS.theme.sessionKey, value: "nord" }]);
+  const { file, liveFrames } = await recordHeld(s, "inside.jsonl", async () => {
+    const frames: Frame[] = [];
+    await s.after(1000);
+    frames.push(await s.requestByDaemon(s.cwd, configFile, "Opus 5"));
+    held(s, null);
+    await s.after(1000);
+    frames.push(await s.requestByDaemon(s.cwd, configFile, "Opus 5"));
+    return frames;
+  });
+  const [during, after] = liveFrames.map(textOf);
+  expect(during).toContain("model=Opus 4.7");
+  expect(during).toContain("⚠ 1");
+  expect(after).toContain("model=Opus 5");
+  expect(after).not.toContain("⚠");
+  expect(readRecording(file).opening.held).toBe(true);
+  await expectReplayed(file, configFile, liveFrames);
+});
+
+test("a click between draws, before the turn is held, replays in the held frames: the picks and depths the held turn was taken over", async () => {
+  const s = liveSession();
+  await s.requestByDaemon(s.cwd, s.configFile);
+  const { file, liveFrames } = await recordHeld(s, "click.jsonl", async () => {
+    const frames: Frame[] = [];
+    await s.after(1000);
+    frames.push(await s.requestByDaemon(s.cwd, s.configFile));
+    // A click with no request after it: the theme picked, the settings menu
+    // open, two steps to undo. The live turn is taken over it.
+    pick(s, [
+      { key: SETTINGS.theme.sessionKey, value: "nord" },
+      { key: SETTINGS_ANCHOR, value: SETTINGS_OPEN },
+    ]);
+    runInAction(() =>
+      s.live.depths.set({
+        history: { undo: 2, redo: 0, sinceEdit: 0 },
+        back: 0,
+      }),
+    );
+    held(s, HELD_REASON);
+    await s.after(1000);
+    frames.push(await s.requestByDaemon(s.cwd, s.configFile, "Opus 5"));
+    held(s, null);
+    await s.after(1000);
+    frames.push(await s.requestByDaemon(s.cwd, s.configFile, "Opus 5"));
+    return frames;
+  });
+  const during = liveFrames[1]!;
+  // Held on the turn the click made: the menu open with its undo control,
+  // the older request, and the failure shown.
+  expect(during.rows.filter((row) => row.kind === "menu")).not.toEqual([]);
+  expect(textOf(during)).toContain("↶");
+  expect(textOf(during)).toContain("⚠ 1");
+  await expectReplayed(file, s.configFile, liveFrames);
 });

@@ -7,10 +7,12 @@
 // main hands in: the facts arm (the in-process arm over owners, or a
 // recording's), the steps (requests at the offsets they arrive at, the draws
 // of their answers, and a recording's documents where the daemon took them),
-// whose home `~` names, what the session's clicks left for each draw (a
-// recording's, or a session that never clicked), and how a request arrives at
-// its offset (a sleep on the machine's clock and its reading, or a held
-// clock's advance and the recorded instant). The path itself never asks which.
+// whose home `~` names, the turn the view opens on and what the session's
+// clicks left for each draw (a recording's, or a session that never clicked),
+// the diagnostics each draw owes its reader (a recording's, or none), and how a
+// request arrives at its offset (a sleep on the machine's clock and its
+// reading, or a held clock's advance and the recorded instant). The path itself
+// never asks which.
 //
 // [LAW:single-enforcer] One faked hook event, or a recorded one, goes through
 // the functions the daemon runs for a real one — loadChain, openView over the
@@ -21,11 +23,17 @@ import { readFileSync } from "node:fs";
 import { observable, runInAction, type IObservableValue } from "mobx";
 import {
   parseRecording,
+  type ClickState,
   type DrawState,
   type Recording,
   type ReplayLine,
   type SessionRequest,
+  type TurnLine,
 } from "../facts/recording.js";
+import {
+  diagnosticsProjection,
+  type DiagnosticList,
+} from "../render/diagnostics.js";
 import type { RendererLinks } from "../click/renderer-links.js";
 import { daemonGates } from "../daemon/update-keys.js";
 import { locations } from "../daemon/paths.js";
@@ -169,7 +177,7 @@ export const NEVER_CLICKED: DrawState = {
 };
 
 // The histories' depths a replay's turn reads, beside its store.
-export type Depths = Pick<DrawState, "history" | "back">;
+export type Depths = Pick<ClickState, "history" | "back">;
 
 // Every field of the settings history's depth, whichever it gains.
 function sameDepths(a: Depths, b: Depths): boolean {
@@ -179,15 +187,15 @@ function sameDepths(a: Depths, b: Depths): boolean {
   );
 }
 
-// [LAW:single-enforcer] A draw's recorded state made the replay's, in one
-// action, so its turn and its `state` variables move together before it
-// draws: the store's values and revision for the session, and the depths.
-// The idle instant is handed to the draw itself.
+// [LAW:single-enforcer] A recorded clicks' state made the replay's, in one
+// action, so its turn and its `state` variables move together: the store's
+// values and revision for the session, and the depths. A draw's idle instant
+// is handed to the draw itself.
 export function restoreDraw(
   sessionState: SessionState,
   depths: IObservableValue<Depths>,
   sessionId: string,
-  state: DrawState,
+  state: ClickState,
 ): void {
   runInAction(() => {
     sessionState.restore(sessionId, state.values, state.revision);
@@ -198,7 +206,9 @@ export function restoreDraw(
 // One step of a play, from the clock's reading as it begins: a request
 // arrives at its offset; a declaration restates the request the next draw's
 // view was declared with; an answer is drawn at the offset of the request it
-// answers, from the session's state it read; a document becomes the arm's.
+// answers, from the session's state it read and with the diagnostics it owed;
+// a document becomes the arm's; a turn is taken over its line's inputs (the
+// clicks' state, the request, the document it reaches) and held or not.
 export type DemoStep =
   | {
       readonly kind: "request";
@@ -210,30 +220,44 @@ export type DemoStep =
       readonly kind: "draw";
       readonly requestOffsetMs: number;
       readonly state: DrawState;
+      readonly diagnostics: DiagnosticList;
     }
-  | { readonly kind: "document"; readonly reach: () => void };
+  | { readonly kind: "document"; readonly reach: () => void }
+  | {
+      readonly kind: "turn";
+      readonly turn: DemoTurn;
+      readonly reach: () => void;
+    };
+
+// A turn the play takes: the request and the clicks' state it is taken over,
+// and whether it is held from then on.
+export type DemoTurn = Pick<TurnLine, "request" | "state" | "held">;
 
 // A recording as the demo plays it: the instant its held clock starts at, in
-// whole milliseconds as the clock reads them, and its lines as steps, in the
-// file's order, at their offsets from it. The clock starts at the first
-// request, not the opening document: the document a recording opens with is
-// the view's latest when it began, which can be hours old.
+// whole milliseconds as the clock reads them, the turn the view opens on, and
+// its lines as steps, in the file's order, at their offsets from it. The clock
+// starts at the first request, not the opening turn: the document a recording
+// opens with is the one the bar was drawn from when it began, which can be
+// hours old.
 export interface RecordingPlay {
   readonly startMs: number;
-  readonly steps: readonly [
-    DemoStep & { readonly kind: "request" },
-    ...DemoStep[],
-  ];
+  readonly opening: DemoTurn;
+  readonly steps: readonly DemoStep[];
 }
 
-// The steps a parsed recording plays by, from its first request, each of its
-// documents reached on `arm` when the walk comes to its line.
+// The steps a parsed recording plays by, each of its documents reached on
+// `arm` when the walk comes to its line, a turn's among them.
 export function playOf(
-  recording: Pick<Recording, "lines">,
+  recording: Pick<Recording, "opening" | "lines">,
   arm: Pick<RecordingFacts, "reach">,
 ): RecordingPlay {
-  const [opening, ...later] = recording.lines;
-  const startMs = msOf(opening.at);
+  const first = recording.lines.find((line) => line.kind === "request");
+  // [LAW:no-silent-failure] The parser refuses a recording no request was
+  // answered in, so one with no request is this play's bug.
+  if (first === undefined) {
+    throw new Error("a recording with no request reached the play");
+  }
+  const startMs = msOf(first.at);
   const step = (line: ReplayLine): DemoStep =>
     line.kind === "request"
       ? {
@@ -248,14 +272,19 @@ export function playOf(
               kind: line.kind,
               requestOffsetMs: msOf(line.request) - startMs,
               state: line.state,
+              diagnostics: line.diagnostics,
             }
-          : { kind: "document", reach: () => arm.reach(line) };
+          : line.kind === "turn"
+            ? {
+                kind: line.kind,
+                turn: line,
+                reach: () => arm.reach(line.document),
+              }
+            : { kind: "document", reach: () => arm.reach(line) };
   return {
     startMs,
-    steps: [
-      { kind: "request", offsetMs: 0, request: opening.request },
-      ...later.map(step),
-    ],
+    opening: recording.opening,
+    steps: recording.lines.map(step),
   };
 }
 
@@ -266,7 +295,8 @@ export interface DemoPlay {
   readonly home: string;
   readonly log: DaemonLogger;
   readonly clock: Timekeeper;
-  // The steps, the first a request opening the view.
+  // The turn the view opens on: over the arm's document as the play begins.
+  readonly opening: DemoTurn;
   readonly steps: RecordingPlay["steps"];
   readonly arrive: Arrive;
   readonly frame: (frame: Frame) => void;
@@ -288,13 +318,15 @@ export const heldArrival =
   };
 
 // One frame of a session's view at `at`, as the daemon draws a request's: the
-// draw's own projections, the options its view's turn resolved, and when the
-// session's menus' idle period began.
+// draw's own projections, the diagnostics it owes its reader among them, the
+// options its view's turn resolved, and when the session's menus' idle period
+// began.
 export function drawDemoFrame(
   view: SessionView<SessionSource>,
   at: Instant,
   effects: SessionEffects<RenderedLine>,
   idleSince: Instant | undefined,
+  diagnostics: DiagnosticList,
   warn: (message: string) => void,
 ): Frame {
   const effective = view.source.effective();
@@ -307,6 +339,7 @@ export function drawDemoFrame(
       drawing: { by: "request" },
       feeds: UNFOLLOWED_FEEDS,
       today: todayOf(view.source.facts().builtins.today, at),
+      diagnostics: diagnosticsProjection(diagnostics),
     },
     at,
     // [LAW:one-source-of-truth] The width is the turn's, as the daemon's
@@ -321,19 +354,20 @@ export function drawDemoFrame(
 // is the order the daemon took them in: a request's clock is brought to its
 // offset, the view is declared with it and what its arrival starts of the
 // facts lands; a draw restores the session's state it read and draws the view
-// as it stands then, at the instant its request arrived at.
+// as it stands then, at the instant its request arrived at; a turn is taken
+// over its line's inputs and then held or not.
 export async function playDemo({
   loaded: { state, sessionState },
   facts,
   home,
   log,
   clock,
+  opening,
   steps,
   arrive,
   frame,
 }: DemoPlay): Promise<void> {
   const warn = (message: string): void => log("warn", message);
-  const [opening] = steps;
   const startMs = clock.now();
   // Each request's instant, by its offset: what its answer is drawn at.
   const arrived = new Map<number, Instant>();
@@ -344,6 +378,20 @@ export async function playDemo({
     deep: false,
     equals: sameDepths,
   });
+  // [LAW:one-source-of-truth] Whether the recorded session's turn was held
+  // where the play stands. While it is, the replay's turn inputs cannot be
+  // read, so the replay's turn keeps the last one it took, through the
+  // daemon's own taking (src/daemon/session-source.ts), as the live one did.
+  const held = observable.box(false);
+  const turnInput =
+    <A extends unknown[], T>(read: (...args: A) => T) =>
+    (...args: A): T => {
+      // [LAW:dataflow-not-control-flow] The recorded hold decides what the
+      // read answers: a turn input that cannot be read, as it could not live.
+      if (held.get())
+        throw new Error("the recorded session's turn was held here");
+      return read(...args);
+    };
   // The session's view of the state, as the daemon opens one per session,
   // at the directory of the request it is declared with.
   const open = (request: SessionRequest) =>
@@ -352,14 +400,18 @@ export async function playDemo({
       source: sessionSource({
         providers: { home, log },
         sessionState,
-        history: () => depths.get().history,
-        navigation: () => depths.get().back,
+        history: turnInput(() => depths.get().history),
+        navigation: turnInput(() => depths.get().back),
       }),
       // The demo draws one frame per request: no feed to wake.
       changed: () => {},
       log,
     });
+  // The opening turn taken over its own clicks' state, request and document
+  // (the arm's as the play begins), then held or not.
+  restoreDraw(sessionState, depths, opening.request.sessionId, opening.state);
   let view = open(opening.request);
+  runInAction(() => held.set(opening.held));
   // [LAW:one-source-of-truth] The view is at its latest request's directory,
   // as the daemon's cache moves a session's view to the entry its request
   // names: a request from another directory opens the view there, so its
@@ -380,6 +432,17 @@ export async function playDemo({
     for (const step of steps) {
       if (step.kind === "document") {
         step.reach();
+      } else if (step.kind === "turn") {
+        // Released, so the turn is taken over the line's inputs: its clicks'
+        // state and its document in one action, then its request, which
+        // declares the view in a call of its own (openView).
+        runInAction(() => {
+          held.set(false);
+          restoreDraw(sessionState, depths, view.sessionId, step.turn.state);
+          step.reach();
+        });
+        declare(step.turn.request);
+        runInAction(() => held.set(step.turn.held));
       } else if (step.kind === "request") {
         const at = await arrive(startMs + step.offsetMs);
         arrived.set(step.offsetMs, at);
@@ -398,7 +461,16 @@ export async function playDemo({
           );
         }
         restoreDraw(sessionState, depths, view.sessionId, step.state);
-        frame(drawDemoFrame(view, at, effects, step.state.idleSince, warn));
+        frame(
+          drawDemoFrame(
+            view,
+            at,
+            effects,
+            step.state.idleSince,
+            step.diagnostics,
+            warn,
+          ),
+        );
       }
     }
   } finally {

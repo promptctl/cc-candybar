@@ -35,6 +35,7 @@ import { Holds } from "../src/utils/holds";
 import { ABSENT, failed, ok, pendingOf, type Outcome } from "../src/utils/outcome";
 import { settledLane, type Lane } from "../src/utils/reading";
 import { viewFacts } from "./helpers/view-facts";
+import type { SessionRequest } from "../src/facts/recording";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { answerRepo } from "./helpers/repo-approval";
 import { stateDir } from "../src/daemon/paths";
@@ -268,7 +269,7 @@ function gitCache() {
   // through the session source, so a test reads the repo off its document.
   const providers = { ...absentOwners(), log: () => {}, gitProvider: git };
   const sessionState = new SessionState();
-  const cache = new RenderCache<SessionSource>(
+  const cache = new RenderCache<SessionSource, SessionRequest>(
     {
       clock: systemTimekeeper,
       stateDir: stateDir(WORLD.home),

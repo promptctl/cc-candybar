@@ -16,6 +16,7 @@ import type { ColorDepth, RichText, ThemeKey } from "@promptctl/rich-js";
 import { Defines, type Engine, type Template } from "@promptctl/go-template-js";
 import type { Instant } from "../utils/instant.js";
 import type { ClockFactory } from "../template-engine/clock.js";
+import type { DrawProjections } from "../config/payload-inputs.js";
 import type {
   ValidatedConfig,
   VariableDecl,
@@ -1287,6 +1288,17 @@ export type DrawSelection = Pick<
 // draw reads, and the selections its view's slots settle.
 export type RenderSelection = DrawSelection & Selections;
 
+// A fixed payload as `bindPayload` bound it: it carries its own projections at
+// their paths, so it is what such a draw hands.
+declare const BOUND: unique symbol;
+export interface BoundPayload {
+  readonly [BOUND]: true;
+}
+
+// [LAW:types-are-the-program] What a draw reads its projections from: the
+// four a view's draw hands, or a fixed payload as bound.
+export type Projected = DrawProjections | BoundPayload;
+
 // The view drawing from `store` bound to a fixed `payload` and `selection` —
 // at the width it is drawn at, `term.cols`, and the depth `opts` names, so the
 // writer and every contrast floor read one depth. Returns the payload as
@@ -1302,14 +1314,15 @@ export function bindPayload(
   payload: unknown,
   opts: BuildLineOptions,
   selection: RenderSelection,
-): unknown {
+): BoundPayload {
   const drawn = {
     ...(payload as object),
     term: { cols: opts.width },
     colorCompatibility: { effective: opts.colorCompatibility },
   };
   bindView(compiled, store, registry, fixedSource(drawn, selection));
-  return drawn;
+  // [LAW:types-are-the-program] The one place the brand is put on.
+  return drawn as unknown as BoundPayload;
 }
 
 export function drawDsl(
@@ -1319,9 +1332,9 @@ export function drawDsl(
   registry: SourceRegistry,
   // [LAW:one-source-of-truth] The draw's own facts: the payload fields its
   // instant answers (DRAW_PROJECTIONS — who it is for, the frames its lanes
-  // were sent, the day it is at). Everything else its inputs read is the
-  // view's (`bindView`): a draw writes no input.
-  projected: unknown,
+  // were sent, the day it is at, what it owes its reader). Everything else its
+  // inputs read is the view's (`bindView`): a draw writes no input.
+  projected: Projected,
   // [LAW:effects-at-boundaries] The instant this render is drawn at, sampled by
   // the caller: nothing rendered reads a clock of its own.
   at: Instant,

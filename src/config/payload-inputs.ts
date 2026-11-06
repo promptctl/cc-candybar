@@ -12,6 +12,9 @@
 
 import type { VariableDecl } from "./dsl-types.js";
 import type { DiagnosticsProjection } from "../render/diagnostics.js";
+import type { TodayPayload } from "../daemon/render-payload.js";
+import type { Pending } from "../utils/outcome.js";
+import type { Drawing, LaneFeeds } from "./lanes.js";
 import { SESSION_ID_VAR_NAME } from "../var-system/sources.js";
 import {
   ANSWERING,
@@ -243,6 +246,21 @@ export const DRAW_PROJECTIONS = {
   diagnostics: "the errors and warnings the draw owes its reader",
 } as const;
 export type DrawProjection = keyof typeof DRAW_PROJECTIONS;
+
+// What each projection is, as a draw hands it.
+interface ProjectionValues {
+  readonly today: TodayPayload | Pending | undefined;
+  readonly feeds: LaneFeeds;
+  readonly drawing: Drawing;
+  readonly diagnostics: DiagnosticsProjection;
+}
+
+// [LAW:types-are-the-program] What a view's draw hands for its instant: every
+// projection, so a draw that leaves one out does not typecheck (its paths
+// would read their inputs' defaults, a bar with no `⚠` that never says why).
+export type DrawProjections = {
+  readonly [K in DrawProjection]: ProjectionValues[K];
+};
 
 // The draw projection a payload path reads, if any.
 export function drawProjectionAt(path: string): DrawProjection | undefined {
