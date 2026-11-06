@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-621",
+      "ref": "refs/pull/621/merge",
+      "sha": "b0c347eb18bfee1eb369d77499c619b61f642b19",
+      "timestamp": "2026-11-06T02:54:10.626Z",
+      "commits": [
+        {
+          "sha": "b0c347eb18bfee1eb369d77499c619b61f642b19",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T02:53:19Z",
+          "message": "Merge e79bef2c026dd20b3b4f1c9b454e362c6c580a6c into 6d2fd8d435350e75805014afa1b3568e1119b767\n"
+        },
+        {
+          "sha": "e79bef2c026dd20b3b4f1c9b454e362c6c580a6c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T19:53:03-07:00",
+          "message": "test(apply): the apply-update case holds its own turns for the holder; doctor-menu reads the latest doctor line, since the apply line now follows every click (candybar-gather-renderer-76bb.1dh.g2l)\n"
+        },
+        {
+          "sha": "d2dc5053d2fd67af7e82b14ad09690459be8f5d6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T19:48:47-07:00",
+          "message": "feat(apply): a click's launches are effects, performed after its turn and reported as effect-done (candybar-gather-renderer-76bb.1dh.g2l)\n\nA handler describes what it asks of the world (a program, a line typed\ninto its pane, the update's act) as an Effect and awaits no child. The\narm table answers `{ answer, effects }`; `apply` performs the effects\nin order after the arm and puts each outcome back through the new\neffect-done arm, which holds a failed one for the session's bar in a\nturn of its own. One `apply` log line per click, menu-idle and\neffect-done event names the verb, the effects and the revision.\n\ntypeSlash takes a TmuxHint: the pane's absence is refused at the click,\nthe pane's own refusals are the effect's failure. A rate-limited click\nlaunch is a failed outcome shown in the bar, no longer a silent ack.\n\nTests: the click helper drives Apply and installs a store view that\nthrows on a write made with no turn held; cases that parked a pbcopy to\nhold the turn park a doctor gather instead.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-620",
       "ref": "refs/pull/620/merge",
       "sha": "a5a99970cd93a311979581c817cef2b815bad47f",
@@ -27,28 +56,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-05T19:35:43-07:00",
           "message": "feat(click)!: remove the load-config verb; a session's config is what its request names (candybar-gather-renderer-76bb.f00.bju)\n\nThe verb that pointed a session at any absolute path goes, with the\nper-session override it wrote, the \"pick\" arm it added to a session's\nconfig target, and the view-follow hook that ran after every click\nbecause a click might have moved the origin. Nothing but a render\nrequest sets a session's origin now, so the render, every durable click\nand the lane meter read the recorded origin directly.\n\nA config that still writes a `cc-candybar://load-config/…` link is\nrefused at load, at the template or the helper that spells it, with a\nmessage naming --config and CC_CANDYBAR_CONFIG as where a session's\nconfig comes from. The scheme string moves to a leaf module so the\nloader can read it without the config layer depending on the click\ncodec.\n\nBREAKING CHANGE: the load-config click verb and the examples' config\nswitcher are removed; a config linking to the verb fails to load.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-621",
-      "ref": "refs/pull/621/merge",
-      "sha": "0adf45bd7b5c200e609dfa8b0fd508fb027573b1",
-      "timestamp": "2026-11-06T02:50:02.261Z",
-      "commits": [
-        {
-          "sha": "0adf45bd7b5c200e609dfa8b0fd508fb027573b1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T19:49:11-07:00",
-          "message": "Merge d2dc5053d2fd67af7e82b14ad09690459be8f5d6 into 6d2fd8d435350e75805014afa1b3568e1119b767\n"
-        },
-        {
-          "sha": "d2dc5053d2fd67af7e82b14ad09690459be8f5d6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T19:48:47-07:00",
-          "message": "feat(apply): a click's launches are effects, performed after its turn and reported as effect-done (candybar-gather-renderer-76bb.1dh.g2l)\n\nA handler describes what it asks of the world (a program, a line typed\ninto its pane, the update's act) as an Effect and awaits no child. The\narm table answers `{ answer, effects }`; `apply` performs the effects\nin order after the arm and puts each outcome back through the new\neffect-done arm, which holds a failed one for the session's bar in a\nturn of its own. One `apply` log line per click, menu-idle and\neffect-done event names the verb, the effects and the revision.\n\ntypeSlash takes a TmuxHint: the pane's absence is refused at the click,\nthe pane's own refusals are the effect's failure. A rate-limited click\nlaunch is a failed outcome shown in the bar, no longer a silent ack.\n\nTests: the click helper drives Apply and installs a store view that\nthrows on a write made with no turn held; cases that parked a pbcopy to\nhold the turn park a doctor gather instead.\n"
         }
       ]
     },
