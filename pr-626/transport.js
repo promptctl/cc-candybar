@@ -52626,8 +52626,9 @@ async function answered(read2) {
 }
 function waitWithin(work, ms, late, after) {
   const wait = new AbortController();
-  const clear = ms > 0 ? after(ms, () => wait.abort()) : () => {
-  };
+  const clear = (ms > 0 ? (fn) => after(ms, fn) : whenDrained)(
+    () => wait.abort()
+  );
   const ended = new Promise((resolve, reject2) => {
     wait.signal.addEventListener("abort", () => resolve("deadline"));
     void work(wait.signal).then(
@@ -52636,12 +52637,16 @@ function waitWithin(work, ms, late, after) {
       // while it listens, its owner's after.
       (e) => wait.signal.aborted ? late(e) : reject2(e)
     );
-    if (ms <= 0) wait.abort();
   });
   return ended.finally(() => {
     clear();
     wait.abort();
   });
+}
+function whenDrained(fn) {
+  void Promise.resolve().then(() => process_default.nextTick(fn));
+  return () => {
+  };
 }
 function settledLane(outcome) {
   return { current: () => outcome };
@@ -80614,6 +80619,20 @@ var TranscriptFold = class {
   // instance per projection per daemon. Observable, so a view's payload over
   // an answer is recomputed in the turn the answer is stored.
   sessions;
+  // [LAW:one-source-of-truth] One fold in flight per session: a request whose
+  // stamp misses while the session's fold is still out joins that fold rather
+  // than starting another over the same bytes. Keyed by the session alone,
+  // not by session and stamp as the usage store's request refresh is: the
+  // fold is an incremental cursor, so a request that saw a newer stamp takes
+  // the in-flight answer and the next request folds the appended tail, where
+  // a key per stamp would start a second fold of the same bytes for every
+  // append that lands mid-fold. The read gate bounds how many windows read at
+  // once, not how many folds are asked for, and a cold fold takes a gate slot
+  // once per window; with one fold per request, a population of cold sessions
+  // asks for folds faster than any can finish its windows, no fold lands, the
+  // fast path never engages, and every request keeps its refresh alive in the
+  // queue.
+  flight = new SingleFlight();
   // [LAW:effects-at-boundaries] The session's refresh: folds what was
   // appended since its last read, and stores what it answered.
   async read(sessionId2, transcriptPath) {
@@ -80621,13 +80640,21 @@ var TranscriptFold = class {
     const prior = held?.folded;
     const stamp2 = statStamp(transcriptPath);
     if (held?.folded && stamp2 !== "" && held.folded.cursor.stamp === stamp2) {
-      const { folded: folded3, answer: answer2 } = held;
-      if (answer2.kind === "ok" && answer2.value === folded3.value) {
+      const { folded: folded2, answer: answer2 } = held;
+      if (answer2.kind === "ok" && answer2.value === folded2.value) {
         this.sessions.touch(sessionId2);
         return answer2;
       }
-      return this.store(sessionId2, folded3, { kind: "ok", value: folded3.value });
+      return this.store(sessionId2, folded2, { kind: "ok", value: folded2.value });
     }
+    return this.flight.run(
+      sessionId2,
+      () => this.fold(sessionId2, transcriptPath, prior)
+    );
+  }
+  // The session's one fold of what was appended since `prior`, and the store
+  // of what it answered.
+  async fold(sessionId2, transcriptPath, prior) {
     const startedAt = this.clock.monotonic();
     const read2 = await foldAppended(
       transcriptPath,
