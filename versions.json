@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "b38ab233e3dc44e6704d7461d5a952da81f5678d",
+      "timestamp": "2026-11-06T10:05:34.983Z",
+      "commits": [
+        {
+          "sha": "b38ab233e3dc44e6704d7461d5a952da81f5678d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T03:04:36-07:00",
+          "message": "feat(links): a click reaches the renderer that drew it, by name (candybar-gather-renderer-76bb.b2l.7q7) (#632)\n\n* feat(links): a click reaches the renderer that drew it, by name: links are minted as cc-candybar://to/<name>/dispatch/…, the daemon's three click intakes share one link parse and one address check, and the URL handler dials the socket the name selects (candybar-gather-renderer-76bb.b2l.7q7)\n\n- The minter takes the renderer's address first, so no link can be minted\n  without one. The name sits outside every signature: it only picks which\n  process verifies.\n- The renderer's link identity is one value, RendererLinks { to, signer },\n  carried where the signer was: the compile, the render cache, the daemon's\n  parts and the verbs' context.\n- The parser returns `to` as a name or null. Old grammars and config-spelled\n  links name none, and run where they arrive until b2l.eul and b2l.x87.\n- url-handle relays the raw link. The click request carries `url` in place\n  of verb and value. The version rule states why an in-bundle kind changes\n  shape without a bump.\n- One daemon helper refuses a link named for another renderer, on the url\n  frame, the click request and the tmux range. Every click event records\n  `to` (or `linkTo` for a range's link).\n- Swift: address.swift holds the name rule and the socket file a link\n  selects, checked before any path forms. main.swift logs the chosen file\n  publicly. address-test.swift runs in CI's macOS job and `just\n  test-url-handler`.\n- check-protocol compares TS against every mirror a row names, not only\n  the first. The Swift name rule, length, socket files, main's name and the\n  address segment are pinned. The name vectors drop \"main\": they are the\n  name rule's lists.\n\n* fix(links): review — a template's link verb is read by the click's own link parse, the URL handler's refusal never quotes the link, the doctor's and the verb table's words match the addressed grammar, and the protocol check reads each side once (candybar-gather-renderer-76bb.b2l.7q7)\n\n* fix(links): review — a template literal is read as a link's head, so a retired verb it ends on is still refused at load, and the compile holds its renderer's links where the draw reads them (candybar-gather-renderer-76bb.b2l.7q7)\n\n* test(links): the composition golden's links carry their renderer's address (candybar-gather-renderer-76bb.b2l.7q7)"
+        },
+        {
+          "sha": "52e519f362165f3c41349e0c094ad562c05278d7",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-06T09:46:57Z",
+          "message": "chore(release): set `package.json` to 1.199.2 [skip ci]\n\n## [1.199.2](https://github.com/promptctl/cc-candybar/compare/v1.199.1...v1.199.2) (2026-11-06)\n\n### Bug Fixes\n\n* **home:** a home file named through a symlink is stored as the home's (candybar-gather-renderer-76bb.f00.lpl) ([#634](https://github.com/promptctl/cc-candybar/issues/634)) ([4d66c41](https://github.com/promptctl/cc-candybar/commit/4d66c4136720948fa45456ed742e340dea015963))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-637",
       "ref": "refs/pull/637/merge",
       "sha": "e3c1fe670ef5f743a544bbfcaeda3fee5b41fdba",
@@ -74,49 +96,6 @@
       ]
     },
     {
-      "version": "pr-632",
-      "ref": "refs/pull/632/merge",
-      "sha": "8f092fe1c9d68664015f7fa263f556861727afcf",
-      "timestamp": "2026-11-06T09:56:42.179Z",
-      "commits": [
-        {
-          "sha": "8f092fe1c9d68664015f7fa263f556861727afcf",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T09:55:48Z",
-          "message": "Merge 9d012faaf81f1299f2510a0efcfd229e116a5268 into 52e519f362165f3c41349e0c094ad562c05278d7\n"
-        },
-        {
-          "sha": "9d012faaf81f1299f2510a0efcfd229e116a5268",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T02:30:23-07:00",
-          "message": "test(links): the composition golden's links carry their renderer's address (candybar-gather-renderer-76bb.b2l.7q7)\n"
-        },
-        {
-          "sha": "b000f4930361ddb61e751ea873039a40e8109a79",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T02:06:57-07:00",
-          "message": "fix(links): review — a template literal is read as a link's head, so a retired verb it ends on is still refused at load, and the compile holds its renderer's links where the draw reads them (candybar-gather-renderer-76bb.b2l.7q7)\n"
-        },
-        {
-          "sha": "d9c5ed05bc6b66b3dfc2df769796db030b470e60",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T01:36:30-07:00",
-          "message": "fix(links): review — a template's link verb is read by the click's own link parse, the URL handler's refusal never quotes the link, the doctor's and the verb table's words match the addressed grammar, and the protocol check reads each side once (candybar-gather-renderer-76bb.b2l.7q7)\n"
-        },
-        {
-          "sha": "730f0d9cad0ea4b6188d596a091f165197e2cb34",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T01:20:50-07:00",
-          "message": "feat(links): a click reaches the renderer that drew it, by name: links are minted as cc-candybar://to/<name>/dispatch/…, the daemon's three click intakes share one link parse and one address check, and the URL handler dials the socket the name selects (candybar-gather-renderer-76bb.b2l.7q7)\n\n- The minter takes the renderer's address first, so no link can be minted\n  without one. The name sits outside every signature: it only picks which\n  process verifies.\n- The renderer's link identity is one value, RendererLinks { to, signer },\n  carried where the signer was: the compile, the render cache, the daemon's\n  parts and the verbs' context.\n- The parser returns `to` as a name or null. Old grammars and config-spelled\n  links name none, and run where they arrive until b2l.eul and b2l.x87.\n- url-handle relays the raw link. The click request carries `url` in place\n  of verb and value. The version rule states why an in-bundle kind changes\n  shape without a bump.\n- One daemon helper refuses a link named for another renderer, on the url\n  frame, the click request and the tmux range. Every click event records\n  `to` (or `linkTo` for a range's link).\n- Swift: address.swift holds the name rule and the socket file a link\n  selects, checked before any path forms. main.swift logs the chosen file\n  publicly. address-test.swift runs in CI's macOS job and `just\n  test-url-handler`.\n- check-protocol compares TS against every mirror a row names, not only\n  the first. The Swift name rule, length, socket files, main's name and the\n  address segment are pinned. The name vectors drop \"main\": they are the\n  name rule's lists.\n"
-        }
-      ]
-    },
-    {
       "version": "pr-636",
       "ref": "refs/pull/636/merge",
       "sha": "aaef70e37ca8250b5c8740ce0995c4070a2af35f",
@@ -149,21 +128,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T02:13:00-07:00",
           "message": "fix(facts): a recording replays each frame from what its answer drew, in the file's order, with the recorded home (candybar-gather-renderer-76bb.6pj.rat)\n\nA live answer is drawn after its request's wait, from the view that request\nholds. The recording now writes a draw line when the answer is drawn, after\nthe document and the declaration that draw read (each restated when it is\nnot the last the recording wrote), and only to the recordings that saw the\nrequest arrive. The replay walks the file's lines in order: the recording\narm serves the last document reached and keeps no clock. The header carries\nthe home the payloads were composed against.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "4d66c4136720948fa45456ed742e340dea015963",
-      "timestamp": "2026-11-06T09:37:10.461Z",
-      "commits": [
-        {
-          "sha": "4d66c4136720948fa45456ed742e340dea015963",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T02:36:16-07:00",
-          "message": "fix(home): a home file named through a symlink is stored as the home's (candybar-gather-renderer-76bb.f00.lpl) (#634)\n\n* fix(home): a home file named through a symlink is stored as the home's (candybar-gather-renderer-76bb.f00.lpl)\n\nWhose a stored path is now follows the directories on its path, compared in\ntheir on-disk spelling at the call, not its spelling: a client's cwd is a\nrealpath, so a --config under CC_CANDYBAR_HOME=/tmp/h arrived as\n/private/tmp/h/... and was stored as the world's, and a copied home undid\ninto the original's config. The render checkpoint respells a requested home\nfile from the root as given, so what is stored reads back as itself. The\ndisk's spelling is a port on the stored root, and the watcher and the\nspelling share one walk to the deepest existing directory.\n\n* fix(home): a world record reached through a link reads back as the home's; one reading of the disk per operation (candybar-gather-renderer-76bb.f00.lpl)\n\nReading a record back had made the refusal of a world path depend on the disk,\nso a record the released build wrote validly, or one a later link made\nreachable from the root, dropped every session's undo history. The refusal is\nlexical again; any other absolute path reads back in the home's spelling.\n\nA StoredRoot reads each directory once per operation (oneReading): the render\ncheckpoint derives the request's spelling and its origin record from one\nreading, and the history's load and save each take one, replacing the\nper-caller memoizers.\n\n* fix(home): a file named through a link into the home's tree is the home's (candybar-gather-renderer-76bb.f00.lpl)\n\nAn ancestor whose on-disk spelling lies inside the root places the file, not\nonly one that is the root, so a link from outside into a subdirectory of the\nhome no longer stores the home's file as the world's.\n\n* docs(home): the stored-path reading and memory say only what holds (candybar-gather-renderer-76bb.f00.lpl)"
         }
       ]
     },

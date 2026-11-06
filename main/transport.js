@@ -22648,7 +22648,106 @@ var DIAGNOSTICS_CLOSED = "0";
 init_globals();
 var URL_SCHEME = "cc-candybar";
 
+// src/daemon/home.ts
+init_globals();
+var import_node_path = __toESM(require_path_browserify(), 1);
+var MAIN_NAME = "main";
+var HOME_ENV = "CC_CANDYBAR_HOME";
+var NAME_ENV = "CC_CANDYBAR_NAME";
+var RUNTIME_DIR_ENV = "CC_CANDYBAR_RUNTIME_DIR";
+var MAIN_SOCKET_FILE = "socket";
+var NAMED_SOCKET_SUFFIX = ".sock";
+var HOME_STATE_DIR = "state";
+var HOME_CACHE_DIR = "cache";
+var HOME_CONFIG_DIR = "config";
+var RENDERER_NAME_MAX = 32;
+var NAME_GRAMMAR = /^[a-z0-9][a-z0-9-]*$/;
+function nameOf(raw, where) {
+  if (!NAME_GRAMMAR.test(raw)) {
+    throw new Error(
+      `${where} must be lowercase letters, digits and dashes, starting with a letter or digit, got ${JSON.stringify(raw)}`
+    );
+  }
+  if (raw.length > RENDERER_NAME_MAX) {
+    throw new Error(
+      `${where} must be at most ${RENDERER_NAME_MAX} characters, got ${raw.length}: ${JSON.stringify(raw)}`
+    );
+  }
+  return raw;
+}
+function parseRendererName(raw) {
+  const name = nameOf(raw, NAME_ENV);
+  if (name === MAIN_NAME) {
+    throw new Error(
+      `${NAME_ENV} may not be ${JSON.stringify(MAIN_NAME)}: that is the main renderer's name, which is what an unset ${HOME_ENV} and ${NAME_ENV} mean`
+    );
+  }
+  return name;
+}
+function parseRendererAddress(raw) {
+  return raw === MAIN_NAME ? MAIN_NAME : nameOf(raw, "a link's renderer name");
+}
+function socketFile(name) {
+  return name === MAIN_NAME ? MAIN_SOCKET_FILE : `${name}${NAMED_SOCKET_SUFFIX}`;
+}
+function xdgEnv(env2, name) {
+  const v = env2[name];
+  return v && v.length > 0 ? v : void 0;
+}
+function uidRuntimeDir() {
+  const uid = process_default.getuid();
+  return import_node_path.default.join("/tmp", `cc-candybar-${uid}`);
+}
+function runtimeDir(host) {
+  const override = xdgEnv(host.env, RUNTIME_DIR_ENV);
+  if (override === void 0) return uidRuntimeDir();
+  if (!import_node_path.default.isAbsolute(override)) {
+    throw new Error(
+      `${RUNTIME_DIR_ENV} must be an absolute path, got ${JSON.stringify(override)}`
+    );
+  }
+  return override;
+}
+function homeOf(host) {
+  const { env: env2 } = host;
+  const root = xdgEnv(env2, HOME_ENV);
+  const name = xdgEnv(env2, NAME_ENV);
+  const legacySocket = xdgEnv(env2, "CC_CANDYBAR_SOCKET") ?? null;
+  const runtime = runtimeDir(host);
+  if (root !== void 0 && name !== void 0) {
+    if (!import_node_path.default.isAbsolute(root)) {
+      throw new Error(
+        `${HOME_ENV} must be an absolute path, got ${JSON.stringify(root)}`
+      );
+    }
+    if (legacySocket !== null) {
+      throw new Error(
+        `CC_CANDYBAR_SOCKET is set beside ${HOME_ENV} and ${NAME_ENV}: a named renderer's socket is its name's, so unset it`
+      );
+    }
+    return { kind: "named", name: parseRendererName(name), runtime, root };
+  }
+  if (root !== void 0 || name !== void 0) {
+    const [set2, missing] = root !== void 0 ? [HOME_ENV, NAME_ENV] : [NAME_ENV, HOME_ENV];
+    throw new Error(
+      `${set2} is set without ${missing}: a renderer's home is both, or neither for the main renderer`
+    );
+  }
+  return {
+    kind: "main",
+    name: MAIN_NAME,
+    runtime,
+    roots: {
+      state: xdgEnv(env2, "XDG_STATE_HOME") ?? import_node_path.default.join(host.home, ".local", "state"),
+      cache: xdgEnv(env2, "XDG_CACHE_HOME") ?? import_node_path.default.join(host.home, ".cache"),
+      config: xdgEnv(env2, "XDG_CONFIG_HOME") ?? import_node_path.default.join(host.home, ".config")
+    },
+    legacySocket
+  };
+}
+
 // src/click/wire.ts
+var LINK_TO = "to";
 var VERB_DISPATCH = "dispatch";
 var VERB_SET_STATE = "set-state";
 var VERB_STEP_STATE = "step-state";
@@ -22745,12 +22844,12 @@ function decodeSegments(value) {
 function decodeFirstSegment(value) {
   return decodeURIComponent(value.split("/", 1)[0]);
 }
-function effectsUrl(effects, says = clickDoes(effects)) {
+function effectsUrl(to, effects, says = clickDoes(effects)) {
   const params = effects.map(
     (e) => `e=${encodeURIComponent(`${e.verb}/${encodeSegments(e.args)}`)}`
   );
   const qs = [`does=${spell(says)}`, ...params].join("&");
-  return `${URL_SCHEME}://${VERB_DISPATCH}/${qs}`;
+  return `${URL_SCHEME}://${LINK_TO}/${to}/${VERB_DISPATCH}/${qs}`;
 }
 function parseEffects(rawValue) {
   return new S(rawValue).getAll("e").map(splitVerb);
@@ -22781,14 +22880,37 @@ function parseHandlerUrl(rawUrl) {
     return { ok: false, problem: `expected a ${prefix} link, got: ${rawUrl}` };
   }
   const rest2 = rawUrl.slice(prefix.length);
+  const addressed = `${LINK_TO}/`;
+  if (!rest2.startsWith(addressed)) {
+    return rest2.includes("/") ? verbOf(rest2, null) : { ok: true, to: null, verb: VERB_COPY, value: rest2 };
+  }
+  const named3 = rest2.slice(addressed.length);
+  const slash2 = named3.indexOf("/");
+  if (slash2 === -1) {
+    return {
+      ok: false,
+      problem: `the link names a renderer and no click: ${rawUrl}`
+    };
+  }
+  try {
+    return verbOf(
+      named3.slice(slash2 + 1),
+      parseRendererAddress(named3.slice(0, slash2))
+    );
+  } catch (error) {
+    return { ok: false, problem: error.message };
+  }
+}
+function verbOf(rest2, to) {
   const slash2 = rest2.indexOf("/");
   if (slash2 === -1) {
-    return { ok: true, verb: VERB_COPY, value: rest2 };
+    return { ok: false, problem: `the link carries no verb: ${rest2}` };
   }
   const encoded = rest2.slice(0, slash2);
   try {
     return {
       ok: true,
+      to,
       verb: decodeURIComponent(encoded),
       value: rest2.slice(slash2 + 1)
     };
@@ -22800,97 +22922,6 @@ function parseHandlerUrl(rawUrl) {
 // src/host.ts
 init_globals();
 init_os();
-
-// src/daemon/home.ts
-init_globals();
-var import_node_path = __toESM(require_path_browserify(), 1);
-var MAIN_NAME = "main";
-var HOME_ENV = "CC_CANDYBAR_HOME";
-var NAME_ENV = "CC_CANDYBAR_NAME";
-var RUNTIME_DIR_ENV = "CC_CANDYBAR_RUNTIME_DIR";
-var MAIN_SOCKET_FILE = "socket";
-var NAMED_SOCKET_SUFFIX = ".sock";
-var HOME_STATE_DIR = "state";
-var HOME_CACHE_DIR = "cache";
-var HOME_CONFIG_DIR = "config";
-var RENDERER_NAME_MAX = 32;
-var NAME_GRAMMAR = /^[a-z0-9][a-z0-9-]*$/;
-function parseRendererName(raw) {
-  if (!NAME_GRAMMAR.test(raw)) {
-    throw new Error(
-      `${NAME_ENV} must be lowercase letters, digits and dashes, starting with a letter or digit, got ${JSON.stringify(raw)}`
-    );
-  }
-  if (raw.length > RENDERER_NAME_MAX) {
-    throw new Error(
-      `${NAME_ENV} must be at most ${RENDERER_NAME_MAX} characters, got ${raw.length}: ${JSON.stringify(raw)}`
-    );
-  }
-  if (raw === MAIN_NAME) {
-    throw new Error(
-      `${NAME_ENV} may not be ${JSON.stringify(MAIN_NAME)}: that is the main renderer's name, which is what an unset ${HOME_ENV} and ${NAME_ENV} mean`
-    );
-  }
-  return raw;
-}
-function socketFile(name) {
-  return name === MAIN_NAME ? MAIN_SOCKET_FILE : `${name}${NAMED_SOCKET_SUFFIX}`;
-}
-function xdgEnv(env2, name) {
-  const v = env2[name];
-  return v && v.length > 0 ? v : void 0;
-}
-function uidRuntimeDir() {
-  const uid = process_default.getuid();
-  return import_node_path.default.join("/tmp", `cc-candybar-${uid}`);
-}
-function runtimeDir(host) {
-  const override = xdgEnv(host.env, RUNTIME_DIR_ENV);
-  if (override === void 0) return uidRuntimeDir();
-  if (!import_node_path.default.isAbsolute(override)) {
-    throw new Error(
-      `${RUNTIME_DIR_ENV} must be an absolute path, got ${JSON.stringify(override)}`
-    );
-  }
-  return override;
-}
-function homeOf(host) {
-  const { env: env2 } = host;
-  const root = xdgEnv(env2, HOME_ENV);
-  const name = xdgEnv(env2, NAME_ENV);
-  const legacySocket = xdgEnv(env2, "CC_CANDYBAR_SOCKET") ?? null;
-  const runtime = runtimeDir(host);
-  if (root !== void 0 && name !== void 0) {
-    if (!import_node_path.default.isAbsolute(root)) {
-      throw new Error(
-        `${HOME_ENV} must be an absolute path, got ${JSON.stringify(root)}`
-      );
-    }
-    if (legacySocket !== null) {
-      throw new Error(
-        `CC_CANDYBAR_SOCKET is set beside ${HOME_ENV} and ${NAME_ENV}: a named renderer's socket is its name's, so unset it`
-      );
-    }
-    return { kind: "named", name: parseRendererName(name), runtime, root };
-  }
-  if (root !== void 0 || name !== void 0) {
-    const [set2, missing] = root !== void 0 ? [HOME_ENV, NAME_ENV] : [NAME_ENV, HOME_ENV];
-    throw new Error(
-      `${set2} is set without ${missing}: a renderer's home is both, or neither for the main renderer`
-    );
-  }
-  return {
-    kind: "main",
-    name: MAIN_NAME,
-    runtime,
-    roots: {
-      state: xdgEnv(env2, "XDG_STATE_HOME") ?? import_node_path.default.join(host.home, ".local", "state"),
-      cache: xdgEnv(env2, "XDG_CACHE_HOME") ?? import_node_path.default.join(host.home, ".cache"),
-      config: xdgEnv(env2, "XDG_CONFIG_HOME") ?? import_node_path.default.join(host.home, ".config")
-    },
-    legacySocket
-  };
-}
 
 // src/proc/system-launcher.ts
 init_globals();
@@ -38503,13 +38534,13 @@ init_globals();
 // src/config/setting-projections.ts
 init_globals();
 var effectiveVarOf = (name) => `${name}.effective`;
-var nameOf = (field) => {
+var nameOf2 = (field) => {
   const row2 = GLOBAL_FIELDS[field];
   return row2.kind === "selection" ? row2.sessionKey : field;
 };
 var SETTINGS = Object.fromEntries(
   CONTROLLED_FIELDS.map((field) => {
-    const name = nameOf(field);
+    const name = nameOf2(field);
     return [
       name,
       {
@@ -39082,10 +39113,10 @@ function confirms(key, disarm, fires) {
   const gates = [...new Set(fires.map((f) => f.when))].filter(
     (g) => g !== "true"
   );
-  const nameOf2 = (held) => gates.length === 0 ? key : `${key}.${held}`;
+  const nameOf3 = (held) => gates.length === 0 ? key : `${key}.${held}`;
   const actions = {};
   for (let held = 0; held < 2 ** gates.length; held++)
-    actions[nameOf2(held)] = {
+    actions[nameOf3(held)] = {
       do: [
         disarm,
         ...fires.filter(
@@ -39093,7 +39124,7 @@ function confirms(key, disarm, fires) {
         ).map((f) => f.action)
       ]
     };
-  const link = (i, held) => i === gates.length ? `"${nameOf2(held)}"` : `(ternary ${link(i + 1, held | 1 << i)} ${link(i + 1, held)} (${gates[i]}))`;
+  const link = (i, held) => i === gates.length ? `"${nameOf3(held)}"` : `(ternary ${link(i + 1, held | 1 << i)} ${link(i + 1, held)} (${gates[i]}))`;
   return { link: link(0, 0), actions };
 }
 function confirmStep(key, labels, fires) {
@@ -46226,13 +46257,13 @@ function templateActionRefs(template, helpers) {
   }
   return [...refs.values()];
 }
-var LINK_VERB_RE = new RegExp(`^${URL_SCHEME}://([a-z][a-z0-9-]*)`);
 function templateLinkVerbs(template, helpers) {
   const refs = /* @__PURE__ */ new Map();
   for (const { code, via } of callGraph(template, helpers)) {
     for (const s of code.matchAll(STRING_LITERAL_RE)) {
-      const verb = LINK_VERB_RE.exec(s[0].slice(1, -1))?.[1];
-      if (verb === void 0) continue;
+      const link = parseHandlerUrl(`${s[0].slice(1, -1)}/`);
+      if (!link.ok) continue;
+      const { verb } = link;
       const key = `${verb}\0${via ?? "\0"}`;
       if (!refs.has(key)) refs.set(key, { verb, via });
     }
@@ -65727,7 +65758,7 @@ var HANDOFF_SEVERITY = {
 function diagnosticSpan(text4, link) {
   return { text: sanitizeText(text4), link };
 }
-function collectDiagnostics(sessionId2, by, errors2, notices, warnings) {
+function collectDiagnostics(to, sessionId2, by, errors2, notices, warnings) {
   const plain = /* @__PURE__ */ new Set();
   const plainOf3 = (text4, severity) => {
     const made = plainMessage(text4, severity);
@@ -65747,7 +65778,7 @@ function collectDiagnostics(sessionId2, by, errors2, notices, warnings) {
         [
           diagnosticSpan(
             m.lines[0][0].text,
-            copyLink(sessionId2, by, keys2[i], i + 1)
+            copyLink(to, sessionId2, by, keys2[i], i + 1)
           )
         ],
         ...m.lines.slice(1)
@@ -65762,8 +65793,9 @@ function plainMessage({ about, text: message, copy: copy3 }, severity) {
 function copyKeys(list2) {
   return stopsOf(list2).map((stop2) => String(stop2 * PAGES + 1));
 }
-function copyLink(sessionId2, by, key, position) {
+function copyLink(to, sessionId2, by, key, position) {
   return effectsUrl(
+    to,
     [{ verb: VERB_COPY_DIAGNOSTIC, args: [sessionId2, by, key] }],
     `copy diagnostic ${position}`
   );
@@ -65817,7 +65849,7 @@ var MAX_VIEWER_ROWS = 20;
 function viewerRowCap(termRows, surfaceRows) {
   return Math.min(MAX_VIEWER_ROWS, termRows ?? MAX_VIEWER_ROWS, ...surfaceRows);
 }
-function viewerRows(list2, at, sessionId2, by, geometry) {
+function viewerRows(list2, at, to, sessionId2, by, geometry) {
   const { index } = at;
   const shown = list2[index - 1];
   const opts = viewerOptions(geometry);
@@ -65827,12 +65859,13 @@ function viewerRows(list2, at, sessionId2, by, geometry) {
     color: shown.severity.colors.fg
   });
   const button = (text4, link) => cell(text4, link === null ? style : style.withLink(link));
-  const step4 = (glyph, to) => to === null ? button(" ", null) : button(
+  const step4 = (glyph, next) => next === null ? button(" ", null) : button(
     glyph,
     viewerLink(
+      to,
       sessionId2,
-      viewerKey(list2, to.index - 1, to.page),
-      `show diagnostic ${to.index} of ${list2.length} page ${to.page + 1}`
+      viewerKey(list2, next.index - 1, next.page),
+      `show diagnostic ${next.index} of ${list2.length} page ${next.page + 1}`
     )
   );
   const headerOf = (pages, page2) => {
@@ -65842,13 +65875,13 @@ function viewerRows(list2, at, sessionId2, by, geometry) {
     const position = pages > 1 ? `[${index}/${list2.length} ${page2 + 1}/${pages}]` : `[${index}/${list2.length}]`;
     return drawnRows(
       [
-        button("\u2715", viewerLink(sessionId2, DIAGNOSTICS_CLOSED)),
+        button("\u2715", viewerLink(to, sessionId2, DIAGNOSTICS_CLOSED)),
         ...steps2 ? [step4("\u2039", back2)] : [],
         button(position, null),
         ...steps2 ? [step4("\u203A", on2)] : [],
         button(
           "\u29C9 copy",
-          copyLink(sessionId2, by, viewerKey(list2, index - 1, 0), index)
+          copyLink(to, sessionId2, by, viewerKey(list2, index - 1, 0), index)
         )
       ],
       opts
@@ -65876,20 +65909,21 @@ function viewerRows(list2, at, sessionId2, by, geometry) {
     return [...header, ...shownRows];
   }
 }
-function handoffRows(handoff, list2, sessionId2, geometry) {
+function handoffRows(handoff, list2, to, sessionId2, geometry) {
   const { label: label2, fg, bg, open: open2 } = diagnosticsProjection(list2);
   const indicator = label2 === "" ? [] : [
     cell(
       label2,
       new Style({ bgcolor: bg, color: fg }).withLink(
-        viewerLink(sessionId2, open2)
+        viewerLink(to, sessionId2, open2)
       )
     )
   ];
   return channelRows(handoff, viewerOptions(geometry), indicator);
 }
-function viewerLink(sessionId2, key, says) {
+function viewerLink(to, sessionId2, key, says) {
   return effectsUrl(
+    to,
     [{ verb: VERB_SET_STATE, args: [sessionId2, DIAGNOSTICS_VIEWING, key] }],
     says
   );
@@ -65980,20 +66014,20 @@ function repoAnswerFields(sessionId2, dir, answer2) {
     evaluated: answer2
   };
 }
-function repoQuestions(gate2, sessionId2, signer) {
+function repoQuestions(gate2, sessionId2, links2) {
   return gate2.awaiting.map((dir) => {
     const message = `a cc-candybar config for ${dir} \u2014 run it?`;
     const answers = REPO_ANSWERS.map(
       (answer2) => diagnosticSpan(
         `[${answer2 === "approved" ? "approve" : "decline"}]`,
-        effectsUrl([
+        effectsUrl(links2.to, [
           {
             verb: VERB_REPO_CONFIG,
             args: [
               sessionId2,
               dir,
               answer2,
-              signer.sign(repoAnswerFields(sessionId2, dir, answer2))
+              links2.signer.sign(repoAnswerFields(sessionId2, dir, answer2))
             ]
           }
         ])
@@ -69267,7 +69301,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.199.1";
+var PACKAGE_VERSION = "1.199.2";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -71457,7 +71491,10 @@ function runOf2([sessionId2 = "", action2 = "", evaluated2 = "", mac = ""], ctx)
     );
   }
   const declaration = runDeclaration(decl);
-  if (!ctx.links.verify({ sessionId: sid, action: action2, declaration, evaluated: evaluated2 }, mac)) {
+  if (!ctx.links.signer.verify(
+    { sessionId: sid, action: action2, declaration, evaluated: evaluated2 },
+    mac
+  )) {
     throw new BadVerbArgs(
       "the link's signature does not match what it carries: it was not drawn by this daemon, or its action has been edited since it was drawn"
     );
@@ -71518,7 +71555,7 @@ var repoConfig = async (value, ctx) => {
   );
   const sid = requireSessionId(sessionId2);
   const answered2 = answer2;
-  if (!ctx.links.verify(repoAnswerFields(sid, dir, answered2), mac)) {
+  if (!ctx.links.signer.verify(repoAnswerFields(sid, dir, answered2), mac)) {
     throw new BadVerbArgs(
       "the answer's signature does not match what it carries: it was not drawn by this daemon"
     );
@@ -73220,9 +73257,9 @@ function renderAction(name, displays, runtime) {
     boundValue,
     store,
     sessionId2,
-    runtime.signer
+    runtime.links.signer
   );
-  return linkOver(display, effectsUrl(effects), active2);
+  return linkOver(display, effectsUrl(runtime.links.to, effects), active2);
 }
 function actionFuncs(runtime) {
   return {
@@ -73237,10 +73274,10 @@ function actionFuncs(runtime) {
 
 // src/render/disclosure-close.ts
 init_globals();
-function disclosureCloseFragment(store, key) {
+function disclosureCloseFragment(to, store, key) {
   return linkFragment(
     DISCLOSURE_GLYPH_CLOSE,
-    effectsUrl([
+    effectsUrl(to, [
       {
         verb: VERB_SET_STATE,
         args: [readVar(store, "session.id"), key, DISCLOSURE_CLOSED]
@@ -73574,7 +73611,7 @@ function renderPicker(applyName, apply2, page2, close, paged, runtime, itemPaint
   );
   const pageIdx = !Number.isInteger(rawPage) ? 0 : rawPage < 0 ? holding2 : Math.min(rawPage, pages.length - 1);
   const pageSections = pages[pageIdx] ?? [];
-  const pageUrl = (value) => effectsUrl([
+  const pageUrl = (value) => effectsUrl(runtime.links.to, [
     { verb: VERB_SET_STATE, args: [sessionId2, page2.key, String(value)] }
   ]);
   const closeWrite = close.kind === "led" ? [] : [
@@ -73584,15 +73621,22 @@ function renderPicker(applyName, apply2, page2, close, paged, runtime, itemPaint
     }
   ];
   const closeEffects = close.kind === "own" && close.onPick ? closeWrite : [];
-  const optionUrl = (option) => effectsUrl([
-    ...realize(declared, option, option, store, sessionId2, runtime.signer).effects,
+  const optionUrl = (option) => effectsUrl(runtime.links.to, [
+    ...realize(
+      declared,
+      option,
+      option,
+      store,
+      sessionId2,
+      runtime.links.signer
+    ).effects,
     ...closeEffects
   ]);
   const optionCell = (face, i) => linkOver(face, optionUrl(apply2.options[i]));
   const nav = close.kind === "led" ? [] : [
     linkFragment(
       DISCLOSURE_GLYPH_CLOSE,
-      effectsUrl(closeWrite),
+      effectsUrl(runtime.links.to, closeWrite),
       false,
       closeStyle
     )
@@ -73601,8 +73645,15 @@ function renderPicker(applyName, apply2, page2, close, paged, runtime, itemPaint
     ...steps2.map(
       ({ glyph, option }) => linkFragment(
         glyph,
-        effectsUrl([
-          ...realize(declared, option, option, store, sessionId2, runtime.signer).effects,
+        effectsUrl(runtime.links.to, [
+          ...realize(
+            declared,
+            option,
+            option,
+            store,
+            sessionId2,
+            runtime.links.signer
+          ).effects,
           {
             verb: VERB_SET_STATE,
             args: [
@@ -73748,13 +73799,14 @@ function renderCarousel(applyName, apply2, openName, label2, runtime) {
   const indexAt = ringAround(options, readVar(store, apply2.stateVar));
   const ring = (offset) => options[indexAt(offset)];
   const step4 = (offset) => effectsUrl(
+    runtime.links.to,
     realize(
       declared,
       ring(offset),
       ring(offset),
       store,
       sessionId2,
-      runtime.signer
+      runtime.links.signer
     ).effects
   );
   return assemble([
@@ -73770,13 +73822,14 @@ function renderCarousel(applyName, apply2, openName, label2, runtime) {
         label2
       ),
       effectsUrl(
+        runtime.links.to,
         realize(
           runtime.compiled.get(openName),
           ring(0),
           void 0,
           store,
           sessionId2,
-          runtime.signer
+          runtime.links.signer
         ).effects
       )
     ),
@@ -74102,7 +74155,7 @@ function renderMenu(applyName, displays, options, runtime) {
   const successor = open2 ? DISCLOSURE_CLOSED : member;
   const glyph = linkFragment(
     pickCycleDisplay(`{{ menu "${applyName}" }}`, displays, 2, open2 ? 1 : 0),
-    effectsUrl([
+    effectsUrl(action2.links.to, [
       {
         verb: VERB_SET_STATE,
         args: [sessionId2, stateKey, successor, pageKey, "0"]
@@ -75566,7 +75619,7 @@ function compileHelpers(engine, bodies, errorPath, inherit = Defines.EMPTY) {
   }
   return defines;
 }
-var compileAlone = (signer) => (_key, input) => compileDslConfig(input, signer);
+var compileAlone = (links2) => (_key, input) => compileDslConfig(input, links2);
 function registerCompiled(config2, registry, cwd2, compile, scopes = EVERY_SCOPE) {
   const input = compileInputOf(config2);
   const key = compileKey(input);
@@ -75622,11 +75675,11 @@ var EVERY_SCOPE = /* @__PURE__ */ new Set([
   "directory",
   "view"
 ]);
-function compileDslConfig({ config: config2, stateReads, projections }, signer) {
+function compileDslConfig({ config: config2, stateReads, projections }, links2) {
   const actionRuntime = {
     bound: void 0,
     compiled: /* @__PURE__ */ new Map(),
-    signer
+    links: links2
   };
   const drawnAt = () => renderBinding(actionRuntime, "drawnAt").registry.drawnAt();
   const activeSegment = createActiveSegmentRef(drawnAt);
@@ -75834,6 +75887,7 @@ function compileDslConfig({ config: config2, stateReads, projections }, signer) 
     roots,
     activeSegment,
     menuRuntime,
+    links: links2,
     globalExpressions,
     instant,
     layoutReadsInstant,
@@ -76043,8 +76097,9 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
         // `{{ menu }}` inside door → ⚙ lands at depth 2 with no walk state.
         renderBody: (body, held, band) => renderNode(body, held, bandRoot(band)),
         // [LAW:one-source-of-truth] The row ✕ reads the session id from the
-        // same store every other affordance's URL does.
-        closeDisclosure: (key) => disclosureCloseFragment(store, key),
+        // same store every other affordance's URL does, and is addressed as
+        // every link the compile draws is.
+        closeDisclosure: (key) => disclosureCloseFragment(compiled.links.to, store, key),
         placed: (id2, lines2) => record2.placed(id2, motion.placed(id2, lines2)),
         lastDrawn: (id2) => last2?.placements.get(id2),
         waited: (variable) => waited.add(variable),
@@ -76553,8 +76608,8 @@ function handedOffTo(lanes, following) {
   );
 }
 var HANDOFF_BUTTON = "[\u27F2 claude]";
-function laneHandoff(sessionId2, lanes) {
-  const reset = effectsUrl([
+function laneHandoff(to, sessionId2, lanes) {
+  const reset = effectsUrl(to, [
     {
       verb: VERB_RESET_CONFIG,
       args: [sessionId2, ...lanes.map((lane) => LANES[lane].switch.setting)]
@@ -76915,6 +76970,7 @@ function renderFrame(parts, sessionId2, fps, at) {
       );
       const answer2 = RENDER_ANSWERS.ansi(drawn.body);
       const statusline = statuslineOf(
+        parts.links.to,
         sessionId2,
         drawn,
         handedOffTo(lanes, frameFeeds.following(sessionId2))
@@ -77081,7 +77137,7 @@ function drawRender(parts, setup, drawing2) {
     frameFeeds,
     renderCache,
     updateWatch,
-    linkSigner: linkSigner2,
+    links: links2,
     fileEvents,
     renderWarnings,
     payloadProviders,
@@ -77103,11 +77159,12 @@ function drawRender(parts, setup, drawing2) {
   const clickHold = clickErrorAt(sessionState, sessionId2, at, drawing2.by);
   const clickShown = clickHold.kind === "held" || clickHold.kind === "owed" ? clickHold.error : null;
   const updates = updateWatch.notice({
+    to: links2.to,
     sessionId: sessionId2,
     dismissed: sessionState.get(sessionId2, UPDATE_DISMISSED_KEY),
     enabled: effective.updateNotice
   });
-  const questions = repoQuestions(entry.repos, sessionId2, linkSigner2);
+  const questions = repoQuestions(entry.repos, sessionId2, links2);
   const sourced = (about, text4) => ({
     about,
     text: text4,
@@ -77148,6 +77205,7 @@ function drawRender(parts, setup, drawing2) {
   ];
   const scope = { config: state.config };
   const diagnostics = collectDiagnostics(
+    links2.to,
     sessionId2,
     drawing2.by,
     errors2,
@@ -77244,7 +77302,14 @@ function drawRender(parts, setup, drawing2) {
   );
   const body = viewing === null ? frame2 : standIn(
     frame2,
-    viewerRows(diagnostics, viewing, sessionId2, drawing2.by, geometry)
+    viewerRows(
+      diagnostics,
+      viewing,
+      links2.to,
+      sessionId2,
+      drawing2.by,
+      geometry
+    )
   );
   const g = payloadProviders.gitProvider.getStats();
   const u = payloadProviders.usageStore.getStats();
@@ -77396,7 +77461,7 @@ async function drawAnswer(parts, req, at, waitEndsAt, facts) {
     const elsewhere = handedOffTo(lanes, frameFeeds.following(sessionId2));
     const toStatusline = roleOf(req.hints.client ?? null) === "statusline";
     const resp = RENDER_ANSWERS[req.encoding](
-      toStatusline ? statuslineOf(sessionId2, drawn, elsewhere) : drawn.body
+      toStatusline ? statuslineOf(parts.links.to, sessionId2, drawn, elsewhere) : drawn.body
     );
     noteFacts(facts, {
       handoff: (toStatusline ? elsewhere : []).join(",") || "-",
@@ -77415,13 +77480,14 @@ async function drawAnswer(parts, req, at, waitEndsAt, facts) {
     __callDispose(_stack, _error, _hasError);
   }
 }
-function statuslineOf(sessionId2, drawn, elsewhere) {
+function statuslineOf(to, sessionId2, drawn, elsewhere) {
   const [first2, ...rest2] = elsewhere;
   return first2 === void 0 || drawn.viewerOpen ? drawn.body : standIn(
     drawn.body,
     handoffRows(
-      laneHandoff(sessionId2, [first2, ...rest2]),
+      laneHandoff(to, sessionId2, [first2, ...rest2]),
       drawn.diagnostics,
+      to,
       sessionId2,
       drawn.geometry
     )
@@ -78413,16 +78479,14 @@ async function clickEvent(parts, accepted, timedOut, clientLeft, run3) {
 async function clickOutcome(parts, req, facts, gone) {
   const arrival = { via: "link", delivery: { kind: "cli" } };
   noteFacts(facts, { via: "cli" });
-  const { verb, value } = req;
-  if (typeof verb !== "string" || typeof value !== "string") {
+  const { url } = req;
+  if (typeof url !== "string") {
     return {
       kind: "bad-request",
-      problems: [
-        `a click's verb and value are strings, got ${typeof verb} and ${typeof value}`
-      ]
+      problems: [`a click's link is a string, got ${typeof url}`]
     };
   }
-  return clickRan(() => handleClick(parts, verb, value, arrival, facts, gone));
+  return clickRan(() => linkClick(parts, url, arrival, facts, gone));
 }
 async function urlClick(parts, frame2, timedOut, accepted, clientLeft) {
   return clickEvent(
@@ -78447,15 +78511,11 @@ async function urlClick(parts, frame2, timedOut, accepted, clientLeft) {
           problems: [`the URL handler's frame carries no url string`]
         };
       }
-      const link = parseHandlerUrl(url);
-      if (!link.ok) return { kind: "bad-request", problems: [link.problem] };
       const arrival = {
         via: "link",
         delivery: { kind: "forwarder", urlV }
       };
-      return clickRan(
-        () => handleClick(parts, link.verb, link.value, arrival, facts, gone)
-      );
+      return clickRan(() => linkClick(parts, url, arrival, facts, gone));
     }
   );
 }
@@ -78475,12 +78535,37 @@ function thrownOutcome(error) {
 function daemonOutcome(error) {
   return error instanceof DaemonClosing ? { kind: "closing", error } : { kind: "threw", error };
 }
+var TO_FACT = {
+  link: "to",
+  "tmux-status": "linkTo"
+};
 var VERB_FACT = {
   link: "verb",
   "tmux-status": "linkVerb"
 };
+async function linkClick(parts, url, arrival, facts, clientGone) {
+  const link = parseHandlerUrl(url);
+  if (!link.ok) return { kind: "bad-request", problems: [link.problem] };
+  noteFacts(facts, { [TO_FACT[arrival.via]]: link.to ?? "-" });
+  const own2 = parts.links.to;
+  if (link.to !== null && link.to !== own2) {
+    return {
+      kind: "bad-request",
+      problems: [
+        `the link is addressed to renderer ${JSON.stringify(link.to)}, and this is ${JSON.stringify(own2)}`
+      ]
+    };
+  }
+  return handleClick(parts, link.verb, link.value, arrival, facts, clientGone);
+}
 async function handleClick(parts, verb, value, arrival, facts, clientGone) {
   if (verb === VERB_TMUX_STATUS_CLICK) {
+    if (arrival.via === "tmux-status") {
+      return {
+        kind: "bad-request",
+        problems: ["a status-line link names another status-line click"]
+      };
+    }
     noteFacts(facts, { verb });
     return statusLineClick(parts, value, facts, clientGone);
   }
@@ -78539,14 +78624,9 @@ async function statusLineClick(parts, value, facts, clientGone) {
   if (click3.kind === "refused") return refused2(click3.reason);
   noteFacts(facts, { link: click3.url });
   if (click3.url.startsWith("cc-candybar://")) {
-    const parsed2 = parseHandlerUrl(click3.url);
-    if (!parsed2.ok) return refused2(parsed2.problem);
-    if (parsed2.verb === VERB_TMUX_STATUS_CLICK)
-      return refused2("a status-line link names another status-line click");
-    return handleClick(
+    return linkClick(
       parts,
-      parsed2.verb,
-      parsed2.value,
+      click3.url,
       { via: "tmux-status" },
       facts,
       clientGone
@@ -78828,14 +78908,16 @@ function updateNotice(update, act, ctx) {
   const message = [sentence, ...failure].join("\n");
   const actSpan = act.kind === "running" ? diagnosticSpan(`[${facts.busy}]`, null) : diagnosticSpan(
     `[${facts.act}]`,
-    effectsUrl([{ verb: VERB_APPLY_UPDATE, args: [ctx.sessionId] }])
+    effectsUrl(ctx.to, [
+      { verb: VERB_APPLY_UPDATE, args: [ctx.sessionId] }
+    ])
   );
   const first2 = [
     diagnosticSpan(sentence, null),
     actSpan,
     diagnosticSpan(
       "[dismiss]",
-      effectsUrl([
+      effectsUrl(ctx.to, [
         {
           verb: VERB_SET_STATE,
           args: [ctx.sessionId, UPDATE_DISMISSED_KEY, identity2]
@@ -78844,7 +78926,7 @@ function updateNotice(update, act, ctx) {
     ),
     diagnosticSpan(
       "[disable]",
-      effectsUrl([
+      effectsUrl(ctx.to, [
         {
           verb: VERB_SET_CONFIG,
           args: [ctx.sessionId, UPDATE_NOTICE_FIELD, "false"]
@@ -82265,7 +82347,7 @@ function buildRenderState(load, deps) {
       config2,
       registry,
       cwd2,
-      deps.compile ?? compileAlone(deps.signer),
+      deps.compile ?? compileAlone(deps.links),
       DIRECTORY_SCOPE
     );
     warnings.push(...registration.loadWarnings);
@@ -82541,7 +82623,7 @@ var RenderCache = class {
   // table learns only when a state carrying it is served, so a load that fails
   // after compiling leaves nothing behind.
   compileOf(key, input) {
-    return this.compiles.get(key) ?? compileDslConfig(input, this.deps.signer);
+    return this.compiles.get(key) ?? compileDslConfig(input, this.deps.links);
   }
   // [LAW:one-source-of-truth] Read off the map the cache serves: an entry's
   // own heap, plus each compile its entries carry once, however many share it.
@@ -85433,7 +85515,7 @@ function createDaemon(inputs) {
     },
     failed: (sessionId2, error) => sayUnapplied(log, "menu-idle", `session=${sessionId2}`, error)
   });
-  const linkSigner2 = inputs.linkSigner;
+  const links2 = { to: home.name, signer: inputs.linkSigner };
   const runs = new Runs({
     supersede: (storage2, sessionId2) => managedStorage.supersede(storage2, sessionId2),
     launch: launcher.launch,
@@ -85555,7 +85637,7 @@ function createDaemon(inputs) {
         watchers: watcherRegistry,
         log,
         storage: managedStorage,
-        signer: linkSigner2,
+        links: links2,
         gates,
         // [LAW:single-enforcer] Where every session's facts come from: the
         // in-process arm over the daemon's own owners, which logs the refreshes
@@ -85699,7 +85781,7 @@ function createDaemon(inputs) {
     }),
     // The storage keys of the same entry `configFor` reads the config of.
     sourcesFor: (origin) => renderCache.getOrCreate(origin.projectDir, origin.cwd, origin.target.path).state.sources,
-    links: linkSigner2,
+    links: links2,
     runs,
     lanes: {
       of: (origin, sessionId2) => lanesAt(parts, origin, sessionId2),
@@ -85731,7 +85813,7 @@ function createDaemon(inputs) {
     effectSessions,
     menuIdle,
     journalTurns,
-    linkSigner: linkSigner2,
+    links: links2,
     runs,
     sourceRuns,
     laneSetups,
@@ -87227,10 +87309,9 @@ async function click2(url, size) {
     const refused3 = copiesOnly ? await copy2(effects.map((e) => e.args.join("/")).join("\n")) : `not sent: on a real machine this ${host.map((e) => HOST_VERBS.get(e.verb)).join(", ")}`;
     return { ...await render2(size), refused: refused3 };
   }
-  const { verb, value } = clickOf(url);
   let refused2 = null;
   try {
-    await daemon2({ v: PROTOCOL_VERSION, kind: "click", verb, value });
+    await daemon2({ v: PROTOCOL_VERSION, kind: "click", url });
   } catch (e) {
     refused2 = e instanceof Error ? e.message : String(e);
   }
