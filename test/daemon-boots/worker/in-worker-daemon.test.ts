@@ -124,7 +124,7 @@ describe("a daemon in this worker", () => {
     await render(daemon, sid, projectDir);
     const refused = await sendClick(
       daemon,
-      effectsUrl([{ verb: VERB_SET_STATE, args: [sid, "no-such-key", "x"] }]),
+      effectsUrl(daemon!.name, [{ verb: VERB_SET_STATE, args: [sid, "no-such-key", "x"] }]),
     );
     expect(refused.ok).toBe(false);
     await render(daemon, sid, projectDir);
@@ -173,11 +173,12 @@ describe("a daemon in this worker", () => {
 
   test("a TIMEOUT is the helper's to ask again", async () => {
     daemon = startDaemon(env);
-    const { send, log, now } = daemon;
+    const { send, log, now, name } = daemon;
     let asked = 0;
     const out = await frameRequest(
       {
         log,
+        name,
         now,
         send: (req, budgetMs) =>
           ++asked === 1

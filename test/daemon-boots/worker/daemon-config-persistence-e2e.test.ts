@@ -98,7 +98,7 @@ describe("candybar-config-engine-71o.5: a daemon's click → persist → restart
       // rather than depending on extracting it.
       await click(
         daemon,
-        effectsUrl([
+        effectsUrl(daemon.name, [
           { verb: VERB_SET_STATE, args: [SID, "candybar.menu", "open"] },
         ]),
       );
@@ -187,7 +187,7 @@ describe("candybar-config-engine-71o.5: a daemon's click → persist → restart
       await render(daemon, OTHER_SID, projectDir);
       await click(
         daemon,
-        effectsUrl([
+        effectsUrl(daemon.name, [
           { verb: VERB_SET_STATE, args: [OTHER_SID, "candybar.menu", "open"] },
           { verb: VERB_SET_STATE, args: [OTHER_SID, ...OPEN_THEME_PICKER] },
         ]),
@@ -214,7 +214,7 @@ describe("candybar-config-engine-71o.5: a daemon's click → persist → restart
       // The padding stepper sits in the ⚙ config tab.
       await click(
         daemon,
-        effectsUrl([
+        effectsUrl(daemon.name, [
           { verb: VERB_SET_STATE, args: [SID, "candybar.tab", "config"] },
         ]),
       );
@@ -297,7 +297,7 @@ describe("candybar-config-engine-71o.5: a daemon's click → persist → restart
       await render(daemon, FRESH_SID, projectDir);
       await click(
         daemon,
-        effectsUrl([
+        effectsUrl(daemon.name, [
           { verb: VERB_SET_STATE, args: [FRESH_SID, "candybar.menu", "open"] },
           { verb: VERB_SET_STATE, args: [FRESH_SID, ...OPEN_THEME_PICKER] },
         ]),

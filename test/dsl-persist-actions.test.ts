@@ -27,7 +27,7 @@ import { HOST, locs } from "./helpers/host";
 import { unscriptedLauncher, unscriptedRuns } from "./helpers/fake-launcher";
 import type { Frame } from "../src/render/frame";
 import { linkUrls, boldUrls } from "./helpers/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_LINKS } from "./helpers/link-signer";
 import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -421,7 +421,7 @@ function buildPersistRuntime(
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
   const compiled = registerDslConfig(config, registry, {
-    signer: TEST_SIGNER,
+    links: TEST_LINKS,
     cwd: process.cwd(),
   });
   const basePalette = getThemePalette("textual-dark"!);
@@ -581,7 +581,7 @@ describe("persist action click → the config file", () => {
       sessionState,
     );
     const compiled = registerDslConfig(config, registry, {
-      signer: TEST_SIGNER,
+      links: TEST_LINKS,
       cwd: process.cwd(),
     });
     const basePalette = getThemePalette("textual-dark"!);
@@ -874,7 +874,7 @@ function makeCache(): {
       locations: locations(durable.host, durable.home),
       runs: new SourceRuns({ launcher: unscriptedLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
-      signer: TEST_SIGNER,
+      links: TEST_LINKS,
       gates: bareGates(),
       sessionState,
       watchers,

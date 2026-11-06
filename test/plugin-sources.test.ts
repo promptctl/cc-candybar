@@ -9,7 +9,7 @@ import { reaction, runInAction } from "mobx";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import { HOST, WORLD, hostOf, worldOf, processLauncher } from "./helpers/host";
 import type { Host, World } from "../src/host";
-import { TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_LINKS } from "./helpers/link-signer";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -179,7 +179,7 @@ function rig(): Rig {
       sessionState,
       watchers,
       storage: providers.managedStorage,
-      signer: TEST_SIGNER,
+      links: TEST_LINKS,
       gates: bareGates(),
       log,
       facts: inProcessFacts({ providers, update: () => updateFact.get() }),
@@ -305,7 +305,7 @@ describe("a source's declaration", () => {
       runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
-      signer: TEST_SIGNER,
+      links: TEST_LINKS,
       gates: bareGates(),
     });
     try {
@@ -400,7 +400,7 @@ describe("a source's declaration", () => {
       runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
-      signer: TEST_SIGNER,
+      links: TEST_LINKS,
       gates: bareGates(),
     });
     try {
@@ -435,7 +435,7 @@ describe("a source's declaration", () => {
       runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
-      signer: TEST_SIGNER,
+      links: TEST_LINKS,
       gates: bareGates(),
     });
     try {
@@ -562,7 +562,7 @@ describe("a source's declaration", () => {
       runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
-      signer: TEST_SIGNER,
+      links: TEST_LINKS,
       gates: bareGates(),
     });
     try {

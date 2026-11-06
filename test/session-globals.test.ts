@@ -1,3 +1,4 @@
+import { MAIN_NAME } from "../src/daemon/home";
 // [LAW:verifiable-goals] candybar-settings-ui-aok.2's done-gate: `autoWrap` and
 // `padding` gain the SessionState half `theme`/`style`/`style` already had, so a
 // click changes the clicking session's bar and nobody else's.
@@ -91,7 +92,7 @@ function globalsBar(padding: number = CONFIG_PADDING) {
   // so the session's render is recorded first.
   const setState = async (sid: string, key: string, value: string): Promise<void> => {
     recordRender(sessionState, sid);
-    await rig.click(effectsUrl([{ verb: VERB_SET_STATE, args: [sid, key, value] }]));
+    await rig.click(effectsUrl(MAIN_NAME, [{ verb: VERB_SET_STATE, args: [sid, key, value] }]));
   };
 
   return { config, sessionState, render, setState, dispose: rig.dispose };

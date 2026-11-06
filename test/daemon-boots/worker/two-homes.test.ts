@@ -6,7 +6,9 @@
 // copied under a third root is a renderer of its own: its undo writes its own
 // config. The homes are named through a symlink and the config file through
 // the directory it points at, as a client whose cwd is a realpath names it, so
-// a root has two spellings and a file in it is the home's under either.
+// a root has two spellings and a file in it is the home's under either. And the
+// links lane's: a link B draws names B, the URL handler's socket rule takes it
+// to B's socket and no other, and A, handed it anyway, refuses it.
 
 import fs from "node:fs";
 import net from "node:net";
@@ -16,13 +18,23 @@ import path from "node:path";
 import {
   HOME_CONFIG_DIR,
   HOME_ENV,
+  MAIN_NAME,
   NAME_ENV,
   RUNTIME_DIR_ENV,
   homeOf,
+  socketFile,
   type RendererHome,
 } from "../../../src/daemon/home";
-import { socketPath } from "../../../src/daemon/paths";
-import { VERB_UNDO, effectsUrl } from "../../../src/click/wire";
+import { logPath, socketPath } from "../../../src/daemon/paths";
+import { logLines } from "../../../src/daemon/log";
+import {
+  PROTOCOL_VERSION,
+  URL_FRAME_KIND,
+  URL_FRAME_VERSION,
+  encodeFrame,
+} from "../../../src/daemon/protocol";
+import { VERB_UNDO, effectsUrl, parseHandlerUrl } from "../../../src/click/wire";
+import { isBarLink } from "../../../src/click/read";
 import { handleConnection } from "../../../src/daemon/connection";
 import type { DaemonLog } from "../../../src/daemon/log";
 import type { Daemon } from "../../../src/daemon/daemon";
@@ -30,19 +42,28 @@ import { textOf } from "../../../src/render/frame";
 import { linkUrls } from "../../helpers/frame";
 import { effectsOf } from "../../helpers/click";
 import { click, configFlag, render } from "../../helpers/daemon-e2e";
+import { sendDaemonRequest } from "../../helpers/daemon-wire";
+import { until } from "../../helpers/until";
 import { hostOf } from "../../helpers/host";
 import { NO_TMUX_AT_EXIT, buildDaemon } from "../../helpers/in-worker-daemon";
 
 jest.setTimeout(30_000);
 
 // A `persist` click writes the field into the home's config file, which is the
-// durable write a renderer makes on its own behalf.
+// durable write a renderer makes on its own behalf. A `set` click writes the
+// session's state, which the bar draws as `mark=…`, so a render says which
+// renderer a click landed on.
 const CONFIG = `{
-  actions: { pad: { persist: "padding", to: "4" } },
+  variables: { mark: { kind: "state", key: "mark", default: "unset" } },
+  actions: {
+    pad: { persist: "padding", to: "4" },
+    mark: { set: "mark", to: "set" },
+  },
   segments: {
     pad: { template: '{{ action "pad" "[pad]" }}', bg: "surface", fg: "foreground" },
+    mark: { template: '{{ action "mark" "[mark]" }} mark={{ .mark }}' },
   },
-  root: { h: ["pad"] },
+  root: { h: ["pad", "mark"] },
 }
 `;
 
@@ -145,6 +166,76 @@ test("two renderers under two homes leave no trace of each other or of their own
       await click(r.home, url);
       expect(fs.readFileSync(configOf(r.home), "utf8")).toMatch(/padding:\s*4/);
     }
+    // Every link B's bar draws names B: the bar closed, and with its settings
+    // menu open, which draws its pickers, steppers and closes.
+    const linksSid = "two-homes-links";
+    const closedBar = await render(b.home, linksSid, projectDir);
+    const door = linkUrls(closedBar).find((u) =>
+      effectsOf(u).some((e) => e.verb === "set-state" && e.args.includes("candybar.menu")),
+    );
+    if (door === undefined) throw new Error(`no settings door in:\n${textOf(closedBar)}`);
+    await click(b.home, door);
+    const drawn = [...linkUrls(closedBar), ...linkUrls(await render(b.home, linksSid, projectDir))].filter(isBarLink);
+    expect(drawn.length).toBeGreaterThan(linkUrls(closedBar).length);
+    const misnamed = drawn.filter((u) => {
+      const parsed = parseHandlerUrl(u);
+      return !parsed.ok || parsed.to !== b.home.name;
+    });
+    expect(misnamed).toEqual([]);
+
+    // A link names the renderer that drew it, and reaches that renderer and
+    // no other.
+    const sid = "two-homes-mark";
+    const markOf = async (r: Renderer): Promise<string> =>
+      /mark=(\w+)/.exec(textOf(await render(r.home, sid, projectDir)))?.[1] ?? "";
+    const clickEvents = (r: Renderer): string[] =>
+      logLines(logPath(r.home)).filter((l) => / click queued=/.test(l));
+    // One link as the URL handler hands it over: one url frame, no answer
+    // read, so the click's event is where it is seen.
+    const forward = async (sock: string, url: string, r: Renderer): Promise<string> => {
+      const before = clickEvents(r).length;
+      net.createConnection(sock).end(encodeFrame({ kind: URL_FRAME_KIND, urlV: URL_FRAME_VERSION, url }));
+      await until(() => clickEvents(r).length > before, `${r.home.name}'s event for the forwarded link`);
+      return clickEvents(r).at(-1)!;
+    };
+    expect(await markOf(a)).toBe("unset");
+    const marked = linkUrls(await render(b.home, sid, projectDir)).find((u) =>
+      effectsOf(u).some((e) => e.verb === "set-state" && e.args.includes("mark")),
+    );
+    if (marked === undefined) throw new Error("no mark link in beta's bar");
+    const link = parseHandlerUrl(marked);
+    if (!link.ok) throw new Error(link.problem);
+    expect(link.to).toBe(b.home.name);
+    // The URL handler's socket rule (url-handler/address.swift): the file the
+    // name selects in the per-uid directory, main's for a link naming none.
+    const chosen = path.join(runtime, socketFile(link.to ?? MAIN_NAME));
+    expect(chosen).toBe(socketPath(b.home));
+    const landed = await forward(chosen, marked, b);
+    expect(landed).toContain(` to=${b.home.name} `);
+    expect(landed).toContain(" outcome=ok");
+    expect(await markOf(b)).toBe("set");
+    expect(await markOf(a)).toBe("unset");
+
+    // Handed to A anyway, by the URL handler's frame or url-handle's request,
+    // B's link is refused, its event says whose it was, and A is untouched.
+    const misdelivered = await forward(socketPath(a.home), marked, a);
+    expect(misdelivered).toContain(` to=${b.home.name} `);
+    expect(misdelivered).toContain(" outcome=bad-request");
+    const refusedBefore = clickEvents(a).length;
+    const relayed = await sendDaemonRequest(a.home, { v: PROTOCOL_VERSION, kind: "click", url: marked });
+    expect(relayed).toMatchObject({ ok: false, code: "BAD_REQUEST" });
+    expect(relayed.ok ? "" : relayed.error).toContain(`addressed to renderer "${b.home.name}"`);
+    await until(() => clickEvents(a).length > refusedBefore, "alpha's event for the relayed link");
+    expect(clickEvents(a).at(-1)).toContain(` via=cli to=${b.home.name} `);
+    expect(await markOf(a)).toBe("unset");
+
+    // A link that names no renderer runs where it arrives, and says so.
+    const before = clickEvents(a).length;
+    await click(a.home, `cc-candybar://set-state/${sid}/mark/set`);
+    await until(() => clickEvents(a).length > before, "alpha's event for the link naming no renderer");
+    expect(clickEvents(a).at(-1)).toContain(" to=- ");
+    expect(await markOf(a)).toBe("set");
+
     await stop(a);
     await stop(b);
 
@@ -173,7 +264,7 @@ test("two renderers under two homes leave no trace of each other or of their own
     const gammaHome = homeNamed("gamma");
     fs.cpSync(treeOf(a.home), treeOf(gammaHome), { recursive: true });
     const c = await start(gammaHome);
-    await click(c.home, effectsUrl([{ verb: VERB_UNDO, args: [sidOf(a)] }]));
+    await click(c.home, effectsUrl(c.home.name, [{ verb: VERB_UNDO, args: [sidOf(a)] }]));
     expect(fs.readFileSync(configOf(c.home), "utf8")).toBe(CONFIG);
     expect(fs.readFileSync(configOf(a.home), "utf8")).toBe(alphaText);
   } finally {

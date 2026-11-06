@@ -95,6 +95,7 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     await click(
       daemon,
       effectsUrl(
+        daemon.name,
         lanes.map((lane) => {
           const { setting, on: value } = LANES[lane].switch;
           return {
@@ -154,9 +155,10 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     expect(statusLines(sid, "released")).toEqual([]);
   });
 
-  // [LAW:nothing-unseen] A status-line click's event names its own verb, the
-  // link its range draws, and the verb that link runs, as `linkVerb`.
-  test("a status-line click runs the link its range draws, and its click event names both verbs", async () => {
+  // [LAW:nothing-unseen] A status-line click's event names its own verb and
+  // address, the link its range draws, and the address and verb that link
+  // carries, as `linkTo` and `linkVerb`.
+  test("a status-line click runs the link its range draws, and its click event names both verbs and both addresses", async () => {
     const sid = "lane-status-click";
     await renderIn(sid);
     await switchLanes(sid, true, "tmuxStatus");
@@ -165,7 +167,7 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
       "the status line's hold",
     );
     const link = linkUrls(await renderIn(sid)).find((u) =>
-      u.startsWith("cc-candybar://dispatch/"),
+      u.startsWith(`cc-candybar://to/${daemon.name}/dispatch/`),
     );
     expect(link).toBeDefined();
     const at = [`/tmp/lane-e2e-${sid}`, "7", rangeOf(link!)]
@@ -193,7 +195,11 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     const [event, ...more] = ran();
     expect(more).toEqual([]);
     expect(event).toContain(` link=${JSON.stringify(link)} `);
-    expect(event).toContain(` linkVerb=dispatch sid=${sid} `);
+    // The binding's URL names no renderer; the link its range marks names
+    // this one. One key each, so neither reads as the other.
+    expect(event).toContain(` to=- verb=${VERB_TMUX_STATUS_CLICK} `);
+    expect(event).toContain(` linkTo=${daemon.name} linkVerb=dispatch sid=${sid} `);
+    expect(event!.match(/ to=/g)).toHaveLength(1);
     expect(event).toContain(" outcome=ok");
   });
 

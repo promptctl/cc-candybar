@@ -16,7 +16,7 @@
 
 import { readFileSync } from "node:fs";
 import { parseRecording, type Recording } from "../facts/recording.js";
-import type { LinkSigner } from "../click/link-signer.js";
+import type { RendererLinks } from "../click/renderer-links.js";
 import { daemonGates } from "../daemon/update-keys.js";
 import { locations } from "../daemon/paths.js";
 import { repoGateAt } from "../daemon/repo-configs.js";
@@ -57,12 +57,12 @@ export interface DemoState extends Disposable {
 
 // What a load reads: the machine, whose clock is the one the frames are drawn
 // by (the machine's, or a replay's held clock); the state directory and the
-// link signer the process main derived from its home; the config, and the
+// links the process main derived from its home; the config, and the
 // directory it loads in.
 export interface DemoLoad {
   readonly world: World;
   readonly stateDir: string;
-  readonly signer: LinkSigner;
+  readonly links: RendererLinks;
   readonly configPath: string;
   readonly cwd: string;
   readonly warn: (message: string) => void;
@@ -76,7 +76,7 @@ export interface DemoLoad {
 export function loadDemo({
   world,
   stateDir,
-  signer,
+  links,
   configPath,
   cwd,
   warn,
@@ -112,7 +112,7 @@ export function loadDemo({
       locations: locs,
       sessionState,
       storage: UNOWNED_STORAGE,
-      signer,
+      links,
       gates: daemonGates(),
       stateDir,
     },

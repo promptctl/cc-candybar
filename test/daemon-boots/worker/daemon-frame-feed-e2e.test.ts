@@ -665,7 +665,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   const setState = async (sid: string, key: string, value: string): Promise<void> =>
     await click(
       home,
-      effectsUrl([{ verb: VERB_SET_STATE, args: [sid, key, value] }]),
+      effectsUrl(daemon.name, [{ verb: VERB_SET_STATE, args: [sid, key, value] }]),
     );
 
   // brandon-menus-sjhy.amf — Brandon: "When we're showing the bar in either
@@ -1019,7 +1019,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   test("a failed click's error shows on Claude Code's bar", async () => {
     const sid = "feed-click-error-bar";
     await render(home, sid, projectDir, {}, args("toggle"));
-    const bad = effectsUrl([{ verb: VERB_SET_STATE, args: [sid, "face", "bogus"] }]);
+    const bad = effectsUrl(daemon.name, [{ verb: VERB_SET_STATE, args: [sid, "face", "bogus"] }]);
     // The statusline lane draws the bar where Claude Code does, so with it
     // followed a render answers the bar, where a lane that draws it elsewhere
     // would answer the handoff row.
@@ -1037,7 +1037,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
 
   test("a failed click's error shows on the pushed frames for the hold, and leaves by time alone", async () => {
     await render(home, "feed-click-error", projectDir, {}, args("toggle"));
-    const bad = effectsUrl([
+    const bad = effectsUrl(daemon.name, [
       { verb: VERB_SET_STATE, args: ["feed-click-error", "face", "bogus"] },
     ]);
     // The error is the one message the bar holds, so the indicator counts it.

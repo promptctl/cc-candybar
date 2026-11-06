@@ -8,7 +8,7 @@ import { homeOf } from "../src/daemon/home";
 import { drawPayload } from "./helpers/draw-payload";
 import { HOST, mainEnv, WORLD, hostOf, worldOf, processLauncher } from "./helpers/host";
 import type { Host, World } from "../src/host";
-import { TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_LINKS } from "./helpers/link-signer";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -593,7 +593,7 @@ test("the daemon's load records the plugins it merged and dropped", () => {
     locations: locations(host, homeOf(host)),
     runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
     storage: NO_PLUGIN_STORAGE,
-    signer: TEST_SIGNER,
+    links: TEST_LINKS,
     gates: bareGates(),
     sessionState: new SessionState(),
   });
@@ -654,7 +654,7 @@ describe("a plugin's own variables", () => {
       locations: locations(host, homeOf(host)),
       runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
-      signer: TEST_SIGNER,
+      links: TEST_LINKS,
       gates: bareGates(),
       sessionState: new SessionState(),
     });
@@ -703,7 +703,7 @@ describe("a plugin's own variables", () => {
       locations: locations(host, homeOf(host)),
       runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
-      signer: TEST_SIGNER,
+      links: TEST_LINKS,
       gates: bareGates(),
       sessionState: new SessionState(),
     });
@@ -762,7 +762,7 @@ describe("a plugin's own variables", () => {
       locations: locations(host, homeOf(host)),
       runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
-      signer: TEST_SIGNER,
+      links: TEST_LINKS,
       gates: bareGates(),
       sessionState: new SessionState(),
     });
@@ -782,7 +782,7 @@ describe("a plugin's own variables", () => {
       locations: locations(host, homeOf(host)),
       runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
-      signer: TEST_SIGNER,
+      links: TEST_LINKS,
       gates: bareGates(),
       sessionState: new SessionState(),
     });
@@ -935,7 +935,7 @@ describe("an installed plugin", () => {
         locations: locations(host, homeOf(host)),
         runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
-        signer: TEST_SIGNER,
+        links: TEST_LINKS,
         gates: bareGates(),
         sessionState: new SessionState(),
       },
@@ -995,7 +995,7 @@ describe("an installed plugin", () => {
         locations: locations(host, homeOf(host)),
         runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
-        signer: TEST_SIGNER,
+        links: TEST_LINKS,
         gates: bareGates(),
         sessionState: new SessionState(),
         watchers,
@@ -1078,7 +1078,7 @@ describe("an installed plugin", () => {
         locations: locations(host, homeOf(host)),
         runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
-        signer: TEST_SIGNER,
+        links: TEST_LINKS,
         gates: bareGates(),
         sessionState: new SessionState(),
       });
@@ -1623,7 +1623,7 @@ describe("an installed plugin", () => {
       locations: locations(host, homeOf(host)),
       runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
-      signer: TEST_SIGNER,
+      links: TEST_LINKS,
       gates: bareGates(),
       sessionState: new SessionState(),
     });
@@ -1662,7 +1662,7 @@ describe("an installed plugin", () => {
         locations: locations(host, homeOf(host)),
         runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
-        signer: TEST_SIGNER,
+        links: TEST_LINKS,
         gates: bareGates(),
         sessionState: new SessionState(),
         watchers,
@@ -1768,7 +1768,7 @@ describe("an installed plugin", () => {
       locations: locations(host, homeOf(host)),
       runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
-      signer: TEST_SIGNER,
+      links: TEST_LINKS,
       gates: bareGates(),
       sessionState: new SessionState(),
     });
@@ -1850,7 +1850,7 @@ describe("an installed plugin", () => {
       locations: locations(host, homeOf(host)),
       runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
-      signer: TEST_SIGNER,
+      links: TEST_LINKS,
       gates: bareGates(),
       sessionState: new SessionState(),
     });
@@ -2013,7 +2013,7 @@ describe("a repo's plugin beside an installed one of its name", () => {
       locations: locations(host, homeOf(host)),
       runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
-      signer: TEST_SIGNER,
+      links: TEST_LINKS,
       gates: bareGates(),
       sessionState: new SessionState(),
     });

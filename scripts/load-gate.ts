@@ -76,7 +76,6 @@ import {
 } from "../src/daemon/client-frames.js";
 import { PARENT_PID_ENV } from "../src/daemon/parent-watchdog.js";
 import type { StatsSnapshot } from "../src/daemon/stats.js";
-import { clickOf } from "../src/click/read.js";
 import { sourceDigest } from "../src/source-digest.js";
 import type { ClaudeHookData } from "../src/utils/claude.js";
 import { fieldsOf } from "../src/utils/logfmt.js";
@@ -615,19 +614,17 @@ interface Click {
 const clicks: Click[] = [];
 
 // One click on a session's 🍫, opening its settings menu or closing it, made
-// as the URL handler makes it — through the handler's own parse and client —
-// and how it ended.
+// as url-handle makes it — the whole link, through the client, to the
+// daemon's one link parse — and how it ended.
 async function menuClick(s: Session, open: boolean): Promise<string> {
-  const { verb, value } = clickOf(
-    effectsUrl([
-      {
-        verb: VERB_SET_STATE,
-        args: [s.id, "candybar.menu", open ? "open" : DISCLOSURE_CLOSED],
-      },
-    ]),
-  );
+  const url = effectsUrl(home.name, [
+    {
+      verb: VERB_SET_STATE,
+      args: [s.id, "candybar.menu", open ? "open" : DISCLOSURE_CLOSED],
+    },
+  ]);
   try {
-    const clicked = await tryClickViaDaemon(wire, verb, value);
+    const clicked = await tryClickViaDaemon(wire, url);
     return clicked.kind === "ok" ? "ok" : failureLabel(clicked);
   } catch (e) {
     // [LAW:no-silent-failure] A click path that throws is a failed click.

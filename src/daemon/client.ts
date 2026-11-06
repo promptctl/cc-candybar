@@ -100,12 +100,11 @@ export function trySessionInPane(
 // caller's "ok? done : kick + fallback" logic gets the same typed input.
 export function tryClickViaDaemon(
   world: ClientWorld,
-  verb: string,
-  value: string,
+  url: string,
 ): Promise<ClientOutcome> {
   return requestOutcome(
     world,
-    () => ({ kind: "click", verb, value }),
+    () => ({ kind: "click", url }),
     CLICK_BUDGETS,
     projectOutput,
   );

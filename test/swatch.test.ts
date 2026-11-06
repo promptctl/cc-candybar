@@ -13,7 +13,7 @@ import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
 import { linksOf } from "../src/click/read";
-import { TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_LINKS } from "./helpers/link-signer";
 import { getThemePalette, type RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -59,7 +59,7 @@ function rig(template: string) {
   );
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState());
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
+  const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/tmp/proj" });
   const sink = new Map<string, readonly RichText[]>();
   const rendered = drawPayload(
     config,

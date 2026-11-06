@@ -221,7 +221,7 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
       string,
       string,
     ];
-    const forged = effectsUrl([
+    const forged = effectsUrl(daemon.name, [
       {
         verb: VERB_RUN,
         args: [

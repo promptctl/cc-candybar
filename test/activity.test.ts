@@ -7,7 +7,7 @@ import { unscriptedRuns } from "./helpers/fake-launcher";
 
 import { drawPayload } from "./helpers/draw-payload";
 import type { Frame } from "../src/render/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_LINKS } from "./helpers/link-signer";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import {
@@ -637,7 +637,7 @@ describe("the bundled activity segment renders the payload", () => {
     );
     try {
       const compiled = registerDslConfig(narrowed, registry, {
-        signer: TEST_SIGNER,
+        links: TEST_LINKS,
         cwd: process.cwd(),
       });
       return drawPayload(

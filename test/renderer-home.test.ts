@@ -9,6 +9,7 @@ import {
   NAME_ENV,
   RUNTIME_DIR_ENV,
   homeOf,
+  parseRendererAddress,
   parseRendererName,
   socketFile,
   uidRuntimeDir,
@@ -25,9 +26,11 @@ import {
 } from "../src/daemon/paths";
 import { hostOf } from "./helpers/host";
 
-// [LAW:one-source-of-truth] The grammar's vectors, the same lists as the Rust
-// client's test module (rust-client/src/main.rs), diffed by
-// scripts/check-protocol.mjs: each side drives its own parser from its own list.
+// [LAW:one-source-of-truth] The name rule's vectors (grammar and length), the
+// same lists as the Rust client's test module (rust-client/src/main.rs) and
+// the URL handler's (url-handler/address-test.swift), diffed by
+// scripts/check-protocol.mjs: each side drives its own parser from its own
+// list. What `main` means is each parse's own case below.
 const NAME_ACCEPT = [
   "a",
   "0",
@@ -38,7 +41,6 @@ const NAME_ACCEPT = [
 ];
 const NAME_REJECT = [
   "",
-  "main",
   "A",
   "Dev",
   "-a",
@@ -64,11 +66,20 @@ const HOME_CASES = [
 ];
 
 describe("a renderer's name", () => {
-  test("the grammar accepts and refuses its vectors", () => {
-    for (const name of NAME_ACCEPT) expect(parseRendererName(name)).toBe(name);
+  test("the rule accepts and refuses its vectors, wherever the name is read", () => {
+    for (const name of NAME_ACCEPT) {
+      expect(parseRendererName(name)).toBe(name);
+      expect(parseRendererAddress(name)).toBe(name);
+    }
     for (const name of NAME_REJECT) {
       expect(() => parseRendererName(name)).toThrow(NAME_ENV);
+      expect(() => parseRendererAddress(name)).toThrow("a link's renderer name");
     }
+  });
+
+  test("main is no home's name, and is the address of the main renderer", () => {
+    expect(() => parseRendererName("main")).toThrow(NAME_ENV);
+    expect(parseRendererAddress("main")).toBe("main");
   });
 
   test("a socket file is the name's: main's stays `socket`, any other carries the suffix", () => {

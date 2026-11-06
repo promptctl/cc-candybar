@@ -10,7 +10,7 @@ import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { plainOf, textOf, type Frame as DrawnFrame, type Run } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_LINKS } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
 
 import { SessionState } from "../src/daemon/session-state";
@@ -74,7 +74,7 @@ interface Frame {
 function renderer(cfg: ValidatedConfig, session = new SessionState()) {
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(unscriptedRuns(), store, "", session);
-  const compiled = registerDslConfig(cfg, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
+  const compiled = registerDslConfig(cfg, registry, { links: TEST_LINKS, cwd: "/tmp" });
   const opts = {
     endcaps: "powerline" as const,
     colorCompatibility: "truecolor" as const,

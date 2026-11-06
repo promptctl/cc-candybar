@@ -1,3 +1,4 @@
+import { MAIN_NAME } from "../src/daemon/home";
 import type { Frame } from "../src/render/frame";
 // [LAW:verifiable-goals] Epic k5a done-gate #1: clicking a theme picker option
 // recolors the WHOLE bar live. The action-surface tests (dsl-actions/dsl-picker)
@@ -112,7 +113,7 @@ function bgColors(frame: Frame): Set<string> {
 async function clickTheme(rig: ReturnType<typeof recolorBar>, theme: string): Promise<void> {
   // Drive the real wire end-to-end: emit the click URL the picker would, then
   // dispatch it exactly as the daemon does (parse → dispatch → set-state).
-  await rig.click(effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "theme", theme] }]));
+  await rig.click(effectsUrl(MAIN_NAME, [{ verb: VERB_SET_STATE, args: [SID, "theme", theme] }]));
 }
 
 describe("DSL theme picker — live recolor (epic k5a done-gate #1)", () => {

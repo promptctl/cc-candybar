@@ -1,3 +1,4 @@
+import { MAIN_NAME } from "../src/daemon/home";
 // [LAW:verifiable-goals] brandon-context-ceiling-xta.7xt: a `slash` action
 // types its declared command into the clicked session's Claude Code pane.
 // Driven through the real loader, the real spine (registerDslConfig +
@@ -8,7 +9,7 @@
 import { drawPayload } from "./helpers/draw-payload";
 import { processLauncher } from "./helpers/host";
 import { linkUrls } from "./helpers/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_LINKS } from "./helpers/link-signer";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -225,7 +226,7 @@ function runtime(tmux: TmuxHint | null) {
   sessionState.set("s1", SESSION_CLIENT_HINTS_KEY, JSON.stringify({ tmux }));
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }), store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
+  const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/tmp/proj" });
   const raw = drawPayload(config, compiled, store, registry, { session_id: "s1" }, instantOf(new Date()), OPTS).frame;
   const logged: string[] = [];
   const ctx = {
@@ -326,7 +327,7 @@ describe("a slash click", () => {
 
   test("a line no action declares is refused before tmux is asked", async () => {
     const rt = runtime(HINT);
-    const forged = effectsUrl([{ verb: VERB_SLASH, args: ["s1", "/exit"] }]);
+    const forged = effectsUrl(MAIN_NAME, [{ verb: VERB_SLASH, args: ["s1", "/exit"] }]);
     // The declared lines in full, each once: the bundled command tray and
     // autocompact controls (merged under the config), then this config's own
     // (the settings menu's tray instance declares the tray's lines again).
@@ -369,7 +370,7 @@ function tray(tmux: TmuxHint | null, drawnIn: TmuxHint | null = tmux) {
   sessionState.set("s1", SESSION_CLIENT_HINTS_KEY, JSON.stringify({ tmux }));
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }), store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
+  const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/tmp/proj" });
   const ctx = {
     ...testVerbContext(sessionState, undefined, config),
     claudeInput: productionClaudeInputEdge(systemLauncher({ inherited: process.env }, systemTimekeeper)),

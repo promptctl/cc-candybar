@@ -23,7 +23,7 @@
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import type { Frame } from "../src/render/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_LINKS } from "./helpers/link-signer";
 import { ColorDepth, type ColorRgba } from "@promptctl/rich-js";
 import { getThemePalette } from "@promptctl/rich-js";
 import type { Palette, RichText } from "@promptctl/rich-js";
@@ -189,7 +189,7 @@ function build(src: string, withDefault = false) {
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
+  const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/tmp/proj" });
   const palette = getThemePalette(THEME);
   const sink = new Map<string, readonly RichText[]>();
   recordRender(sessionState, SID);

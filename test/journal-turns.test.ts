@@ -1,3 +1,5 @@
+import { TEST_LINKS } from "./helpers/link-signer";
+import { MAIN_NAME } from "../src/daemon/home";
 // Journals across an awaited handler. A click is a real `dispatch` parked in
 // its turn on a doctor gather (the one await a handler has left, now that a
 // launch is an effect performed after the turn); the click-path cases drive
@@ -60,7 +62,7 @@ const parkedEdge = (parked: Promise<unknown>): DoctorEdge =>
 // A click of another session that holds the turn while `parked` is.
 const OTHER = "s2";
 function holdTurn(ctx: VerbContext, parked: Promise<unknown>): Promise<void> {
-  const url = effectsUrl([
+  const url = effectsUrl(MAIN_NAME, [
     { verb: VERB_SET_STATE, args: [OTHER, "theme", "nord"] },
     { verb: VERB_DOCTOR_RUN, args: [OTHER] },
   ]);
@@ -76,7 +78,7 @@ function parkedClick(
   style: string,
   parked: Promise<unknown>,
 ): Promise<void> {
-  const url = effectsUrl([
+  const url = effectsUrl(MAIN_NAME, [
     { verb: VERB_SET_STATE, args: [SID, "theme", theme] },
     { verb: VERB_DOCTOR_RUN, args: [SID] },
     { verb: VERB_SET_STATE, args: [SID, "endcaps", style] },
@@ -321,6 +323,7 @@ describe("the click path", () => {
     const events: string[] = [];
     const given = {
       clock: { monotonic: () => performance.now(), now: () => Date.now() },
+      links: TEST_LINKS,
       menuIdle: { clickArrived: () => {}, clickSettled: () => {} },
       payloadProviders: {},
       log: (_level: string, line: string) => events.push(line),
@@ -332,7 +335,7 @@ describe("the click path", () => {
     const send = (verb: string, value: string, gone = () => false) =>
       replyTo(
         given,
-        { kind: "click", verb, value } as Parameters<typeof replyTo>[1],
+        { kind: "click", url: `cc-candybar://${verb}/${value}` } as Parameters<typeof replyTo>[1],
         () => false,
         systemTimekeeper.monotonic(),
         gone,

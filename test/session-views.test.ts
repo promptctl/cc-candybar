@@ -2,7 +2,7 @@ import { FACTS_NOTHING } from "./helpers/facts";
 import { drawPayload } from "./helpers/draw-payload";
 import { HOST, locs, processLauncher, WORLD } from "./helpers/host";
 import { textOf } from "../src/render/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_LINKS } from "./helpers/link-signer";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -76,7 +76,7 @@ function makeCache(
       locations: locs(),
       runs: new SourceRuns({ launcher: launcher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
-      signer: TEST_SIGNER,
+      links: TEST_LINKS,
       gates: bareGates(),
       sessionState: new SessionState(),
       watchers,

@@ -4,7 +4,7 @@
 // so it pins both the setting's effect and that two copies never share a value.
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
-import { TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_LINKS } from "./helpers/link-signer";
 import type { RichText } from "@promptctl/rich-js";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -71,7 +71,7 @@ function renderPair(
   const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
   const sink = new Map<string, readonly RichText[]>();
   try {
-    const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
+    const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/tmp" });
     drawPayload(
       config,
       compiled,

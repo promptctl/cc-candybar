@@ -198,7 +198,10 @@ async function main(): Promise<void> {
     using loaded = loadDemo({
       world: arm.world,
       stateDir: stateDir(machine.home),
-      signer: linkSignerFromKeyFile(linkKeyFile(stateDir(machine.home))),
+      links: {
+        to: machine.home.name,
+        signer: linkSignerFromKeyFile(linkKeyFile(stateDir(machine.home))),
+      },
       configPath,
       cwd,
       warn: (message) => log("warn", message),

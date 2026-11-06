@@ -7,7 +7,7 @@ import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_LINKS } from "./helpers/link-signer";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -54,7 +54,7 @@ function runtime(src: string) {
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
-  const compiled = registerDslConfig(cfg, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
+  const compiled = registerDslConfig(cfg, registry, { links: TEST_LINKS, cwd: "/tmp/proj" });
   recordRender(sessionState, "s1");
   return {
     sessionState,

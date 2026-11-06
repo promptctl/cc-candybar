@@ -141,7 +141,7 @@ describe("daemon shutdown contract", () => {
       await render(home, sessionId, stateDir);
       await click(
         home,
-        effectsUrl([
+        effectsUrl(homeOf(hostOf(env)).name, [
           { verb: VERB_SET_STATE, args: [sessionId, "padding", "4"] },
         ]),
       );

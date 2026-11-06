@@ -33,7 +33,7 @@ import {
   type RenderObservers,
   type RenderSelection,
 } from "../../src/dsl/render";
-import type { LinkSigner } from "../../src/click/link-signer";
+import type { RendererLinks } from "../../src/click/renderer-links";
 import { SESSION_RENDER_ORIGIN_KEY } from "../../src/daemon/foundations/session-keys";
 import type { VerbContext } from "../../src/daemon/verbs";
 import type { SettingsHistory } from "../../src/daemon/settings-history";
@@ -47,7 +47,7 @@ import { VariableStore } from "../../src/var-system/store";
 import { clickUrl, recordRender, testVerbContext } from "./click";
 import { drawPayload } from "./draw-payload";
 import { unscriptedRuns } from "./fake-launcher";
-import { TEST_SIGNER } from "./link-signer";
+import { TEST_LINKS } from "./link-signer";
 import { EMPTY_DEFAULT, parseAndValidate } from "./parse-and-validate";
 import { selectionFor } from "./selection";
 
@@ -82,7 +82,7 @@ export interface RigInit {
   /** What the click path is built with beyond the config: the history and host a durable-config test owns. */
   readonly history?: SettingsHistory;
   readonly host?: Host;
-  readonly signer?: LinkSigner;
+  readonly links?: RendererLinks;
 }
 
 export interface DrawInit {
@@ -133,7 +133,7 @@ const parses = new WeakMap<DslConfig, Map<string, ValidatedConfig>>();
 // walk and drops it on every exit, a second live bind throws) and the per-store
 // `views` map. Sharing is safe because every bind is synchronous and exclusive
 // and one test file's draws run one at a time; an overlap would throw.
-const compiles = new WeakMap<LinkSigner, Map<string, CompiledConfig>>();
+const compiles = new WeakMap<RendererLinks, Map<string, CompiledConfig>>();
 
 function held<K extends object, V>(
   memo: WeakMap<K, Map<string, V>>,
@@ -181,12 +181,12 @@ export function parsedConfig(
 }
 
 /** A compile provider that hands back the compile held for a key, building it on first ask. */
-export function sharedCompile(signer: LinkSigner): CompileProvider {
-  const entries = held(compiles, signer);
+export function sharedCompile(links: RendererLinks): CompileProvider {
+  const entries = held(compiles, links);
   return (key, input) => {
     let compiled = entries.get(key);
     if (compiled === undefined) {
-      compiled = compileDslConfig(input, signer);
+      compiled = compileDslConfig(input, links);
       entries.set(key, compiled);
     }
     return compiled;
@@ -214,7 +214,7 @@ export function buildRig(init: RigInit = {}): Rig {
     config,
     registry,
     cwd,
-    sharedCompile(init.signer ?? TEST_SIGNER),
+    sharedCompile(init.links ?? TEST_LINKS),
     EVERY_SCOPE,
   );
   const compiled = {

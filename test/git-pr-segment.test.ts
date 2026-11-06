@@ -9,7 +9,7 @@ import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_LINKS } from "./helpers/link-signer";
 import { RAW_DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -66,7 +66,7 @@ function renderGitPr(git: Record<string, unknown>): Frame {
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState());
   try {
-    const compiled = registerDslConfig(parsed, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
+    const compiled = registerDslConfig(parsed, registry, { links: TEST_LINKS, cwd: "/tmp" });
     const payload = {
       hook_event_name: "Status",
       session_id: "deadbeef-1234-5678-9abc-def012345678",

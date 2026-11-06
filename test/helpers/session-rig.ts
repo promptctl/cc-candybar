@@ -32,7 +32,7 @@ import { bareGates } from "./gates";
 import { locs } from "./host";
 import { SourceRuns } from "../../src/var-system/source-runs";
 import { unscriptedLauncher } from "./fake-launcher";
-import { TEST_SIGNER } from "./link-signer";
+import { TEST_LINKS } from "./link-signer";
 import { NO_PLUGIN_STORAGE } from "./plugin-storage";
 import {
   absentOwners,
@@ -171,7 +171,7 @@ export function sessionRig(
       sessionState,
       watchers,
       storage: NO_PLUGIN_STORAGE,
-      signer: TEST_SIGNER,
+      links: TEST_LINKS,
       gates: bareGates(),
       log,
       facts: inProcessFacts({ providers: providers as never, update }),

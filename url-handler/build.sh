@@ -8,12 +8,12 @@
 set -eu
 
 out="${1:?usage: build.sh <output-binary>}"
-src="$(cd "$(dirname "$0")" && pwd)/main.swift"
+dir="$(cd "$(dirname "$0")" && pwd)"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
 for arch in arm64 x86_64; do
-  swiftc -O -target "${arch}-apple-macos12.0" -o "$work/$arch" "$src"
+  swiftc -O -target "${arch}-apple-macos12.0" -o "$work/$arch" "$dir/address.swift" "$dir/main.swift"
 done
 mkdir -p "$(dirname "$out")"
 lipo -create "$work/arm64" "$work/x86_64" -output "$out"

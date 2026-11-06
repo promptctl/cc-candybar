@@ -1,3 +1,4 @@
+import { MAIN_NAME } from "../src/daemon/home";
 // A ramp over palette-NAME stops is a colour decision that stays inside the
 // theme system (brandon-custom-segments-g5z.2): its stops resolve through the
 // same live palette an authored `bg: "panel"` does, so a theme click and a
@@ -64,7 +65,7 @@ function rampBar() {
   const render = (payload: { pct: number; stop: string }): Frame =>
     rig.draw({ payload: { session_id: SID, ...payload } }).frame;
   const click = (key: "theme" | "style", value: string): Promise<void> =>
-    rig.click(effectsUrl([{ verb: VERB_SET_STATE, args: [SID, key, value] }]));
+    rig.click(effectsUrl(MAIN_NAME, [{ verb: VERB_SET_STATE, args: [SID, key, value] }]));
   return { render, click };
 }
 

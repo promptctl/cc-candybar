@@ -1,4 +1,4 @@
-import { TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_LINKS } from "./helpers/link-signer";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { NO_PROJECT } from "./helpers/no-project";
 import v8 from "node:v8";
@@ -40,7 +40,7 @@ function registerStdlib() {
   );
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState());
-  return { registry, compiled: registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" }) };
+  return { registry, compiled: registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/tmp" }) };
 }
 
 test("a registered stdlib config costs megabytes, not tens of them, helpers included", () => {

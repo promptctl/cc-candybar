@@ -1,3 +1,4 @@
+import { MAIN_NAME } from "../src/daemon/home";
 // [LAW:verifiable-goals] candybar-settings-ui-aok.5's done-gate: edit mode has
 // its own LOOK, and that look is authored config rather than renderer
 // constants. Four claims, each pinned below:
@@ -102,7 +103,7 @@ async function setState(
 ): Promise<void> {
   await rigOf
     .get(sessionState)!
-    .click(effectsUrl([{ verb: VERB_SET_STATE, args: [SID, key, value] }]));
+    .click(effectsUrl(MAIN_NAME, [{ verb: VERB_SET_STATE, args: [SID, key, value] }]));
 }
 
 // The rig each runtime's session renders with, whose config gates its clicks.

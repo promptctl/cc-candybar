@@ -3,7 +3,7 @@ import type { RendererHome } from "../src/daemon/home";
 // guard abandons the reply, not the click, so the helper sends the click once
 // and takes its outcome from the click event the daemon logs once it has run.
 
-import { homeOf } from "../src/daemon/home";
+import { MAIN_NAME, homeOf } from "../src/daemon/home";
 import fs from "node:fs";
 import { hostOf } from "./helpers/host";
 import net from "node:net";
@@ -94,7 +94,7 @@ async function timingOut(outcome: RequestOutcome): Promise<StandIn> {
   };
 }
 
-const URL = effectsUrl([
+const URL = effectsUrl(MAIN_NAME, [
   { verb: VERB_SET_STATE, args: ["bc-click", "candybar.diagnostics", "0"] },
 ]);
 

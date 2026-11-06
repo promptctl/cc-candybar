@@ -234,8 +234,7 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
     expect(
       await request({
         kind: "click",
-        verb: VERB_DOCTOR_PROBE,
-        value: nonce,
+        url: `cc-candybar://${VERB_DOCTOR_PROBE}/${nonce}`,
       }),
     ).toMatchObject({ ok: true });
     clicks += 1;
@@ -260,9 +259,9 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
       (picked) => picked.length >= 5,
       "five click events",
     );
-    expect(events[0]).toMatch(/ via=cli verb=doctor-probe .* outcome=ok/);
+    expect(events[0]).toMatch(/ via=cli to=- verb=doctor-probe .* outcome=ok/);
     expect(events[1]).toMatch(
-      / via=forwarder urlV=1 verb=doctor-probe .* outcome=ok/,
+      / via=forwarder urlV=1 to=- verb=doctor-probe .* outcome=ok/,
     );
     expect(events[2]).toMatch(
       / via=forwarder urlV=99 .* outcome=bad-request problems="the URL handler's frame version 99 is not one this daemon speaks \(1\)"/,
@@ -279,8 +278,7 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
     expect(
       await request({
         kind: "click",
-        verb: VERB_DOCTOR_RUN,
-        value: SID,
+        url: `cc-candybar://${VERB_DOCTOR_RUN}/${SID}`,
       }),
     ).toMatchObject({ ok: true });
     await click(

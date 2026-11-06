@@ -10,7 +10,7 @@
 import type { ChildProcess } from "node:child_process";
 import net from "node:net";
 
-import type { RendererHome } from "../../src/daemon/home";
+import type { RendererAddress, RendererHome } from "../../src/daemon/home";
 import { logPath, socketPath } from "../../src/daemon/paths";
 import { sendOne } from "../../src/daemon/protocol";
 import type { Request, Response } from "../../src/daemon/protocol";
@@ -24,6 +24,9 @@ const DEFAULT_REPLY_BUDGET_MS = 5000;
 export interface DaemonEndpoint {
   send(req: Record<string, unknown>, budgetMs: number): Promise<Response>;
   readonly log: string;
+  // The renderer's name, which a link a test mints for it is addressed to, as
+  // a home's `name` is for a real daemon.
+  readonly name: RendererAddress;
   // [LAW:one-source-of-truth] A request's budget is its deadline less its
   // arrival, so the two are read off one clock: the machine's, for a real
   // daemon, and a daemon's own, for one a test holds the time of.
@@ -43,6 +46,7 @@ export function endpointOf(target: DaemonTarget): DaemonEndpoint {
   return {
     send: (req, budgetMs) => overSocket(sockPath, req, budgetMs),
     log: logPath(target),
+    name: target.name,
     now: Date.now,
   };
 }

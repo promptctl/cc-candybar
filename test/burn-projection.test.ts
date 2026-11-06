@@ -12,7 +12,7 @@ import { textOf } from "../src/render/frame";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { drawPayload } from "./helpers/draw-payload";
 import type { Frame } from "../src/render/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_LINKS } from "./helpers/link-signer";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import {
@@ -198,7 +198,7 @@ function renderBurnrate(
   // and burnrate's own `when` renders an unrelated ⚠ error cell.
   const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState());
   try {
-    const compiled = registerDslConfig(cfg, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
+    const compiled = registerDslConfig(cfg, registry, { links: TEST_LINKS, cwd: "/tmp" });
     return drawPayload(
       cfg,
       compiled,

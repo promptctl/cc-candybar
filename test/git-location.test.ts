@@ -16,7 +16,7 @@ import { checkoutLocation } from "../src/utils/git-root";
 import { instantOf } from "../src/utils/instant";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
-import { TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_LINKS } from "./helpers/link-signer";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { systemTimekeeper } from "../src/time";
 
@@ -70,7 +70,7 @@ function drawAll(
   const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState());
   const sink = new Map<string, readonly RichText[]>();
   try {
-    const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
+    const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/tmp" });
     drawPayload(
       config,
       compiled,

@@ -4,7 +4,7 @@
 // durable writer) answers the same way. The answer is per repository, holds
 // across edits (nothing here hashes a file) and covers every linked worktree.
 
-import { homeOf } from "../src/daemon/home";
+import { MAIN_NAME, homeOf } from "../src/daemon/home";
 import { bareGates } from "./helpers/gates";
 import { HOST, hostOf, worldOf, mainEnv } from "./helpers/host";
 import type { Host, World } from "../src/host";
@@ -155,7 +155,7 @@ describe("the gate over a project's plugins", () => {
       runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
       sessionState: new SessionState(),
       storage: UNOWNED_STORAGE,
-      signer: linkSigner(Buffer.alloc(32)),
+      links: { to: MAIN_NAME, signer: linkSigner(Buffer.alloc(32)) },
       gates: bareGates(),
       stateDir: stateDir(homeOf(host)), locations: locations(host, homeOf(host)),
     };
@@ -330,7 +330,7 @@ test("the question offers each answer as a link signed for its session, director
       unread: null,
     },
     "sid-1",
-    signer,
+    { to: MAIN_NAME, signer },
   );
   expect(rest).toEqual([]);
   expect(channel!.message).toBe(

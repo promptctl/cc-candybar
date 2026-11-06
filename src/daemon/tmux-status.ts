@@ -29,6 +29,7 @@
 // `if-shell -F '#{@cc-candybar-status-prior}'`, which the restore removes, so
 // a draw landing after it does nothing.
 
+import type { RendererAddress } from "./home.js";
 import { LANES } from "../config/lanes.js";
 import type { TmuxRun } from "../proc/tmux.js";
 import type { TmuxHint } from "../tmux-hint.js";
@@ -478,7 +479,7 @@ export interface TmuxStatusDeps {
   // This daemon's socket: what it writes into tmux is marked with it.
   readonly owner: string;
   // This renderer's name, as the sessions it draws carry it in RENDERER_OPTION.
-  readonly name: string;
+  readonly name: RendererAddress;
   readonly log: (level: "info" | "warn", msg: string) => void;
 }
 

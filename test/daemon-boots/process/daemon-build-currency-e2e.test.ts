@@ -222,7 +222,7 @@ describe("a daemon spawned from the built bundle", () => {
         // that effect's failure, held for the session's bar.
         await click(
           home,
-          effectsUrl([{ verb: VERB_APPLY_UPDATE, args: [sid] }]),
+          effectsUrl(homeOf(hostOf(env)).name, [{ verb: VERB_APPLY_UPDATE, args: [sid] }]),
         );
         await pagesUntil(
           home,

@@ -87,13 +87,14 @@ export function renderCarousel(
   const ring = (offset: number): string => options[indexAt(offset)]!;
   const step = (offset: number): string =>
     effectsUrl(
+      runtime.links.to,
       realize(
         declared,
         ring(offset),
         ring(offset),
         store,
         sessionId,
-        runtime.signer,
+        runtime.links.signer,
       ).effects,
     );
 
@@ -110,13 +111,14 @@ export function renderCarousel(
         label,
       ),
       effectsUrl(
+        runtime.links.to,
         realize(
           runtime.compiled.get(openName)!,
           ring(0),
           undefined,
           store,
           sessionId,
-          runtime.signer,
+          runtime.links.signer,
         ).effects,
       ),
     ),

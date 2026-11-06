@@ -80,7 +80,7 @@ import {
   renderBinding,
   type ActionRuntime,
 } from "../render/action.js";
-import type { LinkSigner } from "../click/link-signer.js";
+import type { RendererLinks } from "../click/renderer-links.js";
 import { SESSION_KEY_TO_EFFECTIVE_VAR } from "../config/setting-projections.js";
 import { disclosureCloseFragment } from "../render/disclosure-close.js";
 import { pickerFuncs } from "../render/picker.js";
@@ -182,6 +182,8 @@ export interface CompiledConfig {
   readonly roots: ReadonlyMap<string, CompiledNode>;
   // [LAW:locality-or-seam] The menu runtime the engine's `menu` func closes over.
   readonly menuRuntime: MenuRuntime;
+  // What makes every link this compile draws its renderer's.
+  readonly links: RendererLinks;
   // [LAW:one-source-of-truth] The compiled template for every RULE the config
   // authored where a name could go — `style` (brandon-looks-pe6) and `palette`
   // (brandon-themes-dzl) — in every globals fragment the config-default rung
@@ -444,14 +446,14 @@ export function registerDslConfig(
   // [LAW:no-silent-failure] `cwd` is required: it is the directory `shell`
   // sources run in, and the daemon's own process.cwd() is
   // whichever shell spawned it — a default here would be that wrong answer.
-  // `signer` signs the `run` links the compile draws.
-  opts: { cwd: string; signer: LinkSigner },
+  // `links` addresses every link the compile draws and signs its `run` links.
+  opts: { cwd: string; links: RendererLinks },
 ): RegisteredConfig {
   const { compiled, loadWarnings } = registerCompiled(
     config,
     registry,
     opts.cwd,
-    compileAlone(opts.signer),
+    compileAlone(opts.links),
     EVERY_SCOPE,
   );
   return { ...compiled, loadWarnings };
@@ -465,9 +467,9 @@ export type CompileProvider = (
 
 /** A compile of its own, for a caller with no other entry to share one with. */
 export const compileAlone =
-  (signer: LinkSigner): CompileProvider =>
+  (links: RendererLinks): CompileProvider =>
   (_key, input) =>
-    compileDslConfig(input, signer);
+    compileDslConfig(input, links);
 
 /** A config composed into a registry: its compile, and its store's declarations. */
 export interface Registration {
@@ -620,8 +622,9 @@ export const EVERY_SCOPE: ReadonlySet<VarScope> = new Set([
 export function compileDslConfig(
   { config, stateReads, projections }: CompileInput,
   // [LAW:locality-or-seam] Not part of the input: the compile's identity is
-  // the config's, and every compile one daemon makes signs with its one key.
-  signer: LinkSigner,
+  // the config's, and every compile one daemon makes addresses its links to
+  // its one name and signs them with its one key.
+  links: RendererLinks,
 ): CompiledConfig {
   // [LAW:locality-or-seam] One engine per config load, carrying THIS config's
   // action runtime. Engine creation amortizes across all of this config's segment
@@ -635,7 +638,7 @@ export function compileDslConfig(
   const actionRuntime: ActionRuntime = {
     bound: undefined,
     compiled: new Map(),
-    signer,
+    links,
   };
   // [LAW:one-way-deps] Inject action + picker feature funcs as data — the engine
   // stays generic. The picker shares the ACTION runtime (it resolves its
@@ -988,6 +991,7 @@ export function compileDslConfig(
     roots,
     activeSegment,
     menuRuntime,
+    links,
     globalExpressions,
     instant,
     layoutReadsInstant,
@@ -1545,8 +1549,10 @@ export function drawDsl(
       // `{{ menu }}` inside door → ⚙ lands at depth 2 with no walk state.
       renderBody: (body, held, band) => renderNode(body, held, bandRoot(band)),
       // [LAW:one-source-of-truth] The row ✕ reads the session id from the
-      // same store every other affordance's URL does.
-      closeDisclosure: (key) => disclosureCloseFragment(store, key),
+      // same store every other affordance's URL does, and is addressed as
+      // every link the compile draws is.
+      closeDisclosure: (key) =>
+        disclosureCloseFragment(compiled.links.to, store, key),
       placed: (id, lines) => record.placed(id, motion.placed(id, lines)),
       lastDrawn: (id) => last?.placements.get(id),
       waited: (variable) => waited.add(variable),

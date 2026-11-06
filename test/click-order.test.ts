@@ -1,3 +1,5 @@
+import { TEST_LINKS } from "./helpers/link-signer";
+import { MAIN_NAME } from "../src/daemon/home";
 // A click's read-only launches run ahead of its journal turn, and its session's
 // queue keeps arrival order across them (candybar-launch-q7o7.fqw). Doctor
 // clicks here are real verbs over a fake doctor edge whose process probe parks
@@ -107,7 +109,7 @@ function setup(over: Partial<DoctorEdge> = {}) {
   const toggle = (sid: string, c: VerbContext = ctx) =>
     VERBS.get(VERB_TOOLBAR_TOGGLE)!(encodeURIComponent(sid), c);
   const doDoctorThen = (c: VerbContext = ctx) => {
-    const url = effectsUrl([
+    const url = effectsUrl(MAIN_NAME, [
       { verb: VERB_DOCTOR_RUN, args: [A] },
       { verb: VERB_TOOLBAR_TOGGLE, args: [A] },
     ]);
@@ -117,7 +119,7 @@ function setup(over: Partial<DoctorEdge> = {}) {
   // A click of `sid` that holds the turn while `parked` is: a doctor run
   // behind a write gathers inside the turn, the one await a handler has left.
   const holdTurn = (sid: string, parked: Promise<unknown> = held.wait) => {
-    const url = effectsUrl([
+    const url = effectsUrl(MAIN_NAME, [
       { verb: VERB_TOOLBAR_TOGGLE, args: [sid] },
       { verb: VERB_DOCTOR_RUN, args: [sid] },
     ]);
@@ -183,7 +185,7 @@ describe("a gather holds no turn", () => {
 
   test("a gather past a click's first gather runs in the turn, after the first one's write", async () => {
     const { held, gathers, ctx } = setup();
-    const url = effectsUrl([
+    const url = effectsUrl(MAIN_NAME, [
       { verb: VERB_DOCTOR_RUN, args: [A] },
       { verb: VERB_DOCTOR_RUN, args: [A] },
     ]);
@@ -309,7 +311,7 @@ describe("a gather is a snapshot of one config", () => {
           },
         }),
       };
-      const url = effectsUrl([
+      const url = effectsUrl(MAIN_NAME, [
         { verb: VERB_SET_CONFIG, args: [A, "palette", [...ALLOWED][0]!] },
         { verb: VERB_DOCTOR_RUN, args: [A] },
       ]);
@@ -505,6 +507,7 @@ test("the click path counts a click pending from arrival, through a refusal, and
   const events: string[] = [];
   const parts = {
     clock: { monotonic: () => performance.now(), now: () => Date.now() },
+    links: TEST_LINKS,
     menuIdle: idle,
     payloadProviders: {},
     log: (_level: string, line: string) => events.push(line),
@@ -513,7 +516,7 @@ test("the click path counts a click pending from arrival, through a refusal, and
   const send = (gone: () => boolean) =>
     replyTo(
       parts,
-      { kind: "click", verb: VERB_DOCTOR_RUN, value: encodeURIComponent(A) } as Parameters<typeof replyTo>[1],
+      { kind: "click", url: `cc-candybar://${VERB_DOCTOR_RUN}/${encodeURIComponent(A)}` } as Parameters<typeof replyTo>[1],
       () => false,
       systemTimekeeper.monotonic(),
       gone,

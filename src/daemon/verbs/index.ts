@@ -13,10 +13,9 @@
 // the live registry and the test enumeration cannot drift.
 //
 // Multi-arg verbs (set-state) carry their args as a single slash-delimited
-// `value` string on the wire — keeping ClickRequest shape-stable at
-// protocol v3 ({verb, value}). The per-verb handler parses its own value
-// into the typed args it needs. URL format mirrors:
-//   cc-candybar://<verb>/<value>   where <value> may itself contain `/`.
+// `value`, the tail of the link after its verb, where <value> may itself
+// contain `/`. The per-verb handler parses its own value into the typed args
+// it needs.
 
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
@@ -134,7 +133,7 @@ import {
   VERB_COPY_DIAGNOSTIC,
   type EvaluatedRun,
 } from "../../click/wire";
-import type { LinkSigner } from "../../click/link-signer";
+import type { RendererLinks } from "../../click/renderer-links";
 import { recordAnswer, repoAnswerFields, repoConfigs } from "../repo-configs";
 import type { RepoAnswer } from "../../config/loader/repo-gate";
 import type { Runs, RunRequest } from "../runs";
@@ -261,9 +260,9 @@ export interface DaemonContext {
   // The storage key of each source that config declares, from the same
   // render state: what a `run` supersedes.
   readonly sourcesFor: (origin: RenderOrigin) => DeclaredSources;
-  // [LAW:single-enforcer] The signer every `run` link was drawn with: a link
-  // is honoured only if it verifies here.
-  readonly links: LinkSigner;
+  // [LAW:single-enforcer] Whose links this daemon drew: a `run` link is
+  // honoured only if it verifies under their key.
+  readonly links: RendererLinks;
   // [LAW:no-ambient-temporal-coupling] The one owner of runs in flight: a
   // `run` click hands its program over and is answered at once.
   readonly runs: Pick<Runs, "start" | "refused">;
@@ -1777,7 +1776,10 @@ function runOf(
   }
   const declaration = runDeclaration(decl);
   if (
-    !ctx.links.verify({ sessionId: sid, action, declaration, evaluated }, mac)
+    !ctx.links.signer.verify(
+      { sessionId: sid, action, declaration, evaluated },
+      mac,
+    )
   ) {
     throw new BadVerbArgs(
       "the link's signature does not match what it carries: it was not drawn by this daemon, or its action has been edited since it was drawn",
@@ -1852,7 +1854,7 @@ const repoConfig: VerbHandler = async (value, ctx) => {
   const sid = requireSessionId(sessionId);
   // Signed, so it is an answer the bar offered.
   const answered = answer as RepoAnswer;
-  if (!ctx.links.verify(repoAnswerFields(sid, dir, answered), mac)) {
+  if (!ctx.links.signer.verify(repoAnswerFields(sid, dir, answered), mac)) {
     throw new BadVerbArgs(
       "the answer's signature does not match what it carries: it was not drawn by this daemon",
     );

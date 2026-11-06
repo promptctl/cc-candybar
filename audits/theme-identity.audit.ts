@@ -24,7 +24,7 @@ import { drawPayload } from "../test/helpers/draw-payload";
 import { unscriptedRuns } from "../test/helpers/fake-launcher";
 import type { Frame } from "../src/render/frame";
 import { backgroundsOf, truecolorOf } from "../test/helpers/frame";
-import { TEST_SIGNER } from "../test/helpers/link-signer";
+import { TEST_LINKS } from "../test/helpers/link-signer";
 import { DIVIDER, drawnChars, isRgb, seams, type Drawn } from "../test/helpers/seams";
 import {
   ColorDepth,
@@ -131,7 +131,7 @@ const CALM = {
 // render, so the renders differ only in the pick.
 const STORE = new VariableStore(systemTimekeeper);
 const REGISTRY = new SourceRegistry(unscriptedRuns(), STORE, "", new SessionState());
-const COMPILED = registerDslConfig(CONFIG, REGISTRY, { signer: TEST_SIGNER, cwd: process.cwd() });
+const COMPILED = registerDslConfig(CONFIG, REGISTRY, { links: TEST_LINKS, cwd: process.cwd() });
 const AT = instantOf(new Date());
 afterAll(() => REGISTRY.dispose());
 

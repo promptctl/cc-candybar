@@ -5,7 +5,7 @@
 // that read it, and released only by a sweep 2.5 to 5 minutes after the last
 // draw that did.
 
-import { TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_LINKS } from "./helpers/link-signer";
 import { HOST, locs, WORLD } from "./helpers/host";
 import { unscriptedLauncher } from "./helpers/fake-launcher";
 import fs from "node:fs";
@@ -133,7 +133,7 @@ test("a view reads the PR from its declaration whatever its preset places, and a
       locations: locs(),
       runs: new SourceRuns({ launcher: unscriptedLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
-      signer: TEST_SIGNER,
+      links: TEST_LINKS,
       gates: bareGates(),
       sessionState,
       watchers,
@@ -272,7 +272,7 @@ function gitCache() {
       locations: locs(),
       runs: new SourceRuns({ launcher: unscriptedLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
-      signer: TEST_SIGNER,
+      links: TEST_LINKS,
       gates: bareGates(),
       sessionState,
       watchers,

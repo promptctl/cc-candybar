@@ -136,7 +136,7 @@ function renderMenu(
   // edit mode's `+` came to read `+▸`.
   const glyph = linkFragment(
     pickCycleDisplay(`{{ menu "${applyName}" }}`, displays, 2, open ? 1 : 0),
-    effectsUrl([
+    effectsUrl(action.links.to, [
       {
         verb: VERB_SET_STATE,
         args: [sessionId, stateKey, successor, pageKey, "0"],

@@ -9,7 +9,7 @@
 // entries in the breach snapshot of 2026-10-19 — until the RSS backstop fired.
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
-import { TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_LINKS } from "./helpers/link-signer";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
@@ -64,7 +64,7 @@ function renderedEntry(
   );
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
+  const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/tmp/proj" });
   if (drawn) {
     drawPayload(
       config,
@@ -146,7 +146,7 @@ describe("VariableStore.dispose releases every computed's subscriptions", () => 
         DEFAULT_DSL_CONFIG,
       ),
       registry,
-      { signer: TEST_SIGNER, cwd: "/tmp/proj" },
+      { links: TEST_LINKS, cwd: "/tmp/proj" },
     );
     expect(sessionState.observers()).toBe(0);
     registry.dispose();

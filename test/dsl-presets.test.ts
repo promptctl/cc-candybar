@@ -1,3 +1,4 @@
+import { MAIN_NAME } from "../src/daemon/home";
 // [LAW:verifiable-goals] brandon-presets-0yk.1 done-gates: (1) a `presets` block
 // loads/validates loudly, with the field cap (root + globals only) enforced;
 // (2) a config with two presets renders the one selected by a config literal
@@ -295,7 +296,7 @@ describe("preset selection — the arrangement the bar renders", () => {
   }
 
   const clickPreset = (rt: ReturnType<typeof presetBar>, preset: string): Promise<void> =>
-    rt.click(effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "preset", preset] }]));
+    rt.click(effectsUrl(MAIN_NAME, [{ verb: VERB_SET_STATE, args: [SID, "preset", preset] }]));
 
   test("with no pick, the floor renders the config's own root", () => {
     const rt = presetBar();

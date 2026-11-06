@@ -16,6 +16,7 @@ import {
   type LaneSwitches,
 } from "../config/lanes.js";
 import { effectsUrl, VERB_RESET_CONFIG } from "../click/wire.js";
+import type { RendererAddress } from "./home.js";
 import {
   diagnosticSpan,
   HANDOFF_SEVERITY,
@@ -43,10 +44,11 @@ export const HANDOFF_BUTTON = "[⟲ claude]";
 // what the lane runs follows the switch (src/daemon/lane-setup.ts), so a pane
 // it opened closes.
 export function laneHandoff(
+  to: RendererAddress,
   sessionId: string,
   lanes: readonly [Lane, ...Lane[]],
 ): ChannelMessage {
-  const reset = effectsUrl([
+  const reset = effectsUrl(to, [
     {
       verb: VERB_RESET_CONFIG,
       args: [sessionId, ...lanes.map((lane) => LANES[lane].switch.setting)],

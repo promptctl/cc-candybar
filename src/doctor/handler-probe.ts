@@ -122,13 +122,13 @@ export async function probeUrlHandler(
   edge: HandlerProbeEdge,
 ): Promise<UrlHandlerFacts> {
   if (edge.platform !== "darwin") return { kind: "unsupported" };
-  // The handler delivers to its own socket: a link opened from a shell whose
-  // daemon is another would land on a daemon this probe cannot read, and the
-  // links that shell's bar draws go there too.
+  // The probe's link names no renderer, so the handler delivers it to main's
+  // socket: opened from a shell whose daemon is another, it would land on a
+  // daemon this probe cannot read.
   if (edge.sockets.own !== edge.sockets.handler) {
     return {
       kind: "unprobed",
-      reason: `this shell's daemon is at ${edge.sockets.own}; the URL handler delivers links to ${edge.sockets.handler}`,
+      reason: `this shell's daemon is at ${edge.sockets.own}; the URL handler delivers the probe's link, which names no renderer, to ${edge.sockets.handler}`,
     };
   }
   // The link is delivered to the daemon, so one that cannot be asked can

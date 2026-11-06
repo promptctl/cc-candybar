@@ -1382,9 +1382,10 @@ mod tests {
     use super::*;
     use std::io;
 
-    // The renderer name grammar's vectors, the same lists as
-    // test/renderer-home.test.ts (diffed by scripts/check-protocol.mjs): each
-    // side drives its own parser from its own list.
+    // The renderer name rule's vectors (grammar and length), the same lists as
+    // test/renderer-home.test.ts and url-handler/address-test.swift (diffed by
+    // scripts/check-protocol.mjs): each side drives its own parser from its
+    // own list. The home's refusal of `main` is HOME_CASES' to show.
     const NAME_ACCEPT: &[&str] = &[
         "a",
         "0",
@@ -1395,7 +1396,6 @@ mod tests {
     ];
     const NAME_REJECT: &[&str] = &[
         "",
-        "main",
         "A",
         "Dev",
         "-a",

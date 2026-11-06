@@ -147,7 +147,7 @@ describe("brandon-build-notice-5d6: the daemon renders what is newer than it, wi
       )!;
       await click(
         sock,
-        effectsUrl([
+        effectsUrl(sock.name, [
           {
             verb: VERB_SET_STATE,
             args: ["bc-disable-pick", UPDATE_NOTICE_SESSION_KEY, "true"],

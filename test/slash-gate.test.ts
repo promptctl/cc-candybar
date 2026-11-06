@@ -11,7 +11,7 @@ import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_LINKS } from "./helpers/link-signer";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -102,7 +102,7 @@ async function bar(
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
+  const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/tmp" });
   const render = (): Frame =>
     drawPayload(
       config,

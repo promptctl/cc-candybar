@@ -83,23 +83,20 @@ describe("click protocol", () => {
     const req = {
       v: PROTOCOL_VERSION,
       kind: "click" as const,
-      verb: "toolbar-toggle",
-      value: "test-session",
+      url: "cc-candybar://toolbar-toggle/test-session",
     };
     const encoded = encodeFrame(req);
     const len = encoded.readUInt32BE(0);
     const body = JSON.parse(encoded.subarray(4, 4 + len).toString("utf8"));
     expect(body.kind).toBe("click");
-    expect(body.verb).toBe("toolbar-toggle");
-    expect(body.value).toBe("test-session");
+    expect(body.url).toBe("cc-candybar://toolbar-toggle/test-session");
   });
 
   test("unknown click verb returns BAD_REQUEST", async () => {
     const resp = await sendToTestServer({
       v: PROTOCOL_VERSION,
       kind: "click",
-      verb: "nonexistent-verb",
-      value: "test",
+      url: "cc-candybar://nonexistent-verb/test",
     });
     expect(resp.ok).toBe(false);
     if (!resp.ok) {
