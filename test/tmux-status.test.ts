@@ -185,10 +185,7 @@ class FakeTmux implements TmuxStatusEdge {
         const named = [...this.sessions.values()].some(
           (s) => (s.get(RENDERER_OPTION) ?? "") !== "",
         );
-        const guards: Record<string, boolean> = {
-          [NAMED]: named,
-          [`#{!:${NAMED}}`]: !named,
-        };
+        const guards: Record<string, boolean> = { [NAMED]: named };
         if (own === null && !(condition in guards))
           throw new Error(`fake tmux: if-shell -F ${condition}`);
         const holds =

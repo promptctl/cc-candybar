@@ -154,11 +154,13 @@ export function restoreBinding(user: CommandList | null): string[] {
     user === null
       ? `unbind-key ${CLICK_KEY.join(" ")}`
       : `bind-key ${CLICK_KEY.join(" ")} ${boundText(user)}`;
+  // The guard is NAMED itself with the branches swapped: tmux before 3.5 has
+  // no `#{!:...}`, leaves it unexpanded, and reads the text left as true.
   return [
     "if-shell",
     "-F",
-    `#{!:${NAMED}}`,
-    `${put} ; display-message -p ${RESTORED}`,
+    NAMED,
     `display-message -p ${HELD}`,
+    `${put} ; display-message -p ${RESTORED}`,
   ];
 }
