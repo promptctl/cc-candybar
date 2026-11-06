@@ -117,6 +117,39 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
     expect(viaAbsent).not.toBe(plain);
   });
 
+  // The two spellings of an explicit config have ONE precedence, composed at
+  // the request boundary (requestedConfigTarget): the `--config` flag over the
+  // `configEnv` hint. Each render below carries both, naming DIFFERENT files,
+  // so the bar itself says which one won. An empty `--config` is no override
+  // at all — the hint applies — never an empty path collapsing the chain to
+  // nothing.
+  test("--config outranks the configEnv hint; an empty flag is no flag", async () => {
+    const sid = "cfg-env-precedence";
+    const hints = { configEnv: absent };
+
+    const flagOverHint = await render(
+      daemon,
+      sid,
+      projectDir,
+      hints,
+      configFlag(rejected),
+    );
+    expect(flagOverHint).toContain("⚠ Invalid config in");
+    expect(flagOverHint).toContain(rejected);
+    expect(flagOverHint).not.toContain("Config file not found");
+
+    const emptyFlag = await render(
+      daemon,
+      sid,
+      projectDir,
+      hints,
+      configFlag(""),
+    );
+    expect(emptyFlag).toContain("⚠ Config file not found:");
+    expect(emptyFlag).toContain(absent);
+    expect(emptyFlag).not.toContain("Invalid config");
+  });
+
   // brandon-unfiled-3248.8bz: a bare `--config` (only ever the last token —
   // the flag takes whatever follows it) was read as no override, silently,
   // even when an earlier `--config` named a file. It is refused as the bar's error

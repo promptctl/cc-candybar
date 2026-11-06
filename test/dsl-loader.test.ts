@@ -1688,15 +1688,15 @@ describe("loadDslConfig — root rows fragment", () => {
 });
 
 describe("loadDslConfig — cross-references", () => {
-  // [LAW:no-silent-failure] A `link` literal naming a verb no click runs is
-  // refused at load with where what it did now lives (RETIRED_LINK_VERBS), at
-  // the template or at the helper that spells it.
-  test("a template linking to the removed load-config verb is refused at load, naming --config and the shell variable", () => {
+  // [LAW:no-silent-failure] A string literal spelling a URL for a verb no
+  // click runs is refused at load with where what it did now lives
+  // (RETIRED_LINK_VERBS), at the template or at the helper that spells it.
+  test("a template spelling the removed load-config verb's URL is refused at load, naming --config and the shell variable", () => {
     const linked = `{ segments: { a: { template: '{{ link (printf "cc-candybar://load-config/%s/" .session.id) "normal" }}' } }, root: { h: ['a'] } }`;
     expectIssue(linked, {
       path: "segments.a.template",
       message:
-        /Template links to "cc-candybar:\/\/load-config\/…", which no click runs: .*--config.*\$CC_CANDYBAR_CONFIG/,
+        /Template spells "cc-candybar:\/\/load-config\/…", a URL no click runs: .*--config.*\$CC_CANDYBAR_CONFIG/,
     });
     const viaHelper = `{ helpers: { h: '{{ link "cc-candybar://load-config/x/" "pick" }}' }, segments: { a: { template: '{{ template "h" . }}' } }, root: { h: ['a'] } }`;
     expectIssue(viaHelper, { path: "helpers.h", message: "load-config" });

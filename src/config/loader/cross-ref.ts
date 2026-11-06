@@ -1114,6 +1114,29 @@ function checkTemplateRefs(
     partials?: Readonly<Record<string, string>>;
   },
 ): void {
+  // [LAW:single-enforcer] Where a template's issue is reported: at the helper
+  // whose body spells it (`via`), else at the template's own declaration.
+  const report = (message: string, via: string | null): void => {
+    if (via !== null) {
+      checkHelperIssue(
+        ctx,
+        via,
+        message,
+        helperKeyPath(
+          via,
+          opts?.segCtx === undefined
+            ? undefined
+            : { name: opts.segCtx, partials: opts.partials },
+        ),
+      );
+      return;
+    }
+    ctx.issues.push({
+      path: declPath,
+      message,
+      line: opts?.line ?? findKeyLine(ctx.source, declPath.split(".")),
+    });
+  };
   for (const [ref, via] of templateReads(template, scope.helpers)) {
     if (refResolves(ref, scope)) continue;
     // [LAW:single-enforcer] A setting is the CALLER's declaration, never the
@@ -1125,69 +1148,31 @@ function checkTemplateRefs(
       // `settings` is passed exactly for a segment's own templates — the ones
       // a placement renders; a variable (a segment-local one included) has no
       // placement, so no declaration could make its read valid.
-      const message =
+      report(
         opts?.segCtx === undefined || opts.settings === undefined
           ? `Template reads ".${ref}"${through}, but only a segment's own templates have settings — call it from a segment that declares "${setting}"`
-          : `Template reads ".${ref}"${through}, but segment "${opts.segCtx}" has no setting "${setting}" (it has: ${Object.keys(opts.settings).join(", ")}) — declare it under segments.${opts.segCtx}.settings`;
-      ctx.issues.push({
-        path: declPath,
-        message,
-        line: opts?.line ?? findKeyLine(ctx.source, declPath.split(".")),
-      });
-      continue;
-    }
-    if (via !== null) {
-      checkHelperIssue(
-        ctx,
-        via,
-        `Template references unknown variable ".${ref}"${retiredReadHint(ref)}`,
-        helperKeyPath(
-          via,
-          opts?.segCtx === undefined
-            ? undefined
-            : { name: opts.segCtx, partials: opts.partials },
-        ),
+          : `Template reads ".${ref}"${through}, but segment "${opts.segCtx}" has no setting "${setting}" (it has: ${Object.keys(opts.settings).join(", ")}) — declare it under segments.${opts.segCtx}.settings`,
+        null,
       );
       continue;
     }
     const namespaced =
-      opts?.segCtx !== undefined ? `${opts.segCtx}.${ref}` : undefined;
+      opts?.segCtx !== undefined && via === null
+        ? `${opts.segCtx}.${ref}`
+        : undefined;
     const hint =
       namespaced !== undefined && refResolves(namespaced, scope)
         ? ` (segment-local vars are namespaced — write ".${namespaced}")`
         : retiredReadHint(ref);
-    ctx.issues.push({
-      path: declPath,
-      message: `Template references unknown variable ".${ref}"${hint}`,
-      line: opts?.line ?? findKeyLine(ctx.source, declPath.split(".")),
-    });
+    report(`Template references unknown variable ".${ref}"${hint}`, via);
   }
-  // [LAW:no-silent-failure] A `link` literal naming a verb no click runs is
-  // the file's error at load, not the bar's at the click, so the author reads
-  // where what it did now lives (RETIRED_LINK_VERBS) — at the helper that
-  // spells it, as an unknown variable is.
+  // [LAW:no-silent-failure] A string literal spelling a URL for a verb no
+  // click runs is the file's error at load, not the bar's at the click, so the
+  // author reads where what it did now lives (RETIRED_LINK_VERBS) — at the
+  // helper that spells it, as an unknown variable is.
   for (const { verb, via } of templateLinkVerbs(template, scope.helpers)) {
     const retired = retiredLinkVerbMessage(verb);
-    if (retired === undefined) continue;
-    if (via !== null) {
-      checkHelperIssue(
-        ctx,
-        via,
-        retired,
-        helperKeyPath(
-          via,
-          opts?.segCtx === undefined
-            ? undefined
-            : { name: opts.segCtx, partials: opts.partials },
-        ),
-      );
-      continue;
-    }
-    ctx.issues.push({
-      path: declPath,
-      message: retired,
-      line: opts?.line ?? findKeyLine(ctx.source, declPath.split(".")),
-    });
+    if (retired !== undefined) report(retired, via);
   }
 }
 

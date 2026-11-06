@@ -1772,8 +1772,7 @@ export class RenderCache<
 
   // [LAW:no-ambient-temporal-coupling] An open feed's pin on its session,
   // from the feed's open to its close (src/daemon/frame-feed.ts). Keyed by
-  // session, so it follows the view wherever a request, a reload or a click
-  // moves it.
+  // session, so it follows the view wherever a request or a reload moves it.
   pin(sessionId: string): () => void {
     this.pins.set(sessionId, (this.pins.get(sessionId) ?? 0) + 1);
     let released = false;

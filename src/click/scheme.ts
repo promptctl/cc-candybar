@@ -1,8 +1,9 @@
 // [LAW:one-way-deps] The scheme a click URL carries, and the app Launch
 // Services starts for it, as a leaf with no imports: the wire codec emits the
 // scheme, the installer registers it, and the config loader reads it off an
-// authored `link` literal, and the loader is what the codec's own imports
-// stand on, so the fact sits below both.
+// authored URL literal. The codec imports config modules (the disclosure, the
+// door, the reserved names), so config importing the codec would point
+// uphill; the fact sits below both instead.
 // [LAW:one-source-of-truth] The scheme string lives here alone.
 export const URL_SCHEME = "cc-candybar";
 

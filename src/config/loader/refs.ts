@@ -348,12 +348,13 @@ export function templateActionRefs(
   return [...refs.values()];
 }
 
-// [LAW:single-enforcer] The click verbs a template's `link` literals spell —
-// `"cc-candybar://<verb>/…"`, whole or as a printf format, in its own text or
-// any reachable helper's (`callGraphBlocks`), exactly as its action bindings
-// are found — once per body, with the helper whose body spells it (`null` =
-// the template itself). A verb computed at the draw is no literal, and is the
-// click's to refuse.
+// [LAW:single-enforcer] The click verbs a template's string literals spell —
+// `"cc-candybar://<verb>/…"`, whole or as a printf format, wherever the literal
+// stands (a `link` argument, a printed text, a comparison: a URL is dead in
+// every position), in its own text or any reachable helper's
+// (`callGraphBlocks`), exactly as its action bindings are found — once per
+// body, with the helper whose body spells it (`null` = the template itself).
+// A verb computed at the draw is no literal, and is the click's to refuse.
 export interface LinkVerbRef {
   readonly verb: string;
   readonly via: string | null;

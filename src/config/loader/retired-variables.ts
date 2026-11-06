@@ -165,7 +165,7 @@ export function retiredGitKindMessage(
   return `${head} read ${field.read} where it was read${note}, or declare ${json5Of(field.declare)} under a name of your own`;
 }
 
-// [LAW:one-source-of-truth] The click verbs a hand-written `link` literal can
+// [LAW:one-source-of-truth] The click verbs a hand-written URL literal can
 // still spell that no daemon dispatches: verb → where what it did now lives.
 // A literal URL reaches no table at load, so without this row the click would
 // fail on the bar, long after the file loaded [LAW:no-silent-failure]. A
@@ -181,5 +181,5 @@ export function retiredLinkVerbMessage(verb: string): string | undefined {
   const where = RETIRED_LINK_VERBS.get(verb);
   return where === undefined
     ? undefined
-    : `Template links to "${URL_SCHEME}://${verb}/…", which no click runs: ${where}`;
+    : `Template spells "${URL_SCHEME}://${verb}/…", a URL no click runs: ${where}`;
 }
