@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-646",
+      "ref": "refs/pull/646/merge",
+      "sha": "44be1565279de8ecdeb51949cd89ae9e6f474c91",
+      "timestamp": "2026-11-06T20:44:44.674Z",
+      "commits": [
+        {
+          "sha": "44be1565279de8ecdeb51949cd89ae9e6f474c91",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T20:43:46Z",
+          "message": "Merge c31963dbb11a979ceb29b18918304fa6051261e1 into 25a3827641cb21d3ec9541e2f1e9f87ea4d9be07\n"
+        },
+        {
+          "sha": "c31963dbb11a979ceb29b18918304fa6051261e1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:29:27-07:00",
+          "message": "fix(apply): a queued lane setup is refused at close; every write asks for its turn first (candybar-gather-renderer-76bb.1dh.9kk)\n\nA lane setup waits in its session's effect order, so one still queued when\nthe daemon closes would start a restart no daemon is left to attach. The\nlane setup owner closes with the daemon and refuses it as the close, as a\nqueued run is. A run the close aborted is answered as the close rather\nthan as a failure that only the teardown's order kept off the bar.\n\nThe store asks for the turn at the top of every public write, before an\nempty batch or a held revision decides that nothing moves, so a write out\nof its turn is refused whatever it would have written.\n"
+        },
+        {
+          "sha": "7c6f47f0faed524bcaebfd0ab0559b0f1139821f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:17:43-07:00",
+          "message": "fix(apply): a request is drawn once applied; a run's sources resume whatever its launch did (candybar-gather-renderer-76bb.1dh.9kk)\n\nThe request arm no longer draws: `applyRequest` applies the request and then\nbegins its draw, so a request whose apply rejected strands no draw. The\neffects the request's turn described go on its render event.\n\nA run's launch is awaited in a try/finally, so a launcher that throws still\nresumes the run's sources and leaves nothing counted running.\n\nThe lane setup effect is declared by the lane setup owner, which the effect\nunion names from above, so the two no longer import each other.\n"
+        },
+        {
+          "sha": "1cb30a68a172c66f09cd6eebc21a729a87362db6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T12:56:21-07:00",
+          "message": "fix(apply): a request's arrival settles in its turn; a queued run is counted (candybar-gather-renderer-76bb.1dh.9kk)\n\nThe lane setups a request's arrival settles were taken off the owed list\nduring the draw and reached the performer only once the draw had answered,\nso a click made during the wait was performed ahead of them, and a draw that\nthrew lost them. The arrival (owed setups and the tmux status line) now\nsettles in the request's turn, measured as a click's switches are, and the\narm answers with the draw under way, so the turn's effects join the\nsession's order as the turn ends.\n\nA run superseded by its click and still waiting behind the session's earlier\neffects shows in the run stats as queued. The lane outcome's comment says\nwhat underway now means, and a write's refusal text is built only when\nrefused.\n"
+        },
+        {
+          "sha": "151d1b5c21cd261fb27ec72481174c606aa8d285",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T12:35:32-07:00",
+          "message": "feat(apply): session state has one writer; a run and a lane setup are effects (candybar-gather-renderer-76bb.1dh.9kk)\n\nThe session store refuses a write made while no journal turn is held, in\nevery daemon. A turn is synchronous, so a write while one is held is that\nturn's own, and one check at the store's single write path is the whole\nenforcement. The test-only view that refused such writes, its adapter\nseam and the separate gauges field are gone.\n\nThe two writers left outside a turn now report through effect-done:\n\n- A `run` click supersedes its sources in its turn, so they read pending\n  from the click on, and describes the launch as a `run` effect. The\n  performer runs the program behind the session's earlier effects; the\n  run owner answers how it ended and no longer writes the bar.\n- A lane setup is a `lane-setup` effect, settled by the click or the\n  request that owes it and run by the performer. Its own per-session\n  queue and defer are replaced by the performer's per-session order.\n\nThe check command, the demo and the doctor's command line build their\nstore with a holder that always holds, since each is one synchronous run.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-651",
       "ref": "refs/pull/651/merge",
       "sha": "474a5a9132104c61c814dd1bef5e85f9a4df4469",
@@ -134,49 +177,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T13:19:48-07:00",
           "message": "fix(click): copy and open clicks name their session, so a menu's idle clock counts them (brandon-menus-sjhy.182)\n\nThe idle close counts a click as activity in the session the click names.\nCopy and open links carried only their text, so clicking ⎘ id or ↗ proj\nin a menu left the clock running and the menu closed under the user.\n\nBoth verbs now carry `[sessionId, argument]` and join the session-first\nand segmented sets, so the daemon reads their session at the one\ncheckpoint every click crosses. A copy whose pbcopy fails now shows on\nthe session's bar instead of only in the log.\n\nThey also take new wire names, `copy-text` and `open-in-vscode`. A\nsession id is nearly any slash-free string, so a link drawn when copy\ncarried only its text, read under the old name, would have its text\ntaken for a session. Under the new names an earlier link is an unknown\nverb that names no session, refused and logged. Keeping the earlier\nform working would be the second grammar the ticket rules out.\n\nThe page's copy path and the link words read the text from the second\nargument. The byte snapshots change only in those links and their OSC 8\nids.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-646",
-      "ref": "refs/pull/646/merge",
-      "sha": "b75a6b36d63a9b0601c2b604397c4d8d4151985e",
-      "timestamp": "2026-11-06T20:37:10.920Z",
-      "commits": [
-        {
-          "sha": "b75a6b36d63a9b0601c2b604397c4d8d4151985e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:36:12-07:00",
-          "message": "Merge 3fc9b5fb108625e2c59229dd8ca9f3e51487aba9 into b50d2769df4a08e2616f729d630653a07ec2c676\n"
-        },
-        {
-          "sha": "3fc9b5fb108625e2c59229dd8ca9f3e51487aba9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:29:27-07:00",
-          "message": "fix(apply): a queued lane setup is refused at close; every write asks for its turn first (candybar-gather-renderer-76bb.1dh.9kk)\n\nA lane setup waits in its session's effect order, so one still queued when\nthe daemon closes would start a restart no daemon is left to attach. The\nlane setup owner closes with the daemon and refuses it as the close, as a\nqueued run is. A run the close aborted is answered as the close rather\nthan as a failure that only the teardown's order kept off the bar.\n\nThe store asks for the turn at the top of every public write, before an\nempty batch or a held revision decides that nothing moves, so a write out\nof its turn is refused whatever it would have written.\n"
-        },
-        {
-          "sha": "791f71eef4a8ea38e3a8d0f1a5f36492a296daef",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:17:43-07:00",
-          "message": "fix(apply): a request is drawn once applied; a run's sources resume whatever its launch did (candybar-gather-renderer-76bb.1dh.9kk)\n\nThe request arm no longer draws: `applyRequest` applies the request and then\nbegins its draw, so a request whose apply rejected strands no draw. The\neffects the request's turn described go on its render event.\n\nA run's launch is awaited in a try/finally, so a launcher that throws still\nresumes the run's sources and leaves nothing counted running.\n\nThe lane setup effect is declared by the lane setup owner, which the effect\nunion names from above, so the two no longer import each other.\n"
-        },
-        {
-          "sha": "8706dbbbb6d39f68c587030eb9d21883e410eba3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:56:21-07:00",
-          "message": "fix(apply): a request's arrival settles in its turn; a queued run is counted (candybar-gather-renderer-76bb.1dh.9kk)\n\nThe lane setups a request's arrival settles were taken off the owed list\nduring the draw and reached the performer only once the draw had answered,\nso a click made during the wait was performed ahead of them, and a draw that\nthrew lost them. The arrival (owed setups and the tmux status line) now\nsettles in the request's turn, measured as a click's switches are, and the\narm answers with the draw under way, so the turn's effects join the\nsession's order as the turn ends.\n\nA run superseded by its click and still waiting behind the session's earlier\neffects shows in the run stats as queued. The lane outcome's comment says\nwhat underway now means, and a write's refusal text is built only when\nrefused.\n"
-        },
-        {
-          "sha": "26c8b7521fcc017c4509e676d9c8782ef1da493c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:35:32-07:00",
-          "message": "feat(apply): session state has one writer; a run and a lane setup are effects (candybar-gather-renderer-76bb.1dh.9kk)\n\nThe session store refuses a write made while no journal turn is held, in\nevery daemon. A turn is synchronous, so a write while one is held is that\nturn's own, and one check at the store's single write path is the whole\nenforcement. The test-only view that refused such writes, its adapter\nseam and the separate gauges field are gone.\n\nThe two writers left outside a turn now report through effect-done:\n\n- A `run` click supersedes its sources in its turn, so they read pending\n  from the click on, and describes the launch as a `run` effect. The\n  performer runs the program behind the session's earlier effects; the\n  run owner answers how it ended and no longer writes the bar.\n- A lane setup is a `lane-setup` effect, settled by the click or the\n  request that owes it and run by the performer. Its own per-session\n  queue and defer are replaced by the performer's per-session order.\n\nThe check command, the demo and the doctor's command line build their\nstore with a holder that always holds, since each is one synchronous run.\n"
         }
       ]
     },
