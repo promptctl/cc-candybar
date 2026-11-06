@@ -76282,6 +76282,9 @@ function drawDsl(config2, compiled, store2, registry, projected, at, opts, obser
 }
 
 // src/daemon/draw-view.ts
+function drawnLanes(source) {
+  return laneSwitches(source.effective(), source.payload().tmux !== void 0);
+}
 function drawView(view, handed, at, effects, idleSince, viewing, to, onRenderWarning) {
   const { drawing: drawing2, feeds, diagnostics } = handed;
   const { source } = view;
@@ -76313,7 +76316,7 @@ function drawView(view, handed, at, effects, idleSince, viewing, to, onRenderWar
     // payload's `.effective` fields read.
     { ...effective, effects, idleSince }
   );
-  const lanes = laneSwitches(effective, source.payload().tmux !== void 0);
+  const lanes = drawnLanes(source);
   const geometry = {
     width,
     // A feed's one frame is shown by every lane switched on, so it pages
@@ -76344,8 +76347,7 @@ function drawView(view, handed, at, effects, idleSince, viewing, to, onRenderWar
       )
     ),
     viewing: position,
-    geometry,
-    lanes
+    geometry
   };
 }
 
@@ -77459,6 +77461,10 @@ function drawRender(parts, setup, drawing2) {
   const payload = view.source.payload();
   const effective = view.source.effective();
   const failure = view.source.failure();
+  const lanes = drawnLanes(view.source);
+  noteFacts(facts, {
+    lanes: LANE_NAMES.filter((lane) => lanes[lane]).join(",") || "-"
+  });
   noteFacts(facts, { width: String(payload.term.cols) });
   const clickHolds = clickErrorsAt(sessionState, sessionId2, at, drawing2.by);
   const updates = updateWatch.notice({
@@ -77545,16 +77551,7 @@ function drawRender(parts, setup, drawing2) {
   });
   const drawnWarnings = [];
   const effects = effectSessions.of(sessionId2);
-  const {
-    body,
-    viewing,
-    geometry,
-    lanes,
-    evaluated: evaluated2,
-    cellBreaks,
-    rules,
-    idleSince
-  } = menuIdle.drawn(
+  const { body, viewing, geometry, evaluated: evaluated2, cellBreaks, rules, idleSince } = menuIdle.drawn(
     sessionId2,
     at,
     effective.menuTimeout,
@@ -77569,9 +77566,6 @@ function drawRender(parts, setup, drawing2) {
       (warning) => drawnWarnings.push(warning)
     )
   );
-  noteFacts(facts, {
-    lanes: LANE_NAMES.filter((lane) => lanes[lane]).join(",") || "-"
-  });
   const keys2 = copyKeys(diagnostics);
   const copies = new Map(diagnostics.map((m, i) => [keys2[i], m.copy]));
   const delivered = () => renderCache.delivered(sessionId2, drawing2.by, copies);

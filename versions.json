@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-649",
+      "ref": "refs/pull/649/merge",
+      "sha": "7f6daf1e95a0c61d007505e8f361b9635ae72fbd",
+      "timestamp": "2026-11-06T20:15:14.568Z",
+      "commits": [
+        {
+          "sha": "7f6daf1e95a0c61d007505e8f361b9635ae72fbd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T20:14:21Z",
+          "message": "Merge 4dfd5c79a6562eafbd255900bb6133c713578df5 into e66660224cc8931a92a0d6bb87bbb0e2368f33a0\n"
+        },
+        {
+          "sha": "4dfd5c79a6562eafbd255900bb6133c713578df5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:14:09-07:00",
+          "message": "fix(draw): a frame's lanes are noted before its walk, so a frame that throws still says which lanes it drew for (candybar-gather-renderer-76bb.6pj.0se)\n"
+        },
+        {
+          "sha": "954191639d0a8b5f7f281bc8a0302f33e7c4a069",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:04:46-07:00",
+          "message": "refactor(draw): a view's draw returns the lane switches it drew under; two comments name lane frames (candybar-gather-renderer-76bb.6pj.0se)\n"
+        },
+        {
+          "sha": "976873e04042a1a5dd509e2d67dac3ffe25ee3b1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T12:51:37-07:00",
+          "message": "fix(facts): a replay draws the lane feeds and diagnostics the live draw was handed, and the frames a lane drew (candybar-gather-renderer-76bb.6pj.0se)\n\nA replay drew every frame with every lane idle, no open viewer, and only\nthe request answers, so a recording of a session with a lane following or\nthe warnings viewer open replayed a bar the user never saw.\n\n- A draw line is one draw of the view, an answer or a lane's frame: it\n  carries the instant it was drawn at and what it was handed (who it drew\n  for, each lane's feed, the diagnostics list). A lane's frames write the\n  view's frame memory and the session's effect memory, so the recorder\n  notes each one, to every recording of the session, and the replay draws\n  them in the file's order at their exact instants. RECORDING_VERSION 6.\n- The daemon and the demo draw a view through one function (draw-view),\n  which derives every draw projection from what the draw was handed and\n  stands the open viewer in for the bar. The demo's own drawDsl call goes.\n- A recording that holds only lane frames is kept and replays; `record`\n  reports answers and lane frames.\n- The seam test's live side is the daemon's draw throughout, and a new case\n  replays a standing warning, a following lane, its toggles and the open\n  viewer, compared whole.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-647",
       "ref": "refs/pull/647/merge",
       "sha": "51fe8d8c1ea094e8e8683f689e9ce8f6ce07ea68",
@@ -70,35 +106,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-06T19:56:28Z",
           "message": "chore(release): set `package.json` to 1.204.0 [skip ci]\n\n## [1.204.0](https://github.com/promptctl/cc-candybar/compare/v1.203.0...v1.204.0) (2026-11-06)\n\n### Features\n\n* **apply:** no turn awaits a launch; a doctor step is an effect, and a held click error accumulates (candybar-gather-renderer-76bb.1dh.c3l) ([#633](https://github.com/promptctl/cc-candybar/issues/633)) ([b3a9482](https://github.com/promptctl/cc-candybar/commit/b3a94823776445b5ab510fe52ab4c622b2f80cff))\n* **links:** the doctor probe is minted by the minter as the probe link kind (candybar-gather-renderer-76bb.b2l.mxk) ([#644](https://github.com/promptctl/cc-candybar/issues/644)) ([2bb7660](https://github.com/promptctl/cc-candybar/commit/2bb7660eaf484d4c41e6cdc671e6415f0cccc8fa))\n* **links:** the one MouseDown1Status binding is constant text; each session carries its renderer's click (candybar-gather-renderer-76bb.b2l.5v7) ([#642](https://github.com/promptctl/cc-candybar/issues/642)) ([0af5d1f](https://github.com/promptctl/cc-candybar/commit/0af5d1f4ce463b0bebbbe6a4b6107d2943900c54))\n\n### Bug Fixes\n\n* **facts:** a recording of a session whose turn failed replays the failed turn's frame (candybar-gather-renderer-76bb.6pj.i7w) ([#643](https://github.com/promptctl/cc-candybar/issues/643)) ([308429c](https://github.com/promptctl/cc-candybar/commit/308429c8f33e9cfe4e0983ab8f29bb1d25c3fe55))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-649",
-      "ref": "refs/pull/649/merge",
-      "sha": "758eab969738f886f5b6f3d657159b2d175eee69",
-      "timestamp": "2026-11-06T20:05:45.659Z",
-      "commits": [
-        {
-          "sha": "758eab969738f886f5b6f3d657159b2d175eee69",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T20:04:56Z",
-          "message": "Merge 954191639d0a8b5f7f281bc8a0302f33e7c4a069 into 1d331bc7612571c272bd1699765d216731683eca\n"
-        },
-        {
-          "sha": "954191639d0a8b5f7f281bc8a0302f33e7c4a069",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:04:46-07:00",
-          "message": "refactor(draw): a view's draw returns the lane switches it drew under; two comments name lane frames (candybar-gather-renderer-76bb.6pj.0se)\n"
-        },
-        {
-          "sha": "976873e04042a1a5dd509e2d67dac3ffe25ee3b1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:51:37-07:00",
-          "message": "fix(facts): a replay draws the lane feeds and diagnostics the live draw was handed, and the frames a lane drew (candybar-gather-renderer-76bb.6pj.0se)\n\nA replay drew every frame with every lane idle, no open viewer, and only\nthe request answers, so a recording of a session with a lane following or\nthe warnings viewer open replayed a bar the user never saw.\n\n- A draw line is one draw of the view, an answer or a lane's frame: it\n  carries the instant it was drawn at and what it was handed (who it drew\n  for, each lane's feed, the diagnostics list). A lane's frames write the\n  view's frame memory and the session's effect memory, so the recorder\n  notes each one, to every recording of the session, and the replay draws\n  them in the file's order at their exact instants. RECORDING_VERSION 6.\n- The daemon and the demo draw a view through one function (draw-view),\n  which derives every draw projection from what the draw was handed and\n  stands the open viewer in for the bar. The demo's own drawDsl call goes.\n- A recording that holds only lane frames is kept and replays; `record`\n  reports answers and lane frames.\n- The seam test's live side is the daemon's draw throughout, and a new case\n  replays a standing warning, a following lane, its toggles and the open\n  viewer, compared whole.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
