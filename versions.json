@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-621",
+      "ref": "refs/pull/621/merge",
+      "sha": "0adf45bd7b5c200e609dfa8b0fd508fb027573b1",
+      "timestamp": "2026-11-06T02:50:02.261Z",
+      "commits": [
+        {
+          "sha": "0adf45bd7b5c200e609dfa8b0fd508fb027573b1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T19:49:11-07:00",
+          "message": "Merge d2dc5053d2fd67af7e82b14ad09690459be8f5d6 into 6d2fd8d435350e75805014afa1b3568e1119b767\n"
+        },
+        {
+          "sha": "d2dc5053d2fd67af7e82b14ad09690459be8f5d6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T19:48:47-07:00",
+          "message": "feat(apply): a click's launches are effects, performed after its turn and reported as effect-done (candybar-gather-renderer-76bb.1dh.g2l)\n\nA handler describes what it asks of the world (a program, a line typed\ninto its pane, the update's act) as an Effect and awaits no child. The\narm table answers `{ answer, effects }`; `apply` performs the effects\nin order after the arm and puts each outcome back through the new\neffect-done arm, which holds a failed one for the session's bar in a\nturn of its own. One `apply` log line per click, menu-idle and\neffect-done event names the verb, the effects and the revision.\n\ntypeSlash takes a TmuxHint: the pane's absence is refused at the click,\nthe pane's own refusals are the effect's failure. A rate-limited click\nlaunch is a failed outcome shown in the bar, no longer a silent ack.\n\nTests: the click helper drives Apply and installs a store view that\nthrows on a write made with no turn held; cases that parked a pbcopy to\nhold the turn park a doctor gather instead.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-619",
       "ref": "refs/pull/619/merge",
       "sha": "558bf4d5c9b345f855f2a79de18d2aca6c34ebf7",
