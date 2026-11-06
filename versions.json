@@ -4,15 +4,22 @@
     {
       "version": "pr-652",
       "ref": "refs/pull/652/merge",
-      "sha": "cfd8ccd9b99b4f951691ea6fe628afbc82bdfbc8",
-      "timestamp": "2026-11-06T20:55:30.168Z",
+      "sha": "575408605a57ea962804a27335a0a59358031748",
+      "timestamp": "2026-11-06T20:57:40.311Z",
       "commits": [
         {
-          "sha": "cfd8ccd9b99b4f951691ea6fe628afbc82bdfbc8",
+          "sha": "575408605a57ea962804a27335a0a59358031748",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:54:38-07:00",
-          "message": "Merge 366b16af407b0a43035367321cf824c3ede22988 into d8b9a7ffe6cac5ba9249eb3428aa11eecd27c4e5\n"
+          "timestamp": "2026-11-06T20:56:44Z",
+          "message": "Merge 4467651310a186e3ba9fe05eb2607d786585d204 into d8b9a7ffe6cac5ba9249eb3428aa11eecd27c4e5\n"
+        },
+        {
+          "sha": "4467651310a186e3ba9fe05eb2607d786585d204",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:56:34-07:00",
+          "message": "test(spawner): the contract states that a realised program writes nothing before its trap is set (candybar-testing-ihvy.0hw)\n"
         },
         {
           "sha": "366b16af407b0a43035367321cf824c3ede22988",
