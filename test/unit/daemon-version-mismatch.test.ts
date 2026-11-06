@@ -22,7 +22,11 @@ import { planOutcome } from "../../src/render/outcome-plan";
 function gate(v: number): { reply: HandledRequest | null; logged: string[] } {
   const logged: string[] = [];
   const req: StatsRequest = { v, kind: "stats" };
-  const reply = versionGate(req, (_level, msg) => logged.push(msg));
+  const reply = versionGate(
+    req,
+    (_level, msg) => logged.push(msg),
+    PROTOCOL_VERSION,
+  );
   return { reply, logged };
 }
 

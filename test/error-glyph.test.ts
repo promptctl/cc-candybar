@@ -5,8 +5,10 @@ import { RENDER_BUDGETS } from "../src/daemon/client";
 import { exchangeOutcome } from "../src/daemon/client-transport";
 import { formatPermanentGlyph } from "../src/render/error-glyph";
 import type { PermanentOutcome } from "../src/daemon/client-transport";
+import { versionGate } from "../src/daemon/reply";
 import {
   PROTOCOL_VERSION,
+  type Request,
   encodeFrame,
   makeFrameReader,
 } from "../src/daemon/protocol";
@@ -140,37 +142,40 @@ describe("formatPermanentGlyph (kz8.5 ch.2)", () => {
 // and the classification run as shipped with no listener or budget for a
 // loaded loop to miss.
 
-// The stubbed daemon always answers VERSION_MISMATCH (with daemonV echoed)
-// regardless of the actual request version — we want to observe what happens
-// when the daemon disagrees with the client.
-function mismatchingDaemonEnd(daemonEnd: Duplex, daemonV: number): void {
+// [LAW:one-source-of-truth] The daemon end runs the real version gate one
+// version ahead of the client, so the reply the client classifies is the one
+// a newer daemon's gate sends a stale client. Only the gate runs: a request
+// the daemon would reject as malformed is not this test's concern. A fault in the daemon end is kept, not
+// thrown: a throw unwinds into the client's own catch and comes back as an
+// outcome without its message, so the test asserts there were none.
+function mismatchingDaemonEnd(daemonEnd: Duplex): Error[] {
+  const faults: Error[] = [];
   daemonEnd.on(
     "data",
     makeFrameReader(
       (frame) => {
-        const req = frame as { v?: number };
-        daemonEnd.write(
-          encodeFrame({
-            ok: false,
-            error: `protocol v${req.v ?? "?"} not supported (daemon at v${daemonV})`,
-            code: "VERSION_MISMATCH",
-            daemonV,
-          }),
-        );
+        const handled = versionGate(frame as Request, () => {}, OTHER_V);
+        if (handled?.kind !== "reply") {
+          faults.push(new Error("the version gate admitted a stale client"));
+          daemonEnd.destroy();
+          return;
+        }
+        daemonEnd.write(encodeFrame(handled.resp));
         daemonEnd.end();
       },
-      () => {
-        /* parse error ignored on daemon side */
+      (err) => {
+        faults.push(err);
+        daemonEnd.destroy();
       },
     ),
   );
+  return faults;
 }
 
 describe("VERSION_MISMATCH wire → permanent outcome → glyph", () => {
-  test("stubbed daemon at a different protocol version yields a glyph that names both versions", async () => {
-    const daemonV = PROTOCOL_VERSION + 7; // arbitrary "other" version
+  test("the daemon's VERSION_MISMATCH reply yields a glyph that names both versions", async () => {
     const { daemonEnd, client } = memoryConnection();
-    mismatchingDaemonEnd(daemonEnd, daemonV);
+    const faults = mismatchingDaemonEnd(daemonEnd);
 
     const outcome = await exchangeOutcome(
       client,
@@ -190,16 +195,17 @@ describe("VERSION_MISMATCH wire → permanent outcome → glyph", () => {
       // The daemon never answers ok here, so nothing is projected.
       (): string | undefined => undefined,
     );
+    expect(faults).toEqual([]);
     expect(outcome.kind).toBe("permanent");
     if (outcome.kind !== "permanent") return;
     expect(outcome.cause).toBe("version_mismatch");
     if (outcome.cause !== "version_mismatch") return;
     expect(outcome.clientV).toBe(PROTOCOL_VERSION);
-    expect(outcome.daemonV).toBe(daemonV);
+    expect(outcome.daemonV).toBe(OTHER_V);
 
     const glyph = formatPermanentGlyph(outcome);
     expect(glyph).toContain(`client v${PROTOCOL_VERSION}`);
-    expect(glyph).toContain(`daemon v${daemonV}`);
+    expect(glyph).toContain(`daemon v${OTHER_V}`);
     expect(glyph.startsWith(OPEN)).toBe(true);
     expect(glyph.endsWith(TAIL)).toBe(true);
   });
