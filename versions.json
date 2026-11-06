@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-641",
+      "ref": "refs/pull/641/merge",
+      "sha": "db9b3a1a35ea73aee83abc541c547a3ac24fd874",
+      "timestamp": "2026-11-06T13:32:13.938Z",
+      "commits": [
+        {
+          "sha": "db9b3a1a35ea73aee83abc541c547a3ac24fd874",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T06:31:12-07:00",
+          "message": "Merge 1d02c148f38fdc3cf9134f9a0bc69dfde83f23a8 into 6861a4a6e8abdea9bde9ed0653074ae3491eebf6\n"
+        },
+        {
+          "sha": "1d02c148f38fdc3cf9134f9a0bc69dfde83f23a8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T06:30:05-07:00",
+          "message": "feat(facts): a session's shell and file sources run into its facts document, and a recording replays them with nothing read or spawned (candybar-gather-renderer-76bb.6pj.d8n)\n\nA config's `shell` and `file` sources ran beside the facts seam: the\nvariable registry held their runs directly, so a recording carried none of\nthem and a replay started each one on the replaying machine, drawing it\nbefore its first result.\n\nThe document gains `runs`, each declared run's reading and watch fault by\nidentity digest. Each facts arm offers the run lanes a view's registry\ndeclares through: the in-process arm holds the runs and stamps them into the\nfollow's document, which the lanes read; the recording arm's lanes read the\nreached document, pending only while a later document holds the run and\nfailed, naming it, once none does. Every shell and file source is a session\nview's, since only a view has a document to read; one run per identity is\nthe digest's to decide. The render event carries `runs=` and `runsPending=`.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "0e482bd299f59cc7c9dfc947682469722309833d",
