@@ -41,8 +41,10 @@ describe("a daemon aimed by its home", () => {
 
   test("every path of the value is under its root, but the socket, which is the runtime directory's", () => {
     const aimed = daemonPaths(homeNamed("aimed"));
-    const { socket, lease, ...underRoot } = aimed;
-    expect(Object.values(underRoot).filter((p) => !p.startsWith(path.join(root, "aimed")))).toEqual([]);
+    const { socket, lease, storedRoot, ...underRoot } = aimed;
+    expect(
+      [...Object.values(underRoot), storedRoot.dir].filter((p) => !p.startsWith(path.join(root, "aimed"))),
+    ).toEqual([]);
     expect(path.dirname(socket)).toBe(path.join(root, "run"));
     expect(path.dirname(lease)).toBe(path.join(root, "run"));
   });

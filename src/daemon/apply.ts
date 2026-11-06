@@ -57,6 +57,7 @@ import {
   type ClickVerb,
   type IdleClose,
 } from "./verbs/index.js";
+import type { StoredRoot } from "./foundations/stored-path.js";
 
 // Whose effects these are: the verb that described them, and the session
 // whose bar a failure reaches (none for a click that names no session).
@@ -291,7 +292,7 @@ export const ARMS: ApplyArms<Event> = {
 function recordRequest(
   state: SessionStateRW,
   req: CheckedRenderRequest,
-  storedRoot: string,
+  storedRoot: StoredRoot,
 ): void {
   const { client: _client, configEnv: _configEnv, ...recorded } = req.hints;
   const said = [

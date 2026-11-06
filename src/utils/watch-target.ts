@@ -1,5 +1,5 @@
-import fs from "node:fs";
 import path from "node:path";
+import { existingAncestor } from "./on-disk-path";
 
 // [LAW:single-enforcer] The one rule for watching a path that may not exist
 // yet: the step the rule for where a set of paths can change
@@ -25,25 +25,10 @@ export function nearestWatchTarget(candidate: string): {
   readonly name: string;
   readonly leaf: boolean;
 } {
-  let name = path.basename(candidate);
-  let dir = path.dirname(candidate);
-  for (;;) {
-    const real = canonicalDirectory(dir);
-    if (real !== null)
-      return { dir: real, name, leaf: dir === path.dirname(candidate) };
-    name = path.basename(dir);
-    dir = path.dirname(dir);
-  }
-}
-
-// The directory's canonical path, or null when it is not one the walk can
-// stop at — absent, unreadable, a file, or removed mid-walk (the walk runs
-// inside watcher callbacks, during exactly the churn that races it, so one
-// call answers both questions and nothing here can throw).
-export function canonicalDirectory(p: string): string | null {
-  try {
-    return fs.statSync(p).isDirectory() ? fs.realpathSync(p) : null;
-  } catch {
-    return null;
-  }
+  const { dir, rest } = existingAncestor(path.dirname(candidate));
+  return {
+    dir,
+    name: rest[0] ?? path.basename(candidate),
+    leaf: rest.length === 0,
+  };
 }

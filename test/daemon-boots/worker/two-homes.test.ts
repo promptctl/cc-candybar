@@ -4,15 +4,24 @@
 // one naming its config file and one finding it, and no file under either
 // root names either root, so neither leaves a trace of the other and a tree
 // copied under a third root is a renderer of its own: its undo writes its own
-// config.
+// config. The homes are named through a symlink and the config file through
+// the directory it points at, as a client whose cwd is a realpath names it, so
+// a root has two spellings and a file in it is the home's under either.
 
 import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 
-import { HOME_ENV, NAME_ENV, RUNTIME_DIR_ENV, homeOf, type RendererHome } from "../../../src/daemon/home";
-import { configDir, socketPath } from "../../../src/daemon/paths";
+import {
+  HOME_CONFIG_DIR,
+  HOME_ENV,
+  NAME_ENV,
+  RUNTIME_DIR_ENV,
+  homeOf,
+  type RendererHome,
+} from "../../../src/daemon/home";
+import { socketPath } from "../../../src/daemon/paths";
 import { VERB_UNDO, effectsUrl } from "../../../src/click/wire";
 import { handleConnection } from "../../../src/daemon/connection";
 import type { DaemonLog } from "../../../src/daemon/log";
@@ -56,13 +65,15 @@ function storedUnder(root: string): Array<{ file: string; text: string }> {
     .map((file) => ({ file, text: fs.readFileSync(file, "utf8") }));
 }
 
-const configOf = (home: RendererHome): string =>
-  path.join(configDir(home), "config.json5");
 
 test("two renderers under two homes leave no trace of each other or of their own roots, and a copied home undoes into its own config", async () => {
   // One short temporary root for every home and the runtime directory they
-  // share, so the socket paths stay under the platform's limit.
+  // share, so the socket paths stay under the platform's limit. The homes sit
+  // under `linked`, a symlink to the root's real directory.
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-2h-"));
+  const real = fs.realpathSync.native(root);
+  const linked = path.join(root, "l");
+  fs.symlinkSync(real, linked);
   const runtime = path.join(root, "run");
   fs.mkdirSync(runtime, { mode: 0o700 });
   const projectDir = path.join(root, "project");
@@ -72,13 +83,18 @@ test("two renderers under two homes leave no trace of each other or of their own
     homeOf(
       hostOf({
         ...process.env,
-        [HOME_ENV]: path.join(root, name),
+        [HOME_ENV]: path.join(linked, name),
         [NAME_ENV]: name,
         [RUNTIME_DIR_ENV]: runtime,
       }),
     );
-  const rootOf = (home: RendererHome): string => (home.kind === "named" ? home.root : "");
-
+  // Every spelling of a home's root: through the link, the temporary
+  // directory as the platform names it, and the directory on disk.
+  const spellingsOf = (home: RendererHome): string[] =>
+    [linked, root, real].map((r) => path.join(r, home.name));
+  const treeOf = (home: RendererHome): string => path.join(real, home.name);
+  const configOf = (home: RendererHome): string =>
+    path.join(treeOf(home), HOME_CONFIG_DIR, "config.json5");
   const running: Renderer[] = [];
   const start = async (home: RendererHome): Promise<Renderer> => {
     const { daemon, daemonLog } = buildDaemon({ home });
@@ -106,15 +122,15 @@ test("two renderers under two homes leave no trace of each other or of their own
   try {
     const homes = [homeNamed("alpha"), homeNamed("beta")] as const;
     for (const home of homes) {
-      fs.mkdirSync(configDir(home), { recursive: true });
+      fs.mkdirSync(path.dirname(configOf(home)), { recursive: true });
       fs.writeFileSync(configOf(home), CONFIG);
     }
     const [a, b] = [await start(homes[0]), await start(homes[1])];
     expect(socketPath(a.home)).toBe(path.join(runtime, "alpha.sock"));
     expect(socketPath(b.home)).toBe(path.join(runtime, "beta.sock"));
 
-    // Alpha names its config file, so its origin holds a file in its home;
-    // beta's is found by the search.
+    // Alpha names its config file on disk, so its origin holds a file in its
+    // home under the root's other spelling; beta's is found by the search.
     const sidOf = (r: Renderer): string => `two-homes-${r.home.name}`;
     for (const [r, args] of [
       [a, configFlag(configOf(a.home))],
@@ -134,14 +150,16 @@ test("two renderers under two homes leave no trace of each other or of their own
 
     // No stored file names a root, the other's or its own.
     for (const home of homes) {
-      const files = storedUnder(rootOf(home));
-      expect(files.map((f) => path.relative(rootOf(home), f.file))).toEqual(
+      const files = storedUnder(treeOf(home));
+      expect(files.map((f) => path.relative(treeOf(home), f.file))).toEqual(
         expect.arrayContaining([
           path.join("state", "session-state.json"),
           path.join("state", "settings-history.json"),
         ]),
       );
-      const naming = files.filter((f) => homes.some((h) => f.text.includes(rootOf(h))));
+      const naming = files.filter((f) =>
+        homes.some((h) => spellingsOf(h).some((r) => f.text.includes(r))),
+      );
       expect(naming.map((f) => f.file)).toEqual([]);
     }
     expect(fs.readFileSync(configOf(a.home), "utf8")).toBe(
@@ -153,7 +171,7 @@ test("two renderers under two homes leave no trace of each other or of their own
     // stays as it was.
     const alphaText = fs.readFileSync(configOf(a.home), "utf8");
     const gammaHome = homeNamed("gamma");
-    fs.cpSync(rootOf(a.home), rootOf(gammaHome), { recursive: true });
+    fs.cpSync(treeOf(a.home), treeOf(gammaHome), { recursive: true });
     const c = await start(gammaHome);
     await click(c.home, effectsUrl([{ verb: VERB_UNDO, args: [sidOf(a)] }]));
     expect(fs.readFileSync(configOf(c.home), "utf8")).toBe(CONFIG);

@@ -16,6 +16,7 @@ import type { RuntimeStats } from "./stats";
 import type { DaemonLogger } from "../utils/logger";
 import { validateHookData } from "../utils/schema-validator.js";
 import { rateLimitsSeen, type RateLimitsSeen } from "./render-sightings";
+import { homeSpelling, type StoredRoot } from "./foundations/stored-path";
 import {
   parseClientDeadline,
   type ClientDeadline,
@@ -131,6 +132,7 @@ export function checkRenderRequest(
   stats: Pick<RuntimeStats, "firstSightOfUnknownHookField">,
   log: DaemonLogger,
   home: string,
+  storedRoot: StoredRoot,
 ): { ok: true; req: CheckedRenderRequest } | { ok: false; problems: string[] } {
   // [LAW:single-enforcer] One trust-boundary check for incoming hookData.
   // The validator reports missing/wrong-typed required fields and unknown
@@ -207,6 +209,12 @@ export function checkRenderRequest(
   // process.cwd(), so config resolution depends only on request data — the
   // daemon's own working directory must not influence output.
   const { configFile, refusedArgs } = parseRenderArgs(req.args, req.cwd, home);
+  // [LAW:parse-dont-validate] A file in the home in the home's spelling
+  // (stored-path.ts): the client's cwd is a realpath, so a `--config` it
+  // resolves names the home's file through a spelling the home's root doesn't
+  // have, and the recorded origin, the cache key and every write must share
+  // one for the stored path to read back as itself.
+  const requested = requestedConfigTarget(configFile, hints.configEnv);
   return {
     ok: true,
     req: {
@@ -219,7 +227,13 @@ export function checkRenderRequest(
       requested: {
         projectDir: req.hookData.workspace.project_dir,
         cwd: req.cwd,
-        target: requestedConfigTarget(configFile, hints.configEnv),
+        target:
+          requested.source === "search"
+            ? requested
+            : {
+                ...requested,
+                path: homeSpelling(storedRoot, requested.path),
+              },
       },
       refusedArgs,
     } as CheckedRenderRequest,

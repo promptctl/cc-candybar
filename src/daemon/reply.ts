@@ -402,7 +402,13 @@ export async function replyTo(
     // [LAW:one-source-of-truth] The count of render requests received is that
     // order.
     const order = ++stats.requestsTotal;
-    const checked = checkRenderRequest(req, stats, parts.log, parts.home);
+    const checked = checkRenderRequest(
+      req,
+      stats,
+      parts.log,
+      parts.home,
+      parts.storedRoot,
+    );
     // [LAW:single-enforcer] A render REQUEST is a client sighting — the
     // frames a feed draws from a session's data are not, so this is the one
     // write, here rather than in drawRender. It is written as the request

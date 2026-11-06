@@ -11,8 +11,43 @@ export type StoredPath =
   | { readonly kind: "home"; readonly path: string }
   | { readonly kind: "world"; readonly path: string };
 
-// [LAW:one-source-of-truth] The one test of "under the root" that both
-// directions share. `file` is absolute.
+// [LAW:effects-at-boundaries] The root a stored home path is relative to
+// (`storedRoot`, paths.ts), with the one question the decision asks the disk:
+// a directory's on-disk spelling (utils/on-disk-path.ts), handed in so the
+// decision itself is pure and a test hands a map of links.
+export interface StoredRoot {
+  readonly dir: string;
+  readonly onDisk: (dir: string) => string;
+}
+
+// [LAW:one-source-of-truth] Whose a file is: the home's when a directory on
+// its path, as named, is the root directory, and then its path from there.
+// Directories are compared in their on-disk spelling, read now, so a file
+// named through a link above the root (macOS's /tmp, a dotfiles ~/.config) or
+// in another letter case is the home's, as one named through a link inside
+// the home (its config/ pointing elsewhere) is, where resolving the file
+// itself would send it to the world. `file` is absolute. A file named under
+// the root as the home names it has the root on its path by definition, so it
+// answers with no disk read: a home file in the home's spelling, which is
+// what the store holds and reads back, costs nothing.
+function homeRelative(root: StoredRoot, file: string): string | null {
+  return underRoot(root.dir, file) ?? namedThrough(root, file);
+}
+
+function namedThrough(root: StoredRoot, file: string): string | null {
+  const home = root.onDisk(root.dir);
+  const at = ancestors(file).find((dir) => root.onDisk(dir) === home);
+  return at === undefined ? null : path.relative(at, file);
+}
+
+// The directories `file` names on its way, nearest first.
+function ancestors(file: string): string[] {
+  const dir = path.dirname(file);
+  return dir === file ? [] : [dir, ...ancestors(dir)];
+}
+
+// The lexical test: the plain path of `file` under the root as the root is
+// spelled, or null. It is also the shape a stored home path is checked by.
 function underRoot(root: string, file: string): string | null {
   const rel = path.relative(root, file);
   return rel === "" ||
@@ -24,8 +59,8 @@ function underRoot(root: string, file: string): string | null {
 }
 
 // Total over an absolute path: the spelling a store writes.
-export function storedPathOf(root: string, file: string): StoredPath {
-  const rel = underRoot(root, file);
+export function storedPathOf(root: StoredRoot, file: string): StoredPath {
+  const rel = homeRelative(root, file);
   return rel === null
     ? { kind: "world", path: file }
     : { kind: "home", path: rel };
@@ -47,7 +82,7 @@ export class StoredPathRefused extends Error {}
 // upgrade its undo history and refuse the tree's own files while guarding
 // nothing: an older tree copied under another root names the original's root,
 // which no spelling rule can tell from a file of the world's.
-export function resolveStoredPath(root: string, raw: unknown): string {
+export function resolveStoredPath(root: StoredRoot, raw: unknown): string {
   if (typeof raw === "string") {
     if (!path.isAbsolute(raw)) {
       throw new StoredPathRefused(
@@ -68,10 +103,10 @@ export function resolveStoredPath(root: string, raw: unknown): string {
     );
   }
   if (kind === "home") {
-    const file = path.join(root, p);
-    if (path.isAbsolute(p) || underRoot(root, file) !== p) {
+    const file = path.join(root.dir, p);
+    if (path.isAbsolute(p) || underRoot(root.dir, file) !== p) {
       throw new StoredPathRefused(
-        `stored home path ${JSON.stringify(p)} is not a plain path inside the home's root ${root}`,
+        `stored home path ${JSON.stringify(p)} is not a plain path inside the home's root ${root.dir}`,
       );
     }
     return file;
@@ -82,9 +117,9 @@ export function resolveStoredPath(root: string, raw: unknown): string {
         `stored world path ${JSON.stringify(p)} is not absolute`,
       );
     }
-    if (underRoot(root, p) !== null) {
+    if (homeRelative(root, p) !== null) {
       throw new StoredPathRefused(
-        `stored world path ${p} lies under the home's root ${root}; a home's file is stored relative to it`,
+        `stored world path ${p} lies under the home's root ${root.dir}; a home's file is stored relative to it`,
       );
     }
     return p;
@@ -92,4 +127,16 @@ export function resolveStoredPath(root: string, raw: unknown): string {
   throw new StoredPathRefused(
     `stored path has no kind of home or world: ${JSON.stringify(raw)}`,
   );
+}
+
+// [LAW:one-source-of-truth] What the store reads back for a file: the root as
+// the home names it, then the file's path inside, whatever spelling named it;
+// a file of the world's as given. It is `storedPathOf` then
+// `resolveStoredPath`, from the one answer of whose the file is, without
+// asking the disk a second time, so a requested path that crosses it before
+// it is recorded, cached or written reads back as itself, and a home file has
+// the one spelling its default target already has.
+export function homeSpelling(root: StoredRoot, file: string): string {
+  const rel = homeRelative(root, file);
+  return rel === null ? file : path.join(root.dir, rel);
 }

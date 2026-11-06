@@ -4,10 +4,8 @@ import { debug } from "../../utils/logger";
 import { valueOf } from "../../utils/logfmt";
 import { walkLinks } from "../../utils/atomic-write";
 import { bindsFolder, boundKey, boundOf } from "../../utils/folder-identity";
-import {
-  canonicalDirectory,
-  nearestWatchTarget,
-} from "../../utils/watch-target";
+import { canonicalDirectory } from "../../utils/on-disk-path";
+import { nearestWatchTarget } from "../../utils/watch-target";
 import type { Timekeeper } from "../../time";
 
 // Logger callable used for watcher lifecycle / failure events. Daemon
