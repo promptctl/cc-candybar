@@ -76,6 +76,7 @@ import {
   type FactsLine,
   type Recording,
   type RecordingLine,
+  type SessionRequest,
 } from "../src/facts/recording";
 import { restamp } from "../src/facts/fact";
 import { ok } from "../src/utils/outcome";
@@ -233,7 +234,7 @@ function request(
   home: string,
   claudeConfigDir: string,
   model = "Opus 4.7",
-): ViewFacts {
+): SessionRequest {
   return {
     sessionId: sessionIdOf(SID),
     hookData: {
@@ -260,7 +261,7 @@ function request(
 }
 
 interface Rig {
-  readonly cache: RenderCache<SessionSource>;
+  readonly cache: RenderCache<SessionSource, SessionRequest>;
   readonly recorder: SessionRecorder;
   readonly lines: string[];
   // What the session's clicks leave: its store, the histories' depths, and
@@ -321,7 +322,7 @@ function rig(
   });
   const { cache, recorder } = recordedCache(
     (recording) =>
-      new RenderCache<SessionSource>(
+      new RenderCache<SessionSource, SessionRequest>(
         {
           clock,
           stateDir: stateDir(home),
@@ -565,8 +566,6 @@ async function replayFile(
   const frames: Frame[] = [];
   await playDemo({
     loaded,
-    // Where the session's view opened, as the demo's arm reads it.
-    cwd: recording.cwd,
     facts,
     // Whose home `~` names: the recorded session's, as the demo's arm reads it.
     home: recording.home,
@@ -740,6 +739,45 @@ test("a session's shell and file sources, recorded live, replay with what each r
   expect(replay.reads).toEqual([]);
   expect(replay.started).toEqual([]);
   expect(replay.said).toEqual([]);
+  expect(replay.frames.map(textOf)).toEqual(liveText);
+});
+
+test("a session that moves to another directory replays each run from the directory its request came from", async () => {
+  const s = liveSession();
+  const note = path.join(s.cwd, "note.txt");
+  fs.writeFileSync(note, "from-the-file");
+  const configFile = runsConfig(s.cwd, note);
+  s.launcher.program(shell("seam-shell"), exits(0, "from-the-shell"));
+  s.launcher.program(shell("seam-keyed"), exits(0, "keyed-opus"));
+  await s.requestFrom(s.cwd, configFile);
+  const file = path.join(tempDir("ccb-seam-out-"), "moved.jsonl");
+  const recorded = recordToFile(
+    s.live.recorder,
+    s.clock,
+    sessionIdOf(SID),
+    file,
+    7,
+    stays(),
+  );
+  // The session's next request comes from another directory: a shell run
+  // there is another run, under another digest.
+  const moved = sessionDir().cwd;
+  const liveFrames: Frame[] = [];
+  await s.after(1000);
+  liveFrames.push(await s.requestFrom(s.cwd, configFile));
+  await s.after(1000);
+  liveFrames.push(await s.requestFrom(moved, configFile));
+  await s.after(5000);
+  expect((await recorded).answers).toBe(2);
+  const liveText = liveFrames.map(textOf);
+  expect(liveText).toEqual([
+    expect.stringContaining("shell=from-the-shell"),
+    expect.stringContaining("shell=from-the-shell"),
+  ]);
+
+  const replay = await replayFile(file, configFile);
+  expect(replay.reads).toEqual([]);
+  expect(replay.started).toEqual([]);
   expect(replay.frames.map(textOf)).toEqual(liveText);
 });
 

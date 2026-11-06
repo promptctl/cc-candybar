@@ -367,6 +367,14 @@ describe("the in-process arm's runs", () => {
       expect(runs.stats().file.held).toBe(0);
       expect(() => holds.close()).not.toThrow();
       expect(runs.stats().file.held).toBe(0);
+      // A run declared after it would start and never end: refused by name.
+      const late = new Holds();
+      expect(() =>
+        late.declare(() => followed.runs.declare(late, fileRun(a))),
+      ).toThrow(
+        `the run of "${a}" was declared after its view's follow was disposed`,
+      );
+      expect(runs.stats().file.held).toBe(0);
     } finally {
       runs.close();
     }

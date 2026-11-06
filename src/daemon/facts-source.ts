@@ -260,6 +260,7 @@ export function inProcessFacts({
         SourceDigest,
         { readonly lane: SourceLane; readonly held: Holds }
       >(undefined, { deep: false });
+      let disposed = false;
       const sid = JSON.stringify(session);
       // [LAW:no-silent-failure] A declaration that throws is logged here,
       // where it runs — a reaction's tracked expression that throws reaches
@@ -329,11 +330,12 @@ export function inProcessFacts({
         };
       });
       // What the session's owners and the view's runs hold now, read once per
-      // turn. A run's value is what its parser made of text, so JSON.
-      const readings = computed(
-        (): Readings => ({
-          ...readingsOf(inputs.get()),
-          runs: new Map(
+      // turn, each apart, so a run landing reads no owner again. A run's
+      // value is what its parser made of text, so JSON.
+      const owned = computed(() => readingsOf(inputs.get()));
+      const ran = computed(
+        () =>
+          new Map(
             [...declaredRuns].map(
               ([digest, { lane }]): [SourceDigest, RunReading] => [
                 digest,
@@ -344,7 +346,9 @@ export function inProcessFacts({
               ],
             ),
           ),
-        }),
+      );
+      const readings = computed(
+        (): Readings => ({ ...owned.get(), runs: ran.get() }),
       );
       // [LAW:one-source-of-truth] The reaction is installed before the first
       // stamp, so the derivations above are observed from the follow's first
@@ -409,6 +413,14 @@ export function inProcessFacts({
       return {
         runs: {
           declare: (callerHolds, identity) => {
+            // [LAW:no-silent-failure] A run declared into a disposed follow
+            // would start and never end: no dispose is left to close it and
+            // no stamp to land it.
+            if (disposed) {
+              throw new Error(
+                `the run of ${whereOf(identity.read)} was declared after its view's follow was disposed`,
+              );
+            }
             const digest = digestOf(identity);
             // [LAW:no-ambient-temporal-coupling] The caller's Holds takes a
             // moved key's declaration before it releases the old one, so the
@@ -451,6 +463,7 @@ export function inProcessFacts({
           };
         },
         dispose: () => {
+          disposed = true;
           stop();
           for (const { held } of declaredRuns.values()) held.close();
           holds.close();

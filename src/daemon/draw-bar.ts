@@ -265,7 +265,7 @@ interface RenderSetup extends Disposable {
   readonly sessionId: SessionId;
   readonly entry: CacheEntry;
   readonly state: DslRenderState;
-  readonly view: SessionView<SessionSource>;
+  readonly view: SessionView<SessionSource, CheckedRenderRequest>;
   readonly hintsError: string | null;
 }
 

@@ -53,9 +53,15 @@ export interface FactsLine {
 
 // One request a session's view was drawn by, and the instant it arrived at:
 // what a replay declares the view with, and what its answer is drawn at.
+// [LAW:types-are-the-program] A request as the daemon's checkpoint takes one:
+// from a directory, which the session's view opens at. A shell source's run
+// is identified by the directory it runs in, so a replay opens the view
+// where each request came from, wherever the demo itself runs.
+export type SessionRequest = ViewFacts & { readonly cwd: string };
+
 export interface RequestLine {
   readonly at: Instant;
-  readonly request: ViewFacts;
+  readonly request: SessionRequest;
 }
 
 // What a session's clicks and menus left for one draw, beside its view: every
@@ -85,7 +91,7 @@ export interface DrawLine {
 // with a later request is not the one it read. Not an arrival: nothing waits
 // for it and no draw answers it.
 export interface DeclaredLine {
-  readonly request: ViewFacts;
+  readonly request: SessionRequest;
 }
 
 // [LAW:one-source-of-truth] What the session's view took and its request path
@@ -119,10 +125,6 @@ export type RecordingLine =
 export interface Recording {
   readonly session: SessionId;
   readonly home: string;
-  // Where the session's view opened: its first request's directory. A shell
-  // source's run is identified by the directory it ran in, so a replay opens
-  // its view here, wherever the demo itself runs.
-  readonly cwd: string;
   readonly opening: FactsLine;
   readonly lines: readonly [
     { readonly kind: "request" } & RequestLine,
@@ -323,7 +325,7 @@ function parseRequest(
   json: Record<string, unknown>,
   where: string,
   session: SessionId,
-): ViewFacts {
+): SessionRequest {
   if (!isPlainObject(json.hookData)) {
     throw new FactParseError(where, "has no `hookData` object");
   }
@@ -345,8 +347,8 @@ function parseRequest(
     );
   }
   const { cwd } = json;
-  if (cwd !== undefined && (typeof cwd !== "string" || !isAbsolute(cwd))) {
-    throw new FactParseError(where, "has a `cwd` that is not an absolute path");
+  if (typeof cwd !== "string" || !isAbsolute(cwd)) {
+    throw new FactParseError(where, "has no `cwd` that is an absolute path");
   }
   if (!isPlainObject(json.hints)) {
     throw new FactParseError(where, "has no `hints` object");
@@ -484,14 +486,7 @@ export function parseRecording(text: string): Recording {
       "holds no answered request: none was answered while it was recorded",
     );
   }
-  const { cwd } = first.request;
-  if (cwd === undefined) {
-    throw new FactParseError(
-      "the recording",
-      "opens on a request with no `cwd`: a replay opens its view where the session's opened",
-    );
-  }
-  return { session, home, cwd, opening, lines: [first, ...later] };
+  return { session, home, opening, lines: [first, ...later] };
 }
 
 function parseInstant(json: unknown, where: string, field: string): Instant {

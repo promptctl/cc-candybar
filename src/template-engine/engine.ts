@@ -283,7 +283,8 @@ export function createCcCandybarEngine(opts: {
       ...sprigDicts(),
       ...SPRIG_DATE_FUNCS,
       ...richTextFuncs(depth),
-      // rich-js's one DrawnAt-reading binding, over richTextFuncs' own.
+      // [LAW:one-source-of-truth] rich-js's one DrawnAt-reading binding, over
+      // richTextFuncs' own, bound to the one depth this engine is built at.
       readableOn: readableOnFunc(depth),
       // [LAW:single-enforcer] Every function that reads the time, built over
       // the one Clock.

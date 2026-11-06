@@ -24,6 +24,7 @@ import {
   type DrawState,
   type Recording,
   type ReplayLine,
+  type SessionRequest,
 } from "../facts/recording.js";
 import type { RendererLinks } from "../click/renderer-links.js";
 import { daemonGates } from "../daemon/update-keys.js";
@@ -40,11 +41,7 @@ import {
   type SessionView,
 } from "../daemon/cache/render.js";
 import type { Facts, RecordingFacts } from "../daemon/facts-source.js";
-import {
-  renderOptionsOf,
-  todayOf,
-  type ViewFacts,
-} from "../daemon/render-payload.js";
+import { renderOptionsOf, todayOf } from "../daemon/render-payload.js";
 import { sessionSource, type SessionSource } from "../daemon/session-source.js";
 import { SessionState } from "../daemon/session-state.js";
 import { EMPTY_HISTORY_DEPTH } from "../daemon/settings-history.js";
@@ -206,9 +203,9 @@ export type DemoStep =
   | {
       readonly kind: "request";
       readonly offsetMs: number;
-      readonly request: ViewFacts;
+      readonly request: SessionRequest;
     }
-  | { readonly kind: "declared"; readonly request: ViewFacts }
+  | { readonly kind: "declared"; readonly request: SessionRequest }
   | {
       readonly kind: "draw";
       readonly requestOffsetMs: number;
@@ -264,10 +261,6 @@ export function playOf(
 
 export interface DemoPlay {
   readonly loaded: DemoState;
-  // The session's directory, which its view opens at and its sources run in,
-  // as the daemon opens a view at its request's: a replay's is the
-  // recording's, wherever the demo runs.
-  readonly cwd: string;
   readonly facts: Facts;
   // The session source's own reads: whose home `~` names, and the log.
   readonly home: string;
@@ -331,7 +324,6 @@ export function drawDemoFrame(
 // as it stands then, at the instant its request arrived at.
 export async function playDemo({
   loaded: { state, sessionState },
-  cwd,
   facts,
   home,
   log,
@@ -353,19 +345,33 @@ export async function playDemo({
     equals: sameDepths,
   });
   // The session's view of the state, as the daemon opens one per session,
-  // declared with the request the first frame draws by.
-  const view = openView(state, cwd, opening.request, {
-    facts,
-    source: sessionSource({
-      providers: { home, log },
-      sessionState,
-      history: () => depths.get().history,
-      navigation: () => depths.get().back,
-    }),
-    // The demo draws one frame per request: no feed to wake.
-    changed: () => {},
-    log,
-  });
+  // at the directory of the request it is declared with.
+  const open = (request: SessionRequest) =>
+    openView(state, request.cwd, request, {
+      facts,
+      source: sessionSource({
+        providers: { home, log },
+        sessionState,
+        history: () => depths.get().history,
+        navigation: () => depths.get().back,
+      }),
+      // The demo draws one frame per request: no feed to wake.
+      changed: () => {},
+      log,
+    });
+  let view = open(opening.request);
+  // [LAW:one-source-of-truth] The view is at its latest request's directory,
+  // as the daemon's cache moves a session's view to the entry its request
+  // names: a request from another directory opens the view there, so its
+  // sources' runs are the ones the session's documents hold from then on.
+  const declare = (request: SessionRequest): void => {
+    if (request.cwd === view.facts().cwd) {
+      view.requested(request);
+      return;
+    }
+    view.dispose();
+    view = open(request);
+  };
   try {
     // The session's effect memory, held across the frames as the daemon holds
     // it across a session's requests, so a `globals.effect` moves frame to
@@ -377,10 +383,10 @@ export async function playDemo({
       } else if (step.kind === "request") {
         const at = await arrive(startMs + step.offsetMs);
         arrived.set(step.offsetMs, at);
-        view.requested(step.request);
+        declare(step.request);
         await view.settle(at).landed;
       } else if (step.kind === "declared") {
-        view.requested(step.request);
+        declare(step.request);
       } else {
         const at = arrived.get(step.requestOffsetMs);
         // [LAW:no-silent-failure] Both arms draw only an answer to a request

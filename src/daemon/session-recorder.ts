@@ -20,9 +20,10 @@ import {
   type FactsLine,
   type RecordingLine,
   type RequestLine,
+  type SessionRequest,
 } from "../facts/recording.js";
 import type { SessionFacts } from "../facts/session-facts.js";
-import type { ViewFacts } from "./render-payload.js";
+import type { ViewSource } from "../dsl/view-source.js";
 import type { Timekeeper } from "../time.js";
 import type { Instant } from "../utils/instant.js";
 import type { DaemonLogger } from "../utils/logger.js";
@@ -88,7 +89,7 @@ export interface Arrival {
 // with, and what the session's clicks and menus left for it.
 export interface DrawnFrom {
   readonly document: FactsLine;
-  readonly declaration: ViewFacts;
+  readonly declaration: SessionRequest;
   readonly state: DrawState;
 }
 
@@ -98,7 +99,7 @@ interface Open {
   // The last document and the last declaration this recording wrote: what a
   // replay's view holds at the next line.
   document: SessionFacts | null;
-  declaration: ViewFacts | null;
+  declaration: SessionRequest | null;
 }
 
 export function sessionRecorder(
@@ -263,7 +264,10 @@ export function recordedCache<C extends SessionViews>(
 // document the settle stamps.
 export function settleRequest(
   recorder: Pick<SessionRecorder, "arrived">,
-  view: Pick<SessionView, "sessionId" | "facts" | "settle">,
+  view: Pick<
+    SessionView<ViewSource, SessionRequest>,
+    "sessionId" | "facts" | "settle"
+  >,
   at: Instant,
 ): Settling & { readonly arrival: Arrival } {
   const arrival = recorder.arrived(view.sessionId, {
@@ -284,7 +288,7 @@ export function drawRequest<
   T extends { readonly idleSince: Instant | undefined },
 >(
   recorder: Pick<SessionRecorder, "drew">,
-  view: Pick<SessionView, "sessionId" | "facts"> & {
+  view: Pick<SessionView<ViewSource, SessionRequest>, "sessionId" | "facts"> & {
     readonly source: Pick<SessionSource, "stamped" | "state">;
   },
   arrival: Arrival,

@@ -121,7 +121,6 @@ test("what the recorder writes reads back as itself, opening on the last documen
   ).toEqual({
     session: SESSION,
     home: HOME,
-    cwd: "/elsewhere/repo",
     opening: { at: at(0.2), facts: document(2) },
     lines: [
       { kind: "request", at: at(0.5), request: request() },
@@ -374,18 +373,6 @@ test("a recording no answer was drawn in is refused: a replay draws one frame pe
   }
 });
 
-test("a recording whose opening request has no cwd is refused: a replay opens its view where the session's opened", () => {
-  const raw = JSON.parse(formatLine(requested(1))) as Record<string, unknown>;
-  delete raw.cwd;
-  expect(() =>
-    parseRecording(
-      text(header, facts(0, 1)) +
-        `${JSON.stringify(raw)}\n` +
-        formatLine(drawn(1)),
-    ),
-  ).toThrow(/^the recording: opens on a request with no `cwd`/);
-});
-
 test("a request line crosses the hook and hint checkpoints", () => {
   const raw = JSON.parse(formatLine(requested(1))) as Record<string, unknown>;
   const line = (patch: Record<string, unknown>): string =>
@@ -393,9 +380,12 @@ test("a request line crosses the hook and hint checkpoints", () => {
   expect(() => parseRecording(line({ hookData: { cwd: "/x" } }))).toThrow(
     /^line 3: has no hookData\.session_id/,
   );
-  expect(() => parseRecording(line({ cwd: "relative" }))).toThrow(
-    /^line 3: has a `cwd` that is not an absolute path/,
-  );
+  // A replay opens the view where the request came from.
+  for (const cwd of ["relative", undefined]) {
+    expect(() => parseRecording(line({ cwd }))).toThrow(
+      /^line 3: has no `cwd` that is an absolute path/,
+    );
+  }
   expect(() => parseRecording(line({ hints: 7 }))).toThrow(
     /^line 3: has no `hints` object/,
   );
