@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "0577540acfe6b769c9a94c7e1e7ee9a4d0a0ee48",
+      "timestamp": "2026-11-06T06:00:00.097Z",
+      "commits": [
+        {
+          "sha": "0577540acfe6b769c9a94c7e1e7ee9a4d0a0ee48",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T22:58:59-07:00",
+          "message": "fix(facts): one transcript fold in flight per session; the gate places every built-in, can snapshot its heap, and is re-priced for it (candybar-gather-renderer-76bb.6pj.c0y) (#622)\n\n* fix(facts): one transcript fold in flight per session; the gate places every built-in and can snapshot its heap (candybar-gather-renderer-76bb.6pj.c0y)\n\nThe 100-session gate failed with metrics and activity on because the\ntranscript fold started a new fold for every request of a session while\nthe session's first fold was still out, and a cold fold re-enters the\n8-slot read gate once per window: folds arrived faster than any could\nfinish, none landed, the stamp fast path never engaged, and every\nrequest's refresh stayed alive in the queue. The fold now coalesces per\nsession through the same SingleFlight the usage store's request refresh\nuses.\n\nThe gate's config places metrics, activity, tokenSparkline and\nautocompact, so it gathers every built-in the facts epic makes\nalways-on. `--heap-snapshots DIR` has the daemon write its heap at the\ntwo collections through Node's signal snapshot; the whole-file wait\nmoves from capture-heap into scripts/lib and both call it.\n\n* fix(load-gate): re-derive the budget from CI with every built-in placed (candybar-gather-renderer-76bb.6pj.c0y)\n\nMeasured on PR #622's CI: 186 MB charged once collected at 20 sessions (feed criterion, feed off) and 514 MB at 100 (load gate). per-session = (514 - 186) / 80 = 4.1 MB, base = 186 - 20 * 4.1 = 104 MB, headroom a fifth as before. The gate placed neither metrics nor activity when the old 112 + 3.1 MB were measured.\n\n* fix(scripts): a snapshot is matched by V8's name shape, the wait reuses sleep, NODE_OPTIONS is quoted; the fold's key comment says why the stamp is left out (candybar-gather-renderer-76bb.6pj.c0y)\n\n* fix(load-gate): the budget check is unjudged under snapshots; the snapshot wait and NODE_OPTIONS form live in the lib; the fold's memory line states a consequence (candybar-gather-renderer-76bb.6pj.c0y)"
+        },
+        {
+          "sha": "9b6790b0d73afbdd6c683accf7b693cffe16c89e",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-06T05:07:19Z",
+          "message": "chore(release): set `package.json` to 1.194.0 [skip ci]\n\n## [1.194.0](https://github.com/promptctl/cc-candybar/compare/v1.193.0...v1.194.0) (2026-11-06)\n\n### ⚠ BREAKING CHANGES\n\n* **config:** remove the env source; a config that declares one fails at load (candybar-gather-renderer-76bb.f00.2fe) (#623)\n\n### Features\n\n* **config:** remove the env source; a config that declares one fails at load (candybar-gather-renderer-76bb.f00.2fe) ([#623](https://github.com/promptctl/cc-candybar/issues/623)) ([2e39515](https://github.com/promptctl/cc-candybar/commit/2e39515c37ff054e142819a3e4ee02f881e22940))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-624",
       "ref": "refs/pull/624/merge",
       "sha": "f273533a8358946d290df0dfc274f1b71c46ff80",
@@ -123,49 +145,6 @@
       ]
     },
     {
-      "version": "pr-622",
-      "ref": "refs/pull/622/merge",
-      "sha": "ac1d5a9e265c1b2d0f51697158f14c70d817c950",
-      "timestamp": "2026-11-06T05:49:42.564Z",
-      "commits": [
-        {
-          "sha": "ac1d5a9e265c1b2d0f51697158f14c70d817c950",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T05:48:24Z",
-          "message": "Merge 934af2956e0fa96c7c95c8b0927d055cdcac6789 into 9b6790b0d73afbdd6c683accf7b693cffe16c89e\n"
-        },
-        {
-          "sha": "934af2956e0fa96c7c95c8b0927d055cdcac6789",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T20:28:35-07:00",
-          "message": "fix(load-gate): the budget check is unjudged under snapshots; the snapshot wait and NODE_OPTIONS form live in the lib; the fold's memory line states a consequence (candybar-gather-renderer-76bb.6pj.c0y)\n"
-        },
-        {
-          "sha": "fd988b1eee4f58d022e052aea123caf67bc3ab56",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T20:17:38-07:00",
-          "message": "fix(scripts): a snapshot is matched by V8's name shape, the wait reuses sleep, NODE_OPTIONS is quoted; the fold's key comment says why the stamp is left out (candybar-gather-renderer-76bb.6pj.c0y)\n"
-        },
-        {
-          "sha": "ea5a02882f6b6032daff92cdb0c3ab5bb584397f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T20:04:41-07:00",
-          "message": "fix(load-gate): re-derive the budget from CI with every built-in placed (candybar-gather-renderer-76bb.6pj.c0y)\n\nMeasured on PR #622's CI: 186 MB charged once collected at 20 sessions (feed criterion, feed off) and 514 MB at 100 (load gate). per-session = (514 - 186) / 80 = 4.1 MB, base = 186 - 20 * 4.1 = 104 MB, headroom a fifth as before. The gate placed neither metrics nor activity when the old 112 + 3.1 MB were measured.\n"
-        },
-        {
-          "sha": "ec9f013fcdbd500c0db25ac4dadf9ff288080730",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T19:58:14-07:00",
-          "message": "fix(facts): one transcript fold in flight per session; the gate places every built-in and can snapshot its heap (candybar-gather-renderer-76bb.6pj.c0y)\n\nThe 100-session gate failed with metrics and activity on because the\ntranscript fold started a new fold for every request of a session while\nthe session's first fold was still out, and a cold fold re-enters the\n8-slot read gate once per window: folds arrived faster than any could\nfinish, none landed, the stamp fast path never engaged, and every\nrequest's refresh stayed alive in the queue. The fold now coalesces per\nsession through the same SingleFlight the usage store's request refresh\nuses.\n\nThe gate's config places metrics, activity, tokenSparkline and\nautocompact, so it gathers every built-in the facts epic makes\nalways-on. `--heap-snapshots DIR` has the daemon write its heap at the\ntwo collections through Node's signal snapshot; the whole-file wait\nmoves from capture-heap into scripts/lib and both call it.\n"
-        }
-      ]
-    },
-    {
       "version": "pr-626",
       "ref": "refs/pull/626/merge",
       "sha": "6a6ee365203cf3740b9ac354e063b9b8f8cad4fc",
@@ -213,28 +192,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-05T22:37:33-07:00",
           "message": "feat(apply): a request takes its turn; its two writes are one batch in the request arm, and the answered mark is an event (candybar-gather-renderer-76bb.1dh.1ql)\n\nThe request arm records what the client said (client-hints, render-origin)\nas one setBatch inside a journal turn and draws once the turn is over, so a\nrequest that arrives while a click's turn is held draws the click whole,\nnever its first write beside the request's hints. The turn waits behind\nturns alone: a click's head gather holds none. The click error's answered\nmark, the one other request-path write, is an `answered` event whose arm\ntakes a turn; the delivery edge applies it as the performer applies\neffect-done, with a refusal said in the log.\n\nThe render line gains renderer=main, factsSeq, turnWait and revision; the\nrequest's apply line stays null, since the render event is its one record.\nThe daemon's draw is a port on the request arm's parts, so the arm is\ndriven below the daemon. The daemon's adapters gain `sessionWrites`: the\nproduction daemon writes the store, every daemon built in a worker writes\nthrough the write-outside-turn instrument. A run's ending and a lane\nsetup's failure still write the store outside a turn (the next story).\n\nTests: test/request-turn.test.ts races a request against a click whose\ndoctor gathers inside its turn under a held clock, and against one parked\nin its head gather; apply-effects covers the answered mark's turn. The\nboot ratchet forbids a new in-worker case, so the race lives at the root\nover Apply and the real journal turns.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "2e39515c37ff054e142819a3e4ee02f881e22940",
-      "timestamp": "2026-11-06T04:57:25.214Z",
-      "commits": [
-        {
-          "sha": "2e39515c37ff054e142819a3e4ee02f881e22940",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T21:56:28-07:00",
-          "message": "feat(config)!: remove the env source; a config that declares one fails at load (candybar-gather-renderer-76bb.f00.2fe) (#623)\n\n* feat(config)!: remove the env source; a config that declares one fails at load, naming file and shell as the expansion points (candybar-gather-renderer-76bb.f00.2fe)\n\nOne detached renderer draws for every session of its user, so its\nenvironment is the shell that spawned it, never the session's: an env\nvariable was never a session fact. The kind, its loader arm, its field\nspec, its renderer dispatch, the registry's declaration and the\nenvironment threaded through the render cache for it all go. The loader\nrefuses `kind: \"env\"` through the retired-kind row the git kind already\nuses, naming the variable it read and the two sources that remain.\n\nThe demo, the demo-variables example, the steel-thread fixture and the\nprobes fixture read the user and home through the payload instead. The\ndebug-introspection test exercises its declare-time lastError through\nan input over a path the payload lacks, the only thing it used env for.\n\n[LAW:polishing-by-subtraction] [LAW:one-source-of-truth] [LAW:no-silent-failure]\n\n* fix(config): the retired env message names the payload input for HOME, USER, LOGNAME and HOSTNAME, and rules out echoing the variable from a shell source\n\nReview fixes (high pass). The steel-thread fixture pins home as a literal\ninstead of an input the rig never feeds; the demo example's header stops\ncounting kinds; the probe patch's render.ts hunks drop the removed env arm;\nthe gap document says the env source is removed, present tense.\n\n* fix(docs): the probe script and its README drop the env probe; the demo keys node --version on the branch and says the key makes the run the session's own\n\nReview fixes (medium pass). The probe patch's blank context lines carry\ntheir space again, so git apply parses it; the scope header stops listing\nenv; the retired replacement record is named for what it is, not for git."
-        },
-        {
-          "sha": "10305eb35f013dc45c9f71410d0f5ee7b9e708cf",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-06T04:47:15Z",
-          "message": "chore(release): set `package.json` to 1.193.0 [skip ci]\n\n## [1.193.0](https://github.com/promptctl/cc-candybar/compare/v1.192.0...v1.193.0) (2026-11-06)\n\n### Features\n\n* **apply:** a click's launches are effects, performed after its turn and reported as effect-done (candybar-gather-renderer-76bb.1dh.g2l) ([#621](https://github.com/promptctl/cc-candybar/issues/621)) ([8bb9728](https://github.com/promptctl/cc-candybar/commit/8bb9728f028615d94483db40d614a14926ef1468))\n"
         }
       ]
     },
