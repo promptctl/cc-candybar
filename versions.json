@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-638",
+      "ref": "refs/pull/638/merge",
+      "sha": "1ad61d6d2dda35522607c3e4604713cb9f73a358",
+      "timestamp": "2026-11-06T10:51:21.331Z",
+      "commits": [
+        {
+          "sha": "1ad61d6d2dda35522607c3e4604713cb9f73a358",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T03:50:23-07:00",
+          "message": "Merge a45c5d716feca904652a753b0a8b1f5831325bab into e96f9bdd556e0da087163fa792f7a69bdaeb5c5d\n"
+        },
+        {
+          "sha": "a45c5d716feca904652a753b0a8b1f5831325bab",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T03:46:42-07:00",
+          "message": "feat(links)!: one link grammar: a link that names no renderer is refused naming its form, at the click, in the URL handler and at load (candybar-gather-renderer-76bb.b2l.eul)\n\nThe parse reads cc-candybar://to/<name>/<verb>/<tail> alone; a direct\ncc-candybar://<verb>/… or a bare cc-candybar://<value> is refused, with a\nproblem naming the form, and `to` is no longer nullable, so the daemon's\nlink judgement loses its null-address exception. The URL handler refuses\nboth forms through its notification, with fixed text. A template literal\nin either form is a load error from the same parse; the retired-verb table\nit made dead is deleted.\n\nEvery producer builds its link through one addressed-link builder: the\ndispatch minter, the tmux status binding (recognised by its click verb, so\na binding from a build before names is still adopted), the doctor probe\n(now probing a named home through the socket its name selects) and the\nclick bench. The install test URL, itself a bare copy link, is removed.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "e96f9bdd556e0da087163fa792f7a69bdaeb5c5d",
