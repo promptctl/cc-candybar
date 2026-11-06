@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-647",
+      "ref": "refs/pull/647/merge",
+      "sha": "c0a066a937b43d5fbb5d21fc5a817e9f2e2f9bea",
+      "timestamp": "2026-11-06T19:43:52.044Z",
+      "commits": [
+        {
+          "sha": "c0a066a937b43d5fbb5d21fc5a817e9f2e2f9bea",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T12:42:56-07:00",
+          "message": "Merge 680c000e169cdb6506d3cddc021e55ae1184b1a4 into 308429c8f33e9cfe4e0983ab8f29bb1d25c3fe55\n"
+        },
+        {
+          "sha": "680c000e169cdb6506d3cddc021e55ae1184b1a4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T12:42:29-07:00",
+          "message": "fix(tmux): the restore guard reads on tmux before 3.5, which has no #{!:} (candybar-gather-renderer-76bb.x07)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-646",
       "ref": "refs/pull/646/merge",
       "sha": "8e88938fee6fa010a8b221a81fec2c684e164b16",
