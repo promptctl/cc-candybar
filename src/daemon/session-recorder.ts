@@ -32,12 +32,17 @@ export interface SessionViews {
   sessionView(sessionId: string): Pick<SessionView, "followed"> | null;
 }
 
-// Where a recording's lines go, and what hears it end: `failure` is null for
-// a recording that ran its course or was stopped, and the write's error for
-// one a write ended.
+// How a recording ended: by its stop, by the daemon closing before the stop
+// came, or by a write that threw.
+export type RecordingEnd =
+  | { readonly kind: "stopped" }
+  | { readonly kind: "closed" }
+  | { readonly kind: "failed"; readonly error: unknown };
+
+// Where a recording's lines go, and what hears it end.
 export interface RecordingSink {
   write(line: RecordingLine): void;
-  end(failure: unknown): void;
+  end(how: RecordingEnd): void;
 }
 
 export interface SessionRecorder {
@@ -50,7 +55,8 @@ export interface SessionRecorder {
   moved(sessionId: string): void;
   // A request arrived at the session's view (`settleRequest`).
   arrived(sessionId: string, line: RequestLine): void;
-  // Every open recording ends: the daemon is closing.
+  // Every open recording ends, and every later one is refused: the daemon
+  // is closing.
   close(): void;
 }
 
@@ -64,12 +70,16 @@ export function sessionRecorder(
   log: DaemonLogger,
 ): SessionRecorder {
   const open = new Map<string, Set<Open>>();
-  const end = (sessionId: string, rec: Open, failure: unknown): void => {
+  // [LAW:no-ambient-temporal-coupling] The daemon's close is the recorder's
+  // own state, so a record request handled after it is refused for what it
+  // is, not for a view the close retired.
+  let closed = false;
+  const end = (sessionId: string, rec: Open, how: RecordingEnd): void => {
     const recs = open.get(sessionId);
     if (recs === undefined || !recs.delete(rec)) return;
     if (recs.size === 0) open.delete(sessionId);
     rec.detach();
-    rec.sink.end(failure);
+    rec.sink.end(how);
   };
   // [LAW:single-enforcer] Every line a recording writes goes through here: a
   // write that throws ends that recording with the error, which its sink
@@ -79,7 +89,7 @@ export function sessionRecorder(
       rec.sink.write(line);
     } catch (e) {
       log("error", `recording sid=${JSON.stringify(sessionId)}: ${inspect(e)}`);
-      end(sessionId, rec, e);
+      end(sessionId, rec, { kind: "failed", error: e });
     }
   };
   // The session's current view, written from: its document now, then each it
@@ -104,6 +114,9 @@ export function sessionRecorder(
   };
   return {
     record(session, sink) {
+      if (closed) {
+        throw new Error("the daemon is closing: it records nothing more");
+      }
       if (views.sessionView(session) === null) {
         throw new Error(
           `no view of session ${JSON.stringify(session)} is open in this daemon: it has not drawn a bar here since the daemon started, or its view closed while it was idle`,
@@ -114,7 +127,7 @@ export function sessionRecorder(
       open.set(session, recs.add(rec));
       write(session, rec, { kind: "recording", session });
       if (recs.has(rec)) attach(session, rec);
-      return () => end(session, rec, null);
+      return () => end(session, rec, { kind: "stopped" });
     },
     moved(sessionId) {
       for (const rec of open.get(sessionId) ?? []) {
@@ -128,8 +141,9 @@ export function sessionRecorder(
       }
     },
     close() {
+      closed = true;
       for (const [sessionId, recs] of open) {
-        for (const rec of recs) end(sessionId, rec, null);
+        for (const rec of recs) end(sessionId, rec, { kind: "closed" });
       }
     },
   };
@@ -204,7 +218,8 @@ export function recordToFile(
   return new Promise((resolve, reject) => {
     let fd: number;
     try {
-      fd = openSync(path, "wx");
+      // Owner-only: it holds the session's paths, hints and usage.
+      fd = openSync(path, "wx", 0o600);
     } catch (e) {
       reject(
         new Error(
@@ -227,20 +242,28 @@ export function recordToFile(
         lines++;
         if (line.kind === "request") requests++;
       },
-      end: (failure) => {
+      end: (how) => {
         clearTimer();
         left.removeEventListener("abort", leave);
-        let ended = failure;
+        let error: unknown = how.kind === "failed" ? how.error : null;
         try {
           closeSync(fd);
           // A recording no request arrived in is one the parser refuses, and
           // it would refuse the same path to the next try: it is not kept.
-          if (ended === null && requests === 0) unlinkSync(path);
+          if (error === null && requests === 0) unlinkSync(path);
         } catch (e) {
-          ended ??= e;
+          error ??= e;
         }
-        if (ended === null) resolve({ path, lines, requests });
-        else reject(new RecordingFailed(`writing ${path}: ${String(ended)}`));
+        if (error === null) {
+          resolve({
+            path,
+            lines,
+            requests,
+            daemonClosed: how.kind === "closed",
+          });
+        } else {
+          reject(new RecordingFailed(`writing ${path}: ${String(error)}`));
+        }
       },
     };
     left.addEventListener("abort", leave, { once: true });

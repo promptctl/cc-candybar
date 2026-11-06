@@ -48,7 +48,7 @@ test("a recording whose first document fails to write is ended, and its view's n
   const { sink, offered, ended } = failingSink();
   recorder.record(SID, sink);
   expect(offered).toEqual(["recording", "facts"]);
-  expect(ended).toEqual([new Error("ENOSPC")]);
+  expect(ended).toEqual([{ kind: "failed", error: new Error("ENOSPC") }]);
   v.move(2);
   expect(offered).toEqual(["recording", "facts"]);
 });
@@ -71,7 +71,7 @@ test("a recording that fails on the document of the view it moved to is ended, a
   failing = true;
   current = second;
   recorder.moved(SID);
-  expect(ended).toEqual([new Error("EIO")]);
+  expect(ended).toEqual([{ kind: "failed", error: new Error("EIO") }]);
   second.move(2);
   first.move(2);
   expect(offered).toEqual(["recording", "facts", "facts"]);

@@ -475,11 +475,13 @@ export function parseRecordSeconds(
 }
 
 // What a recording that ended wrote: its file, its lines, and how many of
-// them are requests — none means the replay has nothing to draw.
+// them are requests — none means the replay has nothing to draw — and
+// whether the daemon's close ended it before its span ran out.
 export interface Recorded {
   readonly path: string;
   readonly lines: number;
   readonly requests: number;
+  readonly daemonClosed: boolean;
 }
 
 export type Request =

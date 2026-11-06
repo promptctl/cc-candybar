@@ -41,11 +41,15 @@ export function parseRecordArgs(
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === "--seconds") {
-      const span = parseRecordSeconds(Number(args[++i]));
+      const given = args[++i];
+      if (given === undefined) {
+        return { ok: false, problem: "--seconds needs a number after it" };
+      }
+      const span = parseRecordSeconds(Number(given));
       if (!span.ok) {
         return {
           ok: false,
-          problem: `--seconds ${JSON.stringify(args[i])} ${span.problem}`,
+          problem: `--seconds ${JSON.stringify(given)} ${span.problem}`,
         };
       }
       seconds = span.seconds;
@@ -83,16 +87,23 @@ export function recordPlan(
       code: 1,
     };
   }
-  const { path, lines, requests } = outcome.value;
+  const { path, lines, requests, daemonClosed } = outcome.value;
+  // A span the daemon's close cut short is said, so a short file or an empty
+  // one is never read as the session's own doing.
+  const cut = `the daemon closed before ${seconds}s ran out`;
   return requests === 0
     ? {
         stdout: "",
-        stderr: `record: ${path}: no request arrived in ${seconds}s, so there is nothing to replay: the session was idle, or its statusline is not drawn by this daemon. No file was left.\n`,
+        stderr: daemonClosed
+          ? `record: ${path}: ${cut}, and no request had arrived, so there is nothing to replay. No file was left.\n`
+          : `record: ${path}: no request arrived in ${seconds}s, so there is nothing to replay: the session was idle, or its statusline is not drawn by this daemon. No file was left.\n`,
         code: 1,
       }
     : {
         stdout: `${path}: ${lines} lines, ${requests} requests\n`,
-        stderr: "",
+        stderr: daemonClosed
+          ? `record: ${cut}: the file holds what came before.\n`
+          : "",
         code: 0,
       };
 }

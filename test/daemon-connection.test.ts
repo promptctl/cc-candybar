@@ -501,7 +501,12 @@ describe("a connection over a stream", () => {
   describe("a held request", () => {
     const RECORDED: Response = {
       ok: true,
-      recorded: { path: "/r.jsonl", lines: 4, requests: 1 },
+      recorded: {
+        path: "/r.jsonl",
+        lines: 4,
+        requests: 1,
+        daemonClosed: false,
+      },
     };
     // Held work the test finishes, counting its starts.
     const work = () => {

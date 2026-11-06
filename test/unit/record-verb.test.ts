@@ -83,6 +83,10 @@ describe("the record command", () => {
     expect(parseRecordArgs([SID, "a", "b"], "/work")).toMatchObject({
       ok: false,
     });
+    expect(parseRecordArgs([SID, "a", "--seconds"], "/work")).toEqual({
+      ok: false,
+      problem: "--seconds needs a number after it",
+    });
     expect(parseRecordArgs([SID, "a", "--seconds", "soon"], "/work")).toEqual({
       ok: false,
       problem: `--seconds "soon" is not a span of seconds above 0 and at most ${MAX_RECORD_SECONDS}`,
@@ -103,7 +107,15 @@ describe("the record command", () => {
   test("says what it wrote and exits 0, or exits 1 when no request arrived", () => {
     expect(
       recordPlan(
-        { kind: "ok", value: { path: "/w/bar.jsonl", lines: 9, requests: 3 } },
+        {
+          kind: "ok",
+          value: {
+            path: "/w/bar.jsonl",
+            lines: 9,
+            requests: 3,
+            daemonClosed: false,
+          },
+        },
         10,
       ),
     ).toEqual({
@@ -112,7 +124,15 @@ describe("the record command", () => {
       code: 0,
     });
     const idle = recordPlan(
-      { kind: "ok", value: { path: "/w/bar.jsonl", lines: 2, requests: 0 } },
+      {
+        kind: "ok",
+        value: {
+          path: "/w/bar.jsonl",
+          lines: 2,
+          requests: 0,
+          daemonClosed: false,
+        },
+      },
       10,
     );
     expect(idle.code).toBe(1);
@@ -120,6 +140,45 @@ describe("the record command", () => {
     expect(idle.stderr).toMatch(
       /^record: \/w\/bar\.jsonl: no request arrived in 10s, so there is nothing to replay: the session was idle/,
     );
+  });
+
+  test("a recording the daemon's close cut short says so: a short file is kept with the note, an empty one is a failure that blames the close", () => {
+    const short = recordPlan(
+      {
+        kind: "ok",
+        value: {
+          path: "/w/bar.jsonl",
+          lines: 9,
+          requests: 3,
+          daemonClosed: true,
+        },
+      },
+      10,
+    );
+    expect(short).toMatchObject({
+      stdout: "/w/bar.jsonl: 9 lines, 3 requests\n",
+      code: 0,
+    });
+    expect(short.stderr).toBe(
+      "record: the daemon closed before 10s ran out: the file holds what came before.\n",
+    );
+    const empty = recordPlan(
+      {
+        kind: "ok",
+        value: {
+          path: "/w/bar.jsonl",
+          lines: 2,
+          requests: 0,
+          daemonClosed: true,
+        },
+      },
+      10,
+    );
+    expect(empty.code).toBe(1);
+    expect(empty.stderr).toMatch(
+      /^record: \/w\/bar\.jsonl: the daemon closed before 10s ran out, and no request had arrived/,
+    );
+    expect(empty.stderr).not.toMatch(/idle/);
   });
 
   test("a refusal from the daemon is the command's failure, said on stderr", () => {

@@ -589,11 +589,21 @@ test("a recording the daemon's close ends is whole: its counts are the file's, a
   await s.after(1000);
   await s.requestFrom(s.cwd, s.configFile);
   s.live.recorder.close();
-  const { lines, requests } = await recorded;
+  const { lines, requests, daemonClosed } = await recorded;
   const text = fs.readFileSync(file, "utf8");
   expect(text.split("\n").filter((l) => l !== "")).toHaveLength(lines);
   expect(requests).toBe(1);
+  expect(daemonClosed).toBe(true);
   expect(parseRecording(text).requests).toHaveLength(1);
+  // The file is the owner's alone: it holds the session's paths and usage.
+  expect(fs.statSync(file).mode & 0o777).toBe(0o600);
+  // A record request handled after the close is refused for the close.
+  expect(() =>
+    s.live.recorder.record(sessionIdOf(SID), {
+      write: () => {},
+      end: () => {},
+    }),
+  ).toThrow(/^the daemon is closing/);
 });
 
 test("a recording no request arrived in leaves no file, so the same path records again", async () => {
@@ -609,7 +619,11 @@ test("a recording no request arrived in leaves no file, so the same path records
     stays(),
   );
   await s.after(1000);
-  expect(await idle).toMatchObject({ path: file, requests: 0 });
+  expect(await idle).toMatchObject({
+    path: file,
+    requests: 0,
+    daemonClosed: false,
+  });
   expect(fs.existsSync(file)).toBe(false);
 });
 

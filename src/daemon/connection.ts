@@ -229,6 +229,8 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
     if (responded) return;
     if (sock.destroyed) return;
     clearBackstop();
+    // One request, one answer: nothing more the client sends is read.
+    sock.off("data", reader);
     const left = new AbortController();
     sock.on("close", () => left.abort());
     start(left.signal).then(
