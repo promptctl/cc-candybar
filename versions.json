@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-661",
+      "ref": "refs/pull/661/merge",
+      "sha": "63514659c9ab357b7df240b596695a045b894d32",
+      "timestamp": "2026-11-06T23:33:21.525Z",
+      "commits": [
+        {
+          "sha": "63514659c9ab357b7df240b596695a045b894d32",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T23:32:27Z",
+          "message": "Merge f452031b1de9f0160e4bcfde4945003ba29c0718 into 86bb0ba47f70ca3b852845b916d66bb727486aae\n"
+        },
+        {
+          "sha": "f452031b1de9f0160e4bcfde4945003ba29c0718",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T16:32:15-07:00",
+          "message": "fix(testing): a wait's sub-steps share its one deadline, and every request failure names its bound (brandon-menus-sjhy.r62)\n\nFrom the high review pass: the pool's start-time read and a request's\nconnect each spent time the wait had not charged; a cut render stated an\nuncut deadline to the daemon; untilHeard ran past its case; a test whose\nbefore-hook failed left its case's deadline set.\n"
+        },
+        {
+          "sha": "e9b9e31f221542d49b62134f4bb9f1af0335f81d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T16:23:05-07:00",
+          "message": "fix(testing): every budgeted wait in a test is cut to what its case has left, so a slow run fails by the wait's name (brandon-menus-sjhy.r62)\n\nA real-daemon case spent a pool slot wait (20 s), readiness (12 s) and its\nown waits inside one Jest timeout (30 s), each sized alone, so their sum\ncould pass it and Jest's anonymous timeout fired first. The test\nenvironment now keeps the running hook's or test's deadline, computed as\njest-circus arms its timer, and every budgeted wait (the pool, readiness,\nuntil, throughout, sendDaemonRequest) is bounded by the smaller of its own\nbudget and that time, less a margin derived from the longest step a wait\ntakes between deadline checks. The process tier's copies of the 30 s go.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "86bb0ba47f70ca3b852845b916d66bb727486aae",
@@ -56,28 +85,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T16:01:22-07:00",
           "message": "fix(lanes): a restart refuses a pane that now runs another session, instead of resuming the old one over it (candybar-gather-renderer-76bb.1dh.9ix)\n\nA statusline restart resumes the session its setup was settled for. After\na `/clear` or `/resume` in the pane, Claude Code is the same process, so the\npid check before the kill passed and the line typed `--resume <old id>`\nover the live session.\n\nThe restart now reads whose session the pane runs (the newest request\nnaming the pane, among each session's latest) directly before SIGTERM,\nafter its last wait, and refuses naming that session when it is not the\none being restarted, or saying no held request names the pane.\n\nThat read is built once in the daemon and handed to the tmux status line\nand lane setup, over one `namesPane` predicate the pane-session reply\nuses too; the predicate was spelled inline twice before.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-661",
-      "ref": "refs/pull/661/merge",
-      "sha": "9b018e8f10e2ec342509feec61707f9ca29c03b3",
-      "timestamp": "2026-11-06T23:24:31.383Z",
-      "commits": [
-        {
-          "sha": "9b018e8f10e2ec342509feec61707f9ca29c03b3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T16:23:32-07:00",
-          "message": "Merge e9b9e31f221542d49b62134f4bb9f1af0335f81d into 5bb40dbee6d8d25c54fff764ee0387a438043749\n"
-        },
-        {
-          "sha": "e9b9e31f221542d49b62134f4bb9f1af0335f81d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T16:23:05-07:00",
-          "message": "fix(testing): every budgeted wait in a test is cut to what its case has left, so a slow run fails by the wait's name (brandon-menus-sjhy.r62)\n\nA real-daemon case spent a pool slot wait (20 s), readiness (12 s) and its\nown waits inside one Jest timeout (30 s), each sized alone, so their sum\ncould pass it and Jest's anonymous timeout fired first. The test\nenvironment now keeps the running hook's or test's deadline, computed as\njest-circus arms its timer, and every budgeted wait (the pool, readiness,\nuntil, throughout, sendDaemonRequest) is bounded by the smaller of its own\nbudget and that time, less a margin derived from the longest step a wait\ntakes between deadline checks. The process tier's copies of the 30 s go.\n"
         }
       ]
     },
