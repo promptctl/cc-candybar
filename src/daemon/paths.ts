@@ -31,6 +31,9 @@ import {
 
 // [LAW:dataflow-not-control-flow] Each derivation is one function over the
 // union with its two arms side by side; nothing downstream asks which it has.
+// [LAW:effects-at-boundaries] The home is a parameter with no default, so a
+// spawner holding a daemon's home (a test fixture) can name that daemon's
+// files — its log above all — without a second derivation of this layout.
 export function stateDir(home: RendererHome): string {
   return home.kind === "main"
     ? path.join(home.roots.state, "cc-candybar")

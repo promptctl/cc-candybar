@@ -108,10 +108,10 @@ Everything that distinguishes one renderer from another:
 
 | Value | Set by |
 |---|---|
-| `name` | Derived from its socket, or stated at start |
-| `socket` | `CC_CANDYBAR_SOCKET`, else the default |
-| `stateRoot` | `XDG_STATE_HOME` |
-| `configHome` | `XDG_CONFIG_HOME` |
+| `name` | `CC_CANDYBAR_NAME`; `main` when the home is unset |
+| `socket` | The name's file in the per-uid runtime directory |
+| `stateRoot` | `state/` under `CC_CANDYBAR_HOME`; main's is `XDG_STATE_HOME` |
+| `configHome` | `config/` under `CC_CANDYBAR_HOME`; main's is `XDG_CONFIG_HOME` |
 | Bundle | The statusline command's path |
 | Gather's address | One fixed per-user socket, beside the default socket |
 

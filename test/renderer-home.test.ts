@@ -106,6 +106,9 @@ describe("the home a process is started with", () => {
   test("the runtime directory is the uid's unless the host overrides it", () => {
     expect(homeOf(hostOf({}, { home: "/u" })).runtime).toBe(uidRuntimeDir());
     expect(homeOf(hostOf({ [RUNTIME_DIR_ENV]: "/run" }, { home: "/u" })).runtime).toBe("/run");
+    expect(() => homeOf(hostOf({ [RUNTIME_DIR_ENV]: "run" }, { home: "/u" }))).toThrow(
+      `${RUNTIME_DIR_ENV} must be an absolute path`,
+    );
   });
 });
 

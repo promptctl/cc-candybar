@@ -69,7 +69,7 @@ process.env.XDG_DATA_DIRS = noPlugins;
 
 // [LAW:single-enforcer] The worker's named home reads none of these, but a test
 // of the main layout builds a main home over this environment less the home's
-// variables (`MAIN_ENV`, test/helpers/host.ts), and that home must not land on
+// variables (`mainEnv()`, test/helpers/host.ts), and that home must not land on
 // the host's: its config would join every such test's chain (the XDG location
 // is the lowest layer, src/config/loader/discovery.ts), its state holds the
 // host's answers for repository configs and its link key, and its cache the

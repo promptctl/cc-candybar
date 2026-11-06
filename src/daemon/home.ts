@@ -1,4 +1,3 @@
-import os from "node:os";
 import path from "node:path";
 import type { Host } from "../host.js";
 
@@ -109,12 +108,24 @@ export function xdgEnv(
 // leases and the breaker's registry sit here. The URL handler, which starts
 // with no shell's environment, spells the same directory.
 export function uidRuntimeDir(): string {
-  const uid = os.userInfo().uid;
+  // The kernel's uid, as the Rust client reads it: no passwd lookup, so a uid
+  // with no entry (a container's) still has its directory.
+  const uid = process.getuid!();
   return path.join("/tmp", `cc-candybar-${uid}`);
 }
 
+// [LAW:parse-dont-validate] The override is refused relative for the reason a
+// relative root is: the daemon is spawned with no cwd, so a relative directory
+// names a different socket in every process that derives it.
 export function runtimeDir(host: Host): string {
-  return xdgEnv(host.env, RUNTIME_DIR_ENV) ?? uidRuntimeDir();
+  const override = xdgEnv(host.env, RUNTIME_DIR_ENV);
+  if (override === undefined) return uidRuntimeDir();
+  if (!path.isAbsolute(override)) {
+    throw new Error(
+      `${RUNTIME_DIR_ENV} must be an absolute path, got ${JSON.stringify(override)}`,
+    );
+  }
+  return override;
 }
 
 // [LAW:parse-dont-validate] The one place the two variables are read. Both set

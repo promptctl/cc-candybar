@@ -14,8 +14,9 @@ import type { World } from "../host";
 // [FRAMING:representation] The 192-daemon storm (epic brandon-daemon-lifecycle-
 // gad) happened because every existing single-instance guard (atomic bind(),
 // the socket lease, the ownership self-check, the spawn cooldown) keys off ONE
-// socket path — daemons on DIFFERENT sockets (test isolation's per-file
-// CC_CANDYBAR_SOCKET) never arbitrate each other and pile up unboundedly. .1
+// socket path — daemons on DIFFERENT sockets (test isolation's per-worker
+// renderer home, src/daemon/home.ts) never arbitrate each other and pile up
+// unboundedly. .1
 // (test/helpers/daemon-pool.ts) bounds that from the SPAWNER side, but the
 // spawner's own cleanup (afterAll, globalTeardown) fails under the exact
 // fork-exhaustion condition it exists to prevent. This module is the
@@ -351,8 +352,9 @@ export function realBreakerDeps(
     // directory the caller happened to put it under (a system tmpdir on some
     // platforms), which is not a boundary this breaker owns or should assert
     // on; there the one-level leaf check alone is the correct, portable
-    // parity with how ensureSocketParentSafe treats an overridden
-    // CC_CANDYBAR_SOCKET (exactly one level, whatever that parent is).
+    // parity with how ensureSocketParentSafe treats a socket outside the
+    // per-uid runtime directory (a test's overridden runtime directory, or
+    // the legacy socket override: exactly one level, whatever that parent is).
     ensureDirSafe: host.env["CC_CANDYBAR_DAEMON_REGISTRY_DIR"]
       ? ensureOwnedPrivateDir
       : (dir: string): void => {

@@ -838,15 +838,15 @@ static HOME: OnceLock<Home> = OnceLock::new();
 
 fn home() -> &'static Home {
     HOME.get_or_init(|| {
-        let runtime = env_non_empty(RUNTIME_DIR_ENV)
-            .map(PathBuf::from)
-            .unwrap_or_else(uid_runtime_dir);
-        match parse_home(
-            env_non_empty(HOME_ENV),
-            env_non_empty(NAME_ENV),
-            env_non_empty("CC_CANDYBAR_SOCKET"),
-            runtime,
-        ) {
+        let parsed = runtime_dir(env_non_empty(RUNTIME_DIR_ENV)).and_then(|runtime| {
+            parse_home(
+                env_non_empty(HOME_ENV),
+                env_non_empty(NAME_ENV),
+                env_non_empty("CC_CANDYBAR_SOCKET"),
+                runtime,
+            )
+        });
+        match parsed {
             Ok(home) => home,
             Err(msg) => {
                 eprintln!("cc-candybar: {msg}");
@@ -854,6 +854,17 @@ fn home() -> &'static Home {
             }
         }
     })
+}
+
+// The override is refused relative as the daemon refuses it, for the reason a
+// relative root is: the daemon is spawned with no cwd, so a relative directory
+// names a different socket in every process that derives it.
+fn runtime_dir(override_: Option<String>) -> Result<PathBuf, String> {
+    match override_ {
+        None => Ok(uid_runtime_dir()),
+        Some(dir) if Path::new(&dir).is_absolute() => Ok(PathBuf::from(dir)),
+        Some(dir) => Err(format!("{RUNTIME_DIR_ENV} must be an absolute path, got {dir:?}")),
+    }
 }
 
 // Path families — must agree with src/daemon/paths.ts or the client can't
@@ -1436,6 +1447,15 @@ mod tests {
             };
             assert_eq!(got, outcome, "{case:?}");
         }
+    }
+
+    #[test]
+    fn runtime_dir_is_the_uids_unless_overridden_absolute() {
+        assert_eq!(runtime_dir(None).unwrap(), uid_runtime_dir());
+        assert_eq!(runtime_dir(Some("/run".into())).unwrap(), PathBuf::from("/run"));
+        assert!(runtime_dir(Some("run".into()))
+            .unwrap_err()
+            .contains("CC_CANDYBAR_RUNTIME_DIR must be an absolute path"));
     }
 
     // The same table as test/term-extent.test.ts: both runtimes must read
