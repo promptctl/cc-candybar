@@ -1,3 +1,9 @@
+## [1.202.0](https://github.com/promptctl/cc-candybar/compare/v1.201.1...v1.202.0) (2026-11-06)
+
+### Features
+
+* **links:** a tmux range id is ccb plus a base36 link id from a counter in the home's state; the URL digest goes (candybar-gather-renderer-76bb.b2l.e1n) ([#640](https://github.com/promptctl/cc-candybar/issues/640)) ([0e482bd](https://github.com/promptctl/cc-candybar/commit/0e482bd299f59cc7c9dfc947682469722309833d))
+
 ## [1.201.1](https://github.com/promptctl/cc-candybar/compare/v1.201.0...v1.201.1) (2026-11-06)
 
 ### Bug Fixes
