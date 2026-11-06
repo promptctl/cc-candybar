@@ -1,3 +1,9 @@
+## [1.194.1](https://github.com/promptctl/cc-candybar/compare/v1.194.0...v1.194.1) (2026-11-06)
+
+### Bug Fixes
+
+* **facts:** one transcript fold in flight per session; the gate places every built-in, can snapshot its heap, and is re-priced for it (candybar-gather-renderer-76bb.6pj.c0y) ([#622](https://github.com/promptctl/cc-candybar/issues/622)) ([0577540](https://github.com/promptctl/cc-candybar/commit/0577540acfe6b769c9a94c7e1e7ee9a4d0a0ee48))
+
 ## [1.194.0](https://github.com/promptctl/cc-candybar/compare/v1.193.0...v1.194.0) (2026-11-06)
 
 ### ⚠ BREAKING CHANGES
