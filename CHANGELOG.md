@@ -1,3 +1,9 @@
+## [1.200.1](https://github.com/promptctl/cc-candybar/compare/v1.200.0...v1.200.1) (2026-11-06)
+
+### Bug Fixes
+
+* **facts:** a recording replays each frame from what its answer drew, in the file's order, with the recorded home (candybar-gather-renderer-76bb.6pj.rat) ([#636](https://github.com/promptctl/cc-candybar/issues/636)) ([e96f9bd](https://github.com/promptctl/cc-candybar/commit/e96f9bdd556e0da087163fa792f7a69bdaeb5c5d))
+
 ## [1.200.0](https://github.com/promptctl/cc-candybar/compare/v1.199.2...v1.200.0) (2026-11-06)
 
 ### Features
