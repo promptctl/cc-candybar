@@ -4,74 +4,74 @@
     {
       "version": "pr-624",
       "ref": "refs/pull/624/merge",
-      "sha": "3f2985488941fdae24207ce4f7dda9a995465ec9",
-      "timestamp": "2026-11-06T06:21:01.227Z",
+      "sha": "f022d8d6c368fe31d280a5dde36ae06522d7e400",
+      "timestamp": "2026-11-06T06:22:02.351Z",
       "commits": [
         {
-          "sha": "3f2985488941fdae24207ce4f7dda9a995465ec9",
+          "sha": "f022d8d6c368fe31d280a5dde36ae06522d7e400",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T06:20:02Z",
-          "message": "Merge 618918725adb758b89563f0b38cd90f8f1ba0015 into 5c5e716e41c8b9ccc7d36b48e3e1265315b579ba\n"
+          "timestamp": "2026-11-06T06:21:05Z",
+          "message": "Merge 7bdde8472b6809461c640ad9e68f7ce8dc5e2b31 into 5c5e716e41c8b9ccc7d36b48e3e1265315b579ba\n"
         },
         {
-          "sha": "618918725adb758b89563f0b38cd90f8f1ba0015",
+          "sha": "7bdde8472b6809461c640ad9e68f7ce8dc5e2b31",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-05T23:19:43-07:00",
           "message": "fix(facts): a declaration that throws whole is answered on every lane, so the bar draws its warning (candybar-gather-renderer-76bb.6pj.go2)\n"
         },
         {
-          "sha": "0d5614ed43a52c9976f12ef450a12fb184079d16",
+          "sha": "9200d746e9c935f35469313659095ff39711db74",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-05T23:16:44-07:00",
           "message": "test(facts): the seam rig builds its paths from the renderer's home (candybar-gather-renderer-76bb.6pj.go2)\n"
         },
         {
-          "sha": "d477d514f5950066ea668acb1528ba4a05b62d7b",
+          "sha": "f9ae315b11f92a3caf4405488014366fe6b0cf7b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-05T23:13:30-07:00",
           "message": "fix(facts): the request's deadline is read after its refresh starts, one rule keeps a persisting fault (candybar-gather-renderer-76bb.6pj.go2)\n"
         },
         {
-          "sha": "b470fa4ee3d02df3a408f57eecf48f25415ef5d7",
+          "sha": "723ec26532b27c85a9c7f10edd3ebce29a732f92",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-05T22:49:17-07:00",
           "message": "test(facts): the seam rig drops the env field main removed (candybar-gather-renderer-76bb.6pj.go2)\n"
         },
         {
-          "sha": "30487a3df6aca3ec28975cdc54b4f5bfa120a682",
+          "sha": "aa062483595c59a836aa6225e36535f080f65f08",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-05T22:46:32-07:00",
           "message": "fix(facts): a declaration that throws whole at the opening follow releases the holds it took (candybar-gather-renderer-76bb.6pj.go2)\n"
         },
         {
-          "sha": "fcfb51c1cd5c9d885d59f31ed21f31c61456822f",
+          "sha": "f964d25bfb94696fa36afed1fd7f358d974b99d4",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-05T22:43:04-07:00",
           "message": "fix(facts): a reopened session replays, a declaration that throws whole is loud, the seam test crosses the recording's text, the parser names the facts field (candybar-gather-renderer-76bb.6pj.go2)\n"
         },
         {
-          "sha": "88a2afb8ec38dea52ad4aa6ce5af3fa1cf01c9eb",
+          "sha": "0051551ec412083ad96edebce142e75d6a9819c0",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-05T22:29:44-07:00",
           "message": "fix(facts): a settle reads the lanes as declared now, a redeclaration is one turn, a cleared fault keeps its line, a recording is one follow's stream, one JSON-object predicate (candybar-gather-renderer-76bb.6pj.go2)\n"
         },
         {
-          "sha": "c25127aaef770eb32d2d5fed27bb212675bd883a",
+          "sha": "b4db83ac98b6d91bc186ea4291d5be5d78a97785",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-05T22:10:44-07:00",
           "message": "fix(facts): the recording arm stands where the clock does, the recorder tells the log a line it could not write, the owners are read once per follow, and the draw reads the turn's closure (candybar-gather-renderer-76bb.6pj.go2)\n"
         },
         {
-          "sha": "7b184426d6d294608101f723cde65eeeca7ba425",
+          "sha": "87388fda59a75456ed3e3cdaf6200bcb2a99e297",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-05T21:12:57-07:00",
