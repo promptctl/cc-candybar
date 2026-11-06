@@ -51691,10 +51691,6 @@ var CLOCK_FUNCTIONS = new Set(
 function engineClockFunctions(extra) {
   return /* @__PURE__ */ new Set([...CLOCK_FUNCTIONS, ...Object.keys(clockFuncs(extra))]);
 }
-var DEPTH_BINDINGS = { readableOn: readableOnFunc };
-var DEPTH_FUNCTIONS = new Set(
-  Object.keys(DEPTH_BINDINGS)
-);
 function createCcCandybarEngine(opts) {
   const { drawnAt, extraFuncs } = opts;
   const depth = () => ({ depth: drawnAt() });
@@ -51725,12 +51721,9 @@ function createCcCandybarEngine(opts) {
       ...sprigDicts(),
       ...SPRIG_DATE_FUNCS,
       ...richTextFuncs(depth),
-      ...Object.fromEntries(
-        Object.entries(DEPTH_BINDINGS).map(([name, bind]) => [
-          name,
-          bind(depth)
-        ])
-      ),
+      // [LAW:one-source-of-truth] rich-js's one DrawnAt-reading binding, over
+      // richTextFuncs' own, bound to the one depth this engine is built at.
+      readableOn: readableOnFunc(depth),
       // [LAW:single-enforcer] Every function that reads the time, built over
       // the one Clock.
       ...clockFuncs([...CLOCK_FACTORIES, ...opts.clockFuncs ?? []]),
@@ -53372,6 +53365,20 @@ var PathWatches = class {
   }
 };
 var derived = (filePath2) => watchTargetsOf({ named: [filePath2], whole: [filePath2] });
+var UNREAD_RUNS = {
+  declare: (_holds, identity2) => ({
+    digest: digestOf3(identity2),
+    current: () => pendingOf("unread"),
+    fault: () => null
+  })
+};
+var NO_RUNS = {
+  declare: (_holds, identity2) => {
+    throw new Error(
+      `a directory declares no shell or file source, and ${whereOf(identity2.read)} was declared in one: each is a session view's`
+    );
+  }
+};
 var SourceRuns = class {
   byKind;
   watchMgr;
@@ -53586,14 +53593,15 @@ var SourceRegistry = class _SourceRegistry {
   // Collects all cleanup callbacks (MobX reaction disposers) so dispose()
   // tears everything down in one call.
   cleanups = [];
-  // [LAW:single-enforcer] What this registry holds of the daemon's source
-  // runs (source-runs.ts): one hold per entry however many of its sources
-  // read it, declared again whenever any source's identity moves, so the
-  // entry a moved key names is held before the one it leaves is released. A
-  // view's payload holds the daemon's built-in entries through a Holds of
-  // its own (src/daemon/cache/render.ts): the two hold disjoint entries with
-  // the one lifetime, and merging them would make a view's declaration of
-  // its lanes re-declare its sources, and the reverse.
+  // [LAW:single-enforcer] What this registry holds through its port's
+  // `declare` (source-runs.ts, SourceLanes): one hold per identity however
+  // many of its sources read it, declared again whenever any source's
+  // identity moves, so the identity a moved key names is held before the one
+  // it leaves is released. Over a run owner the holds are its entries; over a
+  // session's facts arm they are this registry's declarations, and the arm
+  // holds the runs. Either way they are disjoint from the holds a view's
+  // follow takes of the built-ins, and merging them would make a view's
+  // declaration of its lanes re-declare its sources, and the reverse.
   holds = new Holds();
   // Each source's identity as its policy last named it. A policy over the
   // source's own values names none until they answer.
@@ -53656,9 +53664,13 @@ var SourceRegistry = class _SourceRegistry {
   // reads is this home's one node, and its failure this home's one record. It
   // shares the daemon's session state, and is disposed on its
   // own: a session leaving the directory disposes nothing of it.
-  view() {
+  //
+  // Its `shell` and `file` sources get their lanes from `runs`: the facts arm
+  // its session follows, so what they read is what the session's document
+  // carries.
+  view(runs) {
     return new _SourceRegistry(
-      this.runs,
+      runs,
       new VariableStore(this.store.clock, this.store),
       this.defaultEmptyValue,
       this.sessionState,
@@ -53801,18 +53813,24 @@ var SourceRegistry = class _SourceRegistry {
   // every source's current identity, taken in one body so the entry a moved
   // identity names is held before the entry it leaves is released (Holds).
   // A source whose entry did not move keeps its lane, so its publish reaction
-  // is untouched; the lanes are set outside the body, where a publish they
-  // start cannot nest a declaration.
+  // is untouched; the lanes are set after the body, and the action holds the
+  // publishes they start to its end, so none nests a declaration.
+  //
+  // [LAW:no-ambient-temporal-coupling] The declaration and the lane swap are
+  // one action: a lane may answer from what its port holds declared (a facts
+  // arm reads a digest no longer declared as a failure), so no reaction may
+  // run between the old identity's release and the swap to the new lane, and
+  // the old value stands until the new run lands, whoever calls this.
   hold(name, identity2) {
-    this.identities.set(name, identity2);
-    const { result: taken2 } = this.holds.declare(
-      () => [...this.identities].map(([n, id2]) => {
-        const lane = this.runs.declare(this.holds, id2);
-        const prior = this.lanes.get(n);
-        return [n, prior?.digest === lane.digest ? prior : lane];
-      })
-    );
     runInAction(() => {
+      this.identities.set(name, identity2);
+      const { result: taken2 } = this.holds.declare(
+        () => [...this.identities].map(([n, id2]) => {
+          const lane = this.runs.declare(this.holds, id2);
+          const prior = this.lanes.get(n);
+          return [n, prior?.digest === lane.digest ? prior : lane];
+        })
+      );
       for (const [n, lane] of taken2) this.lanes.set(n, lane);
     });
   }
@@ -54014,9 +54032,8 @@ var SourceRegistry = class _SourceRegistry {
   // ─── The view's source ────────────────────────────────────────────────────
   // [LAW:single-enforcer] What this registry's inputs, and the depth, are
   // derived from: bound once by the view that owns the registry, whose source
-  // reads its payload as it stands. A directory binds none: it reads no
-  // payload and no depth — a source whose key reads one is a view's
-  // (src/dsl/variable-scope.ts).
+  // reads its payload as it stands. A directory binds none: it declares only
+  // values that read no payload and no depth (src/dsl/variable-scope.ts).
   bindInputs(source) {
     runInAction(() => this.inputs.set(source));
   }
@@ -67788,6 +67805,15 @@ function sourcesFactOf(sources) {
     ).join(",") || "-"
   };
 }
+function runsFactOf(runs) {
+  const declared = Object.entries(runs);
+  return {
+    runs: String(declared.length),
+    runsPending: declared.flatMap(
+      ([digest2, { reading }]) => reading.kind === "pending" ? [`${shortDigest(digest2)}:${reading.why}`] : []
+    ).join(",") || "-"
+  };
+}
 function projectSources(names, read2) {
   const payload = Object.fromEntries(
     PLUGIN_SCOPES.map((scope) => [scope, {}])
@@ -69346,7 +69372,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.201.1";
+var PACKAGE_VERSION = "1.202.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -70045,7 +70071,7 @@ init_globals();
 
 // src/daemon/stats.ts
 init_globals();
-var NO_RUNS = {
+var NO_RUNS2 = {
   entries: 0,
   held: 0,
   refreshes: {},
@@ -70249,8 +70275,8 @@ var RuntimeStats = class _RuntimeStats {
         probeFailures: 0
       },
       sourceRuns: {
-        shell: NO_RUNS,
-        file: NO_RUNS,
+        shell: NO_RUNS2,
+        file: NO_RUNS2,
         watches: 0
       },
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
@@ -74450,21 +74476,13 @@ function flattenStops(stops) {
 
 // src/dsl/variable-scope.ts
 init_globals();
-function policyReads(decl, fold) {
-  if (decl.kind !== "shell" && decl.kind !== "file") return [];
-  const readsDepth = "key" in decl.cache && [...fold.calls(decl.cache.key)].some((name) => DEPTH_FUNCTIONS.has(name));
-  return [
-    ...fold.ofVariable(decl).flatMap(
-      ({ reaches }) => reaches.length === 0 ? [null] : reaches
-    ),
-    ...readsDepth ? [null] : []
-  ];
-}
 var KIND_SCOPE = {
   input: "view",
   state: "view",
   template: "view",
   time: "view",
+  shell: "view",
+  file: "view",
   literal: "directory",
   dropped: "directory",
   // A plugin source is read per session: its reading is the session's own
@@ -74475,32 +74493,13 @@ var SCOPES = /* @__PURE__ */ new WeakMap();
 function variableScopes(config2) {
   let scopes = SCOPES.get(config2);
   if (scopes === void 0) {
-    scopes = scopesOf(config2);
+    scopes = new Map(
+      [...declaredVariables(config2)].map(([name, decl]) => [
+        name,
+        KIND_SCOPE[decl.kind]
+      ])
+    );
     SCOPES.set(config2, scopes);
-  }
-  return scopes;
-}
-function scopesOf(config2) {
-  const declared = new Map(declaredVariables(config2));
-  const fold = valueReadsOf(config2);
-  const scopes = new Map(
-    [...declared].map(([name, decl]) => [
-      name,
-      decl.kind === "shell" || decl.kind === "file" ? "directory" : KIND_SCOPE[decl.kind]
-    ])
-  );
-  const reads = new Map(
-    [...declared].map(([name, decl]) => [name, policyReads(decl, fold)])
-  );
-  for (let moved = true; moved; ) {
-    moved = false;
-    for (const [name, read2] of reads) {
-      if (scopes.get(name) === "view") continue;
-      if (read2.some((r) => r === null || scopes.get(r) !== "directory")) {
-        scopes.set(name, "view");
-        moved = true;
-      }
-    }
   }
   return scopes;
 }
@@ -76743,7 +76742,7 @@ init_globals();
 
 // src/facts/session-facts.ts
 init_globals();
-var FACTS_VERSION = 1;
+var FACTS_VERSION = 2;
 
 // src/facts/fact.ts
 init_globals();
@@ -76849,7 +76848,7 @@ function resolvePath2(obj, dotPath) {
 }
 
 // src/facts/recording.ts
-var RECORDING_VERSION = 3;
+var RECORDING_VERSION = 4;
 var LANES2 = new Set(REFRESH_LANES);
 function formatLine(line) {
   const json2 = line.kind === "recording" ? {
@@ -77365,6 +77364,7 @@ function drawRender(parts, setup, drawing2) {
   };
   const metrics = isPending(payload.metrics) ? void 0 : payload.metrics;
   noteFacts(facts, sourcesFactOf(document.sources));
+  noteFacts(facts, runsFactOf(document.runs));
   noteFacts(facts, {
     factsSeq: String(document.seq),
     prompts: String(metrics?.messageCount ?? "-"),
@@ -82475,7 +82475,7 @@ function buildRenderState(load, deps) {
   const warnings = [];
   const store = new VariableStore(deps.clock);
   const registry = new SourceRegistry(
-    deps.runs,
+    NO_RUNS,
     store,
     config2.globals.default_empty_value ?? "",
     deps.sessionState
@@ -82490,7 +82490,7 @@ function buildRenderState(load, deps) {
       DIRECTORY_SCOPE
     );
     warnings.push(...registration.loadWarnings);
-    const probe2 = registry.view();
+    const probe2 = registry.view(UNREAD_RUNS);
     warnings.push(...declareDslVariables(config2, probe2, cwd2, VIEW_SCOPE));
     probe2.dispose();
     deps.gates.state.gateFor(config2);
@@ -82621,16 +82621,9 @@ var DIRECTORY_SCOPE = /* @__PURE__ */ new Set(["directory"]);
 var VIEW_SCOPE = /* @__PURE__ */ new Set(["view"]);
 function openView(state, cwd2, facts, { facts: factsSource, source: sourceOf, changed, log }) {
   const { sessionId: sessionId2 } = facts;
-  const registry = state.registry.view();
-  declareDslVariables(state.config, registry, cwd2, VIEW_SCOPE);
   const declaration = { sources: state.sources };
-  let followed;
-  try {
-    followed = factsSource.follow(facts, declaration);
-  } catch (e) {
-    registry.dispose();
-    throw e;
-  }
+  const followed = factsSource.follow(facts, declaration);
+  const registry = state.registry.view(followed.runs);
   const declared = observable.box({ facts }, { deep: false });
   const redeclare = (facts2) => {
     if (facts2 === declared.get().facts) return;
@@ -82640,11 +82633,18 @@ function openView(state, cwd2, facts, { facts: factsSource, source: sourceOf, ch
     });
   };
   const sourceStops = [];
-  const release3 = () => {
+  const release3 = () => runInAction(() => {
     for (const stopSource of sourceStops) stopSource();
+    const disposed = registry.dispose();
     followed.dispose();
-    return registry.dispose();
-  };
+    return disposed;
+  });
+  try {
+    declareDslVariables(state.config, registry, cwd2, VIEW_SCOPE);
+  } catch (e) {
+    release3();
+    throw e;
+  }
   let source;
   try {
     source = sourceOf({
@@ -82661,12 +82661,9 @@ function openView(state, cwd2, facts, { facts: factsSource, source: sourceOf, ch
   }
   bindView(state.compiled, registry.variableStore, registry, source);
   const stopChanged = reaction(
-    () => [
-      source.payload(),
-      source.selections(),
-      registry.published(),
-      state.registry.published()
-    ],
+    // A directory publishes no source (src/dsl/variable-scope.ts), so the
+    // view's own publish is every source's.
+    () => [source.payload(), source.selections(), registry.published()],
     () => changed(sessionId2),
     {
       equals: compareShallow,
@@ -83454,8 +83451,24 @@ function assembleFacts(prior, session, readings, update, at) {
       stamp2(prior?.sources[name], reading)
     ])
   );
-  const parts = { builtins, sources, update, diagnostics: readings.faults };
-  if (prior !== void 0 && sameFacts(builtins, prior.builtins) && sameFacts(sources, prior.sources) && compareStructural(
+  const runs = Object.fromEntries(
+    [...readings.runs].map(([digest2, { reading, fault }]) => {
+      const held2 = prior?.runs[digest2];
+      const fact = stamp2(held2?.reading, reading);
+      return [
+        digest2,
+        held2 !== void 0 && held2.reading === fact && held2.fault === fault ? held2 : { reading: fact, fault }
+      ];
+    })
+  );
+  const parts = {
+    builtins,
+    sources,
+    runs,
+    update,
+    diagnostics: readings.faults
+  };
+  if (prior !== void 0 && sameFacts(builtins, prior.builtins) && sameFacts(sources, prior.sources) && sameFacts(runs, prior.runs) && compareStructural(
     { update, diagnostics: readings.faults },
     { update: prior.update, diagnostics: prior.diagnostics }
   )) {
@@ -83470,6 +83483,22 @@ function assembleFacts(prior, session, readings, update, at) {
 }
 
 // src/daemon/facts-source.ts
+function runLaneOver(identity2, document, missing) {
+  const digest2 = digestOf3(identity2);
+  const run3 = computed(() => document().runs[digest2]);
+  const current = computed(
+    () => {
+      const fact = run3.get();
+      return fact === void 0 ? missing(digest2) : unstamped(fact.reading);
+    },
+    { equals: compareStructural }
+  );
+  return {
+    digest: digest2,
+    current: () => current.get(),
+    fault: () => run3.get()?.fault ?? null
+  };
+}
 function stamped(prior, moved, at, session) {
   if (moved.kind === "failed") return failedWith(prior, moved.reason);
   try {
@@ -83488,13 +83517,29 @@ function stamped(prior, moved, at, session) {
 }
 function inProcessFacts({
   providers,
-  update
+  update,
+  runs
 }) {
   const { clock, log } = providers;
   return {
     follow(facts, declaration) {
       const session = facts.sessionId;
       const holds2 = new Holds();
+      const declaredRuns = observable.map(void 0, { deep: false });
+      let disposed = false;
+      const unstampedRun = (identity2, digest2) => {
+        if (!declaredRuns.has(digest2)) {
+          return failed(
+            `the run of ${whereOf(identity2.read)} is not declared by this view`,
+            "read"
+          );
+        }
+        const { failure } = box.get();
+        return failure === null ? pendingOf("unread") : failed(
+          `the run of ${whereOf(identity2.read)} is in no document: ${failure}`,
+          "read"
+        );
+      };
       const sid = JSON.stringify(session);
       const lanesFor = (facts2, { sources }) => {
         try {
@@ -83542,7 +83587,23 @@ function inProcessFacts({
           deps: { ...providers, lanes: () => declared.get().lanes }
         };
       });
-      const readings = computed(() => readingsOf(inputs.get()));
+      const owned = computed(() => readingsOf(inputs.get()));
+      const ran2 = computed(
+        () => new Map(
+          [...declaredRuns].map(
+            ([digest2, { run: run3 }]) => [
+              digest2,
+              {
+                reading: run3.current(),
+                fault: run3.fault()
+              }
+            ]
+          )
+        )
+      );
+      const readings = computed(
+        () => ({ ...owned.get(), runs: ran2.get() })
+      );
       let box;
       const stop2 = reaction(
         () => {
@@ -83592,6 +83653,31 @@ function inProcessFacts({
         throw e;
       }
       return {
+        runs: {
+          declare: (callerHolds, identity2) => {
+            if (disposed) {
+              throw new Error(
+                `the run of ${whereOf(identity2.read)} was declared after its view's follow was disposed`
+              );
+            }
+            const digest2 = digestOf3(identity2);
+            callerHolds.take(`facts.run:${digest2}`, () => {
+              const held = new Holds();
+              const run3 = runs.declare(held, identity2);
+              const lane = runLaneOver(
+                identity2,
+                () => box.get().line.facts,
+                (missing) => unstampedRun(identity2, missing)
+              );
+              runInAction(() => declaredRuns.set(digest2, { run: run3, held, lane }));
+              return () => {
+                runInAction(() => declaredRuns.delete(digest2));
+                held.close();
+              };
+            });
+            return declaredRuns.get(digest2).lane;
+          }
+        },
         stamped: () => box.get().line,
         failure: () => box.get().failure,
         follow: (facts2, declaration2) => {
@@ -83606,7 +83692,9 @@ function inProcessFacts({
           };
         },
         dispose: () => {
+          disposed = true;
           stop2();
+          for (const { held } of declaredRuns.values()) held.close();
           holds2.close();
         }
       };
@@ -86026,7 +86114,6 @@ function createDaemon(inputs) {
     (recording2) => new RenderCache(
       {
         clock,
-        runs: sourceRuns,
         stateDir: paths2.state,
         locations: locs,
         sessionState,
@@ -86040,7 +86127,8 @@ function createDaemon(inputs) {
         // it makes through the one ledger, so a view's payload logs none of them.
         facts: inProcessFacts({
           providers: payloadProviders,
-          update: () => updateFact.get()
+          update: () => updateFact.get(),
+          runs: sourceRuns
         }),
         // [LAW:single-enforcer] What every session's view draws from: its payload
         // derived over its document, its picks and its histories' depths.
