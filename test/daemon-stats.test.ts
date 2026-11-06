@@ -2,11 +2,14 @@ import { RuntimeStats, type SourceSnapshots } from "../src/daemon/stats";
 import { EMPTY_STORES } from "./helpers/doctor-facts";
 import {
   formatStats,
+  buildLabel,
   missingFields,
+  otherBuild,
   shapeSkew,
   statsPlan,
 } from "../src/daemon/client-stats";
 import { PROTOCOL_VERSION } from "../src/daemon/protocol";
+import { bakedDigest } from "../src/daemon/build-currency";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { systemTimekeeper } from "../src/time";
@@ -234,6 +237,25 @@ describe("RuntimeStats.snapshot", () => {
     const snap = RuntimeStats.referenceSnapshot();
     expect(snap.version).toBe(pkg.version);
     expect(snap.protocolVersion).toBe(PROTOCOL_VERSION);
+  });
+});
+
+describe("otherBuild", () => {
+  test("this build's own version and digest are one build", () => {
+    const snap = RuntimeStats.referenceSnapshot();
+    expect(otherBuild({ ...snap, sourceDigest: bakedDigest() })).toBeNull();
+  });
+
+  test("another version or another digest is another build, named by both labels", () => {
+    const snap = RuntimeStats.referenceSnapshot();
+    const mine = buildLabel(pkg.version, bakedDigest());
+    expect(
+      otherBuild({ ...snap, version: "0.0.1", sourceDigest: bakedDigest() }),
+    ).toEqual({ theirs: buildLabel("0.0.1", bakedDigest()), mine });
+    expect(otherBuild({ ...snap, sourceDigest: "abcdef0123456789" })).toEqual({
+      theirs: buildLabel(pkg.version, "abcdef0123456789"),
+      mine,
+    });
   });
 });
 

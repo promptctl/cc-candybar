@@ -267,9 +267,19 @@ const USER_BINDING = "switch-client -t = \\; set-option -g @ccb-pressed yes";
       // A press on a window in a's window list runs the user's own binding:
       // both of its commands.
       tmux("switch-client", "-c", client, "-t", "a");
+      // Back on a, its status is one line until its rows are drawn again, and
+      // the window list moves up when they are: the press is aimed once they
+      // stand, as b's was.
+      await drawn(
+        "a",
+        a,
+        tmux("display-message", "-p", "-t", "a:0", "#{pane_id}").trim(),
+      );
       await until(
-        () => screen().some((l) => l.startsWith("[a]")),
-        "a's window list on the screen",
+        () =>
+          screen().some((l) => l.startsWith("[a]")) &&
+          screen().some((l) => l.includes("a mark")),
+        "a's window list and row on the screen",
       );
       const lines = screen();
       const y = lines.findIndex((l) => l.startsWith("[a]"));

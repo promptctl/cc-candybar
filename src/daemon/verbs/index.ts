@@ -126,7 +126,7 @@ import {
   VERB_DOCTOR_RUN,
   VERB_DOCTOR_FIX,
   VERB_DOCTOR_MARK,
-  VERB_DOCTOR_PROBE,
+  VERB_PROBE,
   VERB_SLASH,
   VERB_RUN,
   VERB_REPO_CONFIG,
@@ -224,7 +224,7 @@ export interface DaemonContext {
   readonly doctor: DoctorEdge;
   // The doctor's stores, which this daemon files (src/doctor/edge.ts).
   readonly doctorStores: DoctorStores;
-  // Where a `doctor-probe` link records that it arrived.
+  // Where a `probe` link records that it arrived.
   readonly probes: ProbeArrivals;
   // Which client drew each session's bar, as this process saw it render, and
   // the bundle this daemon runs.
@@ -1775,24 +1775,21 @@ const doctorRun: VerbHandler = (value, ctx) => {
 // arrival is the whole effect, read back by the CLI from the daemon's stats.
 // [LAW:single-enforcer] It writes no journal, so it takes no turn: nothing
 // queued can make it wait, and no client's leaving can refuse a link that came.
-const doctorProbe = (
+const probe = (
   value: string,
   ctx: Pick<VerbContext, "arrival" | "probes" | "log">,
 ): undefined => {
   const nonce = parseProbeNonce(oneArg(value));
   if (nonce === null) {
-    throw new BadVerbArgs("doctor-probe: the value is not a probe nonce");
+    throw new BadVerbArgs("probe: the value is not a probe nonce");
   }
   // [LAW:no-silent-failure] A probe link is opened by the CLI, never drawn in
   // a frame, so one cannot come from the tmux status line.
   if (ctx.arrival.via !== "link")
-    throw new BadVerbArgs("doctor-probe: a probe arrives only as a link");
+    throw new BadVerbArgs("probe: a probe arrives only as a link");
   const { delivery } = ctx.arrival;
   ctx.probes.arrive({ nonce, delivery });
-  ctx.log(
-    "info",
-    `doctor-probe: arrived nonce=${nonce} delivery=${delivery.kind}`,
-  );
+  ctx.log("info", `probe: arrived nonce=${nonce} delivery=${delivery.kind}`);
 };
 
 const doctorFix: VerbHandler = (value, ctx) => {
@@ -2013,7 +2010,6 @@ const LEAF_VERBS = new Map<string, VerbHandler>([
   [VERB_DOCTOR_RUN, doctorRun],
   [VERB_DOCTOR_FIX, doctorFix],
   [VERB_DOCTOR_MARK, doctorMark],
-  [VERB_DOCTOR_PROBE, doctorProbe],
   [VERB_SLASH, slash],
   [VERB_RUN, run],
   [VERB_REPO_CONFIG, repoConfig],
@@ -2313,9 +2309,10 @@ export const VERBS: ReadonlyMap<string, VerbRun> = new Map<string, VerbRun>([
       ] as const,
   ),
   [VERB_DISPATCH, click(VERB_DISPATCH, foldEffects)] as const,
-  // After the leaves, so it replaces the click they built: a probe writes no
-  // journal, so nothing may refuse it for a turn, and it describes nothing.
-  [VERB_DOCTOR_PROBE, doctorProbe] as const,
+  // A link kind, never a leaf, so no dispatch can carry it as an effect: a
+  // probe writes no journal, so nothing may refuse it for a turn, and it
+  // describes nothing.
+  [VERB_PROBE, probe] as const,
 ]);
 
 export const VERB_NAMES: readonly string[] = Object.freeze([

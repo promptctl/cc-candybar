@@ -16,8 +16,8 @@ import {
   VERB_COPY_DIAGNOSTIC,
   VERB_DISPATCH,
   VERB_DOCTOR_MARK,
-  VERB_DOCTOR_PROBE,
   VERB_DOCTOR_RUN,
+  VERB_PROBE,
   VERB_SET_CONFIG,
   VERB_SET_STATE,
   VERB_SLASH,
@@ -187,11 +187,11 @@ describe("a gather holds no turn", () => {
     expect(reports()).toHaveLength(2);
   });
 
-  test("doctor-probe answers at once while a doctor's probes park, whoever left", async () => {
+  test("probe answers at once while a doctor's probes park, whoever left", async () => {
     const { ctx, held, doctor } = setup();
     const a = await doctor(B);
     await drain();
-    VERBS.get(VERB_DOCTOR_PROBE)!(NONCE, {
+    VERBS.get(VERB_PROBE)!(NONCE, {
       ...ctx,
       arrival: { via: "link", delivery: { kind: "cli" } },
       gone: () => true,
