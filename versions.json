@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-643",
+      "ref": "refs/pull/643/merge",
+      "sha": "5768edc9c399bc6d5246ae8066541770f06dbccb",
+      "timestamp": "2026-11-06T15:18:03.999Z",
+      "commits": [
+        {
+          "sha": "5768edc9c399bc6d5246ae8066541770f06dbccb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T08:17:02-07:00",
+          "message": "Merge 993f0c5b44e58d584673a92ee7ba2f4d02c7b017 into 076adf43025869c9a3bc87d567166f7a7add59dd\n"
+        },
+        {
+          "sha": "993f0c5b44e58d584673a92ee7ba2f4d02c7b017",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T08:16:25-07:00",
+          "message": "fix(facts): a recording of a session whose turn failed replays the failed turn's frame (candybar-gather-renderer-76bb.6pj.i7w)\n\nA turn whose inputs cannot be read holds the bar on the last turn taken, with the\nfailure as the ⚠ beside the settings door. A replay took every turn the live one\ncould not and drew the newer request and picks with no ⚠.\n\n- The turn holds the request and the store's state it was taken over, and its\n  failure is typed by cause; `held()` says when the bar is held.\n- A recording opens on the turn the bar is drawn from and writes it again\n  wherever the hold moves; the replay takes each turn line's turn and holds its\n  own over the same lines, by making its turn inputs fail.\n- A draw notes its follow's document and carries the diagnostics list the\n  daemon's draw built; the demo derives the indicator from it.\n- drawDsl's projections are typed: a view's draw hands all four, a fixed\n  payload hands its bound self.\n- RECORDING_VERSION 5.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-642",
       "ref": "refs/pull/642/merge",
       "sha": "849eff04d7cd44dbc5a5c0becc818e6fece36bdf",
