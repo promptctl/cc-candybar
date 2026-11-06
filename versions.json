@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-660",
+      "ref": "refs/pull/660/merge",
+      "sha": "b28465753fe10186fd10307af54756013fbce7c6",
+      "timestamp": "2026-11-06T23:40:05.625Z",
+      "commits": [
+        {
+          "sha": "b28465753fe10186fd10307af54756013fbce7c6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T16:39:11-07:00",
+          "message": "Merge c9dabc630321ed089aec11396b394c7b74ef826e into 86bb0ba47f70ca3b852845b916d66bb727486aae\n"
+        },
+        {
+          "sha": "c9dabc630321ed089aec11396b394c7b74ef826e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T16:21:53-07:00",
+          "message": "fix(lanes): the session record is found under the directory the process's own environment names, and a missing one names its remedy (candybar-gather-renderer-76bb.1dh.9ix)\n"
+        },
+        {
+          "sha": "5dbeeabbd32afe294457607ad6d56f7f1bb8e582",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T16:14:12-07:00",
+          "message": "fix(lanes): a restart reads the session its Claude Code holds from the process's own record (candybar-gather-renderer-76bb.1dh.9ix)\n\nThe newest request naming the pane lags a /clear by the new session's\nfirst statusline tick, and any client run inside the pane names the pane\ntoo. Claude Code rewrites its per-process record in its configuration\ndirectory when the session changes, so the restart reads that, for the\npid it is about to kill, synchronously before the kill. A record that is\nmissing or unreadable refuses the restart and says why.\n"
+        },
+        {
+          "sha": "fbd5af8d08aef62523f11974719c4eeec3692f8b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T16:01:22-07:00",
+          "message": "fix(lanes): a restart refuses a pane that now runs another session, instead of resuming the old one over it (candybar-gather-renderer-76bb.1dh.9ix)\n\nA statusline restart resumes the session its setup was settled for. After\na `/clear` or `/resume` in the pane, Claude Code is the same process, so the\npid check before the kill passed and the line typed `--resume <old id>`\nover the live session.\n\nThe restart now reads whose session the pane runs (the newest request\nnaming the pane, among each session's latest) directly before SIGTERM,\nafter its last wait, and refuses naming that session when it is not the\none being restarted, or saying no held request names the pane.\n\nThat read is built once in the daemon and handed to the tmux status line\nand lane setup, over one `namesPane` predicate the pane-session reply\nuses too; the predicate was spelled inline twice before.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-661",
       "ref": "refs/pull/661/merge",
       "sha": "63514659c9ab357b7df240b596695a045b894d32",
@@ -49,42 +85,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-06T23:20:12Z",
           "message": "chore(release): set `package.json` to 1.208.1 [skip ci]\n\n## [1.208.1](https://github.com/promptctl/cc-candybar/compare/v1.208.0...v1.208.1) (2026-11-06)\n\n### Bug Fixes\n\n* **click:** a leaf verb receives its click's session parsed, and a step naming another session is refused (brandon-menus-sjhy.vxi) ([#658](https://github.com/promptctl/cc-candybar/issues/658)) ([d742dce](https://github.com/promptctl/cc-candybar/commit/d742dceaaf1d3f10894fce9f4bbe605089ba7a7d))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-660",
-      "ref": "refs/pull/660/merge",
-      "sha": "b8f7aa53f0dbdd81987788174285359fa5c36ed0",
-      "timestamp": "2026-11-06T23:26:48.941Z",
-      "commits": [
-        {
-          "sha": "b8f7aa53f0dbdd81987788174285359fa5c36ed0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T16:25:49-07:00",
-          "message": "Merge 82078268fd68db1173aecd20cc37dd857ec4a59a into 5bb40dbee6d8d25c54fff764ee0387a438043749\n"
-        },
-        {
-          "sha": "82078268fd68db1173aecd20cc37dd857ec4a59a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T16:21:53-07:00",
-          "message": "fix(lanes): the session record is found under the directory the process's own environment names, and a missing one names its remedy (candybar-gather-renderer-76bb.1dh.9ix)\n"
-        },
-        {
-          "sha": "105b33655f46204165b86c175bc3e11a0e48093a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T16:14:12-07:00",
-          "message": "fix(lanes): a restart reads the session its Claude Code holds from the process's own record (candybar-gather-renderer-76bb.1dh.9ix)\n\nThe newest request naming the pane lags a /clear by the new session's\nfirst statusline tick, and any client run inside the pane names the pane\ntoo. Claude Code rewrites its per-process record in its configuration\ndirectory when the session changes, so the restart reads that, for the\npid it is about to kill, synchronously before the kill. A record that is\nmissing or unreadable refuses the restart and says why.\n"
-        },
-        {
-          "sha": "5e3b0f97031b17df3247a0d6dcbb92e7317a95f8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T16:01:22-07:00",
-          "message": "fix(lanes): a restart refuses a pane that now runs another session, instead of resuming the old one over it (candybar-gather-renderer-76bb.1dh.9ix)\n\nA statusline restart resumes the session its setup was settled for. After\na `/clear` or `/resume` in the pane, Claude Code is the same process, so the\npid check before the kill passed and the line typed `--resume <old id>`\nover the live session.\n\nThe restart now reads whose session the pane runs (the newest request\nnaming the pane, among each session's latest) directly before SIGTERM,\nafter its last wait, and refuses naming that session when it is not the\none being restarted, or saying no held request names the pane.\n\nThat read is built once in the daemon and handed to the tmux status line\nand lane setup, over one `namesPane` predicate the pane-session reply\nuses too; the predicate was spelled inline twice before.\n"
         }
       ]
     },
