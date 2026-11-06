@@ -15082,8 +15082,8 @@ var require_Writer = __commonJS({
         const remaining = byteLength - this.x;
         if (remaining < capacity) {
           const total = byteLength - this.x0;
-          const required = capacity - remaining;
-          const totalRequired = total + required;
+          const required2 = capacity - remaining;
+          const totalRequired = total + required2;
           this.grow(totalRequired <= this.allocSize ? this.allocSize : totalRequired * 2);
         }
       }
@@ -22754,8 +22754,8 @@ var ADDRESS = `${LINK_TO}/`;
 var VERB_DISPATCH = "dispatch";
 var VERB_SET_STATE = "set-state";
 var VERB_STEP_STATE = "step-state";
-var VERB_COPY = "copy";
-var VERB_OPEN_VSCODE = "open-vscode";
+var VERB_COPY = "copy-text";
+var VERB_OPEN_VSCODE = "open-in-vscode";
 var VERB_TOOLBAR_TOGGLE = "toolbar-toggle";
 var VERB_SET_CONFIG = "set-config";
 var VERB_STEP_CONFIG = "step-config";
@@ -22805,8 +22805,8 @@ var SAYS = {
     (key, i) => i % 2 === 0 ? [sayWrite(key, pairs2[i + 1])] : []
   ),
   [VERB_STEP_STATE]: ([, key, by]) => [sayStep(key, by)],
-  [VERB_COPY]: ([text4]) => [`copy ${saidCopy(text4)}`],
-  [VERB_OPEN_VSCODE]: ([target]) => [`open ${target} in vs code`],
+  [VERB_COPY]: ([, text4]) => [`copy ${saidCopy(text4)}`],
+  [VERB_OPEN_VSCODE]: ([, target]) => [`open ${target} in vs code`],
   [VERB_TOOLBAR_TOGGLE]: () => ["toggle the toolbar"],
   [VERB_SET_CONFIG]: ([, key, value]) => [`save ${key} as ${value}`],
   [VERB_STEP_CONFIG]: ([, key, by]) => [`save ${sayStep(key, by)}`],
@@ -22843,9 +22843,6 @@ function encodeSegments(parts) {
 }
 function decodeSegments(value) {
   return value.length === 0 ? [] : value.split("/").map(decodeURIComponent);
-}
-function decodeFirstSegment(value) {
-  return decodeURIComponent(value.split("/", 1)[0]);
 }
 function effectsUrl(to, effects, says = clickDoes(effects)) {
   const params = effects.map(
@@ -22938,6 +22935,62 @@ function verbOf(rest2, to) {
 // src/host.ts
 init_globals();
 init_os();
+
+// src/dial/system-dialer.ts
+init_globals();
+
+// site/shims/unavailable.ts
+init_globals();
+var refuse = (name) => () => {
+  throw new Error(`${name} is not available in the page`);
+};
+var connect = refuse("net.connect");
+var createServer = refuse("net.createServer");
+var createConnection = refuse("net.createConnection");
+var get = refuse("https.get");
+var request = refuse("https.request");
+var createInterface = refuse("readline.createInterface");
+var createRequire = refuse("module.createRequire");
+var json = refuse("stream/consumers.json");
+var text = refuse("stream/consumers.text");
+var writeHeapSnapshot = refuse("v8.writeHeapSnapshot");
+var getHeapStatistics = () => ({ used_heap_size: 0, total_heap_size: 0, heap_size_limit: 0 });
+var unavailable_default = { connect, createServer, createConnection, get, request, createInterface, createRequire, json, text, writeHeapSnapshot, getHeapStatistics };
+
+// src/dial/system-dialer.ts
+var UNREACHABLE = /* @__PURE__ */ new Set(["ECONNREFUSED", "ENOENT", "ENOTSOCK"]);
+var failureOf = (err) => ({
+  cause: UNREACHABLE.has(err.code ?? "") ? "unreachable" : "io_error",
+  message: err.message
+});
+var systemDialer = {
+  dial(sockPath) {
+    const sock = unavailable_default.createConnection({ path: sockPath });
+    let settledYet = false;
+    const settled4 = new Promise((resolve) => {
+      const onError = (err) => {
+        sock.off("connect", onConnect);
+        settledYet = true;
+        resolve({ ok: false, failure: failureOf(err) });
+      };
+      const onConnect = () => {
+        sock.off("error", onError);
+        settledYet = true;
+        resolve({ ok: true, conn: sock });
+      };
+      sock.once("error", onError);
+      sock.once("connect", onConnect);
+    });
+    return {
+      settled: settled4,
+      abandon: () => {
+        if (settledYet) return;
+        sock.removeAllListeners();
+        sock.destroy();
+      }
+    };
+  }
+};
 
 // src/proc/system-launcher.ts
 init_globals();
@@ -23430,7 +23483,7 @@ async function launchWaited(state, opts) {
     const stdout2 = capture(state, opts.category, child.stdout, ends);
     const stderr2 = capture(state, opts.category, child.stderr, ends);
     const output = () => ({ stdout: stdout2.take(), stderr: stderr2.take() });
-    let settled3 = false;
+    let settled4 = false;
     let timer = null;
     let killTimer = null;
     let groupEndTimer = null;
@@ -23441,8 +23494,8 @@ async function launchWaited(state, opts) {
       state.inFlight.delete(onAbort);
     };
     const finish = (deliver) => {
-      if (settled3) return;
-      settled3 = true;
+      if (settled4) return;
+      settled4 = true;
       timer?.();
       killTimer?.();
       groupEndTimer?.();
@@ -23477,7 +23530,7 @@ async function launchWaited(state, opts) {
     const concludeWithGroup = () => conclude(child.exitCode, child.signalCode);
     if (group !== void 0) {
       const awaitGroupEnd = (delayMs) => {
-        if (settled3) return;
+        if (settled4) return;
         if (spawner.groupGone(group)) {
           clock.defer(concludeWithGroup);
           return;
@@ -23972,7 +24025,8 @@ function processWorld() {
     host,
     home: processHome(host),
     launcher: systemOneShotLauncher({ inherited: process_default.env }, clock),
-    clock
+    clock,
+    dialer: systemDialer
   };
 }
 function processHome(host) {
@@ -35258,7 +35312,7 @@ function shares({ pairs: pairs2, depth, theme: theme24 }, colors, touch) {
     const hex3 = own2(pair, side);
     return hex3 === void 0 ? [] : [[hex3, pair[side]]];
   })));
-  const settled3 = new Map([...colors].filter((hex3) => !rgba.has(hex3)).map((hex3) => [hex3, 1]));
+  const settled4 = new Map([...colors].filter((hex3) => !rgba.has(hex3)).map((hex3) => [hex3, 1]));
   const lightness2 = (hex3) => Oklch.fromRgba(rgba.get(hex3)).l;
   for (const hex3 of [...colors].filter((hex4) => rgba.has(hex4)).sort((a, b) => lightness2(b) - lightness2(a))) {
     const facing = pairs2.flatMap((pair) => {
@@ -35266,7 +35320,7 @@ function shares({ pairs: pairs2, depth, theme: theme24 }, colors, touch) {
       if (mine === void 0)
         return [];
       const partner = own2(pair, mine === "fg" ? "bg" : "fg");
-      return [[pair, mine, partner === void 0 ? 0 : settled3.get(partner) ?? 0]];
+      return [[pair, mine, partner === void 0 ? 0 : settled4.get(partner) ?? 0]];
     });
     const holds2 = (share) => facing.every(([pair, mine, theirs]) => {
       const floor2 = floorOf(pair, depth);
@@ -35281,16 +35335,16 @@ function shares({ pairs: pairs2, depth, theme: theme24 }, colors, touch) {
       const mid = (lo + hi) / 2;
       [lo, hi] = holds2(mid) ? [mid, hi] : [lo, mid];
     }
-    settled3.set(hex3, lo);
+    settled4.set(hex3, lo);
   }
-  return settled3;
+  return settled4;
 }
 function onColors(loop, colors) {
-  const settled3 = new WeakMemo();
+  const settled4 = new WeakMemo();
   const settle3 = (drawn) => {
     const lit = colors ?? drawn.colors;
     const key = [drawnKey(drawn), "|", ...lit].join(" ");
-    return settled3.get(drawn.theme, () => new Memo()).get(key, () => shares(drawn, lit, loop.touch));
+    return settled4.get(drawn.theme, () => new Memo()).get(key, () => shares(drawn, lit, loop.touch));
   };
   return stillOnSlots(atShares(loop, settle3));
 }
@@ -35654,7 +35708,7 @@ function segmentsOf(drawn) {
     const i = index.get(at(row2, col));
     return i === void 0 ? void 0 : regions.get(find(i));
   };
-  const placeOf2 = (region) => ({ row: (region.top + region.bottom) / 2, centre: (region.left + region.right + 1) / 2 });
+  const placeOf3 = (region) => ({ row: (region.top + region.bottom) / 2, centre: (region.left + region.right + 1) / 2 });
   const pastSeam = (row2, col, step4) => {
     let past = col;
     while (seams.has(at(row2, past)))
@@ -35666,7 +35720,7 @@ function segmentsOf(drawn) {
     const width = own2?.width ?? 1;
     const beside2 = (own2?.seam === true ? [pastSeam(cell3.row, cell3.col - 1, -1), pastSeam(cell3.row, cell3.col + width, 1)] : []).find((region2) => region2?.hex === hex3);
     const region = beside2 ?? regionAt(cell3.row, cell3.col);
-    return region === void 0 ? ownPlace(cell3, width) : placeOf2(region);
+    return region === void 0 ? ownPlace(cell3, width) : placeOf3(region);
   };
 }
 function wheel(curve, z) {
@@ -35675,18 +35729,18 @@ function wheel(curve, z) {
   const P2 = curve.seconds;
   const stray = ({ row: row2, centre }, t2) => noise(t2 / STRAY_PERIODS[0], centre / STRAY_SPREAD + 5.9, z + row2 / STRAY_SPREAD + 2.3) + 0.5 * noise(t2 / STRAY_PERIODS[1], centre / STRAY_SPREAD + 97.3, z + row2 / STRAY_SPREAD + 7.1);
   const turned = (place, t2) => 360 * t2 / P2 + curve.swing * STRAY * ((stray(place, t2) - stray(place, 0)) / 1.5);
-  const settled3 = new WeakMemo();
+  const settled4 = new WeakMemo();
   return stillOnSlots((drawn) => {
     const { colors, fills, depth, theme: theme24 } = drawn;
     const own2 = (terminal, color) => !terminal && colors.has(color.hex);
     const boundWith = (color, other, theirs) => fills.has(color.hex) || !theirs ? color.hex : other.hex;
     const keyOf2 = (color, bound) => `${color.hex} ${bound}`;
-    const bounds = settled3.get(theme24, () => new Memo()).get(drawnKey(drawn), () => turnedBounds(drawn.pairs, depth, (pair, side) => {
+    const bounds = settled4.get(theme24, () => new Memo()).get(drawnKey(drawn), () => turnedBounds(drawn.pairs, depth, (pair, side) => {
       const other = side === "fg" ? "bg" : "fg";
       return own2(pair.terminal[side], pair[side]) ? keyOf2(pair[side], boundWith(pair[side], pair[other], own2(pair.terminal[other], pair[other]))) : void 0;
     }));
     const indexed = measuredIndexed(depth, theme24);
-    const placeOf2 = segmentsOf(drawn);
+    const placeOf3 = segmentsOf(drawn);
     return Animation.continuous((t2) => {
       const written2 = /* @__PURE__ */ new Map();
       const choose = (color, bound, place) => {
@@ -35701,7 +35755,7 @@ function wheel(curve, z) {
       };
       return (shown, cell3) => {
         const mine = { fg: own2(cell3.terminal.fg, shown.fg), bg: own2(cell3.terminal.bg, shown.bg) };
-        const turn = (color, ours, other, theirs) => ours ? write(color, boundWith(color, other, theirs), placeOf2(cell3, color.hex)) : color;
+        const turn = (color, ours, other, theirs) => ours ? write(color, boundWith(color, other, theirs), placeOf3(cell3, color.hex)) : color;
         return { ...shown, fg: turn(shown.fg, mine.fg, shown.bg, mine.bg), bg: turn(shown.bg, mine.bg, shown.fg, mine.fg) };
       };
     });
@@ -35848,7 +35902,7 @@ init_globals();
 function blank(glyph) {
   return " ".repeat(cellLen(glyph));
 }
-function text(cells) {
+function text2(cells) {
   const ends = /* @__PURE__ */ new Map();
   for (const cell3 of cells.filter((c) => inked(c.glyph)))
     ends.set(cell3.row, { first: ends.get(cell3.row)?.first ?? cell3.index, last: cell3.index });
@@ -35877,7 +35931,7 @@ function typewriter(timing) {
   const phase = Phase.once(0, timing.seconds);
   const ease = settled(timing.ease);
   return transition(timing.seconds, ({ cells }) => {
-    const { length, place } = text(cells);
+    const { length, place } = text2(cells);
     return Animation.continuous((t2) => {
       const typed = arrived(length, ease(phase(t2)));
       return (cell3) => (place.get(cell3.index) ?? -1) < typed ? cell3.glyph : blank(cell3.glyph);
@@ -35892,7 +35946,7 @@ function scramble(timing, z) {
   const ease = settled(timing.ease);
   const flicker = stepped(FLICKER)((step4) => step4, 0);
   return transition(timing.seconds, ({ cells }) => {
-    const { length, place } = text(cells);
+    const { length, place } = text2(cells);
     return Animation.continuous((t2) => {
       const resolved = arrived(length, ease(phase(t2)));
       const step4 = flicker.at(t2);
@@ -35908,7 +35962,7 @@ function backspace(timing) {
   const phase = Phase.once(0, timing.seconds);
   const ease = settled(timing.ease);
   return transition(timing.seconds, ({ cells }) => {
-    const { length, place } = text(cells);
+    const { length, place } = text2(cells);
     return Animation.continuous((t2) => {
       const kept = length - arrived(length, ease(phase(t2)));
       return (cell3) => (place.get(cell3.index) ?? -1) < kept ? cell3.glyph : blank(cell3.glyph);
@@ -35922,7 +35976,7 @@ function scrambleOut(timing, z) {
   const ease = settled(timing.ease);
   const flicker = stepped(FLICKER)((step4) => step4, 0);
   return transition(timing.seconds, ({ cells }) => {
-    const { length, place } = text(cells);
+    const { length, place } = text2(cells);
     return Animation.continuous((t2) => {
       const p2 = ease(phase(t2));
       const churning = arrived(length, p2 / (1 - CHURN));
@@ -38135,15 +38189,15 @@ function optionalEnumSpec(allowed) {
 function objectJson(fieldMap, opts = { closed: true }) {
   const specs = fieldMap;
   const properties = {};
-  const required = [];
+  const required2 = [];
   for (const [field, spec] of Object.entries(specs)) {
     properties[field] = spec.json;
-    if (spec.required) required.push(field);
+    if (spec.required) required2.push(field);
   }
   return {
     type: "object",
     properties,
-    ...required.length > 0 && { required },
+    ...required2.length > 0 && { required: required2 },
     ...opts.closed && { additionalProperties: false }
   };
 }
@@ -38156,8 +38210,8 @@ function withConst(base, key, value) {
     [key]: { const: value },
     ...b.properties
   };
-  const required = [key, ...b.required ?? []];
-  return { ...b, properties, required };
+  const required2 = [key, ...b.required ?? []];
+  return { ...b, properties, required: required2 };
 }
 function taggedUnionJson(schema) {
   const arms = schema.arms;
@@ -38314,7 +38368,7 @@ function selection(sessionKey, spec, domain, shown, extra = {}) {
     themeDefault: extra.themeDefault ?? false
   };
 }
-var text2 = (spec) => ({
+var text3 = (spec) => ({
   kind: "text",
   spec
 });
@@ -38540,13 +38594,13 @@ var GLOBAL_FIELDS = {
     floor: "truecolor"
   },
   // The text segments render when their value is empty.
-  default_empty_value: text2(optionalStringSpec()),
+  default_empty_value: text3(optionalStringSpec()),
   // The cell separator `plain` draws between segments. Absent means the glyph
   // rich-js's bundled `plain` joiner owns — no floor here, since naming one
   // would be a second copy of a constant that lives in rich-js.
-  default_separator: text2(optionalStringSpec()),
+  default_separator: text3(optionalStringSpec()),
   // The settings menu's door glyph (🍫 by default, synthesized by the menu).
-  menuGlyph: text2(menuGlyphSpec)
+  menuGlyph: text3(menuGlyphSpec)
 };
 var ROWS = Object.entries(GLOBAL_FIELDS);
 var VALUED_FIELDS = ROWS.filter(
@@ -38971,7 +39025,7 @@ function insertCells(root, cells) {
         return acc;
       const held = placed2.find((node2) => placementId(node2) === id2);
       if (held !== void 0)
-        return refuse(
+        return refuse2(
           acc,
           cell3,
           `as "${id2}", but placement "${id2}" is already segment "${held.name}" \u2014 give the cell its own id`
@@ -38997,7 +39051,7 @@ function insertCells(root, cells) {
             rows.map(([name, row2, placed3]) => [name, placed3 ?? row2])
           )
         }
-      } : refuse(
+      } : refuse2(
         acc,
         cell3,
         `${cell3.relation} "${cell3.anchor}", but there is no placement "${cell3.anchor}"`
@@ -39006,7 +39060,7 @@ function insertCells(root, cells) {
     { root, unplaced: [] }
   );
 }
-function refuse(acc, cell3, reason) {
+function refuse2(acc, cell3, reason) {
   return { ...acc, unplaced: [...acc.unplaced, { cell: cell3, reason }] };
 }
 function besideRow(row2, anchor, cell3, relation) {
@@ -44407,7 +44461,7 @@ function staticDictEntries(arg) {
   }
   return dict(...values2);
 }
-function get(d, key) {
+function get2(d, key) {
   return d[key];
 }
 function hasKey(d, key) {
@@ -44464,7 +44518,7 @@ function sprigDicts() {
       }
     },
     get: {
-      fn: (d, k) => get(d, k),
+      fn: (d, k) => get2(d, k),
       argTypes: ["dict", "string"],
       arity: { kind: "exact" }
     },
@@ -55029,6 +55083,8 @@ var TMUX_ENV = {
   // 2.1.259 binary: `if (env.CLAUDE_CODE_TMUX_TRUECOLOR) return false`).
   truecolor: "CLAUDE_CODE_TMUX_TRUECOLOR"
 };
+var paneName = (tmux3) => JSON.stringify([tmux3.socket, tmux3.pane]);
+var samePane = (a, b) => paneName(a) === paneName(b);
 var inTmux = (tmux3) => tmux3 !== null && tmux3 !== void 0;
 
 // src/config-hint.ts
@@ -56168,24 +56224,6 @@ var RenderSightings = class {
 // src/daemon/limits.ts
 init_globals();
 var import_node_path11 = __toESM(require_path_browserify(), 1);
-
-// site/shims/unavailable.ts
-init_globals();
-var refuse2 = (name) => () => {
-  throw new Error(`${name} is not available in the page`);
-};
-var connect = refuse2("net.connect");
-var createServer = refuse2("net.createServer");
-var createConnection = refuse2("net.createConnection");
-var get2 = refuse2("https.get");
-var request = refuse2("https.request");
-var createInterface = refuse2("readline.createInterface");
-var createRequire = refuse2("module.createRequire");
-var json = refuse2("stream/consumers.json");
-var text3 = refuse2("stream/consumers.text");
-var writeHeapSnapshot = refuse2("v8.writeHeapSnapshot");
-var getHeapStatistics = () => ({ used_heap_size: 0, total_heap_size: 0, heap_size_limit: 0 });
-var unavailable_default = { connect, createServer, createConnection, get: get2, request, createInterface, createRequire, json, text: text3, writeHeapSnapshot, getHeapStatistics };
 
 // src/daemon/memory-report.ts
 init_globals();
@@ -63385,7 +63423,7 @@ var RAW_DEFAULT_DSL_CONFIG = {
   // `oneArg` owns the single matching decode — so the template never hand-rolls
   // a `urlEncode`, and the path round-trips untouched through one codec.
   //
-  // open* route through the open-vscode verb (`open -a "Visual Studio Code"
+  // open* route through the open-in-vscode verb (`open -a "Visual Studio Code"
   // <path>`), so they pass a bare filesystem path — a directory or a file the
   // editor opens directly — NOT a `vscode://` URL (which `open -a` would treat
   // as a literal filename, not a deep link).
@@ -64410,14 +64448,19 @@ var ClickAbandoned = class extends Error {
     this.name = "ClickAbandoned";
   }
 };
-function decodeWire(decode) {
+function parseWire(decode) {
   try {
-    return decode();
+    return { ok: true, value: decode() };
   } catch (err) {
     if (err instanceof URIError)
-      throw new BadVerbArgs(`malformed wire encoding: ${err.message}`);
+      return { ok: false, problem: `malformed wire encoding: ${err.message}` };
     throw err;
   }
+}
+function decodeWire(decode) {
+  const parsed2 = parseWire(decode);
+  if (!parsed2.ok) throw new BadVerbArgs(parsed2.problem);
+  return parsed2.value;
 }
 
 // src/daemon/config-file-store.ts
@@ -65025,12 +65068,16 @@ var EPHEMERAL_SESSION_STORAGE = {
 };
 var DEFAULT_MAX_SESSIONS = 256;
 var SessionState = class {
-  constructor(storage = EPHEMERAL_SESSION_STORAGE, maxSessions = DEFAULT_MAX_SESSIONS) {
+  // [LAW:types-are-the-program] The holder is required: a store that could
+  // be built without one would write outside every turn unseen.
+  constructor(turns, storage = EPHEMERAL_SESSION_STORAGE, maxSessions = DEFAULT_MAX_SESSIONS) {
+    this.turns = turns;
     this.maxSessions = maxSessions;
     this.storage = storage;
     this.sessions = /* @__PURE__ */ new Map();
     this.hydrateFromStorage();
   }
+  turns;
   maxSessions;
   // [LAW:types-are-the-program] Insertion order is recency order: the store
   // cannot hold more than maxSessions, so "bounded on disk" is structural, not
@@ -65118,6 +65165,7 @@ var SessionState = class {
   // verb body validates that pairs is non-empty before calling, so
   // this is the public-API safety net rather than the hot path.
   setBatch(sessionId2, pairs2) {
+    this.held(sessionId2);
     if (pairs2.length === 0) return;
     this.commit(sessionId2, (session) => {
       if (pairs2.some(({ key, value }) => session.values.get(key) !== value))
@@ -65126,6 +65174,7 @@ var SessionState = class {
     });
   }
   clear(sessionId2, key) {
+    this.held(sessionId2);
     this.commit(sessionId2, (session) => {
       if (session.values.delete(key)) session.revision = ++this.head;
     });
@@ -65138,6 +65187,7 @@ var SessionState = class {
   // raised to it, so no later write mints a revision the store has held. A
   // session already at the revision holds its values: nothing moves.
   restore(sessionId2, values2, revision) {
+    this.held(sessionId2);
     if ((this.sessions.get(sessionId2)?.revision ?? 0) === revision) return;
     this.commit(sessionId2, (session) => {
       session.values.clear();
@@ -65171,15 +65221,16 @@ var SessionState = class {
       this.atom.reportChanged();
     });
   }
-  // [LAW:one-source-of-truth] Drop state for sessions that no longer exist.
-  prune(activeSessionIds) {
-    runInAction(() => {
-      for (const id2 of this.sessions.keys()) {
-        if (!activeSessionIds.has(id2)) this.sessions.delete(id2);
-      }
-      this.persist();
-      this.atom.reportChanged();
-    });
+  // [LAW:single-enforcer][LAW:no-silent-failure] The one check that a write
+  // is a turn's: every public write asks here first, before it decides
+  // whether anything moves, so a write out of its turn is refused whatever it
+  // would have written.
+  held(sessionId2) {
+    if (this.turns.inTurn() === null) {
+      throw new Error(
+        `session state: a write of ${JSON.stringify(sessionId2)} outside any turn`
+      );
+    }
   }
   // Move-to-end: re-inserting at the tail makes this the most-recently-used.
   touch(sessionId2, session) {
@@ -65200,9 +65251,9 @@ var SessionState = class {
     this.storage.flush();
   }
   // [LAW:no-ambient-temporal-coupling] The daemon's close: what is pending
-  // lands, and anything that lands later (a render that was awaiting, a run
-  // settling) stays in memory, so it can never write over the file a next
-  // daemon has taken up.
+  // lands, and the store persists nothing after, so it can never write over
+  // the file a next daemon has taken up. The closed turns refuse every write
+  // that would follow (`held`).
   close() {
     this.flush();
     this.storage = EPHEMERAL_SESSION_STORAGE;
@@ -69459,7 +69510,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.205.0";
+var PACKAGE_VERSION = "1.208.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -70060,6 +70111,9 @@ init_globals();
 // src/daemon/client-transport.ts
 init_globals();
 
+// src/dial/dialer.ts
+init_globals();
+
 // src/daemon/paths.ts
 init_globals();
 var import_node_path30 = __toESM(require_path_browserify(), 1);
@@ -70382,7 +70436,14 @@ var RuntimeStats = class _RuntimeStats {
       effectCache: { sessions: 0, effects: 0 },
       menuIdle: { sessions: 0, armed: 0 },
       journalTurns: { gathers: 0 },
-      runs: { started: 0, failed: 0, timedOut: 0, refused: 0, running: 0 },
+      runs: {
+        started: 0,
+        failed: 0,
+        timedOut: 0,
+        refused: 0,
+        running: 0,
+        queued: 0
+      },
       sessionState: { sessions: 0, observers: 0, revision: 0 },
       frameFeeds: {
         feeds: 0,
@@ -70779,11 +70840,6 @@ function parseSessionId(raw) {
 }
 
 // src/daemon/verbs/index.ts
-function requireSessionId(value) {
-  const parsed2 = parseSessionId(value);
-  if (!parsed2.ok) throw new BadVerbArgs(`session id ${parsed2.problem}`);
-  return parsed2.id;
-}
 function oneArg(value) {
   return decodeWire(() => decodeURIComponent(value));
 }
@@ -70870,8 +70926,8 @@ function pbcopy(text4, ctx) {
 function launch(ctx, spec, what) {
   ctx.effect({ kind: "launch", spec, what });
 }
-var copy = (value, ctx) => {
-  pbcopy(oneArg(value), ctx);
+var copy = (_sid, [text4 = ""], ctx) => {
+  pbcopy(text4, ctx);
 };
 var DRAWERS = /* @__PURE__ */ new Set([
   "request",
@@ -70882,11 +70938,8 @@ function requireDrawer(by) {
     throw new BadVerbArgs(`unknown renderer ${JSON.stringify(by)}`);
   return by;
 }
-var copyDiagnostic = (value, ctx) => {
-  const [sessionId2 = "", by = "", key = ""] = decodeWire(
-    () => decodeSegments(value)
-  );
-  const sid = requireSessionId(sessionId2);
+var copyDiagnostic = (sid, args, ctx) => {
+  const [by = "", key = ""] = args;
   const text4 = ctx.diagnosticCopy(sid, requireDrawer(by), key);
   if (text4 === void 0)
     throw new BadVerbArgs(
@@ -70894,26 +70947,23 @@ var copyDiagnostic = (value, ctx) => {
     );
   pbcopy(text4, ctx);
 };
-var openVscode = (value, ctx) => {
+var openVscode = (_sid, [target = ""], ctx) => {
   launch(
     ctx,
     {
       bin: "/usr/bin/open",
-      args: ["-a", "Visual Studio Code", oneArg(value)],
+      args: ["-a", "Visual Studio Code", target],
       category: "click.open"
     },
     'open -a "Visual Studio Code"'
   );
 };
-var toolbarToggle = (value, ctx) => {
-  const sessionId2 = requireSessionId(oneArg(value));
+var toolbarToggle = (sessionId2, _args, ctx) => {
   const expanded = ctx.navigating.get(sessionId2, "toolbar-expanded");
   if (expanded) ctx.navigating.clear(sessionId2, "toolbar-expanded");
   else ctx.navigating.set(sessionId2, "toolbar-expanded", "1");
 };
-var setState = (rawValue, ctx) => {
-  const [sessionId2 = "", ...rest2] = decodeWire(() => decodeSegments(rawValue));
-  const sid = requireSessionId(sessionId2);
+var setState = (sid, rest2, ctx) => {
   const gate2 = ctx.gates.state.gateFor(sessionConfig(ctx, sid));
   if (rest2.length === 0)
     throw new BadVerbArgs(
@@ -70951,11 +71001,8 @@ function stepWithin(current, by, min2, max2) {
   if (n < min2) return current === min2 ? max2 : min2;
   return n;
 }
-var stepState = (rawValue, ctx) => {
-  const [sessionId2 = "", key = "", byRaw = ""] = decodeWire(
-    () => decodeSegments(rawValue)
-  );
-  const sid = requireSessionId(sessionId2);
+var stepState = (sid, args, ctx) => {
+  const [key = "", byRaw = ""] = args;
   if (!key) {
     throw new BadVerbArgs(
       "step-state: <key> is required (shape: <sessionId>/<key>/<by>)"
@@ -71092,11 +71139,8 @@ function editStore(ctx, sid) {
     logger: ctx.log
   };
 }
-var setConfig = (rawValue, ctx) => {
-  const [sessionId2 = "", key = "", incoming = ""] = decodeWire(
-    () => decodeSegments(rawValue)
-  );
-  const sid = requireSessionId(sessionId2);
+var setConfig = (sid, args, ctx) => {
+  const [key = "", incoming = ""] = args;
   const origin = sessionOrigin(ctx, sid);
   const config2 = ctx.configFor(origin);
   const gate2 = ctx.gates.config.gateFor(config2);
@@ -71120,11 +71164,8 @@ var setConfig = (rawValue, ctx) => {
     `set-config: ${landing.key}=${result.value} \u2192 ${home.path} (session=${sid})`
   );
 };
-var stepConfig = (rawValue, ctx) => {
-  const [sessionId2 = "", key = "", byRaw = ""] = decodeWire(
-    () => decodeSegments(rawValue)
-  );
-  const sid = requireSessionId(sessionId2);
+var stepConfig = (sid, args, ctx) => {
+  const [key = "", byRaw = ""] = args;
   if (!key) {
     throw new BadVerbArgs(
       "step-config: <key> is required (shape: <sessionId>/<key>/<by>)"
@@ -71168,9 +71209,7 @@ var stepConfig = (rawValue, ctx) => {
     `step-config: ${landing.key} ${current}\u2192${result.value} (by ${by}) \u2192 ${home.path} (session=${sid})`
   );
 };
-var save = (value, ctx) => {
-  const [sessionId2 = ""] = decodeWire(() => decodeSegments(value));
-  const sid = requireSessionId(sessionId2);
+var save = (sid, _args, ctx) => {
   const origin = sessionOrigin(ctx, sid);
   const config2 = ctx.configFor(origin);
   const pick2 = (key) => ctx.sessionState.get(sid, key);
@@ -71211,9 +71250,7 @@ function gatePlacements(verb, gate2, placements) {
     if (!result.ok) throw new BadVerbArgs(`${verb}: ${result.reason}`);
   }
 }
-var savePreset = (value, ctx) => {
-  const [sessionId2 = ""] = decodeWire(() => decodeSegments(value));
-  const sid = requireSessionId(sessionId2);
+var savePreset = (sid, _args, ctx) => {
   const origin = sessionOrigin(ctx, sid);
   const config2 = ctx.configFor(origin);
   const snapshot = presetSnapshot(
@@ -71249,9 +71286,7 @@ var savePreset = (value, ctx) => {
     `save-preset: ${[`${name} from=${snapshot.from}`, ...picks.map(([k, v]) => `${k}=${v}`), ...snapshot.placements.map(placementLog)].join(" ")} \u2192 ${home.path} (session=${sid})`
   );
 };
-var saveThemeDefault = (value, ctx) => {
-  const [sessionId2 = ""] = decodeWire(() => decodeSegments(value));
-  const sid = requireSessionId(sessionId2);
+var saveThemeDefault = (sid, _args, ctx) => {
   const origin = sessionOrigin(ctx, sid);
   const config2 = ctx.configFor(origin);
   const save2 = themeDefaultSave(
@@ -71279,9 +71314,8 @@ var saveThemeDefault = (value, ctx) => {
     `save-theme-default: ${save2.theme} ${THEME_DEFAULT_FIELDS.map((f) => `${f}=${save2.look[f]}`).join(" ")} \u2192 ${home.path} (session=${sid})`
   );
 };
-var deletePreset2 = (value, ctx) => {
-  const [sessionId2 = "", name = ""] = decodeWire(() => decodeSegments(value));
-  const sid = requireSessionId(sessionId2);
+var deletePreset2 = (sid, args, ctx) => {
+  const [name = ""] = args;
   if (!name) {
     throw new BadVerbArgs(
       "delete-preset: <name> is required (shape: <sessionId>/<name>)"
@@ -71295,9 +71329,8 @@ var deletePreset2 = (value, ctx) => {
   if (ctx.sessionState.get(sid, key) === name) ctx.sessionState.clear(sid, key);
   ctx.log("info", `delete-preset: ${name} \u2190 ${home.path} (session=${sid})`);
 };
-var resetConfig = (value, ctx) => {
-  const [sessionId2 = "", ...keys2] = decodeWire(() => decodeSegments(value));
-  const sid = requireSessionId(sessionId2);
+var resetConfig = (sid, args, ctx) => {
+  const keys2 = args;
   const origin = sessionOrigin(ctx, sid);
   const known = ctx.gates.config.gateFor(ctx.configFor(origin)).listKeys();
   const unknown = keys2.length === 0 ? [""] : keys2.filter((k) => !known.includes(k));
@@ -71342,11 +71375,8 @@ function endedSessionKeys(ended, configuring) {
     ...member === configuring ? [EDIT_CONFIGURE_KEY] : []
   ]);
 }
-var applyLayoutOp2 = (rawValue, ctx) => {
-  const [sessionId2 = "", key = "", opToken = ""] = decodeWire(
-    () => decodeSegments(rawValue)
-  );
-  const sid = requireSessionId(sessionId2);
+var applyLayoutOp2 = (sid, args, ctx) => {
+  const [key = "", opToken = ""] = args;
   const origin = sessionOrigin(ctx, sid);
   const before = ctx.configFor(origin);
   const gate2 = ctx.gates.config.gateFor(before);
@@ -71376,17 +71406,14 @@ var applyLayoutOp2 = (rawValue, ctx) => {
     `apply-layout-op: ${key} ${result.value} \u2192 ${home.path} placed=${JSON.stringify(placed2)} released=${JSON.stringify(released)} (session=${sid})`
   );
 };
-var undo = (value, ctx) => {
-  const [sessionId2 = ""] = decodeWire(() => decodeSegments(value));
-  const sid = requireSessionId(sessionId2);
+var undo = (sid, _args, ctx) => {
   ctx.journal.commit();
   const step4 = ctx.history.undo(sid);
   ctx.journal.wrote();
   reloadIfWritten(ctx, sid, step4);
   ctx.log("info", `undo: restored ${describeStep(step4)} (session=${sid})`);
 };
-var back = (value, ctx) => {
-  const sid = requireSessionId(oneArg(value));
+var back = (sid, _args, ctx) => {
   const { step: step4, discarded } = ctx.navigation.back(
     sid,
     ctx.sessionState,
@@ -71395,8 +71422,7 @@ var back = (value, ctx) => {
   const restored = step4.map((c) => `${c.key}=${c.before ?? "\u2205"}`).join(" ");
   ctx.log("info", `back: ${restored} discarded=${discarded} (session=${sid})`);
 };
-var rewind = (value, ctx) => {
-  const sid = requireSessionId(oneArg(value));
+var rewind = (sid, _args, ctx) => {
   ctx.journal.commit();
   ctx.journal.wrote();
   const restored = ctx.history.rewind(sid);
@@ -71406,17 +71432,14 @@ var rewind = (value, ctx) => {
     `rewind: put back ${describeStep(restored) || "nothing"} as edit mode found it (session=${sid})`
   );
 };
-var redo = (value, ctx) => {
-  const [sessionId2 = ""] = decodeWire(() => decodeSegments(value));
-  const sid = requireSessionId(sessionId2);
+var redo = (sid, _args, ctx) => {
   ctx.journal.commit();
   const step4 = ctx.history.redo(sid);
   ctx.journal.wrote();
   reloadIfWritten(ctx, sid, step4);
   ctx.log("info", `redo: re-applied ${describeStep(step4)} (session=${sid})`);
 };
-var applyUpdate = (value, ctx) => {
-  requireSessionId(oneArg(value));
+var applyUpdate = (_sid, _args, ctx) => {
   ctx.effect({ kind: "apply-update" });
 };
 function sessionHints(ctx, sid) {
@@ -71638,8 +71661,8 @@ function landStep(ctx, sid, step4, facts) {
   const land2 = DOCTOR_STEPS[step4.kind];
   land2(ctx, sid, step4, facts);
 }
-var doctorRun = (value, ctx) => {
-  describeDoctor(ctx, requireSessionId(oneArg(value)), { kind: "run" });
+var doctorRun = (sid, _args, ctx) => {
+  describeDoctor(ctx, sid, { kind: "run" });
 };
 var probe2 = (value, ctx) => {
   const nonce = parseProbeNonce(oneArg(value));
@@ -71652,22 +71675,16 @@ var probe2 = (value, ctx) => {
   ctx.probes.arrive({ nonce, delivery });
   ctx.log("info", `probe: arrived nonce=${nonce} delivery=${delivery.kind}`);
 };
-var doctorFix = (value, ctx) => {
-  const [sessionId2 = "", checkName = ""] = decodeWire(
-    () => decodeSegments(value)
-  );
-  const sid = requireSessionId(sessionId2);
+var doctorFix = (sid, args, ctx) => {
+  const [checkName = ""] = args;
   const check = checkByName(checkName);
   if (check === void 0) {
     throw new BadVerbArgs(`doctor-fix: unknown check "${checkName}"`);
   }
   describeDoctor(ctx, sid, { kind: "fix", check });
 };
-var doctorMark = (value, ctx) => {
-  const [sessionId2 = "", checkName = "", mark = ""] = decodeWire(
-    () => decodeSegments(value)
-  );
-  const sid = requireSessionId(sessionId2);
+var doctorMark = (sid, args, ctx) => {
+  const [checkName = "", mark = ""] = args;
   const check = checkByName(checkName);
   if (check === void 0) {
     throw new BadVerbArgs(`doctor-mark: unknown check "${checkName}"`);
@@ -71679,9 +71696,8 @@ var doctorMark = (value, ctx) => {
   }
   describeDoctor(ctx, sid, { kind: "mark", check, mark });
 };
-var slash = (value, ctx) => {
-  const [sessionId2 = "", line = ""] = decodeWire(() => decodeSegments(value));
-  const sid = requireSessionId(sessionId2);
+var slash = (sid, args, ctx) => {
+  const [line = ""] = args;
   const declared = Object.values(
     ctx.configFor(sessionOrigin(ctx, sid)).actions
   ).filter((a) => "slash" in a);
@@ -71697,8 +71713,7 @@ var slash = (value, ctx) => {
   }
   ctx.effect({ kind: "type-slash", pane: pane.hint, line: action2.slash });
 };
-function runOf2([sessionId2 = "", action2 = "", evaluated2 = "", mac = ""], ctx) {
-  const sid = requireSessionId(sessionId2);
+function runOf2(sid, [action2 = "", evaluated2 = "", mac = ""], ctx) {
   const origin = sessionOrigin(ctx, sid);
   const actions = ctx.configFor(origin).actions;
   const decl = Object.hasOwn(actions, action2) ? actions[action2] : void 0;
@@ -71751,26 +71766,12 @@ function runOf2([sessionId2 = "", action2 = "", evaluated2 = "", mac = ""], ctx)
     }))
   };
 }
-var run2 = (value, ctx) => {
-  let named3 = { sessionId: "-", action: "-" };
-  let request2;
-  try {
-    const parts = decodeWire(() => decodeSegments(value));
-    named3 = { sessionId: parts[0] || "-", action: parts[1] || "-" };
-    request2 = runOf2(parts, ctx);
-  } catch (e) {
-    if (e instanceof BadVerbArgs) {
-      ctx.runs.refused(named3.sessionId, named3.action, e.message);
-    }
-    throw e;
-  }
-  ctx.runs.start(request2);
+var run2 = (sid, args, ctx) => {
+  const request2 = runOf2(sid, args, ctx);
+  ctx.effect({ kind: "run", id: ctx.runs.superseded(request2), run: request2 });
 };
-var repoConfig = (value, ctx) => {
-  const [sessionId2 = "", dir = "", answer2 = "", mac = ""] = decodeWire(
-    () => decodeSegments(value)
-  );
-  const sid = requireSessionId(sessionId2);
+var repoConfig = (sid, args, ctx) => {
+  const [dir = "", answer2 = "", mac = ""] = args;
   const answered2 = answer2;
   if (!ctx.links.signer.verify(repoAnswerFields(sid, dir, answered2), mac)) {
     throw new BadVerbArgs(
@@ -71789,109 +71790,119 @@ var repoConfig = (value, ctx) => {
   );
   ctx.reloadConfig(sessionOrigin(ctx, sid));
 };
-var LEAF_VERBS = /* @__PURE__ */ new Map([
-  [VERB_COPY, copy],
-  [VERB_OPEN_VSCODE, openVscode],
-  [VERB_SET_STATE, setState],
-  [VERB_STEP_STATE, stepState],
-  [VERB_SET_CONFIG, setConfig],
-  [VERB_STEP_CONFIG, stepConfig],
-  [VERB_RESET_CONFIG, resetConfig],
-  [VERB_SAVE, save],
-  [VERB_SAVE_PRESET, savePreset],
-  [VERB_SAVE_THEME_DEFAULT, saveThemeDefault],
-  [VERB_DELETE_PRESET, deletePreset2],
-  [VERB_APPLY_LAYOUT_OP, applyLayoutOp2],
-  [VERB_UNDO, undo],
-  [VERB_REDO, redo],
-  [VERB_BACK, back],
-  [VERB_REWIND, rewind],
-  [VERB_TOOLBAR_TOGGLE, toolbarToggle],
-  [VERB_APPLY_UPDATE, applyUpdate],
-  [VERB_DOCTOR_RUN, doctorRun],
-  [VERB_DOCTOR_FIX, doctorFix],
-  [VERB_DOCTOR_MARK, doctorMark],
-  [VERB_SLASH, slash],
-  [VERB_RUN, run2],
-  [VERB_REPO_CONFIG, repoConfig],
-  [VERB_COPY_DIAGNOSTIC, copyDiagnostic]
-]);
-var SEGMENTED_VERBS = /* @__PURE__ */ new Set([
-  VERB_SET_STATE,
-  VERB_STEP_STATE,
-  VERB_SET_CONFIG,
-  VERB_STEP_CONFIG,
-  VERB_RESET_CONFIG,
-  VERB_SAVE,
-  VERB_SAVE_PRESET,
-  VERB_SAVE_THEME_DEFAULT,
-  VERB_DELETE_PRESET,
-  VERB_APPLY_LAYOUT_OP,
-  VERB_UNDO,
-  VERB_REDO,
-  VERB_DOCTOR_FIX,
-  VERB_DOCTOR_MARK,
-  VERB_SLASH,
-  VERB_RUN,
-  VERB_REPO_CONFIG,
-  VERB_COPY_DIAGNOSTIC
-]);
-var SESSION_FIRST_VERBS = /* @__PURE__ */ new Set([
-  VERB_SET_STATE,
-  VERB_STEP_STATE,
-  VERB_SET_CONFIG,
-  VERB_STEP_CONFIG,
-  VERB_RESET_CONFIG,
-  VERB_SAVE,
-  VERB_SAVE_PRESET,
-  VERB_SAVE_THEME_DEFAULT,
-  VERB_DELETE_PRESET,
-  VERB_APPLY_LAYOUT_OP,
-  VERB_UNDO,
-  VERB_REDO,
-  VERB_BACK,
-  VERB_REWIND,
-  VERB_TOOLBAR_TOGGLE,
-  VERB_APPLY_UPDATE,
-  VERB_DOCTOR_RUN,
-  VERB_DOCTOR_FIX,
-  VERB_DOCTOR_MARK,
-  VERB_SLASH,
-  VERB_RUN,
-  VERB_REPO_CONFIG,
-  VERB_COPY_DIAGNOSTIC
-]);
+var LEAF_VERBS = new Map(
+  [
+    [VERB_COPY, copy, [1, 1]],
+    [VERB_OPEN_VSCODE, openVscode, [1, 1]],
+    [VERB_SET_STATE, setState, [0, Infinity]],
+    [VERB_STEP_STATE, stepState, [2, 2]],
+    [VERB_SET_CONFIG, setConfig, [2, 2]],
+    [VERB_STEP_CONFIG, stepConfig, [2, 2]],
+    [VERB_RESET_CONFIG, resetConfig, [0, Infinity]],
+    [VERB_SAVE, save, [0, 0]],
+    [VERB_SAVE_PRESET, savePreset, [0, 0]],
+    [VERB_SAVE_THEME_DEFAULT, saveThemeDefault, [0, 0]],
+    [VERB_DELETE_PRESET, deletePreset2, [1, 1]],
+    [VERB_APPLY_LAYOUT_OP, applyLayoutOp2, [2, 2]],
+    [VERB_UNDO, undo, [0, 0]],
+    [VERB_REDO, redo, [0, 0]],
+    [VERB_BACK, back, [0, 0]],
+    [VERB_REWIND, rewind, [0, 0]],
+    [VERB_TOOLBAR_TOGGLE, toolbarToggle, [0, 0]],
+    [VERB_APPLY_UPDATE, applyUpdate, [0, 0]],
+    [VERB_DOCTOR_RUN, doctorRun, [0, 0]],
+    [VERB_DOCTOR_FIX, doctorFix, [1, 1]],
+    [VERB_DOCTOR_MARK, doctorMark, [2, 2]],
+    [VERB_SLASH, slash, [1, 1]],
+    [VERB_RUN, run2, [3, 3]],
+    [VERB_REPO_CONFIG, repoConfig, [3, 3]],
+    [VERB_COPY_DIAGNOSTIC, copyDiagnostic, [2, 2]]
+  ].map(([verb, handler, takes]) => [verb, { handler, takes }])
+);
+var LEAF_VERB_NAMES = new Set(LEAF_VERBS.keys());
+function readLeaf(verb, leaf, value) {
+  const [head = "", ...tail] = value.split("/");
+  return {
+    verb,
+    leaf,
+    session: readSession(head),
+    args: parseWire(() => tail.map(decodeURIComponent))
+  };
+}
+function readSession(head) {
+  const decoded = parseWire(() => decodeURIComponent(head));
+  return decoded.ok ? parseSessionId(decoded.value) : { ok: false, problem: `has ${decoded.problem}` };
+}
+function readEffect({ verb, value }) {
+  const leaf = LEAF_VERBS.get(verb);
+  return leaf === void 0 ? { verb, leaf } : readLeaf(verb, leaf, value);
+}
+function readDispatch(value) {
+  return batchAdjacentWrites(parseEffects(value)).map(readEffect);
+}
+function sessionOf(effects) {
+  return effects.find((e) => e.leaf !== void 0)?.session ?? null;
+}
 function clickSessionOf(verb, value) {
-  return sessionOfEffects(
-    verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }]
+  return sessionOf(
+    verb === VERB_DISPATCH ? readDispatch(value) : [readEffect({ verb, value })]
   );
 }
-function sessionOfEffects(effects) {
-  const bearing = effects.find((e) => SESSION_FIRST_VERBS.has(e.verb));
-  const sid = bearing === void 0 ? "" : decodeWire(() => decodeFirstSegment(bearing.value));
-  return sid === "" ? null : parseSessionId(sid);
-}
-function perform(handler, value, ctx) {
+function perform({ verb, leaf, session, args }, click3, ctx) {
   const described = [];
-  handler(value, { ...ctx, effect: (effect) => void described.push(effect) });
+  try {
+    if (!session.ok) throw new BadVerbArgs(`session id ${session.problem}`);
+    if (!click3?.ok)
+      throw new BadVerbArgs(
+        "its click's own session is refused, so no step of it runs"
+      );
+    if (click3.id !== session.id)
+      throw new BadVerbArgs(
+        `names session ${session.id}, not the session its click is in`
+      );
+    if (!args.ok) throw new BadVerbArgs(args.problem);
+    const [min2, max2] = leaf.takes;
+    if (args.value.length < min2 || args.value.length > max2)
+      throw new BadVerbArgs(
+        `reads ${min2 === max2 ? min2 : `${min2} to ${max2}`} after its session, and the link carries ${args.value.length}`
+      );
+    leaf.handler(session.id, args.value, {
+      ...ctx,
+      effect: (effect) => void described.push(effect)
+    });
+  } catch (e) {
+    if (e instanceof BadVerbArgs) {
+      REFUSAL_OWNERS.get(verb)?.(ctx, {
+        sid: click3?.ok ? click3.id : "-",
+        args: args.ok ? args.value : [],
+        reason: e.message
+      });
+    }
+    throw e;
+  }
   for (const effect of described) ctx.effect(effect);
 }
-function foldEffects(rawValue, ctx) {
+var REFUSAL_OWNERS = /* @__PURE__ */ new Map([
+  [
+    VERB_RUN,
+    (ctx, { sid, args: [action2], reason }) => ctx.runs.refused(sid, action2 || "-", reason)
+  ]
+]);
+function foldEffects(effects, session, ctx) {
   const errors2 = [];
   let operational = false;
-  const effects = parseEffects(rawValue);
-  const session = sessionOfEffects(effects);
-  for (const { verb, value } of batchAdjacentWrites(effects)) {
-    const leaf = LEAF_VERBS.get(verb);
-    if (!leaf) {
-      errors2.push(`unknown effect verb "${verb}"`);
+  for (const effect of effects) {
+    if (effect.leaf === void 0) {
+      errors2.push(`unknown effect verb "${effect.verb}"`);
       continue;
     }
     try {
-      perform(leaf, value, ctx);
+      perform(effect, session, ctx);
     } catch (e) {
       if (!(e instanceof BadVerbArgs)) operational = true;
-      errors2.push(`${verb}: ${e instanceof Error ? e.message : String(e)}`);
+      errors2.push(
+        `${effect.verb}: ${e instanceof Error ? e.message : String(e)}`
+      );
     }
   }
   if (errors2.length > 0) {
@@ -71947,10 +71958,12 @@ function journaled(sid, ctx, handler) {
   if (lanes !== null) {
     try {
       const after = lanes.read();
-      ctx.lanes.clicked(
-        lanes.sessionId,
-        journal.written() ? lanes.before : after,
-        after
+      effects.push(
+        ...ctx.lanes.clicked(
+          lanes.sessionId,
+          journal.written() ? lanes.before : after,
+          after
+        )
       );
     } catch (e) {
       failures.push(e);
@@ -71959,16 +71972,17 @@ function journaled(sid, ctx, handler) {
   ctx.described(effects);
   throwAll(failures);
 }
-function click(verb, handler) {
+function click(verb, read2, handler) {
   return (value, ctx) => {
     if (ctx.gone()) throw new ClickAbandoned(verb);
-    const session = clickSessionOf(verb, value);
+    const effects = read2(value);
+    const session = sessionOf(effects);
     const sid = session?.ok ? session.id : null;
     ctx.journalTurns.take(
       verb,
       () => journaled(sid, ctx, (c) => {
         try {
-          handler(value, c);
+          handler(effects, session, c);
         } finally {
           if (sid !== null) ctx.clickLanded(sid);
         }
@@ -71980,12 +71994,16 @@ var VERBS = new Map([
   ...[...LEAF_VERBS].map(
     ([verb, leaf]) => [
       verb,
-      click(verb, (value, ctx) => {
-        perform(leaf, value, ctx);
-      })
+      click(
+        verb,
+        (value) => [readLeaf(verb, leaf, value)],
+        (effects, session, ctx) => {
+          for (const effect of effects) perform(effect, session, ctx);
+        }
+      )
     ]
   ),
-  [VERB_DISPATCH, click(VERB_DISPATCH, foldEffects)],
+  [VERB_DISPATCH, click(VERB_DISPATCH, readDispatch, foldEffects)],
   // A link kind, never a leaf, so no dispatch can carry it as an effect: a
   // probe writes no journal, so nothing may refuse it for a turn, and it
   // describes nothing.
@@ -72038,18 +72056,29 @@ function linksOf({ rows }) {
   });
 }
 function decodeArgs(verb, value) {
-  return SEGMENTED_VERBS.has(verb) ? decodeSegments(value) : [decodeURIComponent(value)];
+  return LEAF_VERB_NAMES.has(verb) ? decodeSegments(value) : [decodeURIComponent(value)];
 }
 function drawnClickOf(url) {
   const link = parseHandlerUrl(url);
   if (!link.ok) return link;
   const { verb, value } = link;
+  const known = verb === VERB_DISPATCH ? LEAF_VERB_NAMES : VERBS;
   try {
-    const effects = verb === VERB_DISPATCH ? parseEffects(value).map((e) => ({
-      verb: e.verb,
-      args: decodeArgs(e.verb, e.value)
-    })) : [{ verb, args: decodeArgs(verb, value) }];
-    return { ok: true, effects };
+    const raw = verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
+    const unknown = raw.find((e) => !known.has(e.verb));
+    if (unknown !== void 0) {
+      return {
+        ok: false,
+        problem: `the daemon has no verb "${unknown.verb}": ${url}`
+      };
+    }
+    return {
+      ok: true,
+      effects: raw.map((e) => ({
+        verb: e.verb,
+        args: decodeArgs(e.verb, e.value)
+      }))
+    };
   } catch (error) {
     return {
       ok: false,
@@ -72079,6 +72108,16 @@ init_globals();
 // src/daemon/runs.ts
 init_globals();
 var import_node_path35 = __toESM(require_path_browserify(), 1);
+
+// src/daemon/effect-outcome.ts
+init_globals();
+var PERFORMED = { kind: "ok", said: "" };
+var failed2 = (said) => ({
+  kind: "failed",
+  said
+});
+
+// src/daemon/runs.ts
 var RUN_TIMEOUT_MS = 1e4;
 function outcomeOf(result) {
   if (result.ok) return "ok";
@@ -72109,6 +72148,9 @@ var Runs = class {
   deps;
   timeoutMs;
   inFlight = /* @__PURE__ */ new Set();
+  // Each superseded run's resumes, until its launch takes them.
+  held = /* @__PURE__ */ new Map();
+  minted = 0;
   started = 0;
   failed = 0;
   timedOut = 0;
@@ -72118,35 +72160,51 @@ var Runs = class {
     this.deps = deps;
     this.timeoutMs = deps.timeoutMs ?? RUN_TIMEOUT_MS;
   }
-  // Start one run and return at once. Every source it refreshes reads pending
-  // from now until the program has exited, and then is read fresh.
-  start(run3) {
-    if (this.closed) throw new Error("run owner used after close");
-    const resumes = run3.refreshes.map(
-      (r) => this.deps.supersede(r.storage, run3.sessionId)
+  // [LAW:no-ambient-temporal-coupling] In the click's turn: every source the
+  // run refreshes reads pending from now until its program has exited, so no
+  // draw after the click shows the value from before it, however long the
+  // launch waits behind the session's earlier effects.
+  superseded(run3) {
+    if (this.closed) throw new DaemonClosing("run");
+    const id2 = ++this.minted;
+    this.held.set(
+      id2,
+      run3.refreshes.map((r) => this.deps.supersede(r.storage, run3.sessionId))
     );
+    return id2;
+  }
+  // The performer's launch of the run `id` superseded, answering how it
+  // ended; then every source it superseded is read fresh.
+  async run(id2, run3) {
+    if (this.closed) throw new DaemonClosing("run");
+    const resumes = this.held.get(id2);
+    if (resumes === void 0) {
+      throw new Error(`run ${id2} (${run3.action}) was never superseded`);
+    }
+    this.held.delete(id2);
     const abort = new AbortController();
     this.inFlight.add(abort);
     this.started++;
     const [program, ...args] = run3.argv;
     const startedAt = this.deps.clock.monotonic();
-    void this.deps.launch({
-      // [LAW:types-are-the-program] A relative program path is the
-      // declaring file's, as the directory it runs in is; a bare name is
-      // looked up on PATH.
-      bin: program.includes("/") ? import_node_path35.default.resolve(run3.cwd, program) : program,
-      args,
-      envOverlay: run3.envOverlay,
-      cwd: run3.cwd,
-      timeoutMs: this.timeoutMs,
-      signal: abort.signal,
-      category: "click.run"
-    }).then(
-      (result) => this.ended(run3, result, elapsedMs(this.deps.clock, startedAt))
-    ).finally(() => {
+    try {
+      const result = await this.deps.launch({
+        // [LAW:types-are-the-program] A relative program path is the
+        // declaring file's, as the directory it runs in is; a bare name is
+        // looked up on PATH.
+        bin: program.includes("/") ? import_node_path35.default.resolve(run3.cwd, program) : program,
+        args,
+        envOverlay: run3.envOverlay,
+        cwd: run3.cwd,
+        timeoutMs: this.timeoutMs,
+        signal: abort.signal,
+        category: "click.run"
+      });
+      return this.ended(run3, result, elapsedMs(this.deps.clock, startedAt));
+    } finally {
       this.inFlight.delete(abort);
       for (const resume of resumes) resume();
-    });
+    }
   }
   // A link refused before anything ran: counted, and its one event.
   refused(sessionId2, action2, reason) {
@@ -72162,13 +72220,16 @@ var Runs = class {
       failed: this.failed,
       timedOut: this.timedOut,
       refused: this.refusals,
-      running: this.inFlight.size
+      running: this.inFlight.size,
+      queued: this.held.size
     };
   }
   // Aborts every run in flight; each resumes its sources once its program is
-  // gone.
+  // gone. A run never launched resumes nothing: its sources close with the
+  // daemon.
   close() {
     this.closed = true;
+    this.held.clear();
     for (const abort of this.inFlight) abort.abort();
   }
   ended(run3, result, took) {
@@ -72178,14 +72239,10 @@ var Runs = class {
       `run sid=${valueOf(run3.sessionId)} action=${valueOf(run3.action)} program=${valueOf(run3.argv[0])} outcome=${outcome} exit=${exitOf(result)} took=${took} refreshed=${run3.refreshes.map((r) => r.name).join(",") || "-"}`
     );
     if (outcome === "timeout") this.timedOut++;
-    if (result.ok || outcome === "aborted") return;
+    if (result.ok) return PERFORMED;
+    if (outcome === "aborted") throw new DaemonClosing("run");
     if (outcome !== "timeout") this.failed++;
-    holdClickError(
-      this.deps.state,
-      run3.sessionId,
-      `run ${run3.action}: ${failureText(result)}`,
-      this.deps.now()
-    );
+    return failed2(`run ${run3.action}: ${failureText(result)}`);
   }
 };
 
@@ -73184,7 +73241,7 @@ function realize(c, display, boundValue, store2, sessionId2, signer) {
         effects: [
           {
             verb: VERB_COPY,
-            args: [evalTemplate(c.text, buildScope(store2))]
+            args: [sessionId2, evalTemplate(c.text, buildScope(store2))]
           }
         ],
         active: false
@@ -73194,7 +73251,7 @@ function realize(c, display, boundValue, store2, sessionId2, signer) {
         effects: [
           {
             verb: VERB_OPEN_VSCODE,
-            args: [evalTemplate(c.target, buildScope(store2))]
+            args: [sessionId2, evalTemplate(c.target, buildScope(store2))]
           }
         ],
         active: false
@@ -77396,19 +77453,23 @@ function viewLanes(parts, sessionId2) {
   }
 }
 function lanesAt(parts, origin, sessionId2) {
+  const latest = parts.frameFeeds.latest(sessionId2);
+  return switchesAt(
+    parts,
+    origin,
+    sessionId2,
+    latest === null || inTmux(latest.hints.tmux)
+  );
+}
+function switchesAt(parts, origin, sessionId2, tmux3) {
   var _stack = [];
   try {
-    const { renderCache, frameFeeds } = parts;
-    const hold2 = __using(_stack, renderCache.hold(
+    const hold2 = __using(_stack, parts.renderCache.hold(
       origin.projectDir,
       origin.cwd,
       origin.target.path
     ));
-    const latest = frameFeeds.latest(sessionId2);
-    return laneSwitches(
-      sessionGlobals2(parts, sessionId2, hold2.state),
-      latest === null || inTmux(latest.hints.tmux)
-    );
+    return laneSwitches(sessionGlobals2(parts, sessionId2, hold2.state), tmux3);
   } catch (_) {
     var _error = _, _hasError = true;
   } finally {
@@ -77434,13 +77495,13 @@ function requestFacts(req, at, facts, renderer) {
   });
   return hintsError;
 }
-function setUpRender(parts, arrived3, at, facts) {
+function setUpRender(parts, arrived2, at, facts) {
   const { renderCache } = parts;
-  const dir = arrived3.hookData.workspace?.current_dir ?? arrived3.cwd;
+  const dir = arrived2.hookData.workspace?.current_dir ?? arrived2.cwd;
   const req = {
-    ...arrived3,
+    ...arrived2,
     hookData: {
-      ...arrived3.hookData,
+      ...arrived2.hookData,
       ...dir !== void 0 && import_node_path37.default.isAbsolute(dir) && { location: checkoutLocation(dir) }
     }
   };
@@ -77711,14 +77772,16 @@ function drawRender(parts, setup, drawing2) {
     handed
   };
 }
-function arrived2(parts, req, lanes) {
+function requestArrived(parts, req) {
   const { laneSetups, tmuxStatusLines } = parts;
-  laneSetups.noted(laneSessionOf(req), lanes);
-  tmuxStatusLines.observe(
-    req.hookData.session_id,
-    req.hints.tmux,
-    lanes.tmuxStatus
+  const lanes = switchesAt(
+    parts,
+    req.requested,
+    req.sessionId,
+    inTmux(req.hints.tmux)
   );
+  tmuxStatusLines.observe(req.sessionId, req.hints.tmux, lanes.tmuxStatus);
+  return laneSetups.noted(req.sessionId, lanes);
 }
 function drawForAnswer(parts, setup, arrival) {
   return drawRequest(
@@ -77740,25 +77803,15 @@ function laneSessionOf(req) {
 function laneClicked(parts, sessionId2, before, after) {
   const { frameFeeds, laneSetups, tmuxStatusLines } = parts;
   const latest = frameFeeds.latest(sessionId2);
-  laneSetups.clicked(
-    sessionId2,
-    latest === null ? null : laneSessionOf(latest),
-    before,
-    after
-  );
   if (latest !== null && before.tmuxStatus !== after.tmuxStatus)
     tmuxStatusLines.observe(sessionId2, latest.hints.tmux, after.tmuxStatus);
+  return laneSetups.clicked(sessionId2, before, after);
 }
 async function drawAnswer(parts, req, at, waitEndsAt, facts) {
   var _stack = [];
   try {
     const { clock, frameFeeds, log } = parts;
     const setup = __using(_stack, setUpRender(parts, req, at, facts));
-    arrived2(
-      parts,
-      req,
-      laneSwitches(setup.view.source.effective(), inTmux(req.hints.tmux))
-    );
     const settling = settleRequest(parts.recorder, setup.view, at);
     const waitFrom = clock.monotonic();
     const budget = waitEndsAt - waitFrom;
@@ -77834,15 +77887,12 @@ init_globals();
 
 // src/daemon/effect.ts
 init_globals();
-var PERFORMED = { kind: "ok", said: "" };
-var failed2 = (said) => ({
-  kind: "failed",
-  said
-});
 var DESCRIBE = {
   launch: ({ what }) => `launch:${what}`,
   "type-slash": ({ line }) => `type-slash:${line}`,
   "apply-update": () => "apply-update",
+  run: ({ run: run3 }) => `run:${run3.action}`,
+  "lane-setup": ({ lane, on: on2 }) => `lane-setup:${lane}-${on2 ? "on" : "off"}`,
   doctor: ({ step: step4 }) => `doctor:${step4.kind}`
 };
 function describeEffect(effect) {
@@ -77855,29 +77905,33 @@ var NO_EFFECTS = [];
 var ARMS = {
   // [LAW:single-enforcer] The request's writes take their turn as a click's
   // do: what it said of its client and the config inputs it named land in one
-  // batch in a journal turn, and the draw begins once the turn is over. A turn
-  // is synchronous (src/daemon/journal-turns.ts), so the request waits behind
-  // no other session's work, and no draw, this one or a feed's, can read a
-  // click half landed. The revision its turn left goes on the request's line,
-  // the render event, which is its record and opens with the session the edge
-  // noted.
-  request: async ({ req, at, waitEndsAt, facts }, { verbCtx, draw: draw2 }) => {
-    const revision = verbCtx.journalTurns.take("request", () => {
+  // batch in a journal turn, with what its arrival settles (the lane setups
+  // its session's clicks owed, described as the turn's effects), and its draw
+  // begins once the turn is over (`applyRequest`). A turn is synchronous
+  // (src/daemon/journal-turns.ts), so the request waits behind no other
+  // session's work, and no draw, this one or a feed's, can read a click half
+  // landed. The revision its turn left and the effects it described go on the
+  // request's line, the render event, which is its record and opens with the
+  // session the edge noted.
+  request: ({ req, facts }, { verbCtx }) => {
+    const turn = verbCtx.journalTurns.take("request", () => {
       recordRequest(verbCtx.sessionState, req);
-      return verbCtx.sessionState.revision(req.sessionId);
+      return {
+        effects: verbCtx.lanes.arrived(req),
+        revision: verbCtx.sessionState.revision(req.sessionId)
+      };
     });
-    noteFacts(facts, { revision: String(revision) });
-    return {
-      answer: await draw2(req, at, waitEndsAt, facts),
-      effects: NO_EFFECTS,
-      facts: []
-    };
+    noteFacts(facts, {
+      revision: String(turn.revision),
+      effects: turn.effects.map((e) => describeEffect(e)).join(",") || "-"
+    });
+    return { answer: void 0, effects: turn.effects, facts: [] };
   },
   // The turn hands its effects over once it has committed (`described`), and
   // a refused step is answered beside them; a click whose client has left is
   // refused by the verb, where it would land (src/daemon/verbs/index.ts). A
   // turn is synchronous, so no idle timer can close a menu under one.
-  click: async ({ verb, value, arrival, gone }, { verbCtx }) => {
+  click: ({ verb, value, arrival, gone }, { verbCtx }) => {
     const effects = [];
     let answer2 = null;
     try {
@@ -77892,7 +77946,7 @@ var ARMS = {
     }
     return { answer: answer2, effects, facts: [] };
   },
-  "menu-idle": async ({ session, idle }, { verbCtx }) => {
+  "menu-idle": ({ session, idle }, { verbCtx }) => {
     const effects = [];
     closeIdleMenus(session, idle, {
       ...verbCtx,
@@ -77905,7 +77959,7 @@ var ARMS = {
   // (`LANDINGS`), and a failure is held as the session's click error, shown as
   // a failed dispatch's is (src/daemon/click-error.ts). A click that names no
   // session has no bar; its apply line is the record.
-  "effect-done": async ({ of, done: done2 }, parts) => {
+  "effect-done": ({ of, done: done2 }, parts) => {
     const { verbCtx } = parts;
     const outcome = verbCtx.journalTurns.take("effect-done", () => {
       const landed = land(done2, parts);
@@ -77925,7 +77979,7 @@ var ARMS = {
   // click errors it carried are marked answered (src/daemon/click-error.ts), in
   // a turn as every write is, so no frame reads the mark beside a click's
   // writes half landed.
-  answered: async ({ session, errors: errors2 }, { verbCtx }) => {
+  answered: ({ session, errors: errors2 }, { verbCtx }) => {
     verbCtx.journalTurns.take(
       "answered",
       () => answeredClickError(verbCtx.sessionState, session, errors2)
@@ -77940,6 +77994,8 @@ var LANDINGS = {
   launch: asIs,
   "type-slash": asIs,
   "apply-update": asIs,
+  run: asIs,
+  "lane-setup": asIs,
   doctor: ({ effect, outcome }, verbCtx) => {
     if (outcome.kind === "failed") return outcome;
     landDoctor(verbCtx, effect, outcome.gathered);
@@ -77976,7 +78032,7 @@ function recordRequest(state, req) {
 }
 async function apply(event, parts) {
   const arm2 = ARMS[event.kind];
-  const applied2 = await arm2(event, parts);
+  const applied2 = arm2(event, parts);
   const of = originOf(event);
   const line = LINE[event.kind];
   const said = line(event, applied2);
@@ -78003,13 +78059,17 @@ async function apply(event, parts) {
   return {
     answer: applied2.answer,
     // An event that described nothing performs nothing, and takes no place in
-    // the session's order: the effect-done events of that order are applied
-    // from inside it, and a place they took there would settle only after the
-    // work they report on.
+    // any order: the effect-done events of an order are applied from inside
+    // it, and a place they took there would settle only after the work they
+    // report on.
     performed: applied2.effects.length === 0 ? NOTHING_PERFORMED : performAll(parts, of, applied2.effects)
   };
 }
 var NOTHING_PERFORMED = Promise.resolve();
+async function applyRequest(event, parts) {
+  await apply(event, parts);
+  return parts.draw(event.req, event.at, event.waitEndsAt, event.facts);
+}
 var APPLIED = { level: "info", facts: [["outcome", "ok"]] };
 var refused = ({ error }) => ({
   level: "info",
@@ -78069,6 +78129,8 @@ var PERFORM = {
     await verbCtx.applyUpdate();
     return PERFORMED;
   },
+  run: ({ id: id2, run: run3 }, { verbCtx }) => verbCtx.runs.run(id2, run3),
+  "lane-setup": (effect, { verbCtx }) => verbCtx.lanes.setup(effect),
   // The doctor's probes, gathered after the click's turn, in no turn: its
   // step lands with the facts (`LANDINGS`).
   doctor: async (effect, { verbCtx }) => ({
@@ -78093,9 +78155,58 @@ async function perform2(effect, parts) {
   }
   return { effect, outcome };
 }
-function performAll(parts, of, effects) {
-  return parts.verbCtx.journalTurns.performing(of.session, async () => {
-    for (const effect of effects) {
+var ORDERING = {
+  launch: {
+    key: (_effect, { session }) => ({ kind: "session", session }),
+    paneWhenReached: false
+  },
+  "type-slash": {
+    key: ({ pane }) => ({ kind: "pane", tmux: pane }),
+    paneWhenReached: false
+  },
+  "apply-update": {
+    key: (_effect, { session }) => ({ kind: "session", session }),
+    paneWhenReached: false
+  },
+  run: {
+    key: (_effect, { session }) => ({ kind: "session", session }),
+    paneWhenReached: false
+  },
+  "lane-setup": {
+    key: ({ sessionId: sessionId2, lane }) => ({ kind: "lane", session: sessionId2, lane }),
+    paneWhenReached: true
+  },
+  doctor: {
+    key: (_effect, { session }) => ({ kind: "session", session }),
+    paneWhenReached: false
+  }
+};
+function placeOf2(effect, of) {
+  const ordering = ORDERING[effect.kind];
+  return ordering.key(effect, of);
+}
+function performInOrder(turns, of, described, act) {
+  const late = (effect) => ORDERING[effect.kind].paneWhenReached;
+  const effects = [
+    ...described.filter((e) => !late(e)),
+    ...described.filter(late)
+  ];
+  let before = NOTHING_PERFORMED;
+  for (const effect of effects) {
+    const after = before;
+    before = turns.performing(placeOf2(effect, of), async () => {
+      await after;
+      await act(effect);
+    });
+  }
+  return before;
+}
+function performAll(parts, of, described) {
+  return performInOrder(
+    parts.verbCtx.journalTurns,
+    of,
+    described,
+    async (effect) => {
       const done2 = await perform2(effect, parts);
       await applyUnanswered(
         { kind: "effect-done", of, done: done2 },
@@ -78103,7 +78214,7 @@ function performAll(parts, of, effects) {
         `${describeEffect(effect)} ${done2.outcome.kind}${"said" in done2.outcome ? `: ${done2.outcome.said}` : ""}`
       );
     }
-  });
+  );
 }
 
 // src/daemon/render-checkpoint.ts
@@ -78461,6 +78572,34 @@ function recording(parts, req) {
     )
   };
 }
+function versionGate(req, log) {
+  if (req.v === PROTOCOL_VERSION) return null;
+  if (req.v > PROTOCOL_VERSION) {
+    log(
+      "info",
+      `version mismatch: client=${req.v} > daemon=${PROTOCOL_VERSION}; binary likely upgraded \u2014 exiting after the response flushes`
+    );
+  } else {
+    log(
+      "info",
+      `version mismatch: client=${req.v} < daemon=${PROTOCOL_VERSION}; client is stale \u2014 staying up`
+    );
+  }
+  return {
+    kind: "reply",
+    resp: {
+      ok: false,
+      error: `protocol v${req.v} not supported (daemon at v${PROTOCOL_VERSION})`,
+      code: "VERSION_MISMATCH",
+      daemonV: PROTOCOL_VERSION
+    },
+    // [LAW:dataflow-not-control-flow] The asymmetry above is this value.
+    // Exit is sequenced on the response flush, so the client always sees
+    // the VERSION_MISMATCH diagnostic — never a dead socket.
+    exitAfterFlush: req.v > PROTOCOL_VERSION ? 0 : null,
+    delivered: NOTHING_DELIVERED
+  };
+}
 async function handleRequest(parts, inbound, timedOut, accepted, clientLeft) {
   if (inbound.kind === "url") {
     return replied(
@@ -78473,33 +78612,8 @@ async function handleRequest(parts, inbound, timedOut, accepted, clientLeft) {
   if (!req || typeof req !== "object" || typeof req.v !== "number") {
     return refuse3("BAD_REQUEST", "malformed request");
   }
-  if (req.v !== PROTOCOL_VERSION) {
-    if (req.v > PROTOCOL_VERSION) {
-      parts.log(
-        "info",
-        `version mismatch: client=${req.v} > daemon=${PROTOCOL_VERSION}; binary likely upgraded \u2014 exiting after the response flushes`
-      );
-    } else {
-      parts.log(
-        "info",
-        `version mismatch: client=${req.v} < daemon=${PROTOCOL_VERSION}; client is stale \u2014 staying up`
-      );
-    }
-    return {
-      kind: "reply",
-      resp: {
-        ok: false,
-        error: `protocol v${req.v} not supported (daemon at v${PROTOCOL_VERSION})`,
-        code: "VERSION_MISMATCH",
-        daemonV: PROTOCOL_VERSION
-      },
-      // [LAW:dataflow-not-control-flow] The asymmetry above is this value.
-      // Exit is sequenced on the response flush, so the client always sees
-      // the VERSION_MISMATCH diagnostic — never a dead socket.
-      exitAfterFlush: req.v > PROTOCOL_VERSION ? 0 : null,
-      delivered: NOTHING_DELIVERED
-    };
-  }
+  const mismatch = versionGate(req, parts.log);
+  if (mismatch !== null) return mismatch;
   if (req.kind === "subscribe") return subscription(req);
   if (req.kind === "record") return recording(parts, req);
   if (typeof req.kind !== "string" || !Object.hasOwn(REPLY_KINDS, req.kind))
@@ -78567,9 +78681,9 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
         menuIdle: menuIdle.getStats(),
         journalTurns: journalTurns.getStats(),
         sessionState: {
-          sessions: parts.sessionGauges.size(),
-          observers: parts.sessionGauges.observers(),
-          revision: parts.sessionGauges.latestRevision()
+          sessions: parts.sessionState.size(),
+          observers: parts.sessionState.observers(),
+          revision: parts.sessionState.latestRevision()
         },
         frameFeeds: frameFeeds.getStats(),
         tmuxStatus: tmuxStatusLines.stats(),
@@ -78622,7 +78736,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       sighted(checked.req, "drawing");
       frameFeeds.note(checked.req.sessionId, checked.req, order2);
     }
-    const rendered = !checked.ok ? refusedRender(checked.problems) : await apply(
+    const rendered = !checked.ok ? refusedRender(checked.problems) : await applyRequest(
       {
         kind: "request",
         req: checked.req,
@@ -78641,9 +78755,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       },
       parts
     ).then(
-      ({
-        answer: { resp, motion, answersClick, pipeShown, delivered }
-      }) => {
+      ({ resp, motion, answersClick, pipeShown, delivered }) => {
         sighted(checked.req, motion);
         return {
           outcome: { kind: "ok" },
@@ -78922,8 +79034,7 @@ async function handleClick(parts, verb, value, arrival, facts, clientGone) {
   noteFacts(facts, { [VERB_FACT[arrival.via]]: verb });
   const named3 = clickSessionOf(verb, value);
   const session = named3?.ok ? named3.id : null;
-  if (named3 === null) noteFacts(facts, { sid: "-" });
-  else if (session !== null) noteFacts(facts, { sid: session });
+  noteFacts(facts, { sid: session ?? "-" });
   const { answer: answer2 } = await apply(
     {
       kind: "click",
@@ -80413,7 +80524,7 @@ async function writeDisk(owner, table) {
 }
 function fetchPricingData(closing) {
   return new Promise((resolve) => {
-    const request2 = get2(
+    const request2 = get(
       {
         hostname: PRICING_URL.hostname,
         path: PRICING_URL.pathname,
@@ -82530,9 +82641,9 @@ var causeField = (cause) => {
       return `${cause.kind}:${new Date(cause.since).toISOString()}`;
   }
 };
-function configLoadedLine(entry, cause, settled3) {
+function configLoadedLine(entry, cause, settled4) {
   const dirs = (ds) => valueOf(ds.join(",") || "-");
-  return `config loaded projectDir=${valueOf(entry.projectDir)} cwd=${valueOf(entry.cwd)} cause=${valueOf(causeField(cause))} state=${settled3} files=${valueOf(chainName(entry.configLayers, "<bundled default>"))} awaiting=${dirs(entry.repos.awaiting)} declined=${dirs(entry.repos.declined)} unproven=${entry.repos.unproven.length === 0 ? "-" : JSON.stringify(entry.repos.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`;
+  return `config loaded projectDir=${valueOf(entry.projectDir)} cwd=${valueOf(entry.cwd)} cause=${valueOf(causeField(cause))} state=${settled4} files=${valueOf(chainName(entry.configLayers, "<bundled default>"))} awaiting=${dirs(entry.repos.awaiting)} declined=${dirs(entry.repos.declined)} unproven=${entry.repos.unproven.length === 0 ? "-" : JSON.stringify(entry.repos.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`;
 }
 function configDisposeLine(teardown, released) {
   return `config disposed reason=${teardown.reason} released=${released} held=${teardown.held}`;
@@ -84386,11 +84497,11 @@ function shownPanes(listPanes, controlled) {
   return shown;
 }
 function statusLinesOf(listPanes, listClients) {
-  const sessionOf = /* @__PURE__ */ new Map();
+  const sessionOf2 = /* @__PURE__ */ new Map();
   for (const line of listPanes.split("\n")) {
     const [pane, session] = line.trim().split(" ");
     if (pane !== void 0 && pane !== "" && session !== void 0)
-      sessionOf.set(pane, session);
+      sessionOf2.set(pane, session);
   }
   const shownBy = /* @__PURE__ */ new Map();
   for (const line of listClients.split("\n")) {
@@ -84398,7 +84509,7 @@ function statusLinesOf(listPanes, listClients) {
     if (session !== void 0 && control2 === "0" && pane !== void 0)
       shownBy.set(session, pane);
   }
-  return { sessionOf, shownBy };
+  return { sessionOf: sessionOf2, shownBy };
 }
 var PaneVisibility = class {
   constructor(deps) {
@@ -84887,7 +84998,7 @@ var TmuxStatusLines = class {
     if (this.closed) return;
     const held = this.held.get(sessionId2);
     const where = on2 && tmux3 !== null && tmux3 !== void 0 ? tmux3 : null;
-    if (held !== void 0 && (where === null || held.socket !== where.socket || held.pane !== where.pane))
+    if (held !== void 0 && (where === null || !samePane(held, where)))
       this.release(held, "switched off or moved");
     if (where === null || this.held.has(sessionId2)) return;
     const entry = {
@@ -85500,6 +85611,36 @@ var BAND_CLIENT = import_node_path47.default.join("bin", "cc-candybar-native");
 var EXIT_PATIENCE_MS = 15e3;
 var ATTACH_PATIENCE_MS = 3e4;
 var RELOAD_PLUGINS = slashLine("/reload-plugins");
+function laneRun(read2, order2, moved) {
+  const first2 = read2();
+  if (first2.kind === "gone") throw new Error(first2.reason);
+  const paneNow = () => {
+    const latest = read2();
+    if (latest.kind === "gone") return latest;
+    const pane = tmuxPaneOf(latest.session.hints.tmux);
+    return pane.kind === "refused" ? pane : { kind: "in", session: latest.session, tmux: pane.hint };
+  };
+  const inPane = async (work) => {
+    const waited = paneNow();
+    if (waited.kind !== "in") return waited;
+    const held = await order2(waited.tmux, async () => {
+      const now2 = paneNow();
+      if (now2.kind !== "in" || !samePane(now2.tmux, waited.tmux)) return now2;
+      return {
+        kind: "held",
+        value: await work(now2.session, now2.tmux)
+      };
+    });
+    if (held.kind !== "in") return held;
+    moved(waited.tmux, held.tmux);
+    return inPane(work);
+  };
+  return { session: first2.session, inPane };
+}
+function required(step4, refusal) {
+  if (step4.kind !== "held") throw new BadVerbArgs(refusal(step4.reason));
+  return step4.value;
+}
 var done = (said) => ({ kind: "done", said });
 function paneOf(session) {
   const pane = tmuxPaneOf(session.hints.tmux);
@@ -85508,7 +85649,7 @@ function paneOf(session) {
 }
 var LANE_SETUP = {
   band: {
-    on: async (session, host, edge) => {
+    on: async (run3, host, edge) => {
       const checkout = sourceCheckoutOf(host.bundle);
       if (checkout === null) {
         throw new BadVerbArgs(
@@ -85524,7 +85665,7 @@ var LANE_SETUP = {
       return {
         kind: "underway",
         said: `installing ${BAND_PLUGIN} from ${checkout}`,
-        finished: installBand(session, checkout, edge)
+        finished: installBand(run3, checkout, edge)
       };
     },
     // The installed mod draws nothing while the lane is off: the daemon
@@ -85532,8 +85673,8 @@ var LANE_SETUP = {
     off: async () => done("nothing to stop: the band mod draws nothing while the lane is off")
   },
   statusline: {
-    on: async (session, host, edge) => {
-      const tmux3 = paneOf(session);
+    on: async (run3, host, edge) => {
+      const tmux3 = paneOf(run3.session);
       const launcher = attachLauncherOf(host.preload);
       const missing = [host.preload, launcher].find(
         (file) => !edge.fileExists(file)
@@ -85546,11 +85687,20 @@ var LANE_SETUP = {
       return {
         kind: "underway",
         said: `restarting Claude Code in ${tmux3.pane} under the attach launcher`,
-        finished: restartUnderAttach(
-          session,
-          tmux3,
-          { node: host.node[0], launcher, preload: host.preload },
-          edge
+        // The whole restart holds the pane: from the reads that judge it to
+        // the attach, a line typed into the pane would land in the restart.
+        finished: run3.inPane(
+          (session, tmux4) => restartUnderAttach(
+            session,
+            tmux4,
+            { node: host.node[0], launcher, preload: host.preload },
+            edge
+          )
+        ).then(
+          (step4) => required(
+            step4,
+            (reason) => `Claude Code was not restarted under the attach launcher: ${reason}`
+          )
         )
       };
     },
@@ -85560,42 +85710,46 @@ var LANE_SETUP = {
       "nothing to stop: the attached statusline draws its command's output while the lane is off"
     )
   },
+  // Splitting the session's pane resizes what a restart reads in it, so a
+  // split or close holds the pane's order too.
   pane: {
-    on: async (session, host, edge) => {
-      const tmux3 = paneOf(session);
-      const open2 = await edge.barPanes(tmux3);
-      if (open2.length > 0) {
-        return done(
-          `bar pane ${open2.join(", ")} already draws ${tmux3.pane}'s bar`
+    on: async (run3, host, edge) => required(
+      await run3.inPane(async (_session, tmux3) => {
+        const open2 = await edge.barPanes(tmux3);
+        if (open2.length > 0) {
+          return done(
+            `bar pane ${open2.join(", ")} already draws ${tmux3.pane}'s bar`
+          );
+        }
+        const opened = await edge.openBarPane(
+          tmux3,
+          [...host.node, host.bundle, "bar-pane", tmux3.pane],
+          homeEnv(host.home)
         );
-      }
-      const opened = await edge.openBarPane(
-        tmux3,
-        [...host.node, host.bundle, "bar-pane", tmux3.pane],
-        homeEnv(host.home)
-      );
-      return done(`opened bar pane ${opened} under ${tmux3.pane}`);
-    },
+        return done(`opened bar pane ${opened} under ${tmux3.pane}`);
+      }),
+      (reason) => `no bar pane was opened: ${reason}`
+    ),
     // Off is "no bar pane draws this session's bar", which a session with no
     // tmux pane already is.
-    off: async (session, _host, edge) => {
-      const pane = tmuxPaneOf(session.hints.tmux);
-      if (pane.kind === "refused") {
-        return done(`no bar pane to close: ${pane.reason}`);
-      }
-      const tmux3 = pane.hint;
-      const open2 = await edge.barPanes(tmux3);
-      for (const pane2 of open2) await edge.closePane(tmux3, pane2);
-      return done(
-        open2.length === 0 ? `no bar pane draws ${tmux3.pane}'s bar` : `closed bar pane ${open2.join(", ")}`
-      );
+    off: async (run3, _host, edge) => {
+      const step4 = await run3.inPane(async (_session, tmux3) => {
+        const open2 = await edge.barPanes(tmux3);
+        for (const pane of open2) await edge.closePane(tmux3, pane);
+        return done(
+          open2.length === 0 ? `no bar pane draws ${tmux3.pane}'s bar` : `closed bar pane ${open2.join(", ")}`
+        );
+      });
+      if (step4.kind === "refused")
+        return done(`no bar pane to close: ${step4.reason}`);
+      return required(step4, (reason) => reason);
     }
   },
   // The daemon draws the tmux status line itself, for every session whose
   // switch is on (src/daemon/tmux-status.ts), so there is nothing to start or
   // stop — only a session outside tmux to tell why nothing will be drawn.
   tmuxStatus: {
-    on: async (session) => {
+    on: async ({ session }) => {
       const tmux3 = paneOf(session);
       return done(`the daemon draws ${tmux3.pane}'s bar in its status line`);
     },
@@ -85604,7 +85758,8 @@ var LANE_SETUP = {
     )
   }
 };
-async function installBand(session, checkout, edge) {
+async function installBand(run3, checkout, edge) {
+  const { session } = run3;
   const facts = {
     sessionId: session.sessionId,
     projectDir: session.origin.projectDir,
@@ -85612,8 +85767,10 @@ async function installBand(session, checkout, edge) {
   };
   await edge.claude(["plugin", "marketplace", "add", checkout], facts);
   await edge.claude(["plugin", "install", BAND_PLUGIN], facts);
-  const pane = tmuxPaneOf(session.hints.tmux);
-  const typed = pane.kind === "refused" ? pane : await typeSlash(edge.claudeInput, pane.hint, RELOAD_PLUGINS);
+  const held = await run3.inPane(
+    (_session, tmux3) => typeSlash(edge.claudeInput, tmux3, RELOAD_PLUGINS)
+  );
+  const typed = held.kind === "held" ? held.value : { kind: "refused", reason: held.reason };
   if (typed.kind === "refused") {
     throw new Error(
       `the band mod is installed, but /reload-plugins was not typed: ${typed.reason} \u2014 or type /reload-plugins yourself`
@@ -85780,20 +85937,17 @@ var LaneSetups = class {
   deps;
   // Each session's owed lanes, least recently owed first.
   owed = /* @__PURE__ */ new Map();
-  // [LAW:no-ambient-temporal-coupling] Each session's setups, one at a time.
-  setups = new KeyedSerialQueue();
-  // A click of `sessionId` moved its switches from `before` to `after`.
-  // `session` is the session as its latest request reported it, or null when
-  // this daemon holds none yet.
-  clicked(sessionId2, session, before, after) {
+  closed = false;
+  // A click of `sessionId` moved its switches from `before` to `after`: the
+  // setups it settles, or, when this daemon holds no request of the session
+  // yet, none: it owes them.
+  clicked(sessionId2, before, after) {
     const moved = LANE_NAMES.filter((lane) => before[lane] !== after[lane]);
     const owed = this.take(sessionId2);
     for (const lane of moved) if (!owed.has(lane)) owed.set(lane, before[lane]);
     const byOf = (lane) => moved.includes(lane) ? "click" : "owed";
-    if (session !== null) {
-      this.settle(session, owed, after, byOf);
-      return;
-    }
+    if (this.deps.latest(sessionId2) !== null)
+      return settled3(sessionId2, owed, after, byOf, this.deps.log);
     for (const [lane, from] of owed)
       if (from === after[lane]) owed.delete(lane);
     if (moved.length > 0) {
@@ -85814,70 +85968,106 @@ var LaneSetups = class {
         `lane: owed dropped sid=${JSON.stringify(oldest)} lanes=${[...lanes.keys()].join(",")}`
       );
     }
+    return [];
   }
-  // A request of `session` arrived, finding its switches at `switches`: the
-  // setups its clicks owe start now.
-  noted(session, switches) {
-    this.settle(session, this.take(session.sessionId), switches, () => "owed");
+  // A request of `sessionId` arrived, finding its switches at `switches`: the
+  // setups its clicks owe, settled now.
+  noted(sessionId2, switches) {
+    return settled3(
+      sessionId2,
+      this.take(sessionId2),
+      switches,
+      () => "owed",
+      this.deps.log
+    );
   }
   take(sessionId2) {
     const owed = this.owed.get(sessionId2) ?? /* @__PURE__ */ new Map();
     this.owed.delete(sessionId2);
     return owed;
   }
-  // [LAW:dataflow-not-control-flow] Each owed lane is brought to its switch
-  // `now`, unless the switch stands where the lane already is, and either
-  // way is said, under what started it: this click's move, or one owed from
-  // before.
-  settle(session, owed, now2, byOf) {
-    for (const [lane, from] of owed) {
-      if (now2[lane] !== from) this.start(session, lane, now2[lane], byOf(lane));
-      else
-        this.deps.log(
-          "info",
-          `lane: ${lane} ${from ? "on" : "off"} \u2014 nothing owed: its switch is back where the lane is by=${byOf(lane)} (session=${session.sessionId})`
-        );
-    }
-  }
-  start(session, lane, on2, by) {
-    this.deps.defer(
-      () => void this.setups.run(
-        session.sessionId,
-        () => this.sync(session, lane, on2, by)
-      )
-    );
-  }
-  // Resolves once the setup has finished, however it ended.
-  async sync(session, lane, on2, by) {
-    const where = `by=${by} (session=${session.sessionId})`;
-    const failed3 = (error) => {
+  // [LAW:effects-at-boundaries] The performer's run of one setup, answering
+  // how it ended: a part still underway once the plan answers is waited out,
+  // so the lane's next setup starts after it.
+  async setup({
+    sessionId: sessionId2,
+    lane,
+    on: on2,
+    by
+  }) {
+    if (this.closed) throw new DaemonClosing("lane setup");
+    const where = `by=${by} (session=${sessionId2})`;
+    const ended = (error) => {
       const text4 = `lane: ${lane} ${on2 ? "on" : "off"}: ${error instanceof Error ? error.message : String(error)}`;
       this.deps.log("warn", `${text4} ${where}`);
-      holdClickError(this.deps.state, session.sessionId, text4, this.deps.now());
+      return failed2(text4);
     };
     let outcome;
     try {
       outcome = await LANE_SETUP[lane][on2 ? "on" : "off"](
-        session,
+        laneRun(
+          () => this.latestOf(sessionId2),
+          this.paneOrder,
+          (from, to) => this.deps.log(
+            "info",
+            `lane: ${lane} ${on2 ? "on" : "off"} \u2014 the session moved from ${from.pane} to ${to.pane} while its step waited for the pane, so it takes ${to.pane}'s order ${where}`
+          )
+        ),
         this.deps.host,
         this.deps.edge
       );
     } catch (error) {
-      failed3(error);
-      return;
+      return ended(error);
     }
     this.deps.log(
       "info",
       `lane: ${lane} ${on2 ? "on" : "off"} \u2014 ${outcome.said} ${where}`
     );
-    if (outcome.kind === "underway") {
-      await outcome.finished.then(
-        (finished) => this.deps.log("info", `lane: ${lane} ${finished} ${where}`),
-        failed3
-      );
-    }
+    if (outcome.kind === "done") return { kind: "ok", said: outcome.said };
+    return outcome.finished.then((finished) => {
+      this.deps.log("info", `lane: ${lane} ${finished} ${where}`);
+      return { kind: "ok", said: finished };
+    }, ended);
+  }
+  // [LAW:no-ambient-temporal-coupling] A pane step still queued when the
+  // daemon closes is refused, as a queued setup is.
+  paneOrder = (tmux3, work) => this.deps.paneOrder(tmux3, () => {
+    if (this.closed) throw new DaemonClosing("lane setup");
+    return work();
+  });
+  // [LAW:no-silent-failure] The session as its latest request reports it
+  // now. One this daemon has stopped holding since the click (evicted with
+  // the least recently drawn) is refused, saying so.
+  latestOf(sessionId2) {
+    const session = this.deps.latest(sessionId2);
+    return session === null ? {
+      kind: "gone",
+      reason: `this daemon no longer holds a request of session ${sessionId2}`
+    } : { kind: "known", session };
+  }
+  close() {
+    this.closed = true;
   }
 };
+function settled3(sessionId2, owed, now2, byOf, log) {
+  const setups = [];
+  for (const [lane, from] of owed) {
+    if (now2[lane] !== from)
+      setups.push({
+        kind: "lane-setup",
+        sessionId: sessionId2,
+        lane,
+        on: now2[lane],
+        by: byOf(lane)
+      });
+    else
+      log(
+        "info",
+        `lane: ${lane} ${from ? "on" : "off"} \u2014 nothing owed: its switch is back where the lane is by=${byOf(lane)} (session=${sessionId2})`
+      );
+  }
+  return setups;
+}
 
 // src/daemon/render-warnings.ts
 init_globals();
@@ -85942,7 +86132,15 @@ var keyOf = (sessionId2, by) => `${by}\0${sessionId2}`;
 // src/daemon/journal-turns.ts
 init_globals();
 var GATHERS = "gathers";
-var CLICKLESS = "clickless";
+var QUEUED = {
+  session: ({ session }) => ["session", session],
+  pane: ({ tmux: tmux3 }) => ["pane", paneName(tmux3)],
+  lane: ({ session, lane }) => ["lane", session, lane]
+};
+function queuedAs(key) {
+  const queued = QUEUED[key.kind];
+  return JSON.stringify(queued(key));
+}
 var JournalTurns = class {
   gathers = new KeyedSerialQueue();
   effects = new KeyedSerialQueue();
@@ -85984,16 +86182,20 @@ var JournalTurns = class {
       this.gathersInFlight--;
     }
   }
-  // [LAW:no-ambient-temporal-coupling] A session's effects run one at a time,
-  // in the order their turns committed, after them: a performer that reads
-  // before it acts (the pane read before a slash is typed) sees what the
-  // session's earlier effects left, and two doctor clicks of one session reach
-  // their verdicts in the order they were clicked. The order is the
-  // performer's, not the turn's: the session's next click takes its turn while
-  // the last click's effects still run, and no close refuses it, since an
-  // outcome after close is said in the log.
-  performing(session, work) {
-    return this.effects.run(session ?? CLICKLESS, work);
+  // [LAW:no-ambient-temporal-coupling] The effects on one key run one at a
+  // time, in the order their places were taken, each after the last: a
+  // performer that reads before it acts (the pane read before a slash is
+  // typed) sees what the earlier effects on that thing left, and two doctor
+  // clicks of one session reach their verdicts in the order they were
+  // clicked. Effects on different keys wait on each other only through their
+  // own event's order and through a setup's pane step, which waits in its
+  // pane's order; keeping those waits acyclic is the performer's
+  // (src/daemon/apply.ts `performInOrder`). The order is the performer's, not the
+  // turn's: the session's next click takes its turn while the last click's
+  // effects still run, and no close refuses it, since an outcome after close
+  // is said in the log.
+  performing(key, work) {
+    return this.effects.run(queuedAs(key), work);
   }
   getStats() {
     return { gathers: this.gathersInFlight };
@@ -86182,9 +86384,8 @@ function createDaemon(inputs) {
   });
   const probe3 = inputs.probe(launcher);
   const storage = inputs.storage(log);
-  const store2 = new SessionState(storage.session);
   const journalTurns = new JournalTurns();
-  const sessionState = inputs.sessionWrites(store2, journalTurns);
+  const sessionState = new SessionState(journalTurns, storage.session);
   const settingsHistory = new SettingsHistory(
     sessionState,
     log,
@@ -86258,12 +86459,7 @@ function createDaemon(inputs) {
   const runs = new Runs({
     supersede: (storage2, sessionId2) => managedStorage.supersede(storage2, sessionId2),
     launch: launcher.launch,
-    // [LAW:single-enforcer] exception: a run's ending holds a click error
-    // outside any turn, so it writes the store and not the view; it becomes an
-    // effect-done in the next story of this lane.
-    state: store2,
     log,
-    now: instant,
     clock
   });
   const laneSetups = new LaneSetups({
@@ -86281,12 +86477,16 @@ function createDaemon(inputs) {
       home,
       preload: stableAttachPreload(bundle.path, host)
     },
-    // [LAW:single-enforcer] exception: as a run's ending, a lane setup's
-    // failure is held outside any turn, so it writes the store.
-    state: store2,
     log,
-    now: instant,
-    defer: (run3) => void clock.defer(run3)
+    // [LAW:one-source-of-truth] The session a setup acts on is its latest
+    // request, the one a click reads too, read as the setup runs.
+    latest: (sessionId2) => {
+      const req = frameFeeds.latest(sessionId2);
+      return req === null ? null : laneSessionOf(req);
+    },
+    // A setup's steps in a pane take the order of what is typed into it, as a
+    // slash click's typing does (src/daemon/apply.ts).
+    paneOrder: (tmux3, work) => journalTurns.performing({ kind: "pane", tmux: tmux3 }, work)
   });
   const tmuxStatusLines = new TmuxStatusLines({
     edge: {
@@ -86414,8 +86614,8 @@ function createDaemon(inputs) {
           // daemon.log with its cause — the operator's only record of why a load
           // ran, and whether a save was picked up cleanly, kept rendering
           // last-known-good behind an error, or resolved to a different file.
-          onReload: (entry, sessions, cause, settled3) => {
-            log("info", configLoadedLine(entry, cause, settled3));
+          onReload: (entry, sessions, cause, settled4) => {
+            log("info", configLoadedLine(entry, cause, settled4));
             for (const sessionId2 of sessions)
               frameFeeds.wake(sessionId2, "reload");
           },
@@ -86532,7 +86732,9 @@ function createDaemon(inputs) {
     runs,
     lanes: {
       of: (origin, sessionId2) => lanesAt(parts, origin, sessionId2),
-      clicked: (sessionId2, before, after) => laneClicked(parts, sessionId2, before, after)
+      clicked: (sessionId2, before, after) => laneClicked(parts, sessionId2, before, after),
+      arrived: (req) => requestArrived(parts, req),
+      setup: (effect) => laneSetups.setup(effect)
     },
     diagnosticCopy: (sessionId2, by, key) => renderCache.drawnCopy(sessionId2, by, key)
   };
@@ -86554,7 +86756,6 @@ function createDaemon(inputs) {
     fileEvents,
     payloadProviders,
     sessionState,
-    sessionGauges: store2,
     rendererName: home.name,
     draw: (req, at, waitEndsAt, facts) => drawAnswer(parts, req, at, waitEndsAt, facts),
     effectSessions,
@@ -86620,6 +86821,9 @@ function createDaemon(inputs) {
         // is in flight is terminated, whichever owner's work it was, and the
         // launcher's lifeline goes.
         ["launches abort", () => closing.abort(new Error("the daemon closed"))],
+        // A lane setup still queued behind the session's earlier effects is
+        // refused, as a queued run is (`runs close`).
+        ["laneSetups close", () => laneSetups.close()],
         ["frameFeeds close", () => frameFeeds.close()],
         ["linkIds close", () => linkIds.close()],
         ["menuIdle dispose", () => menuIdle.dispose()],
@@ -86642,7 +86846,7 @@ function createDaemon(inputs) {
         ["managedStorage close", () => managedStorage.close()],
         ["fileEvents close", () => fileEvents.close()],
         ["watcherRegistry close", () => watcherRegistry.closeAll()],
-        ["sessionState close", () => store2.close()]
+        ["sessionState close", () => sessionState.close()]
       ];
       for (const [step4, run3] of teardown) {
         try {
@@ -87573,7 +87777,6 @@ function productionAdapters(paths2, daemonLog, machine) {
     daemonLog,
     launcher: (own2) => systemLauncher(own2, machine),
     storage: (log) => fileStorage(paths2, log, machine),
-    sessionWrites: (store2) => store2,
     doctorStores: fileStores(paths2.state),
     doctorEdge: productionEdge,
     claudeInput: productionClaudeInputEdge,
@@ -88062,7 +88265,7 @@ async function click2(url, size) {
   const host = effects.filter((e) => HOST_VERBS.has(e.verb));
   if (host.length > 0) {
     const copiesOnly = effects.every((e) => e.verb === VERB_COPY);
-    const refused3 = copiesOnly ? await copy2(effects.map((e) => e.args.join("/")).join("\n")) : `not sent: on a real machine this ${host.map((e) => HOST_VERBS.get(e.verb)).join(", ")}`;
+    const refused3 = copiesOnly ? await copy2(effects.map(({ args: [, text4] }) => text4).join("\n")) : `not sent: on a real machine this ${host.map((e) => HOST_VERBS.get(e.verb)).join(", ")}`;
     return { ...await render2(size), refused: refused3 };
   }
   let refused2 = null;
