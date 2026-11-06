@@ -143,18 +143,18 @@ describe("formatPermanentGlyph (kz8.5 ch.2)", () => {
 // loaded loop to miss.
 
 // [LAW:one-source-of-truth] The daemon end runs the real version gate one
-// version ahead of the client, so the bytes the client classifies are the ones
-// a newer daemon sends a stale client. A fault in the daemon end is kept, not
+// version ahead of the client, so the reply the client classifies is the one
+// a newer daemon's gate sends a stale client. Only the gate runs: a request
+// the daemon would reject as malformed is not this test's concern. A fault in the daemon end is kept, not
 // thrown: a throw unwinds into the client's own catch and comes back as an
 // outcome without its message, so the test asserts there were none.
-const DAEMON_V = PROTOCOL_VERSION + 1;
 function mismatchingDaemonEnd(daemonEnd: Duplex): Error[] {
   const faults: Error[] = [];
   daemonEnd.on(
     "data",
     makeFrameReader(
       (frame) => {
-        const handled = versionGate(frame as Request, () => {}, DAEMON_V);
+        const handled = versionGate(frame as Request, () => {}, OTHER_V);
         if (handled?.kind !== "reply") {
           faults.push(new Error("the version gate admitted a stale client"));
           daemonEnd.destroy();
@@ -201,11 +201,11 @@ describe("VERSION_MISMATCH wire → permanent outcome → glyph", () => {
     expect(outcome.cause).toBe("version_mismatch");
     if (outcome.cause !== "version_mismatch") return;
     expect(outcome.clientV).toBe(PROTOCOL_VERSION);
-    expect(outcome.daemonV).toBe(DAEMON_V);
+    expect(outcome.daemonV).toBe(OTHER_V);
 
     const glyph = formatPermanentGlyph(outcome);
     expect(glyph).toContain(`client v${PROTOCOL_VERSION}`);
-    expect(glyph).toContain(`daemon v${DAEMON_V}`);
+    expect(glyph).toContain(`daemon v${OTHER_V}`);
     expect(glyph.startsWith(OPEN)).toBe(true);
     expect(glyph.endsWith(TAIL)).toBe(true);
   });

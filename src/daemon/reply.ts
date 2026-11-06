@@ -216,7 +216,8 @@ function recording(parts: DaemonParts, req: RecordRequest): HandledRequest {
 
 // [LAW:single-enforcer] The protocol-version gate: the reply to a request at
 // another version, or null for one this daemon speaks. It reads nothing of
-// the daemon but its log and the version it speaks, so it is judged apart from every other part.
+// the daemon but its log and the version it speaks, so it is judged apart
+// from every other part.
 export function versionGate(
   req: Request,
   log: DaemonLogger,
