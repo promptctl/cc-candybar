@@ -4,15 +4,22 @@
     {
       "version": "pr-628",
       "ref": "refs/pull/628/merge",
-      "sha": "147cbef29e56811616621fe3798a489452355712",
-      "timestamp": "2026-11-06T06:57:09.044Z",
+      "sha": "75f0efac96f84909453a224ba2961e35b7cc651e",
+      "timestamp": "2026-11-06T07:02:58.343Z",
       "commits": [
         {
-          "sha": "147cbef29e56811616621fe3798a489452355712",
+          "sha": "75f0efac96f84909453a224ba2961e35b7cc651e",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T06:56:14Z",
-          "message": "Merge 447792efbbecde25c17628aad317d4d3413367ff into 92e444f3bcf390e07f4b9490d78c0f5223c635e5\n"
+          "timestamp": "2026-11-06T07:01:38Z",
+          "message": "Merge cd2bbacea4870fc9af81d2761de0c7fe75aea2b2 into 92e444f3bcf390e07f4b9490d78c0f5223c635e5\n"
+        },
+        {
+          "sha": "cd2bbacea4870fc9af81d2761de0c7fe75aea2b2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T00:01:26-07:00",
+          "message": "docs(memory): a world path under the root is refused; an older build's bare path is read as this build spells it (candybar-gather-renderer-76bb.f00.n2j)\n"
         },
         {
           "sha": "447792efbbecde25c17628aad317d4d3413367ff",
