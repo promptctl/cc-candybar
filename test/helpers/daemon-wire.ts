@@ -17,6 +17,7 @@ import { dialWithin, type Dialer } from "../../src/dial/dialer";
 import { systemDialer } from "../../src/dial/system-dialer";
 import type { Request, Response } from "../../src/daemon/protocol";
 import { systemTimekeeper } from "../../src/time";
+import { within } from "./case-time";
 
 const DEFAULT_REPLY_BUDGET_MS = 5000;
 
@@ -66,7 +67,7 @@ export function sendDaemonRequest(
   req: Record<string, unknown>,
   timeoutMs: number = DEFAULT_REPLY_BUDGET_MS,
 ): Promise<Response> {
-  return endpointOf(target).send(req, timeoutMs);
+  return endpointOf(target).send(req, within(timeoutMs).ms);
 }
 
 // [LAW:one-source-of-truth] A thin connect-then-delegate wrapper around

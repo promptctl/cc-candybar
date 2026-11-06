@@ -37,6 +37,7 @@ import {
   sameLiveProcess,
   type ProcessIdentity,
 } from "../../src/daemon/process-fingerprint";
+import { within } from "./case-time";
 import { processProbe } from "./host";
 
 type SlotRecord = ProcessIdentity;
@@ -155,18 +156,18 @@ export function createDaemonPool(dir: string, size: number): DaemonPool {
   }
 
   async function acquire(opts: AcquireOpts = {}): Promise<DaemonSlot> {
-    const timeoutMs = opts.timeoutMs ?? DEFAULT_ACQUIRE_TIMEOUT_MS;
+    const wait = within(opts.timeoutMs ?? DEFAULT_ACQUIRE_TIMEOUT_MS);
     const retryIntervalMs = opts.retryIntervalMs ?? DEFAULT_RETRY_INTERVAL_MS;
     const myPid = process.pid;
     const myStartTime = await readOwnStartTime(myPid, processProbe.startTime);
-    const deadline = Date.now() + timeoutMs;
+    const deadline = Date.now() + wait.ms;
     // [LAW:no-silent-failure] Never spawn past the ceiling by falling back
     // silently — a full pool means the caller MUST fail loudly so the
     // regression (more concurrent real daemons than the asserted ceiling)
     // is visible instead of quietly re-opening the storm.
     const timeoutError = (): Error =>
       new Error(
-        `daemon-pool: no free slot among ${size} within ${timeoutMs}ms ` +
+        `daemon-pool: no free slot among ${size} within ${wait.named} ` +
           `(${dir}) — too many concurrent real daemon spawns on this machine`,
       );
     let claimed: number | null = null;

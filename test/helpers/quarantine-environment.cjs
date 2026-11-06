@@ -16,10 +16,14 @@
 // jest that loads this file: jest does not expose its copy, and the environment
 // has to extend the one the run is built on.
 //
+// It is also where the running case's time is kept (case-clock.cjs), because
+// the environment is the one place that sees every function start and end.
+//
 // CommonJS because jest loads an environment untransformed.
 
 const path = require("node:path");
 const { TestEnvironment } = require("jest-environment-node");
+const { CASE_TIME_LEFT, caseClock } = require("./case-clock.cjs");
 const { caseName } = require("./test-records.cjs");
 const { QUARANTINE_FILE, markError, quarantined, readQuarantine } = require("./quarantine.cjs");
 
@@ -52,9 +56,12 @@ class QuarantineEnvironment extends TestEnvironment {
     this.file = path.relative(rootDir, context.testPath);
     this.list = testEnvironmentOptions.quarantine ?? QUARANTINE_FILE;
     this.entries = readQuarantine(rootDir, this.list);
+    this.caseClock = caseClock(Date.now);
+    this.global[CASE_TIME_LEFT] = this.caseClock.left;
   }
 
   handleTestEvent(event, state) {
+    this.caseClock.observe(event, state);
     if (event.name === "run_start") return this.refuseAmbiguousLines(state);
     if (event.name !== "test_done" || event.test.errors.length === 0) return;
     const entry = quarantined(this.entries, this.file, caseNameOf(event.test));

@@ -10,7 +10,6 @@ import {
   type RunningDaemon,
 } from "../../helpers/spawn-isolated-daemon";
 
-jest.setTimeout(30_000);
 
 // The wire of a real client: its own process, env and cwd, over a socket. A
 // client run with `spawnSync` would block a daemon in this worker, so these

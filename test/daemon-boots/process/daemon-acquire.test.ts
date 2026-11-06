@@ -13,8 +13,6 @@ import { until } from "../../helpers/until";
 // drops the import) fails THIS test even though every one of those would still
 // pass unmodified.
 describe("resetSpawnBackoff wiring into onListening (integration: real daemon)", () => {
-  jest.setTimeout(30_000);
-
   test("a real daemon bind deletes a pre-existing spawn.backoff streak file", async () => {
     const { env, home, sockPath, stateDir, removeTmpDirs } =
       prepareIsolatedDaemonEnv("ccb-backoff");

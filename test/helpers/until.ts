@@ -1,5 +1,7 @@
 import { setTimeout as sleep } from "node:timers/promises";
 
+import { within } from "./case-time";
+
 export type Condition = () => boolean | Promise<boolean>;
 
 // What was waited on, for the failure. A thunk is read only when the wait
@@ -73,8 +75,9 @@ export async function until(
   what: What,
   budgetMs = 5_000,
 ): Promise<void> {
-  if (await holdsWithin(reached, budgetMs)) return;
-  throw new Error(`${nameOf(what)} did not hold within ${budgetMs}ms`);
+  const wait = within(budgetMs);
+  if (await holdsWithin(reached, wait.ms)) return;
+  throw new Error(`${nameOf(what)} did not hold within ${wait.named}`);
 }
 
 // The complement: a named condition that must keep holding for the whole
@@ -82,12 +85,17 @@ export async function until(
 // asserts (a blocked spawn stays blocked), so it has its own loud name
 // rather than a false read out of `until`. [LAW:types-are-the-program] `holds`
 // is synchronous because expiry is the pass here: an unanswered probe would
-// pass without having answered.
+// pass without having answered. For the same reason a budget its case cannot
+// give is refused, not shortened: a shorter hold would pass a claim it never
+// tested.
 export async function throughout(
   holds: () => boolean,
   what: What,
   budgetMs: number,
 ): Promise<void> {
+  const wait = within(budgetMs);
+  if (wait.ms < budgetMs)
+    throw new Error(`${nameOf(what)} must hold for ${budgetMs}ms, longer than ${wait.named}`);
   if (await holdsWithin(() => !holds(), budgetMs))
     throw new Error(`${nameOf(what)} stopped holding within ${budgetMs}ms`);
 }

@@ -82,8 +82,6 @@ function spawnLiveHolder(): ChildProcess {
 }
 
 describe("daemon EADDRINUSE arbitration (integration)", () => {
-  jest.setTimeout(30_000);
-
   test("live-lease incumbent: second daemon exits 0 and does NOT unlink the socket", async () => {
     const fx = makeFixture();
     const holder = spawnLiveHolder();

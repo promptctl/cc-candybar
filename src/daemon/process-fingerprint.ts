@@ -58,6 +58,9 @@ export type StartTimeRead =
 // `launch` is the subprocess boundary, injected so the parse/branch logic is
 // exercised by input enumeration with a fake launcher while the real path runs
 // the real `ps`.
+// The longest one read of a start time may take.
+export const START_TIME_READ_BUDGET_MS = 2000;
+
 // [LAW:effects-at-boundaries][LAW:single-enforcer] The sole effect (spawning
 // `ps`) goes through the one subprocess enforcer, `launch`, off the loop: a
 // detached holder of its stdout cannot hold the daemon. The ONLY sound
@@ -74,7 +77,7 @@ export async function readStartTime(
     bin: "ps",
     args: ["-o", "lstart=", "-p", String(pid)],
     category: "process-fingerprint",
-    timeoutMs: 2000,
+    timeoutMs: START_TIME_READ_BUDGET_MS,
     // [FRAMING:representation] Pin BOTH locale and timezone so the token is
     // deterministic across daemons — the writer and reader must render the same
     // process identically for opaque string equality to be sound. LC_ALL=C fixes

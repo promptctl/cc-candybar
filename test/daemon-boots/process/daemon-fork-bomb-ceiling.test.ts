@@ -90,8 +90,6 @@ function waitForExit(
 }
 
 describe("daemon-side fork-bomb circuit breaker (integration)", () => {
-  jest.setTimeout(30_000);
-
   test("refuses the (ceiling+1)th isolated daemon; a dead sibling's slot is reclaimed", async () => {
     const pool = createDaemonPool(tmpDir("cc-candybar-breaker-pool-"), 4);
     const registryDir = tmpDir("cc-candybar-breaker-registry-");
