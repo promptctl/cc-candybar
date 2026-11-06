@@ -64287,6 +64287,7 @@ function closingView(store, nestOf2, log) {
   return {
     get: (sessionId2, key) => store.get(sessionId2, key),
     revision: (sessionId2) => store.revision(sessionId2),
+    values: (sessionId2) => store.values(sessionId2),
     set: (sessionId2, key, value) => setBatch(sessionId2, [{ key, value }]),
     setBatch,
     // A cleared key reads its default, so it closes what its old value held.
@@ -64899,6 +64900,7 @@ function recordingView(store, records, onChange) {
   return {
     get: (sessionId2, key) => store.get(sessionId2, key),
     revision: (sessionId2) => store.revision(sessionId2),
+    values: (sessionId2) => store.values(sessionId2),
     set: (sessionId2, key, value) => recorded(sessionId2, [key], () => store.set(sessionId2, key, value)),
     setBatch: (sessionId2, pairs2) => recorded(
       sessionId2,
@@ -64936,9 +64938,12 @@ var SessionState = class {
   // every mutation reports changed. Coarse-grained reactivity is correct for
   // session-state's load — mutations are rare and computeds are cheap.
   atom = createAtom("SessionState");
+  // [LAW:one-source-of-truth] An empty session in the file is a husk no write
+  // here leaves (`commit` drops it), so it is not taken up: the store holds
+  // nothing for it at revision 0, as for a session it never saw.
   hydrateFromStorage() {
     this.sessions = new Map(
-      Object.entries(this.storage.load()).map(([sessionId2, kv]) => [
+      Object.entries(this.storage.load()).filter(([, kv]) => Object.keys(kv).length > 0).map(([sessionId2, kv]) => [
         sessionId2,
         { values: new Map(Object.entries(kv)), revision: ++this.head }
       ])
@@ -64956,6 +64961,10 @@ var SessionState = class {
   revision(sessionId2) {
     this.atom.reportObserved();
     return this.sessions.get(sessionId2)?.revision ?? 0;
+  }
+  values(sessionId2) {
+    this.atom.reportObserved();
+    return Object.fromEntries(this.sessions.get(sessionId2)?.values ?? []);
   }
   // How many derivations are subscribed to this store right now — every
   // computed that read session state and has not been released. Live configs
@@ -65004,27 +65013,53 @@ var SessionState = class {
   // this is the public-API safety net rather than the hot path.
   setBatch(sessionId2, pairs2) {
     if (pairs2.length === 0) return;
+    this.commit(sessionId2, (session) => {
+      if (pairs2.some(({ key, value }) => session.values.get(key) !== value))
+        session.revision = ++this.head;
+      for (const { key, value } of pairs2) session.values.set(key, value);
+    });
+  }
+  clear(sessionId2, key) {
+    this.commit(sessionId2, (session) => {
+      if (session.values.delete(key)) session.revision = ++this.head;
+    });
+  }
+  // [LAW:one-source-of-truth] The session's state as another store held it:
+  // its values and its revision there, which a recording carries. The
+  // revision is the recorded one, never one this store mints, because a draw
+  // reads it (frame memory keeps the last frame only while it holds), so a
+  // replay keeps or drops exactly where the live store did. The head is
+  // raised to it, so no later write mints a revision the store has held. A
+  // session already at the revision holds its values: nothing moves.
+  restore(sessionId2, values2, revision) {
+    if ((this.sessions.get(sessionId2)?.revision ?? 0) === revision) return;
+    this.commit(sessionId2, (session) => {
+      session.values.clear();
+      for (const [key, value] of Object.entries(values2)) {
+        session.values.set(key, value);
+      }
+      session.revision = revision;
+      this.head = Math.max(this.head, revision);
+    });
+  }
+  // [LAW:single-enforcer] Every write lands here, in one action: the change,
+  // the session's place, then the disk mirror and one notification, so
+  // observers never see a half-applied write. An emptied session is a
+  // non-state, dropped so it neither occupies a cap slot nor persists as a
+  // `{ "sid": {} }` husk [LAW:one-source-of-truth]; a surviving one is
+  // promoted, since every interaction is a recency signal, uniform with get()
+  // [LAW:one-type-per-behavior].
+  commit(sessionId2, write) {
     runInAction(() => {
       const session = this.sessions.get(sessionId2) ?? {
         values: /* @__PURE__ */ new Map(),
         revision: 0
       };
-      if (pairs2.some(({ key, value }) => session.values.get(key) !== value))
-        session.revision = ++this.head;
-      for (const { key, value } of pairs2) session.values.set(key, value);
-      this.touch(sessionId2, session);
-      this.evictOldest();
-      this.persist();
-      this.atom.reportChanged();
-    });
-  }
-  clear(sessionId2, key) {
-    runInAction(() => {
-      const session = this.sessions.get(sessionId2);
-      if (session) {
-        if (session.values.delete(key)) session.revision = ++this.head;
-        if (session.values.size === 0) this.sessions.delete(sessionId2);
-        else this.touch(sessionId2, session);
+      write(session);
+      if (session.values.size === 0) this.sessions.delete(sessionId2);
+      else {
+        this.touch(sessionId2, session);
+        this.evictOldest();
       }
       this.persist();
       this.atom.reportChanged();
@@ -69309,7 +69344,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.200.1";
+var PACKAGE_VERSION = "1.201.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -76785,7 +76820,7 @@ function resolvePath2(obj, dotPath) {
 }
 
 // src/facts/recording.ts
-var RECORDING_VERSION = 2;
+var RECORDING_VERSION = 3;
 var LANES2 = new Set(REFRESH_LANES);
 function formatLine(line) {
   const json2 = line.kind === "recording" ? {
@@ -76793,7 +76828,11 @@ function formatLine(line) {
     v: RECORDING_VERSION,
     session: line.session,
     home: line.home
-  } : line.kind === "facts" ? { kind: line.kind, at: line.at, facts: line.facts } : line.kind === "draw" ? { kind: line.kind, request: line.request } : {
+  } : line.kind === "facts" ? { kind: line.kind, at: line.at, facts: line.facts } : line.kind === "draw" ? {
+    kind: line.kind,
+    request: line.request,
+    state: { ...line.state, idleSince: line.state.idleSince ?? null }
+  } : {
     kind: line.kind,
     ...line.kind === "request" && { at: line.at },
     hookData: line.request.hookData,
@@ -76886,13 +76925,13 @@ function sessionRecorder(views, log) {
     // read: each written again here when it is not the last this recording
     // wrote, as a request's held view the session moved away from has, and
     // the current view at the draw after that.
-    drew(sessionId2, { at: request2, noted }, { document, declaration }) {
+    drew(sessionId2, { at: request2, noted }, { document, declaration, state }) {
       for (const rec of open2.get(sessionId2) ?? []) {
         if (!noted.has(rec)) continue;
         const lines2 = [
           ...rec.document === document.facts ? [] : [{ kind: "facts", ...document }],
           ...rec.declaration === declaration ? [] : [{ kind: "declared", request: declaration }],
-          { kind: "draw", request: request2 }
+          { kind: "draw", request: request2, state }
         ];
         for (const line of lines2) {
           if (open2.get(sessionId2)?.has(rec)) write(sessionId2, rec, line);
@@ -76938,7 +76977,8 @@ function drawRequest(recorder, view, arrival, draw2) {
   const drawn = draw2();
   recorder.drew(view.sessionId, arrival, {
     document: view.source.stamped(),
-    declaration: view.facts()
+    declaration: view.facts(),
+    state: { ...view.source.state(), idleSince: drawn.idleSince }
   });
   return drawn;
 }
@@ -77302,40 +77342,38 @@ function drawRender(parts, setup, drawing2) {
   const drawnWarnings = [];
   const renderOpts = renderOptionsOf(effective, width);
   const effects = effectSessions.of(sessionId2);
-  const idleSince = menuIdle.since(sessionId2, at);
-  const { frame: frame2, evaluated: evaluated2, cellBreaks, rules } = drawDsl(
-    state.config,
-    state.compiled,
-    view.store,
-    view.registry,
-    projected,
+  const { frame: frame2, evaluated: evaluated2, cellBreaks, rules, idleSince } = menuIdle.drawn(
+    sessionId2,
     at,
-    renderOpts,
-    // [LAW:single-enforcer] The per-segment StripCell sink for the
-    // `debug segments` projection. Its identity stays stable for the
-    // view's lifetime; drawDsl clears + repopulates it
-    // in place. Cells are cheap (already computed during the render);
-    // the per-segment ANSI serialization happens lazily inside the
-    // debug handler so normal renders pay no extra serializer cost.
-    {
-      perSegmentSink: view.lastRenderCellsBySegment,
-      onRenderWarning: (warning) => drawnWarnings.push(warning)
-    },
-    // [LAW:one-source-of-truth] The draw's own settings and the session's
-    // effect memory. The theme, style and effect are not among them: the
-    // view's slots settle those names (src/dsl/parts.ts), the same ones its
-    // payload's `.effective` fields read.
-    { ...effective, effects, idleSince }
+    effective.menuTimeout,
+    (idleSince2) => drawDsl(
+      state.config,
+      state.compiled,
+      view.store,
+      view.registry,
+      projected,
+      at,
+      renderOpts,
+      // [LAW:single-enforcer] The per-segment StripCell sink for the
+      // `debug segments` projection. Its identity stays stable for the
+      // view's lifetime; drawDsl clears + repopulates it
+      // in place. Cells are cheap (already computed during the render);
+      // the per-segment ANSI serialization happens lazily inside the
+      // debug handler so normal renders pay no extra serializer cost.
+      {
+        perSegmentSink: view.lastRenderCellsBySegment,
+        onRenderWarning: (warning) => drawnWarnings.push(warning)
+      },
+      // [LAW:one-source-of-truth] The draw's own settings and the session's
+      // effect memory. The theme, style and effect are not among them: the
+      // view's slots settle those names (src/dsl/parts.ts), the same ones its
+      // payload's `.effective` fields read.
+      { ...effective, effects, idleSince: idleSince2 }
+    )
   );
   const keys2 = copyKeys(diagnostics);
   const copies = new Map(diagnostics.map((m, i) => [keys2[i], m.copy]));
   const delivered = () => renderCache.delivered(sessionId2, drawing2.by, copies);
-  menuIdle.observe(
-    sessionId2,
-    at,
-    frame2.rows.some((row2) => row2.kind === "menu"),
-    effective.menuTimeout
-  );
   const menusSince = menuIdle.since(sessionId2, at);
   noteFacts(facts, {
     menuIdle: menusSince === void 0 ? "-" : `${(at - menusSince).toFixed(1)}s/${effective.menuTimeout}s`
@@ -77451,7 +77489,8 @@ function drawRender(parts, setup, drawing2) {
     answersClick: toAnswer(clickHold),
     pipeShown,
     delivered,
-    lanes
+    lanes,
+    idleSince
   };
 }
 function arrived2(parts, req, lanes) {
@@ -83648,7 +83687,13 @@ function sessionSource(deps) {
       home: () => turn.get().compose.home,
       hints: () => turn.get().compose.hints,
       failure: () => turn.get().failure,
-      selections: () => turn.get().draw.effective
+      selections: () => turn.get().draw.effective,
+      state: () => ({
+        values: deps.sessionState.values(sessionId2),
+        revision: deps.sessionState.revision(sessionId2),
+        history: turn.get().draw.history,
+        back: turn.get().draw.back
+      })
     };
   };
 }
@@ -85368,6 +85413,22 @@ var MenuIdle = class {
   since(sessionId2, at) {
     const idle = this.record(sessionId2, at);
     return idle.shown && !this.pending.has(sessionId2) ? idle.since : void 0;
+  }
+  // [LAW:single-enforcer] One frame of the session drawn under its idle
+  // period: the draw is handed the period's start as it stands before the
+  // frame, then what the frame drew is observed. The instant handed is
+  // returned with the draw, because the observe moves the start on a menu's
+  // first frame, and a recording notes what the draw read.
+  drawn(sessionId2, at, timeoutS, draw2) {
+    const idleSince = this.since(sessionId2, at);
+    const drawn = draw2(idleSince);
+    this.observe(
+      sessionId2,
+      at,
+      drawn.frame.rows.some((row2) => row2.kind === "menu"),
+      timeoutS
+    );
+    return { ...drawn, idleSince };
   }
   // What the session's newest frame drew: whether a menu row, and the
   // timeout its settings resolve to. Frames are taken by their instant, not
