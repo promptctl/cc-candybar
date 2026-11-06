@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-656",
+      "ref": "refs/pull/656/merge",
+      "sha": "3fa180c06c098984379fd239e07bcadbc216e3ab",
+      "timestamp": "2026-11-06T22:14:49.828Z",
+      "commits": [
+        {
+          "sha": "3fa180c06c098984379fd239e07bcadbc216e3ab",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T15:13:46-07:00",
+          "message": "Merge 11d9385324c873a2568bbce386274828b1ae4f1e into 466c05ac9e0e8203441238a3692bac06838e69a9\n"
+        },
+        {
+          "sha": "11d9385324c873a2568bbce386274828b1ae4f1e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T14:51:02-07:00",
+          "message": "feat(apply): an effect waits only behind what it acts on; a lane setup holds its pane only while it types (candybar-gather-renderer-76bb.1dh.y9b)\n\nThe performer's order is keyed by what an effect acts on, not by the\nsession: a typed line by its tmux pane, a lane setup by its session's lane,\nand a session's launches, runs, doctor steps and update by that session's\nclicks as they committed. Every effect takes its place when its turn's\neffects are handed over, and an event's effects still run in the order\ndescribed, so a `do` keeps its order and no later click jumps ahead.\n\nA setup's steps that type into the session's pane (the whole statusline\nrestart, the band's /reload-plugins) take the pane's order when they are\nreached, so a copy clicked during a band install is performed at once and a\nslash typed during a restart lands after it. The setup reads the session's\nlatest request as it runs instead of a copy taken at the click.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "466c05ac9e0e8203441238a3692bac06838e69a9",
