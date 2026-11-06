@@ -397,16 +397,6 @@ function oneArg(value: string): string {
   return decodeWire(() => decodeURIComponent(value));
 }
 
-// The argument of a verb that carries `[sessionId, argument]` (copy, open): each
-// is encoded whole, so a copied text's own "/" is data, never a separator.
-function soleArg(args: readonly string[]): string {
-  if (args.length !== 1)
-    throw new BadVerbArgs(
-      `expected a session and one argument, got ${args.length + 1} segments`,
-    );
-  return args[0]!;
-}
-
 // ─── Verb handlers ───────────────────────────────────────────────────────────
 
 // How long a program a click launches has before its effect fails, or, for an
@@ -539,8 +529,8 @@ function launch(ctx: ClickContext, spec: LaunchSpec, what: string): void {
   ctx.effect({ kind: "launch", spec, what });
 }
 
-const copy: VerbHandler = (_sid, args, ctx) => {
-  pbcopy(soleArg(args), ctx);
+const copy: VerbHandler = (_sid, [text = ""], ctx) => {
+  pbcopy(text, ctx);
 };
 
 // [LAW:parse-dont-validate] The renderer a copy click names: the surface it
@@ -568,12 +558,12 @@ const copyDiagnostic: VerbHandler = (sid, args, ctx) => {
   pbcopy(text, ctx);
 };
 
-const openVscode: VerbHandler = (_sid, args, ctx) => {
+const openVscode: VerbHandler = (_sid, [target = ""], ctx) => {
   launch(
     ctx,
     {
       bin: "/usr/bin/open",
-      args: ["-a", "Visual Studio Code", soleArg(args)],
+      args: ["-a", "Visual Studio Code", target],
       category: "click.open",
     },
     'open -a "Visual Studio Code"',
@@ -1948,43 +1938,44 @@ const repoConfig: VerbHandler = (sid, args, ctx) => {
 // verb that names none cannot join this table: it is a link kind beside it, as
 // the probe is.
 //
-// [LAW:no-silent-failure] Each row states how many arguments its verb reads
-// after the session, so a link carrying more is refused, never acted on with
-// the rest dropped unread. A verb whose arguments are a list (pairs, keys)
-// reads any number.
+// [LAW:no-silent-failure] Each row states the fewest and most arguments its
+// verb reads after the session, so a link carrying more is refused, never acted
+// on with the rest dropped unread, and one carrying fewer never reaches a
+// handler to read an empty value in a missing one's place. A verb whose
+// arguments are a list (pairs, keys) reads any number, and judges the list.
 interface Leaf {
   readonly handler: VerbHandler;
-  readonly takes: number;
+  readonly takes: readonly [min: number, max: number];
 }
 
 const LEAF_VERBS = new Map<string, Leaf>(
   (
     [
-      [VERB_COPY, copy, 1],
-      [VERB_OPEN_VSCODE, openVscode, 1],
-      [VERB_SET_STATE, setState, Infinity],
-      [VERB_STEP_STATE, stepState, 2],
-      [VERB_SET_CONFIG, setConfig, 2],
-      [VERB_STEP_CONFIG, stepConfig, 2],
-      [VERB_RESET_CONFIG, resetConfig, Infinity],
-      [VERB_SAVE, save, 0],
-      [VERB_SAVE_PRESET, savePreset, 0],
-      [VERB_SAVE_THEME_DEFAULT, saveThemeDefault, 0],
-      [VERB_DELETE_PRESET, deletePreset, 1],
-      [VERB_APPLY_LAYOUT_OP, applyLayoutOp, 2],
-      [VERB_UNDO, undo, 0],
-      [VERB_REDO, redo, 0],
-      [VERB_BACK, back, 0],
-      [VERB_REWIND, rewind, 0],
-      [VERB_TOOLBAR_TOGGLE, toolbarToggle, 0],
-      [VERB_APPLY_UPDATE, applyUpdate, 0],
-      [VERB_DOCTOR_RUN, doctorRun, 0],
-      [VERB_DOCTOR_FIX, doctorFix, 1],
-      [VERB_DOCTOR_MARK, doctorMark, 2],
-      [VERB_SLASH, slash, 1],
-      [VERB_RUN, run, 3],
-      [VERB_REPO_CONFIG, repoConfig, 3],
-      [VERB_COPY_DIAGNOSTIC, copyDiagnostic, 2],
+      [VERB_COPY, copy, [1, 1]],
+      [VERB_OPEN_VSCODE, openVscode, [1, 1]],
+      [VERB_SET_STATE, setState, [0, Infinity]],
+      [VERB_STEP_STATE, stepState, [2, 2]],
+      [VERB_SET_CONFIG, setConfig, [2, 2]],
+      [VERB_STEP_CONFIG, stepConfig, [2, 2]],
+      [VERB_RESET_CONFIG, resetConfig, [0, Infinity]],
+      [VERB_SAVE, save, [0, 0]],
+      [VERB_SAVE_PRESET, savePreset, [0, 0]],
+      [VERB_SAVE_THEME_DEFAULT, saveThemeDefault, [0, 0]],
+      [VERB_DELETE_PRESET, deletePreset, [1, 1]],
+      [VERB_APPLY_LAYOUT_OP, applyLayoutOp, [2, 2]],
+      [VERB_UNDO, undo, [0, 0]],
+      [VERB_REDO, redo, [0, 0]],
+      [VERB_BACK, back, [0, 0]],
+      [VERB_REWIND, rewind, [0, 0]],
+      [VERB_TOOLBAR_TOGGLE, toolbarToggle, [0, 0]],
+      [VERB_APPLY_UPDATE, applyUpdate, [0, 0]],
+      [VERB_DOCTOR_RUN, doctorRun, [0, 0]],
+      [VERB_DOCTOR_FIX, doctorFix, [1, 1]],
+      [VERB_DOCTOR_MARK, doctorMark, [2, 2]],
+      [VERB_SLASH, slash, [1, 1]],
+      [VERB_RUN, run, [3, 3]],
+      [VERB_REPO_CONFIG, repoConfig, [3, 3]],
+      [VERB_COPY_DIAGNOSTIC, copyDiagnostic, [2, 2]],
     ] as const
   ).map(([verb, handler, takes]) => [verb, { handler, takes }]),
 );
@@ -2086,9 +2077,10 @@ function perform(
         `names session ${session.id}, not the session its click is in`,
       );
     if (!args.ok) throw new BadVerbArgs(args.problem);
-    if (args.value.length > leaf.takes)
+    const [min, max] = leaf.takes;
+    if (args.value.length < min || args.value.length > max)
       throw new BadVerbArgs(
-        `reads ${leaf.takes} after its session, and the link carries ${args.value.length}`,
+        `reads ${min === max ? min : `${min} to ${max}`} after its session, and the link carries ${args.value.length}`,
       );
     leaf.handler(session.id, args.value, {
       ...ctx,

@@ -179,7 +179,8 @@ describe("a dispatch acts on the session its click is in", () => {
   test.each([
     [VERB_TOOLBAR_TOGGLE, ["junk"], 0],
     [VERB_COPY, ["text", "junk"], 1],
-  ])("a %s link carrying more than its verb reads is refused, never acted on with the rest dropped", async (verb, args, reads) => {
+    [VERB_COPY, [], 1],
+  ])("a %s link carrying %j, not the count its verb reads, is refused before its handler runs", async (verb, args, reads) => {
     const r = rig();
     r.spawner.program(program(PBCOPY), exits(0));
     const { answer, performed } = await applyClickAnswered(
