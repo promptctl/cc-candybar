@@ -146,6 +146,40 @@ describe("a copy click's launch is an effect", () => {
   });
 });
 
+describe("a dispatch acts on the session its click is in", () => {
+  // Spelled by hand: the minter encodes every segment, so it mints neither a
+  // second session nor a malformed escape.
+  const dispatch = (...tails: readonly string[]) =>
+    `cc-candybar://to/main/dispatch/does=copy&${tails.map((t) => `e=${encodeURIComponent(t)}`).join("&")}`;
+
+  test("a step naming another session is refused as bad input, held on the click's bar, and launches nothing", async () => {
+    const r = rig();
+    r.spawner.program(program(PBCOPY), exits(0));
+    const url = dispatch(`${VERB_COPY}/${encodeSegments([SID, "mine"])}`, `${VERB_COPY}/${encodeSegments(["s2", "theirs"])}`);
+    const { answer, performed } = await applyClickAnswered(url, r.ctx);
+    expect(answer?.error).toBeInstanceOf(BadVerbArgs);
+    expect(lastClickError(r.sessionState, SID)?.text).toBe(
+      `${VERB_COPY}: names session s2, not the session its click is in`,
+    );
+    expect(lastClickError(r.sessionState, "s2")).toBeNull();
+    await performed;
+    expect(r.started().map((s) => s.stdin)).toEqual(["mine"]);
+  });
+
+  test("a later step's malformed session is that step's refusal; the click still lands its first", async () => {
+    const r = rig();
+    r.spawner.program(program(PBCOPY), exits(0));
+    const url = dispatch(`${VERB_COPY}/${encodeSegments([SID, "mine"])}`, `${VERB_COPY}/%/theirs`);
+    const { answer, performed } = await applyClickAnswered(url, r.ctx);
+    expect(answer?.error).toBeInstanceOf(BadVerbArgs);
+    expect(lastClickError(r.sessionState, SID)?.text).toMatch(
+      new RegExp(`^${VERB_COPY}: session id has malformed wire encoding: `),
+    );
+    await performed;
+    expect(r.started().map((s) => s.stdin)).toEqual(["mine"]);
+  });
+});
+
 describe("a click's failures", () => {
   // [LAW:behavior-not-structure] Read as the draw reads them: each record's
   // hold at a render's instant, for whom it draws.

@@ -441,7 +441,7 @@ describe("parseHandlerUrl — verb split, value raw", () => {
     });
   });
 
-  test("effectsOf mirrors the daemon's per-verb decode (single-arg whole, set-state segmented)", () => {
+  test("effectsOf mirrors the daemon's decode: every leaf verb's value is segments, its session first", () => {
     const at = (verb: string, tail: string): string =>
       addressedLink(MAIN_NAME, verb, tail);
     // A copy is its session and its text, the text's own "/" escaped as data,
@@ -453,11 +453,10 @@ describe("parseHandlerUrl — verb split, value raw", () => {
     expect(effectsOf(at(VERB_SET_STATE, "s1/theme/nord"))).toEqual([
       { verb: "set-state", args: ["s1", "theme", "nord"] },
     ]);
-    // The doctor verbs: doctor-run takes the session alone (whole decode),
-    // doctor-fix the session and the check (segmented) — the classification a
-    // prior round caught drifting.
+    // A verb that takes the session alone splits it off the same way: the
+    // daemon reads session "a" from `a/b`, never a session "a/b".
     expect(effectsOf(at(VERB_DOCTOR_RUN, "a/b"))).toEqual([
-      { verb: VERB_DOCTOR_RUN, args: ["a/b"] },
+      { verb: VERB_DOCTOR_RUN, args: ["a", "b"] },
     ]);
     expect(effectsOf(at(VERB_DOCTOR_FIX, "s1/tmuxTruecolor"))).toEqual([
       { verb: VERB_DOCTOR_FIX, args: ["s1", "tmuxTruecolor"] },

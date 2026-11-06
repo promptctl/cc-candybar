@@ -16,7 +16,7 @@ import {
   VERB_OPEN_VSCODE,
 } from "./wire";
 import { isBarLink } from "./scheme";
-import { LEAF_VERB_NAMES, SEGMENTED_VERBS, VERBS } from "../daemon/verbs";
+import { LEAF_VERB_NAMES, VERBS } from "../daemon/verbs";
 
 /** One link the bar drew: its visible text and its URL. */
 export interface DrawnLink {
@@ -51,13 +51,12 @@ export interface DecodedEffect {
   readonly args: string[];
 }
 
-// [LAW:one-source-of-truth] Decode an effect's value the way its daemon handler
-// does, from the daemon's own list (src/daemon/verbs SEGMENTED_VERBS): those
-// verbs' values are `/`-separated segments; every other verb takes ONE
-// argument, the whole value decoded once, so a `toolbar-toggle/a/b` link
-// reports one arg "a/b".
+// [LAW:one-source-of-truth] Decode an effect's value the way the daemon does,
+// from its own leaf table: a leaf verb's value is `/`-separated segments, its
+// click's session first; the probe takes ONE argument, the whole value
+// decoded once.
 function decodeArgs(verb: string, value: string): string[] {
-  return SEGMENTED_VERBS.has(verb)
+  return LEAF_VERB_NAMES.has(verb)
     ? decodeSegments(value)
     : [decodeURIComponent(value)];
 }
