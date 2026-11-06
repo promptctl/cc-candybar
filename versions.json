@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-644",
+      "ref": "refs/pull/644/merge",
+      "sha": "53716ddf96a04af9fa9986e3b35d2d974a252c0c",
+      "timestamp": "2026-11-06T19:17:17.711Z",
+      "commits": [
+        {
+          "sha": "53716ddf96a04af9fa9986e3b35d2d974a252c0c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T19:16:16Z",
+          "message": "Merge 5f4e472e75e90daf4888021ba0ef9497b04bb5bd into b3a94823776445b5ab510fe52ab4c622b2f80cff\n"
+        },
+        {
+          "sha": "5f4e472e75e90daf4888021ba0ef9497b04bb5bd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T12:16:04-07:00",
+          "message": "test(links): the tmux row case's user binding is one every tmux resolves (candybar-gather-renderer-76bb.b2l.mxk)\n\nThe case bound the user's MouseDown1Status to tmux 3.8's default,\n`switch-client -t =`. On the runner's tmux 3.4 that finds no mouse target for\na window-list press, so the list ends before the mark and the case fails on\nevery CI run, main included since the binding became constant text.\n`select-window -t =` resolves on both, and the case still proves the user's\nbinding runs and switches the window.\n"
+        },
+        {
+          "sha": "75e039c8df19fba0cf2eb1c0a07612f97e100fbb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T12:02:30-07:00",
+          "message": "fix(doctor): a lost link's build row compares builds by value and shows only for a link that opened (candybar-gather-renderer-76bb.b2l.mxk)\n\n- otherBuild decides on the version and the full digest, not on the labels,\n  and hands the two labels back as data; the verdict owns the sentence.\n- A link that never opened was lost before any daemon saw it, so its verdict\n  carries no build row.\n"
+        },
+        {
+          "sha": "991942dd4026ddd5225e6ef3da7091f49d4bdbe2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T11:58:01-07:00",
+          "message": "fix(links): a probe is a link kind, never an effect; a link lost at another build's daemon says so (candybar-gather-renderer-76bb.b2l.mxk)\n\n- The probe leaves the leaf table, so a dispatch carrying it is refused as an\n  unknown effect verb, as the minter's comment says it is.\n- probeLink spells the nonce with encodeURIComponent, the codec the probe\n  verb's one-argument read reverses.\n- The lost verdict names a daemon of another build: a link this build mints\n  may be one it does not read, so a healthy handler is not blamed for it.\n- Comments that said the diagnosis asks about the scheme now say the link.\n"
+        },
+        {
+          "sha": "1aa6f5c40ce180c54429c2b671a8847e9749b711",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T11:48:22-07:00",
+          "message": "feat(links): the doctor probe is minted by the minter as the probe link kind, and Launch Services is asked about the link it opened (candybar-gather-renderer-76bb.b2l.mxk)\n\nThe probe link is cc-candybar://to/<name>/probe/<nonce>, built by probeLink\nbeside effectsUrl, so the doctor no longer assembles a verb and a tail itself.\nThe verb is `probe`, as spec section 18 names it. The doctor's lost-link\ndiagnosis asks NSWorkspace which app opens that same link rather than a\nhand-spelled cc-candybar://probe.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-637",
       "ref": "refs/pull/637/merge",
       "sha": "f4cf241fb7dc8a8dc1fc0cc0c2eb707463ddc838",
@@ -63,42 +106,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T12:02:51-07:00",
           "message": "feat(apply): no turn awaits a launch; a doctor step is an effect, and a held click error accumulates (candybar-gather-renderer-76bb.1dh.c3l) (#633)\n\n* feat(apply): no turn awaits a launch; a doctor step is an effect gathered in no turn; each click failure is its own held message (candybar-gather-renderer-76bb.1dh.c3l)\n\n* test(apply): a dispatch's refused step and its failed launch are two held failures, proven on the click path (candybar-gather-renderer-76bb.1dh.c3l)\n\n* test(doctor): the round trip's click names its renderer, as every link now does (candybar-gather-renderer-76bb.1dh.c3l)\n\n* fix(doctor): a gather that reads the whole session record is refused, so only keys read by name are stamped (candybar-gather-renderer-76bb.1dh.c3l)"
-        }
-      ]
-    },
-    {
-      "version": "pr-644",
-      "ref": "refs/pull/644/merge",
-      "sha": "8225d23301b556b8a965e78e51df8a0c2d91e5ce",
-      "timestamp": "2026-11-06T19:03:52.402Z",
-      "commits": [
-        {
-          "sha": "8225d23301b556b8a965e78e51df8a0c2d91e5ce",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T19:02:43Z",
-          "message": "Merge b24b153f1428f7814bce48354042f139f9a11069 into 0af5d1f4ce463b0bebbbe6a4b6107d2943900c54\n"
-        },
-        {
-          "sha": "b24b153f1428f7814bce48354042f139f9a11069",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:02:30-07:00",
-          "message": "fix(doctor): a lost link's build row compares builds by value and shows only for a link that opened (candybar-gather-renderer-76bb.b2l.mxk)\n\n- otherBuild decides on the version and the full digest, not on the labels,\n  and hands the two labels back as data; the verdict owns the sentence.\n- A link that never opened was lost before any daemon saw it, so its verdict\n  carries no build row.\n"
-        },
-        {
-          "sha": "83471562779455f776edad21e6f6e92daac2e865",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T11:58:01-07:00",
-          "message": "fix(links): a probe is a link kind, never an effect; a link lost at another build's daemon says so (candybar-gather-renderer-76bb.b2l.mxk)\n\n- The probe leaves the leaf table, so a dispatch carrying it is refused as an\n  unknown effect verb, as the minter's comment says it is.\n- probeLink spells the nonce with encodeURIComponent, the codec the probe\n  verb's one-argument read reverses.\n- The lost verdict names a daemon of another build: a link this build mints\n  may be one it does not read, so a healthy handler is not blamed for it.\n- Comments that said the diagnosis asks about the scheme now say the link.\n"
-        },
-        {
-          "sha": "99e6c09a5cd435b41007097aec7517ac28d39720",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T11:48:22-07:00",
-          "message": "feat(links): the doctor probe is minted by the minter as the probe link kind, and Launch Services is asked about the link it opened (candybar-gather-renderer-76bb.b2l.mxk)\n\nThe probe link is cc-candybar://to/<name>/probe/<nonce>, built by probeLink\nbeside effectsUrl, so the doctor no longer assembles a verb and a tail itself.\nThe verb is `probe`, as spec section 18 names it. The doctor's lost-link\ndiagnosis asks NSWorkspace which app opens that same link rather than a\nhand-spelled cc-candybar://probe.\n"
         }
       ]
     },
