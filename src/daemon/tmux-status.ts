@@ -271,12 +271,9 @@ const nameWrite = (session: string, name: string): Command => [
 
 export type Install =
   | Extract<LeftBehind, { kind: "theirs" }>
-  | {
-      readonly kind: "ours";
-      readonly prior: Prior;
-      readonly status: number;
+  | (Extract<LeftBehind, { kind: "ours" }> & {
       readonly commands: readonly Command[];
-    }
+    })
   | {
       readonly kind: "lay-out";
       readonly prior: Prior;
