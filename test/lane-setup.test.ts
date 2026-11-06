@@ -74,6 +74,9 @@ const BAR = parseAndValidate(
 
 const TMUX: TmuxHint = { socket: "/tmp/tmux-1/default", pane: "%7", truecolor: null };
 const READY_SCREEN = ["─".repeat(30), "❯ ", "─".repeat(30)];
+// The session a `/clear` in %7 starts: the same Claude Code process, which
+// now holds another session.
+const CLEARED = "9a1d3c4e-7b2f-4e0a-8c6d-5e4f3a2b1c00";
 
 // A checkout: `src/` beside `dist/`, the native client built.
 function checkout(): { root: string; bundle: string } {
@@ -95,11 +98,10 @@ const session = (
 });
 
 // A setup's run over `s` with nothing else in its pane: each pane step runs at
-// once, on `s`, whose pane runs `inPane()` — `s` unless a case says otherwise.
-const run = (s: LaneSession, inPane: () => string | null = () => s.sessionId): LaneRun =>
+// once, on `s`.
+const run = (s: LaneSession): LaneRun =>
   laneRun(
     () => ({ kind: "known", session: s }),
-    inPane,
     (_tmux, work) => work(),
     () => {},
   );
@@ -149,6 +151,8 @@ function fakeEdge(over: Partial<LaneEdge> = {}): { edge: LaneEdge; did: string[]
       did.push(`graph ${node} ${reader} ${executable}`);
       return { ok: true };
     },
+    // Claude Code's record of its process holds the session under test.
+    heldSession: () => ({ kind: "holds", sessionId: SID }),
     terminate: (pid) => void did.push(`terminate ${pid}`),
     exited: async () => true,
     typeShellLine: async (_hint, line) => void did.push(`shell ${line}`),
@@ -598,36 +602,52 @@ describe("lane B, statusline", () => {
     expect(turnRunning({ inMode: false, screen: [line] })).toBe(running);
   });
 
-  // A `/clear` keeps the pid, so only whose requests now name the pane tells
-  // the restart its session has left it.
-  const CLEARED = "9a1d3c4e-7b2f-4e0a-8c6d-5e4f3a2b1c00";
-
-  test("a pane that runs another session by the kill is not killed, and the refusal names that session", async () => {
-    let runs: string | null = SID;
+  // A `/clear` keeps the pid, so only the process's own record of its session
+  // tells the restart the session has left it.
+  test("a process that holds another session by the kill is not killed, and the refusal names that session", async () => {
+    let holds = SID;
+    const read: unknown[] = [];
     const { edge, did } = fakeEdge({
       // The screen read is the restart's last wait before the kill; the
       // pane's `/clear` lands during it.
       claudeInput: {
         read: async () => {
-          runs = CLEARED;
+          holds = CLEARED;
           return { inMode: false, screen: READY_SCREEN };
         },
         type: async () => ({ kind: "typed" }),
       },
+      heldSession: (pid, configDir) => {
+        read.push([pid, configDir]);
+        return { kind: "holds", sessionId: holds };
+      },
     });
     await expect(
-      finished(await LANE_SETUP.statusline.on(run(session(), () => runs), HOST, edge)),
+      finished(
+        await LANE_SETUP.statusline.on(
+          run(session({ tmux: TMUX, claudeConfigDir: "/u/.claude.zai" })),
+          HOST,
+          edge,
+        ),
+      ),
     ).rejects.toThrow(
       `Claude Code in %7 now runs session ${CLEARED}, not ${SID}, so it was not restarted under the attach launcher`,
     );
+    // The record is the process's, under the session's own configuration
+    // directory.
+    expect(read).toEqual([[4242, "/u/.claude.zai"]]);
     expect(did.filter((d) => d.startsWith("terminate") || d.startsWith("shell"))).toEqual([]);
   });
 
-  test("a pane no held request names by the kill is not killed", async () => {
-    const { edge, did } = fakeEdge();
+  test("a process whose session record cannot be read is not killed, and the refusal says why", async () => {
+    const { edge, did } = fakeEdge({
+      heldSession: () => ({ kind: "unread", why: "it keeps no session record at /u/.claude/sessions/4242.json" }),
+    });
     await expect(
-      finished(await LANE_SETUP.statusline.on(run(session(), () => null), HOST, edge)),
-    ).rejects.toThrow(`no request this daemon holds names %7 any more`);
+      finished(await LANE_SETUP.statusline.on(run(session()), HOST, edge)),
+    ).rejects.toThrow(
+      "Claude Code in %7 was left running: it keeps no session record at /u/.claude/sessions/4242.json, so which session it runs is unknown",
+    );
     expect(did.filter((d) => d.startsWith("terminate"))).toEqual([]);
   });
 
@@ -891,13 +911,6 @@ describe("LaneSetups", () => {
     // The session's latest request, as each click or request below reports
     // it: none until the first.
     let latest: LaneSession | null = null;
-    // The session the newest request naming a pane came from: the session's
-    // own, until another session's request names its pane (`taken`).
-    let inPane: string | null = null;
-    const seen = (session: LaneSession | null): void => {
-      latest = session ?? latest;
-      if (session !== null) inPane = session.sessionId;
-    };
     // [LAW:effects-at-boundaries] What the clicks and requests settle is
     // effects; the performer runs them after the event's turn, each lane's
     // one at a time in the order described, and each pane step in its pane's
@@ -909,7 +922,6 @@ describe("LaneSetups", () => {
       host,
       log: (level, msg) => logs.push(`${level} ${msg}`),
       latest: () => latest,
-      sessionInPane: () => inPane,
       paneOrder: (tmux, work) => turns.performing({ kind: "pane", tmux }, work),
     });
     // Each event's setups, as its turn described them.
@@ -925,11 +937,11 @@ describe("LaneSetups", () => {
         before: LaneSwitches,
         after: LaneSwitches,
       ) => {
-        seen(session);
+        latest = session ?? latest;
         described.push(owner.clicked(sid, before, after));
       },
       noted: (session: LaneSession, switches: LaneSwitches) => {
-        seen(session);
+        latest = session;
         described.push(owner.noted(session.sessionId, switches));
       },
     };
@@ -951,13 +963,10 @@ describe("LaneSetups", () => {
     };
     const close = (): void => owner.close();
     // A request of the session arrived since: its latest, as a setup reads it.
-    const report = (session: LaneSession): void => seen(session);
-    // Another session's request named the session's pane since: a `/clear`
-    // or `/resume` there.
-    const taken = (sid: string): void => void (inPane = sid);
+    const report = (session: LaneSession): void => void (latest = session);
     // The daemon stopped holding the session's request since.
     const evict = (): void => void (latest = null);
-    return { setups, logs, settle, outcomes, refusals, performing, close, report, taken, evict, turns };
+    return { setups, logs, settle, outcomes, refusals, performing, close, report, evict, turns };
   };
   const switches = (on: Partial<LaneSwitches>): LaneSwitches => ({
     band: false,
@@ -1261,25 +1270,22 @@ describe("LaneSetups", () => {
   });
 
   // The pane's order is held when the toggle is clicked, and a `/clear` there
-  // makes its requests another session's before the restart takes the pane.
-  test("a restart whose pane moved on to another session while it waited for the pane resumes nothing over it", async () => {
-    const { edge, did } = fakeEdge();
-    const { setups, settle, taken, performing, outcomes, turns } = owner(edge);
+  // gives its process another session before the restart takes the pane.
+  test("a restart whose process moved on to another session while it waited for the pane resumes nothing over it", async () => {
+    let holds = SID;
+    const { edge, did } = fakeEdge({ heldSession: () => ({ kind: "holds", sessionId: holds }) });
+    const { setups, settle, performing, outcomes, turns } = owner(edge);
     let release!: () => void;
     const parked = turns.performing({ kind: "pane", tmux: TMUX }, () => new Promise<void>((r) => (release = r)));
     setups.clicked(SID, session(), switches({}), switches({ statusline: true }));
     await settle();
-    taken("9a1d3c4e-7b2f-4e0a-8c6d-5e4f3a2b1c00");
+    holds = CLEARED;
     release();
     await parked;
     await Promise.all(performing);
     expect(did.filter((d) => d.startsWith("terminate") || d.startsWith("shell"))).toEqual([]);
     expect(outcomes).toEqual([
-      failed(
-        expect.stringMatching(
-          /^lane: statusline on: Claude Code in %7 now runs session 9a1d3c4e-7b2f-4e0a-8c6d-5e4f3a2b1c00, not /,
-        ),
-      ),
+      failed(expect.stringMatching(new RegExp(`^lane: statusline on: Claude Code in %7 now runs session ${CLEARED}, not `))),
     ]);
   });
 
@@ -1311,7 +1317,6 @@ describe("LaneSetups", () => {
       // The session as its latest request reported it: outside tmux, where a
       // pane lane has nowhere to open.
       latest: () => session({ tmux: null }),
-      sessionInPane: () => SID,
       paneOrder: (tmux, work) =>
         base.journalTurns.performing({ kind: "pane", tmux }, work),
     });
@@ -1360,7 +1365,6 @@ describe("LaneSetups", () => {
       host,
       log: () => {},
       latest: () => session(),
-      sessionInPane: () => SID,
       paneOrder: (tmux, work) =>
         base.journalTurns.performing({ kind: "pane", tmux }, work),
     });
