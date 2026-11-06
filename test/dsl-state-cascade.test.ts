@@ -216,8 +216,8 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // An unknown theme cannot quietly persist — the daemon's dispatcher
     // converts BadVerbArgs into a BAD_REQUEST wire response.
     const { ctx } = cascadeBar();
-    await expect(VERBS.get("set-state")!(`${SESSION_ID}/theme/not-a-theme`, ctx),
-    ).rejects.toThrow(/unknown theme/);
+    expect(() => VERBS.get("set-state")!(`${SESSION_ID}/theme/not-a-theme`, ctx),
+    ).toThrow(/unknown theme/);
   });
 
   test('set-state rejects the "custom" theme sentinel (not a renderable theme)', async () => {
@@ -227,8 +227,8 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // read inline colors; persisting it as a session theme would render
     // empty/broken at the next refresh.
     const { ctx } = cascadeBar();
-    await expect(VERBS.get("set-state")!(`${SESSION_ID}/theme/custom`, ctx),
-    ).rejects.toThrow(/unknown theme/);
+    expect(() => VERBS.get("set-state")!(`${SESSION_ID}/theme/custom`, ctx),
+    ).toThrow(/unknown theme/);
   });
 
   test("set-state rejects an unknown key with the registered-key list", async () => {
@@ -237,8 +237,8 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // exactly which keys ARE writable, so a typo or stale wire spec is
     // self-diagnosing.
     const { ctx } = cascadeBar();
-    await expect(VERBS.get("set-state")!(`${SESSION_ID}/not-a-real-key/whatever`, ctx),
-    ).rejects.toThrow(/unknown state key "not-a-real-key" \(have: .*theme.*\)/);
+    expect(() => VERBS.get("set-state")!(`${SESSION_ID}/not-a-real-key/whatever`, ctx),
+    ).toThrow(/unknown state key "not-a-real-key" \(have: .*theme.*\)/);
   });
 
   test("set-state writes the endcaps key when given a registered endcaps shape", async () => {
@@ -251,8 +251,8 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
 
   test("set-state rejects an unknown endcaps value with the allowed-list", async () => {
     const { ctx } = cascadeBar();
-    await expect(VERBS.get("set-state")!(`${SESSION_ID}/endcaps/not-a-shape`, ctx),
-    ).rejects.toThrow(/unknown endcaps "not-a-shape" \(have: .*capsule.*\)/);
+    expect(() => VERBS.get("set-state")!(`${SESSION_ID}/endcaps/not-a-shape`, ctx),
+    ).toThrow(/unknown endcaps "not-a-shape" \(have: .*capsule.*\)/);
   });
 
   test("set-state normalizes boolean-ish toolbar-expanded values", async () => {
@@ -277,8 +277,8 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
 
   test("set-state rejects non-boolean-ish toolbar-expanded values", async () => {
     const { ctx } = cascadeBar();
-    await expect(VERBS.get("set-state")!(`${SESSION_ID}/toolbar-expanded/maybe`, ctx),
-    ).rejects.toThrow(/expected boolean-ish/);
+    expect(() => VERBS.get("set-state")!(`${SESSION_ID}/toolbar-expanded/maybe`, ctx),
+    ).toThrow(/expected boolean-ish/);
   });
 
   test("set-state rejects malformed wire input (missing tail or odd count)", async () => {
@@ -289,16 +289,16 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const { ctx } = cascadeBar();
 
     // Just the session id (no key/value).
-    await expect(VERBS.get("set-state")!(`${SESSION_ID}`, ctx)).rejects.toThrow(
+    expect(() => VERBS.get("set-state")!(`${SESSION_ID}`, ctx)).toThrow(
       /<key>\/<value> is required/,
     );
     // Key but no value separator (odd-count: one segment).
-    await expect(VERBS.get("set-state")!(`${SESSION_ID}/theme`, ctx)).rejects.toThrow(
+    expect(() => VERBS.get("set-state")!(`${SESSION_ID}/theme`, ctx)).toThrow(
       /expected even-count.*got 1 segment/,
     );
     // Empty key segment at pair 1 — structurally distinct from the
     // unknown-key validator rejection.
-    await expect(VERBS.get("set-state")!(`${SESSION_ID}//ocean`, ctx)).rejects.toThrow(
+    expect(() => VERBS.get("set-state")!(`${SESSION_ID}//ocean`, ctx)).toThrow(
       /empty key at pair 1/,
     );
   });
@@ -317,8 +317,8 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // unrepresentable today.
     const { ctx } = cascadeBar();
     for (const poison of ["__proto__", "constructor", "toString"]) {
-      await expect(VERBS.get("set-state")!(`${SESSION_ID}/${poison}/whatever`, ctx),
-      ).rejects.toThrow(
+      expect(() => VERBS.get("set-state")!(`${SESSION_ID}/${poison}/whatever`, ctx),
+      ).toThrow(
         new RegExp(`unknown state key "${poison.replace(/\$/g, "\\$")}"`),
       );
     }
@@ -401,11 +401,11 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // Seed a known prior state so we can prove the failing batch did
     // not overwrite it.
     sessionState.set(SESSION_ID, "theme", "dracula");
-    await expect(VERBS.get("set-state")!(
+    expect(() => VERBS.get("set-state")!(
         `${SESSION_ID}/theme/nord/toolbar-expanded/maybe`,
         ctx,
       ),
-    ).rejects.toThrow(/pair 2.*expected boolean-ish/);
+    ).toThrow(/pair 2.*expected boolean-ish/);
     // The failing batch did NOT advance the prior theme value.
     expect(sessionState.get(SESSION_ID, "theme")).toBe("dracula");
   });
@@ -416,8 +416,8 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // missing-value structural error — caught with its own message
     // rather than routed through a validator's unknown-key path.
     const { ctx } = cascadeBar();
-    await expect(VERBS.get("set-state")!(`${SESSION_ID}/theme/nord/leftover`, ctx),
-    ).rejects.toThrow(/expected even-count.*got 3 segment/);
+    expect(() => VERBS.get("set-state")!(`${SESSION_ID}/theme/nord/leftover`, ctx),
+    ).toThrow(/expected even-count.*got 3 segment/);
   });
 
   test("set-state names the failing pair index for batched diagnostics", async () => {
@@ -427,8 +427,8 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // generic "set-state: unknown state key" without an index would
     // leave them counting slashes by hand.
     const { ctx } = cascadeBar();
-    await expect(VERBS.get("set-state")!(`${SESSION_ID}/theme/nord/nonsense-key/foo`, ctx),
-    ).rejects.toThrow(/pair 2: unknown state key "nonsense-key"/);
+    expect(() => VERBS.get("set-state")!(`${SESSION_ID}/theme/nord/nonsense-key/foo`, ctx),
+    ).toThrow(/pair 2: unknown state key "nonsense-key"/);
   });
 
   test("set-state rejects an empty key at any pair position", async () => {
@@ -440,12 +440,12 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // structural defect at the pair index.
     const { ctx } = cascadeBar();
     // Empty key at pair 1.
-    await expect(VERBS.get("set-state")!(`${SESSION_ID}//nord`, ctx)).rejects.toThrow(
+    expect(() => VERBS.get("set-state")!(`${SESSION_ID}//nord`, ctx)).toThrow(
       /empty key at pair 1/,
     );
     // Empty key at pair 2 (theme valid, then empty key).
-    await expect(VERBS.get("set-state")!(`${SESSION_ID}/theme/nord//1`, ctx),
-    ).rejects.toThrow(/empty key at pair 2/);
+    expect(() => VERBS.get("set-state")!(`${SESSION_ID}/theme/nord//1`, ctx),
+    ).toThrow(/empty key at pair 2/);
   });
 
   test("a state-kind var needs no session.id of the author's — the menu ensures it", () => {

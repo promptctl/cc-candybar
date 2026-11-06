@@ -135,7 +135,7 @@ export interface DaemonAdapters {
   // made while no journal turn is held, and the daemon writes through it.
   readonly sessionWrites: (
     store: SessionStateRW,
-    turns: Pick<JournalTurns, "getStats">,
+    turns: Pick<JournalTurns, "inTurn">,
   ) => SessionStateRW;
   // The doctor's stores, which this daemon files.
   readonly doctorStores: DoctorStores;
@@ -322,11 +322,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // the build with nothing running.
   const storage = inputs.storage(log);
   const store = new SessionState(storage.session);
-  // [LAW:single-enforcer] The one queue every journal waits its turn in.
-  const journalTurns = new JournalTurns({
-    log,
-    monotonic: () => clock.monotonic(),
-  });
+  // [LAW:single-enforcer] The one owner of every journal's turn.
+  const journalTurns = new JournalTurns();
   const sessionState = inputs.sessionWrites(store, journalTurns);
   const settingsHistory = new SettingsHistory(
     sessionState,
@@ -512,8 +509,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const frameFeeds: FrameFeeds<CheckedRenderRequest> = new FrameFeeds({
     render: (sessionId, fps, at) => renderFrame(parts, sessionId, fps, at),
     // [LAW:no-ambient-temporal-coupling] A wake only moves the feed's timer,
-    // which fires in a later turn. A click that awaits gives up the loop, so a
-    // frame may show its writes ahead of its commit; the step stays whole.
+    // which fires in a later turn. A click's turn is synchronous, so no frame
+    // reads its writes before its commit.
     watch: (sessionId, onChange) =>
       reaction(() => sessionState.revision(sessionId), onChange),
     lanes: (sessionId) => viewLanes(parts, sessionId),

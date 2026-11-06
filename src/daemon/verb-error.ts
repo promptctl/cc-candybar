@@ -20,7 +20,7 @@ export class DaemonClosing extends Error {
   }
 }
 
-// The client left before this click's turn came, so it never ran.
+// The client left before this click ran, so it never landed.
 export class ClickAbandoned extends Error {
   constructor(verb: string) {
     super(`the client left: ${verb} not run`);

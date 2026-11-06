@@ -834,12 +834,12 @@ describe("persist action click → the config file", () => {
       durable.host,
     );
     const setConfig = VERBS.get("set-config")!;
-    await expect(
+    expect(() =>
       setConfig(
         `${encodeURIComponent("s1")}/${encodeURIComponent("not-a-real-key")}/${encodeURIComponent("x")}`,
         ctx,
       ),
-    ).rejects.toThrow(/unknown config key "not-a-real-key"/);
+    ).toThrow(/unknown config key "not-a-real-key"/);
   });
 });
 

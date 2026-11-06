@@ -819,14 +819,14 @@ describe("apply-layout-op click → the config file", () => {
     );
     const applyLayoutOp = VERBS.get("apply-layout-op")!;
     const before = durable.text();
-    await expect(
+    expect(() =>
       applyLayoutOp(
         `${encodeURIComponent("s1")}/${encodeURIComponent("presets.default.root")}/${encodeURIComponent(
           encodeLayoutOp({ op: "remove", target: "noSuchSegmentAnywhere" }),
         )}`,
         ctx,
       ),
-    ).rejects.toThrow(/apply-layout-op/);
+    ).toThrow(/apply-layout-op/);
     expect(durable.text()).toBe(before);
   });
 
@@ -843,14 +843,14 @@ describe("apply-layout-op click → the config file", () => {
       durable.host,
     );
     const applyLayoutOp = VERBS.get("apply-layout-op")!;
-    await expect(
+    expect(() =>
       applyLayoutOp(
         `${encodeURIComponent("s1")}/${encodeURIComponent("presets.default.root")}/${encodeURIComponent(
           encodeLayoutOp({ op: "remove", target: "directory" }),
         )}`,
         ctx,
       ),
-    ).rejects.toThrow(/has not rendered yet/);
+    ).toThrow(/has not rendered yet/);
     expect(durable.parsed().root).toEqual({
       v: [{ h: ["directory", "git"] }, "bar"],
     });

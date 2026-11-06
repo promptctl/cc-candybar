@@ -1,14 +1,15 @@
 // How long a failed click's errors stay on the bar (src/daemon/click-error.ts):
-// every render whose instant falls before the hold ends shows them, a request
-// shows them past it until an answer has carried them, and no render changes
-// what the next one sees.
+// each failure is its own record, every render whose instant falls before its
+// hold ends shows it, a request shows it past the hold until an answer has
+// carried it, and no render changes what the next one sees.
 
 import {
   CLICK_ERROR_HOLD_S,
   answeredClickError,
-  clickErrorAt,
+  clickErrors,
+  clickErrorsAt,
   holdClickError,
-  lastClickError,
+  shownClickErrors,
   toAnswer,
 } from "../../src/daemon/click-error";
 import { SessionState } from "../../src/daemon/session-state";
@@ -18,82 +19,111 @@ const SID = "s";
 const at = (seconds: number): Instant => seconds as Instant;
 const END = 100 + CLICK_ERROR_HOLD_S;
 const error = { text: "set-state: refused", at: at(100), answered: false };
+const boom = (when: number) => ({ text: "dispatch: boom", at: at(when), answered: false });
 
-test("a click's errors show at every instant before the hold ends, and to no frame after", () => {
+test("a click's error shows at every instant before its hold ends, and to no frame after", () => {
   const state = new SessionState();
   holdClickError(state, SID, "set-state: refused", at(100));
-  const held = { kind: "held", error };
+  const held = [{ error, hold: "held" }];
   for (const render of ["feed", "request"] as const) {
-    expect(clickErrorAt(state, SID, at(99.9), render)).toEqual(held);
-    expect(clickErrorAt(state, SID, at(100), render)).toEqual(held);
-    expect(clickErrorAt(state, SID, at(END - 0.001), render)).toEqual(held);
+    expect(clickErrorsAt(state, SID, at(99.9), render)).toEqual(held);
+    expect(clickErrorsAt(state, SID, at(100), render)).toEqual(held);
+    expect(clickErrorsAt(state, SID, at(END - 0.001), render)).toEqual(held);
   }
-  expect(clickErrorAt(state, SID, at(END), "feed")).toEqual({ kind: "over" });
+  expect(clickErrorsAt(state, SID, at(END), "feed")).toEqual([{ error, hold: "over" }]);
 });
 
-test("past the hold, a request is owed them until an answer has carried them", () => {
+test("past the hold, a request is owed it until an answer has carried it", () => {
   const state = new SessionState();
   holdClickError(state, SID, "set-state: refused", at(100));
-  expect(clickErrorAt(state, SID, at(END + 600), "request")).toEqual({
-    kind: "owed",
-    error,
-  });
-  answeredClickError(state, SID, error);
-  expect(clickErrorAt(state, SID, at(END + 600), "request")).toEqual({
-    kind: "over",
-  });
+  expect(clickErrorsAt(state, SID, at(END + 600), "request")).toEqual([{ error, hold: "owed" }]);
+  answeredClickError(state, SID, [error]);
+  expect(shownClickErrors(clickErrorsAt(state, SID, at(END + 600), "request"))).toEqual([]);
 });
 
-test("an answer carrying an older failure leaves a newer one owed", () => {
+test("a second failure is a message of its own, each held from its own instant", () => {
   const state = new SessionState();
   holdClickError(state, SID, "set-state: refused", at(100));
   holdClickError(state, SID, "dispatch: boom", at(102));
-  answeredClickError(state, SID, error);
-  expect(lastClickError(state, SID)).toEqual({
-    text: "dispatch: boom",
-    at: at(102),
-    answered: false,
-  });
+  expect(clickErrors(state, SID)).toEqual([error, boom(102)]);
+  // The first's hold ends where it began to: the second does not restart it.
+  expect(shownClickErrors(clickErrorsAt(state, SID, at(END + 1), "feed"))).toEqual([boom(102)]);
+  // An answer that carried the first leaves the second owed.
+  answeredClickError(state, SID, [error]);
+  expect(shownClickErrors(clickErrorsAt(state, SID, at(END + 600), "request"))).toEqual([
+    boom(102),
+  ]);
+});
+
+test("a failure long after an older one still owed keeps it owed to a request and shows no feed the older", () => {
+  const state = new SessionState();
+  holdClickError(state, SID, "set-state: refused", at(100));
+  holdClickError(state, SID, "dispatch: boom", at(END + 600));
+  expect(shownClickErrors(clickErrorsAt(state, SID, at(END + 601), "feed"))).toEqual([
+    boom(END + 600),
+  ]);
+  expect(shownClickErrors(clickErrorsAt(state, SID, at(END + 601), "request"))).toEqual([
+    error,
+    boom(END + 600),
+  ]);
+});
+
+test("a failure drops the records no render can still show", () => {
+  const state = new SessionState();
+  holdClickError(state, SID, "set-state: refused", at(100));
+  answeredClickError(state, SID, [error]);
+  holdClickError(state, SID, "dispatch: boom", at(END + 600));
+  expect(clickErrors(state, SID)).toEqual([boom(END + 600)]);
 });
 
 test("reading a click's errors writes nothing, so a later render inside the hold still shows them", () => {
   const state = new SessionState();
   holdClickError(state, SID, "dispatch: boom", at(100));
   const revision = state.revision(SID);
-  clickErrorAt(state, SID, at(END + 1), "request");
+  clickErrorsAt(state, SID, at(END + 1), "request");
   expect(state.revision(SID)).toBe(revision);
-  expect(clickErrorAt(state, SID, at(101), "feed").kind).toBe("held");
+  expect(clickErrorsAt(state, SID, at(101), "feed")).toEqual([{ error: boom(100), hold: "held" }]);
 });
 
-test("a session with no click error, or a value an older daemon wrote, holds none", () => {
-  const state = new SessionState();
-  expect(clickErrorAt(state, SID, at(100), "request")).toEqual({ kind: "none" });
-  state.set(SID, "click.error", 'set-state: placement "block" refused');
-  expect(clickErrorAt(state, SID, at(100), "request")).toEqual({ kind: "none" });
-});
-
-test("an answer carrying another failure at the same instant leaves this one owed", () => {
+test("an answer that marks nothing writes nothing", () => {
   const state = new SessionState();
   holdClickError(state, SID, "dispatch: boom", at(100));
-  answeredClickError(state, SID, error);
-  expect(clickErrorAt(state, SID, at(END + 1), "request").kind).toBe("owed");
+  const revision = state.revision(SID);
+  // Another failure at the same instant: this one stays owed.
+  answeredClickError(state, SID, [error]);
+  expect(state.revision(SID)).toBe(revision);
+  expect(clickErrorsAt(state, SID, at(END + 1), "request")).toEqual([
+    { error: boom(100), hold: "owed" },
+  ]);
 });
 
-test("a record an older daemon wrote with no answered mark is owed to the next request", () => {
+test("a session with no click error, or bare text an older daemon wrote, holds none", () => {
   const state = new SessionState();
-  state.set(SID, "click.error", JSON.stringify({ text: "set-state: refused", at: 100 }));
-  expect(clickErrorAt(state, SID, at(END + 600), "request")).toEqual({
-    kind: "owed",
-    error,
-  });
+  expect(clickErrorsAt(state, SID, at(100), "request")).toEqual([]);
+  state.set(SID, "click.error", 'set-state: placement "block" refused');
+  expect(clickErrorsAt(state, SID, at(100), "request")).toEqual([]);
 });
 
-test("an answer carries the shown error to be marked until one has, inside the hold and past it", () => {
+test("the record keeps the fields a build that knows one failure reads, holding the newest there", () => {
   const state = new SessionState();
   holdClickError(state, SID, "set-state: refused", at(100));
-  expect(toAnswer(clickErrorAt(state, SID, at(101), "request"))).toEqual(error);
-  expect(toAnswer(clickErrorAt(state, SID, at(END + 600), "request"))).toEqual(error);
-  answeredClickError(state, SID, error);
-  expect(toAnswer(clickErrorAt(state, SID, at(101), "request"))).toBeNull();
-  expect(toAnswer(clickErrorAt(state, SID, at(END), "feed"))).toBeNull();
+  holdClickError(state, SID, "dispatch: boom", at(102));
+  const stored = JSON.parse(state.get(SID, "click.error")!) as Record<string, unknown>;
+  expect(stored).toEqual({ ...boom(102), earlier: [error] });
+});
+
+test("a record an older daemon wrote, with no earlier failures and no answered mark, is owed to the next request", () => {
+  const state = new SessionState();
+  state.set(SID, "click.error", JSON.stringify({ text: "set-state: refused", at: 100 }));
+  expect(clickErrorsAt(state, SID, at(END + 600), "request")).toEqual([{ error, hold: "owed" }]);
+});
+
+test("an answer carries the shown errors to be marked until one has, inside the hold and past it", () => {
+  const state = new SessionState();
+  holdClickError(state, SID, "set-state: refused", at(100));
+  expect(toAnswer(clickErrorsAt(state, SID, at(101), "request"))).toEqual([error]);
+  expect(toAnswer(clickErrorsAt(state, SID, at(END + 600), "request"))).toEqual([error]);
+  answeredClickError(state, SID, [error]);
+  expect(toAnswer(clickErrorsAt(state, SID, at(101), "request"))).toEqual([]);
+  expect(toAnswer(clickErrorsAt(state, SID, at(END), "feed"))).toEqual([]);
 });

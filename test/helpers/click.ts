@@ -37,7 +37,6 @@ import {
 import { LANE_NAMES, type LaneSwitches } from "../../src/config/lanes";
 import { homeOf } from "../../src/daemon/home";
 import { locations, stateDir, storedRoot } from "../../src/daemon/paths";
-import { systemTimekeeper } from "../../src/time";
 
 const NO_LANES = Object.fromEntries(
   LANE_NAMES.map((lane) => [lane, false]),
@@ -78,10 +77,7 @@ export function testVerbContext(
   history?: SettingsHistory,
   config?: DslConfig,
   host: Host = HOST,
-  journalTurns: JournalTurns = new JournalTurns({
-    log: () => {},
-    monotonic: () => systemTimekeeper.monotonic(),
-  }),
+  journalTurns: JournalTurns = new JournalTurns(),
 ): VerbContext {
   // [LAW:nothing-unseen] Every write a click makes crosses the ordering
   // instrument (test/helpers/writes-in-turn.ts): the context's store, and the
@@ -94,7 +90,6 @@ export function testVerbContext(
     sessionState: inTurn,
     history: history ?? new SettingsHistory(inTurn, () => {}),
     navigation: new NavigationHistory(),
-    asker: { placed: () => {}, gathered: () => {}, waited: () => {}, gone: () => false },
     journalTurns,
     // [LAW:no-silent-failure] A turn's effects go to the arm that ran it
     // (`applyClick` below); a test that drives a describing verb around Apply
@@ -168,6 +163,7 @@ export function testVerbContext(
     // A click from the handler this build would stage, and nowhere of the
     // daemon's for a probe to land: a test that reads arrivals hands in its own.
     arrival: { via: "link", delivery: { kind: "forwarder", urlV: 1 } },
+    gone: () => false,
     probes: new ProbeArrivals(),
     clients: new RenderSightings(),
     bundle: HEALTHY_BUNDLE,
@@ -251,14 +247,13 @@ export function linkClick(url: string): { verb: string; value: string } {
 function clickParts(ctx: VerbContext) {
   const {
     arrival: _arrival,
-    asker: _asker,
+    gone: _gone,
     described: _described,
     ...verbCtx
   } = ctx;
   return {
     verbCtx,
     log: ctx.log,
-    menuIdle: { clickArrived: () => {}, clickSettled: () => {} },
   };
 }
 
@@ -271,8 +266,9 @@ function clickParts(ctx: VerbContext) {
 export async function applyClick(
   url: string,
   ctx: VerbContext,
+  gone: () => boolean = () => false,
 ): Promise<{ readonly performed: Promise<void> }> {
-  const { answer, performed } = await applyClickAnswered(url, ctx);
+  const { answer, performed } = await applyClickAnswered(url, ctx, gone);
   if (answer !== null) throw answer.error;
   return { performed };
 }
@@ -280,6 +276,8 @@ export async function applyClick(
 export async function applyClickAnswered(
   url: string,
   ctx: VerbContext,
+  // Whether the click's client has left, as the daemon's edge reads it.
+  gone: () => boolean = () => false,
 ): Promise<{
   readonly answer: ClickRefusal | null;
   readonly performed: Promise<void>;
@@ -296,8 +294,8 @@ export async function applyClickAnswered(
       verb,
       value,
       arrival: ctx.arrival,
-      pending: session?.ok ? session.id : null,
-      asker: ctx.asker,
+      session: session?.ok ? session.id : null,
+      gone,
     },
     clickParts(ctx),
   );

@@ -93,5 +93,5 @@ export interface DaemonParts {
   readonly updateWatch: UpdateWatch;
   readonly limits: LimitsHandle;
   readonly journalTurns: Pick<JournalTurns, "getStats">;
-  readonly verbCtx: Omit<VerbContext, "arrival" | "asker" | "described">;
+  readonly verbCtx: Omit<VerbContext, "arrival" | "gone" | "described">;
 }

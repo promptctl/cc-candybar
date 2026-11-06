@@ -133,8 +133,8 @@ describe("block's thresholds are settings configure mode steps", () => {
     const error = placementDraftKey("default", "block", "errorAt");
     const setState = VERBS.get("set-state")!;
     const ctx = { ...rt.ctx, configFor: () => load(BLOCK_ONLY) };
-    await expect(setState(`${SID}/${warn}/70/${error}/60`, ctx),
-    ).rejects.toThrow(/"errorAt" \(60\) is below "warnAt" \(70\)/);
+    expect(() => setState(`${SID}/${warn}/70/${error}/60`, ctx),
+    ).toThrow(/"errorAt" \(60\) is below "warnAt" \(70\)/);
     expect(rt.pick("block", "warnAt")).toBeNull();
     // Raising both together is one write that stands.
     await setState(`${SID}/${warn}/85/${error}/90`, ctx);

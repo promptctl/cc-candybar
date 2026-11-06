@@ -32,6 +32,7 @@ import type { RunningDaemon } from "./spawn-isolated-daemon";
 import { ROUTE_ENV } from "./process-tier.cjs";
 import { detectClaudeConfigDir } from "../../src/claude-settings";
 import { logLines } from "../../src/daemon/log";
+import { fieldOf } from "../../src/utils/logfmt";
 import {
   answeredRender,
   drewAwaitedPending,
@@ -273,6 +274,37 @@ export async function click(target: DaemonTarget, url: string): Promise<void> {
   if (!/ outcome=ok(?: |$)/.test(event)) {
     throw new Error(`click failed once it ran past its TIMEOUT: ${event}`);
   }
+}
+
+// [LAW:no-ambient-temporal-coupling] A click, and every effect its turn
+// described, landed: what the bar's next draw shows. A doctor's report lands
+// with its effect, after the click is answered, so a test that reads it waits
+// for the effect-done events the click's own apply line promised.
+export async function clickPerformed(
+  target: DaemonTarget,
+  url: string,
+): Promise<void> {
+  const { log } = endpointOf(target);
+  const applied = applyLines(log, "click").length;
+  const done = applyLines(log, "effect-done").length;
+  await click(target, url);
+  let line = "";
+  await until(
+    () => (line = applyLines(log, "click")[applied] ?? "") !== "",
+    `the apply line of the click (${url})`,
+    REPLY_BUDGET_MS,
+  );
+  const described = fieldOf(line, "effects");
+  const owed = described === "-" ? 0 : described.split(",").length;
+  await until(
+    () => applyLines(log, "effect-done").length >= done + owed,
+    () => `the ${owed} effect(s) of the click (${line})`,
+    REPLY_BUDGET_MS,
+  );
+}
+
+function applyLines(log: string, kind: string): string[] {
+  return logLines(log).filter((l) => l.includes(`] apply kind=${kind} `));
 }
 
 // [LAW:no-ambient-temporal-coupling] Render until the daemon's own state

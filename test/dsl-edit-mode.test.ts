@@ -966,7 +966,7 @@ describe("edit mode's save and cancel", () => {
 
   test("rewind says what it put back, and a session with no savepoint is refused loudly", async () => {
     const rt = buildEditRuntime(BASE);
-    await expect(VERBS.get("rewind")!("s1", rt.ctx)).rejects.toThrow(/no savepoint/);
+    expect(() => VERBS.get("rewind")!("s1", rt.ctx)).toThrow(/no savepoint/);
     await open(rt);
     await removeGit(rt);
     const logs: string[] = [];

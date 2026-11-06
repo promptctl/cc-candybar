@@ -5,8 +5,12 @@
 // is closed, so a new kind of effect fails to build until it has a performer.
 
 import type { SlashLine } from "../claude-input/slash-line.js";
+import type { Check, DoctorFacts, GlyphMark } from "../doctor/checks.js";
+import type { DoctorEdge, gatherFacts } from "../doctor/edge.js";
+import type { ClickArrival } from "../doctor/sightings.js";
 import type { LaunchOpts } from "../proc/launch.js";
 import type { TmuxHint } from "../tmux-hint.js";
+import type { SessionStateReader } from "./session-state.js";
 
 // What a launch effect starts: the bound is the performer's, the same for
 // every click launch.
@@ -29,7 +33,44 @@ export type Effect =
     }
   // The update watch's act (src/daemon/update-notice.ts), which decides for
   // itself what runs.
-  | { readonly kind: "apply-update" };
+  | { readonly kind: "apply-update" }
+  | DoctorEffect;
+
+// A doctor click's step (src/daemon/verbs/index.ts): its probes gathered after
+// the click's turn, and its answer landed with the outcome. `arrival` is how
+// the click came, which the doctor reasons over.
+export interface DoctorEffect {
+  readonly kind: "doctor";
+  readonly session: string;
+  readonly step: DoctorStep;
+  readonly arrival: ClickArrival;
+}
+
+// What the step does with its facts: report them, perform the fix the check's
+// fresh verdict carries, or file what the user saw of its glyphs.
+export type DoctorStep =
+  | { readonly kind: "run" }
+  | { readonly kind: "fix"; readonly check: Check }
+  | { readonly kind: "mark"; readonly check: Check; readonly mark: GlyphMark };
+
+// [LAW:one-source-of-truth] What a gather read that a turn can change: the
+// config it loaded, and each input of session state as it read it (`what`
+// names it), with how to read it again.
+export interface DoctorStamp {
+  readonly load: ReturnType<DoctorEdge["loadConfig"]>;
+  readonly reads: ReadonlyArray<{
+    readonly what: string;
+    readonly value: string | null;
+    readonly again: (state: SessionStateReader) => string | null;
+  }>;
+}
+
+// A doctor gather's facts, and what they were gathered from.
+export interface DoctorGathered {
+  readonly facts: Awaited<ReturnType<typeof gatherFacts>>;
+  readonly install: DoctorFacts["install"];
+  readonly stamp: DoctorStamp;
+}
 
 // How an effect went. `said` is the sentence a person reads: for a failure,
 // the whole of it (what failed, and why, in the edge's own words), and for a
@@ -40,7 +81,30 @@ export type EffectOutcome =
 
 export const PERFORMED: EffectOutcome = { kind: "ok", said: "" };
 
-export const failed = (said: string): EffectOutcome => ({
+// [LAW:types-are-the-program] What performing each kind of effect answers: an
+// act answers how it went, a doctor's gather the facts it gathered, which its
+// landing turns into how it went (src/daemon/apply.ts).
+interface Outcomes {
+  readonly launch: EffectOutcome;
+  readonly "type-slash": EffectOutcome;
+  readonly "apply-update": EffectOutcome;
+  readonly doctor:
+    | Extract<EffectOutcome, { readonly kind: "failed" }>
+    | { readonly kind: "gathered"; readonly gathered: DoctorGathered };
+}
+export type OutcomeOf<K extends Effect["kind"]> = Outcomes[K];
+
+// An effect and what performing it answered, paired by kind.
+export type EffectDone = {
+  readonly [K in Effect["kind"]]: {
+    readonly effect: Extract<Effect, { readonly kind: K }>;
+    readonly outcome: OutcomeOf<K>;
+  };
+}[Effect["kind"]];
+
+export const failed = (
+  said: string,
+): Extract<EffectOutcome, { readonly kind: "failed" }> => ({
   kind: "failed",
   said,
 });
@@ -54,6 +118,7 @@ const DESCRIBE: {
   launch: ({ what }) => `launch:${what}`,
   "type-slash": ({ line }) => `type-slash:${line}`,
   "apply-update": () => "apply-update",
+  doctor: ({ step }) => `doctor:${step.kind}`,
 };
 
 export function describeEffect<K extends Effect["kind"]>(

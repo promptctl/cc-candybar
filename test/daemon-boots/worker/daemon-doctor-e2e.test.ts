@@ -24,7 +24,7 @@ import os from "node:os";
 import path from "node:path";
 
 import {
-  click,
+  clickPerformed,
   frameRequest,
   render,
   renderBody,
@@ -108,15 +108,15 @@ test("the doctor's config row reports the session's own config load", async () =
   try {
     const SID = "doctor-e2e-1";
     const closed = await render(daemon, SID, projectDir);
-    await click(daemon, urlWriting(closed, SETTINGS_ANCHOR, SETTINGS_OPEN));
+    await clickPerformed(daemon, urlWriting(closed, SETTINGS_ANCHOR, SETTINGS_OPEN));
     const opened = await render(daemon, SID, projectDir);
-    await click(daemon, urlWriting(opened, `${SETTINGS_NS}tab`, "tools"));
+    await clickPerformed(daemon, urlWriting(opened, `${SETTINGS_NS}tab`, "tools"));
     const tools = await render(daemon, SID, projectDir);
     const run = linkUrls(tools).find((u) =>
       effectsOf(u).some((e) => e.verb === VERB_DOCTOR_RUN),
     );
     expect(run).toBeDefined();
-    await click(daemon, run!);
+    await clickPerformed(daemon, run!);
 
     // The project layer's unused helper, read over the user's file.
     expect(flat(await render(daemon, SID, projectDir))).toContain(
@@ -129,7 +129,7 @@ test("the doctor's config row reports the session's own config load", async () =
     // the entry, so it never reports the load from before the edit while
     // the fs watcher catches up.
     writeFileSync(projectConfig, `{}`);
-    await click(daemon, run!);
+    await clickPerformed(daemon, run!);
     expect(flat(await render(daemon, SID, projectDir))).toContain(
       squeezed("✓ config"),
     );
@@ -160,18 +160,18 @@ test("the doctor's config row says what named the session's file", async () => {
       args: string[],
     ): Promise<string> => {
       const draw = () => render(daemon, sid, projectDir, hints, args);
-      await click(
+      await clickPerformed(
         daemon,
         urlWriting(await draw(), SETTINGS_ANCHOR, SETTINGS_OPEN),
       );
-      await click(
+      await clickPerformed(
         daemon,
         urlWriting(await draw(), `${SETTINGS_NS}tab`, "tools"),
       );
       const run = linkUrls(await draw()).find((u) =>
         effectsOf(u).some((e) => e.verb === VERB_DOCTOR_RUN),
       );
-      await click(daemon, run!);
+      await clickPerformed(daemon, run!);
       return flat(await draw());
     };
     const flag = ["cc-candybar", "--config", named];
@@ -294,7 +294,7 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
         url: addressedLink(daemon.name, VERB_DOCTOR_RUN, SID),
       }),
     ).toMatchObject({ ok: true });
-    await click(
+    await clickPerformed(
       daemon,
       urlWriting(
         await render(daemon, SID, projectDir),
@@ -302,7 +302,7 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
         SETTINGS_OPEN,
       ),
     );
-    await click(
+    await clickPerformed(
       daemon,
       urlWriting(
         await render(daemon, SID, projectDir),
@@ -525,14 +525,14 @@ test("the session data row reads the transcript the session's render named", asy
   const daemon = startDaemon(env);
   try {
     const closed = await renderT();
-    await click(daemon, urlWriting(closed, SETTINGS_ANCHOR, SETTINGS_OPEN));
+    await clickPerformed(daemon, urlWriting(closed, SETTINGS_ANCHOR, SETTINGS_OPEN));
     const opened = await renderT();
-    await click(daemon, urlWriting(opened, `${SETTINGS_NS}tab`, "tools"));
+    await clickPerformed(daemon, urlWriting(opened, `${SETTINGS_NS}tab`, "tools"));
     const run = linkUrls(await renderT()).find((u) =>
       effectsOf(u).some((e) => e.verb === VERB_DOCTOR_RUN),
     );
     expect(run).toBeDefined();
-    await click(daemon, run!);
+    await clickPerformed(daemon, run!);
     expect(flat(await renderT())).toContain(
       squeezed(
         `✗ session data — 1 of the 2 lines in the transcript ${transcript} are not JSON objects`,
@@ -540,7 +540,7 @@ test("the session data row reads the transcript the session's render named", asy
     );
 
     writeFileSync(transcript, `{"type":"user"}\n`);
-    await click(daemon, run!);
+    await clickPerformed(daemon, run!);
     expect(flat(await renderT())).toContain(squeezed("✓ session data"));
   } finally {
     await daemon.stop();
@@ -582,16 +582,16 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
       drawn++;
       return render(daemon, SID, projectDir, hints);
     };
-    await click(
+    await clickPerformed(
       daemon,
       urlWriting(await draw(), SETTINGS_ANCHOR, SETTINGS_OPEN),
     );
-    await click(daemon, urlWriting(await draw(), `${SETTINGS_NS}tab`, "tools"));
+    await clickPerformed(daemon, urlWriting(await draw(), `${SETTINGS_NS}tab`, "tools"));
     const run = linkUrls(await draw()).find((u) =>
       effectsOf(u).some((e) => e.verb === VERB_DOCTOR_RUN),
     );
     expect(run).toBeDefined();
-    await click(daemon, run!);
+    await clickPerformed(daemon, run!);
     expect(flat(await draw())).toContain(
       squeezed(
         "✗ effect refresh — the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close), but its statusLine sets no refreshInterval",
@@ -599,9 +599,9 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
     );
 
     writeFileSync(projectConfig, barOf("still"));
-    await click(daemon, run!);
+    await clickPerformed(daemon, run!);
     await draw();
-    await click(daemon, run!);
+    await clickPerformed(daemon, run!);
     // Still, but drawn under the open menu the doctor is clicked from, which
     // counts down to the flash before it closes on its own: the frame says
     // when that starts (candybar-animation-wbxz.014), so the bar moves.
@@ -612,17 +612,17 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
     );
 
     // The same bar with its menu closed is still, and passes.
-    await click(
+    await clickPerformed(
       daemon,
       urlWriting(await draw(), SETTINGS_ANCHOR, DISCLOSURE_CLOSED),
     );
     await draw();
-    await click(daemon, run!);
-    await click(
+    await clickPerformed(daemon, run!);
+    await clickPerformed(
       daemon,
       urlWriting(await draw(), SETTINGS_ANCHOR, SETTINGS_OPEN),
     );
-    await click(daemon, urlWriting(await draw(), `${SETTINGS_NS}tab`, "tools"));
+    await clickPerformed(daemon, urlWriting(await draw(), `${SETTINGS_NS}tab`, "tools"));
     expect(flat(await draw())).toContain(squeezed("✓ effect refresh"));
 
     const events = await renderLines(env, SID, drawn);

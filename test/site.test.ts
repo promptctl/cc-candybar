@@ -67,7 +67,13 @@ test("the built site renders, clicks, and plays its scenario with no server", ()
     const painted = await transport.render(size);
     const tools = await transport.click(painted.links.find((l) => l.text.includes("tools")).url, size);
     const doctored = await transport.click(tools.links.find((l) => l.text.includes("🩺")).url, size);
-    const doctor = await transport.frame(size);
+    // The doctor's report lands after its probes, past the click's answer, so
+    // it is drawn by a later frame, as the page's next redraw draws it.
+    let doctor = await transport.frame(size);
+    for (let i = 0; i < 100 && !JSON.stringify(doctor.rows).includes("daemon"); i++) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      doctor = await transport.frame(size);
+    }
     console.log(JSON.stringify({ frames: { cold, first, opened, working, doctor }, refused: clicked.refused, copied: copied.refused, doctorRefused: doctored.refused }));
     process.exit(0);
   `;
