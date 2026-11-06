@@ -70843,13 +70843,6 @@ function parseSessionId(raw) {
 function oneArg(value) {
   return decodeWire(() => decodeURIComponent(value));
 }
-function soleArg(args) {
-  if (args.length !== 1)
-    throw new BadVerbArgs(
-      `expected a session and one argument, got ${args.length + 1} segments`
-    );
-  return args[0];
-}
 var CLICK_PROGRAM_TIMEOUT_MS = 5e3;
 function clickFailed(r, what, log) {
   if (r.reason === "rate-limited") {
@@ -70933,8 +70926,8 @@ function pbcopy(text4, ctx) {
 function launch(ctx, spec, what) {
   ctx.effect({ kind: "launch", spec, what });
 }
-var copy = (_sid, args, ctx) => {
-  pbcopy(soleArg(args), ctx);
+var copy = (_sid, [text4 = ""], ctx) => {
+  pbcopy(text4, ctx);
 };
 var DRAWERS = /* @__PURE__ */ new Set([
   "request",
@@ -70954,12 +70947,12 @@ var copyDiagnostic = (sid, args, ctx) => {
     );
   pbcopy(text4, ctx);
 };
-var openVscode = (_sid, args, ctx) => {
+var openVscode = (_sid, [target = ""], ctx) => {
   launch(
     ctx,
     {
       bin: "/usr/bin/open",
-      args: ["-a", "Visual Studio Code", soleArg(args)],
+      args: ["-a", "Visual Studio Code", target],
       category: "click.open"
     },
     'open -a "Visual Studio Code"'
@@ -71799,31 +71792,31 @@ var repoConfig = (sid, args, ctx) => {
 };
 var LEAF_VERBS = new Map(
   [
-    [VERB_COPY, copy, 1],
-    [VERB_OPEN_VSCODE, openVscode, 1],
-    [VERB_SET_STATE, setState, Infinity],
-    [VERB_STEP_STATE, stepState, 2],
-    [VERB_SET_CONFIG, setConfig, 2],
-    [VERB_STEP_CONFIG, stepConfig, 2],
-    [VERB_RESET_CONFIG, resetConfig, Infinity],
-    [VERB_SAVE, save, 0],
-    [VERB_SAVE_PRESET, savePreset, 0],
-    [VERB_SAVE_THEME_DEFAULT, saveThemeDefault, 0],
-    [VERB_DELETE_PRESET, deletePreset2, 1],
-    [VERB_APPLY_LAYOUT_OP, applyLayoutOp2, 2],
-    [VERB_UNDO, undo, 0],
-    [VERB_REDO, redo, 0],
-    [VERB_BACK, back, 0],
-    [VERB_REWIND, rewind, 0],
-    [VERB_TOOLBAR_TOGGLE, toolbarToggle, 0],
-    [VERB_APPLY_UPDATE, applyUpdate, 0],
-    [VERB_DOCTOR_RUN, doctorRun, 0],
-    [VERB_DOCTOR_FIX, doctorFix, 1],
-    [VERB_DOCTOR_MARK, doctorMark, 2],
-    [VERB_SLASH, slash, 1],
-    [VERB_RUN, run2, 3],
-    [VERB_REPO_CONFIG, repoConfig, 3],
-    [VERB_COPY_DIAGNOSTIC, copyDiagnostic, 2]
+    [VERB_COPY, copy, [1, 1]],
+    [VERB_OPEN_VSCODE, openVscode, [1, 1]],
+    [VERB_SET_STATE, setState, [0, Infinity]],
+    [VERB_STEP_STATE, stepState, [2, 2]],
+    [VERB_SET_CONFIG, setConfig, [2, 2]],
+    [VERB_STEP_CONFIG, stepConfig, [2, 2]],
+    [VERB_RESET_CONFIG, resetConfig, [0, Infinity]],
+    [VERB_SAVE, save, [0, 0]],
+    [VERB_SAVE_PRESET, savePreset, [0, 0]],
+    [VERB_SAVE_THEME_DEFAULT, saveThemeDefault, [0, 0]],
+    [VERB_DELETE_PRESET, deletePreset2, [1, 1]],
+    [VERB_APPLY_LAYOUT_OP, applyLayoutOp2, [2, 2]],
+    [VERB_UNDO, undo, [0, 0]],
+    [VERB_REDO, redo, [0, 0]],
+    [VERB_BACK, back, [0, 0]],
+    [VERB_REWIND, rewind, [0, 0]],
+    [VERB_TOOLBAR_TOGGLE, toolbarToggle, [0, 0]],
+    [VERB_APPLY_UPDATE, applyUpdate, [0, 0]],
+    [VERB_DOCTOR_RUN, doctorRun, [0, 0]],
+    [VERB_DOCTOR_FIX, doctorFix, [1, 1]],
+    [VERB_DOCTOR_MARK, doctorMark, [2, 2]],
+    [VERB_SLASH, slash, [1, 1]],
+    [VERB_RUN, run2, [3, 3]],
+    [VERB_REPO_CONFIG, repoConfig, [3, 3]],
+    [VERB_COPY_DIAGNOSTIC, copyDiagnostic, [2, 2]]
   ].map(([verb, handler, takes]) => [verb, { handler, takes }])
 );
 var LEAF_VERB_NAMES = new Set(LEAF_VERBS.keys());
@@ -71868,9 +71861,10 @@ function perform({ verb, leaf, session, args }, click3, ctx) {
         `names session ${session.id}, not the session its click is in`
       );
     if (!args.ok) throw new BadVerbArgs(args.problem);
-    if (args.value.length > leaf.takes)
+    const [min2, max2] = leaf.takes;
+    if (args.value.length < min2 || args.value.length > max2)
       throw new BadVerbArgs(
-        `reads ${leaf.takes} after its session, and the link carries ${args.value.length}`
+        `reads ${min2 === max2 ? min2 : `${min2} to ${max2}`} after its session, and the link carries ${args.value.length}`
       );
     leaf.handler(session.id, args.value, {
       ...ctx,
@@ -78544,6 +78538,34 @@ function recording(parts, req) {
     )
   };
 }
+function versionGate(req, log) {
+  if (req.v === PROTOCOL_VERSION) return null;
+  if (req.v > PROTOCOL_VERSION) {
+    log(
+      "info",
+      `version mismatch: client=${req.v} > daemon=${PROTOCOL_VERSION}; binary likely upgraded \u2014 exiting after the response flushes`
+    );
+  } else {
+    log(
+      "info",
+      `version mismatch: client=${req.v} < daemon=${PROTOCOL_VERSION}; client is stale \u2014 staying up`
+    );
+  }
+  return {
+    kind: "reply",
+    resp: {
+      ok: false,
+      error: `protocol v${req.v} not supported (daemon at v${PROTOCOL_VERSION})`,
+      code: "VERSION_MISMATCH",
+      daemonV: PROTOCOL_VERSION
+    },
+    // [LAW:dataflow-not-control-flow] The asymmetry above is this value.
+    // Exit is sequenced on the response flush, so the client always sees
+    // the VERSION_MISMATCH diagnostic — never a dead socket.
+    exitAfterFlush: req.v > PROTOCOL_VERSION ? 0 : null,
+    delivered: NOTHING_DELIVERED
+  };
+}
 async function handleRequest(parts, inbound, timedOut, accepted, clientLeft) {
   if (inbound.kind === "url") {
     return replied(
@@ -78556,33 +78578,8 @@ async function handleRequest(parts, inbound, timedOut, accepted, clientLeft) {
   if (!req || typeof req !== "object" || typeof req.v !== "number") {
     return refuse3("BAD_REQUEST", "malformed request");
   }
-  if (req.v !== PROTOCOL_VERSION) {
-    if (req.v > PROTOCOL_VERSION) {
-      parts.log(
-        "info",
-        `version mismatch: client=${req.v} > daemon=${PROTOCOL_VERSION}; binary likely upgraded \u2014 exiting after the response flushes`
-      );
-    } else {
-      parts.log(
-        "info",
-        `version mismatch: client=${req.v} < daemon=${PROTOCOL_VERSION}; client is stale \u2014 staying up`
-      );
-    }
-    return {
-      kind: "reply",
-      resp: {
-        ok: false,
-        error: `protocol v${req.v} not supported (daemon at v${PROTOCOL_VERSION})`,
-        code: "VERSION_MISMATCH",
-        daemonV: PROTOCOL_VERSION
-      },
-      // [LAW:dataflow-not-control-flow] The asymmetry above is this value.
-      // Exit is sequenced on the response flush, so the client always sees
-      // the VERSION_MISMATCH diagnostic — never a dead socket.
-      exitAfterFlush: req.v > PROTOCOL_VERSION ? 0 : null,
-      delivered: NOTHING_DELIVERED
-    };
-  }
+  const mismatch = versionGate(req, parts.log);
+  if (mismatch !== null) return mismatch;
   if (req.kind === "subscribe") return subscription(req);
   if (req.kind === "record") return recording(parts, req);
   if (typeof req.kind !== "string" || !Object.hasOwn(REPLY_KINDS, req.kind))
