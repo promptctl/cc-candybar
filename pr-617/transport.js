@@ -2553,15 +2553,15 @@ var require_path_browserify = __commonJS({
       normalize: function normalize(path44) {
         assertPath(path44);
         if (path44.length === 0) return ".";
-        var isAbsolute3 = path44.charCodeAt(0) === 47;
+        var isAbsolute5 = path44.charCodeAt(0) === 47;
         var trailingSeparator = path44.charCodeAt(path44.length - 1) === 47;
-        path44 = normalizeStringPosix(path44, !isAbsolute3);
-        if (path44.length === 0 && !isAbsolute3) path44 = ".";
+        path44 = normalizeStringPosix(path44, !isAbsolute5);
+        if (path44.length === 0 && !isAbsolute5) path44 = ".";
         if (path44.length > 0 && trailingSeparator) path44 += "/";
-        if (isAbsolute3) return "/" + path44;
+        if (isAbsolute5) return "/" + path44;
         return path44;
       },
-      isAbsolute: function isAbsolute3(path44) {
+      isAbsolute: function isAbsolute5(path44) {
         assertPath(path44);
         return path44.length > 0 && path44.charCodeAt(0) === 47;
       },
@@ -2775,9 +2775,9 @@ var require_path_browserify = __commonJS({
         var ret = { root: "", dir: "", base: "", ext: "", name: "" };
         if (path44.length === 0) return ret;
         var code = path44.charCodeAt(0);
-        var isAbsolute3 = code === 47;
+        var isAbsolute5 = code === 47;
         var start;
-        if (isAbsolute3) {
+        if (isAbsolute5) {
           ret.root = "/";
           start = 1;
         } else {
@@ -2813,11 +2813,11 @@ var require_path_browserify = __commonJS({
         preDotState === 0 || // The (right-most) trimmed path component is exactly '..'
         preDotState === 1 && startDot === end - 1 && startDot === startPart + 1) {
           if (end !== -1) {
-            if (startPart === 0 && isAbsolute3) ret.base = ret.name = path44.slice(1, end);
+            if (startPart === 0 && isAbsolute5) ret.base = ret.name = path44.slice(1, end);
             else ret.base = ret.name = path44.slice(startPart, end);
           }
         } else {
-          if (startPart === 0 && isAbsolute3) {
+          if (startPart === 0 && isAbsolute5) {
             ret.name = path44.slice(1, startDot);
             ret.base = path44.slice(1, end);
           } else {
@@ -2827,7 +2827,7 @@ var require_path_browserify = __commonJS({
           ret.ext = path44.slice(startDot, end);
         }
         if (startPart > 0) ret.dir = path44.slice(0, startPart - 1);
-        else if (isAbsolute3) ret.dir = "/";
+        else if (isAbsolute5) ret.dir = "/";
         return ret;
       },
       sep: "/",
@@ -7548,7 +7548,7 @@ var require_glob = __commonJS({
     var glob_to_regex_js_1 = require_lib();
     var util_1 = require_util2();
     var Dirent_1 = require_Dirent();
-    var { basename, dirname: dirname2, isAbsolute: isAbsolute3, join: join4, relative, resolve } = path_1.posix;
+    var { basename, dirname: dirname2, isAbsolute: isAbsolute5, join: join4, relative, resolve } = path_1.posix;
     var internalAssertionError = () => (0, argErrors_1.withCode)(new Error("This is caused by either a bug in Node.js or incorrect usage of Node.js internals.\nPlease open an issue with this stack trace at https://github.com/nodejs/node/issues\n"), "ERR_INTERNAL_ASSERTION");
     var validateStringArrayOrFunction = (value, name) => {
       if (Array.isArray(value)) {
@@ -7908,7 +7908,7 @@ var require_glob = __commonJS({
       result(path44) {
         if (!this.withFileTypes)
           return path44;
-        const full = isAbsolute3(path44) ? path44 : join4(this.root, path44);
+        const full = isAbsolute5(path44) ? path44 : join4(this.root, path44);
         const stat3 = this.cache.statSync(full);
         return direntOf(basename(full), dirname2(full), stat3 ? stat3.mode : 0);
       }
@@ -54862,6 +54862,14 @@ Subcommands:
   daemon-stats [--json]    Query the running daemon for runtime stats:
                            uptime, RSS, cache hit rates, watcher count,
                            request totals. Does not spawn a daemon.
+  record SESSION PATH [--seconds N]
+                           Write the session's stream out of the running
+                           daemon into a new file PATH for N seconds (default
+                           10): the facts its bar drew from and the requests
+                           it was drawn by. Send it and your config with a bug
+                           report; in a checkout, \`pnpm demo --recording PATH
+                           CONFIG\` replays it frame by frame. SESSION is the
+                           id \u2317 copies. Does not spawn a daemon.
   frames --lane LANE [--config PATH]
                            One session's bar as the daemon pushes it \u2014 up to
                            30 frames a second while it moves, at once on a
@@ -66093,6 +66101,13 @@ var URL_FRAME_VERSIONS = /* @__PURE__ */ new Set([
   ...EARLIER_URL_FRAME_VERSIONS,
   URL_FRAME_VERSION
 ]);
+var MAX_RECORD_SECONDS = Math.floor((2 ** 31 - 1) / 1e3) - 60;
+function parseRecordSeconds(n) {
+  return typeof n === "number" && n > 0 && n <= MAX_RECORD_SECONDS ? { ok: true, seconds: n } : {
+    ok: false,
+    problem: `is not a span of seconds above 0 and at most ${MAX_RECORD_SECONDS}`
+  };
+}
 var MAX_FRAME_BYTES = 16 * 1024 * 1024;
 function sanitizeClient(v) {
   if (typeof v !== "object" || v === null || Array.isArray(v)) return void 0;
@@ -69202,7 +69217,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.198.1";
+var PACKAGE_VERSION = "1.199.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -71900,7 +71915,7 @@ var Runs = class {
 
 // src/daemon/draw-bar.ts
 init_globals();
-var import_node_path34 = __toESM(require_path_browserify(), 1);
+var import_node_path35 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/update-keys.ts
 init_globals();
@@ -76535,6 +76550,289 @@ function requestEvent(kind, facts, outcome, tookMs) {
 }
 var eventLine = (kind, fields2) => `${kind}${fields2.map(([key, value]) => ` ${key}=${valueOf(value)}`).join("")}`;
 
+// src/daemon/session-recorder.ts
+init_globals();
+
+// src/facts/recording.ts
+init_globals();
+
+// src/facts/session-facts.ts
+init_globals();
+var FACTS_VERSION = 1;
+
+// src/facts/fact.ts
+init_globals();
+function restamp(prior, next, at) {
+  if (next.kind === "pending") return pendingOf(next.why);
+  if (prior !== void 0 && prior.kind !== "pending") {
+    const { at: _at, ...held } = prior;
+    if (compareStructural(held, next)) return prior;
+  }
+  return { ...next, at };
+}
+
+// src/facts/recording.ts
+var import_node_path34 = __toESM(require_path_browserify(), 1);
+
+// src/utils/schema-validator.ts
+init_globals();
+var KNOWN_TOP_LEVEL = /* @__PURE__ */ new Set([
+  "hook_event_name",
+  // cc-candybar internal
+  "session_id",
+  "session_name",
+  "transcript_path",
+  "cwd",
+  "model",
+  "workspace",
+  "version",
+  "output_style",
+  "cost",
+  "context_window",
+  "exceeds_200k_tokens",
+  "effort",
+  "thinking",
+  "rate_limits",
+  "vim",
+  "agent",
+  "worktree"
+]);
+var REQUIRED_FIELDS = [
+  ["session_id", "string"],
+  ["transcript_path", "string"],
+  ["cwd", "string"],
+  ["model", "object"],
+  ["model.id", "string"],
+  ["model.display_name", "string"],
+  ["workspace", "object"],
+  ["workspace.current_dir", "string"],
+  ["workspace.project_dir", "string"]
+];
+var OPTIONAL_FIELDS = [
+  ["workspace.added_dirs", "string-list"]
+];
+function validateHookData(raw) {
+  const report2 = {
+    missingRequired: [],
+    typeMismatches: [],
+    unknownTopLevelFields: []
+  };
+  const obj = raw !== null && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  for (const [path44, expectedType] of REQUIRED_FIELDS) {
+    const value = resolvePath2(obj, path44);
+    if (value === void 0 || value === null) {
+      report2.missingRequired.push(path44);
+    } else {
+      const got = kindOf(value);
+      if (got !== expectedType) {
+        report2.typeMismatches.push({ path: path44, expected: expectedType, got });
+      }
+    }
+  }
+  for (const [path44, expectedType] of OPTIONAL_FIELDS) {
+    const value = resolvePath2(obj, path44);
+    const got = value === void 0 ? expectedType : listKind(value);
+    if (got !== expectedType) {
+      report2.typeMismatches.push({ path: path44, expected: expectedType, got });
+    }
+  }
+  for (const key of Object.keys(obj)) {
+    if (!KNOWN_TOP_LEVEL.has(key)) {
+      report2.unknownTopLevelFields.push(key);
+    }
+  }
+  return { data: raw, report: report2 };
+}
+function kindOf(value) {
+  if (Array.isArray(value)) return "array";
+  if (typeof value === "string" && !value.isWellFormed())
+    return "ill-formed string";
+  return typeof value;
+}
+function listKind(value) {
+  return Array.isArray(value) && value.every((v) => kindOf(v) === "string") ? "string-list" : kindOf(value);
+}
+function resolvePath2(obj, dotPath) {
+  let cur = obj;
+  for (const key of dotPath.split(".")) {
+    if (cur === null || cur === void 0 || typeof cur !== "object" || Array.isArray(cur)) {
+      return void 0;
+    }
+    cur = cur[key];
+  }
+  return cur;
+}
+
+// src/facts/recording.ts
+var LANES2 = new Set(REFRESH_LANES);
+function formatLine(line) {
+  const json2 = line.kind === "recording" ? { kind: line.kind, v: FACTS_VERSION, session: line.session } : line.kind === "facts" ? { kind: line.kind, at: line.at, facts: line.facts } : {
+    kind: line.kind,
+    at: line.at,
+    hookData: line.request.hookData,
+    cwd: line.request.cwd,
+    hints: line.request.hints
+  };
+  return `${JSON.stringify(json2)}
+`;
+}
+
+// src/daemon/session-recorder.ts
+function sessionRecorder(views, log) {
+  const open2 = /* @__PURE__ */ new Map();
+  let closed = false;
+  const end = (sessionId2, rec, how) => {
+    const recs = open2.get(sessionId2);
+    if (recs === void 0 || !recs.delete(rec)) return;
+    if (recs.size === 0) open2.delete(sessionId2);
+    rec.detach();
+    rec.sink.end(how);
+  };
+  const write = (sessionId2, rec, line) => {
+    try {
+      rec.sink.write(line);
+    } catch (e) {
+      log("error", `recording sid=${JSON.stringify(sessionId2)}: ${inspect(e)}`);
+      end(sessionId2, rec, { kind: "failed", error: e });
+    }
+  };
+  const attach = (sessionId2, rec) => {
+    const view = views.sessionView(sessionId2);
+    rec.detach = view === null ? () => {
+    } : reaction(
+      () => view.followed.stamped(),
+      (line, _prior, self2) => {
+        rec.detach = () => self2.dispose();
+        write(sessionId2, rec, { kind: "facts", ...line });
+      },
+      { fireImmediately: true }
+    );
+  };
+  return {
+    record(session, sink) {
+      if (closed) {
+        throw new Error("the daemon is closing: it records nothing more");
+      }
+      if (views.sessionView(session) === null) {
+        throw new Error(
+          `no view of session ${JSON.stringify(session)} is open in this daemon: it has not drawn a bar here since the daemon started, or its view closed while it was idle`
+        );
+      }
+      const rec = { sink, detach: () => {
+      } };
+      const recs = open2.get(session) ?? /* @__PURE__ */ new Set();
+      open2.set(session, recs.add(rec));
+      write(session, rec, { kind: "recording", session });
+      if (recs.has(rec)) attach(session, rec);
+      return () => end(session, rec, { kind: "stopped" });
+    },
+    moved(sessionId2) {
+      for (const rec of open2.get(sessionId2) ?? []) {
+        rec.detach();
+        attach(sessionId2, rec);
+      }
+    },
+    arrived(sessionId2, line) {
+      for (const rec of open2.get(sessionId2) ?? []) {
+        write(sessionId2, rec, { kind: "request", ...line });
+      }
+    },
+    close() {
+      closed = true;
+      for (const [sessionId2, recs] of open2) {
+        for (const rec of recs) end(sessionId2, rec, { kind: "closed" });
+      }
+    }
+  };
+}
+function recordedCache(build, log) {
+  let cache2 = null;
+  const recorder = sessionRecorder(
+    {
+      sessionView: (sessionId2) => {
+        if (cache2 === null) {
+          throw new Error(
+            "a recorder read its cache before the cache was built"
+          );
+        }
+        return cache2.sessionView(sessionId2);
+      }
+    },
+    log
+  );
+  cache2 = build({
+    onSessionViewMoved: (sessionId2) => recorder.moved(sessionId2)
+  });
+  return { cache: cache2, recorder };
+}
+function settleRequest(recorder, view, at) {
+  recorder.arrived(view.sessionId, { at, request: view.facts() });
+  return view.settle(at);
+}
+var RecordingFailed = class extends Error {
+  name = "RecordingFailed";
+};
+function recordToFile(recorder, clock, session, path44, seconds, left) {
+  return new Promise((resolve, reject2) => {
+    let fd;
+    try {
+      fd = openSync(path44, "wx", 384);
+    } catch (e) {
+      reject2(
+        new Error(
+          e.code === "EEXIST" ? `${path44} already exists: a recording writes a new file` : `${path44} cannot be created: ${String(e)}`
+        )
+      );
+      return;
+    }
+    let lines2 = 0;
+    let requests = 0;
+    let stop2 = () => {
+    };
+    const clearTimer = clock.after(seconds * 1e3, () => stop2());
+    const leave = () => stop2();
+    const sink = {
+      // A whole line or the write's error: one write call may take part of it.
+      write: (line) => {
+        appendFileSync(fd, formatLine(line));
+        lines2++;
+        if (line.kind === "request") requests++;
+      },
+      end: (how) => {
+        clearTimer();
+        left.removeEventListener("abort", leave);
+        let error = how.kind === "failed" ? how.error : null;
+        try {
+          closeSync(fd);
+          if (requests === 0) unlinkSync(path44);
+        } catch (e) {
+          error ??= e;
+        }
+        if (error === null) {
+          resolve({
+            path: path44,
+            lines: lines2,
+            requests,
+            daemonClosed: how.kind === "closed"
+          });
+        } else {
+          reject2(new RecordingFailed(`writing ${path44}: ${String(error)}`));
+        }
+      }
+    };
+    left.addEventListener("abort", leave, { once: true });
+    try {
+      stop2 = recorder.record(session, sink);
+    } catch (e) {
+      left.removeEventListener("abort", leave);
+      clearTimer();
+      closeSync(fd);
+      unlinkSync(path44);
+      reject2(e);
+    }
+  });
+}
+
 // src/daemon/draw-bar.ts
 var NOTHING_DELIVERED = () => {
 };
@@ -76672,7 +76970,7 @@ function setUpRender(parts, arrived3, at, facts) {
     ...arrived3,
     hookData: {
       ...arrived3.hookData,
-      ...dir !== void 0 && import_node_path34.default.isAbsolute(dir) && { location: checkoutLocation(dir) }
+      ...dir !== void 0 && import_node_path35.default.isAbsolute(dir) && { location: checkoutLocation(dir) }
     }
   };
   const hintsError = requestFacts(req, at, facts, parts.rendererName);
@@ -77013,7 +77311,7 @@ async function drawAnswer(parts, req, at, waitEndsAt, facts) {
       req,
       laneSwitches(setup.view.source.effective(), inTmux(req.hints.tmux))
     );
-    const settling = setup.view.settle(at);
+    const settling = settleRequest(parts.recorder, setup.view, at);
     const waitFrom = clock.monotonic();
     const budget = waitEndsAt - waitFrom;
     noteFacts(facts, {
@@ -77079,6 +77377,7 @@ function statuslineOf(sessionId2, drawn, elsewhere) {
 
 // src/daemon/reply.ts
 init_globals();
+var import_node_path37 = __toESM(require_path_browserify(), 1);
 init_process();
 
 // src/daemon/apply.ts
@@ -77356,98 +77655,7 @@ function performAll(parts, of, effects) {
 
 // src/daemon/render-checkpoint.ts
 init_globals();
-var import_node_path35 = __toESM(require_path_browserify(), 1);
-
-// src/utils/schema-validator.ts
-init_globals();
-var KNOWN_TOP_LEVEL = /* @__PURE__ */ new Set([
-  "hook_event_name",
-  // cc-candybar internal
-  "session_id",
-  "session_name",
-  "transcript_path",
-  "cwd",
-  "model",
-  "workspace",
-  "version",
-  "output_style",
-  "cost",
-  "context_window",
-  "exceeds_200k_tokens",
-  "effort",
-  "thinking",
-  "rate_limits",
-  "vim",
-  "agent",
-  "worktree"
-]);
-var REQUIRED_FIELDS = [
-  ["session_id", "string"],
-  ["transcript_path", "string"],
-  ["cwd", "string"],
-  ["model", "object"],
-  ["model.id", "string"],
-  ["model.display_name", "string"],
-  ["workspace", "object"],
-  ["workspace.current_dir", "string"],
-  ["workspace.project_dir", "string"]
-];
-var OPTIONAL_FIELDS = [
-  ["workspace.added_dirs", "string-list"]
-];
-function validateHookData(raw) {
-  const report2 = {
-    missingRequired: [],
-    typeMismatches: [],
-    unknownTopLevelFields: []
-  };
-  const obj = raw !== null && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
-  for (const [path44, expectedType] of REQUIRED_FIELDS) {
-    const value = resolvePath2(obj, path44);
-    if (value === void 0 || value === null) {
-      report2.missingRequired.push(path44);
-    } else {
-      const got = kindOf(value);
-      if (got !== expectedType) {
-        report2.typeMismatches.push({ path: path44, expected: expectedType, got });
-      }
-    }
-  }
-  for (const [path44, expectedType] of OPTIONAL_FIELDS) {
-    const value = resolvePath2(obj, path44);
-    const got = value === void 0 ? expectedType : listKind(value);
-    if (got !== expectedType) {
-      report2.typeMismatches.push({ path: path44, expected: expectedType, got });
-    }
-  }
-  for (const key of Object.keys(obj)) {
-    if (!KNOWN_TOP_LEVEL.has(key)) {
-      report2.unknownTopLevelFields.push(key);
-    }
-  }
-  return { data: raw, report: report2 };
-}
-function kindOf(value) {
-  if (Array.isArray(value)) return "array";
-  if (typeof value === "string" && !value.isWellFormed())
-    return "ill-formed string";
-  return typeof value;
-}
-function listKind(value) {
-  return Array.isArray(value) && value.every((v) => kindOf(v) === "string") ? "string-list" : kindOf(value);
-}
-function resolvePath2(obj, dotPath) {
-  let cur = obj;
-  for (const key of dotPath.split(".")) {
-    if (cur === null || cur === void 0 || typeof cur !== "object" || Array.isArray(cur)) {
-      return void 0;
-    }
-    cur = cur[key];
-  }
-  return cur;
-}
-
-// src/daemon/render-checkpoint.ts
+var import_node_path36 = __toESM(require_path_browserify(), 1);
 function parseRenderArgs(args, cwd2, home) {
   const { tokens } = (0, import_parseargs.parseArgs)({
     args: args.slice(1),
@@ -77500,7 +77708,7 @@ function checkRenderRequest(req, stats, log, home) {
   if (!sessionId2.ok) {
     wireProblems.push(`field 'session_id' ${sessionId2.problem}`);
   }
-  if (typeof req.cwd !== "string" || !(0, import_node_path35.isAbsolute)(req.cwd)) {
+  if (typeof req.cwd !== "string" || !(0, import_node_path36.isAbsolute)(req.cwd)) {
     wireProblems.push(
       `request 'cwd' is not an absolute path: ${JSON.stringify(req.cwd)}`
     );
@@ -77738,6 +77946,51 @@ function subscription(req) {
     );
   return { kind: "subscribe", sessionId: sessionId2.id, lane };
 }
+function parseRecordRequest(req) {
+  const { session, path: path44, seconds } = req;
+  const id2 = parseSessionId(session);
+  if (!id2.ok) return { ok: false, problem: `record's session ${id2.problem}` };
+  if (typeof path44 !== "string" || !(0, import_node_path37.isAbsolute)(path44)) {
+    return {
+      ok: false,
+      problem: `record's path is not an absolute path: ${JSON.stringify(path44)}`
+    };
+  }
+  const span = parseRecordSeconds(seconds);
+  if (!span.ok) {
+    return {
+      ok: false,
+      problem: `record's seconds ${JSON.stringify(seconds)} ${span.problem}`
+    };
+  }
+  return { ok: true, session: id2.id, path: path44, seconds: span.seconds };
+}
+function recording(parts, req) {
+  const parsed2 = parseRecordRequest(req);
+  if (!parsed2.ok) return refuse3("BAD_REQUEST", parsed2.problem);
+  const { session, path: path44, seconds } = parsed2;
+  return {
+    kind: "held",
+    start: (left) => recordToFile(
+      parts.recorder,
+      parts.clock,
+      session,
+      path44,
+      seconds,
+      left
+    ).then(
+      (recorded) => stay({ ok: true, recorded }),
+      (e) => stay({
+        ok: false,
+        error: e instanceof Error ? e.message : String(e),
+        // [LAW:types-are-the-program] A recording a write ended is the
+        // daemon failing; one refused before it began, the request.
+        code: e instanceof RecordingFailed ? "RENDER_FAILED" : "BAD_REQUEST",
+        daemonV: PROTOCOL_VERSION
+      })
+    )
+  };
+}
 async function handleRequest(parts, inbound, timedOut, accepted, clientLeft) {
   if (inbound.kind === "url") {
     return replied(
@@ -77778,6 +78031,7 @@ async function handleRequest(parts, inbound, timedOut, accepted, clientLeft) {
     };
   }
   if (req.kind === "subscribe") return subscription(req);
+  if (req.kind === "record") return recording(parts, req);
   if (typeof req.kind !== "string" || !Object.hasOwn(REPLY_KINDS, req.kind))
     return refuse3("BAD_REQUEST", "unknown kind");
   return replied(await replyTo(parts, req, timedOut, accepted, clientLeft));
@@ -78261,10 +78515,10 @@ var refusedRender = (problems) => ({
 // src/daemon/update-act.ts
 init_globals();
 init_os();
-var import_node_path36 = __toESM(require_path_browserify(), 1);
+var import_node_path38 = __toESM(require_path_browserify(), 1);
 function actsDir(stateDir2, entryPath) {
   const key = createHash("sha256").update(entryPath).digest("hex").slice(0, 16);
-  return import_node_path36.default.join(stateDir2, "update-act", key);
+  return import_node_path38.default.join(stateDir2, "update-act", key);
 }
 var IDLE = { kind: "idle" };
 function judgeAct(facts) {
@@ -78284,11 +78538,11 @@ function judgeAct(facts) {
   return { kind: "failed", act, identity: record2.identity, reason };
 }
 var filesOf = (actDir) => ({
-  stdout: import_node_path36.default.join(actDir, "stdout"),
-  stderr: import_node_path36.default.join(actDir, "stderr"),
-  status: import_node_path36.default.join(actDir, "status")
+  stdout: import_node_path38.default.join(actDir, "stdout"),
+  stderr: import_node_path38.default.join(actDir, "stderr"),
+  status: import_node_path38.default.join(actDir, "status")
 });
-var recordOf2 = (actDir) => import_node_path36.default.join(actDir, "record.json");
+var recordOf2 = (actDir) => import_node_path38.default.join(actDir, "record.json");
 function actNumbers(dir) {
   let names;
   try {
@@ -78312,9 +78566,9 @@ function lastLineOf(file) {
   }
 }
 function removeAct(dir, act) {
-  const leaving = import_node_path36.default.join(dir, `.removed-${act}-${process_default.pid}`);
+  const leaving = import_node_path38.default.join(dir, `.removed-${act}-${process_default.pid}`);
   try {
-    fs_default.renameSync(import_node_path36.default.join(dir, String(act)), leaving);
+    fs_default.renameSync(import_node_path38.default.join(dir, String(act)), leaving);
   } catch (err) {
     if (err.code === "ENOENT") return;
     throw err;
@@ -78339,7 +78593,7 @@ var sameJob = (a, b) => a.pid === b.pid && a.startTime === b.startTime;
 function makeActReader(dir, read2, jobs, clock) {
   let known = null;
   async function factsOf2(act) {
-    const actDir = import_node_path36.default.join(dir, String(act));
+    const actDir = import_node_path38.default.join(dir, String(act));
     const record2 = readRecord(actDir);
     if (record2 === null) return null;
     if (known === null || !sameJob(known.record, record2)) {
@@ -78367,7 +78621,7 @@ function makeActReader(dir, read2, jobs, clock) {
         if (act === void 0) return null;
         if (act === vanished) {
           throw new Error(
-            `${import_node_path36.default.join(dir, String(act))}: an act with no record`
+            `${import_node_path38.default.join(dir, String(act))}: an act with no record`
           );
         }
         const facts = await factsOf2(act);
@@ -78379,7 +78633,7 @@ function makeActReader(dir, read2, jobs, clock) {
 }
 function stakeClaim(dir, actDir, record2) {
   fs_default.mkdirSync(dir, { recursive: true });
-  const staging = fs_default.mkdtempSync(import_node_path36.default.join(dir, ".claim-"));
+  const staging = fs_default.mkdtempSync(import_node_path38.default.join(dir, ".claim-"));
   try {
     fs_default.writeFileSync(recordOf2(staging), JSON.stringify(record2));
     fs_default.renameSync(staging, actDir);
@@ -78394,7 +78648,7 @@ function stakeClaim(dir, actDir, record2) {
 }
 async function claimAct(launcher, dir, after, identity2, command, timeoutMs, now2, read2) {
   const act = (after ?? 0) + 1;
-  const actDir = import_node_path36.default.join(dir, String(act));
+  const actDir = import_node_path38.default.join(dir, String(act));
   const job = launcher.launchJobSync(command, filesOf(actDir));
   if (!job.ok) throw new Error(`apply-update: ${job.error}`);
   let stood = false;
@@ -78427,23 +78681,12 @@ var CLAIMED_FIRST = {
   reason: "another act claimed this bundle first"
 };
 function endOverdue(dir, facts, jobs) {
-  const status = filesOf(import_node_path36.default.join(dir, String(facts.act))).status;
+  const status = filesOf(import_node_path38.default.join(dir, String(facts.act))).status;
   return jobs.endJob(facts.record.pid, status, { kind: "timeout" });
 }
 
 // src/daemon/update-notice.ts
 init_globals();
-
-// src/facts/fact.ts
-init_globals();
-function restamp(prior, next, at) {
-  if (next.kind === "pending") return pendingOf(next.why);
-  if (prior !== void 0 && prior.kind !== "pending") {
-    const { at: _at, ...held } = prior;
-    if (compareStructural(held, next)) return prior;
-  }
-  return { ...next, at };
-}
 
 // src/utils/keyed-serial-queue.ts
 init_globals();
@@ -78896,7 +79139,7 @@ init_globals();
 
 // src/daemon/cache/git.ts
 init_globals();
-var import_node_path37 = __toESM(require_path_browserify(), 1);
+var import_node_path39 = __toESM(require_path_browserify(), 1);
 
 // src/utils/trailing-edge.ts
 init_globals();
@@ -78983,7 +79226,7 @@ function optionsKey(options) {
 function watchSpec(root, gitDir, commonDir) {
   const dirs = [
     { path: gitDir, filenames: ["HEAD", "index"] },
-    { path: import_node_path37.default.join(commonDir, "refs", "heads"), recursive: true }
+    { path: import_node_path39.default.join(commonDir, "refs", "heads"), recursive: true }
   ];
   const bounds = dirs.map((d) => boundOf(d.path));
   const named3 = dirs.map((d, i) => `${d.path}@${boundKey(bounds[i])}`);
@@ -79489,12 +79732,12 @@ var GitDataProvider = class {
 
 // src/daemon/cache/session-usage-store.ts
 init_globals();
-var import_node_path39 = __toESM(require_path_browserify(), 1);
+var import_node_path41 = __toESM(require_path_browserify(), 1);
 
 // src/segments/pricing.ts
 init_globals();
 init_url();
-var import_node_path38 = __toESM(require_path_browserify(), 1);
+var import_node_path40 = __toESM(require_path_browserify(), 1);
 var OFFLINE_PRICING_DATA = {
   "claude-haiku-4-5-20251001": {
     name: "Claude Haiku 4.5",
@@ -79630,7 +79873,7 @@ function livePricing(owner) {
     })
   };
 }
-var diskPath = (cacheRoot) => import_node_path38.default.join(cacheRoot, "usage", "pricing.json");
+var diskPath = (cacheRoot) => import_node_path40.default.join(cacheRoot, "usage", "pricing.json");
 async function loadTable(owner) {
   const cached = await readDisk(owner);
   if (cached !== null) return cached;
@@ -79662,7 +79905,7 @@ async function writeDisk(owner, table) {
   const file = diskPath(owner.cacheRoot);
   const staged = `${file}.${process_default.pid}.${randomUUID()}`;
   try {
-    await fs_default.promises.mkdir(import_node_path38.default.dirname(file), { recursive: true });
+    await fs_default.promises.mkdir(import_node_path40.default.dirname(file), { recursive: true });
     await fs_default.promises.writeFile(
       staged,
       JSON.stringify({ data: table, timestamp: owner.clock.now() }),
@@ -80375,7 +80618,7 @@ var SessionUsageStore = class {
     const key = claudePaths.join("\0");
     const known = this.daySets.get(key);
     if (known !== void 0) return known;
-    const roots = claudePaths.map((dir) => (0, import_node_path39.join)(dir, "projects") + import_node_path39.sep);
+    const roots = claudePaths.map((dir) => (0, import_node_path41.join)(dir, "projects") + import_node_path41.sep);
     const set2 = {
       roots,
       sums: new Kept(
@@ -80396,7 +80639,7 @@ var SessionUsageStore = class {
   async refold(sessionId2, transcriptPath, prior) {
     const agents = await findAgentTranscripts(
       sessionId2,
-      (0, import_node_path39.dirname)(transcriptPath),
+      (0, import_node_path41.dirname)(transcriptPath),
       prior === void 0 ? void 0 : new Set(prior.files.keys())
     );
     for (const line of longLineLog(agents.longLines)) this.log("info", line);
@@ -80440,7 +80683,7 @@ var SessionUsageStore = class {
         const files = await unlessGone(readdir2(dir));
         for (const file of files ?? []) {
           if (!file.endsWith(".jsonl")) continue;
-          const filePath2 = (0, import_node_path39.join)(dir, file);
+          const filePath2 = (0, import_node_path41.join)(dir, file);
           const st = await unlessGone(stat2(filePath2));
           if (st === void 0 || st.mtimeMs < cutoff) continue;
           candidates.push({
@@ -81249,13 +81492,13 @@ function scanBufferForLastCacheTs(buf, bufStartsAtFileBeginning) {
 
 // src/daemon/cache/managed-storage.ts
 init_globals();
-var import_node_path40 = __toESM(require_path_browserify(), 1);
+var import_node_path42 = __toESM(require_path_browserify(), 1);
 var DAY_MS = 24 * 60 * 60 * 1e3;
 var STORAGE_FILE_MAX_AGE_MS = 30 * DAY_MS;
 var STORAGE_SWEEP_EVERY_MS = DAY_MS;
 var MAX_ENTRIES2 = 256;
 var fileName = (sessionId2) => sessionFileName(sessionId2);
-var fileOf = (f) => import_node_path40.default.join(f.storage.folder, fileName(f.sessionId));
+var fileOf = (f) => import_node_path42.default.join(f.storage.folder, fileName(f.sessionId));
 var keyString = (key) => JSON.stringify([key.folder, key.generation]);
 var sameKey = (a, b) => a.folder === b.folder && a.generation === b.generation;
 var ManagedStorage = class {
@@ -81437,7 +81680,7 @@ var ManagedStorage = class {
         return;
       case "changed": {
         const { paths: paths2 } = invalidation;
-        if (paths2.has(import_node_path40.default.join(key.folder, import_node_path40.default.basename(key.folder)))) {
+        if (paths2.has(import_node_path42.default.join(key.folder, import_node_path42.default.basename(key.folder)))) {
           this.judged(watched, () => this.sessions.changed(inFolder));
         } else {
           this.sessions.changed((f) => inFolder(f) && paths2.has(fileOf(f)));
@@ -81574,7 +81817,7 @@ var ManagedStorage = class {
       for (const entry of entries) {
         if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
         scanned++;
-        const file = import_node_path40.default.join(key.folder, entry.name);
+        const file = import_node_path42.default.join(key.folder, entry.name);
         try {
           const { mtimeMs } = await fs_default.promises.stat(file);
           const held = this.sessions.isHeld(
@@ -81638,7 +81881,7 @@ function createPayloadProviders(opts) {
 
 // src/daemon/cache/render.ts
 init_globals();
-var import_node_path41 = __toESM(require_path_browserify(), 1);
+var import_node_path43 = __toESM(require_path_browserify(), 1);
 
 // src/config/unused.ts
 init_globals();
@@ -81820,7 +82063,7 @@ function watchTargetsFor(entry, locs) {
   const roots = [
     .../* @__PURE__ */ new Set([
       ...entry.state.plugins.roots,
-      import_node_path41.default.join(entry.projectDir, REPO_PLUGIN_DIR)
+      import_node_path43.default.join(entry.projectDir, REPO_PLUGIN_DIR)
     ])
   ];
   return watchTargetsOf({
@@ -82157,6 +82400,7 @@ function openView(state, cwd2, facts, { facts: factsSource, source: sourceOf, ch
     requested: redeclare,
     facts: () => declared.get().facts,
     settle: (at) => followed.settle(at),
+    followed: { stamped: followed.stamped, failure: followed.failure },
     lastRenderCellsBySegment: /* @__PURE__ */ new Map(),
     retire: stopChanged,
     dispose: () => {
@@ -82388,12 +82632,11 @@ var RenderCache = class {
     const { sessionId: sessionId2 } = facts;
     const current = this.views.get(sessionId2);
     if (current?.state === state) {
-      this.views.delete(sessionId2);
-      this.views.set(sessionId2, current);
+      this.placeView(sessionId2, current);
       current.requested(facts);
       return current;
     }
-    this.views.delete(sessionId2);
+    this.placeView(sessionId2, void 0);
     const read2 = current !== void 0 && this.leaseOf(current).read;
     let view;
     try {
@@ -82423,13 +82666,29 @@ var RenderCache = class {
       throw error;
     }
     this.openFailures.delete(sessionId2);
-    this.views.set(sessionId2, view);
     this.viewHolds.set(view, { entry, holders: 0, retired: null, read: read2 });
+    this.placeView(sessionId2, view);
     this.log(
       "info",
       `session view opened sid=${JSON.stringify(sessionId2)} by=${by} cwd=${entry.cwd} views=${this.views.size}`
     );
     return view;
+  }
+  // [LAW:single-enforcer] The one writer of a session's entry in `views`.
+  // Placing a view enters it at the end, the most recently used. An entry whose
+  // view changes — entered, replaced, or dropped — says so, so what follows the
+  // session's current view reads it back here and keeps no record of its own;
+  // a view moved to the end only for recency says nothing.
+  placeView(sessionId2, view) {
+    const before = this.views.get(sessionId2);
+    this.views.delete(sessionId2);
+    if (view !== void 0) this.views.set(sessionId2, view);
+    if (view !== before) this.observers.onSessionViewMoved?.(sessionId2);
+  }
+  // The session's current view, or null while it has none. Reads, never
+  // opens, like latestView.
+  sessionView(sessionId2) {
+    return this.views.get(sessionId2) ?? null;
   }
   leaseOf(view) {
     const lease = this.viewHolds.get(view);
@@ -82440,7 +82699,7 @@ var RenderCache = class {
   // last render holding it returns.
   retireView(view, reason) {
     if (this.views.get(view.sessionId) === view)
-      this.views.delete(view.sessionId);
+      this.placeView(view.sessionId, void 0);
     if (!this.views.has(view.sessionId)) this.copies.delete(view.sessionId);
     view.retire();
     const lease = this.leaseOf(view);
@@ -82861,12 +83120,6 @@ init_globals();
 
 // src/daemon/facts-assembly.ts
 init_globals();
-
-// src/facts/session-facts.ts
-init_globals();
-var FACTS_VERSION = 1;
-
-// src/daemon/facts-assembly.ts
 var over = (reading, project) => reading.kind === "ok" ? ok(project(reading.value)) : reading;
 function prOf(git) {
   switch (git.kind) {
@@ -84138,11 +84391,11 @@ function segmentsOf2(value) {
 
 // src/daemon/lane-setup.ts
 init_globals();
-var import_node_path43 = __toESM(require_path_browserify(), 1);
+var import_node_path45 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/claude-relaunch.ts
 init_globals();
-var import_node_path42 = __toESM(require_path_browserify(), 1);
+var import_node_path44 = __toESM(require_path_browserify(), 1);
 var keep = (arity) => ({ arity, keep: true });
 var drop = (arity) => ({ arity, keep: false });
 var FLAGS = {
@@ -84244,7 +84497,7 @@ function startPlace(startDir, cwd2) {
     args: ["--worktree", tree.name]
   };
 }
-var within3 = (dir, top) => dir === top || dir.startsWith(top + import_node_path42.default.sep);
+var within3 = (dir, top) => dir === top || dir.startsWith(top + import_node_path44.default.sep);
 function relaunchArgs(argv2) {
   const kept = [];
   const tokens = argv2.slice(1);
@@ -84276,14 +84529,14 @@ function relaunchArgs(argv2) {
   return { kind: "args", args: kept };
 }
 function worktreeOf(dir) {
-  const parts = dir.split(import_node_path42.default.sep);
+  const parts = dir.split(import_node_path44.default.sep);
   const at = parts.findLastIndex(
     (p2, i) => p2 === "worktrees" && parts[i - 1] === ".claude" && i + 1 < parts.length
   );
   return at === -1 ? null : {
     name: parts[at + 1].replaceAll("+", "/"),
-    top: parts.slice(0, at + 2).join(import_node_path42.default.sep),
-    repo: parts.slice(0, at - 1).join(import_node_path42.default.sep) || import_node_path42.default.sep
+    top: parts.slice(0, at + 2).join(import_node_path44.default.sep),
+    repo: parts.slice(0, at - 1).join(import_node_path44.default.sep) || import_node_path44.default.sep
   };
 }
 function takeWhile(xs, ok3) {
@@ -84293,7 +84546,7 @@ function takeWhile(xs, ok3) {
 
 // src/daemon/lane-setup.ts
 var BAND_PLUGIN = "candybar-band@cc-candybar";
-var BAND_CLIENT = import_node_path43.default.join("bin", "cc-candybar-native");
+var BAND_CLIENT = import_node_path45.default.join("bin", "cc-candybar-native");
 var EXIT_PATIENCE_MS = 15e3;
 var ATTACH_PATIENCE_MS = 3e4;
 var RELOAD_PLUGINS = slashLine("/reload-plugins");
@@ -84312,7 +84565,7 @@ var LANE_SETUP = {
           `${LANES.band.label} runs the band mod from a cc-candybar source checkout, and this daemon runs ${host.bundle} \u2014 run the daemon from a checkout (mod/README.md)`
         );
       }
-      const client = import_node_path43.default.join(checkout, BAND_CLIENT);
+      const client = import_node_path45.default.join(checkout, BAND_CLIENT);
       if (!edge.fileExists(client)) {
         throw new BadVerbArgs(
           `the band mod starts ${client}, which is not built \u2014 run \`just install-rust\` in ${checkout}`
@@ -85226,58 +85479,62 @@ function createDaemon(inputs) {
   }
   const renderWarnings = new RenderWarningRecords();
   const updateFact = newUpdateFact();
-  const renderCache = new RenderCache(
-    {
-      clock,
-      runs: sourceRuns,
-      stateDir: paths2.state,
-      locations: locs,
-      sessionState,
-      watchers: watcherRegistry,
-      log,
-      storage: managedStorage,
-      signer: linkSigner2,
-      gates,
-      // [LAW:single-enforcer] Where every session's facts come from: the
-      // in-process arm over the daemon's own owners, which logs the refreshes
-      // it makes through the one ledger, so a view's payload logs none of them.
-      facts: inProcessFacts({
-        providers: payloadProviders,
-        update: () => updateFact.get()
-      }),
-      // [LAW:single-enforcer] What every session's view draws from: its payload
-      // derived over its document, its picks and its histories' depths.
-      source: sessionSource({
-        providers: payloadProviders,
+  const { cache: renderCache, recorder } = recordedCache(
+    (recording2) => new RenderCache(
+      {
+        clock,
+        runs: sourceRuns,
+        stateDir: paths2.state,
+        locations: locs,
         sessionState,
-        history: (sessionId2) => settingsHistory.depth(sessionId2),
-        // Measured against the gate of the config the view draws with.
-        navigation: (sessionId2, config2) => navigationHistory.depth(
-          sessionId2,
+        watchers: watcherRegistry,
+        log,
+        storage: managedStorage,
+        signer: linkSigner2,
+        gates,
+        // [LAW:single-enforcer] Where every session's facts come from: the
+        // in-process arm over the daemon's own owners, which logs the refreshes
+        // it makes through the one ledger, so a view's payload logs none of them.
+        facts: inProcessFacts({
+          providers: payloadProviders,
+          update: () => updateFact.get()
+        }),
+        // [LAW:single-enforcer] What every session's view draws from: its payload
+        // derived over its document, its picks and its histories' depths.
+        source: sessionSource({
+          providers: payloadProviders,
           sessionState,
-          gates.state.gateFor(config2)
-        )
-      })
-    },
-    {
-      budgetBytes: () => renderCacheBudget(memoryLimitBytes2),
-      observers: {
-        // [LAW:no-silent-failure] Every config (re)load's outcome lands in
-        // daemon.log with its cause — the operator's only record of why a load
-        // ran, and whether a save was picked up cleanly, kept rendering
-        // last-known-good behind an error, or resolved to a different file.
-        onReload: (entry, sessions, cause, settled3) => {
-          log("info", configLoadedLine(entry, cause, settled3));
-          for (const sessionId2 of sessions)
-            frameFeeds.wake(sessionId2, "reload");
-        },
-        // [LAW:single-enforcer] What a session's view draws from moved: its
-        // feed's next frame is brought forward, whatever moved it: a request's
-        // facts, a refresh landing after its deadline, a source publishing, a
-        // pick. The dump link, which no view holds, wakes the same way.
-        onViewChanged: (sessionId2) => frameFeeds.wake(sessionId2, "data")
+          history: (sessionId2) => settingsHistory.depth(sessionId2),
+          // Measured against the gate of the config the view draws with.
+          navigation: (sessionId2, config2) => navigationHistory.depth(
+            sessionId2,
+            sessionState,
+            gates.state.gateFor(config2)
+          )
+        })
+      },
+      {
+        budgetBytes: () => renderCacheBudget(memoryLimitBytes2),
+        observers: {
+          // [LAW:no-silent-failure] Every config (re)load's outcome lands in
+          // daemon.log with its cause — the operator's only record of why a load
+          // ran, and whether a save was picked up cleanly, kept rendering
+          // last-known-good behind an error, or resolved to a different file.
+          onReload: (entry, sessions, cause, settled3) => {
+            log("info", configLoadedLine(entry, cause, settled3));
+            for (const sessionId2 of sessions)
+              frameFeeds.wake(sessionId2, "reload");
+          },
+          // [LAW:single-enforcer] What a session's view draws from moved: its
+          // feed's next frame is brought forward, whatever moved it: a request's
+          // facts, a refresh landing after its deadline, a source publishing, a
+          // pick. The dump link, which no view holds, wakes the same way.
+          onViewChanged: (sessionId2) => frameFeeds.wake(sessionId2, "data"),
+          ...recording2
+        }
       }
-    }
+    ),
+    log
   );
   fileEvents.subscribe((notice) => {
     switch (notice.kind) {
@@ -85416,6 +85673,7 @@ function createDaemon(inputs) {
     frameFeeds,
     renderWarnings,
     renderCache,
+    recorder,
     updateWatch,
     limits,
     verbCtx
@@ -85471,6 +85729,9 @@ function createDaemon(inputs) {
         ["updateWatch close", () => updateWatch.close()],
         ["binaryWatch close", () => binaryWatch.close()],
         ["limits disarm", () => limits.disarm()],
+        // Every open recording ends, its file whole, while the views it
+        // follows are still served.
+        ["recorder close", () => recorder.close()],
         // Before the sources and the storage its states hold.
         ["renderCache close", () => renderCache.close()],
         ["gitService close", () => gitService.close()],
@@ -85501,7 +85762,7 @@ function createDaemon(inputs) {
 
 // src/daemon/log.ts
 init_globals();
-var import_node_path44 = __toESM(require_path_browserify(), 1);
+var import_node_path46 = __toESM(require_path_browserify(), 1);
 var MAX_BYTES2 = 5 * 1024 * 1024;
 var KEEP_GENERATIONS = 3;
 var MAX_WAITING_BYTES = 4 * 1024 * 1024;
@@ -85652,7 +85913,7 @@ var DaemonLog = class {
       return { held: this.sink, size: st.size };
     }
     this.closeSink();
-    await fs_default.promises.mkdir(import_node_path44.default.dirname(this.filePath), { recursive: true });
+    await fs_default.promises.mkdir(import_node_path46.default.dirname(this.filePath), { recursive: true });
     const fd = await new Promise(
       (resolve, reject2) => fs_default.open(
         this.filePath,
@@ -85769,7 +86030,7 @@ var DaemonLog = class {
     if (first2.length === 0 && this.waiting.length === 0) return;
     const lines2 = import_buffer.Buffer.concat([first2, import_buffer.Buffer.from(this.take())]);
     try {
-      fs_default.mkdirSync(import_node_path44.default.dirname(this.filePath), { recursive: true });
+      fs_default.mkdirSync(import_node_path46.default.dirname(this.filePath), { recursive: true });
       fs_default.appendFileSync(this.filePath, lines2);
       if (stillOut !== null && out !== null && idOf3(fs_default.fstatSync(stillOut.fd)) === idOf3(fs_default.statSync(this.filePath))) {
         out.state = {
@@ -85829,7 +86090,7 @@ init_globals();
 
 // src/daemon/session-state-file.ts
 init_globals();
-var import_node_path45 = __toESM(require_path_browserify(), 1);
+var import_node_path47 = __toESM(require_path_browserify(), 1);
 function isSnapshot(value) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return false;
@@ -85926,7 +86187,7 @@ var FileSessionStorage = class {
     this.writing = true;
     const heldMs = elapsedMs(this.clock, started2);
     try {
-      await fs_default.promises.mkdir(import_node_path45.default.dirname(this.filePath), { recursive: true });
+      await fs_default.promises.mkdir(import_node_path47.default.dirname(this.filePath), { recursive: true });
       const file = await fs_default.promises.open(tmp, "w", 384);
       try {
         await file.writeFile(body);
@@ -85971,7 +86232,7 @@ var FileSessionStorage = class {
     const snapshot = this.pending;
     const started2 = this.clock.monotonic();
     try {
-      fs_default.mkdirSync(import_node_path45.default.dirname(this.filePath), { recursive: true });
+      fs_default.mkdirSync(import_node_path47.default.dirname(this.filePath), { recursive: true });
       const tmp = `${this.filePath}.tmp`;
       const body = JSON.stringify(snapshot);
       fs_default.writeFileSync(tmp, body, { mode: 384 });
@@ -86008,11 +86269,11 @@ init_globals();
 
 // src/path-search.ts
 init_globals();
-var import_node_path46 = __toESM(require_path_browserify(), 1);
+var import_node_path48 = __toESM(require_path_browserify(), 1);
 function executableOn(name, pathVariable, isExecutable) {
-  for (const dir of (pathVariable ?? "").split(import_node_path46.default.delimiter)) {
-    if (!import_node_path46.default.isAbsolute(dir)) continue;
-    const file = import_node_path46.default.join(dir, name);
+  for (const dir of (pathVariable ?? "").split(import_node_path48.default.delimiter)) {
+    if (!import_node_path48.default.isAbsolute(dir)) continue;
+    const file = import_node_path48.default.join(dir, name);
     if (isExecutable(file)) return file;
   }
   return null;
@@ -86029,13 +86290,13 @@ function canonical2(file) {
   try {
     return fs_default.realpathSync(file);
   } catch {
-    return import_node_path46.default.resolve(file);
+    return import_node_path48.default.resolve(file);
   }
 }
 
 // src/attach-preload.ts
 init_globals();
-var import_node_path47 = __toESM(require_path_browserify(), 1);
+var import_node_path49 = __toESM(require_path_browserify(), 1);
 function launcherNode(pathVariable, isExecutable, canonical3) {
   const node = executableOn("node", pathVariable, isExecutable);
   if (node === null) {
@@ -86044,7 +86305,7 @@ function launcherNode(pathVariable, isExecutable, canonical3) {
       why: "no `node` on PATH to run the attach launcher"
     };
   }
-  return import_node_path47.default.basename(canonical3(node)) === "bun" ? {
+  return import_node_path49.default.basename(canonical3(node)) === "bun" ? {
     kind: "refused",
     why: `the \`node\` on PATH (${node}) is Bun; the attach launcher runs under Node`
   } : { kind: "node", file: node };
@@ -86330,7 +86591,7 @@ function productionLaneEdge(launcher, following, closing, clock, probe2) {
 
 // src/daemon/link-key.ts
 init_globals();
-var import_node_path48 = __toESM(require_path_browserify(), 1);
+var import_node_path50 = __toESM(require_path_browserify(), 1);
 
 // src/click/link-signer.ts
 init_globals();
@@ -86361,7 +86622,7 @@ function linkSigner(key) {
 
 // src/daemon/link-key.ts
 function linkKeyFile(dir) {
-  return import_node_path48.default.join(dir, "link.key");
+  return import_node_path50.default.join(dir, "link.key");
 }
 function linkSignerFromKeyFile(file) {
   let signer;
@@ -86388,7 +86649,7 @@ function readOrCreate(file) {
   return linkSigner(key);
 }
 function create(file) {
-  fs_default.mkdirSync(import_node_path48.default.dirname(file), { recursive: true });
+  fs_default.mkdirSync(import_node_path50.default.dirname(file), { recursive: true });
   const written2 = `${file}.${process_default.pid}.${randomBytes(6).toString("hex")}`;
   fs_default.writeFileSync(written2, randomBytes(LINK_KEY_BYTES), {
     mode: 384,
