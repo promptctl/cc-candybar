@@ -1,3 +1,9 @@
+## [1.196.1](https://github.com/promptctl/cc-candybar/compare/v1.196.0...v1.196.1) (2026-11-06)
+
+### Bug Fixes
+
+* **load-gate:** the steady phase begins once the daemon has settled, and a wait with no time left takes no loop turn (candybar-gather-renderer-76bb.6pj.09c) ([#626](https://github.com/promptctl/cc-candybar/issues/626)) ([92e444f](https://github.com/promptctl/cc-candybar/commit/92e444f3bcf390e07f4b9490d78c0f5223c635e5))
+
 ## [1.196.0](https://github.com/promptctl/cc-candybar/compare/v1.195.0...v1.196.0) (2026-11-06)
 
 ### Features
