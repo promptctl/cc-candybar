@@ -22909,6 +22909,12 @@ function parseHandlerUrl(rawUrl) {
     return { ok: false, problem: error.message };
   }
 }
+function spellsUnaddressedLink(text4) {
+  if (!isBarLink(text4)) return false;
+  const rest2 = text4.slice(`${URL_SCHEME}://`.length);
+  const addressed = `${LINK_TO}/`;
+  return !rest2.startsWith(addressed) && !addressed.startsWith(rest2);
+}
 function verbOf(rest2, to) {
   const slash2 = rest2.indexOf("/");
   if (slash2 === -1) {
@@ -46225,17 +46231,14 @@ function templateActionRefs(template, helpers) {
   }
   return [...refs.values()];
 }
-function templateLinkProblems(template, helpers) {
+function templateUnaddressedLinks(template, helpers) {
   const refs = /* @__PURE__ */ new Map();
   for (const { code, via } of callGraph(template, helpers)) {
     for (const s of code.matchAll(STRING_LITERAL_RE)) {
       const literal = s[0].slice(1, -1);
-      if (!isBarLink(literal)) continue;
-      const link = parseHandlerUrl(`${literal}/`);
-      if (link.ok) continue;
-      const { problem } = link;
-      const key = `${problem}\0${via ?? "\0"}`;
-      if (!refs.has(key)) refs.set(key, { problem, via });
+      if (!spellsUnaddressedLink(literal)) continue;
+      const key = `${literal}\0${via ?? "\0"}`;
+      if (!refs.has(key)) refs.set(key, { literal, via });
     }
   }
   return [...refs.values()];
@@ -61076,11 +61079,14 @@ function checkTemplateRefs(ctx, declPath, template, scope, opts) {
     const hint = namespaced !== void 0 && refResolves(namespaced, scope) ? ` (segment-local vars are namespaced \u2014 write ".${namespaced}")` : retiredReadHint(ref);
     report2(`Template references unknown variable ".${ref}"${hint}`, via);
   }
-  for (const { problem, via } of templateLinkProblems(
+  for (const { literal, via } of templateUnaddressedLinks(
     template,
     scope.helpers
   )) {
-    report2(`Template spells a link no click runs: ${problem}`, via);
+    report2(
+      `Template spells a link in a grammar older than names, which names no renderer: "${literal}"`,
+      via
+    );
   }
 }
 function helperKeyPath(name, segment) {
@@ -69301,7 +69307,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.200.0";
+var PACKAGE_VERSION = "1.200.1";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -71865,7 +71871,12 @@ function clickOf(url) {
   return { verb: link.verb, value: link.value };
 }
 function effectsOf(url) {
-  const { verb, value } = clickOf(url);
+  return effectsOfClick(clickOf(url));
+}
+function effectsOfClick({
+  verb,
+  value
+}) {
   if (verb !== VERB_DISPATCH) return [{ verb, args: decodeArgs(verb, value) }];
   return parseEffects(value).map((e) => ({
     verb: e.verb,
@@ -71874,7 +71885,9 @@ function effectsOf(url) {
 }
 function describeLink(link, sessionId2) {
   if (!isBarLink(link.url)) return `opens ${link.url}`;
-  return effectsOf(link.url).map(
+  const click3 = parseHandlerUrl(link.url);
+  if (!click3.ok) return `refused: ${click3.problem}`;
+  return effectsOfClick(click3).map(
     ({ verb, args }) => [verb, ...args.map((a) => a === sessionId2 ? "<session>" : a)].join(" ")
   ).join(" ; ");
 }

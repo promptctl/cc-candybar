@@ -4,15 +4,22 @@
     {
       "version": "pr-638",
       "ref": "refs/pull/638/merge",
-      "sha": "1ad61d6d2dda35522607c3e4604713cb9f73a358",
-      "timestamp": "2026-11-06T10:51:21.331Z",
+      "sha": "cd2f1069257c15e2b48c80bc68666e0d8e3e3064",
+      "timestamp": "2026-11-06T11:04:15.273Z",
       "commits": [
         {
-          "sha": "1ad61d6d2dda35522607c3e4604713cb9f73a358",
+          "sha": "cd2f1069257c15e2b48c80bc68666e0d8e3e3064",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T03:50:23-07:00",
-          "message": "Merge a45c5d716feca904652a753b0a8b1f5831325bab into e96f9bdd556e0da087163fa792f7a69bdaeb5c5d\n"
+          "timestamp": "2026-11-06T11:02:44Z",
+          "message": "Merge c9365a80f4b763ddda4a3d536a49d0c5520b657a into a9a0d05d97e08cc2b5a9facc01cb113d92d542fe\n"
+        },
+        {
+          "sha": "c9365a80f4b763ddda4a3d536a49d0c5520b657a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T04:02:31-07:00",
+          "message": "fix(links): a template literal is refused at load only when no completion of it can name a renderer, quoted as written; a drawn link the daemon refuses reads as its refusal (candybar-gather-renderer-76bb.b2l.eul)\n\nThe load check read each literal as a whole link, with a `/` appended,\nso a literal that is only a link's head (`\"cc-candybar://to/main\"` joined\nto a computed tail, `\"cc-candybar://\"` in a hasPrefix) failed to load, and\na bare literal was named the direct verb form and quoted with a slash the\nauthor never wrote. A literal is now refused when it opens neither the\naddress nor a start of it, and the error quotes it as written.\n\ndescribeLink names a refused drawn link's refusal instead of throwing, so\na config that computes an old-grammar link at the draw no longer fails the\ndev viewers' whole frame.\n"
         },
         {
           "sha": "a45c5d716feca904652a753b0a8b1f5831325bab",
