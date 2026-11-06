@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "21b794ed4cc04858233f9002c26af82023fcf86a",
+      "timestamp": "2026-11-06T10:15:57.487Z",
+      "commits": [
+        {
+          "sha": "21b794ed4cc04858233f9002c26af82023fcf86a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T03:15:06-07:00",
+          "message": "fix(just): deploy builds the URL handler app on macOS, so install from a checkout finds it (#635)\n\n* fix(just): deploy builds the URL handler app on macOS, so install from a checkout finds it\n\n* fix(just): deploy builds the URL handler before cargo, and the docs say macOS install needs it\n\n* docs(just): deploy stages the URL handler binary, not the app; the README owns the no-cargo path"
+        }
+      ]
+    },
+    {
       "version": "pr-637",
       "ref": "refs/pull/637/merge",
       "sha": "1771af0a73a84695a6b6b8b86c8a8ae771c6a15d",
@@ -34,64 +49,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T02:36:44-07:00",
           "message": "feat(disk): files and their watch events go through one filesystem port, first used by the watcher registry and the binary watch (candybar-testing-ihvy.y10)\n\nA Filesystem port (src/disk/) with one adapter over fs, an in-memory fake whose writes emit the events a watch would on the clock, and one contract both pass. The watcher registry, its delivery owner, plugin storage, folder identity, the link walk and the binary watch read the disk through it; IdentityRead and BundleStat are gone. A lint rule bans fs outside the adapter, with an allowlist of the files still to move.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-635",
-      "ref": "refs/pull/635/merge",
-      "sha": "a51846d2a4e7bd0b6e555ac5a908dc2b933c5cc0",
-      "timestamp": "2026-11-06T10:06:38.235Z",
-      "commits": [
-        {
-          "sha": "a51846d2a4e7bd0b6e555ac5a908dc2b933c5cc0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T10:05:47Z",
-          "message": "Merge 738e449b047ab2d9ba7a3e5255555f4f151527d6 into b38ab233e3dc44e6704d7461d5a952da81f5678d\n"
-        },
-        {
-          "sha": "738e449b047ab2d9ba7a3e5255555f4f151527d6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T02:16:03-07:00",
-          "message": "docs(just): deploy stages the URL handler binary, not the app; the README owns the no-cargo path\n"
-        },
-        {
-          "sha": "cb44288385b77f82749933c4411f85e5b304dd0b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T02:15:05-07:00",
-          "message": "fix(just): deploy builds the URL handler before cargo, and the docs say macOS install needs it\n"
-        },
-        {
-          "sha": "9016e4923ee2c1efb3c7d98b137bc86d47e0b295",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T02:12:37-07:00",
-          "message": "fix(just): deploy builds the URL handler app on macOS, so install from a checkout finds it\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "b38ab233e3dc44e6704d7461d5a952da81f5678d",
-      "timestamp": "2026-11-06T10:05:34.983Z",
-      "commits": [
-        {
-          "sha": "b38ab233e3dc44e6704d7461d5a952da81f5678d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T03:04:36-07:00",
-          "message": "feat(links): a click reaches the renderer that drew it, by name (candybar-gather-renderer-76bb.b2l.7q7) (#632)\n\n* feat(links): a click reaches the renderer that drew it, by name: links are minted as cc-candybar://to/<name>/dispatch/…, the daemon's three click intakes share one link parse and one address check, and the URL handler dials the socket the name selects (candybar-gather-renderer-76bb.b2l.7q7)\n\n- The minter takes the renderer's address first, so no link can be minted\n  without one. The name sits outside every signature: it only picks which\n  process verifies.\n- The renderer's link identity is one value, RendererLinks { to, signer },\n  carried where the signer was: the compile, the render cache, the daemon's\n  parts and the verbs' context.\n- The parser returns `to` as a name or null. Old grammars and config-spelled\n  links name none, and run where they arrive until b2l.eul and b2l.x87.\n- url-handle relays the raw link. The click request carries `url` in place\n  of verb and value. The version rule states why an in-bundle kind changes\n  shape without a bump.\n- One daemon helper refuses a link named for another renderer, on the url\n  frame, the click request and the tmux range. Every click event records\n  `to` (or `linkTo` for a range's link).\n- Swift: address.swift holds the name rule and the socket file a link\n  selects, checked before any path forms. main.swift logs the chosen file\n  publicly. address-test.swift runs in CI's macOS job and `just\n  test-url-handler`.\n- check-protocol compares TS against every mirror a row names, not only\n  the first. The Swift name rule, length, socket files, main's name and the\n  address segment are pinned. The name vectors drop \"main\": they are the\n  name rule's lists.\n\n* fix(links): review — a template's link verb is read by the click's own link parse, the URL handler's refusal never quotes the link, the doctor's and the verb table's words match the addressed grammar, and the protocol check reads each side once (candybar-gather-renderer-76bb.b2l.7q7)\n\n* fix(links): review — a template literal is read as a link's head, so a retired verb it ends on is still refused at load, and the compile holds its renderer's links where the draw reads them (candybar-gather-renderer-76bb.b2l.7q7)\n\n* test(links): the composition golden's links carry their renderer's address (candybar-gather-renderer-76bb.b2l.7q7)"
-        },
-        {
-          "sha": "52e519f362165f3c41349e0c094ad562c05278d7",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-06T09:46:57Z",
-          "message": "chore(release): set `package.json` to 1.199.2 [skip ci]\n\n## [1.199.2](https://github.com/promptctl/cc-candybar/compare/v1.199.1...v1.199.2) (2026-11-06)\n\n### Bug Fixes\n\n* **home:** a home file named through a symlink is stored as the home's (candybar-gather-renderer-76bb.f00.lpl) ([#634](https://github.com/promptctl/cc-candybar/issues/634)) ([4d66c41](https://github.com/promptctl/cc-candybar/commit/4d66c4136720948fa45456ed742e340dea015963))\n"
         }
       ]
     },
