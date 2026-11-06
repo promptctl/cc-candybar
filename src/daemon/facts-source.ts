@@ -250,17 +250,46 @@ export function inProcessFacts({
       const session = facts.sessionId;
       const holds = new Holds();
       // [LAW:single-enforcer] What the follow runs for the view's `shell` and
-      // `file` sources: each run the view declared through `runs` (below),
-      // its lane and the Holds of the follow's own its entry is held in,
-      // added by the declaration's hold and closed by its release or by the
-      // follow's dispose, whichever comes first. A closed Holds closed again
-      // releases nothing, so either order ends each run once. Apart from
-      // `holds`, which a request's re-declaration of the built-ins reconciles.
+      // `file` sources, by digest: for each run the view declared through
+      // `runs` (below), the run's own lane, which the follow stamps from; a
+      // Holds of the follow's that holds the run's entry; and the lane over
+      // the document handed to every declaration of it. Added by the
+      // declaration's hold, and its Holds closed by that hold's release or by
+      // the follow's dispose, whichever comes first: a closed Holds closed
+      // again releases nothing, so either order ends each run once. Apart
+      // from `holds`, which a request's re-declaration of the built-ins
+      // reconciles.
       const declaredRuns = observable.map<
         SourceDigest,
-        { readonly lane: SourceLane; readonly held: Holds }
+        {
+          readonly run: SourceLane;
+          readonly held: Holds;
+          readonly lane: SourceLane;
+        }
       >(undefined, { deep: false });
       let disposed = false;
+      // [LAW:no-silent-failure] A run the document lacks: declared, it lands
+      // at the follow's next stamp, unless stamps are failing, when it lands
+      // at none until one succeeds and answers why; not declared by this
+      // view, no correct caller reads it.
+      const unstampedRun = (
+        identity: SourceIdentity,
+        digest: SourceDigest,
+      ): Reading<never> => {
+        if (!declaredRuns.has(digest)) {
+          return failed(
+            `the run of ${whereOf(identity.read)} is not declared by this view`,
+            "read",
+          );
+        }
+        const { failure } = box.get();
+        return failure === null
+          ? pendingOf("unread")
+          : failed(
+              `the run of ${whereOf(identity.read)} is in no document: ${failure}`,
+              "read",
+            );
+      };
       const sid = JSON.stringify(session);
       // [LAW:no-silent-failure] A declaration that throws is logged here,
       // where it runs — a reaction's tracked expression that throws reaches
@@ -337,11 +366,11 @@ export function inProcessFacts({
         () =>
           new Map(
             [...declaredRuns].map(
-              ([digest, { lane }]): [SourceDigest, RunReading] => [
+              ([digest, { run }]): [SourceDigest, RunReading] => [
                 digest,
                 {
-                  reading: lane.current() as Reading<JsonValue>,
-                  fault: lane.fault(),
+                  reading: run.current() as Reading<JsonValue>,
+                  fault: run.fault(),
                 },
               ],
             ),
@@ -427,26 +456,21 @@ export function inProcessFacts({
             // run the key names is held before the run it leaves is ended.
             callerHolds.take(`facts.run:${digest}`, () => {
               const held = new Holds();
-              const lane = runs.declare(held, identity);
-              runInAction(() => declaredRuns.set(digest, { lane, held }));
+              const run = runs.declare(held, identity);
+              const lane = runLaneOver(
+                identity,
+                () => box.get().line.facts,
+                (missing) => unstampedRun(identity, missing),
+              );
+              runInAction(() => declaredRuns.set(digest, { run, held, lane }));
               return () => {
                 runInAction(() => declaredRuns.delete(digest));
                 held.close();
               };
             });
-            // Declared, and not stamped yet: the follow's reaction stamps it
-            // at the end of the turn this declaration runs in.
-            return runLaneOver(
-              identity,
-              () => box.get().line.facts,
-              (missing) =>
-                declaredRuns.has(missing)
-                  ? pendingOf("unread")
-                  : failed(
-                      `the run of ${whereOf(identity.read)} is not declared by this view`,
-                      "read",
-                    ),
-            );
+            // One lane per declared run, however often it is declared: the
+            // caller holds the digest, so its entry is here.
+            return declaredRuns.get(digest)!.lane;
           },
         },
         stamped: () => box.get().line,

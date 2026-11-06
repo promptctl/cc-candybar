@@ -220,6 +220,34 @@ describe("the in-process arm", () => {
     expect(followed.stamped()).toBe(before);
     followed.dispose();
   });
+
+  test("a run declared while the stamp is failing answers why, never a pending that will not land, and lands once a stamp succeeds", () => {
+    const { providers } = owners();
+    const broken = observable.box(false);
+    const followed = arm(providers, () => {
+      if (broken.get()) throw new Error("update watch exploded");
+      return pendingOf("unread");
+    }).follow(viewFacts("/a"), DECLARED);
+    try {
+      runInAction(() => broken.set(true));
+      const holds = new Holds();
+      const { result: lane } = holds.declare(() =>
+        followed.runs.declare(holds, fileRun("/notes/a")),
+      );
+      expect(lane.current()).toEqual({
+        kind: "failed",
+        reason: expect.stringMatching(
+          /^the run of "\/notes\/a" is in no document: .*update watch exploded/,
+        ),
+        failedAt: "read",
+      });
+      runInAction(() => broken.set(false));
+      expect(lane.current().kind).not.toBe("failed");
+      holds.close();
+    } finally {
+      followed.dispose();
+    }
+  });
 });
 
 describe("the in-process arm's runs", () => {

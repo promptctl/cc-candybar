@@ -136,7 +136,7 @@ export interface Recording {
 // request, declared and draw lines, which are the renderer's request path and
 // not the facts protocol. The documents in it carry their own facts version,
 // which each document's parse refuses, so a change of either moves one number.
-export const RECORDING_VERSION = 3;
+export const RECORDING_VERSION = 4;
 
 // A recording of another format: refused whole, never read line by line
 // against this build's. The version is a value, so the edge that names the
