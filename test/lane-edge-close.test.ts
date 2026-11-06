@@ -9,7 +9,7 @@ import { systemTimekeeper } from "../src/time";
 
 describe("the lane edge after its daemon closes", () => {
   const edgeOver = (closing: AbortController) =>
-    productionLaneEdge(unscriptedLauncher, () => new Set(), closing.signal, systemTimekeeper, processProbe);
+    productionLaneEdge(unscriptedLauncher, () => new Set(), closing.signal, systemTimekeeper, processProbe, "/nonexistent-home");
 
   test("a wait for a subscriber ends at once, before its deadline", async () => {
     const closing = new AbortController();

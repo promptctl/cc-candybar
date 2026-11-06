@@ -55,6 +55,7 @@ import { isBarLink } from "../click/scheme.js";
 import { parseHandlerUrl, VERB_RANGE } from "../click/wire.js";
 import { instantOf } from "../utils/instant.js";
 import { waitBudgetMs } from "./request-deadline.js";
+import { namesPane } from "../tmux-hint.js";
 import {
   noteFacts,
   requestEvent,
@@ -347,12 +348,8 @@ export async function replyTo(
       });
     return stay({
       ok: true,
-      paneSession: frameFeeds.newestWhere(
-        ({ hints: { tmux } }) =>
-          tmux !== null &&
-          tmux !== undefined &&
-          tmux.socket === socket &&
-          tmux.pane === pane,
+      paneSession: frameFeeds.newestWhere(({ hints: { tmux } }) =>
+        namesPane(tmux, { socket, pane }),
       ),
     });
   }

@@ -48,8 +48,16 @@ export const samePane = (
 
 // [LAW:one-source-of-truth] Whether a request's client reported its session in
 // a tmux pane: a client too old to answer (absent) is read as not in tmux.
-export const inTmux = (tmux: TmuxHint | null | undefined): boolean =>
+export const inTmux = (tmux: TmuxHint | null | undefined): tmux is TmuxHint =>
   tmux !== null && tmux !== undefined;
+
+// [LAW:one-source-of-truth] Whether a request's client reported its session in
+// the pane `where`: what makes a session the one a pane runs, among the
+// requests that name it.
+export const namesPane = (
+  tmux: TmuxHint | null | undefined,
+  where: Pick<TmuxHint, "socket" | "pane">,
+): boolean => inTmux(tmux) && samePane(tmux, where);
 
 // [LAW:dataflow-not-control-flow] TOTAL over the client's environment, like
 // detectSsh: "not in tmux" is the affirmative answer `null`, never a failure to

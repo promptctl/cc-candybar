@@ -27,7 +27,10 @@
 // it (src/daemon/click-error.ts).
 
 import path from "node:path";
-import { CLAUDE_CONFIG_DIR_ENV } from "../claude-settings.js";
+import {
+  CLAUDE_CONFIG_DIR_ENV,
+  detectClaudeConfigDir,
+} from "../claude-settings.js";
 import { CONFIG_ENV } from "../config-hint.js";
 import {
   LANES,
@@ -106,6 +109,12 @@ export interface PaneClaude {
   readonly attached: boolean;
 }
 
+// [LAW:no-silent-failure] A process's session as its own record says it, or
+// why the record says none: never read as the session a restart expects.
+export type HeldSession =
+  | { readonly kind: "holds"; readonly sessionId: string }
+  | { readonly kind: "unread"; readonly why: string };
+
 export interface LaneEdge {
   readonly claudeInput: ClaudeInputEdge;
   // The bar panes the daemon opened for `tmux.pane`.
@@ -149,6 +158,14 @@ export interface LaneEdge {
   ) => Promise<
     { readonly ok: true } | { readonly ok: false; readonly reason: string }
   >;
+  // The session Claude Code's process `pid` holds now, by the record it keeps
+  // of itself under its configuration directory (`configDir`, as the
+  // process's environment names it; the default when it names none): a
+  // `/clear` or `/resume` rewrites it, though the process stays one.
+  readonly heldSession: (
+    pid: number,
+    configDir: string | undefined,
+  ) => HeldSession;
   // Send `pid` SIGTERM.
   readonly terminate: (pid: number) => void;
   // Resolves true once `pid` has exited, false if it is still running after
@@ -589,6 +606,29 @@ async function restartUnderAttach(
   // start in a directory that is gone) and asks whether to keep it when it
   // does (the restart would wait on that dialog). SIGTERM leaves the
   // worktree as it is (measured on 2.1.289).
+  // [LAW:no-ambient-temporal-coupling] Which session the process holds is
+  // judged at the kill, after the last wait: a `/clear` or `/resume` keeps
+  // the pid the check above compared, and the line would resume this session
+  // over the live one. [LAW:one-source-of-truth] The process's own record
+  // says it, not the requests naming the pane: those lag a `/clear` by the
+  // new session's first statusline tick, and any client run in the pane
+  // names it too.
+  // The directory is resolved from the process's own environment, as the
+  // relaunch line carries it, by the client's rule over the process's cwd.
+  const held = edge.heldSession(
+    claude.pid,
+    detectClaudeConfigDir(Object.fromEntries(started), claude.cwd),
+  );
+  if (held.kind === "unread") {
+    throw new Error(
+      `Claude Code in ${tmux.pane} was left running: ${held.why}, so which session it runs is unknown`,
+    );
+  }
+  if (held.sessionId !== session.sessionId) {
+    throw new Error(
+      `Claude Code in ${tmux.pane} now runs session ${held.sessionId}, not ${session.sessionId}, so it was not restarted under the attach launcher — turn ${LANES.statusline.label} off and on again from the bar in ${tmux.pane} to restart that one`,
+    );
+  }
   edge.terminate(claude.pid);
   if (!(await edge.exited(claude.pid, EXIT_PATIENCE_MS))) {
     throw new Error(

@@ -91,6 +91,7 @@ import { RenderWarningRecords } from "./render-warnings.js";
 import { instantOf, type Instant } from "../utils/instant.js";
 import { JournalTurns } from "./journal-turns.js";
 import { MenuIdle } from "./menu-idle.js";
+import { namesPane } from "../tmux-hint.js";
 
 // How this daemon's node runs the bundle it was loaded from.
 export interface RunningBundle {
@@ -151,6 +152,8 @@ export interface DaemonAdapters {
     following: (sessionId: string) => ReadonlySet<Lane>,
     closing: AbortSignal,
     probe: ProcessProbe,
+    // The user's home (`Host`).
+    home: string,
   ) => LaneEdge;
   // The one signer of every `run` link this daemon draws.
   readonly linkSigner: LinkSigner;
@@ -439,6 +442,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       (sessionId) => frameFeeds.following(sessionId),
       closing.signal,
       probe,
+      host.home,
     ),
     // A bar pane runs this bundle under the node running it now, with the
     // flags it runs with (tsx's loader, under the test harness).
@@ -468,14 +472,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         runTmuxAsync(launcher, { socket }, "tmux-status", args),
     },
     subscribe: (sessionId, sub) => frameFeeds.subscribe(sessionId, sub),
-    sessionInPane: (socket, pane) =>
-      frameFeeds.newestWhere(
-        ({ hints: { tmux } }) =>
-          tmux !== null &&
-          tmux !== undefined &&
-          tmux.socket === socket &&
-          tmux.pane === pane,
-      ),
+    sessionInPane: (where) =>
+      frameFeeds.newestWhere(({ hints: { tmux } }) => namesPane(tmux, where)),
     // Run by tmux under its server's environment, so the renderer's home is
     // stated whole on the command, every variable of it.
     handler: [

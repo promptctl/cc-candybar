@@ -74,6 +74,9 @@ const BAR = parseAndValidate(
 
 const TMUX: TmuxHint = { socket: "/tmp/tmux-1/default", pane: "%7", truecolor: null };
 const READY_SCREEN = ["─".repeat(30), "❯ ", "─".repeat(30)];
+// The session a `/clear` in %7 starts: the same Claude Code process, which
+// now holds another session.
+const CLEARED = "9a1d3c4e-7b2f-4e0a-8c6d-5e4f3a2b1c00";
 
 // A checkout: `src/` beside `dist/`, the native client built.
 function checkout(): { root: string; bundle: string } {
@@ -148,6 +151,13 @@ function fakeEdge(over: Partial<LaneEdge> = {}): { edge: LaneEdge; did: string[]
       did.push(`graph ${node} ${reader} ${executable}`);
       return { ok: true };
     },
+    // Claude Code's record of its process, under the default configuration
+    // directory its environment leaves it, holds the session under test; a
+    // record asked of anything else is not there.
+    heldSession: (pid, configDir) =>
+      pid === claude.pid && configDir === undefined
+        ? { kind: "holds", sessionId: SID }
+        : { kind: "unread", why: `no record of ${pid} under ${configDir ?? "the default"}` },
     terminate: (pid) => void did.push(`terminate ${pid}`),
     exited: async () => true,
     typeShellLine: async (_hint, line) => void did.push(`shell ${line}`),
@@ -368,6 +378,11 @@ describe("lane B, statusline", () => {
           "CLAUDECODE=1",
         ],
       }),
+      // Its record is under the directory it was started with.
+      heldSession: (pid, configDir) =>
+        pid === claude.pid && configDir === "/u/.claude zai"
+          ? { kind: "holds", sessionId: SID }
+          : { kind: "unread", why: `no record of ${pid} under ${configDir ?? "the default"}` },
     });
     await finished(await LANE_SETUP.statusline.on(run(session()), HOST, edge));
     expect(did.join("\n")).not.toContain("secret");
@@ -595,6 +610,52 @@ describe("lane B, statusline", () => {
     ["❯ ", false],
   ])("turnRunning(%j) is %p", async (line, running) => {
     expect(turnRunning({ inMode: false, screen: [line] })).toBe(running);
+  });
+
+  // A `/clear` keeps the pid, so only the process's own record of its session
+  // tells the restart the session has left it.
+  test("a process that holds another session by the kill is not killed, and the refusal names that session", async () => {
+    let holds = SID;
+    const read: unknown[] = [];
+    const claude = await fakeEdge().edge.paneClaude(TMUX);
+    const { edge, did } = fakeEdge({
+      // Started with its own configuration directory.
+      paneClaude: async () => ({ ...claude, env: [...claude.env, "CLAUDE_CONFIG_DIR=/u/.claude.zai"] }),
+      // The screen read is the restart's last wait before the kill; the
+      // pane's `/clear` lands during it.
+      claudeInput: {
+        read: async () => {
+          holds = CLEARED;
+          return { inMode: false, screen: READY_SCREEN };
+        },
+        type: async () => ({ kind: "typed" }),
+      },
+      heldSession: (pid, configDir) => {
+        read.push([pid, configDir]);
+        return { kind: "holds", sessionId: holds };
+      },
+    });
+    await expect(
+      finished(await LANE_SETUP.statusline.on(run(session()), HOST, edge)),
+    ).rejects.toThrow(
+      `Claude Code in %7 now runs session ${CLEARED}, not ${SID}, so it was not restarted under the attach launcher`,
+    );
+    // The record is the process's, under the configuration directory its
+    // own environment names.
+    expect(read).toEqual([[4242, "/u/.claude.zai"]]);
+    expect(did.filter((d) => d.startsWith("terminate") || d.startsWith("shell"))).toEqual([]);
+  });
+
+  test("a process whose session record cannot be read is not killed, and the refusal says why", async () => {
+    const { edge, did } = fakeEdge({
+      heldSession: () => ({ kind: "unread", why: "it keeps no session record at /u/.claude/sessions/4242.json" }),
+    });
+    await expect(
+      finished(await LANE_SETUP.statusline.on(run(session()), HOST, edge)),
+    ).rejects.toThrow(
+      "Claude Code in %7 was left running: it keeps no session record at /u/.claude/sessions/4242.json, so which session it runs is unknown",
+    );
+    expect(did.filter((d) => d.startsWith("terminate") || d.startsWith("shell"))).toEqual([]);
   });
 
   test("a Claude Code already under the attach launcher is left running", async () => {
@@ -1213,6 +1274,26 @@ describe("LaneSetups", () => {
     await Promise.all(performing);
     expect(did).toEqual([]);
     expect(outcomes).toEqual([failed(`lane: pane off: this daemon no longer holds a request of session ${SID}`)]);
+  });
+
+  // The pane's order is held when the toggle is clicked, and a `/clear` there
+  // gives its process another session before the restart takes the pane.
+  test("a restart whose process moved on to another session while it waited for the pane resumes nothing over it", async () => {
+    let holds = SID;
+    const { edge, did } = fakeEdge({ heldSession: () => ({ kind: "holds", sessionId: holds }) });
+    const { setups, settle, performing, outcomes, turns } = owner(edge);
+    let release!: () => void;
+    const parked = turns.performing({ kind: "pane", tmux: TMUX }, () => new Promise<void>((r) => (release = r)));
+    setups.clicked(SID, session(), switches({}), switches({ statusline: true }));
+    await settle();
+    holds = CLEARED;
+    release();
+    await parked;
+    await Promise.all(performing);
+    expect(did.filter((d) => d.startsWith("terminate") || d.startsWith("shell"))).toEqual([]);
+    expect(outcomes).toEqual([
+      failed(expect.stringMatching(new RegExp(`^lane: statusline on: Claude Code in %7 now runs session ${CLEARED}, not `))),
+    ]);
   });
 
   test("a switch turned off brings the lane down", async () => {

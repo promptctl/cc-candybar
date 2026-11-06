@@ -401,7 +401,9 @@ export interface TmuxStatusDeps {
   ) => () => void;
   // The session whose statusline last rendered from `pane`, as the daemon
   // holds it — a /clear or a new Claude Code in the pane takes it over.
-  readonly sessionInPane: (socket: string, pane: string) => string | null;
+  readonly sessionInPane: (
+    where: Pick<TmuxHint, "socket" | "pane">,
+  ) => string | null;
   // The shell words that deliver a `cc-candybar://` URL, the last argument, to
   // this daemon — what a click on one of its ranges runs.
   readonly handler: string;
@@ -549,7 +551,7 @@ export class TmuxStatusLines {
       if (held.socket !== socket) continue;
       if (!view.sessionOf.has(held.pane)) this.release(held, "pane gone");
       else {
-        const newest = this.deps.sessionInPane(socket, held.pane);
+        const newest = this.deps.sessionInPane(held);
         if (newest !== null && newest !== held.sessionId)
           this.release(held, `pane taken by sid=${JSON.stringify(newest)}`);
       }

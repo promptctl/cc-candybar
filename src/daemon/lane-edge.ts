@@ -6,6 +6,7 @@
 // src/proc/tmux), under its own launch category.
 
 import fs from "node:fs";
+import path from "node:path";
 import { sleep, type Timekeeper } from "../time";
 import {
   failureText,
@@ -26,7 +27,12 @@ import { presence } from "../utils/presence.js";
 import { sessionEnv } from "./session-env.js";
 import { canonical, executableOn, regularFileWith } from "../path-search.js";
 import { launcherNode } from "../attach-preload.js";
-import { type LaneEdge, type PaneClaude } from "./lane-setup.js";
+import {
+  type HeldSession,
+  type LaneEdge,
+  type PaneClaude,
+} from "./lane-setup.js";
+import { claudeConfigDir } from "../claude-settings.js";
 
 const SHELL_BUFFER = "cc-candybar-lane";
 // How often the wait for an exit looks again.
@@ -253,19 +259,55 @@ async function paneClaude(
   };
 }
 
+// [LAW:parse-dont-validate] The session Claude Code's record `file` says its
+// process holds (measured on 2.1.299: `{pid, sessionId, cwd, status, ...}`,
+// rewritten when a `/clear` changes the session). One synchronous read, so a
+// restart judges it and kills with no wait between.
+export function heldSessionIn(file: string): HeldSession {
+  let text: string;
+  try {
+    text = fs.readFileSync(file, "utf8");
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === "ENOENT"
+      ? {
+          kind: "unread",
+          why: `it keeps no session record at ${file} (update Claude Code with \`claude update\`: recent releases keep one)`,
+        }
+      : { kind: "unread", why: (e as Error).message };
+  }
+  let record: unknown;
+  try {
+    record = JSON.parse(text);
+  } catch (e) {
+    return {
+      kind: "unread",
+      why: `its session record ${file} is not JSON (${(e as Error).message})`,
+    };
+  }
+  const sessionId =
+    typeof record === "object" && record !== null && "sessionId" in record
+      ? record.sessionId
+      : undefined;
+  return typeof sessionId === "string" && sessionId !== ""
+    ? { kind: "holds", sessionId }
+    : { kind: "unread", why: `its session record ${file} names no session` };
+}
+
 // How often the wait for a lane's subscriber looks again.
 const FOLLOW_POLL_MS = 200;
 
 // `following` is the daemon's FrameFeeds' answer: the lanes whose subscribers
 // follow a session's frames now. `closing` ends what is no launch, as the
 // daemon's launcher ends what is: a poll's wait, and the one signal sent
-// directly.
+// directly. `home` is the user's, where Claude Code's configuration directory
+// is when a client names none.
 export function productionLaneEdge(
   launcher: Launcher,
   following: (sessionId: string) => ReadonlySet<Lane>,
   closing: AbortSignal,
   clock: Timekeeper,
   probe: Pick<ProcessProbe, "alive">,
+  home: string,
 ): LaneEdge {
   const wait = (ms: number): Promise<void> => sleep(clock, ms, closing);
   return {
@@ -321,6 +363,10 @@ export function productionLaneEdge(
     fileExists: (file) => fs.existsSync(file),
     presence,
     paneClaude: (hint) => paneClaude(launcher, hint),
+    heldSession: (pid, configDir) =>
+      heldSessionIn(
+        path.join(claudeConfigDir(configDir, home), "sessions", `${pid}.json`),
+      ),
     // [LAW:no-ambient-temporal-coupling] The pane's directory is the
     // shell's once the shell holds its terminal again: until it has reaped
     // Claude Code and taken the foreground back, tmux reads the directory of
