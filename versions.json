@@ -4,15 +4,22 @@
     {
       "version": "pr-622",
       "ref": "refs/pull/622/merge",
-      "sha": "e183b1ca9f3fa92ac7c960548ddd570a402a314e",
-      "timestamp": "2026-11-06T03:06:20.961Z",
+      "sha": "b1493c2b4633fc4cb1e9cbe70e657788e6459e18",
+      "timestamp": "2026-11-06T03:19:00.172Z",
       "commits": [
         {
-          "sha": "e183b1ca9f3fa92ac7c960548ddd570a402a314e",
+          "sha": "b1493c2b4633fc4cb1e9cbe70e657788e6459e18",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T03:04:56Z",
-          "message": "Merge 59dcb055848e016eec99989fdb9801ee29fa6099 into bfb89187e23eda03a7d719a5fba64875b44a3355\n"
+          "timestamp": "2026-11-06T03:18:03Z",
+          "message": "Merge d13f994d019869aa0ea10b58d6f74508f767daf9 into ef736330044ce69f7e59e3ef737437bd9b8164f0\n"
+        },
+        {
+          "sha": "d13f994d019869aa0ea10b58d6f74508f767daf9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T20:17:38-07:00",
+          "message": "fix(scripts): a snapshot is matched by V8's name shape, the wait reuses sleep, NODE_OPTIONS is quoted; the fold's key comment says why the stamp is left out (candybar-gather-renderer-76bb.6pj.c0y)\n"
         },
         {
           "sha": "59dcb055848e016eec99989fdb9801ee29fa6099",

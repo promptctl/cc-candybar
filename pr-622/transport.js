@@ -69066,7 +69066,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.190.0";
+var PACKAGE_VERSION = "1.191.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -80488,12 +80488,17 @@ var TranscriptFold = class {
   sessions;
   // [LAW:one-source-of-truth] One fold in flight per session: a request whose
   // stamp misses while the session's fold is still out joins that fold rather
-  // than starting another over the same bytes, as the usage store's request
-  // refresh does. The read gate bounds how many windows read at once, not how
-  // many folds are asked for, and a cold fold takes a gate slot once per
-  // window; with one fold per request, a population of cold sessions asks for
-  // folds faster than any can finish its windows, no fold lands, the fast path
-  // never engages, and every request keeps its refresh alive in the queue.
+  // than starting another over the same bytes. Keyed by the session alone,
+  // not by session and stamp as the usage store's request refresh is: the
+  // fold is an incremental cursor, so a request that saw a newer stamp takes
+  // the in-flight answer and the next request folds the appended tail, where
+  // a key per stamp would start a second fold of the same bytes for every
+  // append that lands mid-fold. The read gate bounds how many windows read at
+  // once, not how many folds are asked for, and a cold fold takes a gate slot
+  // once per window; with one fold per request, a population of cold sessions
+  // asks for folds faster than any can finish its windows, no fold lands, the
+  // fast path never engages, and every request keeps its refresh alive in the
+  // queue.
   flight = new SingleFlight();
   // [LAW:effects-at-boundaries] The session's refresh: folds what was
   // appended since its last read, and stores what it answered.
