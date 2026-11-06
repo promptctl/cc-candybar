@@ -9,7 +9,10 @@
 import { CONNECT_TIMEOUT_MS, TOTAL_BUDGET_MS } from "./protocol";
 
 // [LAW:single-enforcer] Every handler's backstop: the connection's own timer
-// answers TIMEOUT at this, whatever its request is still doing.
+// answers TIMEOUT at this, whatever its request is still waiting on. A timer
+// needs a turn of the loop, so a render that holds the loop past it (a
+// synchronous read or compile) answers its bar in the turn it yields, late,
+// and its event's `took` says by how much.
 export const REQUEST_TIMEOUT_MS = 200;
 
 // What a request's wait leaves for its draw: the synchronous turn that reads

@@ -969,7 +969,8 @@ async function drawAnswer(
   const waitFrom = clock.monotonic();
   // [LAW:one-source-of-truth] The event's figure and the wait's timer are one
   // reading. Setup has spent part of what the request arrived with, and below
-  // zero says by how much it overran: the timer fires at once.
+  // zero says by how much it overran: the wait ends in this turn, with no
+  // timer, so a backstop already due cannot answer ahead of this draw.
   const budget = waitEndsAt - waitFrom;
   noteFacts(facts, {
     deadline: `${req.deadline.kind}:${Math.round(budget)}ms`,

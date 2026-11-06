@@ -121,6 +121,15 @@ export type WaitEnd = "answered" | "deadline";
 // nothing behind. What it does not, a run it started, goes on, and a failure
 // of it after the deadline is no one's answer: it goes to `late`, its owner's
 // report.
+//
+// A wait whose time is already gone (`ms` at or below zero) ends in this
+// turn, with no timer: a timer due at once still waits for the loop's next
+// timers phase, which under a backlog comes after every pending request has
+// been read and set up, tens of milliseconds a client with no budget left
+// does not have. It ends once the microtask queue has drained, so work that
+// settles on promise continuations alone (values already held) still answers,
+// or fails as the wait's own. Work that needs anything more, a tick or the
+// loop, is aborted and lands for the next answer.
 export function waitWithin(
   work: (signal: AbortSignal) => Promise<unknown>,
   ms: number,
@@ -128,7 +137,10 @@ export function waitWithin(
   after: Timekeeper["after"],
 ): Promise<WaitEnd> {
   const wait = new AbortController();
-  const clear = after(Math.max(0, ms), () => wait.abort());
+  // [LAW:dataflow-not-control-flow] One alarm ends the wait either way; the
+  // time left picks which.
+  const abort = () => wait.abort();
+  const clear = ms > 0 ? after(ms, abort) : whenDrained(abort);
   const ended = new Promise<WaitEnd>((resolve, reject) => {
     wait.signal.addEventListener("abort", () => resolve("deadline"));
     void work(wait.signal).then(
@@ -142,6 +154,15 @@ export function waitWithin(
     clear();
     wait.abort();
   });
+}
+
+// Calls `fn` once the microtask queue has drained, before the loop's next
+// phase: a tick queued from a microtask runs only after every microtask, those
+// queued meanwhile included. Nothing to clear: a wait that ended first has
+// already aborted, and aborting again does nothing.
+function whenDrained(fn: () => void): () => void {
+  void Promise.resolve().then(() => process.nextTick(fn));
+  return () => {};
 }
 
 // [LAW:types-are-the-program] What a declaration hands its reader: the entry
