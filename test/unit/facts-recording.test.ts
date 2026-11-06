@@ -10,6 +10,7 @@ import {
   parseSessionFacts,
   RECORDING_VERSION,
   RecordingVersionError,
+  type DrawState,
   type FactsLine,
   type RecordingLine,
   type RequestLine,
@@ -88,7 +89,20 @@ const requested = (s: number): RecordingLine => ({
   at: at(s),
   request: request(),
 });
-const drawn = (s: number): RecordingLine => ({ kind: "draw", request: at(s) });
+// What a session's clicks left for a draw: a pick, an open menu, two steps to
+// undo, one to go back to, and a menu idle since half a second in.
+const STATE: DrawState = {
+  values: { preset: "nord", "settings.menu": "open" },
+  revision: 7,
+  history: { undo: 2, redo: 0, sinceEdit: 0 },
+  back: 1,
+  idleSince: at(0.5),
+};
+const drawn = (s: number, state: DrawState = STATE): RecordingLine => ({
+  kind: "draw",
+  request: at(s),
+  state,
+});
 const text = (...lines: RecordingLine[]): string =>
   lines.map(formatLine).join("");
 
@@ -111,9 +125,81 @@ test("what the recorder writes reads back as itself, opening on the last documen
     lines: [
       { kind: "request", at: at(0.5), request: request() },
       { kind: "facts", at: at(1.5), facts: document(3) },
-      { kind: "draw", request: at(0.5) },
+      { kind: "draw", request: at(0.5), state: STATE },
     ],
   });
+});
+
+test("a draw carries the session's state it read, and an idle period not begun reads back as none", () => {
+  const idle = { ...STATE, idleSince: undefined };
+  const { lines } = parseRecording(
+    text(header, facts(0, 1), requested(1), drawn(1, idle)),
+  );
+  expect(lines.at(-1)).toEqual({ kind: "draw", request: at(1), state: idle });
+});
+
+test("a draw whose state is missing or malformed is refused by its line, naming what is wrong", () => {
+  const drawWith = (state: unknown): string =>
+    text(header, facts(0, 1), requested(1)) +
+    `${JSON.stringify({ kind: "draw", request: at(1), state })}\n`;
+  const wire = { ...STATE, idleSince: at(0.5) };
+  expect(() => parseRecording(drawWith(undefined))).toThrow(
+    /^line 4: has no `state` object/,
+  );
+  expect(() =>
+    parseRecording(drawWith({ ...wire, values: { preset: 3 } })),
+  ).toThrow(/^line 4: has no `state.values` of strings by key/);
+  expect(() => parseRecording(drawWith({ ...wire, revision: -1 }))).toThrow(
+    /^line 4: has no count `state.revision`/,
+  );
+  expect(() =>
+    parseRecording(
+      drawWith({ ...wire, history: { ...wire.history, undo: 1.5 } }),
+    ),
+  ).toThrow(/^line 4: has no count `state.history.undo`/);
+  expect(() => parseRecording(drawWith({ ...wire, back: "1" }))).toThrow(
+    /^line 4: has no count `state.back`/,
+  );
+  expect(() =>
+    parseRecording(drawWith({ ...wire, idleSince: "soon" })),
+  ).toThrow(/^line 4: has no finite `state.idleSince`/);
+});
+
+test("a draw's state the store could not have held is refused by its line", () => {
+  // The store is at revision 0 exactly while it holds nothing for the
+  // session, and one revision is one state.
+  expect(() =>
+    parseRecording(
+      text(
+        header,
+        facts(0, 1),
+        requested(1),
+        drawn(1, { ...STATE, revision: 0 }),
+      ),
+    ),
+  ).toThrow(/^line 4: has `state.revision` 0 over 2 values/);
+  expect(() =>
+    parseRecording(
+      text(
+        header,
+        facts(0, 1),
+        requested(1),
+        drawn(1, { ...STATE, values: {} }),
+      ),
+    ),
+  ).toThrow(/^line 4: has `state.revision` 7 over 0 values/);
+  expect(() =>
+    parseRecording(
+      text(
+        header,
+        facts(0, 1),
+        requested(1),
+        drawn(1),
+        requested(2),
+        drawn(2, { ...STATE, values: { preset: "dracula" } }),
+      ),
+    ),
+  ).toThrow(/^line 6: reads revision 7 over other values/);
 });
 
 test("a line that is not JSON, or not a line, is refused by its number", () => {

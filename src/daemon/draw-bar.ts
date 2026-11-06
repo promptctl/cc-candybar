@@ -434,6 +434,8 @@ export function drawRender(
   delivered: () => void;
   // Which animation lanes the session's settings switch on, as drawn.
   lanes: LaneSwitches;
+  // When the session's menus' idle period began, as the draw was handed it.
+  idleSince: Instant | undefined;
 } {
   const {
     sessionState,
@@ -609,32 +611,38 @@ export function drawRender(
   // computation to drift from it.
   const renderOpts = renderOptionsOf(effective, width);
   const effects = effectSessions.of(sessionId);
-  const idleSince = menuIdle.since(sessionId, at);
   // [LAW:single-enforcer] The view's inputs read its source (`bindView`, at
-  // its opening): the draw hands only its own instant's facts.
-  const { frame, evaluated, cellBreaks, rules } = drawDsl(
-    state.config,
-    state.compiled,
-    view.store,
-    view.registry,
-    projected,
+  // its opening): the draw hands only its own instant's facts. What this
+  // frame draws is what the session's close timer follows.
+  const { frame, evaluated, cellBreaks, rules, idleSince } = menuIdle.drawn(
+    sessionId,
     at,
-    renderOpts,
-    // [LAW:single-enforcer] The per-segment StripCell sink for the
-    // `debug segments` projection. Its identity stays stable for the
-    // view's lifetime; drawDsl clears + repopulates it
-    // in place. Cells are cheap (already computed during the render);
-    // the per-segment ANSI serialization happens lazily inside the
-    // debug handler so normal renders pay no extra serializer cost.
-    {
-      perSegmentSink: view.lastRenderCellsBySegment,
-      onRenderWarning: (warning) => drawnWarnings.push(warning),
-    },
-    // [LAW:one-source-of-truth] The draw's own settings and the session's
-    // effect memory. The theme, style and effect are not among them: the
-    // view's slots settle those names (src/dsl/parts.ts), the same ones its
-    // payload's `.effective` fields read.
-    { ...effective, effects, idleSince },
+    effective.menuTimeout,
+    (idleSince) =>
+      drawDsl(
+        state.config,
+        state.compiled,
+        view.store,
+        view.registry,
+        projected,
+        at,
+        renderOpts,
+        // [LAW:single-enforcer] The per-segment StripCell sink for the
+        // `debug segments` projection. Its identity stays stable for the
+        // view's lifetime; drawDsl clears + repopulates it
+        // in place. Cells are cheap (already computed during the render);
+        // the per-segment ANSI serialization happens lazily inside the
+        // debug handler so normal renders pay no extra serializer cost.
+        {
+          perSegmentSink: view.lastRenderCellsBySegment,
+          onRenderWarning: (warning) => drawnWarnings.push(warning),
+        },
+        // [LAW:one-source-of-truth] The draw's own settings and the session's
+        // effect memory. The theme, style and effect are not among them: the
+        // view's slots settle those names (src/dsl/parts.ts), the same ones its
+        // payload's `.effective` fields read.
+        { ...effective, effects, idleSince },
+      ),
   );
   // [LAW:one-source-of-truth] What each copy click this frame mints copies,
   // read back when the click runs (the copy-diagnostic verb): the list this
@@ -645,13 +653,8 @@ export function drawRender(
   const copies = new Map(diagnostics.map((m, i) => [keys[i]!, m.copy]));
   const delivered = (): void =>
     renderCache.delivered(sessionId, drawing.by, copies);
-  // What this frame drew is what the session's close timer follows.
-  menuIdle.observe(
-    sessionId,
-    at,
-    frame.rows.some((row) => row.kind === "menu"),
-    effective.menuTimeout,
-  );
+  // The facts tell the close timer as this frame leaves it, so a menu's first
+  // frame reads its period begun, where the draw was handed none.
   const menusSince = menuIdle.since(sessionId, at);
   noteFacts(facts, {
     menuIdle:
@@ -798,6 +801,7 @@ export function drawRender(
     pipeShown,
     delivered,
     lanes,
+    idleSince,
   };
 }
 

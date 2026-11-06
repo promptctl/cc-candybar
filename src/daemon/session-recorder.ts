@@ -16,6 +16,7 @@ import { appendFileSync, closeSync, openSync, unlinkSync } from "node:fs";
 import { reaction } from "mobx";
 import {
   formatLine,
+  type DrawState,
   type FactsLine,
   type RecordingLine,
   type RequestLine,
@@ -83,11 +84,12 @@ export interface Arrival {
   readonly noted: ReadonlySet<object>;
 }
 
-// What a draw read of the view it drew: its document, and the request it was
-// declared with.
+// What a draw read: its view's document, the request the view was declared
+// with, and what the session's clicks and menus left for it.
 export interface DrawnFrom {
   readonly document: FactsLine;
   readonly declaration: ViewFacts;
+  readonly state: DrawState;
 }
 
 interface Open {
@@ -196,7 +198,7 @@ export function sessionRecorder(
     // read: each written again here when it is not the last this recording
     // wrote, as a request's held view the session moved away from has, and
     // the current view at the draw after that.
-    drew(sessionId, { at: request, noted }, { document, declaration }) {
+    drew(sessionId, { at: request, noted }, { document, declaration, state }) {
       for (const rec of open.get(sessionId) ?? []) {
         if (!noted.has(rec)) continue;
         const lines: RecordingLine[] = [
@@ -206,7 +208,7 @@ export function sessionRecorder(
           ...(rec.declaration === declaration
             ? []
             : [{ kind: "declared", request: declaration } as const]),
-          { kind: "draw", request },
+          { kind: "draw", request, state },
         ];
         // A write that failed ended the recording: nothing more is offered.
         for (const line of lines) {
@@ -272,14 +274,18 @@ export function settleRequest(
 }
 
 // [LAW:single-enforcer] A request's answer, in the request path's one place
-// for it: drawn from the view the request holds, then noted with the document
-// and the declaration that draw read. The note is taken in the draw's own
-// turn, so nothing moves between the two, and only once the draw returned: an
-// answer that threw drew nothing a replay could draw.
-export function drawRequest<T>(
+// for it: drawn from the view the request holds, then noted with the document,
+// the declaration and the session's state that draw read. The note is taken in
+// the draw's own turn, so nothing moves between the two, and only once the draw
+// returned: an answer that threw drew nothing a replay could draw. The idle
+// instant is the one the draw says it was handed (`MenuIdle.drawn`), because
+// the frame it drew has moved the clock since.
+export function drawRequest<
+  T extends { readonly idleSince: Instant | undefined },
+>(
   recorder: Pick<SessionRecorder, "drew">,
   view: Pick<SessionView, "sessionId" | "facts"> & {
-    readonly source: Pick<SessionSource, "stamped">;
+    readonly source: Pick<SessionSource, "stamped" | "state">;
   },
   arrival: Arrival,
   draw: () => T,
@@ -288,6 +294,7 @@ export function drawRequest<T>(
   recorder.drew(view.sessionId, arrival, {
     document: view.source.stamped(),
     declaration: view.facts(),
+    state: { ...view.source.state(), idleSince: drawn.idleSince },
   });
   return drawn;
 }

@@ -22,6 +22,9 @@ export interface SessionStateReader {
   // of a value it did not hold, a clear of a key it did — or 0 while it holds
   // none. Two reads that return one revision read one state, whoever wrote it.
   revision(sessionId: string): number;
+  // Every value the session holds, by key: what a draw read of the store, as a
+  // recording carries it.
+  values(sessionId: string): Readonly<Record<string, string>>;
 }
 
 // [LAW:locality-or-seam] Renderer needs to *cache* per-session random picks
@@ -75,6 +78,7 @@ export function recordingView(
   return {
     get: (sessionId, key) => store.get(sessionId, key),
     revision: (sessionId) => store.revision(sessionId),
+    values: (sessionId) => store.values(sessionId),
     set: (sessionId, key, value) =>
       recorded(sessionId, [key], () => store.set(sessionId, key, value)),
     setBatch: (sessionId, pairs) =>
@@ -146,12 +150,17 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     this.hydrateFromStorage();
   }
 
+  // [LAW:one-source-of-truth] An empty session in the file is a husk no write
+  // here leaves (`commit` drops it), so it is not taken up: the store holds
+  // nothing for it at revision 0, as for a session it never saw.
   private hydrateFromStorage(): void {
     this.sessions = new Map(
-      Object.entries(this.storage.load()).map(([sessionId, kv]) => [
-        sessionId,
-        { values: new Map(Object.entries(kv)), revision: ++this.head },
-      ]),
+      Object.entries(this.storage.load())
+        .filter(([, kv]) => Object.keys(kv).length > 0)
+        .map(([sessionId, kv]) => [
+          sessionId,
+          { values: new Map(Object.entries(kv)), revision: ++this.head },
+        ]),
     );
     this.evictOldest();
     // [LAW:dataflow-not-control-flow] The disk mirror always reflects the built
@@ -176,6 +185,11 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   revision(sessionId: string): number {
     this.atom.reportObserved();
     return this.sessions.get(sessionId)?.revision ?? 0;
+  }
+
+  values(sessionId: string): Readonly<Record<string, string>> {
+    this.atom.reportObserved();
+    return Object.fromEntries(this.sessions.get(sessionId)?.values ?? []);
   }
 
   // How many derivations are subscribed to this store right now — every
@@ -232,32 +246,60 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     pairs: ReadonlyArray<{ key: string; value: string }>,
   ): void {
     if (pairs.length === 0) return;
+    this.commit(sessionId, (session) => {
+      if (pairs.some(({ key, value }) => session.values.get(key) !== value))
+        session.revision = ++this.head;
+      for (const { key, value } of pairs) session.values.set(key, value);
+    });
+  }
+
+  clear(sessionId: string, key: string): void {
+    this.commit(sessionId, (session) => {
+      if (session.values.delete(key)) session.revision = ++this.head;
+    });
+  }
+
+  // [LAW:one-source-of-truth] The session's state as another store held it:
+  // its values and its revision there, which a recording carries. The
+  // revision is the recorded one, never one this store mints, because a draw
+  // reads it (frame memory keeps the last frame only while it holds), so a
+  // replay keeps or drops exactly where the live store did. The head is
+  // raised to it, so no later write mints a revision the store has held. A
+  // session already at the revision holds its values: nothing moves.
+  restore(
+    sessionId: string,
+    values: Readonly<Record<string, string>>,
+    revision: number,
+  ): void {
+    if ((this.sessions.get(sessionId)?.revision ?? 0) === revision) return;
+    this.commit(sessionId, (session) => {
+      session.values.clear();
+      for (const [key, value] of Object.entries(values)) {
+        session.values.set(key, value);
+      }
+      session.revision = revision;
+      this.head = Math.max(this.head, revision);
+    });
+  }
+
+  // [LAW:single-enforcer] Every write lands here, in one action: the change,
+  // the session's place, then the disk mirror and one notification, so
+  // observers never see a half-applied write. An emptied session is a
+  // non-state, dropped so it neither occupies a cap slot nor persists as a
+  // `{ "sid": {} }` husk [LAW:one-source-of-truth]; a surviving one is
+  // promoted, since every interaction is a recency signal, uniform with get()
+  // [LAW:one-type-per-behavior].
+  private commit(sessionId: string, write: (session: Session) => void): void {
     runInAction(() => {
       const session = this.sessions.get(sessionId) ?? {
         values: new Map<string, string>(),
         revision: 0,
       };
-      if (pairs.some(({ key, value }) => session.values.get(key) !== value))
-        session.revision = ++this.head;
-      for (const { key, value } of pairs) session.values.set(key, value);
-      this.touch(sessionId, session);
-      this.evictOldest();
-      this.persist();
-      this.atom.reportChanged();
-    });
-  }
-
-  clear(sessionId: string, key: string): void {
-    runInAction(() => {
-      const session = this.sessions.get(sessionId);
-      if (session) {
-        if (session.values.delete(key)) session.revision = ++this.head;
-        // An emptied session is a non-state — drop it so it neither occupies a
-        // cap slot nor persists as a `{ "sid": {} }` husk. [LAW:one-source-of-truth]
-        // A surviving session is promoted: every interaction is a recency signal,
-        // uniform with get()/set(). [LAW:one-type-per-behavior]
-        if (session.values.size === 0) this.sessions.delete(sessionId);
-        else this.touch(sessionId, session);
+      write(session);
+      if (session.values.size === 0) this.sessions.delete(sessionId);
+      else {
+        this.touch(sessionId, session);
+        this.evictOldest();
       }
       this.persist();
       this.atom.reportChanged();

@@ -57,6 +57,10 @@ import {
   type SourceRuns,
 } from "./source-runs.js";
 
+// What a registry reads of the session store: a `state` variable's value, and
+// the revision its frames are drawn against.
+type StateReads = Pick<SessionStateReader, "get" | "revision">;
+
 export { SHELL_READ_TIMEOUT_MS, type ReadMode } from "./source-runs.js";
 
 // How long text that is not a document may be a write still in progress
@@ -408,7 +412,7 @@ export class SourceRegistry {
   // so tests can substitute a fake and the daemon shares its singleton.
   // Absent in non-daemon contexts; declareState() rejects loudly in that case
   // rather than silently returning empty strings.
-  private readonly sessionState: SessionStateReader | undefined;
+  private readonly sessionState: StateReads | undefined;
 
   // defaultEmptyValue is the global fallback of last resort — the config-level
   // `default_empty_value` from the proposal. Defaults to empty string.
@@ -422,7 +426,7 @@ export class SourceRegistry {
     private readonly runs: SourceRuns,
     private readonly store: VariableStore,
     private readonly defaultEmptyValue: VarValue = "",
-    sessionState?: SessionStateReader,
+    sessionState?: StateReads,
     // The directory home a session's view reads through to (`view()`).
     private readonly parent: SourceRegistry | null = null,
   ) {

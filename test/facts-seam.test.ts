@@ -48,12 +48,20 @@ import {
   type SessionSource,
 } from "../src/daemon/session-source";
 import { SessionState } from "../src/daemon/session-state";
-import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
+import { observable, runInAction, type IObservableValue } from "mobx";
+import { MenuIdle } from "../src/daemon/menu-idle";
+import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/door";
+import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
+import { flashBegins, MENU_TIMEOUT_DEFAULT } from "../src/config/menu-timeout";
+import { SETTINGS } from "../src/config/setting-projections";
 import { newUpdateFact, type UpdateFact } from "../src/daemon/update-fact";
 import {
   drawDemoFrame,
   heldArrival,
   loadDemo,
+  NEVER_CLICKED,
+  restoreDraw,
+  type Depths,
   playDemo,
   playOf,
   readRecording,
@@ -219,6 +227,7 @@ function request(
   cwd: string,
   home: string,
   claudeConfigDir: string,
+  model = "Opus 4.7",
 ): ViewFacts {
   return {
     sessionId: sessionIdOf(SID),
@@ -227,7 +236,7 @@ function request(
       session_id: SID,
       transcript_path: path.join(home, "transcript.jsonl"),
       cwd,
-      model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
+      model: { id: "claude-opus-4-7", display_name: model },
       workspace: { current_dir: cwd, project_dir: cwd },
     },
     cwd,
@@ -249,6 +258,11 @@ interface Rig {
   readonly cache: RenderCache<SessionSource>;
   readonly recorder: SessionRecorder;
   readonly lines: string[];
+  // What the session's clicks leave: its store, the histories' depths, and
+  // its menus' idle clock, which every frame is drawn under.
+  readonly sessionState: SessionState;
+  readonly depths: IObservableValue<Depths>;
+  readonly menuIdle: MenuIdle;
 }
 
 // The daemon's own composition of a render cache over providers
@@ -284,11 +298,20 @@ function rig(
   const sessionState = new SessionState();
   const update = newUpdateFact();
   const runs = new SourceRuns({ launcher, clock });
+  const depths = observable.box<Depths>(NEVER_CLICKED, { deep: false });
   const source = sessionSource({
     providers,
     sessionState,
-    history: () => EMPTY_HISTORY_DEPTH,
-    navigation: () => 0,
+    history: () => depths.get().history,
+    navigation: () => depths.get().back,
+  });
+  // The close a timeout makes is a click's, which no case here reaches.
+  const menuIdle = new MenuIdle({
+    clock,
+    now: () => instantAt(clock),
+    close: async () => {},
+    failed: (sessionId, error) =>
+      lines.push(`error menu-idle sid=${sessionId}: ${String(error)}`),
   });
   const { cache, recorder } = recordedCache(
     (recording) =>
@@ -320,6 +343,7 @@ function rig(
     log,
   );
   cleanups.push(() => {
+    menuIdle.dispose();
     recorder.close();
     cache.close();
     runs.close();
@@ -329,7 +353,7 @@ function rig(
     providers.managedStorage.close();
     watchers.closeAll();
   });
-  return { cache, recorder, lines };
+  return { cache, recorder, lines, sessionState, depths, menuIdle };
 }
 
 // Every fact of the document answered: the owners' children run on the held
@@ -392,7 +416,12 @@ function liveSession({ runsMs, stepMs }: Pace = HELD) {
   // daemon's request path takes one: the view declared with it, the request
   // noted and its view settled. Its answer, once every fact landed, is drawn
   // from the view it holds and noted, and the hold released.
-  const arrive = (cwd: string, configFile: string, burnMs = 0) => {
+  const arrive = (
+    cwd: string,
+    configFile: string,
+    burnMs = 0,
+    model?: string,
+  ) => {
     const at = instantAt(clock);
     // What the request path spends between reading the request's instant and
     // declaring its view: what that declaration stamps is later than `at`.
@@ -401,7 +430,7 @@ function liveSession({ runsMs, stepMs }: Pace = HELD) {
       cwd,
       cwd,
       configFile,
-      request(cwd, home, claudeConfigDir),
+      request(cwd, home, claudeConfigDir, model),
     );
     const settling = settleRequest(live.recorder, held.view, at);
     return {
@@ -409,9 +438,24 @@ function liveSession({ runsMs, stepMs }: Pace = HELD) {
         using _held = held;
         await landed(clock, held.view, stepMs);
         await settling.landed;
+        // [LAW:single-enforcer] Under the session's idle clock, as the
+        // daemon's draw is.
         return drawRequest(live.recorder, held.view, settling.arrival, () =>
-          drawDemoFrame(held.view, at, effects, drawn.warn),
-        );
+          live.menuIdle.drawn(
+            SID,
+            at,
+            held.view.source.effective().menuTimeout,
+            (idleSince) => ({
+              frame: drawDemoFrame(
+                held.view,
+                at,
+                effects,
+                idleSince,
+                drawn.warn,
+              ),
+            }),
+          ),
+        ).frame;
       },
     };
   };
@@ -419,7 +463,8 @@ function liveSession({ runsMs, stepMs }: Pace = HELD) {
     cwd: string,
     configFile: string,
     burnMs = 0,
-  ): Promise<Frame> => arrive(cwd, configFile, burnMs).answer();
+    model?: string,
+  ): Promise<Frame> => arrive(cwd, configFile, burnMs, model).answer();
   const after = async (ms: number): Promise<void> => {
     clock.advance(ms);
     await turns();
@@ -578,6 +623,90 @@ test("a session recorded out of the cache replays through the demo into the bars
   expect(replay.frames.map((f) => f.rows)).toEqual(
     liveFrames.map((f) => f.rows),
   );
+});
+
+test("a session recorded with a pick made and a menu open replays with the pick in effect and the menu open, flashing where the live menu flashed", async () => {
+  const s = liveSession();
+  // Placements fade in and out, and one appears when the model moves: a
+  // frame keeps the last frame's memory to fade from only while the store's
+  // revision holds, so the revision a replay draws at is in its frames.
+  const configFile = path.join(path.dirname(s.configFile), "fades.json5");
+  fs.writeFileSync(
+    configFile,
+    `{
+      plugins: ["./p/plugin.json5"],
+      globals: { transitions: true },
+      segments: {
+        newer: { template: "newer", when: '{{ eq .model.display_name "Opus 5" }}' },
+      },
+      root: { h: ["session", "newer", "tmux"] },
+    }`,
+  );
+  await s.requestFrom(s.cwd, configFile);
+  const file = path.join(tempDir("ccb-seam-out-"), "menu.jsonl");
+  const leave = new AbortController();
+  const recorded = recordToFile(
+    s.live.recorder,
+    s.clock,
+    sessionIdOf(SID),
+    file,
+    600,
+    leave.signal,
+  );
+  // A click, as it leaves the session: the theme picked and not saved, the
+  // settings menu open, two steps to undo, and the menus' idle clock begun.
+  const click = (pairs: { key: string; value: string }[]): void => {
+    s.live.sessionState.setBatch(SID, pairs);
+    s.live.menuIdle.clicked(SID, instantAt(s.clock));
+  };
+  click([
+    { key: SETTINGS.theme.sessionKey, value: "nord" },
+    { key: SETTINGS_ANCHOR, value: SETTINGS_OPEN },
+  ]);
+  runInAction(() =>
+    s.live.depths.set({ history: { undo: 2, redo: 0, sinceEdit: 0 }, back: 0 }),
+  );
+  const liveFrames: Frame[] = [];
+  await s.after(1000);
+  liveFrames.push(await s.requestFrom(s.cwd, configFile));
+  // The menu closed and opened again between two draws: the same values, at
+  // a revision the frame's memory drops at, so the placement the new model
+  // shows appears at once rather than fading in.
+  click([{ key: SETTINGS_ANCHOR, value: DISCLOSURE_CLOSED }]);
+  click([{ key: SETTINGS_ANCHOR, value: SETTINGS_OPEN }]);
+  await s.after(1000);
+  liveFrames.push(await s.requestFrom(s.cwd, configFile, 0, "Opus 5"));
+  // Inside the closing flash's first lit hold, before the menu times out.
+  const timeoutS = MENU_TIMEOUT_DEFAULT;
+  await s.after((flashBegins(timeoutS) - 1 + 0.2) * 1000);
+  liveFrames.push(await s.requestFrom(s.cwd, configFile, 0, "Opus 5"));
+  leave.abort();
+  const { answers } = await recorded;
+  expect(answers).toBe(3);
+
+  // The live bar had the menu open in every frame, its undo control, and the
+  // flash lit on its menu rows in the last frame only.
+  const menuRows = (frame: Frame) =>
+    frame.rows.filter((row) => row.kind === "menu");
+  for (const frame of liveFrames) expect(menuRows(frame)).not.toEqual([]);
+  expect(textOf(liveFrames[0]!)).toContain("↶");
+  expect(menuRows(liveFrames[2]!)).not.toEqual(menuRows(liveFrames[1]!));
+  expect(textOf(liveFrames[0]!)).not.toContain("newer");
+  expect(textOf(liveFrames[1]!)).toContain("newer");
+  // The draws read one set of values at two revisions.
+  const states = readRecording(file).lines.flatMap((line) =>
+    line.kind === "draw" ? [line.state] : [],
+  );
+  expect(states[1]!.values).toEqual(states[0]!.values);
+  expect(states[1]!.revision).not.toBe(states[0]!.revision);
+  expect(states[0]!.values[SETTINGS.theme.sessionKey]).toBe("nord");
+  expect(s.drawn.said).toEqual([]);
+
+  const replay = await replayFile(file, s.cwd, configFile);
+  expect(replay.reads).toEqual([]);
+  expect(replay.started).toEqual([]);
+  expect(replay.said).toEqual([]);
+  expect(replay.frames).toEqual(liveFrames);
 });
 
 test("a recording made on a moving clock replays each frame from what its answer drew: the lanes that landed during the request's wait", async () => {
@@ -741,8 +870,13 @@ test("a document stamped in the instant of a draw, after it, reaches the next dr
   const liveFrame = await s.requestFrom(s.cwd, s.configFile);
   const request = written.find((line) => line.kind === "request");
   const last = written.findLast((line) => line.kind === "facts");
-  if (request?.kind !== "request" || last?.kind !== "facts") {
-    throw new Error("the recording holds the request and a document");
+  const drew = written.find((line) => line.kind === "draw");
+  if (
+    request?.kind !== "request" ||
+    last?.kind !== "facts" ||
+    drew?.kind !== "draw"
+  ) {
+    throw new Error("the recording holds the request, a document and a draw");
   }
   // A document stamped after that draw, at its instant, then a second request
   // at the same instant and its answer.
@@ -761,7 +895,7 @@ test("a document stamped in the instant of a draw, after it, reaches the next dr
   const file = path.join(tempDir("ccb-seam-out-"), "instant.jsonl");
   fs.writeFileSync(
     file,
-    [...written, after, request, { kind: "draw", request: request.at } as const]
+    [...written, after, request, { ...drew, request: request.at }]
       .map(formatLine)
       .join(""),
   );
@@ -1028,8 +1162,15 @@ test("a recording of a session's facts replays through a second cache into the b
     } else if (line.kind === "declared") {
       held.view.requested(line.request);
     } else {
+      restoreDraw(replay.sessionState, replay.depths, SID, line.state);
       replayFrames.push(
-        drawDemoFrame(held.view, line.request, effects, drawn.warn),
+        drawDemoFrame(
+          held.view,
+          line.request,
+          effects,
+          line.state.idleSince,
+          drawn.warn,
+        ),
       );
     }
   }

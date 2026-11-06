@@ -2,7 +2,11 @@
 // offered to its sink after the end, whichever write it was that failed.
 
 import { observable, runInAction } from "mobx";
-import type { FactsLine, RecordingLine } from "../../src/facts/recording";
+import type {
+  DrawState,
+  FactsLine,
+  RecordingLine,
+} from "../../src/facts/recording";
 import type { ViewFacts } from "../../src/daemon/render-payload";
 import {
   sessionRecorder,
@@ -12,6 +16,9 @@ import { sessionIdOf } from "../../src/daemon/session-id";
 import type { Instant } from "../../src/utils/instant";
 
 const SID = sessionIdOf("rec-session");
+
+// What a draw of a view read of the session's state: passed on whole.
+const state = { revision: 3 } as unknown as DrawState;
 
 // A view whose document and declaration the test moves. The recorder only
 // passes them on, so each is a stand-in.
@@ -25,7 +32,7 @@ function view(name = "a") {
     followed: { stamped: () => line.get(), failure: () => null },
     source: { home: () => "/home/recorded" },
     // What a draw of it reads.
-    drawn: (): DrawnFrom => ({ document: line.get(), declaration }),
+    drawn: (): DrawnFrom => ({ document: line.get(), declaration, state }),
     declare: (next: string) => {
       declaration = { name: next } as unknown as ViewFacts;
     },
@@ -180,7 +187,7 @@ test("a draw is written after what it read: its document and declaration again, 
     "declared b",
     "draw",
   ]);
-  expect(lines.at(-1)).toEqual({ kind: "draw", request: AT });
+  expect(lines.at(-1)).toEqual({ kind: "draw", request: AT, state });
 });
 
 test("a draw whose document fails to write ends the recording, and no draw line is offered", () => {

@@ -21,6 +21,7 @@ export function writesInTurn(
   return {
     get: (sessionId, key) => store.get(sessionId, key),
     revision: (sessionId) => store.revision(sessionId),
+    values: (sessionId) => store.values(sessionId),
     set: (sessionId, key, value) => {
       held(`set ${key}`);
       store.set(sessionId, key, value);

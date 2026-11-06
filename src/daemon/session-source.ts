@@ -28,7 +28,7 @@ import { resolveEffectiveGlobals } from "../config/effective-globals.js";
 import type { ValidatedConfig } from "../config/dsl-types.js";
 import type { ViewSource } from "../dsl/view-source.js";
 import type { SourceOf } from "./cache/render.js";
-import type { FactsLine } from "../facts/recording.js";
+import type { DrawState, FactsLine } from "../facts/recording.js";
 import type { SessionFacts } from "../facts/session-facts.js";
 import {
   composePayload,
@@ -66,6 +66,11 @@ export interface SessionSource extends ViewSource {
   // the latest turn completed on a stamped document: while it is set the bar
   // is drawn from the last turn that did, and says so.
   readonly failure: () => string | null;
+  // What the session's clicks left for a draw now: the store's values and
+  // revision for it, which its `state` variables and its frame memory read,
+  // and the histories' depths the turn's payload carries. A recording notes it
+  // with the draw that read it.
+  readonly state: () => Omit<DrawState, "idleSince">;
 }
 
 // [LAW:types-are-the-program] One turn: the document and everything the
@@ -239,6 +244,12 @@ export function sessionSource(
       hints: () => turn.get().compose.hints,
       failure: () => turn.get().failure,
       selections: () => turn.get().draw.effective,
+      state: () => ({
+        values: deps.sessionState.values(sessionId),
+        revision: deps.sessionState.revision(sessionId),
+        history: turn.get().draw.history,
+        back: turn.get().draw.back,
+      }),
     };
   };
 }

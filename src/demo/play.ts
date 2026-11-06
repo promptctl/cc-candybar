@@ -7,9 +7,10 @@
 // main hands in: the facts arm (the in-process arm over owners, or a
 // recording's), the steps (requests at the offsets they arrive at, the draws
 // of their answers, and a recording's documents where the daemon took them),
-// whose home `~` names, and how a request arrives at its offset (a sleep on
-// the machine's clock and its reading, or a held clock's advance and the
-// recorded instant). The path itself never asks which.
+// whose home `~` names, what the session's clicks left for each draw (a
+// recording's, or a session that never clicked), and how a request arrives at
+// its offset (a sleep on the machine's clock and its reading, or a held
+// clock's advance and the recorded instant). The path itself never asks which.
 //
 // [LAW:single-enforcer] One faked hook event, or a recorded one, goes through
 // the functions the daemon runs for a real one — loadChain, openView over the
@@ -17,8 +18,10 @@
 // demo-only payload: a field the daemon's payload gains is in the demo's.
 
 import { readFileSync } from "node:fs";
+import { observable, runInAction, type IObservableValue } from "mobx";
 import {
   parseRecording,
+  type DrawState,
   type Recording,
   type ReplayLine,
 } from "../facts/recording.js";
@@ -91,9 +94,7 @@ export function loadDemo({
   // [LAW:single-enforcer] The demo's own owner of its sources' runs, closed
   // with the registry that holds them.
   const runs = new SourceRuns({ launcher: world.launcher, clock: world.clock });
-  // A session that has never clicked: every pick is absent, so each setting
-  // resolves to the config's own value, every picker is closed, and there is
-  // nothing to undo or go back to.
+  // The session's store, which each draw's state restores before it draws.
   const sessionState = new SessionState();
   const locs = locations(world.host, world.home);
   const repos = repoGateAt(stateDir, cwd);
@@ -168,10 +169,48 @@ export function readRecording(path: string): Recording {
   }
 }
 
+// A session that has never clicked: every pick is absent, so each setting
+// resolves to the config's own value, every picker is closed, there is nothing
+// to undo or go back to, and no menu has been idle.
+export const NEVER_CLICKED: DrawState = {
+  values: {},
+  revision: 0,
+  history: EMPTY_HISTORY_DEPTH,
+  back: 0,
+  idleSince: undefined,
+};
+
+// The histories' depths a replay's turn reads, beside its store.
+export type Depths = Pick<DrawState, "history" | "back">;
+
+// Every field of the settings history's depth, whichever it gains.
+function sameDepths(a: Depths, b: Depths): boolean {
+  const fields = Object.keys(a.history) as Array<keyof Depths["history"]>;
+  return (
+    a.back === b.back && fields.every((k) => a.history[k] === b.history[k])
+  );
+}
+
+// [LAW:single-enforcer] A draw's recorded state made the replay's, in one
+// action, so its turn and its `state` variables move together before it
+// draws: the store's values and revision for the session, and the depths.
+// The idle instant is handed to the draw itself.
+export function restoreDraw(
+  sessionState: SessionState,
+  depths: IObservableValue<Depths>,
+  sessionId: string,
+  state: DrawState,
+): void {
+  runInAction(() => {
+    sessionState.restore(sessionId, state.values, state.revision);
+    depths.set({ history: state.history, back: state.back });
+  });
+}
+
 // One step of a play, from the clock's reading as it begins: a request
 // arrives at its offset; a declaration restates the request the next draw's
 // view was declared with; an answer is drawn at the offset of the request it
-// answers; a document becomes the arm's.
+// answers, from the session's state it read; a document becomes the arm's.
 export type DemoStep =
   | {
       readonly kind: "request";
@@ -179,7 +218,11 @@ export type DemoStep =
       readonly request: ViewFacts;
     }
   | { readonly kind: "declared"; readonly request: ViewFacts }
-  | { readonly kind: "draw"; readonly requestOffsetMs: number }
+  | {
+      readonly kind: "draw";
+      readonly requestOffsetMs: number;
+      readonly state: DrawState;
+    }
   | { readonly kind: "document"; readonly reach: () => void };
 
 // A recording as the demo plays it: the instant its held clock starts at, in
@@ -213,7 +256,11 @@ export function playOf(
       : line.kind === "declared"
         ? { kind: line.kind, request: line.request }
         : line.kind === "draw"
-          ? { kind: line.kind, requestOffsetMs: msOf(line.request) - startMs }
+          ? {
+              kind: line.kind,
+              requestOffsetMs: msOf(line.request) - startMs,
+              state: line.state,
+            }
           : { kind: "document", reach: () => arm.reach(line) };
   return {
     startMs,
@@ -255,11 +302,13 @@ export const heldArrival =
   };
 
 // One frame of a session's view at `at`, as the daemon draws a request's: the
-// draw's own projections, and the options its view's turn resolved.
+// draw's own projections, the options its view's turn resolved, and when the
+// session's menus' idle period began.
 export function drawDemoFrame(
   view: SessionView<SessionSource>,
   at: Instant,
   effects: SessionEffects<RenderedLine>,
+  idleSince: Instant | undefined,
   warn: (message: string) => void,
 ): Frame {
   const effective = view.source.effective();
@@ -278,15 +327,15 @@ export function drawDemoFrame(
     // request draws it: `renderWidth` of its hints, carried as `term.cols`.
     renderOptionsOf(effective, view.source.payload().term.cols),
     { onRenderWarning: ({ message }) => warn(message) },
-    { ...effective, effects },
+    { ...effective, effects, idleSince },
   ).frame;
 }
 
 // [LAW:no-ambient-temporal-coupling] The steps are taken in their order, which
 // is the order the daemon took them in: a request's clock is brought to its
 // offset, the view is declared with it and what its arrival starts of the
-// facts lands; a draw draws the view as it stands then, at the instant its
-// request arrived at.
+// facts lands; a draw restores the session's state it read and draws the view
+// as it stands then, at the instant its request arrived at.
 export async function playDemo({
   loaded: { state, sessionState },
   cwd,
@@ -303,6 +352,13 @@ export async function playDemo({
   const startMs = clock.now();
   // Each request's instant, by its offset: what its answer is drawn at.
   const arrived = new Map<number, Instant>();
+  // [LAW:one-source-of-truth] The depths of the draw being drawn, set with the
+  // store by each draw's restore. Compared by value, so a draw whose depths
+  // held moves nothing the turn reads, as the daemon's depths do not.
+  const depths = observable.box<Depths>(NEVER_CLICKED, {
+    deep: false,
+    equals: sameDepths,
+  });
   // The session's view of the state, as the daemon opens one per session,
   // declared with the request the first frame draws by.
   const view = openView(state, cwd, opening.request, {
@@ -310,8 +366,8 @@ export async function playDemo({
     source: sessionSource({
       providers: { home, log },
       sessionState,
-      history: () => EMPTY_HISTORY_DEPTH,
-      navigation: () => 0,
+      history: () => depths.get().history,
+      navigation: () => depths.get().back,
     }),
     // The demo draws one frame per request: no feed to wake.
     changed: () => {},
@@ -342,7 +398,8 @@ export async function playDemo({
             `a draw answers a request at +${step.requestOffsetMs}ms, and none arrived then`,
           );
         }
-        frame(drawDemoFrame(view, at, effects, warn));
+        restoreDraw(sessionState, depths, view.sessionId, step.state);
+        frame(drawDemoFrame(view, at, effects, step.state.idleSince, warn));
       }
     }
   } finally {

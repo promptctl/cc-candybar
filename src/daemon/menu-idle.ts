@@ -17,6 +17,7 @@ import { closesAt } from "../config/menu-timeout.js";
 import type { Instant } from "../utils/instant.js";
 import type { IdleClose } from "./verbs/index.js";
 import type { Timekeeper } from "../time";
+import type { Frame } from "../render/frame.js";
 
 interface Idle {
   since: Instant;
@@ -91,6 +92,28 @@ export class MenuIdle {
   since(sessionId: string, at: Instant): Instant | undefined {
     const idle = this.record(sessionId, at);
     return idle.shown && !this.pending.has(sessionId) ? idle.since : undefined;
+  }
+
+  // [LAW:single-enforcer] One frame of the session drawn under its idle
+  // period: the draw is handed the period's start as it stands before the
+  // frame, then what the frame drew is observed. The instant handed is
+  // returned with the draw, because the observe moves the start on a menu's
+  // first frame, and a recording notes what the draw read.
+  drawn<D extends { readonly frame: Pick<Frame, "rows"> }>(
+    sessionId: string,
+    at: Instant,
+    timeoutS: number,
+    draw: (idleSince: Instant | undefined) => D,
+  ): D & { readonly idleSince: Instant | undefined } {
+    const idleSince = this.since(sessionId, at);
+    const drawn = draw(idleSince);
+    this.observe(
+      sessionId,
+      at,
+      drawn.frame.rows.some((row) => row.kind === "menu"),
+      timeoutS,
+    );
+    return { ...drawn, idleSince };
   }
 
   // What the session's newest frame drew: whether a menu row, and the
