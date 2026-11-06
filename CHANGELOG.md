@@ -1,3 +1,9 @@
+## [1.201.1](https://github.com/promptctl/cc-candybar/compare/v1.201.0...v1.201.1) (2026-11-06)
+
+### Bug Fixes
+
+* **facts:** a recording replays a session's picks and open menus: each draw carries the state it read (candybar-gather-renderer-76bb.6pj.gs4) ([#639](https://github.com/promptctl/cc-candybar/issues/639)) ([f62952f](https://github.com/promptctl/cc-candybar/commit/f62952f2c7273142b5ad4581bd6d5f05bd29044f))
+
 ## [1.201.0](https://github.com/promptctl/cc-candybar/compare/v1.200.1...v1.201.0) (2026-11-06)
 
 ### ⚠ BREAKING CHANGES
