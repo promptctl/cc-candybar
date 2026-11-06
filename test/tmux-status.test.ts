@@ -5,6 +5,7 @@
 import {
   BINDING_OPTION,
   PRIOR_OPTION,
+  RENDERER_OPTION,
   TmuxStatusLines,
   rowFormat,
   rowOption,
@@ -176,6 +177,7 @@ function harness(ids: readonly string[] = ["$1"]) {
     sessionInPane: (_socket, pane) => newest.get(pane) ?? null,
     handler: "cc-candybar url-handle",
     owner: OWNER,
+    name: "main",
     log: (_level, msg) => logs.push(msg),
   });
   const hold = (sessionId: string, pane: string): void => {
@@ -212,6 +214,7 @@ describe("TmuxStatusLines", () => {
     expect(s.get(rowOption(0))).toContain("one");
     expect(s.get(rowOption(1))).toContain("two");
     expect(JSON.parse(s.get(PRIOR_OPTION)!)).toMatchObject({ base: 1, status: null, formats: null });
+    expect(s.get(RENDERER_OPTION)).toBe("main");
     expect(h.tmux.binding).toContain("tmux-status-click");
     expect(h.tmux.binding).toContain("switch-client -t =");
   });
@@ -295,6 +298,31 @@ describe("TmuxStatusLines", () => {
     for (const [i, value] of Object.entries(wrote)) s.set(`status-format[${i}]`, value);
     await h.answer({ "%9": "$2" }, {});
     expect([...s]).toEqual([["status-format[2]", "old"]]);
+  });
+
+  test("a session a dead daemon on this socket laid out names this daemon once taken over, and names none once released", async () => {
+    const h = harness();
+    const s = session(h);
+    const wrote = { 1: rowFormat(0), 2: rowFormat(1), 3: rowFormat(2), 4: rowFormat(3) };
+    s.set(PRIOR_OPTION, JSON.stringify({ owner: OWNER, base: 1, status: null, formats: null, wrote }));
+    for (const [i, value] of Object.entries(wrote)) s.set(`status-format[${i}]`, value);
+    h.hold("s1", "%1");
+    await h.answer({ "%1": "$1" }, { $1: "%1" });
+    expect(s.get(RENDERER_OPTION)).toBe("main");
+    await h.answer({}, {});
+    expect([...s]).toEqual([]);
+  });
+
+  test("a layout found on the session itself, when the server's listing is refused, names this daemon too", async () => {
+    const h = harness();
+    const s = session(h);
+    s.set(PRIOR_OPTION, JSON.stringify({ owner: OWNER, base: 1, status: null, formats: null, wrote: { 1: rowFormat(0) } }));
+    s.set("status-format[1]", rowFormat(0));
+    h.tmux.refuses = "list-sessions";
+    h.hold("s1", "%1");
+    await h.answer({ "%1": "$1" }, { $1: "%1" });
+    expect(s.get(RENDERER_OPTION)).toBe("main");
+    expect(h.logs.some((l) => l.includes("took over renderer=main session $1"))).toBe(true);
   });
 
   test("a binding the user replaced is left alone, and said once", async () => {
