@@ -87,11 +87,11 @@ export function recordPlan(
       code: 1,
     };
   }
-  const { path, lines, requests, daemonClosed } = outcome.value;
+  const { path, lines, answers, daemonClosed } = outcome.value;
   // A span the daemon's close cut short is said, so a short file or an empty
   // one is never read as the session's own doing.
   const cut = `the daemon closed before ${seconds}s ran out`;
-  return requests === 0
+  return answers === 0
     ? {
         stdout: "",
         stderr: daemonClosed
@@ -100,7 +100,7 @@ export function recordPlan(
         code: 1,
       }
     : {
-        stdout: `${path}: ${lines} lines, ${requests} requests\n`,
+        stdout: `${path}: ${lines} lines, ${answers} answers\n`,
         stderr: daemonClosed
           ? `record: ${cut}: the file holds what came before.\n`
           : "",

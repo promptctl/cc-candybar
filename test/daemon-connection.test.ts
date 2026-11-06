@@ -504,7 +504,7 @@ describe("a connection over a stream", () => {
       recorded: {
         path: "/r.jsonl",
         lines: 4,
-        requests: 1,
+        answers: 1,
         daemonClosed: false,
       },
     };

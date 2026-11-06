@@ -112,14 +112,14 @@ describe("the record command", () => {
           value: {
             path: "/w/bar.jsonl",
             lines: 9,
-            requests: 3,
+            answers: 3,
             daemonClosed: false,
           },
         },
         10,
       ),
     ).toEqual({
-      stdout: "/w/bar.jsonl: 9 lines, 3 requests\n",
+      stdout: "/w/bar.jsonl: 9 lines, 3 answers\n",
       stderr: "",
       code: 0,
     });
@@ -129,7 +129,7 @@ describe("the record command", () => {
         value: {
           path: "/w/bar.jsonl",
           lines: 2,
-          requests: 0,
+          answers: 0,
           daemonClosed: false,
         },
       },
@@ -149,14 +149,14 @@ describe("the record command", () => {
         value: {
           path: "/w/bar.jsonl",
           lines: 9,
-          requests: 3,
+          answers: 3,
           daemonClosed: true,
         },
       },
       10,
     );
     expect(short).toMatchObject({
-      stdout: "/w/bar.jsonl: 9 lines, 3 requests\n",
+      stdout: "/w/bar.jsonl: 9 lines, 3 answers\n",
       code: 0,
     });
     expect(short.stderr).toBe(
@@ -168,7 +168,7 @@ describe("the record command", () => {
         value: {
           path: "/w/bar.jsonl",
           lines: 2,
-          requests: 0,
+          answers: 0,
           daemonClosed: true,
         },
       },

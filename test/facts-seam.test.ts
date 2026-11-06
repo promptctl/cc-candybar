@@ -64,12 +64,12 @@ import type { RenderedLine } from "../src/dsl/node-registry";
 import {
   formatLine,
   parseRecording,
+  RECORDING_VERSION,
   type FactsLine,
   type Recording,
   type RecordingLine,
 } from "../src/facts/recording";
 import { restamp } from "../src/facts/fact";
-import { FACTS_VERSION } from "../src/facts/session-facts";
 import { ok } from "../src/utils/outcome";
 import type { Host } from "../src/host";
 import { exits, runsFor, type Behaviour } from "../src/proc/spawner-fake";
@@ -555,8 +555,8 @@ test("a session recorded out of the cache replays through the demo into the bars
     liveFrames.push(await s.requestFrom(s.cwd, s.configFile));
   }
   await s.after(2000);
-  const { lines, requests } = await recorded;
-  expect(requests).toBe(3);
+  const { lines, answers } = await recorded;
+  expect(answers).toBe(3);
   const text = fs.readFileSync(file, "utf8");
   expect(text.split("\n").filter((l) => l !== "")).toHaveLength(lines);
   // The live bar drew real facts: the branch, its PR, the tmux session, the
@@ -602,7 +602,7 @@ test("a recording made on a moving clock replays each frame from what its answer
     liveFrames.push(await s.requestFrom(dir.cwd, dir.configFile));
   }
   s.live.recorder.close();
-  expect((await recorded).requests).toBe(3);
+  expect((await recorded).answers).toBe(3);
   // The live answers drew the landed lanes, which were stamped after their
   // request's instant.
   const liveText = liveFrames.map(textOf);
@@ -690,7 +690,7 @@ test("a request answered after another moved the session to another directory re
   const b = s.arrive(other.cwd, other.configFile);
   const liveFrames = [await a.answer(), await b.answer()];
   s.live.recorder.close();
-  expect((await recorded).requests).toBe(2);
+  expect((await recorded).answers).toBe(2);
   const liveText = liveFrames.map(textOf);
   expect(liveText[0]).toContain(`dir=${s.cwd}`);
   expect(liveText[1]).toContain(`dir=${other.cwd}`);
@@ -722,7 +722,7 @@ test("a recording started during a request's wait holds only the requests it saw
   await s.after(1000);
   const seen = await s.requestFrom(s.cwd, s.configFile);
   s.live.recorder.close();
-  expect((await recorded).requests).toBe(1);
+  expect((await recorded).answers).toBe(1);
   const replay = await replayFile(file, s.cwd, s.configFile);
   expect(replay.frames.map(textOf)).toEqual([textOf(seen)]);
   expect(replay.frames.map((f) => f.rows)).toEqual([seen.rows]);
@@ -792,7 +792,7 @@ test("a recording follows the session to the view a request from another directo
   await s.after(1000);
   await s.requestFrom(other.cwd, other.configFile);
   s.live.recorder.close();
-  expect((await recorded).requests).toBe(3);
+  expect((await recorded).answers).toBe(3);
   // The recording opens on the first view's current document, and the
   // successor's opening document starts its sequence again, once.
   const seqs = documentsOf(readRecording(file)).map((line) => line.facts.seq);
@@ -852,10 +852,10 @@ test("a recording the daemon's close ends is whole: its counts are the file's, a
   await s.after(1000);
   await s.requestFrom(s.cwd, s.configFile);
   s.live.recorder.close();
-  const { lines, requests, daemonClosed } = await recorded;
+  const { lines, answers, daemonClosed } = await recorded;
   const text = fs.readFileSync(file, "utf8");
   expect(text.split("\n").filter((l) => l !== "")).toHaveLength(lines);
-  expect(requests).toBe(1);
+  expect(answers).toBe(1);
   expect(daemonClosed).toBe(true);
   expect(drawnFrom(parseRecording(text))).toHaveLength(1);
   // The file is the owner's alone: it holds the session's paths and usage.
@@ -884,7 +884,7 @@ test("a recording no request was answered in leaves no file, so the same path re
   await s.after(1000);
   expect(await idle).toMatchObject({
     path: file,
-    requests: 0,
+    answers: 0,
     daemonClosed: false,
   });
   expect(fs.existsSync(file)).toBe(false);
@@ -922,12 +922,12 @@ test("a recording whose client leaves ends there, whole, and writes nothing afte
   await s.after(1000);
   await s.requestFrom(s.cwd, s.configFile);
   client.abort();
-  const { lines, requests } = await recorded;
+  const { lines, answers } = await recorded;
   await s.after(1000);
   await s.requestFrom(s.cwd, s.configFile);
   const text = fs.readFileSync(file, "utf8");
   expect(text.split("\n").filter((l) => l !== "")).toHaveLength(lines);
-  expect(requests).toBe(1);
+  expect(answers).toBe(1);
   expect(drawnFrom(parseRecording(text))).toHaveLength(1);
 });
 
@@ -961,15 +961,15 @@ test("a recording is refused for a session with no view, and onto a file that ex
   expect(fs.readFileSync(kept, "utf8")).toBe("keep\n");
 });
 
-test("a recording of another facts version is refused by the demo naming the file", () => {
+test("a recording of another format is refused by the demo naming the file", () => {
   const file = path.join(tempDir("ccb-seam-out-"), "v-next.jsonl");
   fs.writeFileSync(
     file,
-    `${JSON.stringify({ kind: "recording", v: FACTS_VERSION + 1, session: SID })}\n`,
+    `${JSON.stringify({ kind: "recording", v: RECORDING_VERSION + 1, session: SID })}\n`,
   );
   expect(() => readRecording(file)).toThrow(RecordingUnreadable);
   expect(() => readRecording(file)).toThrow(
-    `${file} is a facts v${FACTS_VERSION + 1} recording; this build reads v${FACTS_VERSION}`,
+    `${file} is a v${RECORDING_VERSION + 1} recording; this build reads v${RECORDING_VERSION}`,
   );
 });
 

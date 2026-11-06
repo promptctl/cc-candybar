@@ -1,6 +1,6 @@
 // [LAW:parse-dont-validate] The one place a recording's text becomes a typed
 // recording. A recording is one session's stream as newline-delimited JSON
-// (docs/design/gather-and-renderer.md §14): a header naming the facts version,
+// (docs/design/gather-and-renderer.md §14): a header naming its format's version,
 // the session and the home its payloads were composed against, then the
 // documents the session's view took, the requests it was drawn by and the
 // draws of their answers, each with its instant. The session's recorder
@@ -106,13 +106,19 @@ export interface Recording {
   ];
 }
 
-// A recording of another facts version: refused whole, never read field by
-// field against this build's document. The version is a value, so the edge
-// that names the file says which.
+// [LAW:one-source-of-truth] The recording's own format: its header and its
+// request, declared and draw lines, which are the renderer's request path and
+// not the facts protocol. The documents in it carry their own facts version,
+// which each document's parse refuses, so a change of either moves one number.
+export const RECORDING_VERSION = 2;
+
+// A recording of another format: refused whole, never read line by line
+// against this build's. The version is a value, so the edge that names the
+// file says which.
 export class RecordingVersionError extends Error {
   constructor(readonly v: unknown) {
     super(
-      `is a facts v${String(v)} recording; this build reads v${FACTS_VERSION}`,
+      `is a v${String(v)} recording; this build reads v${RECORDING_VERSION}`,
     );
     this.name = "RecordingVersionError";
   }
@@ -262,9 +268,9 @@ export function parseRecording(text: string): Recording {
   if (header.kind !== "recording") {
     throw new FactParseError("line 1", "is not a recording's header");
   }
-  // [LAW:no-silent-failure] Another version's documents are refused whole,
-  // before any of them is read against this build's shape.
-  if (header.v !== FACTS_VERSION) throw new RecordingVersionError(header.v);
+  // [LAW:no-silent-failure] Another format's lines are refused whole, before
+  // any of them is read against this build's.
+  if (header.v !== RECORDING_VERSION) throw new RecordingVersionError(header.v);
   const named = parseSessionId(header.session);
   if (!named.ok) throw new FactParseError("line 1", `session ${named.problem}`);
   const session = named.id;
@@ -370,7 +376,7 @@ export function formatLine(line: RecordingLine): string {
     line.kind === "recording"
       ? {
           kind: line.kind,
-          v: FACTS_VERSION,
+          v: RECORDING_VERSION,
           session: line.session,
           home: line.home,
         }

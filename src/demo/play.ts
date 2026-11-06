@@ -52,7 +52,7 @@ import { SessionEffects } from "../render/effect.js";
 import type { Frame } from "../render/frame.js";
 import type { HeldClock } from "../held-clock.js";
 import type { Timekeeper } from "../time.js";
-import { instantOf, type Instant } from "../utils/instant.js";
+import { instantOf, msOf, type Instant } from "../utils/instant.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import { SourceRuns } from "../var-system/source-runs.js";
 
@@ -202,7 +202,6 @@ export function playOf(
   arm: Pick<RecordingFacts, "reach">,
 ): RecordingPlay {
   const [opening, ...later] = recording.lines;
-  const msOf = (at: Instant): number => Math.round(at * 1000);
   const startMs = msOf(opening.at);
   const step = (line: ReplayLine): DemoStep =>
     line.kind === "request"

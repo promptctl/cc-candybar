@@ -8,6 +8,7 @@ import {
   formatLine,
   parseRecording,
   parseSessionFacts,
+  RECORDING_VERSION,
   RecordingVersionError,
   type FactsLine,
   type RecordingLine,
@@ -149,20 +150,35 @@ test("a file cut inside its last line is refused naming that line, never read as
   );
 });
 
-test("the first line is the header, and it names this build's facts version", () => {
+test("the first line is the header, and it names this build's recording format", () => {
   expect(() => parseRecording(text(facts(0, 1), requested(1)))).toThrow(
     /^line 1: is not a recording's header/,
   );
-  const other = `${JSON.stringify({ kind: "recording", v: FACTS_VERSION + 1, session: SESSION })}\n`;
-  expect(() => parseRecording(other)).toThrow(RecordingVersionError);
-  expect(() => parseRecording(other)).toThrow(
-    `is a facts v${FACTS_VERSION + 1} recording; this build reads v${FACTS_VERSION}`,
+  // Another format's header, the shipped first format's among them, is
+  // refused by its version before any line is read.
+  for (const v of [RECORDING_VERSION - 1, RECORDING_VERSION + 1]) {
+    const other = `${JSON.stringify({ kind: "recording", v, session: SESSION })}\n`;
+    expect(() => parseRecording(other)).toThrow(RecordingVersionError);
+    expect(() => parseRecording(other)).toThrow(
+      `is a v${v} recording; this build reads v${RECORDING_VERSION}`,
+    );
+  }
+});
+
+test("a recording holding a document of another facts version is refused at that document's line", () => {
+  const otherFacts = `${JSON.stringify({ kind: "facts", at: at(0), facts: { ...document(1), v: FACTS_VERSION + 1 } })}\n`;
+  expect(() =>
+    parseRecording(text(header) + otherFacts + text(requested(1), drawn(1))),
+  ).toThrow(
+    new RegExp(
+      `^line 2 facts: is facts version ${FACTS_VERSION + 1}, and this build reads ${FACTS_VERSION}`,
+    ),
   );
 });
 
 test("the header names the home the payloads were composed against, as an absolute path", () => {
   const headed = (home: unknown): string =>
-    `${JSON.stringify({ kind: "recording", v: FACTS_VERSION, session: SESSION, home })}\n` +
+    `${JSON.stringify({ kind: "recording", v: RECORDING_VERSION, session: SESSION, home })}\n` +
     text(facts(0, 1), requested(1), drawn(1));
   expect(parseRecording(headed(HOME)).home).toBe(HOME);
   for (const home of [undefined, null, "relative/home", 7]) {

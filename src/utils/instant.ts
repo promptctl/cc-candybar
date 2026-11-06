@@ -11,7 +11,13 @@ export type Instant = number & { readonly __instant: unique symbol };
 export const instantOf = (date: Date): Instant =>
   (date.getTime() / 1000) as Instant;
 
-export const dateOf = (at: Instant): Date => new Date(at * 1000);
+// [LAW:single-enforcer] The one conversion back to the clock's milliseconds.
+// An instant is a millisecond reading over 1000, so rounding recovers the
+// reading exactly; `at * 1000` alone can land a hair below it, which a Date
+// truncates to the millisecond before.
+export const msOf = (at: Instant): number => Math.round(at * 1000);
+
+export const dateOf = (at: Instant): Date => new Date(msOf(at));
 
 // [LAW:single-enforcer] The clock's wall reading (epoch milliseconds) as the
 // instant a stamp carries (epoch seconds): the one conversion, so a stamp is

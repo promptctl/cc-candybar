@@ -329,8 +329,8 @@ export function recordToFile(
       return;
     }
     let lines = 0;
-    // The requests answered while it recorded: the frames a replay draws.
-    let requests = 0;
+    // The answers drawn while it recorded: the frames a replay draws.
+    let answers = 0;
     let stop = (): void => {};
     const clearTimer = clock.after(seconds * 1000, () => stop());
     const leave = (): void => stop();
@@ -339,7 +339,7 @@ export function recordToFile(
       write: (line) => {
         appendFileSync(fd, formatLine(line));
         lines++;
-        if (line.kind === "draw") requests++;
+        if (line.kind === "draw") answers++;
       },
       end: (how) => {
         clearTimer();
@@ -349,7 +349,7 @@ export function recordToFile(
           closeSync(fd);
           // A recording no request was answered in is one the parser refuses,
           // and it would refuse the same path to the next try: it is not kept.
-          if (requests === 0) unlinkSync(path);
+          if (answers === 0) unlinkSync(path);
         } catch (e) {
           error ??= e;
         }
@@ -357,7 +357,7 @@ export function recordToFile(
           resolve({
             path,
             lines,
-            requests,
+            answers,
             daemonClosed: how.kind === "closed",
           });
         } else {
