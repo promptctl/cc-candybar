@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-644",
+      "ref": "refs/pull/644/merge",
+      "sha": "868c47c04475c50e0da7adbd628c8eae84f52ad8",
+      "timestamp": "2026-11-06T18:59:32.748Z",
+      "commits": [
+        {
+          "sha": "868c47c04475c50e0da7adbd628c8eae84f52ad8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T18:58:18Z",
+          "message": "Merge 83471562779455f776edad21e6f6e92daac2e865 into 0af5d1f4ce463b0bebbbe6a4b6107d2943900c54\n"
+        },
+        {
+          "sha": "83471562779455f776edad21e6f6e92daac2e865",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T11:58:01-07:00",
+          "message": "fix(links): a probe is a link kind, never an effect; a link lost at another build's daemon says so (candybar-gather-renderer-76bb.b2l.mxk)\n\n- The probe leaves the leaf table, so a dispatch carrying it is refused as an\n  unknown effect verb, as the minter's comment says it is.\n- probeLink spells the nonce with encodeURIComponent, the codec the probe\n  verb's one-argument read reverses.\n- The lost verdict names a daemon of another build: a link this build mints\n  may be one it does not read, so a healthy handler is not blamed for it.\n- Comments that said the diagnosis asks about the scheme now say the link.\n"
+        },
+        {
+          "sha": "99e6c09a5cd435b41007097aec7517ac28d39720",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T11:48:22-07:00",
+          "message": "feat(links): the doctor probe is minted by the minter as the probe link kind, and Launch Services is asked about the link it opened (candybar-gather-renderer-76bb.b2l.mxk)\n\nThe probe link is cc-candybar://to/<name>/probe/<nonce>, built by probeLink\nbeside effectsUrl, so the doctor no longer assembles a verb and a tail itself.\nThe verb is `probe`, as spec section 18 names it. The doctor's lost-link\ndiagnosis asks NSWorkspace which app opens that same link rather than a\nhand-spelled cc-candybar://probe.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-643",
       "ref": "refs/pull/643/merge",
       "sha": "ad50ce6edf05b9ef3b7d57a32c215e2bb0a90b50",
@@ -99,28 +128,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T08:41:12-07:00",
           "message": "feat(apply): no turn awaits a launch; a doctor step is an effect gathered in no turn; each click failure is its own held message (candybar-gather-renderer-76bb.1dh.c3l)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-644",
-      "ref": "refs/pull/644/merge",
-      "sha": "6131fddf5a7a55d53b9214aa08a0a0beb0782b8c",
-      "timestamp": "2026-11-06T18:49:56.960Z",
-      "commits": [
-        {
-          "sha": "6131fddf5a7a55d53b9214aa08a0a0beb0782b8c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T11:49:06-07:00",
-          "message": "Merge 99e6c09a5cd435b41007097aec7517ac28d39720 into 0af5d1f4ce463b0bebbbe6a4b6107d2943900c54\n"
-        },
-        {
-          "sha": "99e6c09a5cd435b41007097aec7517ac28d39720",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T11:48:22-07:00",
-          "message": "feat(links): the doctor probe is minted by the minter as the probe link kind, and Launch Services is asked about the link it opened (candybar-gather-renderer-76bb.b2l.mxk)\n\nThe probe link is cc-candybar://to/<name>/probe/<nonce>, built by probeLink\nbeside effectsUrl, so the doctor no longer assembles a verb and a tail itself.\nThe verb is `probe`, as spec section 18 names it. The doctor's lost-link\ndiagnosis asks NSWorkspace which app opens that same link rather than a\nhand-spelled cc-candybar://probe.\n"
         }
       ]
     },

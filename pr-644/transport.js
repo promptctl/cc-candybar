@@ -56853,13 +56853,18 @@ var urlHandler = {
           ok: false,
           // What is known: a click request brought it, which is what the
           // retired applet runs — and a hand-run `cc-candybar url-handle`,
-          // or the browser page. Which app Launch Services opens the scheme
+          // or the browser page. Which app Launch Services opens the link
           // with is the opener's row to say (handlerAppProblems).
           reason: `the link was delivered by a click request (\`cc-candybar url-handle\`), not the forwarder app \u2014 ${REINSTALL}`
         };
       case "lost":
         return problemsVerdict([
           ...handlerAppProblems(urlHandler2.opener),
+          // A daemon of another build may not know the link this build sends,
+          // so a healthy handler's link is lost there too.
+          ...urlHandler2.otherBuild === null ? [] : [
+            `${urlHandler2.otherBuild}, so it may not read the link this build sends`
+          ],
           urlHandler2.unopened === null ? "a cc-candybar:// link was opened and did not arrive at the daemon" : `a cc-candybar:// link could not be opened \u2014 ${urlHandler2.unopened}`
         ]);
     }
@@ -71667,7 +71672,6 @@ var LEAF_VERBS = /* @__PURE__ */ new Map([
   [VERB_DOCTOR_RUN, doctorRun],
   [VERB_DOCTOR_FIX, doctorFix],
   [VERB_DOCTOR_MARK, doctorMark],
-  [VERB_PROBE, inTurn(probe2)],
   [VERB_SLASH, inTurn(slash)],
   [VERB_RUN, inTurn(run2)],
   [VERB_REPO_CONFIG, inTurn(repoConfig)],
@@ -71875,8 +71879,9 @@ var VERBS = new Map([
     ]
   ),
   [VERB_DISPATCH, click(VERB_DISPATCH, headGather, foldEffects)],
-  // After the leaves, so it replaces the click they built: a probe writes no
-  // journal, so nothing may refuse it for a turn, and it describes nothing.
+  // A link kind, never a leaf, so no dispatch can carry it as an effect: a
+  // probe writes no journal, so nothing may refuse it for a turn, and it
+  // describes nothing.
   [VERB_PROBE, probe2]
 ]);
 var VERB_NAMES = Object.freeze([
