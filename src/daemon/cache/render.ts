@@ -184,7 +184,7 @@ export interface RenderDeps<S extends ViewSource = ViewSource> {
   gates: Gates;
   // Where a view's facts come from (src/daemon/facts-source.ts): the daemon
   // and the demo pass the in-process arm over their providers; a test reading
-  // no built-in passes a recording with no lines.
+  // no built-in passes the nothing-double in test/helpers/facts.ts.
   facts: Facts;
   // What a view draws from (src/daemon/session-source.ts); a test drawing no
   // view's own payload passes SOURCES_NOTHING.

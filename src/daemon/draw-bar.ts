@@ -586,10 +586,11 @@ export function drawRender(
   noteFacts(facts, {
     prompts: String(metrics?.messageCount ?? "-"),
     nonPrompts: String(metrics?.nonPrompts ?? "-"),
+    // [LAW:one-source-of-truth] The closure the payload's git fact was read
+    // under is the turn's, beside the payload, not one resolved again here.
     pr: prFactOf(
       payload.git,
-      gitOptionsFromClosure(setup.state.neededInputPaths(effective.preset))
-        .showPullRequest === true,
+      gitOptionsFromClosure(view.source.closure()).showPullRequest === true,
     ),
     feeds: feedsFact(projected.feeds),
   });

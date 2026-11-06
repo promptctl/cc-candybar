@@ -44,6 +44,7 @@ import type { Frame } from "../src/render/frame";
 import { textOf } from "../src/render/frame";
 import type { Timekeeper } from "../src/time";
 import { instantAt, type Instant } from "../src/utils/instant";
+import type { DaemonLogger } from "../src/utils/logger";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import { SourceRuns } from "../src/var-system/source-runs";
 import { fakeLauncher, turns } from "./helpers/fake-launcher";
@@ -197,10 +198,11 @@ function rig(
   factsOf: (
     providers: ReturnType<typeof createPayloadProviders>,
     update: UpdateFact,
+    log: DaemonLogger,
   ) => Facts,
 ): Rig {
   const lines: string[] = [];
-  const log = (level: string, message: string): void => {
+  const log: DaemonLogger = (level, message) => {
     lines.push(`${level} ${message}`);
   };
   const watchers = new WatcherRegistry({ clock, logger: log });
@@ -229,7 +231,7 @@ function rig(
       signer: TEST_SIGNER,
       gates: bareGates(),
       log,
-      facts: factsOf(providers, update),
+      facts: factsOf(providers, update, log),
       source: sessionSource({
         providers,
         sessionState,
@@ -311,10 +313,11 @@ test("a recording of a session's facts replays into the bars the live renderer d
     hostOf({}, { home, tmp: home }),
     liveClock,
     liveLauncher.launcher,
-    (providers, update) =>
+    (providers, update, log) =>
       recordedFacts(
         inProcessFacts({ providers, update: () => update.get() }),
         (line) => recording.push(line),
+        log,
       ),
   );
   const liveFrames: Frame["rows"][] = [];

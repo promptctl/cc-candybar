@@ -186,6 +186,26 @@ describe("the recording arm", () => {
     expect(followed.failure()).toBeNull();
   });
 
+  test("a follow mid-recording opens on the line the clock has reached and arms only the lines after it; one before the first line throws", () => {
+    const clock = heldClock(AT);
+    const lines = [line(0, 1), line(2, 2), line(5, 3), line(9, 4)];
+    const facts = recordingFacts(lines, clock);
+    clock.advance(6000);
+    const followed = facts.follow(request(), reads());
+    expect(followed.stamped()).toBe(lines[2]);
+    expect(clock.pending()).toBe(1);
+    clock.advance(2999);
+    expect(followed.stamped()).toBe(lines[2]);
+    clock.advance(1);
+    expect(followed.stamped()).toBe(lines[3]);
+    // A second follow at the same instant is at the same place.
+    expect(facts.follow(request(), reads()).stamped()).toBe(lines[3]);
+    const early = heldClock(new Date(AT.getTime() - 1000));
+    expect(() =>
+      recordingFacts(lines, early).follow(request(), reads()),
+    ).toThrow(/this recording begins at .*, and the clock reads/);
+  });
+
   test("a request settles at once with nothing started, and a follow at other keys changes nothing", async () => {
     const clock = heldClock(AT);
     const followed = recordingFacts([line(0, 1)], clock).follow(
@@ -224,6 +244,15 @@ describe("the recording arm", () => {
       recordingFacts([line(0, 1)], clock).follow(viewFacts("/a", "s2"), reads()),
     ).toThrow('this recording holds session "s1", not "s2"');
   });
+
+  test("a line before the one preceding it is refused by number", () => {
+    const clock = heldClock(AT);
+    expect(() =>
+      recordingFacts([line(0, 1), line(3, 2), line(2, 3)], clock),
+    ).toThrow(
+      `a recording's lines are in time order, and line 3 (at ${at(2)}) is before line 2 (at ${at(3)})`,
+    );
+  });
 });
 
 describe("the recorder", () => {
@@ -246,10 +275,12 @@ describe("the recorder", () => {
       }),
     };
     const recorded: FactsLine[] = [];
-    const followed = recordedFacts(delegate, (l) => recorded.push(l)).follow(
-      viewFacts("/a", "s1"),
-      reads(),
-    );
+    const logged: string[] = [];
+    const followed = recordedFacts(
+      delegate,
+      (l) => recorded.push(l),
+      (level, message) => logged.push(`${level} ${message}`),
+    ).follow(viewFacts("/a", "s1"), reads());
     const next: FactsLine = {
       at: instantOf(new Date(AT.getTime() + 1000)),
       facts: { ...pendingFacts(SESSION), seq: 2 },
@@ -257,9 +288,47 @@ describe("the recorder", () => {
     runInAction(() => box.set(next));
     expect(recorded.map((l) => l.facts.seq)).toEqual([0, 2]);
     expect(recorded[1]).toBe(next);
+    expect(logged).toEqual([]);
     followed.dispose();
     expect(disposed).toBe(1);
     runInAction(() => box.set({ ...next, facts: { ...next.facts, seq: 3 } }));
     expect(recorded).toHaveLength(2);
+  });
+
+  test("a line the edge cannot write is logged against the session, and the next line is still offered", () => {
+    const SESSION = sessionIdOf("s1");
+    const box = observable.box<FactsLine>(
+      { at: instantOf(AT), facts: pendingFacts(SESSION) },
+      { deep: false },
+    );
+    const delegate: Facts = {
+      follow: () => ({
+        stamped: () => box.get(),
+        failure: () => null,
+        follow: () => {},
+        settle: () => ({ refreshed: new Map(), landed: Promise.resolve() }),
+        dispose: () => {},
+      }),
+    };
+    const offered: number[] = [];
+    const logged: string[] = [];
+    recordedFacts(
+      delegate,
+      (l) => {
+        offered.push(l.facts.seq);
+        if (l.facts.seq === 2) throw new Error("disk full");
+      },
+      (level, message) => logged.push(`${level} ${message}`),
+    ).follow(viewFacts("/a", "s1"), reads());
+    const at = (s: number) => instantOf(new Date(AT.getTime() + s * 1000));
+    runInAction(() =>
+      box.set({ at: at(1), facts: { ...pendingFacts(SESSION), seq: 2 } }),
+    );
+    runInAction(() =>
+      box.set({ at: at(2), facts: { ...pendingFacts(SESSION), seq: 3 } }),
+    );
+    expect(offered).toEqual([0, 2, 3]);
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toMatch(/^error recording sid="s1": .*disk full/);
   });
 });

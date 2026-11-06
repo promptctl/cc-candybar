@@ -24,6 +24,7 @@ import type { UpdateNotice } from "../facts/session-facts";
 import type { Timekeeper } from "../time";
 import { Holds } from "../utils/holds";
 import { instantAt, type Instant } from "../utils/instant";
+import type { DaemonLogger } from "../utils/logger";
 import { failed } from "../utils/outcome";
 import { assembleFacts } from "./facts-assembly";
 import type { PayloadProviders } from "./payload-providers";
@@ -254,33 +255,12 @@ export function inProcessFacts({
       const readings = computed(() =>
         readingsOf(inputs.get(), declared.get().declaration.sources),
       );
-      // The first document is stamped here, with no prior, so the box is
-      // total from its first read and every field is pending until an owner
-      // answers. A throw in it is a failed follow: what the follow took is
-      // released, so a view that keeps failing to open leaks nothing.
+      // [LAW:one-source-of-truth] The reaction is installed before the first
+      // stamp, so the derivations above are observed from the follow's first
+      // read: a computed nobody observes is recomputed on every read, and the
+      // opening stamp and each settle would read the owners again. Its effect
+      // runs only once a reading moves, which is after the box below exists.
       let box: IObservableValue<Stamped>;
-      try {
-        const at = instantAt(clock);
-        box = observable.box<Stamped>(
-          {
-            line: {
-              at,
-              facts: assembleFacts(
-                undefined,
-                session,
-                readings.get(),
-                update(),
-                at,
-              ),
-            },
-            failure: null,
-          },
-          { deep: false },
-        );
-      } catch (e) {
-        holds.close();
-        throw e;
-      }
       const stop = reaction(
         (): Moved => {
           try {
@@ -308,6 +288,33 @@ export function inProcessFacts({
             log("error", `session facts threw sid=${sid}: ${inspect(e)}`),
         },
       );
+      // The first document is stamped here, with no prior, so the box is
+      // total from its first read and every field is pending until an owner
+      // answers. A throw in it is a failed follow: what the follow took is
+      // released, so a view that keeps failing to open leaks nothing.
+      try {
+        const at = instantAt(clock);
+        box = observable.box<Stamped>(
+          {
+            line: {
+              at,
+              facts: assembleFacts(
+                undefined,
+                session,
+                readings.get(),
+                update(),
+                at,
+              ),
+            },
+            failure: null,
+          },
+          { deep: false },
+        );
+      } catch (e) {
+        stop();
+        holds.close();
+        throw e;
+      }
       return {
         stamped: () => box.get().line,
         failure: () => box.get().failure,
@@ -333,10 +340,15 @@ export function inProcessFacts({
 
 // ─── The recording arm ───────────────────────────────────────────────────────
 
-// [LAW:parse-dont-validate] A recording is one session's stream (spec §14):
-// the lines it is built over name one session, checked once here, so a follow
-// knows the session it holds and refuses another by name.
-function sessionOf(lines: readonly FactsLine[]): SessionId {
+// [LAW:parse-dont-validate] A recording is one session's stream in time order
+// (spec §14): the lines it is built over name one session and never step back,
+// checked once here, so a follow knows the session it holds and refuses
+// another by name, and a line's offset from the first is its place in the
+// replay.
+function recordingOf(lines: readonly FactsLine[]): {
+  readonly session: SessionId;
+  readonly at0: Instant;
+} {
   const sessions = new Set(lines.map((line) => line.facts.session));
   if (sessions.size !== 1) {
     throw new Error(
@@ -345,30 +357,45 @@ function sessionOf(lines: readonly FactsLine[]): SessionId {
         : `a recording holds one session's stream, and this one names ${[...sessions].map((s) => JSON.stringify(s)).join(", ")}`,
     );
   }
-  return [...sessions][0]!;
+  const back = lines.findIndex(
+    (line, i) => i > 0 && line.at < lines[i - 1]!.at,
+  );
+  if (back !== -1) {
+    throw new Error(
+      `a recording's lines are in time order, and line ${back + 1} (at ${lines[back]!.at}) is before line ${back} (at ${lines[back - 1]!.at})`,
+    );
+  }
+  return { session: [...sessions][0]!, at0: lines[0]!.at };
 }
 
 // [LAW:effects-at-boundaries] Pure over typed lines and a Timekeeper, never a
 // path: the parser (src/facts/recording.ts) is the edge the text crosses. A
-// follow's line at any moment is the last whose offset from the first has
-// passed — the first line at the follow itself, each later one when the
-// handed clock reaches it, so under a held clock a replay runs at any speed.
+// follow's line at any moment is the last whose offset from the first the
+// handed clock has reached, and each later line lands when the clock reaches
+// its offset, so under a held clock a replay runs at any speed.
+//
+// [LAW:no-ambient-temporal-coupling] Where the replay stands is the clock's
+// position in the recording, not the instant of the follow: a view the cache
+// opens again mid-replay (a reload, a request after an idle sweep) shows what
+// the live bar showed at that instant, not the opening line again.
 //
 // [LAW:no-silent-failure] A follow of a session the recording does not hold
 // throws naming both: pending means not yet, and a recording never will, so an
-// all-pending document for it would be an answer-shaped void.
+// all-pending document for it would be an answer-shaped void. So does a follow
+// before the recording's first line, where it has no document at all.
 //
 // A recording starts nothing and waits on nothing, so a request's settling is
 // the empty record, landed; and a follow again changes nothing, because the
 // keys a request names chose nothing here.
 export function recordingFacts(
   lines: readonly FactsLine[],
-  clock: Pick<Timekeeper, "after">,
+  clock: Pick<Timekeeper, "after" | "now">,
 ): Facts {
-  const held = sessionOf(lines);
-  const at0 = lines[0]!.at;
-  const offsetMs = (line: FactsLine): number =>
-    Math.round((line.at - at0) * 1000);
+  const { session: held, at0 } = recordingOf(lines);
+  // Whole milliseconds, as the clock reads them, so a line's offset and the
+  // clock's position in the recording are compared in one unit.
+  const msOf = (at: Instant): number => Math.round(at * 1000);
+  const offsetMs = (line: FactsLine): number => msOf(line.at) - msOf(at0);
   return {
     follow(facts) {
       if (facts.sessionId !== held) {
@@ -376,14 +403,20 @@ export function recordingFacts(
           `this recording holds session ${JSON.stringify(held)}, not ${JSON.stringify(facts.sessionId)}`,
         );
       }
-      const box = observable.box<FactsLine>(
-        lines.filter((line) => offsetMs(line) <= 0).at(-1)!,
-        { deep: false },
-      );
+      const elapsedMs = clock.now() - msOf(at0);
+      const reached = lines.filter((line) => offsetMs(line) <= elapsedMs);
+      if (reached.length === 0) {
+        throw new Error(
+          `this recording begins at ${at0}, and the clock reads ${instantAt(clock)}`,
+        );
+      }
+      const box = observable.box<FactsLine>(reached.at(-1)!, { deep: false });
       const timers = lines
-        .filter((line) => offsetMs(line) > 0)
+        .filter((line) => offsetMs(line) > elapsedMs)
         .map((line) =>
-          clock.after(offsetMs(line), () => runInAction(() => box.set(line))),
+          clock.after(offsetMs(line) - elapsedMs, () =>
+            runInAction(() => box.set(line)),
+          ),
         );
       return {
         stamped: () => box.get(),
@@ -409,12 +442,21 @@ export function recordingFacts(
 export function recordedFacts(
   facts: Facts,
   record: (line: FactsLine) => void,
+  log: DaemonLogger,
 ): Facts {
   return {
     follow(request, declaration) {
       const followed = facts.follow(request, declaration);
       const stop = reaction(() => followed.stamped(), record, {
         fireImmediately: true,
+        // [LAW:no-silent-failure] A line the edge cannot write is told to the
+        // log: a reaction's effect that throws reaches only the console MobX
+        // prints to, and the follow would go on stamping lines nobody kept.
+        onError: (e) =>
+          log(
+            "error",
+            `recording sid=${JSON.stringify(request.sessionId)}: ${inspect(e)}`,
+          ),
       });
       return {
         ...followed,

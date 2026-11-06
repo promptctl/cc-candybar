@@ -54,6 +54,10 @@ export interface SessionSource extends ViewSource {
   // client beside the payload, so it never pairs a turn with a request it was
   // not composed from.
   readonly hints: () => ComposeInputs["hints"];
+  // The closure the turn's payload was composed over: what a draw reads of
+  // the declaration beside the payload, so it never pairs a payload with a
+  // closure resolved through later picks.
+  readonly closure: () => ComposeInputs["neededInputPaths"];
   // Why the turn after the one every read above is of could not be taken, or
   // why the facts source could not stamp the document it holds, or null when
   // the latest turn completed on a stamped document: while it is set the bar
@@ -242,6 +246,7 @@ export function sessionSource(
       effective: () => turn.get().draw.effective,
       facts: () => turn.get().document,
       hints: () => turn.get().compose.hints,
+      closure: () => turn.get().compose.neededInputPaths,
       failure: () => turn.get().failure,
       selections: () => turn.get().draw.effective,
     };
