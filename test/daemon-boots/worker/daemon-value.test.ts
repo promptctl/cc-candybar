@@ -7,7 +7,7 @@ import { NO_TMUX_AT_EXIT } from "../../helpers/in-worker-daemon";
 import { hostOf } from "../../helpers/host";
 import { HOME_ENV, NAME_ENV, homeOf } from "../../../src/daemon/home";
 import type { Host } from "../../../src/host";
-import { createHook } from "node:async_hooks";
+import { AsyncLocalStorage, createHook } from "node:async_hooks";
 import {
   chmodSync,
   existsSync,
@@ -59,6 +59,14 @@ const WATCHED = new Set([
   "PROCESSWRAP",
   "PIPEWRAP",
 ]);
+// [LAW:one-source-of-truth] Only what the case's own work arms is the daemon's
+// to end: the hook sees every timer in the worker, and a provider another
+// file left open (a period re-arms after every pass) keeps arming its own, so
+// a resource counts when it was made from inside a case that asked for it.
+// A resource carries the store of whatever made it, and no store crosses from
+// a leaked chain into this one.
+const ownWork = new AsyncLocalStorage<true>();
+const asOwnWork = (body: () => Promise<void>) => () => ownWork.run(true, body);
 const live = new Map<number, Error>();
 // From a close's return on: `init` and `before` run as the timer is armed and
 // as it fires, where `destroy` lands some turns later. Null until then.
@@ -66,7 +74,7 @@ let baseline = new Set<number>();
 let afterClose: { armed: Error[]; fired: Error[] } | null = null;
 const resources = createHook({
   init: (id, type) => {
-    if (!WATCHED.has(type)) return;
+    if (!WATCHED.has(type) || ownWork.getStore() !== true) return;
     const origin = new Error(type);
     live.set(id, origin);
     if (type === "Timeout") afterClose?.armed.push(origin);
@@ -319,7 +327,7 @@ describe("the daemon is a value", () => {
     expect(textOf(bar)).toContain(`EPOCH=${frozen.getTime() / 1000}`);
   });
 
-  test("close ends everything running: an armed daemon, a feed, a render mid-wait and a child in flight", async () => {
+  test("close ends everything running: an armed daemon, a feed, a render mid-wait and a child in flight", asOwnWork(async () => {
     // A `claude` first on PATH that says it started and blocks: the band's
     // setup launches it with no signal of its own, so only the daemon's close
     // can end it.
@@ -420,5 +428,5 @@ describe("the daemon is a value", () => {
         category: "user-shell",
       }),
     ).toMatchObject({ ok: false, reason: "aborted" });
-  });
+  }));
 });

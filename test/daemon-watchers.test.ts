@@ -844,15 +844,15 @@ async function hearsRefOnlyMove(
     inner,
     periodMs: 600_000,
   });
-  const lane = svc.declare(new Holds(), workingDir, {});
-  await laneOutcome(lane);
-  const storedHead = (): string | undefined => {
-    const info = lane.current();
-    return info.kind === "ok" && info.value.head.kind === "ok"
-      ? info.value.head.value
-      : undefined;
-  };
   try {
+    const lane = svc.declare(new Holds(), workingDir, {});
+    await laneOutcome(lane);
+    const storedHead = (): string | undefined => {
+      const info = lane.current();
+      return info.kind === "ok" && info.value.head.kind === "ok"
+        ? info.value.head.value
+        : undefined;
+    };
     // fs.watch has no ready signal: HEAD is rewritten, unchanged, until the
     // watch fires a change, which only the watch can raise. Written as git
     // writes it, a `.lock` renamed over it, so a read mid-rewrite never sees
@@ -1102,18 +1102,21 @@ describe("GitDataProvider + watchers integration", () => {
     });
     const holds = new Holds();
 
-    await laneOutcome(svc.declare(holds, repo, {}));
-    expect(inner.calls).toBe(1);
-    await new Promise((r) => setTimeout(r, 400));
-    expect(inner.calls).toBeGreaterThanOrEqual(3);
+    try {
+      await laneOutcome(svc.declare(holds, repo, {}));
+      expect(inner.calls).toBe(1);
+      await new Promise((r) => setTimeout(r, 400));
+      expect(inner.calls).toBeGreaterThanOrEqual(3);
 
-    // Released, the repo costs no read on the period.
-    holds.declare(() => {});
-    const after = inner.calls;
-    await new Promise((r) => setTimeout(r, 400));
-    expect(inner.calls).toBe(after);
-    svc.close();
-    rmrf(repo);
+      // Released, the repo costs no read on the period.
+      holds.declare(() => {});
+      const after = inner.calls;
+      await new Promise((r) => setTimeout(r, 400));
+      expect(inner.calls).toBe(after);
+    } finally {
+      svc.close();
+      rmrf(repo);
+    }
   });
 
   test("close releases all watchers", async () => {

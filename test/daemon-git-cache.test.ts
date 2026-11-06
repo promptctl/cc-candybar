@@ -137,6 +137,13 @@ class StubGitService extends GitService {
   }
 }
 
+// [LAW:effects-at-boundaries] Every provider a case builds, closed after it:
+// a held repo's period re-arms after every pass, so a provider a case never
+// closed (or closed after an assertion threw) keeps passing in the worker
+// and its timers land in whatever file runs next, among them the daemon
+// value's close case, which reads every timer the worker arms.
+const built: GitDataProvider[] = [];
+
 function makeCache(
   opts: {
     periodMs?: number;
@@ -164,6 +171,7 @@ function makeCache(
       logs.push(message);
     },
   });
+  built.push(svc);
   return { svc, inner, logs, holds: new Holds() };
 }
 
@@ -219,6 +227,7 @@ async function tick(times = 5): Promise<void> {
 
 afterEach(() => {
   jest.useRealTimers();
+  for (const svc of built.splice(0)) svc.close();
 });
 
 describe("GitDataProvider", () => {
@@ -1502,6 +1511,7 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
       watchers,
       logger,
     });
+    built.push(svc);
     return { svc, inner, counters, logs, watchers };
   }
 
