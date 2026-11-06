@@ -51721,7 +51721,8 @@ function createCcCandybarEngine(opts) {
       ...sprigDicts(),
       ...SPRIG_DATE_FUNCS,
       ...richTextFuncs(depth),
-      // rich-js's one DrawnAt-reading binding, over richTextFuncs' own.
+      // [LAW:one-source-of-truth] rich-js's one DrawnAt-reading binding, over
+      // richTextFuncs' own, bound to the one depth this engine is built at.
       readableOn: readableOnFunc(depth),
       // [LAW:single-enforcer] Every function that reads the time, built over
       // the one Clock.
@@ -83525,6 +83526,7 @@ function inProcessFacts({
       const session = facts.sessionId;
       const holds2 = new Holds();
       const declaredRuns = observable.map(void 0, { deep: false });
+      let disposed = false;
       const sid = JSON.stringify(session);
       const lanesFor = (facts2, { sources }) => {
         try {
@@ -83572,21 +83574,22 @@ function inProcessFacts({
           deps: { ...providers, lanes: () => declared.get().lanes }
         };
       });
-      const readings = computed(
-        () => ({
-          ...readingsOf(inputs.get()),
-          runs: new Map(
-            [...declaredRuns].map(
-              ([digest2, { lane }]) => [
-                digest2,
-                {
-                  reading: lane.current(),
-                  fault: lane.fault()
-                }
-              ]
-            )
+      const owned = computed(() => readingsOf(inputs.get()));
+      const ran2 = computed(
+        () => new Map(
+          [...declaredRuns].map(
+            ([digest2, { lane }]) => [
+              digest2,
+              {
+                reading: lane.current(),
+                fault: lane.fault()
+              }
+            ]
           )
-        })
+        )
+      );
+      const readings = computed(
+        () => ({ ...owned.get(), runs: ran2.get() })
       );
       let box;
       const stop2 = reaction(
@@ -83639,6 +83642,11 @@ function inProcessFacts({
       return {
         runs: {
           declare: (callerHolds, identity2) => {
+            if (disposed) {
+              throw new Error(
+                `the run of ${whereOf(identity2.read)} was declared after its view's follow was disposed`
+              );
+            }
             const digest2 = digestOf3(identity2);
             callerHolds.take(`facts.run:${digest2}`, () => {
               const held = new Holds();
@@ -83673,6 +83681,7 @@ function inProcessFacts({
           };
         },
         dispose: () => {
+          disposed = true;
           stop2();
           for (const { held } of declaredRuns.values()) held.close();
           holds2.close();

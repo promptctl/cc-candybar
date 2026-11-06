@@ -4,15 +4,22 @@
     {
       "version": "pr-641",
       "ref": "refs/pull/641/merge",
-      "sha": "1ea65a770c1df46f64404dde6f517e9bd0faa716",
-      "timestamp": "2026-11-06T13:52:23.162Z",
+      "sha": "b4042c08dd39dd39a409d7d99adaee0817abaa83",
+      "timestamp": "2026-11-06T14:09:28.006Z",
       "commits": [
         {
-          "sha": "1ea65a770c1df46f64404dde6f517e9bd0faa716",
+          "sha": "b4042c08dd39dd39a409d7d99adaee0817abaa83",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:51:16Z",
-          "message": "Merge 1fb6f8323eaef728215dfadde35dc7ccd82f0a31 into 6861a4a6e8abdea9bde9ed0653074ae3491eebf6\n"
+          "timestamp": "2026-11-06T14:08:37Z",
+          "message": "Merge 9c7424f2f943890a4acb0bec25423d5bbacd6203 into 6861a4a6e8abdea9bde9ed0653074ae3491eebf6\n"
+        },
+        {
+          "sha": "9c7424f2f943890a4acb0bec25423d5bbacd6203",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T07:08:25-07:00",
+          "message": "fix(facts): a replay opens the view at each request's directory; a run declared into a disposed follow is refused (candybar-gather-renderer-76bb.6pj.d8n)\n\nReview (medium) findings on #641:\n- Every recorded request carries an absolute cwd (SessionRequest), and the\n  demo's play opens the view at each request's directory, as the daemon\n  moves a session's view to the entry its request names, so a session that\n  moves directories replays its runs under the digests it recorded.\n- The follow's owner readings and run readings are separate computeds.\n- A run declared into a disposed follow throws by name instead of starting\n  a run nothing ends.\n- The law marker on the depth binding is restored.\n"
         },
         {
           "sha": "1fb6f8323eaef728215dfadde35dc7ccd82f0a31",
