@@ -56,15 +56,18 @@ jobs:
       # tier that comes to need one fails here. The three test steps are the whole
       # suite: each run selects a directory and the others ignore it.
       - name: Test the unit tier
+        id: unit
         run: pnpm test:unit
 
       - name: Test outside the process tier
+        id: worker
         run: pnpm test:worker
 
       - name: Build
         run: pnpm run build
 
       - name: Test the process tier
+        id: process
         run: pnpm test:process
 
       # [LAW:single-enforcer] The only run of test/e2e/: the sign-off's cap and
@@ -86,20 +89,22 @@ jobs:
       # [LAW:single-enforcer] The cases under test/daemon-boots/ equal the ratchet,
       # counted from the two booting runs' records. `always()` so a red test run
       # still says what the count was, and before the report so the records it
-      # reads exist.
+      # reads exist. Each of the three trailing steps also waits for the tiers
+      # whose records it reads: a step skipped by an earlier failure left no
+      # records, and the throw for that only restates the failure.
       - name: Daemon-boot cases equal the ratchet
-        if: always()
+        if: always() && steps.worker.outcome != 'skipped' && steps.process.outcome != 'skipped'
         run: node scripts/check-boot-ratchet.mjs --runs worker,process
 
       # One record per test file, kept so a number about the suite is read from
       # a run and not remembered. `always()` because a red run is the one whose
       # records matter most, and last so a failed report cannot skip a gate.
       - name: Report tests by layer
-        if: always()
+        if: always() && steps.unit.outcome != 'skipped' && steps.worker.outcome != 'skipped' && steps.process.outcome != 'skipped'
         run: pnpm test:report --runs unit,worker,process
 
       - name: Keep the test records
-        if: always()
+        if: always() && steps.unit.outcome != 'skipped'
         uses: actions/upload-artifact@v4
         with:
           name: test-records
