@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-628",
+      "ref": "refs/pull/628/merge",
+      "sha": "021689cdb82b811cee25087d4f3dc97a23de8688",
+      "timestamp": "2026-11-06T06:43:55.393Z",
+      "commits": [
+        {
+          "sha": "021689cdb82b811cee25087d4f3dc97a23de8688",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T23:43:07-07:00",
+          "message": "Merge 5312cc5053807422b9ac3454d85e0a3c395a6340 into 1df488f24662b4c0e23f92afecd25c719debac6a\n"
+        },
+        {
+          "sha": "5312cc5053807422b9ac3454d85e0a3c395a6340",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T23:38:10-07:00",
+          "message": "feat(home): a stored path says whether it is the home's or the world's; a copied home undoes into its own config (candybar-gather-renderer-76bb.f00.n2j)\n\nA path a renderer stores is a StoredPath: a file under the home's root is the\nhome's, stored relative to it, and anything else is the world's, stored\nabsolute. Reading one back refuses an absolute path under the root, a home path\nthat climbs out, and a relative world path, naming it. The root is one\nderivation of the home on DaemonPaths: a named home's root, main's config\ndirectory.\n\nThe settings history's file changes and the render origin's configFile hold\nthe union on disk; in memory both stay resolved absolute paths. A history\nnaming a file its root refuses is dropped whole, with a warning naming the\nsession, the step and the path. The origin's configFile is the union itself or\nnull for a search, so an older build refuses the record loudly rather than\nreading a named file as a search, and the record heals on the next render. The\nclient hints record drops configEnv, which nothing reads back: the origin is\nthe one record of the config a request named.\n\nThe two-homes test widens: one home names its config file, no file under\neither root but the log names either root, and the first home's tree copied\nunder a third root undoes into the copy's config and leaves the original's\nbyte-equal.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-627",
       "ref": "refs/pull/627/merge",
       "sha": "f44a76a3201be02c6310f38941ffb8b203e19eaf",
