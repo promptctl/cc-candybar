@@ -12,15 +12,23 @@ import path from "node:path";
 import { sleep } from "../bench/measure.js";
 
 export const HEAP_SNAPSHOT_SIGNAL = "SIGUSR2";
+// How long a daemon is given to write a snapshot of a heap of hundreds of MB.
+export const SNAPSHOT_WAIT_MS = 120_000;
 
-// The daemon's argv that makes the signal write a snapshot under `dir`. Into
-// NODE_OPTIONS each goes double-quoted, as Node reads it: a space in `dir`
-// would otherwise split the option in two.
+// The daemon's argv that makes the signal write a snapshot under `dir`.
 export function heapSnapshotArgs(dir: string): string[] {
   return [
     `--heapsnapshot-signal=${HEAP_SNAPSHOT_SIGNAL}`,
     `--diagnostic-dir=${dir}`,
   ];
+}
+
+// The same as NODE_OPTIONS: each option double-quoted, as Node reads it, so
+// a space in `dir` does not split it in two.
+export function heapSnapshotNodeOptions(dir: string): string {
+  return heapSnapshotArgs(dir)
+    .map((a) => `"${a}"`)
+    .join(" ");
 }
 
 // V8 streams the file under its final name, so a file is whole when its size
@@ -56,7 +64,7 @@ function snapshotsOf(dir: string, pid: number): string[] {
 export async function heapSnapshot(
   pid: number,
   dir: string,
-  waitMs: number,
+  waitMs: number = SNAPSHOT_WAIT_MS,
 ): Promise<string> {
   const before = new Set(snapshotsOf(dir, pid));
   process.kill(pid, HEAP_SNAPSHOT_SIGNAL);

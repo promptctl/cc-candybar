@@ -42,7 +42,7 @@ import { parseArgs } from "node:util";
 
 import { startWorld, type Session } from "./bench/world.js";
 import { sleep } from "./bench/measure.js";
-import { heapSnapshot, heapSnapshotArgs } from "./lib/heap-snapshot.js";
+import { heapSnapshot, heapSnapshotNodeOptions } from "./lib/heap-snapshot.js";
 
 const { values } = parseArgs({
   options: {
@@ -81,8 +81,6 @@ const BATCH = 10;
 const STAGES = [0, 1, 10, SESSIONS].filter(
   (n, i, all) => n <= SESSIONS && all.indexOf(n) === i,
 );
-// How long the daemon is given to write a snapshot of a heap this size.
-const SNAPSHOT_WAIT_MS = 120_000;
 
 // A directory of this run's own: a snapshot found in it is this run's, never
 // a previous run's left under the same --out.
@@ -104,7 +102,7 @@ function footprint(pid: number): { physFootprintMb: number; table: string } {
 
 const world = await startWorld(
   values.config === undefined ? "{}\n" : fs.readFileSync(values.config, "utf8"),
-  { NODE_OPTIONS: heapSnapshotArgs(OUT).map((a) => `"${a}"`).join(" ") },
+  { NODE_OPTIONS: heapSnapshotNodeOptions(OUT) },
 );
 try {
   const pid = (await world.stats()).pid;
@@ -138,7 +136,7 @@ try {
     await read(stage);
   }
 
-  const snapshot = await heapSnapshot(pid, OUT, SNAPSHOT_WAIT_MS);
+  const snapshot = await heapSnapshot(pid, OUT);
   // V8 collects before it snapshots, so the heap read now is what is live.
   const after = await world.stats();
   const final = {

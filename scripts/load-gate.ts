@@ -29,9 +29,9 @@
 // steady phase), and `node scripts/heap-analyze.mjs before after` names what
 // grew. Each snapshot pauses the daemon for as long as its heap takes to
 // write, so the renders around it are not a measurement; its buffers stay
-// charged to the daemon from then on, so the charge checks are not one
-// either, and the daemon runs under a raised memory backstop so they do not
-// end the run. The heap checks are the run's verdict.
+// charged to the daemon from then on, so the budget check is unjudged, and
+// the daemon runs under a raised memory limit so they do not end the run.
+// The heap checks are the run's verdict.
 //
 // The feed measurement (the frame-feed epic's criterion): the same world with
 // a moving bar and its statusline lane on, measured without a feed (`off`,
@@ -134,8 +134,6 @@ const HEAP_SNAPSHOTS: string | null =
     ? null
     : path.resolve(values["heap-snapshots"]);
 if (HEAP_SNAPSHOTS !== null) fs.mkdirSync(HEAP_SNAPSHOTS, { recursive: true });
-// How long the daemon is given to write a snapshot of a heap this size.
-const SNAPSHOT_WAIT_MS = 120_000;
 // How long the feed runs before the steady phase, so its first frames (the
 // lane's setup) are not scored.
 const FEED_SETTLE_MS = 3000;
@@ -412,7 +410,12 @@ const env: NodeJS.ProcessEnv = {
   // The daemon ends with the gate, however the gate ends.
   [PARENT_PID_ENV]: String(process.pid),
   // A snapshot's buffers are charged to the daemon from the moment it writes,
-  // about its heap again, and its backstop would end the run on them.
+  // about its heap again, and its backstop would end the run on them. The
+  // limit is one value: it also sizes the render cache's budget and V8's
+  // old-space cap, so this daemon evicts later and collects later than the
+  // gated one. What a snapshot shows is the live graph after a collection,
+  // which neither changes while the cache is inside the smaller budget, as
+  // it is at a hundred sessions.
   ...(HEAP_SNAPSHOTS === null
     ? {}
     : { [RSS_LIMIT_ENV]: String(4 * DEFAULT_RSS_LIMIT_MB) }),
@@ -443,7 +446,7 @@ const daemon = spawn(
 const snapshotAt = (): Promise<string | null> =>
   HEAP_SNAPSHOTS === null
     ? Promise.resolve(null)
-    : heapSnapshot(daemon.pid!, HEAP_SNAPSHOTS, SNAPSHOT_WAIT_MS);
+    : heapSnapshot(daemon.pid!, HEAP_SNAPSHOTS);
 const inspectorUrl = new Promise<string>((resolve) => {
   // The banner, until its URL is read; nothing after it is kept.
   let banner: string | null = "";
@@ -995,10 +998,16 @@ async function run(): Promise<{
       detail: `pids ${pids.join(",")} ${daemonExit ?? "running"}, post-mortems ${JSON.stringify(postMortems)}`,
     },
     {
+      // [LAW:dataflow-not-control-flow] Unjudged when the daemon wrote
+      // snapshots: their buffers are in its charge from the first one on, so
+      // the reading is the snapshot's, not the sessions'. The detail says so,
+      // and the heap checks are that run's verdict.
       name: "charge once collected within the budget",
       pass:
-        chargeAfterCollection !== null && chargeAfterCollection <= BUDGET_BYTES,
-      detail: `${chargeAfterCollection === null ? "no reading after the collection" : `${mb(chargeAfterCollection)} MB`} of ${mb(BUDGET_BYTES)} MB, ${underLoad.length === 0 ? "no reading under load" : `${mb(Math.max(...underLoad))} MB at most under load`} (limit ${mb(limit)} MB)`,
+        HEAP_SNAPSHOTS !== null ||
+        (chargeAfterCollection !== null &&
+          chargeAfterCollection <= BUDGET_BYTES),
+      detail: `${HEAP_SNAPSHOTS === null ? "" : "unjudged, snapshot buffers in the charge: "}${chargeAfterCollection === null ? "no reading after the collection" : `${mb(chargeAfterCollection)} MB`} of ${mb(BUDGET_BYTES)} MB, ${underLoad.length === 0 ? "no reading under load" : `${mb(Math.max(...underLoad))} MB at most under load`} (limit ${mb(limit)} MB)`,
     },
     {
       name: "live heap not climbing",
