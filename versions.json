@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-651",
+      "ref": "refs/pull/651/merge",
+      "sha": "ba519f9f0562474efd08ae2666fc626110052cb1",
+      "timestamp": "2026-11-06T20:30:29.200Z",
+      "commits": [
+        {
+          "sha": "ba519f9f0562474efd08ae2666fc626110052cb1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T20:29:37Z",
+          "message": "Merge 0701eaf05ef00233296eeaaf739286a8a6c18fb6 into f67fa39229a6df3d0d9927f73e74d59008342c7f\n"
+        },
+        {
+          "sha": "0701eaf05ef00233296eeaaf739286a8a6c18fb6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:29:29-07:00",
+          "message": "chore(testing): no limit, script or doc rests on a load run; the excuse list and capture-heap go (candybar-testing-ihvy.geg)\n"
+        },
+        {
+          "sha": "2a31f2b6649d09e9ee3bf31e0bac71aa79ba6538",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:23:26-07:00",
+          "message": "chore(testing): no job puts the machine under load to judge cost; the load gate and feed criterion are gone (candybar-testing-ihvy.geg)\n\nA stress run reports conditions far past the negligible-load requirement, so\nits numbers steer work away from the real cost. The rule is in CLAUDE.md and\nthe testing memory; comments and docs that justified a limit by a load run now\nstate the reason from the code. `Load gate` is off main-protection's required\nchecks.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-637",
       "ref": "refs/pull/637/merge",
       "sha": "e3d69cacf26c3400bcd8b85cf946078c87505a14",
@@ -55,28 +84,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T02:36:44-07:00",
           "message": "feat(disk): files and their watch events go through one filesystem port, first used by the watcher registry and the binary watch (candybar-testing-ihvy.y10)\n\nA Filesystem port (src/disk/) with one adapter over fs, an in-memory fake whose writes emit the events a watch would on the clock, and one contract both pass. The watcher registry, its delivery owner, plugin storage, folder identity, the link walk and the binary watch read the disk through it; IdentityRead and BundleStat are gone. A lint rule bans fs outside the adapter, with an allowlist of the files still to move.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-651",
-      "ref": "refs/pull/651/merge",
-      "sha": "9a38984c5fee338d796ab0ae5acf4cbf10959cf3",
-      "timestamp": "2026-11-06T20:25:03.749Z",
-      "commits": [
-        {
-          "sha": "9a38984c5fee338d796ab0ae5acf4cbf10959cf3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:23:45-07:00",
-          "message": "Merge 2a31f2b6649d09e9ee3bf31e0bac71aa79ba6538 into f67fa39229a6df3d0d9927f73e74d59008342c7f\n"
-        },
-        {
-          "sha": "2a31f2b6649d09e9ee3bf31e0bac71aa79ba6538",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:23:26-07:00",
-          "message": "chore(testing): no job puts the machine under load to judge cost; the load gate and feed criterion are gone (candybar-testing-ihvy.geg)\n\nA stress run reports conditions far past the negligible-load requirement, so\nits numbers steer work away from the real cost. The rule is in CLAUDE.md and\nthe testing memory; comments and docs that justified a limit by a load run now\nstate the reason from the code. `Load gate` is off main-protection's required\nchecks.\n"
         }
       ]
     },
