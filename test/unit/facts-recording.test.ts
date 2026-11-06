@@ -64,6 +64,9 @@ test("a line that is not JSON, or not a line, is refused by its number", () => {
   expect(() =>
     parseRecording(`${JSON.stringify({ facts: document(1) })}\n`),
   ).toThrow(/^line 1: has no finite `at`/);
+  expect(() => parseRecording(`${JSON.stringify({ at: AT })}\n`)).toThrow(
+    /^line 1 facts: is not an object/,
+  );
 });
 
 test("a partial document is refused naming the field", () => {
@@ -71,14 +74,14 @@ test("a partial document is refused naming the field", () => {
   const { builtins: _builtins, ...withoutBuiltins } = facts;
   expect(() =>
     parseRecording(`${JSON.stringify({ at: AT, facts: withoutBuiltins })}\n`),
-  ).toThrow(/^line 1: has no `builtins`/);
+  ).toThrow(/^line 1 facts: has no `builtins`/);
   const broken = {
     ...facts,
     builtins: { ...(facts.builtins as object), git: { kind: "ok", value: 1 } },
   };
   expect(() =>
     parseRecording(`${JSON.stringify({ at: AT, facts: broken })}\n`),
-  ).toThrow(/^line 1 builtins.git: has no finite `at`/);
+  ).toThrow(/^line 1 facts builtins.git: has no finite `at`/);
 });
 
 test("a document of another facts version is refused", () => {

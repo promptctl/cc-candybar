@@ -1370,7 +1370,16 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
   const stop = reaction(
     presetNow,
     (preset) => redeclare(declared.get().facts, preset),
-    { fireImmediately: true },
+    {
+      fireImmediately: true,
+      // [LAW:no-silent-failure] A follow that throws on a pick reaches only
+      // the console MobX prints to, which nobody reads in a detached daemon.
+      onError: (e) =>
+        log(
+          "error",
+          `session view follow threw on a pick sid=${JSON.stringify(sessionId)}: ${String(e)}`,
+        ),
+    },
   );
   // [LAW:single-enforcer] The view's inputs and slots read its source from
   // here on (src/dsl/parts.ts): no draw writes one.

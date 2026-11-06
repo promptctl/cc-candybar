@@ -37,7 +37,11 @@ import { SessionState } from "../src/daemon/session-state";
 import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import { newUpdateFact, type UpdateFact } from "../src/daemon/update-fact";
 import { drawDsl } from "../src/dsl/render";
-import type { FactsLine } from "../src/facts/recording";
+import {
+  formatLine,
+  parseRecording,
+  type FactsLine,
+} from "../src/facts/recording";
 import type { Host } from "../src/host";
 import { exits } from "../src/proc/spawner-fake";
 import type { Frame } from "../src/render/frame";
@@ -356,7 +360,13 @@ test("a recording of a session's facts replays into the bars the live renderer d
     hostOf({}, { home: replayHome, tmp: replayHome }),
     replayClock,
     replayLauncher.launcher,
-    () => recordingFacts(recording, replayClock),
+    // The recording crosses the text: the lines as the recorder writes them,
+    // read back by the one parser, so the format is part of what is proved.
+    () =>
+      recordingFacts(
+        parseRecording(recording.map(formatLine).join("")),
+        replayClock,
+      ),
   );
   // The load: the config and the plugin are read here, before the instruments.
   replay.cache.getOrCreate(cwd, cwd, configFile);

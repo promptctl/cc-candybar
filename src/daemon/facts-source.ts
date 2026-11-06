@@ -25,13 +25,11 @@ import type { Timekeeper } from "../time";
 import { Holds } from "../utils/holds";
 import { instantAt, type Instant } from "../utils/instant";
 import type { DaemonLogger } from "../utils/logger";
-import { failed } from "../utils/outcome";
 import { assembleFacts } from "./facts-assembly";
 import type { PayloadProviders } from "./payload-providers";
 import {
   declareLanes,
   readingsOf,
-  settledLanes,
   settlePayload,
   type DeclaredLanes,
   type DeclaredSources,
@@ -183,6 +181,13 @@ function stamped(
 // effect, never a derivation: a stamp is the turn's instant, and a computed
 // that read the clock and its own prior answer would answer by when it ran.
 //
+// [LAW:one-source-of-truth] exception: the follow's derivations are its own,
+// not the view's variable store's. The arm is Gather's side of the seam and
+// reads nothing of a renderer; the store is the renderer's one holder of what
+// its templates derive, and is not at this depth to hold these. The follow's
+// one reaction holds them and its dispose, which the view's release calls,
+// lets them go.
+//
 // A request's wait is this arm's own: a request starts the re-read of its
 // session's transcript lanes and draws once they land, which is what keeps
 // the bar's sums current on the tick that follows a message. The split ends
@@ -206,37 +211,29 @@ export function inProcessFacts({
         facts: ViewFacts,
         { closure, sources }: FollowDeclaration,
       ): DeclaredLanes => {
-        try {
-          const {
-            result: { lanes, faults },
-            acquired,
-            released,
-          } = holds.declare(() =>
-            declareLanes(providers, holds, facts, closure, sources),
-          );
-          for (const fault of faults) {
-            log("error", `session view declaration threw sid=${sid} ${fault}`);
-          }
-          // [LAW:verifiable-goals] A declaration that moved a hold — a preset
-          // click, a request naming another key — says so; one that kept what
-          // the view held, every other request's, writes nothing.
-          if (acquired + released > 0) {
-            log(
-              "info",
-              `session view declared sid=${sid} acquired=${acquired} released=${released} held=${holds.size}`,
-            );
-          }
-          return lanes;
-        } catch (e) {
+        // A lane whose owner throws is a fault the declaration answers on
+        // that lane (declareLanes); a declaration that throws whole is a bug,
+        // which fails the open or the request it ran for, loudly.
+        const {
+          result: { lanes, faults },
+          acquired,
+          released,
+        } = holds.declare(() =>
+          declareLanes(providers, holds, facts, closure, sources),
+        );
+        for (const fault of faults) {
+          log("error", `session view declaration threw sid=${sid} ${fault}`);
+        }
+        // [LAW:verifiable-goals] A declaration that moved a hold — a preset
+        // click, a request naming another key — says so; one that kept what
+        // the view held, every other request's, writes nothing.
+        if (acquired + released > 0) {
           log(
-            "error",
-            `session view declaration threw sid=${sid}: ${String(e)}`,
-          );
-          return settledLanes(
-            failed(`view declaration threw: ${String(e)}`, "read"),
-            [...sources.keys()],
+            "info",
+            `session view declared sid=${sid} acquired=${acquired} released=${released} held=${holds.size}`,
           );
         }
+        return lanes;
       };
       const declared = observable.box<Declared>(
         { facts, declaration, lanes: lanesFor(facts, declaration) },
@@ -372,18 +369,12 @@ function recordingOf(lines: readonly FactsLine[]): {
       `a recording's lines are in time order, and line ${back + 1} (at ${lines[back]!.at}) is before line ${back} (at ${lines[back - 1]!.at})`,
     );
   }
-  // One follow's stream: a document's sequence counts its stamps from the
-  // follow's first, so a sequence that does not advance is a second follow of
-  // the session (a view the cache opened beside the one it retires) whose
-  // lines were written into the same recording.
-  const other = lines.findIndex(
-    (line, i) => i > 0 && line.facts.seq <= lines[i - 1]!.facts.seq,
-  );
-  if (other !== -1) {
-    throw new Error(
-      `a recording is one follow's stream, and line ${other + 1} (seq ${lines[other]!.facts.seq}) does not follow line ${other} (seq ${lines[other - 1]!.facts.seq})`,
-    );
-  }
+  // A document's sequence counts one follow's stamps from 1, so a sequence that
+  // starts again is the session followed again: the view the idle sweep
+  // retired opened by the next request, or a reload's successor. The replay
+  // shows that opening document at its instant, as the live bar did. What it
+  // cannot tell apart is two follows writing at once, which is the recorder's
+  // to prevent.
   return { session: [...sessions][0]!, at0: lines[0]!.at };
 }
 

@@ -255,13 +255,16 @@ describe("the recording arm", () => {
     );
   });
 
-  test("a second follow's lines in one recording are refused by the sequence that does not advance", () => {
+  test("a session followed again (its sequence starting over) replays its reopening document at its instant", () => {
     const clock = heldClock(AT);
-    expect(() =>
-      recordingFacts([line(0, 1), line(1, 2), line(2, 1), line(3, 3)], clock),
-    ).toThrow(
-      "a recording is one follow's stream, and line 3 (seq 1) does not follow line 2 (seq 2)",
-    );
+    const lines = [line(0, 1), line(1, 2), line(2, 1), line(3, 2)];
+    const followed = recordingFacts(lines, clock).follow(request(), reads());
+    clock.advance(1000);
+    expect(followed.stamped()).toBe(lines[1]);
+    clock.advance(1000);
+    expect(followed.stamped()).toBe(lines[2]);
+    clock.advance(1000);
+    expect(followed.stamped()).toBe(lines[3]);
   });
 });
 

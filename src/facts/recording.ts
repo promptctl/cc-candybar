@@ -121,7 +121,7 @@ export function parseRecording(text: string): FactsLine[] {
       }
       return {
         at: json.at as Instant,
-        facts: parseSessionFacts(json.facts, where),
+        facts: parseSessionFacts(json.facts, `${where} facts`),
       };
     });
 }
