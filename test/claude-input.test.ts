@@ -266,7 +266,7 @@ describe("a slash click", () => {
     expect(fs.readFileSync(path.join(dir, "stdin"), "utf8")).toBe("/model opus");
     // The typing is the click's effect: its apply line names the pane.
     expect(rt.logged.filter((l) => l.startsWith("apply "))).toEqual([
-      expect.stringMatching(/^apply kind=click verb=dispatch sid=s1 effects="type-slash:\/model opus" revision=\d+$/),
+      expect.stringMatching(/^apply kind=click verb=dispatch sid=s1 outcome=ok effects="type-slash:\/model opus" revision=\d+$/),
       expect.stringMatching(/^apply kind=effect-done verb=dispatch sid=s1 effect="type-slash:\/model opus" outcome=ok said="typed into %7" turnWait=\d+ms effects=- revision=\d+$/),
     ]);
   });

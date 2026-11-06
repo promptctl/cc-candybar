@@ -66,14 +66,14 @@ describe("a copy click's launch is an effect", () => {
     expect(r.started()[0]!.ended).toBeNull();
     expect(reported).toBe(false);
     expect(r.applyLines()).toEqual([
-      "apply kind=click verb=copy sid=- effects=launch:pbcopy revision=-",
+      "apply kind=click verb=copy sid=- outcome=ok effects=launch:pbcopy revision=-",
     ]);
     clock.advance(50);
     await turns();
     await performed;
     expect(r.started()[0]!.stdin).toBe("hello");
     expect(r.applyLines()).toEqual([
-      "apply kind=click verb=copy sid=- effects=launch:pbcopy revision=-",
+      "apply kind=click verb=copy sid=- outcome=ok effects=launch:pbcopy revision=-",
       expect.stringMatching(
         /^apply kind=effect-done verb=copy sid=- effect=launch:pbcopy outcome=ok said=- turnWait=\d+ms effects=- revision=-$/,
       ),
@@ -122,9 +122,53 @@ describe("a copy click's launch is an effect", () => {
     await performed;
     expect(r.started().map((s) => [s.bin, s.stdin])).toEqual([[PBCOPY, "the diagnostic"]]);
     expect(r.applyLines()).toEqual([
-      expect.stringMatching(/^apply kind=click verb=dispatch sid=s1 effects=launch:pbcopy revision=\d+$/),
+      expect.stringMatching(/^apply kind=click verb=dispatch sid=s1 outcome=refused said="dispatch: copy-diagnostic: [^"]*" effects=launch:pbcopy revision=\d+$/),
       expect.stringMatching(/^apply kind=effect-done verb=dispatch sid=s1 effect=launch:pbcopy outcome=ok /),
     ]);
+  });
+});
+
+describe("a session's effects run in the order their turns committed", () => {
+  test("the second click's act starts once the first's has reported; another session's waits on neither", async () => {
+    // [LAW:no-ambient-temporal-coupling] A performer that reads before it acts
+    // must see what the session's earlier effects left, so one session's
+    // effects run one at a time, after each other's report; another session's
+    // run beside them. The update's act is the effect here: it is a function
+    // the test holds, where a launch would meet the launcher's rate window.
+    const r = rig();
+    let release = (): void => {};
+    const parked = new Promise<void>((resolve) => (release = resolve));
+    const acts: string[] = [];
+    let n = 0;
+    const ctx: VerbContext = {
+      ...r.ctx,
+      applyUpdate: async () => {
+        const call = ++n;
+        acts.push(`start ${call}`);
+        if (call === 1) await parked;
+        acts.push(`end ${call}`);
+      },
+    };
+    const update = (sid: string) =>
+      applyClick(`cc-candybar://${VERB_APPLY_UPDATE}/${encodeURIComponent(sid)}`, ctx);
+    const first = await update(SID);
+    const second = await update(SID);
+    const other = await update("s2");
+    await other.performed;
+    await turns();
+    // s2's act ran beside s1's parked one; s1's second has not started.
+    expect(acts).toEqual(["start 1", "start 2", "end 2"]);
+    const reported = () =>
+      r
+        .applyLines()
+        .filter((l) => l.includes("kind=effect-done"))
+        .map((l) => / sid=(\S+) /.exec(l)![1]);
+    expect(reported()).toEqual(["s2"]);
+    release();
+    await first.performed;
+    await second.performed;
+    expect(acts).toEqual(["start 1", "start 2", "end 2", "end 1", "start 3", "end 3"]);
+    expect(reported()).toEqual(["s2", SID, SID]);
   });
 });
 

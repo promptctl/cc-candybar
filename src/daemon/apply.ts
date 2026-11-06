@@ -227,7 +227,7 @@ export async function apply<K extends Event["kind"]>(
   const applied: Applied<K> = await arm(event, parts);
   const of = originOf(event);
   const line: (typeof LINE)[K] = LINE[event.kind];
-  const said = line(event);
+  const said = line(event, applied);
   if (said !== null) {
     parts.log(
       said.level,
@@ -260,14 +260,22 @@ export async function apply<K extends Event["kind"]>(
 // every event passes through: the kind, the verb, the session, the effects
 // described, the revision the session's state stands at once the turn is
 // over, and on effect-done the effect and how it went. What each kind adds
-// of its own is here, and at what level; the request's line is the render
-// line its edge writes (four of five lines in a live log), until its turn
-// gives it a revision.
+// of its own is here, and at what level: its outcome first, since a click
+// the turn refused is applied too, with its refusal for an outcome. The
+// request's line is the render line its edge writes (four of five lines in
+// a live log), until its turn gives it a revision.
 interface ApplyLine {
   readonly level: LogLevel;
   readonly facts: RequestFacts;
 }
-const APPLIED: ApplyLine = { level: "info", facts: [] };
+const APPLIED: ApplyLine = { level: "info", facts: [["outcome", "ok"]] };
+const refused = ({ error }: ClickRefusal): ApplyLine => ({
+  level: "info",
+  facts: [
+    ["outcome", "refused"],
+    ["said", error instanceof Error ? error.message : String(error)],
+  ],
+});
 // [LAW:no-silent-failure] A failed effect is a warning in the log, whether or
 // not a bar shows it: for a click that names no session, the line is the one
 // record.
@@ -278,10 +286,11 @@ const OUTCOME_LEVEL: Record<EffectOutcome["kind"], LogLevel> = {
 const LINE: {
   readonly [K in Event["kind"]]: (
     event: Extract<Event, { readonly kind: K }>,
+    applied: Applied<K & keyof Answers>,
   ) => ApplyLine | null;
 } = {
   request: () => null,
-  click: () => APPLIED,
+  click: (_event, { answer }) => (answer === null ? APPLIED : refused(answer)),
   "menu-idle": () => APPLIED,
   "effect-done": ({ effect, outcome }) => ({
     level: OUTCOME_LEVEL[outcome.kind],
@@ -373,23 +382,26 @@ async function perform<K extends Effect["kind"]>(
 }
 
 // [LAW:effects-at-boundaries] After the turn, each effect in the order it was
-// described, and each outcome back through Apply. Never rejects: an outcome
-// is data, and an effect-done the daemon's close refused is said here, since
-// the bar it would have reached is gone with the turns.
-async function performAll(
+// described, behind the session's earlier effects (`performing`), and each
+// outcome back through Apply. Never rejects: an outcome is data, and an
+// effect-done the daemon's close refused is said here, since the bar it would
+// have reached is gone with the turns.
+function performAll(
   parts: ApplyParts,
   of: EffectOrigin,
   effects: readonly Effect[],
 ): Promise<void> {
-  for (const effect of effects) {
-    const outcome = await perform(effect, parts);
-    try {
-      await apply({ kind: "effect-done", of, effect, outcome }, parts);
-    } catch (e) {
-      parts.log(
-        e instanceof DaemonClosing ? "info" : "error",
-        `apply: effect-done not applied (${describeEffect(effect)} ${outcome.kind}: ${outcome.said}): ${inspect(e)}`,
-      );
+  return parts.verbCtx.journalTurns.performing(of.session, async () => {
+    for (const effect of effects) {
+      const outcome = await perform(effect, parts);
+      try {
+        await apply({ kind: "effect-done", of, effect, outcome }, parts);
+      } catch (e) {
+        parts.log(
+          e instanceof DaemonClosing ? "info" : "error",
+          `apply: effect-done not applied (${describeEffect(effect)} ${outcome.kind}: ${outcome.said}): ${inspect(e)}`,
+        );
+      }
     }
-  }
+  });
 }

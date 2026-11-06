@@ -236,7 +236,10 @@ export interface DaemonContext {
   readonly navigation: NavigationHistory;
   // [LAW:no-ambient-temporal-coupling] Whose turn it is to hold those journals
   // (src/daemon/journal-turns.ts).
-  readonly journalTurns: Pick<JournalTurns, "take" | "click" | "gathering">;
+  readonly journalTurns: Pick<
+    JournalTurns,
+    "take" | "click" | "gathering" | "performing"
+  >;
   // [LAW:effects-at-boundaries] Where a turn's described effects go once it
   // has committed: the performer's list (src/daemon/apply.ts). The arm that
   // runs the turn hands this in; a handler never reaches it, `Journaled.effect`
@@ -2256,7 +2259,7 @@ export const VERBS: ReadonlyMap<string, VerbRun> = new Map<string, VerbRun>([
   [VERB_DISPATCH, click(VERB_DISPATCH, headGather, foldEffects)] as const,
   // After the leaves, so it replaces the click they built: a probe writes no
   // journal, so nothing may refuse it for a turn, and it describes nothing.
-  [VERB_DOCTOR_PROBE, (value, ctx) => doctorProbe(value, ctx)] as const,
+  [VERB_DOCTOR_PROBE, doctorProbe] as const,
 ]);
 
 export const VERB_NAMES: readonly string[] = Object.freeze([
