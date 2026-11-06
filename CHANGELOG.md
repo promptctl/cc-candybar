@@ -1,3 +1,9 @@
+## [1.195.0](https://github.com/promptctl/cc-candybar/compare/v1.194.1...v1.195.0) (2026-11-06)
+
+### Features
+
+* **home:** a renderer's home is one value; two renderers under two homes leave no trace of each other (candybar-gather-renderer-76bb.f00.dmd) ([#625](https://github.com/promptctl/cc-candybar/issues/625)) ([a6c6ada](https://github.com/promptctl/cc-candybar/commit/a6c6adadc4b92f19bca48e7fe1eb518acde6e893))
+
 ## [1.194.1](https://github.com/promptctl/cc-candybar/compare/v1.194.0...v1.194.1) (2026-11-06)
 
 ### Bug Fixes
