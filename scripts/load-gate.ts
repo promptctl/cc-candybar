@@ -674,9 +674,9 @@ function waitBudgetOf(
 
 // [LAW:one-source-of-truth] How a render event says it ended, and `settled`
 // for the one end that says the daemon has: answered inside a wait it had
-// time for, and read by its client. One answered with no time left was set
-// up past its deadline, which is the backlog itself, however its values
-// answered.
+// time for, with its client still waiting on it, told no TIMEOUT first. One
+// answered with no time left was set up past its deadline, which is the
+// backlog itself, however its values answered.
 function renderEnd(line: string): string {
   const fields = fieldsOf(line);
   const outcome = fields.get("outcome");
@@ -690,15 +690,15 @@ function renderEnd(line: string): string {
   if (budget === null)
     throw new Error(`an answered render with no deadline: ${line}`);
   if (budget.ms <= 0) return "answered with no time left";
+  if (fields.get("timedOut") === "Y") return "answered after TIMEOUT";
   return fields.get("clientLeft") === "Y" ? "client left" : "settled";
 }
 
 // How each session's latest render logged since `since` ended.
 function latestRenders(since: number): ReadonlyMap<string, string> {
   const latest = new Map<string, string>();
-  for (const line of logLines(logPath(home))) {
-    if (Date.parse(line.slice(0, 24)) < since) continue;
-    if (!line.includes("] render ")) continue;
+  for (const { at, line } of stampedLog()) {
+    if (at < since || !line.includes("] render ")) continue;
     const sid = fieldsOf(line).get("sid");
     if (sid !== undefined) latest.set(sid, renderEnd(line));
   }
@@ -1293,17 +1293,22 @@ interface Stamped {
   readonly at: number;
   readonly line: string;
 }
+// [LAW:one-source-of-truth] Every line the daemon's log holds, read once
+// with the stamp it leads with.
+function stampedLog(): Stamped[] {
+  return logLines(logPath(home)).map((line) => ({
+    at: Date.parse(line.slice(0, 24)),
+    line,
+  }));
+}
 async function daemonLog(since: number, until: number): Promise<Stamped[]> {
-  const log = logPath(home);
-  const stamped = (): Stamped[] =>
-    logLines(log).map((line) => ({ at: Date.parse(line.slice(0, 24)), line }));
-  let all = stamped();
+  let all = stampedLog();
   for (
     const giveUp = Date.now() + 10_000;
     !all.some(({ at }) => at > until) && Date.now() < giveUp;
   ) {
     await sleep(200);
-    all = stamped();
+    all = stampedLog();
   }
   return all.filter(({ at }) => at >= since && at <= until);
 }

@@ -127,9 +127,9 @@ export type WaitEnd = "answered" | "deadline";
 // timers phase, which under a backlog comes after every pending request has
 // been read and set up, tens of milliseconds a client with no budget left
 // does not have. It ends once the microtask queue has drained, so work that
-// settles without the loop (values already held) still answers, or fails as
-// the wait's own, and work that needs the loop is aborted and lands for the
-// next answer.
+// settles on promise continuations alone (values already held) still answers,
+// or fails as the wait's own. Work that needs anything more, a tick or the
+// loop, is aborted and lands for the next answer.
 export function waitWithin(
   work: (signal: AbortSignal) => Promise<unknown>,
   ms: number,
@@ -139,9 +139,8 @@ export function waitWithin(
   const wait = new AbortController();
   // [LAW:dataflow-not-control-flow] One alarm ends the wait either way; the
   // time left picks which.
-  const clear = (ms > 0 ? (fn: () => void) => after(ms, fn) : whenDrained)(() =>
-    wait.abort(),
-  );
+  const abort = () => wait.abort();
+  const clear = ms > 0 ? after(ms, abort) : whenDrained(abort);
   const ended = new Promise<WaitEnd>((resolve, reject) => {
     wait.signal.addEventListener("abort", () => resolve("deadline"));
     void work(wait.signal).then(
