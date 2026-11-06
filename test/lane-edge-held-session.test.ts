@@ -31,7 +31,7 @@ describe("a Claude Code process's session record", () => {
   });
 
   test.each([
-    ["missing", null, (file: string) => `it keeps no session record at ${file}`],
+    ["missing", null, (file: string) => expect.stringMatching(new RegExp(`^it keeps no session record at ${file} \\(update Claude Code`))],
     ["not JSON", "{\"pid\": 42", (file: string) => expect.stringContaining(`its session record ${file} is not JSON (`)],
     ["without a session", JSON.stringify({ pid: 4242 }), (file: string) => `its session record ${file} names no session`],
     ["not an object", "42", (file: string) => `its session record ${file} names no session`],

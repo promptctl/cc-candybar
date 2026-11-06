@@ -269,7 +269,10 @@ export function heldSessionIn(file: string): HeldSession {
     text = fs.readFileSync(file, "utf8");
   } catch (e) {
     return (e as NodeJS.ErrnoException).code === "ENOENT"
-      ? { kind: "unread", why: `it keeps no session record at ${file}` }
+      ? {
+          kind: "unread",
+          why: `it keeps no session record at ${file} (update Claude Code with \`claude update\`: recent releases keep one)`,
+        }
       : { kind: "unread", why: (e as Error).message };
   }
   let record: unknown;

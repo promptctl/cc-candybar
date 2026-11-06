@@ -27,7 +27,10 @@
 // it (src/daemon/click-error.ts).
 
 import path from "node:path";
-import { CLAUDE_CONFIG_DIR_ENV } from "../claude-settings.js";
+import {
+  CLAUDE_CONFIG_DIR_ENV,
+  detectClaudeConfigDir,
+} from "../claude-settings.js";
 import { CONFIG_ENV } from "../config-hint.js";
 import {
   LANES,
@@ -156,8 +159,9 @@ export interface LaneEdge {
     { readonly ok: true } | { readonly ok: false; readonly reason: string }
   >;
   // The session Claude Code's process `pid` holds now, by the record it keeps
-  // of itself under its configuration directory (`configDir`, the client's
-  // hint): a `/clear` or `/resume` rewrites it, though the process stays one.
+  // of itself under its configuration directory (`configDir`, as the
+  // process's environment names it; the default when it names none): a
+  // `/clear` or `/resume` rewrites it, though the process stays one.
   readonly heldSession: (
     pid: number,
     configDir: string | undefined,
@@ -609,7 +613,12 @@ async function restartUnderAttach(
   // says it, not the requests naming the pane: those lag a `/clear` by the
   // new session's first statusline tick, and any client run in the pane
   // names it too.
-  const held = edge.heldSession(claude.pid, session.hints.claudeConfigDir);
+  // The directory is resolved from the process's own environment, as the
+  // relaunch line carries it, by the client's rule over the process's cwd.
+  const held = edge.heldSession(
+    claude.pid,
+    detectClaudeConfigDir(Object.fromEntries(started), claude.cwd),
+  );
   if (held.kind === "unread") {
     throw new Error(
       `Claude Code in ${tmux.pane} was left running: ${held.why}, so which session it runs is unknown`,
