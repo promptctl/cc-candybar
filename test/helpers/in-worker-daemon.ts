@@ -233,8 +233,9 @@ export function startDaemon(
   let daemon: Daemon;
   let daemonLog: DaemonLog;
   let paths: DaemonPaths;
+  let home: RendererHome;
   try {
-    ({ daemon, daemonLog, paths } = buildDaemon(overrides));
+    ({ daemon, daemonLog, paths, home } = buildDaemon(overrides));
   } catch (e) {
     if (held === null) placeEnv(before);
     throw e;
@@ -260,6 +261,7 @@ export function startDaemon(
   return {
     daemon,
     log: paths.log,
+    name: home.name,
     now: () => daemon.clock.now(),
     connect,
     listen: (sockPath) =>

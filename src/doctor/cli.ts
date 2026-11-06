@@ -112,7 +112,10 @@ export function loadConfigOnce(
     locations: locations(host, home),
     sessionState: new SessionState(),
     storage: UNOWNED_STORAGE,
-    signer: linkSignerFromKeyFile(linkKeyFile(stateDir(home))),
+    links: {
+      to: home.name,
+      signer: linkSignerFromKeyFile(linkKeyFile(stateDir(home))),
+    },
     gates: daemonGates(),
     stateDir: stateDir(home),
   };

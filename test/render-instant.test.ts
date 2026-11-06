@@ -7,7 +7,7 @@ import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
 import type { Frame, Run } from "../src/render/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_LINKS } from "./helpers/link-signer";
 import { SessionState } from "../src/daemon/session-state";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -54,7 +54,7 @@ function renderer(): {
 } {
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState());
-  const compiled = registerDslConfig(CONFIG, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
+  const compiled = registerDslConfig(CONFIG, registry, { links: TEST_LINKS, cwd: "/tmp" });
   return {
     render: (at) =>
       drawPayload(CONFIG, compiled, store, registry, {}, at, OPTS).frame,
@@ -135,7 +135,7 @@ describe("a stored instant is read against the frame's instant", () => {
       new SessionState(),
     );
     try {
-      const compiled = registerDslConfig(BUNDLED, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
+      const compiled = registerDslConfig(BUNDLED, registry, { links: TEST_LINKS, cwd: "/tmp" });
       const draw = (sec: number): string =>
         textOf(
           drawPayload(
@@ -165,7 +165,7 @@ describe("a stored instant is read against the frame's instant", () => {
       new SessionState(),
     );
     try {
-      const compiled = registerDslConfig(BUNDLED, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
+      const compiled = registerDslConfig(BUNDLED, registry, { links: TEST_LINKS, cwd: "/tmp" });
       expect(
         textOf(
           drawPayload(

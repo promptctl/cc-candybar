@@ -1,3 +1,4 @@
+import { MAIN_NAME } from "../src/daemon/home";
 // [LAW:behavior-not-structure] The pure core of the update notice
 // (brandon-build-notice-5d6): which currency facts become an Update, what a
 // dismissal names, the sentence and the three affordances a session sees,
@@ -63,6 +64,7 @@ const CURRENT_RELEASE: Currency = { kind: "current", installed: [1, 2, 3] };
 
 const SID = "sess-1";
 const ctx = (over: Partial<Parameters<typeof updateNotice>[2]> = {}) => ({
+  to: MAIN_NAME,
   sessionId: SID,
   dismissed: null,
   enabled: true,
@@ -237,10 +239,11 @@ describe("updateNotice", () => {
 
   test("drawn: the row reads as the sentence and its three clicks, each linked to its own effect", () => {
     const [message] = updateNotice(SOURCE, { kind: "idle" }, ctx());
-    const list = collectDiagnostics("s", "request", [], [message!], []);
+    const list = collectDiagnostics(MAIN_NAME, "s", "request", [], [message!], []);
     const [, ...rows] = viewerRows(
       list,
       { index: 1, page: 0 },
+      MAIN_NAME,
       "s",
       "request",
       {

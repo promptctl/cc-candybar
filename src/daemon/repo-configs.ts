@@ -5,7 +5,8 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import type { LinkSigner, SignedFields } from "../click/link-signer.js";
+import type { SignedFields } from "../click/link-signer.js";
+import type { RendererLinks } from "../click/renderer-links.js";
 import { effectsUrl, VERB_REPO_CONFIG } from "../click/wire.js";
 import { repoProject } from "../config/loader/discovery.js";
 import {
@@ -150,21 +151,21 @@ export function repoAnswerFields(
 export function repoQuestions(
   gate: RepoGate,
   sessionId: string,
-  signer: LinkSigner,
+  links: RendererLinks,
 ): DiagnosticMessage[] {
   return gate.awaiting.map((dir) => {
     const message = `a cc-candybar config for ${dir} — run it?`;
     const answers = REPO_ANSWERS.map((answer) =>
       diagnosticSpan(
         `[${answer === "approved" ? "approve" : "decline"}]`,
-        effectsUrl([
+        effectsUrl(links.to, [
           {
             verb: VERB_REPO_CONFIG,
             args: [
               sessionId,
               dir,
               answer,
-              signer.sign(repoAnswerFields(sessionId, dir, answer)),
+              links.signer.sign(repoAnswerFields(sessionId, dir, answer)),
             ],
           },
         ]),

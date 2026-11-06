@@ -13,7 +13,7 @@ import {
 } from "../src/daemon/cache/render";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { SessionState } from "../src/daemon/session-state";
-import { TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_LINKS } from "./helpers/link-signer";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { viewFacts } from "./helpers/view-facts";
 import { fakeWatches } from "./helpers/fake-watches";
@@ -66,7 +66,7 @@ function rig() {
       locations: locations(host, homeOf(host)),
       runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
-      signer: TEST_SIGNER,
+      links: TEST_LINKS,
       gates: bareGates(),
       sessionState: new SessionState(),
       watchers,

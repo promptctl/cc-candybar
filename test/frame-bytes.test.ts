@@ -13,7 +13,7 @@
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { ColorDepth, Style, type ColorSpec } from "@promptctl/rich-js";
-import { TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_LINKS } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -83,7 +83,7 @@ function rig(
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
   const compiled = registerDslConfig(config, registry, {
-    signer: TEST_SIGNER,
+    links: TEST_LINKS,
     cwd: "/tmp/proj",
   });
   const effects = new SessionEffects<RenderedLine>(SID);

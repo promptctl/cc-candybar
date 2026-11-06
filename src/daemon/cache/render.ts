@@ -6,7 +6,7 @@ import type { RichText } from "@promptctl/rich-js";
 import { compareShallow, observable, reaction, runInAction } from "mobx";
 import { type DeclaredSources, type ViewFacts } from "../render-payload.js";
 import type { ManagedStorage, StorageKey } from "./managed-storage.js";
-import type { LinkSigner } from "../../click/link-signer.js";
+import type { RendererLinks } from "../../click/renderer-links.js";
 import type { SessionId } from "../session-id.js";
 import { fileHeldSettings } from "../setting-drafts.js";
 import {
@@ -171,8 +171,9 @@ export interface RenderDeps<S extends ViewSource = ViewSource> {
   // The owner of every plugin's managed storage, whose folders a state's
   // build holds (StateDeps).
   storage: PluginStorage;
-  // What signs the `run` links its compiles draw (StateDeps).
-  signer: LinkSigner;
+  // Whose links its compiles draw: their address and the key that signs
+  // `run` links (StateDeps).
+  links: RendererLinks;
   // The gates a load builds against (StateDeps).
   gates: Gates;
   // Where a view's facts come from (src/daemon/facts-source.ts): the daemon
@@ -220,8 +221,8 @@ export interface StateDeps {
   readonly locations: Locations;
   readonly sessionState: SessionStateRW;
   readonly storage: PluginStorage;
-  // What signs the `run` links a compile draws.
-  readonly signer: LinkSigner;
+  // Whose links a compile draws: their address and their signing key.
+  readonly links: RendererLinks;
   // The gates a config's sessions click through, which a load builds once so a
   // config that cannot gate fails there.
   readonly gates: Gates;
@@ -933,7 +934,7 @@ export function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
       config,
       registry,
       cwd,
-      deps.compile ?? compileAlone(deps.signer),
+      deps.compile ?? compileAlone(deps.links),
       DIRECTORY_SCOPE,
     );
     // [LAW:dataflow-not-control-flow] Partial-load warnings (variable
@@ -1509,7 +1510,7 @@ export class RenderCache<
   // table learns only when a state carrying it is served, so a load that fails
   // after compiling leaves nothing behind.
   private compileOf(key: string, input: CompileInput): CompiledConfig {
-    return this.compiles.get(key) ?? compileDslConfig(input, this.deps.signer);
+    return this.compiles.get(key) ?? compileDslConfig(input, this.deps.links);
   }
 
   // [LAW:one-source-of-truth] Read off the map the cache serves: an entry's

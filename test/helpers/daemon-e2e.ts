@@ -21,7 +21,6 @@ import {
 } from "../../src/daemon/protocol";
 import { textOf, parseFrame, type Frame } from "../../src/render/frame";
 import type { ClaudeHookData } from "../../src/utils/claude";
-import { linkClick } from "./click";
 import { effectsOf, type DecodedEffect } from "./click";
 import {
   endpointOf,
@@ -239,15 +238,9 @@ export function sendClick(
   url: string,
   replyBudgetMs = REPLY_BUDGET_MS,
 ): Promise<Response> {
-  const { verb, value } = linkClick(url);
   return sendDaemonRequest(
     target,
-    {
-      v: PROTOCOL_VERSION,
-      kind: "click",
-      verb,
-      value,
-    },
+    { v: PROTOCOL_VERSION, kind: "click", url },
     replyBudgetMs,
   );
 }

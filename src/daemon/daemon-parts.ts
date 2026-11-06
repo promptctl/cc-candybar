@@ -6,7 +6,7 @@ import type { CheckedRenderRequest } from "./render-checkpoint.js";
 import type { FrameFeeds } from "./frame-feed.js";
 import type { LaneSetups } from "./lane-setup.js";
 import type { LimitsHandle } from "./limits";
-import type { LinkSigner } from "../click/link-signer.js";
+import type { RendererLinks } from "../click/renderer-links.js";
 import type { MenuIdle } from "./menu-idle.js";
 import type { PayloadProviders } from "./payload-providers";
 import type { RenderSightings } from "./render-sightings";
@@ -72,7 +72,8 @@ export interface DaemonParts {
   readonly draw: RequestDraw;
   readonly effectSessions: EffectSessions<RenderedLine>;
   readonly menuIdle: MenuIdle;
-  readonly linkSigner: LinkSigner;
+  // Whose links this daemon draws and verifies: its home's name and its key.
+  readonly links: RendererLinks;
   readonly runs: Runs;
   // [LAW:single-enforcer] The daemon's one owner of every declared source's
   // runs, which the stats reply reads.

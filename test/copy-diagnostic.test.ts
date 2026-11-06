@@ -1,3 +1,4 @@
+import { MAIN_NAME } from "../src/daemon/home";
 // [LAW:verifiable-goals] A diagnostic's copy click names its message by key,
 // and the copy-diagnostic verb copies what the session's last draw listed
 // under that key: the full prompt reaches the clipboard while the link stays
@@ -24,6 +25,7 @@ const PROMPT = `Fix my config.\n\n${"a placement that names nothing; ".repeat(20
 
 const drawn = () => {
   const list = collectDiagnostics(
+    MAIN_NAME,
     SID,
     "request",
     [{ about: "dropped\0/x.json5", text: "first line\nsecond", copy: PROMPT }],

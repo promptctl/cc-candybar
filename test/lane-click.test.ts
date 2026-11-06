@@ -1,3 +1,4 @@
+import { MAIN_NAME } from "../src/daemon/home";
 // What a click hands the lane setup's owner: the clicking session's lane
 // switches as the click found them and as its commit left them, measured by
 // the click path itself (journaled, src/daemon/verbs/index.ts). No render,
@@ -43,6 +44,7 @@ function rig() {
   const toggle = async (sid: string, ...lanes: Lane[]): Promise<void> =>
     await clickUrl(
       effectsUrl(
+        MAIN_NAME,
         lanes.map((lane) => ({
           verb: VERB_SET_STATE,
           args: [sid, LANES[lane].switch.setting, String(LANES[lane].switch.on)],

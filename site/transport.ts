@@ -8,7 +8,7 @@
 
 import { VERB_COPY } from "../src/click/wire";
 import { processWorld } from "../src/host";
-import { clickOf, describeLink, effectsOf, HOST_VERBS, linksOf } from "../src/click/read";
+import { describeLink, effectsOf, HOST_VERBS, linksOf } from "../src/click/read";
 import { createDaemon } from "../src/daemon/daemon";
 import { memoryLimitBytes } from "../src/daemon/limits";
 import { daemonGates } from "../src/daemon/update-keys";
@@ -236,10 +236,9 @@ async function click(url: string, size: Size) {
       : `not sent: on a real machine this ${host.map((e) => HOST_VERBS.get(e.verb)).join(", ")}`;
     return { ...(await render(size)), refused };
   }
-  const { verb, value } = clickOf(url);
   let refused: string | null = null;
   try {
-    await daemon({ v: PROTOCOL_VERSION, kind: "click", verb, value });
+    await daemon({ v: PROTOCOL_VERSION, kind: "click", url });
   } catch (e) {
     refused = e instanceof Error ? e.message : String(e);
   }

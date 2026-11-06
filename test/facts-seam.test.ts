@@ -78,7 +78,7 @@ import { fakeLauncher, turns } from "./helpers/fake-launcher";
 import { bareGates } from "./helpers/gates";
 import { heldClock, type HeldClock } from "./helpers/held-clock";
 import { hostOf } from "./helpers/host";
-import { TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_LINKS } from "./helpers/link-signer";
 import { until } from "./helpers/until";
 
 jest.setTimeout(30_000);
@@ -276,7 +276,7 @@ function rig(
           sessionState,
           watchers,
           storage: providers.managedStorage,
-          signer: TEST_SIGNER,
+          links: TEST_LINKS,
           gates: bareGates(),
           log,
           facts: factsOf(providers, update),
@@ -444,7 +444,7 @@ async function replayFile(
   using loaded = loadDemo({
     world: { host, home: homeOf(host), launcher: launcher.launcher, clock },
     stateDir: stateDir(homeOf(host)),
-    signer: TEST_SIGNER,
+    links: TEST_LINKS,
     configPath: configFile,
     cwd,
     warn: drawn.warn,

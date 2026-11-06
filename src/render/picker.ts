@@ -403,7 +403,7 @@ export function renderPicker(
   const pageSections = pages[pageIdx] ?? [];
 
   const pageUrl = (value: number): string =>
-    effectsUrl([
+    effectsUrl(runtime.links.to, [
       { verb: VERB_SET_STATE, args: [sessionId, page.key, String(value)] },
     ]);
   // [LAW:dataflow-not-control-flow] The close writes arrive as data (see
@@ -428,9 +428,15 @@ export function renderPicker(
   // "several writes, one click", not one per producer.
   const closeEffects = close.kind === "own" && close.onPick ? closeWrite : [];
   const optionUrl = (option: string): string =>
-    effectsUrl([
-      ...realize(declared, option, option, store, sessionId, runtime.signer)
-        .effects,
+    effectsUrl(runtime.links.to, [
+      ...realize(
+        declared,
+        option,
+        option,
+        store,
+        sessionId,
+        runtime.links.signer,
+      ).effects,
       ...closeEffects,
     ]);
 
@@ -443,7 +449,7 @@ export function renderPicker(
       : [
           linkFragment(
             DISCLOSURE_GLYPH_CLOSE,
-            effectsUrl(closeWrite),
+            effectsUrl(runtime.links.to, closeWrite),
             false,
             closeStyle,
           ),
@@ -454,9 +460,15 @@ export function renderPicker(
     ...steps.map(({ glyph, option }) =>
       linkFragment(
         glyph,
-        effectsUrl([
-          ...realize(declared, option, option, store, sessionId, runtime.signer)
-            .effects,
+        effectsUrl(runtime.links.to, [
+          ...realize(
+            declared,
+            option,
+            option,
+            store,
+            sessionId,
+            runtime.links.signer,
+          ).effects,
           {
             verb: VERB_SET_STATE,
             args: [

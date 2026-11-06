@@ -1,3 +1,4 @@
+import { MAIN_NAME } from "../src/daemon/home";
 // [LAW:behavior-not-structure] The update act's record
 // (brandon-unfiled-3248.z676): an act is a job whose running and verdict are
 // files, so any daemon reads how it stands; one claim wins per bundle; and a
@@ -618,7 +619,7 @@ describe("claimAct: one act per bundle", () => {
 
     expect(admits("999.0.0")).toBe(false);
     expect(
-      watch.notice({ sessionId: "s", dismissed: null, enabled: true }),
+      watch.notice({ to: MAIN_NAME, sessionId: "s", dismissed: null, enabled: true }),
     ).toEqual([]);
   });
 
@@ -748,7 +749,7 @@ describe("the update watch: one turn at a time on the act files", () => {
     });
     closers.push(() => watch.close());
     const notice = () =>
-      watch.notice({ sessionId: "s", dismissed: null, enabled: true });
+      watch.notice({ to: MAIN_NAME, sessionId: "s", dismissed: null, enabled: true });
     return {
       dir,
       ps,

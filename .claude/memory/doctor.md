@@ -23,7 +23,7 @@ Most of the facts the doctor needs are visible only to the statusline client, wh
 ## Processes and state
 
 - A daemon is identified by its entry path, resolved through links, plus a checkout marker. A process name alone is no identity.
-- The URL handler always delivers to the default socket. So if a shell's socket override names a different daemon, the check refuses before opening any link.
+- The URL handler delivers a link that names no renderer, as the probe's does, to main's socket. So if a shell's socket override names a different daemon, the check refuses before opening any link.
 - Render sightings live in memory, not in session state. Session state persists and is never pruned, so a session recorded by an older daemon would fail its row forever.
 - Clicked terminals get a file of their own, separate from the mark book. Older builds parse the mark book strictly and refuse keys they don't know.
 - If the spawn rate limit refuses a probe, the click is refused too. The refusal never becomes a fact.

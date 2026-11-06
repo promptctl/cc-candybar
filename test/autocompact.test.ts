@@ -11,7 +11,7 @@ import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_LINKS } from "./helpers/link-signer";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -81,7 +81,7 @@ function runtime(read: Outcome<AutoCompactWindow>, contextWindow = 1_000_000) {
     sessionState,
   );
   const compiled = registerDslConfig(config, registry, {
-    signer: TEST_SIGNER,
+    links: TEST_LINKS,
     cwd: "/tmp/proj",
   });
   const payload = {

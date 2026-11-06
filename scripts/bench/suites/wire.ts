@@ -18,7 +18,6 @@ import { DISCLOSURE_CLOSED } from "../../../src/config/disclosure.js";
 import { tryClickViaDaemon } from "../../../src/daemon/client.js";
 import { describeFailure } from "../../../src/daemon/client-transport.js";
 import type { StatsSnapshot } from "../../../src/daemon/stats.js";
-import { clickOf } from "../../../src/click/read.js";
 import { composeBar } from "../../../src/render/frame.js";
 import type { RepoShape } from "../fixtures.js";
 import { sleep } from "../measure.js";
@@ -374,9 +373,8 @@ const configReload = (entries: number): Benchmark => ({
 // ── a click ─────────────────────────────────────────────────────────────────
 
 async function click(url: string): Promise<number> {
-  const { verb, value } = clickOf(url);
   const started = performance.now();
-  const outcome = await tryClickViaDaemon(processWorld(), verb, value);
+  const outcome = await tryClickViaDaemon(processWorld(), url);
   const ms = performance.now() - started;
   // [LAW:no-silent-failure] A click the daemon refused did nothing; its round
   // trip is not a click's.
@@ -397,7 +395,7 @@ const menuClicks: Benchmark = {
       const session = world.session("a", CHECKOUT, TURNS);
       await world.settle(session, DEFAULT_COLUMNS);
       const menu = (state: string): string =>
-        effectsUrl([{ verb: VERB_SET_STATE, args: [session.id, "candybar.menu", state] }]);
+        effectsUrl(processWorld().home.name, [{ verb: VERB_SET_STATE, args: [session.id, "candybar.menu", state] }]);
       const series: Record<"click-open" | "draw-open" | "click-close" | "draw-close", number[]> = {
         "click-open": [],
         "draw-open": [],
@@ -443,7 +441,7 @@ const settingClick: Benchmark = {
       const session = world.session("a", CHECKOUT, TURNS);
       await world.settle(session, DEFAULT_COLUMNS);
       await click(
-        effectsUrl([{ verb: VERB_SET_STATE, args: [session.id, "candybar.menu", "open"] }]),
+        effectsUrl(processWorld().home.name, [{ verb: VERB_SET_STATE, args: [session.id, "candybar.menu", "open"] }]),
       );
       const clicks: number[] = [];
       const visible: number[] = [];

@@ -21,7 +21,7 @@ import { listResolvablePaletteNames } from "../../src/themes/policy";
 import type { Instant } from "../../src/utils/instant";
 import { SourceRegistry } from "../../src/var-system/sources";
 import { VariableStore } from "../../src/var-system/store";
-import { TEST_SIGNER } from "./link-signer";
+import { TEST_LINKS } from "./link-signer";
 import { parseAndValidate } from "./parse-and-validate";
 import { systemTimekeeper } from "../../src/time";
 
@@ -61,7 +61,7 @@ export function sessionBar(configSource: string, cols: number): SessionBar {
   const session = new SessionState();
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(unscriptedRuns(), store, "", session);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/home/tester/code/project" });
+  const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/home/tester/code/project" });
   return {
     pick: (key, value) => session.set(SID, key, value),
     unpick: (key) => session.clear(SID, key),

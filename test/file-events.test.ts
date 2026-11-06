@@ -1,3 +1,4 @@
+import { MAIN_NAME } from "../src/daemon/home";
 import { systemTimekeeper } from "../src/time";
 import fs from "node:fs";
 import os from "node:os";
@@ -529,6 +530,7 @@ describe("the bar's row and daemon-stats' line", () => {
       },
     ]);
     const diagnostics = collectDiagnostics(
+      MAIN_NAME,
       "sid",
       "request",
       [],

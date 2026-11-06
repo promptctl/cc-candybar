@@ -10,6 +10,7 @@
 // the facts the request's line carries; how the turn is queued is the
 // journal's own (test/journal-turns.test.ts).
 
+import { MAIN_NAME } from "../src/daemon/home";
 import {
   effectsUrl,
   VERB_DISPATCH,
@@ -170,7 +171,7 @@ describe("a request takes its turn", () => {
     // The click's first write lands, then its doctor gathers inside the turn,
     // parked: the turn is held with the toolbar toggled and the second toggle
     // still to come.
-    const click = applyClick(effectsUrl([toggle, doctor, toggle]), r.ctx);
+    const click = applyClick(effectsUrl(MAIN_NAME, [toggle, doctor, toggle]), r.ctx);
     await drain();
     expect(r.turns.getStats().holder).toBe(VERB_DISPATCH);
     expect(r.sessionState.get(SID, TOOLBAR)).toBe("1");
@@ -201,7 +202,7 @@ describe("a request takes its turn", () => {
 
   test("a request waits behind turns alone: a click parked in its head gather, before any turn, delays it by nothing", async () => {
     const r = rig();
-    const click = applyClick(effectsUrl([doctor]), r.ctx);
+    const click = applyClick(effectsUrl(MAIN_NAME, [doctor]), r.ctx);
     await drain();
     expect(r.turns.getStats()).toMatchObject({ holder: null, gathers: 1 });
     const { answered, facts } = r.render(60);
@@ -218,7 +219,7 @@ describe("a request takes its turn", () => {
 
   test("a request queued behind a held turn when the daemon closes is refused as the close, having drawn and written nothing", async () => {
     const r = rig();
-    const click = applyClick(effectsUrl([toggle, doctor, toggle]), r.ctx);
+    const click = applyClick(effectsUrl(MAIN_NAME, [toggle, doctor, toggle]), r.ctx);
     await drain();
     expect(r.turns.getStats().holder).toBe(VERB_DISPATCH);
     const { answered, facts } = r.render(60);

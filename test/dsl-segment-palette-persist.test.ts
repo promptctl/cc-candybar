@@ -40,7 +40,7 @@ import { unscriptedLauncher } from "./helpers/fake-launcher";
 import type { Frame } from "../src/render/frame";
 import { linksOf } from "../src/click/read";
 import { linkUrls } from "./helpers/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_LINKS } from "./helpers/link-signer";
 import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
 import { existsSync } from "node:fs";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -487,7 +487,7 @@ function makeCache(): {
       locations: locations(durable.host, durable.home),
       runs: new SourceRuns({ launcher: unscriptedLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
-      signer: TEST_SIGNER,
+      links: TEST_LINKS,
       gates: bareGates(),
       sessionState,
       watchers,

@@ -5,7 +5,7 @@ import { unscriptedLauncher, unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linksOf } from "../src/click/read";
-import { TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_LINKS } from "./helpers/link-signer";
 import { retainerPathsTo } from "./helpers/retainer-path";
 import fs from "node:fs";
 import os from "node:os";
@@ -87,7 +87,7 @@ function makeCache(budgetBytes: number, maxEntries?: number) {
       locations: locs(),
       runs: new SourceRuns({ launcher: unscriptedLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
-      signer: TEST_SIGNER,
+      links: TEST_LINKS,
       gates: bareGates(),
       sessionState,
       watchers,
@@ -392,7 +392,7 @@ test("a compile's clock is the draw's: read outside one, it refuses", () => {
         `{ segments: { clock: { template: '{{ now | date "15:04" }}' } }, root: { h: ["clock"] } }`,
       ),
     ),
-    TEST_SIGNER,
+    TEST_LINKS,
   );
   expect(() => compiled.segments["clock"]!.template.evaluate({})).toThrow(
     /the clock was read outside a draw/,
@@ -406,7 +406,7 @@ test("a compile's clock is the draw's: read outside one, it refuses", () => {
 const heldStores: object[] = [];
 test("a compile keeps nothing of a render once it returns", async () => {
   const config = parseAndValidate("<test>", carouselConfig("mode", "alpha"));
-  const compiled = compileDslConfig(compileInputOf(config), TEST_SIGNER);
+  const compiled = compileDslConfig(compileInputOf(config), TEST_LINKS);
   // [LAW:verifiable-goals] Reachability is read off a heap snapshot, which
   // collects first and follows only strong edges, so no collection count or
   // wait is in the verdict. One store is held on purpose, as the control: it
@@ -449,7 +449,7 @@ test("an entry, a compile and a view hold no more than the cache charges for the
       undefined,
       DEFAULT_DSL_CONFIG,
     );
-    const compiled = compileDslConfig(compileInputOf(config), TEST_SIGNER);
+    const compiled = compileDslConfig(compileInputOf(config), TEST_LINKS);
     drawAlone(config, compiled);
     return compiled;
   };

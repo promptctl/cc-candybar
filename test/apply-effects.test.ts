@@ -1,3 +1,4 @@
+import { MAIN_NAME } from "../src/daemon/home";
 // A click's launches are effects (src/daemon/apply.ts): the click's turn
 // describes them, the click answers once the turn has committed, the performer
 // runs them after it in the order described, and each outcome comes back
@@ -113,7 +114,7 @@ describe("a copy click's launch is an effect", () => {
     // believes happened.
     const r = rig();
     r.spawner.program(program(PBCOPY), exits(0));
-    const url = effectsUrl([
+    const url = effectsUrl(MAIN_NAME, [
       { verb: VERB_COPY_DIAGNOSTIC, args: [SID, "request", "missing"] },
       { verb: VERB_COPY_DIAGNOSTIC, args: [SID, "request", "k"] },
     ]);

@@ -30,6 +30,16 @@ import type { Timekeeper } from "../time";
 //   - Removing a kind or field old clients depend on.
 //   - Renaming a wire field.
 //
+// **In-bundle kinds** (no bump): a kind whose every sender ships in the
+// daemon's own bundle (today, `click`, which only url-handle sends, from the
+// command the daemon composes out of its own bundle path) changes shape
+// without a bump. Its sender meets a daemon of another shape only between the
+// bundle changing on disk and that daemon's exit (the binary watch's next
+// check, or the end of a running update), and in that window the request is
+// refused as a bad request and writes its event. A bump would also reach the
+// kinds whose senders do not ship in the bundle, such as the native client's
+// render, and send every running statusbar through VERSION_MISMATCH.
+//
 // The 452-corpse precedent (kz8.5) makes this discipline load-bearing: every
 // bump forces every running statusbar through VERSION_MISMATCH until its
 // session restarts, because the spiral-breaker contract refuses to kick on a
@@ -348,13 +358,13 @@ export interface ShutdownRequest {
   kind: "shutdown";
 }
 
-// A click as `cc-candybar url-handle` sends it: the verb and value already
-// split. The tmux status line's click binding runs that command.
+// A click as `cc-candybar url-handle` sends it: the whole link, unparsed, as
+// the URL handler app's frame carries it, so the daemon's one link parse reads
+// every click. The tmux status line's click binding runs that command.
 export interface ClickRequest {
   v: number;
   kind: "click";
-  verb: string;
-  value: string;
+  url: string;
 }
 
 // [LAW:types-are-the-program] A link as the URL handler app forwards it: the

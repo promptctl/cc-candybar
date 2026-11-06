@@ -1,17 +1,20 @@
 // The cc-candybar URL handler: a resident macOS background-only app that
-// forwards every `cc-candybar://` link Launch Services hands it to the daemon,
-// as one frame, and does nothing else. The daemon parses the link; this app
-// never reads it. Background-only (the Info.plist install writes) is what
-// keeps a click from taking the terminal's keyboard focus: Launch Services
-// never activates such an app.
+// forwards every `cc-candybar://` link Launch Services hands it to the
+// renderer the link names, as one frame, and does nothing else. It reads the
+// link's address alone (address.swift); the renderer parses the rest.
+// Background-only (the Info.plist install writes) is what keeps a click from
+// taking the terminal's keyboard focus: Launch Services never activates such
+// an app.
 //
-// [LAW:one-source-of-truth] The app knows two wire facts, both mirrored from
-// src/daemon/protocol.ts and src/daemon/paths.ts and pinned by
-// scripts/check-protocol.mjs: the frame (a 4-byte big-endian length, then the
-// JSON `{"kind":"url","urlV":1,"url":…}`) and the socket path, derived from
-// the uid because Launch Services starts the app with no shell's environment.
-// A handler goes stale through what it knows, and this one knows nothing a
-// release changes: not a bundle path, not a node binary, not a verb.
+// [LAW:one-source-of-truth] The app knows the wire facts a link's grammar
+// fixes, mirrored from src/daemon/protocol.ts, src/click/wire.ts and
+// src/daemon/home.ts and pinned by scripts/check-protocol.mjs: the frame (a
+// 4-byte big-endian length, then the JSON `{"kind":"url","urlV":1,"url":…}`),
+// the address and the name rule, and the socket a name selects in the per-uid
+// directory, derived from the uid because Launch Services starts the app with
+// no shell's environment. A handler goes stale through what it knows, and this
+// one knows nothing a release changes: not a bundle path, not a node binary,
+// not a verb.
 //
 // [LAW:carrying-cost] No thread, no retry. The socket is non-blocking: a
 // connect either completes at once (a unix socket with room in its backlog
@@ -49,10 +52,11 @@ let URL_FRAME_VERSION = 1
 // long is only ever reached by one that is wedged.
 let WRITE_WAIT_MS: Int32 = 1000
 
-// Mirrored: src/daemon/paths.ts defaultSocketPath.
-func socketPath() -> String {
+// Mirrored: src/daemon/home.ts uidRuntimeDir. Every renderer's socket sits in
+// it, named by the renderer's name (address.swift).
+func socketPath(_ file: String) -> String {
   let uid = getuid()
-  return "/tmp/cc-candybar-\(uid)/socket"
+  return "/tmp/cc-candybar-\(uid)/\(file)"
 }
 
 let log = Logger(subsystem: "com.cccandybar.url-handler", category: "forward")
@@ -76,9 +80,8 @@ func errnoText(_ what: String) -> String {
   "\(what): \(String(cString: strerror(errno))) (errno \(errno))"
 }
 
-// One frame to the daemon's socket, non-blocking throughout.
-func forward(_ url: String) -> Forward {
-  let path = socketPath()
+// One frame to the socket at `path`, non-blocking throughout.
+func forward(_ url: String, to path: String) -> Forward {
   let fd = socket(AF_UNIX, SOCK_STREAM, 0)
   if fd < 0 { return .failed(errnoText("socket")) }
   defer { close(fd) }
@@ -180,18 +183,25 @@ final class Handler: NSObject, NSApplicationDelegate {
   func application(_ application: NSApplication, open urls: [URL]) {
     for url in urls {
       let link = url.absoluteString
-      switch forward(link) {
       // Notice, not info: the unified log persists notice and above, so
-      // `log show` can answer "did the click reach the socket" after the fact.
-      // The link itself is private: a copy link carries the text being copied,
-      // and the unified log is readable by every admin on the machine. The
-      // daemon's own click event records the link, in the user's own log.
-      // [LAW:nothing-unseen]
-      case .delivered:
-        log.notice("forwarded \(link, privacy: .private)")
-      case .failed(let why):
+      // `log show` can answer "did the click reach the socket, and which"
+      // after the fact. The socket file a link chose is public: it is a
+      // renderer's name. The link itself is private: a copy link carries the
+      // text being copied, and the unified log is readable by every admin on
+      // the machine. The renderer's own click event records the link, in the
+      // user's own log. [LAW:nothing-unseen]
+      switch target(ofLink: link) {
+      case .refused(let why):
         log.error("lost \(link, privacy: .private): \(why, privacy: .public)")
         notifyLost(why)
+      case .file(let file):
+        switch forward(link, to: socketPath(file)) {
+        case .delivered:
+          log.notice("forwarded to=\(file, privacy: .public) \(link, privacy: .private)")
+        case .failed(let why):
+          log.error("lost to=\(file, privacy: .public) \(link, privacy: .private): \(why, privacy: .public)")
+          notifyLost(why)
+        }
       }
     }
   }

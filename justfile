@@ -33,3 +33,8 @@ install-rust:
 install-url-handler:
     ./url-handler/build.sh bin/cc-candybar-url-handler-native
     @echo "URL handler binary staged at bin/cc-candybar-url-handler-native."
+
+# Test the URL handler's address rule (url-handler/address.swift), as CI's
+# macOS job does before it builds the app.
+test-url-handler:
+    ./url-handler/test.sh

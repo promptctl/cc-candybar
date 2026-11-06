@@ -12,6 +12,7 @@
 //
 // [LAW:effects-at-boundaries] Pure: (messages, geometry, viewing) → rows.
 
+import type { RendererAddress } from "../daemon/home.js";
 import { createHash } from "node:crypto";
 
 import { RichText, Style, asCellCol, chopCells } from "@promptctl/rich-js";
@@ -136,6 +137,8 @@ export interface SourcedText {
 // nothing visible in it — empty, whitespace, control characters — is no
 // message, decided here.
 export function collectDiagnostics(
+  // The renderer every click in the list is addressed to.
+  to: RendererAddress,
   sessionId: string,
   // The renderer drawing the list: a copy click names it, so the daemon
   // reads the list that surface shows.
@@ -169,7 +172,7 @@ export function collectDiagnostics(
             [
               diagnosticSpan(
                 m.lines[0][0].text,
-                copyLink(sessionId, by, keys[i]!, i + 1),
+                copyLink(to, sessionId, by, keys[i]!, i + 1),
               ),
             ],
             ...m.lines.slice(1),
@@ -206,12 +209,14 @@ export function copyKeys(list: DiagnosticList): readonly string[] {
 // first line alike: the daemon reads what it copies from the frame renderer
 // `by` last delivered for the session when the click runs.
 function copyLink(
+  to: RendererAddress,
   sessionId: string,
   by: Drawing["by"],
   key: string,
   position: number,
 ): string {
   return effectsUrl(
+    to,
     [{ verb: VERB_COPY_DIAGNOSTIC, args: [sessionId, by, key] }],
     `copy diagnostic ${position}`,
   );
@@ -352,6 +357,7 @@ export interface DiagnosticGeometry {
 export function viewerRows(
   list: DiagnosticList,
   at: ViewerPosition,
+  addressed: RendererAddress,
   sessionId: string,
   by: Drawing["by"],
   geometry: DiagnosticGeometry,
@@ -374,6 +380,7 @@ export function viewerRows(
       : button(
           glyph,
           viewerLink(
+            addressed,
             sessionId,
             viewerKey(list, to.index - 1, to.page),
             `show diagnostic ${to.index} of ${list.length} page ${to.page + 1}`,
@@ -400,13 +407,19 @@ export function viewerRows(
         : `[${index}/${list.length}]`;
     return drawnRows(
       [
-        button("✕", viewerLink(sessionId, DIAGNOSTICS_CLOSED)),
+        button("✕", viewerLink(addressed, sessionId, DIAGNOSTICS_CLOSED)),
         ...(steps ? [step("‹", back)] : []),
         button(position, null),
         ...(steps ? [step("›", on)] : []),
         button(
           "⧉ copy",
-          copyLink(sessionId, by, viewerKey(list, index - 1, 0), index),
+          copyLink(
+            addressed,
+            sessionId,
+            by,
+            viewerKey(list, index - 1, 0),
+            index,
+          ),
         ),
       ],
       opts,
@@ -455,6 +468,7 @@ export function viewerRows(
 export function handoffRows(
   handoff: ChannelMessage,
   list: DiagnosticList,
+  to: RendererAddress,
   sessionId: string,
   geometry: DiagnosticGeometry,
 ): readonly Row[] {
@@ -466,7 +480,7 @@ export function handoffRows(
           cell(
             label,
             new Style({ bgcolor: bg, color: fg }).withLink(
-              viewerLink(sessionId, open),
+              viewerLink(to, sessionId, open),
             ),
           ),
         ];
@@ -474,8 +488,14 @@ export function handoffRows(
 }
 
 // The click that shows the message whose key is `key`, or closes the viewer.
-function viewerLink(sessionId: string, key: string, says?: string): string {
+function viewerLink(
+  to: RendererAddress,
+  sessionId: string,
+  key: string,
+  says?: string,
+): string {
   return effectsUrl(
+    to,
     [{ verb: VERB_SET_STATE, args: [sessionId, DIAGNOSTICS_VIEWING, key] }],
     says,
   );

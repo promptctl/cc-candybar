@@ -2,7 +2,7 @@
 // what the store does with its answer: a projection is derived again by every
 // read, at the draw in progress; anything else is cached.
 
-import { TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_LINKS } from "./helpers/link-signer";
 import { HOST, locs, WORLD } from "./helpers/host";
 import { unscriptedLauncher, unscriptedRuns } from "./helpers/fake-launcher";
 import { projectionsOf } from "../src/config/loader/projections";
@@ -200,7 +200,7 @@ test("the config load line names the load's projections", () => {
   const line = (variables: string, segments = "{}"): string => {
     const file = path.join(dir, "config.json5");
     fs.writeFileSync(file, `{ variables: ${variables}, segments: ${segments} }`);
-    const loaded = loadFromDisk(dir, dir, file, { clock: systemTimekeeper, stateDir: stateDir(WORLD.home), locations: locs(), runs: new SourceRuns({ launcher: unscriptedLauncher, clock: systemTimekeeper }), storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, gates: bareGates(),
+    const loaded = loadFromDisk(dir, dir, file, { clock: systemTimekeeper, stateDir: stateDir(WORLD.home), locations: locs(), runs: new SourceRuns({ launcher: unscriptedLauncher, clock: systemTimekeeper }), storage: NO_PLUGIN_STORAGE, links: TEST_LINKS, gates: bareGates(),
       sessionState: new SessionState(),
     });
     expect(loaded.error).toBeNull();

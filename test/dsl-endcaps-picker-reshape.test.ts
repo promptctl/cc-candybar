@@ -1,3 +1,4 @@
+import { MAIN_NAME } from "../src/daemon/home";
 // [LAW:verifiable-goals] Style-picker done-gate: clicking a style option
 // RESHAPES the whole bar live (the powerline cap/separator family changes). The
 // reshape lives in the daemon's PER-RENDER strip-style resolution
@@ -58,7 +59,7 @@ function reshapeBar() {
 
   // Drive the real wire end-to-end: emit the set-state URL the picker would.
   const clickEndcaps = (style: string): Promise<void> =>
-    rig.click(effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "endcaps", style] }]));
+    rig.click(effectsUrl(MAIN_NAME, [{ verb: VERB_SET_STATE, args: [SID, "endcaps", style] }]));
 
   return { render, clickEndcaps };
 }

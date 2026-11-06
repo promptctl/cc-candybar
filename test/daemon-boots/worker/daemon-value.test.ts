@@ -38,7 +38,6 @@ import {
   type Response,
 } from "../../../src/daemon/protocol";
 import type { SessionStorage } from "../../../src/daemon/session-state";
-import { linkClick } from "../../helpers/click";
 import { parseFrame, textOf, type Frame } from "../../../src/render/frame";
 import { PACKAGE_VERSION } from "../../../src/version";
 import { hookData } from "../../helpers/daemon-e2e";
@@ -169,13 +168,7 @@ describe("the daemon is a value", () => {
   };
 
   const clickLink = (daemon: Daemon, url: string): Promise<Response> => {
-    const { verb, value } = linkClick(url);
-    return reply(daemon, {
-      v: PROTOCOL_VERSION,
-      kind: "click",
-      verb,
-      value,
-    });
+    return reply(daemon, { v: PROTOCOL_VERSION, kind: "click", url });
   };
 
   const writeConfig = (text: string): void => writeFileSync(config, text);
@@ -236,7 +229,7 @@ describe("the daemon is a value", () => {
     await expect(
       clickLink(
         daemon,
-        effectsUrl([
+        effectsUrl(homeOf(hostNow()).name, [
           { verb: VERB_SET_STATE, args: ["value-refused", "a.key", "on"] },
         ]),
       ),
@@ -354,7 +347,7 @@ describe("the daemon is a value", () => {
     const { setting, on } = LANES.band.switch;
     await clickLink(
       daemon,
-      effectsUrl([
+      effectsUrl(homeOf(hostNow()).name, [
         {
           verb: VERB_SET_STATE,
           args: ["value-close", setting, String(on)],

@@ -12,6 +12,13 @@
 // scrollback links, a hand-authored `link` template — so a direct verb is the
 // degenerate one-effect case on the parse side; only emission is unified here.)
 //
+// A link names the renderer that drew it, ahead of everything else:
+// `cc-candybar://to/<name>/dispatch/…`. The name is an address and nothing
+// more: the URL handler reads it alone to choose the socket it writes to, and
+// the renderer there verifies the rest. So no signature covers it: a name
+// rewritten to another renderer's reaches a process whose key signed nothing
+// in the tail.
+//
 // Why query params (not slashes, not base64): the value handed to the daemon is
 // passed RAW (parseHandlerUrl decodes only the verb), so each `e` param survives
 // exactly one URLSearchParams decode and an effect's own slash-bearing value
@@ -38,6 +45,12 @@ import {
   MENU_PAGE_NS,
 } from "../config/reserved-names.js";
 import { URL_SCHEME } from "./scheme.js";
+import { parseRendererAddress, type RendererAddress } from "../daemon/home.js";
+
+// [LAW:one-source-of-truth] The segment that marks a link's address, mirrored
+// by the URL handler (url-handler/address.swift) and pinned by
+// scripts/check-protocol.mjs.
+export const LINK_TO = "to";
 
 // [LAW:one-source-of-truth] The verb vocabulary. The daemon's VERBS registry
 // keys off these and every emitter builds effects with them, so the emitted
@@ -326,7 +339,11 @@ export function decodeFirstSegment(value: string): string {
 // payload follows `dispatch/` (not `dispatch?`) so `/` is the only verb delimiter
 // parseHandlerUrl needs. The words are the effects' own unless the draw holds a
 // fact they do not carry, such as the position it shows a key's message at.
+//
+// [LAW:types-are-the-program] The renderer the link is addressed to comes
+// first, so no link can be minted without one.
 export function effectsUrl(
+  to: RendererAddress,
   effects: readonly Effect[],
   says: string = clickDoes(effects),
 ): string {
@@ -334,7 +351,7 @@ export function effectsUrl(
     (e) => `e=${encodeURIComponent(`${e.verb}/${encodeSegments(e.args)}`)}`,
   );
   const qs = [`does=${spell(says)}`, ...params].join("&");
-  return `${URL_SCHEME}://${VERB_DISPATCH}/${qs}`;
+  return `${URL_SCHEME}://${LINK_TO}/${to}/${VERB_DISPATCH}/${qs}`;
 }
 
 // [LAW:dataflow-not-control-flow] Parse the dispatch verb's raw value (an
@@ -398,38 +415,78 @@ export function splitVerb(s: string): ParsedEffect {
 
 // [LAW:parse-dont-validate] A whole `cc-candybar://` link as a click, or why
 // it is not one: the daemon reads every link this way, whether the URL
-// handler app forwarded it raw or a tmux status line's range marked it.
+// handler app forwarded it raw, url-handle relayed it or a tmux status line's
+// range marked it. `to` is the renderer the link names, or null for a link in
+// a grammar older than names (a direct verb, a bare copy, a link a config
+// spells), which names none.
 export type HandlerUrl =
-  | { readonly ok: true; readonly verb: string; readonly value: string }
+  | {
+      readonly ok: true;
+      readonly to: RendererAddress | null;
+      readonly verb: string;
+      readonly value: string;
+    }
   | { readonly ok: false; readonly problem: string };
 
 // [LAW:dataflow-not-control-flow] Parse the URL into a {verb, value} pair
 // without using `new URL`, which lowercases hosts (would mangle case-sensitive
-// session ids). Format: cc-candybar://<verb>/<tail> | cc-candybar://<value>
-// (bare → copy). The verb ends at the FIRST `/`; everything after is the raw
-// value. The dispatch effect list rides as `dispatch/does=…&e=…`, so its query-
-// style payload is just the tail — `?` is NOT a delimiter, it is ordinary data
-// in a bare-copy value (`cc-candybar://hello?world` copies "hello?world").
+// session ids). Format: cc-candybar://to/<name>/<verb>/<tail> |
+// cc-candybar://<verb>/<tail> | cc-candybar://<value> (bare → copy). The
+// verb ends at the FIRST `/` after the address; everything after is the raw
+// value. The dispatch effect list rides as `dispatch/does=…&e=…`, so its
+// query-style payload is just the tail — `?` is NOT a delimiter, it is
+// ordinary data in a bare-copy value (`cc-candybar://hello?world` copies
+// "hello?world"). An addressed link always carries a verb: the bare copy is
+// the old grammar's alone.
 //
 // [LAW:single-enforcer] Only the VERB is decoded here. The value is passed RAW
 // to the verb; each verb's handler decodes its own value at its boundary (the
 // verb that owns the structure owns its decode). A whole-value decode here would
 // un-escape structural separators inside a nested value — the exact hazard that
-// made compound clicks unrepresentable — so it is deliberately absent.
+// made compound clicks unrepresentable — so it is deliberately absent. The
+// name is never decoded either: the URL handler reads it raw, and the name
+// rule admits no character an escape would spell.
 export function parseHandlerUrl(rawUrl: string): HandlerUrl {
   const prefix = `${URL_SCHEME}://`;
   if (!rawUrl.startsWith(prefix)) {
     return { ok: false, problem: `expected a ${prefix} link, got: ${rawUrl}` };
   }
   const rest = rawUrl.slice(prefix.length);
+  const addressed = `${LINK_TO}/`;
+  if (!rest.startsWith(addressed)) {
+    return rest.includes("/")
+      ? verbOf(rest, null)
+      : { ok: true, to: null, verb: VERB_COPY, value: rest };
+  }
+  const named = rest.slice(addressed.length);
+  const slash = named.indexOf("/");
+  if (slash === -1) {
+    return {
+      ok: false,
+      problem: `the link names a renderer and no click: ${rawUrl}`,
+    };
+  }
+  try {
+    return verbOf(
+      named.slice(slash + 1),
+      parseRendererAddress(named.slice(0, slash)),
+    );
+  } catch (error) {
+    return { ok: false, problem: (error as Error).message };
+  }
+}
+
+// A `<verb>/<tail>` run as a click addressed to `to`.
+function verbOf(rest: string, to: RendererAddress | null): HandlerUrl {
   const slash = rest.indexOf("/");
   if (slash === -1) {
-    return { ok: true, verb: VERB_COPY, value: rest };
+    return { ok: false, problem: `the link carries no verb: ${rest}` };
   }
   const encoded = rest.slice(0, slash);
   try {
     return {
       ok: true,
+      to,
       verb: decodeURIComponent(encoded),
       value: rest.slice(slash + 1),
     };

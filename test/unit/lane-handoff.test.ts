@@ -1,3 +1,4 @@
+import { MAIN_NAME } from "../../src/daemon/home";
 // candybar-plugins-vf6g.qzx: the tmux status line is switched by the renderer
 // setting, and the statusline a lane hands the bar off from is one small row
 // whose button draws it back in Claude Code's.
@@ -46,15 +47,15 @@ describe("laneSwitches", () => {
 
 describe("laneHandoff", () => {
   test("is one row holding the button alone", () => {
-    const row = laneHandoff("s1", ["tmuxStatus"]);
+    const row = laneHandoff(MAIN_NAME, "s1", ["tmuxStatus"]);
     expect(row.lines).toHaveLength(1);
     expect(row.lines[0]!.map((span) => span.text)).toEqual([HANDOFF_BUTTON]);
   });
 
   test("its button resets the switch of each lane it hands off to: the renderer, and a 🧪 toggle", () => {
-    const row = laneHandoff("s1", ["band", "tmuxStatus"]);
+    const row = laneHandoff(MAIN_NAME, "s1", ["band", "tmuxStatus"]);
     expect(row.lines[0]![0]!.link).toBe(
-      effectsUrl([
+      effectsUrl(MAIN_NAME, [
         {
           verb: VERB_RESET_CONFIG,
           args: ["s1", "experimentalBand", "renderer"],

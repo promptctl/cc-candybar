@@ -17,7 +17,6 @@ import type {
   PermanentOutcome,
 } from "../daemon/client-transport";
 import { obtainDaemonKick } from "../daemon/acquire";
-import { parseHandlerUrl } from "../click/wire";
 import { APP_NAME, URL_SCHEME } from "../click/scheme";
 import { DOOR_GLYPH } from "../config/disclosure";
 import { PACKAGE_VERSION } from "../version";
@@ -480,13 +479,10 @@ export async function runUrlHandle(
     process.exit(1);
   }
 
-  const parsed = parseHandlerUrl(rawUrl);
-  if (!parsed.ok) {
-    process.stderr.write(`url-handle: ${parsed.problem}\n`);
-    process.exit(1);
-  }
-
-  const outcome = await tryClickViaDaemon(world, parsed.verb, parsed.value);
+  // [LAW:single-enforcer] The link is relayed whole, as the URL handler
+  // relays it: the daemon's one link parse reads it, and a link it refuses
+  // writes its click event and comes back as a permanent outcome below.
+  const outcome = await tryClickViaDaemon(world, rawUrl);
   if (outcome.kind === "ok") {
     process.exit(0);
   }

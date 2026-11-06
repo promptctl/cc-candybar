@@ -20,7 +20,7 @@
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { ansiOf, type Frame } from "../src/render/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_LINKS } from "./helpers/link-signer";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -71,7 +71,7 @@ function render(src: string, opts: BuildLineOptions): Frame {
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
+  const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: process.cwd() });
   return drawPayload(config, compiled, store, registry, {}, instantOf(new Date()), opts).frame;
 }
 

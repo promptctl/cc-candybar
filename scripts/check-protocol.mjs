@@ -85,8 +85,12 @@ const TS_ENTRY = "src/index.ts";
 const TS_DEBUG_TYPES = "src/daemon/debug-types.ts";
 const RS_FOLLOW = "rust-client/src/follow.rs";
 // The URL handler app, the fourth runtime speaking the wire: one frame (the
-// header and the `url` kind, versioned by itself) and the socket path.
+// header and the `url` kind, versioned by itself), the per-uid directory, and
+// the address it reads off a link to choose the socket in it.
 const SWIFT_HANDLER = "url-handler/main.swift";
+const SWIFT_ADDRESS = "url-handler/address.swift";
+const SWIFT_ADDRESS_TEST = "url-handler/address-test.swift";
+const TS_WIRE = "src/click/wire.ts";
 
 // The names of the native client's own subcommands that Node does NOT also
 // name. Compared against the native list itself, so the row agrees exactly
@@ -193,26 +197,35 @@ const CHECKS = [
     ts: memberSet(TS_PROTOCOL, /export interface UrlFrame \{[\s\S]+?\n\}/, /^ {2}(\w+):/gm),
     swift: memberSet(SWIFT_HANDLER, /withJSONObject: \[[^\]]+\]/, /"(\w+)":/g),
   },
-  // The default socket path: the per-uid /tmp directory (src/daemon/home.ts)
-  // and main's socket file in it. The app starts with no shell's environment,
-  // so it has no home to honour and reaches main.
+  // The per-uid /tmp directory (src/daemon/home.ts) every renderer's socket
+  // sits in. The app starts with no shell's environment, so it has no home
+  // to honour: the link's name chooses the file in it.
   {
-    label: "the default socket path, as the URL handler derives it",
-    ts: markers(
-      TS_HOME,
-      [/path\.join\("\/tmp", `cc-candybar-\$\{uid\}`\)/, /const MAIN_SOCKET_FILE = "socket";/],
-      "/tmp/cc-candybar-<uid>/socket",
-    ),
-    rust: markers(
-      RS_MAIN,
-      [/format!\("\/tmp\/cc-candybar-\{uid\}"\)/, /const MAIN_SOCKET_FILE: &str = "socket";/],
-      "/tmp/cc-candybar-<uid>/socket",
-    ),
-    swift: markers(
-      SWIFT_HANDLER,
-      [/"\/tmp\/cc-candybar-\\\(uid\)\/socket"/],
-      "/tmp/cc-candybar-<uid>/socket",
-    ),
+    label: "the per-uid runtime directory, as the URL handler derives it",
+    ts: markers(TS_HOME, [/path\.join\("\/tmp", `cc-candybar-\$\{uid\}`\)/], "/tmp/cc-candybar-<uid>"),
+    rust: markers(RS_MAIN, [/format!\("\/tmp\/cc-candybar-\{uid\}"\)/], "/tmp/cc-candybar-<uid>"),
+    swift: markers(SWIFT_HANDLER, [/"\/tmp\/cc-candybar-\\\(uid\)\/\\\(file\)"/], "/tmp/cc-candybar-<uid>"),
+  },
+  // The socket file a name selects there: main's, or the name's with the
+  // suffix (the suffix's row is below).
+  {
+    label: "main's socket file",
+    ts: lit(TS_HOME, /export const MAIN_SOCKET_FILE = "((?:[^"\\]|\\.)*)";/),
+    rust: lit(RS_MAIN, /const MAIN_SOCKET_FILE: &str = "((?:[^"\\]|\\.)*)";/),
+    swift: lit(SWIFT_ADDRESS, /^let MAIN_SOCKET_FILE = "((?:[^"\\]|\\.)*)"$/m),
+  },
+  {
+    label: "the main renderer's name",
+    ts: lit(TS_HOME, /export const MAIN_NAME: "main" = "((?:[^"\\]|\\.)*)";/),
+    rust: lit(RS_MAIN, /const MAIN_NAME: &str = "((?:[^"\\]|\\.)*)";/),
+    swift: lit(SWIFT_ADDRESS, /^let MAIN_NAME = "((?:[^"\\]|\\.)*)"$/m),
+  },
+  // The segment a link's address follows (`cc-candybar://to/<name>/…`), as
+  // the minter writes it and the URL handler reads it.
+  {
+    label: "a link's address segment",
+    ts: lit(TS_WIRE, /export const LINK_TO = "((?:[^"\\]|\\.)*)";/),
+    swift: lit(SWIFT_ADDRESS, /^let LINK_TO = "((?:[^"\\]|\\.)*)"$/m),
   },
   // The renderer's home (src/daemon/home.ts): a client started with the two
   // variables derives the socket, state and cache the daemon does.
@@ -235,6 +248,7 @@ const CHECKS = [
     label: "a named home's socket suffix",
     ts: lit(TS_HOME, /export const NAMED_SOCKET_SUFFIX = "((?:[^"\\]|\\.)*)";/),
     rust: lit(RS_MAIN, /const NAMED_SOCKET_SUFFIX: &str = "((?:[^"\\]|\\.)*)";/),
+    swift: lit(SWIFT_ADDRESS, /^let NAMED_SOCKET_SUFFIX = "((?:[^"\\]|\\.)*)"$/m),
   },
   {
     label: "a named home's state directory",
@@ -250,19 +264,22 @@ const CHECKS = [
     label: "a renderer name's length",
     ts: num(TS_HOME, /export const RENDERER_NAME_MAX = ([\d\s*]+);/),
     rust: num(RS_MAIN, /const RENDERER_NAME_MAX: usize = ([\d\s*]+);/),
+    swift: num(SWIFT_ADDRESS, /^let RENDERER_NAME_MAX = ([\d\s*]+)$/m),
   },
-  // The name grammar and the home's parse, spelled in both runtimes: each
-  // side's test drives its own parser from its own list, so the lists are
-  // the mirrored fact.
+  // The name rule, spelled in three runtimes, and the home's parse, in two:
+  // each side's test drives its own parser from its own list, so the lists
+  // are the mirrored fact.
   {
-    label: "renderer name grammar: accepted vectors",
+    label: "renderer name rule: accepted vectors",
     ts: memberSet(TS_HOME_TEST, /const NAME_ACCEPT[\s\S]*?\];/, /"([^"]*)"/g),
     rust: memberSet(RS_MAIN, /const NAME_ACCEPT[\s\S]*?\];/, /"([^"]*)"/g),
+    swift: memberSet(SWIFT_ADDRESS_TEST, /^let NAME_ACCEPT[\s\S]*?\n\]/m, /"([^"]*)"/g),
   },
   {
-    label: "renderer name grammar: rejected vectors",
+    label: "renderer name rule: rejected vectors",
     ts: memberSet(TS_HOME_TEST, /const NAME_REJECT[\s\S]*?\];/, /"([^"]*)"/g),
     rust: memberSet(RS_MAIN, /const NAME_REJECT[\s\S]*?\];/, /"([^"]*)"/g),
+    swift: memberSet(SWIFT_ADDRESS_TEST, /^let NAME_REJECT[\s\S]*?\n\]/m, /"([^"]*)"/g),
   },
   {
     label: "the home's parse: its cases",
@@ -649,26 +666,30 @@ const CHECKS = [
 const MIRRORS = { rust: "Rust", push: "statusline push", swift: "Swift URL handler" };
 const failures = [];
 for (const row of CHECKS) {
-  const key = Object.keys(MIRRORS).find((k) => k in row);
+  const keys = Object.keys(MIRRORS).filter((k) => k in row);
   // [LAW:no-silent-failure] A row naming no mirror is a mistake in this file,
   // said by its label, not a TypeError from calling what it lacks.
-  if (key === undefined) {
+  if (keys.length === 0) {
     throw new Error(
       `check-protocol: row "${row.label}" names no mirror (one of ${Object.keys(MIRRORS).join(", ")})`,
     );
   }
-  const [mirrorName, mirror] = [MIRRORS[key], row[key]];
+  // [LAW:no-silent-failure] Every mirror a row names is held to TS: a row
+  // that spells a fact in three runtimes is a check on all three.
   const tsValue = row.ts();
-  const mirrorValue = mirror();
-  if (tsValue === null || mirrorValue === null) {
-    const missing = [tsValue === null && "TS", mirrorValue === null && mirrorName]
-      .filter(Boolean)
-      .join(" and ");
-    failures.push(`${row.label}: anchor not found in ${missing} source`);
-    continue;
-  }
-  if (tsValue !== mirrorValue) {
-    failures.push(`${row.label}: TS=${tsValue} vs ${mirrorName}=${mirrorValue}`);
+  for (const key of keys) {
+    const mirrorName = MIRRORS[key];
+    const mirrorValue = row[key]();
+    if (tsValue === null || mirrorValue === null) {
+      const missing = [tsValue === null && "TS", mirrorValue === null && mirrorName]
+        .filter(Boolean)
+        .join(" and ");
+      failures.push(`${row.label}: anchor not found in ${missing} source`);
+      continue;
+    }
+    if (tsValue !== mirrorValue) {
+      failures.push(`${row.label}: TS=${tsValue} vs ${mirrorName}=${mirrorValue}`);
+    }
   }
 }
 

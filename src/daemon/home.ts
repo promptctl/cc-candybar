@@ -39,7 +39,7 @@ export type RendererHome =
 // else can be one.
 export type RendererName = string & { readonly RendererName: unique symbol };
 
-export const MAIN_NAME = "main";
+export const MAIN_NAME: "main" = "main";
 
 // Mirrored by the Rust client (rust-client/src/main.rs) and diffed by
 // scripts/check-protocol.mjs: a client started with the two variables derives
@@ -66,29 +66,49 @@ export const RENDERER_NAME_MAX = 32;
 
 const NAME_GRAMMAR = /^[a-z0-9][a-z0-9-]*$/;
 
-export function parseRendererName(raw: string): RendererName {
+// [LAW:types-are-the-program] What a link names: the main renderer, or a
+// named one. A home's name is one of these, and so is the address a link
+// carries, so a link can only ever name a renderer some home could be.
+export type RendererAddress = typeof MAIN_NAME | RendererName;
+
+// [LAW:one-source-of-truth] The name rule, grammar and length, said once.
+// `where` is where the name came from, so a refusal names the variable or the
+// link the user can go and fix. Private, because "main" passes it: each parse
+// below says what "main" means where it reads a name.
+function nameOf(raw: string, where: string): RendererName {
   if (!NAME_GRAMMAR.test(raw)) {
     throw new Error(
-      `${NAME_ENV} must be lowercase letters, digits and dashes, starting with a letter or digit, got ${JSON.stringify(raw)}`,
+      `${where} must be lowercase letters, digits and dashes, starting with a letter or digit, got ${JSON.stringify(raw)}`,
     );
   }
   if (raw.length > RENDERER_NAME_MAX) {
     throw new Error(
-      `${NAME_ENV} must be at most ${RENDERER_NAME_MAX} characters, got ${raw.length}: ${JSON.stringify(raw)}`,
-    );
-  }
-  if (raw === MAIN_NAME) {
-    throw new Error(
-      `${NAME_ENV} may not be ${JSON.stringify(MAIN_NAME)}: that is the main renderer's name, which is what an unset ${HOME_ENV} and ${NAME_ENV} mean`,
+      `${where} must be at most ${RENDERER_NAME_MAX} characters, got ${raw.length}: ${JSON.stringify(raw)}`,
     );
   }
   return raw as RendererName;
 }
 
+export function parseRendererName(raw: string): RendererName {
+  const name = nameOf(raw, NAME_ENV);
+  if (name === MAIN_NAME) {
+    throw new Error(
+      `${NAME_ENV} may not be ${JSON.stringify(MAIN_NAME)}: that is the main renderer's name, which is what an unset ${HOME_ENV} and ${NAME_ENV} mean`,
+    );
+  }
+  return name;
+}
+
+// [LAW:parse-dont-validate] The name a link addresses. A link may name main,
+// which is where an unset home's renderer listens.
+export function parseRendererAddress(raw: string): RendererAddress {
+  return raw === MAIN_NAME ? MAIN_NAME : nameOf(raw, "a link's renderer name");
+}
+
 // [LAW:one-source-of-truth] The socket file is one function of the name, which
-// the URL handler will compute from a link's name alone; the links lane spells
-// the same function in Swift.
-export function socketFile(name: typeof MAIN_NAME | RendererName): string {
+// the URL handler computes from a link's name alone (url-handler/address.swift,
+// held to this by scripts/check-protocol.mjs).
+export function socketFile(name: RendererAddress): string {
   return name === MAIN_NAME
     ? MAIN_SOCKET_FILE
     : `${name}${NAMED_SOCKET_SUFFIX}`;

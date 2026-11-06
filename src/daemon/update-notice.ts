@@ -18,6 +18,7 @@
 // context) → diagnostic channels. The watch below is the edge: the clocks, the
 // registry fetch, the act's record, the validator registrations.
 
+import type { RendererAddress } from "./home.js";
 import {
   effectsUrl,
   VERB_APPLY_UPDATE,
@@ -156,6 +157,8 @@ export function factsOf(update: Update): UpdateFacts {
 // session dismissed (the identity it wrote, or nothing), and whether the
 // session's config allows the notice at all (Globals.updateNotice).
 export interface NoticeContext {
+  // The renderer the notice's clicks are addressed to.
+  readonly to: RendererAddress;
   readonly sessionId: string;
   readonly dismissed: string | null;
   readonly enabled: boolean;
@@ -188,14 +191,16 @@ export function updateNotice(
       ? diagnosticSpan(`[${facts.busy}]`, null)
       : diagnosticSpan(
           `[${facts.act}]`,
-          effectsUrl([{ verb: VERB_APPLY_UPDATE, args: [ctx.sessionId] }]),
+          effectsUrl(ctx.to, [
+            { verb: VERB_APPLY_UPDATE, args: [ctx.sessionId] },
+          ]),
         );
   const first: DiagnosticLine = [
     diagnosticSpan(sentence, null),
     actSpan,
     diagnosticSpan(
       "[dismiss]",
-      effectsUrl([
+      effectsUrl(ctx.to, [
         {
           verb: VERB_SET_STATE,
           args: [ctx.sessionId, UPDATE_DISMISSED_KEY, identity],
@@ -204,7 +209,7 @@ export function updateNotice(
     ),
     diagnosticSpan(
       "[disable]",
-      effectsUrl([
+      effectsUrl(ctx.to, [
         {
           verb: VERB_SET_CONFIG,
           args: [ctx.sessionId, UPDATE_NOTICE_FIELD, "false"],

@@ -730,11 +730,11 @@ async function clickEvent(
 }
 
 // [LAW:parse-dont-validate][LAW:no-silent-failure] A click request run to its
-// outcome. Its verb and value are untrusted JSON, refused here unless both are
-// strings, and whatever the click then throws is its outcome too, so every
-// click writes its event: a refusal of its arguments is a bad request, and
-// anything else thrown is the daemon's failure — a program the click ran, or
-// a bug — recorded with the stack that says which.
+// outcome. Its link is untrusted JSON, refused here unless it is a string, and
+// whatever the click then throws is its outcome too, so every click writes its
+// event: a refusal of its link is a bad request, and anything else thrown is
+// the daemon's failure — a program the click ran, or a bug — recorded with the
+// stack that says which.
 async function clickOutcome(
   parts: DaemonParts,
   req: ClickRequest,
@@ -743,16 +743,14 @@ async function clickOutcome(
 ): Promise<RequestOutcome> {
   const arrival: ClickArrival = { via: "link", delivery: { kind: "cli" } };
   noteFacts(facts, { via: "cli" });
-  const { verb, value } = req as { verb: unknown; value: unknown };
-  if (typeof verb !== "string" || typeof value !== "string") {
+  const { url } = req as { url: unknown };
+  if (typeof url !== "string") {
     return {
       kind: "bad-request",
-      problems: [
-        `a click's verb and value are strings, got ${typeof verb} and ${typeof value}`,
-      ],
+      problems: [`a click's link is a string, got ${typeof url}`],
     };
   }
-  return clickRan(() => handleClick(parts, verb, value, arrival, facts, gone));
+  return clickRan(() => linkClick(parts, url, arrival, facts, gone));
 }
 
 // [LAW:parse-dont-validate][LAW:no-silent-failure] The URL handler's frame run
@@ -789,15 +787,11 @@ async function urlClick(
           problems: [`the URL handler's frame carries no url string`],
         };
       }
-      const link = parseHandlerUrl(url);
-      if (!link.ok) return { kind: "bad-request", problems: [link.problem] };
       const arrival: ClickArrival = {
         via: "link",
         delivery: { kind: "forwarder", urlV },
       };
-      return clickRan(() =>
-        handleClick(parts, link.verb, link.value, arrival, facts, gone),
-      );
+      return clickRan(() => linkClick(parts, url, arrival, facts, gone));
     },
   );
 }
@@ -841,13 +835,49 @@ function daemonOutcome(error: unknown): RequestOutcome {
 // response code: BadVerbArgs (invalid input shape) becomes BAD_REQUEST; any
 // other Error (operational failure) becomes RENDER_FAILED. No string matching.
 
-// [LAW:dataflow-not-control-flow] The field a click records the verb it runs
-// under, by how it arrived: a status-line click has already recorded its own
-// verb, so the one its link runs is `linkVerb`.
+// [LAW:dataflow-not-control-flow] The fields a click records its link's
+// address and the verb it runs under, by how it arrived: a status-line click
+// has already recorded its own, so the ones the link its range marks carries
+// are `linkTo` and `linkVerb`.
+const TO_FACT: Readonly<Record<ClickArrival["via"], string>> = {
+  link: "to",
+  "tmux-status": "linkTo",
+};
 const VERB_FACT: Readonly<Record<ClickArrival["via"], string>> = {
   link: "verb",
   "tmux-status": "linkVerb",
 };
+
+// [LAW:single-enforcer] Every link a click carries, however it arrived (the
+// URL handler's frame, url-handle's request, a tmux status range): read by
+// the one link parse, its address recorded, and judged here, the one place a
+// link's address meets this renderer's name. A link named for another
+// renderer reached the wrong socket, so it is refused rather than run on
+// state it was never drawn from.
+async function linkClick(
+  parts: DaemonParts,
+  url: string,
+  arrival: ClickArrival,
+  facts: RequestFacts,
+  clientGone: () => boolean,
+): Promise<RequestOutcome> {
+  const link = parseHandlerUrl(url);
+  if (!link.ok) return { kind: "bad-request", problems: [link.problem] };
+  noteFacts(facts, { [TO_FACT[arrival.via]]: link.to ?? "-" });
+  const own = parts.links.to;
+  // [LAW:no-mode-explosion] exception: a link with no address (an old
+  // grammar, or one a config spells) runs on the renderer it reached, until
+  // the tickets that remove those forms (b2l.eul, b2l.x87) leave none.
+  if (link.to !== null && link.to !== own) {
+    return {
+      kind: "bad-request",
+      problems: [
+        `the link is addressed to renderer ${JSON.stringify(link.to)}, and this is ${JSON.stringify(own)}`,
+      ],
+    };
+  }
+  return handleClick(parts, link.verb, link.value, arrival, facts, clientGone);
+}
 
 async function handleClick(
   parts: DaemonParts,
@@ -858,6 +888,14 @@ async function handleClick(
   clientGone: () => boolean,
 ): Promise<RequestOutcome> {
   if (verb === VERB_TMUX_STATUS_CLICK) {
+    // [LAW:no-silent-failure] A link the bar draws never names this verb; one
+    // that did would be a click that only ever clicks another.
+    if (arrival.via === "tmux-status") {
+      return {
+        kind: "bad-request",
+        problems: ["a status-line link names another status-line click"],
+      };
+    }
     noteFacts(facts, { verb });
     return statusLineClick(parts, value, facts, clientGone);
   }
@@ -935,17 +973,10 @@ async function statusLineClick(
   noteFacts(facts, { link: click.url });
   if (click.url.startsWith("cc-candybar://")) {
     // A link a config wrote with a malformed escape is refused, as any
-    // click's malformed wire encoding is.
-    const parsed = parseHandlerUrl(click.url);
-    if (!parsed.ok) return refused(parsed.problem);
-    // [LAW:no-silent-failure] A link the bar draws never names this verb; one
-    // that did would be a click that only ever clicks another.
-    if (parsed.verb === VERB_TMUX_STATUS_CLICK)
-      return refused("a status-line link names another status-line click");
-    return handleClick(
+    // click's malformed wire encoding is, on the one link path.
+    return linkClick(
       parts,
-      parsed.verb,
-      parsed.value,
+      click.url,
       { via: "tmux-status" },
       facts,
       clientGone,

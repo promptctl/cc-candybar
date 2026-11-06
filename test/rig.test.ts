@@ -1,3 +1,4 @@
+import { MAIN_NAME } from "../src/daemon/home";
 // What the rig promises a test that builds it: the parse and the compile of one
 // source are shared between rigs, and everything that holds a subscription or a
 // session's picks is a rig's own.
@@ -116,12 +117,12 @@ describe("buildRig", () => {
     }
   });
 
-  test("a compile is shared by signer: one signer's compile is not another's", () => {
+  test("a compile is shared by renderer links: one renderer's compile is not another's", () => {
     const rig = buildRig({ source: SOURCE });
     try {
       const input = compileInputOf(rig.config);
-      const one = linkSigner(Buffer.alloc(32, 1));
-      const two = linkSigner(Buffer.alloc(32, 2));
+      const one = { to: MAIN_NAME, signer: linkSigner(Buffer.alloc(32, 1)) };
+      const two = { to: MAIN_NAME, signer: linkSigner(Buffer.alloc(32, 2)) };
       const key = compileKey(input);
       expect(sharedCompile(one)(key, input)).toBe(
         sharedCompile(one)(key, input),

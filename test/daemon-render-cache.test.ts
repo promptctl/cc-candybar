@@ -7,7 +7,7 @@ import { FACTS_NOTHING } from "./helpers/facts";
 // bzh.2; this is the new, smaller test set scoped to the DSL spine.
 
 import { homeOf } from "../src/daemon/home";
-import { TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_LINKS } from "./helpers/link-signer";
 import { HOST, WORLD, hostOf, worldOf, mainEnv } from "./helpers/host";
 import type { Host, World } from "../src/host";
 import {
@@ -123,7 +123,7 @@ function makeCache(
       locations: locations(host, homeOf(host)),
       runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
-      signer: TEST_SIGNER,
+      links: TEST_LINKS,
       gates: bareGates(),
       sessionState,
       watchers,
@@ -1419,7 +1419,7 @@ describe("RenderCache idle sweep", () => {
         locations: locations(host, homeOf(host)),
         runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
-        signer: TEST_SIGNER,
+        links: TEST_LINKS,
         gates: bareGates(),
         sessionState: new SessionState(),
         watchers,
@@ -1477,7 +1477,7 @@ describe("RenderCache idle sweep", () => {
         locations: locations(host, homeOf(host)),
         runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
-        signer: TEST_SIGNER,
+        links: TEST_LINKS,
         gates: bareGates(),
         sessionState: new SessionState(),
         watchers,
@@ -1539,7 +1539,7 @@ describe("RenderCache idle sweep", () => {
         locations: locations(host, homeOf(host)),
         runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
-        signer: TEST_SIGNER,
+        links: TEST_LINKS,
         gates: bareGates(),
         sessionState,
         watchers,
@@ -1625,7 +1625,7 @@ describe("RenderCache frames and pins", () => {
         locations: locations(host, homeOf(host)),
         runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
-        signer: TEST_SIGNER,
+        links: TEST_LINKS,
         gates: bareGates(),
         sessionState: new SessionState(),
         watchers,
@@ -1748,7 +1748,7 @@ describe("RenderCache frames and pins", () => {
         locations: locations(host, homeOf(host)),
         runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
-        signer: TEST_SIGNER,
+        links: TEST_LINKS,
         gates: bareGates(),
         sessionState: new SessionState(),
         watchers,
@@ -1822,7 +1822,7 @@ describe("RenderCache frames and pins", () => {
         locations: locations(host, homeOf(host)),
         runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
-        signer: TEST_SIGNER,
+        links: TEST_LINKS,
         gates: bareGates(),
         sessionState: new SessionState(),
         watchers,

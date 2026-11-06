@@ -4,7 +4,7 @@
 
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
-import { TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_LINKS } from "./helpers/link-signer";
 import { picked, selectionFor } from "./helpers/selection";
 import { SessionState } from "../src/daemon/session-state";
 import { VariableStore } from "../src/var-system/store";
@@ -38,7 +38,7 @@ function frameOf(
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, {
-    signer: TEST_SIGNER,
+    links: TEST_LINKS,
     cwd: "/tmp",
   });
   try {

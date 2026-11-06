@@ -22,7 +22,7 @@ import { unscriptedRuns } from "./helpers/fake-launcher";
 import { drawPayload } from "./helpers/draw-payload";
 import { runUnder } from "./helpers/frame";
 import type { Frame } from "../src/render/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_LINKS } from "./helpers/link-signer";
 import { picked, selectionFor } from "./helpers/selection";
 import {
   contrastRatio,
@@ -222,7 +222,7 @@ function renderOne(
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState());
   try {
-    const compiled = registerDslConfig(one, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
+    const compiled = registerDslConfig(one, registry, { links: TEST_LINKS, cwd: process.cwd() });
     return drawPayload(
       one,
       compiled,

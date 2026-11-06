@@ -7,7 +7,7 @@
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { linksOf } from "../src/click/read";
-import { TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_LINKS } from "./helpers/link-signer";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { ValidatedConfig } from "../src/config/dsl-types";
@@ -40,7 +40,7 @@ const B = instantOf(new Date(2026, 5, 4, 12, 34, 57));
 function viewOf(config: ValidatedConfig, sessionState = new SessionState()) {
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
+  const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/tmp" });
   const errors: string[] = [];
   const warnings: RenderWarning[] = [];
   const draw = (

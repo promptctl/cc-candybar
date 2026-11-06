@@ -1,3 +1,4 @@
+import { MAIN_NAME } from "../src/daemon/home";
 // [LAW:behavior-not-structure] The `run` action through what a user and an
 // operator see: the load errors a declaration earns, the link a draw makes,
 // what a click does with a link (runs the program, or refuses it into the
@@ -55,7 +56,7 @@ import { encodeRenderOrigin } from "../src/daemon/foundations/render-origin";
 import { sessionIdOf, type SessionId } from "../src/daemon/session-id";
 import type { StorageKey } from "../src/daemon/cache/managed-storage";
 import { clickUrl, effectsOf, testVerbContext, TEST_STORED_ROOT } from "./helpers/click";
-import { TEST_LINK_KEY, TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_LINK_KEY, TEST_SIGNER, TEST_LINKS } from "./helpers/link-signer";
 import { viewFacts } from "./helpers/view-facts";
 import { throughout, until } from "./helpers/until";
 import { untilHeard } from "./helpers/reload-signal";
@@ -220,7 +221,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
       sessionState,
       watchers,
       storage: providers.managedStorage,
-      signer: TEST_SIGNER,
+      links: TEST_LINKS,
       gates: bareGates(),
       log,
       facts: inProcessFacts({ providers, update: () => pendingOf("unread") }),
@@ -405,7 +406,7 @@ describe("a run's declaration", () => {
       runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
-      signer: TEST_SIGNER,
+      links: TEST_LINKS,
       gates: bareGates(),
     });
     try {
@@ -435,7 +436,7 @@ describe("a run's declaration", () => {
       runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
-      signer: TEST_SIGNER,
+      links: TEST_LINKS,
       gates: bareGates(),
     });
     try {
@@ -614,7 +615,7 @@ describe("a click on a run link", () => {
     evaluated: string;
     mac: string;
   }) =>
-    effectsUrl([{ verb: VERB_RUN, args: [l.sid, l.name, l.evaluated, l.mac] }]);
+    effectsUrl(MAIN_NAME, [{ verb: VERB_RUN, args: [l.sid, l.name, l.evaluated, l.mac] }]);
 
   test.each([
     ["the session", (l: ReturnType<typeof runLink>) => ({ ...l, sid: "s2" })],
@@ -712,7 +713,7 @@ describe("a click on a run link", () => {
     const r = rig();
     const { view, link } = await drawnLink(r);
     const ctx = clickContext(r, view, {
-      links: linkSigner(Buffer.alloc(32, 9)),
+      links: { to: TEST_LINKS.to, signer: linkSigner(Buffer.alloc(32, 9)) },
     });
     await expect(clickUrl(link.url, ctx)).rejects.toThrow(
       /signature does not match/,

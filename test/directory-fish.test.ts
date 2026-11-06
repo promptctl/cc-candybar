@@ -13,7 +13,7 @@ import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_LINKS } from "./helpers/link-signer";
 import { RAW_DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { registerDslConfig } from "../src/dsl/render";
@@ -85,7 +85,7 @@ function renderDirRaw(paths: DirPaths): Frame {
   const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState());
   try {
     const compiled = registerDslConfig(parsed, registry, {
-      signer: TEST_SIGNER,
+      links: TEST_LINKS,
       cwd: paths.current_dir,
     });
     const basePalette = getThemePalette("textual-dark"!);
@@ -237,7 +237,7 @@ describe("configurability seam: user template override restores full path", () =
     const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState());
     try {
       const compiled = registerDslConfig(overridden, registry, {
-        signer: TEST_SIGNER,
+        links: TEST_LINKS,
         cwd: "/Users/bmf/code/cc-candybar",
       });
       const basePalette = getThemePalette("textual-dark"!);

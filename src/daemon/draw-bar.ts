@@ -1,6 +1,7 @@
 // One render of a session, a request's or a frame's, and what it records.
 
 import path from "node:path";
+import type { RendererAddress } from "./home.js";
 import { elapsedMs, type Monotonic } from "../time.js";
 import { checkoutLocation } from "../utils/git-root.js";
 import { inTmux } from "../tmux-hint.js";
@@ -146,6 +147,7 @@ export function renderFrame(
     );
     const answer = RENDER_ANSWERS.ansi(drawn.body);
     const statusline = statuslineOf(
+      parts.links.to,
       sessionId,
       drawn,
       handedOffTo(lanes, frameFeeds.following(sessionId)),
@@ -438,7 +440,7 @@ export function drawRender(
     frameFeeds,
     renderCache,
     updateWatch,
-    linkSigner,
+    links,
     fileEvents,
     renderWarnings,
     payloadProviders,
@@ -489,13 +491,14 @@ export function drawRender(
   // THIS session: what it dismissed and whether its config allows the
   // notice — both values, folded by the notice into zero or one message.
   const updates = updateWatch.notice({
+    to: links.to,
     sessionId,
     dismissed: sessionState.get(sessionId, UPDATE_DISMISSED_KEY),
     enabled: effective.updateNotice,
   });
   // [LAW:single-enforcer] Each repository awaiting the user's answer asks,
   // in every session drawn from the entry, until one of them answers.
-  const questions = repoQuestions(entry.repos, sessionId, linkSigner);
+  const questions = repoQuestions(entry.repos, sessionId, links);
   // What a load or a request could not honour: each its own message, named by
   // what it is about. A load's error is about the session's config, and a
   // drop about the file that wrote it, so their text may change under an open
@@ -563,6 +566,7 @@ export function drawRender(
   // session (src/daemon/render-warnings.ts).
   const scope = { config: state.config };
   const diagnostics = collectDiagnostics(
+    links.to,
     sessionId,
     drawing.by,
     errors,
@@ -693,7 +697,14 @@ export function drawRender(
       ? frame
       : standIn(
           frame,
-          viewerRows(diagnostics, viewing, sessionId, drawing.by, geometry),
+          viewerRows(
+            diagnostics,
+            viewing,
+            links.to,
+            sessionId,
+            drawing.by,
+            geometry,
+          ),
         );
   const g = payloadProviders.gitProvider.getStats();
   const u = payloadProviders.usageStore.getStats();
@@ -977,7 +988,9 @@ export async function drawAnswer(
   // it to the lanes drawing it elsewhere.
   const toStatusline = roleOf(req.hints.client ?? null) === "statusline";
   const resp = RENDER_ANSWERS[req.encoding](
-    toStatusline ? statuslineOf(sessionId, drawn, elsewhere) : drawn.body,
+    toStatusline
+      ? statuslineOf(parts.links.to, sessionId, drawn, elsewhere)
+      : drawn.body,
   );
   // [LAW:nothing-unseen] Which lanes the statusline handed the bar to, and
   // how long the turn after the wait took to make the answer — what the
@@ -1002,6 +1015,7 @@ export async function drawAnswer(
 // one list, and its click opens the one viewer: while it is open the statusline
 // shows it, the same body the lanes draw.
 function statuslineOf(
+  to: RendererAddress,
   sessionId: string,
   drawn: DrawnBar,
   elsewhere: readonly Lane[],
@@ -1012,8 +1026,9 @@ function statuslineOf(
     : standIn(
         drawn.body,
         handoffRows(
-          laneHandoff(sessionId, [first, ...rest]),
+          laneHandoff(to, sessionId, [first, ...rest]),
           drawn.diagnostics,
+          to,
           sessionId,
           drawn.geometry,
         ),

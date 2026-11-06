@@ -1,3 +1,4 @@
+import { MAIN_NAME } from "../src/daemon/home";
 // [LAW:verifiable-goals] brandon-themes-07p done-gates: (1) a `styles` block
 // loads/validates loudly; (2) an action `{ set: "style", from: "styles" }` ranges
 // the config's style names in BOTH the rendered options and the derived wire
@@ -363,7 +364,7 @@ describe("style click — live whole-bar recolor over the active theme", () => {
     });
     const render = (): Frame => rig.draw({ payload: { session_id: SID } }).frame;
     const clickStyle = (look: string): Promise<void> =>
-      rig.click(effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "style", look] }]));
+      rig.click(effectsUrl(MAIN_NAME, [{ verb: VERB_SET_STATE, args: [SID, "style", look] }]));
     return { ...rig, render, clickStyle };
   }
 

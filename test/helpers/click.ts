@@ -8,7 +8,7 @@ import { HOST } from "./host";
 import { unscriptedLauncher } from "./fake-launcher";
 import type { Host } from "../../src/host";
 import { HEALTHY_BUNDLE } from "./doctor-facts";
-import { TEST_SIGNER } from "./link-signer";
+import { TEST_LINKS } from "./link-signer";
 import { JournalTurns } from "../../src/daemon/journal-turns";
 import { NavigationHistory } from "../../src/daemon/navigation-history";
 import {
@@ -203,7 +203,7 @@ export function testVerbContext(
     sourcesFor: () => {
       throw new Error("sourcesFor: this test handed in no sources");
     },
-    links: TEST_SIGNER,
+    links: TEST_LINKS,
     runs: {
       start: () => {
         throw new Error("run: no run owner in this test");

@@ -6,7 +6,7 @@ import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linksOf } from "../src/click/read";
-import { TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_LINKS } from "./helpers/link-signer";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -55,7 +55,7 @@ function renderOf(
   );
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState());
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
+  const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/tmp/proj" });
   return drawPayload(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), {
     ...OPTS,
     width,
@@ -136,7 +136,7 @@ describe("{{ picker }} over a catalogue", () => {
     const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState());
     const compiled = registerDslConfig(config, registry, {
-      signer: TEST_SIGNER,
+      links: TEST_LINKS,
       cwd: "/tmp/proj",
     });
     const out = drawPayload(

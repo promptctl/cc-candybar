@@ -80,6 +80,7 @@ import type { RenderedLine } from "../dsl/node-registry.js";
 import type { ClaudeInputEdge } from "../claude-input/edge.js";
 import { LaneSetups, type LaneEdge } from "./lane-setup.js";
 import type { LinkSigner } from "../click/link-signer.js";
+import type { RendererLinks } from "../click/renderer-links.js";
 import { RenderWarningRecords } from "./render-warnings.js";
 import { instantOf, type Instant } from "../utils/instant.js";
 import { JournalTurns } from "./journal-turns.js";
@@ -420,9 +421,10 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     failed: (sessionId, error) =>
       sayUnapplied(log, "menu-idle", `session=${sessionId}`, error),
   });
-  // [LAW:single-enforcer] The one signer of every `run` link this daemon draws
-  // and the one that verifies them on the click, over the state directory's key.
-  const linkSigner = inputs.linkSigner;
+  // [LAW:single-enforcer] Whose links this daemon draws: every one addressed to
+  // its home's name, and every `run` link signed, and verified on the click,
+  // over the state directory's key.
+  const links: RendererLinks = { to: home.name, signer: inputs.linkSigner };
   // [LAW:no-ambient-temporal-coupling] The one owner of every `run` program in
   // flight (src/daemon/runs.ts), closed with the daemon.
   const runs = new Runs({
@@ -580,7 +582,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
           watchers: watcherRegistry,
           log,
           storage: managedStorage,
-          signer: linkSigner,
+          links,
           gates,
           // [LAW:single-enforcer] Where every session's facts come from: the
           // in-process arm over the daemon's own owners, which logs the refreshes
@@ -752,7 +754,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     sourcesFor: (origin: RenderOrigin) =>
       renderCache.getOrCreate(origin.projectDir, origin.cwd, origin.target.path)
         .state.sources,
-    links: linkSigner,
+    links,
     runs,
     lanes: {
       of: (origin: RenderOrigin, sessionId: string) =>
@@ -789,7 +791,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     effectSessions,
     menuIdle,
     journalTurns,
-    linkSigner,
+    links,
     runs,
     sourceRuns,
     laneSetups,

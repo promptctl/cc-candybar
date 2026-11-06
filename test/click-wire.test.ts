@@ -40,6 +40,7 @@ import {
   type Effect,
 } from "../src/click/wire";
 import { parseHandlerUrl } from "../src/click/wire";
+import { MAIN_NAME, parseRendererName } from "../src/daemon/home";
 import { linkClick } from "./helpers/click";
 import { VERBS, BadVerbArgs } from "../src/daemon/verbs";
 import { SessionState } from "../src/daemon/session-state";
@@ -62,10 +63,10 @@ const ctx = (sessionState: SessionState) => {
 
 describe("click wire — encode/decode round-trip", () => {
   test("a single effect serializes to a dispatch URL and decodes back", () => {
-    const url = effectsUrl([
+    const url = effectsUrl(MAIN_NAME, [
       { verb: VERB_SET_STATE, args: [SID, "theme", "nord"] },
     ]);
-    expect(url.startsWith("cc-candybar://dispatch/does=set+theme+to+nord&e=")).toBe(
+    expect(url.startsWith("cc-candybar://to/main/dispatch/does=set+theme+to+nord&e=")).toBe(
       true,
     );
     expect(effectsOf(url)).toEqual([
@@ -74,7 +75,7 @@ describe("click wire — encode/decode round-trip", () => {
   });
 
   test("N effects ride one URL in author order (set leads, copy follows)", () => {
-    const url = effectsUrl([
+    const url = effectsUrl(MAIN_NAME, [
       { verb: VERB_SET_STATE, args: [SID, "theme", "nord"] },
       { verb: VERB_COPY, args: ["copied!"] },
     ]);
@@ -86,7 +87,7 @@ describe("click wire — encode/decode round-trip", () => {
 
   test("values bearing /, & and = round-trip intact (slash-safety)", () => {
     const nasty = "a/b&c=d/e";
-    const url = effectsUrl([{ verb: VERB_COPY, args: [nasty] }]);
+    const url = effectsUrl(MAIN_NAME, [{ verb: VERB_COPY, args: [nasty] }]);
     expect(effectsOf(url)).toEqual([{ verb: "copy", args: [nasty] }]);
   });
 
@@ -96,7 +97,7 @@ describe("click wire — encode/decode round-trip", () => {
   });
 
   test("parseEffects preserves order and keeps each tail encoded for the handler", () => {
-    const url = effectsUrl([
+    const url = effectsUrl(MAIN_NAME, [
       { verb: VERB_SET_STATE, args: [SID, "k", "v"] },
       { verb: VERB_COPY, args: ["x"] },
     ]);
@@ -110,7 +111,7 @@ describe("click wire — encode/decode round-trip", () => {
 // test/click-does.test.ts holds these to the bar's real clicks.
 describe("a link says in words what its click does", () => {
   const spelled = (effects: readonly Effect[]): string =>
-    /^cc-candybar:\/\/dispatch\/does=([^&]*)/.exec(effectsUrl(effects))![1]!;
+    /^cc-candybar:\/\/to\/main\/dispatch\/does=([^&]*)/.exec(effectsUrl(MAIN_NAME, effects))![1]!;
   const does = (effects: readonly Effect[]): string =>
     new URLSearchParams(`does=${spelled(effects)}`).get("does")!;
   const MAC = "ab".repeat(32);
@@ -268,7 +269,7 @@ describe("a link says in words what its click does", () => {
 
   test("a link is printable ASCII whatever a value holds", () => {
     expect(
-      effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "k", "▲ 🍫"] }]),
+      effectsUrl(MAIN_NAME, [{ verb: VERB_SET_STATE, args: [SID, "k", "▲ 🍫"] }]),
     ).toMatch(/^[\x21-\x7e]+$/);
   });
 
@@ -291,13 +292,13 @@ describe("a link says in words what its click does", () => {
     const effects: Effect[] = [
       { verb: VERB_SET_STATE, args: [SID, "k", "2583095899324419"] },
     ];
-    const url = effectsUrl(effects, "show diagnostic 2 of 15 page 3");
+    const url = effectsUrl(MAIN_NAME, effects, "show diagnostic 2 of 15 page 3");
     expect(url).toContain("does=show+diagnostic+2+of+15+page+3&e=");
-    expect(effectsOf(url)).toEqual(effectsOf(effectsUrl(effects)));
+    expect(effectsOf(url)).toEqual(effectsOf(effectsUrl(MAIN_NAME, effects)));
   });
 
   test("the words are not part of the click", () => {
-    const url = effectsUrl([
+    const url = effectsUrl(MAIN_NAME, [
       { verb: VERB_SET_STATE, args: [SID, "theme", "nord"] },
     ]);
     expect(effectsOf(url.replace(/does=[^&]*/, "does=anything"))).toEqual(
@@ -328,9 +329,54 @@ describe("a dispatch link drawn before `does` existed", () => {
   });
 });
 
+// [LAW:verifiable-goals] A link names the renderer that drew it: the URL
+// handler reads that name alone to choose a socket, and the renderer there
+// checks it against its own.
+describe("a link names the renderer that drew it", () => {
+  const NAMED = parseRendererName("dev-bar");
+  const CLICK: Effect[] = [
+    { verb: VERB_SET_STATE, args: [SID, "theme", "nord"] },
+    { verb: VERB_RUN, args: [SID, "deploy", '{"run":["make"],"env":{}}', "ab".repeat(32)] },
+  ];
+
+  test.each([MAIN_NAME, NAMED])("a link minted for %s parses back to that name and its click", (to) => {
+    const url = effectsUrl(to, CLICK);
+    expect(url.startsWith(`cc-candybar://to/${to}/dispatch/does=`)).toBe(true);
+    const link = parseHandlerUrl(url);
+    expect(link).toMatchObject({ ok: true, to, verb: VERB_DISPATCH });
+    expect(effectsOf(url)).toEqual(effectsOf(effectsUrl(MAIN_NAME, CLICK)));
+  });
+
+  test("everything after the name is the same whatever the name, so no signature covers it", () => {
+    const tail = (to: typeof MAIN_NAME | typeof NAMED): string =>
+      effectsUrl(to, CLICK).slice(`cc-candybar://to/${to}/`.length);
+    expect(tail(NAMED)).toBe(tail(MAIN_NAME));
+  });
+
+  test.each([
+    ["no name", "cc-candybar://to//dispatch/e=copy%2Fhi", "a link's renderer name"],
+    ["a name the rule refuses", "cc-candybar://to/Dev/dispatch/e=copy%2Fhi", "a link's renderer name"],
+    ["an escaped name, which is never decoded", "cc-candybar://to/dev%2Dbar/dispatch/e=copy%2Fhi", "a link's renderer name"],
+    ["a name and no click", "cc-candybar://to/dev-bar", "names a renderer and no click"],
+    ["a name and a bare value", "cc-candybar://to/dev-bar/hello", "carries no verb"],
+  ])("a link with %s does not parse into a click", (_, url, problem) => {
+    const link = parseHandlerUrl(url);
+    expect(link.ok).toBe(false);
+    expect(link.ok ? "" : link.problem).toContain(problem);
+  });
+
+  test.each([
+    ["a dispatch link drawn before names", "cc-candybar://dispatch/does=x&e=copy%2Fhi"],
+    ["a direct verb", "cc-candybar://set-state/s1/theme/nord"],
+    ["a bare copy", "cc-candybar://hello"],
+  ])("%s names no renderer", (_, url) => {
+    expect(parseHandlerUrl(url)).toMatchObject({ ok: true, to: null });
+  });
+});
+
 describe("parseHandlerUrl — verb split, value raw", () => {
   test("dispatch URL → verb=dispatch, value is the raw query string", () => {
-    const url = effectsUrl([{ verb: VERB_COPY, args: ["hi"] }]);
+    const url = effectsUrl(MAIN_NAME, [{ verb: VERB_COPY, args: ["hi"] }]);
     const { verb, value } = linkClick(url);
     expect(verb).toBe(VERB_DISPATCH);
     expect(parseEffects(value)).toEqual([{ verb: "copy", value: "hi" }]);
@@ -347,6 +393,7 @@ describe("parseHandlerUrl — verb split, value raw", () => {
   test("bare form → copy with the raw value", () => {
     expect(parseHandlerUrl("cc-candybar://hello-world")).toEqual({
       ok: true,
+      to: null,
       verb: "copy",
       value: "hello-world",
     });
@@ -357,6 +404,7 @@ describe("parseHandlerUrl — verb split, value raw", () => {
     // list, so `?` never needs to split and stays part of a bare copy value.
     expect(parseHandlerUrl("cc-candybar://hello?world")).toEqual({
       ok: true,
+      to: null,
       verb: "copy",
       value: "hello?world",
     });
@@ -368,6 +416,7 @@ describe("parseHandlerUrl — verb split, value raw", () => {
     // parseHandlerUrl hands the raw tail; only the verb is split off.
     expect(parseHandlerUrl("cc-candybar://copy/a/b")).toEqual({
       ok: true,
+      to: null,
       verb: "copy",
       value: "a/b",
     });
@@ -422,7 +471,7 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
     const sessionState = new SessionState();
     // First effect writes a valid key; second steps an unknown key (rejected).
     // Two DIFFERENT verbs, so they are two steps, not one batch (next test).
-    const url = effectsUrl([
+    const url = effectsUrl(MAIN_NAME, [
       { verb: VERB_SET_STATE, args: [SID, "theme", "textual-dark"] },
       { verb: VERB_STEP_STATE, args: [SID, "no-such-key", "1"] },
     ]);
@@ -440,7 +489,7 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
       { verb: VERB_SET_STATE, args: [SID, "theme", "textual-dark"] },
       { verb: VERB_SET_STATE, args: [SID, "no-such-key", "x"] },
     ];
-    const url = effectsUrl(effects);
+    const url = effectsUrl(MAIN_NAME, effects);
     expect(effectsOf(url)).toEqual(effects);
     // Dispatch validates the run whole, so the valid write does not land alone.
     await expect(clickUrl(url, ctx(sessionState))).rejects.toThrow(/no-such-key/);
@@ -481,13 +530,13 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
     // aggregate must stay BadVerbArgs so the dispatcher maps it to BAD_REQUEST,
     // not RENDER_FAILED. (An operational leaf failure flips it to a plain Error.)
     const sessionState = new SessionState();
-    const url = effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "no-such-key", "x"] }]);
+    const url = effectsUrl(MAIN_NAME, [{ verb: VERB_SET_STATE, args: [SID, "no-such-key", "x"] }]);
     await expect(clickUrl(url, ctx(sessionState))).rejects.toThrow(BadVerbArgs);
   });
 
   test("a clean compound click applies both set effects", async () => {
     const sessionState = new SessionState();
-    const url = effectsUrl([
+    const url = effectsUrl(MAIN_NAME, [
       { verb: VERB_SET_STATE, args: [SID, "theme", "textual-dark"] },
       { verb: VERB_SET_STATE, args: [SID, "endcaps", "capsule"] },
     ]);
@@ -514,7 +563,7 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
     const sessionState = new SessionState();
     // Two effects: first valid, second bad. Dispatch throws but also writes
     // per-effect errors to session state so the next render shows them.
-    const url = effectsUrl([
+    const url = effectsUrl(MAIN_NAME, [
       { verb: VERB_SET_STATE, args: [SID, "theme", "textual-dark"] },
       { verb: VERB_SET_STATE, args: [SID, "no-such-key", "x"] },
     ]);
@@ -529,7 +578,7 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
   test("a session-bearing step's malformed argument is that step's error: the click still finds its session and runs the rest", async () => {
     const sessionState = new SessionState();
     // A preset name carrying a bad percent escape (`%ZZ`).
-    const url = effectsUrl([
+    const url = effectsUrl(MAIN_NAME, [
       { verb: VERB_DELETE_PRESET, args: [SID, "BAD"] },
       { verb: VERB_SET_STATE, args: [SID, "theme", "textual-dark"] },
     ]).replace("BAD", encodeURIComponent("%ZZ"));

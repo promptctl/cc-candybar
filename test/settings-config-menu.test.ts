@@ -23,7 +23,7 @@ import { NO_PROJECT } from "./helpers/no-project";
 import { textOf, type Frame } from "../src/render/frame";
 import { linksOf } from "../src/click/read";
 import { linkUrls } from "./helpers/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_LINKS } from "./helpers/link-signer";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { POLLED, PRESET_DELETE_GLYPH } from "../src/config/settings-menu";
@@ -123,7 +123,7 @@ function rig(
     );
     const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
-    const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
+    const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/tmp" });
     // What the render cache reads off the file's raw parse (render.ts).
     const fileHeld = fileHeldSettings(
       loadConfigSource("<user>", text, DEFAULT_DSL_CONFIG, NO_PROJECT, ALLOWED).raw,

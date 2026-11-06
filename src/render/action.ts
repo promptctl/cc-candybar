@@ -70,6 +70,7 @@ import {
   type Effect,
 } from "../click/wire.js";
 import type { LinkSigner } from "../click/link-signer.js";
+import type { RendererLinks } from "../click/renderer-links.js";
 
 // ─── Compiled shapes ───────────────────────────────────────────────────────────
 
@@ -282,10 +283,11 @@ export interface ActionRuntime {
   // render bound rather than answering from whichever entry drew last.
   bound: RenderBinding | undefined;
   compiled: CompiledActions;
-  // [LAW:single-enforcer] What signs every `run` link this compile draws: the
-  // daemon's, check's and the demo's from the key file, a test's from a fixed
-  // key. There is one render path, and it always signs.
-  readonly signer: LinkSigner;
+  // [LAW:single-enforcer] Whose links this compile draws: the name every link
+  // is addressed to and the key that signs every `run` link, the daemon's,
+  // check's and the demo's from their home, a test's main with a fixed key.
+  // There is one render path, and it always addresses and signs.
+  readonly links: RendererLinks;
 }
 
 /** The look a render draws in, as that render resolved it. */
@@ -1182,9 +1184,9 @@ export function renderAction(
     boundValue,
     store,
     sessionId,
-    runtime.signer,
+    runtime.links.signer,
   );
-  return linkOver(display, effectsUrl(effects), active);
+  return linkOver(display, effectsUrl(runtime.links.to, effects), active);
 }
 
 // ─── FuncMap entry ─────────────────────────────────────────────────────────────
