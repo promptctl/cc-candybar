@@ -1,7 +1,6 @@
 // The daemon as a value: what it holds, built from its inputs, and its one close.
 
 import { Runs } from "./runs.js";
-import { inspect } from "node:util";
 import { cacheDir, daemonPaths, homeEnv, locations } from "./paths";
 import type { RendererHome } from "./home";
 import type { Host } from "../host";
@@ -56,7 +55,7 @@ import { makeLimits, type LimitsDeps } from "./limits";
 import { SessionState } from "./session-state";
 import { SettingsHistory } from "./settings-history";
 import { NavigationHistory } from "./navigation-history";
-import { apply } from "./apply.js";
+import { apply, sayUnapplied } from "./apply.js";
 import type { DoctorEdge, DoctorStores } from "../doctor/edge";
 import { ProbeArrivals } from "../doctor/handler-probe";
 import { RenderSightings } from "./render-sightings";
@@ -72,7 +71,6 @@ import {
 } from "./pane-visibility.js";
 import { runTmuxAsync } from "../proc/tmux.js";
 import type { TmuxAtExit } from "./tmux-status.js";
-import { DaemonClosing } from "./verb-error.js";
 import { TmuxStatusLines } from "./tmux-status.js";
 import { shellWord } from "../shell-word.js";
 import { reaction } from "mobx";
@@ -405,10 +403,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       await apply({ kind: "menu-idle", session, idle }, parts);
     },
     failed: (sessionId, error) =>
-      log(
-        error instanceof DaemonClosing ? "info" : "error",
-        `menu-idle: close failed (session=${sessionId}): ${inspect(error)}`,
-      ),
+      sayUnapplied(log, "menu-idle", `session=${sessionId}`, error),
   });
   // [LAW:single-enforcer] The one signer of every `run` link this daemon draws
   // and the one that verifies them on the click, over the state directory's key.

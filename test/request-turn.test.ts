@@ -24,6 +24,7 @@ import type { CheckedRenderRequest } from "../src/daemon/render-checkpoint";
 import type { RequestFacts } from "../src/daemon/request-event";
 import { sessionIdOf } from "../src/daemon/session-id";
 import { SessionState } from "../src/daemon/session-state";
+import { DaemonClosing } from "../src/daemon/verb-error";
 import type { VerbContext } from "../src/daemon/verbs";
 import type { DoctorEdge } from "../src/doctor/edge";
 import { instantOf } from "../src/utils/instant";
@@ -95,7 +96,14 @@ const ANSWER: RequestAnswer = {
 // ordering instrument the context holds (test/helpers/click.ts).
 function rig() {
   const clock = heldClock(START);
-  const sessionState = new SessionState();
+  // How many times the store persisted: a write that changes nothing still
+  // persists and fires the session's atom, which the revision does not show.
+  const persisted = { saves: 0 };
+  const sessionState = new SessionState({
+    load: () => ({}),
+    save: () => void persisted.saves++,
+    flush: () => {},
+  });
   const turns = new JournalTurns({
     log: () => {},
     monotonic: () => clock.monotonic(),
@@ -150,7 +158,7 @@ function rig() {
     );
     return { answered, facts };
   };
-  return { clock, sessionState, turns, parked, ctx, drawn, render };
+  return { clock, sessionState, persisted, turns, parked, ctx, drawn, render };
 }
 
 describe("a request takes its turn", () => {
@@ -205,12 +213,37 @@ describe("a request takes its turn", () => {
     await click;
   });
 
-  test("a request that says what the last one said writes nothing: the revision stands", async () => {
+  test("a request queued behind a held turn when the daemon closes is refused as the close, having drawn and written nothing", async () => {
+    const r = rig();
+    const click = applyClick(effectsUrl([toggle, doctor, toggle]), r.ctx);
+    await drain();
+    expect(r.turns.getStats().holder).toBe(VERB_DISPATCH);
+    const { answered, facts } = r.render(60);
+    const refused = answered.then(
+      () => null,
+      (e: unknown) => e,
+    );
+    await drain();
+    // The close refuses what is queued as its turn arrives, once the held
+    // turn has ended.
+    r.turns.close();
+    r.parked.open();
+    await click.catch(() => {});
+    // The render edge reads the class, as a click's does: `closing`, at info.
+    expect(await refused).toBeInstanceOf(DaemonClosing);
+    expect(r.drawn).toEqual([]);
+    expect(r.sessionState.get(SID, SESSION_CLIENT_HINTS_KEY)).toBe("{}");
+    expect(facts).toEqual([]);
+  });
+
+  test("a request that says what the last one said writes nothing: the store persists nothing and the revision stands", async () => {
     const r = rig();
     await r.render(60).answered;
     const revision = r.sessionState.revision(SID);
+    const saves = r.persisted.saves;
     const { answered, facts } = r.render(60);
     await answered;
+    expect(r.persisted.saves).toBe(saves);
     expect(r.sessionState.revision(SID)).toBe(revision);
     expect(facts).toEqual([
       ["turnWait", "0ms"],

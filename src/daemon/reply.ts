@@ -343,6 +343,9 @@ export async function replyTo(
         order,
       );
     if (checked.ok) {
+      // [LAW:nothing-unseen] The session, first on the request's line once
+      // it passed the checkpoint, so a request refused at its turn names it.
+      noteFacts(facts, { sid: checked.req.sessionId });
       sighted(checked.req, "drawing");
       // [LAW:one-source-of-truth] A request past the checkpoint is the
       // session's data from now on; a followed session's next frame is drawn
@@ -408,7 +411,7 @@ export async function replyTo(
           (error: unknown) => {
             sighted(checked.req, "failed");
             return {
-              outcome: { kind: "threw", error } as const,
+              outcome: thrownOutcome(error),
               resp: renderFailed(error),
               delivered: NOTHING_DELIVERED,
             };
@@ -715,12 +718,19 @@ async function clickRan(
   try {
     return await click();
   } catch (error) {
-    if (error instanceof BadVerbArgs)
-      return { kind: "bad-request", problems: [error.message] };
-    if (error instanceof DaemonClosing) return { kind: "closing", error };
-    if (error instanceof ClickAbandoned) return { kind: "abandoned", error };
-    return { kind: "threw", error };
+    return thrownOutcome(error);
   }
+}
+
+// [LAW:single-enforcer] What a request whose work threw became, by the
+// error's class, for a render as for a click: a render refused at its turn by
+// the daemon's close is `closing`, as a click is.
+function thrownOutcome(error: unknown): RequestOutcome {
+  if (error instanceof BadVerbArgs)
+    return { kind: "bad-request", problems: [error.message] };
+  if (error instanceof DaemonClosing) return { kind: "closing", error };
+  if (error instanceof ClickAbandoned) return { kind: "abandoned", error };
+  return { kind: "threw", error };
 }
 
 // [LAW:dataflow-not-control-flow] The dispatcher is a table lookup. The verb

@@ -177,29 +177,29 @@ export const ARMS: ApplyArms<Event> = {
   // do: what it said of its client and the config inputs it named land in one
   // batch between the journal's begin and commit, and the draw begins once
   // the turn is over, so it never reads the request's hints beside a click
-  // the turn was waiting on. The turn waits behind turns alone: a click's
-  // gather runs ahead of its turn and holds none, so a slow doctor delays no
-  // request. Its wait and the revision the turn left go on the request's own
-  // line, the render event, which is its record: after the draw's facts,
-  // since that line opens with the session the draw names, and whether or
-  // not the draw threw.
+  // the turn was waiting on. The turn waits behind every turn, daemon-wide:
+  // a click's head gather runs ahead of its turn and delays no request, but a
+  // gather inside a turn (a doctor step after a dispatch's first, or one
+  // repeated for a config that changed) holds every session's request for as
+  // long as its probes run, each bounded by its launch timeout, and that wait
+  // is spent from the request's budget. Its wait and the revision its own turn left go on the
+  // request's line, the render event, which is its record and opens with the
+  // session the edge noted.
   request: async ({ req, at, waitEndsAt, facts }, { verbCtx, draw }) => {
-    const turn: RequestFacts = [];
-    try {
-      await verbCtx.journalTurns.take("request", turnWaits(turn), async () =>
-        recordRequest(verbCtx.sessionState, req),
-      );
-      noteFacts(turn, {
-        revision: String(verbCtx.sessionState.revision(req.sessionId)),
-      });
-      return {
-        answer: await draw(req, at, waitEndsAt, facts),
-        effects: NO_EFFECTS,
-        facts: [],
-      };
-    } finally {
-      facts.push(...turn);
-    }
+    const revision = await verbCtx.journalTurns.take(
+      "request",
+      turnWaits(facts),
+      async () => {
+        recordRequest(verbCtx.sessionState, req);
+        return verbCtx.sessionState.revision(req.sessionId);
+      },
+    );
+    noteFacts(facts, { revision: String(revision) });
+    return {
+      answer: await draw(req, at, waitEndsAt, facts),
+      effects: NO_EFFECTS,
+      facts: [],
+    };
   },
   // [LAW:single-enforcer] The click's whole bracket on its menus' idle clock
   // is here, so the timer cannot close a menu under any click Apply carries.
@@ -412,10 +412,24 @@ const ORIGIN: {
   answered: ({ session }) => ({ verb: "request", session }),
 };
 
-// [LAW:no-silent-failure] An event whose source has no reply to carry a
-// rejection: the delivery edge, the performer. Applied, and a refusal said in
-// the log, at info when it is the daemon's close, since the bar it would have
-// reached is gone with the turns.
+// [LAW:no-silent-failure][LAW:single-enforcer] What a source with no reply
+// to carry a rejection says of one: the delivery edge, the performer, the
+// menus' idle timer. At info when it is the daemon's close, since the bar it
+// would have reached is gone with the turns.
+export function sayUnapplied(
+  log: DaemonParts["log"],
+  kind: Event["kind"],
+  said: string,
+  error: unknown,
+): void {
+  log(
+    error instanceof DaemonClosing ? "info" : "error",
+    `apply: ${kind} not applied (${said}): ${inspect(error)}`,
+  );
+}
+
+// An event whose source has no reply to carry a rejection, applied, and a
+// refusal said in the log.
 export function applyUnanswered<K extends Event["kind"]>(
   event: Extract<Event, { readonly kind: K }>,
   parts: ArmParts[K],
@@ -423,11 +437,7 @@ export function applyUnanswered<K extends Event["kind"]>(
 ): Promise<void> {
   return apply(event, parts).then(
     () => undefined,
-    (e: unknown) =>
-      parts.log(
-        e instanceof DaemonClosing ? "info" : "error",
-        `apply: ${event.kind} not applied (${said}): ${inspect(e)}`,
-      ),
+    (e: unknown) => sayUnapplied(parts.log, event.kind, said, e),
   );
 }
 

@@ -131,7 +131,7 @@ export function renderFrame(
 ): FeedFrame | null {
   const { clock, frameFeeds } = parts;
   const started = clock.monotonic();
-  const facts: RequestFacts = [];
+  const facts: RequestFacts = [["sid", sessionId]];
   try {
     using setup = setUpFrame(parts, sessionId, at, facts);
     if (setup === null) return null;
@@ -271,8 +271,10 @@ function requestFacts(
   renderer: string,
 ): string | null {
   // [LAW:nothing-unseen] Named for the renderer that drew it, so a frame in a
-  // bug report traces to its renderer as to its document.
-  noteFacts(facts, { sid: req.sessionId, renderer, at: at.toFixed(3) });
+  // bug report traces to its renderer as to its document. The session is not
+  // the draw's to note: its event opens with it, noted where the request or
+  // the frame began, so a request refused before it draws still names it.
+  noteFacts(facts, { renderer, at: at.toFixed(3) });
   // [LAW:parse-dont-validate] The ONE checkpoint for everything the client
   // observed and the daemon cannot. Raw `req.*` hint fields are not read
   // past this line; `hints` is the stamped type the render path consumes.
