@@ -333,10 +333,14 @@ export function filesystemFake(opts: {
   };
 
   // The directory a new entry at `at` goes into, and its name there.
+  // The parent is walked, never folded as text, so a `..` after a link lands
+  // where the kernel puts it.
   const slot = (at: string, syscall: string) => {
     checkFault(at, syscall);
-    const dir = directoryAt(path.dirname(path.resolve(at)), syscall);
-    return { dir, name: path.basename(at) };
+    const above = parts(at);
+    const name = above.pop()!;
+    if (name === "..") throw failure("EEXIST", syscall, at);
+    return { dir: directoryAt("/" + above.join("/"), syscall), name };
   };
 
   function writeText(at: string, text: string, syscall: string): void {
@@ -347,7 +351,7 @@ export function filesystemFake(opts: {
       return writeText(
         link.target.startsWith("/")
           ? link.target
-          : `${path.dirname(path.resolve(at))}/${link.target}`,
+          : "/" + [...parts(at).slice(0, -1), ...names(link.target)].join("/"),
         text,
         syscall,
       );
@@ -372,6 +376,10 @@ export function filesystemFake(opts: {
     checkFault(at, "mkdir");
     let dir = root;
     for (const name of parts(at)) {
+      if (name === "..") {
+        dir = dir.parent ?? root;
+        continue;
+      }
       const next = dir.children.get(name);
       if (next === undefined) {
         const made: Directory = {
@@ -453,6 +461,9 @@ export function filesystemFake(opts: {
     rename: (from, to) => {
       const entry = walk(from, false, "rename");
       const { dir, name } = slot(to, "rename");
+      // The kernel refuses to move a folder into its own subtree.
+      for (let up: Directory | null = dir; up !== null; up = up.parent)
+        if (up === entry) throw failure("EINVAL", "rename", to);
       const replaced = dir.children.get(name);
       if (replaced !== undefined && replaced !== entry) {
         // The kernel's checks on the destination it replaces.
@@ -475,7 +486,10 @@ export function filesystemFake(opts: {
       for (const w of watches.filter((open) => open.at === at))
         deliver(w, () => {
           for (const l of w.errors) l(new Error(message));
+          // A failed handle is no longer open: it hears nothing again.
           w.closed = true;
+          const open = watches.indexOf(w);
+          if (open !== -1) watches.splice(open, 1);
         });
     },
     unnamedEvent: (at) => {

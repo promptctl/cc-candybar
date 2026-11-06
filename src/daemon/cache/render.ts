@@ -1,5 +1,6 @@
 import path from "node:path";
 import { nearestWatchTarget } from "../../utils/watch-target.js";
+import type { Filesystem } from "../../disk/filesystem.js";
 import { chainName } from "../../config-hint.js";
 import type { RichText } from "@promptctl/rich-js";
 import { compareShallow, observable, reaction, runInAction } from "mobx";
@@ -653,7 +654,7 @@ function authoredRoots(
 // reported in `unresolved` with the reason, so the caller can say which path
 // hears less than it should.
 function watchTargetsFor(
-  watchers: WatcherRegistry,
+  filesystem: Filesystem,
   entry: CacheEntry,
   locs: Locations,
 ): PathsWatch {
@@ -668,7 +669,7 @@ function watchTargetsFor(
       path.join(entry.projectDir, REPO_PLUGIN_DIR),
     ]),
   ];
-  return watchTargetsOf(watchers.filesystem, {
+  return watchTargetsOf(filesystem, {
     named: [
       ...dslConfigCandidatePaths(
         locs,
@@ -2170,7 +2171,7 @@ export class RenderCache<
     entry.configHome = loaded.home;
     entry.repos = loaded.repos;
     const paths = watchTargetsFor(
-      this.deps.watchers,
+      this.deps.watchers.filesystem,
       entry,
       this.deps.locations,
     );

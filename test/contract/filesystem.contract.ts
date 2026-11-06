@@ -144,6 +144,15 @@ export function filesystemContract(name: string, make: () => Subject): void {
       );
     });
 
+    it("makes a folder named with a `..`, and writes after a link's `..`", async () => {
+      s.filesystem.mkdirSync(`${at("a", "b")}/../c`);
+      expect(s.filesystem.statSync(at("a", "c")).kind).toBe("directory");
+      s.world.mkdir(at("real", "sub"));
+      s.world.symlink(at("real", "sub"), at("L"));
+      await s.filesystem.writeFile(`${at("L")}/../x`, "hi");
+      expect(await s.filesystem.readFile(at("real", "x"))).toBe("hi");
+    });
+
     describe("watch", () => {
       const opened: Array<{ close(): void }> = [];
       afterEach(() => {

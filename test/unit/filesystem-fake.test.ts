@@ -76,4 +76,20 @@ describe("the filesystem fake moves and removes as the kernel does", () => {
       expect(names).toEqual(heard);
     }
   });
+
+  it("refuses to move a folder into its own subtree", () => {
+    const { fake } = make("linux");
+    fake.mkdir("/a/b");
+    expect(codeOf(() => fake.rename("/a", "/a/b/a"))).toBe("EINVAL");
+    expect(fake.statSync("/a/b").kind).toBe("directory");
+  });
+
+  it("no longer lists a watch that failed", () => {
+    const { clock, fake } = make("darwin");
+    fake.mkdir("/w");
+    fake.watch("/w", { recursive: false }, () => {});
+    fake.failWatch("/w", "gone deaf");
+    clock.advance(0);
+    expect(fake.watching()).toEqual([]);
+  });
 });
