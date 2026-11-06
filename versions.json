@@ -4,60 +4,60 @@
     {
       "version": "pr-617",
       "ref": "refs/pull/617/merge",
-      "sha": "aff2465cbe9624d64c749dd3bfe7cca93116dacb",
-      "timestamp": "2026-11-06T08:57:52.856Z",
+      "sha": "c8f32dc1941dd426c308d32078814f5fee0267d5",
+      "timestamp": "2026-11-06T09:07:31.046Z",
       "commits": [
         {
-          "sha": "aff2465cbe9624d64c749dd3bfe7cca93116dacb",
+          "sha": "c8f32dc1941dd426c308d32078814f5fee0267d5",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T08:56:24Z",
-          "message": "Merge 9b453c89df6c8e3576e8e651978035dc12efd8ea into 1ad208491233c500feb1dce4da7f3eb61a288b1d\n"
+          "timestamp": "2026-11-06T09:06:35Z",
+          "message": "Merge 1f7907494ba5fed79a85fe25173bb3c952f2d0b5 into 537c926e6cca1e7f2bed89f42058b490482fde86\n"
         },
         {
-          "sha": "9b453c89df6c8e3576e8e651978035dc12efd8ea",
+          "sha": "1f7907494ba5fed79a85fe25173bb3c952f2d0b5",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T00:58:58-07:00",
           "message": "fix(pricing): the shared load keeps a throw as the bundled rates, said once; comments state what the one git option set reads and where a read's throw is logged (candybar-gather-renderer-76bb.6pj.xb3)\n"
         },
         {
-          "sha": "88f4af23b461d1f450d6d78d628d6d260bc70c86",
+          "sha": "cbf08d38fe38cdc55b0be709c4b5baeac23ed20a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T00:51:55-07:00",
           "message": "test(facts): the seam's providers price by the bundled rates (candybar-gather-renderer-76bb.6pj.xb3)\n"
         },
         {
-          "sha": "f4a04e4eb4f412237c049352f9a4eda72e3af714",
+          "sha": "f0ed814ca4f9cdd5beadccf6b6fbb96c76f2bd22",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T00:16:29-07:00",
           "message": "fix(pricing): the load ends with the daemon's closing signal and never rejects; the day's copy is one atomic file with no lock, and a table missing a rate the cost reads is refused (candybar-gather-renderer-76bb.6pj.xb3)\n"
         },
         {
-          "sha": "cf94f22df050955d0f7476327f25da80d5750a51",
+          "sha": "fb89e808f5f4a2bc97a47596aaa817dfe41933ea",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T00:02:45-07:00",
           "message": "fix(pricing): a daemon prices by an adapter it closes: one table loaded once, no pooled socket, and the bundled rates under test (candybar-gather-renderer-76bb.6pj.xb3)\n"
         },
         {
-          "sha": "2fa3df92897d9dc2861ea0b97d1bdfb2dae0c7c7",
+          "sha": "0093075b165ca88edb7d54d976749c94344773fc",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-03T10:16:04-07:00",
           "message": "test(facts): name the doctor's closure tests for what they protect (candybar-gather-renderer-76bb.6pj.xb3)\n"
         },
         {
-          "sha": "6aa0e5ec64d994f1ee4fd29bede46b58af87a9c5",
+          "sha": "a320e909096d248d0ad7577e9b4d3f38c7d76389",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-03T10:12:58-07:00",
           "message": "fix(facts): the wait's comment names every session; the doctor's namespace-read test returns (candybar-gather-renderer-76bb.6pj.xb3)\n"
         },
         {
-          "sha": "da341ab20a2ab9699aea97677fba8863769f89be",
+          "sha": "520c262156d1860024775ecc369021b59480426d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-03T10:07:10-07:00",
