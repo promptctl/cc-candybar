@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-658",
+      "ref": "refs/pull/658/merge",
+      "sha": "e7e96b743b60e50e1010c1570d510636eec810f9",
+      "timestamp": "2026-11-06T22:41:52.178Z",
+      "commits": [
+        {
+          "sha": "e7e96b743b60e50e1010c1570d510636eec810f9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T22:41:00Z",
+          "message": "Merge c58688f99ad7c736443a40f3368bec4e5ea141a8 into 3bd757912554568f0bf3b622640edbe789c7ba04\n"
+        },
+        {
+          "sha": "c58688f99ad7c736443a40f3368bec4e5ea141a8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T15:40:48-07:00",
+          "message": "fix(click): a leaf's arguments are decoded once by its click's reader, and a verb that takes its session alone refuses a tail (brandon-menus-sjhy.vxi)\n\nFrom the high review of PR #658:\n\n- The reader splits a leaf's value before decoding it, so an empty last\n  argument is still one: a copy of empty text copies it again.\n- Handlers take their arguments decoded, so no handler repeats the decode,\n  and the run refusal line names the action as the config does, not\n  percent-encoded.\n- toolbar-toggle, back, rewind, apply-update, doctor-run, save, save-preset,\n  save-theme-default, undo and redo refuse a tail through one wrapper rather\n  than dropping it unread.\n- A step refused because its click's own session failed says so, instead of\n  claiming it names another session.\n- The click line always carries sid: the session that passed, or `-`.\n- Wire decoding parses to a result once (parseWire); the throwing form is\n  built on it, so the session reader no longer converts the error twice.\n\nNot taken: mirroring per-step refusals in the drawn-link reader, which\nreads parse-level refusals only; a second copy of the cross-session rule\nthere would be a second enforcer. The double read of a click is\nbrandon-menus-sjhy.ovq.\n"
+        },
+        {
+          "sha": "7cd7353302793dbc160ac45aef26f55f93586232",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T15:24:15-07:00",
+          "message": "fix(click): a leaf verb receives its click's session parsed, and a step naming another session is refused (brandon-menus-sjhy.vxi)\n\nEvery leaf handler now takes (sid: SessionId, args, ctx). One reader reads a\nleaf effect: its first segment through the one session-id checkpoint, and the\nencoded tail after it. It never throws, so a later step's malformed session is\nthat step's refusal, held on the bar. perform, the one runner every leaf\npasses through, refuses a step whose session fails the checkpoint or is not its\nclick's. So a dispatch can no longer act on one session and report to\nanother's bar, and a verb with no session cannot join the leaf table.\n\nperform hands each refused step to its verb's refusal owner. The run stats\ncount a run link refused at its session as they count one refused for its\narguments. The run handler's own catch is gone, so that count lives in one\nplace.\n\nEvery leaf verb's value is now segments, its session first, so the link\nreader decodes by the leaf table and the separate segmented-verbs list is\ndeleted. The per-handler session re-parse, the copy/open session reader and\nthe first-segment decode helper go too.\n\nA leaf click with an empty session segment now reads as a failed session, not\nas a click naming none, so its reply facts carry no sid.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-657",
       "ref": "refs/pull/657/merge",
       "sha": "bd0746711f6a6f164ea01dae477239cbaffc5bed",
@@ -77,28 +106,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T14:51:02-07:00",
           "message": "feat(apply): an effect waits only behind what it acts on; a lane setup holds its pane only while it types (candybar-gather-renderer-76bb.1dh.y9b)\n\nThe performer's order is keyed by what an effect acts on, not by the\nsession: a typed line by its tmux pane, a lane setup by its session's lane,\nand a session's launches, runs, doctor steps and update by that session's\nclicks as they committed. Every effect takes its place when its turn's\neffects are handed over, and an event's effects still run in the order\ndescribed, so a `do` keeps its order and no later click jumps ahead.\n\nA setup's steps that type into the session's pane (the whole statusline\nrestart, the band's /reload-plugins) take the pane's order when they are\nreached, so a copy clicked during a band install is performed at once and a\nslash typed during a restart lands after it. The setup reads the session's\nlatest request as it runs instead of a copy taken at the click.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-658",
-      "ref": "refs/pull/658/merge",
-      "sha": "b9c345c0b163212565430788f783f086f4c74bae",
-      "timestamp": "2026-11-06T22:28:42.479Z",
-      "commits": [
-        {
-          "sha": "b9c345c0b163212565430788f783f086f4c74bae",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T15:27:51-07:00",
-          "message": "Merge 7cd7353302793dbc160ac45aef26f55f93586232 into 3bd757912554568f0bf3b622640edbe789c7ba04\n"
-        },
-        {
-          "sha": "7cd7353302793dbc160ac45aef26f55f93586232",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T15:24:15-07:00",
-          "message": "fix(click): a leaf verb receives its click's session parsed, and a step naming another session is refused (brandon-menus-sjhy.vxi)\n\nEvery leaf handler now takes (sid: SessionId, args, ctx). One reader reads a\nleaf effect: its first segment through the one session-id checkpoint, and the\nencoded tail after it. It never throws, so a later step's malformed session is\nthat step's refusal, held on the bar. perform, the one runner every leaf\npasses through, refuses a step whose session fails the checkpoint or is not its\nclick's. So a dispatch can no longer act on one session and report to\nanother's bar, and a verb with no session cannot join the leaf table.\n\nperform hands each refused step to its verb's refusal owner. The run stats\ncount a run link refused at its session as they count one refused for its\narguments. The run handler's own catch is gone, so that count lives in one\nplace.\n\nEvery leaf verb's value is now segments, its session first, so the link\nreader decodes by the leaf table and the separate segmented-verbs list is\ndeleted. The per-handler session re-parse, the copy/open session reader and\nthe first-segment decode helper go too.\n\nA leaf click with an empty session segment now reads as a failed session, not\nas a click naming none, so its reply facts carry no sid.\n"
         }
       ]
     },

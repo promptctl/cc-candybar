@@ -64446,14 +64446,19 @@ var ClickAbandoned = class extends Error {
     this.name = "ClickAbandoned";
   }
 };
-function decodeWire(decode) {
+function parseWire(decode) {
   try {
-    return decode();
+    return { ok: true, value: decode() };
   } catch (err) {
     if (err instanceof URIError)
-      throw new BadVerbArgs(`malformed wire encoding: ${err.message}`);
+      return { ok: false, problem: `malformed wire encoding: ${err.message}` };
     throw err;
   }
+}
+function decodeWire(decode) {
+  const parsed2 = parseWire(decode);
+  if (!parsed2.ok) throw new BadVerbArgs(parsed2.problem);
+  return parsed2.value;
 }
 
 // src/daemon/config-file-store.ts
@@ -70837,12 +70842,20 @@ function oneArg(value) {
   return decodeWire(() => decodeURIComponent(value));
 }
 function soleArg(args) {
-  const parts = decodeWire(() => decodeSegments(args));
-  if (parts.length !== 1)
+  if (args.length !== 1)
     throw new BadVerbArgs(
-      `expected a session and one argument, got ${parts.length + 1} segments`
+      `expected a session and one argument, got ${args.length + 1} segments`
     );
-  return parts[0];
+  return args[0];
+}
+function sessionAlone(handler) {
+  return (sid, args, ctx) => {
+    if (args.length > 0)
+      throw new BadVerbArgs(
+        `takes its session alone, got ${args.length} more segments`
+      );
+    return handler(sid, ctx);
+  };
 }
 var CLICK_PROGRAM_TIMEOUT_MS = 5e3;
 function clickFailed(r, what, log) {
@@ -70940,7 +70953,7 @@ function requireDrawer(by) {
   return by;
 }
 var copyDiagnostic = (sid, args, ctx) => {
-  const [by = "", key = ""] = decodeWire(() => decodeSegments(args));
+  const [by = "", key = ""] = args;
   const text4 = ctx.diagnosticCopy(sid, requireDrawer(by), key);
   if (text4 === void 0)
     throw new BadVerbArgs(
@@ -70959,13 +70972,12 @@ var openVscode = (_sid, args, ctx) => {
     'open -a "Visual Studio Code"'
   );
 };
-var toolbarToggle = (sessionId2, _args, ctx) => {
+var toolbarToggle = sessionAlone((sessionId2, ctx) => {
   const expanded = ctx.navigating.get(sessionId2, "toolbar-expanded");
   if (expanded) ctx.navigating.clear(sessionId2, "toolbar-expanded");
   else ctx.navigating.set(sessionId2, "toolbar-expanded", "1");
-};
-var setState = (sid, args, ctx) => {
-  const rest2 = decodeWire(() => decodeSegments(args));
+});
+var setState = (sid, rest2, ctx) => {
   const gate2 = ctx.gates.state.gateFor(sessionConfig(ctx, sid));
   if (rest2.length === 0)
     throw new BadVerbArgs(
@@ -71004,7 +71016,7 @@ function stepWithin(current, by, min2, max2) {
   return n;
 }
 var stepState = (sid, args, ctx) => {
-  const [key = "", byRaw = ""] = decodeWire(() => decodeSegments(args));
+  const [key = "", byRaw = ""] = args;
   if (!key) {
     throw new BadVerbArgs(
       "step-state: <key> is required (shape: <sessionId>/<key>/<by>)"
@@ -71142,7 +71154,7 @@ function editStore(ctx, sid) {
   };
 }
 var setConfig = (sid, args, ctx) => {
-  const [key = "", incoming = ""] = decodeWire(() => decodeSegments(args));
+  const [key = "", incoming = ""] = args;
   const origin = sessionOrigin(ctx, sid);
   const config2 = ctx.configFor(origin);
   const gate2 = ctx.gates.config.gateFor(config2);
@@ -71167,7 +71179,7 @@ var setConfig = (sid, args, ctx) => {
   );
 };
 var stepConfig = (sid, args, ctx) => {
-  const [key = "", byRaw = ""] = decodeWire(() => decodeSegments(args));
+  const [key = "", byRaw = ""] = args;
   if (!key) {
     throw new BadVerbArgs(
       "step-config: <key> is required (shape: <sessionId>/<key>/<by>)"
@@ -71211,7 +71223,7 @@ var stepConfig = (sid, args, ctx) => {
     `step-config: ${landing.key} ${current}\u2192${result.value} (by ${by}) \u2192 ${home.path} (session=${sid})`
   );
 };
-var save = (sid, _args, ctx) => {
+var save = sessionAlone((sid, ctx) => {
   const origin = sessionOrigin(ctx, sid);
   const config2 = ctx.configFor(origin);
   const pick2 = (key) => ctx.sessionState.get(sid, key);
@@ -71244,7 +71256,7 @@ var save = (sid, _args, ctx) => {
       ...placements.map(placementLog)
     ].join(" ")} \u2192 ${home.path} (session=${sid})`
   );
-};
+});
 var placementLog = (p2) => `${p2.preset}/${p2.id}.settings.${p2.setting}=${settingSpelling(p2.value)}`;
 function gatePlacements(verb, gate2, placements) {
   for (const p2 of placements) {
@@ -71252,7 +71264,7 @@ function gatePlacements(verb, gate2, placements) {
     if (!result.ok) throw new BadVerbArgs(`${verb}: ${result.reason}`);
   }
 }
-var savePreset = (sid, _args, ctx) => {
+var savePreset = sessionAlone((sid, ctx) => {
   const origin = sessionOrigin(ctx, sid);
   const config2 = ctx.configFor(origin);
   const snapshot = presetSnapshot(
@@ -71287,8 +71299,8 @@ var savePreset = (sid, _args, ctx) => {
     "info",
     `save-preset: ${[`${name} from=${snapshot.from}`, ...picks.map(([k, v]) => `${k}=${v}`), ...snapshot.placements.map(placementLog)].join(" ")} \u2192 ${home.path} (session=${sid})`
   );
-};
-var saveThemeDefault = (sid, _args, ctx) => {
+});
+var saveThemeDefault = sessionAlone((sid, ctx) => {
   const origin = sessionOrigin(ctx, sid);
   const config2 = ctx.configFor(origin);
   const save2 = themeDefaultSave(
@@ -71315,9 +71327,9 @@ var saveThemeDefault = (sid, _args, ctx) => {
     "info",
     `save-theme-default: ${save2.theme} ${THEME_DEFAULT_FIELDS.map((f) => `${f}=${save2.look[f]}`).join(" ")} \u2192 ${home.path} (session=${sid})`
   );
-};
+});
 var deletePreset2 = (sid, args, ctx) => {
-  const [name = ""] = decodeWire(() => decodeSegments(args));
+  const [name = ""] = args;
   if (!name) {
     throw new BadVerbArgs(
       "delete-preset: <name> is required (shape: <sessionId>/<name>)"
@@ -71332,7 +71344,7 @@ var deletePreset2 = (sid, args, ctx) => {
   ctx.log("info", `delete-preset: ${name} \u2190 ${home.path} (session=${sid})`);
 };
 var resetConfig = (sid, args, ctx) => {
-  const keys2 = decodeWire(() => decodeSegments(args));
+  const keys2 = args;
   const origin = sessionOrigin(ctx, sid);
   const known = ctx.gates.config.gateFor(ctx.configFor(origin)).listKeys();
   const unknown = keys2.length === 0 ? [""] : keys2.filter((k) => !known.includes(k));
@@ -71378,7 +71390,7 @@ function endedSessionKeys(ended, configuring) {
   ]);
 }
 var applyLayoutOp2 = (sid, args, ctx) => {
-  const [key = "", opToken = ""] = decodeWire(() => decodeSegments(args));
+  const [key = "", opToken = ""] = args;
   const origin = sessionOrigin(ctx, sid);
   const before = ctx.configFor(origin);
   const gate2 = ctx.gates.config.gateFor(before);
@@ -71408,14 +71420,14 @@ var applyLayoutOp2 = (sid, args, ctx) => {
     `apply-layout-op: ${key} ${result.value} \u2192 ${home.path} placed=${JSON.stringify(placed2)} released=${JSON.stringify(released)} (session=${sid})`
   );
 };
-var undo = (sid, _args, ctx) => {
+var undo = sessionAlone((sid, ctx) => {
   ctx.journal.commit();
   const step4 = ctx.history.undo(sid);
   ctx.journal.wrote();
   reloadIfWritten(ctx, sid, step4);
   ctx.log("info", `undo: restored ${describeStep(step4)} (session=${sid})`);
-};
-var back = (sid, _args, ctx) => {
+});
+var back = sessionAlone((sid, ctx) => {
   const { step: step4, discarded } = ctx.navigation.back(
     sid,
     ctx.sessionState,
@@ -71423,8 +71435,8 @@ var back = (sid, _args, ctx) => {
   );
   const restored = step4.map((c) => `${c.key}=${c.before ?? "\u2205"}`).join(" ");
   ctx.log("info", `back: ${restored} discarded=${discarded} (session=${sid})`);
-};
-var rewind = (sid, _args, ctx) => {
+});
+var rewind = sessionAlone((sid, ctx) => {
   ctx.journal.commit();
   ctx.journal.wrote();
   const restored = ctx.history.rewind(sid);
@@ -71433,17 +71445,17 @@ var rewind = (sid, _args, ctx) => {
     "info",
     `rewind: put back ${describeStep(restored) || "nothing"} as edit mode found it (session=${sid})`
   );
-};
-var redo = (sid, _args, ctx) => {
+});
+var redo = sessionAlone((sid, ctx) => {
   ctx.journal.commit();
   const step4 = ctx.history.redo(sid);
   ctx.journal.wrote();
   reloadIfWritten(ctx, sid, step4);
   ctx.log("info", `redo: re-applied ${describeStep(step4)} (session=${sid})`);
-};
-var applyUpdate = (_sid, _args, ctx) => {
+});
+var applyUpdate = sessionAlone((_sid, ctx) => {
   ctx.effect({ kind: "apply-update" });
-};
+});
 function sessionHints(ctx, sid) {
   const raw = ctx.sessionState.get(sid, SESSION_CLIENT_HINTS_KEY);
   if (raw === null) {
@@ -71663,9 +71675,9 @@ function landStep(ctx, sid, step4, facts) {
   const land2 = DOCTOR_STEPS[step4.kind];
   land2(ctx, sid, step4, facts);
 }
-var doctorRun = (sid, _args, ctx) => {
+var doctorRun = sessionAlone((sid, ctx) => {
   describeDoctor(ctx, sid, { kind: "run" });
-};
+});
 var probe2 = (value, ctx) => {
   const nonce = parseProbeNonce(oneArg(value));
   if (nonce === null) {
@@ -71678,7 +71690,7 @@ var probe2 = (value, ctx) => {
   ctx.log("info", `probe: arrived nonce=${nonce} delivery=${delivery.kind}`);
 };
 var doctorFix = (sid, args, ctx) => {
-  const [checkName = ""] = decodeWire(() => decodeSegments(args));
+  const [checkName = ""] = args;
   const check = checkByName(checkName);
   if (check === void 0) {
     throw new BadVerbArgs(`doctor-fix: unknown check "${checkName}"`);
@@ -71686,7 +71698,7 @@ var doctorFix = (sid, args, ctx) => {
   describeDoctor(ctx, sid, { kind: "fix", check });
 };
 var doctorMark = (sid, args, ctx) => {
-  const [checkName = "", mark = ""] = decodeWire(() => decodeSegments(args));
+  const [checkName = "", mark = ""] = args;
   const check = checkByName(checkName);
   if (check === void 0) {
     throw new BadVerbArgs(`doctor-mark: unknown check "${checkName}"`);
@@ -71699,7 +71711,7 @@ var doctorMark = (sid, args, ctx) => {
   describeDoctor(ctx, sid, { kind: "mark", check, mark });
 };
 var slash = (sid, args, ctx) => {
-  const [line = ""] = decodeWire(() => decodeSegments(args));
+  const [line = ""] = args;
   const declared = Object.values(
     ctx.configFor(sessionOrigin(ctx, sid)).actions
   ).filter((a) => "slash" in a);
@@ -71769,17 +71781,11 @@ function runOf2(sid, [action2 = "", evaluated2 = "", mac = ""], ctx) {
   };
 }
 var run2 = (sid, args, ctx) => {
-  const request2 = runOf2(
-    sid,
-    decodeWire(() => decodeSegments(args)),
-    ctx
-  );
+  const request2 = runOf2(sid, args, ctx);
   ctx.effect({ kind: "run", id: ctx.runs.superseded(request2), run: request2 });
 };
 var repoConfig = (sid, args, ctx) => {
-  const [dir = "", answer2 = "", mac = ""] = decodeWire(
-    () => decodeSegments(args)
-  );
+  const [dir = "", answer2 = "", mac = ""] = args;
   const answered2 = answer2;
   if (!ctx.links.signer.verify(repoAnswerFields(sid, dir, answered2), mac)) {
     throw new BadVerbArgs(
@@ -71827,16 +71833,17 @@ var LEAF_VERBS = /* @__PURE__ */ new Map([
 ]);
 var LEAF_VERB_NAMES = new Set(LEAF_VERBS.keys());
 function readLeaf(verb, leaf, value) {
-  const { verb: head, value: args } = splitVerb(value);
-  return { verb, leaf, session: readSession(head), args };
+  const [head = "", ...tail] = value.split("/");
+  return {
+    verb,
+    leaf,
+    session: readSession(head),
+    args: parseWire(() => tail.map(decodeURIComponent))
+  };
 }
 function readSession(head) {
-  try {
-    return parseSessionId(decodeWire(() => decodeURIComponent(head)));
-  } catch (e) {
-    if (!(e instanceof BadVerbArgs)) throw e;
-    return { ok: false, problem: `has ${e.message}` };
-  }
+  const decoded = parseWire(() => decodeURIComponent(head));
+  return decoded.ok ? parseSessionId(decoded.value) : { ok: false, problem: `has ${decoded.problem}` };
 }
 function readEffect({ verb, value }) {
   const leaf = LEAF_VERBS.get(verb);
@@ -71857,11 +71864,16 @@ function perform({ verb, leaf, session, args }, click3, ctx) {
   const described = [];
   try {
     if (!session.ok) throw new BadVerbArgs(`session id ${session.problem}`);
-    if (!click3?.ok || click3.id !== session.id)
+    if (!click3?.ok)
+      throw new BadVerbArgs(
+        "its click's own session is refused, so no step of it runs"
+      );
+    if (click3.id !== session.id)
       throw new BadVerbArgs(
         `names session ${session.id}, not the session its click is in`
       );
-    leaf(session.id, args, {
+    if (!args.ok) throw new BadVerbArgs(args.problem);
+    leaf(session.id, args.value, {
       ...ctx,
       effect: (effect) => void described.push(effect)
     });
@@ -71869,7 +71881,7 @@ function perform({ verb, leaf, session, args }, click3, ctx) {
     if (e instanceof BadVerbArgs) {
       REFUSAL_OWNERS.get(verb)?.(ctx, {
         sid: session.ok ? session.id : "-",
-        args,
+        args: args.ok ? args.value : [],
         reason: e.message
       });
     }
@@ -71880,7 +71892,7 @@ function perform({ verb, leaf, session, args }, click3, ctx) {
 var REFUSAL_OWNERS = /* @__PURE__ */ new Map([
   [
     VERB_RUN,
-    (ctx, { sid, args, reason }) => ctx.runs.refused(sid, splitVerb(args).verb || "-", reason)
+    (ctx, { sid, args: [action2], reason }) => ctx.runs.refused(sid, action2 || "-", reason)
   ]
 ]);
 function foldEffects(effects, session, ctx) {
@@ -78948,8 +78960,7 @@ async function handleClick(parts, verb, value, arrival, facts, clientGone) {
   noteFacts(facts, { [VERB_FACT[arrival.via]]: verb });
   const named3 = clickSessionOf(verb, value);
   const session = named3?.ok ? named3.id : null;
-  if (named3 === null) noteFacts(facts, { sid: "-" });
-  else if (session !== null) noteFacts(facts, { sid: session });
+  noteFacts(facts, { sid: session ?? "-" });
   const { answer: answer2 } = await apply(
     {
       kind: "click",
