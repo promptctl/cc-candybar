@@ -126,14 +126,40 @@ describe("daemon shutdown contract", () => {
     }
   });
 
+  test("older-client version mismatch: VERSION_MISMATCH is answered and the daemon keeps serving", async () => {
+    const handle = await spawnDaemon();
+    try {
+      // [LAW:types-are-the-program] The load-bearing half of the asymmetry: a
+      // stale client must not stop the daemon, because the respawned daemon is
+      // at the same version and the same client mismatches it again.
+      const resp = await sendDaemonRequest(
+        handle.home,
+        { v: PROTOCOL_VERSION - 1, kind: "stats" },
+        REPLY_BUDGET_MS,
+      );
+      expect(resp.ok).toBe(false);
+      if (!resp.ok) {
+        expect(resp.code).toBe("VERSION_MISMATCH");
+        expect(resp.daemonV).toBe(PROTOCOL_VERSION);
+      }
+      const after = await sendDaemonRequest(
+        handle.home,
+        { v: PROTOCOL_VERSION, kind: "stats" },
+        REPLY_BUDGET_MS,
+      );
+      expect(after.ok).toBe(true);
+    } finally {
+      handle.cleanup();
+    }
+  });
+
   // [LAW:verifiable-goals] A signal, the memory backstop and the watchdog all
   // end a daemon through one funnel, and a click's session write waits out the
   // file's debounce. So the close in that funnel is what keeps a click a recycled
   // daemon had not written yet, and only a real process has that funnel.
   test("a session write still inside its debounce lands before a signal ends the daemon", async () => {
-    const { env, home, sockPath, stateDir, removeTmpDirs } = prepareIsolatedDaemonEnv(
-      "cc-candybar-shutdown",
-    );
+    const { env, home, sockPath, stateDir, removeTmpDirs } =
+      prepareIsolatedDaemonEnv("cc-candybar-shutdown");
     const sessionId = "shutdown-write";
     let daemon: RunningDaemon | undefined;
     try {
@@ -147,7 +173,9 @@ describe("daemon shutdown contract", () => {
       );
       await killAndWait(daemon, "SIGTERM");
 
-      const saved = JSON.parse(readFileSync(sessionStatePath(homeOf(hostOf(env))), "utf8"));
+      const saved = JSON.parse(
+        readFileSync(sessionStatePath(homeOf(hostOf(env))), "utf8"),
+      );
       expect(saved[sessionId]).toMatchObject({ padding: "4" });
     } finally {
       daemon?.killTree();

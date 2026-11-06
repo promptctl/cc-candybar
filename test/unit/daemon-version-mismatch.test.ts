@@ -1,7 +1,7 @@
 import { heldClock } from "../helpers/held-clock";
 import { memoryConnection } from "../../src/dial/dialer-fake";
 import { PROTOCOL_VERSION } from "../../src/daemon/protocol";
-import type { Request, Response } from "../../src/daemon/protocol";
+import type { Response, StatsRequest } from "../../src/daemon/protocol";
 import { versionGate } from "../../src/daemon/reply";
 import type { HandledRequest } from "../../src/daemon/reply";
 import { RENDER_BUDGETS, renderOutcomeOf } from "../../src/daemon/client";
@@ -21,9 +21,8 @@ import { planOutcome } from "../../src/render/outcome-plan";
 
 function gate(v: number): { reply: HandledRequest | null; logged: string[] } {
   const logged: string[] = [];
-  const reply = versionGate({ v, kind: "stats" } as Request, (_level, msg) =>
-    logged.push(msg),
-  );
+  const req: StatsRequest = { v, kind: "stats" };
+  const reply = versionGate(req, (_level, msg) => logged.push(msg));
   return { reply, logged };
 }
 
