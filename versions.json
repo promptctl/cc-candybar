@@ -2,6 +2,77 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-625",
+      "ref": "refs/pull/625/merge",
+      "sha": "e4efb834e01a8afeaf3a62f8aafa58ef000134c9",
+      "timestamp": "2026-11-06T06:02:11.041Z",
+      "commits": [
+        {
+          "sha": "e4efb834e01a8afeaf3a62f8aafa58ef000134c9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T06:01:14Z",
+          "message": "Merge 3b93f22cae68edcf32f1ea310d616d7b4e0c340a into 0577540acfe6b769c9a94c7e1e7ee9a4d0a0ee48\n"
+        },
+        {
+          "sha": "3b93f22cae68edcf32f1ea310d616d7b4e0c340a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T23:00:48-07:00",
+          "message": "test(home): the tmux row names the isolated home's renderer, not main's\n\nMain's renderer-naming test landed asserting the literal main name, while this\nbranch makes the row carry the renderer's own name and runs isolated daemons\nunder a named home. The assertion now reads the name from the home the daemon\nruns under.\n"
+        },
+        {
+          "sha": "590e28c6dfb9db8f1efc7bb2cc597c6e61801fa6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T22:49:28-07:00",
+          "message": "test(home): finish the rebase over main's env-source removal\n"
+        },
+        {
+          "sha": "7e51c9be3aee92fccb0d98c835d020da132b8076",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T22:45:01-07:00",
+          "message": "fix(home): a misstated home is refused where the world is built; the socket file takes a parsed name; the help and README name the home\n\nReview (second high): the one-line refusal lived in the CLI entry alone, so the demo, the gallery and the load gate printed a stack trace for the same input. The socket-file rule took any string though only main's name or a parsed name can reach it. The usage bench built three worlds per sampled store. The design doc's breaker line and the user-facing help, README and authoring doc now say what the code does.\n"
+        },
+        {
+          "sha": "654be81436055b51c3986a0dfc4d89b4bb99698d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T22:28:10-07:00",
+          "message": "fix(home): a main renderer's child parses main's roots; the entry refuses a misstated home in one line; the suite drops an inherited socket override\n\nReview (medium): the environment a main renderer hands a child carried its socket but not its XDG roots, so a child under the tmux server's environment derived another state and config tree. The entry built its world at module top level, so a half-set home printed a stack trace where the Rust client prints one line. Every Jest worker is a named home, which refuses the legacy socket override beside it, so a shell exporting it refused the whole suite. The socket directory's ownership check reads the uid as the runtime directory's name does. Three design docs named the override as the knob.\n"
+        },
+        {
+          "sha": "a59a193408390f58adef53add1fc8e6ea4fa004f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T22:12:45-07:00",
+          "message": "fix(home): the tmux row carries the renderer's own name; a relative runtime directory is refused in both runtimes; the bench reaches main's home\n\nReview (high): the tmux status line stamped every row `main` though the daemon holds its home's name. The runtime-directory override was accepted relative while the root was refused for the same reason. The uid is read from the kernel, as the Rust client reads it. The click bench stripped only the legacy socket variable to reach the default socket; it drops every home variable now. The effects-at-boundaries marker the rewrite dropped from the state derivation is restored, and the breaker's and the contracts table's stale naming of the legacy variable is replaced.\n"
+        },
+        {
+          "sha": "f232c52249f66cfa0fd7096b3267d55352069ec3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T21:57:30-07:00",
+          "message": "test(home): finish the rebase over main's load-config removal and in-turn click context\n"
+        },
+        {
+          "sha": "33d31f0b9eebadadb1e74981cb5d63c6e18d09be",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T21:16:34-07:00",
+          "message": "test(home): a test's repo answers and main-layout environment follow its own host\n\nThe worker is a named home, so a test that builds a main home over the\nworker's environment reads a state directory the repo-approval helper did\nnot write to by default; every such test now answers through its own host.\nThe main-layout environment is read when asked, as the live process\nenvironment is, so a PATH of stubs written before the host is built reaches\nthe launcher's children. The e2e click stand-in makes the state directory\nthe daemon it plays would. The CLI probe test reaches the isolated daemon\nthrough a world over its own home. The node_modules symlink a worktree\ncarries is untracked, and ignored by name rather than as a directory.\n"
+        },
+        {
+          "sha": "75afaf38b3f642f5a4ceddffa7155ef42443059f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T20:52:23-07:00",
+          "message": "feat(home): a renderer's home is one value; two renderers under two homes leave no trace of each other (candybar-gather-renderer-76bb.f00.dmd)\n\nWork in progress: typecheck, lint, check-protocol, check-schema, cargo test and\nthe unit tier pass; the worker and process tiers have not been run yet.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "0577540acfe6b769c9a94c7e1e7ee9a4d0a0ee48",
@@ -77,70 +148,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-05T21:12:57-07:00",
           "message": "feat(facts): a view follows its session through the Facts interface, with an in-process arm, a recording arm and the seam test (candybar-gather-renderer-76bb.6pj.go2)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-625",
-      "ref": "refs/pull/625/merge",
-      "sha": "c515fa6d21c12054ae1ece3643e411832e815fe4",
-      "timestamp": "2026-11-06T05:50:57.446Z",
-      "commits": [
-        {
-          "sha": "c515fa6d21c12054ae1ece3643e411832e815fe4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T22:49:39-07:00",
-          "message": "Merge 590e28c6dfb9db8f1efc7bb2cc597c6e61801fa6 into 9b6790b0d73afbdd6c683accf7b693cffe16c89e\n"
-        },
-        {
-          "sha": "590e28c6dfb9db8f1efc7bb2cc597c6e61801fa6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T22:49:28-07:00",
-          "message": "test(home): finish the rebase over main's env-source removal\n"
-        },
-        {
-          "sha": "7e51c9be3aee92fccb0d98c835d020da132b8076",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T22:45:01-07:00",
-          "message": "fix(home): a misstated home is refused where the world is built; the socket file takes a parsed name; the help and README name the home\n\nReview (second high): the one-line refusal lived in the CLI entry alone, so the demo, the gallery and the load gate printed a stack trace for the same input. The socket-file rule took any string though only main's name or a parsed name can reach it. The usage bench built three worlds per sampled store. The design doc's breaker line and the user-facing help, README and authoring doc now say what the code does.\n"
-        },
-        {
-          "sha": "654be81436055b51c3986a0dfc4d89b4bb99698d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T22:28:10-07:00",
-          "message": "fix(home): a main renderer's child parses main's roots; the entry refuses a misstated home in one line; the suite drops an inherited socket override\n\nReview (medium): the environment a main renderer hands a child carried its socket but not its XDG roots, so a child under the tmux server's environment derived another state and config tree. The entry built its world at module top level, so a half-set home printed a stack trace where the Rust client prints one line. Every Jest worker is a named home, which refuses the legacy socket override beside it, so a shell exporting it refused the whole suite. The socket directory's ownership check reads the uid as the runtime directory's name does. Three design docs named the override as the knob.\n"
-        },
-        {
-          "sha": "a59a193408390f58adef53add1fc8e6ea4fa004f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T22:12:45-07:00",
-          "message": "fix(home): the tmux row carries the renderer's own name; a relative runtime directory is refused in both runtimes; the bench reaches main's home\n\nReview (high): the tmux status line stamped every row `main` though the daemon holds its home's name. The runtime-directory override was accepted relative while the root was refused for the same reason. The uid is read from the kernel, as the Rust client reads it. The click bench stripped only the legacy socket variable to reach the default socket; it drops every home variable now. The effects-at-boundaries marker the rewrite dropped from the state derivation is restored, and the breaker's and the contracts table's stale naming of the legacy variable is replaced.\n"
-        },
-        {
-          "sha": "f232c52249f66cfa0fd7096b3267d55352069ec3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T21:57:30-07:00",
-          "message": "test(home): finish the rebase over main's load-config removal and in-turn click context\n"
-        },
-        {
-          "sha": "33d31f0b9eebadadb1e74981cb5d63c6e18d09be",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T21:16:34-07:00",
-          "message": "test(home): a test's repo answers and main-layout environment follow its own host\n\nThe worker is a named home, so a test that builds a main home over the\nworker's environment reads a state directory the repo-approval helper did\nnot write to by default; every such test now answers through its own host.\nThe main-layout environment is read when asked, as the live process\nenvironment is, so a PATH of stubs written before the host is built reaches\nthe launcher's children. The e2e click stand-in makes the state directory\nthe daemon it plays would. The CLI probe test reaches the isolated daemon\nthrough a world over its own home. The node_modules symlink a worktree\ncarries is untracked, and ignored by name rather than as a directory.\n"
-        },
-        {
-          "sha": "75afaf38b3f642f5a4ceddffa7155ef42443059f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T20:52:23-07:00",
-          "message": "feat(home): a renderer's home is one value; two renderers under two homes leave no trace of each other (candybar-gather-renderer-76bb.f00.dmd)\n\nWork in progress: typecheck, lint, check-protocol, check-schema, cargo test and\nthe unit tier pass; the worker and process tiers have not been run yet.\n"
         }
       ]
     },
