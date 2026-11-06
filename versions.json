@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-622",
+      "ref": "refs/pull/622/merge",
+      "sha": "6ddf6b83449c1599b643ae66b7ee65ea1c3ce7c7",
+      "timestamp": "2026-11-06T02:59:42.712Z",
+      "commits": [
+        {
+          "sha": "6ddf6b83449c1599b643ae66b7ee65ea1c3ce7c7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T19:58:50-07:00",
+          "message": "Merge 883fe044043884e0a25741e7c4d8bb0698f078e9 into bfb89187e23eda03a7d719a5fba64875b44a3355\n"
+        },
+        {
+          "sha": "883fe044043884e0a25741e7c4d8bb0698f078e9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T19:58:14-07:00",
+          "message": "fix(facts): one transcript fold in flight per session; the gate places every built-in and can snapshot its heap (candybar-gather-renderer-76bb.6pj.c0y)\n\nThe 100-session gate failed with metrics and activity on because the\ntranscript fold started a new fold for every request of a session while\nthe session's first fold was still out, and a cold fold re-enters the\n8-slot read gate once per window: folds arrived faster than any could\nfinish, none landed, the stamp fast path never engaged, and every\nrequest's refresh stayed alive in the queue. The fold now coalesces per\nsession through the same SingleFlight the usage store's request refresh\nuses.\n\nThe gate's config places metrics, activity, tokenSparkline and\nautocompact, so it gathers every built-in the facts epic makes\nalways-on. `--heap-snapshots DIR` has the daemon write its heap at the\ntwo collections through Node's signal snapshot; the whole-file wait\nmoves from capture-heap into scripts/lib and both call it.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "bfb89187e23eda03a7d719a5fba64875b44a3355",
