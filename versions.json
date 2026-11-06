@@ -2,6 +2,63 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-637",
+      "ref": "refs/pull/637/merge",
+      "sha": "e3d69cacf26c3400bcd8b85cf946078c87505a14",
+      "timestamp": "2026-11-06T20:25:41.427Z",
+      "commits": [
+        {
+          "sha": "e3d69cacf26c3400bcd8b85cf946078c87505a14",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:23:58-07:00",
+          "message": "Merge 9c3b2ddd3363c5e6cf6b65fca4227cfc6b4d99e5 into f67fa39229a6df3d0d9927f73e74d59008342c7f\n"
+        },
+        {
+          "sha": "9c3b2ddd3363c5e6cf6b65fca4227cfc6b4d99e5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:23:57-07:00",
+          "message": "Merge branch 'main' into candybar-testing-ihvy.y10"
+        },
+        {
+          "sha": "fd5352e2a1e4026e880cd5f4c7eca53a601bc929",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T12:02:16-07:00",
+          "message": "chore(lint): the link id allocator still reads the disk directly (candybar-testing-ihvy.y10)\n"
+        },
+        {
+          "sha": "0d862689818ee2632b27bd6b253f386a78d122ed",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T11:56:27-07:00",
+          "message": "docs(claude): cost is judged by reading what the code does, never by loading the machine (candybar-testing-ihvy.y10)\n"
+        },
+        {
+          "sha": "46cdc3d21ed67c1fb798454fe26e69922745ac92",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T03:01:50-07:00",
+          "message": "fix(disk): the fake walks a new entry's parent, makes a `..` folder, refuses a move into itself and forgets a failed watch; path derivation takes a Filesystem (candybar-testing-ihvy.y10)\n"
+        },
+        {
+          "sha": "1b7e26e36f77de971798c28ff55ff8c4d9be682c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T02:52:06-07:00",
+          "message": "fix(disk): the fake moves, removes, writes through links and resolves `..` as the kernel does; repo-configs is made on the tree that watches it; the real disk is owned (candybar-testing-ihvy.y10)\n"
+        },
+        {
+          "sha": "489338f6162649aa16f623fcba08339944a48c08",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T02:36:44-07:00",
+          "message": "feat(disk): files and their watch events go through one filesystem port, first used by the watcher registry and the binary watch (candybar-testing-ihvy.y10)\n\nA Filesystem port (src/disk/) with one adapter over fs, an in-memory fake whose writes emit the events a watch would on the clock, and one contract both pass. The watcher registry, its delivery owner, plugin storage, folder identity, the link walk and the binary watch read the disk through it; IdentityRead and BundleStat are gone. A lint rule bans fs outside the adapter, with an allowlist of the files still to move.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-651",
       "ref": "refs/pull/651/merge",
       "sha": "9a38984c5fee338d796ab0ae5acf4cbf10959cf3",
@@ -129,56 +186,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T12:35:32-07:00",
           "message": "feat(apply): session state has one writer; a run and a lane setup are effects (candybar-gather-renderer-76bb.1dh.9kk)\n\nThe session store refuses a write made while no journal turn is held, in\nevery daemon. A turn is synchronous, so a write while one is held is that\nturn's own, and one check at the store's single write path is the whole\nenforcement. The test-only view that refused such writes, its adapter\nseam and the separate gauges field are gone.\n\nThe two writers left outside a turn now report through effect-done:\n\n- A `run` click supersedes its sources in its turn, so they read pending\n  from the click on, and describes the launch as a `run` effect. The\n  performer runs the program behind the session's earlier effects; the\n  run owner answers how it ended and no longer writes the bar.\n- A lane setup is a `lane-setup` effect, settled by the click or the\n  request that owes it and run by the performer. Its own per-session\n  queue and defer are replaced by the performer's per-session order.\n\nThe check command, the demo and the doctor's command line build their\nstore with a holder that always holds, since each is one synchronous run.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-637",
-      "ref": "refs/pull/637/merge",
-      "sha": "16edef900ff8dc473d52b6d74516eedf48426584",
-      "timestamp": "2026-11-06T19:31:41.085Z",
-      "commits": [
-        {
-          "sha": "16edef900ff8dc473d52b6d74516eedf48426584",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T19:30:40Z",
-          "message": "Merge fd5352e2a1e4026e880cd5f4c7eca53a601bc929 into 308429c8f33e9cfe4e0983ab8f29bb1d25c3fe55\n"
-        },
-        {
-          "sha": "fd5352e2a1e4026e880cd5f4c7eca53a601bc929",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:02:16-07:00",
-          "message": "chore(lint): the link id allocator still reads the disk directly (candybar-testing-ihvy.y10)\n"
-        },
-        {
-          "sha": "0d862689818ee2632b27bd6b253f386a78d122ed",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T11:56:27-07:00",
-          "message": "docs(claude): cost is judged by reading what the code does, never by loading the machine (candybar-testing-ihvy.y10)\n"
-        },
-        {
-          "sha": "46cdc3d21ed67c1fb798454fe26e69922745ac92",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T03:01:50-07:00",
-          "message": "fix(disk): the fake walks a new entry's parent, makes a `..` folder, refuses a move into itself and forgets a failed watch; path derivation takes a Filesystem (candybar-testing-ihvy.y10)\n"
-        },
-        {
-          "sha": "1b7e26e36f77de971798c28ff55ff8c4d9be682c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T02:52:06-07:00",
-          "message": "fix(disk): the fake moves, removes, writes through links and resolves `..` as the kernel does; repo-configs is made on the tree that watches it; the real disk is owned (candybar-testing-ihvy.y10)\n"
-        },
-        {
-          "sha": "489338f6162649aa16f623fcba08339944a48c08",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T02:36:44-07:00",
-          "message": "feat(disk): files and their watch events go through one filesystem port, first used by the watcher registry and the binary watch (candybar-testing-ihvy.y10)\n\nA Filesystem port (src/disk/) with one adapter over fs, an in-memory fake whose writes emit the events a watch would on the clock, and one contract both pass. The watcher registry, its delivery owner, plugin storage, folder identity, the link walk and the binary watch read the disk through it; IdentityRead and BundleStat are gone. A lint rule bans fs outside the adapter, with an allowlist of the files still to move.\n"
         }
       ]
     },
