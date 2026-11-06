@@ -1,3 +1,13 @@
+## [1.206.0](https://github.com/promptctl/cc-candybar/compare/v1.205.1...v1.206.0) (2026-11-06)
+
+### Features
+
+* **apply:** session state has one writer; a run and a lane setup are effects (candybar-gather-renderer-76bb.1dh.9kk) ([#646](https://github.com/promptctl/cc-candybar/issues/646)) ([dec17fe](https://github.com/promptctl/cc-candybar/commit/dec17fec2a409d867f331d5898b3ab81d111b5ea))
+
+### Bug Fixes
+
+* **test:** the launch-group abort case reaches its window by what it observes, not a sleep (brandon-menus-sjhy.irc) ([#653](https://github.com/promptctl/cc-candybar/issues/653)) ([4f89028](https://github.com/promptctl/cc-candybar/commit/4f8902896b866dd001944102be7ed0716f005520))
+
 ## [1.205.1](https://github.com/promptctl/cc-candybar/compare/v1.205.0...v1.205.1) (2026-11-06)
 
 ### Bug Fixes
