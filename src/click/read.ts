@@ -15,7 +15,7 @@ import {
   VERB_DISPATCH,
   VERB_OPEN_VSCODE,
 } from "./wire";
-import { URL_SCHEME } from "./scheme";
+import { isBarLink } from "./scheme";
 import { SEGMENTED_VERBS } from "../daemon/verbs";
 
 /** One link the bar drew: its visible text and its URL. */
@@ -46,11 +46,6 @@ export function linksOf({ rows }: Pick<Frame, "rows">): DrawnLink[] {
   });
 }
 
-// A link outside the cc-candybar scheme (a repo page, a PR) is the
-// terminal's to open; the daemon never sees a click on it.
-export const isBarLink = (url: string): boolean =>
-  url.startsWith(`${URL_SCHEME}://`);
-
 export interface DecodedEffect {
   readonly verb: string;
   readonly args: string[];
@@ -59,7 +54,7 @@ export interface DecodedEffect {
 // [LAW:one-source-of-truth] Decode an effect's value the way its daemon handler
 // does, from the daemon's own list (src/daemon/verbs SEGMENTED_VERBS): those
 // verbs' values are `/`-separated segments; every other verb takes ONE
-// argument, the whole value decoded once, so a direct `copy/a/b` reports one
+// argument, the whole value decoded once, so a `copy/a/b` link reports one
 // arg "a/b" (exactly what the copy handler copies).
 function decodeArgs(verb: string, value: string): string[] {
   return SEGMENTED_VERBS.has(verb)
@@ -67,29 +62,50 @@ function decodeArgs(verb: string, value: string): string[] {
     : [decodeURIComponent(value)];
 }
 
-// [LAW:no-silent-failure] A link a bar DREW, as the daemon splits it. A reader
-// of drawn links holds links the renderer wrote, so one the daemon would refuse
-// is a bug in the draw, thrown here rather than carried as a refusal.
-export function clickOf(url: string): { verb: string; value: string } {
+export type DrawnClick =
+  | { readonly ok: true; readonly effects: DecodedEffect[] }
+  | { readonly ok: false; readonly problem: string };
+
+// [LAW:parse-dont-validate] A drawn link's click as the daemon splits it, its
+// ordered effects (a link whose verb is not dispatch is the one-effect case),
+// or the reason the daemon refuses it: a config can compute a link at the
+// draw that the parse refuses, or whose value carries a malformed escape.
+export function drawnClickOf(url: string): DrawnClick {
   const link = parseHandlerUrl(url);
-  if (!link.ok) throw new Error(link.problem);
-  return { verb: link.verb, value: link.value };
+  if (!link.ok) return link;
+  const { verb, value } = link;
+  try {
+    const effects =
+      verb === VERB_DISPATCH
+        ? parseEffects(value).map((e) => ({
+            verb: e.verb,
+            args: decodeArgs(e.verb, e.value),
+          }))
+        : [{ verb, args: decodeArgs(verb, value) }];
+    return { ok: true, effects };
+  } catch (error) {
+    return {
+      ok: false,
+      problem: `the link's value does not decode (${(error as Error).message}): ${url}`,
+    };
+  }
 }
 
-/** A click URL's ordered effect list (verb + decoded args); a direct URL is the one-effect case. */
+// [LAW:no-silent-failure] A drawn link's effects, for a reader holding links
+// the renderer itself wrote, so one the parse refuses is a bug in the draw,
+// thrown here rather than carried as a refusal.
 export function effectsOf(url: string): DecodedEffect[] {
-  const { verb, value } = clickOf(url);
-  if (verb !== VERB_DISPATCH) return [{ verb, args: decodeArgs(verb, value) }];
-  return parseEffects(value).map((e) => ({
-    verb: e.verb,
-    args: decodeArgs(e.verb, e.value),
-  }));
+  const click = drawnClickOf(url);
+  if (!click.ok) throw new Error(click.problem);
+  return click.effects;
 }
 
-/** The effects a click on `link` fires, `verb arg…` each, `;` between; `sessionId` reads as `<session>`. */
+/** The effects a click on `link` fires, `verb arg…` each, `;` between, or the parse's refusal; `sessionId` reads as `<session>`. */
 export function describeLink(link: DrawnLink, sessionId: string): string {
   if (!isBarLink(link.url)) return `opens ${link.url}`;
-  return effectsOf(link.url)
+  const click = drawnClickOf(link.url);
+  if (!click.ok) return `refused: ${click.problem}`;
+  return click.effects
     .map(({ verb, args }) =>
       [verb, ...args.map((a) => (a === sessionId ? "<session>" : a))].join(" "),
     )

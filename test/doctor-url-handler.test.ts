@@ -30,6 +30,7 @@ import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys
 import { SessionState } from "../src/daemon/session-state";
 import { doctorReportKeys } from "../src/doctor/report";
 import { forwarderExecutable } from "../src/install/index";
+import { MAIN_NAME, parseRendererAddress } from "../src/daemon/home";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { recordRender, testVerbContext } from "./helpers/click";
 import {
@@ -155,6 +156,7 @@ function fakeEdge(
   let clock = 0;
   const edge: HandlerProbeEdge = {
     platform: "darwin",
+    name: MAIN_NAME,
     sockets: { own: "/tmp/s", handler: "/tmp/s" },
     monotonic: () => clock as Monotonic,
     nonce: () => NONCE,
@@ -212,15 +214,20 @@ describe("probeUrlHandler", () => {
     expect(calls).toEqual([]);
   });
 
-  test("the link it opens arrives: who delivered it, and no diagnosis", async () => {
-    const { edge, calls } = fakeEdge({ arrivesOnRead: 3 });
+  // The link names this shell's renderer, so a named home is probed through
+  // the socket its name selects, as main is.
+  test("the link it opens, naming this shell's renderer, arrives: who delivered it, and no diagnosis", async () => {
+    const { edge, calls } = fakeEdge({
+      arrivesOnRead: 3,
+      name: parseRendererAddress("dev-bar"),
+    });
     expect(await probeUrlHandler(edge)).toEqual({
       kind: "arrived",
       delivery: FORWARDED,
     });
     expect(calls).toEqual([
       "daemon",
-      `open cc-candybar://${VERB_DOCTOR_PROBE}/${NONCE}`,
+      `open cc-candybar://to/dev-bar/${VERB_DOCTOR_PROBE}/${NONCE}`,
       "pause",
       "daemon",
       "pause",
@@ -278,7 +285,7 @@ describe("probeUrlHandler", () => {
     expect(await probeUrlHandler(edge)).toEqual({
       kind: "unprobed",
       reason:
-        "this shell's daemon is at /tmp/dev/s; the URL handler delivers the probe's link, which names no renderer, to /tmp/cc-candybar-501/socket",
+        "this shell's daemon is at /tmp/dev/s; the URL handler delivers a link naming main to /tmp/cc-candybar-501/socket",
     });
     expect(calls).toEqual([]);
   });

@@ -55,7 +55,7 @@ These are the existing pieces each part of the proposal touches. They are facts 
 
 ## How a click works
 
-Every clickable span is an OSC-8 link, `cc-candybar://dispatch/…`, carrying an ordered list of effects (`src/click/wire.ts`, `effectsUrl`). Clicking it runs the URL handler app, which sends the effects to the daemon. The daemon runs each effect through its verb table (`src/daemon/verbs/index.ts`, `VERBS`), and the next render shows the result.
+Every clickable span is an OSC-8 link, `cc-candybar://to/<name>/dispatch/…`, naming the renderer that drew it and carrying an ordered list of effects (`src/click/wire.ts`, `effectsUrl`). Clicking it runs the URL handler app, which sends the effects to the daemon. The daemon runs each effect through its verb table (`src/daemon/verbs/index.ts`, `VERBS`), and the next render shows the result.
 
 An effect writes in one of two places: the **session** (state that lasts as long as this Claude Code session), or the **config file** (durable; the daemon reloads it). Settings changed in the menu are session drafts until `💾 save` writes them to the file. One click is one step of the session's undo history. A click the daemon refuses is counted by the red indicator beside the door for a few seconds, and its reason is read in the viewer the indicator opens:
 

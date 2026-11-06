@@ -8,12 +8,12 @@ import {
   HOME_ENV,
   HOME_CONFIG_DIR,
   HOME_STATE_DIR,
-  MAIN_SOCKET_FILE,
   NAME_ENV,
   RUNTIME_DIR_ENV,
   socketFile,
   uidRuntimeDir,
   xdgEnv,
+  type RendererAddress,
   type RendererHome,
 } from "./home";
 
@@ -77,10 +77,12 @@ export function socketPath(home: RendererHome): string {
     : path.join(home.runtime, socketFile(home.name));
 }
 
-// The socket a process with no environment reaches — the URL handler app's,
-// which Launch Services starts without this shell's environment.
-export function defaultSocketPath(): string {
-  return path.join(uidRuntimeDir(), MAIN_SOCKET_FILE);
+// [LAW:one-source-of-truth] The socket a link naming `name` is delivered to
+// by the URL handler app (url-handler/address.swift), which Launch Services
+// starts without this shell's environment: the name's file in the uid's own
+// runtime directory, whatever a home's overrides say.
+export function handlerSocketPath(name: RendererAddress): string {
+  return path.join(uidRuntimeDir(), socketFile(name));
 }
 
 // [LAW:one-source-of-truth] The environment a child this renderer starts (a

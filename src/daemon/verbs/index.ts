@@ -394,8 +394,8 @@ function requireSessionId(value: string): SessionId {
 // [LAW:types-are-the-program] A single-argument verb (copy/open/toolbar/show-
 // config) carries ONE argument: the WHOLE value, decoded once. It must NOT split
 // on "/" the way the multi-arg set-state does — a single-arg value legitimately
-// contains "/" (a copy of "a/b", an open path), and an old direct `copy/a/b`
-// scrollback link would be truncated at the first slash if split. The verb's
+// contains "/" (a copy of "a/b", an open path), and a `copy/a/b` link
+// would be truncated at the first slash if split. The verb's
 // arity picks the codec: 1 arg → decode the whole tail; N args → decodeSegments.
 // parseHandlerUrl no longer decodes the value, so the decode lives with the verb
 // that knows its shape [LAW:single-enforcer].
@@ -2265,8 +2265,9 @@ function click(
 }
 
 // [LAW:one-source-of-truth] The full dispatch table the daemon looks up against:
-// every leaf verb plus the one `dispatch` wrapper. Old scrollback links that
-// name a leaf verb directly still resolve here; new renders all emit `dispatch`.
+// every leaf verb plus the one `dispatch` wrapper. A link that names a leaf
+// verb itself, not in a dispatch list, resolves here too; every link the
+// renderer draws names `dispatch`.
 export const VERBS: ReadonlyMap<string, VerbRun> = new Map<string, VerbRun>([
   ...[...LEAF_VERBS].map(
     ([verb, leaf]) =>

@@ -6,6 +6,7 @@ import path from "node:path";
 
 import {
   HOME_ENV,
+  MAIN_NAME,
   NAME_ENV,
   RUNTIME_DIR_ENV,
   homeOf,
@@ -18,7 +19,7 @@ import {
   cacheDir,
   configDir,
   daemonPaths,
-  defaultSocketPath,
+  handlerSocketPath,
   homeEnv,
   socketPath,
   stateDir,
@@ -157,7 +158,7 @@ describe("the main home is today's layout", () => {
       cache: "/home/u/.cache/cc-candybar",
       config: "/home/u/.config/cc-candybar",
     });
-    expect(socketPath(withoutXdg)).toBe(defaultSocketPath());
+    expect(socketPath(withoutXdg)).toBe(handlerSocketPath(MAIN_NAME));
   });
 
   test("with XDG overrides", () => {

@@ -36,16 +36,20 @@ func isRendererName(_ raw: String) -> Bool {
 // [LAW:parse-dont-validate] A link the URL handler was handed, as the socket
 // file it is written to. The name is checked before it becomes any part of a
 // path, because the link is whatever a web page chose to open. A link that
-// names no renderer (one drawn before names) is main's, which is where every
-// link went before them. The name is read raw, never decoded: the rule admits
-// no character an escape spells, so an escaped name is refused.
+// names no renderer is in a grammar older than names (a direct verb, or a
+// bare value read as copy), which no renderer runs, so it is refused naming
+// its form. The name is read raw, never decoded: the rule admits no character
+// an escape spells, so an escaped name is refused.
 func target(ofLink link: String) -> Target {
   guard let scheme = link.range(of: "://") else {
     return .refused("not a link: no scheme")
   }
   let rest = link[scheme.upperBound...]
   let addressed = "\(LINK_TO)/"
-  guard rest.hasPrefix(addressed) else { return .file(MAIN_SOCKET_FILE) }
+  guard rest.hasPrefix(addressed) else {
+    let form = rest.contains("/") ? "the direct verb form" : "the bare copy form"
+    return .refused("the link is in \(form), which names no renderer")
+  }
   let named = rest.dropFirst(addressed.count)
   let name = String(named.prefix { $0 != "/" })
   // The reason is fixed text: a name that fails the rule is the web page's,

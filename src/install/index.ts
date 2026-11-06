@@ -441,9 +441,6 @@ function installUrlHandler(forwarder: string, { host, launcher }: World): void {
   }
 
   process.stdout.write(`✓ ${APP_NAME}.app installed and registered.\n`);
-  process.stdout.write(
-    `  Test: open '${URL_SCHEME}://hello-world' && pbpaste\n`,
-  );
 }
 
 export function runInstallUrlHandler(bundle: string, world: World): void {

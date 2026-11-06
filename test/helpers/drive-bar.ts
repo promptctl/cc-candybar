@@ -45,12 +45,12 @@ import { hostOf } from "./host";
 import { prepareIsolatedDaemonEnv, spawnDaemonWithEnv } from "./spawn-isolated-daemon";
 import {
   describeLink as describeWith,
-  effectsOf,
+  drawnClickOf,
   HOST_VERBS,
-  isBarLink,
   linksOf,
   type DrawnLink,
 } from "../../src/click/read";
+import { isBarLink } from "../../src/click/scheme";
 
 const SESSION_ID = BAR_SESSION_ID;
 const REPLY_BUDGET_MS = 10_000;
@@ -204,7 +204,10 @@ export async function startBar(
     if (!isBarLink(hit.url)) {
       throw new Error(`"${hit.text}" opens ${hit.url}: the terminal's click, not the daemon's`);
     }
-    if (effectsOf(hit.url).some(({ verb }) => HOST_VERBS.has(verb))) {
+    // A link the parse refuses acts on nothing here: the daemon refuses its
+    // click, with the reason.
+    const drawn = drawnClickOf(hit.url);
+    if (drawn.ok && drawn.effects.some(({ verb }) => HOST_VERBS.has(verb))) {
       return { refused: `not sent: ${describeLink(hit)}`, rendered: await render() };
     }
     const resp = await sendClick(daemon.target, hit.url, REPLY_BUDGET_MS);

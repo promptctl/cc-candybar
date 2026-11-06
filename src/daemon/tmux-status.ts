@@ -36,6 +36,7 @@ import type { TmuxHint } from "../tmux-hint.js";
 import type { StatusLines } from "./pane-visibility.js";
 import type { Subscriber } from "./frame-feed.js";
 import {
+  addressedLink,
   decodeSegments,
   encodeSegments,
   VERB_TMUX_STATUS_CLICK,
@@ -401,19 +402,23 @@ export function boundOf(listKeys: string): Bound | null {
   return found === null ? null : { line: found[0], command: found[1]! };
 }
 
-// [LAW:one-source-of-truth] The link a status-line click runs, as this module
-// writes it into the binding and reads it back in `linkAt`: tmux expands the
-// pane (its `%` stripped, which a URL would read as an escape) and the range,
-// shell-quoted, before the shell runs the line.
-const CLICK_URL = `cc-candybar://${VERB_TMUX_STATUS_CLICK}/`;
-const clickUrl = (socket: string): string =>
-  `${CLICK_URL}${encodeSegments([socket])}/#{s/%//:pane_id}/#{q:mouse_status_range}`;
+// [LAW:one-source-of-truth] The link a status-line click runs, addressed to
+// the renderer that binds it, as this module writes it into the binding and
+// reads it back in `linkAt`: tmux expands the pane (its `%` stripped, which a
+// URL would read as an escape) and the range, shell-quoted, before the shell
+// runs the line.
+const clickUrl = (name: RendererAddress, socket: string): string =>
+  addressedLink(
+    name,
+    VERB_TMUX_STATUS_CLICK,
+    `${encodeSegments([socket])}/#{s/%//:pane_id}/#{q:mouse_status_range}`,
+  );
 
-// A binding a cc-candybar daemon wrote — this one or any other — told by the
-// click it runs, which `list-keys` prints as it was bound whatever the
-// padding before it.
+// A binding a cc-candybar daemon wrote — this one or any other, of any name
+// or of a build before names — told by the verb of the click it runs, which
+// `list-keys` prints as it was bound whatever the padding before it.
 const isClickBinding = (bound: Bound | null): boolean =>
-  bound?.command.includes(CLICK_URL) ?? false;
+  bound?.command.includes(`/${VERB_TMUX_STATUS_CLICK}/`) ?? false;
 
 // What `@cc-candybar-binding-prior` holds: the daemon that bound the click,
 // and the binding it replaced.
@@ -478,7 +483,8 @@ export interface TmuxStatusDeps {
   readonly handler: string;
   // This daemon's socket: what it writes into tmux is marked with it.
   readonly owner: string;
-  // This renderer's name, as the sessions it draws carry it in RENDERER_OPTION.
+  // This renderer's name, as the sessions it draws carry it in RENDERER_OPTION
+  // and the click its binding runs is addressed to.
   readonly name: RendererAddress;
   readonly log: (level: "info" | "warn", msg: string) => void;
 }
@@ -1010,7 +1016,7 @@ export class TmuxStatusLines {
         "if-shell",
         "-F",
         `#{m:${RANGE_PREFIX}*,#{mouse_status_range}}`,
-        `run-shell -b ${tmuxQuoted(`${this.deps.handler} ${clickUrl(socket)}`)}`,
+        `run-shell -b ${tmuxQuoted(`${this.deps.handler} ${clickUrl(this.deps.name, socket)}`)}`,
         ...(prior === null ? [] : [prior.command]),
       ],
       ["set-option", "-g", BINDING_OPTION, JSON.stringify(record)],

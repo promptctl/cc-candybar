@@ -193,11 +193,10 @@
 
     // ── Link (OSC-8 hyperlink) + copy + open actions ───────────────────────
     // {{ link url text }} emits an OSC-8 hyperlink span — no action declaration
-    // needed. The URL is a Go template; the text is the visible label.
-    // click follows the OSC-8 URL; the URL handler dispatches to copy/open verbs
-    // for cc-candybar:// URLs and to the OS default handler for everything else.
+    // needed. The URL is a Go template; the text is the visible label. The
+    // terminal opens it; a click the bar itself acts on is an action.
     toolbar: {
-      template: ' {{ link (printf "cc-candybar://open-vscode/%s" (urlEncode .current_dir)) "📂" }} {{ action "copySessionId" "⎘ session" }} {{ action "copyDir" "⎘ dir" }} {{ action "openVscode" "↗ vscode" }} {{ action "openGitHub" "↗ github" }} ',
+      template: ' {{ link "https://github.com/promptctl/cc-candybar" "↗ repo" }} {{ action "copySessionId" "⎘ session" }} {{ action "copyDir" "⎘ dir" }} {{ action "openVscode" "↗ vscode" }} {{ action "openGitHub" "↗ github" }} ',
       bg: "surface",
     },
 

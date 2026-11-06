@@ -15,11 +15,12 @@ import { randomUUID } from "node:crypto";
 import { sleep, type Monotonic } from "../time.js";
 import fs from "node:fs";
 import { URL_SCHEME } from "../click/scheme.js";
-import { VERB_DOCTOR_PROBE } from "../click/wire.js";
+import { addressedLink, VERB_DOCTOR_PROBE } from "../click/wire.js";
 import { describeFailure } from "../daemon/client-transport.js";
 import { fetchStats, shapeSkew } from "../daemon/client-stats.js";
 import type { ClientWorld } from "../daemon/client-transport.js";
-import { defaultSocketPath, socketPath } from "../daemon/paths.js";
+import type { RendererAddress } from "../daemon/home.js";
+import { handlerSocketPath, socketPath } from "../daemon/paths.js";
 import { forwarderExecutable } from "../install/index.js";
 import {
   failureText,
@@ -67,8 +68,10 @@ export interface DaemonView {
 
 export interface HandlerProbeEdge {
   readonly platform: NodeJS.Platform;
+  // The renderer this shell reaches, whose name the probe's link carries.
+  readonly name: RendererAddress;
   // The socket this process reaches its daemon on, and the one the handler
-  // app delivers to, which is main's: they differ for a named home.
+  // app delivers a link naming it to: they differ under an override.
   readonly sockets: { readonly own: string; readonly handler: string };
   readonly nonce: () => string;
   readonly daemon: () => Promise<Asked<DaemonView>>;
@@ -122,13 +125,13 @@ export async function probeUrlHandler(
   edge: HandlerProbeEdge,
 ): Promise<UrlHandlerFacts> {
   if (edge.platform !== "darwin") return { kind: "unsupported" };
-  // The probe's link names no renderer, so the handler delivers it to main's
-  // socket: opened from a shell whose daemon is another, it would land on a
-  // daemon this probe cannot read.
+  // The probe's link names this shell's renderer, and the handler delivers it
+  // to the socket that name selects in the uid's directory: a daemon this
+  // shell reaches elsewhere (an override) would never see it arrive.
   if (edge.sockets.own !== edge.sockets.handler) {
     return {
       kind: "unprobed",
-      reason: `this shell's daemon is at ${edge.sockets.own}; the URL handler delivers the probe's link, which names no renderer, to ${edge.sockets.handler}`,
+      reason: `this shell's daemon is at ${edge.sockets.own}; the URL handler delivers a link naming ${edge.name} to ${edge.sockets.handler}`,
     };
   }
   // The link is delivered to the daemon, so one that cannot be asked can
@@ -141,7 +144,9 @@ export async function probeUrlHandler(
     };
   }
   const nonce = edge.nonce();
-  const unopened = edge.open(`${URL_SCHEME}://${VERB_DOCTOR_PROBE}/${nonce}`);
+  const unopened = edge.open(
+    addressedLink(edge.name, VERB_DOCTOR_PROBE, nonce),
+  );
   const arrived = unopened === null ? await awaitArrival(edge, nonce) : null;
   return arrived ?? { kind: "lost", unopened, opener: handlerApp(edge) };
 }
@@ -221,7 +226,8 @@ export function productionHandlerProbeEdge(
   const { home, clock } = world;
   return {
     platform: process.platform,
-    sockets: { own: socketPath(home), handler: defaultSocketPath() },
+    name: home.name,
+    sockets: { own: socketPath(home), handler: handlerSocketPath(home.name) },
     monotonic: () => clock.monotonic(),
     nonce: randomUUID,
     daemon: () => daemonView(world),

@@ -399,7 +399,7 @@ test("a slash click's pane read and typing run together, after its turn", async 
   const seen: string[] = [];
   const typing = gate();
   const { performed } = await applyClick(
-    `cc-candybar://${VERB_SLASH}/${encodeSegments([A, "/compact"])}`,
+    `cc-candybar://to/main/${VERB_SLASH}/${encodeSegments([A, "/compact"])}`,
     {
       ...ctx,
       configFor: () => config,
@@ -516,7 +516,7 @@ test("the click path counts a click pending from arrival, through a refusal, and
   const send = (gone: () => boolean) =>
     replyTo(
       parts,
-      { kind: "click", url: `cc-candybar://${VERB_DOCTOR_RUN}/${encodeURIComponent(A)}` } as Parameters<typeof replyTo>[1],
+      { kind: "click", url: `cc-candybar://to/main/${VERB_DOCTOR_RUN}/${encodeURIComponent(A)}` } as Parameters<typeof replyTo>[1],
       () => false,
       systemTimekeeper.monotonic(),
       gone,

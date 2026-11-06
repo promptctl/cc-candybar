@@ -52,6 +52,6 @@ A Bun-compiled Claude Code honours BUN_OPTIONS. It doesn't honour BUN_INSPECT_PR
 
 - tmux stores an array option whole at each level. A session-level status-format[1] blanks the global [0] (the window list), and unsetting indices leaves an empty array that still shadows the global one. So copy, write and restore the session's array whole.
 - The restore compares against a record kept in tmux itself, so the next daemon puts back what a dead one left. Each record names the socket of the daemon that wrote it, and a daemon touches only its own records. A dev or test daemon on the same tmux server therefore leaves the real one's records alone.
-- Recognise our mouse binding by the URL its command runs, not by its list-keys line. tmux pads that line's key column to the longest key in the table.
+- Recognise our mouse binding by the click verb its command's URL runs, not by its list-keys line or the whole URL. tmux pads that line's key column to the longest key in the table, and a binding left by another renderer, or by a build before names, carries another address or none, and must still read as ours to adopt or leave alone.
 - A tmux spawn costs about 20 ms on macOS, so calls are async and serial per server. The shutdown restore is the exception and runs synchronously. Draws run under an if-shell guard, so a draw still in flight after a restore lands on nothing.
 - A click from the tmux status line arrives through tmux, so it proves nothing about the URL handler or about terminal links.

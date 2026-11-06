@@ -50,6 +50,7 @@ import {
 import { floorOf } from "../config/globals-fields.js";
 import type { RichText } from "@promptctl/rich-js";
 import { LANE_NAMES, parseLane, type Lane } from "../config/lanes.js";
+import { isBarLink } from "../click/scheme.js";
 import { parseHandlerUrl, VERB_TMUX_STATUS_CLICK } from "../click/wire.js";
 import { instantOf } from "../utils/instant.js";
 import { waitBudgetMs } from "./request-deadline.js";
@@ -863,13 +864,9 @@ async function linkClick(
 ): Promise<RequestOutcome> {
   const link = parseHandlerUrl(url);
   if (!link.ok) return { kind: "bad-request", problems: [link.problem] };
-  noteFacts(facts, { [TO_FACT[arrival.via]]: link.to ?? "-" });
+  noteFacts(facts, { [TO_FACT[arrival.via]]: link.to });
   const own = parts.links.to;
-  // [LAW:no-mode-explosion] exception: a link with no address (one drawn
-  // before names, the status-line binding's, the doctor probe's, or one a
-  // config spells) runs on the renderer it reached, until the tickets that
-  // remove those forms (b2l.eul, b2l.mxk, b2l.x87) leave none.
-  if (link.to !== null && link.to !== own) {
+  if (link.to !== own) {
     return {
       kind: "bad-request",
       problems: [
@@ -972,7 +969,7 @@ async function statusLineClick(
   const click = tmuxStatusLines.linkAt(value);
   if (click.kind === "refused") return refused(click.reason);
   noteFacts(facts, { link: click.url });
-  if (click.url.startsWith("cc-candybar://")) {
+  if (isBarLink(click.url)) {
     // A link a config wrote with a malformed escape is refused, as any
     // click's malformed wire encoding is, on the one link path.
     return linkClick(

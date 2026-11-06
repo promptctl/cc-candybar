@@ -34,7 +34,7 @@ import {
   encodeFrame,
 } from "../../../src/daemon/protocol";
 import { VERB_UNDO, effectsUrl, parseHandlerUrl } from "../../../src/click/wire";
-import { isBarLink } from "../../../src/click/read";
+import { isBarLink } from "../../../src/click/scheme";
 import { handleConnection } from "../../../src/daemon/connection";
 import type { DaemonLog } from "../../../src/daemon/log";
 import type { Daemon } from "../../../src/daemon/daemon";
@@ -229,12 +229,12 @@ test("two renderers under two homes leave no trace of each other or of their own
     expect(clickEvents(a).at(-1)).toContain(` via=cli to=${b.home.name} `);
     expect(await markOf(a)).toBe("unset");
 
-    // A link that names no renderer runs where it arrives, and says so.
-    const before = clickEvents(a).length;
-    await click(a.home, `cc-candybar://set-state/${sid}/mark/set`);
-    await until(() => clickEvents(a).length > before, "alpha's event for the link naming no renderer");
-    expect(clickEvents(a).at(-1)).toContain(" to=- ");
-    expect(await markOf(a)).toBe("set");
+    // A link that names no renderer runs nowhere: the renderer it reached
+    // refuses it, naming its form.
+    const unnamed = await sendDaemonRequest(a.home, { v: PROTOCOL_VERSION, kind: "click", url: `cc-candybar://set-state/${sid}/mark/set` });
+    expect(unnamed).toMatchObject({ ok: false, code: "BAD_REQUEST" });
+    expect(unnamed.ok ? "" : unnamed.error).toContain("the direct verb form");
+    expect(await markOf(a)).toBe("unset");
 
     await stop(a);
     await stop(b);

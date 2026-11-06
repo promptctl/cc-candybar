@@ -215,7 +215,8 @@ describe("TmuxStatusLines", () => {
     expect(s.get(rowOption(1))).toContain("two");
     expect(JSON.parse(s.get(PRIOR_OPTION)!)).toMatchObject({ base: 1, status: null, formats: null });
     expect(s.get(RENDERER_OPTION)).toBe("main");
-    expect(h.tmux.binding).toContain("tmux-status-click");
+    // The click the binding runs is addressed to the renderer that bound it.
+    expect(h.tmux.binding).toContain("cc-candybar://to/main/tmux-status-click/");
     expect(h.tmux.binding).toContain("switch-client -t =");
   });
 
@@ -340,7 +341,7 @@ describe("TmuxStatusLines", () => {
     const h = harness();
     h.hold("s1", "%1");
     await h.answer({ "%1": "$1" }, { $1: "%1" });
-    const url = "cc-candybar://copy/hi";
+    const url = "cc-candybar://to/main/copy/hi";
     await h.frame("s1", frameOf("x", url));
     const value = `${encodeURIComponent(SOCKET)}/1/${rangeOf(url)}`;
     expect(h.owner.linkAt(value)).toEqual({ kind: "link", url });
@@ -430,13 +431,13 @@ describe("TmuxStatusLines", () => {
     expect(h.tmux.binding).toBe(DEFAULT_BINDING);
   });
 
-  test("a binding a daemon on this socket left is bound again as this daemon, over what it first replaced", async () => {
+  test("a binding a daemon on this socket left, from a build before names, is bound again as this daemon, over what it first replaced", async () => {
     const h = harness();
     h.tmux.binding = "bind-key -T root MouseDown1Status if-shell -F x run-shell -b old-node url-handle cc-candybar://tmux-status-click/y switch-client -t =";
     h.tmux.global.set(BINDING_OPTION, JSON.stringify({ owner: OWNER, prior: { line: DEFAULT_BINDING, command: "switch-client -t =" } }));
     h.hold("s1", "%1");
     await h.answer({ "%1": "$1" }, { $1: "%1" });
-    expect(h.tmux.binding).toContain("cc-candybar url-handle cc-candybar://tmux-status-click/");
+    expect(h.tmux.binding).toContain("cc-candybar url-handle cc-candybar://to/main/tmux-status-click/");
     expect(h.tmux.binding).not.toContain("old-node");
     expect(h.tmux.binding).toContain("switch-client -t =");
     await h.answer({}, {});
@@ -445,7 +446,7 @@ describe("TmuxStatusLines", () => {
 
   test("another daemon's binding is left alone", async () => {
     const h = harness();
-    const theirs = "bind-key -T root MouseDown1Status run-shell -b other url-handle cc-candybar://tmux-status-click/z";
+    const theirs = "bind-key -T root MouseDown1Status run-shell -b other url-handle cc-candybar://to/dev-bar/tmux-status-click/z";
     h.tmux.binding = theirs;
     h.hold("s1", "%1");
     await h.answer({ "%1": "$1" }, { $1: "%1" });

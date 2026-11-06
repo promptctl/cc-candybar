@@ -1722,25 +1722,40 @@ describe("loadDslConfig — root rows fragment", () => {
 });
 
 describe("loadDslConfig — cross-references", () => {
-  // [LAW:no-silent-failure] A string literal spelling a URL for a verb no
-  // click runs is refused at load with where what it did now lives
-  // (RETIRED_LINK_VERBS), at the template or at the helper that spells it.
-  test("a template spelling the removed load-config verb's URL is refused at load, naming --config and the shell variable", () => {
+  // [LAW:no-silent-failure] A string literal spelling a link in a grammar older
+  // than names is refused at load, quoted as written, at the template or at
+  // the helper that spells it.
+  test("a template spelling a link that names no renderer is refused at load, quoting the literal", () => {
     const linked = `{ segments: { a: { template: '{{ link (printf "cc-candybar://load-config/%s/" .session.id) "normal" }}' } }, root: { h: ['a'] } }`;
     expectIssue(linked, {
       path: "segments.a.template",
       message:
-        /Template spells "cc-candybar:\/\/load-config\/…", a URL no click runs: .*--config.*\$CC_CANDYBAR_CONFIG/,
+        /^Template spells a link in a grammar older than names, which names no renderer: "cc-candybar:\/\/load-config\/%s\/"\. Bind an action instead \(\{\{ action "name" … \}\}\): its link names the renderer that draws it$/,
     });
-    const viaHelper = `{ helpers: { h: '{{ link "cc-candybar://load-config/x/" "pick" }}' }, segments: { a: { template: '{{ template "h" . }}' } }, root: { h: ['a'] } }`;
-    expectIssue(viaHelper, { path: "helpers.h", message: "load-config" });
-    const addressed = `{ segments: { a: { template: '{{ link "cc-candybar://to/main/load-config/x/" "pick" }}' } }, root: { h: ['a'] } }`;
-    expectIssue(addressed, {
-      path: "segments.a.template",
-      message: "load-config",
-    });
+    const viaHelper = `{ helpers: { h: '{{ link "cc-candybar://open-vscode/x/" "pick" }}' }, segments: { a: { template: '{{ template "h" . }}' } }, root: { h: ['a'] } }`;
+    expectIssue(viaHelper, { path: "helpers.h", message: '"cc-candybar://open-vscode/x/"' });
+    // A literal may be only a link's head, joined to a computed tail.
     const head = `{ segments: { a: { template: '{{ link (printf "%s/%s/" "cc-candybar://load-config" .session.id) "pick" }}' } }, root: { h: ['a'] } }`;
-    expectIssue(head, { path: "segments.a.template", message: "load-config" });
+    expectIssue(head, { path: "segments.a.template", message: '"cc-candybar://load-config"' });
+    const bare = `{ segments: { a: { template: '{{ link "cc-candybar://hello" "copy" }}' } }, root: { h: ['a'] } }`;
+    expectIssue(bare, { path: "segments.a.template", message: /names no renderer: "cc-candybar:\/\/hello"\./ });
+  });
+
+  // A literal that opens the address, or stops before it, can still be joined
+  // into a link that clicks; one that is no bar link is no link at all.
+  test("a template whose literals open an addressed link, or are no link, loads", () => {
+    for (const template of [
+      '{{ link "cc-candybar://to/main/x/1" "go" }}',
+      '{{ link (printf "%s/copy/%s" "cc-candybar://to/main" "x") "go" }}',
+      '{{ link (printf "cc-candybar://to/%s/copy/%s" "main" "x") "go" }}',
+      '{{ link (printf "cc-candybar://%s/copy/%s" "to/main" "x") "go" }}',
+      '{{ if hasPrefix "x" "cc-candybar://" }}x{{ end }}',
+      '{{ link "https://example.com/cc-candybar://x" "go" }}',
+    ]) {
+      expect(() =>
+        parseAndValidate(FILE, `{ segments: { a: { template: '${template}' } }, root: { h: ['a'] } }`),
+      ).not.toThrow();
+    }
   });
 
   test("root-authored config reports unknown segment under the `root` path", () => {

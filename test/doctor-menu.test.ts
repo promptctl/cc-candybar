@@ -392,7 +392,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
   // tmux".
   test("a doctor-run click for a session that never rendered is refused", async () => {
     const rt = doctorBar(HINT);
-    const url = `cc-candybar://${VERB_DOCTOR_RUN}/never-rendered`;
+    const url = `cc-candybar://to/main/${VERB_DOCTOR_RUN}/never-rendered`;
     await expect(rt.click(url)).rejects.toThrow(BadVerbArgs);
     await expect(rt.click(url)).rejects.toThrow(/never-rendered has not rendered yet/);
   });

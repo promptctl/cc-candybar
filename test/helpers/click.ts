@@ -16,7 +16,7 @@ import {
   HEALTHY_SERVING,
   noManagedSettings,
 } from "./doctor-facts";
-import { clickOf } from "../../src/click/read";
+import { parseHandlerUrl } from "../../src/click/wire";
 import { apply, type ClickRefusal } from "../../src/daemon/apply";
 import { clickSessionOf, clickVerb } from "../../src/daemon/verbs";
 import { writesInTurn } from "./writes-in-turn";
@@ -238,8 +238,13 @@ export function testVerbContext(
 
 export { effectsOf, type DecodedEffect } from "../../src/click/read";
 
-// A rendered link as the daemon reads it; a test's links are always links.
-export const linkClick = clickOf;
+// A rendered link as the daemon reads it; a test's links are always links,
+// so one the parse refuses is thrown.
+export function linkClick(url: string): { verb: string; value: string } {
+  const link = parseHandlerUrl(url);
+  if (!link.ok) throw new Error(link.problem);
+  return link;
+}
 
 // What a click's arm reads (src/daemon/apply.ts): the context handed in, its
 // log, and an idle clock nothing here arms.

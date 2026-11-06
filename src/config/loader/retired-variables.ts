@@ -1,5 +1,3 @@
-import { URL_SCHEME } from "../../click/scheme.js";
-import { CONFIG_ENV } from "../../config-hint.js";
 import type { InputVarDecl, TemplateVarDecl } from "../dsl-types.js";
 
 // [LAW:one-source-of-truth] The bundled variables that became per-placement
@@ -204,23 +202,4 @@ export function retiredEnvKindMessage(
     return `${head}; a value the payload lacks is read from a file by a "file" source or computed by a "shell" source, and not by echoing the variable there, since a "shell" source runs in the renderer too`;
   }
   return `${head} and read ${field.read} where it was read, or declare ${json5Of(field.declare)} under a name of your own`;
-}
-
-// [LAW:one-source-of-truth] The click verbs a hand-written URL literal can
-// still spell that no daemon dispatches: verb → where what it did now lives.
-// A literal URL reaches no table at load, so without this row the click would
-// fail on the bar, long after the file loaded [LAW:no-silent-failure]. A
-// future retirement is one row here.
-export const RETIRED_LINK_VERBS: ReadonlyMap<string, string> = new Map([
-  [
-    "load-config",
-    `the load-config verb is removed — a session's config is the file its statusline command names with --config, else the file its shell names in $${CONFIG_ENV}; point the session there instead of linking to a path`,
-  ],
-]);
-
-export function retiredLinkVerbMessage(verb: string): string | undefined {
-  const where = RETIRED_LINK_VERBS.get(verb);
-  return where === undefined
-    ? undefined
-    : `Template spells "${URL_SCHEME}://${verb}/…", a URL no click runs: ${where}`;
 }

@@ -55,7 +55,7 @@ The `{{ link }}` refusal makes `examples/demo-actions.json5` migrate, along with
 
 ### One grammar
 
-Removal candidates, since each leaves one URL form: direct verb URLs and bare `cc-candybar://<value>` copy, which `wire.ts` keeps for old scrollback. Removing them refuses those old links.
+A link has one form, `cc-candybar://to/<name>/<verb>/<tail>`. A direct verb URL or a bare `cc-candybar://<value>` copy, as old scrollback holds, is refused naming its form, by the URL handler and by the renderer.
 
 ### tmux
 

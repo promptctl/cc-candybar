@@ -12,3 +12,8 @@ export const URL_SCHEME = "cc-candybar";
 // which app a click reaches, and a reader of it (the bench) wants nothing of
 // the installer.
 export const APP_NAME = "CCCandybarURLHandler";
+
+// A link outside the cc-candybar scheme (a repo page, a PR) is the
+// terminal's to open; the daemon never sees a click on it.
+export const isBarLink = (url: string): boolean =>
+  url.startsWith(`${URL_SCHEME}://`);

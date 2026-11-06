@@ -141,7 +141,7 @@ describe("apply-update verb", () => {
   // handler's whole job is describing the act, which the performer reaches
   // through ctx once the click has answered.
   const url = (sid: string) =>
-    `cc-candybar://${VERB_APPLY_UPDATE}/${encodeURIComponent(sid)}`;
+    `cc-candybar://to/main/${VERB_APPLY_UPDATE}/${encodeURIComponent(sid)}`;
 
   test("a session id reaches ctx.applyUpdate once, outside the turn and unawaited by the click; a missing or unsafe one is BadVerbArgs and never does", async () => {
     const holders: Array<string | null> = [];

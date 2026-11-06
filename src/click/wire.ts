@@ -8,9 +8,7 @@
 // N=100 — a lone click is the degenerate one-element list. There is no
 // plain-vs-compound mode: every URL effectsUrl emits is `dispatch/does=…&e=…`, and the
 // effect COUNT is data the dispatcher folds over, never a branch that selects a
-// wire. (The wire still ACCEPTS direct `cc-candybar://<verb>/…` URLs — old
-// scrollback links, a hand-authored `link` template — so a direct verb is the
-// degenerate one-effect case on the parse side; only emission is unified here.)
+// wire.
 //
 // A link names the renderer that drew it, ahead of everything else:
 // `cc-candybar://to/<name>/dispatch/…`. The name is an address and nothing
@@ -26,8 +24,7 @@
 // rejected as opaque; a slash-nested payload is unsafe under any single
 // whole-value decode (a `%2F` would un-escape into a structural separator). The
 // payload follows the verb after a `/` (`dispatch/does=…&e=…`), NOT a `?`, so
-// `/` stays the one verb delimiter and `?` remains ordinary data in a bare-copy
-// value (`cc-candybar://hello?world`).
+// `/` stays the one verb delimiter and `?` is ordinary data in a tail.
 //
 // A link says in words what its click does, as a `does` param ahead of the
 // effects: `dispatch/does=set+theme+to+dracula&e=…`. It leads because a terminal
@@ -44,13 +41,17 @@ import {
   MENU_NS,
   MENU_PAGE_NS,
 } from "../config/reserved-names.js";
-import { URL_SCHEME } from "./scheme.js";
+import { isBarLink, URL_SCHEME } from "./scheme.js";
 import { parseRendererAddress, type RendererAddress } from "../daemon/home.js";
 
 // [LAW:one-source-of-truth] The segment that marks a link's address, mirrored
 // by the URL handler (url-handler/address.swift) and pinned by
 // scripts/check-protocol.mjs.
 export const LINK_TO = "to";
+
+// What every link opens with: the scheme, then the address.
+const LINK_PREFIX = `${URL_SCHEME}://`;
+const ADDRESS = `${LINK_TO}/`;
 
 // [LAW:one-source-of-truth] The verb vocabulary. The daemon's VERBS registry
 // keys off these and every emitter builds effects with them, so the emitted
@@ -351,7 +352,19 @@ export function effectsUrl(
     (e) => `e=${encodeURIComponent(`${e.verb}/${encodeSegments(e.args)}`)}`,
   );
   const qs = [`does=${spell(says)}`, ...params].join("&");
-  return `${URL_SCHEME}://${LINK_TO}/${to}/${VERB_DISPATCH}/${qs}`;
+  return addressedLink(to, VERB_DISPATCH, qs);
+}
+
+// [LAW:one-source-of-truth] The one spelling of a link's address: every
+// `cc-candybar://` URL anything opens is built here, and `parseHandlerUrl`
+// reads it back. `tail` is the verb's, already in its own encoding; the
+// tmux binding's carries formats tmux expands at the click.
+export function addressedLink(
+  to: RendererAddress,
+  verb: string,
+  tail: string,
+): string {
+  return `${LINK_PREFIX}${ADDRESS}${to}/${verb}/${tail}`;
 }
 
 // [LAW:dataflow-not-control-flow] Parse the dispatch verb's raw value (an
@@ -416,28 +429,28 @@ export function splitVerb(s: string): ParsedEffect {
 // [LAW:parse-dont-validate] A whole `cc-candybar://` link as a click, or why
 // it is not one: the daemon reads every link this way, whether the URL
 // handler app forwarded it raw, url-handle relayed it or a tmux status line's
-// range marked it. `to` is the renderer the link names, or null for a link in
-// a grammar older than names (a direct verb, a bare copy, a link a config
-// spells), which names none.
+// range marked it, and the config loader reads a template's literal links
+// the same way. `to` is the renderer the link names: a link that names none
+// is no click.
 export type HandlerUrl =
   | {
       readonly ok: true;
-      readonly to: RendererAddress | null;
+      readonly to: RendererAddress;
       readonly verb: string;
       readonly value: string;
     }
   | { readonly ok: false; readonly problem: string };
 
-// [LAW:dataflow-not-control-flow] Parse the URL into a {verb, value} pair
-// without using `new URL`, which lowercases hosts (would mangle case-sensitive
-// session ids). Format: cc-candybar://to/<name>/<verb>/<tail> |
-// cc-candybar://<verb>/<tail> | cc-candybar://<value> (bare → copy). The
-// verb ends at the FIRST `/` after the address; everything after is the raw
-// value. The dispatch effect list rides as `dispatch/does=…&e=…`, so its
-// query-style payload is just the tail — `?` is NOT a delimiter, it is
-// ordinary data in a bare-copy value (`cc-candybar://hello?world` copies
-// "hello?world"). An addressed link always carries a verb: the bare copy is
-// the old grammar's alone.
+// [LAW:dataflow-not-control-flow] Parse the URL into a {to, verb, value}
+// triple without using `new URL`, which lowercases hosts (would mangle
+// case-sensitive session ids). Format: cc-candybar://to/<name>/<verb>/<tail>.
+// The verb ends at the FIRST `/` after the address; everything after is the
+// raw value. The dispatch effect list rides as `dispatch/does=…&e=…`, so its
+// query-style payload is just the tail, and `?` is NOT a delimiter.
+//
+// [LAW:no-silent-failure] A link in a grammar older than names is refused
+// naming its form, because whoever reads the refusal is holding one of two
+// things: a link drawn before names, or a config literal that spells one.
 //
 // [LAW:single-enforcer] Only the VERB is decoded here. The value is passed RAW
 // to the verb; each verb's handler decodes its own value at its boundary (the
@@ -447,18 +460,23 @@ export type HandlerUrl =
 // name is never decoded either: the URL handler reads it raw, and the name
 // rule admits no character an escape would spell.
 export function parseHandlerUrl(rawUrl: string): HandlerUrl {
-  const prefix = `${URL_SCHEME}://`;
-  if (!rawUrl.startsWith(prefix)) {
-    return { ok: false, problem: `expected a ${prefix} link, got: ${rawUrl}` };
+  if (!rawUrl.startsWith(LINK_PREFIX)) {
+    return {
+      ok: false,
+      problem: `expected a ${LINK_PREFIX} link, got: ${rawUrl}`,
+    };
   }
-  const rest = rawUrl.slice(prefix.length);
-  const addressed = `${LINK_TO}/`;
-  if (!rest.startsWith(addressed)) {
-    return rest.includes("/")
-      ? verbOf(rest, null)
-      : { ok: true, to: null, verb: VERB_COPY, value: rest };
+  const rest = rawUrl.slice(LINK_PREFIX.length);
+  if (!rest.startsWith(ADDRESS)) {
+    const form = rest.includes("/")
+      ? `the direct verb form ${LINK_PREFIX}<verb>/…`
+      : `the bare copy form ${LINK_PREFIX}<value>`;
+    return {
+      ok: false,
+      problem: `the link is in ${form}, which names no renderer: ${rawUrl}`,
+    };
   }
-  const named = rest.slice(addressed.length);
+  const named = rest.slice(ADDRESS.length);
   const slash = named.indexOf("/");
   if (slash === -1) {
     return {
@@ -476,8 +494,21 @@ export function parseHandlerUrl(rawUrl: string): HandlerUrl {
   }
 }
 
+// [LAW:single-enforcer] Whether text a config spells opens a bar link that
+// can never name a renderer, whatever the draw joins to it: its head opens
+// with neither the address nor a start of it (`cc-candybar://`, `…://t`).
+// Text is read as a head here, not as a whole link, because a literal may be
+// only a link's start, or a printf format whose verbs fill in the rest at the
+// draw, so the head ends at the first `%`; whether a whole link clicks is the
+// parse's to say, at the click.
+export function spellsUnaddressedLink(text: string): boolean {
+  if (!isBarLink(text)) return false;
+  const head = text.slice(LINK_PREFIX.length).split("%")[0]!;
+  return !head.startsWith(ADDRESS) && !ADDRESS.startsWith(head);
+}
+
 // A `<verb>/<tail>` run as a click addressed to `to`.
-function verbOf(rest: string, to: RendererAddress | null): HandlerUrl {
+function verbOf(rest: string, to: RendererAddress): HandlerUrl {
   const slash = rest.indexOf("/");
   if (slash === -1) {
     return { ok: false, problem: `the link carries no verb: ${rest}` };
