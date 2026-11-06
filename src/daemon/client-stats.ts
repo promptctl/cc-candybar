@@ -86,13 +86,37 @@ export function shapeSkew(
     s,
   );
   if (missing.length === 0) return null;
-  // [LAW:no-defensive-null-guards] exception: trust boundary — the snapshot
-  // is an unchecked cast from socket JSON, and an older daemon's carries no
-  // digest field.
-  const theirs = buildLabel(s.version, s.sourceDigest ?? null);
-  const mine = buildLabel(PACKAGE_VERSION, bakedDigest());
+  const { theirs, mine } = builds(s);
   return `the daemon (${theirs}) reports no ${missing.join(", ")}; it is another build than this client (${mine}), and restarts only when its own bundle changes`;
 }
+
+// The daemon's build and this client's, each as `daemon-stats` labels it.
+export interface Builds {
+  readonly theirs: string;
+  readonly mine: string;
+}
+
+// The two builds when the daemon is not this client's build, or null when it
+// is: decided on the version and the full digest, never on the labels. Refuses
+// nothing (a shape that matches is read whatever the build); it is for a
+// reader whose diagnosis turns on whether the daemon speaks this build's words.
+export function otherBuild(s: StatsSnapshot): Builds | null {
+  return s.version === PACKAGE_VERSION && theirDigest(s) === bakedDigest()
+    ? null
+    : builds(s);
+}
+
+function builds(s: StatsSnapshot): Builds {
+  return {
+    theirs: buildLabel(s.version, theirDigest(s)),
+    mine: buildLabel(PACKAGE_VERSION, bakedDigest()),
+  };
+}
+
+// [LAW:no-defensive-null-guards] exception: trust boundary — the snapshot is
+// an unchecked cast from socket JSON, and an older daemon's carries no digest
+// field.
+const theirDigest = (s: StatsSnapshot): string | null => s.sourceDigest ?? null;
 
 const STATS_FIELDS = Object.keys(RuntimeStats.referenceSnapshot()) as Array<
   keyof StatsSnapshot

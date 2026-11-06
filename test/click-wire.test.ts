@@ -39,7 +39,12 @@ import {
   batchAdjacentWrites,
   type Effect,
 } from "../src/click/wire";
-import { addressedLink, parseHandlerUrl } from "../src/click/wire";
+import {
+  addressedLink,
+  parseHandlerUrl,
+  probeLink,
+  VERB_PROBE,
+} from "../src/click/wire";
 import { MAIN_NAME, parseRendererName } from "../src/daemon/home";
 import { linkClick } from "./helpers/click";
 import { VERBS, BadVerbArgs } from "../src/daemon/verbs";
@@ -400,6 +405,20 @@ describe("parseHandlerUrl — verb split, value raw", () => {
       to: MAIN_NAME,
       verb: "copy",
       value: "a/b",
+    });
+  });
+
+  test("a probe link names its renderer, and its whole click is the nonce", () => {
+    const nonce = "123e4567-e89b-42d3-a456-426614174000";
+    const dev = parseRendererName("dev-bar");
+    expect(probeLink(dev, nonce)).toBe(
+      `cc-candybar://to/dev-bar/probe/${nonce}`,
+    );
+    expect(parseHandlerUrl(probeLink(dev, nonce))).toEqual({
+      ok: true,
+      to: dev,
+      verb: VERB_PROBE,
+      value: nonce,
     });
   });
 
