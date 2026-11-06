@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-657",
+      "ref": "refs/pull/657/merge",
+      "sha": "e2fd248eacbf87097e615ed941c15d0dfd2659c2",
+      "timestamp": "2026-11-06T22:34:31.248Z",
+      "commits": [
+        {
+          "sha": "e2fd248eacbf87097e615ed941c15d0dfd2659c2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T22:33:43Z",
+          "message": "Merge cb90f36c61e24089549910b8239c8790d764a51b into 3bd757912554568f0bf3b622640edbe789c7ba04\n"
+        },
+        {
+          "sha": "cb90f36c61e24089549910b8239c8790d764a51b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T15:33:32-07:00",
+          "message": "test(version): one daemon carries both halves of the mismatch asymmetry, under the process tier's start ceiling (candybar-testing-ihvy.fvw.xka)\n"
+        },
+        {
+          "sha": "18672ed2962672b9a9d2423639399ab7f1107497",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T15:23:39-07:00",
+          "message": "test(version): a real daemon answers an older client and keeps serving (candybar-testing-ihvy.fvw.xka)\n\nMedium-review fixes: the stay-up half of the gate is pinned at the process\ntier beside the exit half, the gate's fixture is typed instead of cast, and\ndaemon-acquire's pointer names where each half is covered.\n"
+        },
+        {
+          "sha": "e6cb35ddf162ac2702201ef7094bd6c9d788a38b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T15:20:45-07:00",
+          "message": "test(version): the gate is its own function, so its test drives it with no cast and runs in the unit tier (candybar-testing-ihvy.fvw.xka)\n\nReview fixes: versionGate is pulled out of handleRequest as a pure function of\n(request, log); the cases assert the admit (null), the log line each branch\nwrites, and cite the respawn-spiral law; the three ClientOutcome cases that ran\nno product code are gone; the clock is a fixed instant.\n"
+        },
+        {
+          "sha": "ee166f67f4925870679b24b49834b109c799d094",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T15:14:59-07:00",
+          "message": "test(version): the mismatch asymmetry is asserted over the daemon's real reply, and the stand-in that copied it is gone (candybar-testing-ihvy.fvw.xka)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-658",
       "ref": "refs/pull/658/merge",
       "sha": "b9c345c0b163212565430788f783f086f4c74bae",
@@ -49,42 +92,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T14:51:02-07:00",
           "message": "feat(apply): an effect waits only behind what it acts on; a lane setup holds its pane only while it types (candybar-gather-renderer-76bb.1dh.y9b)\n\nThe performer's order is keyed by what an effect acts on, not by the\nsession: a typed line by its tmux pane, a lane setup by its session's lane,\nand a session's launches, runs, doctor steps and update by that session's\nclicks as they committed. Every effect takes its place when its turn's\neffects are handed over, and an event's effects still run in the order\ndescribed, so a `do` keeps its order and no later click jumps ahead.\n\nA setup's steps that type into the session's pane (the whole statusline\nrestart, the band's /reload-plugins) take the pane's order when they are\nreached, so a copy clicked during a band install is performed at once and a\nslash typed during a restart lands after it. The setup reads the session's\nlatest request as it runs instead of a copy taken at the click.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-657",
-      "ref": "refs/pull/657/merge",
-      "sha": "7d9d42da139595b267a7a864cfe75e7c920428ce",
-      "timestamp": "2026-11-06T22:24:48.262Z",
-      "commits": [
-        {
-          "sha": "7d9d42da139595b267a7a864cfe75e7c920428ce",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T22:23:51Z",
-          "message": "Merge 18672ed2962672b9a9d2423639399ab7f1107497 into 3bd757912554568f0bf3b622640edbe789c7ba04\n"
-        },
-        {
-          "sha": "18672ed2962672b9a9d2423639399ab7f1107497",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T15:23:39-07:00",
-          "message": "test(version): a real daemon answers an older client and keeps serving (candybar-testing-ihvy.fvw.xka)\n\nMedium-review fixes: the stay-up half of the gate is pinned at the process\ntier beside the exit half, the gate's fixture is typed instead of cast, and\ndaemon-acquire's pointer names where each half is covered.\n"
-        },
-        {
-          "sha": "e6cb35ddf162ac2702201ef7094bd6c9d788a38b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T15:20:45-07:00",
-          "message": "test(version): the gate is its own function, so its test drives it with no cast and runs in the unit tier (candybar-testing-ihvy.fvw.xka)\n\nReview fixes: versionGate is pulled out of handleRequest as a pure function of\n(request, log); the cases assert the admit (null), the log line each branch\nwrites, and cite the respawn-spiral law; the three ClientOutcome cases that ran\nno product code are gone; the clock is a fixed instant.\n"
-        },
-        {
-          "sha": "ee166f67f4925870679b24b49834b109c799d094",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T15:14:59-07:00",
-          "message": "test(version): the mismatch asymmetry is asserted over the daemon's real reply, and the stand-in that copied it is gone (candybar-testing-ihvy.fvw.xka)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
