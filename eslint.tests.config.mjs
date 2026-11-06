@@ -88,6 +88,7 @@ const NET_MODULE = "/^(node:)?net$/";
 const NET_SYNTAX = [
   `ImportDeclaration[source.value=${NET_MODULE}][importKind!='type']`,
   `ImportExpression[source.value=${NET_MODULE}]`,
+  `CallExpression[callee.name='require'][arguments.0.value=${NET_MODULE}]`,
 ].map((selector) => ({ selector, message: NET_MESSAGE }));
 
 export default [

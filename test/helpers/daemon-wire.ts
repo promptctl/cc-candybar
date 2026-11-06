@@ -47,7 +47,10 @@ export function endpointOf(target: DaemonTarget): DaemonEndpoint {
 
 // The daemon a home names, reached through `dialer`: the machine's for a real
 // one, or the fake a case's daemons listen on.
-export function homeEndpoint(home: RendererHome, dialer: Dialer): DaemonEndpoint {
+export function homeEndpoint(
+  home: RendererHome,
+  dialer: Dialer,
+): DaemonEndpoint {
   const sockPath = socketPath(home);
   return {
     send: (req, budgetMs) => overDialer(dialer, sockPath, req, budgetMs),
@@ -82,7 +85,12 @@ async function overDialer(
 ): Promise<Response> {
   // [LAW:no-ambient-temporal-coupling] The connect has its own bound, which
   // sendOne (entered only once connected) does not budget for.
-  const dialed = await dialWithin(dialer, sockPath, timeoutMs, systemTimekeeper);
+  const dialed = await dialWithin(
+    dialer,
+    sockPath,
+    timeoutMs,
+    systemTimekeeper,
+  );
   if (!dialed.ok) {
     throw new Error(
       dialed.failure.cause === "timeout"
@@ -136,7 +144,15 @@ export function exitedAlready(child: ChildProcess): ExitResult | null {
 // own bound and answers false, so a poll that gives up on it leaves no live
 // handle behind.
 export async function isConnectable(sockPath: string): Promise<boolean> {
-  const dialed = await dialWithin(systemDialer, sockPath, 1_000, systemTimekeeper);
+  const dialed = await dialWithin(
+    systemDialer,
+    sockPath,
+    1_000,
+    systemTimekeeper,
+    {
+      unref: true,
+    },
+  );
   if (dialed.ok) dialed.conn.destroy();
   return dialed.ok;
 }

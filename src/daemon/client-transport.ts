@@ -13,7 +13,7 @@
 // branch.
 
 import type { Duplex } from "node:stream";
-import { dialWithin, type DialFailure } from "../dial/dialer";
+import { dialWithin, type BoundedDial, type DialFailure } from "../dial/dialer";
 import type { World } from "../host";
 import { socketPath } from "./paths";
 import {
@@ -116,7 +116,7 @@ export async function requestOutcome<T>(
 // busy. The one miss: a starved client whose timer beats that immediate refusal
 // reports a dead daemon busy, and the next tick kicks it.
 function dialFailureOutcome(
-  failure: DialFailure | { cause: "timeout" },
+  failure: Extract<BoundedDial, { ok: false }>["failure"],
 ): FailureOutcome {
   return failure.cause === "timeout"
     ? {

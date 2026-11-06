@@ -54,10 +54,12 @@ export function dialWithin(
   options?: TimerOptions,
 ): Promise<BoundedDial> {
   const dialing = dialer.dial(sockPath);
+  let timedOut = false;
   return new Promise((resolve) => {
     const clearTimer = clock.after(
       budgetMs,
       () => {
+        timedOut = true;
         dialing.abandon();
         resolve({ ok: false, failure: { cause: "timeout" } });
       },
@@ -65,6 +67,9 @@ export function dialWithin(
     );
     void dialing.settled.then((dialed) => {
       clearTimer();
+      // A dial that settled before the budget ran out but reached here after
+      // it has a connection nobody holds, since the caller has the timeout.
+      if (timedOut && dialed.ok) dialed.conn.destroy();
       resolve(dialed);
     });
   });

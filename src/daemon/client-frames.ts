@@ -67,11 +67,16 @@ export function openFrameStream(
     lane,
   };
   void dialing.settled.then((dialed) => {
+    // A stream closed after its dial settled, before this ran, gave nothing
+    // up: the connection is still the stream's to close.
+    if (end !== null) {
+      if (dialed.ok) dialed.conn.destroy();
+      return;
+    }
     if (!dialed.ok) {
       finish({ kind: "failed", error: new Error(dialed.failure.message) });
       return;
     }
-    // An abandoned dial never settles, so a stream still open holds this.
     const sock = dialed.conn;
     conn = sock;
     sock.on(

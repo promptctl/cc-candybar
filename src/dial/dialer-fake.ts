@@ -89,8 +89,10 @@ export function dialerFake(clock: Pick<Timekeeper, "defer">): DialerFake {
           const { daemonEnd, client } = memoryConnection();
           live.add(client);
           client.once("close", () => live.delete(client));
-          at.onConnection(daemonEnd);
+          // Settled first, so a listener that throws fails loudly here
+          // rather than leaving the dial pending.
           settle({ ok: true, conn: client });
+          at.onConnection(daemonEnd);
         }
       });
       return {
