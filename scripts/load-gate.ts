@@ -79,6 +79,7 @@ import type { StatsSnapshot } from "../src/daemon/stats.js";
 import { clickOf } from "../src/click/read.js";
 import { sourceDigest } from "../src/source-digest.js";
 import type { ClaudeHookData } from "../src/utils/claude.js";
+import { fieldsOf } from "../src/utils/logfmt.js";
 import { heapSnapshot, heapSnapshotArgs } from "./lib/heap-snapshot.js";
 import { percentile } from "./lib/percentile.js";
 import { sessionEnv } from "./lib/session-env.js";
@@ -657,20 +658,49 @@ async function clickMenu(s: Session, started: number): Promise<void> {
   await redrawn(s, answered);
 }
 
-// How each session's latest render logged since `since` ended, as the daemon's
-// render events say it: its wait's end (`answered` inside it, `deadline` drawn
-// with a value still pending), or for one that never reached its wait, its
-// outcome.
+// A render event's wait budget as the daemon stated it: whose deadline it
+// was, and the ms left from the wait's start to the wait's end. Below zero,
+// the render was set up past its deadline.
+function waitBudgetOf(
+  fields: ReadonlyMap<string, string>,
+): { kind: string; ms: number } | null {
+  const deadline = fields.get("deadline");
+  if (deadline === undefined) return null;
+  const [, kind, ms] = /^(\w+):(-?\d+)ms$/.exec(deadline) ?? [];
+  if (kind === undefined)
+    throw new Error(`a render's deadline reads ${deadline}`);
+  return { kind, ms: Number(ms) };
+}
+
+// [LAW:one-source-of-truth] How a render event says it ended, and `settled`
+// for the one end that says the daemon has: answered inside a wait it had
+// time for, and read by its client. One answered with no time left was set
+// up past its deadline, which is the backlog itself, however its values
+// answered.
+function renderEnd(line: string): string {
+  const fields = fieldsOf(line);
+  const outcome = fields.get("outcome");
+  // [LAW:no-silent-failure] Every request event states its outcome.
+  if (outcome === undefined)
+    throw new Error(`render event with no outcome: ${line}`);
+  if (outcome !== "ok") return outcome;
+  const ended = fields.get("ended");
+  if (ended !== "answered") return ended ?? "no wait";
+  const budget = waitBudgetOf(fields);
+  if (budget === null)
+    throw new Error(`an answered render with no deadline: ${line}`);
+  if (budget.ms <= 0) return "answered with no time left";
+  return fields.get("clientLeft") === "Y" ? "client left" : "settled";
+}
+
+// How each session's latest render logged since `since` ended.
 function latestRenders(since: number): ReadonlyMap<string, string> {
   const latest = new Map<string, string>();
   for (const line of logLines(logPath(home))) {
     if (Date.parse(line.slice(0, 24)) < since) continue;
-    const sid = / render sid=(\S+) /.exec(line)?.[1];
-    if (sid === undefined) continue;
-    const end = / ended=(\S+)/.exec(line) ?? / outcome=(\S+)/.exec(line);
-    // [LAW:no-silent-failure] Every request event states its outcome.
-    if (end === null) throw new Error(`render event with no outcome: ${line}`);
-    latest.set(sid, end[1]!);
+    if (!line.includes("] render ")) continue;
+    const sid = fieldsOf(line).get("sid");
+    if (sid !== undefined) latest.set(sid, renderEnd(line));
   }
   return latest;
 }
@@ -684,13 +714,13 @@ interface Settle {
 }
 
 // [LAW:one-source-of-truth][LAW:single-enforcer] The one wait for the daemon
-// to settle: until every session's latest render logged since `since` was
-// answered inside its wait, read from the daemon's log, or the settle
+// to settle: until every session's latest render logged since `since` is
+// settled, as its event in the daemon's log says, or the settle
 // deadline. Both points the steady phase must not inherit a backlog from
 // (the sessions' start, the collection's end) wait here.
 async function settledSince(since: number): Promise<Settle> {
   let latest = latestRenders(since);
-  const settled = () => sessions.every((s) => latest.get(s.id) === "answered");
+  const settled = () => sessions.every((s) => latest.get(s.id) === "settled");
   while (!settled() && Date.now() - since < SETTLE_DEADLINE_MS) {
     // [LAW:no-silent-failure] A dead daemon never settles; it is named, not
     // waited out.
@@ -705,7 +735,7 @@ async function settledSince(since: number): Promise<Settle> {
     unsettled: tally(
       sessions
         .map((s) => latest.get(s.id) ?? "never rendered")
-        .filter((end) => end !== "answered"),
+        .filter((end) => end !== "settled"),
     ),
   };
 }
@@ -987,11 +1017,18 @@ async function run(): Promise<{
     ? [...new Set(fs.readFileSync(unknownCalls, "utf8").trim().split("\n"))]
     : [];
   const ms = steady.map((r) => r.ms).sort((a, b) => a - b);
-  // The daemon's log over the steady phase, from a client's budget before it:
-  // a render asked at the phase's first instant connected inside that budget.
-  const logged = await daemonLog(steadyStarted - TOTAL_BUDGET_MS, steadyEnded);
+  // The daemon's log over the steady phase, from a client's budget before it
+  // (a render asked at the phase's first instant connected inside that
+  // budget) to the end of its last failed round trip, which can outrun it.
+  const logged = await daemonLog(
+    steadyStarted - TOTAL_BUDGET_MS,
+    Math.max(steadyEnded, ...failed.map((r) => steadyStarted + r.atMs + r.ms)),
+  );
   const daemon = logged
-    .filter(({ at, line }) => at >= steadyStarted && line.includes(" took="))
+    .filter(
+      ({ at, line }) =>
+        at >= steadyStarted && at <= steadyEnded && line.includes(" took="),
+    )
     .map(({ line }) => line);
   const steadyFailures = failed.map(({ session, atMs, outcome, ms }) => ({
     session,
@@ -1297,7 +1334,8 @@ function daemonOver(
     longestSilenceMs: longest,
     deadlineDraws: inside.filter(
       ({ line }) =>
-        line.includes("] render ") && line.includes(" ended=deadline "),
+        line.includes("] render ") &&
+        fieldsOf(line).get("ended") === "deadline",
     ).length,
   };
 }
@@ -1306,12 +1344,13 @@ function daemonOver(
 // daemon's wait beginning, off the render event: its stated wait budget is the
 // client's deadline (its connect plus its budget) less the draw's reserve less
 // the wait's start, and the budget and the reserve are the constants the
-// client and the daemon run on. Null for a client that stated no deadline.
+// client and the daemon run on. Null for a client that stated no deadline,
+// or a render that never reached its wait.
 function connectToWait(event: string): number | null {
-  const stated = / deadline=stated:(-?\d+)ms /.exec(event);
-  return stated === null
-    ? null
-    : TOTAL_BUDGET_MS - DRAW_RESERVE_MS - Number(stated[1]);
+  const budget = waitBudgetOf(fieldsOf(event));
+  return budget?.kind === "stated"
+    ? TOTAL_BUDGET_MS - DRAW_RESERVE_MS - budget.ms
+    : null;
 }
 
 // One field's spread over the window's events of one kind, in ms.
