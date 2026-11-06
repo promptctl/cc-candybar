@@ -4,15 +4,22 @@
     {
       "version": "pr-657",
       "ref": "refs/pull/657/merge",
-      "sha": "fc6ab2dee5a6fa3c465d62066ee1bae1c9c6476e",
-      "timestamp": "2026-11-06T22:22:05.486Z",
+      "sha": "7d9d42da139595b267a7a864cfe75e7c920428ce",
+      "timestamp": "2026-11-06T22:24:48.262Z",
       "commits": [
         {
-          "sha": "fc6ab2dee5a6fa3c465d62066ee1bae1c9c6476e",
+          "sha": "7d9d42da139595b267a7a864cfe75e7c920428ce",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T22:21:12Z",
-          "message": "Merge e6cb35ddf162ac2702201ef7094bd6c9d788a38b into 466c05ac9e0e8203441238a3692bac06838e69a9\n"
+          "timestamp": "2026-11-06T22:23:51Z",
+          "message": "Merge 18672ed2962672b9a9d2423639399ab7f1107497 into 3bd757912554568f0bf3b622640edbe789c7ba04\n"
+        },
+        {
+          "sha": "18672ed2962672b9a9d2423639399ab7f1107497",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T15:23:39-07:00",
+          "message": "test(version): a real daemon answers an older client and keeps serving (candybar-testing-ihvy.fvw.xka)\n\nMedium-review fixes: the stay-up half of the gate is pinned at the process\ntier beside the exit half, the gate's fixture is typed instead of cast, and\ndaemon-acquire's pointer names where each half is covered.\n"
         },
         {
           "sha": "e6cb35ddf162ac2702201ef7094bd6c9d788a38b",
