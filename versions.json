@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-635",
+      "ref": "refs/pull/635/merge",
+      "sha": "a5bf218615b07dacd82145c2919eb7d858965ca5",
+      "timestamp": "2026-11-06T09:13:40.554Z",
+      "commits": [
+        {
+          "sha": "a5bf218615b07dacd82145c2919eb7d858965ca5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T02:12:47-07:00",
+          "message": "Merge f0a4bfc9854ff2cad971309104e906b61ca030e5 into 537c926e6cca1e7f2bed89f42058b490482fde86\n"
+        },
+        {
+          "sha": "f0a4bfc9854ff2cad971309104e906b61ca030e5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T02:12:37-07:00",
+          "message": "fix(just): deploy builds the URL handler app on macOS, so install from a checkout finds it\n"
+        }
+      ]
+    },
+    {
       "version": "pr-633",
       "ref": "refs/pull/633/merge",
       "sha": "5037e40ce5fe1d09dd97c83ccbc06173ddf2fd75",
