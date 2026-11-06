@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-653",
+      "ref": "refs/pull/653/merge",
+      "sha": "373d758b49f8234020f5d214a302630b947a6299",
+      "timestamp": "2026-11-06T21:18:51.477Z",
+      "commits": [
+        {
+          "sha": "373d758b49f8234020f5d214a302630b947a6299",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T21:17:52Z",
+          "message": "Merge fdac394d3a969f8ec357dba87763dd9faac34e22 into 3b85a8464e84d21d582e674567b70a353a6c3100\n"
+        },
+        {
+          "sha": "fdac394d3a969f8ec357dba87763dd9faac34e22",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T14:17:40-07:00",
+          "message": "fix(test): the launch-group cases end their holders by removing a path, and the timeout case samples a live group on a held clock (brandon-menus-sjhy.irc)\n\nThe abort and timeout cases each sample the group alive, end its member, then\nact before the next poll. Every holder waits on the case's directory, which\nafterEach removes, so no case bets on a holder's lifetime in real time.\n"
+        },
+        {
+          "sha": "33cc6dcb5d346f2d6b68208e577b7d2904f807f5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T14:07:41-07:00",
+          "message": "fix(test): the launch-group abort case reaches its window by what it observes, not a sleep (brandon-menus-sjhy.irc)\n\nThe case means one state: the child ended, its group is gone, and the launch\nhas not yet sampled the group. A 1300 ms sleep aimed at it, so a loaded\nmachine saw the launch's own sample land first and read ok:true.\n\nThe case now launches on a held clock, so the launch samples the group only\nwhen the case advances it. It waits, by condition, for the child's pidfile,\nfor the group's end, and for the launch to have seen the exit, then aborts\nand advances. The holder outside the group, which keeps the child's close\nfrom concluding first, lives until the case removes its directory, not for\n3 s of real time.\n\nThe launcher's owner moves into launcherOn(clock), shared by the beforeEach\nand this case.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-646",
       "ref": "refs/pull/646/merge",
       "sha": "5c5878624a343a74ac05368da2a70852c103c900",
@@ -63,28 +92,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-06T21:09:39Z",
           "message": "chore(release): set `package.json` to 1.205.1 [skip ci]\n\n## [1.205.1](https://github.com/promptctl/cc-candybar/compare/v1.205.0...v1.205.1) (2026-11-06)\n\n### Bug Fixes\n\n* **click:** copy and open clicks name their session, so a menu's idle clock counts them (brandon-menus-sjhy.182) ([#650](https://github.com/promptctl/cc-candybar/issues/650)) ([242a73c](https://github.com/promptctl/cc-candybar/commit/242a73c2288bc60ae5b871e410be3d5c45b88c48))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-653",
-      "ref": "refs/pull/653/merge",
-      "sha": "349755dcb0fa01e01a3d775c04d2b87a7a361960",
-      "timestamp": "2026-11-06T21:08:43.437Z",
-      "commits": [
-        {
-          "sha": "349755dcb0fa01e01a3d775c04d2b87a7a361960",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T14:07:50-07:00",
-          "message": "Merge 33cc6dcb5d346f2d6b68208e577b7d2904f807f5 into 242a73c2288bc60ae5b871e410be3d5c45b88c48\n"
-        },
-        {
-          "sha": "33cc6dcb5d346f2d6b68208e577b7d2904f807f5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T14:07:41-07:00",
-          "message": "fix(test): the launch-group abort case reaches its window by what it observes, not a sleep (brandon-menus-sjhy.irc)\n\nThe case means one state: the child ended, its group is gone, and the launch\nhas not yet sampled the group. A 1300 ms sleep aimed at it, so a loaded\nmachine saw the launch's own sample land first and read ok:true.\n\nThe case now launches on a held clock, so the launch samples the group only\nwhen the case advances it. It waits, by condition, for the child's pidfile,\nfor the group's end, and for the launch to have seen the exit, then aborts\nand advances. The holder outside the group, which keeps the child's close\nfrom concluding first, lives until the case removes its directory, not for\n3 s of real time.\n\nThe launcher's owner moves into launcherOn(clock), shared by the beforeEach\nand this case.\n"
         }
       ]
     },
