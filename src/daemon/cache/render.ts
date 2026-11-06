@@ -1,6 +1,6 @@
-import fs from "node:fs";
 import path from "node:path";
 import { nearestWatchTarget } from "../../utils/watch-target.js";
+import type { Filesystem } from "../../disk/filesystem.js";
 import { chainName } from "../../config-hint.js";
 import type { RichText } from "@promptctl/rich-js";
 import { compareShallow, observable, reaction, runInAction } from "mobx";
@@ -654,7 +654,11 @@ function authoredRoots(
 // (a loop, an unreadable component) is watched as far as the walk got and
 // reported in `unresolved` with the reason, so the caller can say which path
 // hears less than it should.
-function watchTargetsFor(entry: CacheEntry, locs: Locations): PathsWatch {
+function watchTargetsFor(
+  filesystem: Filesystem,
+  entry: CacheEntry,
+  locs: Locations,
+): PathsWatch {
   // A plugin definition is part of the config it is listed in: installing,
   // fixing or editing one reloads the config as an edit to the file would.
   const { loaded, dropped, unreached } = entry.state.plugins;
@@ -666,7 +670,7 @@ function watchTargetsFor(entry: CacheEntry, locs: Locations): PathsWatch {
       path.join(entry.projectDir, REPO_PLUGIN_DIR),
     ]),
   ];
-  return watchTargetsOf({
+  return watchTargetsOf(filesystem, {
     named: [
       ...dslConfigCandidatePaths(
         locs,
@@ -1509,8 +1513,12 @@ export class RenderCache<
     this.budgetBytes = opts.budgetBytes;
     this.maxEntries = opts.maxEntries ?? MAX_ENTRIES;
     this.observers = opts.observers ?? {};
-    fs.mkdirSync(repoConfigsDir(deps.stateDir), { recursive: true });
-    const { dir, name } = nearestWatchTarget(repoConfigsPath(deps.stateDir));
+    // [LAW:one-source-of-truth] The folder is made on the tree that watches it.
+    deps.watchers.filesystem.mkdirSync(repoConfigsDir(deps.stateDir));
+    const { dir, name } = nearestWatchTarget(
+      deps.watchers.filesystem,
+      repoConfigsPath(deps.stateDir),
+    );
     this.answersWatch = deps.watchers.acquire(
       `repo-configs:${dir}/${name}`,
       { dirs: [{ path: dir, filenames: [name] }] },
@@ -2163,7 +2171,11 @@ export class RenderCache<
     entry.configLayers = loaded.layers;
     entry.configHome = loaded.home;
     entry.repos = loaded.repos;
-    const paths = watchTargetsFor(entry, this.deps.locations);
+    const paths = watchTargetsFor(
+      this.deps.watchers.filesystem,
+      entry,
+      this.deps.locations,
+    );
     const { targets, unresolved } = paths;
     // [LAW:one-source-of-truth] The key names the target set and the folders
     // it binds, so the registry's `follow` rebinds exactly when either moved.

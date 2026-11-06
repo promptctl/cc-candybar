@@ -3,9 +3,9 @@
 // build their daemon over these or over fakes of them, and `createDaemon` names
 // none (eslint.config.mjs lets only this file construct each).
 
-import fs from "node:fs";
 import { productionClaudeInputEdge } from "../claude-input/edge.js";
 import { fileStores, productionEdge } from "../doctor/edge";
+import { systemFilesystem } from "../disk/system-filesystem";
 import { systemLauncher } from "../proc/system-launcher";
 import { systemProbe } from "./process-fingerprint";
 import type { Timekeeper } from "../time";
@@ -50,6 +50,6 @@ export function productionAdapters(
       }),
     fetch,
     pricing: (own) => livePricing({ ...own, clock: machine }),
-    stat: fs.statSync,
+    filesystem: systemFilesystem,
   };
 }

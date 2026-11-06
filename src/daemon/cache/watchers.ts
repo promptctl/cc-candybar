@@ -1,8 +1,8 @@
-import fs from "node:fs";
 import path from "node:path";
+import type { Filesystem, Watch } from "../../disk/filesystem";
 import { debug } from "../../utils/logger";
 import { valueOf } from "../../utils/logfmt";
-import { walkLinks } from "../../utils/atomic-write";
+import { walkLinks } from "../../utils/link-chain";
 import { bindsFolder, boundKey, boundOf } from "../../utils/folder-identity";
 import { canonicalDirectory } from "../../utils/on-disk-path";
 import { nearestWatchTarget } from "../../utils/watch-target";
@@ -61,8 +61,8 @@ export const DEBOUNCE_MS = 50;
 export type DirTarget =
   | {
       path: string;
-      // If set, only fire when fs.watch reports a filename in this list.
-      // Filenames are basenames (not paths) — that's what fs.watch supplies.
+      // If set, only fire when the watch reports a filename in this list.
+      // Filenames are basenames (not paths) — that is what a watch supplies.
       filenames?: readonly string[];
       recursive?: false;
     }
@@ -110,28 +110,31 @@ export interface PathsWatch extends WatchSpec {
 // overrides any name filter on it; one that is not adds nothing. Directories
 // are deduped with their names unioned, and the set is sorted so equal sets
 // spell equal keys. Nothing here throws: it runs inside watcher callbacks.
-export function watchTargetsOf(paths: {
-  readonly named: readonly string[];
-  readonly whole: readonly string[];
-}): PathsWatch {
+export function watchTargetsOf(
+  filesystem: Filesystem,
+  paths: {
+    readonly named: readonly string[];
+    readonly whole: readonly string[];
+  },
+): PathsWatch {
   const unresolved: Refusal[] = [];
   let reached = true;
   // [LAW:types-are-the-program] A directory watched for named children, or
   // for every child (`null`).
   const byDir = new Map<string, Set<string> | null>();
   for (const at of paths.named) {
-    const { hops, stopped } = walkLinks(at);
+    const { hops, stopped } = walkLinks(filesystem, at);
     if (stopped !== null)
       unresolved.push({ path: at, reason: stopped.message });
     for (const hop of hops) {
-      const { dir, name, leaf } = nearestWatchTarget(hop);
+      const { dir, name, leaf } = nearestWatchTarget(filesystem, hop);
       reached &&= leaf;
       const names = byDir.has(dir) ? byDir.get(dir)! : new Set<string>();
       names?.add(name);
       byDir.set(dir, names);
     }
   }
-  for (const dir of paths.whole.map(canonicalDirectory))
+  for (const dir of paths.whole.map((p) => canonicalDirectory(filesystem, p)))
     if (dir !== null) byDir.set(dir, null);
   const targets: WatchTargets = {
     dirs: [...byDir.entries()]
@@ -146,7 +149,7 @@ export function watchTargetsOf(paths: {
   // by, read once here for every consumer of the rule.
   const bound = new Map(
     targets.dirs.map((d) => {
-      const at = boundOf(d.path);
+      const at = boundOf(filesystem, d.path);
       return [d.path, bindsFolder(at) ? boundKey(at) : null] as const;
     }),
   );
@@ -214,7 +217,7 @@ export interface Deafness {
 type DirState =
   | {
       readonly kind: "listening";
-      readonly handle: fs.FSWatcher;
+      readonly handle: Watch;
       readonly bound: string;
     }
   | { readonly kind: "deaf"; readonly deafness: Deafness };
@@ -326,7 +329,7 @@ const failedOf = (d: Deafness): Gathering => ({
 // already on its way from the closed one reports a directory that is gone.
 const heldBy = (
   state: DirState,
-  handle: fs.FSWatcher,
+  handle: Watch,
 ): state is Extract<DirState, { kind: "listening" }> =>
   state.kind === "listening" && state.handle === handle;
 
@@ -339,9 +342,15 @@ export class WatcherRegistry {
   private readonly counters?: WatcherCounters;
   private readonly logger: WatcherLogger;
   private readonly clock: Pick<Timekeeper, "after">;
+  // [LAW:one-source-of-truth] The disk every watch opens on, and that every
+  // owner sharing this registry reads the folders and links it judges from,
+  // so a watch and the identity it is judged by read one tree.
+  readonly filesystem: Filesystem;
   private closed = false;
 
   constructor(opts: {
+    // [LAW:effects-at-boundaries] The disk the watches open on.
+    filesystem: Filesystem;
     // [LAW:effects-at-boundaries] The clock the debounce window runs on.
     clock: Pick<Timekeeper, "after">;
     counters?: WatcherCounters;
@@ -352,6 +361,7 @@ export class WatcherRegistry {
     logger?: WatcherLogger;
   }) {
     this.clock = opts.clock;
+    this.filesystem = opts.filesystem;
     this.counters = opts.counters;
     this.logger = opts.logger ?? defaultLogger;
   }
@@ -483,7 +493,7 @@ export class WatcherRegistry {
       this.reopen(dir, cause);
       return;
     }
-    const now = boundOf(dir.path);
+    const now = boundOf(this.filesystem, dir.path);
     if (bindsFolder(now) && boundKey(now) !== dir.state.bound)
       this.reopen(dir, "another folder is at its path");
   }
@@ -523,7 +533,7 @@ export class WatcherRegistry {
     was: DirState | null,
   ): DirState {
     const at = where.path;
-    const bound = boundKey(boundOf(at));
+    const bound = boundKey(boundOf(this.filesystem, at));
     try {
       // [LAW:no-silent-failure] A directory the daemon cannot open is
       // refused. fs.watch refuses it itself, except Linux's recursive watch
@@ -531,16 +541,16 @@ export class WatcherRegistry {
       // returns a watch that never fires.
       // [LAW:dataflow-not-control-flow] So every open opens the directory
       // first, recursive or not, and its error is the refusal's reason.
-      fs.opendirSync(at).closeSync();
-      const handle = fs.watch(
+      this.filesystem.opendirSync(at);
+      const handle = this.filesystem.watch(
         at,
-        { persistent: false, recursive: where.recursive },
+        { recursive: where.recursive },
         (_event, changed) => this.heard(dirOf(), handle, changed),
       );
       // [LAW:no-silent-failure] An error after open reaches every slot on
       // the directory and the stats, not only the log: the handle behind it
       // delivers nothing more.
-      handle.on("error", (e) => {
+      handle.onError((e) => {
         this.logger("warn", `watcher error ${at}: ${e.message}`);
         if (this.counters) this.counters.watchErrors++;
         const dir = dirOf();
@@ -587,16 +597,12 @@ export class WatcherRegistry {
   // judged, so a handle never stays bound to a folder no longer at its path
   // and every later event naming the directory is judged against the folder
   // there.
-  private heard(
-    dir: DirWatch,
-    handle: fs.FSWatcher,
-    changed: string | null,
-  ): void {
+  private heard(dir: DirWatch, handle: Watch, changed: string | null): void {
     const { state } = dir;
     if (!heldBy(state, handle)) return;
     const moved =
       changed === path.basename(dir.path) &&
-      boundKey(boundOf(dir.path)) !== state.bound;
+      boundKey(boundOf(this.filesystem, dir.path)) !== state.bound;
     for (const { slot, filter } of dir.listeners) {
       if (filter === null || changed === null || filter.has(changed) || moved)
         this.fire(slot, namedOf(dir.path, changed));
@@ -652,7 +658,7 @@ export class WatcherRegistry {
     };
   }
 
-  private closeHandle(at: string, handle: fs.FSWatcher, cause: string): void {
+  private closeHandle(at: string, handle: Watch, cause: string): void {
     try {
       handle.close();
     } catch {}

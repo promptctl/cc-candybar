@@ -16,6 +16,7 @@
 // that instant drew from. Every frame, live and replayed, is drawn by the
 // demo's one draw.
 
+import { systemFilesystem } from "../src/disk/system-filesystem";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import os from "node:os";
@@ -299,7 +300,7 @@ function rig(
   const log: DaemonLogger = (level, message) => {
     lines.push(`${level} ${message}`);
   };
-  const watchers = new WatcherRegistry({ clock, logger: log });
+  const watchers = new WatcherRegistry({ filesystem: systemFilesystem, clock, logger: log });
   const home = homeOf(host);
   const providers = createPayloadProviders({
     clock,

@@ -3,6 +3,7 @@ import tseslint from "@typescript-eslint/eslint-plugin";
 import tsparser from "@typescript-eslint/parser";
 import prettierConfig from "eslint-config-prettier";
 import prettierPlugin from "eslint-plugin-prettier";
+import { builtinRules } from "eslint/use-at-your-own-risk";
 
 // [LAW:single-enforcer] (kz8.2) src/proc/spawner.ts is the only file allowed to
 // import node:child_process directly. Every other spawn site routes through a
@@ -94,6 +95,75 @@ const PATHS = [
   "**/paths.js",
 ];
 
+// [LAW:single-enforcer] [LAW:effects-at-boundaries] The disk is reached through
+// a Filesystem (src/disk/filesystem.ts); src/disk/system-filesystem.ts is the
+// only file that may name `fs`. FS_READERS are the files that still read the
+// disk directly. The list only shrinks: a file joins it only by an edit here,
+// so what is left to move onto the port is counted by its length.
+const FILESYSTEM_FILE = "src/disk/system-filesystem.ts";
+const FS_READERS = [
+  "src/attach-preload-exec.ts",
+  "src/check.ts",
+  "src/claude-settings.ts",
+  "src/config/cli.ts",
+  "src/config/dsl-loader.ts",
+  "src/config/loader/discovery.ts",
+  "src/config/loader/plugin-folders.ts",
+  "src/config/loader/plugins.ts",
+  "src/daemon/acquire.ts",
+  "src/daemon/build-currency.ts",
+  "src/daemon/config-file-store.ts",
+  "src/daemon/fork-bomb-breaker.ts",
+  "src/daemon/lane-edge.ts",
+  "src/daemon/limits.ts",
+  "src/daemon/link-id-allocator.ts",
+  "src/daemon/link-key.ts",
+  "src/daemon/log.ts",
+  "src/daemon/memory-report.ts",
+  "src/daemon/paths.ts",
+  "src/daemon/repo-configs.ts",
+  "src/daemon/server.ts",
+  "src/daemon/session-recorder.ts",
+  "src/daemon/session-state-file.ts",
+  "src/daemon/settings-history.ts",
+  "src/daemon/socket-lease.ts",
+  "src/daemon/socket-ownership.ts",
+  "src/daemon/update-act.ts",
+  "src/daemon/verbs/index.ts",
+  "src/demo/play.ts",
+  "src/doctor/cli.ts",
+  "src/doctor/edge.ts",
+  "src/doctor/font-edge.ts",
+  "src/doctor/handler-probe.ts",
+  "src/doctor/state-file.ts",
+  "src/index.ts",
+  "src/install/index.ts",
+  "src/path-search.ts",
+  "src/plugin-install.ts",
+  "src/proc/launch.ts",
+  "src/segments/autocompact-provider.ts",
+  "src/segments/git.ts",
+  "src/segments/pricing.ts",
+  "src/source-digest.ts",
+  "src/utils/atomic-write.ts",
+  "src/utils/claude.ts",
+  "src/utils/git-root.ts",
+  "src/utils/presence.ts",
+  "src/utils/transcript-fs.ts",
+  "src/var-system/source-runs.ts",
+];
+const FS_MESSAGE =
+  "Reach the disk through a Filesystem (src/disk/filesystem.ts). [LAW:effects-at-boundaries]";
+const FS_MODULE = "/^(node:)?fs(\\u002Fpromises)?$/";
+const FS_SYNTAX = [
+  `ImportDeclaration[source.value=${FS_MODULE}]`,
+  `ExportNamedDeclaration[source.value=${FS_MODULE}]`,
+  `ExportAllDeclaration[source.value=${FS_MODULE}]`,
+  `TSImportEqualsDeclaration[moduleReference.expression.value=${FS_MODULE}]`,
+  `ImportExpression[source.value=${FS_MODULE}]`,
+  `CallExpression[callee.name='require'][arguments.0.value=${FS_MODULE}]`,
+].map((selector) => ({ selector, message: FS_MESSAGE }));
+
 // [LAW:single-enforcer] A fake exists to be scripted by a test; no src file
 // names one, so a stand-in cannot reach a daemon that runs for a person.
 const FAKE_IMPORTS = [
@@ -103,6 +173,8 @@ const FAKE_IMPORTS = [
       "**/spawner-fake.js",
       "**/process-probe-fake",
       "**/process-probe-fake.js",
+      "**/filesystem-fake",
+      "**/filesystem-fake.js",
     ],
     message: "A fake is a test's: src never imports one. [LAW:single-enforcer]",
   },
@@ -133,6 +205,22 @@ const OWNED_IMPORTS = {
     group: ["**/proc/launch", "**/proc/launch.js"],
     owners: [],
     message: "A launcher over the machine is system-launcher's to build.",
+  },
+  // The real disk, handed to a daemon by its adapters. The other owners still
+  // reach for it ambiently, and the list only shrinks as they take it as a port.
+  systemFilesystem: {
+    group: ["**/disk/system-filesystem", "**/disk/system-filesystem.js"],
+    owners: [
+      "src/daemon/production-adapters.ts",
+      "src/daemon/cache/git.ts",
+      "src/daemon/config-file-store.ts",
+      "src/daemon/paths.ts",
+      "src/demo/dsl.ts",
+      "src/plugin-install.ts",
+      "src/utils/atomic-write.ts",
+      "src/var-system/source-runs.ts",
+    ],
+    message: "A Filesystem is a daemon's: take the one you are handed.",
   },
   // The process's one real clock, built beside its host and launcher.
   systemTimekeeper: {
@@ -552,10 +640,6 @@ export default [
           selector: "Identifier[name='runTmux']",
           message: "A path the daemon serves awaits `runTmuxAsync`.",
         },
-        {
-          selector: "ImportDeclaration[source.value=/^(node:)?fs$/]",
-          message: "Take the disk from the daemon's inputs.",
-        },
         ...CLOCK_SYNTAX,
       ],
     },
@@ -572,6 +656,17 @@ export default [
         ...CLOCK_SYNTAX,
       ],
     },
+  },
+  // The disk rule is the core `no-restricted-syntax` under its own name, so it
+  // is one block with one allowlist, and a block that sets its own
+  // `no-restricted-syntax` above neither drops it nor has to repeat it.
+  {
+    files: ["src/**/*.{ts,mts}"],
+    ignores: [FILESYSTEM_FILE, ...FS_READERS],
+    plugins: {
+      disk: { rules: { "no-fs": builtinRules.get("no-restricted-syntax") } },
+    },
+    rules: { "disk/no-fs": ["error", ...FS_SYNTAX] },
   },
   {
     ignores: [

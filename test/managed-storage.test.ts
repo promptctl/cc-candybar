@@ -1,3 +1,4 @@
+import { systemFilesystem } from "../src/disk/system-filesystem";
 import { systemTimekeeper } from "../src/time";
 import fs from "node:fs";
 import os from "node:os";
@@ -12,8 +13,8 @@ import type { Delivery } from "../src/daemon/cache/file-events";
 import {
   statIdentity,
   type FolderIdentity,
-  type IdentityRead,
 } from "../src/utils/folder-identity";
+import type { Filesystem } from "../src/disk/filesystem";
 import {
   DEBOUNCE_MS,
   WatcherRegistry,
@@ -46,7 +47,24 @@ interface Rig {
 
 const rigs: Rig[] = [];
 
-function rig(opts: { identityOf?: IdentityRead } = {}): Rig {
+// The disk, with the identity a folder reads as replaced by `identityOf`'s:
+// a folder made again, or one that cannot be read, without a second disk.
+// The registry and its owners read the one filesystem, so all of them see it.
+const identityBy =
+  (identityOf: (folder: string) => FolderIdentity | "gone"): Filesystem => ({
+    ...systemFilesystem,
+    statSync: (p) => {
+      const identity = identityOf(p);
+      if (identity === "gone")
+        throw Object.assign(
+          new Error(`ENOENT: no such file or directory, stat '${p}'`),
+          { code: "ENOENT", path: p },
+        );
+      return { ...systemFilesystem.statSync(p), ...identity };
+    },
+  });
+
+function rig(opts: { filesystem?: Filesystem } = {}): Rig {
   const root = fs.realpathSync(
     fs.mkdtempSync(path.join(os.tmpdir(), "managed-storage-")),
   );
@@ -62,6 +80,7 @@ function rig(opts: { identityOf?: IdentityRead } = {}): Rig {
   const lines: string[] = [];
   const logger = (level: string, msg: string) => lines.push(`${level} ${msg}`);
   const watchers = new WatcherRegistry({
+    filesystem: opts.filesystem ?? systemFilesystem,
     clock: systemTimekeeper,
     counters,
     logger,
@@ -72,7 +91,6 @@ function rig(opts: { identityOf?: IdentityRead } = {}): Rig {
     watchers,
     logger,
     fileEvents,
-    identityOf: opts.identityOf,
   });
   const made: Rig = {
     root,
@@ -392,13 +410,13 @@ describe("ManagedStorage watches", () => {
     async function recreated() {
       const watches = fakeWatches();
       let birth = 1n;
-      const identityOf: IdentityRead = (folder) => {
-        const real = statIdentity(folder);
+      const identityOf = (folder: string) => {
+        const real = statIdentity(systemFilesystem, folder);
         if (real === "gone") return real;
         const same: FolderIdentity = { dev: 7n, ino: 42n, birthtimeNs: birth };
         return same;
       };
-      const r = rig({ identityOf });
+      const r = rig({ filesystem: identityBy(identityOf) });
       const key = r.storage.keyFor(r.folder);
       r.storage.watch(key);
       const recreate = () => {

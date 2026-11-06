@@ -7,6 +7,7 @@ import { MAIN_NAME } from "../src/daemon/home";
 // cache over the payload providers, followed through the in-process facts arm, drawn from
 // `sessionSource`.
 
+import { systemFilesystem } from "../src/disk/system-filesystem";
 import { homeOf } from "../src/daemon/home";
 import { linkUrls } from "./helpers/frame";
 import { systemLauncher } from "../src/proc/system-launcher";
@@ -195,8 +196,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
   const log = (level: string, message: string): void => {
     lines.push(`${level} ${message}`);
   };
-  const watchers = new WatcherRegistry({
-    clock: systemTimekeeper,
+  const watchers = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
     logger: log,
   });
   const providers = createPayloadProviders({
