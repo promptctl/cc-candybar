@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-628",
+      "ref": "refs/pull/628/merge",
+      "sha": "9341f28a26733fb05ae9481022dcc5c8a79aff2a",
+      "timestamp": "2026-11-06T07:23:12.631Z",
+      "commits": [
+        {
+          "sha": "9341f28a26733fb05ae9481022dcc5c8a79aff2a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T07:22:18Z",
+          "message": "Merge 4623b89d0093371fb51b5a42fae94e9ccb8cb95d into aaaac5005ccf33de93f39158f1320619bed67657\n"
+        },
+        {
+          "sha": "4623b89d0093371fb51b5a42fae94e9ccb8cb95d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T00:01:26-07:00",
+          "message": "docs(memory): a world path under the root is refused; an older build's bare path is read as this build spells it (candybar-gather-renderer-76bb.f00.n2j)\n"
+        },
+        {
+          "sha": "702bca77c6c0ea585d65c454a0e4f3c6470e89c0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T23:55:53-07:00",
+          "message": "fix(home): an older build's bare stored path reads as this build spells it, so an upgrade keeps its undo history (candybar-gather-renderer-76bb.f00.n2j)\n"
+        },
+        {
+          "sha": "881ce59fa3666162cbd63db9989ba8297b6c9efa",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T23:51:06-07:00",
+          "message": "fix(home): a load answers only a refused stored path; the durable-config helper fails on a dropped history (candybar-gather-renderer-76bb.f00.n2j)\n"
+        },
+        {
+          "sha": "fd2b3874aa85e43d3d995704bc13b978fd145c54",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T23:38:10-07:00",
+          "message": "feat(home): a stored path says whether it is the home's or the world's; a copied home undoes into its own config (candybar-gather-renderer-76bb.f00.n2j)\n\nA path a renderer stores is a StoredPath: a file under the home's root is the\nhome's, stored relative to it, and anything else is the world's, stored\nabsolute. Reading one back refuses an absolute path under the root, a home path\nthat climbs out, and a relative world path, naming it. The root is one\nderivation of the home on DaemonPaths: a named home's root, main's config\ndirectory.\n\nThe settings history's file changes and the render origin's configFile hold\nthe union on disk; in memory both stay resolved absolute paths. A history\nnaming a file its root refuses is dropped whole, with a warning naming the\nsession, the step and the path. The origin's configFile is the union itself or\nnull for a search, so an older build refuses the record loudly rather than\nreading a named file as a search, and the record heals on the next render. The\nclient hints record drops configEnv, which nothing reads back: the origin is\nthe one record of the config a request named.\n\nThe two-homes test widens: one home names its config file, no file under\neither root but the log names either root, and the first home's tree copied\nunder a third root undoes into the copy's config and leaves the original's\nbyte-equal.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "aaaac5005ccf33de93f39158f1320619bed67657",
@@ -20,49 +63,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-06T07:06:20Z",
           "message": "chore(release): set `package.json` to 1.196.1 [skip ci]\n\n## [1.196.1](https://github.com/promptctl/cc-candybar/compare/v1.196.0...v1.196.1) (2026-11-06)\n\n### Bug Fixes\n\n* **load-gate:** the steady phase begins once the daemon has settled, and a wait with no time left takes no loop turn (candybar-gather-renderer-76bb.6pj.09c) ([#626](https://github.com/promptctl/cc-candybar/issues/626)) ([92e444f](https://github.com/promptctl/cc-candybar/commit/92e444f3bcf390e07f4b9490d78c0f5223c635e5))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-628",
-      "ref": "refs/pull/628/merge",
-      "sha": "69b40bab4a42aa4dfa6eced494858bcd232e369c",
-      "timestamp": "2026-11-06T07:13:32.308Z",
-      "commits": [
-        {
-          "sha": "69b40bab4a42aa4dfa6eced494858bcd232e369c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T07:12:45Z",
-          "message": "Merge b36f0a2274011218985484bd2b51ad9280006898 into 4e7a92522bd9b4d1a06e8b5973e3b937f7e400b7\n"
-        },
-        {
-          "sha": "b36f0a2274011218985484bd2b51ad9280006898",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T00:01:26-07:00",
-          "message": "docs(memory): a world path under the root is refused; an older build's bare path is read as this build spells it (candybar-gather-renderer-76bb.f00.n2j)\n"
-        },
-        {
-          "sha": "ca16058cd8cde5e8a8840a701f1bef7e731ae2cf",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T23:55:53-07:00",
-          "message": "fix(home): an older build's bare stored path reads as this build spells it, so an upgrade keeps its undo history (candybar-gather-renderer-76bb.f00.n2j)\n"
-        },
-        {
-          "sha": "39ff7d0157c5563a4f1cd1423681c0eca18d5eec",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T23:51:06-07:00",
-          "message": "fix(home): a load answers only a refused stored path; the durable-config helper fails on a dropped history (candybar-gather-renderer-76bb.f00.n2j)\n"
-        },
-        {
-          "sha": "c4796926cae351f3d50f2b090cbe9ad2ed723674",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T23:38:10-07:00",
-          "message": "feat(home): a stored path says whether it is the home's or the world's; a copied home undoes into its own config (candybar-gather-renderer-76bb.f00.n2j)\n\nA path a renderer stores is a StoredPath: a file under the home's root is the\nhome's, stored relative to it, and anything else is the world's, stored\nabsolute. Reading one back refuses an absolute path under the root, a home path\nthat climbs out, and a relative world path, naming it. The root is one\nderivation of the home on DaemonPaths: a named home's root, main's config\ndirectory.\n\nThe settings history's file changes and the render origin's configFile hold\nthe union on disk; in memory both stay resolved absolute paths. A history\nnaming a file its root refuses is dropped whole, with a warning naming the\nsession, the step and the path. The origin's configFile is the union itself or\nnull for a search, so an older build refuses the record loudly rather than\nreading a named file as a search, and the record heals on the next render. The\nclient hints record drops configEnv, which nothing reads back: the origin is\nthe one record of the config a request named.\n\nThe two-homes test widens: one home names its config file, no file under\neither root but the log names either root, and the first home's tree copied\nunder a third root undoes into the copy's config and leaves the original's\nbyte-equal.\n"
         }
       ]
     },
