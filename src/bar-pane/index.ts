@@ -262,7 +262,7 @@ async function drawBarPane(
     following = {
       sessionId,
       said,
-      follower: followFrames(world, socketPath(world.host), sessionId, "pane", {
+      follower: followFrames(world, socketPath(world.home), sessionId, "pane", {
         frame: (resp) => say(planOutcome(renderOutcomeOf(resp)).output),
         off: (resp) => say(resp.error),
         fault: say,
@@ -283,7 +283,7 @@ async function drawBarPane(
         follow(found.value);
         status =
           found.value === null
-            ? `waiting for pane ${pane}'s statusline to render on ${socketPath(world.host)}`
+            ? `waiting for pane ${pane}'s statusline to render on ${socketPath(world.home)}`
             : `waiting for pane ${pane}'s bar`;
       } else {
         if (found.kind === "transient") {

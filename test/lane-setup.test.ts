@@ -1,3 +1,5 @@
+import { MAIN_NAME } from "../src/daemon/home";
+import { homeEnv } from "../src/daemon/paths";
 // brandon-menus-sjhy.amf — what a lane's toggle starts beyond the daemon's own
 // gate, driven through fakes of every effect (src/daemon/lane-setup.ts), and
 // the pure readers the production edge folds tmux's and ps's answers with
@@ -122,7 +124,13 @@ function fakeEdge(over: Partial<LaneEdge> = {}): { edge: LaneEdge; did: string[]
 const HOST: LaneHost = {
   bundle: "/opt/candybar/dist/index.mjs",
   node: ["/usr/bin/node"],
-  socket: "/tmp/cc-candybar-1/socket",
+  home: {
+    kind: "main",
+    name: MAIN_NAME,
+    runtime: "/tmp/cc-candybar-1",
+    roots: { state: "/s", cache: "/c", config: "/g" },
+    legacySocket: null,
+  },
   preload: "/opt/candybar/dist/attach-preload.cjs",
 };
 
@@ -136,7 +144,7 @@ describe("lane C, pane", () => {
     const out = await LANE_SETUP.pane.on(session(), HOST, edge);
     expect(out).toEqual({ kind: "done", said: "opened bar pane %9 under %7" });
     expect(did).toEqual([
-      `open under %7: /usr/bin/node /opt/candybar/dist/index.mjs bar-pane %7 {"CC_CANDYBAR_SOCKET":"/tmp/cc-candybar-1/socket"}`,
+      `open under %7: /usr/bin/node /opt/candybar/dist/index.mjs bar-pane %7 ${JSON.stringify(homeEnv(HOST.home))}`,
     ]);
   });
 
@@ -833,7 +841,7 @@ describe("LaneSetups", () => {
     ...on,
   });
 
-  const OPENED = `open under %7: /usr/bin/node /opt/candybar/dist/index.mjs bar-pane %7 {"CC_CANDYBAR_SOCKET":"/tmp/cc-candybar-1/socket"}`;
+  const OPENED = `open under %7: /usr/bin/node /opt/candybar/dist/index.mjs bar-pane %7 ${JSON.stringify(homeEnv(HOST.home))}`;
 
   // Whatever control moved the switch — the toggle, ↺, ↶ undo, a preset, a
   // save — reaches the setup the same way: the click measured before and

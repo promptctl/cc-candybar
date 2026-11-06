@@ -1,3 +1,5 @@
+import type { RendererHome } from "../../../src/daemon/home";
+import { configDir } from "../../../src/daemon/paths";
 // [LAW:verifiable-goals] brandon-build-notice-5d6's done-when: a daemon assesses
 // the checkout its bundle sits in against the digest its bundle carries. A case
 // about the notice hands those two in, on a daemon in this worker, over a
@@ -56,9 +58,9 @@ const RELEASE_ROW = new RegExp(
 async function withDaemon<T>(
   scratch: Scratch,
   envOverride: NodeJS.ProcessEnv,
-  body: (daemon: InWorkerDaemon) => Promise<T>,
+  body: (daemon: InWorkerDaemon, home: RendererHome) => Promise<T>,
 ): Promise<T> {
-  const { env, removeTmpDirs } = prepareIsolatedDaemonEnv("ccb-bc");
+  const { env, home, removeTmpDirs } = prepareIsolatedDaemonEnv("ccb-bc");
   // The project's config (the collision the bar warns of) is approved.
   answerRepo(scratch.projectDir, "approved", env);
   const daemon = startArmedDaemon(
@@ -66,7 +68,7 @@ async function withDaemon<T>(
     bundleAt(scratch.root, REPO_DIGEST),
   );
   try {
-    return await body(daemon);
+    return await body(daemon, home);
   } finally {
     await daemon.stop();
     removeTmpDirs();
@@ -113,10 +115,9 @@ describe("brandon-build-notice-5d6: the daemon renders what is newer than it, wi
 
   test("[disable] writes updateNotice: false into the user's config file, and the notice is gone once it reloads", async () => {
     const s = scratchLayout("edited");
-    // The user's file — where durable clicks land, under the project's layer.
-    const xdg = path.join(s.root, "xdg");
-    const userFile = path.join(xdg, "cc-candybar", "config.json5");
-    await withDaemon(s, { XDG_CONFIG_HOME: xdg }, async (sock) => {
+    await withDaemon(s, {}, async (sock, home) => {
+      // The home's file — where durable clicks land, under the project's layer.
+      const userFile = path.join(configDir(home), "config.json5");
       const before = noticeOf(await pagesOf(sock, "bc-disable", s.projectDir));
       expect(before).toBeDefined();
       await click(

@@ -446,7 +446,7 @@ describe("config-file-store: segment-palette placement", () => {
           above: [],
           repo: null,
           cwd: null,
-          locs: locations(durable.host),
+          locs: locations(durable.host, durable.home),
         },
         [["segments.ghost.palette", "nord"]],
       ),
@@ -483,8 +483,8 @@ function makeCache(): {
   const cache = new RenderCache(
     {
       clock: systemTimekeeper,
-      stateDir: stateDir(durable.host),
-      locations: locations(durable.host),
+      stateDir: stateDir(durable.home),
+      locations: locations(durable.host, durable.home),
       runs: new SourceRuns({ launcher: unscriptedLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
@@ -548,7 +548,7 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
             above: [],
             repo: null,
             cwd: null,
-            locs: locations(durable.host),
+            locs: locations(durable.host, durable.home),
           },
           [["segments.sidebar.palette", "nord"]],
         ),
@@ -586,7 +586,7 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
         above: [],
         repo: null,
         cwd: null,
-        locs: locations(durable.host),
+        locs: locations(durable.host, durable.home),
       },
       [["segments.sidebar.palette", "gruvbox"]],
     );
@@ -631,7 +631,7 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
         above: [],
         repo: null,
         cwd: null,
-        locs: locations(durable.host),
+        locs: locations(durable.host, durable.home),
       },
       [["segments.directory.palette", "nord"]],
     );

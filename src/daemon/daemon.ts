@@ -2,7 +2,8 @@
 
 import { Runs } from "./runs.js";
 import { inspect } from "node:util";
-import { locations, type DaemonPaths } from "./paths";
+import { cacheDir, daemonPaths, homeEnv, locations } from "./paths";
+import type { RendererHome } from "./home";
 import type { Host } from "../host";
 import type { DaemonLog } from "./log";
 import type { Inbound } from "./protocol";
@@ -161,10 +162,11 @@ export interface DaemonInputs extends DaemonAdapters {
   // environment, home and temporary directory. The daemon reads them from here
   // alone, and its launcher's children inherit the same environment.
   readonly host: Host;
-  // The paths the daemon itself reads or writes. The files an adapter owns are
-  // aimed by the same value at the adapter (production-adapters.ts), so a daemon
-  // aimed at a temporary directory writes nowhere else.
-  readonly paths: Pick<DaemonPaths, "socket" | "state" | "watchProbe">;
+  // [LAW:one-source-of-truth] The daemon's identity: every path it reads or
+  // writes derives from this (paths.ts). The files an adapter owns are aimed by
+  // the same home at the adapter (production-adapters.ts), so a daemon under a
+  // home writes nowhere else.
+  readonly home: RendererHome;
   readonly memoryLimitBytes: number;
   readonly registryUrl: string;
   // [LAW:effects-at-boundaries] The daemon's clock: what it draws and times
@@ -234,12 +236,14 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     registryUrl,
     clock,
     exit,
-    paths,
+    home,
     gates,
     host,
   } = inputs;
-  // Parsed once, here, and handed to everything that loads a config.
-  const locs = locations(host);
+  // Derived once, here, from the one home, and handed to everything that reads
+  // or writes under it.
+  const paths = daemonPaths(home);
+  const locs = locations(host, home);
   const instant = (): Instant => instantOf(new Date(clock.now()));
   // [LAW:single-enforcer] What ends the daemon's work: every launch through its
   // launcher, and the lane edge's waits.
@@ -352,6 +356,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const payloadProviders = createPayloadProviders({
     launcher,
     host,
+    cacheDir: cacheDir(home),
     watchers: watcherRegistry,
     fileEvents,
     clock,
@@ -413,7 +418,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     host: {
       bundle: bundle.path,
       node: bundle.node,
-      socket: paths.socket,
+      home,
       preload: stableAttachPreload(bundle.path, host),
     },
     state: sessionState,
@@ -437,16 +442,18 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
           tmux.socket === socket &&
           tmux.pane === pane,
       ),
+    // Run by tmux under its server's environment, so the renderer's home is
+    // stated whole on the command, every variable of it.
     handler: [
-      `CC_CANDYBAR_SOCKET=${shellWord(paths.socket)}`,
+      ...Object.entries(homeEnv(home)).map(([k, v]) => `${k}=${shellWord(v)}`),
       ...[...bundle.node, bundle.path].map(shellWord),
       "url-handle",
     ].join(" "),
     owner: paths.socket,
-    // [LAW:one-source-of-truth] The main renderer's name (docs/design/
-    // gather-and-renderer.md, section 17), the one renderer until the home
-    // carries a name.
-    name: "main",
+    // [LAW:one-source-of-truth] The renderer's name is its home's (docs/design/
+    // gather-and-renderer.md, section 17): a click on a row this renderer
+    // holds is resolved to this renderer's socket from the name alone.
+    name: home.name,
     log,
   });
   // Each subscribed session's frames, drawn from its latest render request

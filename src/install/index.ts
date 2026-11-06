@@ -8,7 +8,7 @@ import { sourceCheckoutOf } from "../daemon/build-currency.js";
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
-import { locations } from "../daemon/paths";
+import { dataHome } from "../daemon/paths";
 import type { Host, World } from "../host";
 import { writeAtomic } from "../utils/atomic-write";
 import { tryClickViaDaemon } from "../daemon/client";
@@ -78,7 +78,7 @@ function supportDir(host: Host): string {
   if (process.platform === "darwin") {
     return path.join(host.home, "Library", "Application Support", "CCCandybar");
   }
-  return path.join(locations(host).dataHome, "cc-candybar");
+  return path.join(dataHome(host), "cc-candybar");
 }
 
 function stagedBinPath(dir: string): string {

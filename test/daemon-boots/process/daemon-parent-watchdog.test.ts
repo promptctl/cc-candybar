@@ -1,10 +1,9 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 
 import { PARENT_PID_ENV } from "../../../src/daemon/parent-watchdog";
 import { processProbe } from "../../helpers/host";
+import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import { spawnTestDaemon } from "../../helpers/spawn-test-daemon";
 import { until } from "../../helpers/until";
 
@@ -15,18 +14,13 @@ import { until } from "../../helpers/until";
 // reaped in afterEach so this test can never itself contribute to the leak.
 describe("daemon dies with its spawner (integration)", () => {
   const spawned: ChildProcess[] = [];
-  const tmpDirs: string[] = [];
+  const cleanups: Array<() => void> = [];
   const releases: Array<() => void> = [];
   const killTrees: Array<() => void> = [];
 
   const track = (c: ChildProcess): ChildProcess => {
     spawned.push(c);
     return c;
-  };
-  const tmp = (prefix: string): string => {
-    const d = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-    tmpDirs.push(d);
-    return d;
   };
 
   afterEach(() => {
@@ -48,14 +42,7 @@ describe("daemon dies with its spawner (integration)", () => {
     spawned.length = 0;
     for (const release of releases) release();
     releases.length = 0;
-    for (const d of tmpDirs) {
-      try {
-        fs.rmSync(d, { recursive: true, force: true });
-      } catch {
-        // best effort
-      }
-    }
-    tmpDirs.length = 0;
+    for (const cleanup of cleanups.splice(0)) cleanup();
   });
 
   test("SIGKILLing the anchor process shuts the daemon down", async () => {
@@ -66,18 +53,11 @@ describe("daemon dies with its spawner (integration)", () => {
       }),
     );
 
-    const stateRoot = tmp("cc-candybar-watchdog-");
-    const stateDir = path.join(stateRoot, "cc-candybar");
-    // Bind-time trust precondition: socket parent must be uid==me + mode 0700.
-    fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
-    const sockPath = path.join(stateDir, "socket");
+    const { env, home, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv("ccb-watchdog");
+    cleanups.push(removeTmpDirs);
 
     const { child: daemonChild, killTree, release } = await spawnTestDaemon({
-      ...process.env,
-      CC_CANDYBAR_SOCKET: sockPath,
-      XDG_STATE_HOME: stateRoot,
-      XDG_CACHE_HOME: tmp("cc-candybar-watchdog-cache-"),
-      XDG_CONFIG_HOME: tmp("cc-candybar-watchdog-config-"),
+      ...env,
       // Anchor the daemon to the throwaway process, NOT this Jest worker, so
       // killing the anchor (and only the anchor) exercises the watchdog.
       [PARENT_PID_ENV]: String(anchorProc.pid),

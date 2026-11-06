@@ -4,67 +4,52 @@ import { unscriptedLauncher } from "./helpers/fake-launcher";
 import os from "node:os";
 import path from "node:path";
 
+import { HOME_ENV, NAME_ENV, RUNTIME_DIR_ENV, homeOf } from "../src/daemon/home";
 import { DaemonLog, logLines } from "../src/daemon/log";
 import { daemonPaths } from "../src/daemon/paths";
 import { productionAdapters } from "../src/daemon/production-adapters";
 import { systemTimekeeper } from "../src/time";
 
-// [LAW:effects-at-boundaries] A daemon is aimed by the paths value it is built
-// over (candybar-testing-ihvy.yfv), so one aimed at a temporary directory
-// writes there and nowhere the environment names. The environment here names
-// directories that stay empty, so a write that went to the environment's
-// layout, and not the value's, is a file in one of them.
-describe("a daemon aimed by its paths value", () => {
+// [LAW:effects-at-boundaries] A daemon is aimed by the home it is built over,
+// so one under a home of its own writes there and nowhere another home names.
+// The ambient home's directories stay empty, so a write that went to it, and
+// not the aimed one, is a file in them.
+describe("a daemon aimed by its home", () => {
   let root: string;
-  let ambient: string[];
 
   const tree = (dir: string): string[] =>
-    fs.readdirSync(dir, { recursive: true, withFileTypes: false }).map(String);
+    fs.existsSync(dir)
+      ? fs.readdirSync(dir, { recursive: true, withFileTypes: false }).map(String)
+      : [];
 
   beforeEach(() => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-paths-"));
-    ambient = ["state", "cache", "registry", "sockets"].map((name) => {
-      const dir = path.join(root, "ambient", name);
-      fs.mkdirSync(dir, { recursive: true });
-      return dir;
-    });
   });
 
   afterEach(() => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
-  // The environment's layout: nothing is handed a host over it, so a write
-  // that reached its paths is a file in one of the ambient directories.
-  const ambientEnv = (): NodeJS.ProcessEnv => ({
-    XDG_STATE_HOME: ambient[0]!,
-    XDG_CACHE_HOME: ambient[1]!,
-    CC_CANDYBAR_DAEMON_REGISTRY_DIR: ambient[2]!,
-    CC_CANDYBAR_SOCKET: path.join(ambient[3]!, "socket"),
+  const homeNamed = (name: string) =>
+    homeOf(
+      hostOf({
+        [HOME_ENV]: path.join(root, name),
+        [NAME_ENV]: name,
+        [RUNTIME_DIR_ENV]: path.join(root, "run"),
+      }),
+    );
+
+  test("every path of the value is under its root, but the socket, which is the runtime directory's", () => {
+    const aimed = daemonPaths(homeNamed("aimed"));
+    const { socket, lease, ...underRoot } = aimed;
+    expect(Object.values(underRoot).filter((p) => !p.startsWith(path.join(root, "aimed")))).toEqual([]);
+    expect(path.dirname(socket)).toBe(path.join(root, "run"));
+    expect(path.dirname(lease)).toBe(path.join(root, "run"));
   });
 
-  const aimedEnv = (): NodeJS.ProcessEnv => ({
-    XDG_STATE_HOME: path.join(root, "aimed", "state"),
-    XDG_CACHE_HOME: path.join(root, "aimed", "cache"),
-    CC_CANDYBAR_DAEMON_REGISTRY_DIR: path.join(root, "aimed", "registry"),
-    CC_CANDYBAR_SOCKET: path.join(root, "aimed", "sockets", "socket"),
-  });
-
-  test("every path of the value is under the directories its environment names", () => {
-    const aimed = daemonPaths(hostOf(aimedEnv()));
-    expect(
-      Object.values(aimed).filter((p) => !p.startsWith(path.join(root, "aimed"))),
-    ).toEqual([]);
-  });
-
-  test("what its adapters write lands under the value, and the environment's directories stay empty", async () => {
-    const aimed = daemonPaths(hostOf(aimedEnv()));
-    // The fixture is sound: the ambient layout is the one the directories were made for.
-    expect(
-      Object.values(daemonPaths(hostOf(ambientEnv()))).filter(
-        (p) => !p.startsWith(path.join(root, "ambient")),
-      ),
-    ).toEqual([]);
+  test("what its adapters write lands under the home, and another home's directories stay empty", async () => {
+    const aimed = daemonPaths(homeNamed("aimed"));
+    const ambient = homeNamed("ambient");
     const daemonLog = new DaemonLog(aimed.log, systemTimekeeper);
     try {
       const adapters = productionAdapters(aimed, daemonLog, systemTimekeeper);
@@ -96,7 +81,7 @@ describe("a daemon aimed by its paths value", () => {
       expect(fs.existsSync(aimed.sessionState)).toBe(true);
       expect(fs.existsSync(path.join(aimed.state, "link.key"))).toBe(true);
       expect(fs.existsSync(path.join(aimed.state, "report.txt"))).toBe(true);
-      expect(ambient.flatMap(tree)).toEqual([]);
+      expect(tree(ambient.kind === "named" ? ambient.root : "")).toEqual([]);
     } finally {
       daemonLog.dispose();
     }

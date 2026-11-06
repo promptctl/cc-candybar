@@ -84,6 +84,12 @@ Standalone Commands:
 Debugging:
   CC_CANDYBAR_DEBUG=1      Enable debug logging for troubleshooting
 
+Renderer:
+  CC_CANDYBAR_HOME=<dir> CC_CANDYBAR_NAME=<name>
+                           Run the session on a renderer of its own: its socket
+                           is named <name>, and its state, cache and config live
+                           under <dir>. Unset, the session uses the main renderer.
+
 Configuration:
   Layout and segment options are defined in .cc-candybar.json5 (place in your
   project dir, cwd, or ~/.config/cc-candybar/config.json5). Use CC_CANDYBAR_CONFIG

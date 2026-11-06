@@ -8,7 +8,7 @@
 // after the last draw that did.
 
 import { TEST_SIGNER } from "./helpers/link-signer";
-import { HOST, locs } from "./helpers/host";
+import { HOST, locs, WORLD } from "./helpers/host";
 import { unscriptedLauncher } from "./helpers/fake-launcher";
 import fs from "node:fs";
 import os from "node:os";
@@ -130,7 +130,7 @@ test("a preset click that newly places the PR starts its lookup with no draw; sw
   const cache = new RenderCache(
     {
       clock: systemTimekeeper,
-      stateDir: stateDir(HOST),
+      stateDir: stateDir(WORLD.home),
       locations: locs(),
       runs: new SourceRuns({ launcher: unscriptedLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
@@ -277,7 +277,7 @@ function gitCache() {
   const cache = new RenderCache(
     {
       clock: systemTimekeeper,
-      stateDir: stateDir(HOST),
+      stateDir: stateDir(WORLD.home),
       locations: locs(),
       runs: new SourceRuns({ launcher: unscriptedLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,

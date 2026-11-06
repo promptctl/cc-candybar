@@ -35,6 +35,7 @@ import {
   resolveEffectiveGlobals,
 } from "../../src/config/effective-globals";
 import { LANE_NAMES, type LaneSwitches } from "../../src/config/lanes";
+import { homeOf } from "../../src/daemon/home";
 import { locations, stateDir } from "../../src/daemon/paths";
 import { systemTimekeeper } from "../../src/time";
 
@@ -85,7 +86,7 @@ export function testVerbContext(
   const inTurn = writesInTurn(sessionState, journalTurns);
   return {
     gates: bareGates(),
-    stateDir: stateDir(host), locations: locations(host),
+    stateDir: stateDir(homeOf(host)), locations: locations(host, homeOf(host)),
     sessionState: inTurn,
     history: history ?? new SettingsHistory(inTurn, () => {}),
     navigation: new NavigationHistory(),

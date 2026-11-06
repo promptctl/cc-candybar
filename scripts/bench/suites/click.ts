@@ -38,6 +38,13 @@ import { fetchStats } from "../../../src/daemon/client-stats.js";
 import { describeFailure } from "../../../src/daemon/client-transport.js";
 import { logPath } from "../../../src/daemon/paths.js";
 import { processWorld } from "../../../src/host.js";
+import {
+  HOME_ENV,
+  NAME_ENV,
+  RUNTIME_DIR_ENV,
+  homeOf,
+  type RendererHome,
+} from "../../../src/daemon/home.js";
 import { fieldOf, fieldsOf } from "../../../src/utils/logfmt.js";
 import { atOf, msOf } from "../log-event.js";
 import { sleep } from "../measure.js";
@@ -148,6 +155,22 @@ async function click(log: string, verb: string): Promise<Click> {
   }
 }
 
+// The main renderer's home, whatever this shell's environment says: a click
+// from `open` goes where the URL handler goes, which starts with no shell's
+// environment, so the probe, the stats and the log read are all main's. Every
+// variable a home is read from is dropped (src/daemon/home.ts).
+function mainHome(): RendererHome {
+  const { host } = processWorld();
+  const {
+    CC_CANDYBAR_SOCKET: _socket,
+    [HOME_ENV]: _root,
+    [NAME_ENV]: _name,
+    [RUNTIME_DIR_ENV]: _runtime,
+    ...env
+  } = host.env;
+  return homeOf({ ...host, env });
+}
+
 // Why this machine cannot be measured, or null when it can: a daemon answers
 // on the default socket and some app claims the scheme. The round trip goes
 // where a click goes, the default socket, whatever this shell's override
@@ -160,8 +183,7 @@ function cannotMeasure(): Promise<string | null> {
   verdict ??= (async () => {
     if (process.platform !== "darwin") return "the scheme is macOS-only";
     const { host, clock } = processWorld();
-    const { CC_CANDYBAR_SOCKET: _override, ...env } = host.env;
-    const stats = await fetchStats({ host: { ...host, env }, clock });
+    const stats = await fetchStats({ host, home: mainHome(), clock });
     if (stats.kind !== "ok")
       return `no daemon on the default socket: ${describeFailure(stats)}`;
     const probe = spawnSync(
@@ -182,7 +204,7 @@ async function clicks(
 ): Promise<Outcome> {
   const reason = await cannotMeasure();
   if (reason !== null) return skipped(reason);
-  const log = logPath(processWorld().host);
+  const log = logPath(mainHome());
   const run = Date.now().toString(36);
   const samples: Click[] = [];
   for (let i = 0; i < plan.samples; i++) {

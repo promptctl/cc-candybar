@@ -1,3 +1,6 @@
+import { hostOf } from "../../helpers/host";
+import { configDir as homeConfigDir } from "../../../src/daemon/paths";
+import { homeOf } from "../../../src/daemon/home";
 import type { Frame } from "../../../src/render/frame";
 // [LAW:verifiable-goals] candybar-settings-ui-aok.2's headline acceptance,
 // measured the only way it means anything: the daemon's own request handling,
@@ -88,7 +91,7 @@ function rows(rendered: Frame): string[] {
 describe("candybar-settings-ui-aok.2: autoWrap and padding are per-session", () => {
   test("a click moves the clicking session's bar, leaves other sessions alone, and survives a daemon restart", async () => {
     const { env, removeTmpDirs } = prepareIsolatedDaemonEnv("ccb-sess-globals");
-    const configDir = path.join(env.XDG_CONFIG_HOME!, "cc-candybar");
+    const configDir = homeConfigDir(homeOf(hostOf(env)));
     mkdirSync(configDir, { recursive: true });
     const configPath = path.join(configDir, "config.json5");
     writeFileSync(configPath, JSON.stringify(USER_CONFIG));

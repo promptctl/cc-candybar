@@ -408,7 +408,7 @@ export function loadConfigChain(
   const ctx: PluginContext = {
     repo: session.repo,
     checkout: session.cwd === null ? null : checkoutOf(session.cwd),
-    home: locs.home,
+    home: locs.homeDir,
   };
   // [LAW:one-source-of-truth] Installed plugins are the layer every file
   // merges over: bundled < installed < the chain's files (and what each

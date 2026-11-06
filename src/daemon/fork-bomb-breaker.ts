@@ -14,8 +14,9 @@ import type { World } from "../host";
 // [FRAMING:representation] The 192-daemon storm (epic brandon-daemon-lifecycle-
 // gad) happened because every existing single-instance guard (atomic bind(),
 // the socket lease, the ownership self-check, the spawn cooldown) keys off ONE
-// socket path — daemons on DIFFERENT sockets (test isolation's per-file
-// CC_CANDYBAR_SOCKET) never arbitrate each other and pile up unboundedly. .1
+// socket path — daemons on DIFFERENT sockets (test isolation's per-worker
+// renderer home, src/daemon/home.ts) never arbitrate each other and pile up
+// unboundedly. .1
 // (test/helpers/daemon-pool.ts) bounds that from the SPAWNER side, but the
 // spawner's own cleanup (afterAll, globalTeardown) fails under the exact
 // fork-exhaustion condition it exists to prevent. This module is the
@@ -33,9 +34,9 @@ import type { World } from "../host";
 // than an isolated (test/dev) instance, not a smaller version of the same one:
 // it is already bounded to exactly one by bind()'s kernel-enforced exclusion on
 // the canonical socket path, so no ceiling can ever be its failure mode — only
-// isolation (an explicit CC_CANDYBAR_SOCKET override) creates the "many
+// isolation (any socket but the canonical one: a named home's) creates the "many
 // coexisting instances" population this breaker exists to bound. Classifying by
-// "is CC_CANDYBAR_SOCKET set" keeps the two populations from ever counting
+// "is the socket the canonical one" keeps the two populations from ever counting
 // against each other: the production daemon is exempt (and so always boots,
 // however many isolated instances are registered), and isolated instances
 // compete only with each other over the shared ceiling.
@@ -286,10 +287,15 @@ export function realBreakerDeps(
   { host, launcher }: World,
   myStartTime: string | null,
   registryDir: string,
+  // Whether this daemon's socket is any but the canonical one, which its bind
+  // bounds to one daemon: a named home's, the legacy override's or a test
+  // runtime directory's socket is the population this breaker counts. The
+  // shell that knows the socket says so; the breaker ticket deletes the flag.
+  isolated: boolean,
   overrides: Partial<BreakerDeps> = {},
 ): BreakerDeps {
   return {
-    isolated: Boolean(host.env["CC_CANDYBAR_SOCKET"]),
+    isolated,
     registryDir,
     ceiling: daemonCeiling(host.env),
     pid: process.pid,
@@ -346,8 +352,9 @@ export function realBreakerDeps(
     // directory the caller happened to put it under (a system tmpdir on some
     // platforms), which is not a boundary this breaker owns or should assert
     // on; there the one-level leaf check alone is the correct, portable
-    // parity with how ensureSocketParentSafe treats an overridden
-    // CC_CANDYBAR_SOCKET (exactly one level, whatever that parent is).
+    // parity with how ensureSocketParentSafe treats a socket outside the
+    // per-uid runtime directory (a test's overridden runtime directory, or
+    // the legacy socket override: exactly one level, whatever that parent is).
     ensureDirSafe: host.env["CC_CANDYBAR_DAEMON_REGISTRY_DIR"]
       ? ensureOwnedPrivateDir
       : (dir: string): void => {

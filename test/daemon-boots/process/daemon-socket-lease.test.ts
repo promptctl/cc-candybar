@@ -1,13 +1,14 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { processLauncher } from "../../helpers/host";
 import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 
 import { readLease, writeLease } from "../../../src/daemon/socket-lease";
 import { readStartTime } from "../../../src/daemon/process-fingerprint";
 import { waitForExit } from "../../helpers/daemon-wire";
-import { spawnDaemonWithEnv } from "../../helpers/spawn-isolated-daemon";
+import {
+  prepareIsolatedDaemonEnv,
+  spawnDaemonWithEnv,
+} from "../../helpers/spawn-isolated-daemon";
 import { spawnTestDaemon } from "../../helpers/spawn-test-daemon";
 
 // The real kernel start-time of a live pid, so a planted lease matches the true
@@ -36,31 +37,12 @@ interface Fixture {
 }
 
 function makeFixture(): Fixture {
-  const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-slt-"));
-  const stateDir = path.join(stateRoot, "cc-candybar");
-  // ensureSocketParentSafe requires uid==me + mode 0700 on the socket parent.
-  fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
-  const sockPath = path.join(stateDir, "socket");
-  const cacheHome = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-slt-c-"));
-  const configHome = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-slt-g-"));
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
-    CC_CANDYBAR_SOCKET: sockPath,
-    XDG_STATE_HOME: stateRoot,
-    XDG_CACHE_HOME: cacheHome,
-    XDG_CONFIG_HOME: configHome,
-  };
+  const { env, home, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv("ccb-slt");
   return {
     sockPath,
     leasePath: `${sockPath}.lease`,
     env,
-    cleanup: () => {
-      for (const d of [stateRoot, cacheHome, configHome]) {
-        try {
-          fs.rmSync(d, { recursive: true, force: true });
-        } catch {}
-      }
-    },
+    cleanup: removeTmpDirs,
   };
 }
 

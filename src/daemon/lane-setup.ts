@@ -70,6 +70,8 @@ import {
   moduleGraphReaderOf,
 } from "../attach-launcher.js";
 import type { LauncherNode } from "../attach-preload.js";
+import type { RendererHome } from "./home.js";
+import { homeEnv } from "./paths.js";
 import { BadVerbArgs } from "./verb-error.js";
 import { KeyedSerialQueue } from "../utils/keyed-serial-queue.js";
 
@@ -167,7 +169,7 @@ export interface LaneEdge {
   ) => Promise<boolean>;
 }
 
-// This daemon: the bundle it runs, how node runs it, and its socket — what a
+// This daemon: the bundle it runs, how node runs it, and its home — what a
 // bar pane runs to follow this daemon's frames — and the attach preload a
 // restart starts Claude Code with, the one `--help` names
 // (`stableAttachPreload`, src/install/index.ts), so the line a restart types
@@ -175,7 +177,7 @@ export interface LaneEdge {
 export interface LaneHost {
   readonly bundle: string;
   readonly node: readonly string[];
-  readonly socket: string;
+  readonly home: RendererHome;
   readonly preload: string;
 }
 
@@ -290,7 +292,7 @@ export const LANE_SETUP: Readonly<Record<Lane, { on: Plan; off: Plan }>> = {
       const opened = await edge.openBarPane(
         tmux,
         [...host.node, host.bundle, "bar-pane", tmux.pane],
-        { CC_CANDYBAR_SOCKET: host.socket },
+        homeEnv(host.home),
       );
       return done(`opened bar pane ${opened} under ${tmux.pane}`);
     },

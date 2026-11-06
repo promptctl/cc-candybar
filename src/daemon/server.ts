@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 import { inspect } from "node:util";
 import {
   daemonPaths,
+  daemonRegistryDir,
+  defaultSocketPath,
   ensureSocketParentSafe,
   leasePathFor,
   type DaemonPaths,
@@ -112,7 +114,7 @@ function runningBundle(): RunningBundle {
 }
 
 export function runDaemon(world: World): void {
-  const paths = daemonPaths(world.host);
+  const paths = daemonPaths(world.home);
   thisProcess = { world, paths, log: new DaemonLog(paths.log, world.clock) };
   // Catch-alls log + exit so the supervisor (the next client) can restart us.
   // [LAW:no-defensive-null-guards] These are *trust boundaries* — we are
@@ -156,8 +158,17 @@ async function boot(): Promise<void> {
   // line could claim a boot that is about to die. Parsed once, threaded into
   // the limits and the boot line.
   const { world, paths, log: daemonLog } = daemonProcess();
-  const { host } = world;
+  const { host, home } = world;
   const memoryLimit = memoryLimitBytes(host.env);
+  // [LAW:no-mode-explosion] exception: the socket override is read for one
+  // release and said so here; the ticket that retires it deletes this line
+  // with the field it reads.
+  if (home.kind === "main" && home.legacySocket !== null) {
+    serverLog(
+      "warn",
+      `CC_CANDYBAR_SOCKET=${home.legacySocket} is honoured for one more release; a renderer is named by CC_CANDYBAR_HOME and CC_CANDYBAR_NAME instead`,
+    );
+  }
 
   // [LAW:single-enforcer] The fork-bomb circuit breaker runs FIRST among the
   // resource-committing steps (no dir created, no socket touched, no session
@@ -171,7 +182,12 @@ async function boot(): Promise<void> {
     systemProbe(world.launcher).startTime,
   );
   const admission = await admitDaemon(
-    realBreakerDeps(world, myStartTime, paths.registry),
+    realBreakerDeps(
+      world,
+      myStartTime,
+      daemonRegistryDir(host),
+      paths.socket !== defaultSocketPath(),
+    ),
   );
   if (!admission.decision.allow) {
     serverLog(
@@ -187,8 +203,8 @@ async function boot(): Promise<void> {
   // [LAW:single-enforcer] Verify the socket parent is uid==me + mode 0700 +
   // not a symlink before we bind. Without this check, a same-host attacker
   // could pre-create the predictable `/tmp/cc-candybar-<uid>` directory and
-  // squat the socket name. The check applies regardless of CC_CANDYBAR_SOCKET
-  // location — every bind path goes through the same trust precondition.
+  // squat the socket name. The check applies to every home's socket — every
+  // bind path goes through the same trust precondition.
   // No symmetric client-side check: the daemon is the sole creator, so a
   // successful bind already proves the parent is trusted. Failure here surfaces
   // as a daemon exit; the client falls back to the last cached render.
@@ -200,7 +216,7 @@ async function boot(): Promise<void> {
     ...productionAdapters(paths, daemonLog, world.clock),
     bundle: runningBundle(),
     host,
-    paths,
+    home,
     memoryLimitBytes: memoryLimit,
     registryUrl: host.env.CC_CANDYBAR_REGISTRY_URL ?? REGISTRY_URL,
     clock: world.clock,

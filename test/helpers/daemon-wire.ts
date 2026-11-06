@@ -8,11 +8,10 @@
 // copies.
 
 import type { ChildProcess } from "node:child_process";
-import { hostOf } from "./host";
 import net from "node:net";
-import path from "node:path";
 
-import { logPath } from "../../src/daemon/paths";
+import type { RendererHome } from "../../src/daemon/home";
+import { logPath, socketPath } from "../../src/daemon/paths";
 import { sendOne } from "../../src/daemon/protocol";
 import type { Request, Response } from "../../src/daemon/protocol";
 import { systemTimekeeper } from "../../src/time";
@@ -32,20 +31,18 @@ export interface DaemonEndpoint {
 }
 
 // A daemon built in this worker is its own endpoint
-// (test/helpers/in-worker-daemon.ts). A real one is named by its socket path,
-// because the socket is what a test of the process is about.
-export type DaemonTarget = string | DaemonEndpoint;
+// (test/helpers/in-worker-daemon.ts). A real one is named by its home, from
+// which both the socket a test dials and the log it reads derive.
+export type DaemonTarget = RendererHome | DaemonEndpoint;
 
 // [LAW:single-enforcer] The one place a target is read, so nothing that retries
 // or reads events knows which kind it was given.
 export function endpointOf(target: DaemonTarget): DaemonEndpoint {
-  if (typeof target !== "string") return target;
+  if (!("kind" in target)) return target;
+  const sockPath = socketPath(target);
   return {
-    send: (req, budgetMs) => overSocket(target, req, budgetMs),
-    // An isolated daemon keeps its socket in its state directory
-    // (prepareIsolatedDaemonEnv), whose log is the one the daemon itself
-    // writes (logPath).
-    log: logPath(hostOf({ XDG_STATE_HOME: path.dirname(path.dirname(target)) })),
+    send: (req, budgetMs) => overSocket(sockPath, req, budgetMs),
+    log: logPath(target),
     now: Date.now,
   };
 }

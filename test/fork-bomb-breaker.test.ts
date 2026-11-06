@@ -245,7 +245,7 @@ describe("realBreakerDeps ensureDirSafe (registry directory safety)", () => {
     fs.symlinkSync(real, link);
     const registryDir = path.join(link, "daemons");
     try {
-      expect(() => realBreakerDeps(registryWorld(), null, registryDir).ensureDirSafe(registryDir)).toThrow(
+      expect(() => realBreakerDeps(registryWorld(), null, registryDir, true).ensureDirSafe(registryDir)).toThrow(
         /symlink/,
       );
     } finally {
@@ -260,7 +260,7 @@ describe("realBreakerDeps ensureDirSafe (registry directory safety)", () => {
     const registryDir = path.join(root, "daemons");
     try {
       expect(() =>
-        realBreakerDeps(registryWorld(), null, registryDir).ensureDirSafe(registryDir),
+        realBreakerDeps(registryWorld(), null, registryDir, true).ensureDirSafe(registryDir),
       ).not.toThrow();
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
@@ -274,7 +274,7 @@ describe("realBreakerDeps ensureDirSafe (registry directory safety)", () => {
       // The parent here is os.tmpdir() itself, which on a shared-/tmp
       // platform would fail the two-level check — proving the override path
       // deliberately does not apply it.
-      expect(() => realBreakerDeps(registryWorld(dir), null, dir).ensureDirSafe(dir)).not.toThrow();
+      expect(() => realBreakerDeps(registryWorld(dir), null, dir, true).ensureDirSafe(dir)).not.toThrow();
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -304,7 +304,7 @@ describe("realBreakerDeps writeEntry (no orphaned tmp file)", () => {
     const tmp = `${filePath}.${identity.pid}.tmp`;
     try {
       expect(() =>
-        realBreakerDeps(WORLD, null, dir).writeEntry(filePath, identity),
+        realBreakerDeps(WORLD, null, dir, true).writeEntry(filePath, identity),
       ).toThrow();
       expect(fs.existsSync(tmp)).toBe(false);
     } finally {

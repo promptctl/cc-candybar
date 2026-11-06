@@ -6,6 +6,7 @@
 import fs from "node:fs";
 import { hostOf } from "./host";
 import { recordAnswer, repoConfigs } from "../../src/daemon/repo-configs";
+import { homeOf } from "../../src/daemon/home";
 import { stateDir } from "../../src/daemon/paths";
 import type { RepoAnswer } from "../../src/config/loader/repo-gate";
 
@@ -15,7 +16,7 @@ export function answerRepo(
   env: NodeJS.ProcessEnv = process.env,
 ): void {
   const filed = recordAnswer(
-    repoConfigs(stateDir(hostOf(env))),
+    repoConfigs(stateDir(homeOf(hostOf(env)))),
     fs.realpathSync.native(dir),
     answer,
   );

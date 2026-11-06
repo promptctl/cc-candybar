@@ -1,8 +1,8 @@
 import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 
+import { spawnBackoffPath } from "../../../src/daemon/paths";
 import { isConnectable } from "../../helpers/daemon-wire";
+import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import { spawnTestDaemon } from "../../helpers/spawn-test-daemon";
 import { until } from "../../helpers/until";
 
@@ -16,30 +16,13 @@ describe("resetSpawnBackoff wiring into onListening (integration: real daemon)",
   jest.setTimeout(30_000);
 
   test("a real daemon bind deletes a pre-existing spawn.backoff streak file", async () => {
-    const stateRoot = fs.mkdtempSync(
-      path.join(os.tmpdir(), "cc-candybar-backoff-wire-"),
-    );
-    const stateDir = path.join(stateRoot, "cc-candybar");
-    fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
-    const sockPath = path.join(stateDir, "socket");
-    const cacheHome = fs.mkdtempSync(
-      path.join(os.tmpdir(), "cc-candybar-backoff-wire-c-"),
-    );
-    const configHome = fs.mkdtempSync(
-      path.join(os.tmpdir(), "cc-candybar-backoff-wire-g-"),
-    );
-    const backoffPath = path.join(stateDir, "spawn.backoff");
+    const { env, home, sockPath, stateDir, removeTmpDirs } =
+      prepareIsolatedDaemonEnv("ccb-backoff");
+    fs.mkdirSync(stateDir, { recursive: true });
+    const backoffPath = spawnBackoffPath(home);
     // Plant a streak as if several prior kicks failed to converge — the exact
     // state resetSpawnBackoff() must clear the moment this daemon binds.
     fs.writeFileSync(backoffPath, "3", { mode: 0o600 });
-
-    const env: NodeJS.ProcessEnv = {
-      ...process.env,
-      CC_CANDYBAR_SOCKET: sockPath,
-      XDG_STATE_HOME: stateRoot,
-      XDG_CACHE_HOME: cacheHome,
-      XDG_CONFIG_HOME: configHome,
-    };
 
     const { child: daemon, killTree, release } = await spawnTestDaemon(env);
     try {
@@ -65,13 +48,7 @@ describe("resetSpawnBackoff wiring into onListening (integration: real daemon)",
         daemon.once("exit", () => resolve());
       });
       release();
-      for (const d of [stateRoot, cacheHome, configHome]) {
-        try {
-          fs.rmSync(d, { recursive: true, force: true });
-        } catch {
-          // best-effort cleanup
-        }
-      }
+      removeTmpDirs();
     }
   });
 });

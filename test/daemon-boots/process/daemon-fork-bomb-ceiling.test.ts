@@ -5,6 +5,7 @@ import path from "node:path";
 
 import { createDaemonPool } from "../../helpers/daemon-pool";
 import { isConnectable } from "../../helpers/daemon-wire";
+import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import { spawnTestDaemon } from "../../helpers/spawn-test-daemon";
 import { until } from "../../helpers/until";
 
@@ -26,6 +27,7 @@ const REFUSE_BUDGET_MS = 5000;
 // CC_CANDYBAR_DAEMON_REGISTRY_DIR override) so this test is fast, isolated,
 // and never contends with — or pollutes — anything else running concurrently.
 const createdDirs: string[] = [];
+const cleanups: Array<() => void> = [];
 function tmpDir(prefix: string): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   createdDirs.push(dir);
@@ -41,6 +43,7 @@ afterAll(() => {
     }
   }
   createdDirs.length = 0;
+  for (const cleanup of cleanups.splice(0)) cleanup();
 });
 
 interface Fixture {
@@ -48,24 +51,15 @@ interface Fixture {
   env: NodeJS.ProcessEnv;
 }
 
+// A named home of its own, which is the isolated population the breaker
+// counts, under the test's registry and ceiling.
 function makeFixture(prefix: string, registryDir: string): Fixture {
-  const stateRoot = tmpDir(prefix);
-  const cacheRoot = tmpDir(`${prefix}c-`);
-  const configRoot = tmpDir(`${prefix}g-`);
-  const stateDir = path.join(stateRoot, "cc-candybar");
-  // [LAW:single-enforcer] Socket parent must satisfy ensureSocketParentSafe
-  // (uid==me + mode 0700); pre-creating with default umask perms would trip
-  // the daemon's bind-time refusal.
-  fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
-  const sockPath = path.join(stateDir, "socket");
+  const { env, home, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv(prefix);
+  cleanups.push(removeTmpDirs);
   return {
     sockPath,
     env: {
-      ...process.env,
-      CC_CANDYBAR_SOCKET: sockPath,
-      XDG_STATE_HOME: stateRoot,
-      XDG_CACHE_HOME: cacheRoot,
-      XDG_CONFIG_HOME: configRoot,
+      ...env,
       CC_CANDYBAR_DAEMON_REGISTRY_DIR: registryDir,
       CC_CANDYBAR_DAEMON_CEILING: String(CEILING),
     },

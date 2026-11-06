@@ -11,6 +11,8 @@
 // between-turns / a too-stale baseline yields ABSENCE (missing field → -1
 // default → "—"), never a stale or divide-by-zero number.
 
+import { cacheDir } from "../src/daemon/paths";
+import { homeOf } from "../src/daemon/home";
 import { textOf } from "../src/render/frame";
 import { HOST } from "./helpers/host";
 import { unscriptedRuns } from "./helpers/fake-launcher";
@@ -110,6 +112,7 @@ describe("SessionUsageStore.observeSpeed — prior-sample retention", () => {
     const store = new SessionUsageStore({
       clock: systemTimekeeper,
       host: HOST,
+      cacheDir: cacheDir(homeOf(HOST)),
       sweepIntervalMs: 0,
     });
     try {
@@ -160,6 +163,7 @@ describe("SessionUsageStore.observeSpeed — prior-sample retention", () => {
     const store = new SessionUsageStore({
       clock: systemTimekeeper,
       host: HOST,
+      cacheDir: cacheDir(homeOf(HOST)),
       sweepIntervalMs: 0,
     });
     try {
@@ -198,6 +202,7 @@ describe("SessionUsageStore.observeSpeed — prior-sample retention", () => {
     const store = new SessionUsageStore({
       clock: systemTimekeeper,
       host: HOST,
+      cacheDir: cacheDir(homeOf(HOST)),
       sweepIntervalMs: 0,
     });
     try {
@@ -238,6 +243,7 @@ describe("SessionUsageStore.observeSpeed — prior-sample retention", () => {
     const store = new SessionUsageStore({
       clock: systemTimekeeper,
       host: HOST,
+      cacheDir: cacheDir(homeOf(HOST)),
       sweepIntervalMs: 0,
     });
     try {

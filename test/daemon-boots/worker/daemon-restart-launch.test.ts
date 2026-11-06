@@ -4,6 +4,9 @@
 // daemon in this worker with no wait between the close and the build, which is
 // the order a real process can never reach.
 
+import { hostOf } from "../../helpers/host";
+import { configDir as homeConfigDir } from "../../../src/daemon/paths";
+import { homeOf } from "../../../src/daemon/home";
 import { NO_TMUX_AT_EXIT } from "../../helpers/in-worker-daemon";
 import {
   chmodSync,
@@ -84,7 +87,7 @@ describe("a daemon built while a closed one's work unwinds", () => {
     ({ env, removeTmpDirs } = prepareIsolatedDaemonEnv("ccb-restart-launch"));
     projectDir = mkdtempSync(path.join(os.tmpdir(), "cc-candybar-restart-"));
     mkdirSync(path.join(projectDir, ".git"));
-    const configDir = path.join(env.XDG_CONFIG_HOME!, "cc-candybar");
+    const configDir = homeConfigDir(homeOf(hostOf(env)));
     mkdirSync(configDir, { recursive: true });
     writeFileSync(path.join(configDir, "config.json5"), CONFIG);
     bin = mkdtempSync(path.join(os.tmpdir(), "cc-candybar-restart-bin-"));

@@ -1,3 +1,6 @@
+import { hostOf } from "../../helpers/host";
+import { configDir } from "../../../src/daemon/paths";
+import { homeOf } from "../../../src/daemon/home";
 import type { Frame } from "../../../src/render/frame";
 // [LAW:verifiable-goals] candybar-config-engine-71o.5's headline acceptance:
 // the epic's claim ("mutate the configuration via the menu system,
@@ -59,11 +62,7 @@ describe("candybar-config-engine-71o.5: a daemon's click → persist → restart
       path.join(os.tmpdir(), "cc-candybar-config-e2e-project-"),
     );
     // The user's own file — the one durable clicks write.
-    const userConfigPath = path.join(
-      env.XDG_CONFIG_HOME!,
-      "cc-candybar",
-      "config.json5",
-    );
+    const userConfigPath = path.join(configDir(homeOf(hostOf(env))), "config.json5");
     mkdirSync(path.dirname(userConfigPath), { recursive: true });
     // No hand-authored actions — proves the epic acceptance bullet against
     // the BUNDLED DEFAULT, not a config built to exercise the mechanism. The

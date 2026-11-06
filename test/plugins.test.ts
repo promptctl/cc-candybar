@@ -3,8 +3,9 @@
 // and the loaded config's live variable store (what the daemon renders from).
 // brandon-plugins-ktag.8fv.
 
+import { homeOf } from "../src/daemon/home";
 import { drawPayload } from "./helpers/draw-payload";
-import { HOST, WORLD, hostOf, worldOf, processLauncher } from "./helpers/host";
+import { HOST, mainEnv, WORLD, hostOf, worldOf, processLauncher } from "./helpers/host";
 import type { Host, World } from "../src/host";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
@@ -63,7 +64,7 @@ afterEach(() => {
 // This worker's environment with `set` laid over it, as the machine the test
 // that follows runs on. Nothing is written to `process.env`.
 function runOn(set: Record<string, string>): void {
-  host = hostOf({ ...HOST.env, ...set });
+  host = hostOf({ ...mainEnv(), ...set });
   world = worldOf(host);
 }
 
@@ -588,8 +589,8 @@ test("the daemon's load records the plugins it merged and dropped", () => {
   );
   const loaded = loadFromDisk(dir, dir, good, {
     clock: systemTimekeeper,
-    stateDir: stateDir(host),
-    locations: locations(host),
+    stateDir: stateDir(homeOf(host)),
+    locations: locations(host, homeOf(host)),
     runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
     storage: NO_PLUGIN_STORAGE,
     signer: TEST_SIGNER,
@@ -649,8 +650,8 @@ describe("a plugin's own variables", () => {
     expect(warnings).toEqual([]);
     const loaded = loadFromDisk(dir, dir, p, {
       clock: systemTimekeeper,
-      stateDir: stateDir(host),
-      locations: locations(host),
+      stateDir: stateDir(homeOf(host)),
+      locations: locations(host, homeOf(host)),
       runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
@@ -698,8 +699,8 @@ describe("a plugin's own variables", () => {
     expect(rendered).toContain("hello, world 7 ran open=no");
     const loaded = loadFromDisk(dir, dir, p, {
       clock: systemTimekeeper,
-      stateDir: stateDir(host),
-      locations: locations(host),
+      stateDir: stateDir(homeOf(host)),
+      locations: locations(host, homeOf(host)),
       runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
@@ -757,8 +758,8 @@ describe("a plugin's own variables", () => {
     );
     const loaded = loadFromDisk(dir, dir, p, {
       clock: systemTimekeeper,
-      stateDir: stateDir(host),
-      locations: locations(host),
+      stateDir: stateDir(homeOf(host)),
+      locations: locations(host, homeOf(host)),
       runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
@@ -777,8 +778,8 @@ describe("a plugin's own variables", () => {
   test("none declared counts zero", () => {
     const loaded = loadFromDisk(dir, dir, config(), {
       clock: systemTimekeeper,
-      stateDir: stateDir(host),
-      locations: locations(host),
+      stateDir: stateDir(homeOf(host)),
+      locations: locations(host, homeOf(host)),
       runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
@@ -818,7 +819,7 @@ describe("an installed plugin", () => {
       `${repo}/.cc-candybar/plugins/${name}/plugin.json5`,
       definition,
     );
-    answerRepo(path.join(dir, repo));
+    answerRepo(path.join(dir, repo), "approved", host.env);
     return file;
   };
   const placing = (seg: string) =>
@@ -828,7 +829,7 @@ describe("an installed plugin", () => {
     const prepared = await prepareConfig(
       world,
       [],
-      { repo: repoGateAt(stateDir(host), projectDir).plugins },
+      { repo: repoGateAt(stateDir(homeOf(host)), projectDir).plugins },
       projectDir,
       [],
       instantOf(new Date()),
@@ -930,8 +931,8 @@ describe("an installed plugin", () => {
       placing("plugins.lit.ticket"),
       {
         clock: systemTimekeeper,
-        stateDir: stateDir(host),
-        locations: locations(host),
+        stateDir: stateDir(homeOf(host)),
+        locations: locations(host, homeOf(host)),
         runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
@@ -990,8 +991,8 @@ describe("an installed plugin", () => {
     const cache = new RenderCache(
       {
         clock: systemTimekeeper,
-        stateDir: stateDir(host),
-        locations: locations(host),
+        stateDir: stateDir(homeOf(host)),
+        locations: locations(host, homeOf(host)),
         runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
@@ -1073,8 +1074,8 @@ describe("an installed plugin", () => {
     const load = (): string => {
       const loaded = loadFromDisk(dir, path.join(dir, "outer/inner"), p, {
         clock: systemTimekeeper,
-        stateDir: stateDir(host),
-        locations: locations(host),
+        stateDir: stateDir(homeOf(host)),
+        locations: locations(host, homeOf(host)),
         runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
@@ -1618,8 +1619,8 @@ describe("an installed plugin", () => {
     );
     const loaded = loadFromDisk(dir, dir, p, {
       clock: systemTimekeeper,
-      stateDir: stateDir(host),
-      locations: locations(host),
+      stateDir: stateDir(homeOf(host)),
+      locations: locations(host, homeOf(host)),
       runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
@@ -1657,8 +1658,8 @@ describe("an installed plugin", () => {
     const cache = new RenderCache(
       {
         clock: systemTimekeeper,
-        stateDir: stateDir(host),
-        locations: locations(host),
+        stateDir: stateDir(homeOf(host)),
+        locations: locations(host, homeOf(host)),
         runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
@@ -1673,7 +1674,7 @@ describe("an installed plugin", () => {
     try {
       const repo = path.join(dir, "repo");
       fs.mkdirSync(repo);
-      answerRepo(repo);
+      answerRepo(repo, "approved", host.env);
       const p = write(
         "config.json5",
         `{ segments: { s: { template: "{{ .plugins.lit.nope }}" } }, root: { h: ["s"] } }`,
@@ -1763,8 +1764,8 @@ describe("an installed plugin", () => {
     );
     const loaded = loadFromDisk(dir, dir, p, {
       clock: systemTimekeeper,
-      stateDir: stateDir(host),
-      locations: locations(host),
+      stateDir: stateDir(homeOf(host)),
+      locations: locations(host, homeOf(host)),
       runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
@@ -1845,8 +1846,8 @@ describe("an installed plugin", () => {
     const p = placing("plugins.lit.s");
     const loaded = loadFromDisk(dir, dir, p, {
       clock: systemTimekeeper,
-      stateDir: stateDir(host),
-      locations: locations(host),
+      stateDir: stateDir(homeOf(host)),
+      locations: locations(host, homeOf(host)),
       runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
@@ -1869,7 +1870,7 @@ describe("plugin roots", () => {
       XDG_DATA_HOME: "/home/u/.local/share",
       XDG_DATA_DIRS: "/usr/share:/home/u/.local/share:/opt/share",
     });
-    expect(pluginRoots(locations(host), null)).toEqual([
+    expect(pluginRoots(locations(host, homeOf(host)), null)).toEqual([
       { dir: "/opt/share/cc-candybar/plugins", scope: "plugins" },
       { dir: "/usr/share/cc-candybar/plugins", scope: "plugins" },
       { dir: "/home/u/.local/share/cc-candybar/plugins", scope: "plugins" },
@@ -1884,7 +1885,7 @@ describe("plugin roots", () => {
     });
     expect(
       pluginRoots(
-        locations(host),
+        locations(host, homeOf(host)),
         "/w/repo" as Parameters<typeof pluginRoots>[1],
       ),
     ).toEqual([
@@ -1983,7 +1984,7 @@ describe("a repo's plugin beside an installed one of its name", () => {
       `{ segments: { ticket: { template: "{{ if }}" } } }`,
     );
     write("repo/.cc-candybar.json5", `{}`);
-    answerRepo(repo);
+    answerRepo(repo, "approved", host.env);
     const message = fatal(
       await checkConfig(world, daemonGates(), undefined, repo),
     );
@@ -1994,7 +1995,7 @@ describe("a repo's plugin beside an installed one of its name", () => {
   });
 
   test("approved, both load and all three cells draw with no warning", async () => {
-    answerRepo(repo);
+    answerRepo(repo, "approved", host.env);
     const { rendered, warnings } = clean(
       await checkConfig(world, daemonGates(), undefined, repo),
     );
@@ -2008,8 +2009,8 @@ describe("a repo's plugin beside an installed one of its name", () => {
     );
     const loaded = loadFromDisk(repo, repo, undefined, {
       clock: systemTimekeeper,
-      stateDir: stateDir(host),
-      locations: locations(host),
+      stateDir: stateDir(homeOf(host)),
+      locations: locations(host, homeOf(host)),
       runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
@@ -2038,7 +2039,7 @@ describe("a repo's plugin beside an installed one of its name", () => {
   });
 
   test("unapproved, only the installed one loads and the user's placements draw", async () => {
-    answerRepo(repo, "declined");
+    answerRepo(repo, "declined", host.env);
     const { rendered, warnings } = clean(
       await checkConfig(world, daemonGates(), undefined, repo),
     );
@@ -2064,7 +2065,7 @@ describe("a repo's plugin beside an installed one of its name", () => {
       "repo/.cc-candybar.json5",
       `{ plugins: ["./vendor/lit/plugin.json5"], insert: [{ seg: "repo.lit.ticket", after: "plugins.lit.next" }] }`,
     );
-    answerRepo(repo);
+    answerRepo(repo, "approved", host.env);
     const { rendered, warnings } = clean(
       await checkConfig(world, daemonGates(), undefined, repo),
     );
@@ -2075,7 +2076,7 @@ describe("a repo's plugin beside an installed one of its name", () => {
   });
 
   test("a repo. name is never resolved through the installed plugin of its name", async () => {
-    answerRepo(repo);
+    answerRepo(repo, "approved", host.env);
     write(
       "repo/.cc-candybar.json5",
       `{ insert: [{ seg: "repo.lit.phase", after: "plugins.lit.phase" }] }`,
@@ -2147,7 +2148,7 @@ describe("a plugin names itself without its scope", () => {
     write("repo/.cc-candybar/plugins/deploy/plugin.json5", SELF_DEFINITION);
     write("repo/.cc-candybar/plugins/deploy/state.json", STATE);
     write("repo/.cc-candybar.json5", `{ root: { h: ["repo.deploy.status"] } }`);
-    answerRepo(path.join(dir, "repo"));
+    answerRepo(path.join(dir, "repo"), "approved", host.env);
     expect(
       cells(
         await checkConfig(
@@ -2177,7 +2178,7 @@ describe("a plugin names itself without its scope", () => {
       `{ segments: { ticket: { template: '#{{ .plugins.lit.data.id }} {{ template "plugins.lit.h" }}' } }, helpers: { h: "x" } }`,
     );
     write("repo/.cc-candybar.json5", `{ root: { h: ["repo.lit.ticket"] } }`);
-    answerRepo(path.join(dir, "repo"));
+    answerRepo(path.join(dir, "repo"), "approved", host.env);
     const message = fatal(
       await checkConfig(
         world,
@@ -2235,7 +2236,7 @@ describe("a plugin names itself without its scope", () => {
       `{ segments: { t: { template: "x", vars: { v: { kind: "shell", command: "echo hi", cache: { depends_on: ["plugins.lit.x"] } } } } }, actions: { add: { persist: "presets.default.root", removeSegment: "plugins.lit.t" } } }`,
     );
     write("repo/.cc-candybar.json5", `{ root: { h: ["repo.lit.t"] } }`);
-    answerRepo(path.join(dir, "repo"));
+    answerRepo(path.join(dir, "repo"), "approved", host.env);
     const message = fatal(
       await checkConfig(
         world,
@@ -2281,7 +2282,7 @@ describe("a plugin names itself without its scope", () => {
       "repo/.cc-candybar.json5",
       `{ segments: { mine: { template: "MINE" } }, root: { h: ["mine", "plugins.lit.ticket"] } }`,
     );
-    answerRepo(path.join(dir, "repo"));
+    answerRepo(path.join(dir, "repo"), "approved", host.env);
     expect(
       drawn(
         await checkConfig(
@@ -2325,7 +2326,7 @@ describe("a plugin names itself without its scope", () => {
       "repo/.cc-candybar.json5",
       `{ root: { h: ["plugins.deploy.ticket"] } }`,
     );
-    answerRepo(path.join(dir, "repo"));
+    answerRepo(path.join(dir, "repo"), "approved", host.env);
     expect(
       fatal(
         await checkConfig(
@@ -2349,7 +2350,7 @@ describe("a plugin names itself without its scope", () => {
       path.join("data", "cc-candybar", "plugins", "other-one", "plugin.json5"),
       `{ segments: { s: { template: "x" } } }`,
     );
-    answerRepo(path.join(dir, "repo"));
+    answerRepo(path.join(dir, "repo"), "approved", host.env);
     const placed = async (seg: string): Promise<string> => {
       write("repo/.cc-candybar.json5", `{ root: { h: ["${seg}"] } }`);
       return fatal(

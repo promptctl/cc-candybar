@@ -1794,7 +1794,7 @@ function runOf(
       ...drawn.env,
     },
     // The bundled config's runs go in the user's home.
-    cwd: decl.cwd ?? ctx.locations.home,
+    cwd: decl.cwd ?? ctx.locations.homeDir,
     // The loader proved every name a declared source of this config, whose
     // state holds its key.
     refreshes: decl.refreshes.map((name) => ({

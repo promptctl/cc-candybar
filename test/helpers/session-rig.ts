@@ -12,6 +12,7 @@ import {
   type SessionView,
 } from "../../src/daemon/cache/render";
 import { WatcherRegistry } from "../../src/daemon/cache/watchers";
+import { homeOf } from "../../src/daemon/home";
 import { stateDir } from "../../src/daemon/paths";
 import { declareLanes, settlePayload } from "../../src/daemon/render-payload";
 import {
@@ -159,7 +160,7 @@ export function sessionRig(
   const cache = new RenderCache<SessionSource>(
     {
       clock: systemTimekeeper,
-      stateDir: stateDir({ env: {}, home: dir, tmp: dir }),
+      stateDir: stateDir(homeOf({ env: {}, home: dir, tmp: dir })),
       locations: locs(),
       runs,
       sessionState,

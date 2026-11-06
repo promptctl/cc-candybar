@@ -482,10 +482,10 @@ export async function checkConfig(
   const configPath = explicitConfigPath(cwd, target, world.host.home) ?? null;
   // [LAW:single-enforcer] The daemon's gate, under the same answers: a
   // repository the bar would not run, `check` names and runs nothing of.
-  const locs = locations(world.host);
+  const locs = locations(world.host, world.home);
   const resolution = resolveDslConfig(
     locs,
-    repoConfigs(stateDir(world.host)).read(),
+    repoConfigs(stateDir(world.home)).read(),
     cwd,
     cwd,
     configPath ?? undefined,
@@ -617,7 +617,7 @@ export async function prepareConfig(
   // land before its validation, so a fatal outcome still carries them.
   const layers = chain.map((l) => l.path);
   const loaded = loadConfigChain(
-    locations(world.host),
+    locations(world.host, world.home),
     chain,
     DEFAULT_DSL_CONFIG,
     { warned: (w) => warnings.push(...w) },
@@ -644,7 +644,7 @@ export async function prepareConfig(
     // signed with the one key.
     const compiled = registerDslConfig(config, registry, {
       cwd,
-      signer: linkSignerFromKeyFile(linkKeyFile(stateDir(world.host))),
+      signer: linkSignerFromKeyFile(linkKeyFile(stateDir(world.home))),
     });
     warnings.push(...compiled.loadWarnings);
     // A view's inputs are pending until its source answers, and a source

@@ -1,18 +1,16 @@
 // [LAW:single-enforcer] The ONE place that spins up a real, request-serving
-// `cc-candybar daemon` subprocess against an isolated XDG_STATE_HOME/
-// XDG_CACHE_HOME/XDG_CONFIG_HOME + short socket path — extracted from
-// test/daemon-boots/process/daemon-shutdown.test.ts (candybar-config-engine-71o.5) so every test that
-// needs a real daemon over a real socket (not spawnTestDaemon's bare
-// process-lifecycle probe) shares one spawn+readiness+cleanup
-// implementation instead of re-deriving the short-socket-path /
-// connect-round-trip-readiness gotchas per file.
+// `cc-candybar daemon` subprocess under a renderer home of its own, with a
+// short socket path — so every test that needs a real daemon over a real
+// socket (not spawnTestDaemon's bare process-lifecycle probe) shares one
+// spawn+readiness+cleanup implementation instead of re-deriving the
+// short-socket-path / connect-round-trip-readiness gotchas per file.
 //
 // Split into prepare/spawn primitives (not just one all-in-one call) because
 // a daemon-restart test needs to kill ONE daemon and spawn a SECOND against
-// the exact same env/socket/state-dir — the config file and edit history
-// it's proving survive a restart live under that same XDG root, so the
-// tmpdirs must outlive the first daemon's death. `spawnIsolatedDaemon` is
-// the convenience wrapper for the (more common) single-daemon-per-test case.
+// the exact same home — the config file and edit history it's proving survive
+// a restart live under that same root, so it must outlive the first daemon's
+// death. `spawnIsolatedDaemon` is the convenience wrapper for the (more common)
+// single-daemon-per-test case.
 
 import type { ChildProcess } from "node:child_process";
 import { hostOf } from "./host";
@@ -27,15 +25,33 @@ import {
 } from "./spawn-test-daemon";
 import { daemonPool } from "./daemon-pool";
 import { sendDaemonRequest, type ExitResult } from "./daemon-wire";
-import { logPath } from "../../src/daemon/paths";
+import {
+  HOME_ENV,
+  NAME_ENV,
+  RUNTIME_DIR_ENV,
+  homeOf,
+  parseRendererName,
+  socketFile,
+  type RendererHome,
+} from "../../src/daemon/home";
+import { logPath, socketPath, stateDir } from "../../src/daemon/paths";
 import { PROTOCOL_VERSION } from "../../src/daemon/protocol";
 
 export interface IsolatedDaemonEnv {
   env: NodeJS.ProcessEnv;
+  // The home the env names: what a test hands the e2e helpers as the daemon's
+  // address. `sockPath` and `stateDir` are its derivations, for the tests that
+  // watch the socket file or read the log beside it.
+  home: RendererHome;
   sockPath: string;
   stateDir: string;
   removeTmpDirs(): void;
 }
+
+// [LAW:one-source-of-truth] Every prepared home is named alike: each has a
+// runtime directory of its own under its root, so names need only differ
+// within one, and none do.
+const ISOLATED_NAME = parseRendererName("test");
 
 // The smaller of the two platform limits, so a path that passes here passes on
 // both. Linux allows 108; there is no gain in letting a test that works on
@@ -62,8 +78,8 @@ function requireSocketPathFits(tmpPrefix: string): void {
   const longest = path.join(
     os.tmpdir(),
     `${tmpPrefix}-${MKDTEMP_SUFFIX}`,
-    "cc-candybar",
-    "socket",
+    RUNTIME_SUBDIR,
+    socketFile(ISOLATED_NAME),
   );
   if (Buffer.byteLength(longest) > SUN_PATH_MAX) {
     throw new Error(
@@ -75,43 +91,38 @@ function requireSocketPathFits(tmpPrefix: string): void {
   }
 }
 
+// Under one temporary root: the home's root and the runtime directory its
+// socket binds in.
+const HOME_SUBDIR = "home";
+const RUNTIME_SUBDIR = "run";
+
+// The env a daemon under a home of its own is given: the worker's, plus the
+// two variables that name the home and the one that keeps its socket under the
+// same temporary root, and nothing else about where it writes.
 export function prepareIsolatedDaemonEnv(tmpPrefix: string): IsolatedDaemonEnv {
   requireSocketPathFits(tmpPrefix);
-  const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), `${tmpPrefix}-`));
-  const stateDir = path.join(stateRoot, "cc-candybar");
-  // Socket parent must satisfy ensureSocketParentSafe (uid==me + mode 0700).
-  fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
-  const sockPath = path.join(stateDir, "socket");
-
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), `${tmpPrefix}-`));
+  // Made here as the daemon would make it (uid==me, mode 0700), so a test can
+  // bind a socket of its own in it, or loosen it to see the daemon refuse.
+  fs.mkdirSync(path.join(root, RUNTIME_SUBDIR), { mode: 0o700 });
   const env: NodeJS.ProcessEnv = {
     ...process.env,
-    CC_CANDYBAR_SOCKET: sockPath,
-    XDG_STATE_HOME: stateRoot,
-    XDG_CACHE_HOME: fs.mkdtempSync(
-      path.join(os.tmpdir(), `${tmpPrefix}-cache-`),
-    ),
-    XDG_CONFIG_HOME: fs.mkdtempSync(
-      path.join(os.tmpdir(), `${tmpPrefix}-config-`),
-    ),
+    [HOME_ENV]: path.join(root, HOME_SUBDIR),
+    [NAME_ENV]: ISOLATED_NAME,
+    [RUNTIME_DIR_ENV]: path.join(root, RUNTIME_SUBDIR),
   };
-
-  const removeTmpDirs = (): void => {
-    try {
-      fs.rmSync(stateRoot, { recursive: true, force: true });
-    } catch {}
-    if (env.XDG_CACHE_HOME) {
+  const home = homeOf(hostOf(env));
+  return {
+    env,
+    home,
+    sockPath: socketPath(home),
+    stateDir: stateDir(home),
+    removeTmpDirs: (): void => {
       try {
-        fs.rmSync(env.XDG_CACHE_HOME, { recursive: true, force: true });
+        fs.rmSync(root, { recursive: true, force: true });
       } catch {}
-    }
-    if (env.XDG_CONFIG_HOME) {
-      try {
-        fs.rmSync(env.XDG_CONFIG_HOME, { recursive: true, force: true });
-      } catch {}
-    }
+    },
   };
-
-  return { env, sockPath, stateDir, removeTmpDirs };
 }
 
 export interface RunningDaemon {
@@ -145,26 +156,28 @@ export interface RunningDaemon {
 // merely still accepts() cannot pass this probe the way it passed a bare
 // connect.
 //
-// [LAW:one-source-of-truth] `sockPath` is read from `env.CC_CANDYBAR_SOCKET`
-// — the SAME env this spawns the daemon with — rather than taken as a
-// second parameter a caller could (even accidentally) pass out of sync with
-// the env. The readiness probe below polls the socket the daemon actually
-// binds, never a caller-supplied guess.
+// [LAW:one-source-of-truth] The socket is derived from the home the env names
+// — the SAME env this spawns the daemon with — rather than taken as a second
+// parameter a caller could (even accidentally) pass out of sync with the env.
+// The readiness probe below polls the socket the daemon actually binds, never a
+// caller-supplied guess.
+// [LAW:parse-dont-validate] A main home is refused here: its socket is the
+// machine's own, and a test daemon bound there is the live bar's.
 export async function spawnDaemonWithEnv(
   env: NodeJS.ProcessEnv,
   entry: DaemonEntry = TSX_SOURCE_ENTRY,
 ): Promise<RunningDaemon> {
-  const sockPath = env.CC_CANDYBAR_SOCKET;
-  if (!sockPath) {
+  const home = homeOf(hostOf(env));
+  if (home.kind !== "named") {
     throw new Error(
-      "spawnDaemonWithEnv: env.CC_CANDYBAR_SOCKET must be set (use " +
-        "prepareIsolatedDaemonEnv to build env)",
+      `spawnDaemonWithEnv: env must name a renderer home of the test's own (${HOME_ENV} and ${NAME_ENV}; prepareIsolatedDaemonEnv builds one)`,
     );
   }
+  const sockPath = socketPath(home);
   const daemon = await spawnTestDaemon(env, daemonPool, entry);
   const { child, killTree, stderrTail, release } = daemon;
 
-  const readiness = await awaitReadiness(child, sockPath);
+  const readiness = await awaitReadiness(child, home);
   if (readiness.phase !== "serving") {
     killTree();
     release();
@@ -247,14 +260,14 @@ type Readiness = { readonly phase: "serving" } | ReadinessFailure;
 // bound on a live process that has not answered yet.
 async function awaitReadiness(
   child: ChildProcess,
-  sockPath: string,
+  home: RendererHome,
 ): Promise<Readiness> {
   const deadline = Date.now() + READINESS_BUDGET_MS;
   let phase: FailedPhase = "booting";
   for (;;) {
-    if (fs.existsSync(sockPath)) {
+    if (fs.existsSync(socketPath(home))) {
       phase = "bound";
-      if (await answersStats(sockPath)) return { phase: "serving" };
+      if (await answersStats(home)) return { phase: "serving" };
     }
     const exit = exitedAlready(child);
     if (exit !== null) return { phase, exit };
@@ -275,10 +288,10 @@ function exitedAlready(child: ChildProcess): ExitResult | null {
   return { code: child.exitCode, signal: child.signalCode };
 }
 
-async function answersStats(sockPath: string): Promise<boolean> {
+async function answersStats(home: RendererHome): Promise<boolean> {
   try {
     const resp = await sendDaemonRequest(
-      sockPath,
+      home,
       { v: PROTOCOL_VERSION, kind: "stats" },
       STATS_REPLY_BUDGET_MS,
     );
@@ -332,7 +345,7 @@ function processDid(exit: ExitResult | null): string {
 // readiness failure that quotes both names its cause, where the phase above only
 // names which half of the boot it died in.
 function daemonLogTail(env: NodeJS.ProcessEnv, lines = 20): string {
-  const file = logPath(hostOf(env));
+  const file = logPath(homeOf(hostOf(env)));
   let text: string;
   try {
     text = fs.readFileSync(file, "utf8");
@@ -345,6 +358,7 @@ function daemonLogTail(env: NodeJS.ProcessEnv, lines = 20): string {
 
 export interface IsolatedDaemonHandle {
   child: ChildProcess;
+  home: RendererHome;
   sockPath: string;
   stateDir: string;
   cleanup(): void;
@@ -353,7 +367,7 @@ export interface IsolatedDaemonHandle {
 export async function spawnIsolatedDaemon(
   tmpPrefix: string,
 ): Promise<IsolatedDaemonHandle> {
-  const { env, sockPath, stateDir, removeTmpDirs } =
+  const { env, home, sockPath, stateDir, removeTmpDirs } =
     prepareIsolatedDaemonEnv(tmpPrefix);
   let daemon: RunningDaemon;
   try {
@@ -364,6 +378,7 @@ export async function spawnIsolatedDaemon(
   }
   return {
     child: daemon.child,
+    home,
     sockPath,
     stateDir,
     cleanup: (): void => {

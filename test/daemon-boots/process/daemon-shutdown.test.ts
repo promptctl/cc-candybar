@@ -3,7 +3,8 @@ import { hostOf } from "../../helpers/host";
 import { readFileSync } from "node:fs";
 
 import { effectsUrl, VERB_SET_STATE } from "../../../src/click/wire";
-import { sessionStatePath } from "../../../src/daemon/paths";
+import { homeOf } from "../../../src/daemon/home";
+import { sessionStatePath, stateDir } from "../../../src/daemon/paths";
 import { PROTOCOL_VERSION } from "../../../src/daemon/protocol";
 import { click, killAndWait, render } from "../../helpers/daemon-e2e";
 import {
@@ -89,7 +90,7 @@ describe("daemon shutdown contract", () => {
       // test is ALSO the *process exit*, not just the response — the
       // 452-corpse incident produced responses but never produced exits.
       const resp = await sendDaemonRequest(
-        handle.sockPath,
+        handle.home,
         { v: PROTOCOL_VERSION, kind: "shutdown" },
         REPLY_BUDGET_MS,
       );
@@ -110,7 +111,7 @@ describe("daemon shutdown contract", () => {
       // transient/io_error a frameless close would produce. Then the stale
       // daemon must actually exit so the next render respawns fresh.
       const resp = await sendDaemonRequest(
-        handle.sockPath,
+        handle.home,
         { v: PROTOCOL_VERSION + 1, kind: "render" },
         REPLY_BUDGET_MS,
       );
@@ -130,23 +131,23 @@ describe("daemon shutdown contract", () => {
   // file's debounce. So the close in that funnel is what keeps a click a recycled
   // daemon had not written yet, and only a real process has that funnel.
   test("a session write still inside its debounce lands before a signal ends the daemon", async () => {
-    const { env, sockPath, stateDir, removeTmpDirs } = prepareIsolatedDaemonEnv(
+    const { env, home, sockPath, stateDir, removeTmpDirs } = prepareIsolatedDaemonEnv(
       "cc-candybar-shutdown",
     );
     const sessionId = "shutdown-write";
     let daemon: RunningDaemon | undefined;
     try {
       daemon = await spawnDaemonWithEnv(env);
-      await render(sockPath, sessionId, stateDir);
+      await render(home, sessionId, stateDir);
       await click(
-        sockPath,
+        home,
         effectsUrl([
           { verb: VERB_SET_STATE, args: [sessionId, "padding", "4"] },
         ]),
       );
       await killAndWait(daemon, "SIGTERM");
 
-      const saved = JSON.parse(readFileSync(sessionStatePath(hostOf(env)), "utf8"));
+      const saved = JSON.parse(readFileSync(sessionStatePath(homeOf(hostOf(env))), "utf8"));
       expect(saved[sessionId]).toMatchObject({ padding: "4" });
     } finally {
       daemon?.killTree();

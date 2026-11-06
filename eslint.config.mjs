@@ -188,11 +188,14 @@ const OWNED_IMPORTS = {
     ],
     message: "A daemon is handed its link signer (production-adapters.ts).",
   },
-  // Where files are, read from the environment by a process's entry point and
-  // handed down. The daemon process reads it once, in server.ts.
+  // Where files are: every path derives from the renderer home a process's
+  // entry point parsed once (src/daemon/home.ts) and handed down. The daemon
+  // process derives its record once, in server.ts, and the daemon value derives
+  // what it writes from the home it is handed; the pieces below take the one
+  // path they write to.
   daemonPaths: {
     group: PATHS,
-    owners: ["src/daemon/server.ts"],
+    owners: ["src/daemon/server.ts", "src/daemon/daemon.ts"],
     message: "A daemon is handed its paths: take the value you are given.",
   },
   stateDir: {
@@ -202,6 +205,7 @@ const OWNED_IMPORTS = {
       "src/demo/dsl.ts",
       "src/demo/gallery.ts",
       "src/doctor/cli.ts",
+      "src/daemon/acquire.ts",
     ],
     message: "A daemon is handed its paths: take the value you are given.",
   },
@@ -216,29 +220,34 @@ const OWNED_IMPORTS = {
           "src/doctor/handler-probe.ts",
           "src/daemon/client-transport.ts",
           "src/daemon/acquire.ts",
+          "src/daemon/server.ts",
         ],
         message:
-          "Only a client of the daemon reads its socket from the environment.",
+          "Only a client of the daemon, or the shell that binds it, derives its socket.",
       },
     ]),
   ),
   ...Object.fromEntries(
-    ["daemonDir", "spawnLockPath", "spawnCooldownPath", "spawnBackoffPath"].map(
-      (name) => [
-        name,
-        {
-          group: PATHS,
-          owners: ["src/daemon/acquire.ts"],
-          message: "Only the client that spawns a daemon reads these.",
-        },
-      ],
-    ),
+    ["spawnLockPath", "spawnCooldownPath", "spawnBackoffPath"].map((name) => [
+      name,
+      {
+        group: PATHS,
+        owners: ["src/daemon/acquire.ts"],
+        message: "Only the client that spawns a daemon reads these.",
+      },
+    ]),
   ),
-  // The pricing disk cache is read ahead of its port
-  // (candybar-testing-ihvy.89p), which takes its directory as an input.
+  // The usage store takes its cache directory as an input; the root derives it.
   cacheDir: {
     group: PATHS,
-    owners: ["src/daemon/cache/session-usage-store.ts"],
+    owners: ["src/daemon/daemon.ts", "src/demo/dsl.ts"],
+    message: "A daemon is handed its paths: take the value you are given.",
+  },
+  // The breaker's registry is the host's, not a home's: the daemon's shell
+  // derives it and hands it in.
+  daemonRegistryDir: {
+    group: PATHS,
+    owners: ["src/daemon/server.ts"],
     message: "A daemon is handed its paths: take the value you are given.",
   },
   ...Object.fromEntries(
@@ -247,7 +256,6 @@ const OWNED_IMPORTS = {
       "leasePath",
       "sessionStatePath",
       "settingsHistoryPath",
-      "daemonRegistryDir",
       "watchProbeDir",
     ].map((name) => [
       name,

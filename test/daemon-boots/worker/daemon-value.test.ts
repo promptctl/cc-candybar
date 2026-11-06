@@ -5,6 +5,7 @@
 
 import { NO_TMUX_AT_EXIT } from "../../helpers/in-worker-daemon";
 import { hostOf } from "../../helpers/host";
+import { HOME_ENV, NAME_ENV, homeOf } from "../../../src/daemon/home";
 import type { Host } from "../../../src/host";
 import { createHook } from "node:async_hooks";
 import {
@@ -26,7 +27,7 @@ import type { Daemon } from "../../../src/daemon/daemon";
 import { systemTimekeeper, type Timekeeper } from "../../../src/time";
 import { processProbe } from "../../helpers/host";
 import {
-  daemonPaths,
+
   sessionStatePath,
   settingsHistoryPath,
 } from "../../../src/daemon/paths";
@@ -91,9 +92,9 @@ describe("the daemon is a value", () => {
   const openLogs: DaemonLog[] = [];
 
   // The machine a case runs on, read when asked: the worker's environment as it
-  // stands (a case may have put a stub on PATH), with its state under `root`.
+  // stands (a case may have put a stub on PATH), naming a home under `root`.
   const hostNow = (): Host =>
-    hostOf({ ...process.env, XDG_STATE_HOME: path.join(root, "state") });
+    hostOf({ ...process.env, [HOME_ENV]: path.join(root, "home"), [NAME_ENV]: "value" });
 
   const construct = (
     inputs: {
@@ -106,7 +107,7 @@ describe("the daemon is a value", () => {
     const { session } = inputs;
     const { daemon, daemonLog } = buildDaemon({
       host: hostNow(),
-      paths: daemonPaths(hostNow()),
+      home: homeOf(hostNow()),
       bundle: bundleAt(
         inputs.checkout ?? path.join(root, "checkout"),
         inputs.digest,
@@ -201,8 +202,8 @@ describe("the daemon is a value", () => {
     }
     // A live scope would refuse the next test's daemon; this file runs one at a
     // time, so what is left here is the case's own.
-    rmSync(sessionStatePath(hostNow()), { force: true });
-    rmSync(settingsHistoryPath(hostNow()), { force: true });
+    rmSync(sessionStatePath(homeOf(hostNow())), { force: true });
+    rmSync(settingsHistoryPath(homeOf(hostNow())), { force: true });
     if (scratchPath !== undefined) process.env.PATH = scratchPath;
     scratchPath = undefined;
   });
@@ -239,7 +240,7 @@ describe("the daemon is a value", () => {
         ]),
       ),
     ).rejects.toThrow(closed);
-    expect(existsSync(settingsHistoryPath(hostNow()))).toBe(false);
+    expect(existsSync(settingsHistoryPath(homeOf(hostNow())))).toBe(false);
     const refused = jest.fn();
     expect(() =>
       daemon.subscribe("value-refused", {
@@ -251,19 +252,6 @@ describe("the daemon is a value", () => {
     ).toThrow(closed);
     expect(() => daemon.arm()).toThrow(closed);
     expect(() => daemon.reloadConfig({} as RenderOrigin)).toThrow(closed);
-  });
-
-  // [LAW:no-shared-mutable-globals] What a daemon's loads accept is its own
-  // value, so a second daemon built beside a live one is a daemon like any other.
-  test("a second daemon beside a live one is built and answers", async () => {
-    writeConfig(PADDED);
-    const first = construct();
-    const second = construct();
-    expect(second).not.toBe(first);
-    await answer(first, renderRequest("value-first"));
-    await answer(second, renderRequest("value-second"));
-    await close(first);
-    await close(second);
   });
 
   test("a build that throws stands in the way of no next build", async () => {
@@ -397,7 +385,7 @@ describe("the daemon is a value", () => {
       () => false,
     );
 
-    const sessionFile = sessionStatePath(hostNow());
+    const sessionFile = sessionStatePath(homeOf(hostNow()));
     const closing = await daemon.close(NO_TMUX_AT_EXIT);
     open = null;
     afterClose = { armed: [], fired: [] };

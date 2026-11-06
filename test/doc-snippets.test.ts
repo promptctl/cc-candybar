@@ -42,7 +42,7 @@
 // config snippet is an untested claim, which this suite rejects.
 
 import fs from "node:fs";
-import { HOST, hostOf, worldOf } from "./helpers/host";
+import { HOST, hostOf, worldOf, mainEnv } from "./helpers/host";
 import type { World } from "../src/host";
 import os from "node:os";
 import path from "node:path";
@@ -201,7 +201,7 @@ beforeAll(() => {
   }
   process.env.PATH = `${bin}${path.delimiter}${SAVED_PATH ?? ""}`;
   // Built after the PATH write so the stubs reach the launcher's children.
-  world = worldOf(hostOf({ ...HOST.env, XDG_CONFIG_HOME: path.join(os.tmpdir(), "cc-doc-xdg-empty") }));
+  world = worldOf(hostOf({ ...mainEnv(), XDG_CONFIG_HOME: path.join(os.tmpdir(), "cc-doc-xdg-empty") }));
   for (const f of fences) {
     if (f.snippet.kind !== "file") continue;
     const target = path.join(dir, f.snippet.path);

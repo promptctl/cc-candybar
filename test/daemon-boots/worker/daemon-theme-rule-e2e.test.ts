@@ -14,6 +14,9 @@
 // live data reached a branch with a typo. That is why this is a warning over a
 // rendered bar rather than an error instead of one.
 
+import { hostOf } from "../../helpers/host";
+import { configDir as homeConfigDir } from "../../../src/daemon/paths";
+import { homeOf } from "../../../src/daemon/home";
 import { textOf } from "../../../src/render/frame";
 import { backgroundsOf } from "../../helpers/frame";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -39,7 +42,7 @@ const BAD_SESSION = "theme-rule-bad";
 const RULE = `{{ if eq .session.id "${BAD_SESSION}" }}no-such-theme{{ else }}dracula{{ end }}`;
 
 function configFor(env: NodeJS.ProcessEnv): string {
-  const configDir = path.join(env.XDG_CONFIG_HOME!, "cc-candybar");
+  const configDir = homeConfigDir(homeOf(hostOf(env)));
   mkdirSync(configDir, { recursive: true });
   const configPath = path.join(configDir, "config.json5");
   writeFileSync(

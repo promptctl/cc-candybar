@@ -7,6 +7,8 @@
 // incremental fold is OBSERVATIONALLY EQUAL to a from-scratch read of the final
 // file — the optimization changes cost, never output.
 
+import { cacheDir } from "../src/daemon/paths";
+import { homeOf } from "../src/daemon/home";
 import { systemTimekeeper } from "../src/time";
 import {
   mkdtempSync,
@@ -366,6 +368,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
     const incStore = new SessionUsageStore({
       clock: systemTimekeeper,
       host: HOST,
+      cacheDir: cacheDir(homeOf(HOST)),
       sweepIntervalMs: 0,
     });
     let incInfo;
@@ -385,6 +388,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
     const freshStore = new SessionUsageStore({
       clock: systemTimekeeper,
       host: HOST,
+      cacheDir: cacheDir(homeOf(HOST)),
       sweepIntervalMs: 0,
     });
     let freshInfo;
@@ -423,6 +427,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
     const store = new SessionUsageStore({
       clock: systemTimekeeper,
       host: HOST,
+      cacheDir: cacheDir(homeOf(HOST)),
       sweepIntervalMs: 0,
     });
     try {
@@ -451,6 +456,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
       const fresh = new SessionUsageStore({
         clock: systemTimekeeper,
         host: HOST,
+        cacheDir: cacheDir(homeOf(HOST)),
         sweepIntervalMs: 0,
       });
       try {
@@ -482,6 +488,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
     const store = new SessionUsageStore({
       clock: systemTimekeeper,
       host: HOST,
+      cacheDir: cacheDir(homeOf(HOST)),
       sweepIntervalMs: 0,
     });
     // Hold each of the first two folds until released, so the older lands first.
@@ -547,6 +554,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
     const store = new SessionUsageStore({
       clock: systemTimekeeper,
       host: HOST,
+      cacheDir: cacheDir(homeOf(HOST)),
       sweepIntervalMs: 0,
     });
     try {
@@ -591,6 +599,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
       const store = new SessionUsageStore({
         clock: systemTimekeeper,
         host: HOST,
+        cacheDir: cacheDir(homeOf(HOST)),
         sweepIntervalMs: 0,
       });
       try {
@@ -625,6 +634,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
     const store = new SessionUsageStore({
       clock: systemTimekeeper,
       host: HOST,
+      cacheDir: cacheDir(homeOf(HOST)),
       sweepIntervalMs: 0,
     });
     try {

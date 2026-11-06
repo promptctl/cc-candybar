@@ -1,4 +1,5 @@
 import os from "node:os";
+import { homeOf, type RendererHome } from "./daemon/home.js";
 import type { OneShotLauncher } from "./proc/launch.js";
 import { systemOneShotLauncher } from "./proc/system-launcher.js";
 import { systemTimekeeper, type Timekeeper } from "./time.js";
@@ -16,11 +17,13 @@ export interface Host {
 }
 
 // What a process main hands every subcommand it runs: the machine's facts, the
-// launcher over them (so a child inherits the same environment the process
-// itself reads) and the machine's clock, which real children and real files run
-// on.
+// renderer home this process serves or reaches (parsed from the environment
+// once, src/daemon/home.ts), the launcher over them (so a child inherits the
+// same environment the process itself reads) and the machine's clock, which
+// real children and real files run on.
 export interface World {
   readonly host: Host;
+  readonly home: RendererHome;
   readonly launcher: OneShotLauncher;
   readonly clock: Timekeeper;
 }
@@ -41,7 +44,24 @@ export function processWorld(): World {
   const clock = systemTimekeeper;
   return {
     host,
+    home: processHome(host),
     launcher: systemOneShotLauncher({ inherited: process.env }, clock),
     clock,
   };
+}
+
+// [LAW:parse-dont-validate] A home the environment misstates refuses the
+// process here, before any entry derives a path from it, in one line naming
+// the rule, as the Rust client refuses the same input. Every entry (the CLI,
+// the demo, the gallery, the load gate) builds its world here, so the refusal
+// is spoken once and the same way; there is no world yet to report through.
+function processHome(host: Host): RendererHome {
+  try {
+    return homeOf(host);
+  } catch (error) {
+    process.stderr.write(
+      `cc-candybar: ${error instanceof Error ? error.message : String(error)}\n`,
+    );
+    process.exit(1);
+  }
 }

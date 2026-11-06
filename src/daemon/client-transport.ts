@@ -102,7 +102,7 @@ export async function requestOutcome<T>(
   let sock: net.Socket;
   try {
     sock = await connectWithTimeout(
-      socketPath(world.host),
+      socketPath(world.home),
       budgets.connectMs,
       world.clock,
     );
@@ -145,7 +145,7 @@ export async function exchangeOutcome<T>(
 
 // What a client of the daemon runs on: the machine it asks about, and the
 // clock its deadline is figured by.
-export type ClientWorld = Pick<World, "host" | "clock">;
+export type ClientWorld = Pick<World, "host" | "home" | "clock">;
 
 // [LAW:types-are-the-program] One place that turns a wire-level Response
 // into a typed Outcome. Every daemon client goes through this, so the

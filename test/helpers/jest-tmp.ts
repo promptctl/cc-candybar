@@ -7,12 +7,14 @@ export const JEST_TMP_PREFIX = "cc-candybar-jest-";
 // [LAW:types-are-the-program] One lowercase word each, the shape the owner is
 // read back by: a kind outside it mints a name the sweep reads as no one's.
 type JestTmpKind =
-  | "socket"
+  | "home"
+  | "run"
   | "claude"
   | "managed"
   | "data"
   | "config"
   | "state"
+  | "cache"
   | "ledger";
 
 // [LAW:one-source-of-truth] A jest worker's own directory, unique per test file

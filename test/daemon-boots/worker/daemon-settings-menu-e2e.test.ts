@@ -1,3 +1,6 @@
+import { hostOf } from "../../helpers/host";
+import { configDir as homeConfigDir } from "../../../src/daemon/paths";
+import { homeOf } from "../../../src/daemon/home";
 import type { Frame } from "../../../src/render/frame";
 // [LAW:verifiable-goals] candybar-settings-ui-aok.1's headline acceptance,
 // measured the only way the ticket accepts: from a USER CONFIG FILE whose
@@ -41,7 +44,7 @@ describe("candybar-settings-ui-aok.1: a daemon, a real user config", () => {
       "cc-candybar-settings-e2e",
     );
     // The acceptance config, written where the DAEMON resolves it.
-    const configDir = path.join(env.XDG_CONFIG_HOME!, "cc-candybar");
+    const configDir = homeConfigDir(homeOf(hostOf(env)));
     mkdirSync(configDir, { recursive: true });
     writeFileSync(
       path.join(configDir, "config.json5"),

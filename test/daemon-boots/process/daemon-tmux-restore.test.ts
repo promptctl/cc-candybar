@@ -31,7 +31,7 @@ const HAS_TMUX = spawnSync("tmux", ["-V"]).status === 0;
       if (run.status !== 0) throw new Error(`tmux ${args[0]}: ${run.stderr}`);
       return run.stdout;
     };
-    const { env, sockPath, removeTmpDirs } =
+    const { env, home, sockPath, removeTmpDirs } =
       prepareIsolatedDaemonEnv("ccb-tmux-restore");
     const config = path.join(dir, "tmux.json5");
     writeFileSync(
@@ -58,7 +58,7 @@ const HAS_TMUX = spawnSync("tmux", ["-V"]).status === 0;
       const before = own();
       const draw = (): Promise<unknown> =>
         render(
-          sockPath,
+          home,
           "tmux-restore",
           dir,
           {
@@ -77,7 +77,7 @@ const HAS_TMUX = spawnSync("tmux", ["-V"]).status === 0;
             await draw();
             return own() !== before;
           }, "the daemon's layout on the session");
-          expect(renderer()).toBe("main");
+          expect(renderer()).toBe(home.name);
           await killAndWait(daemon, "SIGTERM");
           expect(own()).toBe(before);
         } finally {

@@ -1,3 +1,4 @@
+import type { RendererHome } from "../../../src/daemon/home";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -16,6 +17,7 @@ jest.setTimeout(30_000);
 // keep a real daemon.
 describe("brandon-config-5g8: a real client's config reaches a running daemon", () => {
   let sockPath: string;
+  let home: RendererHome;
   let env: NodeJS.ProcessEnv;
   let removeTmpDirs: () => void;
   let projectDir: string;
@@ -24,7 +26,7 @@ describe("brandon-config-5g8: a real client's config reaches a running daemon", 
 
   beforeAll(async () => {
     const prepared = prepareIsolatedDaemonEnv("cc-candybar-config-env-e2e");
-    ({ sockPath, env, removeTmpDirs } = prepared);
+    ({ sockPath, home, env, removeTmpDirs } = prepared);
     delete prepared.env.CC_CANDYBAR_CONFIG;
     projectDir = mkdtempSync(
       path.join(os.tmpdir(), "cc-candybar-config-env-e2e-project-"),
@@ -63,7 +65,7 @@ describe("brandon-config-5g8: a real client's config reaches a running daemon", 
     // (projectDir, cwd, configFile) and the client reports ITS OWN cwd as
     // `req.cwd`, so it is spawned in projectDir: the entry it hits is the
     // one this warmed. Each literal below is one run of the bar it printed.
-    await render(sockPath, sid, projectDir, { configEnv: override });
+    await render(home, sid, projectDir, { configEnv: override });
     const client = runRealClient([], {
       cwd: projectDir,
       env: { ...env, CC_CANDYBAR_CONFIG: value() },
@@ -83,7 +85,7 @@ describe("brandon-config-5g8: a real client's config reaches a running daemon", 
   // refused as a stray word and `--config` reaches the daemon.
   test("the real client relays --config with nothing refused", async () => {
     const sid = "cfg-flag-real-client";
-    await render(sockPath, sid, projectDir, {}, configFlag(override));
+    await render(home, sid, projectDir, {}, configFlag(override));
     const client = runRealClient(["--config", override], {
       cwd: projectDir,
       env,

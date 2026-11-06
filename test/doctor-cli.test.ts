@@ -3,7 +3,7 @@
 // settings file, a clean setup, and a failed check carrying a fix.
 
 import { BUNDLED_GLYPHS } from "./helpers/bundled-glyphs";
-import { HOST, hostOf, worldOf } from "./helpers/host";
+import { HOST, hostOf, worldOf, mainEnv } from "./helpers/host";
 import type { World } from "../src/host";
 import { EMPTY_STORES, healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, healthyDaemonIn, HEALTHY_FACTS, CARRIED, NAMED, STILL, sightedIn, reportedFrame } from "./helpers/doctor-facts";
 import { glyphSighting } from "../src/doctor/checks";
@@ -337,11 +337,11 @@ describe("doctorPlan over a real config", () => {
   const REAL: DoctorEdge = { ...EDGE, loadConfig: (origin) => loadConfigOnce(world, origin) };
   let project: string;
   beforeEach(() => {
-    world = worldOf(hostOf({ ...HOST.env, XDG_CONFIG_HOME: path.join(dir, "xdg") }));
+    world = worldOf(hostOf({ ...mainEnv(), XDG_CONFIG_HOME: path.join(dir, "xdg") }));
     project = path.join(dir, "project");
     fs.mkdirSync(project);
     // The project's config is the one the doctor reads.
-    answerRepo(project);
+    answerRepo(project, "approved", world.host.env);
   });
   const projectConfig = (): string => path.join(project, ".cc-candybar.json5");
   const plan = (env: Record<string, string> = {}) =>
