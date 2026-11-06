@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-655",
+      "ref": "refs/pull/655/merge",
+      "sha": "129ee3eaf529950eb7b1d24d81a16f078e81ac5b",
+      "timestamp": "2026-11-06T21:55:21.468Z",
+      "commits": [
+        {
+          "sha": "129ee3eaf529950eb7b1d24d81a16f078e81ac5b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T21:53:42Z",
+          "message": "Merge 17a02831d2aca7071c71f6c15e0cfed0ceee722a into 0357f4ada680aa4f6a80a0dd47cacc620c017e4b\n"
+        },
+        {
+          "sha": "17a02831d2aca7071c71f6c15e0cfed0ceee722a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T14:53:30-07:00",
+          "message": "refactor(test): the socket probe helper asks the client's own probe (candybar-testing-ihvy.5em)\n"
+        },
+        {
+          "sha": "c402a782ffa89ce0c7def1ffd339ed0683d75afd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T14:48:17-07:00",
+          "message": "fix(dial): a dial that lands after its bound or its stream's close is closed, not leaked (candybar-testing-ihvy.5em)\n"
+        },
+        {
+          "sha": "e1c39eacf235e0f2a6a2fd3f5fc3d5210ff7e1db",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T14:38:27-07:00",
+          "message": "feat(dial): the client reaches its daemon through one dialer port, and no test hand-rolls a socket (candybar-testing-ihvy.5em)\n\nA Dialer port (src/dial/) with one adapter over a unix socket, an in-memory fake that listens and holds paths on a clock, and one contract both pass. The round trip, the frame stream and acquire's probe dial through the World's dialer; a dial's refusal is typed at the adapter, so interpretException reads no errno out of a message. Lint keeps net in the adapter and the daemon's listener, in src and in tests. The nine test files that stood up their own sockets listen on the fake; the kernel bind cases move to test/integration.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-654",
       "ref": "refs/pull/654/merge",
       "sha": "c917ab59ae251865469f56f66dfa8ed4d5eb364b",
@@ -34,35 +70,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T14:39:17-07:00",
           "message": "fix(test): the parent-watchdog case waits for a serving daemon under the shared readiness budget, and for its exit by name (brandon-menus-sjhy.26f)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-655",
-      "ref": "refs/pull/655/merge",
-      "sha": "a5f45a27669456fa9aac439a06f16b2f7fed453c",
-      "timestamp": "2026-11-06T21:49:24.990Z",
-      "commits": [
-        {
-          "sha": "a5f45a27669456fa9aac439a06f16b2f7fed453c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T21:48:29Z",
-          "message": "Merge c402a782ffa89ce0c7def1ffd339ed0683d75afd into 0357f4ada680aa4f6a80a0dd47cacc620c017e4b\n"
-        },
-        {
-          "sha": "c402a782ffa89ce0c7def1ffd339ed0683d75afd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T14:48:17-07:00",
-          "message": "fix(dial): a dial that lands after its bound or its stream's close is closed, not leaked (candybar-testing-ihvy.5em)\n"
-        },
-        {
-          "sha": "e1c39eacf235e0f2a6a2fd3f5fc3d5210ff7e1db",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T14:38:27-07:00",
-          "message": "feat(dial): the client reaches its daemon through one dialer port, and no test hand-rolls a socket (candybar-testing-ihvy.5em)\n\nA Dialer port (src/dial/) with one adapter over a unix socket, an in-memory fake that listens and holds paths on a clock, and one contract both pass. The round trip, the frame stream and acquire's probe dial through the World's dialer; a dial's refusal is typed at the adapter, so interpretException reads no errno out of a message. Lint keeps net in the adapter and the daemon's listener, in src and in tests. The nine test files that stood up their own sockets listen on the fake; the kernel bind cases move to test/integration.\n"
         }
       ]
     },
