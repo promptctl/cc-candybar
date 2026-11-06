@@ -15082,8 +15082,8 @@ var require_Writer = __commonJS({
         const remaining = byteLength - this.x;
         if (remaining < capacity) {
           const total = byteLength - this.x0;
-          const required = capacity - remaining;
-          const totalRequired = total + required;
+          const required2 = capacity - remaining;
+          const totalRequired = total + required2;
           this.grow(totalRequired <= this.allocSize ? this.allocSize : totalRequired * 2);
         }
       }
@@ -35711,7 +35711,7 @@ function segmentsOf(drawn) {
     const i = index.get(at(row2, col));
     return i === void 0 ? void 0 : regions.get(find(i));
   };
-  const placeOf2 = (region) => ({ row: (region.top + region.bottom) / 2, centre: (region.left + region.right + 1) / 2 });
+  const placeOf3 = (region) => ({ row: (region.top + region.bottom) / 2, centre: (region.left + region.right + 1) / 2 });
   const pastSeam = (row2, col, step4) => {
     let past = col;
     while (seams.has(at(row2, past)))
@@ -35723,7 +35723,7 @@ function segmentsOf(drawn) {
     const width = own2?.width ?? 1;
     const beside2 = (own2?.seam === true ? [pastSeam(cell3.row, cell3.col - 1, -1), pastSeam(cell3.row, cell3.col + width, 1)] : []).find((region2) => region2?.hex === hex3);
     const region = beside2 ?? regionAt(cell3.row, cell3.col);
-    return region === void 0 ? ownPlace(cell3, width) : placeOf2(region);
+    return region === void 0 ? ownPlace(cell3, width) : placeOf3(region);
   };
 }
 function wheel(curve, z) {
@@ -35743,7 +35743,7 @@ function wheel(curve, z) {
       return own2(pair.terminal[side], pair[side]) ? keyOf2(pair[side], boundWith(pair[side], pair[other], own2(pair.terminal[other], pair[other]))) : void 0;
     }));
     const indexed = measuredIndexed(depth, theme24);
-    const placeOf2 = segmentsOf(drawn);
+    const placeOf3 = segmentsOf(drawn);
     return Animation.continuous((t2) => {
       const written2 = /* @__PURE__ */ new Map();
       const choose = (color, bound, place) => {
@@ -35758,7 +35758,7 @@ function wheel(curve, z) {
       };
       return (shown, cell3) => {
         const mine = { fg: own2(cell3.terminal.fg, shown.fg), bg: own2(cell3.terminal.bg, shown.bg) };
-        const turn = (color, ours, other, theirs) => ours ? write(color, boundWith(color, other, theirs), placeOf2(cell3, color.hex)) : color;
+        const turn = (color, ours, other, theirs) => ours ? write(color, boundWith(color, other, theirs), placeOf3(cell3, color.hex)) : color;
         return { ...shown, fg: turn(shown.fg, mine.fg, shown.bg, mine.bg), bg: turn(shown.bg, mine.bg, shown.fg, mine.fg) };
       };
     });
@@ -38192,15 +38192,15 @@ function optionalEnumSpec(allowed) {
 function objectJson(fieldMap, opts = { closed: true }) {
   const specs = fieldMap;
   const properties = {};
-  const required = [];
+  const required2 = [];
   for (const [field, spec] of Object.entries(specs)) {
     properties[field] = spec.json;
-    if (spec.required) required.push(field);
+    if (spec.required) required2.push(field);
   }
   return {
     type: "object",
     properties,
-    ...required.length > 0 && { required },
+    ...required2.length > 0 && { required: required2 },
     ...opts.closed && { additionalProperties: false }
   };
 }
@@ -38213,8 +38213,8 @@ function withConst(base, key, value) {
     [key]: { const: value },
     ...b.properties
   };
-  const required = [key, ...b.required ?? []];
-  return { ...b, properties, required };
+  const required2 = [key, ...b.required ?? []];
+  return { ...b, properties, required: required2 };
 }
 function taggedUnionJson(schema) {
   const arms = schema.arms;
@@ -55086,6 +55086,8 @@ var TMUX_ENV = {
   // 2.1.259 binary: `if (env.CLAUDE_CODE_TMUX_TRUECOLOR) return false`).
   truecolor: "CLAUDE_CODE_TMUX_TRUECOLOR"
 };
+var paneName = (tmux3) => JSON.stringify([tmux3.socket, tmux3.pane]);
+var samePane = (a, b) => paneName(a) === paneName(b);
 var inTmux = (tmux3) => tmux3 !== null && tmux3 !== void 0;
 
 // src/config-hint.ts
@@ -69506,7 +69508,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.206.0";
+var PACKAGE_VERSION = "1.207.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -77777,7 +77779,7 @@ function requestArrived(parts, req) {
     inTmux(req.hints.tmux)
   );
   tmuxStatusLines.observe(req.sessionId, req.hints.tmux, lanes.tmuxStatus);
-  return laneSetups.noted(laneSessionOf(req), lanes);
+  return laneSetups.noted(req.sessionId, lanes);
 }
 function drawForAnswer(parts, setup, arrival) {
   return drawRequest(parts.recorder, setup.view, arrival, () => {
@@ -77799,12 +77801,7 @@ function laneClicked(parts, sessionId2, before, after) {
   const latest = frameFeeds.latest(sessionId2);
   if (latest !== null && before.tmuxStatus !== after.tmuxStatus)
     tmuxStatusLines.observe(sessionId2, latest.hints.tmux, after.tmuxStatus);
-  return laneSetups.clicked(
-    sessionId2,
-    latest === null ? null : laneSessionOf(latest),
-    before,
-    after
-  );
+  return laneSetups.clicked(sessionId2, before, after);
 }
 async function drawAnswer(parts, req, at, waitEndsAt, facts) {
   var _stack = [];
@@ -77912,7 +77909,7 @@ var ARMS = {
   // landed. The revision its turn left and the effects it described go on the
   // request's line, the render event, which is its record and opens with the
   // session the edge noted.
-  request: async ({ req, facts }, { verbCtx }) => {
+  request: ({ req, facts }, { verbCtx }) => {
     const turn = verbCtx.journalTurns.take("request", () => {
       recordRequest(verbCtx.sessionState, req);
       return {
@@ -77930,7 +77927,7 @@ var ARMS = {
   // a refused step is answered beside them; a click whose client has left is
   // refused by the verb, where it would land (src/daemon/verbs/index.ts). A
   // turn is synchronous, so no idle timer can close a menu under one.
-  click: async ({ verb, value, arrival, gone }, { verbCtx }) => {
+  click: ({ verb, value, arrival, gone }, { verbCtx }) => {
     const effects = [];
     let answer2 = null;
     try {
@@ -77945,7 +77942,7 @@ var ARMS = {
     }
     return { answer: answer2, effects, facts: [] };
   },
-  "menu-idle": async ({ session, idle }, { verbCtx }) => {
+  "menu-idle": ({ session, idle }, { verbCtx }) => {
     const effects = [];
     closeIdleMenus(session, idle, {
       ...verbCtx,
@@ -77958,7 +77955,7 @@ var ARMS = {
   // (`LANDINGS`), and a failure is held as the session's click error, shown as
   // a failed dispatch's is (src/daemon/click-error.ts). A click that names no
   // session has no bar; its apply line is the record.
-  "effect-done": async ({ of, done: done2 }, parts) => {
+  "effect-done": ({ of, done: done2 }, parts) => {
     const { verbCtx } = parts;
     const outcome = verbCtx.journalTurns.take("effect-done", () => {
       const landed = land(done2, parts);
@@ -77978,7 +77975,7 @@ var ARMS = {
   // click errors it carried are marked answered (src/daemon/click-error.ts), in
   // a turn as every write is, so no frame reads the mark beside a click's
   // writes half landed.
-  answered: async ({ session, errors: errors2 }, { verbCtx }) => {
+  answered: ({ session, errors: errors2 }, { verbCtx }) => {
     verbCtx.journalTurns.take(
       "answered",
       () => answeredClickError(verbCtx.sessionState, session, errors2)
@@ -78031,7 +78028,7 @@ function recordRequest(state, req) {
 }
 async function apply(event, parts) {
   const arm2 = ARMS[event.kind];
-  const applied2 = await arm2(event, parts);
+  const applied2 = arm2(event, parts);
   const of = originOf(event);
   const line = LINE[event.kind];
   const said = line(event, applied2);
@@ -78058,9 +78055,9 @@ async function apply(event, parts) {
   return {
     answer: applied2.answer,
     // An event that described nothing performs nothing, and takes no place in
-    // the session's order: the effect-done events of that order are applied
-    // from inside it, and a place they took there would settle only after the
-    // work they report on.
+    // any order: the effect-done events of an order are applied from inside
+    // it, and a place they took there would settle only after the work they
+    // report on.
     performed: applied2.effects.length === 0 ? NOTHING_PERFORMED : performAll(parts, of, applied2.effects)
   };
 }
@@ -78154,9 +78151,58 @@ async function perform2(effect, parts) {
   }
   return { effect, outcome };
 }
-function performAll(parts, of, effects) {
-  return parts.verbCtx.journalTurns.performing(of.session, async () => {
-    for (const effect of effects) {
+var ORDERING = {
+  launch: {
+    key: (_effect, { session }) => ({ kind: "session", session }),
+    paneWhenReached: false
+  },
+  "type-slash": {
+    key: ({ pane }) => ({ kind: "pane", tmux: pane }),
+    paneWhenReached: false
+  },
+  "apply-update": {
+    key: (_effect, { session }) => ({ kind: "session", session }),
+    paneWhenReached: false
+  },
+  run: {
+    key: (_effect, { session }) => ({ kind: "session", session }),
+    paneWhenReached: false
+  },
+  "lane-setup": {
+    key: ({ sessionId: sessionId2, lane }) => ({ kind: "lane", session: sessionId2, lane }),
+    paneWhenReached: true
+  },
+  doctor: {
+    key: (_effect, { session }) => ({ kind: "session", session }),
+    paneWhenReached: false
+  }
+};
+function placeOf2(effect, of) {
+  const ordering = ORDERING[effect.kind];
+  return ordering.key(effect, of);
+}
+function performInOrder(turns, of, described, act) {
+  const late = (effect) => ORDERING[effect.kind].paneWhenReached;
+  const effects = [
+    ...described.filter((e) => !late(e)),
+    ...described.filter(late)
+  ];
+  let before = NOTHING_PERFORMED;
+  for (const effect of effects) {
+    const after = before;
+    before = turns.performing(placeOf2(effect, of), async () => {
+      await after;
+      await act(effect);
+    });
+  }
+  return before;
+}
+function performAll(parts, of, described) {
+  return performInOrder(
+    parts.verbCtx.journalTurns,
+    of,
+    described,
+    async (effect) => {
       const done2 = await perform2(effect, parts);
       await applyUnanswered(
         { kind: "effect-done", of, done: done2 },
@@ -78164,7 +78210,7 @@ function performAll(parts, of, effects) {
         `${describeEffect(effect)} ${done2.outcome.kind}${"said" in done2.outcome ? `: ${done2.outcome.said}` : ""}`
       );
     }
-  });
+  );
 }
 
 // src/daemon/render-checkpoint.ts
@@ -84946,7 +84992,7 @@ var TmuxStatusLines = class {
     if (this.closed) return;
     const held = this.held.get(sessionId2);
     const where = on2 && tmux3 !== null && tmux3 !== void 0 ? tmux3 : null;
-    if (held !== void 0 && (where === null || held.socket !== where.socket || held.pane !== where.pane))
+    if (held !== void 0 && (where === null || !samePane(held, where)))
       this.release(held, "switched off or moved");
     if (where === null || this.held.has(sessionId2)) return;
     const entry = {
@@ -85559,6 +85605,36 @@ var BAND_CLIENT = import_node_path47.default.join("bin", "cc-candybar-native");
 var EXIT_PATIENCE_MS = 15e3;
 var ATTACH_PATIENCE_MS = 3e4;
 var RELOAD_PLUGINS = slashLine("/reload-plugins");
+function laneRun(read2, order2, moved) {
+  const first2 = read2();
+  if (first2.kind === "gone") throw new Error(first2.reason);
+  const paneNow = () => {
+    const latest = read2();
+    if (latest.kind === "gone") return latest;
+    const pane = tmuxPaneOf(latest.session.hints.tmux);
+    return pane.kind === "refused" ? pane : { kind: "in", session: latest.session, tmux: pane.hint };
+  };
+  const inPane = async (work) => {
+    const waited = paneNow();
+    if (waited.kind !== "in") return waited;
+    const held = await order2(waited.tmux, async () => {
+      const now2 = paneNow();
+      if (now2.kind !== "in" || !samePane(now2.tmux, waited.tmux)) return now2;
+      return {
+        kind: "held",
+        value: await work(now2.session, now2.tmux)
+      };
+    });
+    if (held.kind !== "in") return held;
+    moved(waited.tmux, held.tmux);
+    return inPane(work);
+  };
+  return { session: first2.session, inPane };
+}
+function required(step4, refusal) {
+  if (step4.kind !== "held") throw new BadVerbArgs(refusal(step4.reason));
+  return step4.value;
+}
 var done = (said) => ({ kind: "done", said });
 function paneOf(session) {
   const pane = tmuxPaneOf(session.hints.tmux);
@@ -85567,7 +85643,7 @@ function paneOf(session) {
 }
 var LANE_SETUP = {
   band: {
-    on: async (session, host, edge) => {
+    on: async (run3, host, edge) => {
       const checkout = sourceCheckoutOf(host.bundle);
       if (checkout === null) {
         throw new BadVerbArgs(
@@ -85583,7 +85659,7 @@ var LANE_SETUP = {
       return {
         kind: "underway",
         said: `installing ${BAND_PLUGIN} from ${checkout}`,
-        finished: installBand(session, checkout, edge)
+        finished: installBand(run3, checkout, edge)
       };
     },
     // The installed mod draws nothing while the lane is off: the daemon
@@ -85591,8 +85667,8 @@ var LANE_SETUP = {
     off: async () => done("nothing to stop: the band mod draws nothing while the lane is off")
   },
   statusline: {
-    on: async (session, host, edge) => {
-      const tmux3 = paneOf(session);
+    on: async (run3, host, edge) => {
+      const tmux3 = paneOf(run3.session);
       const launcher = attachLauncherOf(host.preload);
       const missing = [host.preload, launcher].find(
         (file) => !edge.fileExists(file)
@@ -85605,11 +85681,20 @@ var LANE_SETUP = {
       return {
         kind: "underway",
         said: `restarting Claude Code in ${tmux3.pane} under the attach launcher`,
-        finished: restartUnderAttach(
-          session,
-          tmux3,
-          { node: host.node[0], launcher, preload: host.preload },
-          edge
+        // The whole restart holds the pane: from the reads that judge it to
+        // the attach, a line typed into the pane would land in the restart.
+        finished: run3.inPane(
+          (session, tmux4) => restartUnderAttach(
+            session,
+            tmux4,
+            { node: host.node[0], launcher, preload: host.preload },
+            edge
+          )
+        ).then(
+          (step4) => required(
+            step4,
+            (reason) => `Claude Code was not restarted under the attach launcher: ${reason}`
+          )
         )
       };
     },
@@ -85619,42 +85704,46 @@ var LANE_SETUP = {
       "nothing to stop: the attached statusline draws its command's output while the lane is off"
     )
   },
+  // Splitting the session's pane resizes what a restart reads in it, so a
+  // split or close holds the pane's order too.
   pane: {
-    on: async (session, host, edge) => {
-      const tmux3 = paneOf(session);
-      const open2 = await edge.barPanes(tmux3);
-      if (open2.length > 0) {
-        return done(
-          `bar pane ${open2.join(", ")} already draws ${tmux3.pane}'s bar`
+    on: async (run3, host, edge) => required(
+      await run3.inPane(async (_session, tmux3) => {
+        const open2 = await edge.barPanes(tmux3);
+        if (open2.length > 0) {
+          return done(
+            `bar pane ${open2.join(", ")} already draws ${tmux3.pane}'s bar`
+          );
+        }
+        const opened = await edge.openBarPane(
+          tmux3,
+          [...host.node, host.bundle, "bar-pane", tmux3.pane],
+          homeEnv(host.home)
         );
-      }
-      const opened = await edge.openBarPane(
-        tmux3,
-        [...host.node, host.bundle, "bar-pane", tmux3.pane],
-        homeEnv(host.home)
-      );
-      return done(`opened bar pane ${opened} under ${tmux3.pane}`);
-    },
+        return done(`opened bar pane ${opened} under ${tmux3.pane}`);
+      }),
+      (reason) => `no bar pane was opened: ${reason}`
+    ),
     // Off is "no bar pane draws this session's bar", which a session with no
     // tmux pane already is.
-    off: async (session, _host, edge) => {
-      const pane = tmuxPaneOf(session.hints.tmux);
-      if (pane.kind === "refused") {
-        return done(`no bar pane to close: ${pane.reason}`);
-      }
-      const tmux3 = pane.hint;
-      const open2 = await edge.barPanes(tmux3);
-      for (const pane2 of open2) await edge.closePane(tmux3, pane2);
-      return done(
-        open2.length === 0 ? `no bar pane draws ${tmux3.pane}'s bar` : `closed bar pane ${open2.join(", ")}`
-      );
+    off: async (run3, _host, edge) => {
+      const step4 = await run3.inPane(async (_session, tmux3) => {
+        const open2 = await edge.barPanes(tmux3);
+        for (const pane of open2) await edge.closePane(tmux3, pane);
+        return done(
+          open2.length === 0 ? `no bar pane draws ${tmux3.pane}'s bar` : `closed bar pane ${open2.join(", ")}`
+        );
+      });
+      if (step4.kind === "refused")
+        return done(`no bar pane to close: ${step4.reason}`);
+      return required(step4, (reason) => reason);
     }
   },
   // The daemon draws the tmux status line itself, for every session whose
   // switch is on (src/daemon/tmux-status.ts), so there is nothing to start or
   // stop — only a session outside tmux to tell why nothing will be drawn.
   tmuxStatus: {
-    on: async (session) => {
+    on: async ({ session }) => {
       const tmux3 = paneOf(session);
       return done(`the daemon draws ${tmux3.pane}'s bar in its status line`);
     },
@@ -85663,7 +85752,8 @@ var LANE_SETUP = {
     )
   }
 };
-async function installBand(session, checkout, edge) {
+async function installBand(run3, checkout, edge) {
+  const { session } = run3;
   const facts = {
     sessionId: session.sessionId,
     projectDir: session.origin.projectDir,
@@ -85671,8 +85761,10 @@ async function installBand(session, checkout, edge) {
   };
   await edge.claude(["plugin", "marketplace", "add", checkout], facts);
   await edge.claude(["plugin", "install", BAND_PLUGIN], facts);
-  const pane = tmuxPaneOf(session.hints.tmux);
-  const typed = pane.kind === "refused" ? pane : await typeSlash(edge.claudeInput, pane.hint, RELOAD_PLUGINS);
+  const held = await run3.inPane(
+    (_session, tmux3) => typeSlash(edge.claudeInput, tmux3, RELOAD_PLUGINS)
+  );
+  const typed = held.kind === "held" ? held.value : { kind: "refused", reason: held.reason };
   if (typed.kind === "refused") {
     throw new Error(
       `the band mod is installed, but /reload-plugins was not typed: ${typed.reason} \u2014 or type /reload-plugins yourself`
@@ -85841,15 +85933,15 @@ var LaneSetups = class {
   owed = /* @__PURE__ */ new Map();
   closed = false;
   // A click of `sessionId` moved its switches from `before` to `after`: the
-  // setups it settles. `session` is the session as its latest request
-  // reported it, or null when this daemon holds none yet, which owes them.
-  clicked(sessionId2, session, before, after) {
+  // setups it settles, or, when this daemon holds no request of the session
+  // yet, none: it owes them.
+  clicked(sessionId2, before, after) {
     const moved = LANE_NAMES.filter((lane) => before[lane] !== after[lane]);
     const owed = this.take(sessionId2);
     for (const lane of moved) if (!owed.has(lane)) owed.set(lane, before[lane]);
     const byOf = (lane) => moved.includes(lane) ? "click" : "owed";
-    if (session !== null)
-      return settled3(session, owed, after, byOf, this.deps.log);
+    if (this.deps.latest(sessionId2) !== null)
+      return settled3(sessionId2, owed, after, byOf, this.deps.log);
     for (const [lane, from] of owed)
       if (from === after[lane]) owed.delete(lane);
     if (moved.length > 0) {
@@ -85872,12 +85964,12 @@ var LaneSetups = class {
     }
     return [];
   }
-  // A request of `session` arrived, finding its switches at `switches`: the
+  // A request of `sessionId` arrived, finding its switches at `switches`: the
   // setups its clicks owe, settled now.
-  noted(session, switches) {
+  noted(sessionId2, switches) {
     return settled3(
-      session,
-      this.take(session.sessionId),
+      sessionId2,
+      this.take(sessionId2),
       switches,
       () => "owed",
       this.deps.log
@@ -85890,15 +85982,15 @@ var LaneSetups = class {
   }
   // [LAW:effects-at-boundaries] The performer's run of one setup, answering
   // how it ended: a part still underway once the plan answers is waited out,
-  // so the session's next effect starts after it.
+  // so the lane's next setup starts after it.
   async setup({
-    session,
+    sessionId: sessionId2,
     lane,
     on: on2,
     by
   }) {
     if (this.closed) throw new DaemonClosing("lane setup");
-    const where = `by=${by} (session=${session.sessionId})`;
+    const where = `by=${by} (session=${sessionId2})`;
     const ended = (error) => {
       const text4 = `lane: ${lane} ${on2 ? "on" : "off"}: ${error instanceof Error ? error.message : String(error)}`;
       this.deps.log("warn", `${text4} ${where}`);
@@ -85907,7 +85999,14 @@ var LaneSetups = class {
     let outcome;
     try {
       outcome = await LANE_SETUP[lane][on2 ? "on" : "off"](
-        session,
+        laneRun(
+          () => this.latestOf(sessionId2),
+          this.paneOrder,
+          (from, to) => this.deps.log(
+            "info",
+            `lane: ${lane} ${on2 ? "on" : "off"} \u2014 the session moved from ${from.pane} to ${to.pane} while its step waited for the pane, so it takes ${to.pane}'s order ${where}`
+          )
+        ),
         this.deps.host,
         this.deps.edge
       );
@@ -85924,17 +86023,33 @@ var LaneSetups = class {
       return { kind: "ok", said: finished };
     }, ended);
   }
+  // [LAW:no-ambient-temporal-coupling] A pane step still queued when the
+  // daemon closes is refused, as a queued setup is.
+  paneOrder = (tmux3, work) => this.deps.paneOrder(tmux3, () => {
+    if (this.closed) throw new DaemonClosing("lane setup");
+    return work();
+  });
+  // [LAW:no-silent-failure] The session as its latest request reports it
+  // now. One this daemon has stopped holding since the click (evicted with
+  // the least recently drawn) is refused, saying so.
+  latestOf(sessionId2) {
+    const session = this.deps.latest(sessionId2);
+    return session === null ? {
+      kind: "gone",
+      reason: `this daemon no longer holds a request of session ${sessionId2}`
+    } : { kind: "known", session };
+  }
   close() {
     this.closed = true;
   }
 };
-function settled3(session, owed, now2, byOf, log) {
+function settled3(sessionId2, owed, now2, byOf, log) {
   const setups = [];
   for (const [lane, from] of owed) {
     if (now2[lane] !== from)
       setups.push({
         kind: "lane-setup",
-        session,
+        sessionId: sessionId2,
         lane,
         on: now2[lane],
         by: byOf(lane)
@@ -85942,7 +86057,7 @@ function settled3(session, owed, now2, byOf, log) {
     else
       log(
         "info",
-        `lane: ${lane} ${from ? "on" : "off"} \u2014 nothing owed: its switch is back where the lane is by=${byOf(lane)} (session=${session.sessionId})`
+        `lane: ${lane} ${from ? "on" : "off"} \u2014 nothing owed: its switch is back where the lane is by=${byOf(lane)} (session=${sessionId2})`
       );
   }
   return setups;
@@ -86011,7 +86126,15 @@ var keyOf = (sessionId2, by) => `${by}\0${sessionId2}`;
 // src/daemon/journal-turns.ts
 init_globals();
 var GATHERS = "gathers";
-var CLICKLESS = "clickless";
+var QUEUED = {
+  session: ({ session }) => ["session", session],
+  pane: ({ tmux: tmux3 }) => ["pane", paneName(tmux3)],
+  lane: ({ session, lane }) => ["lane", session, lane]
+};
+function queuedAs(key) {
+  const queued = QUEUED[key.kind];
+  return JSON.stringify(queued(key));
+}
 var JournalTurns = class {
   gathers = new KeyedSerialQueue();
   effects = new KeyedSerialQueue();
@@ -86053,16 +86176,20 @@ var JournalTurns = class {
       this.gathersInFlight--;
     }
   }
-  // [LAW:no-ambient-temporal-coupling] A session's effects run one at a time,
-  // in the order their turns committed, after them: a performer that reads
-  // before it acts (the pane read before a slash is typed) sees what the
-  // session's earlier effects left, and two doctor clicks of one session reach
-  // their verdicts in the order they were clicked. The order is the
-  // performer's, not the turn's: the session's next click takes its turn while
-  // the last click's effects still run, and no close refuses it, since an
-  // outcome after close is said in the log.
-  performing(session, work) {
-    return this.effects.run(session ?? CLICKLESS, work);
+  // [LAW:no-ambient-temporal-coupling] The effects on one key run one at a
+  // time, in the order their places were taken, each after the last: a
+  // performer that reads before it acts (the pane read before a slash is
+  // typed) sees what the earlier effects on that thing left, and two doctor
+  // clicks of one session reach their verdicts in the order they were
+  // clicked. Effects on different keys wait on each other only through their
+  // own event's order and through a setup's pane step, which waits in its
+  // pane's order; keeping those waits acyclic is the performer's
+  // (src/daemon/apply.ts `performInOrder`). The order is the performer's, not the
+  // turn's: the session's next click takes its turn while the last click's
+  // effects still run, and no close refuses it, since an outcome after close
+  // is said in the log.
+  performing(key, work) {
+    return this.effects.run(queuedAs(key), work);
   }
   getStats() {
     return { gathers: this.gathersInFlight };
@@ -86344,7 +86471,16 @@ function createDaemon(inputs) {
       home,
       preload: stableAttachPreload(bundle.path, host)
     },
-    log
+    log,
+    // [LAW:one-source-of-truth] The session a setup acts on is its latest
+    // request, the one a click reads too, read as the setup runs.
+    latest: (sessionId2) => {
+      const req = frameFeeds.latest(sessionId2);
+      return req === null ? null : laneSessionOf(req);
+    },
+    // A setup's steps in a pane take the order of what is typed into it, as a
+    // slash click's typing does (src/daemon/apply.ts).
+    paneOrder: (tmux3, work) => journalTurns.performing({ kind: "pane", tmux: tmux3 }, work)
   });
   const tmuxStatusLines = new TmuxStatusLines({
     edge: {

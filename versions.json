@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "9ae5981784de84f6d5b774905ad8039298f84bc9",
+      "timestamp": "2026-11-06T22:47:25.518Z",
+      "commits": [
+        {
+          "sha": "9ae5981784de84f6d5b774905ad8039298f84bc9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T15:46:21-07:00",
+          "message": "feat(apply): an effect waits only behind what it acts on; a lane setup holds its pane only while it types (candybar-gather-renderer-76bb.1dh.y9b) (#656)\n\n* feat(apply): an effect waits only behind what it acts on; a lane setup holds its pane only while it types (candybar-gather-renderer-76bb.1dh.y9b)\n\nThe performer's order is keyed by what an effect acts on, not by the\nsession: a typed line by its tmux pane, a lane setup by its session's lane,\nand a session's launches, runs, doctor steps and update by that session's\nclicks as they committed. Every effect takes its place when its turn's\neffects are handed over, and an event's effects still run in the order\ndescribed, so a `do` keeps its order and no later click jumps ahead.\n\nA setup's steps that type into the session's pane (the whole statusline\nrestart, the band's /reload-plugins) take the pane's order when they are\nreached, so a copy clicked during a band install is performed at once and a\nslash typed during a restart lands after it. The setup reads the session's\nlatest request as it runs instead of a copy taken at the click.\n\n* fix(apply): a pane step's refusal is data, a split holds the pane, and the order a step takes late is the effect table's (candybar-gather-renderer-76bb.1dh.y9b)\n\nAn evicted session's band install says the mod is installed and what to type;\na bar pane split or close takes the pane's order, since it resizes what a\nrestart reads; whether an effect takes a pane's place when reached is a field\nof the ordering table, which the one performer partitions on; a move between\npanes is logged; pane identity lives in tmux-hint; the lane-setup harness\ndrives the real performer.\n\n* fix(apply): a pane step tells a session gone from one outside tmux, so a bar pane close fails for the first (candybar-gather-renderer-76bb.1dh.y9b)\n\nThe doctor keeps its click's order by the origin, as every session key does;\npane on says what was not opened; the performer's and the order's comments\nname performInOrder and the setups-last exception to a do's order."
+        },
+        {
+          "sha": "3bd757912554568f0bf3b622640edbe789c7ba04",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-06T22:21:18Z",
+          "message": "chore(release): set `package.json` to 1.207.0 [skip ci]\n\n## [1.207.0](https://github.com/promptctl/cc-candybar/compare/v1.206.0...v1.207.0) (2026-11-06)\n\n### Features\n\n* **dial:** the client reaches its daemon through one dialer port, and no test hand-rolls a socket (candybar-testing-ihvy.5em) ([#655](https://github.com/promptctl/cc-candybar/issues/655)) ([466c05a](https://github.com/promptctl/cc-candybar/commit/466c05ac9e0e8203441238a3692bac06838e69a9))\n\n### Bug Fixes\n\n* **test:** the parent-watchdog case waits for a serving daemon under the shared readiness budget, and for its exit by name (brandon-menus-sjhy.26f) ([#654](https://github.com/promptctl/cc-candybar/issues/654)) ([0345c0f](https://github.com/promptctl/cc-candybar/commit/0345c0ff3dc537298327e838f5410e5b53301804))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-658",
       "ref": "refs/pull/658/merge",
       "sha": "e7e96b743b60e50e1010c1570d510636eec810f9",
@@ -70,57 +92,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T15:14:59-07:00",
           "message": "test(version): the mismatch asymmetry is asserted over the daemon's real reply, and the stand-in that copied it is gone (candybar-testing-ihvy.fvw.xka)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-656",
-      "ref": "refs/pull/656/merge",
-      "sha": "fea7f7e2b1f7b616a58acc1a4420e11b6240fe0e",
-      "timestamp": "2026-11-06T22:38:56.594Z",
-      "commits": [
-        {
-          "sha": "fea7f7e2b1f7b616a58acc1a4420e11b6240fe0e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T15:37:43-07:00",
-          "message": "Merge f0a54ac1f5a85a755878ca338a056132ab3623f8 into 3bd757912554568f0bf3b622640edbe789c7ba04\n"
-        },
-        {
-          "sha": "f0a54ac1f5a85a755878ca338a056132ab3623f8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T15:33:35-07:00",
-          "message": "fix(apply): a pane step tells a session gone from one outside tmux, so a bar pane close fails for the first (candybar-gather-renderer-76bb.1dh.y9b)\n\nThe doctor keeps its click's order by the origin, as every session key does;\npane on says what was not opened; the performer's and the order's comments\nname performInOrder and the setups-last exception to a do's order.\n"
-        },
-        {
-          "sha": "edb509b8e83fde932c6fab8dc9d07731c2921b4b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T15:26:35-07:00",
-          "message": "fix(apply): a pane step's refusal is data, a split holds the pane, and the order a step takes late is the effect table's (candybar-gather-renderer-76bb.1dh.y9b)\n\nAn evicted session's band install says the mod is installed and what to type;\na bar pane split or close takes the pane's order, since it resizes what a\nrestart reads; whether an effect takes a pane's place when reached is a field\nof the ordering table, which the one performer partitions on; a move between\npanes is logged; pane identity lives in tmux-hint; the lane-setup harness\ndrives the real performer.\n"
-        },
-        {
-          "sha": "8b11826bbfb8939ed1af510ebc0b3a2403ca884a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T14:51:02-07:00",
-          "message": "feat(apply): an effect waits only behind what it acts on; a lane setup holds its pane only while it types (candybar-gather-renderer-76bb.1dh.y9b)\n\nThe performer's order is keyed by what an effect acts on, not by the\nsession: a typed line by its tmux pane, a lane setup by its session's lane,\nand a session's launches, runs, doctor steps and update by that session's\nclicks as they committed. Every effect takes its place when its turn's\neffects are handed over, and an event's effects still run in the order\ndescribed, so a `do` keeps its order and no later click jumps ahead.\n\nA setup's steps that type into the session's pane (the whole statusline\nrestart, the band's /reload-plugins) take the pane's order when they are\nreached, so a copy clicked during a band install is performed at once and a\nslash typed during a restart lands after it. The setup reads the session's\nlatest request as it runs instead of a copy taken at the click.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "466c05ac9e0e8203441238a3692bac06838e69a9",
-      "timestamp": "2026-11-06T22:13:17.980Z",
-      "commits": [
-        {
-          "sha": "466c05ac9e0e8203441238a3692bac06838e69a9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T15:12:21-07:00",
-          "message": "feat(dial): the client reaches its daemon through one dialer port, and no test hand-rolls a socket (candybar-testing-ihvy.5em) (#655)\n\n* feat(dial): the client reaches its daemon through one dialer port, and no test hand-rolls a socket (candybar-testing-ihvy.5em)\n\nA Dialer port (src/dial/) with one adapter over a unix socket, an in-memory fake that listens and holds paths on a clock, and one contract both pass. The round trip, the frame stream and acquire's probe dial through the World's dialer; a dial's refusal is typed at the adapter, so interpretException reads no errno out of a message. Lint keeps net in the adapter and the daemon's listener, in src and in tests. The nine test files that stood up their own sockets listen on the fake; the kernel bind cases move to test/integration.\n\n* fix(dial): a dial that lands after its bound or its stream's close is closed, not leaked (candybar-testing-ihvy.5em)\n\n* refactor(test): the socket probe helper asks the client's own probe (candybar-testing-ihvy.5em)"
         }
       ]
     },
