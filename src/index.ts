@@ -16,6 +16,7 @@ import {
 import { runDaemon } from "./daemon/server";
 import { tryRenderViaDaemon } from "./daemon/client";
 import { daemonStatsPlan } from "./daemon/client-stats";
+import { recordCommandPlan } from "./daemon/client-record";
 import { debugCommandPlan } from "./daemon/client-debug";
 import { DEBUG_WHATS } from "./daemon/debug-types";
 import { schemaPlan } from "./config/cli";
@@ -98,6 +99,9 @@ const SUBCOMMANDS: Readonly<Record<string, Subcommand>> = {
   },
   "daemon-stats": async (args) => {
     await exitWith(await daemonStatsPlan(world, args));
+  },
+  record: async (args) => {
+    await exitWith(await recordCommandPlan(world, args, process.cwd()));
   },
   // The stream owns its own lifecycle.
   frames: async () => {

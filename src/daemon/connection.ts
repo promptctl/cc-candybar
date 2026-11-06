@@ -18,6 +18,7 @@ import {
   makeFrameReader,
 } from "./protocol";
 import type { Response } from "./protocol";
+import type { Reply } from "./reply.js";
 import { type Lane } from "../config/lanes.js";
 import { newestWins } from "../utils/newest-wins.js";
 import { REQUEST_TIMEOUT_MS } from "./request-deadline.js";
@@ -156,7 +157,8 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
           if (!waits) return;
           if (r.kind === "reply")
             respond(r.resp, r.exitAfterFlush, r.delivered);
-          else stream(r.sessionId, r.lane);
+          else if (r.kind === "subscribe") stream(r.sessionId, r.lane);
+          else hold(r.start);
         })
         .catch((err: unknown) => {
           daemon.log("error", `handler threw: ${inspect(err)}`);
@@ -215,6 +217,24 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
     // never an open socket nothing feeds.
     responded = true;
     sock.on("close", unsubscribe);
+  };
+
+  // A held request is answered past the request timeout by design (a
+  // recording, answered when its file closes). Its work starts only while a
+  // client waits for it: a request the timer already answered TIMEOUT, or
+  // whose client hung up before it was handled, starts nothing — that client
+  // was told, or is gone.
+  const hold = (start: () => Promise<Reply>): void => {
+    if (responded) return;
+    if (sock.destroyed) return;
+    clearBackstop();
+    start().then(
+      (r) => respond(r.resp, r.exitAfterFlush, r.delivered),
+      (err: unknown) => {
+        daemon.log("error", `held request threw: ${inspect(err)}`);
+        respond(renderFailed(err), null, NOTHING_DELIVERED);
+      },
+    );
   };
 
   sock.on("data", reader);

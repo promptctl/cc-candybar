@@ -272,6 +272,11 @@ export interface RenderCacheObservers {
   // draws from moves (openView's `changed`): what a feed showing the session
   // wakes on.
   readonly onViewChanged?: (sessionId: string) => void;
+  // Fires with a session's id whenever which view is its current one changes:
+  // a view entered, replaced, or dropped with none after it. What a recording
+  // of the session follows (src/daemon/session-recorder.ts), reading the
+  // current view back through `sessionView`.
+  readonly onSessionViewMoved?: (sessionId: string) => void;
 }
 
 // [LAW:types-are-the-program] The observer's view of an entry: an ALLOW-LIST
@@ -1227,6 +1232,9 @@ export interface SessionView<
   // every declared lane not answered yet: the follow's
   // (src/daemon/facts-source.ts), so the request path holds no owner.
   settle(at: Instant): Settling;
+  // The document the view's follow last stamped, as its source reads it: what
+  // a recording of the session writes (src/daemon/session-recorder.ts).
+  readonly followed: FollowedFacts;
   // What the view draws from: its payload and selections, bound to its
   // store's inputs and slots (`bindView`) when it opened.
   readonly source: S;
@@ -1447,6 +1455,7 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
     requested: (next) => redeclare(next, presetNow()),
     facts: () => declared.get().facts,
     settle: (at) => followed.settle(at),
+    followed: { stamped: followed.stamped, failure: followed.failure },
     lastRenderCellsBySegment: new Map<string, readonly RichText[]>(),
     retire: stopChanged,
     dispose: () => {
@@ -1763,8 +1772,7 @@ export class RenderCache<
     const current = this.views.get(sessionId);
     if (current?.state === state) {
       // Move to end (most recently used), as getOrCreate does an entry.
-      this.views.delete(sessionId);
-      this.views.set(sessionId, current);
+      this.placeView(sessionId, current);
       // A request declares again before its refresh.
       current.requested(facts);
       return current;
@@ -1778,7 +1786,7 @@ export class RenderCache<
     // The successor is the session's view going on, as a reload's is: a
     // session no request read since the last sweep is still closed by the
     // next.
-    this.views.delete(sessionId);
+    this.placeView(sessionId, undefined);
     const read = current !== undefined && this.leaseOf(current).read;
     let view: SessionView<S, F>;
     try {
@@ -1817,13 +1825,35 @@ export class RenderCache<
       throw error;
     }
     this.openFailures.delete(sessionId);
-    this.views.set(sessionId, view);
+    // The lease first: what hears the view entered can read it as served.
     this.viewHolds.set(view, { entry, holders: 0, retired: null, read });
+    this.placeView(sessionId, view);
     this.log(
       "info",
       `session view opened sid=${JSON.stringify(sessionId)} by=${by} cwd=${entry.cwd} views=${this.views.size}`,
     );
     return view;
+  }
+
+  // [LAW:single-enforcer] The one writer of a session's entry in `views`.
+  // Placing a view enters it at the end, the most recently used. An entry whose
+  // view changes — entered, replaced, or dropped — says so, so what follows the
+  // session's current view reads it back here and keeps no record of its own;
+  // a view moved to the end only for recency says nothing.
+  private placeView(
+    sessionId: string,
+    view: SessionView<S, F> | undefined,
+  ): void {
+    const before = this.views.get(sessionId);
+    this.views.delete(sessionId);
+    if (view !== undefined) this.views.set(sessionId, view);
+    if (view !== before) this.observers.onSessionViewMoved?.(sessionId);
+  }
+
+  // The session's current view, or null while it has none. Reads, never
+  // opens, like latestView.
+  sessionView(sessionId: string): SessionView<S, F> | null {
+    return this.views.get(sessionId) ?? null;
   }
 
   private leaseOf(view: SessionView<S, F>): ViewHold {
@@ -1837,7 +1867,7 @@ export class RenderCache<
   // last render holding it returns.
   private retireView(view: SessionView<S, F>, reason: ViewClose): void {
     if (this.views.get(view.sessionId) === view)
-      this.views.delete(view.sessionId);
+      this.placeView(view.sessionId, undefined);
     // A session left with no view is closed, and its frames with it; a
     // successor opened first keeps what is on screen copyable.
     if (!this.views.has(view.sessionId)) this.copies.delete(view.sessionId);

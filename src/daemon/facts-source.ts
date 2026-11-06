@@ -19,12 +19,11 @@ import {
   type IObservableValue,
 } from "mobx";
 import type { Fact } from "../facts/fact";
-import type { FactsLine } from "../facts/recording";
+import type { FactsLine, Recording } from "../facts/recording";
 import type { UpdateNotice } from "../facts/session-facts";
 import type { Timekeeper } from "../time";
 import { Holds } from "../utils/holds";
 import { instantAt, type Instant } from "../utils/instant";
-import type { DaemonLogger } from "../utils/logger";
 import { failed, failedWith } from "../utils/outcome";
 import { assembleFacts } from "./facts-assembly";
 import type { PayloadProviders } from "./payload-providers";
@@ -356,42 +355,15 @@ export function inProcessFacts({
 
 // ─── The recording arm ───────────────────────────────────────────────────────
 
-// [LAW:parse-dont-validate] A recording is one session's stream in time order
-// (spec §14): the lines it is built over name one session and never step back,
-// checked once here, so a follow knows the session it holds and refuses
-// another by name, and a line's offset from the first is its place in the
-// replay.
-function recordingOf(lines: readonly FactsLine[]): {
-  readonly session: SessionId;
-  readonly at0: Instant;
-} {
-  const sessions = new Set(lines.map((line) => line.facts.session));
-  if (sessions.size !== 1) {
-    throw new Error(
-      sessions.size === 0
-        ? "a recording holds one session's stream, and this one holds no line"
-        : `a recording holds one session's stream, and this one names ${[...sessions].map((s) => JSON.stringify(s)).join(", ")}`,
-    );
-  }
-  const back = lines.findIndex(
-    (line, i) => i > 0 && line.at < lines[i - 1]!.at,
-  );
-  if (back !== -1) {
-    throw new Error(
-      `a recording's lines are in time order, and line ${back + 1} (at ${lines[back]!.at}) is before line ${back} (at ${lines[back - 1]!.at})`,
-    );
-  }
-  // A document's sequence counts one follow's stamps from 1, so a sequence that
-  // starts again is the session followed again: the view the idle sweep
-  // retired opened by the next request, or a reload's successor. The replay
-  // shows that opening document at its instant, as the live bar did. What it
-  // cannot tell apart is two follows writing at once, which is the recorder's
-  // to prevent.
-  return { session: [...sessions][0]!, at0: lines[0]!.at };
-}
-
-// [LAW:effects-at-boundaries] Pure over typed lines and a Timekeeper, never a
-// path: the parser (src/facts/recording.ts) is the edge the text crosses. A
+// [LAW:effects-at-boundaries] Pure over a parsed recording and a Timekeeper,
+// never a path: the parser (src/facts/recording.ts) is the edge the text
+// crosses, and the one checker of what a recording is — one session's, in time
+// order, with a document to open on — so a follow knows the session it holds
+// and refuses another by name, and a line's offset from the first is its place
+// in the replay. A document's sequence counts one follow's stamps from 1, so a
+// sequence that starts again is the session followed again (a reload's
+// successor, the view an idle sweep retired opened by the next request), shown
+// at its instant as the live bar showed it. A
 // follow's line at any moment is the last whose offset from the first the
 // handed clock has reached, and each later line lands when the clock reaches
 // its offset, so under a held clock a replay runs at any speed.
@@ -410,10 +382,10 @@ function recordingOf(lines: readonly FactsLine[]): {
 // the empty record, landed; and a follow again changes nothing, because the
 // keys a request names chose nothing here.
 export function recordingFacts(
-  lines: readonly FactsLine[],
+  { session: held, facts: lines }: Pick<Recording, "session" | "facts">,
   clock: Pick<Timekeeper, "after" | "now">,
 ): Facts {
-  const { session: held, at0 } = recordingOf(lines);
+  const at0 = lines[0].at;
   // Whole milliseconds, as the clock reads them, so a line's offset and the
   // clock's position in the recording are compared in one unit.
   const msOf = (at: Instant): number => Math.round(at * 1000);
@@ -447,44 +419,6 @@ export function recordingFacts(
         settle: () => ({ refreshed: new Map(), landed: Promise.resolve() }),
         dispose: () => {
           for (const clear of timers) clear();
-        },
-      };
-    },
-  };
-}
-
-// ─── The recorder ────────────────────────────────────────────────────────────
-
-// [LAW:one-type-per-behavior] An arm over an arm: every follow is the
-// delegate's, and each line the delegate's follow stamps is handed out as it
-// is stamped, the opening one included. What the lines go to — a file, a
-// test's array — is the caller's edge. Replaying them through
-// `recordingFacts` under a clock started at the first line's instant draws
-// what the delegate's renderer drew at each instant.
-export function recordedFacts(
-  facts: Facts,
-  record: (line: FactsLine) => void,
-  log: DaemonLogger,
-): Facts {
-  return {
-    follow(request, declaration) {
-      const followed = facts.follow(request, declaration);
-      const stop = reaction(() => followed.stamped(), record, {
-        fireImmediately: true,
-        // [LAW:no-silent-failure] A line the edge cannot write is told to the
-        // log: a reaction's effect that throws reaches only the console MobX
-        // prints to, and the follow would go on stamping lines nobody kept.
-        onError: (e) =>
-          log(
-            "error",
-            `recording sid=${JSON.stringify(request.sessionId)}: ${inspect(e)}`,
-          ),
-      });
-      return {
-        ...followed,
-        dispose: () => {
-          stop();
-          followed.dispose();
         },
       };
     },

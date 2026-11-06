@@ -441,9 +441,30 @@ export interface PaneSessionRequest {
   pane: string;
 }
 
+// A session's stream written out of the daemon (src/daemon/session-recorder.ts):
+// the documents its view takes and the requests it is drawn by, appended to
+// `path` for `seconds`, answered once the file is closed. `path` is absolute:
+// the daemon's own directory is no client's.
+export interface RecordRequest {
+  v: number;
+  kind: "record";
+  session: string;
+  path: string;
+  seconds: number;
+}
+
+// What a recording that ended wrote: its file, its lines, and how many of
+// them are requests — none means the replay has nothing to draw.
+export interface Recorded {
+  readonly path: string;
+  readonly lines: number;
+  readonly requests: number;
+}
+
 export type Request =
   | ReaderRenderRequest
   | SubscribeRequest
+  | RecordRequest
   | PaneSessionRequest
   | ShutdownRequest
   | StatsRequest
@@ -463,6 +484,8 @@ export type Response =
   // A pane-session answer: the session, or null when no request the daemon
   // holds came from that pane.
   | { ok: true; paneSession: string | null }
+  // A record request's answer, once its file is closed.
+  | { ok: true; recorded: Recorded }
   // A band-lane subscriber's frame: the bar as the band mod's rows of styled
   // runs (src/daemon/lane-frames.ts), declared by the mod (mod/types).
   | BandBar

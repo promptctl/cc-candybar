@@ -89,6 +89,7 @@ import { waitWithin } from "../utils/reading.js";
 import { noteFacts, requestEvent, type RequestFacts } from "./request-event.js";
 
 import type { DaemonParts } from "./daemon-parts.js";
+import { settleRequest } from "./session-recorder.js";
 
 // What a reply's sender records once the client holds a response carrying
 // nothing to record.
@@ -940,7 +941,7 @@ export async function drawAnswer(
   // [LAW:no-ambient-temporal-coupling] Started before the clock is read for
   // the wait, so the synchronous part of each lane's start is setup, spent
   // from the budget like the rest, and the timer still fires at waitEndsAt.
-  const settling = setup.view.settle(at);
+  const settling = settleRequest(parts.recorder, setup.view, at);
   const waitFrom = clock.monotonic();
   // [LAW:one-source-of-truth] The event's figure and the wait's timer are one
   // reading. Setup has spent part of what the request arrived with, and below
