@@ -57,7 +57,7 @@ function rig(clock: Timekeeper = systemTimekeeper) {
   return { spawner, started, sessionState, ctx, applyLines, warned };
 }
 
-const COPY = `cc-candybar://to/main/${VERB_COPY}/${encodeURIComponent("hello")}`;
+const COPY = `cc-candybar://to/main/${VERB_COPY}/${encodeSegments([SID, "hello"])}`;
 const COPY_DIAGNOSTIC = `cc-candybar://to/main/${VERB_COPY_DIAGNOSTIC}/${encodeSegments([SID, "request", "k"])}`;
 
 describe("a copy click's launch is an effect", () => {
@@ -74,24 +74,27 @@ describe("a copy click's launch is an effect", () => {
     expect(r.started()[0]!.ended).toBeNull();
     expect(reported).toBe(false);
     expect(r.applyLines()).toEqual([
-      "apply kind=click verb=copy sid=- outcome=ok effects=launch:pbcopy revision=-",
+      "apply kind=click verb=copy-text sid=s1 outcome=ok effects=launch:pbcopy revision=0",
     ]);
     clock.advance(50);
     await turns();
     await performed;
     expect(r.started()[0]!.stdin).toBe("hello");
     expect(r.applyLines()).toEqual([
-      "apply kind=click verb=copy sid=- outcome=ok effects=launch:pbcopy revision=-",
+      "apply kind=click verb=copy-text sid=s1 outcome=ok effects=launch:pbcopy revision=0",
       expect.stringMatching(
-        /^apply kind=effect-done verb=copy sid=- effect=launch:pbcopy outcome=ok said=- effects=- revision=-$/,
+        /^apply kind=effect-done verb=copy-text sid=s1 effect=launch:pbcopy outcome=ok said=- effects=- revision=\d+$/,
       ),
     ]);
   });
 
-  test("pbcopy exiting 1 holds the click error for the session, as the next frame reads it", async () => {
+  test.each([
+    [VERB_COPY, COPY],
+    [VERB_COPY_DIAGNOSTIC, COPY_DIAGNOSTIC],
+  ])("pbcopy exiting 1 under %s holds the click error for the session, as the next frame reads it", async (verb, url) => {
     const r = rig();
     r.spawner.program(program(PBCOPY), exits(1, "", "pbcopy: no pasteboard"));
-    await clickUrl(COPY_DIAGNOSTIC, r.ctx);
+    await clickUrl(url, r.ctx);
     const text = lastClickError(r.sessionState, SID)?.text;
     expect(text).toMatch(/^pbcopy failed \(.*no pasteboard\)$/);
     // The draw reads the hold at its own instant (src/daemon/draw-bar.ts).
@@ -99,16 +102,21 @@ describe("a copy click's launch is an effect", () => {
       { hold: "held", error: { text } },
     ]);
     expect(r.applyLines()[1]).toMatch(
-      /^apply kind=effect-done verb=copy-diagnostic sid=s1 effect=launch:pbcopy outcome=failed said="pbcopy failed \(.*no pasteboard\)" effects=- revision=\d+$/,
+      new RegExp(`^apply kind=effect-done verb=${verb} sid=s1 effect=launch:pbcopy outcome=failed said="pbcopy failed \\(.*no pasteboard\\)" effects=- revision=\\d+$`),
     );
   });
 
-  test("a click that names no session leaves a failed effect in the log alone, as a warning", async () => {
+  // A link drawn when copy carried only its text spelled the verb `copy`. Its
+  // text, a session id under ⎘ id, is never read as the click's session.
+  test.each([["hello"], [SID]])("a copy link drawn before copies named their session is an unknown verb naming no session (text %s)", async (text) => {
     const r = rig();
-    r.spawner.program(program(PBCOPY), exits(1));
-    await clickUrl(COPY, r.ctx);
-    expect(r.applyLines()[1]).toContain(" outcome=failed ");
-    expect(r.warned).toEqual([r.applyLines()[1]]);
+    // Spelled as the minter spelled it, since it mints no verb it lacks.
+    const old = `cc-candybar://to/main/dispatch/does=copy&e=${encodeURIComponent(`copy/${encodeURIComponent(text)}`)}`;
+    await expect(clickUrl(old, r.ctx)).rejects.toThrow("copy");
+    expect(r.started()).toEqual([]);
+    expect(r.applyLines()).toEqual([
+      expect.stringMatching(/^apply kind=click verb=dispatch sid=- outcome=refused /),
+    ]);
     expect(lastClickError(r.sessionState, SID)).toBeNull();
   });
 

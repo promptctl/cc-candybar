@@ -390,7 +390,7 @@ describe("a doctor click", () => {
 });
 
 describe("a click's real launch", () => {
-  const COPY = `cc-candybar://to/main/${VERB_COPY}/x`;
+  const COPY = `cc-candybar://to/main/${VERB_COPY}/${encodeSegments([SID, "x"])}`;
 
   test("hung, it times out, holding no turn, and its effect says so", async () => {
     const { ctx, turns, logged } = setup();

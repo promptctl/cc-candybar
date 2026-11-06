@@ -65,8 +65,14 @@ export const VERB_SET_STATE = "set-state";
 // from live state, so the link carries no `current` snapshot and N rapid clicks
 // each re-read-and-write. Additive: old set-state links still resolve.
 export const VERB_STEP_STATE = "step-state";
-export const VERB_COPY = "copy";
-export const VERB_OPEN_VSCODE = "open-vscode";
+// Copy text to the clipboard, and open a path in VS Code. Args:
+// `[sessionId, text]` and `[sessionId, path]` — the session the click is in,
+// so the click counts as that session's activity and a failure shows on its
+// bar. [LAW:parse-dont-validate] The verb is the tag its args are read by: a
+// link drawn when these carried only their text spelled them `copy` and
+// `open-vscode`, so it is an unknown verb now, never text misread as a session.
+export const VERB_COPY = "copy-text";
+export const VERB_OPEN_VSCODE = "open-in-vscode";
 export const VERB_TOOLBAR_TOGGLE = "toolbar-toggle";
 // [LAW:one-source-of-truth] `persist`'s twin of set-state/step-state: writes
 // land in the session's config FILE (candybar-config-dqe — the one durable
@@ -257,8 +263,8 @@ const SAYS = {
       i % 2 === 0 ? [sayWrite(key, pairs[i + 1]!)] : [],
     ),
   [VERB_STEP_STATE]: ([, key, by]) => [sayStep(key!, by!)],
-  [VERB_COPY]: ([text]) => [`copy ${saidCopy(text!)}`],
-  [VERB_OPEN_VSCODE]: ([target]) => [`open ${target} in vs code`],
+  [VERB_COPY]: ([, text]) => [`copy ${saidCopy(text!)}`],
+  [VERB_OPEN_VSCODE]: ([, target]) => [`open ${target} in vs code`],
   [VERB_TOOLBAR_TOGGLE]: () => ["toggle the toolbar"],
   [VERB_SET_CONFIG]: ([, key, value]) => [`save ${key} as ${value}`],
   [VERB_STEP_CONFIG]: ([, key, by]) => [`save ${sayStep(key!, by!)}`],

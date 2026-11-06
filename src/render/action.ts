@@ -884,7 +884,7 @@ export function realize(
         effects: [
           {
             verb: VERB_COPY,
-            args: [evalTemplate(c.text, buildScope(store))],
+            args: [sessionId, evalTemplate(c.text, buildScope(store))],
           },
         ],
         active: false,
@@ -894,7 +894,7 @@ export function realize(
         effects: [
           {
             verb: VERB_OPEN_VSCODE,
-            args: [evalTemplate(c.target, buildScope(store))],
+            args: [sessionId, evalTemplate(c.target, buildScope(store))],
           },
         ],
         active: false,

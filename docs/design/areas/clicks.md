@@ -10,7 +10,7 @@ How a click travels from a surface to the renderer that drew it: the link form i
 
 A link says what to do and for which session, but never who drew it. A click belongs to the renderer whose frame was clicked. A renderer's name in the link is what routes it, so Gather needs to know nothing about verbs or sessions.
 
-This also works after a session moves to another renderer, and for links with no session, such as `copy` and `open-vscode`.
+This also works after a session moves to another renderer, and for links with no session, such as the doctor's probe.
 
 ## Design
 

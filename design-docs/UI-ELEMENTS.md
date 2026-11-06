@@ -711,7 +711,7 @@ Every verb the daemon accepts, from `src/click/wire.ts`, and what emits it.
 | `save-preset`, `delete-preset` | `+ preset`, `🚮 delete` |
 | `apply-layout-op` | edit mode's `✖` and `✚` |
 | `undo`, `redo`, `back`, `rewind` | `↶`, `↷`, `◁`, `↩ cancel` |
-| `copy`, `open-vscode` | `⎘ id`, `⎘ resume`, `↗ proj`, `↗ log`, `↗ config`, the viewer's `⧉ copy` |
+| `copy-text`, `open-in-vscode` | `⎘ id`, `⎘ resume`, `↗ proj`, `↗ log`, `↗ config`, the viewer's `⧉ copy` |
 | `slash` | `/compact`, `/model`, `/clear`, autocompact's `−` `+` `↺` |
 | `doctor-run`, `doctor-fix`, `doctor-mark` | `🩺 doctor`, `[fix]`, `[✓ shapes]` `[✗ boxes]` |
 | `apply-update` | `[rebuild]` / `[upgrade]` |

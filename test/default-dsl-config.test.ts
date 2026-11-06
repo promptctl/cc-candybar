@@ -48,8 +48,10 @@ import {
   testVerbContext,
   clickUrl,
   effectsOf,
+  linkClick,
 } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
+import { clickSessionOf } from "../src/daemon/verbs";
 import { presetNames } from "../src/config/presets";
 import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
 import { narrowToSegment } from "./helpers/narrow-to-segment";
@@ -866,10 +868,29 @@ describe("DEFAULT_DSL_CONFIG", () => {
       expect(textOf(line)).toContain("⎘ resume");
       expect(textOf(line)).toContain("↗ config");
       const effects = linkUrls(line).flatMap(effectsOf);
-      expect(effects).toContainEqual(expect.objectContaining({ args: [resume] }));
       expect(effects).toContainEqual(
-        expect.objectContaining({ args: ["/tmp/c.json5"] }),
+        expect.objectContaining({ args: ["sess-1", resume] }),
       );
+      expect(effects).toContainEqual(
+        expect.objectContaining({ args: ["sess-1", "/tmp/c.json5"] }),
+      );
+    });
+
+    // A copy or open click is activity in the menu it was drawn in: the daemon
+    // reads each tray link's session as the session that drew it, so the
+    // click restarts that session's idle clock (src/daemon/menu-idle.ts).
+    test("every copy and open link in the tray names the session it was drawn in", () => {
+      const line = renderToolbar(
+        { branch: "main" },
+        { resumeCommand: "claude --resume sess-1", configPath: "/tmp/c.json5" },
+      );
+      const urls = linkUrls(line).filter((u) => u.startsWith("cc-candybar://"));
+      expect(textOf(line)).toMatch(/⎘ id.*⎘ resume.*↗ proj.*↗ log.*↗ config/);
+      expect(urls.length).toBeGreaterThanOrEqual(5);
+      for (const url of urls) {
+        const { verb, value } = linkClick(url);
+        expect(clickSessionOf(verb, value)).toEqual({ ok: true, id: "sess-1" });
+      }
     });
 
     test("no resume command and no config file render neither glyph", () => {

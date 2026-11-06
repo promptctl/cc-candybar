@@ -10,7 +10,7 @@ import { JournalTurns } from "../src/daemon/journal-turns";
 import { systemTimekeeper } from "../src/time";
 import { VERBS, VERB_NAMES, BadVerbArgs } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
-import { encodeSegments, VERB_STEP_STATE, VERB_APPLY_UPDATE } from "../src/click/wire";
+import { encodeSegments, VERB_COPY, VERB_STEP_STATE, VERB_APPLY_UPDATE } from "../src/click/wire";
 import { applyClick, clickUrl, recordRender, testVerbContext } from "./helpers/click";
 import { lastClickError } from "../src/daemon/click-error";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
@@ -129,7 +129,7 @@ describe("click protocol", () => {
     // operational RENDER_FAILED. Pins the single-arg (copy) and multi-seg
     // (set-state) codecs at their shared decode boundary.
     const ctx: VerbContext = testVerbContext(new SessionState());
-    for (const verb of ["copy", "set-state"]) {
+    for (const verb of [VERB_COPY, "set-state"]) {
       const handler = VERBS.get(verb)!;
       expect(() => handler("%", ctx)).toThrow(BadVerbArgs);
     }

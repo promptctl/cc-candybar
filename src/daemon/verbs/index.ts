@@ -382,16 +382,27 @@ function requireSessionId(value: string): SessionId {
   return parsed.id;
 }
 
-// [LAW:types-are-the-program] A single-argument verb (copy/open/toolbar/show-
-// config) carries ONE argument: the WHOLE value, decoded once. It must NOT split
-// on "/" the way the multi-arg set-state does — a single-arg value legitimately
-// contains "/" (a copy of "a/b", an open path), and a `copy/a/b` link
-// would be truncated at the first slash if split. The verb's
+// [LAW:types-are-the-program] A single-argument verb (toolbar/show-config)
+// carries ONE argument: the WHOLE value, decoded once. It must NOT split on "/"
+// the way the multi-arg set-state does, since a single-arg value may contain "/"
+// and would be truncated at the first slash if split. The verb's
 // arity picks the codec: 1 arg → decode the whole tail; N args → decodeSegments.
 // parseHandlerUrl no longer decodes the value, so the decode lives with the verb
 // that knows its shape [LAW:single-enforcer].
 function oneArg(value: string): string {
   return decodeWire(() => decodeURIComponent(value));
+}
+
+// The argument of a verb that carries `[sessionId, argument]` (copy, open): each
+// is encoded whole, so a copied text's own "/" is data, never a separator.
+function sessionArg(value: string): string {
+  const parts = decodeWire(() => decodeSegments(value));
+  if (parts.length !== 2)
+    throw new BadVerbArgs(
+      `expected a session and one argument, got ${parts.length} segments`,
+    );
+  requireSessionId(parts[0]!);
+  return parts[1]!;
 }
 
 // ─── Verb handlers ───────────────────────────────────────────────────────────
@@ -527,7 +538,7 @@ function launch(ctx: ClickContext, spec: LaunchSpec, what: string): void {
 }
 
 const copy: VerbHandler = (value, ctx) => {
-  pbcopy(oneArg(value), ctx);
+  pbcopy(sessionArg(value), ctx);
 };
 
 // [LAW:parse-dont-validate] The renderer a copy click names: the surface it
@@ -563,7 +574,7 @@ const openVscode: VerbHandler = (value, ctx) => {
     ctx,
     {
       bin: "/usr/bin/open",
-      args: ["-a", "Visual Studio Code", oneArg(value)],
+      args: ["-a", "Visual Studio Code", sessionArg(value)],
       category: "click.open",
     },
     'open -a "Visual Studio Code"',
@@ -2040,6 +2051,8 @@ export const SEGMENTED_VERBS: ReadonlySet<string> = new Set([
   VERB_RUN,
   VERB_REPO_CONFIG,
   VERB_COPY_DIAGNOSTIC,
+  VERB_COPY,
+  VERB_OPEN_VSCODE,
 ]);
 
 // [LAW:one-source-of-truth] The verbs whose FIRST wire segment is the session
@@ -2070,6 +2083,8 @@ const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
   VERB_RUN,
   VERB_REPO_CONFIG,
   VERB_COPY_DIAGNOSTIC,
+  VERB_COPY,
+  VERB_OPEN_VSCODE,
 ]);
 
 // [LAW:dataflow-not-control-flow] One click is an ordered list of effects; the

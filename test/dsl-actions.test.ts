@@ -34,6 +34,7 @@ import { effectsOf } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import { linkClick } from "./helpers/click";
 import {
+  decodeSegments,
   parseEffects,
   VERB_DISPATCH,
   VERB_COPY,
@@ -78,7 +79,7 @@ function actionBar(src: string) {
     for (const e of effects) {
       // copy/open carry no gate and would launch a real process — record them.
       if (e.verb === VERB_COPY || e.verb === VERB_OPEN_VSCODE) {
-        sideEffects.push({ verb: e.verb, args: [decodeURIComponent(e.value)] });
+        sideEffects.push({ verb: e.verb, args: decodeSegments(e.value) });
         continue;
       }
       const handler = VERBS.get(e.verb);
@@ -551,8 +552,8 @@ describe("2de.12 — copy / open actions derive no gate", () => {
     expect(urls).toHaveLength(2);
     for (const url of urls) await click(url);
     expect(sideEffects).toEqual([
-      { verb: "copy", args: ["s1"] },
-      { verb: "open-vscode", args: ["/tmp/proj"] },
+      { verb: VERB_COPY, args: ["s1", "s1"] },
+      { verb: VERB_OPEN_VSCODE, args: ["s1", "/tmp/proj"] },
     ]);
   });
 });

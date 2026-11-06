@@ -234,7 +234,7 @@ async function click(url: string, size: Size) {
   if (host.length > 0) {
     const copiesOnly = effects.every((e) => e.verb === VERB_COPY);
     const refused = copiesOnly
-      ? await copy(effects.map((e) => e.args.join("/")).join("\n"))
+      ? await copy(effects.map(({ args: [, text] }) => text!).join("\n"))
       : `not sent: on a real machine this ${host.map((e) => HOST_VERBS.get(e.verb)).join(", ")}`;
     return { ...(await render(size)), refused };
   }
