@@ -1,3 +1,13 @@
+## [1.201.0](https://github.com/promptctl/cc-candybar/compare/v1.200.1...v1.201.0) (2026-11-06)
+
+### ⚠ BREAKING CHANGES
+
+* **links:** one link grammar: a link that names no renderer is refused naming its form (candybar-gather-renderer-76bb.b2l.eul) (#638)
+
+### Features
+
+* **links:** one link grammar: a link that names no renderer is refused naming its form (candybar-gather-renderer-76bb.b2l.eul) ([#638](https://github.com/promptctl/cc-candybar/issues/638)) ([5b7989a](https://github.com/promptctl/cc-candybar/commit/5b7989a64a1f6bc3a423a4869e89dbf55505a6f4))
+
 ## [1.200.1](https://github.com/promptctl/cc-candybar/compare/v1.200.0...v1.200.1) (2026-11-06)
 
 ### Bug Fixes
