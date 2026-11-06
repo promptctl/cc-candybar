@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-633",
+      "ref": "refs/pull/633/merge",
+      "sha": "2900a8c20cfcc3490d89bc8d51ffe6b6ff3e4677",
+      "timestamp": "2026-11-06T09:22:32.077Z",
+      "commits": [
+        {
+          "sha": "2900a8c20cfcc3490d89bc8d51ffe6b6ff3e4677",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T09:21:09Z",
+          "message": "Merge bce9b608ea9d9bc6f69fc6711a4c819846f2fa29 into 537c926e6cca1e7f2bed89f42058b490482fde86\n"
+        },
+        {
+          "sha": "bce9b608ea9d9bc6f69fc6711a4c819846f2fa29",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T02:20:56-07:00",
+          "message": "refactor(apply): a synchronous click needs no in-flight bracket on the idle clock; journaled refuses an async handler (candybar-gather-renderer-76bb.1dh.c3l)\n"
+        },
+        {
+          "sha": "437b6bb64fa67371613cf7741da593ee7aab24bb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T02:10:19-07:00",
+          "message": "fix(apply): a probe link is refused by no client's leaving; the doctor stamps the hints it reads; the click error keeps its record's shape (candybar-gather-renderer-76bb.1dh.c3l)\n"
+        },
+        {
+          "sha": "a1792b3f8aae36b997048b800515e0666e1c2545",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T01:41:11-07:00",
+          "message": "fix(apply): each click failure is its own held message; a fault's stack reaches the log; no gather starts after close (candybar-gather-renderer-76bb.1dh.c3l)\n"
+        },
+        {
+          "sha": "37abc98a9aeb4508d77b6f0fda70c9e18fe3ab73",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T01:19:30-07:00",
+          "message": "feat(apply): no turn awaits a launch; a doctor step is an effect, and a held click error accumulates (candybar-gather-renderer-76bb.1dh.c3l)\n\nA turn is a synchronous call: its body cannot be async (Synchronous<T>), a\nrender request never waits behind another session's probes, and no draw can\nread a click half landed. A doctor step describes an effect; the performer\ngathers after the click's turn through a recording view, and the landing\nchecks the gather's read set and config in the turn that writes the report.\nLands yth: a click error held while the last is live joins it.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-632",
       "ref": "refs/pull/632/merge",
       "sha": "b1c28d8652f57e0f08cf0407165cb4df940b7a29",
@@ -135,106 +178,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T01:28:40-07:00",
           "message": "fix(home): a home file named through a symlink is stored as the home's (candybar-gather-renderer-76bb.f00.lpl)\n\nWhose a stored path is now follows the directories on its path, compared in\ntheir on-disk spelling at the call, not its spelling: a client's cwd is a\nrealpath, so a --config under CC_CANDYBAR_HOME=/tmp/h arrived as\n/private/tmp/h/... and was stored as the world's, and a copied home undid\ninto the original's config. The render checkpoint respells a requested home\nfile from the root as given, so what is stored reads back as itself. The\ndisk's spelling is a port on the stored root, and the watcher and the\nspelling share one walk to the deepest existing directory.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-633",
-      "ref": "refs/pull/633/merge",
-      "sha": "5037e40ce5fe1d09dd97c83ccbc06173ddf2fd75",
-      "timestamp": "2026-11-06T09:11:25.938Z",
-      "commits": [
-        {
-          "sha": "5037e40ce5fe1d09dd97c83ccbc06173ddf2fd75",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T09:10:32Z",
-          "message": "Merge 437b6bb64fa67371613cf7741da593ee7aab24bb into 537c926e6cca1e7f2bed89f42058b490482fde86\n"
-        },
-        {
-          "sha": "437b6bb64fa67371613cf7741da593ee7aab24bb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T02:10:19-07:00",
-          "message": "fix(apply): a probe link is refused by no client's leaving; the doctor stamps the hints it reads; the click error keeps its record's shape (candybar-gather-renderer-76bb.1dh.c3l)\n"
-        },
-        {
-          "sha": "a1792b3f8aae36b997048b800515e0666e1c2545",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T01:41:11-07:00",
-          "message": "fix(apply): each click failure is its own held message; a fault's stack reaches the log; no gather starts after close (candybar-gather-renderer-76bb.1dh.c3l)\n"
-        },
-        {
-          "sha": "37abc98a9aeb4508d77b6f0fda70c9e18fe3ab73",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T01:19:30-07:00",
-          "message": "feat(apply): no turn awaits a launch; a doctor step is an effect, and a held click error accumulates (candybar-gather-renderer-76bb.1dh.c3l)\n\nA turn is a synchronous call: its body cannot be async (Synchronous<T>), a\nrender request never waits behind another session's probes, and no draw can\nread a click half landed. A doctor step describes an effect; the performer\ngathers after the click's turn through a recording view, and the landing\nchecks the gather's read set and config in the turn that writes the report.\nLands yth: a click error held while the last is live joins it.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-617",
-      "ref": "refs/pull/617/merge",
-      "sha": "c8f32dc1941dd426c308d32078814f5fee0267d5",
-      "timestamp": "2026-11-06T09:07:31.046Z",
-      "commits": [
-        {
-          "sha": "c8f32dc1941dd426c308d32078814f5fee0267d5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T09:06:35Z",
-          "message": "Merge 1f7907494ba5fed79a85fe25173bb3c952f2d0b5 into 537c926e6cca1e7f2bed89f42058b490482fde86\n"
-        },
-        {
-          "sha": "1f7907494ba5fed79a85fe25173bb3c952f2d0b5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T00:58:58-07:00",
-          "message": "fix(pricing): the shared load keeps a throw as the bundled rates, said once; comments state what the one git option set reads and where a read's throw is logged (candybar-gather-renderer-76bb.6pj.xb3)\n"
-        },
-        {
-          "sha": "cbf08d38fe38cdc55b0be709c4b5baeac23ed20a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T00:51:55-07:00",
-          "message": "test(facts): the seam's providers price by the bundled rates (candybar-gather-renderer-76bb.6pj.xb3)\n"
-        },
-        {
-          "sha": "f0ed814ca4f9cdd5beadccf6b6fbb96c76f2bd22",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T00:16:29-07:00",
-          "message": "fix(pricing): the load ends with the daemon's closing signal and never rejects; the day's copy is one atomic file with no lock, and a table missing a rate the cost reads is refused (candybar-gather-renderer-76bb.6pj.xb3)\n"
-        },
-        {
-          "sha": "fb89e808f5f4a2bc97a47596aaa817dfe41933ea",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T00:02:45-07:00",
-          "message": "fix(pricing): a daemon prices by an adapter it closes: one table loaded once, no pooled socket, and the bundled rates under test (candybar-gather-renderer-76bb.6pj.xb3)\n"
-        },
-        {
-          "sha": "0093075b165ca88edb7d54d976749c94344773fc",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T10:16:04-07:00",
-          "message": "test(facts): name the doctor's closure tests for what they protect (candybar-gather-renderer-76bb.6pj.xb3)\n"
-        },
-        {
-          "sha": "a320e909096d248d0ad7577e9b4d3f38c7d76389",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T10:12:58-07:00",
-          "message": "fix(facts): the wait's comment names every session; the doctor's namespace-read test returns (candybar-gather-renderer-76bb.6pj.xb3)\n"
-        },
-        {
-          "sha": "520c262156d1860024775ecc369021b59480426d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T10:07:10-07:00",
-          "message": "chore(facts): delete the wants closure (candybar-gather-renderer-76bb.6pj.xb3)\n\nThe facts document is total, so the question \"which fields does this config\nread\" has no caller with a reason. Every session now gathers every built-in:\ngit runs one constant option set (forge lookup included), every declared\nplugin source is held, and burn, block and autocompact's context cap are always\ncomposed. A view's declaration depends on the request alone, so a preset pick\nmoves no hold.\n\nDeleted: the wants function, the needed-prefix builders, the sources-read walk,\nthe closure parameter through declare/refresh/read/project, the PR reads gate,\nthe git options derived from the closure, `Gathered`, `declaredSources`, and the\nview's preset reaction. The doctor's data-needs walk stays and now owns its own\nper-segment path closure, since it answers what a config would read.\n\nThe bar is byte-identical; the payload golden gains the keys that were gated\n(block, burn, metrics, activity, tmux and the like on presets that did not read\nthem). Tests that asserted gating are deleted; the fold-edge cases they covered\n(partials, helpers handed a dict) move to the doctor's path closure.\n"
         }
       ]
     },

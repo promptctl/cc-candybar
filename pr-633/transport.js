@@ -70283,7 +70283,7 @@ var RuntimeStats = class _RuntimeStats {
         budgetBytes: 0
       },
       effectCache: { sessions: 0, effects: 0 },
-      menuIdle: { sessions: 0, armed: 0, pending: 0 },
+      menuIdle: { sessions: 0, armed: 0 },
       journalTurns: { gathers: 0 },
       runs: { started: 0, failed: 0, timedOut: 0, refused: 0, running: 0 },
       sessionState: { sessions: 0, observers: 0, revision: 0 },
@@ -77611,13 +77611,11 @@ var ARMS = {
       facts: []
     };
   },
-  // [LAW:single-enforcer] The click's whole bracket on its menus' idle clock
-  // is here, so the timer cannot close a menu under any click Apply carries.
   // The turn hands its effects over once it has committed (`described`), and
   // a refused step is answered beside them; a click whose client has left is
-  // refused by the verb, where it would land (src/daemon/verbs/index.ts).
-  click: async ({ verb, value, arrival, pending: pending2, gone }, { verbCtx, menuIdle }) => {
-    if (pending2 !== null) menuIdle.clickArrived(pending2);
+  // refused by the verb, where it would land (src/daemon/verbs/index.ts). A
+  // turn is synchronous, so no idle timer can close a menu under one.
+  click: async ({ verb, value, arrival, gone }, { verbCtx }) => {
     const effects = [];
     let answer2 = null;
     try {
@@ -77629,8 +77627,6 @@ var ARMS = {
       });
     } catch (error) {
       answer2 = { error };
-    } finally {
-      if (pending2 !== null) menuIdle.clickSettled(pending2);
     }
     return { answer: answer2, effects, facts: [] };
   },
@@ -77780,7 +77776,7 @@ var LINE = {
 };
 var ORIGIN = {
   request: ({ req }) => ({ verb: "request", session: req.sessionId }),
-  click: ({ verb, pending: pending2 }) => ({ verb: verb.name, session: pending2 }),
+  click: ({ verb, session }) => ({ verb: verb.name, session }),
   "menu-idle": ({ session }) => ({ verb: "menu-idle", session }),
   "effect-done": ({ of }) => of,
   answered: ({ session }) => ({ verb: "answered", session })
@@ -78619,17 +78615,17 @@ async function handleClick(parts, verb, value, arrival, facts, clientGone) {
     return { kind: "bad-request", problems: [`unknown click verb: ${verb}`] };
   }
   noteFacts(facts, { [VERB_FACT[arrival.via]]: verb });
-  const session = clickSessionOf(verb, value);
-  const pending2 = session?.ok ? session.id : null;
-  if (session === null) noteFacts(facts, { sid: "-" });
-  else if (pending2 !== null) noteFacts(facts, { sid: pending2 });
+  const named3 = clickSessionOf(verb, value);
+  const session = named3?.ok ? named3.id : null;
+  if (named3 === null) noteFacts(facts, { sid: "-" });
+  else if (session !== null) noteFacts(facts, { sid: session });
   const { answer: answer2 } = await apply(
     {
       kind: "click",
       verb: resolved,
       value,
       arrival,
-      pending: pending2,
+      session,
       gone: clientGone
     },
     parts
@@ -85477,9 +85473,6 @@ var MenuIdle = class {
   }
   deps;
   sessions = /* @__PURE__ */ new Map();
-  // Clicks in flight per session, entries deleted at zero. Apart from the
-  // records, which eviction drops under a click that is still in flight.
-  pending = /* @__PURE__ */ new Map();
   disposed = false;
   // A click in the session starts a new idle period.
   clicked(sessionId2, at) {
@@ -85487,26 +85480,12 @@ var MenuIdle = class {
     idle.since = at;
     this.settle(sessionId2);
   }
-  // A click of the session arrived: no deadline until it settles.
-  clickArrived(sessionId2) {
-    this.pending.set(sessionId2, (this.pending.get(sessionId2) ?? 0) + 1);
-    if (this.sessions.has(sessionId2)) this.settle(sessionId2);
-  }
-  // A click of the session landed or was refused, after any landing stamp. A
-  // record evicted meanwhile has no timer left to follow it.
-  clickSettled(sessionId2) {
-    const left = this.pending.get(sessionId2) - 1;
-    if (left === 0) this.pending.delete(sessionId2);
-    else this.pending.set(sessionId2, left);
-    if (this.sessions.has(sessionId2)) this.settle(sessionId2);
-  }
   // When the idle period of the menus the session's last frame drew began —
   // its last click, or the first frame that drew them, whichever is later —
   // or nothing, while it drew none: a menu that appears now has only begun.
-  // Nothing too while a click is in flight: no close is due to count down to.
   since(sessionId2, at) {
     const idle = this.record(sessionId2, at);
-    return idle.shown && !this.pending.has(sessionId2) ? idle.since : void 0;
+    return idle.shown ? idle.since : void 0;
   }
   // What the session's newest frame drew: whether a menu row, and the
   // timeout its settings resolve to. Frames are taken by their instant, not
@@ -85523,14 +85502,11 @@ var MenuIdle = class {
     idle.timeoutS = timeoutS;
     this.settle(sessionId2);
   }
-  // The sessions whose clocks are kept, those whose close timer is armed, and
-  // the clicks in flight.
+  // The sessions whose clocks are kept, and those whose close timer is armed.
   getStats() {
     let armed = 0;
     for (const idle of this.sessions.values()) if (idle.timer !== null) armed++;
-    let pending2 = 0;
-    for (const count of this.pending.values()) pending2 += count;
-    return { sessions: this.sessions.size, armed, pending: pending2 };
+    return { sessions: this.sessions.size, armed };
   }
   dispose() {
     this.disposed = true;
@@ -85558,7 +85534,7 @@ var MenuIdle = class {
   // [LAW:single-enforcer] The one place the timer follows the record.
   settle(sessionId2) {
     const idle = this.sessions.get(sessionId2);
-    const due = idle.shown && !idle.closing && !this.disposed && !this.pending.has(sessionId2) ? closesAt(idle.since, idle.timeoutS) : null;
+    const due = idle.shown && !idle.closing && !this.disposed ? closesAt(idle.since, idle.timeoutS) : null;
     if (idle.timer?.at === due) return;
     this.disarm(idle);
     if (due === null) return;
@@ -85591,9 +85567,9 @@ var MenuIdle = class {
     const closing = {
       idleS: now2 - idle.since,
       timeoutS: idle.timeoutS,
-      // A click arrived after this firing is queued behind the close, and an
-      // evicted record stops counting, so its session is no longer known idle.
-      stillIdle: () => this.sessions.get(sessionId2) === idle && !this.pending.has(sessionId2),
+      // An evicted record stops counting, so its session is no longer known
+      // idle.
+      stillIdle: () => this.sessions.get(sessionId2) === idle,
       closed: () => {
         idle.since = now2;
         idle.shown = false;
@@ -85776,8 +85752,8 @@ function createDaemon(inputs) {
   const frameFeeds = new FrameFeeds({
     render: (sessionId2, fps, at) => renderFrame(parts, sessionId2, fps, at),
     // [LAW:no-ambient-temporal-coupling] A wake only moves the feed's timer,
-    // which fires in a later turn. A click that awaits gives up the loop, so a
-    // frame may show its writes ahead of its commit; the step stays whole.
+    // which fires in a later turn. A click's turn is synchronous, so no frame
+    // reads its writes before its commit.
     watch: (sessionId2, onChange) => reaction(() => sessionState.revision(sessionId2), onChange),
     lanes: (sessionId2) => viewLanes(parts, sessionId2),
     // [LAW:single-enforcer] A feed's pin is its life: releasing it is the one
