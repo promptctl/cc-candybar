@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-630",
+      "ref": "refs/pull/630/merge",
+      "sha": "7eec2fcd6329af203e735f3dabeaccc6b68fdbe3",
+      "timestamp": "2026-11-06T07:35:57.417Z",
+      "commits": [
+        {
+          "sha": "7eec2fcd6329af203e735f3dabeaccc6b68fdbe3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T00:35:02-07:00",
+          "message": "Merge 454f7a7e656c37e2031270a4b5ab9955020a0989 into c6103c1e8d45ea9db68f0c9a7411382a1db6be4e\n"
+        },
+        {
+          "sha": "454f7a7e656c37e2031270a4b5ab9955020a0989",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T00:34:04-07:00",
+          "message": "fix(ci): a failed early step shows its own red step, not the three that restate it (candybar-testing-0x6u.dsu)\n\nThe ratchet, layer report and records upload run under always(), so a lint,\ntypecheck or worker-tier failure left them to throw 'no records'. Each now\nalso waits for the tiers whose records it reads.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "c6103c1e8d45ea9db68f0c9a7411382a1db6be4e",
