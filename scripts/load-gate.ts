@@ -1347,8 +1347,8 @@ function pct(sorted: readonly number[], p: number): number {
 // A gate that hangs (a daemon that stopped answering its inspector, a render
 // that never settles) ends here, with its root kept, before CI cancels it.
 // Counted from the process's start, the fixture's building included: the
-// steady phase asked for, the two waits the warm deadline bounds, and a minute
-// for the collections and the fixture.
+// steady phase asked for, the two settles the settle deadline bounds, and a
+// minute for the collections and the fixture.
 // [LAW:one-source-of-truth] Derived from the phases, so a longer run asked
 // for is a longer deadline, never a failure.
 const GATE_DEADLINE_MS = STEADY_MS + 2 * SETTLE_DEADLINE_MS + 60_000;

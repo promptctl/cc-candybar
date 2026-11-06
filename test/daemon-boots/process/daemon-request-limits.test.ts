@@ -27,14 +27,16 @@ const TEST_TIMEOUT_MS = 30_000;
 
 jest.setTimeout(TEST_TIMEOUT_MS);
 
-// The connection's backstop answers TIMEOUT whatever the render is still
-// doing. A wait ends before it, so what outlives it is a synchronous turn: here
-// the render's read of its config file, which blocks the daemon's loop until
-// the test writes into the pipe the file is. The test holds that read open
-// past the backstop, so the render outlives it by construction, not by how
-// slow a compile is on this machine. The render's event says the client read
-// another reply, and the hold it drew under is released when it ends.
-test("a render that outlives its request timeout writes timedOut=Y", async () => {
+// The connection's backstop answers TIMEOUT only if the loop gets a turn
+// before the reply, and a render takes none after its wait: a wait whose time
+// is gone ends in the same turn. So a render whose synchronous setup outlives
+// the backstop (here its read of its config file, which blocks the daemon's
+// loop until the test writes into the pipe the file is) still answers its
+// client with the bar in the turn the read ends in, and the backstop, cleared
+// by that answer, writes nothing over it. The read is held open past the
+// backstop by construction, not by how slow a compile is on this machine, and
+// the hold the render drew under is released when it ends.
+test("a render whose config read outlives the request timeout answers its client in the turn the read ends", async () => {
   const { sockPath, home, env, removeTmpDirs } = prepareIsolatedDaemonEnv(
     "cc-candybar-request-limits",
   );
@@ -45,12 +47,12 @@ test("a render that outlives its request timeout writes timedOut=Y", async () =>
   execFileSync("mkfifo", [config]);
   const daemon = await spawnDaemonWithEnv(env);
   try {
-    // [LAW:no-ambient-temporal-coupling] The backstop's TIMEOUT reply is a
-    // task on the daemon's loop, so it cannot be written until the
-    // synchronous read yields: this client's wait is bounded by the hold
-    // below, not by the backstop. The helper's default budget is for an
-    // answered request, so the budget here is the test's own timeout. The
-    // event's `took` below is what says the render outlived the backstop.
+    // [LAW:no-ambient-temporal-coupling] Nothing is written until the
+    // synchronous read yields, and the answer is written in the turn it
+    // yields in: this client's wait is bounded by the hold below, not by the
+    // backstop. The helper's default budget is for an answered request, so
+    // the budget here is the test's own timeout. The event's `took` below is
+    // what says the render outlived the backstop.
     const answered = sendDaemonRequest(
       home,
       {
@@ -91,13 +93,10 @@ test("a render that outlives its request timeout writes timedOut=Y", async () =>
     await sleep(REQUEST_TIMEOUT_MS * 2);
     await pipe.writeFile(JSON.stringify({ segments: {}, root: { h: [] } }));
     await pipe.close();
-    await expect(answered).resolves.toMatchObject({
-      ok: false,
-      code: "TIMEOUT",
-    });
+    await expect(answered).resolves.toMatchObject({ ok: true });
     const late = only(await landedEvents(env, "ev-backstop", 1));
     expect(field(late, "outcome")).toBe("ok");
-    expect(field(late, "timedOut")).toBe("Y");
+    expect(field(late, "timedOut")).toBe("N");
     expect(Number(field(late, "took")?.replace(/ms$/u, ""))).toBeGreaterThan(
       REQUEST_TIMEOUT_MS,
     );
