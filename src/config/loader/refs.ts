@@ -6,6 +6,7 @@
 // fold over the one call-graph walk (`callGraphBlocks`); a new question is a new
 // fold over it, never a second walker, or it is blind to helpers again.
 
+import { URL_SCHEME } from "../../click/scheme.js";
 import { ownedBy } from "./plugin-scope.js";
 import { parseArm, type DslConfig, type VariableDecl } from "../dsl-types.js";
 
@@ -342,6 +343,34 @@ export function templateActionRefs(
     for (const { name, site } of actionBindings(code)) {
       const key = `${name}\0${via ?? "\0"}`;
       if (!refs.has(key)) refs.set(key, { name, site, via });
+    }
+  }
+  return [...refs.values()];
+}
+
+// [LAW:single-enforcer] The click verbs a template's string literals spell —
+// `"cc-candybar://<verb>/…"`, whole or as a printf format, wherever the literal
+// stands (a `link` argument, a printed text, a comparison: a URL is dead in
+// every position), in its own text or any reachable helper's
+// (`callGraphBlocks`), exactly as its action bindings are found — once per
+// body, with the helper whose body spells it (`null` = the template itself).
+// A verb computed at the draw is no literal, and is the click's to refuse.
+export interface LinkVerbRef {
+  readonly verb: string;
+  readonly via: string | null;
+}
+const LINK_VERB_RE = new RegExp(`^${URL_SCHEME}://([a-z][a-z0-9-]*)`);
+export function templateLinkVerbs(
+  template: string,
+  helpers: Readonly<Record<string, string>>,
+): readonly LinkVerbRef[] {
+  const refs = new Map<string, LinkVerbRef>();
+  for (const { code, via } of callGraph(template, helpers)) {
+    for (const s of code.matchAll(STRING_LITERAL_RE)) {
+      const verb = LINK_VERB_RE.exec(s[0].slice(1, -1))?.[1];
+      if (verb === undefined) continue;
+      const key = `${verb}\0${via ?? "\0"}`;
+      if (!refs.has(key)) refs.set(key, { verb, via });
     }
   }
   return [...refs.values()];

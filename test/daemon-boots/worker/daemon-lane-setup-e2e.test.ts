@@ -21,7 +21,6 @@ import path from "node:path";
 
 import {
   effectsUrl,
-  VERB_LOAD_CONFIG,
   VERB_SET_STATE,
   VERB_TMUX_STATUS_CLICK,
 } from "../../../src/click/wire";
@@ -274,30 +273,6 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     await renderLines(env, sid, 1);
     expect(statusLines(sid, "holding")).toEqual([]);
     expect(readFileSync(file, "utf8")).toBe(source);
-  });
-
-  test("a load-config pick of a config that switches a lane on sets it up, as the session's click", async () => {
-    const sid = "lane-load";
-    await renderIn(sid);
-    const picked = path.join(projectDir, "tmux-on.json5");
-    writeFileSync(
-      picked,
-      `{ globals: { renderer: "tmux" }, segments: { mark: { template: 'a lane mark' } }, root: { h: ['mark'] } }`,
-    );
-    await click(
-      daemon,
-      `cc-candybar://${VERB_LOAD_CONFIG}/${encodeURIComponent(sid)}/${encodeURIComponent(picked)}`,
-    );
-    await until(() => laneLines(sid).length > 0, "the pick's setup");
-    expect(laneLines(sid)).toEqual([
-      expect.stringContaining(
-        `lane: tmuxStatus on — the daemon draws %7's bar in its status line by=click (session=${sid})`,
-      ),
-    ]);
-    await until(
-      () => statusLines(sid, "holding").length > 0,
-      "the status line's hold",
-    );
   });
 
   // The daemon before a restart drew the bar the toggle is clicked on: this

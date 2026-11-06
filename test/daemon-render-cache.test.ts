@@ -1760,37 +1760,6 @@ describe("RenderCache frames and pins", () => {
     }
   });
 
-  test("follow moves a session's view to the config its origin resolves to, and opens none for a session without one", () => {
-    const { cache, dirs, close, request, opened } = pinCache();
-    try {
-      const view = request("s1", dirs[0]!);
-      request("s3", dirs[0]!);
-      cache.follow("s1", dirs[0]!, dirs[0]!, undefined);
-      // Its origin did not move: nothing opened, and the click is no render,
-      // so the latest rendered session is still the one that rendered.
-      expect(opened()).toHaveLength(2);
-      expect(cache.holdView("s1")?.view).toBe(view);
-      expect(cache.latestView()?.sessionId).toBe("s3");
-      cache.follow("s1", dirs[1]!, dirs[1]!, undefined);
-      expect(opened().at(-1)).toMatch(
-        /^session view opened sid="s1" by=click /,
-      );
-      {
-        using hold = cache.holdView("s1");
-        expect(hold?.entry.cwd).toBe(dirs[1]);
-        // Declared with the request the view drew by.
-        expect(hold?.view.facts()).toBe(view.facts());
-      }
-      // A session with no view has nothing to move, and gets no view.
-      const size = cache.size;
-      cache.follow("s2", dirs[2]!, dirs[2]!, undefined);
-      expect(cache.holdView("s2")).toBeNull();
-      expect(cache.size).toBe(size);
-    } finally {
-      close();
-    }
-  });
-
   test("a reload whose successor view fails to open leaves the session with no view and its error, which a frame does not reopen", () => {
     const watchers = new WatcherRegistry({
       clock: systemTimekeeper,
@@ -1905,60 +1874,6 @@ describe("RenderCache frames and pins", () => {
       cache.close();
       watchers.closeAll();
       cleanup();
-    }
-  });
-
-  // A click that moves the origin of a session whose opening failed opens
-  // by the request that opening was for, so a pick that fixes it shows with
-  // no request after it.
-  test("follow retries a failed opening by its request, and the error goes", () => {
-    const watchers = new WatcherRegistry({
-      clock: systemTimekeeper,
-      logger: () => {},
-    });
-    const first = mkConfigDir();
-    const second = mkConfigDir();
-    let opens = 0;
-    const cache = new RenderCache(
-      {
-        clock: systemTimekeeper,
-        stateDir: stateDir(host),
-        locations: locations(host),
-        env: host.env,
-        runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
-        storage: NO_PLUGIN_STORAGE,
-        signer: TEST_SIGNER,
-        gates: bareGates(),
-        sessionState: new SessionState(),
-        watchers,
-        log: () => {},
-        declare: DECLARES_NOTHING,
-        source: (view) => {
-          if (++opens === 1) throw new Error("the view broke");
-          return SOURCES_NOTHING(view);
-        },
-      },
-      { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES + VIEW_BYTES },
-    );
-    try {
-      const facts = viewFacts(first.dir, "s1");
-      expect(() =>
-        cache.holdSession(first.dir, first.dir, undefined, facts),
-      ).toThrow("the view broke");
-      const unpin = cache.pin("s1");
-      cache.follow("s1", second.dir, second.dir, undefined);
-      {
-        using hold = cache.holdView("s1");
-        expect(hold?.entry.cwd).toBe(second.dir);
-        expect(hold?.view.facts()).toBe(facts);
-      }
-      expect(cache.openFailure("s1")).toBeNull();
-      unpin();
-    } finally {
-      cache.close();
-      watchers.closeAll();
-      first.cleanup();
-      second.cleanup();
     }
   });
 

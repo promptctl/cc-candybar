@@ -711,15 +711,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       clicked: (sessionId: string, before: LaneSwitches, after: LaneSwitches) =>
         laneClicked(parts, sessionId, before, after),
     },
-    views: {
-      follow: (sessionId: string, origin: RenderOrigin) =>
-        renderCache.follow(
-          sessionId,
-          origin.projectDir,
-          origin.cwd,
-          origin.target.path,
-        ),
-    },
     diagnosticCopy: (sessionId: string, by: Drawing["by"], key: string) =>
       renderCache.drawnCopy(sessionId, by, key),
   };

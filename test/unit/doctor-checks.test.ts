@@ -336,7 +336,6 @@ describe("config probe", () => {
   test.each([
     ["argument", "/x.json5 (command argument)"],
     ["environment", "/x.json5 ($CC_CANDYBAR_CONFIG)"],
-    ["pick", "/x.json5 (load-config pick)"],
     ["unknown", "/x.json5 (source unknown)"],
   ] as const)("a file named by %s reads %s", (source, judged) => {
     const named = { ...LOADED, target: { source, path: "/x.json5" } };

@@ -207,8 +207,6 @@ export function testVerbContext(
             ),
       clicked: () => {},
     },
-    // No render cache here, so no session has a view to move.
-    views: { follow: () => {} },
     // No draw here lists a diagnostic, so a copy-diagnostic click is refused.
     diagnosticCopy: () => undefined,
   };

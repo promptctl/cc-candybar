@@ -8,15 +8,14 @@ import {
   decodeSegments,
   parseEffects,
   parseHandlerUrl,
-  URL_SCHEME,
   VERB_APPLY_UPDATE,
   VERB_RUN,
   VERB_COPY,
   VERB_COPY_DIAGNOSTIC,
   VERB_DISPATCH,
-  VERB_LOAD_CONFIG,
   VERB_OPEN_VSCODE,
 } from "./wire";
+import { URL_SCHEME } from "./scheme";
 import { SEGMENTED_VERBS } from "../daemon/verbs";
 
 /** One link the bar drew: its visible text and its URL. */
@@ -59,20 +58,13 @@ export interface DecodedEffect {
 
 // [LAW:one-source-of-truth] Decode an effect's value the way its daemon handler
 // does, from the daemon's own list (src/daemon/verbs SEGMENTED_VERBS): those
-// verbs' values are `/`-separated segments; load-config is `<session>/<path>`,
-// split at the first slash only, since a path has slashes; every other verb
-// takes ONE argument, the whole value decoded once, so a direct `copy/a/b`
-// reports one arg "a/b" (exactly what the copy handler copies).
+// verbs' values are `/`-separated segments; every other verb takes ONE
+// argument, the whole value decoded once, so a direct `copy/a/b` reports one
+// arg "a/b" (exactly what the copy handler copies).
 function decodeArgs(verb: string, value: string): string[] {
-  if (SEGMENTED_VERBS.has(verb)) return decodeSegments(value);
-  const slash = value.indexOf("/");
-  if (verb === VERB_LOAD_CONFIG && slash !== -1) {
-    return [
-      decodeURIComponent(value.slice(0, slash)),
-      decodeURIComponent(value.slice(slash + 1)),
-    ];
-  }
-  return [decodeURIComponent(value)];
+  return SEGMENTED_VERBS.has(verb)
+    ? decodeSegments(value)
+    : [decodeURIComponent(value)];
 }
 
 // [LAW:no-silent-failure] A link a bar DREW, as the daemon splits it. A reader

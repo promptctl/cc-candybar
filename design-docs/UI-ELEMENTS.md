@@ -716,7 +716,6 @@ Every verb the daemon accepts, from `src/click/wire.ts`, and what emits it.
 | `doctor-run`, `doctor-fix`, `doctor-mark` | `🩺 doctor`, `[fix]`, `[✓ shapes]` `[✗ boxes]` |
 | `apply-update` | `[rebuild]` / `[upgrade]` |
 | `toolbar-toggle` | nothing |
-| `load-config` | nothing |
 
 ## Gaps and overlaps
 
@@ -731,4 +730,4 @@ Found while drawing the above. Each is for Brandon to decide; none is changed he
 7. **No control names its field.** The settings rings and tabs are labelled by glyph (`🎨`, `◐`, `✦`, `🎼`, `🔣`, `🌈`), while configure mode labels controls with words (`theme`, `warning at %`). This is the proposal's state 1 complaint, and the two conventions differ today.
 8. **Resolved (brandon-menu-ia-q30.nk8): `↺` shows only when it would do something**, as `⟲` does, and a tab holding one is marked `•`.
 9. **Two confirm phrasings.** `⟲ reset all? ✕` and `/clear ✓ confirm ✕` are the same [confirm step](#confirm-step) with different confirm labels.
-10. **Unused pieces.** The `toolbar-toggle` and `load-config` verbs are in the verb table but nothing emits them; `toolbar-toggle` writes a session key nothing reads. `{{ picker }}` written by hand and `{{ gauge }}` have no bundled caller (both are author-facing).
+10. **Unused pieces.** The `toolbar-toggle` verb is in the verb table but nothing emits it, and it writes a session key nothing reads. `{{ picker }}` written by hand and `{{ gauge }}` have no bundled caller (both are author-facing).

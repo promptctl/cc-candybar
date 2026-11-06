@@ -14,7 +14,8 @@
 import { randomUUID } from "node:crypto";
 import { sleep, type Monotonic } from "../time.js";
 import fs from "node:fs";
-import { URL_SCHEME, VERB_DOCTOR_PROBE } from "../click/wire.js";
+import { URL_SCHEME } from "../click/scheme.js";
+import { VERB_DOCTOR_PROBE } from "../click/wire.js";
 import { describeFailure } from "../daemon/client-transport.js";
 import { fetchStats, shapeSkew } from "../daemon/client-stats.js";
 import type { ClientWorld } from "../daemon/client-transport.js";

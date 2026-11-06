@@ -517,8 +517,8 @@ export function configDisposeLine(
 // every render request. The wire boundary in render-checkpoint.ts validates the
 // underlying hookData and returns BAD_REQUEST when either is absent, so by
 // the time a cache entry is built they are real non-empty paths. `configFile`
-// is the explicit path a session's render origin names (a load-config pick,
-// `--config`, or the `configEnv` hint; absolute) — present when
+// is the explicit path a session's render origin names (`--config` or the
+// `configEnv` hint; absolute) — present when
 // overriding the standard precedence chain, undefined otherwise.
 export interface CacheEntry {
   projectDir: string;
@@ -575,9 +575,9 @@ export interface SessionHold<
   readonly view: SessionView<S, F>;
 }
 
-// What opened a view: a request, a reload's successor, or a click that moved
-// the session's origin (`follow`). Never a frame (`holdView`).
-export type ViewOpening = "request" | "reload" | "click";
+// What opened a view: a request, or a reload's successor. Never a frame
+// (`holdView`).
+export type ViewOpening = "request" | "reload";
 
 // Why a view stopped being served: its state did (reload, evict, close), its
 // session's latest render resolved to another entry (`moved`), or no request
@@ -1536,13 +1536,12 @@ export class RenderCache<
   // itself, not frames happening to read the view within each sweep.
   private readonly pins = new Map<string, number>();
   // [LAW:no-silent-failure] Each session whose view last failed to open, by
-  // the error and the request the opening was for, until a view opens for
-  // it: a frame draws that error, never the last bar it pushed, and a click
-  // that moves the origin retries by that request (`follow`). Written only by
-  // `opened`, which sets either this or the session's view, never both.
+  // the error, until a view opens for it: a frame draws that error, never the
+  // last bar it pushed. Written only by `opened`, which sets either this or
+  // the session's view, never both.
   private readonly openFailures = new Map<
     string,
-    { readonly error: unknown; readonly facts: F }
+    { readonly error: unknown }
   >();
   // [LAW:one-source-of-truth] One compile per compile key, shared by every
   // state carrying that key, and dropped with the last of them (reclaim).
@@ -1771,37 +1770,9 @@ export class RenderCache<
     return this.openFailures.get(sessionId) ?? null;
   }
 
-  // [LAW:single-enforcer] A click that moved the session's origin — a
-  // load-config pick, or a history step restoring one — moves its view to the
-  // origin's entry, declared with the request the view draws by, as a
-  // request from there would (`journaled`, src/daemon/verbs/index.ts). A
-  // session whose last opening failed opens by the request that opening was
-  // for, so a pick that fixes it shows with no request after it. A session
-  // with neither has nothing to move: no feed draws it, and its next request
-  // opens one. A click that left the origin alone finds the view already on
-  // its entry and changes nothing, its use order included, so the latest
-  // rendered session stays the one that rendered.
-  follow(
-    sessionId: string,
-    projectDir: string,
-    cwd: string,
-    configFile: string | undefined,
-  ): void {
-    const current = this.views.get(sessionId);
-    // Read before the hold: building the origin's entry may evict the one
-    // the current view is of, which retires the view.
-    const facts = current?.facts() ?? this.openFailures.get(sessionId)?.facts;
-    if (facts === undefined) return;
-    const origin = this.entries.get(cacheKey(projectDir, cwd, configFile));
-    if (current !== undefined && origin?.state === current.state) return;
-    using held = this.hold(projectDir, cwd, configFile);
-    this.viewOf(held.entry, held.state, facts, "click");
-  }
-
   // [LAW:no-ambient-temporal-coupling] An open feed's pin on its session,
   // from the feed's open to its close (src/daemon/frame-feed.ts). Keyed by
-  // session, so it follows the view wherever a request, a reload or a click
-  // moves it.
+  // session, so it follows the view wherever a request or a reload moves it.
   pin(sessionId: string): () => void {
     this.pins.set(sessionId, (this.pins.get(sessionId) ?? 0) + 1);
     let released = false;
@@ -1875,7 +1846,7 @@ export class RenderCache<
         log: this.log,
       });
     } catch (error) {
-      this.openFailures.set(sessionId, { error, facts });
+      this.openFailures.set(sessionId, { error });
       throw error;
     }
     this.openFailures.delete(sessionId);

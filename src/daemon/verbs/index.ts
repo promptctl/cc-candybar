@@ -28,7 +28,7 @@ import {
   type Launcher,
 } from "../../proc/launch";
 import type { Locations } from "../paths";
-import type { SessionStateReader, SessionStateRW } from "../session-state";
+import type { SessionStateRW } from "../session-state";
 import { holdClickError } from "../click-error";
 import type { Instant } from "../../utils/instant";
 import { sleep } from "../../time";
@@ -47,7 +47,6 @@ import type { Gates } from "../foundations/gates";
 import type { Gate, RangeParams } from "../foundations/validator-registry";
 import {
   SESSION_CLIENT_HINTS_KEY,
-  SESSION_CONFIG_OVERRIDE_KEY,
   SESSION_RENDER_ORIGIN_KEY,
 } from "../foundations/session-keys";
 import {
@@ -111,7 +110,6 @@ import {
   VERB_COPY,
   VERB_DISPATCH,
   VERB_OPEN_VSCODE,
-  VERB_LOAD_CONFIG,
   VERB_REDO,
   VERB_BACK,
   VERB_REWIND,
@@ -271,13 +269,6 @@ export interface DaemonContext {
       before: LaneSwitches,
       after: LaneSwitches,
     ) => void;
-  };
-  // [LAW:single-enforcer] Brings the session's view, if it has one, to the
-  // config `origin` resolves to: what a click that moved its load-config pick
-  // does after its commit (`journaled`), so a feed drawing the session shows
-  // the pick on its next frame with no request after it.
-  readonly views: {
-    readonly follow: (sessionId: string, origin: RenderOrigin) => void;
   };
   // What the diagnostic the frame renderer `by` last delivered for the
   // session listed under `key` copies; undefined when it lists none under it.
@@ -813,24 +804,6 @@ function stepFrom(
 
 // ─── The durable store: which file, and the history over it ─────────────────
 
-// [LAW:one-source-of-truth] The one place a load-config pick outranks the
-// path the request named: what the render draws from (draw-bar.ts) and what a
-// durable click resolves (sessionOrigin) both come through here, so a click
-// made right after a pick lands in the file the bar now draws from, without
-// waiting for the session's next request to record it.
-// [LAW:effects-at-boundaries] The load-config verb writes per-session config
-// overrides into SessionState; this is the one read point.
-export function sessionRenderOrigin(
-  requested: RenderOrigin,
-  state: SessionStateReader,
-  sid: string,
-): RenderOrigin {
-  const pick = state.get(sid, SESSION_CONFIG_OVERRIDE_KEY);
-  return pick === null
-    ? requested
-    : { ...requested, target: { source: "pick", path: pick } };
-}
-
 // [LAW:parse-dont-validate] What a record's two fields say together. The path
 // is what a session reads and keeps its meaning across builds, so no path is a
 // search whichever build wrote it. The source only labels the path: one this
@@ -889,24 +862,12 @@ function sessionOrigin(ctx: Unbound, sid: string): RenderOrigin {
 
 // The origin the session's last request recorded, as it named it; null for a
 // session that has never rendered.
-function requestedOrigin(
+function recordedOrigin(
   ctx: Omit<DaemonContext, TurnBound>,
   sid: string,
 ): RenderOrigin | null {
   const raw = ctx.sessionState.get(sid, SESSION_RENDER_ORIGIN_KEY);
   return raw === null ? null : parseRenderOrigin(raw);
-}
-
-// The origin the session's last request recorded, under its load-config
-// pick; null for a session that has never rendered.
-function recordedOrigin(
-  ctx: Omit<DaemonContext, TurnBound>,
-  sid: string,
-): RenderOrigin | null {
-  const requested = requestedOrigin(ctx, sid);
-  return requested === null
-    ? null
-    : sessionRenderOrigin(requested, ctx.sessionState, sid);
 }
 
 // [LAW:no-ambient-temporal-coupling] A history step that rewrote the file this
@@ -931,9 +892,8 @@ function sessionConfig(ctx: Unbound, sid: string): DslConfig {
 }
 
 // A session's lane switches as a click found them, and their read over the
-// config it renders with now — under its load-config pick as it stands at
-// each read, which a click can move. Null for a session that has never
-// rendered, which has no config to switch them.
+// config it renders with now. Null for a session that has never rendered,
+// which has no config to switch them.
 interface LaneMeter {
   readonly sessionId: string;
   readonly before: LaneSwitches;
@@ -941,10 +901,9 @@ interface LaneMeter {
 }
 
 function laneMeter(ctx: DaemonContext, sid: string): LaneMeter | null {
-  const requested = requestedOrigin(ctx, sid);
-  if (requested === null) return null;
-  const read = (): LaneSwitches =>
-    ctx.lanes.of(sessionRenderOrigin(requested, ctx.sessionState, sid), sid);
+  const origin = recordedOrigin(ctx, sid);
+  if (origin === null) return null;
+  const read = (): LaneSwitches => ctx.lanes.of(origin, sid);
   return { sessionId: sid, before: read(), read };
 }
 
@@ -1910,39 +1869,8 @@ const repoConfig: VerbHandler = async (value, ctx) => {
 // plain object would be a truthy hit on Object.prototype that then throws on
 // invocation (RENDER_FAILED instead of BAD_REQUEST). Map makes the wrong
 // dispatch unrepresentable, matching src/daemon/session-state.ts.
-const loadConfig: VerbHandler = async (value, ctx) => {
-  const slash = value.indexOf("/");
-  if (slash === -1) {
-    throw new BadVerbArgs(
-      "load-config: expected <sessionId>/<path> (missing separator)",
-    );
-  }
-  const sid = requireSessionId(
-    decodeWire(() => decodeURIComponent(value.slice(0, slash))),
-  );
-  const p = decodeWire(() => decodeURIComponent(value.slice(slash + 1))).trim();
-  if (p !== "") {
-    if (!p.startsWith("/")) {
-      throw new BadVerbArgs(`load-config: path must be absolute, got "${p}"`);
-    }
-    if (!/\.(json5?|json)$/.test(p)) {
-      throw new BadVerbArgs(
-        `load-config: path must end with .json5 or .json, got "${p}"`,
-      );
-    }
-  }
-  if (p === "") {
-    ctx.sessionState.clear(sid, SESSION_CONFIG_OVERRIDE_KEY);
-    ctx.log("info", `load-config: override cleared (session=${sid})`);
-  } else {
-    ctx.sessionState.set(sid, SESSION_CONFIG_OVERRIDE_KEY, p);
-    ctx.log("info", `load-config: ${p} (session=${sid})`);
-  }
-};
-
 const LEAF_VERBS = new Map<string, Verb>([
   [VERB_COPY, inTurn(copy)],
-  [VERB_LOAD_CONFIG, inTurn(loadConfig)],
   [VERB_OPEN_VSCODE, inTurn(openVscode)],
   [VERB_SET_STATE, inTurn(setState)],
   [VERB_STEP_STATE, inTurn(stepState)],
@@ -1972,7 +1900,7 @@ const LEAF_VERBS = new Map<string, Verb>([
 
 // [LAW:one-source-of-truth] The verbs whose handler splits its value into
 // `/`-separated segments (decodeSegments); every other verb decodes its whole
-// value as one argument (oneArg, or load-config's split at the first slash).
+// value as one argument (oneArg).
 // It is what src/click/read.ts decodes a click's effects by, to describe them
 // as the handler will read them; a handler that changes codec changes its row.
 export const SEGMENTED_VERBS: ReadonlySet<string> = new Set([
@@ -2023,7 +1951,6 @@ const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
   VERB_SLASH,
   VERB_RUN,
   VERB_REPO_CONFIG,
-  VERB_LOAD_CONFIG,
   VERB_COPY_DIAGNOSTIC,
 ]);
 
@@ -2268,19 +2195,6 @@ async function journaled<C extends DaemonContext>(
         journal.written() ? lanes.before : after,
         after,
       );
-    } catch (e) {
-      failures.push(e);
-    }
-  }
-  // [LAW:single-enforcer] Every click passes here, so here is where a
-  // click that moved the session's origin — a load-config pick, or a
-  // history step restoring or clearing one — moves its view: a frame opens
-  // none (src/daemon/cache/render.ts `holdView`).
-  // A session that has never rendered has no origin, and no view.
-  if (live && sid !== null) {
-    try {
-      const origin = recordedOrigin(ctx, sid);
-      if (origin !== null) ctx.views.follow(sid, origin);
     } catch (e) {
       failures.push(e);
     }

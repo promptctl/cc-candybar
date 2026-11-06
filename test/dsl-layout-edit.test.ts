@@ -68,10 +68,10 @@ import { linkClick } from "./helpers/click";
 import {
   encodeSegments,
   parseEffects,
-  URL_SCHEME,
   VERB_DISPATCH,
   VERB_RESET_CONFIG,
 } from "../src/click/wire";
+import { URL_SCHEME } from "../src/click/scheme";
 import { VERBS } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
 import { deriveConfigActionValidators } from "../src/daemon/foundations/config-validators";

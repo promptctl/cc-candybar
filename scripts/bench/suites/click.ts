@@ -33,7 +33,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 
-import { APP_NAME, URL_SCHEME } from "../../../src/click/wire.js";
+import { APP_NAME, URL_SCHEME } from "../../../src/click/scheme.js";
 import { fetchStats } from "../../../src/daemon/client-stats.js";
 import { describeFailure } from "../../../src/daemon/client-transport.js";
 import { logPath } from "../../../src/daemon/paths.js";

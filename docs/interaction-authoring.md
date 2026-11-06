@@ -225,8 +225,8 @@ own pick of that setting, so the bar moves. A path your file never authored is
 left alone, and a reset that changes nothing enters no undo history.
 
 The file a click writes is your own config file, resolved at the moment of the
-click by the same search the render runs: an explicit path (a load-config pick,
-`--config`, or `$CC_CANDYBAR_CONFIG`) if one is set, else the XDG
+click by the same search the render runs: an explicit path (`--config` or
+`$CC_CANDYBAR_CONFIG`) if one is set, else the XDG
 `config.json5` — never a project or cwd `.cc-candybar.json5`, which are
 layers merged over it. When the file does not exist yet, the first `persist`
 creates it. A click whose change a project or cwd file would hide (that file

@@ -3,8 +3,7 @@
 
 import type { RequestedOrigin } from "../src/config-hint";
 import { BadVerbArgs } from "../src/daemon/verb-error";
-import { parseRenderOrigin, sessionRenderOrigin } from "../src/daemon/verbs/index";
-import { SESSION_CONFIG_OVERRIDE_KEY } from "../src/daemon/foundations/session-keys";
+import { parseRenderOrigin } from "../src/daemon/verbs/index";
 import { encodeRenderOrigin } from "../src/daemon/foundations/render-origin";
 
 const AT = { projectDir: "/p", cwd: "/p/sub" };
@@ -49,7 +48,7 @@ describe("the render origin record", () => {
 
   test.each([
     ["a newer build's source", "workspace"],
-    ["a pick", "pick"],
+    ["an older build's load-config pick", "pick"],
     ["a search", "search"],
     ["no kind of source", 3],
   ])("%s beside a file leaves the file with its source unknown", (_name, source) => {
@@ -71,30 +70,5 @@ describe("the render origin record", () => {
 
   test("a record with no configFile is refused", () => {
     expect(() => parseRenderOrigin(record({ source: "search" }))).toThrow(BadVerbArgs);
-  });
-});
-
-describe("sessionRenderOrigin", () => {
-  const requested = {
-    ...AT,
-    target: { source: "environment", path: "/env.json5" },
-  } as const;
-  const state = (held: Record<string, string>) => ({
-    get: (_sid: string, key: string) => held[key] ?? null,
-    revision: () => 0,
-  });
-
-  test("with no pick, the request's target stands", () => {
-    expect(sessionRenderOrigin(requested, state({}), "s1")).toEqual(requested);
-  });
-
-  test("a pick replaces the target, and is what names the file", () => {
-    expect(
-      sessionRenderOrigin(
-        requested,
-        state({ [SESSION_CONFIG_OVERRIDE_KEY]: "/pick.json5" }),
-        "s1",
-      ),
-    ).toEqual({ ...AT, target: { source: "pick", path: "/pick.json5" } });
   });
 });

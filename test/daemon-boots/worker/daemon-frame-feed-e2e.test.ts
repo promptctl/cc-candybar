@@ -59,7 +59,6 @@ import {
 import { POLLED } from "../../../src/config/settings-menu";
 import {
   effectsUrl,
-  VERB_LOAD_CONFIG,
   VERB_SET_STATE,
 } from "../../../src/click/wire";
 import { startDaemon, statsOf, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
@@ -550,56 +549,6 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     expect(await closedSummary(sid)).toMatch(/,reload:[1-9]\d*,/u);
   });
 
-  // brandon-unfiled-3248.8ro6 §5: a frame opens no view. A load-config pick
-  // moves the session's view itself, after its commit, so a feed drawing the
-  // session shows the picked config with no request after the click — and
-  // clearing the pick moves it back.
-  test("a load-config pick under an open feed is pushed with no request after it, and the click opened the view", async () => {
-    const sid = "feed-load-config";
-    const picked = path.join(projectDir, "picked.json5");
-    writeFileSync(
-      picked,
-      `{ globals: { experimentalBand: true }, segments: { mark: { template: 'the picked mark' } }, root: { h: ['mark'] } }`,
-    );
-    await render(sockPath, sid, projectDir, {}, args("still"));
-    const pick = async (file: string): Promise<void> =>
-      await click(
-        sockPath,
-        `cc-candybar://${VERB_LOAD_CONFIG}/${encodeURIComponent(sid)}/${encodeURIComponent(file)}`,
-      );
-    const frames = await framesOf(sid, async ({ received, waitFor }) => {
-      await waitFor(() => received.length > 0, "the bar before the pick");
-      await pick(picked);
-      await waitFor(() => shows(received, "the picked mark"), "the picked bar");
-      await pick("");
-      await waitFor(
-        () => textOf(bars(received).at(-1)!).includes("a still mark"),
-        "the bar the request named, once the pick is cleared",
-      );
-    });
-    const shown = bars(frames).map(textOf);
-    expect(shown[0]).toContain("a still mark");
-    expect(shown.some((text) => text.includes("the picked mark"))).toBe(true);
-    // [LAW:no-ambient-temporal-coupling] The log is written off the loop, so
-    // the frame a click's view-open draws can reach the test before the line
-    // that records the open lands. Wait for the lines; a wait that fails
-    // names the view-open lines that did land.
-    const opened = await loggedLines(
-      env,
-      (lines) =>
-        lines.filter((l) =>
-          l.includes(`session view opened sid=${JSON.stringify(sid)} `),
-        ),
-      (found) => found.length >= 3,
-      "three view-open lines for the session",
-    );
-    expect(opened.map((l) => / by=(\w+) /.exec(l)?.[1])).toEqual([
-      "request",
-      "click",
-      "click",
-    ]);
-  });
-
   test("a subscriber that arrives before the session's first render receives it", async () => {
     const frames = await framesOf(
       "feed-early",
@@ -1048,13 +997,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     const sid = "feed-frame-records-nothing";
     const revision = async (): Promise<number> =>
       (await statsOf(daemon.daemon)).sessionState.revision;
-    await render(sockPath, sid, projectDir, {}, args("still"));
-    // The pick lands before anyone subscribes, so no frame draws until the
-    // revision is read: every frame after it draws the warned config.
-    await click(
-      sockPath,
-      `cc-candybar://${VERB_LOAD_CONFIG}/${encodeURIComponent(sid)}/${encodeURIComponent(path.join(projectDir, "warned.json5"))}`,
-    );
+    await render(sockPath, sid, projectDir, {}, args("warned"));
     const before = await revision();
     const drawnBefore = (await feedStats()).drawn;
     let after = before;
