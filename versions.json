@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-635",
+      "ref": "refs/pull/635/merge",
+      "sha": "a51846d2a4e7bd0b6e555ac5a908dc2b933c5cc0",
+      "timestamp": "2026-11-06T10:06:38.235Z",
+      "commits": [
+        {
+          "sha": "a51846d2a4e7bd0b6e555ac5a908dc2b933c5cc0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T10:05:47Z",
+          "message": "Merge 738e449b047ab2d9ba7a3e5255555f4f151527d6 into b38ab233e3dc44e6704d7461d5a952da81f5678d\n"
+        },
+        {
+          "sha": "738e449b047ab2d9ba7a3e5255555f4f151527d6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T02:16:03-07:00",
+          "message": "docs(just): deploy stages the URL handler binary, not the app; the README owns the no-cargo path\n"
+        },
+        {
+          "sha": "cb44288385b77f82749933c4411f85e5b304dd0b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T02:15:05-07:00",
+          "message": "fix(just): deploy builds the URL handler before cargo, and the docs say macOS install needs it\n"
+        },
+        {
+          "sha": "9016e4923ee2c1efb3c7d98b137bc86d47e0b295",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T02:12:37-07:00",
+          "message": "fix(just): deploy builds the URL handler app on macOS, so install from a checkout finds it\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "b38ab233e3dc44e6704d7461d5a952da81f5678d",
@@ -56,42 +92,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T02:36:44-07:00",
           "message": "feat(disk): files and their watch events go through one filesystem port, first used by the watcher registry and the binary watch (candybar-testing-ihvy.y10)\n\nA Filesystem port (src/disk/) with one adapter over fs, an in-memory fake whose writes emit the events a watch would on the clock, and one contract both pass. The watcher registry, its delivery owner, plugin storage, folder identity, the link walk and the binary watch read the disk through it; IdentityRead and BundleStat are gone. A lint rule bans fs outside the adapter, with an allowlist of the files still to move.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-635",
-      "ref": "refs/pull/635/merge",
-      "sha": "73df9cfb37c3e76aec99055fb22b68448a142c96",
-      "timestamp": "2026-11-06T10:03:49.277Z",
-      "commits": [
-        {
-          "sha": "73df9cfb37c3e76aec99055fb22b68448a142c96",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T10:02:35Z",
-          "message": "Merge 54c3caae72dbad0b999e8acfe86d8b882254561c into 52e519f362165f3c41349e0c094ad562c05278d7\n"
-        },
-        {
-          "sha": "54c3caae72dbad0b999e8acfe86d8b882254561c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T02:16:03-07:00",
-          "message": "docs(just): deploy stages the URL handler binary, not the app; the README owns the no-cargo path\n"
-        },
-        {
-          "sha": "f66484068c250339c487040e8e9405eeb002754e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T02:15:05-07:00",
-          "message": "fix(just): deploy builds the URL handler before cargo, and the docs say macOS install needs it\n"
-        },
-        {
-          "sha": "f81b7c789bcb379f56e2802c16b496d758c0445f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T02:12:37-07:00",
-          "message": "fix(just): deploy builds the URL handler app on macOS, so install from a checkout finds it\n"
         }
       ]
     },
