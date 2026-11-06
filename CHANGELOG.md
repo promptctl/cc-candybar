@@ -1,3 +1,9 @@
+## [1.196.0](https://github.com/promptctl/cc-candybar/compare/v1.195.0...v1.196.0) (2026-11-06)
+
+### Features
+
+* **facts:** a view follows its session through the Facts interface, with an in-process arm, a recording arm and the seam test (candybar-gather-renderer-76bb.6pj.go2) ([#624](https://github.com/promptctl/cc-candybar/issues/624)) ([a38c437](https://github.com/promptctl/cc-candybar/commit/a38c437bf19653dbd6f983f06de25bc82f2d4a58))
+
 ## [1.195.0](https://github.com/promptctl/cc-candybar/compare/v1.194.1...v1.195.0) (2026-11-06)
 
 ### Features
