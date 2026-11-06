@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-620",
+      "ref": "refs/pull/620/merge",
+      "sha": "47eaaf92eb04da509c4e4b168408aae02704bd3b",
+      "timestamp": "2026-11-06T02:36:50.468Z",
+      "commits": [
+        {
+          "sha": "47eaaf92eb04da509c4e4b168408aae02704bd3b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T19:36:05-07:00",
+          "message": "Merge b63ddfac55da40e6ce25a6fb7aecf3e99eeadbcf into 6d2fd8d435350e75805014afa1b3568e1119b767\n"
+        },
+        {
+          "sha": "b63ddfac55da40e6ce25a6fb7aecf3e99eeadbcf",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T19:35:43-07:00",
+          "message": "feat(click)!: remove the load-config verb; a session's config is what its request names (candybar-gather-renderer-76bb.f00.bju)\n\nThe verb that pointed a session at any absolute path goes, with the\nper-session override it wrote, the \"pick\" arm it added to a session's\nconfig target, and the view-follow hook that ran after every click\nbecause a click might have moved the origin. Nothing but a render\nrequest sets a session's origin now, so the render, every durable click\nand the lane meter read the recorded origin directly.\n\nA config that still writes a `cc-candybar://load-config/…` link is\nrefused at load, at the template or the helper that spells it, with a\nmessage naming --config and CC_CANDYBAR_CONFIG as where a session's\nconfig comes from. The scheme string moves to a leaf module so the\nloader can read it without the config layer depending on the click\ncodec.\n\nBREAKING CHANGE: the load-config click verb and the examples' config\nswitcher are removed; a config linking to the verb fails to load.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-619",
       "ref": "refs/pull/619/merge",
       "sha": "4402769a2d15c6ede834d33720cedf15db4023f5",
