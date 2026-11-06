@@ -6,7 +6,8 @@
 // link of its own: Launch Services hands it to the handler app, which forwards
 // it to the daemon, where the `probe` verb lists it among the arrivals
 // in its stats. A link that does not come back is then diagnosed: which app
-// Launch Services opens the scheme with, and whether it is the forwarder.
+// Launch Services opens that link with, whether it is the forwarder, and
+// whether the daemon is another build, which may not read the link at all.
 //
 // [LAW:effects-at-boundaries] Every effect is a member of `HandlerProbeEdge`;
 // `probeUrlHandler` is the sequence over them, and a test hands in its own.
@@ -16,7 +17,7 @@ import { sleep, type Monotonic } from "../time.js";
 import fs from "node:fs";
 import { probeLink } from "../click/wire.js";
 import { describeFailure } from "../daemon/client-transport.js";
-import { fetchStats, shapeSkew } from "../daemon/client-stats.js";
+import { fetchStats, otherBuild, shapeSkew } from "../daemon/client-stats.js";
 import type { ClientWorld } from "../daemon/client-transport.js";
 import type { RendererAddress } from "../daemon/home.js";
 import { handlerSocketPath, socketPath } from "../daemon/paths.js";
@@ -60,9 +61,11 @@ export function parseProbeNonce(value: string): string | null {
   return NONCE.test(value) ? value : null;
 }
 
-// What the CLI needs of the running daemon: the probes that reached it.
+// What the CLI needs of the running daemon: the probes that reached it, and
+// whether it is this CLI's build.
 export interface DaemonView {
   readonly arrivals: readonly ProbeArrival[];
+  readonly otherBuild: string | null;
 }
 
 export interface HandlerProbeEdge {
@@ -149,8 +152,16 @@ export async function probeUrlHandler(
   const link = probeLink(edge.name, nonce);
   const unopened = edge.open(link);
   const arrived = unopened === null ? await awaitArrival(edge, nonce) : null;
-  // A lost link is diagnosed by the app Launch Services opens that link with.
-  return arrived ?? { kind: "lost", unopened, opener: handlerApp(edge, link) };
+  // A lost link is diagnosed by the app Launch Services opens that link with,
+  // and by the build of the daemon it was sent to.
+  return (
+    arrived ?? {
+      kind: "lost",
+      unopened,
+      opener: handlerApp(edge, link),
+      otherBuild: daemon.value.otherBuild,
+    }
+  );
 }
 
 // ─── The production edge ─────────────────────────────────────────────────────
@@ -205,7 +216,7 @@ async function daemonView(world: ClientWorld): Promise<Asked<DaemonView>> {
     }
     arrivals.push(arrival);
   }
-  return ok({ arrivals });
+  return ok({ arrivals, otherBuild: otherBuild(outcome.value) });
 }
 
 export function parseArrival(raw: unknown): ProbeArrival | null {

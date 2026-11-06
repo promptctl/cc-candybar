@@ -137,6 +137,8 @@ export type UrlHandlerFacts =
       // Why the link could not be opened at all, or null: it was opened.
       readonly unopened: string | null;
       readonly opener: Asked<HandlerApp | null>;
+      // The daemon is another build than this CLI, or null: one build.
+      readonly otherBuild: string | null;
     };
 
 // [LAW:types-are-the-program] The `statusLine` Claude Code runs, as the
@@ -875,13 +877,20 @@ const urlHandler: Check = {
           ok: false,
           // What is known: a click request brought it, which is what the
           // retired applet runs — and a hand-run `cc-candybar url-handle`,
-          // or the browser page. Which app Launch Services opens the scheme
+          // or the browser page. Which app Launch Services opens the link
           // with is the opener's row to say (handlerAppProblems).
           reason: `the link was delivered by a click request (\`cc-candybar url-handle\`), not the forwarder app — ${REINSTALL}`,
         };
       case "lost":
         return problemsVerdict([
           ...handlerAppProblems(urlHandler.opener),
+          // A daemon of another build may not know the link this build sends,
+          // so a healthy handler's link is lost there too.
+          ...(urlHandler.otherBuild === null
+            ? []
+            : [
+                `${urlHandler.otherBuild}, so it may not read the link this build sends`,
+              ]),
           urlHandler.unopened === null
             ? "a cc-candybar:// link was opened and did not arrive at the daemon"
             : `a cc-candybar:// link could not be opened — ${urlHandler.unopened}`,

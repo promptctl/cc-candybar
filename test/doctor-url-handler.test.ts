@@ -24,7 +24,7 @@ import {
 } from "../src/doctor/handler-probe";
 import { clickArrived } from "../src/doctor/edge";
 import { type ClickArrival, type Delivery } from "../src/doctor/sightings";
-import { VERB_DOCTOR_RUN, VERB_PROBE } from "../src/click/wire";
+import { VERB_DISPATCH, VERB_DOCTOR_RUN, VERB_PROBE } from "../src/click/wire";
 import { BadVerbArgs, VERBS, type VerbContext } from "../src/daemon/verbs";
 import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
 import { SessionState } from "../src/daemon/session-state";
@@ -85,6 +85,7 @@ describe("urlHandler probe", () => {
         kind: "lost",
         unopened: "No application knows how to open URL",
         opener: { kind: "ok", value: null },
+        otherBuild: null,
       }),
     ).toEqual({
       ok: false,
@@ -101,6 +102,7 @@ describe("urlHandler probe", () => {
         kind: "lost",
         unopened: null,
         opener: { kind: "ok", value: { app: APP, forwarder: false } },
+        otherBuild: null,
       }),
     ).toEqual({
       ok: false,
@@ -117,6 +119,7 @@ describe("urlHandler probe", () => {
         kind: "lost",
         unopened: null,
         opener: { kind: "ok", value: { app: APP, forwarder: true } },
+        otherBuild: null,
       }),
     ).toEqual({
       ok: false,
@@ -126,12 +129,32 @@ describe("urlHandler probe", () => {
     });
   });
 
+  test("a link lost at a daemon of another build leads with the build", async () => {
+    expect(
+      verdict({
+        kind: "lost",
+        unopened: null,
+        opener: { kind: "ok", value: { app: APP, forwarder: true } },
+        otherBuild:
+          "the daemon (1.0.0 [aaaa]) is another build than this client (1.0.0 [bbbb])",
+      }),
+    ).toEqual({
+      ok: false,
+      reason:
+        "the daemon (1.0.0 [aaaa]) is another build than this client (1.0.0 [bbbb]), so it may not read the link this build sends",
+      more: [
+        "a cc-candybar:// link was opened and did not arrive at the daemon",
+      ],
+    });
+  });
+
   test("a lookup that failed is named", async () => {
     expect(
       verdict({
         kind: "lost",
         unopened: null,
         opener: { kind: "failed", reason: "osascript: timeout" },
+        otherBuild: null,
       }),
     ).toMatchObject({
       reason:
@@ -171,6 +194,7 @@ function fakeEdge(
                 { nonce: NONCE, delivery: FORWARDED },
               ]
             : [{ nonce: "another", delivery: CLI }],
+        otherBuild: null,
       };
       return { kind: "ok", value: view };
     },
@@ -243,12 +267,28 @@ describe("probeUrlHandler", () => {
       kind: "lost",
       unopened: null,
       opener: { kind: "ok", value: { app: APP, forwarder: true } },
+      otherBuild: null,
     });
     expect(calls.filter((c) => c === "pause")).toHaveLength(50);
     expect(calls.slice(-2)).toEqual([
       `opener cc-candybar://to/main/probe/${NONCE}`,
       `exists ${APP}/Contents/MacOS/CCCandybarURLHandler`,
     ]);
+  });
+
+  test("a link lost at a daemon of another build carries that build to the diagnosis", async () => {
+    const skew =
+      "the daemon (1.0.0 [aaaa]) is another build than this client (1.0.0 [bbbb])";
+    const { edge } = fakeEdge({
+      daemon: async () => ({
+        kind: "ok",
+        value: { arrivals: [], otherBuild: skew },
+      }),
+    });
+    expect(await probeUrlHandler(edge)).toMatchObject({
+      kind: "lost",
+      otherBuild: skew,
+    });
   });
 
   test("an opener whose forwarder executable is gone, or that is another app, is not the forwarder", async () => {
@@ -299,6 +339,7 @@ describe("probeUrlHandler", () => {
       kind: "lost",
       unopened: "No application knows how to open URL",
       opener: { kind: "ok", value: null },
+      otherBuild: null,
     });
     expect(calls).toEqual(["daemon"]);
   });
@@ -313,6 +354,7 @@ describe("probeUrlHandler", () => {
               kind: "ok",
               value: {
                 arrivals: reads > 2 ? [{ nonce: NONCE, delivery: CLI }] : [],
+                otherBuild: null,
               },
             },
     });
@@ -504,6 +546,14 @@ describe("the daemon's side of the round trip", () => {
     expect(row.reason).toContain("asked from the tmux status line");
     expect(row.logs).toHaveLength(1);
     expect(row.logs[0]).toContain(" clicked=no ");
+  });
+
+  test("a dispatch cannot carry a probe as one of its effects", async () => {
+    const d = daemon(link(FORWARDED));
+    await expect(
+      d.click(VERB_DISPATCH, `e=${encodeURIComponent(`probe/${NONCE}`)}`),
+    ).rejects.toThrow(new BadVerbArgs('dispatch: unknown effect verb "probe"'));
+    expect(d.probes.list()).toEqual([]);
   });
 
   test("a probe cannot arrive from the tmux status line", async () => {

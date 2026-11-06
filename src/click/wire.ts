@@ -357,9 +357,10 @@ export function effectsUrl(
 }
 
 // The probe link `cc-candybar doctor` opens to learn whether a link reaches
-// the renderer it names: the nonce is the whole click.
+// the renderer it names: the nonce is the whole click, one argument, in the
+// codec the probe verb reads it back with.
 export function probeLink(to: RendererAddress, nonce: string): string {
-  return addressedLink(to, VERB_PROBE, encodeSegments([nonce]));
+  return addressedLink(to, VERB_PROBE, encodeURIComponent(nonce));
 }
 
 // [LAW:one-source-of-truth] The one spelling of a link's address: every

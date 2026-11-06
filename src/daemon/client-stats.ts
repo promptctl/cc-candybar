@@ -86,12 +86,28 @@ export function shapeSkew(
     s,
   );
   if (missing.length === 0) return null;
-  // [LAW:no-defensive-null-guards] exception: trust boundary — the snapshot
-  // is an unchecked cast from socket JSON, and an older daemon's carries no
-  // digest field.
-  const theirs = buildLabel(s.version, s.sourceDigest ?? null);
-  const mine = buildLabel(PACKAGE_VERSION, bakedDigest());
+  const { theirs, mine } = builds(s);
   return `the daemon (${theirs}) reports no ${missing.join(", ")}; it is another build than this client (${mine}), and restarts only when its own bundle changes`;
+}
+
+// The daemon's build as this client names it, or null when the two are one
+// build. Refuses nothing (a shape that matches is read whatever the build): it
+// is what a reader says when the daemon's words may not be this build's.
+export function otherBuild(s: StatsSnapshot): string | null {
+  const { theirs, mine } = builds(s);
+  return theirs === mine
+    ? null
+    : `the daemon (${theirs}) is another build than this client (${mine})`;
+}
+
+function builds(s: StatsSnapshot): { theirs: string; mine: string } {
+  return {
+    // [LAW:no-defensive-null-guards] exception: trust boundary — the snapshot
+    // is an unchecked cast from socket JSON, and an older daemon's carries no
+    // digest field.
+    theirs: buildLabel(s.version, s.sourceDigest ?? null),
+    mine: buildLabel(PACKAGE_VERSION, bakedDigest()),
+  };
 }
 
 const STATS_FIELDS = Object.keys(RuntimeStats.referenceSnapshot()) as Array<

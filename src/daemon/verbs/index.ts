@@ -2010,7 +2010,6 @@ const LEAF_VERBS = new Map<string, VerbHandler>([
   [VERB_DOCTOR_RUN, doctorRun],
   [VERB_DOCTOR_FIX, doctorFix],
   [VERB_DOCTOR_MARK, doctorMark],
-  [VERB_PROBE, probe],
   [VERB_SLASH, slash],
   [VERB_RUN, run],
   [VERB_REPO_CONFIG, repoConfig],
@@ -2310,8 +2309,9 @@ export const VERBS: ReadonlyMap<string, VerbRun> = new Map<string, VerbRun>([
       ] as const,
   ),
   [VERB_DISPATCH, click(VERB_DISPATCH, foldEffects)] as const,
-  // After the leaves, so it replaces the click they built: a probe writes no
-  // journal, so nothing may refuse it for a turn, and it describes nothing.
+  // A link kind, never a leaf, so no dispatch can carry it as an effect: a
+  // probe writes no journal, so nothing may refuse it for a turn, and it
+  // describes nothing.
   [VERB_PROBE, probe] as const,
 ]);
 
