@@ -15,7 +15,8 @@ import type { Runs } from "./runs.js";
 import type { SourceRuns } from "../var-system/source-runs.js";
 import type { RuntimeStats } from "./stats";
 import type { SessionSource } from "./session-source.js";
-import type { SessionState } from "./session-state";
+import type { SessionState, SessionStateRW } from "./session-state";
+import type { RequestDraw } from "./draw-bar.js";
 import type { TmuxStatusLines } from "./tmux-status.js";
 import type { UpdateWatch } from "./update-notice";
 import type { VerbContext } from "./verbs";
@@ -49,7 +50,21 @@ export interface DaemonParts {
   readonly refreshLedger: RefreshLedger;
   readonly fileEvents: FileEventDelivery;
   readonly payloadProviders: PayloadProviders;
-  readonly sessionState: SessionState;
+  // [LAW:single-enforcer] What the request and click paths write session
+  // state through, and read it through: the store's view the daemon was
+  // built with, which under test refuses a write made while no journal turn
+  // is held (test/helpers/writes-in-turn.ts).
+  readonly sessionState: SessionStateRW;
+  // The store's gauges, for the stats reply.
+  readonly sessionGauges: Pick<
+    SessionState,
+    "size" | "observers" | "latestRevision"
+  >;
+  // [LAW:one-source-of-truth] This renderer's name, as every record of its
+  // work and the tmux rows it draws carry it.
+  readonly rendererName: string;
+  // The draw a request's arm reaches once its turn is over.
+  readonly draw: RequestDraw;
   readonly effectSessions: EffectSessions<RenderedLine>;
   readonly menuIdle: MenuIdle;
   readonly linkSigner: LinkSigner;

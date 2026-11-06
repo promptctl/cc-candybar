@@ -3,7 +3,7 @@
 import process from "node:process";
 import { inspect } from "node:util";
 import type { DaemonParts } from "./daemon-parts.js";
-import { apply } from "./apply.js";
+import { apply, applyUnanswered } from "./apply.js";
 import { NOTHING_DELIVERED, renderFailed } from "./draw-bar.js";
 import {
   checkRenderRequest,
@@ -43,7 +43,6 @@ import {
 import { floorOf } from "../config/globals-fields.js";
 import type { RichText } from "@promptctl/rich-js";
 import { LANE_NAMES, parseLane, type Lane } from "../config/lanes.js";
-import { answeredClickError } from "./click-error.js";
 import { parseHandlerUrl, VERB_TMUX_STATUS_CLICK } from "../click/wire.js";
 import { instantOf } from "../utils/instant.js";
 import { waitBudgetMs } from "./request-deadline.js";
@@ -223,7 +222,6 @@ export async function replyTo(
     effectSessions,
     menuIdle,
     journalTurns,
-    sessionState,
     tmuxStatusLines,
     watcherRegistry,
     limits,
@@ -281,9 +279,9 @@ export async function replyTo(
         menuIdle: menuIdle.getStats(),
         journalTurns: journalTurns.getStats(),
         sessionState: {
-          sessions: sessionState.size(),
-          observers: sessionState.observers(),
-          revision: sessionState.latestRevision(),
+          sessions: parts.sessionGauges.size(),
+          observers: parts.sessionGauges.observers(),
+          revision: parts.sessionGauges.latestRevision(),
         },
         frameFeeds: frameFeeds.getStats(),
         tmuxStatus: tmuxStatusLines.stats(),
@@ -386,14 +384,19 @@ export async function replyTo(
               resp,
               // [LAW:single-enforcer] An answer carrying the click error or the
               // launcher's pipe event that reaches its client is the one that
-              // delivered it (src/utils/event-hold.ts).
+              // delivered it (src/utils/event-hold.ts). The click error's mark
+              // is a write, so it is an event the arm makes in a turn.
               delivered: () => {
                 delivered();
                 if (clickShown !== null)
-                  answeredClickError(
-                    sessionState,
-                    checked.req.sessionId,
-                    clickShown,
+                  void applyUnanswered(
+                    {
+                      kind: "answered",
+                      session: checked.req.sessionId,
+                      error: clickShown,
+                    },
+                    parts,
+                    `sid=${checked.req.sessionId}`,
                   );
                 // Daemon-wide: one session's answer having shown the
                 // launcher's pipe event is what makes it not silent.

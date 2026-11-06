@@ -1,9 +1,10 @@
-// [LAW:nothing-unseen] The ordering instrument of the click path: a view of
-// the session store that throws on a write made while no journal turn is held,
-// so a write that slipped out of its turn fails the test that made it instead
-// of landing in a frame that no event explains. Every click-path test writes
-// through it (test/helpers/click.ts); the ticket that routes the last writer
-// promotes it into the store itself.
+// [LAW:nothing-unseen] The ordering instrument of the request and click
+// paths: a view of the session store that throws on a write made while no
+// journal turn is held, so a write that slipped out of its turn fails the test
+// that made it instead of landing in a frame that no event explains. Every
+// click-path test writes through it (test/helpers/click.ts), and so does every
+// daemon built in a worker (test/helpers/in-worker-daemon.ts); the ticket that
+// routes the last writer promotes it into the store itself.
 
 import type { JournalTurns } from "../../src/daemon/journal-turns";
 import type { SessionStateRW } from "../../src/daemon/session-state";

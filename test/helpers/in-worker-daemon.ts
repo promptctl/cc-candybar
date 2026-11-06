@@ -34,6 +34,7 @@ import type { DaemonLogger } from "../../src/utils/logger";
 import type { DaemonEndpoint } from "./daemon-wire";
 import type { StartBarDaemon } from "./drive-bar";
 import { memoryConnection } from "./memory-connection";
+import { writesInTurn } from "./writes-in-turn";
 import { LEDGER_ENV, TEST_FILE_ENV, recordDaemonStart } from "./process-tier.cjs";
 
 // [LAW:single-enforcer] What a boot here is recorded with. `startDaemon` replaces
@@ -101,6 +102,9 @@ export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
   try {
     const daemon = createDaemon({
       ...productionAdapters(paths, daemonLog, systemTimekeeper),
+      // [LAW:nothing-unseen] Every request and click a daemon here serves
+      // writes through the ordering instrument (test/helpers/writes-in-turn.ts).
+      sessionWrites: writesInTurn,
       bundle: bundleAt(path.join(paths.state, "checkout")),
       host: HOST,
       memoryLimitBytes: memoryLimitBytes(process.env),

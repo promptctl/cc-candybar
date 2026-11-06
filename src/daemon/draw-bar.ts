@@ -30,11 +30,6 @@ import {
   type SessionView,
 } from "./cache/render";
 import { watchFault } from "./cache/watchers";
-import { encodeRenderOrigin } from "./foundations/render-origin";
-import {
-  SESSION_CLIENT_HINTS_KEY,
-  SESSION_RENDER_ORIGIN_KEY,
-} from "./foundations/session-keys";
 import { answeredOf, roleOf } from "./foundations/sighting-roles";
 import { drawDsl, type RenderWarning } from "../dsl/render.js";
 import type { DrawnMotion } from "../render/drawn-motion.js";
@@ -273,11 +268,11 @@ function requestFacts(
   req: CheckedRenderRequest,
   at: Instant,
   facts: RequestFacts,
+  renderer: string,
 ): string | null {
-  noteFacts(facts, {
-    sid: req.sessionId,
-    at: at.toFixed(3),
-  });
+  // [LAW:nothing-unseen] Named for the renderer that drew it, so a frame in a
+  // bug report traces to its renderer as to its document.
+  noteFacts(facts, { sid: req.sessionId, renderer, at: at.toFixed(3) });
   // [LAW:parse-dont-validate] The ONE checkpoint for everything the client
   // observed and the daemon cannot. Raw `req.*` hint fields are not read
   // past this line; `hints` is the stamped type the render path consumes.
@@ -323,7 +318,7 @@ export function setUpRender(
         path.isAbsolute(dir) && { location: checkoutLocation(dir) }),
     },
   };
-  const hintsError = requestFacts(req, at, facts);
+  const hintsError = requestFacts(req, at, facts, parts.rendererName);
   noteFacts(facts, { encoding: req.encoding });
   // [LAW:one-source-of-truth] The explicit config path has two spellings and
   // ONE precedence: the `--config` flag over the client's `CC_CANDYBAR_CONFIG`
@@ -368,7 +363,7 @@ function setUpFrame(
   const req = hold.view.facts();
   let hintsError: string | null;
   try {
-    hintsError = requestFacts(req, at, facts);
+    hintsError = requestFacts(req, at, facts, parts.rendererName);
   } catch (e) {
     hold[Symbol.dispose]();
     throw e;
@@ -583,7 +578,10 @@ export function drawRender(
   };
   const metrics = isPending(payload.metrics) ? undefined : payload.metrics;
   noteFacts(facts, sourcesFactOf(document.sources));
+  // [LAW:nothing-unseen] The document this frame drew from, by its seq, so a
+  // frame in a bug report traces to it.
   noteFacts(facts, {
+    factsSeq: String(document.seq),
     prompts: String(metrics?.messageCount ?? "-"),
     nonPrompts: String(metrics?.nonPrompts ?? "-"),
     // [LAW:one-source-of-truth] The closure the payload's git fact was read
@@ -826,38 +824,7 @@ interface DrawnBar {
   readonly geometry: DiagnosticGeometry;
 }
 
-// [LAW:effects-at-boundaries] What a render request said, recorded where the
-// request arrives — never by a frame, which only draws, and which would wake
-// its own feed by writing the session's state. Compared before writing:
-// every set() persists and fires the session's MobX atom, so an
-// unconditional per-request write would invalidate every state-driven
-// computed each render.
-function recordRequest(parts: DaemonParts, req: CheckedRenderRequest): void {
-  const { sessionState } = parts;
-  const sessionId = req.sessionId;
-  // [LAW:one-source-of-truth] The STAMPED hints: a click arrives with no
-  // hints of its own, so the doctor (verbs/index.ts) reads the facts of this
-  // session's last request from here, re-parsed through the same checkpoint.
-  // The client itself is not recorded: which client drew a session's bar is
-  // RenderSightings' fact (src/daemon/render-sightings.ts), held in memory,
-  // and two clients drawing one session would otherwise rewrite this
-  // persisted record on every request.
-  const { client: _client, ...recorded } = req.hints;
-  const hintRecord = JSON.stringify(recorded);
-  if (sessionState.get(sessionId, SESSION_CLIENT_HINTS_KEY) !== hintRecord) {
-    sessionState.set(sessionId, SESSION_CLIENT_HINTS_KEY, hintRecord);
-  }
-  // [LAW:one-source-of-truth] The config inputs this request named, so a
-  // durable click on this session resolves the same chain (verbs/index.ts
-  // sessionOrigin) and writes the file the next reload reads — never a path re-derived from the daemon's
-  // own cwd.
-  const origin = encodeRenderOrigin(req.requested);
-  if (sessionState.get(sessionId, SESSION_RENDER_ORIGIN_KEY) !== origin) {
-    sessionState.set(sessionId, SESSION_RENDER_ORIGIN_KEY, origin);
-  }
-}
-
-// A render request's answer: what it said is recorded, and the bar is drawn.
+// A render request's answer: the bar, drawn once the request's turn is over.
 export interface RequestAnswer {
   // What this request's client is answered with: the statusline's answer to
   // Claude Code's statusline, the bar to a client drawing it itself.
@@ -869,16 +836,16 @@ export interface RequestAnswer {
   delivered: () => void;
 }
 
-export async function answerRequest(
-  parts: DaemonParts,
+// [LAW:effects-at-boundaries] The daemon's draw of a request, as its arm
+// reaches it (src/daemon/apply.ts): after the request's turn, over the state
+// the turn left. It writes no session state; what the request said is the
+// arm's to record, in the turn.
+export type RequestDraw = (
   req: CheckedRenderRequest,
   at: Instant,
   waitEndsAt: Monotonic,
   facts: RequestFacts,
-): Promise<RequestAnswer> {
-  recordRequest(parts, req);
-  return drawAnswer(parts, req, at, waitEndsAt, facts);
-}
+) => Promise<RequestAnswer>;
 
 // [LAW:effects-at-boundaries] What a request's arrival starts beyond its
 // own answer, in its arrival turn, by the lanes its session's settings switch
@@ -939,7 +906,7 @@ export function laneClicked(
     tmuxStatusLines.observe(sessionId, latest.hints.tmux, after.tmuxStatus);
 }
 
-async function drawAnswer(
+export async function drawAnswer(
   parts: DaemonParts,
   req: CheckedRenderRequest,
   at: Instant,
