@@ -2,53 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-653",
-      "ref": "refs/pull/653/merge",
-      "sha": "08b6dde1308f12b6a676d87c57db536d29712b94",
-      "timestamp": "2026-11-06T21:28:58.105Z",
-      "commits": [
-        {
-          "sha": "08b6dde1308f12b6a676d87c57db536d29712b94",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T21:28:08Z",
-          "message": "Merge e8a4553db9b53484c793c342d12b23241ab5704d into dec17fec2a409d867f331d5898b3ab81d111b5ea\n"
-        },
-        {
-          "sha": "e8a4553db9b53484c793c342d12b23241ab5704d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T14:23:05-07:00",
-          "message": "fix(test): the exit-code case arms a timeout it never reaches, and each loop run's holder ends with its run (brandon-menus-sjhy.irc)\n\nA fired timeout concludes on the gone group as ok, so a timeout inside the\ncase's life hid a launch that waited for its holder.\n"
-        },
-        {
-          "sha": "bf3c7ce5facade6933dad536d14da87a292d1ba0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T14:17:40-07:00",
-          "message": "fix(test): the launch-group cases end their holders by removing a path, and the timeout case samples a live group on a held clock (brandon-menus-sjhy.irc)\n\nThe abort and timeout cases each sample the group alive, end its member, then\nact before the next poll. Every holder waits on the case's directory, which\nafterEach removes, so no case bets on a holder's lifetime in real time.\n"
-        },
-        {
-          "sha": "cb1089de9d0570504d092762809bc0ec2f98a01f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T14:07:41-07:00",
-          "message": "fix(test): the launch-group abort case reaches its window by what it observes, not a sleep (brandon-menus-sjhy.irc)\n\nThe case means one state: the child ended, its group is gone, and the launch\nhas not yet sampled the group. A 1300 ms sleep aimed at it, so a loaded\nmachine saw the launch's own sample land first and read ok:true.\n\nThe case now launches on a held clock, so the launch samples the group only\nwhen the case advances it. It waits, by condition, for the child's pidfile,\nfor the group's end, and for the launch to have seen the exit, then aborts\nand advances. The holder outside the group, which keeps the child's close\nfrom concluding first, lives until the case removes its directory, not for\n3 s of real time.\n\nThe launcher's owner moves into launcherOn(clock), shared by the beforeEach\nand this case.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "dec17fec2a409d867f331d5898b3ab81d111b5ea",
-      "timestamp": "2026-11-06T21:28:20.006Z",
+      "sha": "4f8902896b866dd001944102be7ed0716f005520",
+      "timestamp": "2026-11-06T21:34:43.650Z",
       "commits": [
         {
-          "sha": "dec17fec2a409d867f331d5898b3ab81d111b5ea",
+          "sha": "4f8902896b866dd001944102be7ed0716f005520",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T14:27:21-07:00",
-          "message": "feat(apply): session state has one writer; a run and a lane setup are effects (candybar-gather-renderer-76bb.1dh.9kk) (#646)\n\n* feat(apply): session state has one writer; a run and a lane setup are effects (candybar-gather-renderer-76bb.1dh.9kk)\n\nThe session store refuses a write made while no journal turn is held, in\nevery daemon. A turn is synchronous, so a write while one is held is that\nturn's own, and one check at the store's single write path is the whole\nenforcement. The test-only view that refused such writes, its adapter\nseam and the separate gauges field are gone.\n\nThe two writers left outside a turn now report through effect-done:\n\n- A `run` click supersedes its sources in its turn, so they read pending\n  from the click on, and describes the launch as a `run` effect. The\n  performer runs the program behind the session's earlier effects; the\n  run owner answers how it ended and no longer writes the bar.\n- A lane setup is a `lane-setup` effect, settled by the click or the\n  request that owes it and run by the performer. Its own per-session\n  queue and defer are replaced by the performer's per-session order.\n\nThe check command, the demo and the doctor's command line build their\nstore with a holder that always holds, since each is one synchronous run.\n\n* fix(apply): a request's arrival settles in its turn; a queued run is counted (candybar-gather-renderer-76bb.1dh.9kk)\n\nThe lane setups a request's arrival settles were taken off the owed list\nduring the draw and reached the performer only once the draw had answered,\nso a click made during the wait was performed ahead of them, and a draw that\nthrew lost them. The arrival (owed setups and the tmux status line) now\nsettles in the request's turn, measured as a click's switches are, and the\narm answers with the draw under way, so the turn's effects join the\nsession's order as the turn ends.\n\nA run superseded by its click and still waiting behind the session's earlier\neffects shows in the run stats as queued. The lane outcome's comment says\nwhat underway now means, and a write's refusal text is built only when\nrefused.\n\n* fix(apply): a request is drawn once applied; a run's sources resume whatever its launch did (candybar-gather-renderer-76bb.1dh.9kk)\n\nThe request arm no longer draws: `applyRequest` applies the request and then\nbegins its draw, so a request whose apply rejected strands no draw. The\neffects the request's turn described go on its render event.\n\nA run's launch is awaited in a try/finally, so a launcher that throws still\nresumes the run's sources and leaves nothing counted running.\n\nThe lane setup effect is declared by the lane setup owner, which the effect\nunion names from above, so the two no longer import each other.\n\n* fix(apply): a queued lane setup is refused at close; every write asks for its turn first (candybar-gather-renderer-76bb.1dh.9kk)\n\nA lane setup waits in its session's effect order, so one still queued when\nthe daemon closes would start a restart no daemon is left to attach. The\nlane setup owner closes with the daemon and refuses it as the close, as a\nqueued run is. A run the close aborted is answered as the close rather\nthan as a failure that only the teardown's order kept off the bar.\n\nThe store asks for the turn at the top of every public write, before an\nempty batch or a held revision decides that nothing moves, so a write out\nof its turn is refused whatever it would have written."
+          "timestamp": "2026-11-06T14:33:45-07:00",
+          "message": "fix(test): the launch-group abort case reaches its window by what it observes, not a sleep (brandon-menus-sjhy.irc) (#653)\n\n* fix(test): the launch-group abort case reaches its window by what it observes, not a sleep (brandon-menus-sjhy.irc)\n\nThe case means one state: the child ended, its group is gone, and the launch\nhas not yet sampled the group. A 1300 ms sleep aimed at it, so a loaded\nmachine saw the launch's own sample land first and read ok:true.\n\nThe case now launches on a held clock, so the launch samples the group only\nwhen the case advances it. It waits, by condition, for the child's pidfile,\nfor the group's end, and for the launch to have seen the exit, then aborts\nand advances. The holder outside the group, which keeps the child's close\nfrom concluding first, lives until the case removes its directory, not for\n3 s of real time.\n\nThe launcher's owner moves into launcherOn(clock), shared by the beforeEach\nand this case.\n\n* fix(test): the launch-group cases end their holders by removing a path, and the timeout case samples a live group on a held clock (brandon-menus-sjhy.irc)\n\nThe abort and timeout cases each sample the group alive, end its member, then\nact before the next poll. Every holder waits on the case's directory, which\nafterEach removes, so no case bets on a holder's lifetime in real time.\n\n* fix(test): the exit-code case arms a timeout it never reaches, and each loop run's holder ends with its run (brandon-menus-sjhy.irc)\n\nA fired timeout concludes on the gone group as ok, so a timeout inside the\ncase's life hid a launch that waited for its holder."
         }
       ]
     },
