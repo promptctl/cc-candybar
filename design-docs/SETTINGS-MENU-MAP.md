@@ -139,22 +139,6 @@ Added by me, at Brandon's request to fill out the list:
 - **Segments have their data.** `gitPr` is placed and `gh`/`glab` is installed and logged in. `block`/`weekly` are placed and the hook payload carries `rate_limits`.
 - **Session data is readable.** The transcript can be read.
 
-## Widths at 80 columns
-
-`pnpm exec tsx design-docs/settings-menu-map-render.mts` printed these numbers until it stopped running (brandon-menus-sjhy.bc0). The rows brandon-menus-sjhy.ek7 changed were re-measured through `drawDsl` on the bundled default at 200 columns, the others are the script's last output. Widths are at padding 1, and each padding step adds two cells per cell. "Drifted" is every setting resettable, one draft, one undo and one redo step.
-
-| Row | Cells |
-|---|---|
-| Door line 1: fresh / drifted / drifted with `⟲ reset all?` armed | 56 / 80 / 93 |
-| Door line 2: tabs (the open one led by `▾`) / two tabs marked `•` | 64 / 68 |
-| `⚡ session` links / commands | 50 / 52 |
-| `🎨 look` / drifted | 53 / 59 |
-| `📐 layout` | 16 |
-| `⚙ config` / drifted | 61 / 69 |
-| ⚙ gear with `⤓ default for catppuccin-frappe` / drifted | 92 / 98 |
-| `🧰 tools` | 17 |
-| Edit mode's save row | 49 |
-
 ## Also recorded
 
 - The drift marker is the reset. `↺` appears on a control only when it has a session draft or a config-file value, which are what the reset clears. A value the active preset pins shows none, since a reset could not move it. This narrows brandon-menu-ia-q30.nk8, which counts preset-set values as drift.
