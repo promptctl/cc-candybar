@@ -41,9 +41,10 @@ import { decodeSegments, VERB_RANGE } from "../click/wire.js";
 import type { LinkSigner } from "../click/link-signer.js";
 import type { TmuxStatusBar } from "../tmux-status/frames.js";
 import {
+  bindClick,
+  BOUND,
   boundOf,
   CLICK_OPTION,
-  clickBinding,
   HELD,
   RENDERER_OPTION,
   RESTORED,
@@ -385,20 +386,12 @@ export function restorePlan(
 
 export interface TmuxStatusEdge {
   // One tmux invocation against the server at `socket`.
-  run(
-    socket: string,
-    args: readonly string[],
-    stdin?: string,
-  ): Promise<TmuxRun>;
+  run(socket: string, args: readonly string[]): Promise<TmuxRun>;
 }
 
 // One tmux invocation that finishes before it returns: the daemon's shutdown
 // cannot wait, so whoever ends the process hands this to `restoreAll`.
-export type TmuxAtExit = (
-  socket: string,
-  args: readonly string[],
-  stdin?: string,
-) => TmuxRun;
+export type TmuxAtExit = (socket: string, args: readonly string[]) => TmuxRun;
 
 export interface TmuxStatusDeps {
   readonly edge: TmuxStatusEdge;
@@ -944,25 +937,27 @@ export class TmuxStatusLines {
     // after the shutdown's restore.
     if (answers === null || this.closed) return;
     const { user } = boundOf(answers[0] ?? "");
-    // Known before it is written, so a shutdown while the write is in flight
-    // still puts it back.
+    // Known before it is written, so a shutdown that reads it bound while
+    // the write is in flight puts it back. One whose restore ran first has
+    // unset every name it wrote, so the bind lands on nothing.
     server.binding = "bound";
-    const took =
-      (
-        await this.write(socket, [
-          clickBinding(user),
-          ["set-option", "-g", "-q", "-u", OLDER_BINDING_RECORD],
-        ])
-      ).kind === "ok";
-    // A bind tmux refused leaves nothing to put back; the next reconcile
-    // binds again.
-    if (!took) {
-      server.binding = period;
-      return;
-    }
+    const run = await this.write(socket, [
+      bindClick(user),
+      ["set-option", "-g", "-q", "-u", OLDER_BINDING_RECORD],
+    ]);
+    const took = run.kind === "ok" && run.stdout.includes(BOUND);
+    // A bind tmux refused, or one no session's name let land, leaves nothing
+    // to put back; the next reconcile binds again.
+    if (!took) server.binding = period;
+    // [LAW:nothing-unseen] Which way tmux went.
+    const said = took
+      ? `bound MouseDown1Status over ${spelled(user)}`
+      : run.kind === "ok"
+        ? "left MouseDown1Status unbound: no session names a renderer"
+        : `MouseDown1Status not bound: ${run.reason}`;
     this.deps.log(
       "info",
-      `tmux-status: socket=${JSON.stringify(socket)} bound MouseDown1Status over ${spelled(user)}`,
+      `tmux-status: socket=${JSON.stringify(socket)} ${said}`,
     );
   }
 
@@ -1004,12 +999,14 @@ export class TmuxStatusLines {
     run: TmuxRun,
     user: CommandList | null,
   ): void {
-    if (run.kind !== "ok") return;
-    const said = run.stdout.includes(RESTORED)
-      ? `restored MouseDown1Status to ${spelled(user)}`
-      : run.stdout.includes(HELD)
-        ? "left MouseDown1Status bound: a session still names a renderer"
-        : `MouseDown1Status restore said neither way: ${JSON.stringify(run.stdout)}`;
+    const said =
+      run.kind !== "ok"
+        ? `MouseDown1Status not restored: ${run.reason}`
+        : run.stdout.includes(RESTORED)
+          ? `restored MouseDown1Status to ${spelled(user)}`
+          : run.stdout.includes(HELD)
+            ? "left MouseDown1Status bound: a session still names a renderer"
+            : `MouseDown1Status restore said neither way: ${JSON.stringify(run.stdout)}`;
     this.deps.log(
       "info",
       `tmux-status: socket=${JSON.stringify(socket)} ${said}`,
@@ -1035,8 +1032,8 @@ export class TmuxStatusLines {
     return run;
   }
 
-  private async run(socket: string, args: readonly string[], stdin?: string) {
-    return this.counted(socket, await this.deps.edge.run(socket, args, stdin));
+  private async run(socket: string, args: readonly string[]) {
+    return this.counted(socket, await this.deps.edge.run(socket, args));
   }
 
   private async ask(
@@ -1060,22 +1057,20 @@ export class TmuxStatusLines {
   private async write(
     socket: string,
     commands: readonly Command[],
-    stdin?: string,
   ): Promise<TmuxRun> {
     if (commands.length === 0) return WROTE_NOTHING;
     this.writes++;
-    return this.run(socket, chain(commands), stdin);
+    return this.run(socket, chain(commands));
   }
 
   private writeSync(
     atExit: TmuxAtExit,
     socket: string,
     commands: readonly Command[],
-    stdin?: string,
   ): TmuxRun {
     if (commands.length === 0) return WROTE_NOTHING;
     this.writes++;
-    return this.counted(socket, atExit(socket, chain(commands), stdin));
+    return this.counted(socket, atExit(socket, chain(commands)));
   }
 }
 

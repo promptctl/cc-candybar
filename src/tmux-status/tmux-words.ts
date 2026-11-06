@@ -11,9 +11,10 @@ export type Word = string | { readonly block: CommandList };
 export type CommandList = ReadonlyArray<readonly Word[]>;
 
 // A string tmux parses as one word of a command: double-quoted, with the
-// three characters it escapes there escaped.
+// characters it reads there escaped, `~` among them, which tmux expands as a
+// home directory even in double quotes (measured).
 export function tmuxQuoted(text: string): string {
-  return `"${text.replace(/[\\"$]/g, (c) => `\\${c}`)}"`;
+  return `"${text.replace(/[\\"$~]/g, (c) => `\\${c}`)}"`;
 }
 
 // A command list as the text of one word, for a command that takes one —
@@ -58,10 +59,11 @@ const lonely = (text: string, i: number): boolean =>
 // [LAW:parse-dont-validate] The command list text spells, as tmux prints one
 // or as command text: words bare, double-quoted or single-quoted, every one
 // with its escapes undone (tmux escapes inside single quotes too), `''` the
-// empty word, `{ … }` a block of commands, and an unquoted `;` or a lone `\;`
-// the separator, so a `;` inside a quoted word stays in it. A lone `;`
-// argument cannot be told from a separator in a listing (tmux prints both
-// `\;`), so it reads as one. A brace inside a word is printed escaped
+// empty word, `{ … }` a block of commands, and an unquoted `;` the separator,
+// so a `;` inside a quoted word stays in it. At the top of a listing a lone
+// `\;` is the separator too: a lone `;` argument cannot be told from one there
+// (tmux prints both `\;`), so it reads as one. Inside a block tmux separates
+// with ` ; `, so a lone `\;` there is the argument. A brace inside a word is printed escaped
 // (measured: `\{`), so one standing alone opens or closes a block. Octal
 // escapes are bytes, decoded together so a UTF-8 character tmux escaped reads
 // whole.
@@ -107,7 +109,7 @@ export function tmuxCommands(text: string): Word[][] {
     const commands: Word[][] = [[]];
     while (i < text.length) {
       if (text[i] === " ") i++;
-      else if (text[i] === ";" || lonely(text, i)) {
+      else if (text[i] === ";" || (!inBlock && lonely(text, i))) {
         commands.push([]);
         i += text[i] === ";" ? 1 : 2;
       } else if (inBlock && alone("}")) {

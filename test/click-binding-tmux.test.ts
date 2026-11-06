@@ -60,6 +60,11 @@ const HAS_TMUX = spawnSync("tmux", ["-V"]).status === 0;
         `select-window -t = \\; if-shell -F 1 { display-message "a }b" ; display-message 'c;d' }`,
       ],
       [
+        "a block whose command takes a ; argument",
+        `if-shell -F 1 { send-keys ";" }`,
+      ],
+      ["words that start with a ~", `send-keys \\~/foo "\\~x y"`],
+      [
         "a string beside a block",
         `if-shell -F 1 "display-message \\"{ x }\\"" { display-message '{' }`,
       ],

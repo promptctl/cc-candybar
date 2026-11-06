@@ -15,6 +15,7 @@ import {
   boundOf,
   clickBinding,
   CLICK_OPTION,
+  NAMED,
   RENDERER_OPTION,
 } from "../src/tmux-status/click-binding";
 import { linkSigner, type LinkSigner } from "../src/click/link-signer";
@@ -105,16 +106,12 @@ class FakeTmux implements TmuxStatusEdge {
     for (const id of ids) this.sessions.set(id, new Map());
   }
 
-  async run(
-    socket: string,
-    args: readonly string[],
-    stdin?: string,
-  ): Promise<TmuxRun> {
+  async run(socket: string, args: readonly string[]): Promise<TmuxRun> {
     if (this.gate !== null) await this.gate;
-    return this.runSync(socket, args, stdin);
+    return this.runSync(socket, args);
   }
 
-  runSync(_socket: string, args: readonly string[], stdin?: string): TmuxRun {
+  runSync(_socket: string, args: readonly string[]): TmuxRun {
     this.onRun?.(args);
     const commands: string[][] = [[]];
     for (const arg of args)
@@ -123,20 +120,20 @@ class FakeTmux implements TmuxStatusEdge {
         commands
           .at(-1)!
           .push(arg.endsWith("\\;") ? `${arg.slice(0, -2)};` : arg);
-    return this.list(commands, stdin);
+    return this.list(commands);
   }
 
-  private list(commands: readonly string[][], stdin?: string): TmuxRun {
+  private list(commands: readonly string[][]): TmuxRun {
     let out = "";
     for (const command of commands) {
-      const run = this.one(command, stdin);
+      const run = this.one(command);
       if (run.kind !== "ok") return run;
       out += run.stdout;
     }
     return ok(out);
   }
 
-  private one(command: readonly string[], stdin?: string): TmuxRun {
+  private one(command: readonly string[]): TmuxRun {
     const [name, ...rest] = command;
     if (name === this.refuses)
       return { kind: "failed", reason: `fake tmux refused ${name}` };
@@ -185,15 +182,19 @@ class FakeTmux implements TmuxStatusEdge {
       case "if-shell": {
         const [condition, then, otherwise] = words as [string, string, string?];
         const own = /^#\{(@[\w-]+)\}$/.exec(condition);
-        const none = /^#\{!:#\{S:#\{\?#\{!=:#\{(@[\w-]+)\},\},1,\}\}\}$/.exec(
-          condition,
+        const named = [...this.sessions.values()].some(
+          (s) => (s.get(RENDERER_OPTION) ?? "") !== "",
         );
+        const guards: Record<string, boolean> = {
+          [NAMED]: named,
+          [`#{!:${NAMED}}`]: !named,
+        };
+        if (own === null && !(condition in guards))
+          throw new Error(`fake tmux: if-shell -F ${condition}`);
         const holds =
           own !== null
             ? (this.sessions.get(target ?? "")?.has(own[1]!) ?? false)
-            : ![...this.sessions.values()].some(
-                (s) => (s.get(none![1]!) ?? "") !== "",
-              );
+            : guards[condition]!;
         const runs = holds ? then : otherwise;
         return runs === undefined ? ok() : this.list(parseCommands(runs));
       }
@@ -594,13 +595,46 @@ describe("TmuxStatusLines", () => {
     await h.answer({ "%1": "$1", "%2": "$2" }, { $1: "%1", $2: "%2" });
     await h.frame("s1", frameOf("a"));
     await h.frame("s2", frameOf("b"));
-    h.owner.restoreAll((socket, args, stdin) =>
-      h.tmux.runSync(socket, args, stdin),
-    );
+    h.owner.restoreAll((socket, args) => h.tmux.runSync(socket, args));
     expect([...session(h, "$1")]).toEqual([]);
     expect([...session(h, "$2")]).toEqual([]);
     expect(h.tmux.binding).toBe(DEFAULT_COMMAND);
     expect(h.owner.stats()).toMatchObject({ sessions: 0, layouts: 0 });
+  });
+
+  test("a bind still in flight when the daemon shuts down lands on nothing", async () => {
+    const h = harness();
+    h.hold("s1", "%1");
+    let release = (): void => {};
+    let gated = false;
+    // The bind's write is in tmux's hands, behind its read of the root table.
+    h.tmux.onRun = (args) => {
+      if (gated || !args.includes("list-keys")) return;
+      gated = true;
+      h.tmux.gate = new Promise((resolve) => (release = resolve));
+    };
+    const answering = h.answer({ "%1": "$1" }, { $1: "%1" });
+    while (!gated) await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+    h.owner.restoreAll((socket, args) => h.tmux.runSync(socket, args));
+    h.tmux.gate = null;
+    release();
+    await answering;
+    expect(h.tmux.binding).toBe(DEFAULT_COMMAND);
+    expect(
+      h.logs.some((l) => l.includes("left MouseDown1Status unbound")),
+    ).toBe(true);
+  });
+
+  test("a binding restore tmux refused says so", async () => {
+    const h = harness();
+    h.hold("s1", "%1");
+    await h.answer({ "%1": "$1" }, { $1: "%1" });
+    h.tmux.refuses = "if-shell";
+    await h.answer({}, {});
+    expect(
+      h.logs.some((l) => l.includes("MouseDown1Status not restored")),
+    ).toBe(true);
   });
 
   test("a draw still in flight when the daemon shuts down lands on nothing", async () => {
@@ -613,9 +647,7 @@ describe("TmuxStatusLines", () => {
     // The draw's write is in tmux's hands when the shutdown restores.
     const drawing = h.frame("s1", frameOf("two\nthree"));
     await new Promise((resolve) => setImmediate(resolve));
-    h.owner.restoreAll((socket, args, stdin) =>
-      h.tmux.runSync(socket, args, stdin),
-    );
+    h.owner.restoreAll((socket, args) => h.tmux.runSync(socket, args));
     h.tmux.gate = null;
     release();
     await drawing;
@@ -841,9 +873,7 @@ describe("TmuxStatusLines", () => {
     h.hold("s1", "%1");
     await h.answer({ "%1": "$1" }, { $1: "%1" });
     session(h, "$2").set(RENDERER_OPTION, "dev");
-    h.owner.restoreAll((socket, args, stdin) =>
-      h.tmux.runSync(socket, args, stdin),
-    );
+    h.owner.restoreAll((socket, args) => h.tmux.runSync(socket, args));
     expect(oursOn(h.tmux)).toBe(true);
     session(h, "$2").delete(RENDERER_OPTION);
   });
@@ -873,9 +903,7 @@ describe("TmuxStatusLines", () => {
       shownBy: new Map([["$1", "%1"]]),
     });
     await new Promise((resolve) => setImmediate(resolve));
-    h.owner.restoreAll((socket, args, stdin) =>
-      h.tmux.runSync(socket, args, stdin),
-    );
+    h.owner.restoreAll((socket, args) => h.tmux.runSync(socket, args));
     h.tmux.gate = null;
     release();
     await h.owner.settled();

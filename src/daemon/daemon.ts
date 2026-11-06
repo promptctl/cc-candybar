@@ -470,8 +470,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // state (src/daemon/tmux-status.ts).
   const tmuxStatusLines: TmuxStatusLines = new TmuxStatusLines({
     edge: {
-      run: (socket, args, stdin) =>
-        runTmuxAsync(launcher, { socket }, "tmux-status", args, stdin),
+      run: (socket, args) =>
+        runTmuxAsync(launcher, { socket }, "tmux-status", args),
     },
     subscribe: (sessionId, sub) => frameFeeds.subscribe(sessionId, sub),
     sessionInPane: (socket, pane) =>

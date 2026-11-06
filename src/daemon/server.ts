@@ -462,8 +462,8 @@ function writeLeaseFile(sockPath: string): void {
 // hold this restore, bounded by shutdown's SIGKILL backstop only once it returns.
 const tmuxAtExit =
   (launcher: OneShotLauncher): TmuxAtExit =>
-  (socket, args, stdin) =>
-    runTmuxAtExit(launcher, { socket }, "tmux-status", args, stdin);
+  (socket, args) =>
+    runTmuxAtExit(launcher, { socket }, "tmux-status", args);
 
 let shuttingDown = false;
 function shutdown(code: number): void {

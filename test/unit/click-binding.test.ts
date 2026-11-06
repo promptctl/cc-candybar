@@ -102,6 +102,16 @@ describe("the user's binding a listing holds", () => {
       ],
     ],
     [
+      "a block whose command takes a ; argument",
+      `if-shell -F 1 { send-keys \\; }`,
+      [["if-shell", "-F", "1", { block: [["send-keys", ";"]] }]],
+    ],
+    [
+      "a word that starts with an escaped ~",
+      `send-keys \\~/foo "\\~x y"`,
+      [["send-keys", "~/foo", "~x y"]],
+    ],
+    [
       "a string beside a block, each holding a brace",
       `if-shell -F 1 "display-message \\"{ x }\\"" { display-message \\{ }`,
       [

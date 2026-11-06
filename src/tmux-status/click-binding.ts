@@ -75,7 +75,7 @@ export function clickBinding(user: CommandList | null): string[] {
 // The command a root `MouseDown1Status` binding runs, as `list-keys` prints
 // the line binding it: a note and a repeat flag may sit before the table, and
 // a whole table's listing pads the key's column with spaces.
-const BOUND =
+const LISTED =
   /^bind-key\s+(?:-r\s+)?(?:-N\s+(?:"(?:[^"\\]|\\.)*"|\S+)\s+)?-T\s+root\s+MouseDown1Status\s+(.+)$/m;
 
 // One of our bindings' else-branch, the list it chains (null: none), or
@@ -110,7 +110,7 @@ export interface Bound {
 }
 
 export function boundOf(listKeys: string): Bound {
-  const printed = BOUND.exec(listKeys)?.[1];
+  const printed = LISTED.exec(listKeys)?.[1];
   let user: CommandList | null =
     printed === undefined ? null : tmuxCommands(printed);
   const ours = user !== null && chained(user) !== undefined;
@@ -122,15 +122,33 @@ export function boundOf(listKeys: string): Bound {
   return { ours, user };
 }
 
-// What the restore prints, so the owner can say which way tmux went.
+// What the bind and the restore print, so the owner can say which way tmux
+// went.
+export const BOUND = "ccb:bound";
 export const RESTORED = "ccb:restored";
 export const HELD = "ccb:held";
 
+// Whether any session names a renderer, as tmux decides it: a session counts
+// by whether it carries a name at all, because tmux reads a name such as `0`
+// as false (measured).
+export const NAMED = `#{S:#{?#{!=:#{${RENDERER_OPTION}},},1,}}`;
+
+// [LAW:no-ambient-temporal-coupling] The binding written, decided by tmux in
+// the call that writes it: only while a session names a renderer, so a bind
+// still in flight when the last renderer has restored lands on nothing, as a
+// draw does.
+export function bindClick(user: CommandList | null): string[] {
+  return [
+    "if-shell",
+    "-F",
+    NAMED,
+    `${commandText([clickBinding(user)])} ; display-message -p ${BOUND}`,
+  ];
+}
+
 // [LAW:no-ambient-temporal-coupling] Putting the user's binding back, decided
 // by tmux in the call that writes it: only while no session names a renderer,
-// so one that named itself since the listing was read keeps its clicks. A
-// session counts by whether it carries a name at all, because tmux reads a
-// name such as `0` as false (measured).
+// so one that named itself since the listing was read keeps its clicks.
 export function restoreBinding(user: CommandList | null): string[] {
   const put =
     user === null
@@ -139,7 +157,7 @@ export function restoreBinding(user: CommandList | null): string[] {
   return [
     "if-shell",
     "-F",
-    `#{!:#{S:#{?#{!=:#{${RENDERER_OPTION}},},1,}}}`,
+    `#{!:${NAMED}}`,
     `${put} ; display-message -p ${RESTORED}`,
     `display-message -p ${HELD}`,
   ];

@@ -55,12 +55,8 @@ export function runTmuxAtExit(
   hint: Pick<TmuxHint, "socket">,
   category: LaunchCategory,
   args: readonly string[],
-  stdinInput?: string,
 ): TmuxRun {
-  return tmuxRun(
-    launcher.launchSync(invocation(hint, category, args, stdinInput)),
-    args,
-  );
+  return tmuxRun(launcher.launchSync(invocation(hint, category, args)), args);
 }
 
 // The same invocation off the loop: for everything else the daemon asks.
