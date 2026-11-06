@@ -76848,7 +76848,7 @@ function resolvePath2(obj, dotPath) {
 }
 
 // src/facts/recording.ts
-var RECORDING_VERSION = 3;
+var RECORDING_VERSION = 4;
 var LANES2 = new Set(REFRESH_LANES);
 function formatLine(line) {
   const json2 = line.kind === "recording" ? {
@@ -83527,6 +83527,19 @@ function inProcessFacts({
       const holds2 = new Holds();
       const declaredRuns = observable.map(void 0, { deep: false });
       let disposed = false;
+      const unstampedRun = (identity2, digest2) => {
+        if (!declaredRuns.has(digest2)) {
+          return failed(
+            `the run of ${whereOf(identity2.read)} is not declared by this view`,
+            "read"
+          );
+        }
+        const { failure } = box.get();
+        return failure === null ? pendingOf("unread") : failed(
+          `the run of ${whereOf(identity2.read)} is in no document: ${failure}`,
+          "read"
+        );
+      };
       const sid = JSON.stringify(session);
       const lanesFor = (facts2, { sources }) => {
         try {
@@ -83578,11 +83591,11 @@ function inProcessFacts({
       const ran2 = computed(
         () => new Map(
           [...declaredRuns].map(
-            ([digest2, { lane }]) => [
+            ([digest2, { run: run3 }]) => [
               digest2,
               {
-                reading: lane.current(),
-                fault: lane.fault()
+                reading: run3.current(),
+                fault: run3.fault()
               }
             ]
           )
@@ -83650,21 +83663,19 @@ function inProcessFacts({
             const digest2 = digestOf3(identity2);
             callerHolds.take(`facts.run:${digest2}`, () => {
               const held = new Holds();
-              const lane = runs.declare(held, identity2);
-              runInAction(() => declaredRuns.set(digest2, { lane, held }));
+              const run3 = runs.declare(held, identity2);
+              const lane = runLaneOver(
+                identity2,
+                () => box.get().line.facts,
+                (missing) => unstampedRun(identity2, missing)
+              );
+              runInAction(() => declaredRuns.set(digest2, { run: run3, held, lane }));
               return () => {
                 runInAction(() => declaredRuns.delete(digest2));
                 held.close();
               };
             });
-            return runLaneOver(
-              identity2,
-              () => box.get().line.facts,
-              (missing) => declaredRuns.has(missing) ? pendingOf("unread") : failed(
-                `the run of ${whereOf(identity2.read)} is not declared by this view`,
-                "read"
-              )
-            );
+            return declaredRuns.get(digest2).lane;
           }
         },
         stamped: () => box.get().line,
