@@ -59,8 +59,9 @@ import type { Timekeeper } from "../time";
 // must hold a hundred sessions, each drawing from its own checkout, at their
 // charges, which takes 832 MB (560 MB of charges plus the reserve, over the
 // near-limit fraction). The margin to 1024 is what lets a leak trip the
-// backstop while it is still a leak, before the share runs out. Below 832 the cache cannot hold the
-// directories being rendered from, every render misses, and a miss's config
+// backstop while it is still a leak, before the share runs out. Below 832 the
+// cache cannot hold the directories being rendered from, every render misses,
+// and a miss's config
 // load is longer than the client waits, so every render fails rather than some.
 export const RSS_LIMIT_ENV = "CC_CANDYBAR_RSS_LIMIT_MB";
 export const DEFAULT_RSS_LIMIT_MB = 1024;
