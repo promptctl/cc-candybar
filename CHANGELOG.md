@@ -1,3 +1,9 @@
+## [1.191.0](https://github.com/promptctl/cc-candybar/compare/v1.190.0...v1.191.0) (2026-11-06)
+
+### Features
+
+* **tmux-status:** the renderer names itself on every session whose row it draws (candybar-gather-renderer-76bb.b2l.rwj) ([#619](https://github.com/promptctl/cc-candybar/issues/619)) ([bfb8918](https://github.com/promptctl/cc-candybar/commit/bfb89187e23eda03a7d719a5fba64875b44a3355))
+
 ## [1.190.0](https://github.com/promptctl/cc-candybar/compare/v1.189.0...v1.190.0) (2026-11-05)
 
 ### Features
