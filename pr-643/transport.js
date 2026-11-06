@@ -22778,7 +22778,7 @@ var VERB_SLASH = "slash";
 var VERB_RUN = "run";
 var VERB_REPO_CONFIG = "repo-config";
 var VERB_COPY_DIAGNOSTIC = "copy-diagnostic";
-var VERB_TMUX_STATUS_CLICK = "tmux-status-click";
+var VERB_RANGE = "range";
 var sayStep = (key, by) => `step ${key} ${by.startsWith("-") ? "down" : "up"} by ${by.replace("-", "")}`;
 var withoutNs = (key, ns) => key.startsWith(ns) ? key.slice(ns.length) : key;
 function sayWrite(key, value) {
@@ -46117,8 +46117,8 @@ function* scopedBlocks(template, root) {
     }
     if (keyword === "else") {
       yield { code, dot: outer, block };
-      const chained = /^with\b([\s\S]*)$/.exec(rest2);
-      stack[stack.length - 1] = chained === null ? outer : operandAt(chained[1], outer, root);
+      const chained2 = /^with\b([\s\S]*)$/.exec(rest2);
+      stack[stack.length - 1] = chained2 === null ? outer : operandAt(chained2[1], outer, root);
       continue;
     }
     yield { code, dot: top, block };
@@ -65142,9 +65142,9 @@ function oneReading(root) {
     onDisk: (dir) => {
       const known = read2.get(dir);
       if (known !== void 0) return known;
-      const spelled2 = root.onDisk(dir);
-      read2.set(dir, spelled2);
-      return spelled2;
+      const spelled3 = root.onDisk(dir);
+      read2.set(dir, spelled3);
+      return spelled3;
     }
   };
 }
@@ -78750,7 +78750,7 @@ async function linkClick(parts, url, arrival, facts, clientGone) {
   return handleClick(parts, link.verb, link.value, arrival, facts, clientGone);
 }
 async function handleClick(parts, verb, value, arrival, facts, clientGone) {
-  if (verb === VERB_TMUX_STATUS_CLICK) {
+  if (verb === VERB_RANGE) {
     if (arrival.via === "tmux-status") {
       return {
         kind: "bad-request",
@@ -83875,11 +83875,11 @@ function sessionSource(deps) {
       effective: () => turn.get().draw.effective,
       facts: () => turn.get().stamped.facts,
       turn: () => {
-        const { stamped: stamped2, request: request2, picks: taken2, draw: drawn } = turn.get();
+        const { stamped: stamped2, request: request2, picks: turnPicks, draw: drawn } = turn.get();
         return {
           document: stamped2,
           request: request2,
-          state: { ...taken2, history: drawn.history, back: drawn.back }
+          state: { ...turnPicks, history: drawn.history, back: drawn.back }
         };
       },
       held: () => turn.get().failure?.cause === "inputs",
@@ -84358,12 +84358,163 @@ function sameView(a, b) {
 
 // src/daemon/tmux-status.ts
 init_globals();
+
+// src/tmux-status/click-binding.ts
+init_globals();
+
+// src/tmux-status/tmux-words.ts
+init_globals();
+function tmuxQuoted(text4) {
+  return `"${text4.replace(/[\\"$~]/g, (c) => `\\${c}`)}"`;
+}
+function commandText(commands) {
+  return commands.map((c) => c.map(wordText).join(" ")).join(" ; ");
+}
+var wordText = (word) => typeof word === "string" ? tmuxQuoted(word) : `{ ${commandText(word.block)} }`;
+function boundText(commands) {
+  return commands.map((c) => c.map(wordText).join(" ")).join(" \\; ");
+}
+var C_ESCAPES = {
+  n: "\n",
+  t: "	",
+  r: "\r",
+  b: "\b",
+  a: "\x07",
+  v: "\v",
+  f: "\f",
+  "0": "\0"
+};
+var lonely = (text4, i) => text4.startsWith("\\;", i) && (text4[i + 2] ?? " ") === " ";
+function tmuxCommands(text4) {
+  let i = 0;
+  const alone = (brace) => text4[i] === brace && (text4[i + 1] ?? " ") === " ";
+  const word = () => {
+    const bytes = [];
+    const add2 = (s) => {
+      bytes.push(...import_buffer.Buffer.from(s, "utf8"));
+    };
+    let quote2 = null;
+    while (i < text4.length) {
+      const c = text4[i];
+      if (quote2 === null && (c === " " || c === ";")) break;
+      if (c === quote2) {
+        quote2 = null;
+        i++;
+      } else if (quote2 === null && (c === '"' || c === "'")) {
+        quote2 = c;
+        i++;
+      } else if (c === "\\" && i + 1 < text4.length) {
+        const octal = /^[0-7]{3}/.exec(text4.slice(i + 1, i + 4));
+        const next = text4[i + 1];
+        if (octal !== null) {
+          bytes.push(parseInt(octal[0], 8));
+          i += 4;
+        } else {
+          add2(C_ESCAPES[next] ?? next);
+          i += 2;
+        }
+      } else {
+        const char = String.fromCodePoint(text4.codePointAt(i));
+        add2(char);
+        i += char.length;
+      }
+    }
+    return import_buffer.Buffer.from(bytes).toString("utf8");
+  };
+  const list2 = (inBlock) => {
+    const commands = [[]];
+    while (i < text4.length) {
+      if (text4[i] === " ") i++;
+      else if (text4[i] === ";" || !inBlock && lonely(text4, i)) {
+        commands.push([]);
+        i += text4[i] === ";" ? 1 : 2;
+      } else if (inBlock && alone("}")) {
+        i++;
+        break;
+      } else if (alone("{")) {
+        i++;
+        commands.at(-1).push({ block: list2(true) });
+      } else commands.at(-1).push(word());
+    }
+    return commands.filter((c) => c.length > 0);
+  };
+  return list2(false);
+}
+
+// src/tmux-status/click-binding.ts
+var CLICK_KEY = ["-T", "root", "MouseDown1Status"];
+var RENDERER_OPTION = "@cc-candybar-renderer";
+var CLICK_OPTION = "@cc-candybar-click";
+function sessionClick(handler, name, socket, mac) {
+  return `${handler} ${addressedLink(name, VERB_RANGE, encodeSegments([socket, mac]))}`;
+}
+var NO_RENDERER = "cc-candybar: no renderer takes clicks on this row: the one that drew it is older than this binding";
+var OUR_RANGE = `#{m:${RANGE_PREFIX}*,#{mouse_status_range}}`;
+function clickBinding(user) {
+  const run3 = `run-shell -b ${tmuxQuoted(`#{${CLICK_OPTION}}/#{s/%//:pane_id}/#{q:mouse_status_range}`)}`;
+  const said = `display-message ${tmuxQuoted(NO_RENDERER)}`;
+  return [
+    "bind-key",
+    ...CLICK_KEY,
+    "if-shell",
+    "-F",
+    OUR_RANGE,
+    `if-shell -F ${tmuxQuoted(`#{${CLICK_OPTION}}`)} ${tmuxQuoted(run3)} ${tmuxQuoted(said)}`,
+    ...user === null ? [] : [commandText(user)]
+  ];
+}
+var LISTED = /^bind-key\s+(?:-r\s+)?(?:-N\s+(?:"(?:[^"\\]|\\.)*"|\S+)\s+)?-T\s+root\s+MouseDown1Status\s+(.+)$/m;
+function chained(list2) {
+  const [only, ...more] = list2;
+  if (only === void 0 || more.length > 0 || only[0] !== "if-shell")
+    return void 0;
+  let operands = only.slice(1);
+  while (typeof operands[0] === "string" && operands[0].startsWith("-"))
+    operands = operands.slice(1);
+  if (operands[0] !== OUR_RANGE) return void 0;
+  const otherwise = operands[2];
+  const chain2 = otherwise === void 0 ? [] : typeof otherwise === "string" ? tmuxCommands(otherwise) : otherwise.block;
+  return chain2.length > 0 ? chain2 : null;
+}
+function boundOf2(listKeys) {
+  const printed = LISTED.exec(listKeys)?.[1];
+  let user = printed === void 0 ? null : tmuxCommands(printed);
+  const ours = user !== null && chained(user) !== void 0;
+  while (user !== null) {
+    const next = chained(user);
+    if (next === void 0) break;
+    user = next;
+  }
+  return { ours, user };
+}
+var BOUND = "ccb:bound";
+var RESTORED = "ccb:restored";
+var HELD = "ccb:held";
+var NAMED = `#{S:#{?#{!=:#{${RENDERER_OPTION}},},1,}}`;
+function bindClick(user) {
+  return [
+    "if-shell",
+    "-F",
+    NAMED,
+    `${commandText([clickBinding(user)])} ; display-message -p ${BOUND}`
+  ];
+}
+function restoreBinding(user) {
+  const put = user === null ? `unbind-key ${CLICK_KEY.join(" ")}` : `bind-key ${CLICK_KEY.join(" ")} ${boundText(user)}`;
+  return [
+    "if-shell",
+    "-F",
+    `#{!:${NAMED}}`,
+    `${put} ; display-message -p ${RESTORED}`,
+    `display-message -p ${HELD}`
+  ];
+}
+
+// src/daemon/tmux-status.ts
 var MAX_STATUS_ROWS = LANES.tmuxStatus.rows;
 var PRIOR_OPTION = "@cc-candybar-status-prior";
 var WROTE_OPTION = "@cc-candybar-status-wrote";
-var BINDING_OPTION = "@cc-candybar-binding-prior";
-var RENDERER_OPTION = "@cc-candybar-renderer";
-var CLICK_KEY = ["-T", "root", "MouseDown1Status"];
+var OLDER_BINDING_RECORD = "@cc-candybar-binding-prior";
 var INDICES = Array.from({ length: MAX_STATUS_ROWS }, (_, i) => i);
 var rowOption = (row2) => `@cc-candybar-row-${row2}`;
 var rowFormat = (row2) => `#[fill=terminal]#{${rowOption(row2)}}`;
@@ -84385,17 +84536,12 @@ function sameFormats(a, b) {
 function tmuxArg(value) {
   return value.endsWith(";") ? `${value.slice(0, -1)}\\;` : value;
 }
+var WROTE_NOTHING = { kind: "ok", stdout: "" };
 function chain(commands) {
   return commands.flatMap((command, i) => [
     ...i === 0 ? [] : [";"],
     ...command
   ]);
-}
-function tmuxQuoted(text4) {
-  return `"${text4.replace(/[\\"$]/g, (c) => `\\${c}`)}"`;
-}
-function commandText(commands) {
-  return commands.map((c) => c.map(tmuxQuoted).join(" ")).join(" ; ");
 }
 var SEPARATOR = "ccb:separator";
 function readChain(queries) {
@@ -84478,21 +84624,18 @@ function leftBehind(prior, wrote, owner) {
     why: `the daemon at ${JSON.stringify(parsed2.owner)} draws it`
   };
 }
-var nameWrite = (session, name) => [
-  "set-option",
-  "-t",
-  session,
-  RENDERER_OPTION,
-  name
+var marksWrite = (session, marks) => [
+  ["set-option", "-t", session, RENDERER_OPTION, marks.name],
+  ["set-option", "-t", session, CLICK_OPTION, marks.click]
 ];
-function installPlan(session, answers, owner, name) {
+function installPlan(session, answers, owner, marks) {
   const [statusWordNow = "", ...rest2] = answers;
   const own2 = ownOf(rest2.slice(0, 2 + MAX_STATUS_ROWS));
   const globals = rest2.slice(2 + MAX_STATUS_ROWS, 2 + 2 * MAX_STATUS_ROWS);
   const [prior = "", wrote = ""] = rest2.slice(2 + 2 * MAX_STATUS_ROWS);
   if (prior !== "") {
     const left = leftBehind(prior, wrote, owner);
-    return left.kind === "theirs" ? left : { ...left, commands: [nameWrite(session, name)] };
+    return left.kind === "theirs" ? left : { ...left, commands: marksWrite(session, marks) };
   }
   const base = statusRows(statusWordNow);
   const above = {};
@@ -84521,7 +84664,7 @@ function installPlan(session, answers, owner, name) {
     prior: laid,
     commands: [
       ["set-option", "-t", session, PRIOR_OPTION, JSON.stringify(laid)],
-      nameWrite(session, name),
+      ...marksWrite(session, marks),
       ...arrayWrite(session, wroteFormats)
     ]
   };
@@ -84561,40 +84704,12 @@ function restorePlan(session, prior, answers) {
     ]),
     ["set-option", "-q", "-u", "-t", session, PRIOR_OPTION],
     ["set-option", "-q", "-u", "-t", session, WROTE_OPTION],
-    ["set-option", "-q", "-u", "-t", session, RENDERER_OPTION]
+    ["set-option", "-q", "-u", "-t", session, RENDERER_OPTION],
+    ["set-option", "-q", "-u", "-t", session, CLICK_OPTION]
   );
   return { commands, kept };
 }
-var BOUND = /^bind-key\s+(?:-r\s+)?(?:-N\s+(?:"(?:[^"\\]|\\.)*"|\S+)\s+)?-T\s+root\s+MouseDown1Status\s+(.+)$/m;
 var ROOT_KEYS = [["list-keys", "-T", "root"]];
-function boundOf2(listKeys) {
-  const found2 = BOUND.exec(listKeys);
-  return found2 === null ? null : { line: found2[0], command: found2[1] };
-}
-var clickUrl = (name, socket, mac) => addressedLink(
-  name,
-  VERB_TMUX_STATUS_CLICK,
-  `${encodeSegments([socket, mac])}/#{s/%//:pane_id}/#{q:mouse_status_range}`
-);
-var isClickBinding = (bound) => bound?.command.includes(`/${VERB_TMUX_STATUS_CLICK}/`) ?? false;
-function bindingRestorePlan(prior, listKeys) {
-  const forget = {
-    command: ["set-option", "-g", "-q", "-u", BINDING_OPTION]
-  };
-  if (!isClickBinding(boundOf2(listKeys)))
-    return {
-      steps: [forget],
-      said: "left MouseDown1Status as it is: bound again since"
-    };
-  return {
-    steps: [
-      prior === null ? { command: ["unbind-key", ...CLICK_KEY] } : { command: ["source-file", "-"], stdin: `${prior.line}
-` },
-      forget
-    ],
-    said: `restored MouseDown1Status to ${prior === null ? "unbound" : JSON.stringify(prior.line)}`
-  };
-}
 var TmuxStatusLines = class {
   constructor(deps) {
     this.deps = deps;
@@ -84680,24 +84795,20 @@ var TmuxStatusLines = class {
     for (const [socket, server] of this.servers) {
       for (const [session, layout] of [...server.layouts]) {
         server.layouts.delete(session);
-        const answers = this.askSync(atExit, socket, RESTORE_QUERIES(session));
-        if (answers === null) continue;
-        const plan = restorePlan(session, layout.prior, answers);
+        const answers2 = this.askSync(atExit, socket, RESTORE_QUERIES(session));
+        if (answers2 === null) continue;
+        const plan = restorePlan(session, layout.prior, answers2);
         this.writeSync(atExit, socket, plan.commands);
         this.saidRestored(socket, session, plan.kept);
       }
-      const binding = server.binding;
-      server.binding = { kind: "none" };
-      if (binding.kind === "ours" || binding.kind === "adopted") {
-        const answers = this.askSync(atExit, socket, ROOT_KEYS);
-        if (answers === null) continue;
-        this.writeBindingRestoreSync(
-          atExit,
-          socket,
-          binding.prior,
-          answers[0] ?? ""
-        );
-      }
+      if (server.binding === "none") continue;
+      server.binding = "none";
+      const answers = this.askSync(atExit, socket, ROOT_KEYS);
+      if (answers === null) continue;
+      const restore = this.bindingRestore(socket, answers[0] ?? "");
+      if (restore === null) continue;
+      const run3 = this.writeSync(atExit, socket, [restore.command]);
+      this.saidBindingRestore(socket, run3, restore.user);
     }
   }
   // A click on the range `<range>` of pane `%<n>` on the server `<socket>`
@@ -84709,7 +84820,7 @@ var TmuxStatusLines = class {
     if (segments === null || socket === void 0 || mac === void 0 || pane === void 0 || range === void 0 || extra.length > 0)
       return {
         kind: "refused",
-        reason: `tmux-status-click needs <socket>/<mac>/<pane>/<range>, got ${JSON.stringify(value)}`
+        reason: `${VERB_RANGE} needs <socket>/<mac>/<pane>/<range>, got ${JSON.stringify(value)}`
       };
     if (!this.deps.signer.verifyBinding(socket, mac))
       return {
@@ -84749,7 +84860,7 @@ var TmuxStatusLines = class {
       adopted: false,
       layouts: /* @__PURE__ */ new Map(),
       left: /* @__PURE__ */ new Map(),
-      binding: { kind: "none" },
+      binding: "none",
       running: null,
       again: false,
       lastFailure: null
@@ -84844,7 +84955,8 @@ var TmuxStatusLines = class {
       `#{session_id}	#{${PRIOR_OPTION}}	#{${WROTE_OPTION}}`
     ]);
     if (run3.kind === "ok") {
-      const names = [];
+      const ours = this.marks(socket);
+      const marks = [];
       for (const line of run3.stdout.split("\n")) {
         const [session, prior, wrote = ""] = line.split("	");
         if (session === void 0 || prior === void 0 || prior === "")
@@ -84856,30 +84968,30 @@ var TmuxStatusLines = class {
             rows: [],
             status: found2.status
           });
-          names.push(nameWrite(session, this.deps.name));
+          marks.push(...marksWrite(session, ours));
         } else this.leave(socket, server, session, found2.why);
       }
-      await this.write(socket, names);
+      await this.write(socket, marks);
     }
-    const answers = await this.ask(socket, [showGlobal(BINDING_OPTION)]);
-    const saved = answers?.[0] ?? "";
-    if (saved !== "") {
-      try {
-        const record2 = JSON.parse(saved);
-        if (record2.owner === this.deps.owner)
-          server.binding = { kind: "adopted", prior: record2.prior };
-      } catch (error) {
-        this.deps.log(
-          "warn",
-          `tmux-status: socket=${JSON.stringify(socket)} ${BINDING_OPTION} does not read (${String(error)}), left as it is`
-        );
-      }
-    }
-    if (server.layouts.size > 0 || server.binding.kind === "adopted")
+    if (server.layouts.size > 0) {
+      server.binding = "owed";
       this.deps.log(
         "info",
-        `tmux-status: socket=${JSON.stringify(socket)} took over layouts=${[...server.layouts.keys()].join(",") || "-"} binding=${server.binding.kind}`
+        `tmux-status: socket=${JSON.stringify(socket)} took over layouts=${[...server.layouts.keys()].join(",")}`
       );
+    }
+  }
+  // What this renderer's sessions on the server at `socket` carry.
+  marks(socket) {
+    return {
+      name: this.deps.name,
+      click: sessionClick(
+        this.deps.handler,
+        this.deps.name,
+        socket,
+        this.deps.signer.signBinding(socket)
+      )
+    };
   }
   // A tmux session this daemon does not draw while what is laid out there is
   // not its own — said once, when it is first met.
@@ -84893,7 +85005,12 @@ var TmuxStatusLines = class {
   async install(socket, server, session) {
     const answers = await this.ask(socket, INSTALL_QUERIES(session));
     if (answers === null || this.closed) return null;
-    const plan = installPlan(session, answers, this.deps.owner, this.deps.name);
+    const plan = installPlan(
+      session,
+      answers,
+      this.deps.owner,
+      this.marks(socket)
+    );
     if (plan.kind === "theirs") {
       this.leave(socket, server, session, plan.why);
       return null;
@@ -84925,7 +85042,7 @@ var TmuxStatusLines = class {
         ["set-option", "-t", session, WROTE_OPTION, word]
       );
     }
-    const took = commands.length === 0 || await this.write(socket, [
+    const took = commands.length === 0 || (await this.write(socket, [
       [
         "if-shell",
         "-F",
@@ -84934,7 +85051,7 @@ var TmuxStatusLines = class {
         `#{${PRIOR_OPTION}}`,
         commandText(commands)
       ]
-    ]);
+    ])).kind === "ok";
     if (!took) return;
     layout.rows = rows;
     layout.status = status;
@@ -84955,73 +85072,63 @@ var TmuxStatusLines = class {
       `tmux-status: socket=${JSON.stringify(socket)} restored session ${session} kept=${kept.join(",") || "-"}`
     );
   }
-  // The server's click binding made this process's: bound over whatever the
-  // user had (or, for one a daemon on this socket left, over what IT
-  // replaced), with the record of what it replaced written in the same tmux
-  // call — so tmux never holds the binding without it. Another daemon's
-  // binding is left alone.
+  // The server's click binding bound over the user's own: the same text every
+  // renderer binds (src/tmux-status/click-binding.ts), so a server another
+  // renderer already bound is bound again to what it holds. The sessions this
+  // process draws carry their click before this runs, because the reconcile
+  // installs them first.
   async installBinding(socket, server) {
-    const binding = server.binding;
-    if (binding.kind === "ours" || binding.kind === "left") return;
+    if (server.binding === "bound") return;
+    const period = server.binding;
     const answers = await this.ask(socket, ROOT_KEYS);
     if (answers === null || this.closed) return;
-    const bound = boundOf2(answers[0] ?? "");
-    if (binding.kind === "none" && isClickBinding(bound)) {
-      server.binding = {
-        kind: "left",
-        why: "another cc-candybar daemon's status-line clicks are bound to MouseDown1Status; left as it is, so this daemon's are off"
-      };
-      this.deps.log(
-        "warn",
-        `tmux-status: socket=${JSON.stringify(socket)} ${server.binding.why}`
-      );
-      return;
-    }
-    const prior = binding.kind === "adopted" && isClickBinding(bound) ? binding.prior : bound;
-    const record2 = { owner: this.deps.owner, prior };
-    server.binding = { kind: "ours", prior };
-    const took = await this.write(socket, [
-      [
-        "bind-key",
-        ...CLICK_KEY,
-        "if-shell",
-        "-F",
-        `#{m:${RANGE_PREFIX}*,#{mouse_status_range}}`,
-        `run-shell -b ${tmuxQuoted(`${this.deps.handler} ${clickUrl(this.deps.name, socket, this.deps.signer.signBinding(socket))}`)}`,
-        ...prior === null ? [] : [prior.command]
-      ],
-      ["set-option", "-g", BINDING_OPTION, JSON.stringify(record2)]
+    const { user } = boundOf2(answers[0] ?? "");
+    server.binding = "bound";
+    const run3 = await this.write(socket, [
+      bindClick(user),
+      ["set-option", "-g", "-q", "-u", OLDER_BINDING_RECORD]
     ]);
-    if (!took) {
-      server.binding = binding;
-      return;
-    }
+    const took = run3.kind === "ok" && run3.stdout.includes(BOUND);
+    if (!took) server.binding = period;
+    const said = took ? `bound MouseDown1Status over ${spelled2(user)}` : run3.kind === "ok" ? "left MouseDown1Status unbound: no session names a renderer" : `MouseDown1Status not bound: ${run3.reason}`;
     this.deps.log(
       "info",
-      `tmux-status: socket=${JSON.stringify(socket)} bound MouseDown1Status (was ${prior === null ? "unbound" : JSON.stringify(prior.line)})`
+      `tmux-status: socket=${JSON.stringify(socket)} ${said}`
     );
   }
+  // Once a bound period, as it ends: the user's binding put back, unless a
+  // session still names a renderer, which tmux decides in the writing call.
   async restoreBinding(socket, server) {
-    const binding = server.binding;
-    server.binding = { kind: "none" };
-    if (binding.kind !== "ours" && binding.kind !== "adopted") return;
+    if (server.binding === "none") return;
+    server.binding = "none";
     const answers = await this.ask(socket, ROOT_KEYS);
     if (answers === null) return;
-    const plan = bindingRestorePlan(binding.prior, answers[0] ?? "");
-    for (const step4 of plan.steps)
-      await this.write(socket, [step4.command], step4.stdin);
-    this.deps.log(
-      "info",
-      `tmux-status: socket=${JSON.stringify(socket)} ${plan.said}`
-    );
+    const restore = this.bindingRestore(socket, answers[0] ?? "");
+    if (restore === null) return;
+    const run3 = await this.write(socket, [restore.command]);
+    this.saidBindingRestore(socket, run3, restore.user);
   }
-  writeBindingRestoreSync(atExit, socket, prior, listKeys) {
-    const plan = bindingRestorePlan(prior, listKeys);
-    for (const step4 of plan.steps)
-      this.writeSync(atExit, socket, [step4.command], step4.stdin);
+  // The call that puts the user's binding back, from the root table as it
+  // reads now, or null where what is bound is not ours (the user's, bound
+  // since, or a dead daemon's that never bound): it stays.
+  bindingRestore(socket, listKeys) {
+    const bound = boundOf2(listKeys);
+    if (!bound.ours) {
+      this.deps.log(
+        "info",
+        `tmux-status: socket=${JSON.stringify(socket)} left MouseDown1Status as it is: not a cc-candybar binding`
+      );
+      return null;
+    }
+    return { command: restoreBinding(bound.user), user: bound.user };
+  }
+  // [LAW:nothing-unseen] Which way tmux went: the user's binding back, or held
+  // for a session that still names a renderer.
+  saidBindingRestore(socket, run3, user) {
+    const said = run3.kind !== "ok" ? `MouseDown1Status not restored: ${run3.reason}` : run3.stdout.includes(RESTORED) ? `restored MouseDown1Status to ${spelled2(user)}` : run3.stdout.includes(HELD) ? "left MouseDown1Status bound: a session still names a renderer" : `MouseDown1Status restore said neither way: ${JSON.stringify(run3.stdout)}`;
     this.deps.log(
       "info",
-      `tmux-status: socket=${JSON.stringify(socket)} ${plan.said}`
+      `tmux-status: socket=${JSON.stringify(socket)} ${said}`
     );
   }
   // ─── tmux, counted ───────────────────────────────────────────────────────
@@ -85041,8 +85148,8 @@ var TmuxStatusLines = class {
     server.lastFailure = run3.reason;
     return run3;
   }
-  async run(socket, args, stdin) {
-    return this.counted(socket, await this.deps.edge.run(socket, args, stdin));
+  async run(socket, args) {
+    return this.counted(socket, await this.deps.edge.run(socket, args));
   }
   async ask(socket, queries) {
     const run3 = await this.run(socket, readChain(queries));
@@ -85052,18 +85159,19 @@ var TmuxStatusLines = class {
     const run3 = this.counted(socket, atExit(socket, readChain(queries)));
     return run3.kind === "ok" ? answersOf(run3.stdout, queries.length) : null;
   }
-  // Whether tmux took the write.
-  async write(socket, commands, stdin) {
-    if (commands.length === 0) return true;
+  // What tmux said to the write: `ok` where it took it.
+  async write(socket, commands) {
+    if (commands.length === 0) return WROTE_NOTHING;
     this.writes++;
-    return (await this.run(socket, chain(commands), stdin)).kind === "ok";
+    return this.run(socket, chain(commands));
   }
-  writeSync(atExit, socket, commands, stdin) {
-    if (commands.length === 0) return;
+  writeSync(atExit, socket, commands) {
+    if (commands.length === 0) return WROTE_NOTHING;
     this.writes++;
-    this.counted(socket, atExit(socket, chain(commands), stdin));
+    return this.counted(socket, atExit(socket, chain(commands)));
   }
 };
+var spelled2 = (user) => user === null ? "unbound" : JSON.stringify(commandText(user));
 function segmentsOf2(value) {
   try {
     return decodeSegments(value);
@@ -86104,7 +86212,7 @@ function createDaemon(inputs) {
   });
   const tmuxStatusLines = new TmuxStatusLines({
     edge: {
-      run: (socket, args, stdin) => runTmuxAsync(launcher, { socket }, "tmux-status", args, stdin)
+      run: (socket, args) => runTmuxAsync(launcher, { socket }, "tmux-status", args)
     },
     subscribe: (sessionId2, sub2) => frameFeeds.subscribe(sessionId2, sub2),
     sessionInPane: (socket, pane) => frameFeeds.newestWhere(
@@ -87318,7 +87426,7 @@ var linkFields2 = (fields2) => [
   fields2.evaluated
 ];
 var bindingFields = (socket) => [
-  VERB_TMUX_STATUS_CLICK,
+  VERB_RANGE,
   socket
 ];
 function linkSigner(key) {
