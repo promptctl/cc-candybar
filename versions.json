@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-661",
+      "ref": "refs/pull/661/merge",
+      "sha": "0fb428276c61e19facf383a7c6effa29e4539c76",
+      "timestamp": "2026-11-06T23:56:00.181Z",
+      "commits": [
+        {
+          "sha": "0fb428276c61e19facf383a7c6effa29e4539c76",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T23:55:03Z",
+          "message": "Merge 391b1b796fb67db09f3d78c4dc8edecb7c223fff into 37eb112c989fe03fdef3152c96c290f0cb09728f\n"
+        },
+        {
+          "sha": "391b1b796fb67db09f3d78c4dc8edecb7c223fff",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T16:49:05-07:00",
+          "message": "fix(testing): a wait keeps its deadline on the case's clock, so faking the sandbox's clock freezes none (brandon-menus-sjhy.r62)\n\nFrom the second high review pass. untilHeard keeps its 48 rounds, ended\nearly only by the case; a bound says what set it, so a pool wait the case\ncut no longer blames the machine; render failures name their last bound.\n"
+        },
+        {
+          "sha": "09902b978c8fa3e8f37c961212af4e412821dca4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T16:39:52-07:00",
+          "message": "fix(testing): untilHeard ends at a deadline, the pool reads its case after its own start time, and the rest of a case is a bound (brandon-menus-sjhy.r62)\n\nFrom the medium review pass. A cut wait names the margin it keeps, and a\nrequest whose deadline the daemon is told is sent under that same bound.\n"
+        },
+        {
+          "sha": "488f9261bc735e6244e10c80ea1354da42205c08",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T16:32:15-07:00",
+          "message": "fix(testing): a wait's sub-steps share its one deadline, and every request failure names its bound (brandon-menus-sjhy.r62)\n\nFrom the high review pass: the pool's start-time read and a request's\nconnect each spent time the wait had not charged; a cut render stated an\nuncut deadline to the daemon; untilHeard ran past its case; a test whose\nbefore-hook failed left its case's deadline set.\n"
+        },
+        {
+          "sha": "99dcb31eced4e4102324cab1cb8c4e8ba3f8e8c8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T16:23:05-07:00",
+          "message": "fix(testing): every budgeted wait in a test is cut to what its case has left, so a slow run fails by the wait's name (brandon-menus-sjhy.r62)\n\nA real-daemon case spent a pool slot wait (20 s), readiness (12 s) and its\nown waits inside one Jest timeout (30 s), each sized alone, so their sum\ncould pass it and Jest's anonymous timeout fired first. The test\nenvironment now keeps the running hook's or test's deadline, computed as\njest-circus arms its timer, and every budgeted wait (the pool, readiness,\nuntil, throughout, sendDaemonRequest) is bounded by the smaller of its own\nbudget and that time, less a margin derived from the longest step a wait\ntakes between deadline checks. The process tier's copies of the 30 s go.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "37eb112c989fe03fdef3152c96c290f0cb09728f",
@@ -13,49 +56,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T16:54:19-07:00",
           "message": "test(error-glyph): the pipeline test's daemon end writes the version gate's real VERSION_MISMATCH reply (candybar-testing-ihvy.fvw.b78) (#659)\n\n* test(error-glyph): the pipeline test's daemon end writes the version gate's real VERSION_MISMATCH reply (candybar-testing-ihvy.fvw.b78)\n\n* test(error-glyph): the version gate takes the daemon's version, so the pipeline test runs a real stale-client exchange with distinct versions (candybar-testing-ihvy.fvw.b78)\n\n* test(error-glyph): reuse the file's other-version fixture and scope the daemon end's claim to the gate (candybar-testing-ihvy.fvw.b78)"
-        }
-      ]
-    },
-    {
-      "version": "pr-661",
-      "ref": "refs/pull/661/merge",
-      "sha": "80be5b22e13a165cdd19ba8fba73bb369710eb12",
-      "timestamp": "2026-11-06T23:51:05.568Z",
-      "commits": [
-        {
-          "sha": "80be5b22e13a165cdd19ba8fba73bb369710eb12",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T23:50:13Z",
-          "message": "Merge 04937b963be31ac1f077a4395c13938d8c2fe5c5 into 873a8e0e0be2d843b7d0b4c308831e2d20b5bde1\n"
-        },
-        {
-          "sha": "04937b963be31ac1f077a4395c13938d8c2fe5c5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T16:49:05-07:00",
-          "message": "fix(testing): a wait keeps its deadline on the case's clock, so faking the sandbox's clock freezes none (brandon-menus-sjhy.r62)\n\nFrom the second high review pass. untilHeard keeps its 48 rounds, ended\nearly only by the case; a bound says what set it, so a pool wait the case\ncut no longer blames the machine; render failures name their last bound.\n"
-        },
-        {
-          "sha": "10a2d74c5fd2c5a85e150510f01d8e4a0990ddad",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T16:39:52-07:00",
-          "message": "fix(testing): untilHeard ends at a deadline, the pool reads its case after its own start time, and the rest of a case is a bound (brandon-menus-sjhy.r62)\n\nFrom the medium review pass. A cut wait names the margin it keeps, and a\nrequest whose deadline the daemon is told is sent under that same bound.\n"
-        },
-        {
-          "sha": "6283fab84aa60419ad6037063896d06a3a0e82c5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T16:32:15-07:00",
-          "message": "fix(testing): a wait's sub-steps share its one deadline, and every request failure names its bound (brandon-menus-sjhy.r62)\n\nFrom the high review pass: the pool's start-time read and a request's\nconnect each spent time the wait had not charged; a cut render stated an\nuncut deadline to the daemon; untilHeard ran past its case; a test whose\nbefore-hook failed left its case's deadline set.\n"
-        },
-        {
-          "sha": "a99efd03029e616100c7bb4dcb8378a72a7d08e2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T16:23:05-07:00",
-          "message": "fix(testing): every budgeted wait in a test is cut to what its case has left, so a slow run fails by the wait's name (brandon-menus-sjhy.r62)\n\nA real-daemon case spent a pool slot wait (20 s), readiness (12 s) and its\nown waits inside one Jest timeout (30 s), each sized alone, so their sum\ncould pass it and Jest's anonymous timeout fired first. The test\nenvironment now keeps the running hook's or test's deadline, computed as\njest-circus arms its timer, and every budgeted wait (the pool, readiness,\nuntil, throughout, sendDaemonRequest) is bounded by the smaller of its own\nbudget and that time, less a margin derived from the longest step a wait\ntakes between deadline checks. The process tier's copies of the 30 s go.\n"
         }
       ]
     },
