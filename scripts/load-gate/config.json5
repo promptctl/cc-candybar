@@ -23,6 +23,9 @@
     v: [
       { h: ["directory", "gitaculous", "toolbar"] },
       { h: ["model", "context", "cacheTimer", "block", "weekly", "themeControl", "plugins.lit.ticket"] },
+      // Every built-in the bundled default draws from the session's transcript
+      // and hook data, so the gate prices every lane the daemon gathers.
+      { h: ["metrics", "activity", "tokenSparkline", "autocompact"] },
     ],
   },
   themeDefaults: {

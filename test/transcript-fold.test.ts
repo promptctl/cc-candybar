@@ -214,3 +214,41 @@ test("a multi-window transcript folds every entry, and a long line is logged", a
     expect.stringMatching(/^transcript long line path=".*big\.jsonl" offset=\d+ bytes=\d+$/),
   ]);
 });
+
+// [LAW:one-source-of-truth] One fold in flight per session. Every statusline
+// request refreshes its session's fold, and a cold session's first fold outlasts
+// the requests that arrive during it; each of those would otherwise start a fold
+// of the same bytes, and under a population of cold sessions those folds arrive
+// faster than the read gate lets any finish (candybar-gather-renderer-76bb.6pj.c0y).
+test("requests that arrive during a session's fold share it, and the next hits the stamp", async () => {
+  const path = join(dir, "e.jsonl");
+  write(path, line("one"), line("two"), line("three"));
+  const refreshes = new RefreshLedger().declare({
+    name: "count",
+    scope: "session",
+    refresh: ["request"],
+  });
+  let steps = 0;
+  const fold = new TranscriptFold<number>(
+    0,
+    (n: number) => {
+      steps++;
+      return n + 1;
+    },
+    refreshes,
+    systemTimekeeper,
+  );
+
+  const answers = await Promise.all(
+    Array.from({ length: 5 }, () => valueOf(fold, "s", path)),
+  );
+  expect(answers).toEqual([3, 3, 3, 3, 3]);
+  // The bytes were folded once, and the ledger saw one refresh.
+  expect(steps).toBe(3);
+  expect(refreshes.record().refreshes.request).toBe(1);
+
+  // Landed: a read after it is the stamp fast path, which folds nothing.
+  expect(await valueOf(fold, "s", path)).toBe(3);
+  expect(steps).toBe(3);
+  expect(refreshes.record().refreshes.request).toBe(1);
+});
