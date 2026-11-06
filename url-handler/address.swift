@@ -48,8 +48,10 @@ func target(ofLink link: String) -> Target {
   guard rest.hasPrefix(addressed) else { return .file(MAIN_SOCKET_FILE) }
   let named = rest.dropFirst(addressed.count)
   let name = String(named.prefix { $0 != "/" })
+  // The reason is fixed text: a name that fails the rule is the web page's,
+  // and the link it came from is private.
   guard isRendererName(name) else {
-    return .refused("the link names no renderer a home can have: \(name.debugDescription)")
+    return .refused("the link names no renderer a home can have")
   }
   return .file(name == MAIN_NAME ? MAIN_SOCKET_FILE : "\(name)\(NAMED_SOCKET_SUFFIX)")
 }

@@ -13,10 +13,9 @@
 // the live registry and the test enumeration cannot drift.
 //
 // Multi-arg verbs (set-state) carry their args as a single slash-delimited
-// `value` string on the wire — keeping ClickRequest shape-stable at
-// protocol v3 ({verb, value}). The per-verb handler parses its own value
-// into the typed args it needs. URL format mirrors:
-//   cc-candybar://<verb>/<value>   where <value> may itself contain `/`.
+// `value`, the tail of the link after its verb, where <value> may itself
+// contain `/`. The per-verb handler parses its own value into the typed args
+// it needs.
 
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";

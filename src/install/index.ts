@@ -455,8 +455,8 @@ export function runInstallUrlHandler(bundle: string, world: World): void {
   installUrlHandler(forwarder, world);
 }
 
-// [LAW:single-enforcer] url-handle is a thin IPC shim: parse the URL, send
-// the click request to the daemon, exit. There is NO in-process verb
+// [LAW:single-enforcer] url-handle is a thin IPC shim: send the link whole
+// to the daemon, whose one link parse reads it, and exit. There is NO in-process verb
 // dispatch and NO direct disk mutation. The daemon is the only writer of
 // click-side state ([LAW:one-source-of-truth] for SessionState); kicking a
 // daemon on a transient failure is the only recovery, and it's

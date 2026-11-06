@@ -1734,6 +1734,11 @@ describe("loadDslConfig — cross-references", () => {
     });
     const viaHelper = `{ helpers: { h: '{{ link "cc-candybar://load-config/x/" "pick" }}' }, segments: { a: { template: '{{ template "h" . }}' } }, root: { h: ['a'] } }`;
     expectIssue(viaHelper, { path: "helpers.h", message: "load-config" });
+    const addressed = `{ segments: { a: { template: '{{ link "cc-candybar://to/main/load-config/x/" "pick" }}' } }, root: { h: ['a'] } }`;
+    expectIssue(addressed, {
+      path: "segments.a.template",
+      message: "load-config",
+    });
   });
 
   test("root-authored config reports unknown segment under the `root` path", () => {

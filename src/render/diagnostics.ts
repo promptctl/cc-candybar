@@ -357,7 +357,7 @@ export interface DiagnosticGeometry {
 export function viewerRows(
   list: DiagnosticList,
   at: ViewerPosition,
-  addressed: RendererAddress,
+  to: RendererAddress,
   sessionId: string,
   by: Drawing["by"],
   geometry: DiagnosticGeometry,
@@ -374,16 +374,16 @@ export function viewerRows(
     cell(text, link === null ? style : style.withLink(link));
   // [LAW:dataflow-not-control-flow] A step with nowhere to go is a blank of
   // the arrow's width, so the header never shifts as the reader pages.
-  const step = (glyph: string, to: ViewerPosition | null): RichText =>
-    to === null
+  const step = (glyph: string, next: ViewerPosition | null): RichText =>
+    next === null
       ? button(" ", null)
       : button(
           glyph,
           viewerLink(
-            addressed,
+            to,
             sessionId,
-            viewerKey(list, to.index - 1, to.page),
-            `show diagnostic ${to.index} of ${list.length} page ${to.page + 1}`,
+            viewerKey(list, next.index - 1, next.page),
+            `show diagnostic ${next.index} of ${list.length} page ${next.page + 1}`,
           ),
         );
   // The header for a message of `pages` pages, shown at `page`.
@@ -407,19 +407,13 @@ export function viewerRows(
         : `[${index}/${list.length}]`;
     return drawnRows(
       [
-        button("✕", viewerLink(addressed, sessionId, DIAGNOSTICS_CLOSED)),
+        button("✕", viewerLink(to, sessionId, DIAGNOSTICS_CLOSED)),
         ...(steps ? [step("‹", back)] : []),
         button(position, null),
         ...(steps ? [step("›", on)] : []),
         button(
           "⧉ copy",
-          copyLink(
-            addressed,
-            sessionId,
-            by,
-            viewerKey(list, index - 1, 0),
-            index,
-          ),
+          copyLink(to, sessionId, by, viewerKey(list, index - 1, 0), index),
         ),
       ],
       opts,

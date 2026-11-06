@@ -188,8 +188,9 @@ final class Handler: NSObject, NSApplicationDelegate {
       // after the fact. The socket file a link chose is public: it is a
       // renderer's name. The link itself is private: a copy link carries the
       // text being copied, and the unified log is readable by every admin on
-      // the machine. The renderer's own click event records the link, in the
-      // user's own log. [LAW:nothing-unseen]
+      // the machine. A reason is public too: it never quotes the link. The
+      // renderer's own click event records the link, in the user's own log.
+      // [LAW:nothing-unseen]
       switch target(ofLink: link) {
       case .refused(let why):
         log.error("lost \(link, privacy: .private): \(why, privacy: .public)")

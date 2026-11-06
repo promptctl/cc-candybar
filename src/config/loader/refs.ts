@@ -6,7 +6,7 @@
 // fold over the one call-graph walk (`callGraphBlocks`); a new question is a new
 // fold over it, never a second walker, or it is blind to helpers again.
 
-import { URL_SCHEME } from "../../click/scheme.js";
+import { parseHandlerUrl } from "../../click/wire.js";
 import { ownedBy } from "./plugin-scope.js";
 import { parseArm, type DslConfig, type VariableDecl } from "../dsl-types.js";
 
@@ -355,11 +355,12 @@ export function templateActionRefs(
 // (`callGraphBlocks`), exactly as its action bindings are found — once per
 // body, with the helper whose body spells it (`null` = the template itself).
 // A verb computed at the draw is no literal, and is the click's to refuse.
+// [LAW:single-enforcer] The verb is read by the one link parse the click runs,
+// so a literal in any grammar a click reads names the verb that click would.
 export interface LinkVerbRef {
   readonly verb: string;
   readonly via: string | null;
 }
-const LINK_VERB_RE = new RegExp(`^${URL_SCHEME}://([a-z][a-z0-9-]*)`);
 export function templateLinkVerbs(
   template: string,
   helpers: Readonly<Record<string, string>>,
@@ -367,8 +368,9 @@ export function templateLinkVerbs(
   const refs = new Map<string, LinkVerbRef>();
   for (const { code, via } of callGraph(template, helpers)) {
     for (const s of code.matchAll(STRING_LITERAL_RE)) {
-      const verb = LINK_VERB_RE.exec(s[0].slice(1, -1))?.[1];
-      if (verb === undefined) continue;
+      const link = parseHandlerUrl(s[0].slice(1, -1));
+      if (!link.ok) continue;
+      const { verb } = link;
       const key = `${verb}\0${via ?? "\0"}`;
       if (!refs.has(key)) refs.set(key, { verb, via });
     }

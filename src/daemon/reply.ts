@@ -865,9 +865,10 @@ async function linkClick(
   if (!link.ok) return { kind: "bad-request", problems: [link.problem] };
   noteFacts(facts, { [TO_FACT[arrival.via]]: link.to ?? "-" });
   const own = parts.links.to;
-  // [LAW:no-mode-explosion] exception: a link with no address (an old
-  // grammar, or one a config spells) runs on the renderer it reached, until
-  // the tickets that remove those forms (b2l.eul, b2l.x87) leave none.
+  // [LAW:no-mode-explosion] exception: a link with no address (one drawn
+  // before names, the status-line binding's, the doctor probe's, or one a
+  // config spells) runs on the renderer it reached, until the tickets that
+  // remove those forms (b2l.eul, b2l.mxk, b2l.x87) leave none.
   if (link.to !== null && link.to !== own) {
     return {
       kind: "bad-request",

@@ -675,18 +675,17 @@ for (const row of CHECKS) {
     );
   }
   // [LAW:no-silent-failure] Every mirror a row names is held to TS: a row
-  // that spells a fact in three runtimes is a check on all three.
-  const tsValue = row.ts();
-  for (const key of keys) {
-    const mirrorName = MIRRORS[key];
-    const mirrorValue = row[key]();
-    if (tsValue === null || mirrorValue === null) {
-      const missing = [tsValue === null && "TS", mirrorValue === null && mirrorName]
-        .filter(Boolean)
-        .join(" and ");
-      failures.push(`${row.label}: anchor not found in ${missing} source`);
-      continue;
-    }
+  // that spells a fact in three runtimes is a check on all three. Each side
+  // is read once, so an anchor that stopped matching is one line, said of its
+  // own source.
+  const sides = [["TS", row.ts()], ...keys.map((key) => [MIRRORS[key], row[key]()])];
+  const missing = sides.filter(([, value]) => value === null).map(([name]) => name);
+  if (missing.length > 0) {
+    failures.push(`${row.label}: anchor not found in ${missing.join(" and ")} source`);
+    continue;
+  }
+  const [[, tsValue], ...mirrors] = sides;
+  for (const [mirrorName, mirrorValue] of mirrors) {
     if (tsValue !== mirrorValue) {
       failures.push(`${row.label}: TS=${tsValue} vs ${mirrorName}=${mirrorValue}`);
     }
