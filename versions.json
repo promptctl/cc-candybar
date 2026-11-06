@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-651",
+      "ref": "refs/pull/651/merge",
+      "sha": "9a38984c5fee338d796ab0ae5acf4cbf10959cf3",
+      "timestamp": "2026-11-06T20:25:03.749Z",
+      "commits": [
+        {
+          "sha": "9a38984c5fee338d796ab0ae5acf4cbf10959cf3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:23:45-07:00",
+          "message": "Merge 2a31f2b6649d09e9ee3bf31e0bac71aa79ba6538 into f67fa39229a6df3d0d9927f73e74d59008342c7f\n"
+        },
+        {
+          "sha": "2a31f2b6649d09e9ee3bf31e0bac71aa79ba6538",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:23:26-07:00",
+          "message": "chore(testing): no job puts the machine under load to judge cost; the load gate and feed criterion are gone (candybar-testing-ihvy.geg)\n\nA stress run reports conditions far past the negligible-load requirement, so\nits numbers steer work away from the real cost. The rule is in CLAUDE.md and\nthe testing memory; comments and docs that justified a limit by a load run now\nstate the reason from the code. `Load gate` is off main-protection's required\nchecks.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "f67fa39229a6df3d0d9927f73e74d59008342c7f",
