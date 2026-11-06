@@ -22939,6 +22939,62 @@ function verbOf(rest2, to) {
 init_globals();
 init_os();
 
+// src/dial/system-dialer.ts
+init_globals();
+
+// site/shims/unavailable.ts
+init_globals();
+var refuse = (name) => () => {
+  throw new Error(`${name} is not available in the page`);
+};
+var connect = refuse("net.connect");
+var createServer = refuse("net.createServer");
+var createConnection = refuse("net.createConnection");
+var get = refuse("https.get");
+var request = refuse("https.request");
+var createInterface = refuse("readline.createInterface");
+var createRequire = refuse("module.createRequire");
+var json = refuse("stream/consumers.json");
+var text = refuse("stream/consumers.text");
+var writeHeapSnapshot = refuse("v8.writeHeapSnapshot");
+var getHeapStatistics = () => ({ used_heap_size: 0, total_heap_size: 0, heap_size_limit: 0 });
+var unavailable_default = { connect, createServer, createConnection, get, request, createInterface, createRequire, json, text, writeHeapSnapshot, getHeapStatistics };
+
+// src/dial/system-dialer.ts
+var UNREACHABLE = /* @__PURE__ */ new Set(["ECONNREFUSED", "ENOENT", "ENOTSOCK"]);
+var failureOf = (err) => ({
+  cause: UNREACHABLE.has(err.code ?? "") ? "unreachable" : "io_error",
+  message: err.message
+});
+var systemDialer = {
+  dial(sockPath) {
+    const sock = unavailable_default.createConnection({ path: sockPath });
+    let settledYet = false;
+    const settled4 = new Promise((resolve) => {
+      const onError = (err) => {
+        sock.off("connect", onConnect);
+        settledYet = true;
+        resolve({ ok: false, failure: failureOf(err) });
+      };
+      const onConnect = () => {
+        sock.off("error", onError);
+        settledYet = true;
+        resolve({ ok: true, conn: sock });
+      };
+      sock.once("error", onError);
+      sock.once("connect", onConnect);
+    });
+    return {
+      settled: settled4,
+      abandon: () => {
+        if (settledYet) return;
+        sock.removeAllListeners();
+        sock.destroy();
+      }
+    };
+  }
+};
+
 // src/proc/system-launcher.ts
 init_globals();
 
@@ -23972,7 +24028,8 @@ function processWorld() {
     host,
     home: processHome(host),
     launcher: systemOneShotLauncher({ inherited: process_default.env }, clock),
-    clock
+    clock,
+    dialer: systemDialer
   };
 }
 function processHome(host) {
@@ -35848,7 +35905,7 @@ init_globals();
 function blank(glyph) {
   return " ".repeat(cellLen(glyph));
 }
-function text(cells) {
+function text2(cells) {
   const ends = /* @__PURE__ */ new Map();
   for (const cell3 of cells.filter((c) => inked(c.glyph)))
     ends.set(cell3.row, { first: ends.get(cell3.row)?.first ?? cell3.index, last: cell3.index });
@@ -35877,7 +35934,7 @@ function typewriter(timing) {
   const phase = Phase.once(0, timing.seconds);
   const ease = settled(timing.ease);
   return transition(timing.seconds, ({ cells }) => {
-    const { length, place } = text(cells);
+    const { length, place } = text2(cells);
     return Animation.continuous((t2) => {
       const typed = arrived(length, ease(phase(t2)));
       return (cell3) => (place.get(cell3.index) ?? -1) < typed ? cell3.glyph : blank(cell3.glyph);
@@ -35892,7 +35949,7 @@ function scramble(timing, z) {
   const ease = settled(timing.ease);
   const flicker = stepped(FLICKER)((step4) => step4, 0);
   return transition(timing.seconds, ({ cells }) => {
-    const { length, place } = text(cells);
+    const { length, place } = text2(cells);
     return Animation.continuous((t2) => {
       const resolved = arrived(length, ease(phase(t2)));
       const step4 = flicker.at(t2);
@@ -35908,7 +35965,7 @@ function backspace(timing) {
   const phase = Phase.once(0, timing.seconds);
   const ease = settled(timing.ease);
   return transition(timing.seconds, ({ cells }) => {
-    const { length, place } = text(cells);
+    const { length, place } = text2(cells);
     return Animation.continuous((t2) => {
       const kept = length - arrived(length, ease(phase(t2)));
       return (cell3) => (place.get(cell3.index) ?? -1) < kept ? cell3.glyph : blank(cell3.glyph);
@@ -35922,7 +35979,7 @@ function scrambleOut(timing, z) {
   const ease = settled(timing.ease);
   const flicker = stepped(FLICKER)((step4) => step4, 0);
   return transition(timing.seconds, ({ cells }) => {
-    const { length, place } = text(cells);
+    const { length, place } = text2(cells);
     return Animation.continuous((t2) => {
       const p2 = ease(phase(t2));
       const churning = arrived(length, p2 / (1 - CHURN));
@@ -38314,7 +38371,7 @@ function selection(sessionKey, spec, domain, shown, extra = {}) {
     themeDefault: extra.themeDefault ?? false
   };
 }
-var text2 = (spec) => ({
+var text3 = (spec) => ({
   kind: "text",
   spec
 });
@@ -38540,13 +38597,13 @@ var GLOBAL_FIELDS = {
     floor: "truecolor"
   },
   // The text segments render when their value is empty.
-  default_empty_value: text2(optionalStringSpec()),
+  default_empty_value: text3(optionalStringSpec()),
   // The cell separator `plain` draws between segments. Absent means the glyph
   // rich-js's bundled `plain` joiner owns — no floor here, since naming one
   // would be a second copy of a constant that lives in rich-js.
-  default_separator: text2(optionalStringSpec()),
+  default_separator: text3(optionalStringSpec()),
   // The settings menu's door glyph (🍫 by default, synthesized by the menu).
-  menuGlyph: text2(menuGlyphSpec)
+  menuGlyph: text3(menuGlyphSpec)
 };
 var ROWS = Object.entries(GLOBAL_FIELDS);
 var VALUED_FIELDS = ROWS.filter(
@@ -38971,7 +39028,7 @@ function insertCells(root, cells) {
         return acc;
       const held = placed2.find((node2) => placementId(node2) === id2);
       if (held !== void 0)
-        return refuse(
+        return refuse2(
           acc,
           cell3,
           `as "${id2}", but placement "${id2}" is already segment "${held.name}" \u2014 give the cell its own id`
@@ -38997,7 +39054,7 @@ function insertCells(root, cells) {
             rows.map(([name, row2, placed3]) => [name, placed3 ?? row2])
           )
         }
-      } : refuse(
+      } : refuse2(
         acc,
         cell3,
         `${cell3.relation} "${cell3.anchor}", but there is no placement "${cell3.anchor}"`
@@ -39006,7 +39063,7 @@ function insertCells(root, cells) {
     { root, unplaced: [] }
   );
 }
-function refuse(acc, cell3, reason) {
+function refuse2(acc, cell3, reason) {
   return { ...acc, unplaced: [...acc.unplaced, { cell: cell3, reason }] };
 }
 function besideRow(row2, anchor, cell3, relation) {
@@ -44407,7 +44464,7 @@ function staticDictEntries(arg) {
   }
   return dict(...values2);
 }
-function get(d, key) {
+function get2(d, key) {
   return d[key];
 }
 function hasKey(d, key) {
@@ -44464,7 +44521,7 @@ function sprigDicts() {
       }
     },
     get: {
-      fn: (d, k) => get(d, k),
+      fn: (d, k) => get2(d, k),
       argTypes: ["dict", "string"],
       arity: { kind: "exact" }
     },
@@ -56168,24 +56225,6 @@ var RenderSightings = class {
 // src/daemon/limits.ts
 init_globals();
 var import_node_path11 = __toESM(require_path_browserify(), 1);
-
-// site/shims/unavailable.ts
-init_globals();
-var refuse2 = (name) => () => {
-  throw new Error(`${name} is not available in the page`);
-};
-var connect = refuse2("net.connect");
-var createServer = refuse2("net.createServer");
-var createConnection = refuse2("net.createConnection");
-var get2 = refuse2("https.get");
-var request = refuse2("https.request");
-var createInterface = refuse2("readline.createInterface");
-var createRequire = refuse2("module.createRequire");
-var json = refuse2("stream/consumers.json");
-var text3 = refuse2("stream/consumers.text");
-var writeHeapSnapshot = refuse2("v8.writeHeapSnapshot");
-var getHeapStatistics = () => ({ used_heap_size: 0, total_heap_size: 0, heap_size_limit: 0 });
-var unavailable_default = { connect, createServer, createConnection, get: get2, request, createInterface, createRequire, json, text: text3, writeHeapSnapshot, getHeapStatistics };
 
 // src/daemon/memory-report.ts
 init_globals();
@@ -70068,6 +70107,9 @@ init_globals();
 // src/daemon/client-transport.ts
 init_globals();
 
+// src/dial/dialer.ts
+init_globals();
+
 // src/daemon/paths.ts
 init_globals();
 var import_node_path30 = __toESM(require_path_browserify(), 1);
@@ -80430,7 +80472,7 @@ async function writeDisk(owner, table) {
 }
 function fetchPricingData(closing) {
   return new Promise((resolve) => {
-    const request2 = get2(
+    const request2 = get(
       {
         hostname: PRICING_URL.hostname,
         path: PRICING_URL.pathname,
