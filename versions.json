@@ -2,6 +2,56 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-637",
+      "ref": "refs/pull/637/merge",
+      "sha": "8e8bc5c3f60483440ecd9c0d8c689d0de4ee0831",
+      "timestamp": "2026-11-06T19:03:56.561Z",
+      "commits": [
+        {
+          "sha": "8e8bc5c3f60483440ecd9c0d8c689d0de4ee0831",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T12:02:29-07:00",
+          "message": "Merge 18533f81409b42dfff341ed369150c3220bbdb7e into 0af5d1f4ce463b0bebbbe6a4b6107d2943900c54\n"
+        },
+        {
+          "sha": "18533f81409b42dfff341ed369150c3220bbdb7e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T12:02:16-07:00",
+          "message": "chore(lint): the link id allocator still reads the disk directly (candybar-testing-ihvy.y10)\n"
+        },
+        {
+          "sha": "728b70da18fd38638d3fc4e447d55fc3c141b5c9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T11:56:27-07:00",
+          "message": "docs(claude): cost is judged by reading what the code does, never by loading the machine (candybar-testing-ihvy.y10)\n"
+        },
+        {
+          "sha": "d5b9f1f4021dbd2913182e319d97fa0b17b3a1d4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T03:01:50-07:00",
+          "message": "fix(disk): the fake walks a new entry's parent, makes a `..` folder, refuses a move into itself and forgets a failed watch; path derivation takes a Filesystem (candybar-testing-ihvy.y10)\n"
+        },
+        {
+          "sha": "2aadaf49f6d439625cf32769baca136a363cad72",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T02:52:06-07:00",
+          "message": "fix(disk): the fake moves, removes, writes through links and resolves `..` as the kernel does; repo-configs is made on the tree that watches it; the real disk is owned (candybar-testing-ihvy.y10)\n"
+        },
+        {
+          "sha": "30a49fe662603b1739263789c01d51973642d542",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T02:36:44-07:00",
+          "message": "feat(disk): files and their watch events go through one filesystem port, first used by the watcher registry and the binary watch (candybar-testing-ihvy.y10)\n\nA Filesystem port (src/disk/) with one adapter over fs, an in-memory fake whose writes emit the events a watch would on the clock, and one contract both pass. The watcher registry, its delivery owner, plugin storage, folder identity, the link walk and the binary watch read the disk through it; IdentityRead and BundleStat are gone. A lint rule bans fs outside the adapter, with an allowlist of the files still to move.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-644",
       "ref": "refs/pull/644/merge",
       "sha": "8225d23301b556b8a965e78e51df8a0c2d91e5ce",
@@ -114,42 +164,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-06T14:40:38Z",
           "message": "chore(release): set `package.json` to 1.203.0 [skip ci]\n\n## [1.203.0](https://github.com/promptctl/cc-candybar/compare/v1.202.0...v1.203.0) (2026-11-06)\n\n### Features\n\n* **facts:** a session's shell and file sources run into its facts document, and a recording replays them with nothing read or spawned (candybar-gather-renderer-76bb.6pj.d8n) ([#641](https://github.com/promptctl/cc-candybar/issues/641)) ([9c90c3b](https://github.com/promptctl/cc-candybar/commit/9c90c3b99f998a33415660abd7f7cf035941219e))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-637",
-      "ref": "refs/pull/637/merge",
-      "sha": "368ac1c810087fd073b3d8b856fb2787e37c650a",
-      "timestamp": "2026-11-06T10:24:30.710Z",
-      "commits": [
-        {
-          "sha": "368ac1c810087fd073b3d8b856fb2787e37c650a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T10:23:37Z",
-          "message": "Merge 91046506c2639766fb07e2bbdf1aeded2c5ca687 into 3c33c5be3daa31e7700684f97a79f2e90bcff262\n"
-        },
-        {
-          "sha": "91046506c2639766fb07e2bbdf1aeded2c5ca687",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T03:01:50-07:00",
-          "message": "fix(disk): the fake walks a new entry's parent, makes a `..` folder, refuses a move into itself and forgets a failed watch; path derivation takes a Filesystem (candybar-testing-ihvy.y10)\n"
-        },
-        {
-          "sha": "aa754c1a3f86cd71bcc5ababc9745e3f65cede87",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T02:52:06-07:00",
-          "message": "fix(disk): the fake moves, removes, writes through links and resolves `..` as the kernel does; repo-configs is made on the tree that watches it; the real disk is owned (candybar-testing-ihvy.y10)\n"
-        },
-        {
-          "sha": "206d3134974e35223319270ccda0084187db0e5c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T02:36:44-07:00",
-          "message": "feat(disk): files and their watch events go through one filesystem port, first used by the watcher registry and the binary watch (candybar-testing-ihvy.y10)\n\nA Filesystem port (src/disk/) with one adapter over fs, an in-memory fake whose writes emit the events a watch would on the clock, and one contract both pass. The watcher registry, its delivery owner, plugin storage, folder identity, the link walk and the binary watch read the disk through it; IdentityRead and BundleStat are gone. A lint rule bans fs outside the adapter, with an allowlist of the files still to move.\n"
         }
       ]
     }
