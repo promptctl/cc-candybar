@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-619",
+      "ref": "refs/pull/619/merge",
+      "sha": "02a5115e13908fec7b21a0cdcc7627f9efef5d97",
+      "timestamp": "2026-11-06T02:45:16.362Z",
+      "commits": [
+        {
+          "sha": "02a5115e13908fec7b21a0cdcc7627f9efef5d97",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T02:43:34Z",
+          "message": "Merge 76f73c84e816d03ec6ea45c86dcbfeaa7d61d667 into 6d2fd8d435350e75805014afa1b3568e1119b767\n"
+        },
+        {
+          "sha": "76f73c84e816d03ec6ea45c86dcbfeaa7d61d667",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T19:43:21-07:00",
+          "message": "fix(tmux-status): a layout taken over names this daemon too, as a fresh one does (candybar-gather-renderer-76bb.b2l.rwj)\n\nEvery install plan carries its commands, so the write after it has no branch:\na taken-over record gets the renderer option, and so does each layout the\nfirst answer adopts from the server's listing. The option's comment names\nwhat it is for rather than a binding that does not exist yet. The unit test\nfile carries only the ticket's change, not a reformat. The process test's\nsetup is back under its try so a tmux refusal still cleans up.\n"
+        },
+        {
+          "sha": "f0796700a7d43c3edfd9e81e7c93951bff174441",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T19:23:23-07:00",
+          "message": "feat(tmux-status): the renderer names itself on every session whose row it draws (candybar-gather-renderer-76bb.b2l.rwj)\n\nThe install plan's lay-out write sets `@cc-candybar-renderer` on the tmux\nsession in the same call as the prior record and the status-format array,\nand the restore plan unsets it beside the prior and wrote records. The name\nreaches the lane through its deps; the composition root passes `main`, the\nmain renderer's name, until the home lane carries a name. The install log\nline says which renderer laid the session out.\n\nProved on a private tmux server: the option reads `main` while the row is\ndrawn, SIGTERM returns the session's options to what they were, and a second\ndaemon started after that names itself on the row again.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-620",
       "ref": "refs/pull/620/merge",
       "sha": "47eaaf92eb04da509c4e4b168408aae02704bd3b",
@@ -20,28 +49,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-05T19:35:43-07:00",
           "message": "feat(click)!: remove the load-config verb; a session's config is what its request names (candybar-gather-renderer-76bb.f00.bju)\n\nThe verb that pointed a session at any absolute path goes, with the\nper-session override it wrote, the \"pick\" arm it added to a session's\nconfig target, and the view-follow hook that ran after every click\nbecause a click might have moved the origin. Nothing but a render\nrequest sets a session's origin now, so the render, every durable click\nand the lane meter read the recorded origin directly.\n\nA config that still writes a `cc-candybar://load-config/…` link is\nrefused at load, at the template or the helper that spells it, with a\nmessage naming --config and CC_CANDYBAR_CONFIG as where a session's\nconfig comes from. The scheme string moves to a leaf module so the\nloader can read it without the config layer depending on the click\ncodec.\n\nBREAKING CHANGE: the load-config click verb and the examples' config\nswitcher are removed; a config linking to the verb fails to load.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-619",
-      "ref": "refs/pull/619/merge",
-      "sha": "4402769a2d15c6ede834d33720cedf15db4023f5",
-      "timestamp": "2026-11-06T02:24:26.862Z",
-      "commits": [
-        {
-          "sha": "4402769a2d15c6ede834d33720cedf15db4023f5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T19:23:35-07:00",
-          "message": "Merge f0796700a7d43c3edfd9e81e7c93951bff174441 into 6d2fd8d435350e75805014afa1b3568e1119b767\n"
-        },
-        {
-          "sha": "f0796700a7d43c3edfd9e81e7c93951bff174441",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T19:23:23-07:00",
-          "message": "feat(tmux-status): the renderer names itself on every session whose row it draws (candybar-gather-renderer-76bb.b2l.rwj)\n\nThe install plan's lay-out write sets `@cc-candybar-renderer` on the tmux\nsession in the same call as the prior record and the status-format array,\nand the restore plan unsets it beside the prior and wrote records. The name\nreaches the lane through its deps; the composition root passes `main`, the\nmain renderer's name, until the home lane carries a name. The install log\nline says which renderer laid the session out.\n\nProved on a private tmux server: the option reads `main` while the row is\ndrawn, SIGTERM returns the session's options to what they were, and a second\ndaemon started after that names itself on the row again.\n"
         }
       ]
     },

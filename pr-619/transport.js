@@ -83394,12 +83394,22 @@ function leftBehind(prior, wrote, owner) {
     why: `the daemon at ${JSON.stringify(parsed2.owner)} draws it`
   };
 }
+var nameWrite = (session, name) => [
+  "set-option",
+  "-t",
+  session,
+  RENDERER_OPTION,
+  name
+];
 function installPlan(session, answers, owner, name) {
   const [statusWordNow = "", ...rest2] = answers;
   const own2 = ownOf(rest2.slice(0, 2 + MAX_STATUS_ROWS));
   const globals = rest2.slice(2 + MAX_STATUS_ROWS, 2 + 2 * MAX_STATUS_ROWS);
   const [prior = "", wrote = ""] = rest2.slice(2 + 2 * MAX_STATUS_ROWS);
-  if (prior !== "") return leftBehind(prior, wrote, owner);
+  if (prior !== "") {
+    const left = leftBehind(prior, wrote, owner);
+    return left.kind === "theirs" ? left : { ...left, commands: [nameWrite(session, name)] };
+  }
   const base = statusRows(statusWordNow);
   const above = {};
   for (let i = 0; i < base; i++) {
@@ -83427,7 +83437,7 @@ function installPlan(session, answers, owner, name) {
     prior: laid,
     commands: [
       ["set-option", "-t", session, PRIOR_OPTION, JSON.stringify(laid)],
-      ["set-option", "-t", session, RENDERER_OPTION, name],
+      nameWrite(session, name),
       ...arrayWrite(session, wroteFormats)
     ]
   };
@@ -83739,19 +83749,22 @@ var TmuxStatusLines = class {
       `#{session_id}	#{${PRIOR_OPTION}}	#{${WROTE_OPTION}}`
     ]);
     if (run3.kind === "ok") {
+      const names = [];
       for (const line of run3.stdout.split("\n")) {
         const [session, prior, wrote = ""] = line.split("	");
         if (session === void 0 || prior === void 0 || prior === "")
           continue;
         const found2 = leftBehind(prior, wrote, this.deps.owner);
-        if (found2.kind === "ours")
+        if (found2.kind === "ours") {
           server.layouts.set(session, {
             prior: found2.prior,
             rows: [],
             status: found2.status
           });
-        else this.leave(socket, server, session, found2.why);
+          names.push(nameWrite(session, this.deps.name));
+        } else this.leave(socket, server, session, found2.why);
       }
+      await this.write(socket, names);
     }
     const answers = await this.ask(socket, [showGlobal(BINDING_OPTION)]);
     const saved = answers?.[0] ?? "";
@@ -83796,7 +83809,7 @@ var TmuxStatusLines = class {
       status: plan.kind === "ours" ? plan.status : plan.prior.base
     };
     server.layouts.set(session, layout);
-    if (plan.kind === "lay-out") await this.write(socket, plan.commands);
+    await this.write(socket, plan.commands);
     this.deps.log(
       "info",
       `tmux-status: socket=${JSON.stringify(socket)} ${plan.kind === "ours" ? "took over" : "laid out"} renderer=${this.deps.name} session ${session} base=${plan.prior.base} own=${[plan.prior.status === null ? [] : ["status"], plan.prior.formats === null ? [] : ["status-format"]].flat().join(",") || "-"}`
