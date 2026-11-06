@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-635",
+      "ref": "refs/pull/635/merge",
+      "sha": "61a1f1d7bdec6d1614fa94baf1f2c7ab214918a8",
+      "timestamp": "2026-11-06T09:16:46.255Z",
+      "commits": [
+        {
+          "sha": "61a1f1d7bdec6d1614fa94baf1f2c7ab214918a8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T09:15:17Z",
+          "message": "Merge a575f170d29b9d0ede7f4f2d1713ba8f3b1c29e6 into 537c926e6cca1e7f2bed89f42058b490482fde86\n"
+        },
+        {
+          "sha": "a575f170d29b9d0ede7f4f2d1713ba8f3b1c29e6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T02:15:05-07:00",
+          "message": "fix(just): deploy builds the URL handler before cargo, and the docs say macOS install needs it\n"
+        },
+        {
+          "sha": "f0a4bfc9854ff2cad971309104e906b61ca030e5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T02:12:37-07:00",
+          "message": "fix(just): deploy builds the URL handler app on macOS, so install from a checkout finds it\n"
+        }
+      ]
+    },
+    {
       "version": "pr-636",
       "ref": "refs/pull/636/merge",
       "sha": "ff8de9c6c8b3f653f40b1bb02e7e7cc6a15d95a9",
@@ -63,28 +92,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T01:28:40-07:00",
           "message": "fix(home): a home file named through a symlink is stored as the home's (candybar-gather-renderer-76bb.f00.lpl)\n\nWhose a stored path is now follows the directories on its path, compared in\ntheir on-disk spelling at the call, not its spelling: a client's cwd is a\nrealpath, so a --config under CC_CANDYBAR_HOME=/tmp/h arrived as\n/private/tmp/h/... and was stored as the world's, and a copied home undid\ninto the original's config. The render checkpoint respells a requested home\nfile from the root as given, so what is stored reads back as itself. The\ndisk's spelling is a port on the stored root, and the watcher and the\nspelling share one walk to the deepest existing directory.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-635",
-      "ref": "refs/pull/635/merge",
-      "sha": "a5bf218615b07dacd82145c2919eb7d858965ca5",
-      "timestamp": "2026-11-06T09:13:40.554Z",
-      "commits": [
-        {
-          "sha": "a5bf218615b07dacd82145c2919eb7d858965ca5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T02:12:47-07:00",
-          "message": "Merge f0a4bfc9854ff2cad971309104e906b61ca030e5 into 537c926e6cca1e7f2bed89f42058b490482fde86\n"
-        },
-        {
-          "sha": "f0a4bfc9854ff2cad971309104e906b61ca030e5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T02:12:37-07:00",
-          "message": "fix(just): deploy builds the URL handler app on macOS, so install from a checkout finds it\n"
         }
       ]
     },
