@@ -653,6 +653,8 @@ export function drawRender(
   const copies = new Map(diagnostics.map((m, i) => [keys[i]!, m.copy]));
   const delivered = (): void =>
     renderCache.delivered(sessionId, drawing.by, copies);
+  // The facts tell the close timer as this frame leaves it, so a menu's first
+  // frame reads its period begun, where the draw was handed none.
   const menusSince = menuIdle.since(sessionId, at);
   noteFacts(facts, {
     menuIdle:

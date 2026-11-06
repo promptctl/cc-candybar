@@ -399,12 +399,7 @@ export async function playDemo({
             `a draw answers a request at +${step.requestOffsetMs}ms, and none arrived then`,
           );
         }
-        restoreDraw(
-          sessionState,
-          depths,
-          opening.request.sessionId,
-          step.state,
-        );
+        restoreDraw(sessionState, depths, view.sessionId, step.state);
         frame(drawDemoFrame(view, at, effects, step.state.idleSince, warn));
       }
     }

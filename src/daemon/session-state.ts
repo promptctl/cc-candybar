@@ -150,12 +150,17 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     this.hydrateFromStorage();
   }
 
+  // [LAW:one-source-of-truth] An empty session in the file is a husk no write
+  // here leaves (`commit` drops it), so it is not taken up: the store holds
+  // nothing for it at revision 0, as for a session it never saw.
   private hydrateFromStorage(): void {
     this.sessions = new Map(
-      Object.entries(this.storage.load()).map(([sessionId, kv]) => [
-        sessionId,
-        { values: new Map(Object.entries(kv)), revision: ++this.head },
-      ]),
+      Object.entries(this.storage.load())
+        .filter(([, kv]) => Object.keys(kv).length > 0)
+        .map(([sessionId, kv]) => [
+          sessionId,
+          { values: new Map(Object.entries(kv)), revision: ++this.head },
+        ]),
     );
     this.evictOldest();
     // [LAW:dataflow-not-control-flow] The disk mirror always reflects the built
