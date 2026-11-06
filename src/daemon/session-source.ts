@@ -28,7 +28,12 @@ import { resolveEffectiveGlobals } from "../config/effective-globals.js";
 import type { ValidatedConfig } from "../config/dsl-types.js";
 import type { ViewSource } from "../dsl/view-source.js";
 import type { SourceOf } from "./cache/render.js";
-import type { DrawState, FactsLine } from "../facts/recording.js";
+import type {
+  ClickState,
+  FactsLine,
+  RecordedTurn,
+  SessionRequest,
+} from "../facts/recording.js";
 import type { SessionFacts } from "../facts/session-facts.js";
 import {
   composePayload,
@@ -40,7 +45,6 @@ import {
 import type { SessionStateReader } from "./session-state.js";
 import type { HistoryDepth } from "./settings-history.js";
 import { settingCounts } from "./setting-drafts.js";
-import { failedWith } from "../utils/outcome.js";
 
 // What a session's view draws from: the selections its slots settle and the
 // payload its inputs read, as ViewSource names them, the globals the session's
@@ -49,12 +53,17 @@ import { failedWith } from "../utils/outcome.js";
 export interface SessionSource extends ViewSource {
   readonly payload: () => ViewPayload;
   readonly effective: () => EffectiveGlobals;
-  // The session's facts document (src/facts/session-facts.ts), as the view's
-  // follow holds it.
+  // The session's facts document (src/facts/session-facts.ts), as the turn
+  // holds it.
   readonly facts: () => SessionFacts;
-  // The same document with the instant it was stamped at: the line a
-  // recording writes for the draw that read it.
-  readonly stamped: () => FactsLine;
+  // The turn the bar is drawn from, as a recording carries it: its document
+  // with the instant it was stamped at, the request and the store's state it
+  // was taken over, and the histories' depths it read.
+  readonly turn: () => RecordedTurn;
+  // Whether the bar is held on the last turn taken because the next one's
+  // inputs could not be read. A recording marks where this moves, so a replay
+  // holds its turn over the same lines.
+  readonly held: () => boolean;
   // The home the turn's payload was composed against: whose `~` it names.
   readonly home: () => string;
   // The client's hints the turn was composed from: what a draw takes of the
@@ -64,22 +73,34 @@ export interface SessionSource extends ViewSource {
   // Why the turn after the one every read above is of could not be taken, or
   // why the facts source could not stamp the document it holds, or null when
   // the latest turn completed on a stamped document: while it is set the bar
-  // is drawn from the last turn that did, and says so.
-  readonly failure: () => string | null;
+  // is drawn from the last turn that did, and says which.
+  readonly failure: () => TurnFailure | null;
   // What the session's clicks left for a draw now: the store's values and
   // revision for it, which its `state` variables and its frame memory read,
   // and the histories' depths the turn's payload carries. A recording notes it
   // with the draw that read it.
-  readonly state: () => Omit<DrawState, "idleSince">;
+  readonly state: () => ClickState;
+}
+
+// [LAW:types-are-the-program] Why the bar is drawn from an older turn: the
+// next turn's inputs could not be read, so the turn is held on the last one
+// taken; or the facts source could not restamp its document, so the turn is
+// taken over the one it kept.
+export interface TurnFailure {
+  readonly cause: "inputs" | "facts";
+  readonly reason: string;
 }
 
 // [LAW:types-are-the-program] One turn: the document and everything the
-// payload is composed from beside it, taken together.
+// payload is composed from beside it, taken together, with the request and the
+// store's state it was taken over — the picks its globals were resolved from.
 interface Turn {
   readonly stamped: FactsLine;
+  readonly request: SessionRequest;
+  readonly picks: Pick<ClickState, "values" | "revision">;
   readonly compose: ComposeInputs;
   readonly draw: DrawInputs;
-  readonly failure: string | null;
+  readonly failure: TurnFailure | null;
 }
 
 // What a turn reads, or what stopped it reading: a derivation that throws is a
@@ -89,31 +110,53 @@ type TurnInputs =
       readonly kind: "read";
       readonly stamped: FactsLine;
       readonly facts: string | null;
+      readonly request: SessionRequest;
       readonly compose: ComposeInputs;
       readonly draw: DrawInputs;
     }
   | { readonly kind: "failed"; readonly reason: string };
 
+// The failure a turn carries, compared by value: a fault that persists must
+// not mint a new turn per move, which would wake every holder and log again
+// for a bar that has not changed.
+function sameFailure(a: TurnFailure | null, b: TurnFailure | null): boolean {
+  return a === b || (a?.cause === b?.cause && a?.reason === b?.reason);
+}
+
 // [LAW:single-enforcer] The one taking of a turn, against the turn it
 // replaces. The prior turn itself is returned when nothing it holds moved, so
 // nothing holding it is touched; a turn that cannot be taken keeps the prior
 // one and says why, and a turn over a document its source could not restamp
-// carries the source's reason.
+// carries the source's reason. `picks` is read only for a turn taken new: the
+// store's state then is the one its globals were just resolved from, and a
+// copy compared by identity would mint a turn per move.
 //
 // [LAW:no-silent-failure] A failed turn is a value the draw reads
 // (`failure`), not only a line in the daemon's log.
-function taken(prior: Turn, moved: TurnInputs): Turn {
-  if (moved.kind === "failed") return failedWith(prior, moved.reason);
-  return prior.failure === moved.facts &&
+function taken(
+  prior: Turn,
+  moved: TurnInputs,
+  picks: () => Turn["picks"],
+): Turn {
+  if (moved.kind === "failed") {
+    const failure: TurnFailure = { cause: "inputs", reason: moved.reason };
+    return sameFailure(prior.failure, failure) ? prior : { ...prior, failure };
+  }
+  const failure: TurnFailure | null =
+    moved.facts === null ? null : { cause: "facts", reason: moved.facts };
+  return sameFailure(prior.failure, failure) &&
     moved.stamped === prior.stamped &&
+    moved.request === prior.request &&
     moved.compose === prior.compose &&
     moved.draw === prior.draw
     ? prior
     : {
         stamped: moved.stamped,
+        request: moved.request,
+        picks: picks(),
         compose: moved.compose,
         draw: moved.draw,
-        failure: moved.facts,
+        failure,
       };
 }
 
@@ -129,9 +172,12 @@ export interface SessionSourceDeps {
   readonly navigation: (sessionId: string, config: ValidatedConfig) => number;
 }
 
+// [LAW:types-are-the-program] Built over a view declared with a session's
+// request, so a turn holds the request it was composed from, directory and
+// all, as a recording restates it.
 export function sessionSource(
   deps: SessionSourceDeps,
-): SourceOf<SessionSource> {
+): SourceOf<SessionSource, SessionRequest> {
   return ({ sessionId, state, store, declared, followed, onDispose }) => {
     const pick = (key: string): string | null =>
       deps.sessionState.get(sessionId, key);
@@ -177,12 +223,19 @@ export function sessionSource(
     // a computed that threw would reach the draw as a throw. The first turn is
     // taken here, with no prior, so the box is total from its first read; a
     // throw in it is a failed open, which the view's opening releases.
+    const picks = (): Turn["picks"] => ({
+      values: deps.sessionState.values(sessionId),
+      revision: deps.sessionState.revision(sessionId),
+    });
+    const opening = followed.failure();
     const turn = observable.box<Turn>(
       {
         stamped: followed.stamped(),
+        request: declared().facts,
+        picks: picks(),
         compose: compose.read(),
         draw: draw.read(),
-        failure: followed.failure(),
+        failure: opening === null ? null : { cause: "facts", reason: opening },
       },
       { deep: false },
     );
@@ -194,6 +247,7 @@ export function sessionSource(
               kind: "read",
               stamped: followed.stamped(),
               facts: followed.failure(),
+              request: declared().facts,
               compose: compose.read(),
               draw: draw.read(),
             };
@@ -207,14 +261,15 @@ export function sessionSource(
         (moved) =>
           runInAction(() => {
             const prior = turn.get();
-            const next = taken(prior, moved);
+            // The effect runs untracked, in the run its inputs were read in.
+            const next = taken(prior, moved, picks);
             // [LAW:single-enforcer] The source's own fault was logged by the
             // source when it was set; a turn logs only a turn that failed.
             if (moved.kind === "failed" && next !== prior) {
               // [LAW:no-silent-failure] Told to the log as well as to the bar.
               deps.providers.log(
                 "error",
-                `session turn sid=${JSON.stringify(sessionId)}: ${next.failure}`,
+                `session turn sid=${JSON.stringify(sessionId)}: ${moved.reason}`,
               );
             }
             turn.set(next);
@@ -239,7 +294,15 @@ export function sessionSource(
       payload: () => payload.read(),
       effective: () => turn.get().draw.effective,
       facts: () => turn.get().stamped.facts,
-      stamped: () => turn.get().stamped,
+      turn: () => {
+        const { stamped, request, picks: turnPicks, draw: drawn } = turn.get();
+        return {
+          document: stamped,
+          request,
+          state: { ...turnPicks, history: drawn.history, back: drawn.back },
+        };
+      },
+      held: () => turn.get().failure?.cause === "inputs",
       home: () => turn.get().compose.home,
       hints: () => turn.get().compose.hints,
       failure: () => turn.get().failure,

@@ -1,6 +1,6 @@
 import path from "node:path";
 import { parseClientHints, type ClientHints } from "../../src/daemon/protocol";
-import type { ViewFacts } from "../../src/daemon/render-payload";
+import type { SessionRequest } from "../../src/facts/recording";
 import { sessionIdOf } from "../../src/daemon/session-id";
 
 // The request a view is opened with and declares at (brandon-unfiled-3248.
@@ -9,7 +9,7 @@ export function viewFacts(
   cwd: string,
   sessionId = "s1",
   hints: ClientHints = parseClientHints({}),
-): ViewFacts {
+): SessionRequest {
   return {
     sessionId: sessionIdOf(sessionId),
     hookData: {

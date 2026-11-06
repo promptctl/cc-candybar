@@ -4,6 +4,7 @@
 // [LAW:one-source-of-truth] The golden over the payload's composition and the
 // tests of the turn a view draws from open their views through this one rig.
 
+import type { SessionRequest } from "../../src/facts/recording";
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -162,7 +163,7 @@ export function sessionRig(
     clock: systemTimekeeper,
   });
   cleanups.push(() => runs.close());
-  const cache = new RenderCache<SessionSource>(
+  const cache = new RenderCache<SessionSource, SessionRequest>(
     {
       clock: systemTimekeeper,
       stateDir: stateDir(homeOf({ env: {}, home: dir, tmp: dir })),

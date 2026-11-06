@@ -91,7 +91,11 @@ import { waitWithin } from "../utils/reading.js";
 import { noteFacts, requestEvent, type RequestFacts } from "./request-event.js";
 
 import type { DaemonParts } from "./daemon-parts.js";
-import { drawRequest, settleRequest } from "./session-recorder.js";
+import {
+  drawRequest,
+  settleRequest,
+  type Arrival,
+} from "./session-recorder.js";
 
 // What a reply's sender records once the client holds a response carrying
 // nothing to record.
@@ -259,7 +263,7 @@ export function lanesAt(
 // [LAW:types-are-the-program] No owner is here: what the request's arrival
 // starts of the facts is the view's follow's (`view.settle`), so nothing on
 // the request path can read one.
-interface RenderSetup extends Disposable {
+export interface RenderSetup extends Disposable {
   readonly req: CheckedRenderRequest;
   readonly at: Instant;
   readonly facts: RequestFacts;
@@ -554,14 +558,18 @@ export function drawRender(
     ...(entry.lastWarning === null
       ? []
       : [{ kind: "load" as const, message: entry.lastWarning }]),
-    // [LAW:no-silent-failure] A turn that could not be stamped leaves the bar
-    // drawn from the last one that was, so the bar says it is behind.
+    // [LAW:no-silent-failure] A turn that could not be taken, or taken over a
+    // document that could not be stamped, leaves the bar drawn from older
+    // facts, so the bar says it is behind and why.
     ...(failure === null
       ? []
       : [
           {
             kind: "facts" as const,
-            message: `the bar is drawn from the last facts that were read; the next could not be stamped: ${failure}`,
+            message:
+              failure.cause === "inputs"
+                ? `the bar is held on the last turn taken: ${failure.reason}`
+                : `the bar is drawn from the last facts that were read; the next could not be stamped: ${failure.reason}`,
           },
         ]),
   ];
@@ -894,6 +902,20 @@ function arrived(
   );
 }
 
+// [LAW:single-enforcer] A request's answer, drawn and noted for its
+// recordings: the list the draw built is the one a recording carries, which
+// its door's indicator and its viewer read.
+export function drawForAnswer(
+  parts: DaemonParts,
+  setup: RenderSetup,
+  arrival: Arrival,
+): ReturnType<typeof drawRender> {
+  return drawRequest(parts.recorder, setup.view, arrival, () => {
+    const drew = drawRender(parts, setup, ANSWERING);
+    return { ...drew, diagnostics: drew.drawn.diagnostics };
+  });
+}
+
 // [LAW:one-source-of-truth] A session as a lane's setup needs it: what its
 // request `req` reported, and the config inputs it renders from now.
 export function laneSessionOf(req: CheckedRenderRequest): LaneSession {
@@ -988,11 +1010,10 @@ export async function drawAnswer(
     ended,
     refreshed: refreshedFact(settling.refreshed),
   });
-  const { drawn, answersClick, pipeShown, delivered, lanes } = drawRequest(
-    parts.recorder,
-    setup.view,
+  const { drawn, answersClick, pipeShown, delivered, lanes } = drawForAnswer(
+    parts,
+    setup,
     settling.arrival,
-    () => drawRender(parts, setup, ANSWERING),
   );
   const sessionId = req.sessionId;
   const elsewhere = handedOffTo(lanes, frameFeeds.following(sessionId));

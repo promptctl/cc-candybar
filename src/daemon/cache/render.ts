@@ -155,7 +155,10 @@ export const MAX_ENTRIES = 256;
 // owned data providers like the SessionUsageStore/git provider/etc. live in
 // the session source (src/daemon/session-source.ts) a view's payload is
 // derived through; they are not part of cache identity or lifecycle.
-export interface RenderDeps<S extends ViewSource = ViewSource> {
+export interface RenderDeps<
+  S extends ViewSource = ViewSource,
+  F extends ViewFacts = ViewFacts,
+> {
   // The daemon's clock (StateDeps).
   clock: Timekeeper;
   // The daemon's state directory, where the repositories' answers are kept
@@ -179,7 +182,7 @@ export interface RenderDeps<S extends ViewSource = ViewSource> {
   facts: Facts;
   // What a view draws from (src/daemon/session-source.ts); a test drawing no
   // view's own payload passes SOURCES_NOTHING.
-  source: SourceOf<S>;
+  source: SourceOf<S, F>;
   // Where the cache's events go — every load, every teardown. Only the
   // daemon passes its log; a caller passing none logs quietly, like the
   // providers and the usage store.
@@ -1241,12 +1244,13 @@ export interface ViewDeclared<F extends ViewFacts = ViewFacts> {
 
 // What a view's source is built over: the session, the state it is a view of,
 // the view's own store (a source's kept derivations are released with it),
-// its declaration, observable, and the follow its facts come through.
-export interface SourcedView {
+// its declaration, observable and typed as the view holds it, and the follow
+// its facts come through.
+export interface SourcedView<F extends ViewFacts = ViewFacts> {
   readonly sessionId: SessionId;
   readonly state: DslRenderState;
   readonly store: VariableStore;
-  readonly declared: () => ViewDeclared;
+  readonly declared: () => ViewDeclared<F>;
   readonly followed: FollowedFacts;
   // [LAW:single-enforcer] The view's one teardown also stops what its source
   // runs outside the store (a reaction): a source hands its stop here, and
@@ -1254,7 +1258,9 @@ export interface SourcedView {
   readonly onDispose: (stop: () => void) => void;
 }
 
-export type SourceOf<S extends ViewSource> = (view: SourcedView) => S;
+export type SourceOf<S extends ViewSource, F extends ViewFacts = ViewFacts> = (
+  view: SourcedView<F>,
+) => S;
 
 // A source answering nothing yet: every input of the view pending, and the
 // selections the config declares — what a test's views draw from until it
@@ -1271,9 +1277,12 @@ export const SOURCES_NOTHING: SourceOf<ViewSource> = ({ state }) =>
 
 // What a view reads to keep its declaration current, where its facts come
 // from, what it draws from, and whom it tells that what it draws from moved.
-export interface ViewDeclaring<S extends ViewSource = ViewSource> {
+export interface ViewDeclaring<
+  S extends ViewSource = ViewSource,
+  F extends ViewFacts = ViewFacts,
+> {
   readonly facts: Facts;
-  readonly source: SourceOf<S>;
+  readonly source: SourceOf<S, F>;
   readonly changed: (sessionId: string) => void;
   readonly log: DaemonLogger;
 }
@@ -1295,7 +1304,7 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
   state: DslRenderState,
   cwd: string,
   facts: F,
-  { facts: factsSource, source: sourceOf, changed, log }: ViewDeclaring<S>,
+  { facts: factsSource, source: sourceOf, changed, log }: ViewDeclaring<S, F>,
 ): SessionView<S, F> {
   // [LAW:one-source-of-truth] The session is the one the request's checkpoint
   // parsed: a later request of the view's names the same one.
@@ -1476,7 +1485,7 @@ export class RenderCache<
   // [LAW:one-source-of-truth] One compile per compile key, shared by every
   // state carrying that key, and dropped with the last of them (reclaim).
   private readonly compiles = new Map<string, CompiledConfig>();
-  private readonly deps: RenderDeps<S> & StateDeps;
+  private readonly deps: RenderDeps<S, F> & StateDeps;
   private readonly log: DaemonLogger;
   // Read when an eviction is decided: the budget is a boot-time fact.
   private readonly budgetBytes: () => number;
@@ -1484,7 +1493,7 @@ export class RenderCache<
   private readonly observers: RenderCacheObservers;
 
   constructor(
-    deps: RenderDeps<S>,
+    deps: RenderDeps<S, F>,
     opts: {
       budgetBytes: () => number;
       maxEntries?: number;

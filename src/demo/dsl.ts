@@ -108,7 +108,10 @@ const log: DaemonLogger = (level, message) =>
 
 // What the frames are drawn from beside the loaded config, and what to close
 // once they are drawn.
-type Arm = Pick<DemoPlay, "facts" | "clock" | "steps" | "arrive" | "home"> & {
+type Arm = Pick<
+  DemoPlay,
+  "facts" | "clock" | "opening" | "steps" | "arrive" | "home"
+> & {
   readonly world: World;
   readonly close: () => void;
 };
@@ -173,6 +176,8 @@ function liveArm(): Arm {
       kind: "draw",
       requestOffsetMs: i * FRAME_INTERVAL_MS,
       state: NEVER_CLICKED,
+      // A faked event is warned of nothing.
+      diagnostics: [],
     }) as const;
   return {
     world: machine,
@@ -183,6 +188,8 @@ function liveArm(): Arm {
     }),
     clock: machine.clock,
     home: machine.host.home,
+    // A session that never clicked, opened on its first request.
+    opening: { request, state: NEVER_CLICKED, held: false },
     steps: [
       arrives(0),
       answered(0),
@@ -219,14 +226,19 @@ function liveArm(): Arm {
 // built and nothing is read or spawned for them.
 function recordingArm(path: string): Arm {
   const recording = readRecording(path);
-  const facts = recordingFacts(recording);
-  const { startMs, steps } = playOf(recording, facts);
+  const facts = recordingFacts({
+    session: recording.session,
+    opening: recording.opening.document,
+    lines: recording.lines,
+  });
+  const { startMs, opening, steps } = playOf(recording, facts);
   const clock = heldClock(new Date(startMs));
   return {
     world: { ...machine, clock },
     facts,
     clock,
     home: recording.home,
+    opening,
     steps,
     arrive: heldArrival(clock),
     close: () => {},

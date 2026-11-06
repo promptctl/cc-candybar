@@ -16,6 +16,7 @@ import { checkPayload } from "../src/check";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
+import { diagnosticsProjection } from "../src/render/diagnostics";
 import { presetNames } from "../src/config/presets";
 import { renderOptionsOf, todayOf } from "../src/daemon/render-payload";
 import { drawDsl } from "../src/dsl/render";
@@ -55,6 +56,7 @@ async function drawnUnder(preset: string | null) {
       drawing: { by: "request" },
       feeds: UNFOLLOWED_FEEDS,
       today: todayOf(view.source.facts().builtins.today, AT),
+      diagnostics: diagnosticsProjection([]),
     },
     AT,
     renderOptionsOf(effective, COLS),

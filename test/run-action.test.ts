@@ -36,6 +36,8 @@ import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import { drawDsl } from "../src/dsl/render";
 import { LOADING_GLYPH } from "../src/dsl/node-registry";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
+import { diagnosticsProjection } from "../src/render/diagnostics";
+import type { SessionRequest } from "../src/facts/recording";
 import { checkConfig, type CheckOutcome } from "../src/check";
 import { parseDslConfig } from "../src/config/dsl-loader";
 import { ConfigError } from "../src/config/loader/diagnostics";
@@ -156,7 +158,7 @@ function programWrites(sid: string, doc: unknown): void {
 }
 
 interface Rig {
-  readonly cache: RenderCache<SessionSource>;
+  readonly cache: RenderCache<SessionSource, SessionRequest>;
   readonly providers: ReturnType<typeof createPayloadProviders>;
   readonly sessionState: SessionState;
   readonly runs: Runs;
@@ -212,7 +214,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
     ledger: new RefreshLedger(log),
   });
   const sessionState = new SessionState();
-  const cache = new RenderCache<SessionSource>(
+  const cache = new RenderCache<SessionSource, SessionRequest>(
     {
       clock: systemTimekeeper,
       stateDir: stateDir(WORLD.home),
@@ -269,7 +271,12 @@ function draw(view: SessionView<SessionSource>): {
     view.state.compiled,
     view.store,
     view.registry,
-    { drawing: { by: "request" }, feeds: UNFOLLOWED_FEEDS, today: undefined },
+    {
+      drawing: { by: "request" },
+      feeds: UNFOLLOWED_FEEDS,
+      today: undefined,
+      diagnostics: diagnosticsProjection([]),
+    },
     instantOf(new Date()),
     renderOptionsOf(effective, 200),
     { onSegmentError: (id, message) => errors.push(`${id}: ${message}`) },

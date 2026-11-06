@@ -25,6 +25,8 @@ import { drawDsl, registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { SourceRegistry, VariableStore } from "../src/var-system";
 import { instantOf } from "../src/utils/instant";
+import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
+import { diagnosticsProjection } from "../src/render/diagnostics";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/var-system/source-runs";
 
@@ -65,9 +67,22 @@ function viewOver(
     arrive: (next: Record<string, unknown>) =>
       runInAction(() => answer.set(next)),
     draw: () =>
-      drawDsl(config, compiled, store, registry, {}, AT, OPTS, undefined, {
-        ...selections,
-      }),
+      drawDsl(
+        config,
+        compiled,
+        store,
+        registry,
+        {
+          drawing: { by: "request" },
+          feeds: UNFOLLOWED_FEEDS,
+          today: undefined,
+          diagnostics: diagnosticsProjection([]),
+        },
+        AT,
+        OPTS,
+        undefined,
+        { ...selections },
+      ),
     runs: (): number =>
       fs.existsSync(runs)
         ? fs.readFileSync(runs, "utf8").split("\n").filter(Boolean).length
