@@ -76806,19 +76806,20 @@ function formatLine(line) {
 // src/daemon/session-recorder.ts
 function sessionRecorder(views, log) {
   const open2 = /* @__PURE__ */ new Map();
-  const end = (sessionId2, rec, failure) => {
+  let closed = false;
+  const end = (sessionId2, rec, how) => {
     const recs = open2.get(sessionId2);
     if (recs === void 0 || !recs.delete(rec)) return;
     if (recs.size === 0) open2.delete(sessionId2);
     rec.detach();
-    rec.sink.end(failure);
+    rec.sink.end(how);
   };
   const write = (sessionId2, rec, line) => {
     try {
       rec.sink.write(line);
     } catch (e) {
       log("error", `recording sid=${JSON.stringify(sessionId2)}: ${inspect(e)}`);
-      end(sessionId2, rec, e);
+      end(sessionId2, rec, { kind: "failed", error: e });
     }
   };
   const attach = (sessionId2, rec) => {
@@ -76835,6 +76836,9 @@ function sessionRecorder(views, log) {
   };
   return {
     record(session, sink) {
+      if (closed) {
+        throw new Error("the daemon is closing: it records nothing more");
+      }
       if (views.sessionView(session) === null) {
         throw new Error(
           `no view of session ${JSON.stringify(session)} is open in this daemon: it has not drawn a bar here since the daemon started, or its view closed while it was idle`
@@ -76846,7 +76850,7 @@ function sessionRecorder(views, log) {
       open2.set(session, recs.add(rec));
       write(session, rec, { kind: "recording", session });
       if (recs.has(rec)) attach(session, rec);
-      return () => end(session, rec, null);
+      return () => end(session, rec, { kind: "stopped" });
     },
     moved(sessionId2) {
       for (const rec of open2.get(sessionId2) ?? []) {
@@ -76860,8 +76864,9 @@ function sessionRecorder(views, log) {
       }
     },
     close() {
+      closed = true;
       for (const [sessionId2, recs] of open2) {
-        for (const rec of recs) end(sessionId2, rec, null);
+        for (const rec of recs) end(sessionId2, rec, { kind: "closed" });
       }
     }
   };
@@ -76897,7 +76902,7 @@ function recordToFile(recorder, clock, session, path44, seconds, left) {
   return new Promise((resolve, reject2) => {
     let fd;
     try {
-      fd = openSync(path44, "wx");
+      fd = openSync(path44, "wx", 384);
     } catch (e) {
       reject2(
         new Error(
@@ -76919,18 +76924,26 @@ function recordToFile(recorder, clock, session, path44, seconds, left) {
         lines2++;
         if (line.kind === "request") requests++;
       },
-      end: (failure) => {
+      end: (how) => {
         clearTimer();
         left.removeEventListener("abort", leave);
-        let ended = failure;
+        let error = how.kind === "failed" ? how.error : null;
         try {
           closeSync(fd);
-          if (ended === null && requests === 0) unlinkSync(path44);
+          if (error === null && requests === 0) unlinkSync(path44);
         } catch (e) {
-          ended ??= e;
+          error ??= e;
         }
-        if (ended === null) resolve({ path: path44, lines: lines2, requests });
-        else reject2(new RecordingFailed(`writing ${path44}: ${String(ended)}`));
+        if (error === null) {
+          resolve({
+            path: path44,
+            lines: lines2,
+            requests,
+            daemonClosed: how.kind === "closed"
+          });
+        } else {
+          reject2(new RecordingFailed(`writing ${path44}: ${String(error)}`));
+        }
       }
     };
     left.addEventListener("abort", leave, { once: true });
