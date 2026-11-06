@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-639",
+      "ref": "refs/pull/639/merge",
+      "sha": "1113bdf20fe0c3e08e36dc837383cf874fd343f9",
+      "timestamp": "2026-11-06T11:32:19.042Z",
+      "commits": [
+        {
+          "sha": "1113bdf20fe0c3e08e36dc837383cf874fd343f9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T04:31:18-07:00",
+          "message": "Merge a678997e9497b0b7bd9a919534e98e3314b10e3b into a9a0d05d97e08cc2b5a9facc01cb113d92d542fe\n"
+        },
+        {
+          "sha": "a678997e9497b0b7bd9a919534e98e3314b10e3b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T04:27:19-07:00",
+          "message": "fix(facts): a recording replays a session's picks and open menus: each draw carries the state it read (candybar-gather-renderer-76bb.6pj.gs4)\n\nA recording carried the session's documents and requests but not what its\nclicks left, so a replay drew every pick absent, every menu closed, both\nhistories empty and no closing flash.\n\nEach draw line now carries the session's draw state: the store's values and\nrevision for the session, the settings history's and back history's depths,\nand when its menus' idle period began. The revision crosses as itself because\nframe memory keeps the last frame only while it holds; the idle instant is the\none the draw was handed, which the daemon's draw and the seam rig both read\nthrough one MenuIdle method that hands, draws and observes. The replay\nrestores each draw's state before drawing it. The recording format is v3.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-638",
       "ref": "refs/pull/638/merge",
       "sha": "507dd3526916d8cb127ce0ea7d82dd9ca4fe1fee",
