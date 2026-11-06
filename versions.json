@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-622",
+      "ref": "refs/pull/622/merge",
+      "sha": "ac1d5a9e265c1b2d0f51697158f14c70d817c950",
+      "timestamp": "2026-11-06T05:49:42.564Z",
+      "commits": [
+        {
+          "sha": "ac1d5a9e265c1b2d0f51697158f14c70d817c950",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T05:48:24Z",
+          "message": "Merge 934af2956e0fa96c7c95c8b0927d055cdcac6789 into 9b6790b0d73afbdd6c683accf7b693cffe16c89e\n"
+        },
+        {
+          "sha": "934af2956e0fa96c7c95c8b0927d055cdcac6789",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T20:28:35-07:00",
+          "message": "fix(load-gate): the budget check is unjudged under snapshots; the snapshot wait and NODE_OPTIONS form live in the lib; the fold's memory line states a consequence (candybar-gather-renderer-76bb.6pj.c0y)\n"
+        },
+        {
+          "sha": "fd988b1eee4f58d022e052aea123caf67bc3ab56",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T20:17:38-07:00",
+          "message": "fix(scripts): a snapshot is matched by V8's name shape, the wait reuses sleep, NODE_OPTIONS is quoted; the fold's key comment says why the stamp is left out (candybar-gather-renderer-76bb.6pj.c0y)\n"
+        },
+        {
+          "sha": "ea5a02882f6b6032daff92cdb0c3ab5bb584397f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T20:04:41-07:00",
+          "message": "fix(load-gate): re-derive the budget from CI with every built-in placed (candybar-gather-renderer-76bb.6pj.c0y)\n\nMeasured on PR #622's CI: 186 MB charged once collected at 20 sessions (feed criterion, feed off) and 514 MB at 100 (load gate). per-session = (514 - 186) / 80 = 4.1 MB, base = 186 - 20 * 4.1 = 104 MB, headroom a fifth as before. The gate placed neither metrics nor activity when the old 112 + 3.1 MB were measured.\n"
+        },
+        {
+          "sha": "ec9f013fcdbd500c0db25ac4dadf9ff288080730",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T19:58:14-07:00",
+          "message": "fix(facts): one transcript fold in flight per session; the gate places every built-in and can snapshot its heap (candybar-gather-renderer-76bb.6pj.c0y)\n\nThe 100-session gate failed with metrics and activity on because the\ntranscript fold started a new fold for every request of a session while\nthe session's first fold was still out, and a cold fold re-enters the\n8-slot read gate once per window: folds arrived faster than any could\nfinish, none landed, the stamp fast path never engaged, and every\nrequest's refresh stayed alive in the queue. The fold now coalesces per\nsession through the same SingleFlight the usage store's request refresh\nuses.\n\nThe gate's config places metrics, activity, tokenSparkline and\nautocompact, so it gathers every built-in the facts epic makes\nalways-on. `--heap-snapshots DIR` has the daemon write its heap at the\ntwo collections through Node's signal snapshot; the whole-file wait\nmoves from capture-heap into scripts/lib and both call it.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-626",
       "ref": "refs/pull/626/merge",
       "sha": "6a6ee365203cf3740b9ac354e063b9b8f8cad4fc",
@@ -121,49 +164,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-06T04:47:15Z",
           "message": "chore(release): set `package.json` to 1.193.0 [skip ci]\n\n## [1.193.0](https://github.com/promptctl/cc-candybar/compare/v1.192.0...v1.193.0) (2026-11-06)\n\n### Features\n\n* **apply:** a click's launches are effects, performed after its turn and reported as effect-done (candybar-gather-renderer-76bb.1dh.g2l) ([#621](https://github.com/promptctl/cc-candybar/issues/621)) ([8bb9728](https://github.com/promptctl/cc-candybar/commit/8bb9728f028615d94483db40d614a14926ef1468))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-622",
-      "ref": "refs/pull/622/merge",
-      "sha": "6772ddd4218bea293109801a025de5ed188b4cef",
-      "timestamp": "2026-11-06T03:36:30.408Z",
-      "commits": [
-        {
-          "sha": "6772ddd4218bea293109801a025de5ed188b4cef",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T03:35:24Z",
-          "message": "Merge 6d82f1254f6a076f88a0d7f2f7ac1fa3f1047281 into ef736330044ce69f7e59e3ef737437bd9b8164f0\n"
-        },
-        {
-          "sha": "6d82f1254f6a076f88a0d7f2f7ac1fa3f1047281",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T20:28:35-07:00",
-          "message": "fix(load-gate): the budget check is unjudged under snapshots; the snapshot wait and NODE_OPTIONS form live in the lib; the fold's memory line states a consequence (candybar-gather-renderer-76bb.6pj.c0y)\n"
-        },
-        {
-          "sha": "eb5d85cc9a25ffe141cf187beeb2dedc25e1f0d6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T20:17:38-07:00",
-          "message": "fix(scripts): a snapshot is matched by V8's name shape, the wait reuses sleep, NODE_OPTIONS is quoted; the fold's key comment says why the stamp is left out (candybar-gather-renderer-76bb.6pj.c0y)\n"
-        },
-        {
-          "sha": "008363a0406448c0494501069ad89399151826e8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T20:04:41-07:00",
-          "message": "fix(load-gate): re-derive the budget from CI with every built-in placed (candybar-gather-renderer-76bb.6pj.c0y)\n\nMeasured on PR #622's CI: 186 MB charged once collected at 20 sessions (feed criterion, feed off) and 514 MB at 100 (load gate). per-session = (514 - 186) / 80 = 4.1 MB, base = 186 - 20 * 4.1 = 104 MB, headroom a fifth as before. The gate placed neither metrics nor activity when the old 112 + 3.1 MB were measured.\n"
-        },
-        {
-          "sha": "b6bf27fe73db0cb998b272497d622bbd9d61af1d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T19:58:14-07:00",
-          "message": "fix(facts): one transcript fold in flight per session; the gate places every built-in and can snapshot its heap (candybar-gather-renderer-76bb.6pj.c0y)\n\nThe 100-session gate failed with metrics and activity on because the\ntranscript fold started a new fold for every request of a session while\nthe session's first fold was still out, and a cold fold re-enters the\n8-slot read gate once per window: folds arrived faster than any could\nfinish, none landed, the stamp fast path never engaged, and every\nrequest's refresh stayed alive in the queue. The fold now coalesces per\nsession through the same SingleFlight the usage store's request refresh\nuses.\n\nThe gate's config places metrics, activity, tokenSparkline and\nautocompact, so it gathers every built-in the facts epic makes\nalways-on. `--heap-snapshots DIR` has the daemon write its heap at the\ntwo collections through Node's signal snapshot; the whole-file wait\nmoves from capture-heap into scripts/lib and both call it.\n"
         }
       ]
     },
