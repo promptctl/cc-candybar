@@ -21279,9 +21279,9 @@ var require_dist = __commonJS({
       var _library = false;
       var _shared = createCommonjsModule(function(module2) {
         var SHARED = "__core-js_shared__";
-        var store = _global[SHARED] || (_global[SHARED] = {});
+        var store2 = _global[SHARED] || (_global[SHARED] = {});
         (module2.exports = function(key2, value) {
-          return store[key2] || (store[key2] = value !== void 0 ? value : {});
+          return store2[key2] || (store2[key2] = value !== void 0 ? value : {});
         })("versions", []).push({
           version: _core.version,
           mode: _library ? "pure" : "global",
@@ -23954,27 +23954,25 @@ function holdClickError(state, sessionId2, text4, at) {
   const live = clickErrors(state, sessionId2).filter(
     (e) => eventHoldAt(e, CLICK_ERROR_HOLD_S, at, "request") !== "over"
   );
-  const record2 = { text: text4, at, answered: false };
-  state.set(sessionId2, KEY, JSON.stringify([...live, record2]));
+  store(state, sessionId2, {
+    newest: { text: text4, at, answered: false },
+    earlier: live
+  });
 }
 function answeredClickError(state, sessionId2, errors2) {
-  const all2 = clickErrors(state, sessionId2);
-  const marked = all2.map(
-    (e) => errors2.some((shown) => answeredBy(e, shown)) ? { ...e, answered: true } : e
-  );
-  if (marked.every((e, i) => e === all2[i])) return;
-  state.set(sessionId2, KEY, JSON.stringify(marked));
+  const stored = storedOf(state, sessionId2);
+  if (stored === null) return;
+  const mark = (e) => errors2.some((shown) => answeredBy(e, shown)) ? { ...e, answered: true } : e;
+  const marked = {
+    newest: mark(stored.newest),
+    earlier: stored.earlier.map(mark)
+  };
+  const unmoved = marked.newest === stored.newest && marked.earlier.every((e, i) => e === stored.earlier[i]);
+  if (!unmoved) store(state, sessionId2, marked);
 }
 function clickErrors(state, sessionId2) {
-  const raw = state.get(sessionId2, KEY);
-  if (raw === null) return [];
-  let value;
-  try {
-    value = JSON.parse(raw);
-  } catch {
-    return [];
-  }
-  return (Array.isArray(value) ? value : [value]).flatMap(recordOf);
+  const stored = storedOf(state, sessionId2);
+  return stored === null ? [] : [...stored.earlier, stored.newest];
 }
 function clickErrorsAt(state, sessionId2, at, render3) {
   return clickErrors(state, sessionId2).map((error) => ({
@@ -23984,10 +23982,33 @@ function clickErrorsAt(state, sessionId2, at, render3) {
 }
 var shownClickErrors = (errors2) => errors2.flatMap(({ error, hold: hold2 }) => hold2 === "over" ? [] : [error]);
 var toAnswer = (errors2) => shownClickErrors(errors2).filter((error) => !error.answered);
+function store(state, sessionId2, { newest, earlier }) {
+  state.set(sessionId2, KEY, JSON.stringify({ ...newest, earlier }));
+}
+function storedOf(state, sessionId2) {
+  const raw = state.get(sessionId2, KEY);
+  if (raw === null) return null;
+  let value;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  const newest = recordOf(value);
+  if (newest === null) return null;
+  const { earlier } = value;
+  return {
+    newest,
+    earlier: Array.isArray(earlier) ? earlier.flatMap((e) => {
+      const record2 = recordOf(e);
+      return record2 === null ? [] : [record2];
+    }) : []
+  };
+}
 function recordOf(value) {
-  if (typeof value !== "object" || value === null) return [];
+  if (typeof value !== "object" || value === null) return null;
   const { text: text4, at, answered: answered2 } = value;
-  return typeof text4 === "string" && typeof at === "number" && (answered2 === void 0 || typeof answered2 === "boolean") ? [{ text: text4, at, answered: answered2 === true }] : [];
+  return typeof text4 === "string" && typeof at === "number" && (answered2 === void 0 || typeof answered2 === "boolean") ? { text: text4, at, answered: answered2 === true } : null;
 }
 
 // src/daemon/verbs/key-seeds.ts
@@ -51756,16 +51777,16 @@ function createCcCandybarEngine(opts) {
 
 // src/template-engine/scope.ts
 init_globals();
-function buildScope(store) {
-  const names = new Set(store.names());
-  return makeProxy(store, names, "");
+function buildScope(store2) {
+  const names = new Set(store2.names());
+  return makeProxy(store2, names, "");
 }
-function makeProxy(store, names, prefix) {
+function makeProxy(store2, names, prefix) {
   return new Proxy(/* @__PURE__ */ Object.create(null), {
     has(_, key) {
       if (typeof key !== "string") return false;
       const fullKey = prefix ? `${prefix}.${key}` : key;
-      if (names.has(fullKey)) return !absentDocument(store, fullKey);
+      if (names.has(fullKey)) return !absentDocument(store2, fullKey);
       const nsPrefix = `${fullKey}.`;
       for (const n of names) {
         if (n.startsWith(nsPrefix)) return true;
@@ -51776,14 +51797,14 @@ function makeProxy(store, names, prefix) {
       if (typeof key !== "string") return void 0;
       const fullKey = prefix ? `${prefix}.${key}` : key;
       if (names.has(fullKey)) {
-        if (store.getKind(fullKey) !== "document") return store.read(fullKey);
-        const doc = store.readDocument(fullKey);
+        if (store2.getKind(fullKey) !== "document") return store2.read(fullKey);
+        const doc = store2.readDocument(fullKey);
         return doc.kind === "absent" ? void 0 : unwrapDocument(fullKey, doc);
       }
       const nsPrefix = `${fullKey}.`;
       for (const n of names) {
         if (n.startsWith(nsPrefix)) {
-          return makeProxy(store, names, fullKey);
+          return makeProxy(store2, names, fullKey);
         }
       }
       return void 0;
@@ -51796,8 +51817,8 @@ function placementScope(scope, settings) {
     get: (target, key) => key === "settings" ? settings : Reflect.get(target, key)
   });
 }
-function absentDocument(store, name) {
-  return store.getKind(name) === "document" && store.readDocument(name).kind === "absent";
+function absentDocument(store2, name) {
+  return store2.getKind(name) === "document" && store2.readDocument(name).kind === "absent";
 }
 function unwrapDocument(name, doc) {
   switch (doc.kind) {
@@ -53548,9 +53569,9 @@ var SourceRegistry = class _SourceRegistry {
   // sessionState lets the daemon inject its singleton so state-kind variables
   // share one MobX atom and one disk-persistence layer with the click verbs.
   // Omitted in tests that don't exercise state vars.
-  constructor(runs, store, defaultEmptyValue = "", sessionState, parent = null) {
+  constructor(runs, store2, defaultEmptyValue = "", sessionState, parent = null) {
     this.runs = runs;
-    this.store = store;
+    this.store = store2;
     this.defaultEmptyValue = defaultEmptyValue;
     this.parent = parent;
     this.sessionState = sessionState;
@@ -64224,32 +64245,32 @@ function openRoots(nest, read2) {
 
 // src/daemon/closing-view.ts
 init_globals();
-function closingView(store, nestOf2, log) {
+function closingView(store2, nestOf2, log) {
   const write = (sessionId2, writes, land2) => {
     const folds = closeNested(
       nestOf2(sessionId2),
-      (key) => store.get(sessionId2, key),
+      (key) => store2.get(sessionId2, key),
       writes
     );
     runInAction(() => {
       land2();
-      for (const key of folds) store.clear(sessionId2, key);
+      for (const key of folds) store2.clear(sessionId2, key);
     });
     if (folds.length > 0) {
       log(`close-nested: folded=${folds.join(",")} (session=${sessionId2})`);
     }
   };
-  const setBatch = (sessionId2, pairs2) => write(sessionId2, pairs2, () => store.setBatch(sessionId2, pairs2));
+  const setBatch = (sessionId2, pairs2) => write(sessionId2, pairs2, () => store2.setBatch(sessionId2, pairs2));
   return {
-    get: (sessionId2, key) => store.get(sessionId2, key),
-    revision: (sessionId2) => store.revision(sessionId2),
+    get: (sessionId2, key) => store2.get(sessionId2, key),
+    revision: (sessionId2) => store2.revision(sessionId2),
     set: (sessionId2, key, value) => setBatch(sessionId2, [{ key, value }]),
     setBatch,
     // A cleared key reads its default, so it closes what its old value held.
     clear: (sessionId2, key) => write(
       sessionId2,
       [{ key, value: nestOf2(sessionId2).defaultOf(key) }],
-      () => store.clear(sessionId2, key)
+      () => store2.clear(sessionId2, key)
     )
   };
 }
@@ -64513,14 +64534,14 @@ function requireValueTarget(key) {
   }
   return target;
 }
-function commit2(store, home, before, after, refuse4) {
+function commit2(store2, home, before, after, refuse4) {
   const will = loadOrRefuse(home, after);
   let held;
   const was = () => (held ??= { chain: loadedOrNull(home, before) }).chain;
   refuseNewDrops(home, was, will);
   refuse4(home, was, will);
-  writeConfigText(home.path, after, store.logger);
-  store.record(home.path, before, after);
+  writeConfigText(home.path, after, store2.logger);
+  store2.record(home.path, before, after);
 }
 function refuseHidden(home, was, will) {
   const hidden = hiddenBy(home, was(), will);
@@ -64621,10 +64642,10 @@ function readValue(file, key) {
   const node = doc === null ? void 0 : nodeAt(doc, persistPath(target));
   return node !== void 0 && "value" in node ? node.value : void 0;
 }
-function writeValues(store, home, pairs2) {
-  writeDrafts(store, home, pairs2, []);
+function writeValues(store2, home, pairs2) {
+  writeDrafts(store2, home, pairs2, []);
 }
-function writeDrafts(store, home, pairs2, placements) {
+function writeDrafts(store2, home, pairs2, placements) {
   const before = readConfigText(home.path);
   const valued = pairs2.reduce(
     (text4, [key, raw]) => setValue(
@@ -64636,7 +64657,7 @@ function writeDrafts(store, home, pairs2, placements) {
     before ?? ""
   );
   commit2(
-    store,
+    store2,
     home,
     before,
     homeOnly(
@@ -64688,7 +64709,7 @@ function deleteAtPath(text4, path44) {
   const ownPreset = path44[0] === "presets" && path44.length > 2 && !isBundledPreset(path44[1]);
   return deleteValue(text4, path44, ownPreset ? 2 : 0);
 }
-function deleteValues(store, home, keys2) {
+function deleteValues(store2, home, keys2) {
   const targets = keys2.map(requireTarget);
   const before = readConfigText(home.path);
   if (before === null) return;
@@ -64697,7 +64718,7 @@ function deleteValues(store, home, keys2) {
     before
   );
   if (after === before) return;
-  commit2(store, home, before, after, releases);
+  commit2(store2, home, before, after, releases);
 }
 var SAVED_PRESET_PREFIX = "custom-";
 function presetKeys(doc) {
@@ -64723,7 +64744,7 @@ function freePresetName(doc, home) {
     (_, i) => `${SAVED_PRESET_PREFIX}${i + 1}`
   ).find((candidate) => !taken2.has(ident(candidate)));
 }
-function writePreset(store, home, from, globals, picks, placements) {
+function writePreset(store2, home, from, globals, picks, placements) {
   const before = readConfigText(home.path);
   const doc = docOf(before ?? "");
   const name = freePresetName(doc, home);
@@ -64758,10 +64779,10 @@ function writePreset(store, home, from, globals, picks, placements) {
       ownRow
     )
   );
-  commit2(store, home, before, placed2, refuseHidden);
+  commit2(store2, home, before, placed2, refuseHidden);
   return name;
 }
-function writeThemeDefault(store, home, theme24, look) {
+function writeThemeDefault(store2, home, theme24, look) {
   const before = readConfigText(home.path);
   const after = setValue(
     before ?? "",
@@ -64769,9 +64790,9 @@ function writeThemeDefault(store, home, theme24, look) {
     json5Text(look),
     JSON5_DIALECT
   );
-  commit2(store, home, before, after, refuseHidden);
+  commit2(store2, home, before, after, refuseHidden);
 }
-function deletePreset(store, home, name) {
+function deletePreset(store2, home, name) {
   if (isBundledPreset(name)) {
     throw new BadVerbArgs(
       `cannot delete preset "${name}": it is bundled \u2014 reset its settings instead`
@@ -64791,14 +64812,14 @@ function deletePreset(store, home, name) {
     ...selected?.kind === "string" && selected.value === name ? [["globals", "preset"]] : []
   ];
   commit2(
-    store,
+    store2,
     home,
     before,
     paths2.reduce((text4, at) => deleteAtPath(text4, at), before),
     releases
   );
 }
-function applyLayoutOp(store, home, key, op) {
+function applyLayoutOp(store2, home, key, op) {
   const target = requireTarget(key);
   if (target.scope !== "preset-root") {
     throw new Error(`"${key}" is not a "presets.<name>.root" target`);
@@ -64821,7 +64842,7 @@ function applyLayoutOp(store, home, key, op) {
       `${placement.path.join(".")} in ${home.path} has no placement "${subject}" \u2014 the bar you clicked is stale (it reloads on the next render), or the action names a placement the layout never held`
     );
   }
-  commit2(store, home, before, after, refuseHidden);
+  commit2(store2, home, before, after, refuseHidden);
   return placed2;
 }
 function spliceOp(text4, path44, op, rendered) {
@@ -64844,24 +64865,24 @@ var import_node_path18 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/session-state.ts
 init_globals();
-function recordingView(store, records, onChange) {
+function recordingView(store2, records, onChange) {
   const recorded = (sessionId2, keys2, write) => {
-    const before = keys2.filter(records).map((key) => ({ key, before: store.get(sessionId2, key) }));
+    const before = keys2.filter(records).map((key) => ({ key, before: store2.get(sessionId2, key) }));
     write();
     for (const { key, before: b } of before) {
-      onChange(sessionId2, key, b, store.get(sessionId2, key));
+      onChange(sessionId2, key, b, store2.get(sessionId2, key));
     }
   };
   return {
-    get: (sessionId2, key) => store.get(sessionId2, key),
-    revision: (sessionId2) => store.revision(sessionId2),
-    set: (sessionId2, key, value) => recorded(sessionId2, [key], () => store.set(sessionId2, key, value)),
+    get: (sessionId2, key) => store2.get(sessionId2, key),
+    revision: (sessionId2) => store2.revision(sessionId2),
+    set: (sessionId2, key, value) => recorded(sessionId2, [key], () => store2.set(sessionId2, key, value)),
     setBatch: (sessionId2, pairs2) => recorded(
       sessionId2,
       pairs2.map((p2) => p2.key),
-      () => store.setBatch(sessionId2, pairs2)
+      () => store2.setBatch(sessionId2, pairs2)
     ),
-    clear: (sessionId2, key) => recorded(sessionId2, [key], () => store.clear(sessionId2, key))
+    clear: (sessionId2, key) => recorded(sessionId2, [key], () => store2.clear(sessionId2, key))
   };
 }
 var EPHEMERAL_SESSION_STORAGE = {
@@ -65912,9 +65933,9 @@ var repoConfigs = (dir) => {
     }
   };
 };
-function recordAnswer(store, dir, answer2) {
+function recordAnswer(store2, dir, answer2) {
   let recorded = { superseded: [], absent: [], unchecked: [] };
-  const filed = store.update((book) => {
+  const filed = store2.update((book) => {
     const others = Object.keys(book).filter((d) => d !== dir).map((d) => ({ d, found: presence(d) }));
     recorded = {
       superseded: others.filter(
@@ -69349,7 +69370,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.199.0";
+var PACKAGE_VERSION = "1.199.1";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -71329,28 +71350,39 @@ function writeReport(ctx, sid, facts) {
 function describeDoctor(ctx, sid, step4) {
   ctx.effect({ kind: "doctor", session: sid, step: step4, arrival: ctx.arrival });
 }
-function recordingReads(store, reads) {
+function recordingReads(store2, reads) {
   const refused2 = (what) => {
     throw new Error(`doctor: the gather ${what}; a gather writes nothing`);
   };
   return {
     get: (sid, key) => {
-      const value = store.get(sid, key);
-      reads.set(JSON.stringify([sid, key]), { sid, key, value });
+      const value = store2.get(sid, key);
+      reads.set(JSON.stringify([sid, key]), {
+        what: key,
+        value,
+        again: (state) => state.get(sid, key)
+      });
       return value;
     },
-    revision: (sid) => store.revision(sid),
+    revision: (sid) => store2.revision(sid),
     set: (_sid, key) => refused2(`set ${key}`),
     setBatch: () => refused2("wrote a batch"),
     clear: (_sid, key) => refused2(`cleared ${key}`)
   };
 }
 function movedSince(ctx, sid, stamp2) {
-  for (const { sid: s, key, value } of stamp2.reads) {
-    if (ctx.sessionState.get(s, key) !== value) return key;
+  for (const { what, value, again } of stamp2.reads) {
+    if (again(ctx.sessionState) !== value) return what;
   }
   const stands = ctx.doctor.loadConfig(sessionOrigin(ctx, sid));
   return stands.config === stamp2.load.config && stands.error === stamp2.load.error && stands.warning === stamp2.load.warning ? null : "config";
+}
+function doctorHints(state, sid) {
+  const { tmux: tmux3, claudeConfigDir: claudeConfigDir2, terminalEnv, ssh } = sessionHints(
+    { sessionState: state },
+    sid
+  );
+  return { tmux: tmux3, claudeConfigDir: claudeConfigDir2, terminalEnv, ssh };
 }
 async function gatherOnce(ctx, sid, arrival, doctor) {
   const reads = /* @__PURE__ */ new Map();
@@ -71358,6 +71390,13 @@ async function gatherOnce(ctx, sid, arrival, doctor) {
     ...ctx,
     sessionState: recordingReads(ctx.sessionState, reads)
   };
+  const hintsRead = (state) => JSON.stringify(doctorHints(state, sid));
+  const hints = doctorHints(ctx.sessionState, sid);
+  reads.set("hints", {
+    what: SESSION_CLIENT_HINTS_KEY,
+    value: JSON.stringify(hints),
+    again: hintsRead
+  });
   const load = doctor.loadConfig(sessionOrigin(seen, sid));
   const scope = { kind: "clicked", sessionId: sid, via: arrival.via };
   const said = ctx.clients.ofSession(sid, ctx.now());
@@ -71365,7 +71404,7 @@ async function gatherOnce(ctx, sid, arrival, doctor) {
   try {
     facts = await gatherFacts(
       { ...doctor, loadConfig: () => load },
-      sessionHints(seen, sid),
+      hints,
       sessionOrigin(seen, sid),
       (key) => seen.sessionState.get(sid, key),
       { kind: "ok", value: ctx.serving() },
@@ -71780,8 +71819,8 @@ function journaled(sid, ctx, handler) {
   const journal = ctx.history.begin();
   const navigation = ctx.navigation.begin(journal.sessionState);
   const failures = [];
-  const closing = (store) => closingView(
-    store,
+  const closing = (store2) => closingView(
+    store2,
     (sid2) => nestOf(ctx, sid2),
     (line) => ctx.log("info", line)
   );
@@ -71821,6 +71860,7 @@ function journaled(sid, ctx, handler) {
 }
 function click(verb, handler) {
   return (value, ctx) => {
+    if (ctx.gone()) throw new ClickAbandoned(verb);
     const session = clickSessionOf(verb, value);
     const sid = session?.ok ? session.id : null;
     ctx.journalTurns.take(
@@ -72953,8 +72993,8 @@ function parseActionTemplate(parse3, src, name) {
     );
   }
 }
-function readVar(store, name) {
-  return store.has(name) ? toString(store.read(name)) : "";
+function readVar(store2, name) {
+  return store2.has(name) ? toString(store2.read(name)) : "";
 }
 function evalTemplate(tpl, scope) {
   return tpl.evaluate(scope).map((f) => f.plain).join("");
@@ -72983,13 +73023,13 @@ function linkOver(cell3, url, current = false) {
   linked.end = "";
   return linked;
 }
-function cycleIndex(c, store) {
-  return Math.max(c.members.indexOf(readVar(store, c.stateVar)), 0);
+function cycleIndex(c, store2) {
+  return Math.max(c.members.indexOf(readVar(store2, c.stateVar)), 0);
 }
-function realize(c, display, boundValue, store, sessionId2, signer) {
+function realize(c, display, boundValue, store2, sessionId2, signer) {
   switch (c.kind) {
     case "set-literal": {
-      const current = readVar(store, c.stateVar);
+      const current = readVar(store2, c.stateVar);
       return {
         effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, c.value] }],
         active: current === c.value
@@ -72997,7 +73037,7 @@ function realize(c, display, boundValue, store, sessionId2, signer) {
     }
     case "set-option": {
       const value = boundValue ?? display;
-      const current = readVar(store, c.stateVar);
+      const current = readVar(store2, c.stateVar);
       return {
         effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, value] }],
         active: current === value
@@ -73005,14 +73045,14 @@ function realize(c, display, boundValue, store, sessionId2, signer) {
     }
     case "set-int": {
       const value = boundValue ?? display;
-      const current = readVar(store, c.stateVar);
+      const current = readVar(store2, c.stateVar);
       return {
         effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, value] }],
         active: current === value
       };
     }
     case "set-cycle": {
-      const next = c.members[(cycleIndex(c, store) + 1) % c.members.length];
+      const next = c.members[(cycleIndex(c, store2) + 1) % c.members.length];
       return {
         effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, next] }],
         active: false
@@ -73034,7 +73074,7 @@ function realize(c, display, boundValue, store, sessionId2, signer) {
         effects: [
           {
             verb: VERB_COPY,
-            args: [evalTemplate(c.text, buildScope(store))]
+            args: [evalTemplate(c.text, buildScope(store2))]
           }
         ],
         active: false
@@ -73044,7 +73084,7 @@ function realize(c, display, boundValue, store, sessionId2, signer) {
         effects: [
           {
             verb: VERB_OPEN_VSCODE,
-            args: [evalTemplate(c.target, buildScope(store))]
+            args: [evalTemplate(c.target, buildScope(store2))]
           }
         ],
         active: false
@@ -73055,7 +73095,7 @@ function realize(c, display, boundValue, store, sessionId2, signer) {
     // VERB_SET_STATE/VERB_STEP_STATE) — the daemon-side handler is what makes
     // the write durable, not the click itself.
     case "persist-literal": {
-      const current = readVar(store, c.stateVar);
+      const current = readVar(store2, c.stateVar);
       return {
         effects: [{ verb: VERB_SET_CONFIG, args: [sessionId2, c.key, c.value] }],
         active: current === c.value
@@ -73063,14 +73103,14 @@ function realize(c, display, boundValue, store, sessionId2, signer) {
     }
     case "persist-option": {
       const value = boundValue ?? display;
-      const current = readVar(store, c.stateVar);
+      const current = readVar(store2, c.stateVar);
       return {
         effects: [{ verb: VERB_SET_CONFIG, args: [sessionId2, c.key, value] }],
         active: current === value
       };
     }
     case "persist-cycle": {
-      const next = c.members[(cycleIndex(c, store) + 1) % c.members.length];
+      const next = c.members[(cycleIndex(c, store2) + 1) % c.members.length];
       return {
         effects: [{ verb: VERB_SET_CONFIG, args: [sessionId2, c.key, next] }],
         active: false
@@ -73138,7 +73178,7 @@ function realize(c, display, boundValue, store, sessionId2, signer) {
         effects: [
           {
             verb: VERB_DELETE_PRESET,
-            args: [sessionId2, evalTemplate(c.name, buildScope(store))]
+            args: [sessionId2, evalTemplate(c.name, buildScope(store2))]
           }
         ],
         active: false
@@ -73173,7 +73213,7 @@ function realize(c, display, boundValue, store, sessionId2, signer) {
     // mac, so the click runs what the bar showed and nothing a URL made up.
     // Never "active": a run is a one-shot trigger.
     case "run": {
-      const scope = buildScope(store);
+      const scope = buildScope(store2);
       const evaluated2 = JSON.stringify({
         run: c.argv.map((item) => evalTemplate(item, scope)),
         env: Object.fromEntries(
@@ -73217,7 +73257,7 @@ function realize(c, display, boundValue, store, sessionId2, signer) {
         c.head,
         display,
         boundValue,
-        store,
+        store2,
         sessionId2,
         signer
       );
@@ -73225,7 +73265,7 @@ function realize(c, display, boundValue, store, sessionId2, signer) {
         effects: [
           ...head.effects,
           ...c.rest.flatMap(
-            (m) => realize(m, display, void 0, store, sessionId2, signer).effects
+            (m) => realize(m, display, void 0, store2, sessionId2, signer).effects
           )
         ],
         active: head.active
@@ -73257,7 +73297,7 @@ function realize(c, display, boundValue, store, sessionId2, signer) {
     }
   }
 }
-function selectDisplay(name, action2, displays, store) {
+function selectDisplay(name, action2, displays, store2) {
   if (displays.length === 0) {
     throw new Error(`action "${name}" needs a display (the clickable text)`);
   }
@@ -73266,7 +73306,7 @@ function selectDisplay(name, action2, displays, store) {
       `action "${name}"`,
       displays,
       action2.members.length,
-      cycleIndex(action2, store)
+      cycleIndex(action2, store2)
     );
     return { display, boundValue: void 0 };
   }
@@ -73282,19 +73322,19 @@ function renderAction(name, displays, runtime) {
   if (!declared) {
     throw new Error(`action "${name}" is not declared in this config`);
   }
-  const store = renderBinding(runtime, `action "${name}"`).store;
+  const store2 = renderBinding(runtime, `action "${name}"`).store;
   const { display, boundValue } = selectDisplay(
     name,
     presentedAction(declared),
     displays,
-    store
+    store2
   );
-  const sessionId2 = readVar(store, "session.id");
+  const sessionId2 = readVar(store2, "session.id");
   const { effects, active: active2 } = realize(
     declared,
     display.plain,
     boundValue,
-    store,
+    store2,
     sessionId2,
     runtime.signer
   );
@@ -73313,13 +73353,13 @@ function actionFuncs(runtime) {
 
 // src/render/disclosure-close.ts
 init_globals();
-function disclosureCloseFragment(store, key) {
+function disclosureCloseFragment(store2, key) {
   return linkFragment(
     DISCLOSURE_GLYPH_CLOSE,
     effectsUrl([
       {
         verb: VERB_SET_STATE,
-        args: [readVar(store, "session.id"), key, DISCLOSURE_CLOSED]
+        args: [readVar(store2, "session.id"), key, DISCLOSURE_CLOSED]
       }
     ]),
     false
@@ -73613,9 +73653,9 @@ function requireOptionKind(runtime, name, helper) {
 }
 function renderPicker(applyName, apply2, page2, close, paged, runtime, itemPaint, closeStyle, steps2 = []) {
   const declared = runtime.compiled.get(applyName);
-  const store = renderBinding(runtime, "picker").store;
-  const sessionId2 = readVar(store, "session.id");
-  const current = "stateVar" in apply2 ? readVar(store, apply2.stateVar) : void 0;
+  const store2 = renderBinding(runtime, "picker").store;
+  const sessionId2 = readVar(store2, "session.id");
+  const current = "stateVar" in apply2 ? readVar(store2, apply2.stateVar) : void 0;
   const optionFace = (i, label2) => {
     const option = apply2.options[i];
     return itemPaint(
@@ -73638,7 +73678,7 @@ function renderPicker(applyName, apply2, page2, close, paged, runtime, itemPaint
     available,
     navReserve
   );
-  const rawPage = parseInt(readVar(store, page2.stateVar), 10);
+  const rawPage = parseInt(readVar(store2, page2.stateVar), 10);
   const pageHolding = (index) => Math.max(
     0,
     pages.findIndex(
@@ -73661,7 +73701,7 @@ function renderPicker(applyName, apply2, page2, close, paged, runtime, itemPaint
   ];
   const closeEffects = close.kind === "own" && close.onPick ? closeWrite : [];
   const optionUrl = (option) => effectsUrl([
-    ...realize(declared, option, option, store, sessionId2, runtime.signer).effects,
+    ...realize(declared, option, option, store2, sessionId2, runtime.signer).effects,
     ...closeEffects
   ]);
   const optionCell = (face, i) => linkOver(face, optionUrl(apply2.options[i]));
@@ -73678,7 +73718,7 @@ function renderPicker(applyName, apply2, page2, close, paged, runtime, itemPaint
       ({ glyph, option }) => linkFragment(
         glyph,
         effectsUrl([
-          ...realize(declared, option, option, store, sessionId2, runtime.signer).effects,
+          ...realize(declared, option, option, store2, sessionId2, runtime.signer).effects,
           {
             verb: VERB_SET_STATE,
             args: [
@@ -73811,24 +73851,24 @@ function renderCarousel(applyName, apply2, openName, label2, runtime) {
       `carousel references action "${applyName}", which inserts a segment and holds no current value to centre on \u2014 a carousel needs a { set, from } or { persist, from } action`
     );
   }
-  const store = renderBinding(runtime, "carousel").store;
-  if (!store.has(apply2.stateVar)) {
+  const store2 = renderBinding(runtime, "carousel").store;
+  if (!store2.has(apply2.stateVar)) {
     throw new Error(
       `carousel references action "${applyName}", whose key "${apply2.stateVar}" no variable reads back, so there is no current value to centre on \u2014 declare { kind: "state", key: "${apply2.stateVar}" } among the variables`
     );
   }
   const declared = runtime.compiled.get(applyName);
-  const sessionId2 = readVar(store, "session.id");
+  const sessionId2 = readVar(store2, "session.id");
   const { options } = apply2;
   if (options.length === 0) return assemble([]);
-  const indexAt = ringAround(options, readVar(store, apply2.stateVar));
+  const indexAt = ringAround(options, readVar(store2, apply2.stateVar));
   const ring = (offset) => options[indexAt(offset)];
   const step4 = (offset) => effectsUrl(
     realize(
       declared,
       ring(offset),
       ring(offset),
-      store,
+      store2,
       sessionId2,
       runtime.signer
     ).effects
@@ -73850,7 +73890,7 @@ function renderCarousel(applyName, apply2, openName, label2, runtime) {
           runtime.compiled.get(openName),
           ring(0),
           void 0,
-          store,
+          store2,
           sessionId2,
           runtime.signer
         ).effects
@@ -74172,9 +74212,9 @@ function renderMenu(applyName, displays, options, runtime) {
   const stateKey = menuStateKey(placement.placementId, applyName, options.key);
   const pageKey = menuPageKey(stateKey);
   const member = menuMember(applyName);
-  const store = renderBinding(action2, "menu").store;
-  const open2 = readVar(store, stateKey) === member;
-  const sessionId2 = readVar(store, "session.id");
+  const store2 = renderBinding(action2, "menu").store;
+  const open2 = readVar(store2, stateKey) === member;
+  const sessionId2 = readVar(store2, "session.id");
   const successor = open2 ? DISCLOSURE_CLOSED : member;
   const glyph = linkFragment(
     pickCycleDisplay(`{{ menu "${applyName}" }}`, displays, 2, open2 ? 1 : 0),
@@ -74988,13 +75028,13 @@ var sameLook2 = sameBy({
   decor: sameDecor
 });
 var ViewParts = class {
-  constructor(store, registry, source, view) {
-    this.store = store;
+  constructor(store2, registry, source, view) {
+    this.store = store2;
     this.registry = registry;
     this.source = source;
     this.view = observable.box(view, { deep: false });
-    this.scope = buildScope(store);
-    this.depth = store.derive("drawn depth", "computed", () => {
+    this.scope = buildScope(store2);
+    this.depth = store2.derive("drawn depth", "computed", () => {
       const said = this.inputAt(COLOR_PATH);
       return said.kind === "found" && typeof said.value === "string" && isColorCompatibility(said.value) ? said.value : COLOR_FLOOR;
     });
@@ -75004,7 +75044,7 @@ var ViewParts = class {
     const phase = this.phase;
     const layout = () => this.layout.read();
     this.binding = {
-      store,
+      store: store2,
       registry,
       get width() {
         return drawn.width;
@@ -75294,18 +75334,18 @@ var ViewParts = class {
     return this.placement(node).gate().kind !== "hidden";
   }
 };
-function bindView(source, store, registry, view) {
-  const parts = source.views.get(store);
+function bindView(source, store2, registry, view) {
+  const parts = source.views.get(store2);
   if (parts !== void 0) {
     parts.bind(view);
     return parts;
   }
-  const made = new ViewParts(store, registry, source, view);
-  source.views.set(store, made);
+  const made = new ViewParts(store2, registry, source, view);
+  source.views.set(store2, made);
   return made;
 }
-function partsOf(source, store) {
-  const parts = source.views.get(store);
+function partsOf(source, store2) {
+  const parts = source.views.get(store2);
   if (parts === void 0) {
     throw new Error(
       "a store was drawn before its view was bound (bindView): its inputs have no source"
@@ -75983,7 +76023,7 @@ function segmentsUnder(node) {
     ...node.opens === void 0 ? [] : segmentsUnder(node.opens.body)
   ];
 }
-function drawDsl(config2, compiled, store, registry, projected, at, opts, observers, selection2) {
+function drawDsl(config2, compiled, store2, registry, projected, at, opts, observers, selection2) {
   var _stack = [];
   try {
     const { perSegmentSink, onSegmentError, onRenderWarning } = observers ?? {};
@@ -75991,7 +76031,7 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
     const effects = selection2.effects ?? new SessionEffects("");
     const clock = effects.clockAt(at, ANIMATION_SPEEDS[selection2.animationSpeed]);
     const drawClock = __using(_stack, bindClock(at, clock.timeline));
-    const parts = partsOf(compiled, store);
+    const parts = partsOf(compiled, store2);
     const drawOpts = {
       ...opts,
       colorCompatibility: parts.colorCompatibility()
@@ -76120,7 +76160,7 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
         renderBody: (body, held, band) => renderNode(body, held, bandRoot(band)),
         // [LAW:one-source-of-truth] The row ✕ reads the session id from the
         // same store every other affordance's URL does.
-        closeDisclosure: (key) => disclosureCloseFragment(store, key),
+        closeDisclosure: (key) => disclosureCloseFragment(store2, key),
         placed: (id2, lines2) => record2.placed(id2, motion.placed(id2, lines2)),
         lastDrawn: (id2) => last2?.placements.get(id2),
         waited: (variable) => waited.add(variable),
@@ -77574,18 +77614,9 @@ var ARMS = {
   // [LAW:single-enforcer] The click's whole bracket on its menus' idle clock
   // is here, so the timer cannot close a menu under any click Apply carries.
   // The turn hands its effects over once it has committed (`described`), and
-  // a refused step is answered beside them.
-  // [LAW:single-enforcer] A click whose client has left never lands, so a
-  // client told TIMEOUT can click again without reverting a toggle; it moves
-  // no idle clock and describes nothing.
+  // a refused step is answered beside them; a click whose client has left is
+  // refused by the verb, where it would land (src/daemon/verbs/index.ts).
   click: async ({ verb, value, arrival, pending: pending2, gone }, { verbCtx, menuIdle }) => {
-    if (gone()) {
-      return {
-        answer: { error: new ClickAbandoned(verb.name) },
-        effects: NO_EFFECTS,
-        facts: []
-      };
-    }
     if (pending2 !== null) menuIdle.clickArrived(pending2);
     const effects = [];
     let answer2 = null;
@@ -77593,6 +77624,7 @@ var ARMS = {
       verb.run(value, {
         ...verbCtx,
         arrival,
+        gone,
         described: (described) => void effects.push(...described)
       });
     } catch (error) {
@@ -77933,12 +77965,12 @@ function buildDebugSnapshot(what, state) {
 }
 function introspectVars(state) {
   if (state === null) return [];
-  const { store, registry, config: config2 } = state;
+  const { store: store2, registry, config: config2 } = state;
   const sourceByName = buildSourceKindIndex(config2);
-  const names = store.names().sort();
+  const names = store2.names().sort();
   const out = [];
   for (const name of names) {
-    const node = store.getNode(name);
+    const node = store2.getNode(name);
     const value = valueOf2(node);
     const err = registry.getLastError(name);
     out.push({
@@ -77946,7 +77978,7 @@ function introspectVars(state) {
       source: sourceByName.get(name) ?? null,
       ...value,
       lastError: err !== void 0 ? { timestampMs: err.timestamp, message: err.message } : null,
-      ageMs: ageFromNode(node.lastUpdatedMs(), store.clock)
+      ageMs: ageFromNode(node.lastUpdatedMs(), store2.clock)
     });
   }
   return out;
@@ -77999,8 +78031,8 @@ function sourceKindOf(decl) {
 }
 function introspectSegments(state) {
   if (state === null) return [];
-  const { store, config: config2, lastRenderBySegment } = state;
-  const declaredNames = new Set(store.names());
+  const { store: store2, config: config2, lastRenderBySegment } = state;
+  const declaredNames = new Set(store2.names());
   const segNames = orderedSegmentNames(config2);
   const placed2 = placementsBySegment(config2);
   const out = [];
@@ -82527,10 +82559,10 @@ function buildRenderState(load, deps) {
     (l) => (l.raw.insert ?? []).map((cell3) => cell3.seg)
   );
   const warnings = [];
-  const store = new VariableStore(deps.clock);
+  const store2 = new VariableStore(deps.clock);
   const registry = new SourceRegistry(
     deps.runs,
-    store,
+    store2,
     config2.globals.default_empty_value ?? "",
     deps.sessionState
   );
@@ -82564,7 +82596,7 @@ function buildRenderState(load, deps) {
       compileKey: registration.compileKey,
       loadKey: load.key,
       buildWarnings: warnings,
-      store,
+      store: store2,
       registry,
       compiled: registration.compiled,
       neededInputPaths: neededPrefixesByPreset(config2),
@@ -83390,8 +83422,8 @@ var NavigationHistory = class {
   );
   // [LAW:one-source-of-truth] How many clicks on `◁` restore something — the
   // walk `back` itself makes, so the count cannot promise a step it discards.
-  depth(sessionId2, store, gate2) {
-    return this.restorable(sessionId2, store, gate2).length;
+  depth(sessionId2, store2, gate2) {
+    return this.restorable(sessionId2, store2, gate2).length;
   }
   // The steps going back would restore, oldest first: walking down from the
   // newest over the state as each restore would leave it, a step is restored
@@ -83401,9 +83433,9 @@ var NavigationHistory = class {
   // view that is gone — rewritten since (a layout edit releasing the placement
   // it configured), or no longer one the config admits (that placement
   // removed, a group renamed) — and is discarded rather than replayed.
-  restorable(sessionId2, store, gate2) {
+  restorable(sessionId2, store2, gate2) {
     const state = /* @__PURE__ */ new Map();
-    const read2 = (key) => state.has(key) ? state.get(key) : store.get(sessionId2, key);
+    const read2 = (key) => state.has(key) ? state.get(key) : store2.get(sessionId2, key);
     const kept = [];
     for (const step4 of [...this.past.get(sessionId2) ?? []].reverse()) {
       const holds2 = step4.every(
@@ -83418,10 +83450,10 @@ var NavigationHistory = class {
   // `store` is the click's own view of session state — the settings journal's,
   // so a navigating click that also picks a setting still records the pick
   // where undo reaches it.
-  begin(store) {
+  begin(store2) {
     const pending2 = /* @__PURE__ */ new Map();
     const sessionState = recordingView(
-      store,
+      store2,
       isNavigationKey,
       (sessionId2, key, before, after) => {
         const changes = pending2.get(sessionId2) ?? /* @__PURE__ */ new Map();
@@ -83447,9 +83479,9 @@ var NavigationHistory = class {
   // returns it, with how many steps it discarded (restorable). Written through
   // the bare store, never a navigation journal, so going back is not itself a
   // step.
-  back(sessionId2, store, gate2) {
+  back(sessionId2, store2, gate2) {
     const all2 = this.past.get(sessionId2) ?? [];
-    const steps2 = this.restorable(sessionId2, store, gate2);
+    const steps2 = this.restorable(sessionId2, store2, gate2);
     const step4 = steps2.at(-1);
     const discarded = all2.length - steps2.length;
     if (step4 === void 0) {
@@ -83462,9 +83494,9 @@ var NavigationHistory = class {
       const restored = step4.flatMap(
         ({ key, before }) => before === null ? [] : [{ key, value: before }]
       );
-      if (restored.length > 0) store.setBatch(sessionId2, restored);
+      if (restored.length > 0) store2.setBatch(sessionId2, restored);
       for (const { key, before } of step4) {
-        if (before === null) store.clear(sessionId2, key);
+        if (before === null) store2.clear(sessionId2, key);
       }
     });
     this.put(sessionId2, steps2.slice(0, -1));
@@ -83721,9 +83753,9 @@ function taken(prior, moved) {
   };
 }
 function sessionSource(deps) {
-  return ({ sessionId: sessionId2, state, store, declared, followed, onDispose }) => {
+  return ({ sessionId: sessionId2, state, store: store2, declared, followed, onDispose }) => {
     const pick2 = (key) => deps.sessionState.get(sessionId2, key);
-    const effective = store.derive(
+    const effective = store2.derive(
       "session.effective",
       "computed",
       () => resolveEffectiveGlobals(
@@ -83732,7 +83764,7 @@ function sessionSource(deps) {
         (preset) => state.authoredRoots.has(preset)
       )
     );
-    const compose = store.derive(
+    const compose = store2.derive(
       "session.compose",
       "computed",
       () => {
@@ -83745,7 +83777,7 @@ function sessionSource(deps) {
         };
       }
     );
-    const draw2 = store.derive(
+    const draw2 = store2.derive(
       "session.draw",
       "computed",
       () => ({
@@ -83805,7 +83837,7 @@ function sessionSource(deps) {
         }
       )
     );
-    const payload = store.derive("session.payload", "computed", () => {
+    const payload = store2.derive("session.payload", "computed", () => {
       const { document, compose: composed2, draw: drawn } = turn.get();
       return composePayload(document, composed2, drawn);
     });
@@ -85619,9 +85651,9 @@ function createDaemon(inputs) {
   });
   const probe2 = inputs.probe(launcher);
   const storage = inputs.storage(log);
-  const store = new SessionState(storage.session);
+  const store2 = new SessionState(storage.session);
   const journalTurns = new JournalTurns();
-  const sessionState = inputs.sessionWrites(store, journalTurns);
+  const sessionState = inputs.sessionWrites(store2, journalTurns);
   const settingsHistory = new SettingsHistory(
     sessionState,
     log,
@@ -85692,7 +85724,7 @@ function createDaemon(inputs) {
     // [LAW:single-enforcer] exception: a run's ending holds a click error
     // outside any turn, so it writes the store and not the view; it becomes an
     // effect-done in the next story of this lane.
-    state: store,
+    state: store2,
     log,
     now: instant,
     clock
@@ -85714,7 +85746,7 @@ function createDaemon(inputs) {
     },
     // [LAW:single-enforcer] exception: as a run's ending, a lane setup's
     // failure is held outside any turn, so it writes the store.
-    state: store,
+    state: store2,
     log,
     now: instant,
     defer: (run3) => void clock.defer(run3)
@@ -85976,7 +86008,7 @@ function createDaemon(inputs) {
     fileEvents,
     payloadProviders,
     sessionState,
-    sessionGauges: store,
+    sessionGauges: store2,
     rendererName: home.name,
     draw: (req, at, waitEndsAt, facts) => drawAnswer(parts, req, at, waitEndsAt, facts),
     effectSessions,
@@ -86062,7 +86094,7 @@ function createDaemon(inputs) {
         ["managedStorage close", () => managedStorage.close()],
         ["fileEvents close", () => fileEvents.close()],
         ["watcherRegistry close", () => watcherRegistry.closeAll()],
-        ["sessionState close", () => store.close()]
+        ["sessionState close", () => store2.close()]
       ];
       for (const [step4, run3] of teardown) {
         try {
@@ -86987,7 +87019,7 @@ function productionAdapters(paths2, daemonLog, machine) {
     daemonLog,
     launcher: (own2) => systemLauncher(own2, machine),
     storage: (log) => fileStorage(paths2, log, machine),
-    sessionWrites: (store) => store,
+    sessionWrites: (store2) => store2,
     doctorStores: fileStores(paths2.state),
     doctorEdge: productionEdge,
     claudeInput: productionClaudeInputEdge,
