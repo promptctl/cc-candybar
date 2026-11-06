@@ -1,3 +1,13 @@
+## [1.200.0](https://github.com/promptctl/cc-candybar/compare/v1.199.2...v1.200.0) (2026-11-06)
+
+### Features
+
+* **links:** a click reaches the renderer that drew it, by name (candybar-gather-renderer-76bb.b2l.7q7) ([#632](https://github.com/promptctl/cc-candybar/issues/632)) ([b38ab23](https://github.com/promptctl/cc-candybar/commit/b38ab233e3dc44e6704d7461d5a952da81f5678d))
+
+### Bug Fixes
+
+* **just:** deploy builds the URL handler app on macOS, so install from a checkout finds it ([#635](https://github.com/promptctl/cc-candybar/issues/635)) ([21b794e](https://github.com/promptctl/cc-candybar/commit/21b794ed4cc04858233f9002c26af82023fcf86a))
+
 ## [1.199.2](https://github.com/promptctl/cc-candybar/compare/v1.199.1...v1.199.2) (2026-11-06)
 
 ### Bug Fixes
