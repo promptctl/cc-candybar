@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "e66660224cc8931a92a0d6bb87bbb0e2368f33a0",
+      "timestamp": "2026-11-06T20:11:17.368Z",
+      "commits": [
+        {
+          "sha": "e66660224cc8931a92a0d6bb87bbb0e2368f33a0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:10:25-07:00",
+          "message": "docs(menus): the settings-menu width script and its table go (brandon-menus-sjhy.bc0) (#648)\n\nThe table answered a design-time question, whether the proposed menu rows\nfit at 80 columns, and that menu is now built: the script's model of\nproposed rows measures what can simply be rendered. Fitting 80 columns is\nno invariant the menu keeps (the armed-reset row was 93 cells), and\nnothing ran the script, which is how it broke at import unnoticed.\nRepaired, it would be a second map of the menu that only a human redraws.\n\nThe autocompact drawing UI-ELEMENTS credited to the script is asserted in\ntest/autocompact.test.ts, so the doc points there."
+        },
+        {
+          "sha": "1d331bc7612571c272bd1699765d216731683eca",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-06T19:56:28Z",
+          "message": "chore(release): set `package.json` to 1.204.0 [skip ci]\n\n## [1.204.0](https://github.com/promptctl/cc-candybar/compare/v1.203.0...v1.204.0) (2026-11-06)\n\n### Features\n\n* **apply:** no turn awaits a launch; a doctor step is an effect, and a held click error accumulates (candybar-gather-renderer-76bb.1dh.c3l) ([#633](https://github.com/promptctl/cc-candybar/issues/633)) ([b3a9482](https://github.com/promptctl/cc-candybar/commit/b3a94823776445b5ab510fe52ab4c622b2f80cff))\n* **links:** the doctor probe is minted by the minter as the probe link kind (candybar-gather-renderer-76bb.b2l.mxk) ([#644](https://github.com/promptctl/cc-candybar/issues/644)) ([2bb7660](https://github.com/promptctl/cc-candybar/commit/2bb7660eaf484d4c41e6cdc671e6415f0cccc8fa))\n* **links:** the one MouseDown1Status binding is constant text; each session carries its renderer's click (candybar-gather-renderer-76bb.b2l.5v7) ([#642](https://github.com/promptctl/cc-candybar/issues/642)) ([0af5d1f](https://github.com/promptctl/cc-candybar/commit/0af5d1f4ce463b0bebbbe6a4b6107d2943900c54))\n\n### Bug Fixes\n\n* **facts:** a recording of a session whose turn failed replays the failed turn's frame (candybar-gather-renderer-76bb.6pj.i7w) ([#643](https://github.com/promptctl/cc-candybar/issues/643)) ([308429c](https://github.com/promptctl/cc-candybar/commit/308429c8f33e9cfe4e0983ab8f29bb1d25c3fe55))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-649",
       "ref": "refs/pull/649/merge",
       "sha": "758eab969738f886f5b6f3d657159b2d175eee69",
@@ -27,28 +49,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T12:51:37-07:00",
           "message": "fix(facts): a replay draws the lane feeds and diagnostics the live draw was handed, and the frames a lane drew (candybar-gather-renderer-76bb.6pj.0se)\n\nA replay drew every frame with every lane idle, no open viewer, and only\nthe request answers, so a recording of a session with a lane following or\nthe warnings viewer open replayed a bar the user never saw.\n\n- A draw line is one draw of the view, an answer or a lane's frame: it\n  carries the instant it was drawn at and what it was handed (who it drew\n  for, each lane's feed, the diagnostics list). A lane's frames write the\n  view's frame memory and the session's effect memory, so the recorder\n  notes each one, to every recording of the session, and the replay draws\n  them in the file's order at their exact instants. RECORDING_VERSION 6.\n- The daemon and the demo draw a view through one function (draw-view),\n  which derives every draw projection from what the draw was handed and\n  stands the open viewer in for the bar. The demo's own drawDsl call goes.\n- A recording that holds only lane frames is kept and replays; `record`\n  reports answers and lane frames.\n- The seam test's live side is the daemon's draw throughout, and a new case\n  replays a standing warning, a following lane, its toggles and the open\n  viewer, compared whole.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-648",
-      "ref": "refs/pull/648/merge",
-      "sha": "be0779b4c9827832f185ee5eaefcae0d2b2e0c96",
-      "timestamp": "2026-11-06T20:03:05.303Z",
-      "commits": [
-        {
-          "sha": "be0779b4c9827832f185ee5eaefcae0d2b2e0c96",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T20:02:07Z",
-          "message": "Merge 8ef3b63a57847539cc03700f493345d29c22e4aa into 1d331bc7612571c272bd1699765d216731683eca\n"
-        },
-        {
-          "sha": "8ef3b63a57847539cc03700f493345d29c22e4aa",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:50:06-07:00",
-          "message": "docs(menus): the settings-menu width script and its table go (brandon-menus-sjhy.bc0)\n\nThe table answered a design-time question, whether the proposed menu rows\nfit at 80 columns, and that menu is now built: the script's model of\nproposed rows measures what can simply be rendered. Fitting 80 columns is\nno invariant the menu keeps (the armed-reset row was 93 cells), and\nnothing ran the script, which is how it broke at import unnoticed.\nRepaired, it would be a second map of the menu that only a human redraws.\n\nThe autocompact drawing UI-ELEMENTS credited to the script is asserted in\ntest/autocompact.test.ts, so the doc points there.\n"
         }
       ]
     },
@@ -121,21 +121,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T12:35:32-07:00",
           "message": "feat(apply): session state has one writer; a run and a lane setup are effects (candybar-gather-renderer-76bb.1dh.9kk)\n\nThe session store refuses a write made while no journal turn is held, in\nevery daemon. A turn is synchronous, so a write while one is held is that\nturn's own, and one check at the store's single write path is the whole\nenforcement. The test-only view that refused such writes, its adapter\nseam and the separate gauges field are gone.\n\nThe two writers left outside a turn now report through effect-done:\n\n- A `run` click supersedes its sources in its turn, so they read pending\n  from the click on, and describes the launch as a `run` effect. The\n  performer runs the program behind the session's earlier effects; the\n  run owner answers how it ended and no longer writes the bar.\n- A lane setup is a `lane-setup` effect, settled by the click or the\n  request that owes it and run by the performer. Its own per-session\n  queue and defer are replaced by the performer's per-session order.\n\nThe check command, the demo and the doctor's command line build their\nstore with a holder that always holds, since each is one synchronous run.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "2bb7660eaf484d4c41e6cdc671e6415f0cccc8fa",
-      "timestamp": "2026-11-06T19:46:54.730Z",
-      "commits": [
-        {
-          "sha": "2bb7660eaf484d4c41e6cdc671e6415f0cccc8fa",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:46:06-07:00",
-          "message": "feat(links): the doctor probe is minted by the minter as the probe link kind (candybar-gather-renderer-76bb.b2l.mxk) (#644)\n\n* feat(links): the doctor probe is minted by the minter as the probe link kind, and Launch Services is asked about the link it opened (candybar-gather-renderer-76bb.b2l.mxk)\n\nThe probe link is cc-candybar://to/<name>/probe/<nonce>, built by probeLink\nbeside effectsUrl, so the doctor no longer assembles a verb and a tail itself.\nThe verb is `probe`, as spec section 18 names it. The doctor's lost-link\ndiagnosis asks NSWorkspace which app opens that same link rather than a\nhand-spelled cc-candybar://probe.\n\n* fix(links): a probe is a link kind, never an effect; a link lost at another build's daemon says so (candybar-gather-renderer-76bb.b2l.mxk)\n\n- The probe leaves the leaf table, so a dispatch carrying it is refused as an\n  unknown effect verb, as the minter's comment says it is.\n- probeLink spells the nonce with encodeURIComponent, the codec the probe\n  verb's one-argument read reverses.\n- The lost verdict names a daemon of another build: a link this build mints\n  may be one it does not read, so a healthy handler is not blamed for it.\n- Comments that said the diagnosis asks about the scheme now say the link.\n\n* fix(doctor): a lost link's build row compares builds by value and shows only for a link that opened (candybar-gather-renderer-76bb.b2l.mxk)\n\n- otherBuild decides on the version and the full digest, not on the labels,\n  and hands the two labels back as data; the verdict owns the sentence.\n- A link that never opened was lost before any daemon saw it, so its verdict\n  carries no build row.\n\n* test(links): the tmux row case aims its window-list press after a's rows stand again (candybar-gather-renderer-76bb.b2l.mxk)\n\nBack on session a, its status is one line until its rows are drawn again,\nand the window list moves up when they land. The case aimed its press as soon\nas the window list showed, so on CI's runner the rows usually landed between\nthe aim and the press and the press hit a row instead: the case failed on\nnearly every CI run, main included. It now waits for a's rows as it already\ndid for b's."
         }
       ]
     },
