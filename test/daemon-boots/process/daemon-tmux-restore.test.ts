@@ -50,40 +50,40 @@ const HAS_TMUX = spawnSync("tmux", ["-V"]).status === 0;
       "-y",
       "40",
     );
-    const pane = tmux("list-panes", "-t", "bar", "-F", "#{pane_id}").trim();
-    const own = (): string => tmux("show-options", "-t", "bar");
-    const renderer = (): string =>
-      tmux("show-options", "-q", "-v", "-t", "bar", RENDERER_OPTION).trim();
-    const before = own();
-    const draw = (): Promise<unknown> =>
-      render(
-        sockPath,
-        "tmux-restore",
-        dir,
-        {
-          termCols: 120,
-          termRows: 40,
-          tmux: { socket, pane, truecolor: null },
-        },
-        configFlag(config),
-      );
-    // One daemon's life on the session: it lays the row out and names itself,
-    // and its shutdown puts every option back.
-    const life = async (): Promise<void> => {
-      const daemon = await spawnDaemonWithEnv(env);
-      try {
-        await until(async () => {
-          await draw();
-          return own() !== before;
-        }, "the daemon's layout on the session");
-        expect(renderer()).toBe("main");
-        await killAndWait(daemon, "SIGTERM");
-        expect(own()).toBe(before);
-      } finally {
-        daemon.killTree();
-      }
-    };
     try {
+      const pane = tmux("list-panes", "-t", "bar", "-F", "#{pane_id}").trim();
+      const own = (): string => tmux("show-options", "-t", "bar");
+      const renderer = (): string =>
+        tmux("show-options", "-q", "-v", "-t", "bar", RENDERER_OPTION).trim();
+      const before = own();
+      const draw = (): Promise<unknown> =>
+        render(
+          sockPath,
+          "tmux-restore",
+          dir,
+          {
+            termCols: 120,
+            termRows: 40,
+            tmux: { socket, pane, truecolor: null },
+          },
+          configFlag(config),
+        );
+      // One daemon's life on the session: it lays the row out and names
+      // itself, and its shutdown puts every option back.
+      const life = async (): Promise<void> => {
+        const daemon = await spawnDaemonWithEnv(env);
+        try {
+          await until(async () => {
+            await draw();
+            return own() !== before;
+          }, "the daemon's layout on the session");
+          expect(renderer()).toBe("main");
+          await killAndWait(daemon, "SIGTERM");
+          expect(own()).toBe(before);
+        } finally {
+          daemon.killTree();
+        }
+      };
       await life();
       await life();
     } finally {

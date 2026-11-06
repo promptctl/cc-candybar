@@ -49,10 +49,10 @@ export const MAX_STATUS_ROWS = LANES.tmuxStatus.rows;
 export const PRIOR_OPTION = "@cc-candybar-status-prior";
 export const WROTE_OPTION = "@cc-candybar-status-wrote";
 export const BINDING_OPTION = "@cc-candybar-binding-prior";
-// The renderer drawing a session's row, by name, set with its layout and
-// unset with its restore (docs/design/gather-and-renderer.md, section 18): the
-// one MouseDown1Status binding expands it at the click, so a row no renderer
-// holds names none.
+// The renderer drawing a session's row, by name, for the click binding to
+// expand at the click (docs/design/gather-and-renderer.md, section 18). Set
+// when the daemon takes hold of the session and unset with its restore, so a
+// row no renderer holds names none.
 export const RENDERER_OPTION = "@cc-candybar-renderer";
 const CLICK_KEY = ["-T", "root", "MouseDown1Status"] as const;
 const INDICES = Array.from({ length: MAX_STATUS_ROWS }, (_, i) => i);
@@ -258,8 +258,25 @@ export function leftBehind(
       };
 }
 
+// [LAW:one-source-of-truth] Every layout this daemon holds names it, the one
+// it takes over included: a record a daemon left before the name existed
+// carries none, and the name a live row expands is this daemon's.
+const nameWrite = (session: string, name: string): Command => [
+  "set-option",
+  "-t",
+  session,
+  RENDERER_OPTION,
+  name,
+];
+
 export type Install =
-  | LeftBehind
+  | Extract<LeftBehind, { kind: "theirs" }>
+  | {
+      readonly kind: "ours";
+      readonly prior: Prior;
+      readonly status: number;
+      readonly commands: readonly Command[];
+    }
   | {
       readonly kind: "lay-out";
       readonly prior: Prior;
@@ -276,7 +293,12 @@ export function installPlan(
   const own = ownOf(rest.slice(0, 2 + MAX_STATUS_ROWS));
   const globals = rest.slice(2 + MAX_STATUS_ROWS, 2 + 2 * MAX_STATUS_ROWS);
   const [prior = "", wrote = ""] = rest.slice(2 + 2 * MAX_STATUS_ROWS);
-  if (prior !== "") return leftBehind(prior, wrote, owner);
+  if (prior !== "") {
+    const left = leftBehind(prior, wrote, owner);
+    return left.kind === "theirs"
+      ? left
+      : { ...left, commands: [nameWrite(session, name)] };
+  }
   const base = statusRows(statusWordNow);
   const above: Record<number, string> = {};
   for (let i = 0; i < base; i++) {
@@ -304,7 +326,7 @@ export function installPlan(
     prior: laid,
     commands: [
       ["set-option", "-t", session, PRIOR_OPTION, JSON.stringify(laid)],
-      ["set-option", "-t", session, RENDERER_OPTION, name],
+      nameWrite(session, name),
       ...arrayWrite(session, wroteFormats),
     ],
   };
@@ -802,19 +824,22 @@ export class TmuxStatusLines {
       `#{session_id}\t#{${PRIOR_OPTION}}\t#{${WROTE_OPTION}}`,
     ]);
     if (run.kind === "ok") {
+      const names: Command[] = [];
       for (const line of run.stdout.split("\n")) {
         const [session, prior, wrote = ""] = line.split("\t");
         if (session === undefined || prior === undefined || prior === "")
           continue;
         const found = leftBehind(prior, wrote, this.deps.owner);
-        if (found.kind === "ours")
+        if (found.kind === "ours") {
           server.layouts.set(session, {
             prior: found.prior,
             rows: [],
             status: found.status,
           });
-        else this.leave(socket, server, session, found.why);
+          names.push(nameWrite(session, this.deps.name));
+        } else this.leave(socket, server, session, found.why);
       }
+      await this.write(socket, names);
     }
     const answers = await this.ask(socket, [showGlobal(BINDING_OPTION)]);
     const saved = answers?.[0] ?? "";
@@ -874,7 +899,7 @@ export class TmuxStatusLines {
       status: plan.kind === "ours" ? plan.status : plan.prior.base,
     };
     server.layouts.set(session, layout);
-    if (plan.kind === "lay-out") await this.write(socket, plan.commands);
+    await this.write(socket, plan.commands);
     this.deps.log(
       "info",
       `tmux-status: socket=${JSON.stringify(socket)} ${plan.kind === "ours" ? "took over" : "laid out"} renderer=${this.deps.name} session ${session} base=${plan.prior.base} own=${[plan.prior.status === null ? [] : ["status"], plan.prior.formats === null ? [] : ["status-format"]].flat().join(",") || "-"}`,
