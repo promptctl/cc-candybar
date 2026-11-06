@@ -77,7 +77,7 @@ const HAS_TMUX = spawnSync("tmux", ["-V"]).status === 0;
             await draw();
             return own() !== before;
           }, "the daemon's layout on the session");
-          expect(renderer()).toBe("main");
+          expect(renderer()).toBe(home.name);
           await killAndWait(daemon, "SIGTERM");
           expect(own()).toBe(before);
         } finally {
