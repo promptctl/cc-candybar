@@ -25,13 +25,15 @@ import type { Timekeeper } from "../time";
 import { Holds } from "../utils/holds";
 import { instantAt, type Instant } from "../utils/instant";
 import type { DaemonLogger } from "../utils/logger";
-import { failedWith } from "../utils/outcome";
+import { failed, failedWith } from "../utils/outcome";
 import { assembleFacts } from "./facts-assembly";
 import type { PayloadProviders } from "./payload-providers";
 import {
   declareLanes,
   readingsOf,
+  settledLanes,
   settlePayload,
+  sourcesRead,
   type DeclaredLanes,
   type DeclaredSources,
   type PayloadInputs,
@@ -201,46 +203,52 @@ export function inProcessFacts({
       // only the console MobX prints to, which nobody reads in a detached
       // daemon. It keeps the holds it had, and its lanes answer its failure,
       // naming the cause.
+      //
+      // [LAW:dataflow-not-control-flow] A lane whose owner throws is a fault
+      // answered on that lane (declareLanes), and a declaration that throws
+      // whole is answered the same way on every lane, so the bar draws with
+      // its ⚠ on the open, each request and a pick alike, never a request
+      // that fails on every tick or a pick that only logs. What the throw took
+      // stays held until a declaration that returns releases it, or the
+      // follow's dispose closes it.
       const lanesFor = (
         facts: ViewFacts,
         { closure, sources }: FollowDeclaration,
       ): DeclaredLanes => {
-        // A lane whose owner throws is a fault the declaration answers on
-        // that lane (declareLanes); a declaration that throws whole is a bug,
-        // which fails the open or the request it ran for, loudly.
-        const {
-          result: { lanes, faults },
-          acquired,
-          released,
-        } = holds.declare(() =>
-          declareLanes(providers, holds, facts, closure, sources),
-        );
-        for (const fault of faults) {
-          log("error", `session view declaration threw sid=${sid} ${fault}`);
-        }
-        // [LAW:verifiable-goals] A declaration that moved a hold — a preset
-        // click, a request naming another key — says so; one that kept what
-        // the view held, every other request's, writes nothing.
-        if (acquired + released > 0) {
+        try {
+          const {
+            result: { lanes, faults },
+            acquired,
+            released,
+          } = holds.declare(() =>
+            declareLanes(providers, holds, facts, closure, sources),
+          );
+          for (const fault of faults) {
+            log("error", `session view declaration threw sid=${sid} ${fault}`);
+          }
+          // [LAW:verifiable-goals] A declaration that moved a hold — a preset
+          // click, a request naming another key — says so; one that kept what
+          // the view held, every other request's, writes nothing.
+          if (acquired + released > 0) {
+            log(
+              "info",
+              `session view declared sid=${sid} acquired=${acquired} released=${released} held=${holds.size}`,
+            );
+          }
+          return lanes;
+        } catch (e) {
           log(
-            "info",
-            `session view declared sid=${sid} acquired=${acquired} released=${released} held=${holds.size}`,
+            "error",
+            `session view declaration threw sid=${sid}: ${inspect(e)}`,
+          );
+          return settledLanes(
+            failed(`view declaration threw: ${String(e)}`, "read"),
+            sourcesRead(closure, sources),
           );
         }
-        return lanes;
       };
-      // A declaration that throws whole fails the follow having released
-      // what it took before the throw: a holds declaration that does not
-      // return keeps those, and only a close lets them go.
-      let opening: DeclaredLanes;
-      try {
-        opening = lanesFor(facts, declaration);
-      } catch (e) {
-        holds.close();
-        throw e;
-      }
       const declared = observable.box<Declared>(
-        { facts, declaration, lanes: opening },
+        { facts, declaration, lanes: lanesFor(facts, declaration) },
         { deep: false },
       );
       // [LAW:one-source-of-truth] What the owners are read by: the request

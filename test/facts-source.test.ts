@@ -73,7 +73,10 @@ describe("the in-process arm", () => {
 
   test("a follow takes the holds its declaration names, a follow at other keys releases the rest, and dispose releases all", () => {
     const { providers, held, released, lines } = owners();
-    const followed = arm(providers).follow(viewFacts("/a"), reads("git.branch"));
+    const followed = arm(providers).follow(
+      viewFacts("/a"),
+      reads("git.branch"),
+    );
     expect(held).toEqual(["/a"]);
     expect(followed.stamped().facts.builtins.git).toMatchObject({
       kind: "ok",
@@ -101,7 +104,10 @@ describe("the in-process arm", () => {
     ).gitProvider.declare = () => {
       throw new Error("resolver bug");
     };
-    const followed = arm(providers).follow(viewFacts("/a"), reads("git.branch"));
+    const followed = arm(providers).follow(
+      viewFacts("/a"),
+      reads("git.branch"),
+    );
     expect(held).toEqual([]);
     expect(followed.stamped().facts.builtins.git).toMatchObject({
       kind: "failed",
@@ -127,20 +133,41 @@ describe("the in-process arm", () => {
     expect(released).toEqual(["/a"]);
   });
 
-  test("a follow whose declaration throws whole throws, having released the holds it took before the throw", () => {
-    const { providers, held, released } = owners();
-    // The git lane's hold is taken before the sources are walked.
-    const sources: FollowDeclaration["sources"] = new Map();
-    sources.keys = () => {
-      throw new Error("sources bug");
-    };
-    expect(() =>
-      arm(providers).follow(viewFacts("/a"), {
-        closure: new Set(["git.branch"]),
-        sources,
-      }),
-    ).toThrow("sources bug");
+  test("a declaration that throws whole is answered on every lane and logged, and a later declaration that returns takes its holds", () => {
+    const { providers, held, released, lines } = owners();
+    // The hints are read before any lane declares, outside every lane's own
+    // catch: a throw there is the declaration's, not a lane's.
+    const broken = viewFacts("/a");
+    const hints = Object.defineProperty({ ...broken.hints }, "tmux", {
+      get: () => {
+        throw new Error("hints bug");
+      },
+    });
+    const followed = arm(providers).follow(
+      { ...broken, hints },
+      reads("git.branch"),
+    );
+    expect(followed.stamped().facts.builtins.git).toMatchObject({
+      kind: "failed",
+      failedAt: "read",
+      reason: expect.stringContaining(
+        "view declaration threw: Error: hints bug",
+      ),
+    });
+    expect(lines).toContainEqual(
+      expect.stringMatching(
+        /^session view declaration threw sid="s1": .*hints bug/,
+      ),
+    );
+    expect(held).toEqual([]);
+
+    followed.follow(viewFacts("/a"), reads("git.branch"));
     expect(held).toEqual(["/a"]);
+    expect(followed.stamped().facts.builtins.git).toMatchObject({
+      kind: "ok",
+      value: { branch: "main" },
+    });
+    followed.dispose();
     expect(released).toEqual(["/a"]);
   });
 
@@ -192,7 +219,13 @@ describe("the recording arm", () => {
 
   test("each line is the document once the clock reaches its offset from the first, the last of several at one instant winning", () => {
     const clock = heldClock(AT);
-    const lines = [line(0, 1), line(0, 2), line(1.5, 3), line(1.5, 4), line(4, 5)];
+    const lines = [
+      line(0, 1),
+      line(0, 2),
+      line(1.5, 3),
+      line(1.5, 4),
+      line(4, 5),
+    ];
     const followed = recordingFacts(lines, clock).follow(request(), reads());
     expect(followed.stamped()).toBe(lines[1]);
     clock.advance(1000);
@@ -259,7 +292,10 @@ describe("the recording arm", () => {
       /names "s1", "s2"/,
     );
     expect(() =>
-      recordingFacts([line(0, 1)], clock).follow(viewFacts("/a", "s2"), reads()),
+      recordingFacts([line(0, 1)], clock).follow(
+        viewFacts("/a", "s2"),
+        reads(),
+      ),
     ).toThrow('this recording holds session "s1", not "s2"');
   });
 
