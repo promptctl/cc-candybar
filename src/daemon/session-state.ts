@@ -260,6 +260,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     sessionId: string,
     pairs: ReadonlyArray<{ key: string; value: string }>,
   ): void {
+    this.held(sessionId);
     if (pairs.length === 0) return;
     this.commit(sessionId, (session) => {
       if (pairs.some(({ key, value }) => session.values.get(key) !== value))
@@ -269,6 +270,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   }
 
   clear(sessionId: string, key: string): void {
+    this.held(sessionId);
     this.commit(sessionId, (session) => {
       if (session.values.delete(key)) session.revision = ++this.head;
     });
@@ -286,6 +288,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     values: Readonly<Record<string, string>>,
     revision: number,
   ): void {
+    this.held(sessionId);
     if ((this.sessions.get(sessionId)?.revision ?? 0) === revision) return;
     this.commit(sessionId, (session) => {
       session.values.clear();
@@ -299,14 +302,12 @@ export class SessionState implements SessionStateReader, SessionStateRW {
 
   // [LAW:single-enforcer] Every write lands here, in one action: the change,
   // the session's place, then the disk mirror and one notification, so
-  // observers never see a half-applied write. A write while no turn is held
-  // is refused before anything moves (`held`). An emptied session is a
+  // observers never see a half-applied write. An emptied session is a
   // non-state, dropped so it neither occupies a cap slot nor persists as a
   // `{ "sid": {} }` husk [LAW:one-source-of-truth]; a surviving one is
   // promoted, since every interaction is a recency signal, uniform with get()
   // [LAW:one-type-per-behavior].
   private commit(sessionId: string, write: (session: Session) => void): void {
-    this.held(sessionId);
     runInAction(() => {
       const session = this.sessions.get(sessionId) ?? {
         values: new Map<string, string>(),
@@ -324,7 +325,9 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   }
 
   // [LAW:single-enforcer][LAW:no-silent-failure] The one check that a write
-  // is a turn's: every write passes `commit`, which asks here.
+  // is a turn's: every public write asks here first, before it decides
+  // whether anything moves, so a write out of its turn is refused whatever it
+  // would have written.
   private held(sessionId: string): void {
     if (this.turns.inTurn() === null) {
       throw new Error(

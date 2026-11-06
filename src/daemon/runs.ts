@@ -226,9 +226,11 @@ export class Runs {
     );
     if (outcome === "timeout") this.timedOut++;
     if (result.ok) return PERFORMED;
-    // An aborted run is the daemon going down, not the program failing: not
-    // counted, and its outcome lands in no turn, since the turns closed first.
-    if (outcome !== "timeout" && outcome !== "aborted") this.failed++;
+    // [LAW:types-are-the-program] An aborted run is the daemon going down, not
+    // the program failing: not counted, and answered as the close, which no
+    // bar shows as a fault, whenever its outcome lands.
+    if (outcome === "aborted") throw new DaemonClosing("run");
+    if (outcome !== "timeout") this.failed++;
     return failed(`run ${run.action}: ${failureText(result)}`);
   }
 }

@@ -852,6 +852,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         // is in flight is terminated, whichever owner's work it was, and the
         // launcher's lifeline goes.
         ["launches abort", () => closing.abort(new Error("the daemon closed"))],
+        // A lane setup still queued behind the session's earlier effects is
+        // refused, as a queued run is (`runs close`).
+        ["laneSetups close", () => laneSetups.close()],
         ["frameFeeds close", () => frameFeeds.close()],
         ["linkIds close", () => linkIds.close()],
         ["menuIdle dispose", () => menuIdle.dispose()],

@@ -262,6 +262,10 @@ describe("the store refuses a write outside a turn", () => {
     );
     expect(String(fromTimer)).toMatch(/session state: a write of "s1" outside any turn/);
     expect(() => store.clear(SID, "k")).toThrow(/outside any turn/);
+    // Refused whatever it would have written: a batch that writes nothing,
+    // and a restore to the revision the store already holds.
+    expect(() => store.setBatch(SID, [])).toThrow(/outside any turn/);
+    expect(() => store.restore(SID, {}, 0)).toThrow(/outside any turn/);
     expect(store.get(SID, "k")).toBeNull();
     expect(store.revision(SID)).toBe(0);
     turns.take("test", () => store.set(SID, "k", "v"));

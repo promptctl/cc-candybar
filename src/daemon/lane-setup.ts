@@ -70,7 +70,7 @@ import {
 import type { LauncherNode } from "../attach-preload.js";
 import type { RendererHome } from "./home.js";
 import { homeEnv } from "./paths.js";
-import { BadVerbArgs } from "./verb-error.js";
+import { BadVerbArgs, DaemonClosing } from "./verb-error.js";
 
 // The band mod, as the checkout's marketplace (`.claude-plugin/
 // marketplace.json`) names it.
@@ -663,6 +663,7 @@ type Owed = Map<Lane, boolean>;
 export class LaneSetups {
   // Each session's owed lanes, least recently owed first.
   private readonly owed = new Map<string, Owed>();
+  private closed = false;
 
   constructor(
     private readonly deps: {
@@ -748,6 +749,10 @@ export class LaneSetups {
     on,
     by,
   }: LaneSetupEffect): Promise<EffectOutcome> {
+    // [LAW:no-ambient-temporal-coupling] A setup still queued when the daemon
+    // closes is refused, as a queued run is: a restart started then would
+    // stop a Claude Code no daemon is left to attach.
+    if (this.closed) throw new DaemonClosing("lane setup");
     const where = `by=${by} (session=${session.sessionId})`;
     const ended = (error: unknown): EffectOutcome => {
       const text = `lane: ${lane} ${on ? "on" : "off"}: ${error instanceof Error ? error.message : String(error)}`;
@@ -773,6 +778,10 @@ export class LaneSetups {
       this.deps.log("info", `lane: ${lane} ${finished} ${where}`);
       return { kind: "ok", said: finished };
     }, ended);
+  }
+
+  close(): void {
+    this.closed = true;
   }
 }
 

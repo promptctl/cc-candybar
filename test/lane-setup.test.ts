@@ -34,7 +34,7 @@ import {
   barPanesOf,
 } from "../src/daemon/lane-edge";
 import { draftShown, turnRunning } from "../src/claude-input/prompt-screen";
-import { BadVerbArgs } from "../src/daemon/verb-error";
+import { BadVerbArgs, DaemonClosing } from "../src/daemon/verb-error";
 import { JournalTurns } from "../src/daemon/journal-turns";
 import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { lastClickError } from "../src/daemon/click-error";
@@ -843,6 +843,8 @@ describe("LaneSetups", () => {
     const turns = new JournalTurns();
     const described: LaneSetupEffect[] = [];
     const outcomes: EffectOutcome[] = [];
+    // What the performer caught: a setup that threw (src/daemon/apply.ts).
+    const refusals: unknown[] = [];
     const performing: Promise<void>[] = [];
     const setups = {
       clicked: (...args: Parameters<LaneSetups["clicked"]>) =>
@@ -855,14 +857,18 @@ describe("LaneSetups", () => {
     const settle = async (): Promise<void> => {
       for (const effect of described.splice(0)) {
         performing.push(
-          turns.performing(effect.session.sessionId, async () => {
-            outcomes.push(await owner.setup(effect));
-          }),
+          turns.performing(effect.session.sessionId, () =>
+            owner.setup(effect).then(
+              (outcome) => void outcomes.push(outcome),
+              (e: unknown) => void refusals.push(e),
+            ),
+          ),
         );
       }
       await new Promise((r) => setImmediate(r));
     };
-    return { setups, logs, settle, outcomes, performing };
+    const close = (): void => owner.close();
+    return { setups, logs, settle, outcomes, refusals, performing, close };
   };
   const switches = (on: Partial<LaneSwitches>): LaneSwitches => ({
     band: false,
@@ -870,6 +876,17 @@ describe("LaneSetups", () => {
     pane: false,
     tmuxStatus: false,
     ...on,
+  });
+
+  test("a setup still queued when the daemon closes is refused as the close, and runs nothing", async () => {
+    const { edge, did } = fakeEdge({ barPanes: async () => [] });
+    const { setups, settle, outcomes, refusals, close } = owner(edge);
+    setups.clicked(SID, session(), switches({}), switches({ pane: true }));
+    close();
+    await settle();
+    expect(did).toEqual([]);
+    expect(outcomes).toEqual([]);
+    expect(refusals).toEqual([expect.any(DaemonClosing)]);
   });
 
   const OPENED = `open under %7: /usr/bin/node /opt/candybar/dist/index.mjs bar-pane %7 ${JSON.stringify(homeEnv(HOST.home))}`;

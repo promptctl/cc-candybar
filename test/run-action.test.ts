@@ -1041,13 +1041,14 @@ describe("the run owner", () => {
     expect(o.runs.stats()).toMatchObject({ running: 0, queued: 0 });
   });
 
-  test("closing the owner aborts the run in flight and resumes its sources; one never launched resumes nothing", async () => {
+  test("closing the owner aborts the run in flight, answered as the close, and resumes its sources; one never launched resumes nothing", async () => {
     const o = owner();
     const { ended } = o.started(o.run("sleep 30"));
     const queued = o.runs.superseded(o.run("true"));
     expect(o.runs.stats().running).toBe(1);
     o.runs.close();
-    await ended;
+    // The run the close aborted is answered as the close, not as a failure.
+    await expect(ended).rejects.toThrow(DaemonClosing);
     expect(o.held).toEqual([
       `supersede /s ${SID}`,
       `supersede /s ${SID}`,
