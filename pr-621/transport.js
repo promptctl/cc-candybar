@@ -69066,7 +69066,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.190.0";
+var PACKAGE_VERSION = "1.191.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -71555,8 +71555,8 @@ async function journaled(sid, ctx, turn, handler) {
       failures.push(e);
     }
   }
+  if (live) ctx.described(effects);
   throwAll(failures);
-  return effects;
 }
 function click(verb, gather, handler) {
   return async (value, ctx) => {
@@ -71591,13 +71591,7 @@ var VERBS = new Map([
   [VERB_DISPATCH, click(VERB_DISPATCH, headGather, foldEffects)],
   // After the leaves, so it replaces the click they built: a probe writes no
   // journal, so nothing may refuse it for a turn, and it describes nothing.
-  [
-    VERB_DOCTOR_PROBE,
-    async (value, ctx) => {
-      await doctorProbe(value, ctx);
-      return [];
-    }
-  ]
+  [VERB_DOCTOR_PROBE, (value, ctx) => doctorProbe(value, ctx)]
 ]);
 var VERB_NAMES = Object.freeze([
   ...VERBS.keys()
@@ -76456,11 +76450,9 @@ function requestEvent(kind, facts, outcome, tookMs) {
     ["outcome", outcome.kind],
     ...detailOf(outcome)
   ];
-  return {
-    level: LEVEL[outcome.kind],
-    line: `${kind}${fields2.map(([key, value]) => ` ${key}=${valueOf(value)}`).join("")}`
-  };
+  return { level: LEVEL[outcome.kind], line: eventLine(kind, fields2) };
 }
+var eventLine = (kind, fields2) => `${kind}${fields2.map(([key, value]) => ` ${key}=${valueOf(value)}`).join("")}`;
 
 // src/daemon/draw-bar.ts
 var NOTHING_DELIVERED = () => {
@@ -77085,23 +77077,34 @@ var ARMS = {
   }),
   // [LAW:single-enforcer] The click's whole bracket on its menus' idle clock
   // is here, so the timer cannot close a menu under any click Apply carries.
+  // The turn hands its effects over once it has committed (`described`), and
+  // a refused step is answered beside them.
   click: async ({ verb, value, arrival, pending: pending2, asker }, { verbCtx, menuIdle }) => {
     if (pending2 !== null) menuIdle.clickArrived(pending2);
+    const effects = [];
+    let answer2 = null;
     try {
-      return {
-        answer: void 0,
-        effects: await verb.run(value, { ...verbCtx, arrival, asker }),
-        facts: []
-      };
+      await verb.run(value, {
+        ...verbCtx,
+        arrival,
+        asker,
+        described: (described) => void effects.push(...described)
+      });
+    } catch (error) {
+      answer2 = { error };
     } finally {
       if (pending2 !== null) menuIdle.clickSettled(pending2);
     }
+    return { answer: answer2, effects, facts: [] };
   },
-  "menu-idle": async ({ session, idle }, { verbCtx }) => ({
-    answer: void 0,
-    effects: await closeIdleMenus(session, idle, verbCtx),
-    facts: []
-  }),
+  "menu-idle": async ({ session, idle }, { verbCtx }) => {
+    const effects = [];
+    await closeIdleMenus(session, idle, {
+      ...verbCtx,
+      described: (described) => void effects.push(...described)
+    });
+    return { answer: void 0, effects, facts: [] };
+  },
   // [LAW:single-enforcer] The one writer of what a failed effect leaves: the
   // session's click error, held in a turn of its own as every write is, and
   // shown as a failed dispatch's is (src/daemon/click-error.ts). A click that
@@ -77136,12 +77139,12 @@ async function apply(event, parts) {
   const said = line(event);
   if (said !== null) {
     parts.log(
-      "info",
-      logLine([
+      said.level,
+      eventLine("apply", [
         ["kind", event.kind],
         ["verb", of.verb],
         ["sid", of.session ?? "-"],
-        ...said,
+        ...said.facts,
         ...applied2.facts,
         [
           "effects",
@@ -77159,17 +77162,24 @@ async function apply(event, parts) {
     performed: performAll(parts, of, applied2.effects)
   };
 }
+var APPLIED = { level: "info", facts: [] };
+var OUTCOME_LEVEL = {
+  ok: "info",
+  failed: "warn"
+};
 var LINE = {
   request: () => null,
-  click: () => [],
-  "menu-idle": () => [],
-  "effect-done": ({ effect, outcome }) => [
-    ["effect", describeEffect(effect)],
-    ["outcome", outcome.kind],
-    ["said", outcome.said || "-"]
-  ]
+  click: () => APPLIED,
+  "menu-idle": () => APPLIED,
+  "effect-done": ({ effect, outcome }) => ({
+    level: OUTCOME_LEVEL[outcome.kind],
+    facts: [
+      ["effect", describeEffect(effect)],
+      ["outcome", outcome.kind],
+      ["said", outcome.said || "-"]
+    ]
+  })
 };
-var logLine = (fields2) => `apply${fields2.map(([key, value]) => ` ${key}=${valueOf(value)}`).join("")}`;
 var ORIGIN = {
   request: ({ req }) => ({ verb: "request", session: req.sessionId }),
   click: ({ verb, pending: pending2 }) => ({ verb: verb.name, session: pending2 }),
@@ -78028,7 +78038,7 @@ async function handleClick(parts, verb, value, arrival, facts, clientGone) {
   const pending2 = session?.ok ? session.id : null;
   if (session === null) noteFacts(facts, { sid: "-" });
   else if (pending2 !== null) noteFacts(facts, { sid: pending2 });
-  await apply(
+  const { answer: answer2 } = await apply(
     {
       kind: "click",
       verb: resolved,
@@ -78044,6 +78054,7 @@ async function handleClick(parts, verb, value, arrival, facts, clientGone) {
     },
     parts
   );
+  if (answer2 !== null) throw answer2.error;
   return { kind: "ok" };
 }
 function clickReply(outcome) {
@@ -83411,6 +83422,7 @@ var MAX_STATUS_ROWS = LANES.tmuxStatus.rows;
 var PRIOR_OPTION = "@cc-candybar-status-prior";
 var WROTE_OPTION = "@cc-candybar-status-wrote";
 var BINDING_OPTION = "@cc-candybar-binding-prior";
+var RENDERER_OPTION = "@cc-candybar-renderer";
 var CLICK_KEY = ["-T", "root", "MouseDown1Status"];
 var INDICES = Array.from({ length: MAX_STATUS_ROWS }, (_, i) => i);
 var rowOption = (row2) => `@cc-candybar-row-${row2}`;
@@ -83526,12 +83538,22 @@ function leftBehind(prior, wrote, owner) {
     why: `the daemon at ${JSON.stringify(parsed2.owner)} draws it`
   };
 }
-function installPlan(session, answers, owner) {
+var nameWrite = (session, name) => [
+  "set-option",
+  "-t",
+  session,
+  RENDERER_OPTION,
+  name
+];
+function installPlan(session, answers, owner, name) {
   const [statusWordNow = "", ...rest2] = answers;
   const own2 = ownOf(rest2.slice(0, 2 + MAX_STATUS_ROWS));
   const globals = rest2.slice(2 + MAX_STATUS_ROWS, 2 + 2 * MAX_STATUS_ROWS);
   const [prior = "", wrote = ""] = rest2.slice(2 + 2 * MAX_STATUS_ROWS);
-  if (prior !== "") return leftBehind(prior, wrote, owner);
+  if (prior !== "") {
+    const left = leftBehind(prior, wrote, owner);
+    return left.kind === "theirs" ? left : { ...left, commands: [nameWrite(session, name)] };
+  }
   const base = statusRows(statusWordNow);
   const above = {};
   for (let i = 0; i < base; i++) {
@@ -83559,6 +83581,7 @@ function installPlan(session, answers, owner) {
     prior: laid,
     commands: [
       ["set-option", "-t", session, PRIOR_OPTION, JSON.stringify(laid)],
+      nameWrite(session, name),
       ...arrayWrite(session, wroteFormats)
     ]
   };
@@ -83597,7 +83620,8 @@ function restorePlan(session, prior, answers) {
       rowOption(i)
     ]),
     ["set-option", "-q", "-u", "-t", session, PRIOR_OPTION],
-    ["set-option", "-q", "-u", "-t", session, WROTE_OPTION]
+    ["set-option", "-q", "-u", "-t", session, WROTE_OPTION],
+    ["set-option", "-q", "-u", "-t", session, RENDERER_OPTION]
   );
   return { commands, kept };
 }
@@ -83869,19 +83893,22 @@ var TmuxStatusLines = class {
       `#{session_id}	#{${PRIOR_OPTION}}	#{${WROTE_OPTION}}`
     ]);
     if (run3.kind === "ok") {
+      const names = [];
       for (const line of run3.stdout.split("\n")) {
         const [session, prior, wrote = ""] = line.split("	");
         if (session === void 0 || prior === void 0 || prior === "")
           continue;
         const found2 = leftBehind(prior, wrote, this.deps.owner);
-        if (found2.kind === "ours")
+        if (found2.kind === "ours") {
           server.layouts.set(session, {
             prior: found2.prior,
             rows: [],
             status: found2.status
           });
-        else this.leave(socket, server, session, found2.why);
+          names.push(nameWrite(session, this.deps.name));
+        } else this.leave(socket, server, session, found2.why);
       }
+      await this.write(socket, names);
     }
     const answers = await this.ask(socket, [showGlobal(BINDING_OPTION)]);
     const saved = answers?.[0] ?? "";
@@ -83915,7 +83942,7 @@ var TmuxStatusLines = class {
   async install(socket, server, session) {
     const answers = await this.ask(socket, INSTALL_QUERIES(session));
     if (answers === null || this.closed) return null;
-    const plan = installPlan(session, answers, this.deps.owner);
+    const plan = installPlan(session, answers, this.deps.owner, this.deps.name);
     if (plan.kind === "theirs") {
       this.leave(socket, server, session, plan.why);
       return null;
@@ -83926,10 +83953,10 @@ var TmuxStatusLines = class {
       status: plan.kind === "ours" ? plan.status : plan.prior.base
     };
     server.layouts.set(session, layout);
-    if (plan.kind === "lay-out") await this.write(socket, plan.commands);
+    await this.write(socket, plan.commands);
     this.deps.log(
       "info",
-      `tmux-status: socket=${JSON.stringify(socket)} ${plan.kind === "ours" ? "took over" : "laid out"} session ${session} base=${plan.prior.base} own=${[plan.prior.status === null ? [] : ["status"], plan.prior.formats === null ? [] : ["status-format"]].flat().join(",") || "-"}`
+      `tmux-status: socket=${JSON.stringify(socket)} ${plan.kind === "ours" ? "took over" : "laid out"} renderer=${this.deps.name} session ${session} base=${plan.prior.base} own=${[plan.prior.status === null ? [] : ["status"], plan.prior.formats === null ? [] : ["status-format"]].flat().join(",") || "-"}`
     );
     return layout;
   }
@@ -85096,6 +85123,10 @@ function createDaemon(inputs) {
       "url-handle"
     ].join(" "),
     owner: paths2.socket,
+    // [LAW:one-source-of-truth] The main renderer's name (docs/design/
+    // gather-and-renderer.md, section 17), the one renderer until the home
+    // carries a name.
+    name: "main",
     log
   });
   const frameFeeds = new FrameFeeds({
@@ -85460,7 +85491,7 @@ async function rotate(filePath2) {
   await fs_default.promises.rename(filePath2, `${filePath2}.1`).catch(() => {
   });
 }
-function logLine2(level, msg, at) {
+function logLine(level, msg, at) {
   return `${new Date(at).toISOString()} [${level}] ${msg}
 `;
 }
@@ -85512,7 +85543,7 @@ var DaemonLog = class {
   disposed = false;
   // One line, to the log: the daemon's `DaemonLogger`.
   log = (level, msg) => {
-    const line = logLine2(level, msg, this.clock.now());
+    const line = logLine(level, msg, this.clock.now());
     if (this.exitListener === null && !this.disposed) {
       this.exitListener = () => {
         this.exiting = true;
@@ -85630,7 +85661,7 @@ var DaemonLog = class {
   }
   // Everything waiting, after the count of the lines dropped before it.
   take() {
-    const lost = this.dropped === 0 ? "" : logLine2(
+    const lost = this.dropped === 0 ? "" : logLine(
       "warn",
       `log: ${this.dropped} earlier line(s) dropped (${this.droppedBytes} bytes): more than ${MAX_WAITING_BYTES} bytes were waiting for the disk`,
       this.clock.now()
