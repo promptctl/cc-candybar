@@ -1,107 +1,95 @@
 // Minimal end-to-end demo of the segment DSL render spine.
 //
-//   pnpm demo                       # renders src/demo/statusline.json5
-//   pnpm demo path/to/other.json5   # renders any DSL config
+//   pnpm demo                                # renders src/demo/statusline.json5
+//   pnpm demo path/to/other.json5            # renders any DSL config
+//   pnpm demo --recording bar.jsonl [cfg]    # replays `cc-candybar record`'s file
 //
 // pnpm runs scripts from the repo root, so a relative path resolves there,
 // not in the directory you typed the command in.
 //
-// [LAW:single-enforcer] One faked hook event, with the hints a statusline
-// client reports from this terminal (detectClientHints), goes through the
-// functions the daemon runs for a real one — parseClientHints,
-// loadChain, openView over the daemon's session source, settlePayload,
-// drawDsl — over the providers the daemon builds (createPayloadProviders).
-// There is no demo-only payload: a field the daemon's payload gains is in the
-// demo's.
-// The config is the one file named here, loaded or refused; the daemon's
-// search for a config and its diagnostics viewer are not part of the demo.
+// This is the demo's process main: it reads the machine and its arguments
+// once and hands values to the one view-and-print path (src/demo/play.ts).
 //
-// [LAW:dataflow-not-control-flow] The body is straight-line: load → frames →
-// dispose. The config file and the hook event are data; swapping either
-// changes the output without changing this code. Rendering N frames over time
-// is not branching — it lets the config's own timed sources (shell, time)
-// populate, exactly as the daemon re-renders on each status-line tick.
+// [LAW:dataflow-not-control-flow] `--recording` chooses values, never a second
+// path: which facts arm the view follows (the in-process arm over the
+// providers, or the recording's), which requests it is drawn by and when (one
+// faked hook event four times, or the recording's requests at their offsets),
+// and how the clock reaches each one (a sleep, or a held clock's advance).
+// Rendering N frames over time is not branching: it lets the config's own
+// timed sources populate, as the daemon re-renders on each status-line tick.
 
-import { linkKeyFile, linkSignerFromKeyFile } from "../daemon/link-key.js";
-import { daemonGates } from "../daemon/update-keys.js";
-import { cacheDir, locations, stateDir } from "../daemon/paths.js";
-import { repoGateAt } from "../daemon/repo-configs.js";
-import { repoGateLines } from "../config/loader/repo-gate.js";
-import { UNFOLLOWED_FEEDS } from "../config/lanes.js";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 import { sleep } from "../time.js";
-
 import { detectClientHints } from "../client-hints.js";
 import {
   ConfigError,
   DroppedPlacements,
 } from "../config/loader/diagnostics.js";
-import { homeLayer, refuseDrops } from "../config/dsl-loader.js";
-import {
-  loadChain,
-  openView,
-  UNOWNED_STORAGE,
-  type DslRenderState,
-} from "../daemon/cache/render.js";
 import { WatcherRegistry } from "../daemon/cache/watchers.js";
 import { NO_FILE_EVENTS } from "../daemon/cache/file-events.js";
+import { cacheDir, stateDir } from "../daemon/paths.js";
+import { linkKeyFile, linkSignerFromKeyFile } from "../daemon/link-key.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import { createPayloadProviders } from "../daemon/payload-providers.js";
-import { processWorld } from "../host.js";
+import { processWorld, type World } from "../host.js";
+import { heldClock } from "../held-clock.js";
 import { RefreshLedger } from "../utils/refresh-ledger.js";
 import { parseClientHints } from "../daemon/protocol.js";
-import {
-  renderOptionsOf,
-  renderWidth,
-  todayOf,
-} from "../daemon/render-payload.js";
-import { inProcessFacts } from "../daemon/facts-source.js";
+import { inProcessFacts, recordingFacts } from "../daemon/facts-source.js";
 import { sessionIdOf } from "../daemon/session-id.js";
-import { sessionSource } from "../daemon/session-source.js";
-import { SessionState } from "../daemon/session-state.js";
 import { newUpdateFact } from "../daemon/update-fact.js";
-import { EMPTY_HISTORY_DEPTH } from "../daemon/settings-history.js";
-import { drawDsl } from "../dsl/render.js";
-import { SessionEffects } from "../render/effect.js";
 import { ansiOf } from "../render/frame.js";
-import type { RenderedLine } from "../dsl/node-registry.js";
 import type { ClaudeHookData } from "../utils/claude.js";
 import { debug, setDebug } from "../utils/logger.js";
-import { instantOf } from "../utils/instant.js";
-import { SourceRuns } from "../var-system/source-runs.js";
+import {
+  loadDemo,
+  playDemo,
+  readRecording,
+  RecordingUnreadable,
+  type DemoPlay,
+} from "./play.js";
 
 const FRAMES = 4;
 const FRAME_INTERVAL_MS = 450;
 
 const here = dirname(fileURLToPath(import.meta.url));
 const cwd = process.cwd();
+
+// Arguments the demo cannot run with: the message is the whole report.
+class UsageError extends Error {}
+
+// [LAW:parse-dont-validate] The arguments, read once: a config path, and a
+// recording to replay. Anything else is refused by name.
+function parseArgs(args: readonly string[]): {
+  readonly configPath: string;
+  readonly recording: string | null;
+} {
+  let config: string | null = null;
+  let recording: string | null = null;
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === "--recording") {
+      const path = args[++i];
+      if (path === undefined) throw new UsageError("--recording needs a path");
+      recording = resolve(path);
+    } else if (arg === undefined || arg.startsWith("-") || config !== null) {
+      throw new UsageError(`unexpected argument ${JSON.stringify(arg)}`);
+    } else {
+      config = resolve(arg);
+    }
+  }
+  return {
+    configPath: config ?? join(here, "statusline.json5"),
+    recording,
+  };
+}
+
 // [LAW:effects-at-boundaries] This script is its own process main: it reads the
 // machine once, as src/index.ts does, and the debug channel follows it.
-const world = processWorld();
-// [LAW:single-enforcer] The demo's own owner of its sources' runs, closed
-// with the registry that holds them.
-const runs = new SourceRuns({ launcher: world.launcher, clock: world.clock });
-const { host } = world;
-setDebug(Boolean(host.env.CC_CANDYBAR_DEBUG));
-const configPath = resolve(process.argv[2] ?? join(here, "statusline.json5"));
-const sessionId = sessionIdOf("demo0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b");
-
-// One Claude Code hook event, faked. A session that has never run has no
-// transcript, so the path names no file — a missing transcript is an empty
-// session, not a failure.
-const hookData: ClaudeHookData = {
-  hook_event_name: "Status",
-  session_id: sessionId,
-  transcript_path: join(host.tmp, `cc-candybar-demo-${sessionId}.jsonl`),
-  cwd,
-  model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
-  workspace: { current_dir: cwd, project_dir: cwd, added_dirs: [] },
-};
-// The demo's frames go to stdout, so stdout is the stream on the terminal.
-const hints = parseClientHints(detectClientHints(host, cwd, process.stdout));
-const width = renderWidth(hints);
+const machine = processWorld();
+setDebug(Boolean(machine.host.env.CC_CANDYBAR_DEBUG));
 
 // [LAW:no-silent-failure] What the daemon writes to daemon.log, the demo says
 // on stderr when it is a problem; the daemon's routine lines stay behind
@@ -110,165 +98,145 @@ const log: DaemonLogger = (level, message) =>
   level === "info"
     ? debug(message)
     : void process.stderr.write(`${level}: ${message}\n`);
-const warn = (message: string): void => log("warn", message);
 
-const watchers = new WatcherRegistry({ clock: world.clock, logger: log });
-const providers = createPayloadProviders({
-  launcher: world.launcher,
-  host,
-  cacheDir: cacheDir(world.home),
-  watchers,
-  // The demo holds no folder and watches nothing.
-  fileEvents: NO_FILE_EVENTS,
-  clock: world.clock,
-  logger: log,
-  ledger: new RefreshLedger(log),
-});
-// A session that has never clicked: every pick is absent, so each setting
-// resolves to the config's own value, every picker is closed, and there is
-// nothing to undo or go back to.
-const sessionState = new SessionState();
+// What the frames are drawn from beside the loaded config, and what to close
+// once they are drawn.
+type Arm = Pick<DemoPlay, "facts" | "clock" | "ticks" | "pace"> & {
+  readonly world: World;
+  readonly close: () => void;
+};
 
-// The demo renders the file it was given or nothing. The advisories a file
-// earns are reported whether or not it goes on to load, as the daemon's strip
-// and `cc-candybar check` report them.
-function loadState(): DslRenderState {
-  const locs = locations(host, world.home);
-  const repos = repoGateAt(stateDir(world.home), cwd);
-  // The file it was given is named explicitly: no repository supplies it.
-  const chain = {
-    layers: [homeLayer(configPath)],
-    home: configPath,
-    repo: repos.plugins,
-    locs,
-  };
-  // [LAW:single-enforcer] The daemon's own load and settle: the advisories
-  // come out of the one place every load composes them.
-  const loaded = loadChain(
-    {
-      repos,
-      advisories: repoGateLines(repos),
-      started: world.clock.monotonic(),
-    },
+// One Claude Code hook event, faked, drawn four times on the machine's clock,
+// its facts read by the owners the daemon builds. A session that has never
+// run has no transcript, so the path names no file — a missing transcript is
+// an empty session, not a failure.
+function liveArm(): Arm {
+  const sessionId = sessionIdOf("demo0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b");
+  const hookData: ClaudeHookData = {
+    hook_event_name: "Status",
+    session_id: sessionId,
+    transcript_path: join(
+      machine.host.tmp,
+      `cc-candybar-demo-${sessionId}.jsonl`,
+    ),
     cwd,
-    chain,
-    {
-      clock: world.clock,
-      runs,
-      locations: locs,
-      sessionState,
-      storage: UNOWNED_STORAGE,
-      signer: linkSignerFromKeyFile(linkKeyFile(stateDir(world.home))),
-      gates: daemonGates(),
-      stateDir: stateDir(world.home),
-    },
+    model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
+    workspace: { current_dir: cwd, project_dir: cwd, added_dirs: [] },
+  };
+  // The demo's frames go to stdout, so stdout is the stream on the terminal.
+  const hints = parseClientHints(
+    detectClientHints(machine.host, cwd, process.stdout),
   );
-  if (loaded.warning !== null) warn(loaded.warning);
-  if (loaded.state === null) throw loaded.cause;
-  return loaded.state;
+  const watchers = new WatcherRegistry({ clock: machine.clock, logger: log });
+  const providers = createPayloadProviders({
+    launcher: machine.launcher,
+    host: machine.host,
+    cacheDir: cacheDir(machine.home),
+    watchers,
+    // The demo holds no folder and watches nothing.
+    fileEvents: NO_FILE_EVENTS,
+    clock: machine.clock,
+    logger: log,
+    ledger: new RefreshLedger(log),
+  });
+  // The demo runs no update watch: its facts document carries an update
+  // nothing has sampled.
+  const updateFact = newUpdateFact();
+  const request = { sessionId, hookData, cwd, hints };
+  const tick = (i: number) => ({ offsetMs: i * FRAME_INTERVAL_MS, request });
+  return {
+    world: machine,
+    facts: inProcessFacts({ providers, update: () => updateFact.get() }),
+    clock: machine.clock,
+    ticks: [
+      tick(0),
+      ...Array.from({ length: FRAMES - 1 }, (_, i) => tick(i + 1)),
+    ],
+    pace: (ms) => sleep(machine.clock, ms),
+    // The providers own their timers and watchers; all of them are released
+    // so the process ends when the frames do.
+    close: () => {
+      providers.gitProvider.close();
+      providers.usageStore.close();
+      providers.tmuxService.close();
+      providers.hostService.close();
+      providers.managedStorage.close();
+      watchers.closeAll();
+    },
+  };
 }
 
-async function renderFrames(): Promise<void> {
-  const state = loadState();
-  // [LAW:no-silent-failure] The daemon draws past a placement of an undeclared
-  // segment; the demo, like `check`, refuses it with the loader's message.
-  try {
-    refuseDrops(state.dropped);
-  } catch (e) {
-    state.registry.dispose();
-    runs.close();
-    throw e;
-  }
-  // The demo runs no update watch: its facts document carries an update nothing
-  // has sampled.
-  const updateFact = newUpdateFact();
-  // The session's view of the state, as the daemon opens one per session,
-  // declared with the one request the demo's frames draw by.
-  const view = openView(
-    state,
-    cwd,
-    { sessionId, hookData, cwd, hints },
-    {
-      sessionState,
-      facts: inProcessFacts({ providers, update: () => updateFact.get() }),
-      source: sessionSource({
-        providers,
-        sessionState,
-        history: () => EMPTY_HISTORY_DEPTH,
-        navigation: () => 0,
-      }),
-      // The demo draws one frame per tick of its own: no feed to wake.
-      changed: () => {},
-      log,
-    },
-  );
-  try {
-    const effective = view.source.effective();
+// A recording's requests, drawn under a held clock started at its first
+// request, each at its offset: the documents are the recording's, so no
+// owner is built and nothing is read or spawned for them.
+function recordingArm(path: string): Arm {
+  const { recording, startMs, ticks } = readRecording(path);
+  const clock = heldClock(new Date(startMs));
+  return {
+    world: { ...machine, clock },
+    facts: recordingFacts(recording, clock),
+    clock,
+    ticks,
+    pace: async (ms) => clock.advance(ms),
+    close: () => {},
+  };
+}
 
+async function main(): Promise<void> {
+  const { configPath, recording } = parseArgs(process.argv.slice(2));
+  const arm = recording === null ? liveArm() : recordingArm(recording);
+  try {
+    using loaded = loadDemo({
+      world: arm.world,
+      stateDir: stateDir(machine.home),
+      signer: linkSignerFromKeyFile(linkKeyFile(stateDir(machine.home))),
+      configPath,
+      cwd,
+      warn: (message) => log("warn", message),
+    });
     process.stdout.write(
       `\n  DSL demo — ${configPath}\n` +
-        `  one faked status-line request, rendered by the daemon's own functions\n` +
-        `  ${FRAMES} renders, one per status-line tick — watch the clock move:\n\n`,
+        (recording === null
+          ? `  one faked status-line request, rendered by the daemon's own functions\n` +
+            `  ${FRAMES} renders, one per status-line tick — watch the clock move:\n\n`
+          : `  ${recording}, replayed by the daemon's own functions\n` +
+            `  ${arm.ticks.length} renders, one per request the session received:\n\n`),
     );
-
-    // The session's effect memory, held across the frames as the daemon holds
-    // it across a session's requests, so a `globals.effect` moves frame to frame.
-    const effects = new SessionEffects<RenderedLine>(sessionId);
-    for (let frame = 0; frame < FRAMES; frame++) {
-      // [LAW:effects-at-boundaries] Each frame is one status-line tick: one
-      // instant, sampled here as the daemon samples it per request.
-      const at = instantOf(new Date(world.clock.now()));
-      // What the tick starts of the facts, landed, as the daemon's request
-      // waits for it.
-      await view.settle(at).landed;
-      const { frame: drawn } = drawDsl(
-        state.config,
-        state.compiled,
-        view.store,
-        view.registry,
-        {
-          drawing: { by: "request" },
-          feeds: UNFOLLOWED_FEEDS,
-          today: todayOf(view.source.facts().builtins.today, at),
-        },
-        at,
-        renderOptionsOf(effective, width),
-        { onRenderWarning: ({ message }) => warn(message) },
-        { ...effective, effects },
-      );
-      process.stdout.write(
-        ansiOf(drawn)
-          .split("\n")
-          .map((row) => `  ${row}\n`)
-          .join(""),
-      );
-      if (frame < FRAMES - 1) await sleep(world.clock, FRAME_INTERVAL_MS);
-    }
-
+    await playDemo({
+      ...arm,
+      loaded,
+      cwd,
+      home: machine.host.home,
+      log,
+      frame: (drawn) =>
+        process.stdout.write(
+          ansiOf(drawn)
+            .split("\n")
+            .map((row) => `  ${row}\n`)
+            .join(""),
+        ),
+    });
     process.stdout.write("\n");
   } finally {
-    view.dispose();
-    state.registry.dispose();
-    runs.close();
+    arm.close();
   }
 }
 
 try {
-  await renderFrames();
+  await main();
 } catch (err) {
-  // A refused config is the demo's one expected failure: the loader's message
-  // is the whole report. Anything else is a defect and keeps its stack.
-  if (!(err instanceof ConfigError || err instanceof DroppedPlacements))
+  // A refused config or recording is the demo's expected failure: the
+  // message is the whole report. Anything else is a defect and keeps its
+  // stack.
+  if (
+    !(
+      err instanceof ConfigError ||
+      err instanceof DroppedPlacements ||
+      err instanceof RecordingUnreadable ||
+      err instanceof UsageError
+    )
+  )
     throw err;
   process.stderr.write(`error: ${err.message}\n`);
   process.exitCode = 1;
-} finally {
-  // The providers own their timers and watchers; all of them are released so
-  // the process ends when the frames do.
-  providers.gitProvider.close();
-  providers.usageStore.close();
-  providers.tmuxService.close();
-  providers.hostService.close();
-  providers.managedStorage.close();
-  watchers.closeAll();
 }

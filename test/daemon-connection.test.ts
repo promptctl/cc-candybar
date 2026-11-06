@@ -494,4 +494,93 @@ describe("a connection over a stream", () => {
       ]);
     });
   });
+
+  // A request answered past the backstop by design (a recording): its work
+  // starts only while its client waits, and its answer is the reply it settles
+  // with.
+  describe("a held request", () => {
+    const RECORDED: Response = {
+      ok: true,
+      recorded: {
+        path: "/r.jsonl",
+        lines: 4,
+        requests: 1,
+        daemonClosed: false,
+      },
+    };
+    // Held work the test finishes, counting its starts.
+    const work = () => {
+      let finish!: (reply: Reply) => void;
+      const start = jest.fn(
+        () => new Promise<Reply>((resolve) => (finish = resolve)),
+      );
+      return {
+        handled: { kind: "held", start } as HandledRequest,
+        start,
+        finish: () =>
+          finish({
+            resp: RECORDED,
+            exitAfterFlush: null,
+            delivered: NOTHING_DELIVERED,
+          }),
+      };
+    };
+
+    test("is answered when its work settles, long after the backstop would have fired", async () => {
+      const held = work();
+      const { send, received, ended } = open(
+        standIn({ handle: async () => held.handled }),
+      );
+      send(STATS);
+      await settled();
+      expect(held.start).toHaveBeenCalledTimes(1);
+      jest.advanceTimersByTime(REQUEST_TIMEOUT_MS * 50);
+      await settled();
+      expect(received).toEqual([]);
+      held.finish();
+      await settled();
+      expect(received).toEqual([RECORDED]);
+      expect(ended()).toBe(true);
+    });
+
+    test("one the backstop answered while it was on its way starts nothing", async () => {
+      const request = held();
+      const job = work();
+      const { send, received } = open(standIn({ handle: request.handle }));
+      send(STATS);
+      await settled();
+      jest.advanceTimersByTime(REQUEST_TIMEOUT_MS);
+      request.answer(job.handled);
+      await settled();
+      expect(received).toMatchObject([{ code: "TIMEOUT" }]);
+      expect(job.start).not.toHaveBeenCalled();
+    });
+
+    test("one whose client hung up first starts nothing", async () => {
+      const request = held();
+      const job = work();
+      const { client, send } = open(standIn({ handle: request.handle }));
+      send(STATS);
+      await settled();
+      client.destroy();
+      await settled();
+      request.answer(job.handled);
+      await settled();
+      expect(job.start).not.toHaveBeenCalled();
+    });
+
+    test("one whose client hangs up while it runs is told the client left", async () => {
+      const held = work();
+      const { client, send } = open(
+        standIn({ handle: async () => held.handled }),
+      );
+      send(STATS);
+      await settled();
+      const [left] = held.start.mock.calls[0] as unknown as [AbortSignal];
+      expect(left.aborted).toBe(false);
+      client.destroy();
+      await settled();
+      expect(left.aborted).toBe(true);
+    });
+  });
 });

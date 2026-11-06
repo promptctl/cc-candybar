@@ -1,5 +1,6 @@
 // A daemon's answer to a request: the checkpoint, then a reply per kind.
 
+import { isAbsolute } from "node:path";
 import process from "node:process";
 import { inspect } from "node:util";
 import type { DaemonParts } from "./daemon-parts.js";
@@ -9,15 +10,21 @@ import {
   checkRenderRequest,
   type CheckedRenderRequest,
 } from "./render-checkpoint.js";
-import { PROTOCOL_VERSION, URL_FRAME_VERSIONS } from "./protocol";
+import {
+  parseRecordSeconds,
+  PROTOCOL_VERSION,
+  URL_FRAME_VERSIONS,
+} from "./protocol";
 import type {
   ClickRequest,
   Inbound,
   Request,
   Response,
+  RecordRequest,
   SubscribeRequest,
 } from "./protocol";
 import { parseSessionId, type SessionId } from "./session-id";
+import { RecordingFailed, recordToFile } from "./session-recorder.js";
 import { type SourceSnapshots } from "./stats";
 import {
   clickVerb,
@@ -70,10 +77,17 @@ export interface Reply {
   readonly delivered: () => void;
 }
 // A subscription is the one request answered by a stream rather than a reply:
-// the connection boundary turns its socket over to the session's feed.
+// the connection boundary turns its socket over to the session's feed. A held
+// request is answered past the request backstop by design (a recording,
+// answered when its file closes).
+// [LAW:effects-at-boundaries] Held work is a description: the connection
+// starts it only once it knows a client still waits for the answer, so a
+// request the backstop already answered starts nothing, and `left` aborts
+// when that client hangs up, so its work stops with it.
 export type HandledRequest =
   | ({ kind: "reply" } & Reply)
-  | { kind: "subscribe"; sessionId: SessionId; lane: Lane };
+  | { kind: "subscribe"; sessionId: SessionId; lane: Lane }
+  | { kind: "held"; start: (left: AbortSignal) => Promise<Reply> };
 
 const stay = (resp: Response): Reply => ({
   resp,
@@ -83,8 +97,9 @@ const stay = (resp: Response): Reply => ({
 const replied = (reply: Reply): HandledRequest => ({ kind: "reply", ...reply });
 
 // [LAW:types-are-the-program] Every request kind answered with a reply: all
-// but a subscribe, the compiler naming one added to the protocol until it is.
-export type ReplyRequest = Exclude<Request, SubscribeRequest>;
+// but a subscribe and a record, the compiler naming one added to the protocol
+// until it is.
+export type ReplyRequest = Exclude<Request, SubscribeRequest | RecordRequest>;
 const REPLY_KINDS: Readonly<Record<ReplyRequest["kind"], true>> = {
   render: true,
   "pane-session": true,
@@ -126,6 +141,74 @@ function subscription(req: SubscribeRequest): HandledRequest {
       `subscribe needs a lane, one of ${LANE_NAMES.join(", ")}: got ${JSON.stringify(req.lane)}`,
     );
   return { kind: "subscribe", sessionId: sessionId.id, lane };
+}
+
+// [LAW:parse-dont-validate] A record request's fields, parsed once: the
+// session, an absolute path (a relative one would resolve against the
+// daemon's own directory, which is no client's), and a positive span.
+export function parseRecordRequest(req: RecordRequest):
+  | {
+      readonly ok: true;
+      readonly session: SessionId;
+      readonly path: string;
+      readonly seconds: number;
+    }
+  | { readonly ok: false; readonly problem: string } {
+  const { session, path, seconds } = req as {
+    session: unknown;
+    path: unknown;
+    seconds: unknown;
+  };
+  const id = parseSessionId(session);
+  if (!id.ok) return { ok: false, problem: `record's session ${id.problem}` };
+  if (typeof path !== "string" || !isAbsolute(path)) {
+    return {
+      ok: false,
+      problem: `record's path is not an absolute path: ${JSON.stringify(path)}`,
+    };
+  }
+  const span = parseRecordSeconds(seconds);
+  if (!span.ok) {
+    return {
+      ok: false,
+      problem: `record's seconds ${JSON.stringify(seconds)} ${span.problem}`,
+    };
+  }
+  return { ok: true, session: id.id, path, seconds: span.seconds };
+}
+
+// A record request past the connection's checkpoint: the recording it starts
+// once the connection knows a client waits, answered when its file closes, or
+// the reply refusing it. A recording that cannot start or that a write ends
+// is answered with why.
+function recording(parts: DaemonParts, req: RecordRequest): HandledRequest {
+  const parsed = parseRecordRequest(req);
+  if (!parsed.ok) return refuse("BAD_REQUEST", parsed.problem);
+  const { session, path, seconds } = parsed;
+  return {
+    kind: "held",
+    start: (left) =>
+      recordToFile(
+        parts.recorder,
+        parts.clock,
+        session,
+        path,
+        seconds,
+        left,
+      ).then(
+        (recorded) => stay({ ok: true, recorded }),
+        (e: unknown) =>
+          stay({
+            ok: false,
+            error: e instanceof Error ? e.message : String(e),
+            // [LAW:types-are-the-program] A recording a write ended is the
+            // daemon failing; one refused before it began, the request.
+            code:
+              e instanceof RecordingFailed ? "RENDER_FAILED" : "BAD_REQUEST",
+            daemonV: PROTOCOL_VERSION,
+          }),
+      ),
+  };
 }
 
 export async function handleRequest(
@@ -192,6 +275,7 @@ export async function handleRequest(
   }
 
   if (req.kind === "subscribe") return subscription(req);
+  if (req.kind === "record") return recording(parts, req);
   // [LAW:parse-dont-validate] The kind is untrusted JSON: one no request
   // carries — a name no kind has, or no name at all, which `Object.hasOwn`
   // would coerce into one — is refused here, so replyTo is total over the

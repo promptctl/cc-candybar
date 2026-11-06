@@ -60,6 +60,7 @@ import type { DoctorEdge, DoctorStores } from "../doctor/edge";
 import { ProbeArrivals } from "../doctor/handler-probe";
 import { RenderSightings } from "./render-sightings";
 import { inProcessFacts } from "./facts-source.js";
+import { recordedCache } from "./session-recorder.js";
 import { sessionSource, type SessionSource } from "./session-source.js";
 import { EffectSessions } from "../render/effect.js";
 import { FEED_PERIODS, FrameFeeds } from "./frame-feed.js";
@@ -550,61 +551,69 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // writes it and every session's facts document reads it, so the box exists
   // before either.
   const updateFact = newUpdateFact();
-  const renderCache = new RenderCache<SessionSource, CheckedRenderRequest>(
-    {
-      clock,
-      runs: sourceRuns,
-      stateDir: paths.state,
-      locations: locs,
-      sessionState,
-      watchers: watcherRegistry,
-      log,
-      storage: managedStorage,
-      signer: linkSigner,
-      gates,
-      // [LAW:single-enforcer] Where every session's facts come from: the
-      // in-process arm over the daemon's own owners, which logs the refreshes
-      // it makes through the one ledger, so a view's payload logs none of them.
-      facts: inProcessFacts({
-        providers: payloadProviders,
-        update: () => updateFact.get(),
-      }),
-      // [LAW:single-enforcer] What every session's view draws from: its payload
-      // derived over its document, its picks and its histories' depths.
-      source: sessionSource({
-        providers: payloadProviders,
-        sessionState,
-        history: (sessionId) => settingsHistory.depth(sessionId),
-        // Measured against the gate of the config the view draws with.
-        navigation: (sessionId, config) =>
-          navigationHistory.depth(
-            sessionId,
+  // [LAW:single-enforcer] The cache with its sessions' recorder wired over it
+  // (src/daemon/session-recorder.ts): the record verb writes a session's
+  // stream out of here.
+  const { cache: renderCache, recorder } = recordedCache(
+    (recording) =>
+      new RenderCache<SessionSource, CheckedRenderRequest>(
+        {
+          clock,
+          runs: sourceRuns,
+          stateDir: paths.state,
+          locations: locs,
+          sessionState,
+          watchers: watcherRegistry,
+          log,
+          storage: managedStorage,
+          signer: linkSigner,
+          gates,
+          // [LAW:single-enforcer] Where every session's facts come from: the
+          // in-process arm over the daemon's own owners, which logs the refreshes
+          // it makes through the one ledger, so a view's payload logs none of them.
+          facts: inProcessFacts({
+            providers: payloadProviders,
+            update: () => updateFact.get(),
+          }),
+          // [LAW:single-enforcer] What every session's view draws from: its payload
+          // derived over its document, its picks and its histories' depths.
+          source: sessionSource({
+            providers: payloadProviders,
             sessionState,
-            gates.state.gateFor(config),
-          ),
-      }),
-    },
-    {
-      budgetBytes: () => renderCacheBudget(memoryLimitBytes),
-      observers: {
-        // [LAW:no-silent-failure] Every config (re)load's outcome lands in
-        // daemon.log with its cause — the operator's only record of why a load
-        // ran, and whether a save was picked up cleanly, kept rendering
-        // last-known-good behind an error, or resolved to a different file.
-        onReload: (entry, sessions, cause, settled) => {
-          log("info", configLoadedLine(entry, cause, settled));
-          // A reload changes the bar of every session drawn from the entry,
-          // even one that failed and kept the old config: its indicator says so.
-          for (const sessionId of sessions)
-            frameFeeds.wake(sessionId, "reload");
+            history: (sessionId) => settingsHistory.depth(sessionId),
+            // Measured against the gate of the config the view draws with.
+            navigation: (sessionId, config) =>
+              navigationHistory.depth(
+                sessionId,
+                sessionState,
+                gates.state.gateFor(config),
+              ),
+          }),
         },
-        // [LAW:single-enforcer] What a session's view draws from moved: its
-        // feed's next frame is brought forward, whatever moved it: a request's
-        // facts, a refresh landing after its deadline, a source publishing, a
-        // pick. The dump link, which no view holds, wakes the same way.
-        onViewChanged: (sessionId) => frameFeeds.wake(sessionId, "data"),
-      },
-    },
+        {
+          budgetBytes: () => renderCacheBudget(memoryLimitBytes),
+          observers: {
+            // [LAW:no-silent-failure] Every config (re)load's outcome lands in
+            // daemon.log with its cause — the operator's only record of why a load
+            // ran, and whether a save was picked up cleanly, kept rendering
+            // last-known-good behind an error, or resolved to a different file.
+            onReload: (entry, sessions, cause, settled) => {
+              log("info", configLoadedLine(entry, cause, settled));
+              // A reload changes the bar of every session drawn from the entry,
+              // even one that failed and kept the old config: its indicator says so.
+              for (const sessionId of sessions)
+                frameFeeds.wake(sessionId, "reload");
+            },
+            // [LAW:single-enforcer] What a session's view draws from moved: its
+            // feed's next frame is brought forward, whatever moved it: a request's
+            // facts, a refresh landing after its deadline, a source publishing, a
+            // pick. The dump link, which no view holds, wakes the same way.
+            onViewChanged: (sessionId) => frameFeeds.wake(sessionId, "data"),
+            ...recording,
+          },
+        },
+      ),
+    log,
   );
   // [LAW:no-silent-failure] An edit made while file events went unheard is
   // re-read when they resume, in every entry, and every feed redraws when
@@ -773,6 +782,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     frameFeeds,
     renderWarnings,
     renderCache,
+    recorder,
     updateWatch,
     limits,
     verbCtx,
@@ -832,6 +842,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         ["updateWatch close", () => updateWatch.close()],
         ["binaryWatch close", () => binaryWatch.close()],
         ["limits disarm", () => limits.disarm()],
+        // Every open recording ends, its file whole, while the views it
+        // follows are still served.
+        ["recorder close", () => recorder.close()],
         // Before the sources and the storage its states hold.
         ["renderCache close", () => renderCache.close()],
         ["gitService close", () => gitService.close()],

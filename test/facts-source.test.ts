@@ -1,13 +1,13 @@
 // The facts source's arms, each alone (src/daemon/facts-source.ts): the
 // in-process arm takes and releases a view's holds and stamps its document
 // from what the owners hold; the recording arm replays lines under the clock
-// it is handed and holds one session; the recorder writes what a follow
-// stamps. The seam between them is held by test/facts-seam.test.ts.
+// it is handed and holds one session. The seam between them, and the
+// recorder that writes a session's stream, are held by
+// test/facts-seam.test.ts.
 
 import { observable, runInAction } from "mobx";
 import {
   inProcessFacts,
-  recordedFacts,
   recordingFacts,
   type Facts,
   type FollowDeclaration,
@@ -216,6 +216,13 @@ describe("the recording arm", () => {
     },
   });
   const request = () => viewFacts("/a", "s1");
+  // The session's lines as the parser hands them over: one session's, in time
+  // order, with a document to open on (test/unit/facts-recording.test.ts).
+  const recording = (lines: readonly FactsLine[]) => {
+    const [first, ...rest] = lines;
+    if (first === undefined) throw new Error("a recording has a document");
+    return { session: SESSION, facts: [first, ...rest] as const };
+  };
 
   test("each line is the document once the clock reaches its offset from the first, the last of several at one instant winning", () => {
     const clock = heldClock(AT);
@@ -226,7 +233,10 @@ describe("the recording arm", () => {
       line(1.5, 4),
       line(4, 5),
     ];
-    const followed = recordingFacts(lines, clock).follow(request(), reads());
+    const followed = recordingFacts(recording(lines), clock).follow(
+      request(),
+      reads(),
+    );
     expect(followed.stamped()).toBe(lines[1]);
     clock.advance(1000);
     expect(followed.stamped()).toBe(lines[1]);
@@ -240,7 +250,7 @@ describe("the recording arm", () => {
   test("a follow mid-recording opens on the line the clock has reached and arms only the lines after it; one before the first line throws", () => {
     const clock = heldClock(AT);
     const lines = [line(0, 1), line(2, 2), line(5, 3), line(9, 4)];
-    const facts = recordingFacts(lines, clock);
+    const facts = recordingFacts(recording(lines), clock);
     clock.advance(6000);
     const followed = facts.follow(request(), reads());
     expect(followed.stamped()).toBe(lines[2]);
@@ -253,13 +263,13 @@ describe("the recording arm", () => {
     expect(facts.follow(request(), reads()).stamped()).toBe(lines[3]);
     const early = heldClock(new Date(AT.getTime() - 1000));
     expect(() =>
-      recordingFacts(lines, early).follow(request(), reads()),
+      recordingFacts(recording(lines), early).follow(request(), reads()),
     ).toThrow(/this recording begins at .*, and the clock reads/);
   });
 
   test("a request settles at once with nothing started, and a follow at other keys changes nothing", async () => {
     const clock = heldClock(AT);
-    const followed = recordingFacts([line(0, 1)], clock).follow(
+    const followed = recordingFacts(recording([line(0, 1)]), clock).follow(
       request(),
       reads(),
     );
@@ -272,129 +282,37 @@ describe("the recording arm", () => {
 
   test("dispose clears the timers it armed", () => {
     const clock = heldClock(AT);
-    const followed = recordingFacts([line(0, 1), line(2, 2)], clock).follow(
-      request(),
-      reads(),
-    );
+    const followed = recordingFacts(
+      recording([line(0, 1), line(2, 2)]),
+      clock,
+    ).follow(request(), reads());
     expect(clock.pending()).toBe(1);
     followed.dispose();
     expect(clock.pending()).toBe(0);
   });
 
-  test("a recording holds one session: two are refused, none is refused, and a follow of another throws naming both", () => {
+  test("a follow of a session the recording does not hold throws naming both", () => {
     const clock = heldClock(AT);
-    expect(() => recordingFacts([], clock)).toThrow(/holds no line/);
-    const other: FactsLine = {
-      at: at(1),
-      facts: pendingFacts(sessionIdOf("s2")),
-    };
-    expect(() => recordingFacts([line(0, 1), other], clock)).toThrow(
-      /names "s1", "s2"/,
-    );
     expect(() =>
-      recordingFacts([line(0, 1)], clock).follow(
+      recordingFacts(recording([line(0, 1)]), clock).follow(
         viewFacts("/a", "s2"),
         reads(),
       ),
     ).toThrow('this recording holds session "s1", not "s2"');
   });
 
-  test("a line before the one preceding it is refused by number", () => {
-    const clock = heldClock(AT);
-    expect(() =>
-      recordingFacts([line(0, 1), line(3, 2), line(2, 3)], clock),
-    ).toThrow(
-      `a recording's lines are in time order, and line 3 (at ${at(2)}) is before line 2 (at ${at(3)})`,
-    );
-  });
-
   test("a session followed again (its sequence starting over) replays its reopening document at its instant", () => {
     const clock = heldClock(AT);
     const lines = [line(0, 1), line(1, 2), line(2, 1), line(3, 2)];
-    const followed = recordingFacts(lines, clock).follow(request(), reads());
+    const followed = recordingFacts(recording(lines), clock).follow(
+      request(),
+      reads(),
+    );
     clock.advance(1000);
     expect(followed.stamped()).toBe(lines[1]);
     clock.advance(1000);
     expect(followed.stamped()).toBe(lines[2]);
     clock.advance(1000);
     expect(followed.stamped()).toBe(lines[3]);
-  });
-});
-
-describe("the recorder", () => {
-  test("writes the opening line and each line the follow stamps, and stops with the follow", () => {
-    const SESSION = sessionIdOf("s1");
-    const box = observable.box<FactsLine>(
-      { at: instantOf(AT), facts: pendingFacts(SESSION) },
-      { deep: false },
-    );
-    let disposed = 0;
-    const delegate: Facts = {
-      follow: () => ({
-        stamped: () => box.get(),
-        failure: () => null,
-        follow: () => {},
-        settle: () => ({ refreshed: new Map(), landed: Promise.resolve() }),
-        dispose: () => {
-          disposed++;
-        },
-      }),
-    };
-    const recorded: FactsLine[] = [];
-    const logged: string[] = [];
-    const followed = recordedFacts(
-      delegate,
-      (l) => recorded.push(l),
-      (level, message) => logged.push(`${level} ${message}`),
-    ).follow(viewFacts("/a", "s1"), reads());
-    const next: FactsLine = {
-      at: instantOf(new Date(AT.getTime() + 1000)),
-      facts: { ...pendingFacts(SESSION), seq: 2 },
-    };
-    runInAction(() => box.set(next));
-    expect(recorded.map((l) => l.facts.seq)).toEqual([0, 2]);
-    expect(recorded[1]).toBe(next);
-    expect(logged).toEqual([]);
-    followed.dispose();
-    expect(disposed).toBe(1);
-    runInAction(() => box.set({ ...next, facts: { ...next.facts, seq: 3 } }));
-    expect(recorded).toHaveLength(2);
-  });
-
-  test("a line the edge cannot write is logged against the session, and the next line is still offered", () => {
-    const SESSION = sessionIdOf("s1");
-    const box = observable.box<FactsLine>(
-      { at: instantOf(AT), facts: pendingFacts(SESSION) },
-      { deep: false },
-    );
-    const delegate: Facts = {
-      follow: () => ({
-        stamped: () => box.get(),
-        failure: () => null,
-        follow: () => {},
-        settle: () => ({ refreshed: new Map(), landed: Promise.resolve() }),
-        dispose: () => {},
-      }),
-    };
-    const offered: number[] = [];
-    const logged: string[] = [];
-    recordedFacts(
-      delegate,
-      (l) => {
-        offered.push(l.facts.seq);
-        if (l.facts.seq === 2) throw new Error("disk full");
-      },
-      (level, message) => logged.push(`${level} ${message}`),
-    ).follow(viewFacts("/a", "s1"), reads());
-    const at = (s: number) => instantOf(new Date(AT.getTime() + s * 1000));
-    runInAction(() =>
-      box.set({ at: at(1), facts: { ...pendingFacts(SESSION), seq: 2 } }),
-    );
-    runInAction(() =>
-      box.set({ at: at(2), facts: { ...pendingFacts(SESSION), seq: 3 } }),
-    );
-    expect(offered).toEqual([0, 2, 3]);
-    expect(logged).toHaveLength(1);
-    expect(logged[0]).toMatch(/^error recording sid="s1": .*disk full/);
   });
 });

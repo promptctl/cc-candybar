@@ -10,6 +10,7 @@ import type { LinkSigner } from "../click/link-signer.js";
 import type { MenuIdle } from "./menu-idle.js";
 import type { PayloadProviders } from "./payload-providers";
 import type { RenderSightings } from "./render-sightings";
+import type { SessionRecorder } from "./session-recorder.js";
 import type { RenderWarningRecords } from "./render-warnings.js";
 import type { Runs } from "./runs.js";
 import type { SourceRuns } from "../var-system/source-runs.js";
@@ -77,6 +78,9 @@ export interface DaemonParts {
   readonly frameFeeds: FrameFeeds<CheckedRenderRequest>;
   readonly renderWarnings: RenderWarningRecords;
   readonly renderCache: RenderCache<SessionSource, CheckedRenderRequest>;
+  // The sessions' recordings, over the render cache's views
+  // (src/daemon/session-recorder.ts).
+  readonly recorder: SessionRecorder;
   readonly updateWatch: UpdateWatch;
   readonly limits: LimitsHandle;
   readonly journalTurns: Pick<JournalTurns, "getStats">;

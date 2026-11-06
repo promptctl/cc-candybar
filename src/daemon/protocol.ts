@@ -441,9 +441,53 @@ export interface PaneSessionRequest {
   pane: string;
 }
 
+// A session's stream written out of the daemon (src/daemon/session-recorder.ts):
+// the documents its view takes and the requests it is drawn by, appended to
+// `path` for `seconds`, answered once the file is closed. `path` is absolute:
+// the daemon's own directory is no client's.
+export interface RecordRequest {
+  v: number;
+  kind: "record";
+  session: string;
+  path: string;
+  seconds: number;
+}
+
+// The longest span a recording may last: what the timers on both ends can
+// hold, the client's wait being the span with a margin. Node fires a timer
+// longer than 2^31-1 ms at once.
+export const MAX_RECORD_SECONDS = Math.floor((2 ** 31 - 1) / 1000) - 60;
+
+// [LAW:single-enforcer] A recording's span, parsed once for the CLI and the
+// daemon alike. The problem reads after the value, which each side names in
+// its own words.
+export function parseRecordSeconds(
+  n: unknown,
+):
+  | { readonly ok: true; readonly seconds: number }
+  | { readonly ok: false; readonly problem: string } {
+  return typeof n === "number" && n > 0 && n <= MAX_RECORD_SECONDS
+    ? { ok: true, seconds: n }
+    : {
+        ok: false,
+        problem: `is not a span of seconds above 0 and at most ${MAX_RECORD_SECONDS}`,
+      };
+}
+
+// What a recording that ended wrote: its file, its lines, and how many of
+// them are requests — none means the replay has nothing to draw — and
+// whether the daemon's close ended it before its span ran out.
+export interface Recorded {
+  readonly path: string;
+  readonly lines: number;
+  readonly requests: number;
+  readonly daemonClosed: boolean;
+}
+
 export type Request =
   | ReaderRenderRequest
   | SubscribeRequest
+  | RecordRequest
   | PaneSessionRequest
   | ShutdownRequest
   | StatsRequest
@@ -463,6 +507,8 @@ export type Response =
   // A pane-session answer: the session, or null when no request the daemon
   // holds came from that pane.
   | { ok: true; paneSession: string | null }
+  // A record request's answer, once its file is closed.
+  | { ok: true; recorded: Recorded }
   // A band-lane subscriber's frame: the bar as the band mod's rows of styled
   // runs (src/daemon/lane-frames.ts), declared by the mod (mod/types).
   | BandBar
