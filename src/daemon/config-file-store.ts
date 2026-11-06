@@ -27,7 +27,9 @@
 import { BadVerbArgs } from "./verb-error";
 import fs from "node:fs";
 import JSON5 from "json5";
-import { resolvedTarget, writeAtomic } from "../utils/atomic-write.js";
+import { writeAtomic } from "../utils/atomic-write.js";
+import { resolvedTarget } from "../utils/link-chain.js";
+import { systemFilesystem } from "../disk/system-filesystem.js";
 import {
   DEFAULT_DSL_CONFIG,
   RAW_DEFAULT_DSL_CONFIG,
@@ -145,7 +147,7 @@ export function writeConfigText(
 ): void {
   try {
     if (text === null) {
-      fs.rmSync(resolvedTarget(file), { force: true });
+      fs.rmSync(resolvedTarget(systemFilesystem, file), { force: true });
       return;
     }
     writeAtomic(file, text);

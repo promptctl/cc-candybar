@@ -1,3 +1,4 @@
+import { systemFilesystem } from "../src/disk/system-filesystem";
 import { FACTS_NOTHING } from "./helpers/facts";
 import { textOf } from "../src/render/frame";
 import { locations } from "../src/daemon/paths";
@@ -1011,8 +1012,7 @@ function makeCache(reloads?: ReloadSignal): {
   cleanups: Array<() => void>;
 } {
   const cleanups: Array<() => void> = [];
-  const watchers = new WatcherRegistry({
-    clock: systemTimekeeper,
+  const watchers = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
     counters: {
       watchersOpened: 0,
       watchersClosed: 0,
@@ -1237,8 +1237,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
     durable.write(userConfigBody);
     const loads: string[] = [];
     const lines: string[] = [];
-    const watchers = new WatcherRegistry({
-      clock: systemTimekeeper,
+    const watchers = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
       logger: () => {},
     });
     const sessionState = new SessionState();

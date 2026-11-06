@@ -1,11 +1,9 @@
-import fs from "node:fs";
 import path from "node:path";
 import type { Invalidation, WatcherHandle, WatcherRegistry } from "./watchers";
 import {
   sameIdentity,
   statIdentity,
   type FolderIdentity,
-  type IdentityRead,
 } from "../../utils/folder-identity";
 import type { Release } from "../../utils/holds";
 import type { DaemonLogger } from "../../utils/logger";
@@ -125,7 +123,6 @@ export class FileEventDelivery {
   private probeFailures = 0;
   private readonly watchers: WatcherRegistry;
   private readonly logger: DaemonLogger;
-  private readonly identityOf: IdentityRead;
   private readonly clock: Pick<Timekeeper, "now" | "every">;
 
   constructor(opts: {
@@ -134,12 +131,10 @@ export class FileEventDelivery {
     // [LAW:effects-at-boundaries] The daemon's clock: the probe period, and
     // the times probes and spans are stamped with.
     readonly clock: Pick<Timekeeper, "now" | "every">;
-    readonly identityOf?: IdentityRead;
   }) {
     this.watchers = opts.watchers;
     this.logger = opts.logger;
     this.clock = opts.clock;
-    this.identityOf = opts.identityOf ?? statIdentity;
     // [LAW:no-silent-failure] Nothing reads as delivering before it has been
     // measured.
     this.current = {
@@ -174,8 +169,10 @@ export class FileEventDelivery {
     );
     let identity: FolderIdentity | "gone";
     try {
-      fs.mkdirSync(folder, { recursive: true });
-      identity = this.identityOf(folder);
+      // [LAW:one-source-of-truth] The probe goes on the disk its watch
+      // opens on: the registry's.
+      this.watchers.filesystem.mkdirSync(folder);
+      identity = statIdentity(this.watchers.filesystem, folder);
     } catch (e) {
       this.end(
         stopPeriod,
@@ -251,7 +248,7 @@ export class FileEventDelivery {
     if (inst.kind !== "probing") return;
     let now: FolderIdentity | "gone";
     try {
-      now = this.identityOf(inst.folder);
+      now = statIdentity(this.watchers.filesystem, inst.folder);
     } catch (e) {
       this.end(
         inst.stopPeriod,
@@ -291,7 +288,7 @@ export class FileEventDelivery {
       this.current = { ...before, unreported: [...before.unreported, at] };
     }
     try {
-      await fs.promises.writeFile(
+      await this.watchers.filesystem.writeFile(
         path.join(inst.folder, PROBE_FILE),
         String(at),
       );

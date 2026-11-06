@@ -5,6 +5,7 @@
 // that read it, and released only by a sweep 2.5 to 5 minutes after the last
 // draw that did.
 
+import { systemFilesystem } from "../src/disk/system-filesystem";
 import { TEST_LINKS } from "./helpers/link-signer";
 import { HOST, locs, WORLD } from "./helpers/host";
 import { unscriptedLauncher } from "./helpers/fake-launcher";
@@ -118,8 +119,7 @@ test("a view reads the PR from its declaration whatever its preset places, and a
   });
   cleanups.push(() => git.close());
   const sessionState = new SessionState();
-  const watchers = new WatcherRegistry({
-    clock: systemTimekeeper,
+  const watchers = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
     logger: () => {},
   });
   cleanups.push(() => watchers.closeAll());
@@ -260,8 +260,7 @@ function gitCache() {
     logger: () => {},
   });
   cleanups.push(() => git.close());
-  const watchers = new WatcherRegistry({
-    clock: systemTimekeeper,
+  const watchers = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
     logger: () => {},
   });
   cleanups.push(() => watchers.closeAll());

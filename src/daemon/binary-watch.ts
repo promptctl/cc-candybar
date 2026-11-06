@@ -15,17 +15,18 @@
 import { changeLogger, type DaemonLogger } from "../utils/logger";
 import { ABSENT, failed, ok, type Outcome } from "../utils/outcome";
 import type { Timekeeper } from "../time";
+import type { Filesystem } from "../disk/filesystem";
 
-/** `fs.statSync`'s shape: the edge the watch reads the disk through. */
-export type BundleStat = (path: string) => { readonly mtimeMs: number };
+// [LAW:effects-at-boundaries] The edge the watch reads the disk through.
+type BundleDisk = Pick<Filesystem, "statSync">;
 
 // [LAW:one-type-per-behavior] A target's stamp is the provider outcome over
 // its mtime: `absent` is the file (or a directory above it) no longer
 // existing — the bundle the daemon runs is no longer on disk; `failed` is
 // every other stat failure (EACCES, EIO), which says nothing about the bundle.
-function mtimeOf(path: string, stat: BundleStat): Outcome<number> {
+function mtimeOf(path: string, disk: BundleDisk): Outcome<number> {
   try {
-    return ok(stat(path).mtimeMs);
+    return ok(disk.statSync(path).mtimeMs);
   } catch (e) {
     const code = (e as NodeJS.ErrnoException).code;
     return code === "ENOENT" || code === "ENOTDIR"
@@ -45,7 +46,7 @@ export interface BinaryWatchOptions {
   readonly clock: Pick<Timekeeper, "every">;
   readonly targets: readonly string[];
   readonly intervalMs: number;
-  readonly stat: BundleStat;
+  readonly filesystem: BundleDisk;
   /** True while something the restart would kill is rewriting the bundle. */
   readonly held: () => Promise<boolean>;
   /** The daemon's one exit funnel, which owns running only once. */
@@ -61,10 +62,13 @@ export interface BinaryWatch {
 }
 
 export function makeBinaryWatch(opts: BinaryWatchOptions): BinaryWatch {
-  const { targets, intervalMs, stat, held, exit, log, clock } = opts;
+  const { targets, intervalMs, filesystem, held, exit, log, clock } = opts;
   const logHeld = changeLogger(log);
   // The stamps the daemon booted with, taken the same way every sample is.
-  const boot = targets.map((path) => ({ path, stamp: mtimeOf(path, stat) }));
+  const boot = targets.map((path) => ({
+    path,
+    stamp: mtimeOf(path, filesystem),
+  }));
   // [LAW:types-are-the-program] A stat that failed at boot leaves nothing to
   // compare against: that target is reported once, when the watch arms, and
   // not watched. A stat failing later says nothing about the bundle either,
@@ -81,7 +85,7 @@ export function makeBinaryWatch(opts: BinaryWatchOptions): BinaryWatch {
   const sample = async (): Promise<void> => {
     if (ended) return;
     for (const { path, stamp } of watched) {
-      const now = mtimeOf(path, stat);
+      const now = mtimeOf(path, filesystem);
       if (now.kind === "failed") {
         log("warn", `binary stat failed (${path}): ${now.reason}`);
         continue;

@@ -1,3 +1,4 @@
+import { systemFilesystem } from "../src/disk/system-filesystem";
 import { homeOf } from "../src/daemon/home";
 import { FACTS_NOTHING } from "./helpers/facts";
 import fs from "node:fs";
@@ -54,8 +55,7 @@ function rig() {
   const loads: Settled[] = [];
   const causes: LoadCause[] = [];
   const lines: string[] = [];
-  const watchers = new WatcherRegistry({
-    clock: systemTimekeeper,
+  const watchers = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
     logger: () => {},
   });
   cleanups.push(() => watchers.closeAll());

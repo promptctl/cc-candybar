@@ -1,3 +1,4 @@
+import { systemFilesystem } from "../src/disk/system-filesystem";
 import { systemTimekeeper } from "../src/time";
 import fs from "node:fs";
 import { processLauncher } from "./helpers/host";
@@ -42,7 +43,7 @@ describe("WatcherRegistry", () => {
   // after a sleep that bets on it.
   test("a write to a watched name fires invalidation", async () => {
     const repo = makeRepo();
-    const reg = new WatcherRegistry({ clock: systemTimekeeper });
+    const reg = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper });
     let fired = 0;
     const headPath = path.join(repo, ".git/HEAD");
     reg.acquire(
@@ -64,7 +65,7 @@ describe("WatcherRegistry", () => {
 
   test("refcount: release closes watchers when refcount hits zero", async () => {
     const repo = makeRepo();
-    const reg = new WatcherRegistry({ clock: systemTimekeeper });
+    const reg = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper });
     const h1 = reg.acquire(repo, { dirs: [] }, () => {});
     const h2 = reg.acquire(repo, { dirs: [] }, () => {});
     expect(reg.size()).toBe(1);
@@ -86,7 +87,7 @@ describe("WatcherRegistry", () => {
       dirWatchesOpened: 0,
       dirWatchesClosed: 0,
     };
-    const reg = new WatcherRegistry({ clock: systemTimekeeper, counters });
+    const reg = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper, counters });
     const first = reg.follow(
       null,
       { key: "a", targets: { dirs: [] }, unbound: false },
@@ -145,7 +146,7 @@ describe("WatcherRegistry", () => {
       dirWatchesOpened: 0,
       dirWatchesClosed: 0,
     };
-    const reg = new WatcherRegistry({ clock: systemTimekeeper, counters });
+    const reg = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper, counters });
     const fired: string[] = [];
     const handles = Array.from({ length: 300 }, (_, i) =>
       reg.acquire(`k${i}`, { dirs: [] }, () => fired.push(`k${i}`)),
@@ -170,7 +171,7 @@ describe("WatcherRegistry", () => {
 
   test("hands its consumer the paths that fired in the window", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "watch-names-"));
-    const reg = new WatcherRegistry({ clock: systemTimekeeper });
+    const reg = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper });
     const seen: Invalidation[] = [];
     reg.acquire(dir, { dirs: [{ path: dir }] }, (inv) => seen.push(inv));
     // FSEvents may also report the folder's own creation late, under its
@@ -196,7 +197,7 @@ describe("WatcherRegistry", () => {
 
   test("a tree target hears a write below its first level, named by its path", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "watch-tree-"));
-    const reg = new WatcherRegistry({ clock: systemTimekeeper });
+    const reg = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper });
     const seen: Invalidation[] = [];
     reg.acquire(dir, { dirs: [{ path: dir, recursive: true }] }, (inv) =>
       seen.push(inv),
@@ -229,8 +230,7 @@ describe("WatcherRegistry", () => {
       dirWatchesOpened: 0,
       dirWatchesClosed: 0,
     };
-    const reg = new WatcherRegistry({
-      clock: systemTimekeeper,
+    const reg = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
       counters,
       logger: () => {},
     });
@@ -268,8 +268,7 @@ describe("WatcherRegistry", () => {
     () => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), "watch-unreadable-"));
       fs.chmodSync(dir, 0o000);
-      const reg = new WatcherRegistry({
-        clock: systemTimekeeper,
+      const reg = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
         logger: () => {},
       });
       try {
@@ -301,8 +300,7 @@ describe("WatcherRegistry", () => {
     const fake = standIn();
     try {
       const counters = zeroCounters();
-      const reg = new WatcherRegistry({
-        clock: systemTimekeeper,
+      const reg = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
         counters,
         logger: () => {},
       });
@@ -386,8 +384,7 @@ describe("WatcherRegistry", () => {
     fs.mkdirSync(conf);
     const fake = standIn();
     try {
-      const reg = new WatcherRegistry({
-        clock: systemTimekeeper,
+      const reg = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
         logger: () => {},
       });
       const seen: Invalidation[] = [];
@@ -424,8 +421,7 @@ describe("WatcherRegistry", () => {
     fs.mkdirSync(conf);
     const fake = standIn();
     try {
-      const reg = new WatcherRegistry({
-        clock: systemTimekeeper,
+      const reg = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
         logger: () => {},
       });
       const seen: Invalidation[] = [];
@@ -462,8 +458,7 @@ describe("WatcherRegistry", () => {
   test("an unnamed event under a name filter is unknown", async () => {
     const fake = standIn();
     try {
-      const reg = new WatcherRegistry({
-        clock: systemTimekeeper,
+      const reg = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
         logger: () => {},
       });
       const seen: Invalidation[] = [];
@@ -482,8 +477,7 @@ describe("WatcherRegistry", () => {
   test("every holder of a key hears each window", async () => {
     const fake = standIn();
     try {
-      const reg = new WatcherRegistry({
-        clock: systemTimekeeper,
+      const reg = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
         logger: () => {},
       });
       const first: Invalidation[] = [];
@@ -509,8 +503,7 @@ describe("WatcherRegistry", () => {
     const fake = standIn();
     try {
       const counters = zeroCounters();
-      const reg = new WatcherRegistry({
-        clock: systemTimekeeper,
+      const reg = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
         counters,
         logger: () => {},
       });
@@ -548,8 +541,7 @@ describe("WatcherRegistry", () => {
   test("following to a key that changes only a name filter opens and closes no handle, and hears the new name", async () => {
     const fake = standIn();
     try {
-      const reg = new WatcherRegistry({
-        clock: systemTimekeeper,
+      const reg = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
         logger: () => {},
       });
       const seen: Invalidation[] = [];
@@ -582,8 +574,7 @@ describe("WatcherRegistry", () => {
     fs.mkdirSync(dir);
     const fake = standIn();
     try {
-      const reg = new WatcherRegistry({
-        clock: systemTimekeeper,
+      const reg = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
         logger: () => {},
       });
       reg.acquire("a", { dirs: [{ path: dir }] }, () => {});
@@ -615,8 +606,7 @@ describe("WatcherRegistry", () => {
     const fake = standIn();
     try {
       const counters = zeroCounters();
-      const reg = new WatcherRegistry({
-        clock: systemTimekeeper,
+      const reg = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
         counters,
         logger: () => {},
       });
@@ -667,8 +657,7 @@ describe("WatcherRegistry", () => {
     const fake = standIn();
     try {
       const counters = zeroCounters();
-      const reg = new WatcherRegistry({
-        clock: systemTimekeeper,
+      const reg = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
         counters,
         logger: () => {},
       });
@@ -735,8 +724,7 @@ describe("WatcherRegistry", () => {
     const fake = standIn();
     try {
       const counters = zeroCounters();
-      const reg = new WatcherRegistry({
-        clock: systemTimekeeper,
+      const reg = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
         counters,
         logger: () => {},
       });
@@ -771,8 +759,7 @@ describe("WatcherRegistry", () => {
   test("acquiring a slot another holder holds reopens its deaf directory", () => {
     const fake = standIn();
     try {
-      const reg = new WatcherRegistry({
-        clock: systemTimekeeper,
+      const reg = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
         logger: () => {},
       });
       const first = reg.acquire("k", { dirs: [{ path: "/w" }] }, () => {});
@@ -792,7 +779,7 @@ describe("WatcherRegistry", () => {
 
   test("closeAll closes every watcher", () => {
     const repo = makeRepo();
-    const reg = new WatcherRegistry({ clock: systemTimekeeper });
+    const reg = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper });
     reg.acquire(repo, { dirs: [] }, () => {});
     expect(reg.size()).toBe(1);
     reg.closeAll();
@@ -916,7 +903,7 @@ describe("watchTargetsOf", () => {
     const y = path.join(dir, "two", "y");
     fs.symlinkSync(y, x);
     fs.symlinkSync(x, y);
-    const { targets, reached, unresolved } = watchTargetsOf({
+    const { targets, reached, unresolved } = watchTargetsOf(systemFilesystem, {
       named: [x],
       whole: [],
     });
@@ -937,11 +924,11 @@ describe("watchTargetsOf", () => {
     const d = path.join(dir, "d");
     fs.mkdirSync(d);
     const f = path.join(d, "f");
-    const before = watchTargetsOf({ named: [f], whole: [] });
-    expect(watchTargetsOf({ named: [f], whole: [] }).key).toBe(before.key);
+    const before = watchTargetsOf(systemFilesystem, { named: [f], whole: [] });
+    expect(watchTargetsOf(systemFilesystem, { named: [f], whole: [] }).key).toBe(before.key);
     rmrf(d);
     fs.mkdirSync(d);
-    const after = watchTargetsOf({ named: [f], whole: [] });
+    const after = watchTargetsOf(systemFilesystem, { named: [f], whole: [] });
     expect(after.targets).toEqual(before.targets);
     expect(after.key).not.toBe(before.key);
   });
@@ -949,7 +936,7 @@ describe("watchTargetsOf", () => {
   test("a directory watched whole hears every child, whatever names are watched in it", () => {
     const d = path.join(dir, "d");
     fs.mkdirSync(d);
-    const { targets } = watchTargetsOf({
+    const { targets } = watchTargetsOf(systemFilesystem, {
       named: [d, path.join(d, "f")],
       whole: [d],
     });
@@ -960,7 +947,7 @@ describe("watchTargetsOf", () => {
   });
 
   test("a hop under a directory that does not exist yet has not reached it", () => {
-    const { targets, reached } = watchTargetsOf({
+    const { targets, reached } = watchTargetsOf(systemFilesystem, {
       named: [path.join(dir, "later", "f")],
       whole: [],
     });
@@ -986,7 +973,7 @@ describe("watchFault", () => {
   });
 
   test("a watch that hears every place its paths can change has no fault", () => {
-    const derived = watchTargetsOf({ named: [path.join(dir, "f")], whole: [] });
+    const derived = watchTargetsOf(systemFilesystem, { named: [path.join(dir, "f")], whole: [] });
     expect(watchFault("config", { derived, held: held([]) }, null)).toBeNull();
   });
 
@@ -994,7 +981,7 @@ describe("watchFault", () => {
     const x = path.join(dir, "x");
     fs.symlinkSync(`${x}.other`, x);
     fs.symlinkSync(x, `${x}.other`);
-    const derived = watchTargetsOf({
+    const derived = watchTargetsOf(systemFilesystem, {
       named: [x, path.join(dir, "f")],
       whole: [],
     });
@@ -1018,7 +1005,7 @@ describe("watchFault", () => {
   });
 
   test("a reason beyond the watch's own is the watch's fault too", () => {
-    const derived = watchTargetsOf({ named: [path.join(dir, "f")], whole: [] });
+    const derived = watchTargetsOf(systemFilesystem, { named: [path.join(dir, "f")], whole: [] });
     expect(
       watchFault("config", { derived, held: held([]) }, "the OS stopped"),
     ).toBe("config: the OS stopped");

@@ -1,3 +1,4 @@
+import { systemFilesystem } from "../src/disk/system-filesystem";
 import { FACTS_NOTHING } from "./helpers/facts";
 // [LAW:verifiable-goals] Acceptance for candybar-config-engine-71o.2 —
 // persistent config writes — driven through the real spine, mirroring
@@ -852,8 +853,7 @@ function makeCache(): {
   reloads: ReloadSignal;
 } {
   const cleanups: Array<() => void> = [];
-  const watchers = new WatcherRegistry({
-    clock: systemTimekeeper,
+  const watchers = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
     counters: {
       watchersOpened: 0,
       watchersClosed: 0,

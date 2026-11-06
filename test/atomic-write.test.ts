@@ -1,11 +1,9 @@
+import { systemFilesystem } from "../src/disk/system-filesystem";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import {
-  linkChain,
-  resolvedTarget,
-  writeAtomic,
-} from "../src/utils/atomic-write.js";
+import { writeAtomic } from "../src/utils/atomic-write.js";
+import { linkChain, resolvedTarget } from "../src/utils/link-chain.js";
 
 let dir: string;
 beforeEach(() => {
@@ -35,7 +33,7 @@ describe("writeAtomic through symbolic links", () => {
     writeAtomic(link, "first");
     expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
     expect(fs.readFileSync(target, "utf8")).toBe("first");
-    expect(resolvedTarget(link)).toBe(
+    expect(resolvedTarget(systemFilesystem, link)).toBe(
       path.join(fs.realpathSync(dir), "later.json"),
     );
   });
@@ -62,7 +60,7 @@ describe("writeAtomic through symbolic links", () => {
     fs.symlinkSync("../shared/settings.json", path.join(real, "settings.json"));
     fs.symlinkSync(real, path.join(dir, "home-claude"));
     const link = path.join(dir, "home-claude", "settings.json");
-    expect(resolvedTarget(link)).toBe(fs.realpathSync(target));
+    expect(resolvedTarget(systemFilesystem, link)).toBe(fs.realpathSync(target));
     writeAtomic(link, "new");
     expect(fs.readFileSync(target, "utf8")).toBe("new");
   });
@@ -71,10 +69,10 @@ describe("writeAtomic through symbolic links", () => {
     const target = path.join(dir, "t.json");
     fs.symlinkSync(target, path.join(dir, "b.json"));
     fs.symlinkSync(path.join(dir, "b.json"), path.join(dir, "a.json"));
-    expect(resolvedTarget(path.join(dir, "a.json"))).toBe(target);
+    expect(resolvedTarget(systemFilesystem, path.join(dir, "a.json"))).toBe(target);
     fs.symlinkSync(path.join(dir, "y"), path.join(dir, "x"));
     fs.symlinkSync(path.join(dir, "x"), path.join(dir, "y"));
-    expect(() => resolvedTarget(path.join(dir, "x"))).toThrow(
+    expect(() => resolvedTarget(systemFilesystem, path.join(dir, "x"))).toThrow(
       /more than 40 symbolic links/,
     );
   });
@@ -86,12 +84,12 @@ describe("linkChain", () => {
   test("a plain path, present or absent, is one place", () => {
     const plain = path.join(dir, "config.json5");
     fs.writeFileSync(plain, "");
-    expect(linkChain(plain)).toEqual([plain]);
+    expect(linkChain(systemFilesystem, plain)).toEqual([plain]);
     const absent = path.join(dir, "absent.json5");
-    expect(linkChain(absent)).toEqual([absent]);
+    expect(linkChain(systemFilesystem, absent)).toEqual([absent]);
     // An ancestor that is a regular file: the path does not exist either.
     const underFile = path.join(plain, "config.json5");
-    expect(linkChain(underFile)).toEqual([underFile]);
+    expect(linkChain(systemFilesystem, underFile)).toEqual([underFile]);
   });
 
   test("a link lists itself and its target, a dangling target included", () => {
@@ -99,9 +97,9 @@ describe("linkChain", () => {
     const target = path.join(fs.realpathSync(dir), "dotfiles", "config.json5");
     const link = path.join(dir, "config.json5");
     fs.symlinkSync(target, link);
-    expect(linkChain(link)).toEqual([link, target]);
+    expect(linkChain(systemFilesystem, link)).toEqual([link, target]);
     fs.writeFileSync(target, "");
-    expect(linkChain(link)).toEqual([link, target]);
+    expect(linkChain(systemFilesystem, link)).toEqual([link, target]);
   });
 
   test("a chain lists every hop in order, so a middle link re-pointed is heard", () => {
@@ -111,14 +109,14 @@ describe("linkChain", () => {
     const link = path.join(dir, "config.json5");
     fs.symlinkSync(profile, current);
     fs.symlinkSync(current, link);
-    expect(linkChain(link)).toEqual([link, current, profile]);
-    expect(resolvedTarget(link)).toBe(profile);
+    expect(linkChain(systemFilesystem, link)).toEqual([link, current, profile]);
+    expect(resolvedTarget(systemFilesystem, link)).toBe(profile);
   });
 
   test("a loop throws", () => {
     fs.symlinkSync(path.join(dir, "b"), path.join(dir, "a"));
     fs.symlinkSync(path.join(dir, "a"), path.join(dir, "b"));
-    expect(() => linkChain(path.join(dir, "a"))).toThrow(
+    expect(() => linkChain(systemFilesystem, path.join(dir, "a"))).toThrow(
       /more than 40 symbolic links/,
     );
   });

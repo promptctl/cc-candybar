@@ -4,6 +4,7 @@
 // [LAW:one-source-of-truth] The golden over the payload's composition and the
 // tests of the turn a view draws from open their views through this one rig.
 
+import { systemFilesystem } from "../../src/disk/system-filesystem";
 import type { SessionRequest } from "../../src/facts/recording";
 import fs from "node:fs";
 import path from "node:path";
@@ -154,8 +155,7 @@ export function sessionRig(
 ) {
   const providers = fixedOwners(log);
   const sessionState = new SessionState();
-  const watchers = new WatcherRegistry({
-    clock: systemTimekeeper,
+  const watchers = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
     logger: () => {},
   });
   const runs = new SourceRuns({

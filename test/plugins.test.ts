@@ -1,3 +1,4 @@
+import { systemFilesystem } from "../src/disk/system-filesystem";
 import { FACTS_NOTHING, factsRunning } from "./helpers/facts";
 // [LAW:behavior-not-structure] A plugin, end to end, as the two programs that
 // meet it see it: `cc-candybar check` (the verdict an authoring agent reads)
@@ -970,8 +971,7 @@ describe("an installed plugin", () => {
     write("main/.claude/worktrees/w/.lit/state.json", `{ "id": "w-2" }`);
     fs.mkdirSync(path.join(dir, "main/src"), { recursive: true });
     const p = placing("plugins.lit.ticket");
-    const watchers = new WatcherRegistry({
-      clock: systemTimekeeper,
+    const watchers = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
       counters: {
         watchersOpened: 0,
         watchersClosed: 0,
@@ -1637,8 +1637,7 @@ describe("an installed plugin", () => {
   // A config that fails its first load still renders the seeded default; the
   // seed searches the entry's repo, so the plugin that would fix it reloads.
   test("a failed first load still watches the repo's plugin root", () => {
-    const watchers = new WatcherRegistry({
-      clock: systemTimekeeper,
+    const watchers = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
       counters: {
         watchersOpened: 0,
         watchersClosed: 0,

@@ -4,6 +4,7 @@
 // function ran. Every view here is the daemon's own: a render cache over the
 // payload providers, declared by `declareLanes`, drawn from `sessionSource`.
 
+import { systemFilesystem } from "../src/disk/system-filesystem";
 import { homeOf } from "../src/daemon/home";
 import { reaction, runInAction } from "mobx";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
@@ -150,8 +151,7 @@ function rig(): Rig {
   const log = (level: string, message: string): void => {
     lines.push(`${level} ${message}`);
   };
-  const watchers = new WatcherRegistry({
-    clock: systemTimekeeper,
+  const watchers = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
     counters,
     logger: log,
   });
