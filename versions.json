@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-658",
+      "ref": "refs/pull/658/merge",
+      "sha": "78ab90213111497221c97d848dc626f0083812e8",
+      "timestamp": "2026-11-06T22:50:21.889Z",
+      "commits": [
+        {
+          "sha": "78ab90213111497221c97d848dc626f0083812e8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T22:49:26Z",
+          "message": "Merge d28bc36e4067973d7d13e647ecf42a729ec418ff into 9ae5981784de84f6d5b774905ad8039298f84bc9\n"
+        },
+        {
+          "sha": "d28bc36e4067973d7d13e647ecf42a729ec418ff",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T15:49:14-07:00",
+          "message": "fix(click): every leaf row states how many arguments its verb reads, and a refusal counts for the session that clicked (brandon-menus-sjhy.vxi)\n\nFrom the medium review of PR #658:\n\n- The leaf table carries each verb's arity, and the one step runner\n  refuses a link carrying more, so no fixed-arity verb acts with a tail\n  dropped unread. This replaces the session-only wrapper, which covered\n  only some of the verbs. Verbs whose arguments are lists (set-state pairs,\n  reset-config keys) read any number.\n- A refused step is counted for the session that clicked, never for a\n  session id a step's link spelled, so no page can put refusals on a\n  session it chooses.\n- The drawn-link reader's comments claim only how a link reads, leaving\n  per-step refusals to the daemon.\n\nDeferred to brandon-menus-sjhy.ovq: the double read of a click, the\nsession it reads twice, and the one-element read list a direct leaf\nclick builds.\n"
+        },
+        {
+          "sha": "c58688f99ad7c736443a40f3368bec4e5ea141a8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T15:40:48-07:00",
+          "message": "fix(click): a leaf's arguments are decoded once by its click's reader, and a verb that takes its session alone refuses a tail (brandon-menus-sjhy.vxi)\n\nFrom the high review of PR #658:\n\n- The reader splits a leaf's value before decoding it, so an empty last\n  argument is still one: a copy of empty text copies it again.\n- Handlers take their arguments decoded, so no handler repeats the decode,\n  and the run refusal line names the action as the config does, not\n  percent-encoded.\n- toolbar-toggle, back, rewind, apply-update, doctor-run, save, save-preset,\n  save-theme-default, undo and redo refuse a tail through one wrapper rather\n  than dropping it unread.\n- A step refused because its click's own session failed says so, instead of\n  claiming it names another session.\n- The click line always carries sid: the session that passed, or `-`.\n- Wire decoding parses to a result once (parseWire); the throwing form is\n  built on it, so the session reader no longer converts the error twice.\n\nNot taken: mirroring per-step refusals in the drawn-link reader, which\nreads parse-level refusals only; a second copy of the cross-session rule\nthere would be a second enforcer. The double read of a click is\nbrandon-menus-sjhy.ovq.\n"
+        },
+        {
+          "sha": "7cd7353302793dbc160ac45aef26f55f93586232",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T15:24:15-07:00",
+          "message": "fix(click): a leaf verb receives its click's session parsed, and a step naming another session is refused (brandon-menus-sjhy.vxi)\n\nEvery leaf handler now takes (sid: SessionId, args, ctx). One reader reads a\nleaf effect: its first segment through the one session-id checkpoint, and the\nencoded tail after it. It never throws, so a later step's malformed session is\nthat step's refusal, held on the bar. perform, the one runner every leaf\npasses through, refuses a step whose session fails the checkpoint or is not its\nclick's. So a dispatch can no longer act on one session and report to\nanother's bar, and a verb with no session cannot join the leaf table.\n\nperform hands each refused step to its verb's refusal owner. The run stats\ncount a run link refused at its session as they count one refused for its\narguments. The run handler's own catch is gone, so that count lives in one\nplace.\n\nEvery leaf verb's value is now segments, its session first, so the link\nreader decodes by the leaf table and the separate segmented-verbs list is\ndeleted. The per-handler session re-parse, the copy/open session reader and\nthe first-segment decode helper go too.\n\nA leaf click with an empty session segment now reads as a failed session, not\nas a click naming none, so its reply facts carry no sid.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-657",
       "ref": "refs/pull/657/merge",
       "sha": "e16cc7a6182ddfc30587599c5745d7156f440647",
@@ -63,35 +99,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-06T22:21:18Z",
           "message": "chore(release): set `package.json` to 1.207.0 [skip ci]\n\n## [1.207.0](https://github.com/promptctl/cc-candybar/compare/v1.206.0...v1.207.0) (2026-11-06)\n\n### Features\n\n* **dial:** the client reaches its daemon through one dialer port, and no test hand-rolls a socket (candybar-testing-ihvy.5em) ([#655](https://github.com/promptctl/cc-candybar/issues/655)) ([466c05a](https://github.com/promptctl/cc-candybar/commit/466c05ac9e0e8203441238a3692bac06838e69a9))\n\n### Bug Fixes\n\n* **test:** the parent-watchdog case waits for a serving daemon under the shared readiness budget, and for its exit by name (brandon-menus-sjhy.26f) ([#654](https://github.com/promptctl/cc-candybar/issues/654)) ([0345c0f](https://github.com/promptctl/cc-candybar/commit/0345c0ff3dc537298327e838f5410e5b53301804))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-658",
-      "ref": "refs/pull/658/merge",
-      "sha": "e7e96b743b60e50e1010c1570d510636eec810f9",
-      "timestamp": "2026-11-06T22:41:52.178Z",
-      "commits": [
-        {
-          "sha": "e7e96b743b60e50e1010c1570d510636eec810f9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T22:41:00Z",
-          "message": "Merge c58688f99ad7c736443a40f3368bec4e5ea141a8 into 3bd757912554568f0bf3b622640edbe789c7ba04\n"
-        },
-        {
-          "sha": "c58688f99ad7c736443a40f3368bec4e5ea141a8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T15:40:48-07:00",
-          "message": "fix(click): a leaf's arguments are decoded once by its click's reader, and a verb that takes its session alone refuses a tail (brandon-menus-sjhy.vxi)\n\nFrom the high review of PR #658:\n\n- The reader splits a leaf's value before decoding it, so an empty last\n  argument is still one: a copy of empty text copies it again.\n- Handlers take their arguments decoded, so no handler repeats the decode,\n  and the run refusal line names the action as the config does, not\n  percent-encoded.\n- toolbar-toggle, back, rewind, apply-update, doctor-run, save, save-preset,\n  save-theme-default, undo and redo refuse a tail through one wrapper rather\n  than dropping it unread.\n- A step refused because its click's own session failed says so, instead of\n  claiming it names another session.\n- The click line always carries sid: the session that passed, or `-`.\n- Wire decoding parses to a result once (parseWire); the throwing form is\n  built on it, so the session reader no longer converts the error twice.\n\nNot taken: mirroring per-step refusals in the drawn-link reader, which\nreads parse-level refusals only; a second copy of the cross-session rule\nthere would be a second enforcer. The double read of a click is\nbrandon-menus-sjhy.ovq.\n"
-        },
-        {
-          "sha": "7cd7353302793dbc160ac45aef26f55f93586232",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T15:24:15-07:00",
-          "message": "fix(click): a leaf verb receives its click's session parsed, and a step naming another session is refused (brandon-menus-sjhy.vxi)\n\nEvery leaf handler now takes (sid: SessionId, args, ctx). One reader reads a\nleaf effect: its first segment through the one session-id checkpoint, and the\nencoded tail after it. It never throws, so a later step's malformed session is\nthat step's refusal, held on the bar. perform, the one runner every leaf\npasses through, refuses a step whose session fails the checkpoint or is not its\nclick's. So a dispatch can no longer act on one session and report to\nanother's bar, and a verb with no session cannot join the leaf table.\n\nperform hands each refused step to its verb's refusal owner. The run stats\ncount a run link refused at its session as they count one refused for its\narguments. The run handler's own catch is gone, so that count lives in one\nplace.\n\nEvery leaf verb's value is now segments, its session first, so the link\nreader decodes by the leaf table and the separate segmented-verbs list is\ndeleted. The per-handler session re-parse, the copy/open session reader and\nthe first-segment decode helper go too.\n\nA leaf click with an empty session segment now reads as a failed session, not\nas a click naming none, so its reply facts carry no sid.\n"
         }
       ]
     },
