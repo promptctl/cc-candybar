@@ -24,7 +24,7 @@ Today `settings-history.json` holds absolute paths, so undo in an isolated rende
 
 **The link key lives in the state root**, so each renderer signs with its own.
 
-**`load-config` is a removal candidate.** It lets a click point a session at any absolute `.json` or `.json5` path, which is the one verb whose purpose is to leave the config home.
+**`load-config` is removed.** It let a click point a session at any absolute `.json` or `.json5` path, which was the one verb whose purpose was to leave the config home; a config that still spells its URL is refused at load.
 
 ## To survey
 

@@ -1536,12 +1536,12 @@ export class RenderCache<
   // itself, not frames happening to read the view within each sweep.
   private readonly pins = new Map<string, number>();
   // [LAW:no-silent-failure] Each session whose view last failed to open, by
-  // the error and the request the opening was for, until a view opens for
-  // it: a frame draws that error, never the last bar it pushed. Written only
-  // by `opened`, which sets either this or the session's view, never both.
+  // the error, until a view opens for it: a frame draws that error, never the
+  // last bar it pushed. Written only by `opened`, which sets either this or
+  // the session's view, never both.
   private readonly openFailures = new Map<
     string,
-    { readonly error: unknown; readonly facts: F }
+    { readonly error: unknown }
   >();
   // [LAW:one-source-of-truth] One compile per compile key, shared by every
   // state carrying that key, and dropped with the last of them (reclaim).
@@ -1846,7 +1846,7 @@ export class RenderCache<
         log: this.log,
       });
     } catch (error) {
-      this.openFailures.set(sessionId, { error, facts });
+      this.openFailures.set(sessionId, { error });
       throw error;
     }
     this.openFailures.delete(sessionId);
