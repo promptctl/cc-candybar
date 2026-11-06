@@ -380,9 +380,12 @@ test("a request line crosses the hook and hint checkpoints", () => {
   expect(() => parseRecording(line({ hookData: { cwd: "/x" } }))).toThrow(
     /^line 3: has no hookData\.session_id/,
   );
-  expect(() => parseRecording(line({ cwd: "relative" }))).toThrow(
-    /^line 3: has a `cwd` that is not an absolute path/,
-  );
+  // A replay opens the view where the request came from.
+  for (const cwd of ["relative", undefined]) {
+    expect(() => parseRecording(line({ cwd }))).toThrow(
+      /^line 3: has no `cwd` that is an absolute path/,
+    );
+  }
   expect(() => parseRecording(line({ hints: 7 }))).toThrow(
     /^line 3: has no `hints` object/,
   );

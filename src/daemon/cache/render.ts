@@ -58,7 +58,7 @@ import { fixedSource, type ViewSource } from "../../dsl/view-source.js";
 import { bindView } from "../../dsl/parts.js";
 import { unusedDeclarations, type UnusedDecl } from "../../config/unused.js";
 import { VariableStore } from "../../var-system/store.js";
-import type { SourceRuns } from "../../var-system/source-runs.js";
+import { NO_RUNS, UNREAD_RUNS } from "../../var-system/source-runs.js";
 import { SourceRegistry } from "../../var-system/sources.js";
 import type { VarScope } from "../../dsl/variable-scope.js";
 import type { SessionStateRW } from "../session-state.js";
@@ -158,9 +158,6 @@ export const MAX_ENTRIES = 256;
 export interface RenderDeps<S extends ViewSource = ViewSource> {
   // The daemon's clock (StateDeps).
   clock: Timekeeper;
-  // The owner of every declared source's runs, whose entries its states'
-  // `shell` and `file` sources hold (StateDeps).
-  runs: SourceRuns;
   // The daemon's state directory, where the repositories' answers are kept
   // (StateDeps).
   stateDir: string;
@@ -209,11 +206,6 @@ export interface StateDeps {
   // The clock its variables' ages and the load's own duration run on: the
   // daemon's.
   readonly clock: Timekeeper;
-  // [LAW:single-enforcer] The daemon's one owner of every declared source's
-  // runs: a state's `shell` and `file` sources hold entries of it, so two
-  // states declaring one identity share one run. A build outside the daemon
-  // (check, the doctor, a test) hands in one of its own.
-  readonly runs: SourceRuns;
   // The state directory whose answers book a load reads: which repositories'
   // plugins it may run.
   readonly stateDir: string;
@@ -301,8 +293,8 @@ export type ReloadedEntry = Readonly<
 // the settings menu (the door back to the file) exists from the first
 // render, through the same synthesis every config gets.
 //
-// `store` and `registry` are the entry's DIRECTORY home: the sources no
-// session value reaches (variable-scope.ts). A session draws through its own
+// `store` and `registry` are the entry's DIRECTORY home: the values the
+// directory alone decides (variable-scope.ts). A session draws through its own
 // view over them (SessionView).
 export interface DslRenderState {
   readonly config: ValidatedConfig;
@@ -917,8 +909,10 @@ export function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
   // neither its path resolves nor the declaration carries its own `default`.
   // The loader validates it as a string; the registry default ("") matches
   // the historical behavior when omitted.
+  // [LAW:no-silent-failure] A directory declares no `shell` or `file` source:
+  // each is a session view's, run by the facts arm it follows.
   const registry = new SourceRegistry(
-    deps.runs,
+    NO_RUNS,
     store,
     config.globals.default_empty_value ?? "",
     deps.sessionState,
@@ -948,7 +942,8 @@ export function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
     // it finds a directory source's: the session values are declared once into
     // a view no session draws, then disposed. Every session's view declares
     // them identically and reports nothing (openView).
-    const probe = registry.view();
+    // The probe's sources take lanes that never answer, so it starts no run.
+    const probe = registry.view(UNREAD_RUNS);
     warnings.push(...declareDslVariables(config, probe, cwd, VIEW_SCOPE));
     probe.dispose();
     // [LAW:no-silent-failure] The gates this config's sessions click through
@@ -1305,10 +1300,6 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
   // [LAW:one-source-of-truth] The session is the one the request's checkpoint
   // parsed: a later request of the view's names the same one.
   const { sessionId } = facts;
-  const registry = state.registry.view();
-  // What fails to declare here failed in the load's probe (buildRenderState),
-  // which reported it: a declaration reads only the config.
-  declareDslVariables(state.config, registry, cwd, VIEW_SCOPE);
   // [LAW:dataflow-not-control-flow] What the view declares beyond its request
   // is its config's sources, the same for every request: the facts are total,
   // so nothing a layout places decides what is gathered.
@@ -1323,14 +1314,12 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
   // for (ViewDeclared): observable, so the view's payload is derived again in
   // the turn a declaration lands.
   // [LAW:no-silent-failure] A follow the source refuses fails the open, which
-  // the cache records and reports; the registry the open took goes first.
-  let followed: Followed;
-  try {
-    followed = factsSource.follow(facts, declaration);
-  } catch (e) {
-    registry.dispose();
-    throw e;
-  }
+  // the cache records and reports; the open has taken nothing before it.
+  const followed: Followed = factsSource.follow(facts, declaration);
+  // [LAW:locality-or-seam] The view's registry gets its `shell` and `file`
+  // sources' lanes from the follow, so what they draw is what the session's
+  // document carries, and a recording carries them.
+  const registry = state.registry.view(followed.runs);
   const declared = observable.box<ViewDeclared<F>>({ facts }, { deep: false });
   // [LAW:single-enforcer] A request is declared once.
   const redeclare = (facts: F): void => {
@@ -1348,11 +1337,27 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
   // What the view took, released whole: by its disposal, and by an opening
   // that fails after taking it. The follow's dispose releases every hold its
   // declaration took.
-  const release = () => {
-    for (const stopSource of sourceStops) stopSource();
-    followed.dispose();
-    return registry.dispose();
-  };
+  //
+  // [LAW:no-ambient-temporal-coupling] One action: the registry's dispose
+  // releases its run declarations, each ending its run, and the follow's
+  // stamp, held to the action's end, is stopped by the follow's dispose
+  // before then, so no document is stamped for the release. This is the one
+  // way a view ends.
+  const release = () =>
+    runInAction(() => {
+      for (const stopSource of sourceStops) stopSource();
+      const disposed = registry.dispose();
+      followed.dispose();
+      return disposed;
+    });
+  // What fails to declare here failed in the load's probe (buildRenderState),
+  // which reported it: a declaration reads only the config.
+  try {
+    declareDslVariables(state.config, registry, cwd, VIEW_SCOPE);
+  } catch (e) {
+    release();
+    throw e;
+  }
   // [LAW:no-silent-failure] A source that throws in its opening turn fails the
   // open, which the cache records and reports; what the open took is released
   // first, so a session that keeps failing to open leaks nothing.
@@ -1375,18 +1380,15 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
   // its payload (a fold of its turn: the document with every lane the view
   // declared, plugin sources and `today`'s day sums among them, its request,
   // its picks and the depths of its histories), its selections, or what its
-  // own or its directory's sources published. Told as it opens, since a view
+  // own sources published. Told as it opens, since a view
   // opening is what its session's bar draws from changing. The draw writes
   // none of these (step 4e), so no frame wakes the next one.
   // [LAW:no-silent-failure] A tracked read that throws is logged: a reaction
   // that let it go would reach only the console MobX prints to.
   const stopChanged = reaction(
-    () => [
-      source.payload(),
-      source.selections(),
-      registry.published(),
-      state.registry.published(),
-    ],
+    // A directory publishes no source (src/dsl/variable-scope.ts), so the
+    // view's own publish is every source's.
+    () => [source.payload(), source.selections(), registry.published()],
     () => changed(sessionId),
     {
       equals: compareShallow,

@@ -43,6 +43,7 @@ import {
 import {
   renderOptionsOf,
   prFactOf,
+  runsFactOf,
   sourcesFactOf,
   refreshedFact,
   todayOf,
@@ -264,7 +265,7 @@ interface RenderSetup extends Disposable {
   readonly sessionId: SessionId;
   readonly entry: CacheEntry;
   readonly state: DslRenderState;
-  readonly view: SessionView<SessionSource>;
+  readonly view: SessionView<SessionSource, CheckedRenderRequest>;
   readonly hintsError: string | null;
 }
 
@@ -596,6 +597,7 @@ export function drawRender(
   };
   const metrics = isPending(payload.metrics) ? undefined : payload.metrics;
   noteFacts(facts, sourcesFactOf(document.sources));
+  noteFacts(facts, runsFactOf(document.runs));
   // [LAW:nothing-unseen] The document this frame drew from, by its seq, so a
   // frame in a bug report traces to it.
   noteFacts(facts, {
@@ -944,8 +946,8 @@ export async function drawAnswer(
   );
   // Rules 1 and 2 of the model: the answer shows what this request carried,
   // so it waits for the refreshes its arrival triggers, the first value of
-  // every keyed lane its view declared, and every run of its view's or its
-  // directory's sources that answers a new key — a first value, or a key its
+  // every keyed lane its view declared, and every run of its view's sources
+  // that answers a new key — a first value, or a key its
   // fields moved — until its client's deadline. What has not
   // answered by then draws as pending, and lands for the next frame.
   //

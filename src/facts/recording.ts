@@ -28,6 +28,7 @@ import {
   FACTS_VERSION,
   type BuiltinFacts,
   type FactsDiagnostic,
+  type RunFact,
   type SessionFacts,
   type SourceValue,
   type UpdateNotice,
@@ -52,9 +53,15 @@ export interface FactsLine {
 
 // One request a session's view was drawn by, and the instant it arrived at:
 // what a replay declares the view with, and what its answer is drawn at.
+// [LAW:types-are-the-program] A request as the daemon's checkpoint takes one:
+// from a directory, which the session's view opens at. A shell source's run
+// is identified by the directory it runs in, so a replay opens the view
+// where each request came from, wherever the demo itself runs.
+export type SessionRequest = ViewFacts & { readonly cwd: string };
+
 export interface RequestLine {
   readonly at: Instant;
-  readonly request: ViewFacts;
+  readonly request: SessionRequest;
 }
 
 // What a session's clicks and menus left for one draw, beside its view: every
@@ -84,7 +91,7 @@ export interface DrawLine {
 // with a later request is not the one it read. Not an arrival: nothing waits
 // for it and no draw answers it.
 export interface DeclaredLine {
-  readonly request: ViewFacts;
+  readonly request: SessionRequest;
 }
 
 // [LAW:one-source-of-truth] What the session's view took and its request path
@@ -129,7 +136,7 @@ export interface Recording {
 // request, declared and draw lines, which are the renderer's request path and
 // not the facts protocol. The documents in it carry their own facts version,
 // which each document's parse refuses, so a change of either moves one number.
-export const RECORDING_VERSION = 3;
+export const RECORDING_VERSION = 4;
 
 // A recording of another format: refused whole, never read line by line
 // against this build's. The version is a value, so the edge that names the
@@ -154,6 +161,20 @@ function parseDiagnostic(json: unknown, where: string): FactsDiagnostic {
     throw new FactParseError(where, "has no reason");
   }
   return { lane: json.lane as RefreshLane, reason: json.reason };
+}
+
+function parseRun(json: unknown, where: string): RunFact {
+  if (!isPlainObject(json)) throw new FactParseError(where, "is not an object");
+  if (json.fault !== null && typeof json.fault !== "string") {
+    throw new FactParseError(
+      where,
+      "has a fault that is neither text nor null",
+    );
+  }
+  return {
+    reading: parseFact(json.reading, `${where} reading`) as Fact<SourceValue>,
+    fault: json.fault,
+  };
 }
 
 // [LAW:types-are-the-program] A document off a wire or a recording, or a
@@ -196,6 +217,15 @@ export function parseSessionFacts(json: unknown, where: string): SessionFacts {
       parseFact(fact, `${where} sources.${name}`) as Fact<SourceValue>,
     ]),
   );
+  if (!isPlainObject(json.runs)) {
+    throw new FactParseError(where, "has no `runs`");
+  }
+  const runs = Object.fromEntries(
+    Object.entries(json.runs).map(([digest, run]) => [
+      digest,
+      parseRun(run, `${where} runs.${digest}`),
+    ]),
+  );
   if (!Array.isArray(json.diagnostics)) {
     throw new FactParseError(where, "has no `diagnostics`");
   }
@@ -205,6 +235,7 @@ export function parseSessionFacts(json: unknown, where: string): SessionFacts {
     seq: json.seq,
     builtins,
     sources,
+    runs,
     update: parseFact(json.update, `${where} update`) as Fact<UpdateNotice>,
     diagnostics: json.diagnostics.map((d, i) =>
       parseDiagnostic(d, `${where} diagnostics[${i}]`),
@@ -294,7 +325,7 @@ function parseRequest(
   json: Record<string, unknown>,
   where: string,
   session: SessionId,
-): ViewFacts {
+): SessionRequest {
   if (!isPlainObject(json.hookData)) {
     throw new FactParseError(where, "has no `hookData` object");
   }
@@ -316,8 +347,8 @@ function parseRequest(
     );
   }
   const { cwd } = json;
-  if (cwd !== undefined && (typeof cwd !== "string" || !isAbsolute(cwd))) {
-    throw new FactParseError(where, "has a `cwd` that is not an absolute path");
+  if (typeof cwd !== "string" || !isAbsolute(cwd)) {
+    throw new FactParseError(where, "has no `cwd` that is an absolute path");
   }
   if (!isPlainObject(json.hints)) {
     throw new FactParseError(where, "has no `hints` object");

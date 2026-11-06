@@ -1,4 +1,4 @@
-import { FACTS_NOTHING } from "./helpers/facts";
+import { factsRunning } from "./helpers/facts";
 // brandon-unfiled-3248.8ro6 §4e: a session's view says when what it draws
 // from moved, and a feed showing the session wakes on nothing else of its
 // data. It says so as it opens, and when a source it reads publishes a value
@@ -77,6 +77,12 @@ function setUp() {
     logger: () => {},
   });
   cleanups.push(() => watchers.closeAll());
+  // The views' file source runs through their follow, in this owner.
+  const runs = new SourceRuns({
+    launcher: unscriptedLauncher,
+    clock: systemTimekeeper,
+  });
+  cleanups.push(() => runs.close());
   const changed: string[] = [];
   // The sessions each reload said drew from its entry, in order.
   const reloads: Array<readonly string[]> = [];
@@ -85,14 +91,13 @@ function setUp() {
       clock: systemTimekeeper,
       stateDir: stateDir(WORLD.home),
       locations: locs(),
-      runs: new SourceRuns({ launcher: unscriptedLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       links: TEST_LINKS,
       gates: bareGates(),
       sessionState: new SessionState(),
       watchers,
       source: SOURCES_NOTHING,
-      facts: FACTS_NOTHING,
+      facts: factsRunning(runs),
     },
     {
       budgetBytes: () => Number.MAX_SAFE_INTEGER,
@@ -125,8 +130,7 @@ test("a source re-read that finds what it stored wakes nothing; a new value wake
     () => held.view.store.read("status") === "green",
     "the source's first read",
   );
-  // Its first read is a change from the default the view opened with: the
-  // directory's source, read through the view.
+  // Its first read is a change from the default the view opened with.
   const settled = changed.length;
   expect(changed).toEqual(["s", "s"]);
   // Twenty periods of re-reads of the same text.

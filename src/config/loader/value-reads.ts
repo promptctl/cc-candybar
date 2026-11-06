@@ -3,7 +3,7 @@
 // it depends on, and in a template every action it binds, whose own text
 // `realize` evaluates inside that template. Every walk that asks what a value
 // reads — the doctor's input paths, the projection fold, the cycle graph, the
-// variable-scope fold, the rule-slot check and the unused check — asks this,
+// rule-slot check and the unused check — asks this,
 // so an edge kind is added here once and none of them can miss it.
 //
 // [LAW:one-source-of-truth] A read is told against the declared names through

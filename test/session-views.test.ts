@@ -1,4 +1,4 @@
-import { FACTS_NOTHING } from "./helpers/facts";
+import { FACTS_NOTHING, factsRunning } from "./helpers/facts";
 import { drawPayload } from "./helpers/draw-payload";
 import { HOST, locs, processLauncher, WORLD } from "./helpers/host";
 import { textOf } from "../src/render/frame";
@@ -69,19 +69,21 @@ function makeCache(
     logger: () => {},
   });
   cleanups.push(() => watchers.closeAll());
+  // The sessions' `shell` sources run through their follow, in this owner.
+  const runs = new SourceRuns({ launcher, clock: systemTimekeeper });
+  cleanups.push(() => runs.close());
   const cache = new RenderCache(
     {
       clock: systemTimekeeper,
       stateDir: stateDir(WORLD.home),
       locations: locs(),
-      runs: new SourceRuns({ launcher: launcher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       links: TEST_LINKS,
       gates: bareGates(),
       sessionState: new SessionState(),
       watchers,
       source: SOURCES_NOTHING,
-      facts: opts.facts ?? FACTS_NOTHING,
+      facts: opts.facts ?? factsRunning(runs),
       log: (_level, line) => {
         opts.log?.(line);
         lines.push(line);
@@ -569,13 +571,18 @@ test("a config load starts no view's source, and still names a session value tha
   // The one value that cannot declare, and no view source faulted for want of
   // a session.
   expect(entry.lastWarning).toBe('Variable "unclosed": unclosed action');
-  // The directory's one source, and nothing a session did not ask for.
-  expect(shells).toBe(1);
-  expect(runs("perDirectory")).toBe(1);
+  // Every source is a session view's, so a load runs none of them.
+  expect(shells).toBe(0);
 
   // A session asks for each of them, and a render settles what it started.
   await render(cache, "s-a");
-  for (const name of ["byInput", "byState", "afterState", "byDepth"]) {
+  for (const name of [
+    "byInput",
+    "byState",
+    "afterState",
+    "byDepth",
+    "perDirectory",
+  ]) {
     expect([name, runs(name)]).toEqual([name, 1]);
   }
   expect(shells).toBe(5);

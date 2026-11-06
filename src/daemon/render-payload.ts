@@ -104,13 +104,16 @@ import type { Fact } from "../facts/fact.js";
 import type {
   FactsDiagnostic,
   GitFacts as DocumentGitFacts,
+  RunFact,
   SessionFacts,
+  SourceDigest,
   SourceValue,
 } from "../facts/session-facts.js";
 import type { SessionId } from "./session-id.js";
 import type { ManagedStorage, StorageKey } from "./cache/managed-storage.js";
 import type { JsonValue } from "../var-system/types.js";
 import { elapsedMs, type Timekeeper } from "../time";
+import { shortDigest } from "../source-digest.js";
 
 // The resolved globals as the options drawDsl's joiner and cells read (its
 // selection is the resolution itself — RenderSelection is a Pick of it).
@@ -896,7 +899,15 @@ export interface Lanes {
 export interface Readings {
   readonly lanes: Lanes;
   readonly today: Current<TodayFacts>;
+  // Each declared `shell` and `file` source's run, by its identity's digest.
+  readonly runs: ReadonlyMap<SourceDigest, RunReading>;
   readonly faults: readonly FactsDiagnostic[];
+}
+
+// What a run holds now: its reading, and its watch's fault.
+export interface RunReading {
+  readonly reading: Reading<JsonValue>;
+  readonly fault: string | null;
 }
 
 // What a view's declaration reads of the request its renders draw by: the
@@ -1049,8 +1060,9 @@ export function declareLanes(
 
 // [LAW:effects-at-boundaries] No I/O, and no write: every read takes what its
 // owner stored, so the view's payload computed over it is recomputed in the
-// turn an owner stores a new value.
-export function readingsOf(inputs: PayloadInputs): Readings {
+// turn an owner stores a new value. The runs are the follow's own
+// declaration's, read beside these (src/daemon/facts-source.ts).
+export function readingsOf(inputs: PayloadInputs): Omit<Readings, "runs"> {
   const { hookData, deps } = inputs;
   const sessionId = hookData.session_id;
   const lanes = deps.lanes();
@@ -1163,7 +1175,7 @@ export type ComposeInputs = Pick<PayloadInputs, "hookData" | "hints"> & {
 // [LAW:single-enforcer] The one place a fact's instant is dropped on the way to
 // a template: the payload carries what the owners hold, never when it first
 // differed, which only the document keeps.
-const unstamped = <T>(fact: Fact<T>): Reading<T> => {
+export const unstamped = <T>(fact: Fact<T>): Reading<T> => {
   switch (fact.kind) {
     case "pending":
       return fact;
@@ -1421,6 +1433,29 @@ export function sourcesFactOf(
       named
         .flatMap(([name, fact]) =>
           fact.kind === "pending" ? [`${name}:${fact.why}`] : [],
+        )
+        .join(",") || "-",
+  };
+}
+
+// [LAW:nothing-unseen] The render event's `runs=` and `runsPending=`: how
+// many `shell` and `file` runs the view declared, and those not answered yet
+// as the draw reads them, by short digest with why (`-` for none), so a run
+// that never lands is told from one nothing declared. A run's source events
+// name the same short digest.
+export function runsFactOf(runs: Readonly<Record<string, RunFact>>): {
+  readonly runs: string;
+  readonly runsPending: string;
+} {
+  const declared = Object.entries(runs);
+  return {
+    runs: String(declared.length),
+    runsPending:
+      declared
+        .flatMap(([digest, { reading }]) =>
+          reading.kind === "pending"
+            ? [`${shortDigest(digest)}:${reading.why}`]
+            : [],
         )
         .join(",") || "-",
   };

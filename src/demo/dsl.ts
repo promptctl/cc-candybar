@@ -39,6 +39,7 @@ import { processWorld, type World } from "../host.js";
 import { heldClock } from "../held-clock.js";
 import { livePricing } from "../segments/pricing.js";
 import { RefreshLedger } from "../utils/refresh-ledger.js";
+import { SourceRuns } from "../var-system/source-runs.js";
 import { parseClientHints } from "../daemon/protocol.js";
 import { inProcessFacts, recordingFacts } from "../daemon/facts-source.js";
 import { sessionIdOf } from "../daemon/session-id.js";
@@ -155,6 +156,14 @@ function liveArm(): Arm {
   // The demo runs no update watch: its facts document carries an update
   // nothing has sampled.
   const updateFact = newUpdateFact();
+  // [LAW:single-enforcer] The arm's one owner of the config's sources' runs,
+  // closed with it.
+  const runs = new SourceRuns({
+    launcher: machine.launcher,
+    clock: machine.clock,
+    logger: log,
+    watchers,
+  });
   const request = { sessionId, hookData, cwd, hints };
   // Each request, then the draw of its answer once what it started landed.
   const arrives = (i: number) =>
@@ -167,7 +176,11 @@ function liveArm(): Arm {
     }) as const;
   return {
     world: machine,
-    facts: inProcessFacts({ providers, update: () => updateFact.get() }),
+    facts: inProcessFacts({
+      providers,
+      update: () => updateFact.get(),
+      runs,
+    }),
     clock: machine.clock,
     home: machine.host.home,
     steps: [
@@ -190,6 +203,7 @@ function liveArm(): Arm {
     // so the process ends when the frames do.
     close: () => {
       pricingClosing.abort(new Error("the demo closed"));
+      runs.close();
       providers.gitProvider.close();
       providers.usageStore.close();
       providers.tmuxService.close();
@@ -245,7 +259,6 @@ async function main(): Promise<void> {
     await playDemo({
       ...arm,
       loaded,
-      cwd,
       log,
       frame: (drawn) =>
         process.stdout.write(

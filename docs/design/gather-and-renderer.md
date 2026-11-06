@@ -142,7 +142,8 @@ interface SessionFacts {
     readonly hostName: Fact<string>;        // read apart from the user and failing apart from it
     readonly hostUser: Fact<string>;
   };
-  readonly sources: Readonly<Record<SourceId, Fact<SourceValue>>>;  // declared shell/file/plugin
+  readonly sources: Readonly<Record<SourceId, Fact<SourceValue>>>;  // declared plugin sources, by name
+  readonly runs: Readonly<Record<SourceDigest, RunFact>>;           // declared shell/file runs: reading and watch fault
   readonly update: Fact<UpdateNotice>;      // the release check; a Gather fact because it reads the network
   readonly diagnostics: readonly FactsDiagnostic[];  // Gather's own faults for this session
 }
@@ -263,7 +264,7 @@ interface Locator {
 
 Everything Gather reads for a session it reads from these. The renderer sends `follow` on the first request for a session and again only when the locator changes by value.
 
-A source's identity is `digest(kind, command | [path, readMode], cwd, parserId, normalisedPolicy, keyHash)`. `default`, `default_empty_value` and the key template are out, because they are the renderer's. Two renderers declaring the same digest share one run; a `key` message with a new hash is a new identity and a new run, with the previous reading standing in the document until the new run's reading replaces it, so a key change draws no pending flash. The fact type needs no arm for that: the old `ok` fact is simply not overwritten yet. `shellReader` gains a timeout of 10 s, a parameter; a source past it is `failed(read, "timed out")`. The repo gate stays in the renderer's load, and Gather re-validates absolute paths, regex captures and the shell floor with the loader's own specs on `declare`, as a consistency guard.
+A source's identity is `digest(kind, command | [path, readMode], cwd, parserId, normalisedPolicy, keyHash)`. `default`, `default_empty_value` and the key template are out, because they are the renderer's. Two renderers declaring the same digest share one run; a `key` message with a new hash is a new identity and a new run. The previous run leaves the document with its declaration, and its reading stands in the renderer's variable until the new run's reading replaces it, so a key change draws no pending flash. The fact type needs no arm for that: a pending reading is never written into the variable. `shellReader` gains a timeout of 10 s, a parameter; a source past it is `failed(read, "timed out")`. The repo gate stays in the renderer's load, and Gather re-validates absolute paths, regex captures and the shell floor with the loader's own specs on `declare`, as a consistency guard.
 
 ## 20. Failure, as seen from the bar
 

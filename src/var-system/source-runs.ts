@@ -49,8 +49,14 @@ import {
   type KeyedSourceStats,
 } from "../utils/keyed-source.js";
 import { quietLogger, type DaemonLogger } from "../utils/logger.js";
-import { ABSENT, failed, ok, type Outcome } from "../utils/outcome.js";
-import type { Current } from "../utils/reading.js";
+import {
+  ABSENT,
+  failed,
+  ok,
+  pendingOf,
+  type Outcome,
+  type Reading,
+} from "../utils/outcome.js";
 import { RefreshLedger } from "../utils/refresh-ledger.js";
 import { valueOf } from "../utils/logfmt.js";
 import { shortDigest } from "../source-digest.js";
@@ -130,7 +136,7 @@ interface SourceReader {
 // The directory is part of the origin: a command that asks about "this repo"
 // answers differently per directory, so every failure — exit, regex
 // no-match, JSON parse — names where it ran.
-const whereOf = (read: SourceRead): string =>
+export const whereOf = (read: SourceRead): string =>
   read.kind === "shell"
     ? `output of "${read.command}" in ${read.cwd}`
     : `"${read.path}"`;
@@ -397,14 +403,50 @@ const derived = (filePath: string): PathsWatch =>
 
 // [LAW:types-are-the-program] What a declaration holds: the run's reading as
 // it stands (observable, so a declaration publishes in the turn it lands) and
-// its watch's fault, read the same way; and the digest, for the record.
+// its watch's fault, read the same way; and the digest, for the record. A
+// reading, not a landing to await: a registry waits on its lanes by
+// observing them (sources.ts, `inFlight`), and a lane a document answers has
+// no landing to hand.
 export interface SourceLane {
   readonly digest: string;
-  current(): Current<unknown>;
+  current(): Reading<unknown>;
   // Why the run's watch may be missing changes to its path, or `null` when
   // it hears every place the path can change, or the run watches nothing.
   fault(): string | null;
 }
+
+// [LAW:locality-or-seam] Where a registry's `shell` and `file` sources get
+// their lanes: `declare` takes, in the caller's `holds`, whatever the lane
+// needs held, and the lane reads the run as it stands. `SourceRuns` is one
+// (a registry no session draws, such as `cc-candybar check`'s, runs its own);
+// a session's facts arm is another, whose lanes read the session's document
+// (src/daemon/facts-source.ts), so a view's sources are drawn only through
+// the facts seam and a recording carries them.
+export interface SourceLanes {
+  declare(holds: Holds, identity: SourceIdentity): SourceLane;
+}
+
+// Lanes that never answer and take nothing: a view declared only to find what
+// fails to declare (the load's probe), which starts no run.
+export const UNREAD_RUNS: SourceLanes = {
+  declare: (_holds, identity) => ({
+    digest: digestOf(identity),
+    current: () => pendingOf("unread"),
+    fault: () => null,
+  }),
+};
+
+// [LAW:no-silent-failure] A directory's registry declares no `shell` or
+// `file` source (src/dsl/variable-scope.ts): each is a session's view's, read
+// from its document. One declared here is a scope bug, refused by name rather
+// than drawn pending for good.
+export const NO_RUNS: SourceLanes = {
+  declare: (_holds, identity) => {
+    throw new Error(
+      `a directory declares no shell or file source, and ${whereOf(identity.read)} was declared in one: each is a session view's`,
+    );
+  },
+};
 
 export interface SourceRunsDeps {
   // Who a shell run's program belongs to.
@@ -431,7 +473,7 @@ export interface SourceRunsStats {
   readonly watches: number;
 }
 
-export class SourceRuns {
+export class SourceRuns implements SourceLanes {
   private readonly byKind: Readonly<
     Record<SourceRead["kind"], KeyedSource<SourceIdentity, unknown>>
   >;

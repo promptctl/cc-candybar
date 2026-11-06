@@ -85,7 +85,6 @@ function makeCache(budgetBytes: number, maxEntries?: number) {
       clock: systemTimekeeper,
       stateDir: stateDir(WORLD.home),
       locations: locs(),
-      runs: new SourceRuns({ launcher: unscriptedLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       links: TEST_LINKS,
       gates: bareGates(),

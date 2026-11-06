@@ -4,7 +4,7 @@
 // nothing-doubles, so a cache or view built for another subject declares
 // nothing without an owner.
 import type { SessionId } from "../../src/daemon/session-id";
-import type { Facts } from "../../src/daemon/facts-source";
+import { inProcessFacts, type Facts } from "../../src/daemon/facts-source";
 import {
   BUILTIN_FACTS,
   FACTS_VERSION,
@@ -13,6 +13,8 @@ import {
 } from "../../src/facts/session-facts";
 import type { Instant } from "../../src/utils/instant";
 import { pendingOf } from "../../src/utils/outcome";
+import { UNREAD_RUNS, type SourceRuns } from "../../src/var-system/source-runs";
+import { absentOwners } from "./payload-owners";
 
 // The document before any source has answered: total, sequence 0 because no
 // assembly made it. The built-ins are the one list of them, so a built-in
@@ -27,6 +29,7 @@ export function pendingFacts(session: SessionId): SessionFacts {
       BUILTIN_FACTS.map((name) => [name, unread]),
     ) as unknown as BuiltinFacts,
     sources: {},
+    runs: {},
     update: unread,
     diagnostics: [],
   };
@@ -36,6 +39,7 @@ export const FACTS_NOTHING: Facts = {
   follow: (facts) => {
     const line = { at: 0 as Instant, facts: pendingFacts(facts.sessionId) };
     return {
+      runs: UNREAD_RUNS,
       stamped: () => line,
       failure: () => null,
       follow: () => {},
@@ -44,3 +48,16 @@ export const FACTS_NOTHING: Facts = {
     };
   },
 };
+
+// The facts source a test hands a view whose `shell` and `file` sources must
+// answer and whose built-ins it reads none of: the in-process arm, running
+// the view's sources in `runs`, over owners that hold nothing. A view's
+// sources are drawn only through its follow (src/daemon/facts-source.ts), so
+// a double that ran none would leave them pending.
+export function factsRunning(runs: SourceRuns): Facts {
+  return inProcessFacts({
+    providers: { ...absentOwners(), log: () => {} } as never,
+    update: () => pendingOf("unread"),
+    runs,
+  });
+}

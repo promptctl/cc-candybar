@@ -4,6 +4,7 @@ import {
   FACTS_VERSION,
   type BuiltinFacts,
   type GitFacts,
+  type RunFact,
   type SessionFacts,
   type SourceValue,
   type UpdateNotice,
@@ -96,7 +97,28 @@ export function assembleFacts(
     ]),
   );
 
-  const parts = { builtins, sources, update, diagnostics: readings.faults };
+  // A run keeps its prior entry whole while neither its reading nor its fault
+  // moved, so the sameness below is identity, as for the sources.
+  const runs: Record<string, RunFact> = Object.fromEntries(
+    [...readings.runs].map(([digest, { reading, fault }]) => {
+      const held = prior?.runs[digest];
+      const fact = stamp(held?.reading, reading as Reading<SourceValue>);
+      return [
+        digest,
+        held !== undefined && held.reading === fact && held.fault === fault
+          ? held
+          : { reading: fact, fault },
+      ];
+    }),
+  );
+
+  const parts = {
+    builtins,
+    sources,
+    runs,
+    update,
+    diagnostics: readings.faults,
+  };
   // [LAW:single-enforcer] `restamp` is the one judge of whether a fact moved,
   // and it returns the prior fact itself when not, so the document is
   // unmoved when every fact is the prior's own. The builtins and sources are
@@ -106,6 +128,7 @@ export function assembleFacts(
     prior !== undefined &&
     sameFacts(builtins, prior.builtins) &&
     sameFacts(sources, prior.sources) &&
+    sameFacts(runs, prior.runs) &&
     compareStructural(
       { update, diagnostics: readings.faults },
       { update: prior.update, diagnostics: prior.diagnostics },

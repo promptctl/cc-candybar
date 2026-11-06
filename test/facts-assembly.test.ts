@@ -12,6 +12,7 @@ import {
   readingsOf,
   settlePayload,
   type PayloadInputs,
+  type Readings,
   type RenderPayloadDeps,
 } from "../src/daemon/render-payload";
 import { sessionIdOf } from "../src/daemon/session-id";
@@ -41,6 +42,12 @@ import {
   fakeTmux,
   fakeUsage,
 } from "./helpers/payload-owners";
+
+// What the owners hold, with no run declared: these cases are the built-ins'.
+const ownerReadings = (inputs: Parameters<typeof readingsOf>[0]): Readings => ({
+  ...readingsOf(inputs),
+  runs: new Map(),
+});
 
 const SID = sessionIdOf("facts-assembly");
 const PANE = { socket: "/tmp/tmux.sock", pane: "%7", truecolor: null };
@@ -134,7 +141,7 @@ describe("a session's facts document", () => {
     const doc = assembleFacts(
       undefined,
       SID,
-      readingsOf(r.inputs),
+      ownerReadings(r.inputs),
       PENDING,
       T0,
     );
@@ -172,7 +179,7 @@ describe("a session's facts document", () => {
     const doc = assembleFacts(
       undefined,
       SID,
-      readingsOf(r.inputs),
+      ownerReadings(r.inputs),
       PENDING,
       T0,
     );
@@ -188,7 +195,7 @@ describe("a session's facts document", () => {
       return assembleFacts(
         undefined,
         SID,
-        readingsOf(r.inputs),
+        ownerReadings(r.inputs),
         PENDING,
         T0,
       ).builtins.pr;
@@ -241,7 +248,7 @@ describe("a session's facts document", () => {
       const doc = assembleFacts(
         undefined,
         SID,
-        readingsOf({ ...r.inputs, deps }),
+        ownerReadings({ ...r.inputs, deps }),
         PENDING,
         T0,
       );
@@ -258,14 +265,14 @@ describe("a session's facts document", () => {
       const first = assembleFacts(
         undefined,
         SID,
-        readingsOf(r.inputs),
+        ownerReadings(r.inputs),
         PENDING,
         T0,
       );
       const again = assembleFacts(
         first,
         SID,
-        readingsOf(r.inputs),
+        ownerReadings(r.inputs),
         PENDING,
         at(60),
       );
@@ -277,7 +284,7 @@ describe("a session's facts document", () => {
       const first = assembleFacts(
         undefined,
         SID,
-        readingsOf(r.inputs),
+        ownerReadings(r.inputs),
         PENDING,
         T0,
       );
@@ -285,7 +292,7 @@ describe("a session's facts document", () => {
       const second = assembleFacts(
         first,
         SID,
-        readingsOf(r.inputs),
+        ownerReadings(r.inputs),
         PENDING,
         at(60),
       );
@@ -309,7 +316,7 @@ describe("a session's facts document", () => {
       const third = assembleFacts(
         second,
         SID,
-        readingsOf(r.inputs),
+        ownerReadings(r.inputs),
         PENDING,
         at(120),
       );
@@ -324,7 +331,7 @@ describe("a session's facts document", () => {
 
     test("the update is the fact it is handed, by reference", async () => {
       const r = await sampled(rig());
-      const readings = readingsOf(r.inputs);
+      const readings = ownerReadings(r.inputs);
       const none = restamp(undefined, ABSENT, T0);
       const first = assembleFacts(undefined, SID, readings, none, T0);
       expect(first.update).toBe(none);

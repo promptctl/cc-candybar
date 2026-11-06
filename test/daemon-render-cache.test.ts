@@ -1,4 +1,4 @@
-import { FACTS_NOTHING } from "./helpers/facts";
+import { FACTS_NOTHING, factsRunning } from "./helpers/facts";
 // [LAW:single-enforcer] Tests for the RenderCache invariants that bzh.2
 // changed: cache identity (projectDir+cwd, args ignored), last-known-good
 // preservation across failed reloads, candidate-dir watcher firing when a
@@ -116,12 +116,14 @@ function makeCache(
   cleanups.push(() => watchers.closeAll());
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
+  // The views' `shell` sources run through their follow, in this owner.
+  const runs = new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper });
+  cleanups.push(() => runs.close());
   const cache = new RenderCache(
     {
       clock: systemTimekeeper,
       stateDir: stateDir(homeOf(host)),
       locations: locations(host, homeOf(host)),
-      runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       links: TEST_LINKS,
       gates: bareGates(),
@@ -129,7 +131,7 @@ function makeCache(
       watchers,
       log,
       source: SOURCES_NOTHING,
-      facts: FACTS_NOTHING,
+      facts: factsRunning(runs),
     },
     {
       // Room for four entries over one compile: the fifth evicts the oldest.
@@ -268,12 +270,16 @@ describe("RenderCache", () => {
       const b = realpathSync(mkdtempSync(join(tmpdir(), "ccb-entry-b-")));
       cleanups.push(() => rmSync(a, { recursive: true, force: true }));
       cleanups.push(() => rmSync(b, { recursive: true, force: true }));
-      const inA = cache.getOrCreate(a, a, cfg).state;
-      const inB = cache.getOrCreate(b, b, cfg).state;
-      expect(await inA.registry.settled(5000)).toEqual([]);
-      expect(await inB.registry.settled(5000)).toEqual([]);
-      expect(inA.store.read("here")).toBe(a);
-      expect(inB.store.read("here")).toBe(b);
+      // A source is a session view's: each entry's view runs it in the
+      // entry's directory.
+      const inA = cache.holdSession(a, a, cfg, viewFacts(a, "s-a"));
+      const inB = cache.holdSession(b, b, cfg, viewFacts(b, "s-b"));
+      cleanups.unshift(() => inA[Symbol.dispose]());
+      cleanups.unshift(() => inB[Symbol.dispose]());
+      expect(await inA.view.registry.settled(5000)).toEqual([]);
+      expect(await inB.view.registry.settled(5000)).toEqual([]);
+      expect(inA.view.store.read("here")).toBe(a);
+      expect(inB.view.store.read("here")).toBe(b);
     } finally {
       for (const fn of cleanups) fn();
       cleanup();
@@ -1417,7 +1423,6 @@ describe("RenderCache idle sweep", () => {
         clock: systemTimekeeper,
         stateDir: stateDir(homeOf(host)),
         locations: locations(host, homeOf(host)),
-        runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         links: TEST_LINKS,
         gates: bareGates(),
@@ -1475,7 +1480,6 @@ describe("RenderCache idle sweep", () => {
         clock: systemTimekeeper,
         stateDir: stateDir(homeOf(host)),
         locations: locations(host, homeOf(host)),
-        runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         links: TEST_LINKS,
         gates: bareGates(),
@@ -1537,7 +1541,6 @@ describe("RenderCache idle sweep", () => {
         clock: systemTimekeeper,
         stateDir: stateDir(homeOf(host)),
         locations: locations(host, homeOf(host)),
-        runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         links: TEST_LINKS,
         gates: bareGates(),
@@ -1623,7 +1626,6 @@ describe("RenderCache frames and pins", () => {
         clock: systemTimekeeper,
         stateDir: stateDir(homeOf(host)),
         locations: locations(host, homeOf(host)),
-        runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         links: TEST_LINKS,
         gates: bareGates(),
@@ -1746,7 +1748,6 @@ describe("RenderCache frames and pins", () => {
         clock: systemTimekeeper,
         stateDir: stateDir(homeOf(host)),
         locations: locations(host, homeOf(host)),
-        runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         links: TEST_LINKS,
         gates: bareGates(),
@@ -1820,7 +1821,6 @@ describe("RenderCache frames and pins", () => {
         clock: systemTimekeeper,
         stateDir: stateDir(homeOf(host)),
         locations: locations(host, homeOf(host)),
-        runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         links: TEST_LINKS,
         gates: bareGates(),

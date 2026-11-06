@@ -131,7 +131,6 @@ test("a view reads the PR from its declaration whatever its preset places, and a
       clock: systemTimekeeper,
       stateDir: stateDir(WORLD.home),
       locations: locs(),
-      runs: new SourceRuns({ launcher: unscriptedLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       links: TEST_LINKS,
       gates: bareGates(),
@@ -141,6 +140,10 @@ test("a view reads the PR from its declaration whatever its preset places, and a
       facts: inProcessFacts({
         providers: providers as never,
         update: () => pendingOf("unread"),
+        runs: new SourceRuns({
+          launcher: unscriptedLauncher,
+          clock: systemTimekeeper,
+        }),
       }),
     },
     { budgetBytes: () => 1024 * 1024 * 1024 },
@@ -270,7 +273,6 @@ function gitCache() {
       clock: systemTimekeeper,
       stateDir: stateDir(WORLD.home),
       locations: locs(),
-      runs: new SourceRuns({ launcher: unscriptedLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       links: TEST_LINKS,
       gates: bareGates(),
@@ -279,6 +281,10 @@ function gitCache() {
       facts: inProcessFacts({
         providers: providers as never,
         update: () => pendingOf("unread"),
+        runs: new SourceRuns({
+          launcher: unscriptedLauncher,
+          clock: systemTimekeeper,
+        }),
       }),
       source: sessionSource({
         providers: providers as never,

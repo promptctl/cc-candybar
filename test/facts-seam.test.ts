@@ -76,11 +76,17 @@ import {
   type FactsLine,
   type Recording,
   type RecordingLine,
+  type SessionRequest,
 } from "../src/facts/recording";
 import { restamp } from "../src/facts/fact";
 import { ok } from "../src/utils/outcome";
 import type { Host } from "../src/host";
-import { exits, runsFor, type Behaviour } from "../src/proc/spawner-fake";
+import {
+  exits,
+  runsFor,
+  shell,
+  type Behaviour,
+} from "../src/proc/spawner-fake";
 import { SessionEffects } from "../src/render/effect";
 import type { Frame } from "../src/render/frame";
 import { textOf } from "../src/render/frame";
@@ -228,7 +234,7 @@ function request(
   home: string,
   claudeConfigDir: string,
   model = "Opus 4.7",
-): ViewFacts {
+): SessionRequest {
   return {
     sessionId: sessionIdOf(SID),
     hookData: {
@@ -255,7 +261,7 @@ function request(
 }
 
 interface Rig {
-  readonly cache: RenderCache<SessionSource>;
+  readonly cache: RenderCache<SessionSource, SessionRequest>;
   readonly recorder: SessionRecorder;
   readonly lines: string[];
   // What the session's clicks leave: its store, the histories' depths, and
@@ -276,6 +282,7 @@ function rig(
   factsOf: (
     providers: ReturnType<typeof createPayloadProviders>,
     update: UpdateFact,
+    runs: SourceRuns,
   ) => Facts,
   failsFor: string | null = null,
 ): Rig {
@@ -315,19 +322,18 @@ function rig(
   });
   const { cache, recorder } = recordedCache(
     (recording) =>
-      new RenderCache<SessionSource>(
+      new RenderCache<SessionSource, SessionRequest>(
         {
           clock,
           stateDir: stateDir(home),
           locations: locations(host, home),
-          runs,
           sessionState,
           watchers,
           storage: providers.managedStorage,
           links: TEST_LINKS,
           gates: bareGates(),
           log,
-          facts: factsOf(providers, update),
+          facts: factsOf(providers, update, runs),
           source: (view) => {
             if (view.declared().facts.cwd === failsFor) {
               throw new Error(`the source of ${failsFor} throws as it opens`);
@@ -364,8 +370,14 @@ async function landed(
   stepMs: number,
 ): Promise<void> {
   const pending = (): string[] => {
-    const { builtins, sources } = view.source.facts();
-    return [...Object.entries(builtins), ...Object.entries(sources)]
+    const { builtins, sources, runs } = view.source.facts();
+    return [
+      ...Object.entries(builtins),
+      ...Object.entries(sources),
+      ...Object.entries(runs).map(
+        ([digest, run]) => [digest, run.reading] as const,
+      ),
+    ]
       .filter(([, fact]) => fact.kind === "pending")
       .map(([name]) => name);
   };
@@ -406,8 +418,8 @@ function liveSession({ runsMs, stepMs }: Pace = HELD) {
     hostOf({}, { home, tmp: home }),
     clock,
     launcher.launcher,
-    (providers, update) =>
-      inProcessFacts({ providers, update: () => update.get() }),
+    (providers, update, runs) =>
+      inProcessFacts({ providers, update: () => update.get(), runs }),
     path.join(home, "fails"),
   );
   const effects = new SessionEffects<RenderedLine>(SID);
@@ -469,7 +481,17 @@ function liveSession({ runsMs, stepMs }: Pace = HELD) {
     clock.advance(ms);
     await turns();
   };
-  return { ...dir, home, clock, live, drawn, arrive, requestFrom, after };
+  return {
+    ...dir,
+    home,
+    clock,
+    launcher: launcher.spawner,
+    live,
+    drawn,
+    arrive,
+    requestFrom,
+    after,
+  };
 }
 
 // Every read call of fs and fs/promises, with no allow-list: a read inside a
@@ -508,12 +530,11 @@ function spyReads(): () => string[] {
 }
 
 // The demo's replay of a recording file under a held clock at its first
-// request, on a machine whose home is not the recorded one, its config loaded
-// before the instruments and its frames drawn with every read and spawn
-// counted.
+// request, on a machine whose home is not the recorded one and from a
+// directory that is not the session's, its config loaded before the
+// instruments and its frames drawn with every read and spawn counted.
 async function replayFile(
   file: string,
-  cwd: string,
   configFile: string,
   arriveOn: (clock: HeldClock) => Arrive = heldArrival,
 ): Promise<{
@@ -538,14 +559,13 @@ async function replayFile(
     stateDir: stateDir(homeOf(host)),
     links: TEST_LINKS,
     configPath: configFile,
-    cwd,
+    cwd: replayHome,
     warn: drawn.warn,
   });
   const reads = spyReads();
   const frames: Frame[] = [];
   await playDemo({
     loaded,
-    cwd,
     facts,
     // Whose home `~` names: the recorded session's, as the demo's arm reads it.
     home: recording.home,
@@ -615,7 +635,7 @@ test("a session recorded out of the cache replays through the demo into the bars
   expect(liveText[0]).toContain(`home=${s.home}`);
   expect(s.drawn.said).toEqual([]);
 
-  const replay = await replayFile(file, s.cwd, s.configFile);
+  const replay = await replayFile(file, s.configFile);
   expect(replay.reads).toEqual([]);
   expect(replay.started).toEqual([]);
   expect(replay.said).toEqual([]);
@@ -623,6 +643,159 @@ test("a session recorded out of the cache replays through the demo into the bars
   expect(replay.frames.map((f) => f.rows)).toEqual(
     liveFrames.map((f) => f.rows),
   );
+});
+
+// A config whose bar draws a `shell` source on a period, a `file` source on
+// its watch, and a `shell` source keyed on the session's model: the three
+// ways a run is told to read again.
+function runsConfig(dir: string, note: string, command = "seam-shell"): string {
+  const file = path.join(dir, `runs-${command}.json5`);
+  fs.writeFileSync(
+    file,
+    JSON.stringify({
+      variables: {
+        seamModel: { kind: "input", path: "model.display_name" },
+        shelled: { kind: "shell", command, cache: { ttl: "1h" } },
+        noted: { kind: "file", path: note, cache: { watch_file: note } },
+        keyed: {
+          kind: "shell",
+          command: "seam-keyed",
+          cache: { key: "{{ .seamModel }}" },
+        },
+      },
+      segments: {
+        runs: {
+          template: "shell={{ .shelled }} file={{ .noted }} keyed={{ .keyed }}",
+        },
+      },
+      root: { h: ["runs"] },
+    }),
+  );
+  return file;
+}
+
+// A session drawing `runsConfig`, recorded across a move of its model: three
+// answers, the last after the keyed source's key moved.
+async function recordedRuns(): Promise<{
+  s: ReturnType<typeof liveSession>;
+  note: string;
+  configFile: string;
+  file: string;
+  liveFrames: Frame[];
+}> {
+  const s = liveSession();
+  const note = path.join(s.cwd, "note.txt");
+  fs.writeFileSync(note, "from-the-file");
+  const configFile = runsConfig(s.cwd, note);
+  s.launcher.program(shell("seam-shell"), exits(0, "from-the-shell"));
+  s.launcher.program(shell("seam-keyed"), exits(0, "keyed-opus"));
+  await s.requestFrom(s.cwd, configFile);
+  const file = path.join(tempDir("ccb-seam-out-"), "runs.jsonl");
+  const recorded = recordToFile(
+    s.live.recorder,
+    s.clock,
+    sessionIdOf(SID),
+    file,
+    7,
+    stays(),
+  );
+  const liveFrames: Frame[] = [];
+  for (const offset of [1000, 2000]) {
+    await s.after(offset);
+    liveFrames.push(await s.requestFrom(s.cwd, configFile));
+  }
+  // The model moves, so the keyed source's key does, and its run answers anew.
+  s.launcher.program(shell("seam-keyed"), exits(0, "keyed-sonnet"));
+  await s.after(1000);
+  liveFrames.push(await s.requestFrom(s.cwd, configFile, 0, "Sonnet 4.6"));
+  // To the recording's end, seven seconds after it started.
+  await s.after(3000);
+  expect((await recorded).answers).toBe(3);
+  return { s, note, configFile, file, liveFrames };
+}
+
+test("a session's shell and file sources, recorded live, replay with what each run read, with nothing read and nothing spawned", async () => {
+  const { s, configFile, file, liveFrames } = await recordedRuns();
+  const liveText = liveFrames.map(textOf);
+  expect(liveText).toEqual([
+    expect.stringContaining(
+      "shell=from-the-shell file=from-the-file keyed=keyed-opus",
+    ),
+    expect.stringContaining(
+      "shell=from-the-shell file=from-the-file keyed=keyed-opus",
+    ),
+    expect.stringContaining(
+      "shell=from-the-shell file=from-the-file keyed=keyed-sonnet",
+    ),
+  ]);
+  expect(s.drawn.said).toEqual([]);
+  // Each run crossed the recording in its documents.
+  const recording = readRecording(file);
+  expect(
+    documentsOf(recording).map((line) => Object.keys(line.facts.runs).length),
+  ).toContain(3);
+
+  const replay = await replayFile(file, configFile);
+  expect(replay.reads).toEqual([]);
+  expect(replay.started).toEqual([]);
+  expect(replay.said).toEqual([]);
+  expect(replay.frames.map(textOf)).toEqual(liveText);
+});
+
+test("a session that moves to another directory replays each run from the directory its request came from", async () => {
+  const s = liveSession();
+  const note = path.join(s.cwd, "note.txt");
+  fs.writeFileSync(note, "from-the-file");
+  const configFile = runsConfig(s.cwd, note);
+  s.launcher.program(shell("seam-shell"), exits(0, "from-the-shell"));
+  s.launcher.program(shell("seam-keyed"), exits(0, "keyed-opus"));
+  await s.requestFrom(s.cwd, configFile);
+  const file = path.join(tempDir("ccb-seam-out-"), "moved.jsonl");
+  const recorded = recordToFile(
+    s.live.recorder,
+    s.clock,
+    sessionIdOf(SID),
+    file,
+    7,
+    stays(),
+  );
+  // The session's next request comes from another directory: a shell run
+  // there is another run, under another digest.
+  const moved = sessionDir().cwd;
+  const liveFrames: Frame[] = [];
+  await s.after(1000);
+  liveFrames.push(await s.requestFrom(s.cwd, configFile));
+  await s.after(1000);
+  liveFrames.push(await s.requestFrom(moved, configFile));
+  await s.after(5000);
+  expect((await recorded).answers).toBe(2);
+  const liveText = liveFrames.map(textOf);
+  expect(liveText).toEqual([
+    expect.stringContaining("shell=from-the-shell"),
+    expect.stringContaining("shell=from-the-shell"),
+  ]);
+
+  const replay = await replayFile(file, configFile);
+  expect(replay.reads).toEqual([]);
+  expect(replay.started).toEqual([]);
+  expect(replay.frames.map(textOf)).toEqual(liveText);
+});
+
+test("a replay against a config whose command was edited since the recording draws that source as failed, never pending, and still spawns nothing", async () => {
+  const { s, note, file } = await recordedRuns();
+  const edited = runsConfig(s.cwd, note, "seam-edited");
+  const replay = await replayFile(file, edited);
+  expect(replay.started).toEqual([]);
+  expect(replay.reads).toEqual([]);
+  // The edited source's run is in no document: its variable answers its
+  // failure's fallback, not a loading cell that would never land, and the
+  // runs the recording holds still draw what they read. The failure's text is
+  // the variable's (test/facts-source.test.ts).
+  expect(replay.frames.map(textOf)).toEqual([
+    expect.stringContaining("shell= file=from-the-file keyed=keyed-opus"),
+    expect.stringContaining("shell= file=from-the-file keyed=keyed-opus"),
+    expect.stringContaining("shell= file=from-the-file keyed=keyed-sonnet"),
+  ]);
 });
 
 test("a session recorded with a pick made and a menu open replays with the pick in effect and the menu open, flashing where the live menu flashed", async () => {
@@ -702,7 +875,7 @@ test("a session recorded with a pick made and a menu open replays with the pick 
   expect(states[0]!.values[SETTINGS.theme.sessionKey]).toBe("nord");
   expect(s.drawn.said).toEqual([]);
 
-  const replay = await replayFile(file, s.cwd, configFile);
+  const replay = await replayFile(file, configFile);
   expect(replay.reads).toEqual([]);
   expect(replay.started).toEqual([]);
   expect(replay.said).toEqual([]);
@@ -741,7 +914,7 @@ test("a recording made on a moving clock replays each frame from what its answer
   for (const { request, document } of drew)
     expect(document).toBeGreaterThan(request);
 
-  const replay = await replayFile(file, s.cwd, s.configFile);
+  const replay = await replayFile(file, s.configFile);
   expect(replay.reads).toEqual([]);
   expect(replay.started).toEqual([]);
   expect(replay.frames.map(textOf)).toEqual(liveText);
@@ -792,7 +965,7 @@ test("a play draws each answer at the instant its arm says the request arrived a
       (at, n) =>
         `s=${String((Math.floor(at) + 7 * (n + 1)) % 60).padStart(2, "0")}`,
     );
-  const replay = await replayFile(file, s.cwd, clockConfig, late);
+  const replay = await replayFile(file, clockConfig, late);
   expect(replay.said).toEqual([]);
   expect(
     replay.frames.map((frame) => /s=\d\d/.exec(textOf(frame))?.[0]),
@@ -824,7 +997,7 @@ test("a request answered after another moved the session to another directory re
   expect(liveText[0]).toContain(`dir=${s.cwd}`);
   expect(liveText[1]).toContain(`dir=${other.cwd}`);
 
-  const replay = await replayFile(file, s.cwd, s.configFile);
+  const replay = await replayFile(file, s.configFile);
   expect(replay.reads).toEqual([]);
   expect(replay.started).toEqual([]);
   expect(replay.frames.map(textOf)).toEqual(liveText);
@@ -852,7 +1025,7 @@ test("a recording started during a request's wait holds only the requests it saw
   const seen = await s.requestFrom(s.cwd, s.configFile);
   s.live.recorder.close();
   expect((await recorded).answers).toBe(1);
-  const replay = await replayFile(file, s.cwd, s.configFile);
+  const replay = await replayFile(file, s.configFile);
   expect(replay.frames.map(textOf)).toEqual([textOf(seen)]);
   expect(replay.frames.map((f) => f.rows)).toEqual([seen.rows]);
 });
@@ -899,7 +1072,7 @@ test("a document stamped in the instant of a draw, after it, reaches the next dr
       .map(formatLine)
       .join(""),
   );
-  const replay = await replayFile(file, s.cwd, s.configFile);
+  const replay = await replayFile(file, s.configFile);
   expect(replay.frames.map(textOf)[0]).toEqual(textOf(liveFrame));
   expect(textOf(liveFrame)).not.toContain("elsewhere");
   expect(replay.frames.map(textOf)[1]).toContain("elsewhere");
@@ -933,7 +1106,7 @@ test("a recording follows the session to the view a request from another directo
   expect(seqs[0]).toBeGreaterThan(1);
   expect(seqs.filter((seq) => seq === 1)).toHaveLength(1);
   expect(seqs.indexOf(1)).toBeGreaterThan(0);
-  const replay = await replayFile(file, s.cwd, s.configFile);
+  const replay = await replayFile(file, s.configFile);
   expect(replay.frames).toHaveLength(3);
   expect(replay.reads).toEqual([]);
   expect(replay.started).toEqual([]);

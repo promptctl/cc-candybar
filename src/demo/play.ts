@@ -24,6 +24,7 @@ import {
   type DrawState,
   type Recording,
   type ReplayLine,
+  type SessionRequest,
 } from "../facts/recording.js";
 import type { RendererLinks } from "../click/renderer-links.js";
 import { daemonGates } from "../daemon/update-keys.js";
@@ -40,11 +41,7 @@ import {
   type SessionView,
 } from "../daemon/cache/render.js";
 import type { Facts, RecordingFacts } from "../daemon/facts-source.js";
-import {
-  renderOptionsOf,
-  todayOf,
-  type ViewFacts,
-} from "../daemon/render-payload.js";
+import { renderOptionsOf, todayOf } from "../daemon/render-payload.js";
 import { sessionSource, type SessionSource } from "../daemon/session-source.js";
 import { SessionState } from "../daemon/session-state.js";
 import { EMPTY_HISTORY_DEPTH } from "../daemon/settings-history.js";
@@ -57,9 +54,8 @@ import type { HeldClock } from "../held-clock.js";
 import type { Timekeeper } from "../time.js";
 import { instantOf, msOf, type Instant } from "../utils/instant.js";
 import type { DaemonLogger } from "../utils/logger.js";
-import { SourceRuns } from "../var-system/source-runs.js";
 
-// A config loaded for the demo, with what owns its runs and picks.
+// A config loaded for the demo, with what owns its picks.
 export interface DemoState extends Disposable {
   readonly state: DslRenderState;
   readonly sessionState: SessionState;
@@ -91,9 +87,6 @@ export function loadDemo({
   cwd,
   warn,
 }: DemoLoad): DemoState {
-  // [LAW:single-enforcer] The demo's own owner of its sources' runs, closed
-  // with the registry that holds them.
-  const runs = new SourceRuns({ launcher: world.launcher, clock: world.clock });
   // The session's store, which each draw's state restores before it draws.
   const sessionState = new SessionState();
   const locs = locations(world.host, world.home);
@@ -116,7 +109,6 @@ export function loadDemo({
     },
     {
       clock: world.clock,
-      runs,
       locations: locs,
       sessionState,
       storage: UNOWNED_STORAGE,
@@ -126,14 +118,10 @@ export function loadDemo({
     },
   );
   if (loaded.warning !== null) warn(loaded.warning);
-  if (loaded.state === null) {
-    runs.close();
-    throw loaded.cause;
-  }
+  if (loaded.state === null) throw loaded.cause;
   const { state } = loaded;
   const dispose = (): void => {
     state.registry.dispose();
-    runs.close();
   };
   // [LAW:no-silent-failure] The daemon draws past a placement of an
   // undeclared segment; the demo, like `check`, refuses it with the loader's
@@ -215,9 +203,9 @@ export type DemoStep =
   | {
       readonly kind: "request";
       readonly offsetMs: number;
-      readonly request: ViewFacts;
+      readonly request: SessionRequest;
     }
-  | { readonly kind: "declared"; readonly request: ViewFacts }
+  | { readonly kind: "declared"; readonly request: SessionRequest }
   | {
       readonly kind: "draw";
       readonly requestOffsetMs: number;
@@ -273,8 +261,6 @@ export function playOf(
 
 export interface DemoPlay {
   readonly loaded: DemoState;
-  // The directory the view's sources run in, as an entry's do.
-  readonly cwd: string;
   readonly facts: Facts;
   // The session source's own reads: whose home `~` names, and the log.
   readonly home: string;
@@ -338,7 +324,6 @@ export function drawDemoFrame(
 // as it stands then, at the instant its request arrived at.
 export async function playDemo({
   loaded: { state, sessionState },
-  cwd,
   facts,
   home,
   log,
@@ -360,19 +345,33 @@ export async function playDemo({
     equals: sameDepths,
   });
   // The session's view of the state, as the daemon opens one per session,
-  // declared with the request the first frame draws by.
-  const view = openView(state, cwd, opening.request, {
-    facts,
-    source: sessionSource({
-      providers: { home, log },
-      sessionState,
-      history: () => depths.get().history,
-      navigation: () => depths.get().back,
-    }),
-    // The demo draws one frame per request: no feed to wake.
-    changed: () => {},
-    log,
-  });
+  // at the directory of the request it is declared with.
+  const open = (request: SessionRequest) =>
+    openView(state, request.cwd, request, {
+      facts,
+      source: sessionSource({
+        providers: { home, log },
+        sessionState,
+        history: () => depths.get().history,
+        navigation: () => depths.get().back,
+      }),
+      // The demo draws one frame per request: no feed to wake.
+      changed: () => {},
+      log,
+    });
+  let view = open(opening.request);
+  // [LAW:one-source-of-truth] The view is at its latest request's directory,
+  // as the daemon's cache moves a session's view to the entry its request
+  // names: a request from another directory opens the view there, so its
+  // sources' runs are the ones the session's documents hold from then on.
+  const declare = (request: SessionRequest): void => {
+    if (request.cwd === view.facts().cwd) {
+      view.requested(request);
+      return;
+    }
+    view.dispose();
+    view = open(request);
+  };
   try {
     // The session's effect memory, held across the frames as the daemon holds
     // it across a session's requests, so a `globals.effect` moves frame to
@@ -384,10 +383,10 @@ export async function playDemo({
       } else if (step.kind === "request") {
         const at = await arrive(startMs + step.offsetMs);
         arrived.set(step.offsetMs, at);
-        view.requested(step.request);
+        declare(step.request);
         await view.settle(at).landed;
       } else if (step.kind === "declared") {
-        view.requested(step.request);
+        declare(step.request);
       } else {
         const at = arrived.get(step.requestOffsetMs);
         // [LAW:no-silent-failure] Both arms draw only an answer to a request

@@ -573,8 +573,8 @@ export function compileKey(input: CompileInput): string {
   return createHash("sha256").update(JSON.stringify(input)).digest("hex");
 }
 
-// Declare every variable of the given scopes into the registry — a directory's
-// sources into its home, a session's values into its view (variable-scope.ts),
+// Declare every variable of the given scopes into the registry — what the
+// directory alone decides into its home, a session's into its view (variable-scope.ts),
 // or both into one registry for a one-shot render. Returns the declaration
 // failures: the rest are declared (see RegisteredConfig.loadWarnings).
 export function declareDslVariables(

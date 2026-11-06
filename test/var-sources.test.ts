@@ -108,9 +108,11 @@ function registryOver(
 // Helper: fresh pair so tests are fully isolated.
 function make(defaultEmptyValue?: string) {
   const store = new VariableStore(systemTimekeeper);
+  const runs = runsOver();
   return {
     store,
-    registry: registryOver(store, defaultEmptyValue),
+    runs,
+    registry: registryOver(store, defaultEmptyValue, undefined, null, runs),
   };
 }
 
@@ -1773,7 +1775,7 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         null,
         runs,
       );
-      const view = registry.view();
+      const view = registry.view(runs);
       live.add(view);
       registry.declareFile("home", f, {
         parse: TEXT,
@@ -1830,22 +1832,18 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
       fs.writeFileSync(data, "before");
       const events = handDelivery();
       const store = new VariableStore(systemTimekeeper);
-      const registry = registryOver(
-        store,
-        "",
-        undefined,
-        null,
-        runsOver({ fileEvents: events }),
-      );
+      const runs = runsOver({ fileEvents: events });
+      const registry = registryOver(store, "", undefined, null, runs);
       const cache = { kind: "watch_file", path: watched } as const;
-      return { watched, data, events, store, registry, cache };
+      return { watched, data, events, store, registry, runs, cache };
     }
 
     it("every watch_file variable, in a view too, says so with the span's start; a ttl variable does not", async () => {
       const { dir, cleanup } = makeTmpDir();
       try {
-        const { watched, data, events, store, registry, cache } = rig(dir);
-        const view = registry.view();
+        const { watched, data, events, store, registry, runs, cache } =
+          rig(dir);
+        const view = registry.view(runs);
         live.add(view);
         registry.declareFile("file", data, { parse: TEXT, cache });
         registry.declareShell("shell", `cat ${data}`, {
@@ -2003,14 +2001,15 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         counters,
         logger: () => {},
       });
+      const runs = runsOver({ watchers });
       const home = registryOver(
         new VariableStore(systemTimekeeper),
         "",
         undefined,
         null,
-        runsOver({ watchers }),
+        runs,
       );
-      const view = home.view();
+      const view = home.view(runs);
       live.add(view);
       home.declareFile("a", f, {
         parse: TEXT,
@@ -3244,8 +3243,8 @@ describe("SourceRegistry — in-flight runs", () => {
       const spawns = path.join(dir, "spawns");
       const gate = shellGate(path.join(dir, "gate"));
       gate.close();
-      const { registry: home } = make();
-      const view = home.view();
+      const { registry: home, runs } = make();
+      const view = home.view(runs);
       live.add(view);
       const period = { kind: "ttl", durationMs: MIN_SHELL_TTL_MS } as const;
       const counted = (out: string) =>

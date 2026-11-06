@@ -140,7 +140,7 @@ export function payloadOf(inputs: PayloadInputs, draw: DrawInputs) {
   const document = assembleFacts(
     undefined,
     sessionIdOf(inputs.hookData.session_id),
-    readingsOf(inputs),
+    { ...readingsOf(inputs), runs: new Map() },
     pendingOf("unread"),
     instantOf(new Date(0)),
   );

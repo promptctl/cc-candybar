@@ -6,8 +6,8 @@ import type {
   DrawState,
   FactsLine,
   RecordingLine,
+  SessionRequest,
 } from "../../src/facts/recording";
-import type { ViewFacts } from "../../src/daemon/render-payload";
 import {
   sessionRecorder,
   type DrawnFrom,
@@ -27,14 +27,14 @@ function view(name = "a") {
     at: 1,
     facts: { seq: 1 },
   } as unknown as FactsLine);
-  let declaration = { name } as unknown as ViewFacts;
+  let declaration = { name } as unknown as SessionRequest;
   return {
     followed: { stamped: () => line.get(), failure: () => null },
     source: { home: () => "/home/recorded" },
     // What a draw of it reads.
     drawn: (): DrawnFrom => ({ document: line.get(), declaration, state }),
     declare: (next: string) => {
-      declaration = { name: next } as unknown as ViewFacts;
+      declaration = { name: next } as unknown as SessionRequest;
     },
     move: (seq: number) =>
       runInAction(() =>
