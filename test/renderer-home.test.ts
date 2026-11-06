@@ -139,6 +139,7 @@ describe("the main home is today's layout", () => {
       log: "/home/u/.local/state/cc-candybar/daemon.log",
       sessionState: "/home/u/.local/state/cc-candybar/session-state.json",
       settingsHistory: "/home/u/.local/state/cc-candybar/settings-history.json",
+      storedRoot: "/home/u/.config/cc-candybar",
       watchProbe: "/home/u/.local/state/cc-candybar/watch-probe",
       spawnBackoff: "/home/u/.local/state/cc-candybar/spawn.backoff",
       cache: "/home/u/.cache/cc-candybar",
@@ -159,6 +160,7 @@ describe("the main home is today's layout", () => {
       log: "/x/state/cc-candybar/daemon.log",
       sessionState: "/x/state/cc-candybar/session-state.json",
       settingsHistory: "/x/state/cc-candybar/settings-history.json",
+      storedRoot: "/x/config/cc-candybar",
       watchProbe: "/x/state/cc-candybar/watch-probe",
       spawnBackoff: "/x/state/cc-candybar/spawn.backoff",
       cache: "/x/cache/cc-candybar",
@@ -188,7 +190,8 @@ describe("a named home", () => {
     const paths = daemonPaths(home);
     expect(paths.socket).toBe("/w/run/dev-bar.sock");
     expect(paths.lease).toBe("/w/run/dev-bar.sock.lease");
-    const { socket: _s, lease: _l, ...underRoot } = paths;
+    const { socket: _s, lease: _l, storedRoot, ...underRoot } = paths;
+    expect(storedRoot).toBe("/w/home");
     for (const p of [...Object.values(underRoot), cacheDir(home), configDir(home)]) {
       expect(p.startsWith("/w/home/")).toBe(true);
     }

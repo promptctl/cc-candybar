@@ -33,12 +33,19 @@ import type { DaemonLogger } from "../utils/logger";
 import { recordingView, type SessionStateRW } from "./session-state";
 import { BadVerbArgs } from "./verb-error";
 import { writeAtomic } from "../utils/atomic-write.js";
+import {
+  resolveStoredPath,
+  storedPathOf,
+  type StoredPath,
+} from "./foundations/stored-path";
 
 // [LAW:types-are-the-program] What a change touched and the two states it
 // stepped between. `null` is absence on both kinds: an unset session key, a
 // config file that does not exist (a first-ever write created it). Undo writes
-// `before`, redo writes `after` — the same write either way.
-export type Change =
+// `before`, redo writes `after` — the same write either way. A file is its
+// resolved absolute path in memory and a StoredPath in the history's file
+// (stored-path.ts), so the history is generic over how it spells one.
+export type Change<F = string> =
   | {
       readonly kind: "session";
       readonly key: string;
@@ -47,19 +54,19 @@ export type Change =
     }
   | {
       readonly kind: "file";
-      readonly file: string;
+      readonly file: F;
       readonly before: string | null;
       readonly after: string | null;
     };
 
-export type Step = readonly Change[];
+export type Step<F = string> = ReadonlyArray<Change<F>>;
 
-export interface SessionHistory {
-  readonly past: readonly Step[];
-  readonly future: readonly Step[];
+export interface SessionHistory<F = string> {
+  readonly past: ReadonlyArray<Step<F>>;
+  readonly future: ReadonlyArray<Step<F>>;
   // The savepoint edit mode opened at. Present exactly while edit mode is
   // open.
-  readonly savepoint?: Savepoint;
+  readonly savepoint?: Savepoint<F>;
 }
 
 // [LAW:types-are-the-program] What cancelling edit mode needs, as one value.
@@ -73,10 +80,10 @@ export interface SessionHistory {
 // how many steps of `past` were there when edit mode opened, and `below` the
 // steps from before it that a fresh step in edit mode abandoned off the redo
 // stack after a `↶` took them back — in order, right above `at`.
-export interface Savepoint {
+export interface Savepoint<F = string> {
   readonly at: number;
-  readonly net: Step;
-  readonly below: readonly Step[];
+  readonly net: Step<F>;
+  readonly below: ReadonlyArray<Step<F>>;
 }
 
 // What the settings menu shows: how many steps undo and redo can take.
@@ -94,7 +101,9 @@ export const EMPTY_HISTORY_DEPTH: HistoryDepth = {
   sinceEdit: 0,
 };
 
-export type HistoryState = Readonly<Record<string, SessionHistory>>;
+export type HistoryState<F = string> = Readonly<
+  Record<string, SessionHistory<F>>
+>;
 
 // [LAW:locality-or-seam] Persistence is the storage's property, as with
 // SessionStorage: the daemon binds a file, everything else keeps the ephemeral
@@ -618,26 +627,28 @@ function describe(change: Change): string {
 
 // ─── The file ───────────────────────────────────────────────────────────────
 
-function isChange(v: unknown): v is Change {
+// The file a file change names is checked by the resolver, which knows the
+// root it lies under.
+function isChange(v: unknown): v is Change<unknown> {
   if (v === null || typeof v !== "object") return false;
   const o = v as Record<string, unknown>;
   const state = (x: unknown) => x === null || typeof x === "string";
   return (
     ((o.kind === "session" && typeof o.key === "string") ||
-      (o.kind === "file" && typeof o.file === "string")) &&
+      (o.kind === "file" && "file" in o)) &&
     state(o.before) &&
     state(o.after)
   );
 }
 
-function isSteps(v: unknown): v is Step[] {
+function isSteps(v: unknown): v is Array<Step<unknown>> {
   return (
     Array.isArray(v) &&
     v.every((step) => Array.isArray(step) && step.every(isChange))
   );
 }
 
-function isSavepoint(v: unknown): v is Savepoint {
+function isSavepoint(v: unknown): v is Savepoint<unknown> {
   if (v === null || typeof v !== "object") return false;
   const o = v as Record<string, unknown>;
   return (
@@ -649,7 +660,7 @@ function isSavepoint(v: unknown): v is Savepoint {
   );
 }
 
-function isSessionHistory(v: unknown): v is SessionHistory {
+function isSessionHistory(v: unknown): v is SessionHistory<unknown> {
   if (v === null || typeof v !== "object") return false;
   const o = v as Record<string, unknown>;
   return (
@@ -692,12 +703,43 @@ function withoutRetiredKeys(
   };
 }
 
+// Every file change of a history with its file respelled, each told where in
+// the history it stands, so a refusal can name the step.
+function mapFiles<A, B>(
+  history: SessionHistory<A>,
+  respell: (file: A, where: string) => B,
+): SessionHistory<B> {
+  const step = (s: Step<A>, where: string): Step<B> =>
+    s.map((c) =>
+      c.kind === "file" ? { ...c, file: respell(c.file, where) } : c,
+    );
+  const steps = (list: ReadonlyArray<Step<A>>, where: string): Array<Step<B>> =>
+    list.map((s, i) => step(s, `${where} step ${i + 1}`));
+  const { past, future, savepoint } = history;
+  return {
+    past: steps(past, "undo"),
+    future: steps(future, "redo"),
+    ...(savepoint !== undefined && {
+      savepoint: {
+        at: savepoint.at,
+        net: step(savepoint.net, "edit mode's change"),
+        below: steps(savepoint.below, "edit mode's redo"),
+      },
+    }),
+  };
+}
+
 // [LAW:no-silent-failure] A missing file is a first boot. An unreadable or
 // wrong-shaped one is logged and dropped WHOLE rather than salvaged entry by
-// entry. A write failure throws: the click's change landed, but saying it is
-// undoable would be a lie.
+// entry, and so is one naming a file its root refuses (stored-path.ts): the
+// warning names the session, the step and the path. A write failure throws:
+// the click's change landed, but saying it is undoable would be a lie.
+// [LAW:parse-dont-validate] A file is stored as a StoredPath against `root`,
+// so a home's history names its config relative to the home, and a copy of
+// the home's tree undoes into the copy's config.
 export function fileHistoryStorage(
   file: string,
+  root: string,
   logger: DaemonLogger,
 ): HistoryStorage {
   return {
@@ -715,39 +757,72 @@ export function fileHistoryStorage(
         }
         return {};
       }
+      let parsed: unknown;
       try {
-        const parsed: unknown = JSON.parse(raw);
-        if (
-          parsed !== null &&
-          typeof parsed === "object" &&
-          !Array.isArray(parsed) &&
-          Object.values(parsed).every(isSessionHistory)
-        ) {
-          const retired = new Set<string>();
-          const state = Object.fromEntries(
-            Object.entries(parsed as HistoryState).map(([sid, history]) => [
-              sid,
-              withoutRetiredKeys(history, retired),
-            ]),
-          );
-          if (retired.size > 0) {
-            logger(
-              "warn",
-              `settings-history load: dropped the changes to ${[...retired].map((k) => `"${k}"`).join(", ")}, no longer a setting`,
-            );
-          }
-          return state;
-        }
+        parsed = JSON.parse(raw);
       } catch {
-        // reported below
+        parsed = null;
       }
-      logger("warn", "settings-history load: unexpected shape, starting empty");
-      return {};
+      if (
+        parsed === null ||
+        typeof parsed !== "object" ||
+        Array.isArray(parsed) ||
+        !Object.values(parsed).every(isSessionHistory)
+      ) {
+        logger(
+          "warn",
+          "settings-history load: unexpected shape, starting empty",
+        );
+        return {};
+      }
+      let resolved: Array<[string, SessionHistory]>;
+      try {
+        resolved = Object.entries(parsed as HistoryState<unknown>).map(
+          ([sid, history]) => [
+            sid,
+            mapFiles(history, (stored, where) => {
+              try {
+                return resolveStoredPath(root, stored);
+              } catch (e) {
+                throw new Error(
+                  `session ${sid}'s ${where}: ${(e as Error).message}`,
+                );
+              }
+            }),
+          ],
+        );
+      } catch (e) {
+        logger(
+          "warn",
+          `settings-history load: ${(e as Error).message}; starting empty`,
+        );
+        return {};
+      }
+      const retired = new Set<string>();
+      const state = Object.fromEntries(
+        resolved.map(([sid, history]) => [
+          sid,
+          withoutRetiredKeys(history, retired),
+        ]),
+      );
+      if (retired.size > 0) {
+        logger(
+          "warn",
+          `settings-history load: dropped the changes to ${[...retired].map((k) => `"${k}"`).join(", ")}, no longer a setting`,
+        );
+      }
+      return state;
     },
     save: (state) => {
+      const stored: HistoryState<StoredPath> = Object.fromEntries(
+        Object.entries(state).map(([sid, history]) => [
+          sid,
+          mapFiles(history, (f) => storedPathOf(root, f)),
+        ]),
+      );
       try {
         fs.mkdirSync(path.dirname(file), { recursive: true });
-        writeAtomic(file, JSON.stringify(state), 0o600);
+        writeAtomic(file, JSON.stringify(stored), 0o600);
       } catch (e) {
         const message = `settings-history write failed — the change landed but is not undoable: ${(e as Error).message}`;
         logger("error", message);

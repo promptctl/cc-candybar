@@ -54,7 +54,7 @@ import {
 import { encodeRenderOrigin } from "../src/daemon/foundations/render-origin";
 import { sessionIdOf, type SessionId } from "../src/daemon/session-id";
 import type { StorageKey } from "../src/daemon/cache/managed-storage";
-import { clickUrl, effectsOf, testVerbContext } from "./helpers/click";
+import { clickUrl, effectsOf, testVerbContext, TEST_STORED_ROOT } from "./helpers/click";
 import { TEST_LINK_KEY, TEST_SIGNER } from "./helpers/link-signer";
 import { viewFacts } from "./helpers/view-facts";
 import { throughout, until } from "./helpers/until";
@@ -361,7 +361,7 @@ function clickContext(
       projectDir: dir,
       cwd: dir,
       target: { source: "search" },
-    }),
+    }, TEST_STORED_ROOT),
   );
   r.sessionState.set(
     SID,
@@ -655,7 +655,7 @@ describe("a click on a run link", () => {
           projectDir: dir,
           cwd: dir,
           target: { source: "search" },
-        }),
+        }, TEST_STORED_ROOT),
       );
       await expect(clickUrl(relink(tampered), ctx)).rejects.toThrow(
         BadVerbArgs,

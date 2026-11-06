@@ -36,12 +36,15 @@ import {
 } from "../../src/config/effective-globals";
 import { LANE_NAMES, type LaneSwitches } from "../../src/config/lanes";
 import { homeOf } from "../../src/daemon/home";
-import { locations, stateDir } from "../../src/daemon/paths";
+import { locations, stateDir, storedRoot } from "../../src/daemon/paths";
 import { systemTimekeeper } from "../../src/time";
 
 const NO_LANES = Object.fromEntries(
   LANE_NAMES.map((lane) => [lane, false]),
 ) as LaneSwitches;
+
+// The root the test context reads a recorded origin against: the test host's.
+export const TEST_STORED_ROOT = storedRoot(homeOf(HOST));
 
 // The record a session's render leaves behind, which a click resolves its
 // config from: a session only clicks links its own render drew.
@@ -57,7 +60,7 @@ export function recordRender(
       projectDir: dir,
       cwd: dir,
       target: { source: "search" },
-    }),
+    }, TEST_STORED_ROOT),
   );
 }
 
@@ -87,6 +90,7 @@ export function testVerbContext(
   return {
     gates: bareGates(),
     stateDir: stateDir(homeOf(host)), locations: locations(host, homeOf(host)),
+    storedRoot: storedRoot(homeOf(host)),
     sessionState: inTurn,
     history: history ?? new SettingsHistory(inTurn, () => {}),
     navigation: new NavigationHistory(),

@@ -54,7 +54,7 @@ Reset deletes the setting at every layer: the globals, every bundled preset's gl
 
 ## Undo, and edit mode
 
-Undo and redo work one step per click. A journal around every verb handler records each step, storing the whole file before and after for every file written. A step whose target no longer reads as it left it (after a hand edit, or another session's write) is refused loudly, and every change to that target drops off the stacks.
+Undo and redo work one step per click. A journal around every verb handler records each step, storing the whole file before and after for every file written. A file the history and the render origin store is the home's, relative to its root, or the world's, absolute, and an absolute path under the root is refused at load: a home's tree copied under another root is then a renderer that undoes into its own config, where an absolute spelling would write the original's. A step whose target no longer reads as it left it (after a hand edit, or another session's write) is refused loudly, and every change to that target drops off the stacks.
 
 Edit mode's save and cancel are that history and nothing more. Layout clicks are already written to the file, so entering edit mode takes a savepoint, and cancel applies the net change backwards as one step. A target someone else changed in the meantime is kept, never overwritten. Undo and redo can't bring cancelled edits back. The savepoint is taken and released at the one place every click's writes pass, so any control that enters or leaves edit mode needs no bookkeeping of its own. There's no per-session unsaved layout, because the render cache holds one compiled tree per project and cwd, not per session.
 

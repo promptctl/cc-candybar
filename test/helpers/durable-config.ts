@@ -31,10 +31,15 @@ import type { SessionStateRW } from "../../src/daemon/session-state";
 import {
   SettingsHistory,
   fileHistoryStorage,
+  type HistoryStorage,
   type SessionHistory,
   type Step,
 } from "../../src/daemon/settings-history";
-import { configDir, settingsHistoryPath } from "../../src/daemon/paths";
+import {
+  configDir,
+  settingsHistoryPath,
+  storedRoot,
+} from "../../src/daemon/paths";
 import { SESSION_RENDER_ORIGIN_KEY } from "../../src/daemon/foundations/session-keys";
 import { encodeRenderOrigin } from "../../src/daemon/foundations/render-origin";
 
@@ -82,6 +87,8 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
     [NAME_ENV]: "durable",
   });
   const home = homeOf(host);
+  const historyStorage = (): HistoryStorage =>
+    fileHistoryStorage(settingsHistoryPath(home), storedRoot(home), () => {});
   const configPath = join(configDir(home), "config.json5");
   mkdirSync(dirname(configPath), { recursive: true });
   const readOrNull = (file: string): string | null => {
@@ -103,15 +110,11 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
     write: (text) => writeFileSync(configPath, text),
     text: readText,
     parsed: () => JSON5.parse(readText() ?? "") as Record<string, unknown>,
-    // The history file itself is created by the first step, so before one an
-    // absent file and an absent entry both read as the empty stack.
+    // The history as the next daemon loads it. The file itself is created by
+    // the first step, so before one an absent file and an absent entry both
+    // read as the empty stack.
     history: (sessionId = "s1") =>
-      (
-        JSON.parse(readOrNull(settingsHistoryPath(home)) ?? "{}") as Record<
-          string,
-          SessionHistory
-        >
-      )[sessionId] ?? { past: [], future: [] },
+      historyStorage().load()[sessionId] ?? { past: [], future: [] },
     fileStep: (before, after, file = configPath) => [
       { kind: "file", file, before, after },
     ],
@@ -119,7 +122,7 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
       new SettingsHistory(
         sessionState,
         () => {},
-        fileHistoryStorage(settingsHistoryPath(home), () => {}),
+        historyStorage(),
       ),
     seedOrigin: (sessionState, sessionId, configFile) =>
       sessionState.set(
@@ -129,7 +132,7 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
           projectDir: root,
           cwd: root,
           target: requestedConfigTarget(configFile, undefined),
-        }),
+        }, storedRoot(home)),
       ),
     dispose: () => {
       rmSync(root, { recursive: true, force: true });

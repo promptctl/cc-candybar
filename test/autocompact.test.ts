@@ -22,7 +22,7 @@ import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { testVerbContext, effectsOf, clickUrl } from "./helpers/click";
+import { testVerbContext, effectsOf, clickUrl, TEST_STORED_ROOT } from "./helpers/click";
 import { VERB_SLASH } from "../src/click/wire";
 import {
   SESSION_CLIENT_HINTS_KEY,
@@ -67,7 +67,7 @@ function runtime(read: Outcome<AutoCompactWindow>, contextWindow = 1_000_000) {
       projectDir: "/tmp/proj",
       cwd: "/tmp/proj",
       target: { source: "search" },
-    }),
+    }, TEST_STORED_ROOT),
   );
   sessionState.set(
     "s1",
