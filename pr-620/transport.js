@@ -39333,7 +39333,7 @@ var RETIRED_LINK_VERBS = /* @__PURE__ */ new Map([
 ]);
 function retiredLinkVerbMessage(verb) {
   const where = RETIRED_LINK_VERBS.get(verb);
-  return where === void 0 ? void 0 : `Template links to "${URL_SCHEME}://${verb}/\u2026", which no click runs: ${where}`;
+  return where === void 0 ? void 0 : `Template spells "${URL_SCHEME}://${verb}/\u2026", a URL no click runs: ${where}`;
 }
 
 // src/config/loader/variables.ts
@@ -60870,59 +60870,43 @@ function checkActionRefs(ctx, cfg, path42, template, line, helpers = cfg.helpers
   }
 }
 function checkTemplateRefs(ctx, declPath, template, scope, opts) {
+  const report2 = (message, via) => {
+    if (via !== null) {
+      checkHelperIssue(
+        ctx,
+        via,
+        message,
+        helperKeyPath(
+          via,
+          opts?.segCtx === void 0 ? void 0 : { name: opts.segCtx, partials: opts.partials }
+        )
+      );
+      return;
+    }
+    ctx.issues.push({
+      path: declPath,
+      message,
+      line: opts?.line ?? findKeyLine(ctx.source, declPath.split("."))
+    });
+  };
   for (const [ref, via] of templateReads(template, scope.helpers)) {
     if (refResolves(ref, scope)) continue;
     if (ref.startsWith(SETTINGS_SCOPE_PREFIX)) {
       const through = via === null ? "" : ` through helper "${via}"`;
       const setting = ref.slice(SETTINGS_SCOPE_PREFIX.length);
-      const message = opts?.segCtx === void 0 || opts.settings === void 0 ? `Template reads ".${ref}"${through}, but only a segment's own templates have settings \u2014 call it from a segment that declares "${setting}"` : `Template reads ".${ref}"${through}, but segment "${opts.segCtx}" has no setting "${setting}" (it has: ${Object.keys(opts.settings).join(", ")}) \u2014 declare it under segments.${opts.segCtx}.settings`;
-      ctx.issues.push({
-        path: declPath,
-        message,
-        line: opts?.line ?? findKeyLine(ctx.source, declPath.split("."))
-      });
-      continue;
-    }
-    if (via !== null) {
-      checkHelperIssue(
-        ctx,
-        via,
-        `Template references unknown variable ".${ref}"${retiredReadHint(ref)}`,
-        helperKeyPath(
-          via,
-          opts?.segCtx === void 0 ? void 0 : { name: opts.segCtx, partials: opts.partials }
-        )
+      report2(
+        opts?.segCtx === void 0 || opts.settings === void 0 ? `Template reads ".${ref}"${through}, but only a segment's own templates have settings \u2014 call it from a segment that declares "${setting}"` : `Template reads ".${ref}"${through}, but segment "${opts.segCtx}" has no setting "${setting}" (it has: ${Object.keys(opts.settings).join(", ")}) \u2014 declare it under segments.${opts.segCtx}.settings`,
+        null
       );
       continue;
     }
-    const namespaced = opts?.segCtx !== void 0 ? `${opts.segCtx}.${ref}` : void 0;
+    const namespaced = opts?.segCtx !== void 0 && via === null ? `${opts.segCtx}.${ref}` : void 0;
     const hint = namespaced !== void 0 && refResolves(namespaced, scope) ? ` (segment-local vars are namespaced \u2014 write ".${namespaced}")` : retiredReadHint(ref);
-    ctx.issues.push({
-      path: declPath,
-      message: `Template references unknown variable ".${ref}"${hint}`,
-      line: opts?.line ?? findKeyLine(ctx.source, declPath.split("."))
-    });
+    report2(`Template references unknown variable ".${ref}"${hint}`, via);
   }
   for (const { verb, via } of templateLinkVerbs(template, scope.helpers)) {
     const retired = retiredLinkVerbMessage(verb);
-    if (retired === void 0) continue;
-    if (via !== null) {
-      checkHelperIssue(
-        ctx,
-        via,
-        retired,
-        helperKeyPath(
-          via,
-          opts?.segCtx === void 0 ? void 0 : { name: opts.segCtx, partials: opts.partials }
-        )
-      );
-      continue;
-    }
-    ctx.issues.push({
-      path: declPath,
-      message: retired,
-      line: opts?.line ?? findKeyLine(ctx.source, declPath.split("."))
-    });
+    if (retired !== void 0) report2(retired, via);
   }
 }
 function helperKeyPath(name, segment) {
@@ -82276,8 +82260,7 @@ var RenderCache = class {
   }
   // [LAW:no-ambient-temporal-coupling] An open feed's pin on its session,
   // from the feed's open to its close (src/daemon/frame-feed.ts). Keyed by
-  // session, so it follows the view wherever a request, a reload or a click
-  // moves it.
+  // session, so it follows the view wherever a request or a reload moves it.
   pin(sessionId2) {
     this.pins.set(sessionId2, (this.pins.get(sessionId2) ?? 0) + 1);
     let released = false;
