@@ -1,3 +1,9 @@
+## [1.193.0](https://github.com/promptctl/cc-candybar/compare/v1.192.0...v1.193.0) (2026-11-06)
+
+### Features
+
+* **apply:** a click's launches are effects, performed after its turn and reported as effect-done (candybar-gather-renderer-76bb.1dh.g2l) ([#621](https://github.com/promptctl/cc-candybar/issues/621)) ([8bb9728](https://github.com/promptctl/cc-candybar/commit/8bb9728f028615d94483db40d614a14926ef1468))
+
 ## [1.192.0](https://github.com/promptctl/cc-candybar/compare/v1.191.0...v1.192.0) (2026-11-06)
 
 ### ⚠ BREAKING CHANGES
