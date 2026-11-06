@@ -1657,3 +1657,40 @@ test("a request answered from a held view the session moved away from replays th
   expect(heldAt).toContain(s.cwd);
   await expectReplayed(file, s.configFile, liveFrames);
 });
+
+test("a click on a state variable a source is keyed on, before the recording starts, replays from the run the live session held", async () => {
+  const s = liveSession();
+  const configFile = path.join(s.cwd, "detail.json5");
+  fs.writeFileSync(
+    configFile,
+    JSON.stringify({
+      variables: {
+        detail: { kind: "state", key: "seam.detail", default: "off" },
+        detailed: {
+          kind: "shell",
+          command: "seam-detail",
+          cache: { key: "{{ .detail }}" },
+        },
+      },
+      segments: {
+        runs: { template: "detail={{ .detail }} run={{ .detailed }}" },
+      },
+      root: { h: ["runs"] },
+    }),
+  );
+  s.launcher.program(shell("seam-detail"), exits(0, "ran"));
+  await s.requestFrom(s.cwd, configFile);
+  // A click with no request after it: the key moves, and its run lands.
+  pick(s, [{ key: "seam.detail", value: "on" }]);
+  await s.after(1000);
+  const { file, liveFrames } = await recordHeld(s, "detail.jsonl", async () => {
+    await s.after(1000);
+    return [await s.requestFrom(s.cwd, configFile)];
+  });
+  expect(textOf(liveFrames[0]!)).toContain("detail=on run=ran");
+  const replay = await replayFile(file, configFile);
+  expect(replay.reads).toEqual([]);
+  expect(replay.started).toEqual([]);
+  expect(replay.said).toEqual([]);
+  expect(replay.frames.map(textOf)).toEqual(liveFrames.map(textOf));
+});

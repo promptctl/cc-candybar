@@ -226,7 +226,7 @@ test("one revision is one state across turns and draws: a turn over other values
   ).toThrow(/^line 4: reads revision 7 over other values/);
 });
 
-test("a draw carries the diagnostics it built, read back to the severities this build draws, and refused by its line when malformed", () => {
+test("a draw carries the diagnostics it built, read back as data, and refused by its line when malformed", () => {
   const { lines } = parseRecording(
     text(header, turned(0, 1), requested(1), drawn(1)),
   );
@@ -244,7 +244,19 @@ test("a draw carries the diagnostics it built, read back to the severities this 
       drawWith([{ ...message, severity: { level: "error", glyph: "!" } }]),
     ),
   ).toThrow(
-    /^line 4 diagnostics\[0\] severity: has a severity this build does not draw/,
+    /^line 4 diagnostics\[0\] severity: has no `colors` with `fg` and `bg`/,
+  );
+  expect(() =>
+    parseRecording(
+      drawWith([
+        {
+          ...message,
+          severity: { ...(message.severity as object), level: "fatal" },
+        },
+      ]),
+    ),
+  ).toThrow(
+    /^line 4 diagnostics\[0\] severity: has no `level` that is error or warning/,
   );
   expect(() => parseRecording(drawWith([{ ...message, lines: [] }]))).toThrow(
     /^line 4 diagnostics\[0\]: has no `lines`/,

@@ -295,11 +295,11 @@ export function sessionSource(
       effective: () => turn.get().draw.effective,
       facts: () => turn.get().stamped.facts,
       turn: () => {
-        const { stamped, request, picks: taken, draw: drawn } = turn.get();
+        const { stamped, request, picks: turnPicks, draw: drawn } = turn.get();
         return {
           document: stamped,
           request,
-          state: { ...taken, history: drawn.history, back: drawn.back },
+          state: { ...turnPicks, history: drawn.history, back: drawn.back },
         };
       },
       held: () => turn.get().failure?.cause === "inputs",

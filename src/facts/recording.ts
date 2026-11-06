@@ -49,7 +49,7 @@ import { REFRESH_LANES, type RefreshLane } from "../daemon/refresh-faults";
 import type { HistoryDepth } from "../daemon/settings-history";
 import {
   diagnosticSpan,
-  SEVERITIES,
+  type DiagnosticLevel,
   type DiagnosticLine,
   type DiagnosticList,
   type DiagnosticMessage,
@@ -339,13 +339,10 @@ function parseClickState(json: unknown, where: string): ClickState {
 // A draw's state as the recorder wrote it: an idle period that had not begun
 // is `null` in the file, the one spelling JSON has for it.
 function parseDrawState(json: unknown, where: string): DrawState {
-  const { values, revision, history, back } = parseClickState(json, where);
+  const clicks = parseClickState(json, where);
   const { idleSince } = json as Record<string, unknown>;
   return {
-    values,
-    revision,
-    history,
-    back,
+    ...clicks,
     idleSince:
       idleSince === null
         ? undefined
@@ -353,23 +350,40 @@ function parseDrawState(json: unknown, where: string): DrawState {
   };
 }
 
-// [LAW:parse-dont-validate] A severity is one this build draws, matched by
-// every field it is drawn with, so a replayed message wears the same glyph and
-// colours and counts at the same level.
+// Every level a message counts at. [LAW:types-are-the-program] Keyed by the
+// type, so a level added there is a compile error until it is read here.
+const LEVELS = { error: true, warning: true } satisfies Record<
+  DiagnosticLevel,
+  true
+>;
+
+// [LAW:parse-dont-validate] A severity is data — the level it counts at, the
+// glyph that leads it and its colours — read back as the draw wrote it, so a
+// replayed message wears the same glyph and colours and counts at the same
+// level.
 function parseSeverity(json: unknown, where: string): DiagnosticSeverity {
-  const known = SEVERITIES.find(
-    (s) =>
-      isPlainObject(json) &&
-      json.level === s.level &&
-      json.glyph === s.glyph &&
-      isPlainObject(json.colors) &&
-      json.colors.fg === s.colors.fg &&
-      json.colors.bg === s.colors.bg,
-  );
-  if (known === undefined) {
-    throw new FactParseError(where, "has a severity this build does not draw");
+  if (!isPlainObject(json)) {
+    throw new FactParseError(where, "is not an object");
   }
-  return known;
+  const { level, glyph, colors } = json;
+  if (typeof level !== "string" || !Object.hasOwn(LEVELS, level)) {
+    throw new FactParseError(where, "has no `level` that is error or warning");
+  }
+  if (typeof glyph !== "string" || glyph === "") {
+    throw new FactParseError(where, "has no `glyph`");
+  }
+  if (
+    !isPlainObject(colors) ||
+    typeof colors.fg !== "string" ||
+    typeof colors.bg !== "string"
+  ) {
+    throw new FactParseError(where, "has no `colors` with `fg` and `bg`");
+  }
+  return {
+    level: level as DiagnosticLevel,
+    glyph,
+    colors: { fg: colors.fg, bg: colors.bg },
+  };
 }
 
 function parseText(json: unknown, where: string, field: string): string {
@@ -564,12 +578,7 @@ export function parseRecording(text: string): Recording {
     return {
       document: parseFactsLine(json, where, session),
       request: parseRequest(json, where, session),
-      state: {
-        values: state.values,
-        revision: state.revision,
-        history: state.history,
-        back: state.back,
-      },
+      state,
       held: json.held,
     };
   };
