@@ -7,7 +7,7 @@ import { NO_TMUX_AT_EXIT } from "../../helpers/in-worker-daemon";
 import { hostOf } from "../../helpers/host";
 import { HOME_ENV, NAME_ENV, homeOf } from "../../../src/daemon/home";
 import type { Host } from "../../../src/host";
-import { createHook } from "node:async_hooks";
+import { AsyncLocalStorage, createHook } from "node:async_hooks";
 import {
   chmodSync,
   existsSync,
@@ -49,9 +49,8 @@ import { until } from "../../helpers/until";
 
 jest.setTimeout(30_000);
 
-// What can outlive a close. Enabled before the file's first launch, so it sees
-// the lifeline. `getActiveResourcesInfo` can't show this: it omits what is
-// unref'd, which is nearly every timer the daemon holds.
+// What can outlive a close. `getActiveResourcesInfo` can't show this: it omits
+// what is unref'd, which is nearly every timer the daemon holds.
 const WATCHED = new Set([
   "Timeout",
   "FSEVENTWRAP",
@@ -59,23 +58,25 @@ const WATCHED = new Set([
   "PROCESSWRAP",
   "PIPEWRAP",
 ]);
+// [LAW:no-shared-mutable-globals] The hook sees every timer in the worker, and
+// a provider another file left open keeps arming its own. A resource counts
+// only when the case's own async work made it: it carries that work's store.
+const ownWork = new AsyncLocalStorage<true>();
+const asOwnWork = (body: () => Promise<void>) => () => ownWork.run(true, body);
 const live = new Map<number, Error>();
 // From a close's return on: `init` and `before` run as the timer is armed and
 // as it fires, where `destroy` lands some turns later. Null until then.
-let baseline = new Set<number>();
 let afterClose: { armed: Error[]; fired: Error[] } | null = null;
 const resources = createHook({
   init: (id, type) => {
-    if (!WATCHED.has(type)) return;
+    if (!WATCHED.has(type) || ownWork.getStore() !== true) return;
     const origin = new Error(type);
     live.set(id, origin);
     if (type === "Timeout") afterClose?.armed.push(origin);
   },
   before: (id) => {
     const origin = live.get(id);
-    if (origin?.message === "Timeout" && !baseline.has(id)) {
-      afterClose?.fired.push(origin);
-    }
+    if (origin?.message === "Timeout") afterClose?.fired.push(origin);
   },
   destroy: (id) => {
     live.delete(id);
@@ -319,7 +320,7 @@ describe("the daemon is a value", () => {
     expect(textOf(bar)).toContain(`EPOCH=${frozen.getTime() / 1000}`);
   });
 
-  test("close ends everything running: an armed daemon, a feed, a render mid-wait and a child in flight", async () => {
+  test("close ends everything running: an armed daemon, a feed, a render mid-wait and a child in flight", asOwnWork(async () => {
     // A `claude` first on PATH that says it started and blocks: the band's
     // setup launches it with no signal of its own, so only the daemon's close
     // can end it.
@@ -344,8 +345,6 @@ describe("the daemon is a value", () => {
       root: { h: ['mark'] },
     }`);
 
-    const settled = [...live.keys()];
-    baseline = new Set(settled);
     const daemon = construct();
     daemon.arm();
 
@@ -385,6 +384,12 @@ describe("the daemon is a value", () => {
       () => false,
     );
 
+    // The hook counts only what this case's work made, so a close over an
+    // empty record passes with the close removed: the daemon's timers and the
+    // stub child must be in it before the close.
+    const held = new Set([...live.values()].map(({ message }) => message));
+    expect([...held]).toEqual(expect.arrayContaining(["Timeout", "PROCESSWRAP"]));
+
     const sessionFile = sessionStatePath(homeOf(hostNow()));
     const closing = await daemon.close(NO_TMUX_AT_EXIT);
     open = null;
@@ -396,8 +401,7 @@ describe("the daemon is a value", () => {
     await midWait;
 
     // Turns, not timers: a wait of this test's own would be in the record.
-    const leftover = () =>
-      [...live].filter(([id]) => !settled.includes(id)).map(([, held]) => held);
+    const leftover = () => [...live.values()];
     const quietBy = Date.now() + 5_000;
     while (leftover().length > 0 && Date.now() < quietBy) {
       await new Promise((turn) => setImmediate(turn));
@@ -420,5 +424,5 @@ describe("the daemon is a value", () => {
         category: "user-shell",
       }),
     ).toMatchObject({ ok: false, reason: "aborted" });
-  });
+  }));
 });

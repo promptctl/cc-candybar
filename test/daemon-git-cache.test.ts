@@ -137,6 +137,11 @@ class StubGitService extends GitService {
   }
 }
 
+// [LAW:no-shared-mutable-globals] A held repo's period re-arms after every
+// pass, so a provider left open lands its timers in whichever file runs next
+// in the worker. Every provider a case builds is closed after it.
+const built: GitDataProvider[] = [];
+
 function makeCache(
   opts: {
     periodMs?: number;
@@ -164,6 +169,7 @@ function makeCache(
       logs.push(message);
     },
   });
+  built.push(svc);
   return { svc, inner, logs, holds: new Holds() };
 }
 
@@ -219,6 +225,18 @@ async function tick(times = 5): Promise<void> {
 
 afterEach(() => {
   jest.useRealTimers();
+  // One provider failing to close must not leave the rest open.
+  const failures: unknown[] = [];
+  for (const svc of built.splice(0)) {
+    try {
+      svc.close();
+    } catch (failure) {
+      failures.push(failure);
+    }
+  }
+  if (failures.length > 0) {
+    throw new AggregateError(failures, "providers failed to close");
+  }
 });
 
 describe("GitDataProvider", () => {
@@ -1502,6 +1520,7 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
       watchers,
       logger,
     });
+    built.push(svc);
     return { svc, inner, counters, logs, watchers };
   }
 
