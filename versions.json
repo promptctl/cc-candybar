@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-631",
+      "ref": "refs/pull/631/merge",
+      "sha": "4b3d79547cc66de68baedff7ebec0b16b15e537f",
+      "timestamp": "2026-11-06T08:32:20.775Z",
+      "commits": [
+        {
+          "sha": "4b3d79547cc66de68baedff7ebec0b16b15e537f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T08:30:10Z",
+          "message": "Merge c8c08245e6974defa85d51c598d8962f1a583d2e into 787741095721977bdce8e6c628817b38188b4f97\n"
+        },
+        {
+          "sha": "c8c08245e6974defa85d51c598d8962f1a583d2e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T01:20:00-07:00",
+          "message": "fix(test): the close case proves the daemon's own work reached the leak record, and every close failure is reported (candybar-testing-0x6u.6f3)\n"
+        },
+        {
+          "sha": "34bd8c17850e50cb55756fe34ed972481453186b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T01:18:18-07:00",
+          "message": "fix(test): review of the leak fix — the dead baseline goes, a failed close no longer strands the rest, the close-all case closes in finally (candybar-testing-0x6u.6f3)\n"
+        },
+        {
+          "sha": "db8e0e9c88ce69f470dba1598c6cde16bbc8c39d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T01:12:58-07:00",
+          "message": "fix(test): the daemon close case counts only its own timers, and no file leaves a git provider open (candybar-testing-0x6u.6f3)\n\nThe close case read every timer the jest worker armed. A git provider an\nearlier file never closed keeps passing on its period, so its timers landed in\nwhichever file ran next and the case failed on CI order, not on the daemon:\nthe daemon builds no git state in this case, and a probe that leaks one\nprovider before it reproduces the CI stacks.\n\nThe case now counts resources made inside its own async work. The git-cache\nfile closes every provider it builds after each case (75 built, 33 closed by\nhand), and two watcher cases close in a finally.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-634",
       "ref": "refs/pull/634/merge",
       "sha": "af041edd58b9ef719cba9a7b185d0524eb3100e4",
@@ -64,42 +100,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-06T08:08:41Z",
           "message": "chore(release): set `package.json` to 1.198.1 [skip ci]\n\n## [1.198.1](https://github.com/promptctl/cc-candybar/compare/v1.198.0...v1.198.1) (2026-11-06)\n\n### Bug Fixes\n\n* **ci:** a failed early step shows its own red step, not the three that restate it (candybar-testing-0x6u.dsu) ([#630](https://github.com/promptctl/cc-candybar/issues/630)) ([6933237](https://github.com/promptctl/cc-candybar/commit/6933237709e563a9f5c545898d2df59c76238cd3))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-631",
-      "ref": "refs/pull/631/merge",
-      "sha": "efc0e2c9600bd2b24515ae7b885fc0d64ab6d3e5",
-      "timestamp": "2026-11-06T08:21:07.185Z",
-      "commits": [
-        {
-          "sha": "efc0e2c9600bd2b24515ae7b885fc0d64ab6d3e5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T08:20:13Z",
-          "message": "Merge 8ea32ab48c50fdcd235b7e7c4f3b70cc13fc54ba into 91002fc866ad04a5022b58207a9968824f6712bc\n"
-        },
-        {
-          "sha": "8ea32ab48c50fdcd235b7e7c4f3b70cc13fc54ba",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T01:20:00-07:00",
-          "message": "fix(test): the close case proves the daemon's own work reached the leak record, and every close failure is reported (candybar-testing-0x6u.6f3)\n"
-        },
-        {
-          "sha": "1bc1434d58fd8b8019dcda2edd3efedbfb7b8908",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T01:18:18-07:00",
-          "message": "fix(test): review of the leak fix — the dead baseline goes, a failed close no longer strands the rest, the close-all case closes in finally (candybar-testing-0x6u.6f3)\n"
-        },
-        {
-          "sha": "efe7d7bfc80a6871a7734eab7d15094cf00853e1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T01:12:58-07:00",
-          "message": "fix(test): the daemon close case counts only its own timers, and no file leaves a git provider open (candybar-testing-0x6u.6f3)\n\nThe close case read every timer the jest worker armed. A git provider an\nearlier file never closed keeps passing on its period, so its timers landed in\nwhichever file ran next and the case failed on CI order, not on the daemon:\nthe daemon builds no git state in this case, and a probe that leaks one\nprovider before it reproduces the CI stacks.\n\nThe case now counts resources made inside its own async work. The git-cache\nfile closes every provider it builds after each case (75 built, 33 closed by\nhand), and two watcher cases close in a finally.\n"
         }
       ]
     },
