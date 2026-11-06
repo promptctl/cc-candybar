@@ -64931,9 +64931,12 @@ var SessionState = class {
   // every mutation reports changed. Coarse-grained reactivity is correct for
   // session-state's load — mutations are rare and computeds are cheap.
   atom = createAtom("SessionState");
+  // [LAW:one-source-of-truth] An empty session in the file is a husk no write
+  // here leaves (`commit` drops it), so it is not taken up: the store holds
+  // nothing for it at revision 0, as for a session it never saw.
   hydrateFromStorage() {
     this.sessions = new Map(
-      Object.entries(this.storage.load()).map(([sessionId2, kv]) => [
+      Object.entries(this.storage.load()).filter(([, kv]) => Object.keys(kv).length > 0).map(([sessionId2, kv]) => [
         sessionId2,
         { values: new Map(Object.entries(kv)), revision: ++this.head }
       ])

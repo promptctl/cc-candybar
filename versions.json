@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-639",
+      "ref": "refs/pull/639/merge",
+      "sha": "852889018ebb2c54cd2b2406736c84c0575c3059",
+      "timestamp": "2026-11-06T11:55:10.023Z",
+      "commits": [
+        {
+          "sha": "852889018ebb2c54cd2b2406736c84c0575c3059",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T11:54:17Z",
+          "message": "Merge 137c0d8278f8521a70ee3551d4e7ef8351f0d68a into a9a0d05d97e08cc2b5a9facc01cb113d92d542fe\n"
+        },
+        {
+          "sha": "137c0d8278f8521a70ee3551d4e7ef8351f0d68a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T04:54:02-07:00",
+          "message": "fix(facts): a session the store's file holds empty is not taken up, so a recorded state holds the store's revision rule; the replay restores under its view's session (candybar-gather-renderer-76bb.6pj.gs4)\n"
+        },
+        {
+          "sha": "a376413f260658080563af92c3eb92149ddb638e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T04:43:45-07:00",
+          "message": "fix(facts): a recorded draw state the store could not have held is refused; a replayed draw whose depths held moves nothing (candybar-gather-renderer-76bb.6pj.gs4)\n"
+        },
+        {
+          "sha": "a678997e9497b0b7bd9a919534e98e3314b10e3b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T04:27:19-07:00",
+          "message": "fix(facts): a recording replays a session's picks and open menus: each draw carries the state it read (candybar-gather-renderer-76bb.6pj.gs4)\n\nA recording carried the session's documents and requests but not what its\nclicks left, so a replay drew every pick absent, every menu closed, both\nhistories empty and no closing flash.\n\nEach draw line now carries the session's draw state: the store's values and\nrevision for the session, the settings history's and back history's depths,\nand when its menus' idle period began. The revision crosses as itself because\nframe memory keeps the last frame only while it holds; the idle instant is the\none the draw was handed, which the daemon's draw and the seam rig both read\nthrough one MenuIdle method that hands, draws and observes. The replay\nrestores each draw's state before drawing it. The recording format is v3.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-638",
       "ref": "refs/pull/638/merge",
       "sha": "34f6d583a5651d1636351778f5482eabdf704f31",
@@ -48,35 +84,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T03:46:42-07:00",
           "message": "feat(links)!: one link grammar: a link that names no renderer is refused naming its form, at the click, in the URL handler and at load (candybar-gather-renderer-76bb.b2l.eul)\n\nThe parse reads cc-candybar://to/<name>/<verb>/<tail> alone; a direct\ncc-candybar://<verb>/… or a bare cc-candybar://<value> is refused, with a\nproblem naming the form, and `to` is no longer nullable, so the daemon's\nlink judgement loses its null-address exception. The URL handler refuses\nboth forms through its notification, with fixed text. A template literal\nin either form is a load error from the same parse; the retired-verb table\nit made dead is deleted.\n\nEvery producer builds its link through one addressed-link builder: the\ndispatch minter, the tmux status binding (recognised by its click verb, so\na binding from a build before names is still adopted), the doctor probe\n(now probing a named home through the socket its name selects) and the\nclick bench. The install test URL, itself a bare copy link, is removed.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-639",
-      "ref": "refs/pull/639/merge",
-      "sha": "9c885c8a8ef7a92bb347b7e7c6e78a88e04e2bf6",
-      "timestamp": "2026-11-06T11:44:50.229Z",
-      "commits": [
-        {
-          "sha": "9c885c8a8ef7a92bb347b7e7c6e78a88e04e2bf6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T11:43:56Z",
-          "message": "Merge a376413f260658080563af92c3eb92149ddb638e into a9a0d05d97e08cc2b5a9facc01cb113d92d542fe\n"
-        },
-        {
-          "sha": "a376413f260658080563af92c3eb92149ddb638e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T04:43:45-07:00",
-          "message": "fix(facts): a recorded draw state the store could not have held is refused; a replayed draw whose depths held moves nothing (candybar-gather-renderer-76bb.6pj.gs4)\n"
-        },
-        {
-          "sha": "a678997e9497b0b7bd9a919534e98e3314b10e3b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T04:27:19-07:00",
-          "message": "fix(facts): a recording replays a session's picks and open menus: each draw carries the state it read (candybar-gather-renderer-76bb.6pj.gs4)\n\nA recording carried the session's documents and requests but not what its\nclicks left, so a replay drew every pick absent, every menu closed, both\nhistories empty and no closing flash.\n\nEach draw line now carries the session's draw state: the store's values and\nrevision for the session, the settings history's and back history's depths,\nand when its menus' idle period began. The revision crosses as itself because\nframe memory keeps the last frame only while it holds; the idle instant is the\none the draw was handed, which the daemon's draw and the seam rig both read\nthrough one MenuIdle method that hands, draws and observes. The replay\nrestores each draw's state before drawing it. The recording format is v3.\n"
         }
       ]
     },
