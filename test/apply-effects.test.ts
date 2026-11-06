@@ -13,7 +13,13 @@ import {
   effectsUrl,
   encodeSegments,
 } from "../src/click/wire";
-import { clickErrorsAt, holdClickError, lastClickError } from "../src/daemon/click-error";
+import {
+  CLICK_ERROR_HOLD_S,
+  clickErrors,
+  clickErrorsAt,
+  holdClickError,
+  lastClickError,
+} from "../src/daemon/click-error";
 import { JournalTurns } from "../src/daemon/journal-turns";
 import { SessionState } from "../src/daemon/session-state";
 import { BadVerbArgs, type VerbContext } from "../src/daemon/verbs";
@@ -125,6 +131,62 @@ describe("a copy click's launch is an effect", () => {
     expect(r.applyLines()).toEqual([
       expect.stringMatching(/^apply kind=click verb=dispatch sid=s1 outcome=refused said="dispatch: copy-diagnostic: [^"]*" effects=launch:pbcopy revision=\d+$/),
       expect.stringMatching(/^apply kind=effect-done verb=dispatch sid=s1 effect=launch:pbcopy outcome=ok /),
+    ]);
+  });
+});
+
+describe("a click's failures", () => {
+  // [LAW:behavior-not-structure] Read as the draw reads them: each record's
+  // hold at a render's instant, for whom it draws.
+  test("a dispatch's refused step and its landed step's failed launch are two failures, each held from its own instant, and one answer that carried both marks both", async () => {
+    const clock = heldClock(AT);
+    const r = rig(clock);
+    const LAUNCH_MS = 2000;
+    r.spawner.program(
+      program(PBCOPY),
+      runsFor(LAUNCH_MS, exits(1, "", "pbcopy: no pasteboard")),
+    );
+    const url = effectsUrl(MAIN_NAME, [
+      { verb: VERB_COPY_DIAGNOSTIC, args: [SID, "request", "missing"] },
+      { verb: VERB_COPY_DIAGNOSTIC, args: [SID, "request", "k"] },
+    ]);
+    const { answer, performed } = await applyClickAnswered(url, r.ctx);
+    expect(answer?.error).toBeInstanceOf(BadVerbArgs);
+    await turns();
+    clock.advance(LAUNCH_MS);
+    await turns();
+    await performed;
+
+    const after = (ms: number) => instantOf(new Date(AT.getTime() + ms));
+    const [refused, failed] = clickErrors(r.sessionState, SID);
+    expect(refused).toMatchObject({ text: expect.stringMatching(/^copy-diagnostic: /), at: after(0) });
+    expect(failed).toMatchObject({ text: expect.stringMatching(/^pbcopy failed \(.*no pasteboard\)$/), at: after(LAUNCH_MS) });
+    const holds = (ms: number, by: "feed" | "request") =>
+      clickErrorsAt(r.sessionState, SID, after(ms), by).map(({ error, hold }) => [error.text, hold]);
+    const HOLD_MS = CLICK_ERROR_HOLD_S * 1000;
+    // The launch's failure landing did not replace the refusal, nor restart its hold.
+    expect(holds(LAUNCH_MS, "feed")).toEqual([
+      [refused!.text, "held"],
+      [failed!.text, "held"],
+    ]);
+    expect(holds(HOLD_MS, "feed")).toEqual([
+      [refused!.text, "over"],
+      [failed!.text, "held"],
+    ]);
+    // Past both holds, a request is owed both until an answer has carried them.
+    expect(holds(HOLD_MS + LAUNCH_MS, "request")).toEqual([
+      [refused!.text, "owed"],
+      [failed!.text, "owed"],
+    ]);
+    const { arrival: _arrival, described: _described, ...verbCtx } = r.ctx;
+    await applyUnanswered(
+      { kind: "answered", session: SID, errors: [refused!, failed!] },
+      { verbCtx, log: r.ctx.log },
+      "test",
+    );
+    expect(holds(HOLD_MS + LAUNCH_MS, "request")).toEqual([
+      [refused!.text, "over"],
+      [failed!.text, "over"],
     ]);
   });
 });
