@@ -90,17 +90,21 @@ const HAS_TMUX = spawnSync("tmux", ["-V"]).status === 0;
       expect(line()).toBe(before);
     });
 
-    test("a restore is held while any session names a renderer", () => {
-      tmux(
-        ["source-file", "-"],
-        "bind-key -T root MouseDown1Status switch-client -t =\n",
-      );
-      tmux(clickBinding(boundOf(line()).user));
-      const bound = line();
-      tmux(["set-option", "-t", "binding", "@cc-candybar-renderer", "dev"]);
-      expect(tmux(restoreBinding(boundOf(bound).user))).toContain("ccb:held");
-      expect(line()).toBe(bound);
-      tmux(["set-option", "-u", "-t", "binding", "@cc-candybar-renderer"]);
-    });
+    // tmux reads `0` as false, so a session counts by carrying a name at all.
+    test.each(["dev", "0"])(
+      "a restore is held while a session names renderer %s",
+      (name) => {
+        tmux(
+          ["source-file", "-"],
+          "bind-key -T root MouseDown1Status switch-client -t =\n",
+        );
+        tmux(clickBinding(boundOf(line()).user));
+        const bound = line();
+        tmux(["set-option", "-t", "binding", "@cc-candybar-renderer", name]);
+        expect(tmux(restoreBinding(boundOf(bound).user))).toContain("ccb:held");
+        expect(line()).toBe(bound);
+        tmux(["set-option", "-u", "-t", "binding", "@cc-candybar-renderer"]);
+      },
+    );
   },
 );

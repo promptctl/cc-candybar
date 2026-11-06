@@ -443,6 +443,13 @@ interface Layout {
 // The root table (never empty, so `list-keys` of it answers).
 const ROOT_KEYS: Command[] = [["list-keys", "-T", "root"]];
 
+// [LAW:types-are-the-program] Where the server's click binding is in this
+// process's bound period, which opens when it first holds a layout there and
+// closes with one restore: `owed` where it took over a dead daemon's layouts,
+// whose binding it puts back even if it never binds, and `bound` once it has
+// written the binding itself, which it writes once a period.
+type BindingPeriod = "none" | "owed" | "bound";
+
 interface Server {
   view: StatusLines | null;
   adopted: boolean;
@@ -450,9 +457,7 @@ interface Server {
   // Sessions laid out by something other than this daemon, and why, left
   // alone until no held pane is in them.
   readonly left: Map<string, string>;
-  // Whether this process has bound the server's click binding since it last
-  // held no layout there: it binds once a bound period and restores once.
-  bound: boolean;
+  binding: BindingPeriod;
   // [LAW:no-ambient-temporal-coupling] The reconcile running now, if any, and
   // whether something changed while it ran — one more runs after it, never a
   // second beside it.
@@ -592,8 +597,8 @@ export class TmuxStatusLines {
         this.writeSync(atExit, socket, plan.commands);
         this.saidRestored(socket, session, plan.kept);
       }
-      if (!server.bound) continue;
-      server.bound = false;
+      if (server.binding === "none") continue;
+      server.binding = "none";
       const answers = this.askSync(atExit, socket, ROOT_KEYS);
       if (answers === null) continue;
       const restore = this.bindingRestore(socket, answers[0] ?? "");
@@ -670,7 +675,7 @@ export class TmuxStatusLines {
       adopted: false,
       layouts: new Map(),
       left: new Map(),
-      bound: false,
+      binding: "none",
       running: null,
       again: false,
       lastFailure: null,
@@ -788,11 +793,13 @@ export class TmuxStatusLines {
       }
       await this.write(socket, marks);
     }
-    if (server.layouts.size > 0)
+    if (server.layouts.size > 0) {
+      server.binding = "owed";
       this.deps.log(
         "info",
         `tmux-status: socket=${JSON.stringify(socket)} took over layouts=${[...server.layouts.keys()].join(",")}`,
       );
+    }
   }
 
   // What this renderer's sessions on the server at `socket` carry.
@@ -930,7 +937,8 @@ export class TmuxStatusLines {
   // process draws carry their click before this runs, because the reconcile
   // installs them first.
   private async installBinding(socket: string, server: Server): Promise<void> {
-    if (server.bound) return;
+    if (server.binding === "bound") return;
+    const period = server.binding;
     const answers = await this.ask(socket, ROOT_KEYS);
     // [LAW:no-ambient-temporal-coupling] As for a layout: nothing is bound
     // after the shutdown's restore.
@@ -938,7 +946,7 @@ export class TmuxStatusLines {
     const { user } = boundOf(answers[0] ?? "");
     // Known before it is written, so a shutdown while the write is in flight
     // still puts it back.
-    server.bound = true;
+    server.binding = "bound";
     const took =
       (
         await this.write(socket, [
@@ -949,7 +957,7 @@ export class TmuxStatusLines {
     // A bind tmux refused leaves nothing to put back; the next reconcile
     // binds again.
     if (!took) {
-      server.bound = false;
+      server.binding = period;
       return;
     }
     this.deps.log(
@@ -961,8 +969,8 @@ export class TmuxStatusLines {
   // Once a bound period, as it ends: the user's binding put back, unless a
   // session still names a renderer, which tmux decides in the writing call.
   private async restoreBinding(socket: string, server: Server): Promise<void> {
-    if (!server.bound) return;
-    server.bound = false;
+    if (server.binding === "none") return;
+    server.binding = "none";
     const answers = await this.ask(socket, ROOT_KEYS);
     if (answers === null) return;
     const restore = this.bindingRestore(socket, answers[0] ?? "");
@@ -972,7 +980,8 @@ export class TmuxStatusLines {
   }
 
   // The call that puts the user's binding back, from the root table as it
-  // reads now, or null where the user has bound the key since: theirs stays.
+  // reads now, or null where what is bound is not ours (the user's, bound
+  // since, or a dead daemon's that never bound): it stays.
   private bindingRestore(
     socket: string,
     listKeys: string,
@@ -981,7 +990,7 @@ export class TmuxStatusLines {
     if (!bound.ours) {
       this.deps.log(
         "info",
-        `tmux-status: socket=${JSON.stringify(socket)} left MouseDown1Status as it is: bound again since`,
+        `tmux-status: socket=${JSON.stringify(socket)} left MouseDown1Status as it is: not a cc-candybar binding`,
       );
       return null;
     }

@@ -13,6 +13,7 @@ import {
 } from "../src/daemon/tmux-status";
 import {
   boundOf,
+  clickBinding,
   CLICK_OPTION,
   RENDERER_OPTION,
 } from "../src/tmux-status/click-binding";
@@ -184,7 +185,9 @@ class FakeTmux implements TmuxStatusEdge {
       case "if-shell": {
         const [condition, then, otherwise] = words as [string, string, string?];
         const own = /^#\{(@[\w-]+)\}$/.exec(condition);
-        const none = /^#\{!:#\{S:#\{(@[\w-]+)\}\}\}$/.exec(condition);
+        const none = /^#\{!:#\{S:#\{\?#\{!=:#\{(@[\w-]+)\},\},1,\}\}\}$/.exec(
+          condition,
+        );
         const holds =
           own !== null
             ? (this.sessions.get(target ?? "")?.has(own[1]!) ?? false)
@@ -442,8 +445,14 @@ describe("TmuxStatusLines", () => {
     s.set("status", "2");
     for (const [i, value] of Object.entries(wrote))
       s.set(`status-format[${i}]`, value);
+    // Its binding too, though this daemon holds no pane there and never binds.
+    h.tmux.binding = clickBinding([["select-pane"]])
+      .slice(4)
+      .map(printed)
+      .join(" ");
     await h.answer({ "%9": "$2" }, {});
     expect([...s]).toEqual([["status-format[2]", "old"]]);
+    expect(h.tmux.binding).toBe("select-pane");
   });
 
   test("a session a dead daemon on this socket laid out names this daemon once taken over, and names none once released", async () => {
@@ -505,9 +514,9 @@ describe("TmuxStatusLines", () => {
     await h.answer({ "%1": "$1" }, { $1: "%1" });
     await h.answer({}, {});
     await h.answer({}, {});
-    expect(h.logs.filter((l) => l.includes("bound again since"))).toHaveLength(
-      1,
-    );
+    expect(
+      h.logs.filter((l) => l.includes("not a cc-candybar binding")),
+    ).toHaveLength(1);
     expect(h.tmux.binding).toBe("select-pane");
   });
 

@@ -89,10 +89,14 @@ function chained(list: CommandList): CommandList | null | undefined {
     operands = operands.slice(1);
   if (operands[0] !== OUR_RANGE) return undefined;
   const otherwise = operands[2];
-  if (otherwise === undefined) return null;
-  return typeof otherwise === "string"
-    ? tmuxCommands(otherwise)
-    : otherwise.block;
+  const chain =
+    otherwise === undefined
+      ? []
+      : typeof otherwise === "string"
+        ? tmuxCommands(otherwise)
+        : otherwise.block;
+  // An else-branch of no commands chains none, as an absent one does.
+  return chain.length > 0 ? chain : null;
 }
 
 // [LAW:parse-dont-validate] MouseDown1Status as a listing holds it: whether
@@ -124,7 +128,9 @@ export const HELD = "ccb:held";
 
 // [LAW:no-ambient-temporal-coupling] Putting the user's binding back, decided
 // by tmux in the call that writes it: only while no session names a renderer,
-// so one that named itself since the listing was read keeps its clicks.
+// so one that named itself since the listing was read keeps its clicks. A
+// session counts by whether it carries a name at all, because tmux reads a
+// name such as `0` as false (measured).
 export function restoreBinding(user: CommandList | null): string[] {
   const put =
     user === null
@@ -133,7 +139,7 @@ export function restoreBinding(user: CommandList | null): string[] {
   return [
     "if-shell",
     "-F",
-    `#{!:#{S:#{${RENDERER_OPTION}}}}`,
+    `#{!:#{S:#{?#{!=:#{${RENDERER_OPTION}},},1,}}}`,
     `${put} ; display-message -p ${RESTORED}`,
     `display-message -p ${HELD}`,
   ];
