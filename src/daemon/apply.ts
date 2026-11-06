@@ -217,8 +217,10 @@ export const ARMS: ApplyArms<Event> = {
 // [LAW:types-are-the-program] Generic over the kind, so the arm `ARMS[kind]`
 // picks, the parts it reads and the answer it gives are the ones `ApplyArms`
 // pairs with it. Answers once the arm has: the effects run after, and
-// `performed` settles when the last has reported. It never rejects, so a
-// source may drop it; a test awaits it.
+// `performed` settles when the last has reported. `performed` never rejects,
+// so a source may drop it, and a test awaits it; `apply` itself rejects as
+// its arm does (a turn the close refused, a commit that threw), which a
+// source answers as it answers the arm.
 export async function apply<K extends Event["kind"]>(
   event: Extract<Event, { readonly kind: K }>,
   parts: ArmParts[K],
@@ -252,9 +254,18 @@ export async function apply<K extends Event["kind"]>(
   }
   return {
     answer: applied.answer,
-    performed: performAll(parts, of, applied.effects),
+    // An event that described nothing performs nothing, and takes no place in
+    // the session's order: the effect-done events of that order are applied
+    // from inside it, and a place they took there would settle only after the
+    // work they report on.
+    performed:
+      applied.effects.length === 0
+        ? NOTHING_PERFORMED
+        : performAll(parts, of, applied.effects),
   };
 }
+
+const NOTHING_PERFORMED: Promise<void> = Promise.resolve();
 
 // [LAW:nothing-unseen] One `apply` line per applied event, from the layer
 // every event passes through: the kind, the verb, the session, the effects

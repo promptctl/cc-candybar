@@ -2026,6 +2026,10 @@ const hoisted = (
 
 // An effect's turn: its gather's rest, or, gathering in the turn, the whole of
 // it, which then reads what the click wrote before it.
+// [LAW:effects-at-boundaries] A step's effects are its own until it returns:
+// one that throws after describing describes nothing, so no effect performs
+// for a step the bar reports as refused. Held here, in the one runner every
+// leaf passes through, rather than as a rule each leaf keeps.
 async function perform(
   verb: Verb,
   value: string,
@@ -2034,7 +2038,9 @@ async function perform(
 ): Promise<void> {
   const step =
     gathered ?? (await ctx.gather((full) => verb.prepare(value, full)));
-  await step(ctx);
+  const described: Effect[] = [];
+  await step({ ...ctx, effect: (effect) => void described.push(effect) });
+  for (const effect of described) ctx.effect(effect);
 }
 
 // [LAW:no-ambient-temporal-coupling] Only the gather that opens a click goes
