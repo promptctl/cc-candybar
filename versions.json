@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-633",
+      "ref": "refs/pull/633/merge",
+      "sha": "3aad9a511a6b230b1d581024a9d15a4372b35fae",
+      "timestamp": "2026-11-06T08:24:42.735Z",
+      "commits": [
+        {
+          "sha": "3aad9a511a6b230b1d581024a9d15a4372b35fae",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T01:22:38-07:00",
+          "message": "Merge 37abc98a9aeb4508d77b6f0fda70c9e18fe3ab73 into 787741095721977bdce8e6c628817b38188b4f97\n"
+        },
+        {
+          "sha": "37abc98a9aeb4508d77b6f0fda70c9e18fe3ab73",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T01:19:30-07:00",
+          "message": "feat(apply): no turn awaits a launch; a doctor step is an effect, and a held click error accumulates (candybar-gather-renderer-76bb.1dh.c3l)\n\nA turn is a synchronous call: its body cannot be async (Synchronous<T>), a\nrender request never waits behind another session's probes, and no draw can\nread a click half landed. A doctor step describes an effect; the performer\ngathers after the click's turn through a recording view, and the landing\nchecks the gather's read set and config in the turn that writes the report.\nLands yth: a click error held while the last is live joins it.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "787741095721977bdce8e6c628817b38188b4f97",
