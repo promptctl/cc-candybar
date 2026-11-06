@@ -4,15 +4,22 @@
     {
       "version": "pr-624",
       "ref": "refs/pull/624/merge",
-      "sha": "84d29cca1c76d67a3284269fd351e7ebc5edd2a6",
-      "timestamp": "2026-11-06T05:11:57.967Z",
+      "sha": "02dc42ee78c1013a83873e634f6f7ef8713ca8ef",
+      "timestamp": "2026-11-06T05:31:06.050Z",
       "commits": [
         {
-          "sha": "84d29cca1c76d67a3284269fd351e7ebc5edd2a6",
+          "sha": "02dc42ee78c1013a83873e634f6f7ef8713ca8ef",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T05:11:05Z",
-          "message": "Merge 4ce50c2b05a290d69ede19ca901ed92bf84fda9c into 9b6790b0d73afbdd6c683accf7b693cffe16c89e\n"
+          "timestamp": "2026-11-06T05:30:09Z",
+          "message": "Merge 5cfc1100ca3aae44374ee811ea8c385244ede463 into 9b6790b0d73afbdd6c683accf7b693cffe16c89e\n"
+        },
+        {
+          "sha": "5cfc1100ca3aae44374ee811ea8c385244ede463",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T22:29:44-07:00",
+          "message": "fix(facts): a settle reads the lanes as declared now, a redeclaration is one turn, a cleared fault keeps its line, a recording is one follow's stream, one JSON-object predicate (candybar-gather-renderer-76bb.6pj.go2)\n"
         },
         {
           "sha": "4ce50c2b05a290d69ede19ca901ed92bf84fda9c",

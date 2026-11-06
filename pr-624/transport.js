@@ -36915,6 +36915,68 @@ init_globals();
 init_globals();
 var import_node_path = __toESM(require_path_browserify(), 1);
 
+// src/utils/plain.ts
+init_globals();
+
+// site/shims/crypto.ts
+init_globals();
+var import_buffer3 = __toESM(require_buffer(), 1);
+function fnv(text4) {
+  let h = 2166136261;
+  for (let i = 0; i < text4.length; i++) h = Math.imul(h ^ text4.charCodeAt(i), 16777619) >>> 0;
+  return h.toString(16).padStart(8, "0").repeat(8);
+}
+function createHash(_alg) {
+  let acc = "";
+  const h = {
+    update(d) {
+      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
+      return h;
+    },
+    digest(_enc2) {
+      return fnv(acc);
+    }
+  };
+  return h;
+}
+function createHmac(_alg, key) {
+  let acc = import_buffer3.Buffer.from(key).toString("hex");
+  const h = {
+    update(d) {
+      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
+      return h;
+    },
+    digest() {
+      return import_buffer3.Buffer.from(fnv(acc), "hex");
+    }
+  };
+  return h;
+}
+function timingSafeEqual(a, b) {
+  if (a.length !== b.length) throw new RangeError("Input buffers must have the same byte length");
+  return a.every((byte, i) => byte === b[i]);
+}
+var randomUUID = () => globalThis.crypto.randomUUID();
+var randomBytes = (n) => globalThis.crypto.getRandomValues(new Uint8Array(n));
+var crypto_default = { createHash, createHmac, timingSafeEqual, randomUUID, randomBytes };
+
+// src/utils/plain.ts
+function isPlainObject(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function digestOf(value) {
+  return createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex");
+}
+function canonical(value) {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (typeof value === "object" && value !== null) {
+    return Object.fromEntries(
+      Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([k, v]) => [k, canonical(v)])
+    );
+  }
+  return value;
+}
+
 // src/config/loader/diagnostics.ts
 init_globals();
 
@@ -37602,9 +37664,6 @@ function optionalEnum(ctx, path42, raw, field, allowed) {
     return void 0;
   }
   return v;
-}
-function isPlainObject(v) {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 function describeType(v) {
   if (v === null) return "null";
@@ -51694,48 +51753,6 @@ var Holds = class {
 // src/var-system/source-runs.ts
 init_globals();
 
-// site/shims/crypto.ts
-init_globals();
-var import_buffer3 = __toESM(require_buffer(), 1);
-function fnv(text4) {
-  let h = 2166136261;
-  for (let i = 0; i < text4.length; i++) h = Math.imul(h ^ text4.charCodeAt(i), 16777619) >>> 0;
-  return h.toString(16).padStart(8, "0").repeat(8);
-}
-function createHash(_alg) {
-  let acc = "";
-  const h = {
-    update(d) {
-      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
-      return h;
-    },
-    digest(_enc2) {
-      return fnv(acc);
-    }
-  };
-  return h;
-}
-function createHmac(_alg, key) {
-  let acc = import_buffer3.Buffer.from(key).toString("hex");
-  const h = {
-    update(d) {
-      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
-      return h;
-    },
-    digest() {
-      return import_buffer3.Buffer.from(fnv(acc), "hex");
-    }
-  };
-  return h;
-}
-function timingSafeEqual(a, b) {
-  if (a.length !== b.length) throw new RangeError("Input buffers must have the same byte length");
-  return a.every((byte, i) => byte === b[i]);
-}
-var randomUUID = () => globalThis.crypto.randomUUID();
-var randomBytes = (n) => globalThis.crypto.getRandomValues(new Uint8Array(n));
-var crypto_default = { createHash, createHmac, timingSafeEqual, randomUUID, randomBytes };
-
 // site/shims/fs-promises.ts
 init_globals();
 var import_memfs2 = __toESM(require_lib8(), 1);
@@ -53001,7 +53018,7 @@ function sourceEntries(root, dir, keep2 = isSourceEntry) {
     return [[rel, entryBytes(p2, st)]];
   });
 }
-function digestOf(entries) {
+function digestOf2(entries) {
   const h = crypto_default.createHash("sha256");
   for (const [rel, bytes] of entries) {
     h.update(rel).update("\0").update(bytes).update("\0");
@@ -53009,11 +53026,11 @@ function digestOf(entries) {
   return h.digest("hex");
 }
 function sourceDigest(srcDir) {
-  return digestOf(sourceEntries(srcDir, srcDir));
+  return digestOf2(sourceEntries(srcDir, srcDir));
 }
 var CRATE_SOURCE = ["Cargo.toml", "Cargo.lock", "src"];
 function crateDigest(crateDir) {
-  return digestOf(
+  return digestOf2(
     sourceEntries(
       crateDir,
       crateDir,
@@ -53023,21 +53040,6 @@ function crateDigest(crateDir) {
 }
 var SHORT_DIGEST_LENGTH = 7;
 var shortDigest = (digest2) => digest2.slice(0, SHORT_DIGEST_LENGTH);
-
-// src/utils/plain.ts
-init_globals();
-function digestOf2(value) {
-  return createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex");
-}
-function canonical(value) {
-  if (Array.isArray(value)) return value.map(canonical);
-  if (typeof value === "object" && value !== null) {
-    return Object.fromEntries(
-      Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([k, v]) => [k, canonical(v)])
-    );
-  }
-  return value;
-}
 
 // src/var-system/parse.ts
 init_globals();
@@ -53060,7 +53062,7 @@ var jsonParser = (text4) => {
 
 // src/var-system/source-runs.ts
 var SHELL_READ_TIMEOUT_MS = 1e4;
-var digestOf3 = (identity2) => digestOf2(identity2);
+var digestOf3 = (identity2) => digestOf(identity2);
 function keyHashOf(value) {
   return crypto_default.createHash("sha256").update(value).digest("hex");
 }
@@ -81847,7 +81849,7 @@ function plugins(p2) {
 }
 function loadKey(inputs) {
   const { loaded, chain: chain2 } = inputs;
-  return digestOf2({
+  return digestOf({
     cwd: inputs.cwd,
     chain: {
       layers: chain2.layers,
@@ -82108,8 +82110,10 @@ function openView(state, cwd2, facts, {
   const redeclare = (facts2, preset) => {
     const now2 = declared.get();
     if (facts2 === now2.facts && preset === now2.preset) return;
-    followed.follow(facts2, declarationOf(preset));
-    runInAction(() => declared.set({ facts: facts2, preset }));
+    runInAction(() => {
+      followed.follow(facts2, declarationOf(preset));
+      declared.set({ facts: facts2, preset });
+    });
   };
   const stop2 = reaction(
     presetNow,
@@ -82957,7 +82961,8 @@ function stamped(prior, moved, at, session) {
       moved.update,
       at
     );
-    return prior.failure === null && facts === prior.line.facts ? prior : { line: { at, facts }, failure: null };
+    const line = facts === prior.line.facts ? prior.line : { at, facts };
+    return line === prior.line && prior.failure === null ? prior : { line, failure: null };
   } catch (e) {
     return failedWith(prior, `stamping the facts document: ${String(e)}`);
   }
@@ -83007,13 +83012,16 @@ function inProcessFacts({
         { deep: false }
       );
       const inputs = computed(() => {
-        const { facts: facts2, declaration: declaration2, lanes } = declared.get();
+        const { facts: facts2, declaration: declaration2 } = declared.get();
         return {
           hookData: facts2.hookData,
           cwd: facts2.cwd,
           hints: facts2.hints,
           neededInputPaths: declaration2.closure,
-          deps: { ...providers, lanes: () => lanes }
+          // The lanes as declared now, read at each call: a settle in flight
+          // waits out the lanes a follow during it took, not the ones it
+          // started with.
+          deps: { ...providers, lanes: () => declared.get().lanes }
         };
       });
       const readings = computed(
