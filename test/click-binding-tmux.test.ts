@@ -51,6 +51,18 @@ const HAS_TMUX = spawnSync("tmux", ["-V"]).status === 0;
       ],
       ["the server's own", "switch-client -t ="],
       ["one that mentions cc-candybar", `run-shell "cc-candybar doctor"`],
+      [
+        "an if-shell over blocks",
+        "if-shell -F '#{==:1,1}' { select-window -t = ; display-message hi } { display-message no }",
+      ],
+      [
+        "a list ending in a nested block",
+        `select-window -t = \\; if-shell -F 1 { display-message "a }b" ; display-message 'c;d' }`,
+      ],
+      [
+        "a string beside a block",
+        `if-shell -F 1 "display-message \\"{ x }\\"" { display-message '{' }`,
+      ],
     ])("is %s, and comes back as it was", (_what, command) => {
       tmux(
         ["source-file", "-"],

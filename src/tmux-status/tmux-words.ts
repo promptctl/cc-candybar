@@ -3,8 +3,12 @@
 // when it lists a binding (`list-keys`), so what it prints reads as the
 // commands it holds.
 
-// A command list: commands of words, in the order tmux runs them.
-export type CommandList = ReadonlyArray<readonly string[]>;
+// A command list: commands of words, in the order tmux runs them. A word is a
+// string or a block of commands (`{ … }`): tmux keeps the two apart and prints
+// each as it was written, so a list read back and written again stays as the
+// user wrote it.
+export type Word = string | { readonly block: CommandList };
+export type CommandList = ReadonlyArray<readonly Word[]>;
 
 // A string tmux parses as one word of a command: double-quoted, with the
 // three characters it escapes there escaped.
@@ -15,14 +19,21 @@ export function tmuxQuoted(text: string): string {
 // A command list as the text of one word, for a command that takes one —
 // if-shell's, which tmux parses as it is (measured: not format-expanded).
 export function commandText(commands: CommandList): string {
-  return commands.map((c) => c.map(tmuxQuoted).join(" ")).join(" ; ");
+  return commands.map((c) => c.map(wordText).join(" ")).join(" ; ");
 }
+
+// A word as tmux parses it back to itself: a block's commands inside braces,
+// where tmux reads ` ; ` as their separator.
+const wordText = (word: Word): string =>
+  typeof word === "string"
+    ? tmuxQuoted(word)
+    : `{ ${commandText(word.block)} }`;
 
 // A command list spliced into command text as the commands of the command
 // before it — a bind-key's — rather than as commands of its own: `\;` is the
 // separator tmux leaves to the command it parses.
 export function boundText(commands: CommandList): string {
-  return commands.map((c) => c.map(tmuxQuoted).join(" ")).join(" \\; ");
+  return commands.map((c) => c.map(wordText).join(" ")).join(" \\; ");
 }
 
 // The escapes tmux's printer writes inside a word (vis(3) with its C-style,
@@ -47,24 +58,18 @@ const lonely = (text: string, i: number): boolean =>
 // [LAW:parse-dont-validate] The command list text spells, as tmux prints one
 // or as command text: words bare, double-quoted or single-quoted, every one
 // with its escapes undone (tmux escapes inside single quotes too), `''` the
-// empty word, and an unquoted `;` or a lone `\;` the separator, so a `;`
-// inside a quoted word stays in it. A lone `;` argument cannot be told from a
-// separator in a listing (tmux prints both `\;`), so it reads as one. Octal
+// empty word, `{ … }` a block of commands, and an unquoted `;` or a lone `\;`
+// the separator, so a `;` inside a quoted word stays in it. A lone `;`
+// argument cannot be told from a separator in a listing (tmux prints both
+// `\;`), so it reads as one. A brace inside a word is printed escaped
+// (measured: `\{`), so one standing alone opens or closes a block. Octal
 // escapes are bytes, decoded together so a UTF-8 character tmux escaped reads
 // whole.
-export function tmuxCommands(text: string): string[][] {
-  const commands: string[][] = [[]];
+export function tmuxCommands(text: string): Word[][] {
   let i = 0;
-  while (i < text.length) {
-    if (text[i] === " ") {
-      i++;
-      continue;
-    }
-    if (text[i] === ";" || lonely(text, i)) {
-      commands.push([]);
-      i += text[i] === ";" ? 1 : 2;
-      continue;
-    }
+  const alone = (brace: string): boolean =>
+    text[i] === brace && (text[i + 1] ?? " ") === " ";
+  const word = (): string => {
     const bytes: number[] = [];
     const add = (s: string): void => {
       bytes.push(...Buffer.from(s, "utf8"));
@@ -95,7 +100,25 @@ export function tmuxCommands(text: string): string[][] {
         i += char.length;
       }
     }
-    commands.at(-1)!.push(Buffer.from(bytes).toString("utf8"));
-  }
-  return commands.filter((c) => c.length > 0);
+    return Buffer.from(bytes).toString("utf8");
+  };
+  // The commands up to the end, or up to the `}` closing the block they are in.
+  const list = (inBlock: boolean): Word[][] => {
+    const commands: Word[][] = [[]];
+    while (i < text.length) {
+      if (text[i] === " ") i++;
+      else if (text[i] === ";" || lonely(text, i)) {
+        commands.push([]);
+        i += text[i] === ";" ? 1 : 2;
+      } else if (inBlock && alone("}")) {
+        i++;
+        break;
+      } else if (alone("{")) {
+        i++;
+        commands.at(-1)!.push({ block: list(true) });
+      } else commands.at(-1)!.push(word());
+    }
+    return commands.filter((c) => c.length > 0);
+  };
+  return list(false);
 }

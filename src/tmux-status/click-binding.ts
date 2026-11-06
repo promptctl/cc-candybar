@@ -47,9 +47,10 @@ export function sessionClick(
   return `${handler} ${addressedLink(name, VERB_RANGE, encodeSegments([socket, mac]))}`;
 }
 
-// What a click on a `ccb` range says where its session carries no click.
+// What a click on a `ccb` range says where its session carries no click: a
+// row an older build drew, which names its renderer but writes no click.
 export const NO_RENDERER =
-  "cc-candybar: no renderer takes clicks on this row: the one that drew it is gone, or older than this binding";
+  "cc-candybar: no renderer takes clicks on this row: the one that drew it is older than this binding";
 
 // The test every cc-candybar binding of every build opens with: the press was
 // on a range of ours. It is what tells ours from the user's, by shape.
@@ -84,10 +85,14 @@ function chained(list: CommandList): CommandList | null | undefined {
   if (only === undefined || more.length > 0 || only[0] !== "if-shell")
     return undefined;
   let operands = only.slice(1);
-  while (operands[0]?.startsWith("-")) operands = operands.slice(1);
+  while (typeof operands[0] === "string" && operands[0].startsWith("-"))
+    operands = operands.slice(1);
   if (operands[0] !== OUR_RANGE) return undefined;
   const otherwise = operands[2];
-  return otherwise === undefined ? null : tmuxCommands(otherwise);
+  if (otherwise === undefined) return null;
+  return typeof otherwise === "string"
+    ? tmuxCommands(otherwise)
+    : otherwise.block;
 }
 
 // [LAW:parse-dont-validate] MouseDown1Status as a listing holds it: whether

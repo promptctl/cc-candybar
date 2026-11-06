@@ -4,7 +4,11 @@
 // printed.
 
 import { boundOf, clickBinding } from "../../src/tmux-status/click-binding";
-import { commandText, tmuxCommands } from "../../src/tmux-status/tmux-words";
+import {
+  commandText,
+  tmuxCommands,
+  type CommandList,
+} from "../../src/tmux-status/tmux-words";
 
 // A root table listing whose MouseDown1Status runs `printed`, padded as a
 // whole table's listing pads the key column.
@@ -15,7 +19,7 @@ const listing = (printed: string): string =>
   ].join("\n") + "\n";
 
 // Our binding as tmux prints it back, over `user`.
-const ours = (user: string[][] | null): string => {
+const ours = (user: CommandList | null): string => {
   const [, , , , ...command] = clickBinding(user);
   return command
     .map((w) =>
@@ -61,6 +65,55 @@ describe("the user's binding a listing holds", () => {
       `run-shell "cc-candybar doctor"`,
       [["run-shell", "cc-candybar doctor"]],
     ],
+    [
+      "an if-shell over blocks",
+      `if-shell -F "#{==:1,1}" { select-window -t = ; display-message hi } { display-message no }`,
+      [
+        [
+          "if-shell",
+          "-F",
+          "#{==:1,1}",
+          {
+            block: [
+              ["select-window", "-t", "="],
+              ["display-message", "hi"],
+            ],
+          },
+          { block: [["display-message", "no"]] },
+        ],
+      ],
+    ],
+    [
+      "a command list ending in a block with a brace and a ; quoted inside",
+      `select-window -t = \\; if-shell -F 1 { display-message "a }b" ; display-message "c;d" }`,
+      [
+        ["select-window", "-t", "="],
+        [
+          "if-shell",
+          "-F",
+          "1",
+          {
+            block: [
+              ["display-message", "a }b"],
+              ["display-message", "c;d"],
+            ],
+          },
+        ],
+      ],
+    ],
+    [
+      "a string beside a block, each holding a brace",
+      `if-shell -F 1 "display-message \\"{ x }\\"" { display-message \\{ }`,
+      [
+        [
+          "if-shell",
+          "-F",
+          "1",
+          'display-message "{ x }"',
+          { block: [["display-message", "{"]] },
+        ],
+      ],
+    ],
   ])("is %s, read as the user's", (_what, printed, user) => {
     expect(boundOf(listing(printed))).toEqual({ ours: false, user });
   });
@@ -86,6 +139,24 @@ describe("the user's binding a listing holds", () => {
     );
     expect(boundOf(listing(ours(user)))).toEqual({ ours: true, user });
     expect(boundOf(listing(ours(null)))).toEqual({ ours: true, user: null });
+  });
+
+  test("under ours, a block in the user's list is still a block", () => {
+    const user: CommandList = [
+      [
+        "if-shell",
+        "-F",
+        "#{==:1,1}",
+        {
+          block: [
+            ["select-window", "-t", "="],
+            ["display-message", "hi"],
+          ],
+        },
+        { block: [["display-message", "no"]] },
+      ],
+    ];
+    expect(boundOf(listing(ours(user)))).toEqual({ ours: true, user });
   });
 
   // An older build wrote its prior's printed text as the else-branch, so its

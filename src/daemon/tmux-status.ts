@@ -121,6 +121,9 @@ export function tmuxArg(value: string): string {
 
 type Command = readonly string[];
 
+// What a write of no commands answers: tmux holds what it held.
+const WROTE_NOTHING: TmuxRun = { kind: "ok", stdout: "" };
+
 // Commands run in one tmux invocation, `;` between them.
 function chain(commands: readonly Command[]): string[] {
   return commands.flatMap((command, i) => [
@@ -595,7 +598,7 @@ export class TmuxStatusLines {
       if (answers === null) continue;
       const restore = this.bindingRestore(socket, answers[0] ?? "");
       if (restore === null) continue;
-      const run = this.counted(socket, atExit(socket, restore.command));
+      const run = this.writeSync(atExit, socket, [restore.command]);
       this.saidBindingRestore(socket, run, restore.user);
     }
   }
@@ -767,6 +770,7 @@ export class TmuxStatusLines {
       `#{session_id}\t#{${PRIOR_OPTION}}\t#{${WROTE_OPTION}}`,
     ]);
     if (run.kind === "ok") {
+      const ours = this.marks(socket);
       const marks: Command[] = [];
       for (const line of run.stdout.split("\n")) {
         const [session, prior, wrote = ""] = line.split("\t");
@@ -779,7 +783,7 @@ export class TmuxStatusLines {
             rows: [],
             status: found.status,
           });
-          marks.push(...marksWrite(session, this.marks(socket)));
+          marks.push(...marksWrite(session, ours));
         } else this.leave(socket, server, session, found.why);
       }
       await this.write(socket, marks);
@@ -877,16 +881,18 @@ export class TmuxStatusLines {
     // the layout as it was, so the next reconcile writes it again.
     const took =
       commands.length === 0 ||
-      (await this.write(socket, [
-        [
-          "if-shell",
-          "-F",
-          "-t",
-          session,
-          `#{${PRIOR_OPTION}}`,
-          commandText(commands),
-        ],
-      ]));
+      (
+        await this.write(socket, [
+          [
+            "if-shell",
+            "-F",
+            "-t",
+            session,
+            `#{${PRIOR_OPTION}}`,
+            commandText(commands),
+          ],
+        ])
+      ).kind === "ok";
     if (!took) return;
     layout.rows = rows;
     layout.status = status;
@@ -933,10 +939,13 @@ export class TmuxStatusLines {
     // Known before it is written, so a shutdown while the write is in flight
     // still puts it back.
     server.bound = true;
-    const took = await this.write(socket, [
-      clickBinding(user),
-      ["set-option", "-g", "-q", "-u", OLDER_BINDING_RECORD],
-    ]);
+    const took =
+      (
+        await this.write(socket, [
+          clickBinding(user),
+          ["set-option", "-g", "-q", "-u", OLDER_BINDING_RECORD],
+        ])
+      ).kind === "ok";
     // A bind tmux refused leaves nothing to put back; the next reconcile
     // binds again.
     if (!took) {
@@ -958,7 +967,7 @@ export class TmuxStatusLines {
     if (answers === null) return;
     const restore = this.bindingRestore(socket, answers[0] ?? "");
     if (restore === null) return;
-    const run = await this.run(socket, restore.command);
+    const run = await this.write(socket, [restore.command]);
     this.saidBindingRestore(socket, run, restore.user);
   }
 
@@ -1038,15 +1047,15 @@ export class TmuxStatusLines {
     return run.kind === "ok" ? answersOf(run.stdout, queries.length) : null;
   }
 
-  // Whether tmux took the write.
+  // What tmux said to the write: `ok` where it took it.
   private async write(
     socket: string,
     commands: readonly Command[],
     stdin?: string,
-  ): Promise<boolean> {
-    if (commands.length === 0) return true;
+  ): Promise<TmuxRun> {
+    if (commands.length === 0) return WROTE_NOTHING;
     this.writes++;
-    return (await this.run(socket, chain(commands), stdin)).kind === "ok";
+    return this.run(socket, chain(commands), stdin);
   }
 
   private writeSync(
@@ -1054,20 +1063,20 @@ export class TmuxStatusLines {
     socket: string,
     commands: readonly Command[],
     stdin?: string,
-  ): void {
-    if (commands.length === 0) return;
+  ): TmuxRun {
+    if (commands.length === 0) return WROTE_NOTHING;
     this.writes++;
-    this.counted(socket, atExit(socket, chain(commands), stdin));
+    return this.counted(socket, atExit(socket, chain(commands), stdin));
   }
 }
 
-// A status-line click's segments, or null when one is not percent-encoded:
-// a value it cannot read is refused like any other it cannot use.
 // The user's binding as a log line spells it: its command text, or what
 // stands where there is none.
 const spelled = (user: CommandList | null): string =>
   user === null ? "unbound" : JSON.stringify(commandText(user));
 
+// A status-line click's segments, or null when one is not percent-encoded:
+// a value it cannot read is refused like any other it cannot use.
 function segmentsOf(value: string): string[] | null {
   try {
     return decodeSegments(value);
