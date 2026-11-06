@@ -22,6 +22,7 @@ import {
 } from "../../src/daemon/daemon";
 import { memoryLimitBytes } from "../../src/daemon/limits";
 import { fileStorage } from "../../src/daemon/file-storage";
+import { offlinePricing } from "../../src/segments/pricing";
 import { DaemonLog } from "../../src/daemon/log";
 import { homeOf, type RendererHome } from "../../src/daemon/home";
 import { daemonPaths, type DaemonPaths } from "../../src/daemon/paths";
@@ -105,6 +106,9 @@ export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
       // [LAW:nothing-unseen] Every request and click a daemon here serves
       // writes through the ordering instrument (test/helpers/writes-in-turn.ts).
       sessionWrites: writesInTurn,
+      // [LAW:effects-at-boundaries] A daemon under test prices by the bundled
+      // rates: it reaches no network, and its close leaves no load out.
+      pricing: () => offlinePricing(),
       bundle: bundleAt(path.join(paths.state, "checkout")),
       host: HOST,
       memoryLimitBytes: memoryLimitBytes(process.env),

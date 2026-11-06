@@ -109,8 +109,7 @@ const FAKE_IMPORTS = [
       "**/process-probe-fake",
       "**/process-probe-fake.js",
     ],
-    message:
-      "A fake is a test's: src never imports one. [LAW:single-enforcer]",
+    message: "A fake is a test's: src never imports one. [LAW:single-enforcer]",
   },
 ];
 
@@ -176,6 +175,12 @@ const OWNED_IMPORTS = {
   fileStorage: {
     group: ["**/file-storage", "**/file-storage.js"],
     owners: ["src/daemon/production-adapters.ts"],
+    message: "A daemon is handed its adapters (production-adapters.ts).",
+  },
+  // The network a daemon prices by: production's, or the demo's own process.
+  livePricing: {
+    group: ["**/segments/pricing", "**/segments/pricing.js"],
+    owners: ["src/daemon/production-adapters.ts", "src/demo/dsl.ts"],
     message: "A daemon is handed its adapters (production-adapters.ts).",
   },
   linkSignerFromKeyFile: {
@@ -482,11 +487,7 @@ export default [
   {
     files: HOST_READERS,
     rules: {
-      "no-restricted-properties": [
-        "error",
-        ...CLOCK_PROPERTIES,
-        KILL_PROPERTY,
-      ],
+      "no-restricted-properties": ["error", ...CLOCK_PROPERTIES, KILL_PROPERTY],
     },
   },
   {

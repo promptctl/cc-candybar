@@ -55,7 +55,8 @@ import { textOf, ansiOf } from "../src/render/frame";
 import { viewFacts } from "./helpers/view-facts";
 import { ReloadSignal } from "./helpers/reload-signal";
 import { until } from "./helpers/until";
-import { locations, stateDir, cacheDir } from "../src/daemon/paths";
+import { locations, stateDir } from "../src/daemon/paths";
+import { offlinePricing } from "../src/segments/pricing";
 import { bareGates } from "./helpers/gates";
 import { daemonGates } from "../src/daemon/update-keys";
 import { systemTimekeeper } from "../src/time";
@@ -156,7 +157,7 @@ function rig(): Rig {
     clock: systemTimekeeper,
     launcher: world.launcher,
     host,
-    cacheDir: cacheDir(homeOf(host)),
+    pricing: offlinePricing(),
     watchers,
     fileEvents: new FileEventDelivery({
       clock: systemTimekeeper,

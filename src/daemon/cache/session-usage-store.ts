@@ -8,7 +8,7 @@ import {
   type TokenBreakdown,
 } from "../../segments/session";
 import type { Host } from "../../host";
-import { PricingService } from "../../segments/pricing";
+import { costOf, type Pricing, type PriceTable } from "../../segments/pricing";
 import {
   getClaudePaths,
   findProjectPaths,
@@ -255,13 +255,13 @@ const EMPTY_FILE_FOLD: FileFold = {
 // file is foldAppended's to start over from EMPTY_FILE_FOLD.
 //
 // [LAW:one-source-of-truth] Session cost and day cost use the SAME priced value:
-// an entry lacking costUSD is priced once (PricingService) and that figure feeds
+// an entry lacking costUSD is priced once (by the store's pricing) and that figure feeds
 // BOTH the session total and its day bucket, so `today` is not silently
 // under-counted for un-costed entries.
 async function foldFile(
   state: FileFold,
   entries: readonly ParsedEntry[],
-  cacheRoot: string,
+  pricing: Pricing,
   clock: Pick<Timekeeper, "now" | "monotonic" | "after">,
 ): Promise<FileFold> {
   // dayKey strings sort lexically == chronologically, so "keep recent" is a
@@ -270,6 +270,9 @@ async function foldFile(
   let count = state.entries;
   let cost = state.cost;
   const breakdown = { ...state.breakdown };
+  // Loaded by the first entry that has no cost of its own, so a fold of
+  // costed entries never waits on it.
+  let table: PriceTable | null = null;
   const days = new Map<string, DayUsage>();
   for (const [k, v] of state.days) if (k >= keep) days.set(k, { ...v });
   for (const entry of entries) {
@@ -277,8 +280,7 @@ async function foldFile(
     if (!u) continue;
     count++;
     const priced =
-      entry.costUSD ??
-      (await PricingService.calculateCostForEntry(entry.raw, cacheRoot, clock));
+      entry.costUSD ?? costOf((table ??= await pricing.table()), entry.raw);
     cost += priced;
     breakdown.input += u.input_tokens || 0;
     breakdown.output += u.output_tokens || 0;
@@ -405,7 +407,7 @@ async function mapPool<T>(
 // The `session` projection's last step, shared by a request's refresh and a
 // draw. [LAW:one-source-of-truth] Claude's reported total_cost_usd is the
 // authoritative cost of the active session. base.cost (transcript entries
-// priced by PricingService against a hand-maintained rate table) is a
+// priced by the store's pricing against a hand-maintained rate table) is a
 // reimplementation — kept ONLY as a fallback for clients that omit cost, and
 // to feed the cross-session `today` total, which has no native source (past
 // sessions expose only their transcripts, not a live cost figure). The native
@@ -461,7 +463,7 @@ export class SessionUsageStore {
   // The machine the store reads: where transcripts live.
   private readonly host: Host;
   // The home's cache directory, where the day's scan is folded.
-  private readonly cacheDir: string;
+  private readonly pricing: Pricing;
   private readonly log: DaemonLogger;
   private readonly renderTally: IngestTally = { hits: 0, misses: 0 };
   private readonly ledger: RefreshLedger;
@@ -478,7 +480,8 @@ export class SessionUsageStore {
 
   constructor(opts: {
     host: Host;
-    cacheDir: string;
+    // What prices an entry that carries no cost: the owner's, which closes it.
+    pricing: Pricing;
     // [LAW:effects-at-boundaries] The daemon's clock: the sweep and the scans'
     // periods, and the instants the store stamps, ages and cuts off by.
     clock: Pick<Timekeeper, "now" | "monotonic" | "after" | "every">;
@@ -492,7 +495,7 @@ export class SessionUsageStore {
     ledger?: RefreshLedger;
   }) {
     this.host = opts.host;
-    this.cacheDir = opts.cacheDir;
+    this.pricing = opts.pricing;
     this.clock = opts.clock;
     this.log = opts.logger ?? quietLogger;
     this.ledger = opts.ledger ?? new RefreshLedger(this.log);
@@ -831,7 +834,7 @@ export class SessionUsageStore {
     // prior can't corrupt. Pinned by the concurrency test in
     // test/transcript-incremental.test.ts.
     // [LAW:no-silent-failure] ingest MUST stay total — every caller reads
-    // `.kind`, so a rejected promise (e.g. PricingService.calculateCostForEntry
+    // `.kind`, so a rejected promise (e.g. the pricing table's load
     // throwing on a bad rate table or network hiccup inside foldFile) would
     // escape the Outcome contract entirely. The deleted getSessionUsageFromPath
     // wrapped this; keep that guarantee by mapping any throw to `failed`.
@@ -970,7 +973,7 @@ export class SessionUsageStore {
         filePath,
         priorFold,
         EMPTY_FILE_FOLD,
-        (state, entries) => foldFile(state, entries, this.cacheDir, this.clock),
+        (state, entries) => foldFile(state, entries, this.pricing, this.clock),
       );
       if (read.kind === "failed") return read;
       if (read.kind === "absent") {

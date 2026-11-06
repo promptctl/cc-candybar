@@ -60,7 +60,8 @@ import { viewFacts } from "./helpers/view-facts";
 import { throughout, until } from "./helpers/until";
 import { untilHeard } from "./helpers/reload-signal";
 import { textOf } from "../src/render/frame";
-import { stateDir, cacheDir } from "../src/daemon/paths";
+import { stateDir } from "../src/daemon/paths";
+import { offlinePricing } from "../src/segments/pricing";
 import { bareGates } from "./helpers/gates";
 import { daemonGates } from "../src/daemon/update-keys";
 import { systemTimekeeper } from "../src/time";
@@ -199,7 +200,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
     clock: systemTimekeeper,
     launcher: processLauncher,
     host: HOST,
-    cacheDir: cacheDir(homeOf(HOST)),
+    pricing: offlinePricing(),
     watchers,
     fileEvents: new FileEventDelivery({
       clock: systemTimekeeper,

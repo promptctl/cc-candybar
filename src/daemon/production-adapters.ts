@@ -13,6 +13,7 @@ import type { DaemonAdapters } from "./daemon.js";
 import { fileStorage } from "./file-storage";
 import { productionLaneEdge } from "./lane-edge.js";
 import { linkKeyFile, linkSignerFromKeyFile } from "./link-key.js";
+import { livePricing } from "../segments/pricing.js";
 import { realLimitsDeps } from "./limits";
 import type { DaemonLog } from "./log";
 import type { DaemonPaths } from "./paths";
@@ -48,6 +49,7 @@ export function productionAdapters(
         writeLogNow: () => daemonLog.writeNow(),
       }),
     fetch,
+    pricing: (cacheRoot) => livePricing({ cacheRoot, clock: machine }),
     stat: fs.statSync,
   };
 }
