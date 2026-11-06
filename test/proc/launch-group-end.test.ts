@@ -35,8 +35,8 @@ const SET =
 // body, so a launch that waited for it could not resolve.
 let holding: string;
 // Forks a process that leaves the group and holds the inherited stdout.
-const forkHolder = () =>
-  `if os.fork()==0:\n  os.setsid()\n  hold(${JSON.stringify(holding)})\n  os._exit(0)\n`;
+const forkHolder = (path = holding) =>
+  `if os.fork()==0:\n  os.setsid()\n  hold(${JSON.stringify(path)})\n  os._exit(0)\n`;
 
 interface DrainClose {
   category: LaunchCategory;
@@ -97,7 +97,9 @@ const launch = (run: { bin: string; args: string[] }, timeoutMs?: number) =>
   });
 
 describe("a launch whose child ends with a descendant outside its group", () => {
-  it.each([[undefined], [2000]])(
+  // A timeout armed past the case's own, so only the child's exit can answer:
+  // one that fires concludes on the gone group as well.
+  it.each([[undefined], [60_000]])(
     "resolves on the child's exit code (timeoutMs %s)",
     async (timeoutMs) => {
       const r = await launch(
@@ -122,19 +124,14 @@ describe("a launch whose child ends with a descendant outside its group", () => 
   });
 
   it("leaves the descendant its pipes, so a later write does not kill it", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "launch-group-end-"));
-    const marker = join(dir, "wrote");
+    const marker = join(holding, "wrote");
     const r = await launch(
       python(
         `${SET}if os.fork()==0:\n  os.setsid()\n  time.sleep(0.3)\n  print('late',flush=True)\n  open(${JSON.stringify(marker)},'w').close()\n  os._exit(0)\nos._exit(0)\n`,
       ),
     );
     expect(r).toMatchObject({ ok: true, stdout: "" });
-    try {
-      await until(() => existsSync(marker), "the holder's later write");
-    } finally {
-      rmSync(dir, { recursive: true });
-    }
+    await until(() => existsSync(marker), "the holder's later write");
   });
 
   // [LAW:no-ambient-temporal-coupling] A launch whose group ended between two of
@@ -215,15 +212,19 @@ describe("a launch whose child ends with a descendant outside its group", () => 
 
   it("resolves when a group member ends just after the child", async () => {
     for (let i = 0; i < 50; i += 1) {
+      // Each run's holder ends with its run, so the runs never pile up.
+      const held = join(holding, `run-${i}`);
+      writeFileSync(held, "");
       const r = await launch({
         bin: "sh",
         args: [
           "-c",
           'sleep 0.002 & python3 -c "$1"; exit 0',
           "sh",
-          `${SET}${forkHolder()}`,
+          `${SET}${forkHolder(held)}`,
         ],
       });
+      rmSync(held);
       expect(r.ok).toBe(true);
     }
   }, 60_000);
