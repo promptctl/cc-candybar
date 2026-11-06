@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-657",
+      "ref": "refs/pull/657/merge",
+      "sha": "f70ac26ed71e338c51d77e5ef297780c05c53880",
+      "timestamp": "2026-11-06T22:16:05.592Z",
+      "commits": [
+        {
+          "sha": "f70ac26ed71e338c51d77e5ef297780c05c53880",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T15:15:10-07:00",
+          "message": "Merge ee166f67f4925870679b24b49834b109c799d094 into 466c05ac9e0e8203441238a3692bac06838e69a9\n"
+        },
+        {
+          "sha": "ee166f67f4925870679b24b49834b109c799d094",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T15:14:59-07:00",
+          "message": "test(version): the mismatch asymmetry is asserted over the daemon's real reply, and the stand-in that copied it is gone (candybar-testing-ihvy.fvw.xka)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-656",
       "ref": "refs/pull/656/merge",
       "sha": "3fa180c06c098984379fd239e07bcadbc216e3ab",
