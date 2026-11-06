@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-648",
+      "ref": "refs/pull/648/merge",
+      "sha": "dc7a370dc965a464316e0ff1bbb12ea605db1b1e",
+      "timestamp": "2026-11-06T19:51:09.065Z",
+      "commits": [
+        {
+          "sha": "dc7a370dc965a464316e0ff1bbb12ea605db1b1e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T12:50:21-07:00",
+          "message": "Merge b4267ba4ae18666301bfb598e3e009d5ed7455c4 into 2bb7660eaf484d4c41e6cdc671e6415f0cccc8fa\n"
+        },
+        {
+          "sha": "b4267ba4ae18666301bfb598e3e009d5ed7455c4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T12:50:06-07:00",
+          "message": "docs(menus): the settings-menu width script and its table go (brandon-menus-sjhy.bc0)\n\nThe table answered a design-time question, whether the proposed menu rows\nfit at 80 columns, and that menu is now built: the script's model of\nproposed rows measures what can simply be rendered. Fitting 80 columns is\nno invariant the menu keeps (the armed-reset row was 93 cells), and\nnothing ran the script, which is how it broke at import unnoticed.\nRepaired, it would be a second map of the menu that only a human redraws.\n\nThe autocompact drawing UI-ELEMENTS credited to the script is asserted in\ntest/autocompact.test.ts, so the doc points there.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-647",
       "ref": "refs/pull/647/merge",
       "sha": "49d702dbd411e2ac72942d35b697b3ab286adef3",
