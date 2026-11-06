@@ -23951,44 +23951,43 @@ init_globals();
 var KEY = "click.error";
 var CLICK_ERROR_HOLD_S = 5;
 function holdClickError(state, sessionId2, text4, at) {
-  const last2 = lastClickError(state, sessionId2);
-  const live = last2 !== null && eventHoldAt(last2, CLICK_ERROR_HOLD_S, at, "request") !== "over";
-  const record2 = {
-    text: live ? `${last2.text}
-${text4}` : text4,
-    at,
-    answered: false
-  };
-  state.set(sessionId2, KEY, JSON.stringify(record2));
+  const live = clickErrors(state, sessionId2).filter(
+    (e) => eventHoldAt(e, CLICK_ERROR_HOLD_S, at, "request") !== "over"
+  );
+  const record2 = { text: text4, at, answered: false };
+  state.set(sessionId2, KEY, JSON.stringify([...live, record2]));
 }
-function answeredClickError(state, sessionId2, error) {
-  const last2 = lastClickError(state, sessionId2);
-  if (last2 === null || !answeredBy(last2, error)) return;
-  state.set(sessionId2, KEY, JSON.stringify({ ...last2, answered: true }));
+function answeredClickError(state, sessionId2, errors2) {
+  const all2 = clickErrors(state, sessionId2);
+  const marked = all2.map(
+    (e) => errors2.some((shown) => answeredBy(e, shown)) ? { ...e, answered: true } : e
+  );
+  if (marked.every((e, i) => e === all2[i])) return;
+  state.set(sessionId2, KEY, JSON.stringify(marked));
 }
-function lastClickError(state, sessionId2) {
+function clickErrors(state, sessionId2) {
   const raw = state.get(sessionId2, KEY);
-  return raw === null ? null : recordOf(raw);
-}
-function clickErrorAt(state, sessionId2, at, render3) {
-  const last2 = lastClickError(state, sessionId2);
-  if (last2 === null) return { kind: "none" };
-  const kind = eventHoldAt(last2, CLICK_ERROR_HOLD_S, at, render3);
-  return kind === "over" ? { kind } : { kind, error: last2 };
-}
-function toAnswer(hold2) {
-  return (hold2.kind === "held" || hold2.kind === "owed") && !hold2.error.answered ? hold2.error : null;
-}
-function recordOf(raw) {
+  if (raw === null) return [];
   let value;
   try {
     value = JSON.parse(raw);
   } catch {
-    return null;
+    return [];
   }
-  if (typeof value !== "object" || value === null) return null;
+  return (Array.isArray(value) ? value : [value]).flatMap(recordOf);
+}
+function clickErrorsAt(state, sessionId2, at, render3) {
+  return clickErrors(state, sessionId2).map((error) => ({
+    error,
+    hold: eventHoldAt(error, CLICK_ERROR_HOLD_S, at, render3)
+  }));
+}
+var shownClickErrors = (errors2) => errors2.flatMap(({ error, hold: hold2 }) => hold2 === "over" ? [] : [error]);
+var toAnswer = (errors2) => shownClickErrors(errors2).filter((error) => !error.answered);
+function recordOf(value) {
+  if (typeof value !== "object" || value === null) return [];
   const { text: text4, at, answered: answered2 } = value;
-  return typeof text4 === "string" && typeof at === "number" && (answered2 === void 0 || typeof answered2 === "boolean") ? { text: text4, at, answered: answered2 === true } : null;
+  return typeof text4 === "string" && typeof at === "number" && (answered2 === void 0 || typeof answered2 === "boolean") ? [{ text: text4, at, answered: answered2 === true }] : [];
 }
 
 // src/daemon/verbs/key-seeds.ts
@@ -69350,7 +69349,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.198.1";
+var PACKAGE_VERSION = "1.199.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -77177,8 +77176,7 @@ function drawRender(parts, setup, drawing2) {
   const hints = view.source.hints();
   const width = payload.term.cols;
   noteFacts(facts, { width: String(width) });
-  const clickHold = clickErrorAt(sessionState, sessionId2, at, drawing2.by);
-  const clickShown = clickHold.kind === "held" || clickHold.kind === "owed" ? clickHold.error : null;
+  const clickHolds = clickErrorsAt(sessionState, sessionId2, at, drawing2.by);
   const updates = updateWatch.notice({
     sessionId: sessionId2,
     dismissed: sessionState.get(sessionId2, UPDATE_DISMISSED_KEY),
@@ -77201,7 +77199,9 @@ function drawRender(parts, setup, drawing2) {
       text: e.message,
       copy: e.prompt
     })),
-    said(clickShown?.text)
+    ...shownClickErrors(clickHolds).map(
+      (e) => sourced(`click\0${e.at}\0${e.text}`, e.text)
+    )
   ].flatMap(
     ({ about, text: text4, copy: copy3 }) => about && text4 && copy3 ? [{ about, text: text4, copy: copy3 }] : []
   );
@@ -77377,7 +77377,8 @@ function drawRender(parts, setup, drawing2) {
     // draw, `per-draw` at this frame's instant; `-` for none.
     rules: [...rules].map(([slot, how]) => `${slot}:${how}`).join(",") || "-",
     err: errors2.length > 0 ? "Y" : "N",
-    clickError: clickHold.kind === "none" ? "-" : clickHold.kind,
+    // Each click error as this frame held it, oldest first: `-` for none.
+    clickError: clickHolds.map(({ hold: hold2 }) => hold2).join(",") || "-",
     // The launcher's pipe event as this frame showed it: `-` for not at all.
     pipeEvent: pipeWarning?.hold ?? "-",
     upd: String(updates.length),
@@ -77400,7 +77401,7 @@ function drawRender(parts, setup, drawing2) {
     },
     evaluated: evaluated2,
     cellBreaks,
-    answersClick: toAnswer(clickHold),
+    answersClick: toAnswer(clickHolds),
     pipeShown,
     delivered,
     lanes
@@ -77614,9 +77615,10 @@ var ARMS = {
   // (`LANDINGS`), and a failure is held as the session's click error, shown as
   // a failed dispatch's is (src/daemon/click-error.ts). A click that names no
   // session has no bar; its apply line is the record.
-  "effect-done": async ({ of, done: done2 }, { verbCtx }) => {
+  "effect-done": async ({ of, done: done2 }, parts) => {
+    const { verbCtx } = parts;
     const outcome = verbCtx.journalTurns.take("effect-done", () => {
-      const landed = land(done2, verbCtx);
+      const landed = land(done2, parts);
       if (landed.kind === "failed" && of.session !== null) {
         holdClickError(
           verbCtx.sessionState,
@@ -77630,13 +77632,13 @@ var ARMS = {
     return { answer: outcome, effects: NO_EFFECTS, facts: [] };
   },
   // [LAW:single-enforcer] The one write after a request's answer went out: the
-  // click error it carried is marked answered (src/daemon/click-error.ts), in
+  // click errors it carried are marked answered (src/daemon/click-error.ts), in
   // a turn as every write is, so no frame reads the mark beside a click's
   // writes half landed.
-  answered: async ({ session, error }, { verbCtx }) => {
+  answered: async ({ session, errors: errors2 }, { verbCtx }) => {
     verbCtx.journalTurns.take(
       "answered",
-      () => answeredClickError(verbCtx.sessionState, session, error)
+      () => answeredClickError(verbCtx.sessionState, session, errors2)
     );
     return { answer: void 0, effects: NO_EFFECTS, facts: [] };
   }
@@ -77654,13 +77656,19 @@ var LANDINGS = {
     return PERFORMED;
   }
 };
-function land(done2, verbCtx) {
+function land(done2, parts) {
   const landing = LANDINGS[done2.effect.kind];
   try {
-    return landing(done2, verbCtx);
+    return landing(done2, parts.verbCtx);
   } catch (e) {
-    return failed2(e instanceof Error ? e.message : String(e));
+    return thrown(done2.effect, e, parts.log);
   }
+}
+function thrown(effect, e, log) {
+  if (!(e instanceof BadVerbArgs || e instanceof DaemonClosing)) {
+    log("error", `apply: ${describeEffect(effect)} threw: ${inspect(e)}`);
+  }
+  return failed2(e instanceof Error ? e.message : String(e));
 }
 function recordRequest(state, req, storedRoot2) {
   const { client: _client, configEnv: _configEnv, ...recorded } = req.hints;
@@ -77791,7 +77799,7 @@ async function perform2(effect, parts) {
   try {
     outcome = await performer(effect, parts);
   } catch (e) {
-    outcome = failed2(e instanceof Error ? e.message : String(e));
+    outcome = thrown(effect, e, parts.log);
   }
   return { effect, outcome };
 }
@@ -78332,12 +78340,12 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
           // is a write, so it is an event the arm makes in a turn.
           delivered: () => {
             delivered();
-            if (answersClick !== null)
+            if (answersClick.length > 0)
               void applyUnanswered(
                 {
                   kind: "answered",
                   session: checked.req.sessionId,
-                  error: answersClick
+                  errors: answersClick
                 },
                 parts,
                 `sid=${checked.req.sessionId}`
@@ -82424,7 +82432,7 @@ function watchTargetsFor(entry, locs) {
 function joinWarnings(parts) {
   return parts.filter(Boolean).join("\n") || null;
 }
-var thrown = (err) => err instanceof Error ? err.message : String(err);
+var thrown2 = (err) => err instanceof Error ? err.message : String(err);
 function plugins(p2) {
   return {
     loaded: p2.loaded,
@@ -82615,7 +82623,7 @@ function settle2(frame2, chain2, resolveWarnings, attempt4, clock) {
         kind: "failed",
         warning: warning(attempt4.warnings),
         state: null,
-        error: thrown(attempt4.cause),
+        error: thrown2(attempt4.cause),
         cause: attempt4.cause
       };
   }
@@ -82659,7 +82667,7 @@ function fallbackState(cwd2, repo2, deps) {
   );
   const built = resolved.kind === "failed" ? resolved : buildRenderState(resolved, deps);
   if (built.kind === "failed")
-    throw new Error(`bundled default failed to load: ${thrown(built.cause)}`, {
+    throw new Error(`bundled default failed to load: ${thrown2(built.cause)}`, {
       cause: built.cause
     });
   return built.state;
@@ -85401,7 +85409,10 @@ var JournalTurns = class {
   async gathering(gather) {
     this.gathersInFlight++;
     try {
-      return await this.gathers.run(GATHERS, gather);
+      return await this.gathers.run(GATHERS, () => {
+        if (!this.open) throw new DaemonClosing("doctor");
+        return gather();
+      });
     } finally {
       this.gathersInFlight--;
     }
