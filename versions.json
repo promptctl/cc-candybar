@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-629",
+      "ref": "refs/pull/629/merge",
+      "sha": "88f640da5fff4bec518d5b8f263730be6b1acd2b",
+      "timestamp": "2026-11-06T07:12:23.391Z",
+      "commits": [
+        {
+          "sha": "88f640da5fff4bec518d5b8f263730be6b1acd2b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T00:11:22-07:00",
+          "message": "Merge 6bb6f314dbf467ac504980d2b0d0ab669d3db0a3 into 4e7a92522bd9b4d1a06e8b5973e3b937f7e400b7\n"
+        },
+        {
+          "sha": "6bb6f314dbf467ac504980d2b0d0ab669d3db0a3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T00:10:49-07:00",
+          "message": "feat(facts): record writes a session's stream out of the daemon, the demo replays the file frame by frame, and another facts version is refused (candybar-gather-renderer-76bb.6pj.qg5)\n\nA recording is a header, then documents and requests with their instants.\nThe session recorder follows the render cache's current view (one writer of\nthe cache's view map fires the observer), request lines are noted where the\nrequest path settles a view, and the file is created new and closed after\nN seconds or at daemon close. The wire verb is a held request the connection\nstarts only while its client waits. The demo splits into load and play, one\nview-and-print path, with --recording choosing the recording arm on a held\nclock (moved to src/). cc-candybar record exits 1 when no request arrived.\n\nTests run on the render-cache rig rather than an in-worker daemon, because\nthe boot ratchet only falls.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-627",
       "ref": "refs/pull/627/merge",
       "sha": "cf3c000aae8d9e7f15ae2d4dedee37ab66779c74",
