@@ -182,9 +182,12 @@ export const ARMS: ApplyArms<Event> = {
   // gather inside a turn (a doctor step after a dispatch's first, or one
   // repeated for a config that changed) holds every session's request for as
   // long as its probes run, each bounded by its launch timeout, and that wait
-  // is spent from the request's budget. Its wait and the revision its own turn left go on the
-  // request's line, the render event, which is its record and opens with the
-  // session the edge noted.
+  // is spent from the request's budget. The same gather is the one way a
+  // draw, this one or a feed's, reads a click half landed: a click that takes
+  // its turn while the draw waits on its sources has landed its first write
+  // and parked before its last. Its wait and the revision its own turn left
+  // go on the request's line, the render event, which is its record and opens
+  // with the session the edge noted.
   request: async ({ req, at, waitEndsAt, facts }, { verbCtx, draw }) => {
     const revision = await verbCtx.journalTurns.take(
       "request",
@@ -409,7 +412,7 @@ const ORIGIN: {
   click: ({ verb, pending }) => ({ verb: verb.name, session: pending }),
   "menu-idle": ({ session }) => ({ verb: "menu-idle", session }),
   "effect-done": ({ of }) => of,
-  answered: ({ session }) => ({ verb: "request", session }),
+  answered: ({ session }) => ({ verb: "answered", session }),
 };
 
 // [LAW:no-silent-failure][LAW:single-enforcer] What a source with no reply

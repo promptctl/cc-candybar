@@ -850,8 +850,8 @@ export type RequestDraw = (
 ) => Promise<RequestAnswer>;
 
 // [LAW:effects-at-boundaries] What a request's arrival starts beyond its
-// own answer, in its arrival turn, by the lanes its session's settings switch
-// on as it arrived: the setups its session's clicks owe
+// own answer, as its draw begins once its turn is over, by the lanes its
+// session's settings switch on then: the setups its session's clicks owe
 // (src/daemon/lane-setup.ts), and the tmux status line its switch and pane
 // hold (src/daemon/tmux-status.ts) — held again here after `answered`
 // released it, and by nothing between requests, so a status line another

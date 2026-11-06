@@ -225,7 +225,7 @@ describe("the mark a delivered answer makes on the click error", () => {
     expect(lastClickError(r.sessionState, SID)?.answered).toBe(true);
     expect(r.applyLines()).toEqual([
       expect.stringMatching(
-        new RegExp(`^apply kind=answered verb=request sid=${SID} outcome=ok turnWait=\\d+ms effects=- revision=${r.sessionState.revision(SID)}$`),
+        new RegExp(`^apply kind=answered verb=answered sid=${SID} outcome=ok turnWait=\\d+ms effects=- revision=${r.sessionState.revision(SID)}$`),
       ),
     ]);
   });
