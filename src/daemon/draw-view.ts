@@ -47,14 +47,18 @@ export interface Handed {
   readonly diagnostics: DiagnosticList;
 }
 
+// [LAW:one-source-of-truth] The lanes a view's settings switch on, as its
+// turn draws them: the tmux pane is the turn's payload's.
+export function drawnLanes(source: SessionSource): LaneSwitches {
+  return laneSwitches(source.effective(), source.payload().tmux !== undefined);
+}
+
 export interface ViewDrawn extends DrawnFrame {
   // What the client is shown: the walk's frame, or the viewer standing in for
   // it while one is open on a message of the list.
   readonly body: Frame;
   readonly viewing: ViewerPosition | null;
   readonly geometry: DiagnosticGeometry;
-  // Which animation lanes the view's settings switch on, as drawn.
-  readonly lanes: LaneSwitches;
 }
 
 // The view drawn at `at` from what it was `handed`, under the session's
@@ -105,9 +109,7 @@ export function drawView(
     // payload's `.effective` fields read.
     { ...effective, effects, idleSince },
   );
-  // [LAW:one-source-of-truth] The lanes the view's settings switch on, as its
-  // turn draws them: the tmux pane is the turn's payload's.
-  const lanes = laneSwitches(effective, source.payload().tmux !== undefined);
+  const lanes = drawnLanes(source);
   const geometry: DiagnosticGeometry = {
     width,
     // A feed's one frame is shown by every lane switched on, so it pages
@@ -146,6 +148,5 @@ export function drawView(
           ),
     viewing: position,
     geometry,
-    lanes,
   };
 }
