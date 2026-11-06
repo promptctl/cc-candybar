@@ -119,6 +119,10 @@ export type RecordingLine =
 export interface Recording {
   readonly session: SessionId;
   readonly home: string;
+  // Where the session's view opened: its first request's directory. A shell
+  // source's run is identified by the directory it ran in, so a replay opens
+  // its view here, wherever the demo itself runs.
+  readonly cwd: string;
   readonly opening: FactsLine;
   readonly lines: readonly [
     { readonly kind: "request" } & RequestLine,
@@ -480,7 +484,14 @@ export function parseRecording(text: string): Recording {
       "holds no answered request: none was answered while it was recorded",
     );
   }
-  return { session, home, opening, lines: [first, ...later] };
+  const { cwd } = first.request;
+  if (cwd === undefined) {
+    throw new FactParseError(
+      "the recording",
+      "opens on a request with no `cwd`: a replay opens its view where the session's opened",
+    );
+  }
+  return { session, home, cwd, opening, lines: [first, ...later] };
 }
 
 function parseInstant(json: unknown, where: string, field: string): Instant {

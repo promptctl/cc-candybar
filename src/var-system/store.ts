@@ -419,7 +419,7 @@ function assertType(
 
 // [LAW:one-source-of-truth] Every variable lives in ONE store, the home its
 // scope names (brandon-unfiled-3248.8ro6, step 2): a directory's store holds
-// the sources no session value reaches, and each session's view is a store of
+// the values the directory alone decides, and each session's view is a store of
 // its own over it — `parent` — holding the session's inputs, state and
 // derivations. A view READS through to its parent and declares and writes only
 // its own nodes, so no session's write lands in another session's values, and

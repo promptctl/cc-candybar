@@ -293,8 +293,8 @@ export type ReloadedEntry = Readonly<
 // the settings menu (the door back to the file) exists from the first
 // render, through the same synthesis every config gets.
 //
-// `store` and `registry` are the entry's DIRECTORY home: the sources no
-// session value reaches (variable-scope.ts). A session draws through its own
+// `store` and `registry` are the entry's DIRECTORY home: the values the
+// directory alone decides (variable-scope.ts). A session draws through its own
 // view over them (SessionView).
 export interface DslRenderState {
   readonly config: ValidatedConfig;
@@ -1314,7 +1314,7 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
   // for (ViewDeclared): observable, so the view's payload is derived again in
   // the turn a declaration lands.
   // [LAW:no-silent-failure] A follow the source refuses fails the open, which
-  // the cache records and reports; the registry the open took goes first.
+  // the cache records and reports; the open has taken nothing before it.
   const followed: Followed = factsSource.follow(facts, declaration);
   // [LAW:locality-or-seam] The view's registry gets its `shell` and `file`
   // sources' lanes from the follow, so what they draw is what the session's
@@ -1338,12 +1338,11 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
   // that fails after taking it. The follow's dispose releases every hold its
   // declaration took.
   //
-  // [LAW:no-ambient-temporal-coupling] The registry goes before the follow,
-  // in one action: its dispose releases its run declarations into a follow
-  // still live, whose re-declaration ends their runs, and the follow's
-  // stamp, held to the action's end, is stopped by its dispose before then,
-  // so no document is stamped for the release. This is the one way a view
-  // ends.
+  // [LAW:no-ambient-temporal-coupling] One action: the registry's dispose
+  // releases its run declarations, each ending its run, and the follow's
+  // stamp, held to the action's end, is stopped by the follow's dispose
+  // before then, so no document is stamped for the release. This is the one
+  // way a view ends.
   const release = () =>
     runInAction(() => {
       for (const stopSource of sourceStops) stopSource();

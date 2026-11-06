@@ -529,12 +529,11 @@ function spyReads(): () => string[] {
 }
 
 // The demo's replay of a recording file under a held clock at its first
-// request, on a machine whose home is not the recorded one, its config loaded
-// before the instruments and its frames drawn with every read and spawn
-// counted.
+// request, on a machine whose home is not the recorded one and from a
+// directory that is not the session's, its config loaded before the
+// instruments and its frames drawn with every read and spawn counted.
 async function replayFile(
   file: string,
-  cwd: string,
   configFile: string,
   arriveOn: (clock: HeldClock) => Arrive = heldArrival,
 ): Promise<{
@@ -559,14 +558,15 @@ async function replayFile(
     stateDir: stateDir(homeOf(host)),
     links: TEST_LINKS,
     configPath: configFile,
-    cwd,
+    cwd: replayHome,
     warn: drawn.warn,
   });
   const reads = spyReads();
   const frames: Frame[] = [];
   await playDemo({
     loaded,
-    cwd,
+    // Where the session's view opened, as the demo's arm reads it.
+    cwd: recording.cwd,
     facts,
     // Whose home `~` names: the recorded session's, as the demo's arm reads it.
     home: recording.home,
@@ -636,7 +636,7 @@ test("a session recorded out of the cache replays through the demo into the bars
   expect(liveText[0]).toContain(`home=${s.home}`);
   expect(s.drawn.said).toEqual([]);
 
-  const replay = await replayFile(file, s.cwd, s.configFile);
+  const replay = await replayFile(file, s.configFile);
   expect(replay.reads).toEqual([]);
   expect(replay.started).toEqual([]);
   expect(replay.said).toEqual([]);
@@ -736,7 +736,7 @@ test("a session's shell and file sources, recorded live, replay with what each r
     documentsOf(recording).map((line) => Object.keys(line.facts.runs).length),
   ).toContain(3);
 
-  const replay = await replayFile(file, s.cwd, configFile);
+  const replay = await replayFile(file, configFile);
   expect(replay.reads).toEqual([]);
   expect(replay.started).toEqual([]);
   expect(replay.said).toEqual([]);
@@ -746,7 +746,7 @@ test("a session's shell and file sources, recorded live, replay with what each r
 test("a replay against a config whose command was edited since the recording draws that source as failed, never pending, and still spawns nothing", async () => {
   const { s, note, file } = await recordedRuns();
   const edited = runsConfig(s.cwd, note, "seam-edited");
-  const replay = await replayFile(file, s.cwd, edited);
+  const replay = await replayFile(file, edited);
   expect(replay.started).toEqual([]);
   expect(replay.reads).toEqual([]);
   // The edited source's run is in no document: its variable answers its
@@ -837,7 +837,7 @@ test("a session recorded with a pick made and a menu open replays with the pick 
   expect(states[0]!.values[SETTINGS.theme.sessionKey]).toBe("nord");
   expect(s.drawn.said).toEqual([]);
 
-  const replay = await replayFile(file, s.cwd, configFile);
+  const replay = await replayFile(file, configFile);
   expect(replay.reads).toEqual([]);
   expect(replay.started).toEqual([]);
   expect(replay.said).toEqual([]);
@@ -876,7 +876,7 @@ test("a recording made on a moving clock replays each frame from what its answer
   for (const { request, document } of drew)
     expect(document).toBeGreaterThan(request);
 
-  const replay = await replayFile(file, s.cwd, s.configFile);
+  const replay = await replayFile(file, s.configFile);
   expect(replay.reads).toEqual([]);
   expect(replay.started).toEqual([]);
   expect(replay.frames.map(textOf)).toEqual(liveText);
@@ -927,7 +927,7 @@ test("a play draws each answer at the instant its arm says the request arrived a
       (at, n) =>
         `s=${String((Math.floor(at) + 7 * (n + 1)) % 60).padStart(2, "0")}`,
     );
-  const replay = await replayFile(file, s.cwd, clockConfig, late);
+  const replay = await replayFile(file, clockConfig, late);
   expect(replay.said).toEqual([]);
   expect(
     replay.frames.map((frame) => /s=\d\d/.exec(textOf(frame))?.[0]),
@@ -959,7 +959,7 @@ test("a request answered after another moved the session to another directory re
   expect(liveText[0]).toContain(`dir=${s.cwd}`);
   expect(liveText[1]).toContain(`dir=${other.cwd}`);
 
-  const replay = await replayFile(file, s.cwd, s.configFile);
+  const replay = await replayFile(file, s.configFile);
   expect(replay.reads).toEqual([]);
   expect(replay.started).toEqual([]);
   expect(replay.frames.map(textOf)).toEqual(liveText);
@@ -987,7 +987,7 @@ test("a recording started during a request's wait holds only the requests it saw
   const seen = await s.requestFrom(s.cwd, s.configFile);
   s.live.recorder.close();
   expect((await recorded).answers).toBe(1);
-  const replay = await replayFile(file, s.cwd, s.configFile);
+  const replay = await replayFile(file, s.configFile);
   expect(replay.frames.map(textOf)).toEqual([textOf(seen)]);
   expect(replay.frames.map((f) => f.rows)).toEqual([seen.rows]);
 });
@@ -1034,7 +1034,7 @@ test("a document stamped in the instant of a draw, after it, reaches the next dr
       .map(formatLine)
       .join(""),
   );
-  const replay = await replayFile(file, s.cwd, s.configFile);
+  const replay = await replayFile(file, s.configFile);
   expect(replay.frames.map(textOf)[0]).toEqual(textOf(liveFrame));
   expect(textOf(liveFrame)).not.toContain("elsewhere");
   expect(replay.frames.map(textOf)[1]).toContain("elsewhere");
@@ -1068,7 +1068,7 @@ test("a recording follows the session to the view a request from another directo
   expect(seqs[0]).toBeGreaterThan(1);
   expect(seqs.filter((seq) => seq === 1)).toHaveLength(1);
   expect(seqs.indexOf(1)).toBeGreaterThan(0);
-  const replay = await replayFile(file, s.cwd, s.configFile);
+  const replay = await replayFile(file, s.configFile);
   expect(replay.frames).toHaveLength(3);
   expect(replay.reads).toEqual([]);
   expect(replay.started).toEqual([]);

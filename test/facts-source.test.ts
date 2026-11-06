@@ -313,6 +313,65 @@ describe("the in-process arm's runs", () => {
     }
   });
 
+  test("a run's lane hands out one reading while its run holds one value, however often the document is stamped for another run", async () => {
+    const a = path.join(dir, "a");
+    const b = path.join(dir, "b");
+    fs.writeFileSync(a, "from-a");
+    fs.writeFileSync(b, "from-b");
+    const { runs, followed } = follow();
+    const holds = new Holds();
+    try {
+      const { result: lane } = holds.declare(() =>
+        followed.runs.declare(holds, fileRun(a)),
+      );
+      // Observed, as a registry's publish observes it.
+      const seen: unknown[] = [];
+      const stop = reaction(
+        () => lane.current(),
+        (reading) => seen.push(reading),
+        { fireImmediately: true },
+      );
+      await until(() => lane.current().kind === "ok", "a's run");
+      const landed = lane.current();
+      // Another run is declared and lands: the document is stamped twice
+      // more, and a's reading is the object it was.
+      const { result: other } = holds.declare(() => {
+        followed.runs.declare(holds, fileRun(a));
+        return followed.runs.declare(holds, fileRun(b));
+      });
+      await until(() => other.current().kind === "ok", "b's run");
+      expect(lane.current()).toBe(landed);
+      expect(seen).toEqual([pendingOf("unread"), ok("from-a")]);
+      stop();
+    } finally {
+      holds.close();
+      followed.dispose();
+      runs.close();
+    }
+  });
+
+  test("a run declaration released after the follow's dispose releases nothing: the dispose ended its run", async () => {
+    const a = path.join(dir, "a");
+    const b = path.join(dir, "b");
+    fs.writeFileSync(a, "from-a");
+    fs.writeFileSync(b, "from-b");
+    const { runs, followed } = follow();
+    try {
+      const holds = new Holds();
+      holds.declare(() => {
+        followed.runs.declare(holds, fileRun(a));
+        followed.runs.declare(holds, fileRun(b));
+      });
+      expect(runs.stats().file.held).toBe(2);
+      followed.dispose();
+      expect(runs.stats().file.held).toBe(0);
+      expect(() => holds.close()).not.toThrow();
+      expect(runs.stats().file.held).toBe(0);
+    } finally {
+      runs.close();
+    }
+  });
+
   test("the render event says how many runs the view declared and which have not answered", () => {
     const answered = { reading: restamp(undefined, ok("x"), at0), fault: null };
     expect(runsFactOf({})).toEqual({ runs: "0", runsPending: "-" });
@@ -449,6 +508,42 @@ describe("the recording arm", () => {
     expect(
       followed.runs.declare(new Holds(), fileRun("/notes/b")).current(),
     ).toMatchObject({ kind: "failed" });
+  });
+
+  test("a run's lane hands out one reading across lines that hold its run at one value", () => {
+    const identity = fileRun("/notes/a");
+    const digest = digestOf(identity);
+    // Each line parsed anew: equal runs, never one object.
+    const withRun = (offsetS: number, seq: number) => {
+      const l = line(offsetS, seq);
+      return {
+        ...l,
+        facts: {
+          ...l.facts,
+          runs: {
+            [digest]: {
+              reading: restamp(undefined, ok("same"), at(0)),
+              fault: null,
+            },
+          },
+        },
+      };
+    };
+    const lines = [withRun(0, 1), withRun(1, 2), withRun(2, 3)] as const;
+    const facts = recordingFacts(recording(...lines));
+    const lane = facts
+      .follow(request(), DECLARED)
+      .runs.declare(new Holds(), identity);
+    const seen: unknown[] = [];
+    const stop = reaction(
+      () => lane.current(),
+      (reading) => seen.push(reading),
+      { fireImmediately: true },
+    );
+    facts.reach(lines[1]);
+    facts.reach(lines[2]);
+    stop();
+    expect(seen).toEqual([ok("same")]);
   });
 
   test("the walk reaching a document the recording does not hold throws", () => {

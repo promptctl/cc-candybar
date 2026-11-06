@@ -264,7 +264,9 @@ export function playOf(
 
 export interface DemoPlay {
   readonly loaded: DemoState;
-  // The directory the view's sources run in, as an entry's do.
+  // The session's directory, which its view opens at and its sources run in,
+  // as the daemon opens a view at its request's: a replay's is the
+  // recording's, wherever the demo runs.
   readonly cwd: string;
   readonly facts: Facts;
   // The session source's own reads: whose home `~` names, and the log.

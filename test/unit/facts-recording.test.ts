@@ -121,6 +121,7 @@ test("what the recorder writes reads back as itself, opening on the last documen
   ).toEqual({
     session: SESSION,
     home: HOME,
+    cwd: "/elsewhere/repo",
     opening: { at: at(0.2), facts: document(2) },
     lines: [
       { kind: "request", at: at(0.5), request: request() },
@@ -371,6 +372,18 @@ test("a recording no answer was drawn in is refused: a replay draws one frame pe
       /^the recording: holds no answered request: none was answered while it was recorded/,
     );
   }
+});
+
+test("a recording whose opening request has no cwd is refused: a replay opens its view where the session's opened", () => {
+  const raw = JSON.parse(formatLine(requested(1))) as Record<string, unknown>;
+  delete raw.cwd;
+  expect(() =>
+    parseRecording(
+      text(header, facts(0, 1)) +
+        `${JSON.stringify(raw)}\n` +
+        formatLine(drawn(1)),
+    ),
+  ).toThrow(/^the recording: opens on a request with no `cwd`/);
 });
 
 test("a request line crosses the hook and hint checkpoints", () => {

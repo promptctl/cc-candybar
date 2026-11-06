@@ -108,7 +108,10 @@ const log: DaemonLogger = (level, message) =>
 
 // What the frames are drawn from beside the loaded config, and what to close
 // once they are drawn.
-type Arm = Pick<DemoPlay, "facts" | "clock" | "steps" | "arrive" | "home"> & {
+type Arm = Pick<
+  DemoPlay,
+  "facts" | "clock" | "steps" | "arrive" | "home" | "cwd"
+> & {
   readonly world: World;
   readonly close: () => void;
 };
@@ -183,6 +186,7 @@ function liveArm(): Arm {
     }),
     clock: machine.clock,
     home: machine.host.home,
+    cwd,
     steps: [
       arrives(0),
       answered(0),
@@ -227,6 +231,7 @@ function recordingArm(path: string): Arm {
     facts,
     clock,
     home: recording.home,
+    cwd: recording.cwd,
     steps,
     arrive: heldArrival(clock),
     close: () => {},
@@ -259,7 +264,6 @@ async function main(): Promise<void> {
     await playDemo({
       ...arm,
       loaded,
-      cwd,
       log,
       frame: (drawn) =>
         process.stdout.write(

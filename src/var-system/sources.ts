@@ -924,9 +924,8 @@ export class SourceRegistry {
 
   // [LAW:single-enforcer] What this registry's inputs, and the depth, are
   // derived from: bound once by the view that owns the registry, whose source
-  // reads its payload as it stands. A directory binds none: it reads no
-  // payload and no depth — a source whose key reads one is a view's
-  // (src/dsl/variable-scope.ts).
+  // reads its payload as it stands. A directory binds none: it declares only
+  // values that read no payload and no depth (src/dsl/variable-scope.ts).
   bindInputs(source: InputSource): void {
     runInAction(() => this.inputs.set(source));
   }

@@ -237,15 +237,6 @@ export function engineClockFunctions(
   return new Set([...CLOCK_FUNCTIONS, ...Object.keys(clockFuncs(extra))]);
 }
 
-// [LAW:one-source-of-truth] The functions that read the drawn depth: rich-js's
-// one DrawnAt-reading binding, registered from this table over richTextFuncs'
-// own, so the names the scope fold reads (a cache key calling one reads a
-// session's value — src/dsl/variable-scope.ts) are the names the engine binds.
-const DEPTH_BINDINGS = { readableOn: readableOnFunc } as const;
-export const DEPTH_FUNCTIONS: ReadonlySet<string> = new Set(
-  Object.keys(DEPTH_BINDINGS),
-);
-
 // [LAW:single-enforcer] fromString/toString are declared once here.
 // richTextFuncs() provides the theme-independent vocabulary: painting, color
 // math, attributes, links. It needs no configuration, so it is unconditional.
@@ -292,12 +283,8 @@ export function createCcCandybarEngine(opts: {
       ...sprigDicts(),
       ...SPRIG_DATE_FUNCS,
       ...richTextFuncs(depth),
-      ...Object.fromEntries(
-        Object.entries(DEPTH_BINDINGS).map(([name, bind]) => [
-          name,
-          bind(depth),
-        ]),
-      ),
+      // rich-js's one DrawnAt-reading binding, over richTextFuncs' own.
+      readableOn: readableOnFunc(depth),
       // [LAW:single-enforcer] Every function that reads the time, built over
       // the one Clock.
       ...clockFuncs([...CLOCK_FACTORIES, ...(opts.clockFuncs ?? [])]),
