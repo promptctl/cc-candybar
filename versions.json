@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-634",
+      "ref": "refs/pull/634/merge",
+      "sha": "be408f7344d041404a0310d37bcc6ddd19eeeddc",
+      "timestamp": "2026-11-06T09:14:31.402Z",
+      "commits": [
+        {
+          "sha": "be408f7344d041404a0310d37bcc6ddd19eeeddc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T09:13:26Z",
+          "message": "Merge 0e359efaead44f0cf128604609f7b22b04d95fec into 537c926e6cca1e7f2bed89f42058b490482fde86\n"
+        },
+        {
+          "sha": "0e359efaead44f0cf128604609f7b22b04d95fec",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T02:13:12-07:00",
+          "message": "docs(home): the stored-path reading and memory say only what holds (candybar-gather-renderer-76bb.f00.lpl)\n"
+        },
+        {
+          "sha": "6d40a8c3a2d31a00a8fbbd4811701982c11b001d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T02:07:17-07:00",
+          "message": "fix(home): a file named through a link into the home's tree is the home's (candybar-gather-renderer-76bb.f00.lpl)\n\nAn ancestor whose on-disk spelling lies inside the root places the file, not\nonly one that is the root, so a link from outside into a subdirectory of the\nhome no longer stores the home's file as the world's.\n"
+        },
+        {
+          "sha": "a54475ab0e947a2b92eaee46521e92ecbeaa8d91",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T01:50:32-07:00",
+          "message": "fix(home): a world record reached through a link reads back as the home's; one reading of the disk per operation (candybar-gather-renderer-76bb.f00.lpl)\n\nReading a record back had made the refusal of a world path depend on the disk,\nso a record the released build wrote validly, or one a later link made\nreachable from the root, dropped every session's undo history. The refusal is\nlexical again; any other absolute path reads back in the home's spelling.\n\nA StoredRoot reads each directory once per operation (oneReading): the render\ncheckpoint derives the request's spelling and its origin record from one\nreading, and the history's load and save each take one, replacing the\nper-caller memoizers.\n"
+        },
+        {
+          "sha": "0dfd5742908b7a9d9c5e74e63e4de4a821da4ede",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T01:28:40-07:00",
+          "message": "fix(home): a home file named through a symlink is stored as the home's (candybar-gather-renderer-76bb.f00.lpl)\n\nWhose a stored path is now follows the directories on its path, compared in\ntheir on-disk spelling at the call, not its spelling: a client's cwd is a\nrealpath, so a --config under CC_CANDYBAR_HOME=/tmp/h arrived as\n/private/tmp/h/... and was stored as the world's, and a copied home undid\ninto the original's config. The render checkpoint respells a requested home\nfile from the root as given, so what is stored reads back as itself. The\ndisk's spelling is a port on the stored root, and the watcher and the\nspelling share one walk to the deepest existing directory.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-635",
       "ref": "refs/pull/635/merge",
       "sha": "a5bf218615b07dacd82145c2919eb7d858965ca5",
@@ -56,42 +99,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T01:19:30-07:00",
           "message": "feat(apply): no turn awaits a launch; a doctor step is an effect, and a held click error accumulates (candybar-gather-renderer-76bb.1dh.c3l)\n\nA turn is a synchronous call: its body cannot be async (Synchronous<T>), a\nrender request never waits behind another session's probes, and no draw can\nread a click half landed. A doctor step describes an effect; the performer\ngathers after the click's turn through a recording view, and the landing\nchecks the gather's read set and config in the turn that writes the report.\nLands yth: a click error held while the last is live joins it.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-634",
-      "ref": "refs/pull/634/merge",
-      "sha": "39af83a7ab2a69335a208ea10f8dfb8c929cb570",
-      "timestamp": "2026-11-06T09:08:26.194Z",
-      "commits": [
-        {
-          "sha": "39af83a7ab2a69335a208ea10f8dfb8c929cb570",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T09:07:30Z",
-          "message": "Merge 6d40a8c3a2d31a00a8fbbd4811701982c11b001d into 537c926e6cca1e7f2bed89f42058b490482fde86\n"
-        },
-        {
-          "sha": "6d40a8c3a2d31a00a8fbbd4811701982c11b001d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T02:07:17-07:00",
-          "message": "fix(home): a file named through a link into the home's tree is the home's (candybar-gather-renderer-76bb.f00.lpl)\n\nAn ancestor whose on-disk spelling lies inside the root places the file, not\nonly one that is the root, so a link from outside into a subdirectory of the\nhome no longer stores the home's file as the world's.\n"
-        },
-        {
-          "sha": "a54475ab0e947a2b92eaee46521e92ecbeaa8d91",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T01:50:32-07:00",
-          "message": "fix(home): a world record reached through a link reads back as the home's; one reading of the disk per operation (candybar-gather-renderer-76bb.f00.lpl)\n\nReading a record back had made the refusal of a world path depend on the disk,\nso a record the released build wrote validly, or one a later link made\nreachable from the root, dropped every session's undo history. The refusal is\nlexical again; any other absolute path reads back in the home's spelling.\n\nA StoredRoot reads each directory once per operation (oneReading): the render\ncheckpoint derives the request's spelling and its origin record from one\nreading, and the history's load and save each take one, replacing the\nper-caller memoizers.\n"
-        },
-        {
-          "sha": "0dfd5742908b7a9d9c5e74e63e4de4a821da4ede",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T01:28:40-07:00",
-          "message": "fix(home): a home file named through a symlink is stored as the home's (candybar-gather-renderer-76bb.f00.lpl)\n\nWhose a stored path is now follows the directories on its path, compared in\ntheir on-disk spelling at the call, not its spelling: a client's cwd is a\nrealpath, so a --config under CC_CANDYBAR_HOME=/tmp/h arrived as\n/private/tmp/h/... and was stored as the world's, and a copied home undid\ninto the original's config. The render checkpoint respells a requested home\nfile from the root as given, so what is stored reads back as itself. The\ndisk's spelling is a port on the stored root, and the watcher and the\nspelling share one walk to the deepest existing directory.\n"
         }
       ]
     },
