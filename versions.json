@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-637",
+      "ref": "refs/pull/637/merge",
+      "sha": "12d6a61eeced131a493038d7b019c345ad7845e9",
+      "timestamp": "2026-11-06T10:03:16.712Z",
+      "commits": [
+        {
+          "sha": "12d6a61eeced131a493038d7b019c345ad7845e9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T10:02:07Z",
+          "message": "Merge 4a586593a7d20c898707eef2fb271d486c33cfa7 into 52e519f362165f3c41349e0c094ad562c05278d7\n"
+        },
+        {
+          "sha": "4a586593a7d20c898707eef2fb271d486c33cfa7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T03:01:50-07:00",
+          "message": "fix(disk): the fake walks a new entry's parent, makes a `..` folder, refuses a move into itself and forgets a failed watch; path derivation takes a Filesystem (candybar-testing-ihvy.y10)\n"
+        },
+        {
+          "sha": "f003bb9b1b10c913f30ba598412951635ea338e4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T02:52:06-07:00",
+          "message": "fix(disk): the fake moves, removes, writes through links and resolves `..` as the kernel does; repo-configs is made on the tree that watches it; the real disk is owned (candybar-testing-ihvy.y10)\n"
+        },
+        {
+          "sha": "04a745483d3759d4ad7011f9110892ff63982371",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T02:36:44-07:00",
+          "message": "feat(disk): files and their watch events go through one filesystem port, first used by the watcher registry and the binary watch (candybar-testing-ihvy.y10)\n\nA Filesystem port (src/disk/) with one adapter over fs, an in-memory fake whose writes emit the events a watch would on the clock, and one contract both pass. The watcher registry, its delivery owner, plugin storage, folder identity, the link walk and the binary watch read the disk through it; IdentityRead and BundleStat are gone. A lint rule bans fs outside the adapter, with an allowlist of the files still to move.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-632",
       "ref": "refs/pull/632/merge",
       "sha": "8f092fe1c9d68664015f7fa263f556861727afcf",
@@ -41,35 +77,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T01:20:50-07:00",
           "message": "feat(links): a click reaches the renderer that drew it, by name: links are minted as cc-candybar://to/<name>/dispatch/…, the daemon's three click intakes share one link parse and one address check, and the URL handler dials the socket the name selects (candybar-gather-renderer-76bb.b2l.7q7)\n\n- The minter takes the renderer's address first, so no link can be minted\n  without one. The name sits outside every signature: it only picks which\n  process verifies.\n- The renderer's link identity is one value, RendererLinks { to, signer },\n  carried where the signer was: the compile, the render cache, the daemon's\n  parts and the verbs' context.\n- The parser returns `to` as a name or null. Old grammars and config-spelled\n  links name none, and run where they arrive until b2l.eul and b2l.x87.\n- url-handle relays the raw link. The click request carries `url` in place\n  of verb and value. The version rule states why an in-bundle kind changes\n  shape without a bump.\n- One daemon helper refuses a link named for another renderer, on the url\n  frame, the click request and the tmux range. Every click event records\n  `to` (or `linkTo` for a range's link).\n- Swift: address.swift holds the name rule and the socket file a link\n  selects, checked before any path forms. main.swift logs the chosen file\n  publicly. address-test.swift runs in CI's macOS job and `just\n  test-url-handler`.\n- check-protocol compares TS against every mirror a row names, not only\n  the first. The Swift name rule, length, socket files, main's name and the\n  address segment are pinned. The name vectors drop \"main\": they are the\n  name rule's lists.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-637",
-      "ref": "refs/pull/637/merge",
-      "sha": "eabf1886c0d0c44d082b190242789c17d111d3c3",
-      "timestamp": "2026-11-06T09:53:08.162Z",
-      "commits": [
-        {
-          "sha": "eabf1886c0d0c44d082b190242789c17d111d3c3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T09:52:20Z",
-          "message": "Merge f003bb9b1b10c913f30ba598412951635ea338e4 into 52e519f362165f3c41349e0c094ad562c05278d7\n"
-        },
-        {
-          "sha": "f003bb9b1b10c913f30ba598412951635ea338e4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T02:52:06-07:00",
-          "message": "fix(disk): the fake moves, removes, writes through links and resolves `..` as the kernel does; repo-configs is made on the tree that watches it; the real disk is owned (candybar-testing-ihvy.y10)\n"
-        },
-        {
-          "sha": "04a745483d3759d4ad7011f9110892ff63982371",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T02:36:44-07:00",
-          "message": "feat(disk): files and their watch events go through one filesystem port, first used by the watcher registry and the binary watch (candybar-testing-ihvy.y10)\n\nA Filesystem port (src/disk/) with one adapter over fs, an in-memory fake whose writes emit the events a watch would on the clock, and one contract both pass. The watcher registry, its delivery owner, plugin storage, folder identity, the link walk and the binary watch read the disk through it; IdentityRead and BundleStat are gone. A lint rule bans fs outside the adapter, with an allowlist of the files still to move.\n"
         }
       ]
     },

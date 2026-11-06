@@ -53301,7 +53301,7 @@ var PathWatches = class {
     return () => this.unsubscribe(filePath2, callback);
   }
   arm(filePath2) {
-    const watch2 = derived(this.watchers, filePath2);
+    const watch2 = derived(this.watchers.filesystem, filePath2);
     const entry = {
       bound: {
         derived: watch2,
@@ -53319,7 +53319,7 @@ var PathWatches = class {
   // Derive where the path can change, follow it, and say the watch's fault.
   // A new key acquires its watch, keeping every directory both keys name.
   rederive(filePath2, entry) {
-    const paths2 = derived(this.watchers, filePath2);
+    const paths2 = derived(this.watchers.filesystem, filePath2);
     const { watch: watch2 } = this.watchers.follow(
       entry.bound.held,
       paths2,
@@ -53390,7 +53390,7 @@ var PathWatches = class {
     return this.entries.size;
   }
 };
-var derived = (watchers, filePath2) => watchTargetsOf(watchers.filesystem, { named: [filePath2], whole: [filePath2] });
+var derived = (filesystem, filePath2) => watchTargetsOf(filesystem, { named: [filePath2], whole: [filePath2] });
 var SourceRuns = class {
   byKind;
   watchMgr;
@@ -82175,7 +82175,7 @@ function authoredRoots(config2, raw) {
     )
   );
 }
-function watchTargetsFor(watchers, entry, locs) {
+function watchTargetsFor(filesystem, entry, locs) {
   const { loaded, dropped, unreached } = entry.state.plugins;
   const roots = [
     .../* @__PURE__ */ new Set([
@@ -82183,7 +82183,7 @@ function watchTargetsFor(watchers, entry, locs) {
       import_node_path45.default.join(entry.projectDir, REPO_PLUGIN_DIR)
     ])
   ];
-  return watchTargetsOf(watchers.filesystem, {
+  return watchTargetsOf(filesystem, {
     named: [
       ...dslConfigCandidatePaths(
         locs,
@@ -83071,7 +83071,7 @@ var RenderCache = class {
     entry.configHome = loaded.home;
     entry.repos = loaded.repos;
     const paths2 = watchTargetsFor(
-      this.deps.watchers,
+      this.deps.watchers.filesystem,
       entry,
       this.deps.locations
     );
