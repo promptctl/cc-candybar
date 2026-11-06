@@ -66,7 +66,7 @@ A renderer has one identity: its **home**, a record `{ name, root }`. Every path
 
 No absolute path is stored anywhere a renderer writes. Undo history, `render-origin` and any snapshot hold paths relative to the home's root, so an isolated renderer given a copy of the user's config cannot be made to write the user's config, because the sentence cannot be formed. A renderer's state starts from values, never from a copied history. The bundle is the one value not derived from the home, because it is the code that reads the home; the client spawns the bundle beside it on a daemon miss, as today.
 
-Two verbs existed only to leave the home. `load-config`, which pointed a session at any absolute path, is gone; the `env` source, which reads the spawning shell's environment and calls it a session fact, should go. `file` and `shell` are the expansion points, and both are reachable from inside a home. [LAW:polishing-by-subtraction]
+Two verbs existed only to leave the home. `load-config`, which pointed a session at any absolute path, is gone; so is the `env` source, which read the spawning shell's environment and called it a session fact. `file` and `shell` are the expansion points, and both are reachable from inside a home. [LAW:polishing-by-subtraction]
 
 ## 7. A session reaches a renderer by starting with its values
 

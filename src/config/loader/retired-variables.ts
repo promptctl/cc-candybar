@@ -165,6 +165,19 @@ export function retiredGitKindMessage(
   return `${head} read ${field.read} where it was read${note}, or declare ${json5Of(field.declare)} under a name of your own`;
 }
 
+// [LAW:one-source-of-truth] The retired `kind: "env"`: one detached renderer
+// draws for every session of its user, so its environment is the shell that
+// spawned it, never the session's, and the value this kind read was no session
+// fact. Nothing replaces it one for one; `file` and `shell` are the expansion
+// points, and both reach their value from inside the renderer's home.
+export function retiredEnvKindMessage(
+  raw: Readonly<Record<string, unknown>>,
+): string {
+  const read =
+    typeof raw.name === "string" ? ` (this one read $${raw.name})` : "";
+  return `kind "env" is removed${read}: the renderer's environment belongs to whichever shell spawned it, not to the session it draws for, so an env variable was never a session fact — drop this declaration; a value the payload lacks is read from a file by a "file" source or computed by a "shell" source`;
+}
+
 // [LAW:one-source-of-truth] The click verbs a hand-written URL literal can
 // still spell that no daemon dispatches: verb → where what it did now lives.
 // A literal URL reaches no table at load, so without this row the click would

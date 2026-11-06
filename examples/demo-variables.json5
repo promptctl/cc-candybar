@@ -1,6 +1,6 @@
 // cc-candybar: demo-variables.json5
 //
-// Demonstrates all 9 variable source kinds, all 5 cache policies,
+// Demonstrates all 8 variable source kinds, all 5 cache policies,
 // segment-local vars, custom helpers, dynamic bg expressions,
 // per-segment palette override, and width/justify/truncate controls.
 //
@@ -67,15 +67,12 @@
       type: "number",   // ensures numeric math works without explicit int() casts
       default: 100,
     },
+    // The user this machine runs the daemon as: a machine fact the payload
+    // carries, read where it is read (the daemon's own environment belongs to
+    // whichever shell spawned it, so no source reads that).
+    "demo.user": { kind: "input", path: "host.user", default: "?" },
 
-    // ── 3. env ──────────────────────────────────────────────────────────────
-    // Reads a process environment variable. Re-read each time the render-cache
-    // entry is rebuilt; not watched for mid-session changes.
-    "demo.editor": { kind: "env", name: "EDITOR", default: "(none)" },
-    "demo.user":   { kind: "env", name: "USER",   default: "?" },
-    "demo.shell":  { kind: "env", name: "SHELL",  default: "" },
-
-    // ── 4. file ─────────────────────────────────────────────────────────────
+    // ── 3. file ─────────────────────────────────────────────────────────────
     // Reads a file from disk. Paths MUST be absolute — ~ is not expanded.
     //
     // readMode — WHAT TEXT the file yields (a reader fact):
@@ -117,7 +114,7 @@
       default: "",
     },
 
-    // ── 5. shell ────────────────────────────────────────────────────────────
+    // ── 4. shell ────────────────────────────────────────────────────────────
     // Spawns a subprocess in /bin/sh. stdout is the text the parse step sees
     // (absent parse: trimmed text is the value). The minimum shell TTL is
     // 500 ms — shorter ttl values are clamped up.
@@ -141,13 +138,13 @@
       default: "?",
     },
 
-    // Node.js version. key cache: re-run whenever the shell changes
-    // (e.g. after switching node versions via a version manager).
+    // Node.js version. key cache: re-run whenever the directory changes
+    // (a version manager picks the node version per project).
     "demo.nodeVer": {
       kind: "shell",
       command: "node --version 2>/dev/null",
       parse: { regex: "v?([0-9]+\\.[0-9]+)" },  // "major.minor" out of "v22.13.0"
-      cache: { key: "{{ .demo.shell }}" },
+      cache: { key: "{{ .demo.cwd }}" },
       default: "",
     },
 
@@ -166,7 +163,7 @@
       default: { name: "?", deps: { runtime: 0 } },
     },
 
-    // ── 6. template ─────────────────────────────────────────────────────────
+    // ── 5. template ─────────────────────────────────────────────────────────
     // A Go template evaluated against the live variable store. MobX auto-
     // tracks every variable read during evaluation — the invalidation graph
     // builds itself, so a template variable takes no cache policy. Use for
@@ -187,7 +184,7 @@
       default: "",
     },
 
-    // ── 7. time ─────────────────────────────────────────────────────────────
+    // ── 6. time ─────────────────────────────────────────────────────────────
     // Formats the instant the bar is drawn at with a Go reference-time layout.
     //
     // Go's reference time (the "epoch" used as a mnemonic for tokens):
@@ -223,7 +220,7 @@
       default: "",
     },
 
-    // ── 8. git ──────────────────────────────────────────────────────────────
+    // ── 7. git ──────────────────────────────────────────────────────────────
     // Every git fact is an input over the payload's git lane — the same read
     // the bundled `gitaculous` segment draws from. The bundled default already
     // declares all of them as "git.<fact>"; these re-declare four under names
@@ -247,7 +244,7 @@
       default: 0,
     },
 
-    // ── 9. state ────────────────────────────────────────────────────────────
+    // ── 8. state ────────────────────────────────────────────────────────────
     // Reads from the daemon's SessionState — a per-session key/value store
     // that persists between renders and is mutated by action clicks.
     // [LAW:one-source-of-truth] The SessionState key is the canonical store;
@@ -274,7 +271,8 @@
     //
     // Use case: a display-only derived value that no other segment needs.
     demoIdentity: {
-      template: " 👤 {{ .demoIdentity.badge }} ",
+      // template "orUnset" calls the helper declared above
+      template: ' 👤 {{ template "orUnset" .demoIdentity.badge }} ',
       bg: "surface-active",
       vars: {
         // Local template var composing three global vars. Only this segment
@@ -292,13 +290,6 @@
       template: " ◈ {{ .demo.label }} v{{ .demo.version }}  ⌗{{ .demo.shortId }} ",
       bg: "surface",
       when: '{{ ne .demo.sessionId "" }}',
-    },
-
-    // ── Env vars + helper call ────────────────────────────────────────────
-    demoEnv: {
-      // template "orUnset" calls the helper declared above
-      template: ' ✎ {{ template "orUnset" .demo.editor }}  🐚 {{ basename .demo.shell }} ',
-      bg: "panel",
     },
 
     // ── File + shell + width/justify/truncate ─────────────────────────────
@@ -390,7 +381,7 @@
   // names a segment leaf. Single-segment rows are just the bare leaf.
   root: { v: [
     { h: ["demoIdentity", "demoClock", "demoPkg"] },
-    { h: ["demoLiterals", "demoEnv"] },
+    { h: ["demoLiterals"] },
     "demoSystem",
     { h: ["demoGit", "demoGitStatus"] },
     { h: ["demoMode", "demoContext", "demoFixed"] },

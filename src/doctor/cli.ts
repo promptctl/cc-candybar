@@ -110,7 +110,6 @@ export function loadConfigOnce(
     clock,
     runs: new SourceRuns({ launcher, clock }),
     locations: locations(host),
-    env: host.env,
     sessionState: new SessionState(),
     storage: UNOWNED_STORAGE,
     signer: linkSignerFromKeyFile(linkKeyFile(stateDir(host))),

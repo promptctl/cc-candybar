@@ -46,11 +46,6 @@ const FIXTURE_SOURCE = readFileSync(
   "utf-8",
 );
 
-// HOME is controlled so the directory template's home-collapse branch is
-// never taken — makes path rendering deterministic across machines. (An `env`
-// source reads the registry's environment at registerDslConfig call time.)
-const ENV = { HOME: "" };
-
 describe("DSL render spine (bzh.7 steel thread)", () => {
   // Strip opts are the rig's own (powerline, truecolor, wrap, padding 0, width
   // Infinity) so the committed snapshot stays a single line — wrap behavior is
@@ -60,7 +55,7 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
     source: string = FIXTURE_SOURCE,
     palettes: ReadonlySet<string> = ALLOWED_PALETTES,
   ) {
-    const rig = buildRig({ source, palettes, cwd, env: ENV });
+    const rig = buildRig({ source, palettes, cwd });
     return { ...rig, drawHook: (observers?: RenderObservers) => rig.draw({ payload: HOOK_DATA, observers }).frame };
   }
 

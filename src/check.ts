@@ -638,8 +638,6 @@ export async function prepareConfig(
     store,
     config.globals.default_empty_value ?? "",
     new SessionState(),
-    null,
-    world.host.env,
   );
   try {
     // [LAW:single-enforcer] check draws `run` links as the daemon does,

@@ -85,7 +85,6 @@ function makeCache(budgetBytes: number, maxEntries?: number) {
       clock: systemTimekeeper,
       stateDir: stateDir(HOST),
       locations: locs(),
-      env: HOST.env,
       runs: new SourceRuns({ launcher: unscriptedLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,

@@ -59,7 +59,6 @@ const KIND_SCOPE: Readonly<
   template: "view",
   time: "view",
   literal: "directory",
-  env: "directory",
   dropped: "directory",
   // A plugin source is read per session: its reading is the session's own
   // file, which reaches the view through its payload.

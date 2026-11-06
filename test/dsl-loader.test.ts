@@ -355,10 +355,17 @@ describe("loadDslConfig — variable source kinds", () => {
     expect(ok.variables.sid).toEqual({ kind: "input", path: "session.id" });
   });
 
-  test("env: requires name", () => {
+  // [LAW:no-silent-failure] The retired `env` kind: the renderer's environment
+  // is the spawning shell's, so the declaration is refused at load, naming the
+  // variable it read and the two sources that remain.
+  test("env: the retired kind is refused, naming what it read and the sources that remain", () => {
+    expectIssue(`{ variables: { home: { kind: "env", name: "HOME" } } }`, {
+      path: "variables.home.kind",
+      message: 'kind "env" is removed (this one read $HOME): ',
+    });
     expectIssue(`{ variables: { home: { kind: "env" } } }`, {
-      path: "variables.home.name",
-      message: "variables.home.name must be a string",
+      path: "variables.home.kind",
+      message: 'read from a file by a "file" source or computed by a "shell" source',
     });
   });
 
@@ -740,7 +747,6 @@ describe("loadDslConfig — unknown keys on a variable declaration", () => {
     for (const decl of [
       `{ kind: "literal", value: "v" }`,
       `{ kind: "input", path: "session_id" }`,
-      `{ kind: "env", name: "HOME" }`,
       `{ kind: "file", path: "/p", cache: { never: true } }`,
       `{ kind: "shell", command: "echo", cache: { never: true } }`,
       `{ kind: "template", template: "x" }`,
@@ -2197,7 +2203,6 @@ describe("loadDslConfig — valid corpus", () => {
       variables: {
         cwd: { kind: "input", path: "cwd" },
         sid: { kind: "input", path: "session.id" },
-        home: { kind: "env", name: "HOME" },
         load_avg: {
           kind: "shell", command: "uptime",
           parse: { regex: "load average:\\\\s*([0-9.]+)" },
@@ -2238,7 +2243,6 @@ describe("loadDslConfig — valid corpus", () => {
       "constant",
       "cwd",
       "cwd_short",
-      "home",
       "hostname",
       "load_avg",
       "now",

@@ -1,5 +1,5 @@
 // [LAW:types-are-the-program] The variable schema: a AuthoredVariableDecl is discriminated
-// by `kind` (literal / input / env / file / shell / template / time / state),
+// by `kind` (literal / input / file / shell / template / time / state),
 // declared as DATA (VARIABLE_SCHEMA) and interpreted by the tag-by-field-value
 // engine (taggedUnion). Each arm is a `fields` schema over its member's non-`kind`
 // fields, except `input`, whose `default` must match its `type` — a genuine
@@ -9,7 +9,6 @@
 import {
   type ParseDecl,
   type SourceDefault,
-  type EnvVarDecl,
   type FileVarDecl,
   type InputVarDecl,
   type LiteralVarDecl,
@@ -50,6 +49,7 @@ import {
 import { requireCacheSpec } from "./cache.js";
 import {
   RETIRED_INPUT_PATHS,
+  retiredEnvKindMessage,
   retiredGitKindMessage,
 } from "./retired-variables.js";
 
@@ -311,10 +311,6 @@ const INPUT_FIELDS: FieldSpecMap<Omit<InputVarDecl, "kind">> = {
   type: optionalEnumSpec(["string", "number", "boolean"] as const),
   default: typedDefaultSpec(),
 };
-const ENV_FIELDS: FieldSpecMap<Omit<EnvVarDecl, "kind">> = {
-  name: requireStringSpec(),
-  default: optionalStringSpec(),
-};
 const FILE_FIELDS: FieldSpecMap<Omit<FileVarDecl, "kind">> = {
   path: requireAbsolutePathSpec(),
   readMode: optionalEnumSpec(["whole", "first-line"] as const),
@@ -412,14 +408,13 @@ const VARIABLE_SCHEMA: TaggedUnionSchema<AuthoredVariableDecl, "kind"> = {
     // is one field map like every other arm — `arm()` derives both `parse` and
     // `json` from INPUT_FIELDS, no hand-authored schema to keep in sync.
     input: arm("input", INPUT_FIELDS),
-    env: arm("env", ENV_FIELDS),
     file: arm("file", FILE_FIELDS),
     shell: arm("shell", SHELL_FIELDS),
     template: arm("template", TEMPLATE_FIELDS, TEMPLATE_VAR_REMOVED),
     time: arm("time", TIME_FIELDS, TIME_VAR_REMOVED),
     state: arm("state", STATE_FIELDS),
   },
-  retired: { git: retiredGitKindMessage },
+  retired: { git: retiredGitKindMessage, env: retiredEnvKindMessage },
 };
 
 // [LAW:one-source-of-truth] One AuthoredVariableDecl's schema, derived from the SAME

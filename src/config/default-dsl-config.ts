@@ -230,9 +230,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
 
     // home flows through the augmented payload (projectPayload reads
     // HOME, falling back to USERPROFILE on Windows where HOME is often
-    // unset). Sourcing via `kind: "input"` rather than `kind: "env",
-    // name: "HOME"` makes the directory `~` collapse work on every
-    // platform without per-platform config edits.
+    // unset), so the directory `~` collapse works on every platform
+    // without per-platform config edits.
     home: { kind: "input", path: "home", default: "" },
 
     // The tmux session name of the pane this session's client reported flows
@@ -246,9 +245,9 @@ export const RAW_DEFAULT_DSL_CONFIG = {
 
     // Host identity — which machine this session is on, and whether the user
     // arrived over SSH. All three come through the augmented payload rather
-    // than `kind: "env"` / `kind: "shell"`, and that is not a style choice:
+    // than a `kind: "shell"` source, and that is not a style choice:
     //
-    //   • `host.ssh` CANNOT be an env var here. Variables are evaluated in the
+    //   • `host.ssh` is no fact of the daemon's. Variables are evaluated in the
     //     DAEMON, which is detached and serves every session for this user at
     //     once — its `SSH_*` env describes whichever shell happened to spawn
     //     it. The fact is captured by the live client and carried as a wire

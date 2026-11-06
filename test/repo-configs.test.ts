@@ -156,7 +156,7 @@ describe("the gate over a project's plugins", () => {
       storage: UNOWNED_STORAGE,
       signer: linkSigner(Buffer.alloc(32)),
       gates: bareGates(),
-      stateDir: stateDir(host), locations: locations(host), env: host.env,
+      stateDir: stateDir(host), locations: locations(host),
     };
     const waiting = loadFromDisk(project, project, undefined, deps);
     expect(waiting.repos.awaiting).toEqual([project]);

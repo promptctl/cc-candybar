@@ -316,10 +316,6 @@ function declareOne(
       );
       break;
 
-    case "env":
-      registry.declareEnv(name, decl.name, decl.default);
-      break;
-
     case "file":
       registry.declareFile(name, decl.path, {
         readMode: decl.readMode,

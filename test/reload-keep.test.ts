@@ -63,7 +63,6 @@ function rig() {
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
-      env: host.env,
       runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
