@@ -73,8 +73,11 @@ export function requestEvent(
     ["outcome", outcome.kind],
     ...detailOf(outcome),
   ];
-  return {
-    level: LEVEL[outcome.kind],
-    line: `${kind}${fields.map(([key, value]) => ` ${key}=${valueOf(value)}`).join("")}`,
-  };
+  return { level: LEVEL[outcome.kind], line: eventLine(kind, fields) };
 }
+
+// [LAW:one-source-of-truth] The one shape of an event line, whichever layer
+// writes it (the request edge here, Apply in src/daemon/apply.ts): its name,
+// then each fact as a logfmt field, as every reader of the log parses it.
+export const eventLine = (kind: string, fields: RequestFacts): string =>
+  `${kind}${fields.map(([key, value]) => ` ${key}=${valueOf(value)}`).join("")}`;

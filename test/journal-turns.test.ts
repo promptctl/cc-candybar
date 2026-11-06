@@ -337,19 +337,22 @@ describe("the click path", () => {
         systemTimekeeper.monotonic(),
         gone,
       );
-    return { send, events };
+    // The reply's click line: a refused click's turn still committed, so its
+    // apply line is logged ahead of it.
+    const clickLine = () => events.find((l) => l.startsWith("click "));
+    return { send, events, clickLine };
   }
 
   test("a BadVerbArgs thrown in the handler reaches the client", async () => {
     const { ctx } = setup();
-    const { send, events } = parts(ctx);
+    const { send, clickLine } = parts(ctx);
     const { resp } = await send(VERB_UNDO, encodeSegments([SID]));
     expect(resp).toMatchObject({
       ok: false,
       code: "BAD_REQUEST",
       error: expect.stringContaining("nothing to undo"),
     });
-    expect(events[0]).toMatch(/ turnWait=\d+ms /);
+    expect(clickLine()).toMatch(/ turnWait=\d+ms /);
   });
 
   test("a status-line link naming a verb re-enters without deadlock", async () => {
@@ -374,16 +377,16 @@ describe("the click path", () => {
   test("a click after close is a `closing` outcome at info, not an error", async () => {
     const { ctx, turns } = setup();
     turns.close();
-    const { send, events } = parts(ctx);
+    const { send, clickLine } = parts(ctx);
     await send(VERB_UNDO, encodeSegments([SID]));
-    expect(events[0]).toContain("closing=");
+    expect(clickLine()).toContain("closing=");
   });
 
   test("a queued click whose client left never lands, and undoes no toggle", async () => {
     const { sessionState, ctx, click } = setup();
     const held = gate();
     const slow = click("nord", "plain", held.wait);
-    const { send, events } = parts(ctx);
+    const { send, clickLine } = parts(ctx);
     const queued = send(
       VERB_SET_STATE,
       encodeSegments([SID, "theme", "dracula"]),
@@ -393,7 +396,7 @@ describe("the click path", () => {
     await slow;
     await queued;
     expect(sessionState.get(SID, "theme")).toBe("nord");
-    expect(events[0]).toContain("abandoned=1");
+    expect(clickLine()).toContain("abandoned=1");
   });
 });
 

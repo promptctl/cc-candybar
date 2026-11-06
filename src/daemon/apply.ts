@@ -23,7 +23,7 @@ import type { ClickArrival } from "../doctor/sightings.js";
 import { failureText, type Launcher } from "../proc/launch.js";
 import type { Monotonic } from "../time.js";
 import type { Instant } from "../utils/instant.js";
-import { valueOf } from "../utils/logfmt.js";
+import type { LogLevel } from "../utils/logger.js";
 import { holdClickError } from "./click-error.js";
 import type { DaemonParts } from "./daemon-parts.js";
 import { answerRequest, type RequestAnswer } from "./draw-bar.js";
@@ -37,7 +37,7 @@ import {
 } from "./effect.js";
 import type { ClickAsker } from "./journal-turns.js";
 import type { MenuIdle } from "./menu-idle.js";
-import type { RequestFacts } from "./request-event.js";
+import { eventLine, type RequestFacts } from "./request-event.js";
 import type { CheckedRenderRequest } from "./render-checkpoint.js";
 import { DaemonClosing } from "./verb-error.js";
 import {
@@ -86,10 +86,18 @@ export type Event =
       readonly outcome: EffectOutcome;
     };
 
+// [LAW:effects-at-boundaries] A click's refusal, as its answer: the failure
+// of a step, answered as data beside the effects its landed steps described,
+// so the performer runs those while the source tells the client. Its class is
+// what the wire reads (src/daemon/reply.ts `clickRan`).
+export interface ClickRefusal {
+  readonly error: unknown;
+}
+
 // What applying each kind answers its source with.
 interface Answers {
   readonly request: RequestAnswer;
-  readonly click: void;
+  readonly click: ClickRefusal | null;
   readonly "menu-idle": void;
   readonly "effect-done": void;
 }
@@ -148,26 +156,37 @@ export const ARMS: ApplyArms<Event> = {
   }),
   // [LAW:single-enforcer] The click's whole bracket on its menus' idle clock
   // is here, so the timer cannot close a menu under any click Apply carries.
+  // The turn hands its effects over once it has committed (`described`), and
+  // a refused step is answered beside them.
   click: async (
     { verb, value, arrival, pending, asker },
     { verbCtx, menuIdle },
   ) => {
     if (pending !== null) menuIdle.clickArrived(pending);
+    const effects: Effect[] = [];
+    let answer: ClickRefusal | null = null;
     try {
-      return {
-        answer: undefined,
-        effects: await verb.run(value, { ...verbCtx, arrival, asker }),
-        facts: [],
-      };
+      await verb.run(value, {
+        ...verbCtx,
+        arrival,
+        asker,
+        described: (described) => void effects.push(...described),
+      });
+    } catch (error) {
+      answer = { error };
     } finally {
       if (pending !== null) menuIdle.clickSettled(pending);
     }
+    return { answer, effects, facts: [] };
   },
-  "menu-idle": async ({ session, idle }, { verbCtx }) => ({
-    answer: undefined,
-    effects: await closeIdleMenus(session, idle, verbCtx),
-    facts: [],
-  }),
+  "menu-idle": async ({ session, idle }, { verbCtx }) => {
+    const effects: Effect[] = [];
+    await closeIdleMenus(session, idle, {
+      ...verbCtx,
+      described: (described) => void effects.push(...described),
+    });
+    return { answer: undefined, effects, facts: [] };
+  },
   // [LAW:single-enforcer] The one writer of what a failed effect leaves: the
   // session's click error, held in a turn of its own as every write is, and
   // shown as a failed dispatch's is (src/daemon/click-error.ts). A click that
@@ -211,12 +230,12 @@ export async function apply<K extends Event["kind"]>(
   const said = line(event);
   if (said !== null) {
     parts.log(
-      "info",
-      logLine([
+      said.level,
+      eventLine("apply", [
         ["kind", event.kind],
         ["verb", of.verb],
         ["sid", of.session ?? "-"],
-        ...said,
+        ...said.facts,
         ...applied.facts,
         [
           "effects",
@@ -241,25 +260,38 @@ export async function apply<K extends Event["kind"]>(
 // every event passes through: the kind, the verb, the session, the effects
 // described, the revision the session's state stands at once the turn is
 // over, and on effect-done the effect and how it went. What each kind adds
-// of its own is here; the request's line is the render line its edge writes
-// (four of five lines in a live log), until its turn gives it a revision.
+// of its own is here, and at what level; the request's line is the render
+// line its edge writes (four of five lines in a live log), until its turn
+// gives it a revision.
+interface ApplyLine {
+  readonly level: LogLevel;
+  readonly facts: RequestFacts;
+}
+const APPLIED: ApplyLine = { level: "info", facts: [] };
+// [LAW:no-silent-failure] A failed effect is a warning in the log, whether or
+// not a bar shows it: for a click that names no session, the line is the one
+// record.
+const OUTCOME_LEVEL: Record<EffectOutcome["kind"], LogLevel> = {
+  ok: "info",
+  failed: "warn",
+};
 const LINE: {
   readonly [K in Event["kind"]]: (
     event: Extract<Event, { readonly kind: K }>,
-  ) => RequestFacts | null;
+  ) => ApplyLine | null;
 } = {
   request: () => null,
-  click: () => [],
-  "menu-idle": () => [],
-  "effect-done": ({ effect, outcome }) => [
-    ["effect", describeEffect(effect)],
-    ["outcome", outcome.kind],
-    ["said", outcome.said || "-"],
-  ],
+  click: () => APPLIED,
+  "menu-idle": () => APPLIED,
+  "effect-done": ({ effect, outcome }) => ({
+    level: OUTCOME_LEVEL[outcome.kind],
+    facts: [
+      ["effect", describeEffect(effect)],
+      ["outcome", outcome.kind],
+      ["said", outcome.said || "-"],
+    ],
+  }),
 };
-
-const logLine = (fields: RequestFacts): string =>
-  `apply${fields.map(([key, value]) => ` ${key}=${valueOf(value)}`).join("")}`;
 
 // Whose effects an event's are.
 const ORIGIN: {
@@ -307,8 +339,10 @@ const PERFORM: Performers<Effect> = {
 };
 
 // [LAW:one-type-per-behavior] A click's launch of a program it waits out,
-// the clipboard or an editor, each of which hands off and exits. The bound is
-// what every click launch has, so a hung program ends with its outcome said.
+// the clipboard or an editor, each of which hands off and exits.
+// [LAW:no-ambient-temporal-coupling] The bound is what every click launch
+// has, and it is the performer's, not the click's: a hung program ends with
+// its outcome said and `performed` settled, where it once held the turn.
 export async function clickLaunch(
   launcher: Launcher,
   spec: LaunchSpec,

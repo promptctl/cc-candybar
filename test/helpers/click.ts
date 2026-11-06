@@ -17,11 +17,12 @@ import {
   noManagedSettings,
 } from "./doctor-facts";
 import { clickOf } from "../../src/click/read";
-import { apply } from "../../src/daemon/apply";
+import { apply, type ClickRefusal } from "../../src/daemon/apply";
 import { clickSessionOf, clickVerb } from "../../src/daemon/verbs";
 import { writesInTurn } from "./writes-in-turn";
 import { SESSION_RENDER_ORIGIN_KEY } from "../../src/daemon/foundations/session-keys";
 import { encodeRenderOrigin } from "../../src/daemon/foundations/render-origin";
+import { describeEffect } from "../../src/daemon/effect";
 import type { VerbContext } from "../../src/daemon/verbs";
 import type { SessionStateRW } from "../../src/daemon/session-state";
 import { SettingsHistory } from "../../src/daemon/settings-history";
@@ -90,6 +91,15 @@ export function testVerbContext(
     navigation: new NavigationHistory(),
     asker: { placed: () => {}, gathered: () => {}, waited: () => {}, gone: () => false },
     journalTurns,
+    // [LAW:no-silent-failure] A turn's effects go to the arm that ran it
+    // (`applyClick` below); a test that drives a describing verb around Apply
+    // would drop them, so reaching this one is a test bug.
+    described: (effects) => {
+      if (effects.length === 0) return;
+      throw new Error(
+        `described outside apply: ${effects.map((e) => describeEffect(e)).join(",")}`,
+      );
+    },
     clickLanded: () => {},
     log: () => {},
     launcher: unscriptedLauncher,
@@ -229,7 +239,12 @@ export const linkClick = clickOf;
 // What a click's arm reads (src/daemon/apply.ts): the context handed in, its
 // log, and an idle clock nothing here arms.
 function clickParts(ctx: VerbContext) {
-  const { arrival: _arrival, asker: _asker, ...verbCtx } = ctx;
+  const {
+    arrival: _arrival,
+    asker: _asker,
+    described: _described,
+    ...verbCtx
+  } = ctx;
   return {
     verbCtx,
     log: ctx.log,
@@ -240,18 +255,32 @@ function clickParts(ctx: VerbContext) {
 // A rendered click URL through Apply, as the daemon runs it: answers once its
 // turn has committed, with the handle that settles when its effects have all
 // reported. A verb that refuses the click rejects here, as the daemon's reply
-// would say.
+// would say; `applyClickAnswered` hands the refusal back as the arm answers
+// it, beside the handle, for a test that reads what a refused click still
+// performed.
 export async function applyClick(
   url: string,
   ctx: VerbContext,
 ): Promise<{ readonly performed: Promise<void> }> {
+  const { answer, performed } = await applyClickAnswered(url, ctx);
+  if (answer !== null) throw answer.error;
+  return { performed };
+}
+
+export async function applyClickAnswered(
+  url: string,
+  ctx: VerbContext,
+): Promise<{
+  readonly answer: ClickRefusal | null;
+  readonly performed: Promise<void>;
+}> {
   const { verb: name, value } = linkClick(url);
   const verb = clickVerb(name);
   if (verb === null) throw new Error(`no handler for verb "${name}"`);
   // The session the click names, read as the daemon's edge reads it
   // (src/daemon/reply.ts handleClick).
   const session = clickSessionOf(name, value);
-  const { performed } = await apply(
+  return apply(
     {
       kind: "click",
       verb,
@@ -262,7 +291,6 @@ export async function applyClick(
     },
     clickParts(ctx),
   );
-  return { performed };
 }
 
 // Drive a rendered click URL through the real path, effects and all: resolves

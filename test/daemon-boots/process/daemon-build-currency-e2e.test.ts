@@ -215,12 +215,20 @@ describe("a daemon spawned from the built bundle", () => {
         expect(() =>
           affordance(noticeOf(busy)!.rendered, "apply-update"),
         ).toThrow();
-        await expect(
-          click(
-            sockPath,
-            effectsUrl([{ verb: VERB_APPLY_UPDATE, args: [sid] }]),
-          ),
-        ).rejects.toThrow(/already rebuilding/);
+        // The click itself is answered: the act is its effect, performed
+        // after its turn (src/daemon/apply.ts), and the watch's refusal is
+        // that effect's failure, held for the session's bar.
+        await click(
+          sockPath,
+          effectsUrl([{ verb: VERB_APPLY_UPDATE, args: [sid] }]),
+        );
+        await pagesUntil(
+          sockPath,
+          sid,
+          s.projectDir,
+          (pages) => pages.some((p) => /already rebuilding/.test(p.text)),
+          "the refused act held on the bar",
+        );
         fs.writeFileSync(stub.gate, "");
         await afterGate(successor, sockPath, sid, s);
         return { ran: fs.readFileSync(stub.ran, "utf8") };

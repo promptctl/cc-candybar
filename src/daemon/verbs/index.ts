@@ -237,6 +237,11 @@ export interface DaemonContext {
   // [LAW:no-ambient-temporal-coupling] Whose turn it is to hold those journals
   // (src/daemon/journal-turns.ts).
   readonly journalTurns: Pick<JournalTurns, "take" | "click" | "gathering">;
+  // [LAW:effects-at-boundaries] Where a turn's described effects go once it
+  // has committed: the performer's list (src/daemon/apply.ts). The arm that
+  // runs the turn hands this in; a handler never reaches it, `Journaled.effect`
+  // being its one way to describe.
+  readonly described: (effects: readonly Effect[]) => void;
   // [LAW:no-ambient-temporal-coupling] A click of the session landed, in its
   // turn: the session's idle clock restarts (src/daemon/menu-idle.ts).
   readonly clickLanded: (sessionId: string) => void;
@@ -293,8 +298,14 @@ export interface VerbContext extends DaemonContext {
 // The edges a handler never reaches: what it would do through them it
 // describes as an effect instead (`Journaled.effect`), and the one await it
 // has left, `gather`, is bound to the turn, so it cannot await what the
-// daemon's close would not stop it after.
-type TurnBound = "launcher" | "doctor" | "claudeInput" | "applyUpdate";
+// daemon's close would not stop it after. Nor does it reach the performer's
+// list: the turn hands its effects over once it has committed.
+type TurnBound =
+  | "launcher"
+  | "doctor"
+  | "claudeInput"
+  | "applyUpdate"
+  | "described";
 
 // What a helper reads, from either side of the turn.
 type Unbound = Omit<VerbContext, TurnBound>;
@@ -306,8 +317,10 @@ export type Journaled<C extends DaemonContext> = Omit<C, TurnBound> & {
   // [LAW:effects-at-boundaries] What the click asks of the world (a program,
   // a line typed into its pane, the update's act) is described here, as data,
   // and performed once the turn has committed (src/daemon/apply.ts): a handler
-  // awaits no child, and a turn is as short as its writes. A handler that
-  // throws describes nothing; its effects go with its turn.
+  // awaits no child, and a turn is as short as its writes. An effect goes
+  // where the step's writes went: a turn that committed performs every effect
+  // its steps described, a refused step's refusal beside them; a turn the
+  // close cut off performs none.
   readonly effect: (effect: Effect) => void;
   // [LAW:single-enforcer] Read-only work in the turn, over what the click has
   // written so far: the click's turn answers whether it may go on
@@ -2109,16 +2122,19 @@ function throwAll(failures: readonly unknown[]): void {
 // handler keeps its step whole. A turn the daemon's close cut off was committed
 // there, and the daemon is gone from under what follows the commit.
 //
-// [LAW:effects-at-boundaries] It answers the effects the handler described,
-// for the performer to run once the turn is over; a step that failed anywhere
-// (the handler, the commit, what follows it) throws instead, and its effects
-// go with it.
+// [LAW:effects-at-boundaries] It hands the effects the handler described to
+// the performer (`ctx.described`) once the turn has committed, and throws the
+// failure of any step (the handler, the commit, what follows it) after that:
+// the effects go where the writes went. A dispatch commits the steps that
+// landed and holds the refused one on the bar (`foldEffects`), so what a
+// landed step described is performed, as its write was kept; a turn the
+// daemon's close cut off hands over none.
 async function journaled<C extends DaemonContext>(
   sid: string | null,
   ctx: C,
   turn: JournalTurn,
   handler: (ctx: Journaled<C>) => Promise<void>,
-): Promise<readonly Effect[]> {
+): Promise<void> {
   const lanes = sid === null ? null : laneMeter(ctx, sid);
   const journal = ctx.history.begin();
   const navigation = ctx.navigation.begin(journal.sessionState);
@@ -2181,16 +2197,14 @@ async function journaled<C extends DaemonContext>(
       failures.push(e);
     }
   }
+  if (live) ctx.described(effects);
   throwAll(failures);
-  return effects;
 }
 
-// A verb as the daemon runs it: the raw wire value and the click's context,
-// answering the effects its turn described once they have all landed.
-export type VerbRun = (
-  value: string,
-  ctx: VerbContext,
-) => Promise<readonly Effect[]>;
+// A verb as the daemon runs it: the raw wire value and the click's context.
+// It settles once its turn has committed and handed its effects over; it
+// rejects with the refusal of a step that failed.
+export type VerbRun = (value: string, ctx: VerbContext) => Promise<void>;
 
 // [LAW:single-enforcer] A click: its place in its session's order, the gather
 // ahead of its turn, then a journal around the rest (src/daemon/journal-turns.ts).
@@ -2242,13 +2256,7 @@ export const VERBS: ReadonlyMap<string, VerbRun> = new Map<string, VerbRun>([
   [VERB_DISPATCH, click(VERB_DISPATCH, headGather, foldEffects)] as const,
   // After the leaves, so it replaces the click they built: a probe writes no
   // journal, so nothing may refuse it for a turn, and it describes nothing.
-  [
-    VERB_DOCTOR_PROBE,
-    async (value, ctx) => {
-      await doctorProbe(value, ctx);
-      return [];
-    },
-  ] as const,
+  [VERB_DOCTOR_PROBE, (value, ctx) => doctorProbe(value, ctx)] as const,
 ]);
 
 export const VERB_NAMES: readonly string[] = Object.freeze([
@@ -2290,7 +2298,7 @@ export function closeIdleMenus(
   sid: string,
   idle: IdleClose,
   ctx: DaemonContext,
-): Promise<readonly Effect[]> {
+): Promise<void> {
   return ctx.journalTurns.take(
     "menu-idle",
     {

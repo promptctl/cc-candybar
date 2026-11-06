@@ -760,7 +760,7 @@ async function handleClick(
   const pending = session?.ok ? session.id : null;
   if (session === null) noteFacts(facts, { sid: "-" });
   else if (pending !== null) noteFacts(facts, { sid: pending });
-  await apply(
+  const { answer } = await apply(
     {
       kind: "click",
       verb: resolved,
@@ -776,6 +776,10 @@ async function handleClick(
     },
     parts,
   );
+  // A refused click is answered as data, so the effects its landed steps
+  // described still run; the wire reads the refusal as it always has, by its
+  // class (`clickRan`).
+  if (answer !== null) throw answer.error;
   return { kind: "ok" };
 }
 
