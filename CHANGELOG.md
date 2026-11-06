@@ -1,3 +1,9 @@
+## [1.199.2](https://github.com/promptctl/cc-candybar/compare/v1.199.1...v1.199.2) (2026-11-06)
+
+### Bug Fixes
+
+* **home:** a home file named through a symlink is stored as the home's (candybar-gather-renderer-76bb.f00.lpl) ([#634](https://github.com/promptctl/cc-candybar/issues/634)) ([4d66c41](https://github.com/promptctl/cc-candybar/commit/4d66c4136720948fa45456ed742e340dea015963))
+
 ## [1.199.1](https://github.com/promptctl/cc-candybar/compare/v1.199.0...v1.199.1) (2026-11-06)
 
 ### Bug Fixes
