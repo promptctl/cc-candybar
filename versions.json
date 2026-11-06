@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "5bc4b1644438e6c6202cedb3b5da327ab8e07bfd",
+      "timestamp": "2026-11-06T09:22:35.943Z",
+      "commits": [
+        {
+          "sha": "5bc4b1644438e6c6202cedb3b5da327ab8e07bfd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T02:21:16-07:00",
+          "message": "chore(facts): delete the wants closure (candybar-gather-renderer-76bb.6pj.xb3) (#617)\n\n* chore(facts): delete the wants closure (candybar-gather-renderer-76bb.6pj.xb3)\n\nThe facts document is total, so the question \"which fields does this config\nread\" has no caller with a reason. Every session now gathers every built-in:\ngit runs one constant option set (forge lookup included), every declared\nplugin source is held, and burn, block and autocompact's context cap are always\ncomposed. A view's declaration depends on the request alone, so a preset pick\nmoves no hold.\n\nDeleted: the wants function, the needed-prefix builders, the sources-read walk,\nthe closure parameter through declare/refresh/read/project, the PR reads gate,\nthe git options derived from the closure, `Gathered`, `declaredSources`, and the\nview's preset reaction. The doctor's data-needs walk stays and now owns its own\nper-segment path closure, since it answers what a config would read.\n\nThe bar is byte-identical; the payload golden gains the keys that were gated\n(block, burn, metrics, activity, tmux and the like on presets that did not read\nthem). Tests that asserted gating are deleted; the fold-edge cases they covered\n(partials, helpers handed a dict) move to the doctor's path closure.\n\n* fix(facts): the wait's comment names every session; the doctor's namespace-read test returns (candybar-gather-renderer-76bb.6pj.xb3)\n\n* test(facts): name the doctor's closure tests for what they protect (candybar-gather-renderer-76bb.6pj.xb3)\n\n* fix(pricing): a daemon prices by an adapter it closes: one table loaded once, no pooled socket, and the bundled rates under test (candybar-gather-renderer-76bb.6pj.xb3)\n\n* fix(pricing): the load ends with the daemon's closing signal and never rejects; the day's copy is one atomic file with no lock, and a table missing a rate the cost reads is refused (candybar-gather-renderer-76bb.6pj.xb3)\n\n* test(facts): the seam's providers price by the bundled rates (candybar-gather-renderer-76bb.6pj.xb3)\n\n* fix(pricing): the shared load keeps a throw as the bundled rates, said once; comments state what the one git option set reads and where a read's throw is logged (candybar-gather-renderer-76bb.6pj.xb3)"
+        },
+        {
+          "sha": "537c926e6cca1e7f2bed89f42058b490482fde86",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-06T08:59:34Z",
+          "message": "chore(release): set `package.json` to 1.199.1 [skip ci]\n\n## [1.199.1](https://github.com/promptctl/cc-candybar/compare/v1.199.0...v1.199.1) (2026-11-06)\n\n### Bug Fixes\n\n* **test:** the daemon close case counts only its own timers, and no file leaves a git provider open (candybar-testing-0x6u.6f3) ([#631](https://github.com/promptctl/cc-candybar/issues/631)) ([1ad2084](https://github.com/promptctl/cc-candybar/commit/1ad208491233c500feb1dce4da7f3eb61a288b1d))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-633",
       "ref": "refs/pull/633/merge",
       "sha": "2900a8c20cfcc3490d89bc8d51ffe6b6ff3e4677",
@@ -178,28 +200,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T01:28:40-07:00",
           "message": "fix(home): a home file named through a symlink is stored as the home's (candybar-gather-renderer-76bb.f00.lpl)\n\nWhose a stored path is now follows the directories on its path, compared in\ntheir on-disk spelling at the call, not its spelling: a client's cwd is a\nrealpath, so a --config under CC_CANDYBAR_HOME=/tmp/h arrived as\n/private/tmp/h/... and was stored as the world's, and a copied home undid\ninto the original's config. The render checkpoint respells a requested home\nfile from the root as given, so what is stored reads back as itself. The\ndisk's spelling is a port on the stored root, and the watcher and the\nspelling share one walk to the deepest existing directory.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "1ad208491233c500feb1dce4da7f3eb61a288b1d",
-      "timestamp": "2026-11-06T08:51:37.249Z",
-      "commits": [
-        {
-          "sha": "1ad208491233c500feb1dce4da7f3eb61a288b1d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T01:50:15-07:00",
-          "message": "fix(test): the daemon close case counts only its own timers, and no file leaves a git provider open (candybar-testing-0x6u.6f3) (#631)\n\n* fix(test): the daemon close case counts only its own timers, and no file leaves a git provider open (candybar-testing-0x6u.6f3)\n\nThe close case read every timer the jest worker armed. A git provider an\nearlier file never closed keeps passing on its period, so its timers landed in\nwhichever file ran next and the case failed on CI order, not on the daemon:\nthe daemon builds no git state in this case, and a probe that leaks one\nprovider before it reproduces the CI stacks.\n\nThe case now counts resources made inside its own async work. The git-cache\nfile closes every provider it builds after each case (75 built, 33 closed by\nhand), and two watcher cases close in a finally.\n\n* fix(test): review of the leak fix — the dead baseline goes, a failed close no longer strands the rest, the close-all case closes in finally (candybar-testing-0x6u.6f3)\n\n* fix(test): the close case proves the daemon's own work reached the leak record, and every close failure is reported (candybar-testing-0x6u.6f3)"
-        },
-        {
-          "sha": "a024ef4e373bc0a8440684b0123bbd2ba110ad7e",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-06T08:30:49Z",
-          "message": "chore(release): set `package.json` to 1.199.0 [skip ci]\n\n## [1.199.0](https://github.com/promptctl/cc-candybar/compare/v1.198.1...v1.199.0) (2026-11-06)\n\n### Features\n\n* **facts:** record a session out of the daemon, replay it in the demo, refuse another facts version (candybar-gather-renderer-76bb.6pj.qg5) ([#629](https://github.com/promptctl/cc-candybar/issues/629)) ([7877410](https://github.com/promptctl/cc-candybar/commit/787741095721977bdce8e6c628817b38188b4f97))\n"
         }
       ]
     }
