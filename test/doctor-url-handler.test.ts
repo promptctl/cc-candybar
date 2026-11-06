@@ -416,7 +416,7 @@ describe("the daemon's side of the round trip", () => {
     // Through Apply, as the daemon runs it: a doctor step's report lands
     // with its effect.
     const click = (verb: string, value: string): Promise<void> =>
-      clickUrl(`cc-candybar://${verb}/${value}`, ctx);
+      clickUrl(`cc-candybar://to/main/${verb}/${value}`, ctx);
     return { sessionState, probes, logs, click };
   }
 
