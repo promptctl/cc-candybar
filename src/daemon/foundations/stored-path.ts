@@ -23,7 +23,7 @@ export interface StoredRoot {
 // [LAW:one-source-of-truth] One operation's reading of the disk: each
 // directory is asked once, so every decision the operation makes (a request's
 // spelling and the origin it records, a history's many steps) stands on one
-// answer, and walks over shared ancestors read each once. It is made per
+// answer, and no directory it asks about is read twice. It is made per
 // operation and dropped with it, because a link re-pointed after is the next
 // operation's to read.
 export function oneReading(root: StoredRoot): StoredRoot {
