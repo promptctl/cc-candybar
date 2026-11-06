@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-636",
+      "ref": "refs/pull/636/merge",
+      "sha": "ff8de9c6c8b3f653f40b1bb02e7e7cc6a15d95a9",
+      "timestamp": "2026-11-06T09:15:43.227Z",
+      "commits": [
+        {
+          "sha": "ff8de9c6c8b3f653f40b1bb02e7e7cc6a15d95a9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T02:13:29-07:00",
+          "message": "Merge 18e1fdb3cc81ea0386105544504ebc5000830332 into 537c926e6cca1e7f2bed89f42058b490482fde86\n"
+        },
+        {
+          "sha": "18e1fdb3cc81ea0386105544504ebc5000830332",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T02:13:00-07:00",
+          "message": "fix(facts): a recording replays each frame from what its answer drew, in the file's order, with the recorded home (candybar-gather-renderer-76bb.6pj.rat)\n\nA live answer is drawn after its request's wait, from the view that request\nholds. The recording now writes a draw line when the answer is drawn, after\nthe document and the declaration that draw read (each restated when it is\nnot the last the recording wrote), and only to the recordings that saw the\nrequest arrive. The replay walks the file's lines in order: the recording\narm serves the last document reached and keeps no clock. The header carries\nthe home the payloads were composed against.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-634",
       "ref": "refs/pull/634/merge",
       "sha": "be408f7344d041404a0310d37bcc6ddd19eeeddc",
