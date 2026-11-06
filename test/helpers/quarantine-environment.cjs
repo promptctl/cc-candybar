@@ -23,7 +23,7 @@
 
 const path = require("node:path");
 const { TestEnvironment } = require("jest-environment-node");
-const { CASE_TIME_LEFT, caseClock } = require("./case-clock.cjs");
+const { CASE_CLOCK, caseClock } = require("./case-clock.cjs");
 const { caseName } = require("./test-records.cjs");
 const { QUARANTINE_FILE, markError, quarantined, readQuarantine } = require("./quarantine.cjs");
 
@@ -57,7 +57,8 @@ class QuarantineEnvironment extends TestEnvironment {
     this.list = testEnvironmentOptions.quarantine ?? QUARANTINE_FILE;
     this.entries = readQuarantine(rootDir, this.list);
     this.caseClock = caseClock(Date.now);
-    this.global[CASE_TIME_LEFT] = this.caseClock.left;
+    const { now, left } = this.caseClock;
+    this.global[CASE_CLOCK] = { now, left };
   }
 
   handleTestEvent(event, state) {

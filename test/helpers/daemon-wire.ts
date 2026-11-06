@@ -115,7 +115,7 @@ async function overDialer(
   if (!dialed.ok) {
     throw new Error(
       dialed.failure.cause === "timeout"
-        ? `connect did not complete within ${timeoutMs}ms`
+        ? "the connect did not complete"
         : dialed.failure.message,
     );
   }

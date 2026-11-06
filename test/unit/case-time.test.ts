@@ -7,12 +7,13 @@ import { caseClock } from "../helpers/case-clock.cjs";
 
 describe("boundedBy — a wait's budget or its case's time, whichever ends first", () => {
   test("a budget the case has room for is the wait, named by its ms", () => {
-    expect(boundedBy(5_000, 30_000)).toEqual({ ms: 5_000, named: "5000ms" });
+    expect(boundedBy(5_000, 30_000)).toEqual({ ms: 5_000, by: "budget", named: "5000ms" });
   });
 
   test("a budget past the case's time is cut to what the case leaves before Jest's timeout", () => {
     const wait = boundedBy(20_000, 10_000);
     expect(wait.ms).toBe(10_000 - MARGIN_MS);
+    expect(wait.by).toBe("case");
     expect(wait.named).toBe(`the ${wait.ms}ms its case had left, ${MARGIN_MS}ms short of Jest's timeout`);
   });
 
@@ -22,7 +23,7 @@ describe("boundedBy — a wait's budget or its case's time, whichever ends first
   });
 
   test("outside a case nothing cuts the budget", () => {
-    expect(boundedBy(12_000, Infinity)).toEqual({ ms: 12_000, named: "12000ms" });
+    expect(boundedBy(12_000, Infinity)).toEqual({ ms: 12_000, by: "budget", named: "12000ms" });
   });
 
   test("an infinite budget is refused, since a timer fires at once on one", () => {

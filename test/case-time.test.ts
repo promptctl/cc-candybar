@@ -2,7 +2,10 @@
 // real case: a wait whose budget outlasts its case fails by its own name before
 // Jest's timeout, which would name nothing.
 
+import { setTimeout as sleep } from "node:timers/promises";
+
 import { MARGIN_MS, restOfCase, within } from "./helpers/case-time";
+import { untilHeard } from "./helpers/reload-signal";
 import { until } from "./helpers/until";
 
 const CASE_TIMEOUT_MS = 5_000;
@@ -46,6 +49,32 @@ describe("a case's time bounds the waits inside it", () => {
       jest.useRealTimers();
     }
   }, CASE_TIMEOUT_MS);
+
+  test("a wait's deadline passes while the test fakes the clock", async () => {
+    jest.useFakeTimers({ now: 0 });
+    try {
+      const wait = within(50);
+      await sleep(100);
+      expect(wait.left()).toBeLessThanOrEqual(0);
+    } finally {
+      jest.useRealTimers();
+    }
+  }, CASE_TIMEOUT_MS);
+
+  test(
+    "a watch never heard while the test fakes the clock fails by name, inside the case",
+    async () => {
+      jest.useFakeTimers({ now: 0 });
+      try {
+        await expect(untilHeard(() => {}, () => false, "a watch nothing delivers")).rejects.toThrow(
+          /^a watch nothing delivers did not hold after \d+ of 48 mutations/,
+        );
+      } finally {
+        jest.useRealTimers();
+      }
+    },
+    CASE_TIMEOUT_MS,
+  );
 });
 
 // Read at collection, when no hook or test function has started.

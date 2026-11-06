@@ -131,7 +131,9 @@ async function renderAnswer(
     );
     if (!resp.ok) {
       if (resp.code === "TIMEOUT" && attempt < TIMEOUT_RETRY_BUDGET) continue;
-      throw new Error(`render failed: ${resp.error} (${resp.code})`);
+      throw new Error(
+        `render failed within ${wait.named}: ${resp.error} (${resp.code})`,
+      );
     }
     let event = "";
     await until(
@@ -149,7 +151,7 @@ async function renderAnswer(
       throw new Error(`render drew pending though its wait answered: ${event}`);
     if (attempt >= PENDING_RETRY_BUDGET)
       throw new Error(
-        `render still drew pending after ${attempt} asks: ${event}`,
+        `render still drew pending after ${attempt} asks, the last within ${wait.named}: ${event}`,
       );
     // [LAW:no-ambient-temporal-coupling] A value no request waits for is asked
     // again once its owner logs the refresh that lands it, never after a guessed

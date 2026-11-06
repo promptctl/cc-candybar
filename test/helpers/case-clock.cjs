@@ -2,16 +2,17 @@
 // with its own timeout. The test environment is the one writer: it sees each
 // hook and test function start and end, and computes the deadline from the
 // same expression jest-circus arms its timer with, just before circus arms it.
-// A helper's wait reads it through the function the environment publishes on
-// the sandbox's global (test/helpers/case-time.ts), so no wait need know how
-// many others the case has already spent.
+// A helper's wait reads it through the clock the environment publishes on the
+// sandbox's global (test/helpers/case-time.ts), so no wait need know how many
+// others the case has already spent.
 //
-// The function closes over the environment's own clock, not the sandbox's: a
-// test that fakes the sandbox's Date still reads its case's real time here.
+// The clock is the environment's own, not the sandbox's: a test that fakes the
+// sandbox's Date still reads its case's real time here, and a wait's deadline
+// kept on it still passes.
 //
 // CommonJS because jest loads an environment untransformed.
 
-const CASE_TIME_LEFT = Symbol.for("cc-candybar.caseTimeLeft");
+const CASE_CLOCK = Symbol.for("cc-candybar.caseClock");
 
 const STARTS = new Set(["hook_start", "test_fn_start"]);
 // A test whose before-hook failed starts its function and ends with neither
@@ -39,8 +40,9 @@ function caseClock(now) {
         deadline = Infinity;
       }
     },
+    now,
     left: () => deadline - now(),
   };
 }
 
-module.exports = { CASE_TIME_LEFT, caseClock };
+module.exports = { CASE_CLOCK, caseClock };

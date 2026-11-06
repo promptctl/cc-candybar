@@ -23,7 +23,7 @@ import {
   TSX_SOURCE_ENTRY,
   type DaemonEntry,
 } from "./spawn-test-daemon";
-import { within, type Wait } from "./case-time";
+import { within, type Bound } from "./case-time";
 import { daemonPool } from "./daemon-pool";
 import {
   exitedAlready,
@@ -255,7 +255,7 @@ export interface ReadinessFailure {
   readonly phase: FailedPhase;
   readonly exit: ExitResult | null;
   // The bound the boot was waited on, which a slow boot outlived.
-  readonly waited: Wait;
+  readonly waited: Bound;
 }
 
 type Readiness = { readonly phase: "serving" } | ReadinessFailure;
@@ -276,7 +276,6 @@ async function awaitReadiness(
   home: RendererHome,
 ): Promise<Readiness> {
   const waited = within(READINESS_BUDGET_MS);
-  const deadline = Date.now() + waited.ms;
   let phase: FailedPhase = "booting";
   for (;;) {
     if (fs.existsSync(socketPath(home))) {
@@ -285,7 +284,7 @@ async function awaitReadiness(
     }
     const exit = exitedAlready(child);
     if (exit !== null) return { phase, exit, waited };
-    if (Date.now() >= deadline) return { phase, exit: null, waited };
+    if (waited.left() <= 0) return { phase, exit: null, waited };
     await new Promise((r) => setTimeout(r, READINESS_POLL_MS));
   }
 }
@@ -329,7 +328,7 @@ function socketDid(phase: FailedPhase, sockPath: string): string {
   }
 }
 
-function processDid(exit: ExitResult | null, waited: Wait): string {
+function processDid(exit: ExitResult | null, waited: Bound): string {
   if (exit === null) {
     return (
       `the process was still running after ${waited.named}, ` +

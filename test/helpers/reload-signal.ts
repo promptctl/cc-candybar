@@ -4,7 +4,7 @@ import type {
   RenderCacheObservers,
 } from "../../src/daemon/cache/render";
 import { DEBOUNCE_MS } from "../../src/daemon/cache/watchers";
-import { within } from "./case-time";
+import { restOfCase } from "./case-time";
 import { holdsWithin, nameOf, type Condition, type What } from "./until";
 
 // [LAW:no-ambient-temporal-coupling] A happens-after gate over RenderCache
@@ -127,18 +127,19 @@ export async function untilHeard(
     });
     return asked;
   };
-  // [LAW:no-ambient-temporal-coupling] The rounds end at one deadline, so a
-  // slow mutation or poll tick is spent from the wait, not added to it. The
-  // first round always runs: the mutation is applied at once.
-  const wait = within(MAX_ROUNDS * RETRY_MS);
-  const deadline = Date.now() + wait.ms;
+  // [LAW:no-ambient-temporal-coupling] The rounds stop at their count, or at
+  // the end of the rest of the case, read on the case's clock, whichever comes
+  // first, and no round waits past that end. The first round always runs: the
+  // mutation is applied at once.
+  const rest = restOfCase();
   let rounds = 0;
   do {
     rounds++;
     await mutate();
-    if (await holdsWithin(answer, RETRY_MS)) return;
-  } while (Date.now() < deadline);
+    if (await holdsWithin(answer, Math.min(RETRY_MS, Math.max(0, rest.left()))))
+      return;
+  } while (rounds < MAX_ROUNDS && rest.left() > 0);
   throw new Error(
-    `${nameOf(what)} did not hold within ${wait.named}, after ${rounds} mutations ${RETRY_MS} ms apart`,
+    `${nameOf(what)} did not hold after ${rounds} of ${MAX_ROUNDS} mutations ${RETRY_MS} ms apart, within ${rest.named}`,
   );
 }

@@ -22,7 +22,7 @@ import {
   readinessFailure,
   type ReadinessFailure,
 } from "./helpers/spawn-isolated-daemon";
-import { boundedBy, MARGIN_MS, type Wait } from "./helpers/case-time";
+import { boundedBy, MARGIN_MS, type Bound } from "./helpers/case-time";
 
 const LOG_LINE = "2026-09-12T00:00:00.000Z [error] refusing to boot: nope";
 const STDERR_LINE = "Error: died before it had a log";
@@ -51,7 +51,7 @@ describe("readinessFailure — what the socket did, what our process did", () =>
 
   const message = (
     readiness: Omit<ReadinessFailure, "waited">,
-    waited: Wait = { ms: 12_000, named: "12000ms" },
+    waited: Bound = boundedBy(12_000, Infinity),
   ): string => readinessFailure({ ...readiness, waited }, SOCK, env, STDERR_LINE);
 
   // The ticket's acceptance criterion: the message itself distinguishes "never

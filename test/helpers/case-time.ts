@@ -1,11 +1,19 @@
 import { START_TIME_READ_BUDGET_MS } from "../../src/daemon/process-fingerprint";
-import { CASE_TIME_LEFT } from "./case-clock.cjs";
+import { CASE_CLOCK } from "./case-clock.cjs";
 
-// A wait's bound, and the words a failure names it by: its own budget, or the
-// time its case had left when that ran out first.
-export interface Wait {
+// A wait's bound: how long, what set it (its own budget, or the time its case
+// had left when that ran out first), and the words a failure names it by.
+export interface Bound {
   readonly ms: number;
+  readonly by: "budget" | "case";
   readonly named: string;
+}
+
+// A bound running from when it was read. [LAW:one-source-of-truth] Its
+// deadline is kept on the case's clock, the environment's own, so a wait that
+// polls it still ends in a test that fakes the sandbox's clock.
+export interface Wait extends Bound {
+  left(): number;
 }
 
 // [LAW:no-ambient-temporal-coupling] What a wait leaves Jest after its named
@@ -18,37 +26,51 @@ export const MARGIN_MS = START_TIME_READ_BUDGET_MS + 1_000;
 
 // [LAW:parse-dont-validate] A budget is a finite number of milliseconds: an
 // infinite one would reach a timer, which fires at once on it.
-export function boundedBy(budgetMs: number, leftMs: number): Wait {
+export function boundedBy(budgetMs: number, leftMs: number): Bound {
   if (!Number.isFinite(budgetMs) || budgetMs < 0) {
     throw new Error(`a wait's budget is a finite number of ms, not ${budgetMs}`);
   }
   const room = Math.max(0, leftMs - MARGIN_MS);
   return room < budgetMs
-    ? { ms: room, named: `the ${room}ms its case had left, ${MARGIN_MS}ms short of Jest's timeout` }
-    : { ms: budgetMs, named: `${budgetMs}ms` };
+    ? {
+        ms: room,
+        by: "case",
+        named: `the ${room}ms its case had left, ${MARGIN_MS}ms short of Jest's timeout`,
+      }
+    : { ms: budgetMs, by: "budget", named: `${budgetMs}ms` };
 }
 
-// The test environment publishes the case's time (test/helpers/case-clock.cjs).
+interface CaseClock {
+  now(): number;
+  left(): number;
+}
+
+// The test environment publishes the case's clock (test/helpers/case-clock.cjs).
 // A host with no Jest, as `pnpm bar` is, runs no case, so no case bounds its
-// waits.
-const timeLeft =
-  ((globalThis as Record<symbol, unknown>)[CASE_TIME_LEFT] as
-    | (() => number)
-    | undefined) ?? ((): number => Infinity);
+// waits, and nothing fakes its clock.
+const clock: CaseClock = ((globalThis as Record<symbol, unknown>)[CASE_CLOCK] as
+  | CaseClock
+  | undefined) ?? { now: () => Date.now(), left: () => Infinity };
+
+function running(bound: Bound): Wait {
+  const end = clock.now() + bound.ms;
+  return { ...bound, left: () => end - clock.now() };
+}
 
 // [LAW:one-source-of-truth] Every budgeted wait in a test is bounded through
 // here, so their sum is the case's to bound, not each wait's to guess.
 export function within(budgetMs: number): Wait {
-  return boundedBy(budgetMs, timeLeft());
+  return running(boundedBy(budgetMs, clock.left()));
 }
 
 // The rest of the running case, for a wait whose bound is the case itself:
 // a bound, not the raw time left, so no wait built on it ends with Jest's
-// timeout. [LAW:no-silent-failure] Outside a case there is no rest to wait out.
+// timeout. A case already past its time has none to give.
+// [LAW:no-silent-failure] Outside a case there is no rest to wait out.
 export function restOfCase(): Wait {
-  const left = timeLeft();
+  const left = clock.left();
   if (!Number.isFinite(left)) {
     throw new Error("restOfCase: no Jest case is running, so it has no time left to wait out");
   }
-  return boundedBy(left, left);
+  return running(boundedBy(Math.max(0, left), left));
 }
