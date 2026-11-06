@@ -7,7 +7,7 @@
 // beside it.
 
 import fs from "node:fs";
-import { HOST, hostOf, worldOf, MAIN_ENV } from "./helpers/host";
+import { HOST, hostOf, worldOf, mainEnv } from "./helpers/host";
 import type { World } from "../src/host";
 import os from "node:os";
 import path from "node:path";
@@ -33,7 +33,7 @@ let world: World;
 beforeAll(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-check-throws-"));
   // Only the explicit target is read: the developer's own config cannot leak in.
-  world = worldOf(hostOf({ ...MAIN_ENV, XDG_CONFIG_HOME: path.join(dir, "xdg-empty") }));
+  world = worldOf(hostOf({ ...mainEnv(), XDG_CONFIG_HOME: path.join(dir, "xdg-empty") }));
 });
 afterAll(() => {
   fs.rmSync(dir, { recursive: true, force: true });

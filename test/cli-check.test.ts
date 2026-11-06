@@ -14,7 +14,7 @@
 // fields).
 
 import fs from "node:fs";
-import { HOST, MAIN_ENV, hostOf, worldOf } from "./helpers/host";
+import { HOST, mainEnv, hostOf, worldOf } from "./helpers/host";
 import type { Host, World } from "../src/host";
 import os from "node:os";
 import path from "node:path";
@@ -49,7 +49,7 @@ afterAll(() => {
 // verdict. $CC_CANDYBAR_CONFIG is pinned too because one test sets it. The
 // machine is the worker's own environment with `set` laid over it (undefined
 // removes a variable); nothing is written to `process.env`.
-let host: Host = hostOf(MAIN_ENV);
+let host: Host = hostOf(mainEnv());
 let world: World;
 function runOn(set: Record<string, string | undefined>): void {
   const env = { ...host.env, ...set };
@@ -58,7 +58,7 @@ function runOn(set: Record<string, string | undefined>): void {
   world = worldOf(host);
 }
 beforeEach(() => {
-  host = hostOf(MAIN_ENV);
+  host = hostOf(mainEnv());
   runOn({ CC_CANDYBAR_CONFIG: undefined, XDG_CONFIG_HOME: path.join(dir, "xdg-empty") });
 });
 
@@ -798,7 +798,7 @@ describe("checkConfig — default resolution (the daemon's own chain)", () => {
       "proj/.cc-candybar.json5",
       `{ segments: { a: { template: 'a' } }, root: { h: ['a'] } }`,
     );
-    answerRepo(cwd);
+    answerRepo(cwd, "approved", host.env);
     const outcome = await checkConfig(world, daemonGates(), undefined, cwd);
     expect(outcome.kind).toBe("clean");
     if (outcome.kind === "clean") expect(outcome.layers).toEqual([{ path: p, scope: "repo" }]);

@@ -5,7 +5,7 @@
 
 import { homeOf } from "../src/daemon/home";
 import fs from "node:fs";
-import { hostOf, worldOf, MAIN_ENV } from "./helpers/host";
+import { hostOf, worldOf, mainEnv } from "./helpers/host";
 import type { Host, World } from "../src/host";
 import { locations } from "../src/daemon/paths";
 import os from "node:os";
@@ -44,12 +44,12 @@ beforeEach(() => {
   project = path.join(dir, "repo");
   fs.mkdirSync(path.join(dir, "xdg", "cc-candybar"), { recursive: true });
   fs.mkdirSync(project);
-  // The project's config runs: these cases are about how it layers.
-  answerRepo(project);
   userFile = path.join(dir, "xdg", "cc-candybar", "config.json5");
   projectFile = path.join(project, ".cc-candybar.json5");
-  host = hostOf({ ...MAIN_ENV, XDG_CONFIG_HOME: path.join(dir, "xdg") });
+  host = hostOf({ ...mainEnv(), XDG_CONFIG_HOME: path.join(dir, "xdg") });
   world = worldOf(host);
+  // The project's config runs: these cases are about how it layers.
+  answerRepo(project, "approved", host.env);
   fs.writeFileSync(
     userFile,
     `{ globals: { menuGlyph: "U" }, segments: { mine: { template: "USERSEG" } }, root: { h: ["mine"] } }`,
@@ -152,7 +152,7 @@ test("the user's file is a layer even when the session's cwd is its directory", 
   const xdgDir = path.dirname(userFile);
   const local = path.join(xdgDir, ".cc-candybar.json5");
   fs.writeFileSync(local, `{}`);
-  answerRepo(xdgDir);
+  answerRepo(xdgDir, "approved", host.env);
   const resolved = resolveDslConfig(locations(host, homeOf(host)), repoConfigs(stateDir(homeOf(host))).read(), undefined, xdgDir);
   expect(resolved.kind === "chain" && resolved.layers).toEqual([
     { path: userFile, scope: "plugins" },
@@ -298,7 +298,7 @@ describe("a project layer inserting into the user's row", () => {
   test("an unapproved repo's cell is not drawn and its file is never named", async () => {
     userRow(`{ rows: { status: { h: ["mine", "other"] } } }`);
     writeProject(`[{ seg: "theirs", after: "mine" }]`);
-    answerRepo(project, "declined");
+    answerRepo(project, "declined", host.env);
     const outcome = clean(await checkConfig(world, daemonGates(), undefined, project));
     expect(textOf(outcome.rendered)).toContain("USERSEG");
     expect(textOf(outcome.rendered)).not.toContain("THEIRSEG");

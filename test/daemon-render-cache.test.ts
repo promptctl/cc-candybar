@@ -7,7 +7,7 @@
 
 import { homeOf } from "../src/daemon/home";
 import { TEST_SIGNER } from "./helpers/link-signer";
-import { HOST, WORLD, hostOf, worldOf, MAIN_ENV } from "./helpers/host";
+import { HOST, WORLD, hostOf, worldOf, mainEnv } from "./helpers/host";
 import type { Host, World } from "../src/host";
 import {
   chmodSync,
@@ -144,7 +144,7 @@ function makeCache(
 function mkConfigDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "cc-candybar-cache-"));
   // The config the cache loads here is the directory's own.
-  answerRepo(dir);
+  answerRepo(dir, "approved", host.env);
   return {
     dir,
     cleanup: () => rmSync(dir, { recursive: true, force: true }),
@@ -162,7 +162,7 @@ describe("RenderCache", () => {
   let xdgIsolateDir: string;
   beforeAll(() => {
     xdgIsolateDir = mkdtempSync(join(tmpdir(), "cc-candybar-cache-xdg-"));
-    host = hostOf({ ...MAIN_ENV, XDG_CONFIG_HOME: xdgIsolateDir });
+    host = hostOf({ ...mainEnv(), XDG_CONFIG_HOME: xdgIsolateDir });
     world = worldOf(host);
   });
   afterAll(() => {
@@ -692,7 +692,7 @@ describe("RenderCache", () => {
     const { cache, cleanups, reloads, watchers, counters } = makeCache();
     try {
       mkdirSync(proj, { recursive: true });
-      answerRepo(proj);
+      answerRepo(proj, "approved", host.env);
       const cfg = join(proj, ".cc-candybar.json5");
       const config = (value: string): string =>
         JSON.stringify({

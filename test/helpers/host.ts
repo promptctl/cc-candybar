@@ -20,12 +20,12 @@ export const HOST: Host = {
 // worker a renderer home of its own, and a named home reads no XDG directory,
 // so a test of the main layout that names one over the worker's environment
 // states it over this, else the named home wins and the directory is never
-// read.
-export const MAIN_ENV: NodeJS.ProcessEnv = (({
-  [HOME_ENV]: _home,
-  [NAME_ENV]: _name,
-  ...main
-}) => main)(process.env);
+// read. Read when asked, as `HOST.env` is: a test that writes `process.env`
+// before building its host (a PATH of stubs) is building over what it wrote.
+export function mainEnv(): NodeJS.ProcessEnv {
+  const { [HOME_ENV]: _home, [NAME_ENV]: _name, ...main } = process.env;
+  return main;
+}
 
 // A host over the environment a test states. Its home and temporary directory
 // are the test's unless it names them.

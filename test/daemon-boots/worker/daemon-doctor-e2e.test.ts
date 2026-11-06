@@ -8,7 +8,7 @@
 import { configDir } from "../../../src/daemon/paths";
 import { homeOf } from "../../../src/daemon/home";
 import { cellLen } from "@promptctl/rich-js";
-import { HOST, WORLD, hostOf } from "../../helpers/host";
+import { HOST, WORLD, hostOf, worldOf } from "../../helpers/host";
 
 import { textOf, type Frame } from "../../../src/render/frame";
 import { linkUrls } from "../../helpers/frame";
@@ -318,12 +318,14 @@ test("the CLI's probe reads its own link back from the daemon it was delivered t
   const { env, home, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv(
     "cc-candybar-doctor-e2e",
   );
-  // The env it places names this socket, which is where the CLI's send looks.
+  // The CLI runs in a shell whose environment names this home, so its own
+  // socket is this daemon's.
   const daemon = startDaemon(env);
   try {
     await daemon.listen(sockPath);
+    const cli = worldOf(hostOf(env));
     const facts = await probeUrlHandler({
-      ...productionHandlerProbeEdge(WORLD.launcher, WORLD),
+      ...productionHandlerProbeEdge(cli.launcher, cli),
       platform: "darwin",
       // The stand-in for the handler app below delivers to this daemon as
       // the app does: one frame, then hang up, reading no answer.

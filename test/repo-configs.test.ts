@@ -6,7 +6,7 @@
 
 import { homeOf } from "../src/daemon/home";
 import { bareGates } from "./helpers/gates";
-import { HOST, hostOf, worldOf, MAIN_ENV } from "./helpers/host";
+import { HOST, hostOf, worldOf, mainEnv } from "./helpers/host";
 import type { Host, World } from "../src/host";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -55,7 +55,7 @@ beforeEach(() => {
   );
   project = path.join(root, "repo");
   fs.mkdirSync(project);
-  host = hostOf({ ...MAIN_ENV, XDG_CONFIG_HOME: path.join(root, "xdg") });
+  host = hostOf({ ...mainEnv(), XDG_CONFIG_HOME: path.join(root, "xdg") });
   world = worldOf(host);
 });
 
@@ -164,7 +164,7 @@ describe("the gate over a project's plugins", () => {
     expect(waiting.state!.plugins.loaded).toEqual([]);
     waiting.state!.registry.dispose();
 
-    answerRepo(project);
+    answerRepo(project, "approved", host.env);
     const approved = loadFromDisk(project, project, undefined, deps);
     expect(approved.repos.awaiting).toEqual([]);
     expect(approved.repos.plugins).toBe(project);
@@ -220,7 +220,7 @@ describe("check", () => {
   test("an approved one loads and runs", async () => {
     const marker = path.join(project, "ran.marker");
     const file = write(".cc-candybar.json5", shellConfig(marker));
-    answerRepo(project);
+    answerRepo(project, "approved", host.env);
     const outcome = await checkConfig(world, daemonGates(), undefined, project);
     expect(outcome).toMatchObject({
       kind: "clean",

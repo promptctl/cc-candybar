@@ -5,7 +5,7 @@
 
 import { homeOf } from "../src/daemon/home";
 import { drawPayload } from "./helpers/draw-payload";
-import { HOST, MAIN_ENV, WORLD, hostOf, worldOf, processLauncher } from "./helpers/host";
+import { HOST, mainEnv, WORLD, hostOf, worldOf, processLauncher } from "./helpers/host";
 import type { Host, World } from "../src/host";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
@@ -64,7 +64,7 @@ afterEach(() => {
 // This worker's environment with `set` laid over it, as the machine the test
 // that follows runs on. Nothing is written to `process.env`.
 function runOn(set: Record<string, string>): void {
-  host = hostOf({ ...MAIN_ENV, ...set });
+  host = hostOf({ ...mainEnv(), ...set });
   world = worldOf(host);
 }
 
@@ -819,7 +819,7 @@ describe("an installed plugin", () => {
       `${repo}/.cc-candybar/plugins/${name}/plugin.json5`,
       definition,
     );
-    answerRepo(path.join(dir, repo));
+    answerRepo(path.join(dir, repo), "approved", host.env);
     return file;
   };
   const placing = (seg: string) =>
@@ -1674,7 +1674,7 @@ describe("an installed plugin", () => {
     try {
       const repo = path.join(dir, "repo");
       fs.mkdirSync(repo);
-      answerRepo(repo);
+      answerRepo(repo, "approved", host.env);
       const p = write(
         "config.json5",
         `{ segments: { s: { template: "{{ .plugins.lit.nope }}" } }, root: { h: ["s"] } }`,
@@ -1984,7 +1984,7 @@ describe("a repo's plugin beside an installed one of its name", () => {
       `{ segments: { ticket: { template: "{{ if }}" } } }`,
     );
     write("repo/.cc-candybar.json5", `{}`);
-    answerRepo(repo);
+    answerRepo(repo, "approved", host.env);
     const message = fatal(
       await checkConfig(world, daemonGates(), undefined, repo),
     );
@@ -1995,7 +1995,7 @@ describe("a repo's plugin beside an installed one of its name", () => {
   });
 
   test("approved, both load and all three cells draw with no warning", async () => {
-    answerRepo(repo);
+    answerRepo(repo, "approved", host.env);
     const { rendered, warnings } = clean(
       await checkConfig(world, daemonGates(), undefined, repo),
     );
@@ -2039,7 +2039,7 @@ describe("a repo's plugin beside an installed one of its name", () => {
   });
 
   test("unapproved, only the installed one loads and the user's placements draw", async () => {
-    answerRepo(repo, "declined");
+    answerRepo(repo, "declined", host.env);
     const { rendered, warnings } = clean(
       await checkConfig(world, daemonGates(), undefined, repo),
     );
@@ -2065,7 +2065,7 @@ describe("a repo's plugin beside an installed one of its name", () => {
       "repo/.cc-candybar.json5",
       `{ plugins: ["./vendor/lit/plugin.json5"], insert: [{ seg: "repo.lit.ticket", after: "plugins.lit.next" }] }`,
     );
-    answerRepo(repo);
+    answerRepo(repo, "approved", host.env);
     const { rendered, warnings } = clean(
       await checkConfig(world, daemonGates(), undefined, repo),
     );
@@ -2076,7 +2076,7 @@ describe("a repo's plugin beside an installed one of its name", () => {
   });
 
   test("a repo. name is never resolved through the installed plugin of its name", async () => {
-    answerRepo(repo);
+    answerRepo(repo, "approved", host.env);
     write(
       "repo/.cc-candybar.json5",
       `{ insert: [{ seg: "repo.lit.phase", after: "plugins.lit.phase" }] }`,
@@ -2148,7 +2148,7 @@ describe("a plugin names itself without its scope", () => {
     write("repo/.cc-candybar/plugins/deploy/plugin.json5", SELF_DEFINITION);
     write("repo/.cc-candybar/plugins/deploy/state.json", STATE);
     write("repo/.cc-candybar.json5", `{ root: { h: ["repo.deploy.status"] } }`);
-    answerRepo(path.join(dir, "repo"));
+    answerRepo(path.join(dir, "repo"), "approved", host.env);
     expect(
       cells(
         await checkConfig(
@@ -2178,7 +2178,7 @@ describe("a plugin names itself without its scope", () => {
       `{ segments: { ticket: { template: '#{{ .plugins.lit.data.id }} {{ template "plugins.lit.h" }}' } }, helpers: { h: "x" } }`,
     );
     write("repo/.cc-candybar.json5", `{ root: { h: ["repo.lit.ticket"] } }`);
-    answerRepo(path.join(dir, "repo"));
+    answerRepo(path.join(dir, "repo"), "approved", host.env);
     const message = fatal(
       await checkConfig(
         world,
@@ -2236,7 +2236,7 @@ describe("a plugin names itself without its scope", () => {
       `{ segments: { t: { template: "x", vars: { v: { kind: "shell", command: "echo hi", cache: { depends_on: ["plugins.lit.x"] } } } } }, actions: { add: { persist: "presets.default.root", removeSegment: "plugins.lit.t" } } }`,
     );
     write("repo/.cc-candybar.json5", `{ root: { h: ["repo.lit.t"] } }`);
-    answerRepo(path.join(dir, "repo"));
+    answerRepo(path.join(dir, "repo"), "approved", host.env);
     const message = fatal(
       await checkConfig(
         world,
@@ -2282,7 +2282,7 @@ describe("a plugin names itself without its scope", () => {
       "repo/.cc-candybar.json5",
       `{ segments: { mine: { template: "MINE" } }, root: { h: ["mine", "plugins.lit.ticket"] } }`,
     );
-    answerRepo(path.join(dir, "repo"));
+    answerRepo(path.join(dir, "repo"), "approved", host.env);
     expect(
       drawn(
         await checkConfig(
@@ -2326,7 +2326,7 @@ describe("a plugin names itself without its scope", () => {
       "repo/.cc-candybar.json5",
       `{ root: { h: ["plugins.deploy.ticket"] } }`,
     );
-    answerRepo(path.join(dir, "repo"));
+    answerRepo(path.join(dir, "repo"), "approved", host.env);
     expect(
       fatal(
         await checkConfig(
@@ -2350,7 +2350,7 @@ describe("a plugin names itself without its scope", () => {
       path.join("data", "cc-candybar", "plugins", "other-one", "plugin.json5"),
       `{ segments: { s: { template: "x" } } }`,
     );
-    answerRepo(path.join(dir, "repo"));
+    answerRepo(path.join(dir, "repo"), "approved", host.env);
     const placed = async (seg: string): Promise<string> => {
       write("repo/.cc-candybar.json5", `{ root: { h: ["${seg}"] } }`);
       return fatal(

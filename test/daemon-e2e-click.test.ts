@@ -10,7 +10,7 @@ import net from "node:net";
 
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { logLine } from "../src/daemon/log";
-import { logPath } from "../src/daemon/paths";
+import { logPath, stateDir } from "../src/daemon/paths";
 import {
   encodeFrame,
   makeFrameReader,
@@ -36,6 +36,9 @@ interface StandIn {
 // as the daemon does once a click queued behind its loop has run.
 async function timingOut(outcome: RequestOutcome): Promise<StandIn> {
   const { env, home, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv("ccb-clk");
+  // The stand-in logs where the daemon it plays would, so it makes the
+  // state directory the daemon makes at boot.
+  fs.mkdirSync(stateDir(home), { recursive: true });
   // A write still pending when the stand-in closes is dropped with it, so no
   // timer of this file outlives its test.
   const pending = new Set<NodeJS.Timeout>();
