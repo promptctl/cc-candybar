@@ -2,6 +2,63 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-617",
+      "ref": "refs/pull/617/merge",
+      "sha": "16fb074322b1c64bb83b708fc4125bb48be50fb1",
+      "timestamp": "2026-11-06T07:53:04.034Z",
+      "commits": [
+        {
+          "sha": "16fb074322b1c64bb83b708fc4125bb48be50fb1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T07:52:07Z",
+          "message": "Merge bd46d19829e7f1f284e7b3e2f8ef36bea06b9d96 into fb1f9e3561dce957792b8bb02c28e81aaab80b29\n"
+        },
+        {
+          "sha": "bd46d19829e7f1f284e7b3e2f8ef36bea06b9d96",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T00:51:55-07:00",
+          "message": "test(facts): the seam's providers price by the bundled rates (candybar-gather-renderer-76bb.6pj.xb3)\n"
+        },
+        {
+          "sha": "c1af6f0e86579f61f277ae506f20c74354fac56b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T00:16:29-07:00",
+          "message": "fix(pricing): the load ends with the daemon's closing signal and never rejects; the day's copy is one atomic file with no lock, and a table missing a rate the cost reads is refused (candybar-gather-renderer-76bb.6pj.xb3)\n"
+        },
+        {
+          "sha": "43d31b8f43c24cfb88428f4b47154c2dc4c757ab",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T00:02:45-07:00",
+          "message": "fix(pricing): a daemon prices by an adapter it closes: one table loaded once, no pooled socket, and the bundled rates under test (candybar-gather-renderer-76bb.6pj.xb3)\n"
+        },
+        {
+          "sha": "2fef80632f55ce6b7ac89bd8759e8cd6b08586aa",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T10:16:04-07:00",
+          "message": "test(facts): name the doctor's closure tests for what they protect (candybar-gather-renderer-76bb.6pj.xb3)\n"
+        },
+        {
+          "sha": "820c5c4f7b21519f916ad31c69c1673ce9c0c48e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T10:12:58-07:00",
+          "message": "fix(facts): the wait's comment names every session; the doctor's namespace-read test returns (candybar-gather-renderer-76bb.6pj.xb3)\n"
+        },
+        {
+          "sha": "92dec40bb6bb9c9e09d1d2ecfeb83dc1a75e0f1e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T10:07:10-07:00",
+          "message": "chore(facts): delete the wants closure (candybar-gather-renderer-76bb.6pj.xb3)\n\nThe facts document is total, so the question \"which fields does this config\nread\" has no caller with a reason. Every session now gathers every built-in:\ngit runs one constant option set (forge lookup included), every declared\nplugin source is held, and burn, block and autocompact's context cap are always\ncomposed. A view's declaration depends on the request alone, so a preset pick\nmoves no hold.\n\nDeleted: the wants function, the needed-prefix builders, the sources-read walk,\nthe closure parameter through declare/refresh/read/project, the PR reads gate,\nthe git options derived from the closure, `Gathered`, `declaredSources`, and the\nview's preset reaction. The doctor's data-needs walk stays and now owns its own\nper-segment path closure, since it answers what a config would read.\n\nThe bar is byte-identical; the payload golden gains the keys that were gated\n(block, burn, metrics, activity, tmux and the like on presets that did not read\nthem). Tests that asserted gating are deleted; the fold-edge cases they covered\n(partials, helpers handed a dict) move to the doctor's path closure.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-630",
       "ref": "refs/pull/630/merge",
       "sha": "7a0ca0c1bf43fb70ce6e899d29e54006b6537bac",
@@ -99,42 +156,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-06T07:29:23Z",
           "message": "chore(release): set `package.json` to 1.197.0 [skip ci]\n\n## [1.197.0](https://github.com/promptctl/cc-candybar/compare/v1.196.1...v1.197.0) (2026-11-06)\n\n### Features\n\n* **apply:** a request takes its turn; its writes are one batch in the request arm, and the answered mark is an event (candybar-gather-renderer-76bb.1dh.1ql) ([#627](https://github.com/promptctl/cc-candybar/issues/627)) ([aaaac50](https://github.com/promptctl/cc-candybar/commit/aaaac5005ccf33de93f39158f1320619bed67657))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-617",
-      "ref": "refs/pull/617/merge",
-      "sha": "321ce95c31309848d517a5b1923c0c96be2cd5b5",
-      "timestamp": "2026-11-06T06:13:12.742Z",
-      "commits": [
-        {
-          "sha": "321ce95c31309848d517a5b1923c0c96be2cd5b5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T06:12:11Z",
-          "message": "Merge 00d8b307696a501044bbc09164375c7c9d61e174 into a6c6adadc4b92f19bca48e7fe1eb518acde6e893\n"
-        },
-        {
-          "sha": "00d8b307696a501044bbc09164375c7c9d61e174",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T10:16:04-07:00",
-          "message": "test(facts): name the doctor's closure tests for what they protect (candybar-gather-renderer-76bb.6pj.xb3)\n"
-        },
-        {
-          "sha": "065c652f19ff8a54edaca23ff27ab83b581a012f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T10:12:58-07:00",
-          "message": "fix(facts): the wait's comment names every session; the doctor's namespace-read test returns (candybar-gather-renderer-76bb.6pj.xb3)\n"
-        },
-        {
-          "sha": "d48e3e7fb420783f42021fd9aff68ce257eebce7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T10:07:10-07:00",
-          "message": "chore(facts): delete the wants closure (candybar-gather-renderer-76bb.6pj.xb3)\n\nThe facts document is total, so the question \"which fields does this config\nread\" has no caller with a reason. Every session now gathers every built-in:\ngit runs one constant option set (forge lookup included), every declared\nplugin source is held, and burn, block and autocompact's context cap are always\ncomposed. A view's declaration depends on the request alone, so a preset pick\nmoves no hold.\n\nDeleted: the wants function, the needed-prefix builders, the sources-read walk,\nthe closure parameter through declare/refresh/read/project, the PR reads gate,\nthe git options derived from the closure, `Gathered`, `declaredSources`, and the\nview's preset reaction. The doctor's data-needs walk stays and now owns its own\nper-segment path closure, since it answers what a config would read.\n\nThe bar is byte-identical; the payload golden gains the keys that were gated\n(block, burn, metrics, activity, tmux and the like on presets that did not read\nthem). Tests that asserted gating are deleted; the fold-edge cases they covered\n(partials, helpers handed a dict) move to the doctor's path closure.\n"
         }
       ]
     }
