@@ -52752,7 +52752,8 @@ async function answered(read2) {
 }
 function waitWithin(work, ms, late, after) {
   const wait = new AbortController();
-  const clear = after(Math.max(0, ms), () => wait.abort());
+  const abort = () => wait.abort();
+  const clear = ms > 0 ? after(ms, abort) : whenDrained(abort);
   const ended = new Promise((resolve, reject2) => {
     wait.signal.addEventListener("abort", () => resolve("deadline"));
     void work(wait.signal).then(
@@ -52766,6 +52767,11 @@ function waitWithin(work, ms, late, after) {
     clear();
     wait.abort();
   });
+}
+function whenDrained(fn) {
+  void Promise.resolve().then(() => process_default.nextTick(fn));
+  return () => {
+  };
 }
 function settledLane(outcome) {
   return { current: () => outcome };
