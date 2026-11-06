@@ -86,15 +86,15 @@ export const RETIRED_INPUT_PATHS: ReadonlyMap<string, string> = new Map([
 // value it gave, typed as it was; `test/dsl-loader.test.ts` holds each input
 // declaration to the bundled default's (the loader cannot import it: the
 // default is built on the loader).
-interface RetiredGitField {
+interface RetiredField {
   readonly read: string;
   readonly declare: InputVarDecl | TemplateVarDecl;
   readonly note?: string;
 }
 
-export const RETIRED_GIT_FIELDS: ReadonlyMap<string, RetiredGitField> = new Map<
+export const RETIRED_GIT_FIELDS: ReadonlyMap<string, RetiredField> = new Map<
   string,
-  RetiredGitField
+  RetiredField
 >([
   [
     "branch",
@@ -123,7 +123,7 @@ export const RETIRED_GIT_FIELDS: ReadonlyMap<string, RetiredGitField> = new Map<
     },
   ],
   ...(["ahead", "behind", "stash"] as const).map(
-    (field): [string, RetiredGitField] => [
+    (field): [string, RetiredField] => [
       field,
       {
         read: `.git.${field}`,
@@ -139,7 +139,7 @@ export const RETIRED_GIT_FIELDS: ReadonlyMap<string, RetiredGitField> = new Map<
 ]);
 
 // A declaration as an author writes it in JSON5.
-function json5Of(decl: RetiredGitField["declare"]): string {
+function json5Of(decl: RetiredField["declare"]): string {
   const value = (v: unknown): string =>
     typeof v === "string" && v.includes('"') && !v.includes("'")
       ? `'${v}'`
@@ -163,6 +163,47 @@ export function retiredGitKindMessage(
   }
   const note = field.note === undefined ? "" : ` (${field.note})`;
   return `${head} read ${field.read} where it was read${note}, or declare ${json5Of(field.declare)} under a name of your own`;
+}
+
+// [LAW:one-source-of-truth] The retired `kind: "env"`: one detached renderer
+// draws for every session of its user, so its environment is the shell that
+// spawned it, never the session's, and the value this kind read was no session
+// fact. The names it was declared for are payload facts the bundled default
+// already declares, so each carries the read and the declaration that give the
+// value, as the git fields do; `test/dsl-loader.test.ts` holds each to the
+// bundled default's. For any other name, `file` and `shell` are the expansion
+// points, and both reach their value from inside the renderer's home. A
+// `shell` source runs in the renderer too, so echoing the variable there would
+// read the same wrong environment; the message says so.
+export const RETIRED_ENV_NAMES: ReadonlyMap<string, RetiredField> = new Map<
+  string,
+  RetiredField
+>(
+  (
+    [
+      ["HOME", "home"],
+      ["USER", "host.user"],
+      ["LOGNAME", "host.user"],
+      ["HOSTNAME", "host.name"],
+    ] as const
+  ).map(([name, path]) => [
+    name,
+    { read: `.${path}`, declare: { kind: "input", path, default: "" } },
+  ]),
+);
+
+export function retiredEnvKindMessage(
+  raw: Readonly<Record<string, unknown>>,
+): string {
+  const read =
+    typeof raw.name === "string" ? ` (this one read $${raw.name})` : "";
+  const head = `kind "env" is removed${read}: the renderer's environment belongs to whichever shell spawned it, not to the session it draws for, so an env variable was never a session fact — drop this declaration`;
+  const field =
+    typeof raw.name === "string" ? RETIRED_ENV_NAMES.get(raw.name) : undefined;
+  if (field === undefined) {
+    return `${head}; a value the payload lacks is read from a file by a "file" source or computed by a "shell" source, and not by echoing the variable there, since a "shell" source runs in the renderer too`;
+  }
+  return `${head} and read ${field.read} where it was read, or declare ${json5Of(field.declare)} under a name of your own`;
 }
 
 // [LAW:one-source-of-truth] The click verbs a hand-written URL literal can

@@ -355,12 +355,47 @@ describe("loadDslConfig — variable source kinds", () => {
     expect(ok.variables.sid).toEqual({ kind: "input", path: "session.id" });
   });
 
-  test("env: requires name", () => {
+  // [LAW:no-silent-failure] The retired `env` kind: the renderer's environment
+  // is the spawning shell's, so the declaration is refused at load, naming the
+  // variable it read and the two sources that remain. A `shell` source runs in
+  // the renderer too, so the message rules out echoing the variable there.
+  test("env: the retired kind is refused, naming what it read and the sources that remain", () => {
+    expectIssue(`{ variables: { ed: { kind: "env", name: "EDITOR" } } }`, {
+      path: "variables.ed.kind",
+      message: 'kind "env" is removed (this one read $EDITOR): ',
+    });
     expectIssue(`{ variables: { home: { kind: "env" } } }`, {
-      path: "variables.home.name",
-      message: "variables.home.name must be a string",
+      path: "variables.home.kind",
+      message:
+        'read from a file by a "file" source or computed by a "shell" source, and not by echoing the variable there',
     });
   });
+
+  // The env names that are payload facts: the message names the read and a
+  // declaration that, copied out of it, loads as the bundled default's own,
+  // because a `shell` source echoing the variable would read the renderer's
+  // environment again, the defect the removal ends.
+  test.each(["HOME", "USER", "LOGNAME", "HOSTNAME"])(
+    "env: the retired kind's name %s is refused with a declaration that loads",
+    (name) => {
+      const issue = expectError(
+        `{ variables: { e: { kind: "env", name: "${name}" } } }`,
+      ).issues.find((i) => i.path === "variables.e.kind");
+      expect(issue?.message).toMatch(
+        new RegExp(`^kind "env" is removed \\(this one read \\$${name}\\): .* and read \\.[a-z.]+ where it was read, or declare `),
+      );
+      const declared = / or declare (\{.*\}) under a name of your own$/.exec(
+        issue!.message,
+      );
+      expect(declared).not.toBeNull();
+      const { variables } = validateAgainstDefault(
+        `{ variables: { mine: ${declared![1]} } }`,
+      );
+      const mine = variables.mine!;
+      expect(mine.kind).toBe("input");
+      if (mine.kind === "input") expect(mine).toEqual(variables[mine.path]);
+    },
+  );
 
   test("unknown source kind is rejected", () => {
     expectIssue(`{ variables: { x: { kind: "wat" } } }`, {
@@ -740,7 +775,6 @@ describe("loadDslConfig — unknown keys on a variable declaration", () => {
     for (const decl of [
       `{ kind: "literal", value: "v" }`,
       `{ kind: "input", path: "session_id" }`,
-      `{ kind: "env", name: "HOME" }`,
       `{ kind: "file", path: "/p", cache: { never: true } }`,
       `{ kind: "shell", command: "echo", cache: { never: true } }`,
       `{ kind: "template", template: "x" }`,
@@ -2197,7 +2231,6 @@ describe("loadDslConfig — valid corpus", () => {
       variables: {
         cwd: { kind: "input", path: "cwd" },
         sid: { kind: "input", path: "session.id" },
-        home: { kind: "env", name: "HOME" },
         load_avg: {
           kind: "shell", command: "uptime",
           parse: { regex: "load average:\\\\s*([0-9.]+)" },
@@ -2238,7 +2271,6 @@ describe("loadDslConfig — valid corpus", () => {
       "constant",
       "cwd",
       "cwd_short",
-      "home",
       "hostname",
       "load_avg",
       "now",

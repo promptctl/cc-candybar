@@ -213,25 +213,6 @@
             "type": "object",
             "properties": {
               "kind": {
-                "const": "env"
-              },
-              "name": {
-                "type": "string"
-              },
-              "default": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "kind",
-              "name"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "kind": {
                 "const": "file"
               },
               "path": {
@@ -1775,25 +1756,6 @@
                 "type": "object",
                 "properties": {
                   "kind": {
-                    "const": "env"
-                  },
-                  "name": {
-                    "type": "string"
-                  },
-                  "default": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "name"
-                ],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
                     "const": "file"
                   },
                   "path": {
@@ -2369,25 +2331,6 @@
                 "required": [
                   "kind",
                   "path"
-                ],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "const": "env"
-                  },
-                  "name": {
-                    "type": "string"
-                  },
-                  "default": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "name"
                 ],
                 "additionalProperties": false
               },

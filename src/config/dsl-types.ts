@@ -564,7 +564,6 @@ export type VariableDecl =
 export type AuthoredVariableDecl =
   | LiteralVarDecl
   | InputVarDecl
-  | EnvVarDecl
   | FileVarDecl
   | ShellVarDecl
   | TemplateVarDecl
@@ -616,12 +615,6 @@ export interface InputVarDecl {
   readonly path: string;
   readonly type?: "string" | "number" | "boolean";
   readonly default?: string | number | boolean;
-}
-
-export interface EnvVarDecl {
-  readonly kind: "env";
-  readonly name: string;
-  readonly default?: string;
 }
 
 export interface FileVarDecl {
@@ -750,7 +743,6 @@ export type CacheKey = (typeof CACHE_KEYS)[number];
 export const SOURCE_KINDS = [
   "literal",
   "input",
-  "env",
   "file",
   "shell",
   "template",

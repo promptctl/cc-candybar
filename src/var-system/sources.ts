@@ -425,10 +425,6 @@ export class SourceRegistry {
     sessionState?: SessionStateReader,
     // The directory home a session's view reads through to (`view()`).
     private readonly parent: SourceRegistry | null = null,
-    // [LAW:one-source-of-truth] The environment an `env` source reads: the
-    // daemon's host, handed in by whatever builds the registry. A registry built
-    // without one reads every variable as unset, and says so on the source.
-    private readonly env: Readonly<Record<string, string | undefined>> = {},
   ) {
     this.sessionState = sessionState;
   }
@@ -448,7 +444,6 @@ export class SourceRegistry {
       this.defaultEmptyValue,
       this.sessionState,
       this,
-      this.env,
     );
   }
 
@@ -549,25 +544,6 @@ export class SourceRegistry {
         e instanceof Error ? e.message : String(e),
       );
     }
-  }
-
-  // env: resolved once at declaration from the registry's environment; box written once, never again.
-  // type is always 'string' — env vars are text by nature.
-  declareEnv(name: string, envVar: string, varDefault?: string): void {
-    const raw = this.env[envVar];
-    if (raw !== undefined) {
-      this.store.defineBox(name, "string", raw);
-      return;
-    }
-    // Env var absent: apply fallback chain, record last_error.
-    const fallback =
-      varDefault !== undefined
-        ? varDefault
-        : typeof this.defaultEmptyValue === "string"
-          ? this.defaultEmptyValue
-          : "";
-    this.store.defineBox(name, "string", fallback);
-    this.recordError(name, `env var "${envVar}" is not set`);
   }
 
   // ─── Async source kinds ───────────────────────────────────────────────────

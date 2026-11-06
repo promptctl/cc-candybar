@@ -528,7 +528,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       runs: sourceRuns,
       stateDir: paths.state,
       locations: locs,
-      env: host.env,
       sessionState,
       watchers: watcherRegistry,
       log,

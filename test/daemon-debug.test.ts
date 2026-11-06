@@ -43,16 +43,15 @@ import { systemTimekeeper } from "../src/time";
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
-// [LAW:verifiable-goals] The "unset env var" branch of declareEnv must be
-// exercised deterministically. The registry built below is handed no
-// environment, so the variable is absent whatever the machine exports.
-const UNSET_ENV_VAR = "CC_CANDYBAR_DEBUG_TEST_UNSET_VAR_XYZ";
+// [LAW:verifiable-goals] A path the payload fed below never carries, so the
+// input that reads it records a lastError and publishes its default whatever
+// the machine looks like.
+const MISSING_PATH = "user.path";
 
 // A minimal DslConfig that exercises every snapshot field:
 //   - literal (no source-side state)
 //   - input (driven by the bound payload, produces a value)
-//   - env (resolved at declare time — UNSET_ENV_VAR is absent from the
-//     registry's environment, so this records a lastError and uses the
+//   - input over a path the payload lacks (records a lastError and uses the
 //     per-variable default)
 //   - template (computed node, depends on other vars)
 const TEST_CONFIG_SOURCE = `{
@@ -60,7 +59,7 @@ const TEST_CONFIG_SOURCE = `{
   variables: {
     greeting: { kind: 'literal', value: 'hello' },
     'session.id': { kind: 'input', path: 'session_id', default: '' },
-    user_path: { kind: 'env', name: '${UNSET_ENV_VAR}', default: '(unset)' },
+    user_path: { kind: 'input', path: '${MISSING_PATH}', default: '(unset)' },
     derived: { kind: 'template', template: '{{ .greeting }}, world' },
   },
   segments: {
@@ -173,7 +172,7 @@ describe("introspectVars with populated state", () => {
     const byName = new Map(vars.map((v) => [v.name, v]));
     expect(byName.get("greeting")?.source).toBe("literal");
     expect(byName.get("session.id")?.source).toBe("input");
-    expect(byName.get("user_path")?.source).toBe("env");
+    expect(byName.get("user_path")?.source).toBe("input");
     expect(byName.get("derived")?.source).toBe("template");
   });
 
@@ -183,20 +182,20 @@ describe("introspectVars with populated state", () => {
     const byName = new Map(vars.map((v) => [v.name, v]));
     expect(byName.get("greeting")?.value).toBe("hello");
     expect(byName.get("session.id")?.value).toBe("abc-123-def");
-    // Unset env var falls back to the per-variable default.
+    // A path the payload lacks falls back to the per-variable default.
     expect(byName.get("user_path")?.value).toBe("(unset)");
     // Template evaluates against the live store.
     expect(byName.get("derived")?.value).toBe("hello, world");
   });
 
-  test("lastError is set for the unset env var, null otherwise", () => {
+  test("lastError is set for the input whose path the payload lacks, null otherwise", () => {
     const state = buildPopulatedState();
     const vars = introspectVars(state);
     const byName = new Map(vars.map((v) => [v.name, v]));
-    // The env var with the unset name surfaces a lastError.
+    // The input over the missing path surfaces a lastError naming it.
     const userPath = byName.get("user_path");
     expect(userPath?.lastError).not.toBeNull();
-    expect(userPath?.lastError?.message).toContain(UNSET_ENV_VAR);
+    expect(userPath?.lastError?.message).toContain(MISSING_PATH);
     expect(userPath?.lastError?.timestampMs).toBeGreaterThan(0);
     // Other vars resolved cleanly.
     expect(byName.get("greeting")?.lastError).toBeNull();
@@ -208,12 +207,12 @@ describe("introspectVars with populated state", () => {
     const state = buildPopulatedState();
     const vars = introspectVars(state);
     const byName = new Map(vars.map((v) => [v.name, v]));
-    // Literals and envs are boxes — they have a real age.
+    // A literal is a box — it has a real age.
     expect(byName.get("greeting")?.ageMs).toBeGreaterThanOrEqual(0);
-    expect(byName.get("user_path")?.ageMs).toBeGreaterThanOrEqual(0);
     // An input is derived from its view's payload, and a template is
     // computed: neither has one moment it was written.
     expect(byName.get("session.id")?.ageMs).toBeNull();
+    expect(byName.get("user_path")?.ageMs).toBeNull();
     expect(byName.get("derived")?.ageMs).toBeNull();
   });
 

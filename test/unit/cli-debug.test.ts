@@ -36,15 +36,15 @@ describe("formatDebug", () => {
       vars: [
         {
           name: "user_path",
-          source: "env",
+          source: "input",
           type: "string",
           value: "(unset)",
-          lastError: { timestampMs: 0, message: "env var not set" },
+          lastError: { timestampMs: 0, message: "input path not found" },
           ageMs: null,
         },
       ],
     };
-    expect(formatDebug(snap)).toContain("env var not set");
+    expect(formatDebug(snap)).toContain("input path not found");
   });
 
   it("aligns the value column across a string var and a document var", () => {

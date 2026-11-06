@@ -142,7 +142,7 @@ Today the path is read → parse → publish, in `declareSource`.
 
 ## 4. `env` from the client
 
-**Today:** `declareEnv` reads `process.env` once at declaration, scope `directory`. It therefore reports the spawning shell of a detached daemon, which is the exact thing `CLAUDE.md` calls wrong for session facts. `src/config/default-dsl-config.ts` already avoids it for `host.ssh`, and `docs/segment-authoring.md` says shells run with the daemon's environment.
+**Today:** the `env` source is removed; a config that declares one fails at load. It read the daemon's `process.env` once at declaration, which reports the spawning shell of a detached daemon, the exact thing `CLAUDE.md` calls wrong for session facts. The options below are what an honest per-session `env` would take, should one ever be wanted.
 
 | Option | Mechanism | Cost |
 |---|---|---|

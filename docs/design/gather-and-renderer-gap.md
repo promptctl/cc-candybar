@@ -46,7 +46,7 @@ The gap is listed per proposal section: what the code does today, what the backl
 
 **Change.**
 - Fold into the §1 ticket: `follow { session, locator }` and `declare { session, sources }` as the two renderer-to-Gather messages, with the locator typed as the hint subset Gather reads. No separate ticket; it is the input side of the same seam.
-- The shell/file source identity digest (kind, command or path, cwd, parse, normalised policy, key value) is a small ticket of its own against `src/var-system/sources.ts`. Today dedupe is by scope: a source lives in the directory registry for its `(projectDir, cwd)` render-cache entry unless its key reads a view value, in which case each session runs its own. That rule is the renderer's and cannot be shared across processes; the digest replaces it. The same ticket gives `shellReader` the timeout it lacks, since one slow command would otherwise hold its identity for every renderer sharing it. The `declareEnv` read of the daemon's own `host.env` is the `env` source the proposal removes.
+- The shell/file source identity digest (kind, command or path, cwd, parse, normalised policy, key value) is a small ticket of its own against `src/var-system/sources.ts`. Today dedupe is by scope: a source lives in the directory registry for its `(projectDir, cwd)` render-cache entry unless its key reads a view value, in which case each session runs its own. That rule is the renderer's and cannot be shared across processes; the digest replaces it. The same ticket gives `shellReader` the timeout it lacks, since one slow command would otherwise hold its identity for every renderer sharing it. The `env` source, which read the daemon's own environment, is removed.
 
 ## §5 Events → Apply → Draw
 

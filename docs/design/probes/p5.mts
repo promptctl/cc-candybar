@@ -60,7 +60,6 @@ const load = (sessionState: any) => {
   return loaded.state;
 };
 
-process.env.PROBE_ENV = "daemon-env";
 fs.rmSync("/tmp/ccb-probe/shell-runs", { force: true });
 fs.writeFileSync("/tmp/ccb-probe/value.txt", "file-value\n");
 const ss = new SessionState();
@@ -252,10 +251,9 @@ function plainEq(a: string, b: string) {
 
 // 3. The supported sources: today, in a renderer, and carried by the payload.
 if (process.env.PROBE_VARS === "1") {
-  const names = ["probeShell", "probeJson", "probeKeyed", "probeFile", "probeEnv"];
+  const names = ["probeShell", "probeJson", "probeKeyed", "probeFile"];
   const a = drawA(at);
   const runsAfterDaemon = fs.readFileSync("/tmp/ccb-probe/shell-runs", "utf8").split("\n").length - 1;
-  process.env.PROBE_ENV = "renderer-env";
   const r = fresh(new SessionState());
   const b = drawB(r, JSON.parse(json), at);
   await new Promise((res) => setTimeout(res, 1500));
@@ -268,7 +266,6 @@ if (process.env.PROBE_VARS === "1") {
   }
   out.values = values;
   g.__wireVars = true;
-  process.env.PROBE_ENV = "renderer-env";
   const r3 = fresh(new SessionState());
   const carried = drawB(r3, { ...JSON.parse(json), ...JSON.parse(JSON.stringify(values)) }, at);
   await new Promise((res) => setTimeout(res, 800));

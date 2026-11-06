@@ -18,10 +18,8 @@
   // with a leading dot (`.user`, `.cwd`, …). A referenced-but-undeclared name
   // is a load-time error, not a silent blank.
   variables: {
-    // env  — read straight from the process environment.
-    user: { kind: "env", name: "USER", default: "anon" },
-
     // input — pulled from the JSON payload Claude Code sends each render tick.
+    user: { kind: "input", path: "host.user", default: "anon" },
     cwd: { kind: "input", path: "workspace.current_dir", default: "?" },
     model: { kind: "input", path: "model.display_name", default: "" },
     session: { kind: "input", path: "session_id", default: "" },

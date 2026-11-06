@@ -170,8 +170,6 @@ export interface RenderDeps<S extends ViewSource = ViewSource> {
   stateDir: string;
   // Where the user's config and installed plugins live (StateDeps).
   locations: Locations;
-  // What an `env` source reads (StateDeps).
-  env: Readonly<Record<string, string | undefined>>;
   sessionState: SessionStateRW;
   watchers: WatcherRegistry;
   // The owner of every plugin's managed storage, whose folders a state's
@@ -224,8 +222,6 @@ export interface StateDeps {
   readonly stateDir: string;
   // Where the user's config and installed plugins live.
   readonly locations: Locations;
-  // The environment an `env` source reads: the daemon's host.
-  readonly env: Readonly<Record<string, string | undefined>>;
   readonly sessionState: SessionStateRW;
   readonly storage: PluginStorage;
   // What signs the `run` links a compile draws.
@@ -920,17 +916,15 @@ export function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
   const store = new VariableStore(deps.clock);
   // The sessionState injection makes `kind: "state"` variables read/write the
   // same per-session store the click verbs mutate. `default_empty_value`
-  // is honored from globals — it's the fallback used by input/env/etc.
-  // sources when neither the path resolves nor the declaration carries
-  // its own `default`. The loader validates it as a string; the registry
-  // default ("") matches the historical behavior when omitted.
+  // is honored from globals — it's the fallback an input publishes when
+  // neither its path resolves nor the declaration carries its own `default`.
+  // The loader validates it as a string; the registry default ("") matches
+  // the historical behavior when omitted.
   const registry = new SourceRegistry(
     deps.runs,
     store,
     config.globals.default_empty_value ?? "",
     deps.sessionState,
-    null,
-    deps.env,
   );
 
   let registration: Registration;

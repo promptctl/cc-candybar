@@ -180,9 +180,8 @@ export function effectiveInputs(effective: EffectiveGlobals): EffectiveInputs {
 // carry `Pending` (`DrawnPayload`); a request waits for every answer, so its
 // payload carries none (`RenderPayload`, `P = never`).
 export interface RenderPayloadOf<P> extends ClaudeHookData, ValuedInputs {
-  // env-style values surfaced as paths so the DSL can read them via `input`
-  // alongside the rest of the payload. (`kind: "env"` is also available for
-  // arbitrary env-var lookups in user configs.)
+  // The user's home directory, surfaced as a path so the DSL reads it via
+  // `input` alongside the rest of the payload.
   readonly home?: string;
 
   // ─── Daemon-computed augmentations ───────────────────────────────────────

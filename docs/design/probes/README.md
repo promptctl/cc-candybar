@@ -6,7 +6,7 @@ To rerun, copy `src`, `scripts`, `test/helpers`, `test/fixtures`, `package.json`
 
 | Script | Question |
 |---|---|
-| `p5.mts` | Frame runs back to exact ANSI; every built-in source on; `shell`, `file` and `env` carried in the payload. Set `PROBE_CONFIG`, `PROBE_TAG`, and `PROBE_ALL`, `PROBE_VARS`, `PROBE_NO_TODAY`, `PROBE_NO_PR` as needed |
+| `p5.mts` | Frame runs back to exact ANSI; every built-in source on; `shell` and `file` carried in the payload. Set `PROBE_CONFIG`, `PROBE_TAG`, and `PROBE_ALL`, `PROBE_VARS`, `PROBE_NO_TODAY`, `PROBE_NO_PR` as needed |
 | `p6.mts` | Which files each click verb writes, through an isolated bar |
 | `p7.mts` | A click routed through one isolated daemon to another |
 | `p8.mts` | A lone Draw's memory and cost, and any disk or process calls during draws. Records `frames.json` |

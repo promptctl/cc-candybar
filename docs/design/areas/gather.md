@@ -66,7 +66,7 @@ Carrying values in place of running them drew byte-identically with nothing run 
 
 ### `env`
 
-`declareEnv` reads `process.env` once. That's the spawning shell's for a detached daemon, which `CLAUDE.md` calls wrong for session facts. It's a removal candidate: `file` and `shell` are the expansion points, and an honest `env` needs per-session client work (option D in [../inventory/sources.md](../inventory/sources.md)). If it stays, a renderer started for a session has that session's environment, but the main renderer still doesn't.
+Removed. It read the daemon's `process.env` once, which is the spawning shell's for a detached daemon and so no session fact; a config that still declares it fails at load, naming `file` and `shell` as the expansion points. An honest per-session `env` would need client work (option D in [../inventory/sources.md](../inventory/sources.md)), and even then the main renderer would not have it.
 
 ### Diagnostics
 

@@ -92,7 +92,6 @@ function registryOver(
   defaultEmptyValue?: VarValue,
   sessionState?: SessionState,
   parent?: SourceRegistry | null,
-  env?: NodeJS.ProcessEnv,
   runs: SourceRuns = runsOver(),
 ): SourceRegistry {
   const registry = new SourceRegistry(
@@ -101,20 +100,17 @@ function registryOver(
     defaultEmptyValue,
     sessionState,
     parent,
-    env,
   );
   live.add(registry);
   return registry;
 }
 
 // Helper: fresh pair so tests are fully isolated.
-// `env` is the environment an `env` source reads: stated by the test that means
-// one, otherwise empty (every variable unset).
-function make(defaultEmptyValue?: string, env: NodeJS.ProcessEnv = {}) {
+function make(defaultEmptyValue?: string) {
   const store = new VariableStore(systemTimekeeper);
   return {
     store,
-    registry: registryOver(store, defaultEmptyValue, undefined, undefined, env),
+    registry: registryOver(store, defaultEmptyValue),
   };
 }
 
@@ -156,60 +152,6 @@ describe("SourceRegistry — literal", () => {
     registry.declareLiteral("stable", "fixed");
     expect(store.read("stable")).toBe("fixed");
     expect(store.read("stable")).toBe("fixed");
-  });
-});
-
-// ─── env ─────────────────────────────────────────────────────────────────────
-
-describe("SourceRegistry — env", () => {
-  const VAR = "CC_TEST_VAR_SOURCES";
-
-  it("returns the env var value when set", () => {
-    const { store, registry } = make(undefined, { [VAR]: "from-env" });
-    registry.declareEnv("myvar", VAR);
-    expect(store.read("myvar")).toBe("from-env");
-    expect(registry.getLastError("myvar")).toBeUndefined();
-  });
-
-  it("type is always 'string'", () => {
-    const { store, registry } = make(undefined, { [VAR]: "42" });
-    registry.declareEnv("myvar", VAR);
-    expect(store.getType("myvar")).toBe("string");
-    expect(store.read("myvar")).toBe("42"); // raw string, not coerced to number
-  });
-
-  it("falls back to varDefault when env var is absent", () => {
-    const { store, registry } = make();
-    registry.declareEnv("myvar", VAR, "fallback-default");
-    expect(store.read("myvar")).toBe("fallback-default");
-  });
-
-  it("records last_error when env var is absent", () => {
-    const { registry } = make();
-    const before = Date.now();
-    registry.declareEnv("myvar", VAR);
-    const err = registry.getLastError("myvar");
-    expect(err).toBeDefined();
-    expect(err!.message).toMatch(/not set/);
-    expect(err!.timestamp).toBeGreaterThanOrEqual(before);
-  });
-
-  it("falls back to defaultEmptyValue when absent and no varDefault", () => {
-    const { store, registry } = make("(empty)");
-    registry.declareEnv("myvar", VAR);
-    expect(store.read("myvar")).toBe("(empty)");
-  });
-
-  it("falls back to empty string when absent, no varDefault, no defaultEmptyValue", () => {
-    const { store, registry } = make();
-    registry.declareEnv("myvar", VAR);
-    expect(store.read("myvar")).toBe("");
-  });
-
-  it("does NOT record last_error when env var is present", () => {
-    const { registry } = make(undefined, { [VAR]: "present" });
-    registry.declareEnv("myvar", VAR);
-    expect(registry.getLastError("myvar")).toBeUndefined();
   });
 });
 
@@ -631,7 +573,6 @@ describe("SourceRegistry — shell: basic", () => {
       undefined,
       undefined,
       undefined,
-      undefined,
       runsOver({
         launcher: systemLauncher(
           { inherited: process.env, signal: closing.signal },
@@ -832,7 +773,6 @@ describe("SourceRegistry — shell: read timeout", () => {
       "",
       undefined,
       undefined,
-      undefined,
       runsOver({ launcher, clock }),
     );
     const periodMs = SHELL_READ_TIMEOUT_MS * 2;
@@ -887,7 +827,6 @@ describe("SourceRegistry — shell: read timeout", () => {
       "",
       undefined,
       undefined,
-      undefined,
       runsOver({ launcher, clock }),
     );
     registry.declareShell("val", "sleep 99", {
@@ -934,7 +873,6 @@ describe("SourceRegistry — shell: a failed read carries stderr", () => {
     const registry = registryOver(
       store,
       "",
-      undefined,
       undefined,
       undefined,
       runsOver({ launcher, clock }),
@@ -1043,7 +981,6 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
         "",
         undefined,
         null,
-        undefined,
         runsOver({ ledger }),
       );
       registry.declareShell("val", `cat ${f}`, {
@@ -1834,7 +1771,6 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         "",
         undefined,
         null,
-        undefined,
         runs,
       );
       const view = registry.view();
@@ -1899,7 +1835,6 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         "",
         undefined,
         null,
-        undefined,
         runsOver({ fileEvents: events }),
       );
       const cache = { kind: "watch_file", path: watched } as const;
@@ -2073,7 +2008,6 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         "",
         undefined,
         null,
-        undefined,
         runsOver({ watchers }),
       );
       const view = home.view();
@@ -2271,7 +2205,6 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
           undefined,
           undefined,
           null,
-          undefined,
           runsOver({ watchers }),
         );
         registry.declareFile("val", a, {

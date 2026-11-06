@@ -156,7 +156,6 @@ function loadState(): DslRenderState {
       clock: world.clock,
       runs,
       locations: locs,
-      env: host.env,
       sessionState,
       storage: UNOWNED_STORAGE,
       signer: linkSignerFromKeyFile(linkKeyFile(stateDir(host))),

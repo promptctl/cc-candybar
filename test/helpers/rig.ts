@@ -76,8 +76,6 @@ export interface RigInit {
   readonly palettes?: ReadonlySet<string>;
   /** The directory `shell` sources run in; the session's project directory. */
   readonly cwd?: string;
-  /** The environment an `env` source reads. */
-  readonly env?: Readonly<Record<string, string>>;
   /** The session the rig draws and clicks as, and its state (a test sharing one across rigs hands it in). */
   readonly sessionId?: string;
   readonly sessionState?: SessionState;
@@ -211,8 +209,6 @@ export function buildRig(init: RigInit = {}): Rig {
     store,
     "",
     sessionState,
-    null,
-    init.env,
   );
   const registered = registerCompiled(
     config,
