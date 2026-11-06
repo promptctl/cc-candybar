@@ -61086,7 +61086,7 @@ function checkTemplateRefs(ctx, declPath, template, scope, opts) {
     scope.helpers
   )) {
     report2(
-      `Template spells a link in a grammar older than names, which names no renderer: "${literal}"`,
+      `Template spells a link in a grammar older than names, which names no renderer: "${literal}". Bind an action instead ({{ action "name" \u2026 }}): its link names the renderer that draws it`,
       via
     );
   }
@@ -71871,15 +71871,18 @@ function drawnClickOf(url) {
   const link = parseHandlerUrl(url);
   if (!link.ok) return link;
   const { verb, value } = link;
-  if (verb !== VERB_DISPATCH)
-    return { ok: true, effects: [{ verb, args: decodeArgs(verb, value) }] };
-  return {
-    ok: true,
-    effects: parseEffects(value).map((e) => ({
+  try {
+    const effects = verb === VERB_DISPATCH ? parseEffects(value).map((e) => ({
       verb: e.verb,
       args: decodeArgs(e.verb, e.value)
-    }))
-  };
+    })) : [{ verb, args: decodeArgs(verb, value) }];
+    return { ok: true, effects };
+  } catch (error) {
+    return {
+      ok: false,
+      problem: `the link's value does not decode (${error.message}): ${url}`
+    };
+  }
 }
 function describeLink(link, sessionId2) {
   if (!isBarLink(link.url)) return `opens ${link.url}`;
