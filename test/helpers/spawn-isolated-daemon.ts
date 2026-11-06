@@ -24,7 +24,11 @@ import {
   type DaemonEntry,
 } from "./spawn-test-daemon";
 import { daemonPool } from "./daemon-pool";
-import { sendDaemonRequest, type ExitResult } from "./daemon-wire";
+import {
+  exitedAlready,
+  sendDaemonRequest,
+  type ExitResult,
+} from "./daemon-wire";
 import {
   HOME_ENV,
   NAME_ENV,
@@ -280,18 +284,6 @@ async function awaitReadiness(
     if (Date.now() >= deadline) return { phase, exit: null };
     await new Promise((r) => setTimeout(r, READINESS_POLL_MS));
   }
-}
-
-// [LAW:one-source-of-truth] Node retains the terminal code/signal on the
-// ChildProcess after `exit` fires, which is what makes reading it directly
-// race-free — the same property `waitForExit`'s pre-check reads in
-// daemon-wire.ts. This is that read's polling half: one synchronous look per
-// poll, so no `once("exit")` listener accumulates across iterations. It is asked
-// only while nothing has answered yet, which is the whole window in which a
-// refusal is the explanation.
-function exitedAlready(child: ChildProcess): ExitResult | null {
-  if (child.exitCode === null && child.signalCode === null) return null;
-  return { code: child.exitCode, signal: child.signalCode };
 }
 
 async function answersStats(home: RendererHome): Promise<boolean> {

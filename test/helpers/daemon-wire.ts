@@ -120,12 +120,21 @@ export interface ExitResult {
 // stale "did I miss it" guess) is the correct, race-free source.
 export function waitForExit(child: ChildProcess): Promise<ExitResult> {
   return new Promise((resolve) => {
-    if (child.exitCode !== null || child.signalCode !== null) {
-      resolve({ code: child.exitCode, signal: child.signalCode });
+    const exit = exitedAlready(child);
+    if (exit !== null) {
+      resolve(exit);
       return;
     }
     child.once("exit", (code, signal) => resolve({ code, signal }));
   });
+}
+
+// [LAW:one-source-of-truth] The one synchronous read of a child's end, for the
+// pre-check above and for a poll: one look per poll, so no `once("exit")`
+// listener accumulates across iterations.
+export function exitedAlready(child: ChildProcess): ExitResult | null {
+  if (child.exitCode === null && child.signalCode === null) return null;
+  return { code: child.exitCode, signal: child.signalCode };
 }
 
 // [LAW:one-source-of-truth] THE probe for "is a daemon serving this socket":
