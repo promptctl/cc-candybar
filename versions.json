@@ -4,39 +4,39 @@
     {
       "version": "pr-654",
       "ref": "refs/pull/654/merge",
-      "sha": "da278a0288aee00d1c705073492ca08cfd35c32f",
-      "timestamp": "2026-11-06T21:55:33.136Z",
+      "sha": "41fcccead5e8f8bf22fcbfd7c39b2440c1b793d9",
+      "timestamp": "2026-11-06T21:56:36.055Z",
       "commits": [
         {
-          "sha": "da278a0288aee00d1c705073492ca08cfd35c32f",
+          "sha": "41fcccead5e8f8bf22fcbfd7c39b2440c1b793d9",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T21:53:34Z",
-          "message": "Merge cd707e6a8491bafd69fa6a662a320bd657a4be84 into 0357f4ada680aa4f6a80a0dd47cacc620c017e4b\n"
+          "timestamp": "2026-11-06T14:54:06-07:00",
+          "message": "Merge 35c29be1310ea2ac2cad1a9214a122955f5b8508 into 0357f4ada680aa4f6a80a0dd47cacc620c017e4b\n"
         },
         {
-          "sha": "cd707e6a8491bafd69fa6a662a320bd657a4be84",
+          "sha": "35c29be1310ea2ac2cad1a9214a122955f5b8508",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T14:53:22-07:00",
           "message": "fix(test): the parent-watchdog case proves a clean exit through the one shared exit read (brandon-menus-sjhy.26f)\n"
         },
         {
-          "sha": "10884733453dd14ec9c2b1455656b9b44a59839e",
+          "sha": "125e11c1ff6fd599f0942bd0dad0bbaf86d28b47",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T14:49:38-07:00",
           "message": "fix(test): the parent-watchdog case reads the daemon's death from the wrapper's exit and the watchdog's line for its own anchor (brandon-menus-sjhy.26f)\n"
         },
         {
-          "sha": "b7ea1a1f0cb30f2a4b9a7a776cae1156c90605cf",
+          "sha": "dd3bd3b9712d9685910dc66199560fe15572bf48",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T14:45:17-07:00",
           "message": "fix(test): the parent-watchdog case waits for the anchor's reap and the daemon's whole group, and proves the watchdog ended it (brandon-menus-sjhy.26f)\n"
         },
         {
-          "sha": "63b1e1aec9b9b8b7f1959a5e024d951868df0aaf",
+          "sha": "0f0ce94ba41164d415a9c4102b5293efaf851c6c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T14:39:17-07:00",
