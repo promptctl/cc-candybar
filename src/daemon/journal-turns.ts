@@ -1,168 +1,82 @@
 // [LAW:no-ambient-temporal-coupling][LAW:single-enforcer] The one owner of when
-// a journal is open. A handler that awaits gives up the loop between its
-// journal's begin and commit, so run-to-completion no longer keeps two journals
-// apart: each takes a turn here, daemon-wide and not per session, because a
-// session's history is its own but the config files it writes are shared. A
-// click and a menu-idle close take a turn only around a journal
-// (src/daemon/verbs/index.ts), which never nests, so a turn never waits on
-// itself.
+// a journal is open. A turn's work is synchronous: its body runs to completion
+// in the call that takes it, so no other turn, no draw and no other writer can
+// run between a journal's begin and its commit, and a turn waits on nothing.
+// That is what keeps two journals apart, daemon-wide and not per session,
+// because a session's history is its own but the config files it writes are
+// shared. A turn fences synchronous work alone: a render request, a click and
+// an effect's outcome each take one and are never queued behind another's
+// awaits.
 //
-// A click's read-only launches come before its turn (`click`), so a slow doctor
-// gather holds up no other session. What keeps one session's clicks in arrival
-// order is then the queue a click joins on arrival and keeps its place in
-// through gather and turn. A click holds that place while it asks for the
-// turn, and no turn ever asks for a place, so the two cannot deadlock.
+// What a turn would wait on is an effect (src/daemon/effect.ts): a click
+// describes it in its turn, the performer runs it after (src/daemon/apply.ts),
+// and its outcome lands in a turn of its own. A doctor's probes are such an
+// effect, gathered here one at a time daemon-wide (`gathering`), in no turn.
+// One that never settles shows in `getStats().gathers` and holds nothing else.
 //
-// `close` ends the turns for good: what is queued is refused as its turn
-// arrives, and what is in flight is committed there and then, so writes already
-// landed stay undoable as one step when the daemon's launches abort under them,
-// and goes no further than its next `landed`. A turn's one await is a gather in
-// it (a doctor's probes), whose launches are bounded, so a turn comes back
-// unless a child outlives SIGKILL, in uninterruptible sleep: its launch never
-// settles, and `getStats` shows the holder's `heldMs` growing. What a click
-// launches for its own sake is an effect, performed after its turn
-// (src/daemon/apply.ts), and holds no turn at all.
+// `close` ends the turns for good: every take after it is refused, and since
+// no turn is ever in flight across an await, there is nothing to cut off. A
+// gather whose place comes after it is refused too, since no turn would land
+// what its probes found.
 
-import { elapsedMs, spanMs, type Monotonic } from "../time.js";
 import { KeyedSerialQueue } from "../utils/keyed-serial-queue.js";
-import { ClickAbandoned, DaemonClosing } from "./verb-error.js";
+import { DaemonClosing } from "./verb-error.js";
 
-interface InFlight {
-  readonly verb: string;
-  readonly commit: () => void;
-}
-
-export interface JournalTurn {
-  // Names the commit `close` runs if the turn is cut off, and answers the one
-  // way to run it: true when this call committed, false when `close` already
-  // had and the turn is over.
-  readonly holds: (commit: () => void) => () => boolean;
-  // [LAW:single-enforcer] Where a handler resumes: what follows an await runs
-  // only if the turn outlived it, so a click `close` cut off writes nothing
-  // more, whichever store it would have reached. `p` settling either way
-  // counts: a launch the close aborted rejects.
-  readonly landed: <T>(p: Promise<T>) => Promise<T>;
-}
+// [LAW:types-are-the-program] A turn body's answer: anything but a promise, so
+// an async body, whose writes after its first await would land outside its
+// turn, fails to build.
+export type Synchronous<T> = T extends PromiseLike<unknown> ? never : T;
 
 export interface JournalTurnStats {
-  // The verb holding the turn and for how long; `queued` wait behind it.
-  readonly holder: string | null;
-  readonly heldMs: number;
-  readonly queued: number;
   // Gathers running or queued, which hold no turn: one that never settles
   // reads here and nowhere else.
   readonly gathers: number;
 }
 
-// How a click asks for its turn: `waited` hears how many ms it took to come,
-// and `gone` says whether whoever asked has left.
-export interface TurnAsker {
-  readonly waited: (ms: number) => void;
-  readonly gone: () => boolean;
-}
-
-// The same, for a click that may gather first: `placed` hears how long it
-// waited behind its session's earlier clicks, `gathered` how long it took.
-export interface ClickAsker extends TurnAsker {
-  readonly placed: (ms: number) => void;
-  readonly gathered: (ms: number) => void;
-}
-
-const DAEMON_WIDE = "journals";
 const GATHERS = "gathers";
 // The order effects of clicks naming no session keep among themselves.
 const CLICKLESS = "clickless";
 
 export class JournalTurns {
-  private readonly queue = new KeyedSerialQueue<typeof DAEMON_WIDE>();
-  private readonly sessions = new KeyedSerialQueue<string>();
   private readonly gathers = new KeyedSerialQueue<typeof GATHERS>();
   private readonly effects = new KeyedSerialQueue<string>();
   private open = true;
-  private inFlight: InFlight | null = null;
-  private holder: { readonly verb: string; readonly since: Monotonic } | null =
-    null;
-  private queued = 0;
+  private holder: string | null = null;
   private gathersInFlight = 0;
 
-  constructor(
-    private readonly deps: {
-      readonly log: (level: "warn", msg: string) => void;
-      // On a clock whose differences are milliseconds.
-      readonly monotonic: () => Monotonic;
-    },
-  ) {}
-
-  // Runs `body` in its turn, unless the daemon closed or the asker left while
-  // it waited: a click whose client took a TIMEOUT never lands, so clicking
-  // again cannot revert a toggle.
-  take<T>(
-    verb: string,
-    { waited, gone }: TurnAsker,
-    body: (turn: JournalTurn) => Promise<T>,
-  ): Promise<T> {
-    const asked = this.deps.monotonic();
-    this.queued++;
-    return this.queue.run(DAEMON_WIDE, async () => {
-      this.queued--;
-      this.refuseClosed(verb);
-      if (gone()) throw new ClickAbandoned(verb);
-      const since = this.deps.monotonic();
-      waited(spanMs(asked, since));
-      this.holder = { verb, since };
-      try {
-        return await body({
-          holds: (commit) => {
-            const held = { verb, commit };
-            this.inFlight = held;
-            return () => this.commit(held);
-          },
-          landed: (p) => p.finally(() => this.refuseClosed(verb)),
-        });
-      } finally {
-        this.holder = null;
-      }
-    });
+  // Runs `body` as `verb`'s turn and answers what it answered, or throws what
+  // it threw. Refused once the daemon has closed, and inside another turn: a
+  // turn nested in a turn would nest two journals.
+  take<T>(verb: string, body: () => Synchronous<T>): T {
+    if (!this.open) throw new DaemonClosing(verb);
+    if (this.holder !== null) {
+      throw new Error(`journal: ${verb} took a turn inside ${this.holder}'s`);
+    }
+    this.holder = verb;
+    try {
+      return body() as T;
+    } finally {
+      this.holder = null;
+    }
   }
 
-  // A click from arrival to landing: in `session`'s order (a click naming none
-  // goes straight on), `gather` outside any turn, `body` in one.
-  // [LAW:single-enforcer] `gone` is read for a click's waits and never for its
-  // own gather: a client that left at the head of its queue, or after the
-  // gather while the turn was awaited, refuses the click; one that left during
-  // the gather does not, since a gather outlasts a client's budget through no
-  // fault of a re-click. With no gather `left` is false, as it was just read.
-  click<G, T>(
-    verb: string,
-    session: string | null,
-    { placed, waited, gone, gathered }: ClickAsker,
-    gather: () => Promise<G>,
-    body: (gathering: G, turn: JournalTurn) => Promise<T>,
-  ): Promise<T> {
-    const arrived = this.deps.monotonic();
-    const inPlace = async (): Promise<T> => {
-      placed(elapsedMs(this.deps, arrived));
-      this.refuseClosed(verb);
-      if (gone()) throw new ClickAbandoned(verb);
-      const started = this.deps.monotonic();
-      const gathering = await gather();
-      gathered(elapsedMs(this.deps, started));
-      const left = gone();
-      return this.take(verb, { waited, gone: () => !left && gone() }, (turn) =>
-        body(gathering, turn),
-      );
-    };
-    return session === null ? inPlace() : this.sessions.run(session, inPlace);
+  // [LAW:single-enforcer] The verb whose turn body is running now, or null.
+  // Turns are synchronous, so a write made while one is held is that turn's.
+  inTurn(): string | null {
+    return this.holder;
   }
 
-  // A click's gather, one at a time daemon-wide and in no turn, as the turn once
-  // kept them: its probes share rate windows across sessions, so a slow gather
-  // refuses none behind it. Two within a window still meet the limiter's
-  // refusal, the doctor's 'click again'.
+  // A doctor's gather, one at a time daemon-wide and in no turn: its probes
+  // share rate windows across sessions, so a slow gather refuses none behind
+  // it. Two within a window still meet the limiter's refusal, the doctor's
+  // 'click again'.
   async gathering<G>(gather: () => Promise<G>): Promise<G> {
     this.gathersInFlight++;
     try {
-      return await this.gathers.run(GATHERS, gather);
+      return await this.gathers.run(GATHERS, () => {
+        if (!this.open) throw new DaemonClosing("doctor");
+        return gather();
+      });
     } finally {
       this.gathersInFlight--;
     }
@@ -171,43 +85,20 @@ export class JournalTurns {
   // [LAW:no-ambient-temporal-coupling] A session's effects run one at a time,
   // in the order their turns committed, after them: a performer that reads
   // before it acts (the pane read before a slash is typed) sees what the
-  // session's earlier effects left, as it did when a launch held the turn.
-  // The order is the performer's, not the turn's: the session's next click
-  // takes its turn while the last click's effects still run, and no close
-  // refuses it, since an outcome after close is said in the log.
+  // session's earlier effects left, and two doctor clicks of one session reach
+  // their verdicts in the order they were clicked. The order is the
+  // performer's, not the turn's: the session's next click takes its turn while
+  // the last click's effects still run, and no close refuses it, since an
+  // outcome after close is said in the log.
   performing<T>(session: string | null, work: () => Promise<T>): Promise<T> {
     return this.effects.run(session ?? CLICKLESS, work);
   }
 
   getStats(): JournalTurnStats {
-    const { holder, queued } = this;
-    return {
-      holder: holder?.verb ?? null,
-      heldMs: holder === null ? 0 : elapsedMs(this.deps, holder.since),
-      queued,
-      gathers: this.gathersInFlight,
-    };
+    return { gathers: this.gathersInFlight };
   }
 
   close(): void {
     this.open = false;
-    if (this.inFlight === null) return;
-    // [LAW:nothing-unseen] Said first, so a commit that throws still names it.
-    this.deps.log(
-      "warn",
-      `journal: ${this.inFlight.verb} cut off by close, committing what landed`,
-    );
-    this.commit(this.inFlight);
-  }
-
-  private refuseClosed(verb: string): void {
-    if (!this.open) throw new DaemonClosing(verb);
-  }
-
-  private commit(held: InFlight): boolean {
-    if (this.inFlight !== held) return false;
-    this.inFlight = null;
-    held.commit();
-    return true;
   }
 }

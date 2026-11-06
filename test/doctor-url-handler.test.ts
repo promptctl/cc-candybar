@@ -32,7 +32,7 @@ import { doctorReportKeys } from "../src/doctor/report";
 import { forwarderExecutable } from "../src/install/index";
 import { MAIN_NAME, parseRendererAddress } from "../src/daemon/home";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { recordRender, testVerbContext } from "./helpers/click";
+import { clickUrl, recordRender, testVerbContext } from "./helpers/click";
 import {
   emptyStores,
   HEALTHY_FACTS,
@@ -377,7 +377,11 @@ describe("the daemon's side of the round trip", () => {
       arrival,
       probes,
       clients,
-      log: (_level, message) => logs.push(message),
+      // The doctor's own lines: Apply's line per event is its record, not the
+      // row's.
+      log: (_level, message) => {
+        if (!message.startsWith("apply ")) logs.push(message);
+      },
       doctorStores: emptyStores(),
       doctor: {
         install: HEALTHY_INSTALL_EDGE,
@@ -409,9 +413,10 @@ describe("the daemon's side of the round trip", () => {
         }),
       },
     };
-    const click = async (verb: string, value: string): Promise<void> => {
-      await VERBS.get(verb)!(value, ctx);
-    };
+    // Through Apply, as the daemon runs it: a doctor step's report lands
+    // with its effect.
+    const click = (verb: string, value: string): Promise<void> =>
+      clickUrl(`cc-candybar://to/main/${verb}/${value}`, ctx);
     return { sessionState, probes, logs, click };
   }
 

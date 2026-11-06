@@ -66,7 +66,8 @@ import {
   type LaneSwitches,
 } from "../config/lanes.js";
 import {
-  clickErrorAt,
+  clickErrorsAt,
+  shownClickErrors,
   toAnswer,
   type ClickErrorRecord,
 } from "./click-error.js";
@@ -427,7 +428,7 @@ export function drawRender(
   cellBreaks: number;
   // The click error an answer carrying this draw marks answered
   // (src/daemon/click-error.ts).
-  answersClick: ClickErrorRecord | null;
+  answersClick: readonly ClickErrorRecord[];
   // The launcher's pipe event this draw showed, which an answer carrying it
   // marks answered.
   pipeShown: PipeEvent | null;
@@ -482,15 +483,11 @@ export function drawRender(
   const hints = view.source.hints();
   const width = payload.term.cols;
   noteFacts(facts, { width: String(width) });
-  // [LAW:no-ambient-temporal-coupling] The click error dispatch held for this
-  // session, at this draw's instant and for whom it draws: shown by every
-  // render inside its hold, and past it by a request until an answer has
+  // [LAW:no-ambient-temporal-coupling] The click errors held for this
+  // session, at this draw's instant and for whom it draws: each shown by every
+  // render inside its own hold, and past it by a request until an answer has
   // carried it.
-  const clickHold = clickErrorAt(sessionState, sessionId, at, drawing.by);
-  const clickShown =
-    clickHold.kind === "held" || clickHold.kind === "owed"
-      ? clickHold.error
-      : null;
+  const clickHolds = clickErrorsAt(sessionState, sessionId, at, drawing.by);
   // [LAW:one-source-of-truth] The daemon-wide update notice, read for
   // THIS session: what it dismissed and whether its config allows the
   // notice — both values, folded by the notice into zero or one message.
@@ -507,7 +504,8 @@ export function drawRender(
   // what it is about. A load's error is about the session's config, and a
   // drop about the file that wrote it, so their text may change under an open
   // viewer (an issue fixed) without becoming another message; a request's
-  // refusal, its hints' and a click's are about exactly what their text says.
+  // refusal and its hints' are about exactly what their text says, and a
+  // click's failure is about itself, its instant with its text.
   // Each copies its own text, but a drop copies the prompt that fixes it.
   const sourced = (about: string, text: string | null | undefined) => ({
     about,
@@ -528,7 +526,9 @@ export function drawRender(
       text: e.message,
       copy: e.prompt,
     })),
-    said(clickShown?.text),
+    ...shownClickErrors(clickHolds).map((e) =>
+      sourced(`click\0${e.at}\0${e.text}`, e.text),
+    ),
   ].flatMap(({ about, text, copy }) =>
     about && text && copy ? [{ about, text, copy }] : [],
   );
@@ -777,7 +777,8 @@ export function drawRender(
     // draw, `per-draw` at this frame's instant; `-` for none.
     rules: [...rules].map(([slot, how]) => `${slot}:${how}`).join(",") || "-",
     err: errors.length > 0 ? "Y" : "N",
-    clickError: clickHold.kind === "none" ? "-" : clickHold.kind,
+    // Each click error as this frame held it, oldest first: `-` for none.
+    clickError: clickHolds.map(({ hold }) => hold).join(",") || "-",
     // The launcher's pipe event as this frame showed it: `-` for not at all.
     pipeEvent: pipeWarning?.hold ?? "-",
     upd: String(updates.length),
@@ -803,7 +804,7 @@ export function drawRender(
     },
     evaluated,
     cellBreaks,
-    answersClick: toAnswer(clickHold),
+    answersClick: toAnswer(clickHolds),
     pipeShown,
     delivered,
     lanes,
@@ -854,7 +855,7 @@ export interface RequestAnswer {
   // Claude Code's statusline, the bar to a client drawing it itself.
   resp: Response;
   motion: DrawnMotion;
-  answersClick: ClickErrorRecord | null;
+  answersClick: readonly ClickErrorRecord[];
   pipeShown: PipeEvent | null;
   // Records what the answer's copy clicks copy, once it reached its client.
   delivered: () => void;

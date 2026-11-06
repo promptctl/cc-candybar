@@ -129,8 +129,8 @@ describe("RuntimeStats.snapshot", () => {
         budgetBytes: 9,
       },
       effectCache: { sessions: 2, effects: 5 },
-      menuIdle: { sessions: 2, armed: 1, pending: 0 },
-      journalTurns: { holder: null, heldMs: 0, queued: 0, gathers: 0 },
+      menuIdle: { sessions: 2, armed: 1 },
+      journalTurns: { gathers: 0 },
       runs: { started: 3, failed: 1, timedOut: 1, refused: 2, running: 0 },
       sessionState: { sessions: 2, observers: 11, revision: 7 },
       frameFeeds: {
@@ -201,7 +201,7 @@ describe("RuntimeStats.snapshot", () => {
     expect(snap.usageCache.size).toBe(10);
     expect(snap.sources).toEqual(SOURCES);
     expect(snap.effectCache).toEqual({ sessions: 2, effects: 5 });
-    expect(snap.menuIdle).toEqual({ sessions: 2, armed: 1, pending: 0 });
+    expect(snap.menuIdle).toEqual({ sessions: 2, armed: 1 });
     expect(snap.runs).toEqual({
       started: 3,
       failed: 1,
@@ -338,8 +338,8 @@ describe("formatStats", () => {
         budgetBytes: 128 * 1024 * 1024,
       },
       effectCache: { sessions: 2, effects: 3 },
-      menuIdle: { sessions: 2, armed: 1, pending: 0 },
-      journalTurns: { holder: null, heldMs: 0, queued: 0, gathers: 0 },
+      menuIdle: { sessions: 2, armed: 1 },
+      journalTurns: { gathers: 0 },
       runs: { started: 3, failed: 1, timedOut: 1, refused: 2, running: 0 },
       sessionState: { sessions: 2, observers: 11, revision: 7 },
       frameFeeds: {
@@ -488,8 +488,8 @@ describe("formatStats", () => {
         budgetBytes: 0,
       },
       effectCache: { sessions: 0, effects: 0 },
-      menuIdle: { sessions: 0, armed: 0, pending: 0 },
-      journalTurns: { holder: null, heldMs: 0, queued: 0, gathers: 0 },
+      menuIdle: { sessions: 0, armed: 0 },
+      journalTurns: { gathers: 0 },
       runs: { started: 0, failed: 0, timedOut: 0, refused: 0, running: 0 },
       sessionState: { sessions: 0, observers: 0, revision: 0 },
       frameFeeds: {

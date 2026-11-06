@@ -109,12 +109,6 @@ describe("MenuIdle: the close follows the idle clock, whoever writes it", () => 
     const later = idle.drawn("s", at(now), 30, draw);
     expect(later.handed).toBe(1000);
     expect(later.idleSince).toBe(1000);
-    // While a click is in flight no close is due: none is handed.
-    idle.clickArrived("s");
-    const pending = idle.drawn("s", at(now), 30, draw);
-    expect(pending.handed).toBeUndefined();
-    expect(pending.idleSince).toBeUndefined();
-    idle.clickSettled("s");
   });
 
   test("a drawn menu closes a timeout after the first frame that drew it", () => {

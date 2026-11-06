@@ -188,7 +188,7 @@ const RATE_LIMITS: Partial<Record<LaunchCategory, number>> = {
   // for any human click cadence.
   "click.pbcopy": 1000,
   "click.open": 1000,
-  // A click's probe, run ahead of its turn for up to its 2 s timeout.
+  // A doctor click's probe, run after its turn for up to its 2 s timeout.
   "doctor.tmux": 1000,
   "doctor.font": 1000,
   "doctor.process": 1000,

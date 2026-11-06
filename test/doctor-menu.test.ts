@@ -35,6 +35,7 @@ import {
   DISCLOSURE_GLYPH_CLOSE,
 } from "../src/config/disclosure";
 import { clickUrl, effectsOf } from "./helpers/click";
+import { lastClickError } from "../src/daemon/click-error";
 import { buildRig } from "./helpers/rig";
 import {
   VERB_DOCTOR_FIX,
@@ -97,6 +98,13 @@ const GHOSTTY: TerminalFixture = {
 // and the Claude Code directory it runs with: the location its bar's settings
 // chain is read at, the click's own.
 const sessionAt = () => ({ projectDir: "/tmp/proj", claudeConfigDir: dir });
+
+// The failure the session's bar holds: a doctor step's refusal is its
+// effect's failure, held as a click's is.
+const heldError = (
+  rt: { readonly sessionState: Parameters<typeof lastClickError>[0] },
+  sid = "s1",
+): string | undefined => lastClickError(rt.sessionState, sid)?.text;
 
 function doctorBar(
   tmux: TmuxHint | null,
@@ -388,13 +396,12 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
   });
 
   // [LAW:no-silent-failure] A session the daemon never rendered has no client
-  // facts; the doctor refuses loudly rather than diagnose a guessed "not in
-  // tmux".
+  // facts; the doctor refuses loudly, on that session's bar, rather than
+  // diagnose a guessed "not in tmux".
   test("a doctor-run click for a session that never rendered is refused", async () => {
     const rt = doctorBar(HINT);
-    const url = `cc-candybar://to/main/${VERB_DOCTOR_RUN}/never-rendered`;
-    await expect(rt.click(url)).rejects.toThrow(BadVerbArgs);
-    await expect(rt.click(url)).rejects.toThrow(/never-rendered has not rendered yet/);
+    await rt.click(`cc-candybar://to/main/${VERB_DOCTOR_RUN}/never-rendered`);
+    expect(heldError(rt, "never-rendered")).toMatch(/never-rendered has not rendered yet/);
   });
 
   // [LAW:no-silent-failure] A stale `[fix]` URL (the world moved since the
@@ -406,7 +413,8 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     const fixUrl = rt.urlOfVerb(VERB_DOCTOR_FIX)!;
     await rt.clickVerb(VERB_DOCTOR_FIX);
     const before = fs.readFileSync(rt.settingsPath, "utf8");
-    await expect(rt.click(fixUrl)).rejects.toThrow(BadVerbArgs);
+    await rt.click(fixUrl);
+    expect(heldError(rt)).toMatch(/^doctor-fix: tmux truecolor — /);
     expect(fs.readFileSync(rt.settingsPath, "utf8")).toBe(before);
   });
 
@@ -536,10 +544,12 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       await rt.clickVerb(VERB_DOCTOR_RUN);
       expect(rt.render()).toContain("✓ Nerd Font");
       expect(markUrl(rt, "drawn")).toBeUndefined();
-      await expect(VERBS.get(VERB_DOCTOR_MARK)!("s1/nerdFont/drawn", rt.ctx),
-      ).rejects.toThrow(BadVerbArgs);
-      await expect(VERBS.get(VERB_DOCTOR_MARK)!("s1/nerdFont/perhaps", rt.ctx),
-      ).rejects.toThrow(/the mark is "perhaps"/);
+      await rt.click(`cc-candybar://to/main/${VERB_DOCTOR_MARK}/s1/nerdFont/drawn`);
+      expect(heldError(rt)).toMatch(/doctor-mark: .*nothing to (mark|look at)/);
+      // A mark the click names wrongly is the click's own refusal, in its turn.
+      expect(() => VERBS.get(VERB_DOCTOR_MARK)!("s1/nerdFont/perhaps", rt.ctx)).toThrow(
+        /the mark is "perhaps"/,
+      );
     });
 
     test("a mark book that stops reading before the mark is filed refuses the click and keeps the file", async () => {
@@ -557,11 +567,8 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
           update: fileMarkBook(dir).update,
         };
         const ctx = { ...rt.ctx, doctorStores: { ...rt.ctx.doctorStores, marks } };
-        const mark = async () => await VERBS.get(VERB_DOCTOR_MARK)!("s1/nerdFont/drawn", ctx);
-        await expect(mark).rejects.toThrow(BadVerbArgs);
-        await expect(mark).rejects.toThrow(
-          `doctor-mark: ${file} is not JSON`,
-        );
+        await clickUrl(`cc-candybar://to/main/${VERB_DOCTOR_MARK}/s1/nerdFont/drawn`, ctx);
+        expect(heldError(rt)).toContain(`doctor-mark: ${file} is not JSON`);
         expect(fs.readFileSync(file, "utf8")).toBe("junk");
       } finally {
         fs.rmSync(dir, { recursive: true, force: true });
@@ -577,8 +584,9 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       };
       const rt = doctorBar(null, CLEAN_LOAD, busy);
       await rt.openTools();
-      await expect(VERBS.get(VERB_DOCTOR_RUN)!("s1", rt.ctx)).rejects.toThrow(
-        new BadVerbArgs("the doctor looked at the font less than a second ago — click again"),
+      await rt.click(`cc-candybar://to/main/${VERB_DOCTOR_RUN}/s1`);
+      expect(heldError(rt)).toBe(
+        "the doctor looked at the font less than a second ago — click again",
       );
       expect(rt.render()).not.toContain("Nerd Font");
     });

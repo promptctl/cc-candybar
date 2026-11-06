@@ -485,12 +485,12 @@ export async function replyTo(
               // is a write, so it is an event the arm makes in a turn.
               delivered: () => {
                 delivered();
-                if (answersClick !== null)
+                if (answersClick.length > 0)
                   void applyUnanswered(
                     {
                       kind: "answered",
                       session: checked.req.sessionId,
-                      error: answersClick,
+                      errors: answersClick,
                     },
                     parts,
                     `sid=${checked.req.sessionId}`,
@@ -708,14 +708,14 @@ async function clickEvent(
   const { clock } = parts;
   const t0 = clock.monotonic();
   const facts: RequestFacts = [["queued", `${spanMs(accepted, t0)}ms`]];
-  // When a click still waiting for its turn is refused: the daemon's deadline,
-  // or a client that waited for the answer leaving. The connection knows which
+  // When a click is refused before it runs: the daemon's deadline passed, or
+  // a client that waited for the answer left, while it sat behind the loop. The connection knows which
   // clients wait (the forwarder does not), so its `clientLeft` already says so.
   const gone = () => timedOut() || clientLeft();
   const outcome = await run(facts, gone);
   // Whether the client was told TIMEOUT, and whether a client that waited
   // hung up, while the click ran: its effect lands though the client reported
-  // a failure. One still waiting for its turn at either moment was refused
+  // a failure. One that had not run yet at either moment was refused
   // (`abandoned`).
   noteFacts(facts, {
     timedOut: timedOut() ? "Y" : "N",
@@ -904,25 +904,20 @@ async function handleClick(
   }
   noteFacts(facts, { [VERB_FACT[arrival.via]]: verb });
   // The click's session, as it crossed the one session-id checkpoint: one
-  // that passed is recorded and is pending on its idle clock until it settles,
-  // one that failed is never recorded, and a click naming none records `sid=-`.
-  const session = clickSessionOf(verb, value);
-  const pending = session?.ok ? session.id : null;
-  if (session === null) noteFacts(facts, { sid: "-" });
-  else if (pending !== null) noteFacts(facts, { sid: pending });
+  // that passed is recorded, one that failed is never recorded, and a click
+  // naming none records `sid=-`.
+  const named = clickSessionOf(verb, value);
+  const session = named?.ok ? named.id : null;
+  if (named === null) noteFacts(facts, { sid: "-" });
+  else if (session !== null) noteFacts(facts, { sid: session });
   const { answer } = await apply(
     {
       kind: "click",
       verb: resolved,
       value,
       arrival,
-      pending,
-      asker: {
-        placed: (ms) => noteFacts(facts, { placeWait: `${ms}ms` }),
-        gathered: (ms) => noteFacts(facts, { gather: `${ms}ms` }),
-        waited: (ms) => noteFacts(facts, { turnWait: `${ms}ms` }),
-        gone: clientGone,
-      },
+      session,
+      gone: clientGone,
     },
     parts,
   );

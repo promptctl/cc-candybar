@@ -1,14 +1,14 @@
 // A request takes its turn (src/daemon/apply.ts): its arm records what the
-// client said in a journal turn and draws once the turn is over, so a request
-// that arrives while a click's turn is held draws the click whole, never its
-// first write beside the request's hints; and it waits behind turns alone,
-// never behind a click's gather. Driven through Apply over the real journal
-// turns and the real click arm; the daemon's draw is a fake that reads what a
-// frame would read, the session's state as the draw begins.
+// client said in a journal turn and draws once the turn is over. A turn is
+// synchronous, so a request waits behind no other session's work, and no
+// draw can run inside a click's turn: a click is drawn whole or not at all. A
+// doctor click's probes run after its turn, in none, so a request sent while
+// they park draws at once. Driven through Apply over the real journal turns
+// and the real click arm; the daemon's draw is a fake that reads what a frame
+// would read, the session's state as the draw begins.
 //
 // [LAW:behavior-not-structure] The cases read the store as the draw does and
-// the facts the request's line carries; how the turn is queued is the
-// journal's own (test/journal-turns.test.ts).
+// the facts the request's line carries.
 
 import { MAIN_NAME } from "../src/daemon/home";
 import {
@@ -27,6 +27,7 @@ import type { RequestFacts } from "../src/daemon/request-event";
 import { sessionIdOf } from "../src/daemon/session-id";
 import { SessionState } from "../src/daemon/session-state";
 import { DaemonClosing } from "../src/daemon/verb-error";
+import { doctorReportKeys } from "../src/doctor/report";
 import type { VerbContext } from "../src/daemon/verbs";
 import type { DoctorEdge } from "../src/doctor/edge";
 import { instantOf } from "../src/utils/instant";
@@ -42,6 +43,7 @@ import { heldClock } from "./helpers/held-clock";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 
 const SID = "session-a";
+const OTHER = "session-b";
 const DIR = "/tmp/proj";
 const START = new Date("2026-11-05T12:00:00Z");
 const AT = instantOf(START);
@@ -68,9 +70,9 @@ async function drain(): Promise<void> {
 // A render request past the checkpoint, as the arm reads it: its session,
 // its hints and the config inputs it named.
 const REQUESTED = { projectDir: DIR, cwd: DIR, target: { source: "search" } } as const;
-const request = (termCols: number): CheckedRenderRequest =>
+const request = (termCols: number, sid = SID): CheckedRenderRequest =>
   ({
-    sessionId: sessionIdOf(SID),
+    sessionId: sessionIdOf(sid),
     hints: { termCols },
     requested: REQUESTED,
     originRecord: encodeRenderOrigin(REQUESTED, TEST_STORED_ROOT),
@@ -84,13 +86,14 @@ const doctor = { verb: VERB_DOCTOR_RUN, args: [SID] } as const;
 interface Drawn {
   readonly toolbar: string | null;
   readonly hints: string | null;
+  readonly report: boolean;
   readonly holder: string | null;
 }
 
 const ANSWER: RequestAnswer = {
   resp: { ok: true, output: "" },
   motion: "still",
-  answersClick: null,
+  answersClick: [],
   pipeShown: null,
   delivered: () => {},
 };
@@ -108,12 +111,11 @@ function rig() {
     save: () => void persisted.saves++,
     flush: () => {},
   });
-  const turns = new JournalTurns({
-    log: () => {},
-    monotonic: () => clock.monotonic(),
-  });
-  recordRender(sessionState, SID, DIR);
-  sessionState.set(SID, SESSION_CLIENT_HINTS_KEY, "{}");
+  const turns = new JournalTurns();
+  for (const sid of [SID, OTHER]) {
+    recordRender(sessionState, sid, DIR);
+    sessionState.set(sid, SESSION_CLIENT_HINTS_KEY, "{}");
+  }
   const parked = gate();
   const healthy = healthyDaemonEdge().daemons;
   const ctx: VerbContext = {
@@ -134,26 +136,32 @@ function rig() {
       daemons: () => parked.wait.then(healthy),
     },
   };
-  const { arrival: _arrival, asker: _asker, described: _described, ...verbCtx } = ctx;
+  const { arrival: _arrival, described: _described, ...verbCtx } = ctx;
   const drawn: Drawn[] = [];
+  // A draw that waits on its sources until `sources` settles, as a request
+  // whose view declares a source not answered yet, then reads the session.
+  let sources: Promise<void> = Promise.resolve();
   const parts = {
     verbCtx,
     log: ctx.log,
-    draw: async (): Promise<RequestAnswer> => {
+    draw: async (req: CheckedRenderRequest): Promise<RequestAnswer> => {
+      await sources;
       drawn.push({
-        toolbar: sessionState.get(SID, TOOLBAR),
-        hints: sessionState.get(SID, SESSION_CLIENT_HINTS_KEY),
-        holder: turns.getStats().holder,
+        toolbar: sessionState.get(req.sessionId, TOOLBAR),
+        hints: sessionState.get(req.sessionId, SESSION_CLIENT_HINTS_KEY),
+        report:
+          sessionState.get(req.sessionId, doctorReportKeys("utf8").verdict) !== null,
+        holder: turns.inTurn(),
       });
       return ANSWER;
     },
   };
-  const render = (termCols: number) => {
+  const render = (termCols: number, sid = SID) => {
     const facts: RequestFacts = [];
     const answered = apply(
       {
         kind: "request",
-        req: request(termCols),
+        req: request(termCols, sid),
         at: AT,
         waitEndsAt: clock.monotonic(),
         facts,
@@ -162,82 +170,77 @@ function rig() {
     );
     return { answered, facts };
   };
-  return { clock, sessionState, persisted, turns, parked, ctx, drawn, render };
+  const waitOn = (wait: Promise<void>) => (sources = wait);
+  return { clock, sessionState, persisted, turns, parked, ctx, drawn, render, waitOn };
 }
 
 describe("a request takes its turn", () => {
-  test("a request that arrives while a click's turn is held draws once the click has landed whole, at the request's width", async () => {
+  test("a request for one session, sent while another's dispatch parks in its doctor step's probes, draws at once and in no turn", async () => {
     const r = rig();
-    // The click's first write lands, then its doctor gathers inside the turn,
-    // parked: the turn is held with the toolbar toggled and the second toggle
-    // still to come.
-    const click = applyClick(effectsUrl(MAIN_NAME, [toggle, doctor, toggle]), r.ctx);
+    const click = await applyClick(
+      effectsUrl(MAIN_NAME, [
+        { verb: VERB_TOOLBAR_TOGGLE, args: [OTHER] },
+        { verb: VERB_DOCTOR_RUN, args: [OTHER] },
+        { verb: VERB_TOOLBAR_TOGGLE, args: [OTHER] },
+      ]),
+      r.ctx,
+    );
     await drain();
-    expect(r.turns.getStats().holder).toBe(VERB_DISPATCH);
-    expect(r.sessionState.get(SID, TOOLBAR)).toBe("1");
-
-    const { answered, facts } = r.render(60);
-    let done = false;
-    void answered.then(() => (done = true));
-    r.clock.advance(30);
-    await drain();
-    // The request waits for the turn: nothing drawn, nothing written.
-    expect(done).toBe(false);
-    expect(r.drawn).toEqual([]);
-    expect(r.sessionState.get(SID, SESSION_CLIENT_HINTS_KEY)).toBe("{}");
-
-    r.parked.open();
-    await click;
-    await answered;
-    // Drawn after the click's turn, from the state it left: the toolbar back
-    // as it was, the request's hints recorded, no turn held while drawing.
-    expect(r.drawn).toEqual([
-      { toolbar: null, hints: JSON.stringify({ termCols: 60 }), holder: null },
-    ]);
-    expect(facts).toEqual([
-      ["turnWait", "30ms"],
-      ["revision", String(r.sessionState.revision(SID))],
-    ]);
-  });
-
-  test("a request waits behind turns alone: a click parked in its head gather, before any turn, delays it by nothing", async () => {
-    const r = rig();
-    const click = applyClick(effectsUrl(MAIN_NAME, [doctor]), r.ctx);
-    await drain();
-    expect(r.turns.getStats()).toMatchObject({ holder: null, gathers: 1 });
-    const { answered, facts } = r.render(60);
-    r.clock.advance(30);
-    await answered;
     expect(r.turns.getStats().gathers).toBe(1);
+    const { answered, facts } = r.render(60);
+    await answered;
     expect(r.drawn).toEqual([
-      { toolbar: null, hints: JSON.stringify({ termCols: 60 }), holder: null },
+      { toolbar: null, hints: JSON.stringify({ termCols: 60 }), report: false, holder: null },
     ]);
-    expect(facts[0]).toEqual(["turnWait", "0ms"]);
+    expect(facts).toEqual([["revision", String(r.sessionState.revision(SID))]]);
     r.parked.open();
-    await click;
+    await click.performed;
   });
 
-  test("a request queued behind a held turn when the daemon closes is refused as the close, having drawn and written nothing", async () => {
+  test("a draw while a click's doctor step parks reads the click whole, its report not yet landed; after, the report", async () => {
     const r = rig();
-    const click = applyClick(effectsUrl(MAIN_NAME, [toggle, doctor, toggle]), r.ctx);
+    const click = await applyClick(effectsUrl(MAIN_NAME, [toggle, doctor, toggle]), r.ctx);
     await drain();
-    expect(r.turns.getStats().holder).toBe(VERB_DISPATCH);
-    const { answered, facts } = r.render(60);
-    const refused = answered.then(
+    await r.render(60).answered;
+    r.parked.open();
+    await click.performed;
+    await r.render(60).answered;
+    // Both toggles landed in the click's one turn: never the first alone.
+    expect(r.drawn).toEqual([
+      { toolbar: null, hints: JSON.stringify({ termCols: 60 }), report: false, holder: null },
+      { toolbar: null, hints: JSON.stringify({ termCols: 60 }), report: true, holder: null },
+    ]);
+  });
+
+  test("a click that lands while a request's draw waits on its sources is drawn whole: its writes are all in, in no turn", async () => {
+    const r = rig();
+    const sources = gate();
+    r.waitOn(sources.wait);
+    const { answered } = r.render(60);
+    await drain();
+    // The click lands while the draw waits, then parks in its doctor's
+    // probes; every write it made passed the instrument inside its turn.
+    const click = await applyClick(effectsUrl(MAIN_NAME, [toggle, doctor]), r.ctx);
+    sources.open();
+    await answered;
+    expect(r.drawn).toEqual([
+      { toolbar: "1", hints: JSON.stringify({ termCols: 60 }), report: false, holder: null },
+    ]);
+    r.parked.open();
+    await click.performed;
+  });
+
+  test("a request after the daemon closed is refused as the close, having drawn and written nothing", async () => {
+    const r = rig();
+    r.turns.close();
+    const refused = await r.render(60).answered.then(
       () => null,
       (e: unknown) => e,
     );
-    await drain();
-    // The close refuses what is queued as its turn arrives, once the held
-    // turn has ended.
-    r.turns.close();
-    r.parked.open();
-    await click.catch(() => {});
     // The render edge reads the class, as a click's does: `closing`, at info.
-    expect(await refused).toBeInstanceOf(DaemonClosing);
+    expect(refused).toBeInstanceOf(DaemonClosing);
     expect(r.drawn).toEqual([]);
     expect(r.sessionState.get(SID, SESSION_CLIENT_HINTS_KEY)).toBe("{}");
-    expect(facts).toEqual([]);
   });
 
   test("a request that says what the last one said writes nothing: the store persists nothing and the revision stands", async () => {
@@ -249,9 +252,6 @@ describe("a request takes its turn", () => {
     await answered;
     expect(r.persisted.saves).toBe(saves);
     expect(r.sessionState.revision(SID)).toBe(revision);
-    expect(facts).toEqual([
-      ["turnWait", "0ms"],
-      ["revision", String(revision)],
-    ]);
+    expect(facts).toEqual([["revision", String(revision)]]);
   });
 });

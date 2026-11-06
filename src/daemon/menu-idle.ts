@@ -9,9 +9,8 @@
 // render each write their own fact and settle, so neither has to arrive before
 // the other for the close to land where the record says.
 //
-// While a click of the session is in flight no deadline exists: its gather and
-// its queues are not idleness, whatever they take. Only a landing moves the
-// clock, so an abandoned click restarts nothing.
+// A click's turn is synchronous, so no deadline falls inside one, and only a
+// landing moves the clock, so an abandoned click restarts nothing.
 
 import { closesAt } from "../config/menu-timeout.js";
 import type { Instant } from "../utils/instant.js";
@@ -33,8 +32,6 @@ interface Idle {
 export interface MenuIdleStats {
   readonly sessions: number;
   readonly armed: number;
-  // Clicks in flight, from arrival until they land or are refused.
-  readonly pending: number;
 }
 
 export interface MenuIdleDeps {
@@ -56,9 +53,6 @@ const MAX_SESSIONS = 256;
 
 export class MenuIdle {
   private readonly sessions = new Map<string, Idle>();
-  // Clicks in flight per session, entries deleted at zero. Apart from the
-  // records, which eviction drops under a click that is still in flight.
-  private readonly pending = new Map<string, number>();
   private disposed = false;
 
   constructor(private readonly deps: MenuIdleDeps) {}
@@ -70,28 +64,12 @@ export class MenuIdle {
     this.settle(sessionId);
   }
 
-  // A click of the session arrived: no deadline until it settles.
-  clickArrived(sessionId: string): void {
-    this.pending.set(sessionId, (this.pending.get(sessionId) ?? 0) + 1);
-    if (this.sessions.has(sessionId)) this.settle(sessionId);
-  }
-
-  // A click of the session landed or was refused, after any landing stamp. A
-  // record evicted meanwhile has no timer left to follow it.
-  clickSettled(sessionId: string): void {
-    const left = this.pending.get(sessionId)! - 1;
-    if (left === 0) this.pending.delete(sessionId);
-    else this.pending.set(sessionId, left);
-    if (this.sessions.has(sessionId)) this.settle(sessionId);
-  }
-
   // When the idle period of the menus the session's last frame drew began —
   // its last click, or the first frame that drew them, whichever is later —
   // or nothing, while it drew none: a menu that appears now has only begun.
-  // Nothing too while a click is in flight: no close is due to count down to.
   since(sessionId: string, at: Instant): Instant | undefined {
     const idle = this.record(sessionId, at);
-    return idle.shown && !this.pending.has(sessionId) ? idle.since : undefined;
+    return idle.shown ? idle.since : undefined;
   }
 
   // [LAW:single-enforcer] One frame of the session drawn under its idle
@@ -137,14 +115,11 @@ export class MenuIdle {
     this.settle(sessionId);
   }
 
-  // The sessions whose clocks are kept, those whose close timer is armed, and
-  // the clicks in flight.
+  // The sessions whose clocks are kept, and those whose close timer is armed.
   getStats(): MenuIdleStats {
     let armed = 0;
     for (const idle of this.sessions.values()) if (idle.timer !== null) armed++;
-    let pending = 0;
-    for (const count of this.pending.values()) pending += count;
-    return { sessions: this.sessions.size, armed, pending };
+    return { sessions: this.sessions.size, armed };
   }
 
   dispose(): void {
@@ -179,10 +154,7 @@ export class MenuIdle {
     // [LAW:no-ambient-temporal-coupling] Disposed, nothing is due: a render
     // that was awaiting when the daemon closed arms no timer as it lands.
     const due =
-      idle.shown &&
-      !idle.closing &&
-      !this.disposed &&
-      !this.pending.has(sessionId)
+      idle.shown && !idle.closing && !this.disposed
         ? closesAt(idle.since, idle.timeoutS)
         : null;
     if (idle.timer?.at === due) return;
@@ -219,10 +191,9 @@ export class MenuIdle {
     const closing: IdleClose = {
       idleS: now - idle.since,
       timeoutS: idle.timeoutS,
-      // A click arrived after this firing is queued behind the close, and an
-      // evicted record stops counting, so its session is no longer known idle.
-      stillIdle: () =>
-        this.sessions.get(sessionId) === idle && !this.pending.has(sessionId),
+      // An evicted record stops counting, so its session is no longer known
+      // idle.
+      stillIdle: () => this.sessions.get(sessionId) === idle,
       closed: () => {
         idle.since = now;
         idle.shown = false;

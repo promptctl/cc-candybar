@@ -2,18 +2,19 @@
 // source of change reaches the daemon's state as one arm of a closed Event
 // union, and one table of arms is the only consumer. The table is keyed by
 // every kind the union has, so adding a source of change is a compile error
-// here until its arm exists, and no arm is a default. The journal's turn
-// (src/daemon/journal-turns.ts) is the queue every arm writes in: the request
-// records what its client said there and draws once the turn is over, so a
-// frame never reads the request's hints beside a click's writes half landed.
+// here until its arm exists, and no arm is a default. Every arm writes in a
+// journal turn (src/daemon/journal-turns.ts), which is synchronous: the
+// request records what its client said there and draws once the turn is
+// over, so a frame never reads the request's hints beside a click's writes
+// half landed.
 //
 // [LAW:effects-at-boundaries] An arm answers its source and describes the
 // effects its turn asked for (src/daemon/effect.ts). The performer below runs
-// them once the arm has answered, in the order described, and puts each
-// outcome back on the queue as an effect-done event, whose arm is the one
-// writer of what a failed effect leaves on the bar. So a click's reply never
-// waits on a child process, and no write of the click path happens outside a
-// turn.
+// them once the arm has answered, in the order described, and applies each
+// outcome as an effect-done event, whose arm is the one writer of what the
+// effect leaves: a doctor's report, or a failure on the bar. So a click's
+// reply never waits on a child process, no turn waits on one either, and no
+// write of the click path happens outside a turn.
 //
 // An arm joins the union when its source is routed through Apply, and not
 // before: an arm with no producer is a handler nothing can reach.
@@ -37,22 +38,24 @@ import {
   failed,
   PERFORMED,
   type Effect,
+  type EffectDone,
   type EffectOutcome,
   type LaunchSpec,
+  type OutcomeOf,
 } from "./effect.js";
 import {
   SESSION_CLIENT_HINTS_KEY,
   SESSION_RENDER_ORIGIN_KEY,
 } from "./foundations/session-keys.js";
-import type { ClickAsker, TurnAsker } from "./journal-turns.js";
-import type { MenuIdle } from "./menu-idle.js";
 import { eventLine, noteFacts, type RequestFacts } from "./request-event.js";
 import type { CheckedRenderRequest } from "./render-checkpoint.js";
 import type { SessionStateRW } from "./session-state.js";
-import { DaemonClosing } from "./verb-error.js";
+import { BadVerbArgs, DaemonClosing } from "./verb-error.js";
 import {
   CLICK_PROGRAM_TIMEOUT_MS,
   closeIdleMenus,
+  gatherDoctor,
+  landDoctor,
   type ClickVerb,
   type IdleClose,
 } from "./verbs/index.js";
@@ -79,10 +82,11 @@ export type Event =
       readonly value: string;
       readonly arrival: ClickArrival;
       // The session the click names, once it passed the session-id
-      // checkpoint: pending on its menus' idle clock until the click settles.
-      readonly pending: string | null;
-      // Where the click's waits are reported, and whether its client left.
-      readonly asker: ClickAsker;
+      // checkpoint.
+      readonly session: string | null;
+      // Whether its client has left: told TIMEOUT, or hung up, while the click
+      // sat behind the loop.
+      readonly gone: () => boolean;
     }
   | {
       readonly kind: "menu-idle";
@@ -92,15 +96,14 @@ export type Event =
   | {
       readonly kind: "effect-done";
       readonly of: EffectOrigin;
-      readonly effect: Effect;
-      readonly outcome: EffectOutcome;
+      readonly done: EffectDone;
     }
-  // A request's answer carrying `error`, the session's held click error,
+  // A request's answer carrying `errors`, click errors the session held,
   // reached its client (src/daemon/reply.ts).
   | {
       readonly kind: "answered";
       readonly session: string;
-      readonly error: ClickErrorRecord;
+      readonly errors: readonly ClickErrorRecord[];
     };
 
 // [LAW:effects-at-boundaries] A click's refusal, as its answer: the failure
@@ -116,21 +119,19 @@ interface Answers {
   readonly request: RequestAnswer;
   readonly click: ClickRefusal | null;
   readonly "menu-idle": void;
-  readonly "effect-done": void;
+  // How the effect went, as it landed.
+  readonly "effect-done": EffectOutcome;
   readonly answered: void;
 }
 
 // [LAW:types-are-the-program] What each arm reads of the daemon: every arm
 // writes through the verb context and says what it did through the log; the
-// request draws through the daemon's draw once its turn is over, and the
-// click brackets its session on the idle clock. A test applies an event over
-// exactly those and nothing more.
+// request draws through the daemon's draw once its turn is over. A test
+// applies an event over exactly those and nothing more.
 export type ApplyParts = Pick<DaemonParts, "verbCtx" | "log">;
 interface ArmParts {
   readonly request: ApplyParts & Pick<DaemonParts, "draw">;
-  readonly click: ApplyParts & {
-    readonly menuIdle: Pick<MenuIdle, "clickArrived" | "clickSettled">;
-  };
+  readonly click: ApplyParts;
   readonly "menu-idle": ApplyParts;
   readonly "effect-done": ApplyParts;
   readonly answered: ApplyParts;
@@ -164,38 +165,20 @@ export type ApplyArms<E extends { readonly kind: string }> = {
 
 const NO_EFFECTS: readonly Effect[] = [];
 
-// How an arm with no client behind it asks for its turn: its wait is a fact
-// of its line, and nobody leaves.
-const turnWaits = (facts: RequestFacts): TurnAsker => ({
-  waited: (ms) => noteFacts(facts, { turnWait: `${ms}ms` }),
-  gone: () => false,
-});
-
 export const ARMS: ApplyArms<Event> = {
   // [LAW:single-enforcer] The request's writes take their turn as a click's
   // do: what it said of its client and the config inputs it named land in one
-  // batch between the journal's begin and commit, and the draw begins once
-  // the turn is over, so it never reads the request's hints beside a click
-  // the turn was waiting on. The turn waits behind every turn, daemon-wide:
-  // a click's head gather runs ahead of its turn and delays no request, but a
-  // gather inside a turn (a doctor step after a dispatch's first, or one
-  // repeated for a config that changed) holds every session's request for as
-  // long as its probes run, each bounded by its launch timeout, and that wait
-  // is spent from the request's budget. The same gather is the one way a
-  // draw, this one or a feed's, reads a click half landed: a click that takes
-  // its turn while the draw waits on its sources has landed its first write
-  // and parked before its last. Its wait and the revision its own turn left
-  // go on the request's line, the render event, which is its record and opens
-  // with the session the edge noted.
+  // batch in a journal turn, and the draw begins once the turn is over. A turn
+  // is synchronous (src/daemon/journal-turns.ts), so the request waits behind
+  // no other session's work, and no draw, this one or a feed's, can read a
+  // click half landed. The revision its turn left goes on the request's line,
+  // the render event, which is its record and opens with the session the edge
+  // noted.
   request: async ({ req, at, waitEndsAt, facts }, { verbCtx, draw }) => {
-    const revision = await verbCtx.journalTurns.take(
-      "request",
-      turnWaits(facts),
-      async () => {
-        recordRequest(verbCtx.sessionState, req);
-        return verbCtx.sessionState.revision(req.sessionId);
-      },
-    );
+    const revision = verbCtx.journalTurns.take("request", () => {
+      recordRequest(verbCtx.sessionState, req);
+      return verbCtx.sessionState.revision(req.sessionId);
+    });
     noteFacts(facts, { revision: String(revision) });
     return {
       answer: await draw(req, at, waitEndsAt, facts),
@@ -203,73 +186,120 @@ export const ARMS: ApplyArms<Event> = {
       facts: [],
     };
   },
-  // [LAW:single-enforcer] The click's whole bracket on its menus' idle clock
-  // is here, so the timer cannot close a menu under any click Apply carries.
   // The turn hands its effects over once it has committed (`described`), and
-  // a refused step is answered beside them.
-  click: async (
-    { verb, value, arrival, pending, asker },
-    { verbCtx, menuIdle },
-  ) => {
-    if (pending !== null) menuIdle.clickArrived(pending);
+  // a refused step is answered beside them; a click whose client has left is
+  // refused by the verb, where it would land (src/daemon/verbs/index.ts). A
+  // turn is synchronous, so no idle timer can close a menu under one.
+  click: async ({ verb, value, arrival, gone }, { verbCtx }) => {
     const effects: Effect[] = [];
     let answer: ClickRefusal | null = null;
     try {
-      await verb.run(value, {
+      verb.run(value, {
         ...verbCtx,
         arrival,
-        asker,
+        gone,
         described: (described) => void effects.push(...described),
       });
     } catch (error) {
       answer = { error };
-    } finally {
-      if (pending !== null) menuIdle.clickSettled(pending);
     }
     return { answer, effects, facts: [] };
   },
   "menu-idle": async ({ session, idle }, { verbCtx }) => {
     const effects: Effect[] = [];
-    await closeIdleMenus(session, idle, {
+    closeIdleMenus(session, idle, {
       ...verbCtx,
       described: (described) => void effects.push(...described),
     });
     return { answer: undefined, effects, facts: [] };
   },
-  // [LAW:single-enforcer] The one writer of what a failed effect leaves: the
-  // session's click error, held in a turn of its own as every write is, and
-  // shown as a failed dispatch's is (src/daemon/click-error.ts). A click that
-  // names no session has no bar; its apply line is the record.
-  "effect-done": async ({ of, outcome }, { verbCtx }) => {
-    const facts: RequestFacts = [];
-    await verbCtx.journalTurns.take(
-      "effect-done",
-      turnWaits(facts),
-      async () => {
-        if (outcome.kind === "failed" && of.session !== null) {
-          holdClickError(
-            verbCtx.sessionState,
-            of.session,
-            outcome.said,
-            verbCtx.now(),
-          );
-        }
-      },
-    );
-    return { answer: undefined, effects: NO_EFFECTS, facts };
+  // [LAW:single-enforcer] The one writer of what an effect's outcome leaves:
+  // its landing, in a turn of its own as every write is, answers how it went
+  // (`LANDINGS`), and a failure is held as the session's click error, shown as
+  // a failed dispatch's is (src/daemon/click-error.ts). A click that names no
+  // session has no bar; its apply line is the record.
+  "effect-done": async ({ of, done }, parts) => {
+    const { verbCtx } = parts;
+    const outcome = verbCtx.journalTurns.take("effect-done", () => {
+      const landed = land(done, parts);
+      if (landed.kind === "failed" && of.session !== null) {
+        holdClickError(
+          verbCtx.sessionState,
+          of.session,
+          landed.said,
+          verbCtx.now(),
+        );
+      }
+      return landed;
+    });
+    return { answer: outcome, effects: NO_EFFECTS, facts: [] };
   },
   // [LAW:single-enforcer] The one write after a request's answer went out: the
-  // click error it carried is marked answered (src/daemon/click-error.ts), in
+  // click errors it carried are marked answered (src/daemon/click-error.ts), in
   // a turn as every write is, so no frame reads the mark beside a click's
   // writes half landed.
-  answered: async ({ session, error }, { verbCtx }) => {
-    const facts: RequestFacts = [];
-    await verbCtx.journalTurns.take("answered", turnWaits(facts), async () =>
-      answeredClickError(verbCtx.sessionState, session, error),
+  answered: async ({ session, errors }, { verbCtx }) => {
+    verbCtx.journalTurns.take("answered", () =>
+      answeredClickError(verbCtx.sessionState, session, errors),
     );
-    return { answer: undefined, effects: NO_EFFECTS, facts };
+    return { answer: undefined, effects: NO_EFFECTS, facts: [] };
   },
 };
+
+// [LAW:types-are-the-program] What each kind of effect's outcome becomes as
+// it lands, in the outcome's turn, none missing: an act's outcome is how it
+// went, and a doctor's gathered facts are its step's to answer.
+type Landings = {
+  readonly [K in Effect["kind"]]: (
+    done: Extract<EffectDone, { readonly effect: { readonly kind: K } }>,
+    verbCtx: ApplyParts["verbCtx"],
+  ) => EffectOutcome;
+};
+const asIs = ({
+  outcome,
+}: {
+  readonly outcome: EffectOutcome;
+}): EffectOutcome => outcome;
+const LANDINGS: Landings = {
+  launch: asIs,
+  "type-slash": asIs,
+  "apply-update": asIs,
+  doctor: ({ effect, outcome }, verbCtx) => {
+    if (outcome.kind === "failed") return outcome;
+    landDoctor(verbCtx, effect, outcome.gathered);
+    return PERFORMED;
+  },
+};
+
+// A landing's refusal (an input moved, nothing to fix) failed the effect.
+function land<K extends Effect["kind"]>(
+  done: Extract<EffectDone, { readonly effect: { readonly kind: K } }>,
+  parts: ApplyParts,
+): EffectOutcome {
+  const landing: Landings[K] = LANDINGS[done.effect.kind];
+  try {
+    return landing(done, parts.verbCtx);
+  } catch (e) {
+    return thrown(done.effect, e, parts.log);
+  }
+}
+
+// [LAW:single-enforcer][LAW:no-silent-failure] The one place a throw from a
+// performer or a landing becomes an outcome: the effect failed, in the
+// thrower's own words, which the bar shows. A refusal (BadVerbArgs) or the
+// daemon's close is said whole by those words; anything else is a fault of
+// the daemon's, whose words alone cannot locate it, so the log has it in
+// full, stack and all, at error.
+function thrown(
+  effect: Effect,
+  e: unknown,
+  log: ApplyParts["log"],
+): Extract<EffectOutcome, { readonly kind: "failed" }> {
+  if (!(e instanceof BadVerbArgs || e instanceof DaemonClosing)) {
+    log("error", `apply: ${describeEffect(effect)} threw: ${inspect(e)}`);
+  }
+  return failed(e instanceof Error ? e.message : String(e));
+}
 
 // [LAW:effects-at-boundaries][LAW:one-source-of-truth] What a render request
 // said, recorded in its turn and never by a frame, which only draws. The STAMPED hints: a click arrives
@@ -394,12 +424,12 @@ const LINE: {
   click: (_event, { answer }) => (answer === null ? APPLIED : refused(answer)),
   "menu-idle": () => APPLIED,
   answered: () => APPLIED,
-  "effect-done": ({ effect, outcome }) => ({
-    level: OUTCOME_LEVEL[outcome.kind],
+  "effect-done": ({ done }, { answer }) => ({
+    level: OUTCOME_LEVEL[answer.kind],
     facts: [
-      ["effect", describeEffect(effect)],
-      ["outcome", outcome.kind],
-      ["said", outcome.said || "-"],
+      ["effect", describeEffect(done.effect)],
+      ["outcome", answer.kind],
+      ["said", answer.said || "-"],
     ],
   }),
 };
@@ -411,7 +441,7 @@ const ORIGIN: {
   ) => EffectOrigin;
 } = {
   request: ({ req }) => ({ verb: "request", session: req.sessionId }),
-  click: ({ verb, pending }) => ({ verb: verb.name, session: pending }),
+  click: ({ verb, session }) => ({ verb: verb.name, session }),
   "menu-idle": ({ session }) => ({ verb: "menu-idle", session }),
   "effect-done": ({ of }) => of,
   answered: ({ session }) => ({ verb: "answered", session }),
@@ -457,14 +487,14 @@ function originOf<K extends Event["kind"]>(
 
 // [LAW:types-are-the-program] One performer per kind of effect, none missing:
 // an effect added to the union fails to build until it has one.
-type Performers<E extends { readonly kind: string }> = {
-  readonly [K in E["kind"]]: (
-    effect: Extract<E, { readonly kind: K }>,
+type Performers = {
+  readonly [K in Effect["kind"]]: (
+    effect: Extract<Effect, { readonly kind: K }>,
     parts: ApplyParts,
-  ) => Promise<EffectOutcome>;
+  ) => Promise<OutcomeOf<K>>;
 };
 
-const PERFORM: Performers<Effect> = {
+const PERFORM: Performers = {
   launch: ({ spec, what }, { verbCtx }) =>
     clickLaunch(verbCtx.launcher, spec, what),
   "type-slash": async ({ pane, line }, { verbCtx }) => {
@@ -477,6 +507,12 @@ const PERFORM: Performers<Effect> = {
     await verbCtx.applyUpdate();
     return PERFORMED;
   },
+  // The doctor's probes, gathered after the click's turn, in no turn: its
+  // step lands with the facts (`LANDINGS`).
+  doctor: async (effect, { verbCtx }) => ({
+    kind: "gathered",
+    gathered: await gatherDoctor(verbCtx, effect),
+  }),
 };
 
 // [LAW:one-type-per-behavior] A click's launch of a program it waits out,
@@ -498,19 +534,23 @@ export async function clickLaunch(
     : failed(`${what} failed (${failureText(result)})`);
 }
 
-// [LAW:single-enforcer] The one place a performer's throw becomes an outcome:
-// an edge that throws (tmux itself failing, the act refused) failed the
-// effect, in its own words.
+// An edge that throws (tmux itself failing, the act refused) failed the
+// effect.
 async function perform<K extends Effect["kind"]>(
   effect: Extract<Effect, { readonly kind: K }>,
   parts: ApplyParts,
-): Promise<EffectOutcome> {
-  const performer: Performers<Effect>[K] = PERFORM[effect.kind];
+): Promise<EffectDone> {
+  const performer: Performers[K] = PERFORM[effect.kind];
+  let outcome: OutcomeOf<K> | ReturnType<typeof thrown>;
   try {
-    return await performer(effect, parts);
+    outcome = await performer(effect, parts);
   } catch (e) {
-    return failed(e instanceof Error ? e.message : String(e));
+    outcome = thrown(effect, e, parts.log);
   }
+  // [LAW:types-are-the-program] exception: every kind's outcome admits a
+  // failure, and the performer is the one its kind picked, so the pair is
+  // that kind's; the checker cannot close that over a kind left open.
+  return { effect, outcome } as EffectDone;
 }
 
 // [LAW:effects-at-boundaries] After the turn, each effect in the order it was
@@ -523,11 +563,11 @@ function performAll(
 ): Promise<void> {
   return parts.verbCtx.journalTurns.performing(of.session, async () => {
     for (const effect of effects) {
-      const outcome = await perform(effect, parts);
+      const done = await perform(effect, parts);
       await applyUnanswered(
-        { kind: "effect-done", of, effect, outcome },
+        { kind: "effect-done", of, done },
         parts,
-        `${describeEffect(effect)} ${outcome.kind}: ${outcome.said}`,
+        `${describeEffect(effect)} ${done.outcome.kind}${"said" in done.outcome ? `: ${done.outcome.said}` : ""}`,
       );
     }
   });

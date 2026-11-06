@@ -13,7 +13,13 @@ import {
   effectsUrl,
   encodeSegments,
 } from "../src/click/wire";
-import { clickErrorAt, holdClickError, lastClickError } from "../src/daemon/click-error";
+import {
+  CLICK_ERROR_HOLD_S,
+  clickErrors,
+  clickErrorsAt,
+  holdClickError,
+  lastClickError,
+} from "../src/daemon/click-error";
 import { JournalTurns } from "../src/daemon/journal-turns";
 import { SessionState } from "../src/daemon/session-state";
 import { BadVerbArgs, type VerbContext } from "../src/daemon/verbs";
@@ -77,7 +83,7 @@ describe("a copy click's launch is an effect", () => {
     expect(r.applyLines()).toEqual([
       "apply kind=click verb=copy sid=- outcome=ok effects=launch:pbcopy revision=-",
       expect.stringMatching(
-        /^apply kind=effect-done verb=copy sid=- effect=launch:pbcopy outcome=ok said=- turnWait=\d+ms effects=- revision=-$/,
+        /^apply kind=effect-done verb=copy sid=- effect=launch:pbcopy outcome=ok said=- effects=- revision=-$/,
       ),
     ]);
   });
@@ -89,12 +95,11 @@ describe("a copy click's launch is an effect", () => {
     const text = lastClickError(r.sessionState, SID)?.text;
     expect(text).toMatch(/^pbcopy failed \(.*no pasteboard\)$/);
     // The draw reads the hold at its own instant (src/daemon/draw-bar.ts).
-    expect(clickErrorAt(r.sessionState, SID, instantOf(new Date()), "request")).toMatchObject({
-      kind: "held",
-      error: { text },
-    });
+    expect(clickErrorsAt(r.sessionState, SID, instantOf(new Date()), "request")).toMatchObject([
+      { hold: "held", error: { text } },
+    ]);
     expect(r.applyLines()[1]).toMatch(
-      /^apply kind=effect-done verb=copy-diagnostic sid=s1 effect=launch:pbcopy outcome=failed said="pbcopy failed \(.*no pasteboard\)" turnWait=\d+ms effects=- revision=\d+$/,
+      /^apply kind=effect-done verb=copy-diagnostic sid=s1 effect=launch:pbcopy outcome=failed said="pbcopy failed \(.*no pasteboard\)" effects=- revision=\d+$/,
     );
   });
 
@@ -126,6 +131,62 @@ describe("a copy click's launch is an effect", () => {
     expect(r.applyLines()).toEqual([
       expect.stringMatching(/^apply kind=click verb=dispatch sid=s1 outcome=refused said="dispatch: copy-diagnostic: [^"]*" effects=launch:pbcopy revision=\d+$/),
       expect.stringMatching(/^apply kind=effect-done verb=dispatch sid=s1 effect=launch:pbcopy outcome=ok /),
+    ]);
+  });
+});
+
+describe("a click's failures", () => {
+  // [LAW:behavior-not-structure] Read as the draw reads them: each record's
+  // hold at a render's instant, for whom it draws.
+  test("a dispatch's refused step and its landed step's failed launch are two failures, each held from its own instant, and one answer that carried both marks both", async () => {
+    const clock = heldClock(AT);
+    const r = rig(clock);
+    const LAUNCH_MS = 2000;
+    r.spawner.program(
+      program(PBCOPY),
+      runsFor(LAUNCH_MS, exits(1, "", "pbcopy: no pasteboard")),
+    );
+    const url = effectsUrl(MAIN_NAME, [
+      { verb: VERB_COPY_DIAGNOSTIC, args: [SID, "request", "missing"] },
+      { verb: VERB_COPY_DIAGNOSTIC, args: [SID, "request", "k"] },
+    ]);
+    const { answer, performed } = await applyClickAnswered(url, r.ctx);
+    expect(answer?.error).toBeInstanceOf(BadVerbArgs);
+    await turns();
+    clock.advance(LAUNCH_MS);
+    await turns();
+    await performed;
+
+    const after = (ms: number) => instantOf(new Date(AT.getTime() + ms));
+    const [refused, failed] = clickErrors(r.sessionState, SID);
+    expect(refused).toMatchObject({ text: expect.stringMatching(/^copy-diagnostic: /), at: after(0) });
+    expect(failed).toMatchObject({ text: expect.stringMatching(/^pbcopy failed \(.*no pasteboard\)$/), at: after(LAUNCH_MS) });
+    const holds = (ms: number, by: "feed" | "request") =>
+      clickErrorsAt(r.sessionState, SID, after(ms), by).map(({ error, hold }) => [error.text, hold]);
+    const HOLD_MS = CLICK_ERROR_HOLD_S * 1000;
+    // The launch's failure landing did not replace the refusal, nor restart its hold.
+    expect(holds(LAUNCH_MS, "feed")).toEqual([
+      [refused!.text, "held"],
+      [failed!.text, "held"],
+    ]);
+    expect(holds(HOLD_MS, "feed")).toEqual([
+      [refused!.text, "over"],
+      [failed!.text, "held"],
+    ]);
+    // Past both holds, a request is owed both until an answer has carried them.
+    expect(holds(HOLD_MS + LAUNCH_MS, "request")).toEqual([
+      [refused!.text, "owed"],
+      [failed!.text, "owed"],
+    ]);
+    const { arrival: _arrival, described: _described, ...verbCtx } = r.ctx;
+    await applyUnanswered(
+      { kind: "answered", session: SID, errors: [refused!, failed!] },
+      { verbCtx, log: r.ctx.log },
+      "test",
+    );
+    expect(holds(HOLD_MS + LAUNCH_MS, "request")).toEqual([
+      [refused!.text, "over"],
+      [failed!.text, "over"],
     ]);
   });
 });
@@ -175,24 +236,15 @@ describe("a session's effects run in the order their turns committed", () => {
 });
 
 describe("the write-outside-turn instrument", () => {
-  test("a write with no turn held throws; one inside a turn lands", async () => {
+  test("a write with no turn held throws; one inside a turn lands", () => {
     const store = new SessionState();
-    const turns = new JournalTurns({
-      log: () => {},
-      monotonic: () => systemTimekeeper.monotonic(),
-    });
+    const turns = new JournalTurns();
     const watched = writesInTurn(store, turns);
     expect(() => watched.set(SID, "k", "v")).toThrow(/outside any journal turn: set k/);
     expect(() => watched.setBatch(SID, [{ key: "k", value: "v" }])).toThrow(/setBatch k/);
     expect(() => watched.clear(SID, "k")).toThrow(/clear k/);
     expect(store.get(SID, "k")).toBeNull();
-    await turns.take(
-      "test",
-      { waited: () => {}, gone: () => false },
-      async () => {
-        watched.set(SID, "k", "v");
-      },
-    );
+    turns.take("test", () => watched.set(SID, "k", "v"));
     expect(watched.get(SID, "k")).toBe("v");
   });
 
@@ -216,17 +268,17 @@ describe("the mark a delivered answer makes on the click error", () => {
   test("is a turn's write, applied as an answered event with its own line", async () => {
     const r = rig();
     // The error is held as the effect-done arm holds one: in a turn.
-    await r.ctx.journalTurns.take("test", { waited: () => {}, gone: () => false }, async () =>
+    r.ctx.journalTurns.take("test", () =>
       holdClickError(r.ctx.sessionState, SID, "boom", instantOf(AT)),
     );
     const error = lastClickError(r.sessionState, SID)!;
     expect(error.answered).toBe(false);
-    const { arrival: _arrival, asker: _asker, described: _described, ...verbCtx } = r.ctx;
-    await applyUnanswered({ kind: "answered", session: SID, error }, { verbCtx, log: r.ctx.log }, "test");
+    const { arrival: _arrival, described: _described, ...verbCtx } = r.ctx;
+    await applyUnanswered({ kind: "answered", session: SID, errors: [error] }, { verbCtx, log: r.ctx.log }, "test");
     expect(lastClickError(r.sessionState, SID)?.answered).toBe(true);
     expect(r.applyLines()).toEqual([
       expect.stringMatching(
-        new RegExp(`^apply kind=answered verb=answered sid=${SID} outcome=ok turnWait=\\d+ms effects=- revision=${r.sessionState.revision(SID)}$`),
+        new RegExp(`^apply kind=answered verb=answered sid=${SID} outcome=ok effects=- revision=${r.sessionState.revision(SID)}$`),
       ),
     ]);
   });
