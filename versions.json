@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "f67fa39229a6df3d0d9927f73e74d59008342c7f",
+      "timestamp": "2026-11-06T20:24:14.169Z",
+      "commits": [
+        {
+          "sha": "f67fa39229a6df3d0d9927f73e74d59008342c7f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:23:25-07:00",
+          "message": "fix(tmux): the restore guard reads on tmux before 3.5, which has no #{!:} (candybar-gather-renderer-76bb.x07) (#647)\n\n* fix(tmux): the restore guard reads on tmux before 3.5, which has no #{!:} (candybar-gather-renderer-76bb.x07)\n\n* fix(tmux): the restore guard's comment and the fake's guard check say one condition (candybar-gather-renderer-76bb.x07)"
+        }
+      ]
+    },
+    {
       "version": "pr-650",
       "ref": "refs/pull/650/merge",
       "sha": "22e4c58239ded0942d2f9016aeecfca84c1bc566",
@@ -92,78 +107,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T12:35:32-07:00",
           "message": "feat(apply): session state has one writer; a run and a lane setup are effects (candybar-gather-renderer-76bb.1dh.9kk)\n\nThe session store refuses a write made while no journal turn is held, in\nevery daemon. A turn is synchronous, so a write while one is held is that\nturn's own, and one check at the store's single write path is the whole\nenforcement. The test-only view that refused such writes, its adapter\nseam and the separate gauges field are gone.\n\nThe two writers left outside a turn now report through effect-done:\n\n- A `run` click supersedes its sources in its turn, so they read pending\n  from the click on, and describes the launch as a `run` effect. The\n  performer runs the program behind the session's earlier effects; the\n  run owner answers how it ended and no longer writes the bar.\n- A lane setup is a `lane-setup` effect, settled by the click or the\n  request that owes it and run by the performer. Its own per-session\n  queue and defer are replaced by the performer's per-session order.\n\nThe check command, the demo and the doctor's command line build their\nstore with a holder that always holds, since each is one synchronous run.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-647",
-      "ref": "refs/pull/647/merge",
-      "sha": "51fe8d8c1ea094e8e8683f689e9ce8f6ce07ea68",
-      "timestamp": "2026-11-06T20:14:04.078Z",
-      "commits": [
-        {
-          "sha": "51fe8d8c1ea094e8e8683f689e9ce8f6ce07ea68",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T20:13:15Z",
-          "message": "Merge 423bfa11599308f888ef7029c95f1a052307ae0e into e66660224cc8931a92a0d6bb87bbb0e2368f33a0\n"
-        },
-        {
-          "sha": "423bfa11599308f888ef7029c95f1a052307ae0e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:13:11-07:00",
-          "message": "Merge branch 'main' into candybar-gather-renderer-76bb.x07"
-        },
-        {
-          "sha": "563e7104032a3375e735abda874e853aed95eec6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:01:23-07:00",
-          "message": "Merge branch 'main' into candybar-gather-renderer-76bb.x07"
-        },
-        {
-          "sha": "265c81f91b6376b3efad2072fdec86e32db0f376",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:54:05-07:00",
-          "message": "Merge branch 'main' into candybar-gather-renderer-76bb.x07"
-        },
-        {
-          "sha": "98ce2f24cad76fe5243f6d6fe3d516f4fbd45436",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:47:52-07:00",
-          "message": "fix(tmux): the restore guard's comment and the fake's guard check say one condition (candybar-gather-renderer-76bb.x07)\n"
-        },
-        {
-          "sha": "680c000e169cdb6506d3cddc021e55ae1184b1a4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:42:29-07:00",
-          "message": "fix(tmux): the restore guard reads on tmux before 3.5, which has no #{!:} (candybar-gather-renderer-76bb.x07)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "e66660224cc8931a92a0d6bb87bbb0e2368f33a0",
-      "timestamp": "2026-11-06T20:11:17.368Z",
-      "commits": [
-        {
-          "sha": "e66660224cc8931a92a0d6bb87bbb0e2368f33a0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:10:25-07:00",
-          "message": "docs(menus): the settings-menu width script and its table go (brandon-menus-sjhy.bc0) (#648)\n\nThe table answered a design-time question, whether the proposed menu rows\nfit at 80 columns, and that menu is now built: the script's model of\nproposed rows measures what can simply be rendered. Fitting 80 columns is\nno invariant the menu keeps (the armed-reset row was 93 cells), and\nnothing ran the script, which is how it broke at import unnoticed.\nRepaired, it would be a second map of the menu that only a human redraws.\n\nThe autocompact drawing UI-ELEMENTS credited to the script is asserted in\ntest/autocompact.test.ts, so the doc points there."
-        },
-        {
-          "sha": "1d331bc7612571c272bd1699765d216731683eca",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-06T19:56:28Z",
-          "message": "chore(release): set `package.json` to 1.204.0 [skip ci]\n\n## [1.204.0](https://github.com/promptctl/cc-candybar/compare/v1.203.0...v1.204.0) (2026-11-06)\n\n### Features\n\n* **apply:** no turn awaits a launch; a doctor step is an effect, and a held click error accumulates (candybar-gather-renderer-76bb.1dh.c3l) ([#633](https://github.com/promptctl/cc-candybar/issues/633)) ([b3a9482](https://github.com/promptctl/cc-candybar/commit/b3a94823776445b5ab510fe52ab4c622b2f80cff))\n* **links:** the doctor probe is minted by the minter as the probe link kind (candybar-gather-renderer-76bb.b2l.mxk) ([#644](https://github.com/promptctl/cc-candybar/issues/644)) ([2bb7660](https://github.com/promptctl/cc-candybar/commit/2bb7660eaf484d4c41e6cdc671e6415f0cccc8fa))\n* **links:** the one MouseDown1Status binding is constant text; each session carries its renderer's click (candybar-gather-renderer-76bb.b2l.5v7) ([#642](https://github.com/promptctl/cc-candybar/issues/642)) ([0af5d1f](https://github.com/promptctl/cc-candybar/commit/0af5d1f4ce463b0bebbbe6a4b6107d2943900c54))\n\n### Bug Fixes\n\n* **facts:** a recording of a session whose turn failed replays the failed turn's frame (candybar-gather-renderer-76bb.6pj.i7w) ([#643](https://github.com/promptctl/cc-candybar/issues/643)) ([308429c](https://github.com/promptctl/cc-candybar/commit/308429c8f33e9cfe4e0983ab8f29bb1d25c3fe55))\n"
         }
       ]
     },

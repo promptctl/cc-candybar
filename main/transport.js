@@ -84569,9 +84569,9 @@ function restoreBinding(user) {
   return [
     "if-shell",
     "-F",
-    `#{!:${NAMED}}`,
-    `${put} ; display-message -p ${RESTORED}`,
-    `display-message -p ${HELD}`
+    NAMED,
+    `display-message -p ${HELD}`,
+    `${put} ; display-message -p ${RESTORED}`
   ];
 }
 
