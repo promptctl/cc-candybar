@@ -1,150 +1,62 @@
-import { heldClock } from "./helpers/held-clock";
-import { memoryConnection } from "../src/dial/dialer-fake";
-import { PROTOCOL_VERSION } from "../src/daemon/protocol";
-import type { Request, Response } from "../src/daemon/protocol";
-import { handleRequest } from "../src/daemon/reply";
-import type { HandledRequest } from "../src/daemon/reply";
-import type { DaemonParts } from "../src/daemon/daemon-parts";
-import type { Monotonic } from "../src/time";
-import { RENDER_BUDGETS, renderOutcomeOf } from "../src/daemon/client";
-import type { ClientOutcome } from "../src/daemon/client";
-import { exchangeOutcome } from "../src/daemon/client-transport";
+import { heldClock } from "../helpers/held-clock";
+import { memoryConnection } from "../../src/dial/dialer-fake";
+import { PROTOCOL_VERSION } from "../../src/daemon/protocol";
+import type { Request, Response } from "../../src/daemon/protocol";
+import { versionGate } from "../../src/daemon/reply";
+import type { HandledRequest } from "../../src/daemon/reply";
+import { RENDER_BUDGETS, renderOutcomeOf } from "../../src/daemon/client";
+import type { ClientOutcome } from "../../src/daemon/client";
+import { exchangeOutcome } from "../../src/daemon/client-transport";
 import type {
   PermanentOutcome,
   TransientOutcome,
-} from "../src/daemon/client-transport";
-import { planOutcome } from "../src/render/outcome-plan";
+} from "../../src/daemon/client-transport";
+import { planOutcome } from "../../src/render/outcome-plan";
 
 // [LAW:behavior-not-structure] The daemon's half of the contract is the
-// reply handleRequest returns: an older client gets VERSION_MISMATCH with
-// daemonV and the daemon stays up (exiting would respawn a daemon at the same
-// version, which the same client mismatches again: the respawn spiral); a
-// newer client gets the same answer and the daemon exits once it flushes. The
-// version gate reads nothing of the daemon but its log, so these drive the
-// real gate rather than a copy of it.
+// version gate's reply: an older client gets VERSION_MISMATCH with daemonV
+// and the daemon stays up; a newer client gets the same answer and the daemon
+// exits once it flushes; a client at this version is admitted. These drive
+// the real gate, and its log line is the operator's record of which it chose.
 
-const gateParts = { log: () => undefined } as unknown as DaemonParts;
-
-function replyFor(req: unknown): Promise<HandledRequest> {
-  return handleRequest(
-    gateParts,
-    { kind: "request", req: req as Request },
-    () => false,
-    0 as Monotonic,
-    () => false,
+function gate(v: number): { reply: HandledRequest | null; logged: string[] } {
+  const logged: string[] = [];
+  const reply = versionGate({ v, kind: "stats" } as Request, (_level, msg) =>
+    logged.push(msg),
   );
+  return { reply, logged };
 }
 
 describe("daemon version-mismatch trigger asymmetry", () => {
-  test("an older client is answered VERSION_MISMATCH with daemonV, and the daemon stays up", async () => {
-    const reply = await replyFor({ v: PROTOCOL_VERSION - 1, kind: "stats" });
+  test("an older client is answered VERSION_MISMATCH with daemonV, and the daemon stays up", () => {
+    const { reply, logged } = gate(PROTOCOL_VERSION - 1);
+    // [LAW:types-are-the-program] The load-bearing half: an older client must
+    // not stop the daemon, because the respawned daemon is at the same version
+    // and the same client mismatches it again — the respawn spiral.
     expect(reply).toMatchObject({
       kind: "reply",
       resp: { ok: false, code: "VERSION_MISMATCH", daemonV: PROTOCOL_VERSION },
       exitAfterFlush: null,
     });
+    expect(logged).toEqual([
+      expect.stringContaining("client is stale — staying up"),
+    ]);
   });
 
-  test("a newer client is answered VERSION_MISMATCH, and the daemon exits once it flushes", async () => {
-    const reply = await replyFor({ v: PROTOCOL_VERSION + 1, kind: "stats" });
+  test("a newer client is answered VERSION_MISMATCH, and the daemon exits once it flushes", () => {
+    const { reply, logged } = gate(PROTOCOL_VERSION + 1);
     expect(reply).toMatchObject({
       kind: "reply",
       resp: { ok: false, code: "VERSION_MISMATCH", daemonV: PROTOCOL_VERSION },
       exitAfterFlush: 0,
     });
+    expect(logged).toEqual([
+      expect.stringContaining("binary likely upgraded — exiting"),
+    ]);
   });
 
-  test("a matching client passes the gate: never a mismatch, never an exit", async () => {
-    // An unknown kind at the current version is refused past the gate, which
-    // answers without reaching any other part of the daemon.
-    const reply = await replyFor({ v: PROTOCOL_VERSION, kind: "nope" });
-    expect(reply).toMatchObject({
-      kind: "reply",
-      resp: { ok: false, code: "BAD_REQUEST" },
-      exitAfterFlush: null,
-    });
-  });
-});
-
-// --- client.ts interpretResponse() decoding ---
-//
-// [LAW:behavior-not-structure] The client's typed outcome is the contract.
-// We exercise it via renderOutcomeOf on wire answers. This
-// proves the wire→type translation matches the runtime: VERSION_MISMATCH
-// → `permanent`/`version_mismatch` carrying clientV and daemonV.
-
-describe("ClientOutcome typing (kz8.5 chunk 1)", () => {
-  function isPermanent(
-    o: ClientOutcome,
-  ): o is Extract<ClientOutcome, { kind: "permanent" }> {
-    return o.kind === "permanent";
-  }
-  function isTransient(
-    o: ClientOutcome,
-  ): o is Extract<ClientOutcome, { kind: "transient" }> {
-    return o.kind === "transient";
-  }
-  function isOk(o: ClientOutcome): o is { kind: "ok"; value: string } {
-    return o.kind === "ok";
-  }
-
-  test("type guards distinguish all three branches at compile time", () => {
-    const samples: ClientOutcome[] = [
-      { kind: "ok", value: "hello" },
-      { kind: "transient", cause: "unreachable", message: "ECONNREFUSED" },
-      {
-        kind: "permanent",
-        cause: "version_mismatch",
-        clientV: 3,
-        daemonV: 2,
-      },
-    ];
-    expect(samples.filter(isOk).length).toBe(1);
-    expect(samples.filter(isTransient).length).toBe(1);
-    expect(samples.filter(isPermanent).length).toBe(1);
-  });
-
-  test("VERSION_MISMATCH carries clientV and daemonV on the permanent variant", () => {
-    const sample: ClientOutcome = {
-      kind: "permanent",
-      cause: "version_mismatch",
-      clientV: 3,
-      daemonV: 4,
-    };
-    expect(isPermanent(sample)).toBe(true);
-    if (isPermanent(sample) && sample.cause === "version_mismatch") {
-      expect(sample.clientV).toBe(3);
-      expect(sample.daemonV).toBe(4);
-    }
-  });
-
-  test("transient causes are recoverable; permanent causes are not — discriminator-only check", () => {
-    // [LAW:types-are-the-program] The kick-vs-not decision lives in the
-    // variant. Callers must NEVER have to inspect message text or some
-    // sibling field to decide.
-    const kickWorthy = (o: ClientOutcome): boolean => o.kind === "transient";
-    expect(
-      kickWorthy({
-        kind: "transient",
-        cause: "unreachable",
-        message: "any",
-      }),
-    ).toBe(true);
-    expect(
-      kickWorthy({
-        kind: "permanent",
-        cause: "version_mismatch",
-        clientV: 3,
-        daemonV: 2,
-      }),
-    ).toBe(false);
-    expect(
-      kickWorthy({
-        kind: "permanent",
-        cause: "bad_request",
-        message: "any",
-      }),
-    ).toBe(false);
+  test("a matching client is admitted: no reply, nothing logged", () => {
+    expect(gate(PROTOCOL_VERSION)).toEqual({ reply: null, logged: [] });
   });
 });
 
@@ -288,7 +200,7 @@ describe("wire trust boundary: protocol-violation exceptions are permanent", () 
     });
     return exchangeOutcome(
       client,
-      heldClock(new Date()),
+      heldClock(new Date("2026-01-01T00:00:00Z")),
       (deadline) => ({
         kind: "render",
         hookData: {

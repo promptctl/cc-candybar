@@ -994,7 +994,7 @@ describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
 //
 // The sibling acceptance criterion ("A demonstrated stale-bin / version-skew
 // scenario does not produce repeated daemon spawns") is already covered by
-// the kz8.5 work this ticket builds on: `test/daemon-version-mismatch.test.ts`
+// the kz8.5 work this ticket builds on: `test/unit/daemon-version-mismatch.test.ts`
 // pins that every Permanent outcome — including version_mismatch — never
 // calls kick, at both the pure-decision level (planOutcome) and the live-daemon
 // level (shutdownObserved). No new production code was needed for that half;

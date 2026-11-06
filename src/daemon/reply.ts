@@ -4,6 +4,7 @@ import { isAbsolute } from "node:path";
 import process from "node:process";
 import { inspect } from "node:util";
 import type { DaemonParts } from "./daemon-parts.js";
+import type { DaemonLogger } from "../utils/logger";
 import { apply, applyRequest, applyUnanswered } from "./apply.js";
 import { NOTHING_DELIVERED, renderFailed } from "./draw-bar.js";
 import {
@@ -212,6 +213,49 @@ function recording(parts: DaemonParts, req: RecordRequest): HandledRequest {
   };
 }
 
+// [LAW:single-enforcer] The protocol-version gate: the reply to a request at
+// another version, or null for one this daemon speaks. It reads nothing of
+// the daemon but its log, so it is judged apart from every other part.
+export function versionGate(
+  req: Request,
+  log: DaemonLogger,
+): HandledRequest | null {
+  if (req.v === PROTOCOL_VERSION) return null;
+  // [LAW:types-are-the-program] The asymmetry is data, not control flow.
+  //   client > daemon: the *binary* probably upgraded under us. Exit so the
+  //     next client respawns from the current artifact.
+  //   client < daemon: the *client* is stale. Respawning daemon does not
+  //     help (the new daemon will have the same version). Stay up and
+  //     return VERSION_MISMATCH — the client is responsible for surfacing
+  //     the diagnostic and refusing to kick. Shutting down here was the
+  //     load-bearing half of the 452-corpse spiral (kz8.5).
+  if (req.v > PROTOCOL_VERSION) {
+    log(
+      "info",
+      `version mismatch: client=${req.v} > daemon=${PROTOCOL_VERSION}; binary likely upgraded — exiting after the response flushes`,
+    );
+  } else {
+    log(
+      "info",
+      `version mismatch: client=${req.v} < daemon=${PROTOCOL_VERSION}; client is stale — staying up`,
+    );
+  }
+  return {
+    kind: "reply",
+    resp: {
+      ok: false,
+      error: `protocol v${req.v} not supported (daemon at v${PROTOCOL_VERSION})`,
+      code: "VERSION_MISMATCH",
+      daemonV: PROTOCOL_VERSION,
+    },
+    // [LAW:dataflow-not-control-flow] The asymmetry above is this value.
+    // Exit is sequenced on the response flush, so the client always sees
+    // the VERSION_MISMATCH diagnostic — never a dead socket.
+    exitAfterFlush: req.v > PROTOCOL_VERSION ? 0 : null,
+    delivered: NOTHING_DELIVERED,
+  };
+}
+
 export async function handleRequest(
   parts: DaemonParts,
   inbound: Inbound,
@@ -239,41 +283,8 @@ export async function handleRequest(
     return refuse("BAD_REQUEST", "malformed request");
   }
 
-  if (req.v !== PROTOCOL_VERSION) {
-    // [LAW:types-are-the-program] The asymmetry is data, not control flow.
-    //   client > daemon: the *binary* probably upgraded under us. Exit so the
-    //     next client respawns from the current artifact.
-    //   client < daemon: the *client* is stale. Respawning daemon does not
-    //     help (the new daemon will have the same version). Stay up and
-    //     return VERSION_MISMATCH — the client is responsible for surfacing
-    //     the diagnostic and refusing to kick. Shutting down here was the
-    //     load-bearing half of the 452-corpse spiral (kz8.5).
-    if (req.v > PROTOCOL_VERSION) {
-      parts.log(
-        "info",
-        `version mismatch: client=${req.v} > daemon=${PROTOCOL_VERSION}; binary likely upgraded — exiting after the response flushes`,
-      );
-    } else {
-      parts.log(
-        "info",
-        `version mismatch: client=${req.v} < daemon=${PROTOCOL_VERSION}; client is stale — staying up`,
-      );
-    }
-    return {
-      kind: "reply",
-      resp: {
-        ok: false,
-        error: `protocol v${req.v} not supported (daemon at v${PROTOCOL_VERSION})`,
-        code: "VERSION_MISMATCH",
-        daemonV: PROTOCOL_VERSION,
-      },
-      // [LAW:dataflow-not-control-flow] The asymmetry above is this value.
-      // Exit is sequenced on the response flush, so the client always sees
-      // the VERSION_MISMATCH diagnostic — never a dead socket.
-      exitAfterFlush: req.v > PROTOCOL_VERSION ? 0 : null,
-      delivered: NOTHING_DELIVERED,
-    };
-  }
+  const mismatch = versionGate(req, parts.log);
+  if (mismatch !== null) return mismatch;
 
   if (req.kind === "subscribe") return subscription(req);
   if (req.kind === "record") return recording(parts, req);
