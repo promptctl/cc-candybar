@@ -1,3 +1,9 @@
+## [1.198.1](https://github.com/promptctl/cc-candybar/compare/v1.198.0...v1.198.1) (2026-11-06)
+
+### Bug Fixes
+
+* **ci:** a failed early step shows its own red step, not the three that restate it (candybar-testing-0x6u.dsu) ([#630](https://github.com/promptctl/cc-candybar/issues/630)) ([6933237](https://github.com/promptctl/cc-candybar/commit/6933237709e563a9f5c545898d2df59c76238cd3))
+
 ## [1.198.0](https://github.com/promptctl/cc-candybar/compare/v1.197.0...v1.198.0) (2026-11-06)
 
 ### Features
