@@ -665,7 +665,7 @@ function ensureStateDir(home: RendererHome): string | null {
 
 // ─── Connect probe ──────────────────────────────────────────────────────────
 
-async function canConnect(
+export async function canConnect(
   dialer: Dialer,
   sockPath: string,
   timeoutMs: number,

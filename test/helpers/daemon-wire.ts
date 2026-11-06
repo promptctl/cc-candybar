@@ -10,6 +10,7 @@
 import type { ChildProcess } from "node:child_process";
 
 import type { RendererAddress, RendererHome } from "../../src/daemon/home";
+import { canConnect } from "../../src/daemon/acquire";
 import { logPath, socketPath } from "../../src/daemon/paths";
 import { sendOne } from "../../src/daemon/protocol";
 import { dialWithin, type Dialer } from "../../src/dial/dialer";
@@ -137,22 +138,12 @@ export function exitedAlready(child: ChildProcess): ExitResult | null {
   return { code: child.exitCode, signal: child.signalCode };
 }
 
-// [LAW:one-source-of-truth] THE probe for "is a daemon serving this socket":
-// a connect that completes, then closed. A missing path errors the connect
+// [LAW:one-source-of-truth] The client's probe for "is a daemon serving this
+// socket", over a real socket: a connect that completes, then closed. A missing path errors the connect
 // like a dead socket does, so there is no stat before it. A connect that
 // neither completes nor errors (bound, nobody accepting) is destroyed at its
 // own bound and answers false, so a poll that gives up on it leaves no live
 // handle behind.
-export async function isConnectable(sockPath: string): Promise<boolean> {
-  const dialed = await dialWithin(
-    systemDialer,
-    sockPath,
-    1_000,
-    systemTimekeeper,
-    {
-      unref: true,
-    },
-  );
-  if (dialed.ok) dialed.conn.destroy();
-  return dialed.ok;
+export function isConnectable(sockPath: string): Promise<boolean> {
+  return canConnect(systemDialer, sockPath, 1_000, systemTimekeeper);
 }
