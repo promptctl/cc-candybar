@@ -54676,7 +54676,7 @@ function optionPicker(key, name, listKey, from, face) {
 // src/config/help.ts
 init_globals();
 var HELP_GLYPH_CLOSED = "(?)";
-function declareHelp(name, lines2, within4, out) {
+function declareHelp(name, lines2, within5, out) {
   const self2 = {
     variable: name,
     key: name,
@@ -54684,7 +54684,7 @@ function declareHelp(name, lines2, within4, out) {
   };
   out.variables[name] = {
     ...disclosureStateVar(name, DISCLOSURE_CLOSED),
-    ...within4.length > 0 && { within: within4 }
+    ...within5.length > 0 && { within: within5 }
   };
   out.actions[name] = disclosureCycleAction(name, DISCLOSURE_OPEN);
   out.segments[name] = {
@@ -54695,7 +54695,7 @@ function declareHelp(name, lines2, within4, out) {
     ),
     // The trigger is visible wherever its host surface is. An unnested `(?)`
     // (`within` empty) is always visible, and declares no `when` at all.
-    ...gateOf(within4)
+    ...gateOf(within5)
   };
   const children2 = lines2.map((line, i) => {
     const lineName = `${name}.${i}`;
@@ -54709,8 +54709,8 @@ function declareHelp(name, lines2, within4, out) {
     "drop"
   );
 }
-function gateOf(within4) {
-  const [first2, ...rest2] = within4;
+function gateOf(within5) {
+  const [first2, ...rest2] = within5;
   return first2 === void 0 ? {} : { when: disclosureGate(first2, ...rest2) };
 }
 
@@ -61347,7 +61347,7 @@ function validateDeclarations(ctx, cfg, templateScope, subject) {
 
 // src/config/loader/cycles.ts
 init_globals();
-function validateNoCycles(ctx, cfg, within4 = () => true) {
+function validateNoCycles(ctx, cfg, within5 = () => true) {
   const { graph, nodeInfo } = buildTemplateGraph(cfg);
   const WHITE2 = 0;
   const GRAY = 1;
@@ -61356,14 +61356,14 @@ function validateNoCycles(ctx, cfg, within4 = () => true) {
   const stack = [];
   for (const node of graph.keys()) color.set(node, WHITE2);
   for (const start of graph.keys()) {
-    if (!within4(start) || color.get(start) !== WHITE2) continue;
+    if (!within5(start) || color.get(start) !== WHITE2) continue;
     if (dfs(start)) return;
   }
   function dfs(node) {
     color.set(node, GRAY);
     stack.push(node);
     for (const next of graph.get(node) ?? []) {
-      if (!within4(next)) continue;
+      if (!within5(next)) continue;
       const c = color.get(next);
       if (c === GRAY) {
         const cycleStart = stack.indexOf(next);
@@ -64174,11 +64174,11 @@ function buildDisclosureNest(config2) {
       }
     };
     visit(parent);
-    const within4 = /* @__PURE__ */ new Map();
+    const within5 = /* @__PURE__ */ new Map();
     for (const { key, member } of found2.values()) {
-      within4.set(key, (within4.get(key) ?? /* @__PURE__ */ new Set()).add(member));
+      within5.set(key, (within5.get(key) ?? /* @__PURE__ */ new Set()).add(member));
     }
-    const keys2 = [...within4].map(([key, held]) => ({
+    const keys2 = [...within5].map(([key, held]) => ({
       key,
       outside: new Set([...members.get(key)].filter((m) => !held.has(m)))
     }));
@@ -64218,11 +64218,11 @@ function closeNested(nest, read2, writes) {
 }
 function openRoots(nest, read2) {
   const open2 = ({ key, member }) => (read2(key) ?? nest.defaultOf(key)) === member;
-  const within4 = (child, parent) => nest.inside(parent).some(
+  const within5 = (child, parent) => nest.inside(parent).some(
     ({ key, outside }) => key === child.key && !outside.has(child.member)
   );
   return nest.menus.filter(open2).filter((d) => {
-    const parents = nest.menus.filter((p2) => p2 !== d && within4(d, p2));
+    const parents = nest.menus.filter((p2) => p2 !== d && within5(d, p2));
     const leftByParent = parents.length > 0 && nest.defaultOf(d.key) === d.member;
     return !parents.some(open2) && !leftByParent;
   });
@@ -65061,16 +65061,23 @@ function homeRelative(root, file) {
 }
 function namedThrough(root, file) {
   const home = root.onDisk(root.dir);
-  const at = ancestors(file).find((dir) => root.onDisk(dir) === home);
-  return at === void 0 ? null : import_node_path18.default.relative(at, file);
+  for (const dir of ancestors(file)) {
+    const inside = within2(home, root.onDisk(dir));
+    if (inside !== null) return import_node_path18.default.join(inside, import_node_path18.default.relative(dir, file));
+  }
+  return null;
 }
 function ancestors(file) {
   const dir = import_node_path18.default.dirname(file);
   return dir === file ? [] : [dir, ...ancestors(dir)];
 }
+function within2(root, p2) {
+  const rel = import_node_path18.default.relative(root, p2);
+  return rel === ".." || rel.startsWith(`..${import_node_path18.default.sep}`) || import_node_path18.default.isAbsolute(rel) ? null : rel;
+}
 function underRoot(root, file) {
-  const rel = import_node_path18.default.relative(root, file);
-  return rel === "" || rel === ".." || rel.startsWith(`..${import_node_path18.default.sep}`) || import_node_path18.default.isAbsolute(rel) ? null : rel;
+  const rel = within2(root, file);
+  return rel === "" ? null : rel;
 }
 function storedPathOf(root, file) {
   const rel = homeRelative(root, file);
@@ -69386,7 +69393,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.199.0";
+var PACKAGE_VERSION = "1.199.1";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -74553,7 +74560,7 @@ function rowIdentities(lines2) {
   });
 }
 var visibilityOf = (gate2) => gate2.kind === "failed" ? HIDDEN : gate2;
-function within2(parent, own2) {
+function within3(parent, own2) {
   return own2.kind === "shown" || own2.kind === "failed" && parent.kind === "pending" ? parent : own2;
 }
 function returnedBy(id2, lines2) {
@@ -74742,7 +74749,7 @@ function drawSegment(node, ctx) {
   }
   try {
     const parts = ctx.placement(node);
-    const gate2 = within2(ctx.gate, parts.gate());
+    const gate2 = within3(ctx.gate, parts.gate());
     if (gate2.kind === "failed") {
       return brokenSegment(node, scope, ctx, gate2.message);
     }
@@ -76123,7 +76130,7 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
     perSegmentSink?.clear();
     const lookupSegment = (name) => config2.segments[name];
     const renderNode = (node, parent, region) => {
-      const evaluated2 = parent.kind === "hidden" ? parent : within2(parent, parts.gate(node));
+      const evaluated2 = parent.kind === "hidden" ? parent : within3(parent, parts.gate(node));
       const gate2 = evaluated2.kind === "failed" ? {
         ...evaluated2,
         report: () => {
@@ -84903,7 +84910,7 @@ var isFlag = (token) => token.startsWith("-") && token !== "-";
 function startPlace(startDir, cwd2) {
   const tree = worktreeOf(cwd2);
   if (tree === null) return { dir: startDir ?? cwd2, args: [] };
-  if (startDir !== null && within3(startDir, tree.top)) {
+  if (startDir !== null && within4(startDir, tree.top)) {
     return { dir: startDir, args: [] };
   }
   return {
@@ -84911,7 +84918,7 @@ function startPlace(startDir, cwd2) {
     args: ["--worktree", tree.name]
   };
 }
-var within3 = (dir, top) => dir === top || dir.startsWith(top + import_node_path45.default.sep);
+var within4 = (dir, top) => dir === top || dir.startsWith(top + import_node_path45.default.sep);
 function relaunchArgs(argv2) {
   const kept = [];
   const tokens = argv2.slice(1);
