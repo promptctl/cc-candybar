@@ -273,6 +273,13 @@ export function logPath(home: RendererHome): string {
   return path.join(stateDir(home), "daemon.log");
 }
 
+// The home's link-id counter (src/daemon/link-id-allocator.ts): state, not
+// cache, since clearing it would let a restarted renderer reissue an id a
+// stale tmux row still carries.
+export function linkIdsPath(home: RendererHome): string {
+  return path.join(stateDir(home), "link-ids");
+}
+
 // [LAW:effects-at-boundaries] Every path a daemon process touches, derived
 // from its home and handed down as a value: the daemon's modules take the one
 // they write to, so a daemon under a home writes nowhere else. The process's
@@ -290,6 +297,7 @@ export interface DaemonPaths {
   readonly storedRoot: StoredRoot;
   readonly watchProbe: string;
   readonly spawnBackoff: string;
+  readonly linkIds: string;
 }
 
 export function daemonPaths(home: RendererHome): DaemonPaths {
@@ -303,6 +311,7 @@ export function daemonPaths(home: RendererHome): DaemonPaths {
     storedRoot: storedRoot(home),
     watchProbe: watchProbeDir(home),
     spawnBackoff: spawnBackoffPath(home),
+    linkIds: linkIdsPath(home),
   };
 }
 

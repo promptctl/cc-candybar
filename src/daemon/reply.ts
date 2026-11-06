@@ -370,6 +370,7 @@ export async function replyTo(
         },
         frameFeeds: frameFeeds.getStats(),
         tmuxStatus: tmuxStatusLines.stats(),
+        linkIds: parts.linkIds.stats(),
         watchersActive: watcherRegistry.size(),
         dirWatchesActive: watcherRegistry.dirWatches(),
         nextRestartReason: limits.describeNextRestart(),

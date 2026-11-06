@@ -9,7 +9,6 @@ import type { Duplex } from "node:stream";
 import { inspect } from "node:util";
 import type { Daemon } from "./daemon.js";
 import { NOTHING_DELIVERED, renderFailed } from "./draw-bar.js";
-import { LANE_FRAMES } from "./lane-frames";
 import {
   PROTOCOL_VERSION,
   classifyInbound,
@@ -204,8 +203,9 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
     const write = newestWins(sock);
     const unsubscribe = daemon.subscribe(sessionId, {
       lane,
-      frame: (bar, json) =>
-        write(encodeJsonFrame(LANE_FRAMES[lane](bar, json))),
+      // The frame as the feed encoded it for the lane, once for every
+      // subscriber of it (src/daemon/lane-frames.ts).
+      frame: (out) => write(encodeJsonFrame(out.json)),
       // A refused subscription is over: its refusal ends the stream, and a
       // frame still waiting for the socket to drain is dropped, as
       // newest-wins drops any frame a newer one replaces.

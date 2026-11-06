@@ -5,6 +5,7 @@
 import type { MenuIdleStats } from "./menu-idle.js";
 import type { RunStats } from "./runs.js";
 import type { TmuxStatusStats } from "./tmux-status.js";
+import type { LinkIdStats } from "./link-id-allocator.js";
 import type { TranscriptReads } from "../utils/transcript-fs";
 import type { FeedStats } from "./frame-feed";
 import type { RenderCacheStats } from "./cache/render";
@@ -159,6 +160,9 @@ export interface StatsSnapshot {
   // The tmux status line lane's writes (src/daemon/tmux-status.ts): sessions
   // it draws, status lines it has laid out, tmux invocations, failed ones.
   tmuxStatus: TmuxStatusStats;
+  // The status lines' range ids (src/daemon/link-id-allocator.ts): an
+  // animating row climbs `reused` and leaves `minted` still.
+  linkIds: LinkIdStats;
   // Watch slots: open now, opened with every target watched, closed, opened
   // with a target the OS refused, and errors watches reported after opening.
   // `dirs`: the OS directory watches the slots share, open now, opened and
@@ -452,6 +456,7 @@ export class RuntimeStats {
         found: 0,
       },
       tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
+      linkIds: { minted: 0, reused: 0, evicted: 0, reservations: 0, faults: 0 },
       watchersActive: 0,
       dirWatchesActive: 0,
       handlerProbes: [],
@@ -487,6 +492,7 @@ export class RuntimeStats {
     sessionState: StatsSnapshot["sessionState"];
     frameFeeds: FeedStats;
     tmuxStatus: TmuxStatusStats;
+    linkIds: LinkIdStats;
     watchersActive: number;
     dirWatchesActive: number;
     nextRestartReason?: string | null;
@@ -533,6 +539,7 @@ export class RuntimeStats {
       sessionState: extras.sessionState,
       frameFeeds: extras.frameFeeds,
       tmuxStatus: extras.tmuxStatus,
+      linkIds: extras.linkIds,
       watchers: {
         active: extras.watchersActive,
         opened: this.watchersOpened,

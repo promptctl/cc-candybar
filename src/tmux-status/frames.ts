@@ -10,7 +10,6 @@
 // draw the statusline's bytes are encoded from, as the band lane's frames are
 // (src/band/frames.ts).
 
-import { createHash } from "node:crypto";
 import { ColorDepth, ColorSpec } from "@promptctl/rich-js";
 import {
   laneEncoded,
@@ -19,28 +18,13 @@ import {
   type Frame,
   type Run,
 } from "../render/frame";
+import type { LinkIds } from "./link-ids";
 
 // One frame, as a tmux status line draws it: a format per row, and each range
 // id a row marks to the link it stands for.
 export interface TmuxStatusBar {
   readonly rows: readonly string[];
   readonly links: Readonly<Record<string, string>>;
-}
-
-// The prefix of every range id this lane marks, which the status line's click
-// binding matches on (`#{m:ccb*,#{mouse_status_range}}`).
-export const RANGE_PREFIX = "ccb";
-// tmux takes a user range id of at most 15 bytes (tmux(1), STYLES).
-const RANGE_HASH_HEX = 15 - RANGE_PREFIX.length;
-
-// [LAW:one-source-of-truth] A link's range id is a digest of its URL, so a
-// click on a frame the bar has since moved past finds no link rather than the
-// link that now sits at the same place.
-export function rangeOf(url: string): string {
-  return (
-    RANGE_PREFIX +
-    createHash("sha256").update(url).digest("hex").slice(0, RANGE_HASH_HEX)
-  );
 }
 
 // tmux's names for the sixteen colours a terminal's theme draws, in SGR order
@@ -135,13 +119,18 @@ function directive({ fg, bg, attrs = [] }: Run): string {
   return `#[${["none", `fg=${tmuxColor(fg)}`, `bg=${tmuxColor(bg)}`, ...attributes].join(",")}]`;
 }
 
-// A linked run is a range whose id names its link.
-function encode(frame: Frame): TmuxStatusBar {
+// A linked run is a range whose id names its link, from the session's table
+// (src/tmux-status/link-ids.ts).
+function encode(frame: Frame, ids: LinkIds): TmuxStatusBar {
   const links: Record<string, string> = {};
   const drawn = (run: Run): string => {
     const text = directive(run) + escaped(run.text);
     if (run.link === undefined) return text;
-    const range = rangeOf(run.link);
+    const range = ids.rangeOf(run.link);
+    // [LAW:no-silent-failure] No id while the counter is faulted: the run is
+    // drawn without a range, so the row goes on drawing, and every bar's ⚠
+    // says why its links do not click.
+    if (range === null) return text;
     links[range] = run.link;
     return `#[range=user|${range}]${text}#[norange]`;
   };
@@ -149,7 +138,7 @@ function encode(frame: Frame): TmuxStatusBar {
   return { rows, links };
 }
 
-// One drawn bar as the rows a status line draws.
-export function tmuxStatusFrame(frame: Frame): TmuxStatusBar {
-  return laneEncoded(encode, frame);
+// One drawn bar as the rows a status line draws, its ranges named by `ids`.
+export function tmuxStatusFrame(frame: Frame, ids: LinkIds): TmuxStatusBar {
+  return laneEncoded((drawn) => encode(drawn, ids), frame);
 }

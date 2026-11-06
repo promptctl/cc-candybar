@@ -442,6 +442,7 @@ export function drawRender(
     frameFeeds,
     renderCache,
     updateWatch,
+    linkIds,
     links,
     fileEvents,
     renderWarnings,
@@ -518,6 +519,9 @@ export function drawRender(
     said(hintsError),
     sourced("load", entry.lastError),
     sourced("update-act", updateWatch.error()),
+    // [LAW:no-silent-failure] The home's link-id counter, faulted: no tmux
+    // status line's link clicks until it can issue ids again.
+    sourced("link-ids", linkIds.error()),
     ...state.dropped.map((e) => ({
       about: `dropped\0${e.file}`,
       text: e.message,

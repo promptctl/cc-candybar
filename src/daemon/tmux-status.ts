@@ -41,11 +41,8 @@ import {
   encodeSegments,
   VERB_TMUX_STATUS_CLICK,
 } from "../click/wire.js";
-import {
-  RANGE_PREFIX,
-  tmuxStatusFrame,
-  type TmuxStatusBar,
-} from "../tmux-status/frames.js";
+import type { TmuxStatusBar } from "../tmux-status/frames.js";
+import { RANGE_PREFIX } from "../tmux-status/link-ids.js";
 
 export const MAX_STATUS_ROWS = LANES.tmuxStatus.rows;
 export const PRIOR_OPTION = "@cc-candybar-status-prior";
@@ -474,7 +471,10 @@ export type TmuxAtExit = (
 
 export interface TmuxStatusDeps {
   readonly edge: TmuxStatusEdge;
-  readonly subscribe: (sessionId: string, sub: Subscriber) => () => void;
+  readonly subscribe: (
+    sessionId: string,
+    sub: Subscriber<"tmuxStatus">,
+  ) => () => void;
   // The session whose statusline last rendered from `pane`, as the daemon
   // holds it — a /clear or a new Claude Code in the pane takes it over.
   readonly sessionInPane: (socket: string, pane: string) => string | null;
@@ -600,8 +600,10 @@ export class TmuxStatusLines {
     // a request's other refreshes do: started in its turn, awaited in none.
     entry.unsubscribe = this.deps.subscribe(sessionId, {
       lane: "tmuxStatus",
-      frame: (bar) => {
-        entry.frame = tmuxStatusFrame(bar);
+      // The bar as the feed encoded it for this lane, its ranges named from
+      // the session's link-id table (src/tmux-status/link-ids.ts).
+      frame: (out) => {
+        entry.frame = out.value;
         this.reconcile(entry.socket);
       },
       refused: (resp) => {

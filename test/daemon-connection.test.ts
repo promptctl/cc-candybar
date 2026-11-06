@@ -24,7 +24,6 @@ import {
 import type { HandledRequest, Reply } from "../src/daemon/reply";
 import { REQUEST_TIMEOUT_MS } from "../src/daemon/request-deadline";
 import { sessionIdOf } from "../src/daemon/session-id";
-import { barOf } from "./helpers/drawn-frame";
 import { RuntimeStats } from "../src/daemon/stats";
 import { memoryConnection } from "./helpers/memory-connection";
 import { openedOn, type Opened } from "./helpers/opened-connection";
@@ -388,8 +387,8 @@ describe("a connection over a stream", () => {
       expect(daemon.stats.requestsTimedOut).toBe(0);
       expect(ended()).toBe(false);
 
-      subscriptions[0]!.frame(barOf(), JSON.stringify(ANSWER));
-      subscriptions[0]!.frame(barOf(), JSON.stringify(ANSWER));
+      subscriptions[0]!.frame({ json: JSON.stringify(ANSWER), value: null });
+      subscriptions[0]!.frame({ json: JSON.stringify(ANSWER), value: null });
       await settled();
       expect(received).toEqual([ANSWER, ANSWER]);
     });
@@ -481,7 +480,7 @@ describe("a connection over a stream", () => {
       // first frame fills the stream.
       const frame = (name: string): void => {
         const resp: Response = { ok: true, output: name.repeat(128 * 1024) };
-        subscriptions[0]!.frame(barOf(), JSON.stringify(resp));
+        subscriptions[0]!.frame({ json: JSON.stringify(resp), value: null });
       };
       ["a", "b", "c", "d"].forEach(frame);
       await settled();

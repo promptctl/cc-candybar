@@ -143,6 +143,7 @@ describe("RuntimeStats.snapshot", () => {
         found: 0,
       },
       tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
+      linkIds: { minted: 0, reused: 0, evicted: 0, reservations: 0, faults: 0 },
       watchersActive: 2,
       dirWatchesActive: 5,
       handlerProbes: [{ nonce: "n", delivery: { kind: "forwarder", urlV: 1 } }],
@@ -351,6 +352,7 @@ describe("formatStats", () => {
         found: 0,
       },
       tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
+      linkIds: { minted: 0, reused: 0, evicted: 0, reservations: 0, faults: 0 },
       watchers: {
         active: 5,
         opened: 7,
@@ -500,6 +502,7 @@ describe("formatStats", () => {
         found: 0,
       },
       tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
+      linkIds: { minted: 0, reused: 0, evicted: 0, reservations: 0, faults: 0 },
       watchers: {
         active: 0,
         opened: 0,

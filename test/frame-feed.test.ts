@@ -17,9 +17,11 @@ import {
   type Refusal,
   type Subscriber,
 } from "../src/daemon/frame-feed";
+import { laneEncoders, type LaneEncoders } from "../src/daemon/lane-frames";
 import type { Response } from "../src/daemon/protocol";
 import { plainOf, renderFailedFrame, type Frame } from "../src/render/frame";
 import { barOf } from "./helpers/drawn-frame";
+import { countedIds } from "./helpers/link-ids";
 import {
   UNFOLLOWED,
   UNFOLLOWED_FEEDS,
@@ -136,6 +138,16 @@ function harness(opts: {
   const changes = new Map<string, () => void>();
   const log: string[] = [];
   const ledger = new RefreshLedger();
+  // The tmux status line's ids, counted; every other lane is handed the
+  // answer as the feed serialized it, so a case reads the feed's own choices.
+  const ids = countedIds();
+  const passed = () => (_bar: Frame, json: string) => ({ json, value: null });
+  const encoders: LaneEncoders = {
+    band: passed,
+    statusline: passed,
+    pane: passed,
+    tmuxStatus: laneEncoders(ids).tmuxStatus,
+  };
   const feeds: FrameFeeds<string> = new FrameFeeds<string>({
     render: (sessionId, fps, at): FeedFrame | null => {
       const req = feeds.latest(sessionId);
@@ -173,6 +185,7 @@ function harness(opts: {
     },
     refreshes: () => ledger.totals(),
     periods: PERIODS,
+    encoders,
     clock: {
       monotonic: () =>
         (START_MS + clock.monotonic() + state.skewMs) as Monotonic,
@@ -194,7 +207,7 @@ function harness(opts: {
   };
   // The instant a frame drawn now is drawn at.
   const nowAt = (): Instant => instantOf(new Date(clock.now()));
-  return { feeds, note, state, changes, log, ledger, clock, nowAt };
+  return { feeds, note, state, changes, log, ledger, clock, nowAt, ids };
 }
 
 // The parts each bar frame says it evaluated.
@@ -202,6 +215,9 @@ const EVALUATED = 3;
 
 // The strip items each bar frame says divided cells added.
 const CELL_BREAKS = 2;
+
+// The one link every bar frame draws, its text the frame's own.
+const BAR_LINK = "cc-candybar://to/main/copy/bar";
 
 // A frame drawing `output`, next changing at `nextChange`, whose statusline
 // shows `handoff` in its place, if any.
@@ -211,7 +227,7 @@ function barFrame(
   handoff: string | null = null,
 ): FeedFrame {
   return {
-    bar: { ...barOf([{ text: output }]), nextChange },
+    bar: { ...barOf([{ text: output, link: BAR_LINK }]), nextChange },
     resp: { ok: true, output },
     statusline: { ok: true, output: handoff ?? output },
     evaluated: EVALUATED,
@@ -246,7 +262,7 @@ const sub = (
   refused: (resp: Refusal) => unknown = () => {},
 ): Subscriber => ({
   lane,
-  frame: (_bar, json) => frame(JSON.parse(json) as Response),
+  frame: (out) => void frame(JSON.parse(out.json) as Response),
   refused,
   drawing: () => true,
 });
@@ -507,31 +523,52 @@ test("a watched session's request outlives the eviction of the least recently no
   expect(state.renders).toBe(drawn + 1);
 });
 
-test("every subscriber is handed the bar with its lane's answer, and one joining later the bar as it stands", () => {
+test("every subscriber is handed its lane's encoding of the frame, and one joining later the frame as it stands", () => {
   const { feeds, note, state, clock } = harness({ motion: "still" });
   state.handoff = "the bar is drawn in the band";
   note("s", "bar");
-  const barText = (bar: Frame): string => plainOf(bar.rows[0]!.runs);
-  const seen: Array<[string, string]> = [];
+  const seen: string[] = [];
   const follow = (lane: Lane): (() => void) =>
     feeds.subscribe("s", {
       lane,
-      frame: (bar, json) => seen.push([barText(bar), json]),
+      frame: (out) => void seen.push(out.json),
       refused: () => {},
       drawing: () => true,
     });
   const closeBand = follow("band");
   clock.advance(PERIODS.moving * 3);
-  expect(seen).toEqual([
-    ["bar#0", JSON.stringify({ ok: true, output: "bar#0" })],
-  ]);
+  expect(seen).toEqual([JSON.stringify({ ok: true, output: "bar#0" })]);
   const closeLate = follow("statusline");
-  expect(seen[1]).toEqual([
-    "bar#0",
-    JSON.stringify({ ok: true, output: state.handoff }),
-  ]);
+  expect(seen[1]).toEqual(JSON.stringify({ ok: true, output: state.handoff }));
   closeBand();
   closeLate();
+});
+
+test("a lane is encoded once a frame however many follow it, so its subscribers, one joining late included, share one minting of the tmux status line's ids", () => {
+  const { feeds, note, clock, ids } = harness({ motion: "moving" });
+  note("s", "bar");
+  const seen: Array<Readonly<Record<string, string>>> = [];
+  const follow = (): (() => void) =>
+    feeds.subscribe("s", {
+      lane: "tmuxStatus",
+      frame: (out) => void seen.push(out.value.links),
+      refused: () => {},
+      drawing: () => true,
+    });
+  const first = follow();
+  const second = follow();
+  clock.advance(PERIODS.moving * 4);
+  const frames = seen.length / 2;
+  expect(frames).toBeGreaterThan(1);
+  const late = follow();
+  // The late subscriber is handed the frame as it stands, encoded already.
+  expect(seen).toHaveLength(frames * 2 + 1);
+  expect(seen.at(-1)).toBe(seen.at(-2));
+  // Every frame draws one link, its text the frame's own: it was looked up
+  // once a frame, whoever followed, and minted only on the first.
+  expect(ids.counts).toEqual({ minted: 1, reused: frames - 1, evicted: 0 });
+  expect(new Set(seen.flatMap((links) => Object.keys(links))).size).toBe(1);
+  [first, second, late].forEach((close) => close());
 });
 
 test("a frame that keeps failing the same way is logged once, and counted every time", () => {

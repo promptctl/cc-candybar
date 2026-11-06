@@ -25,10 +25,10 @@ import {
   VERB_SET_STATE,
   VERB_TMUX_STATUS_CLICK,
 } from "../../../src/click/wire";
-import { rangeOf } from "../../../src/tmux-status/frames";
+import { sendDaemonRequest } from "../../helpers/daemon-wire";
 import { LANES, type Lane } from "../../../src/config/lanes";
 import { GLOBAL_FIELDS } from "../../../src/config/globals-fields";
-import type { ClientHints } from "../../../src/daemon/protocol";
+import { PROTOCOL_VERSION, type ClientHints } from "../../../src/daemon/protocol";
 import { click, render, sendClick } from "../../helpers/daemon-e2e";
 import { logLines, renderLines } from "../../helpers/daemon-log";
 import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
@@ -171,7 +171,19 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
       u.startsWith(`cc-candybar://to/${daemon.name}/dispatch/`),
     );
     expect(link).toBeDefined();
-    const at = [`/tmp/lane-e2e-${sid}`, "7", rangeOf(link!)]
+    // [LAW:one-source-of-truth] The range as a subscriber of the lane is sent
+    // it: the encoding the status line drew, so a click on it reaching the
+    // link shows the stream and tmux were given one set of ids.
+    const streamed = (await sendDaemonRequest(
+      daemon,
+      { v: PROTOCOL_VERSION, kind: "subscribe", sessionId: sid, lane: "tmuxStatus" },
+      5000,
+    )) as { tmuxStatus: { links: Record<string, string> } };
+    const range = Object.entries(streamed.tmuxStatus.links).find(
+      ([, url]) => url === link,
+    )?.[0];
+    expect(range).toBeDefined();
+    const at = [`/tmp/lane-e2e-${sid}`, "7", range!]
       .map(encodeURIComponent)
       .join("/");
     const statusClick = addressedLink(daemon.name, VERB_TMUX_STATUS_CLICK, at);

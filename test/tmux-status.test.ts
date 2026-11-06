@@ -13,10 +13,11 @@ import {
   type TmuxStatusEdge,
 } from "../src/daemon/tmux-status";
 import type { Subscriber } from "../src/daemon/frame-feed";
+import { laneEncoders, type LaneEncoder } from "../src/daemon/lane-frames";
 import type { StatusLines } from "../src/daemon/pane-visibility";
 import type { TmuxRun } from "../src/proc/tmux";
-import { rangeOf } from "../src/tmux-status/frames";
 import { barOf } from "./helpers/drawn-frame";
+import { countedIds } from "./helpers/link-ids";
 
 const SOCKET = "/tmp/tmux-test/default";
 const OWNER = "/tmp/cc-candybar-test/socket";
@@ -164,7 +165,10 @@ const frameOf = (text: string, link?: string) =>
 
 function harness(ids: readonly string[] = ["$1"]) {
   const tmux = new FakeTmux(ids);
-  const subs = new Map<string, Subscriber>();
+  const subs = new Map<string, Subscriber<"tmuxStatus">>();
+  // Each session's lane encoder, as its feed makes one (src/daemon/frame-feed.ts).
+  const encoders = laneEncoders(countedIds());
+  const encoding = new Map<string, LaneEncoder<"tmuxStatus">>();
   const unsubscribed: string[] = [];
   const newest = new Map<string, string>();
   const logs: string[] = [];
@@ -192,9 +196,18 @@ function harness(ids: readonly string[] = ["$1"]) {
     owner.answered(SOCKET, view);
     await owner.settled();
   };
+  // The bar as the session's lane encoded it, handed to its subscriber; what
+  // it encoded to is the answer, so a case reads the ranges it was drawn with.
   const frame = async (sessionId: string, bar: ReturnType<typeof frameOf>) => {
-    subs.get(sessionId)!.frame(bar, "");
+    let encode = encoding.get(sessionId);
+    if (encode === undefined) {
+      encode = encoders.tmuxStatus();
+      encoding.set(sessionId, encode);
+    }
+    const out = encode(bar, "");
+    subs.get(sessionId)!.frame(out);
     await owner.settled();
+    return out.value;
   };
   return { tmux, owner, subs, unsubscribed, newest, logs, hold, answer, frame };
 }
@@ -342,11 +355,27 @@ describe("TmuxStatusLines", () => {
     h.hold("s1", "%1");
     await h.answer({ "%1": "$1" }, { $1: "%1" });
     const url = "cc-candybar://to/main/copy/hi";
-    await h.frame("s1", frameOf("x", url));
-    const value = `${encodeURIComponent(SOCKET)}/1/${rangeOf(url)}`;
+    const [range] = Object.keys((await h.frame("s1", frameOf("x", url))).links);
+    const value = `${encodeURIComponent(SOCKET)}/1/${range}`;
+    expect(h.owner.linkAt(value)).toEqual({ kind: "link", url });
+    // Redrawn as it animates, the link keeps its range.
+    await h.frame("s1", frameOf("x!", url));
     expect(h.owner.linkAt(value)).toEqual({ kind: "link", url });
     await h.frame("s1", frameOf("y"));
     expect(h.owner.linkAt(value).kind).toBe("refused");
+  });
+
+  test("a click on a range from a frame since replaced by another link at the same place finds nothing, never the link there now", async () => {
+    const h = harness();
+    h.hold("s1", "%1");
+    await h.answer({ "%1": "$1" }, { $1: "%1" });
+    const before = await h.frame("s1", frameOf("x", "cc-candybar://to/main/copy/one"));
+    const after = await h.frame("s1", frameOf("x", "cc-candybar://to/main/copy/two"));
+    const [old] = Object.keys(before.links);
+    expect(Object.keys(after.links)).not.toContain(old);
+    expect(h.owner.linkAt(`${encodeURIComponent(SOCKET)}/1/${old}`).kind).toBe(
+      "refused",
+    );
   });
 
   test("the daemon's shutdown puts back everything it laid out, at once", async () => {
