@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "a38c437bf19653dbd6f983f06de25bc82f2d4a58",
+      "timestamp": "2026-11-06T06:31:30.459Z",
+      "commits": [
+        {
+          "sha": "a38c437bf19653dbd6f983f06de25bc82f2d4a58",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T23:30:29-07:00",
+          "message": "feat(facts): a view follows its session through the Facts interface, with an in-process arm, a recording arm and the seam test (candybar-gather-renderer-76bb.6pj.go2) (#624)\n\n* feat(facts): a view follows its session through the Facts interface, with an in-process arm, a recording arm and the seam test (candybar-gather-renderer-76bb.6pj.go2)\n\n* fix(facts): the recording arm stands where the clock does, the recorder tells the log a line it could not write, the owners are read once per follow, and the draw reads the turn's closure (candybar-gather-renderer-76bb.6pj.go2)\n\n* fix(facts): a settle reads the lanes as declared now, a redeclaration is one turn, a cleared fault keeps its line, a recording is one follow's stream, one JSON-object predicate (candybar-gather-renderer-76bb.6pj.go2)\n\n* fix(facts): a reopened session replays, a declaration that throws whole is loud, the seam test crosses the recording's text, the parser names the facts field (candybar-gather-renderer-76bb.6pj.go2)\n\n* fix(facts): a declaration that throws whole at the opening follow releases the holds it took (candybar-gather-renderer-76bb.6pj.go2)\n\n* test(facts): the seam rig drops the env field main removed (candybar-gather-renderer-76bb.6pj.go2)\n\n* fix(facts): the request's deadline is read after its refresh starts, one rule keeps a persisting fault (candybar-gather-renderer-76bb.6pj.go2)\n\n* test(facts): the seam rig builds its paths from the renderer's home (candybar-gather-renderer-76bb.6pj.go2)\n\n* fix(facts): a declaration that throws whole is answered on every lane, so the bar draws its warning (candybar-gather-renderer-76bb.6pj.go2)"
+        },
+        {
+          "sha": "5c5e716e41c8b9ccc7d36b48e3e1265315b579ba",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-06T06:19:42Z",
+          "message": "chore(release): set `package.json` to 1.195.0 [skip ci]\n\n## [1.195.0](https://github.com/promptctl/cc-candybar/compare/v1.194.1...v1.195.0) (2026-11-06)\n\n### Features\n\n* **home:** a renderer's home is one value; two renderers under two homes leave no trace of each other (candybar-gather-renderer-76bb.f00.dmd) ([#625](https://github.com/promptctl/cc-candybar/issues/625)) ([a6c6ada](https://github.com/promptctl/cc-candybar/commit/a6c6adadc4b92f19bca48e7fe1eb518acde6e893))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-626",
       "ref": "refs/pull/626/merge",
       "sha": "ce8f1f4d4ae6a755cab5d8d147e21873a216a4de",
@@ -52,84 +74,6 @@
       ]
     },
     {
-      "version": "pr-624",
-      "ref": "refs/pull/624/merge",
-      "sha": "f022d8d6c368fe31d280a5dde36ae06522d7e400",
-      "timestamp": "2026-11-06T06:22:02.351Z",
-      "commits": [
-        {
-          "sha": "f022d8d6c368fe31d280a5dde36ae06522d7e400",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T06:21:05Z",
-          "message": "Merge 7bdde8472b6809461c640ad9e68f7ce8dc5e2b31 into 5c5e716e41c8b9ccc7d36b48e3e1265315b579ba\n"
-        },
-        {
-          "sha": "7bdde8472b6809461c640ad9e68f7ce8dc5e2b31",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T23:19:43-07:00",
-          "message": "fix(facts): a declaration that throws whole is answered on every lane, so the bar draws its warning (candybar-gather-renderer-76bb.6pj.go2)\n"
-        },
-        {
-          "sha": "9200d746e9c935f35469313659095ff39711db74",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T23:16:44-07:00",
-          "message": "test(facts): the seam rig builds its paths from the renderer's home (candybar-gather-renderer-76bb.6pj.go2)\n"
-        },
-        {
-          "sha": "f9ae315b11f92a3caf4405488014366fe6b0cf7b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T23:13:30-07:00",
-          "message": "fix(facts): the request's deadline is read after its refresh starts, one rule keeps a persisting fault (candybar-gather-renderer-76bb.6pj.go2)\n"
-        },
-        {
-          "sha": "723ec26532b27c85a9c7f10edd3ebce29a732f92",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T22:49:17-07:00",
-          "message": "test(facts): the seam rig drops the env field main removed (candybar-gather-renderer-76bb.6pj.go2)\n"
-        },
-        {
-          "sha": "aa062483595c59a836aa6225e36535f080f65f08",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T22:46:32-07:00",
-          "message": "fix(facts): a declaration that throws whole at the opening follow releases the holds it took (candybar-gather-renderer-76bb.6pj.go2)\n"
-        },
-        {
-          "sha": "f964d25bfb94696fa36afed1fd7f358d974b99d4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T22:43:04-07:00",
-          "message": "fix(facts): a reopened session replays, a declaration that throws whole is loud, the seam test crosses the recording's text, the parser names the facts field (candybar-gather-renderer-76bb.6pj.go2)\n"
-        },
-        {
-          "sha": "0051551ec412083ad96edebce142e75d6a9819c0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T22:29:44-07:00",
-          "message": "fix(facts): a settle reads the lanes as declared now, a redeclaration is one turn, a cleared fault keeps its line, a recording is one follow's stream, one JSON-object predicate (candybar-gather-renderer-76bb.6pj.go2)\n"
-        },
-        {
-          "sha": "b4db83ac98b6d91bc186ea4291d5be5d78a97785",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T22:10:44-07:00",
-          "message": "fix(facts): the recording arm stands where the clock does, the recorder tells the log a line it could not write, the owners are read once per follow, and the draw reads the turn's closure (candybar-gather-renderer-76bb.6pj.go2)\n"
-        },
-        {
-          "sha": "87388fda59a75456ed3e3cdaf6200bcb2a99e297",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T21:12:57-07:00",
-          "message": "feat(facts): a view follows its session through the Facts interface, with an in-process arm, a recording arm and the seam test (candybar-gather-renderer-76bb.6pj.go2)\n"
-        }
-      ]
-    },
-    {
       "version": "pr-617",
       "ref": "refs/pull/617/merge",
       "sha": "321ce95c31309848d517a5b1923c0c96be2cd5b5",
@@ -162,28 +106,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-03T10:07:10-07:00",
           "message": "chore(facts): delete the wants closure (candybar-gather-renderer-76bb.6pj.xb3)\n\nThe facts document is total, so the question \"which fields does this config\nread\" has no caller with a reason. Every session now gathers every built-in:\ngit runs one constant option set (forge lookup included), every declared\nplugin source is held, and burn, block and autocompact's context cap are always\ncomposed. A view's declaration depends on the request alone, so a preset pick\nmoves no hold.\n\nDeleted: the wants function, the needed-prefix builders, the sources-read walk,\nthe closure parameter through declare/refresh/read/project, the PR reads gate,\nthe git options derived from the closure, `Gathered`, `declaredSources`, and the\nview's preset reaction. The doctor's data-needs walk stays and now owns its own\nper-segment path closure, since it answers what a config would read.\n\nThe bar is byte-identical; the payload golden gains the keys that were gated\n(block, burn, metrics, activity, tmux and the like on presets that did not read\nthem). Tests that asserted gating are deleted; the fold-edge cases they covered\n(partials, helpers handed a dict) move to the doctor's path closure.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "a6c6adadc4b92f19bca48e7fe1eb518acde6e893",
-      "timestamp": "2026-11-06T06:11:45.727Z",
-      "commits": [
-        {
-          "sha": "a6c6adadc4b92f19bca48e7fe1eb518acde6e893",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T23:10:42-07:00",
-          "message": "feat(home): a renderer's home is one value; two renderers under two homes leave no trace of each other (candybar-gather-renderer-76bb.f00.dmd) (#625)\n\n* feat(home): a renderer's home is one value; two renderers under two homes leave no trace of each other (candybar-gather-renderer-76bb.f00.dmd)\n\nWork in progress: typecheck, lint, check-protocol, check-schema, cargo test and\nthe unit tier pass; the worker and process tiers have not been run yet.\n\n* test(home): a test's repo answers and main-layout environment follow its own host\n\nThe worker is a named home, so a test that builds a main home over the\nworker's environment reads a state directory the repo-approval helper did\nnot write to by default; every such test now answers through its own host.\nThe main-layout environment is read when asked, as the live process\nenvironment is, so a PATH of stubs written before the host is built reaches\nthe launcher's children. The e2e click stand-in makes the state directory\nthe daemon it plays would. The CLI probe test reaches the isolated daemon\nthrough a world over its own home. The node_modules symlink a worktree\ncarries is untracked, and ignored by name rather than as a directory.\n\n* test(home): finish the rebase over main's load-config removal and in-turn click context\n\n* fix(home): the tmux row carries the renderer's own name; a relative runtime directory is refused in both runtimes; the bench reaches main's home\n\nReview (high): the tmux status line stamped every row `main` though the daemon holds its home's name. The runtime-directory override was accepted relative while the root was refused for the same reason. The uid is read from the kernel, as the Rust client reads it. The click bench stripped only the legacy socket variable to reach the default socket; it drops every home variable now. The effects-at-boundaries marker the rewrite dropped from the state derivation is restored, and the breaker's and the contracts table's stale naming of the legacy variable is replaced.\n\n* fix(home): a main renderer's child parses main's roots; the entry refuses a misstated home in one line; the suite drops an inherited socket override\n\nReview (medium): the environment a main renderer hands a child carried its socket but not its XDG roots, so a child under the tmux server's environment derived another state and config tree. The entry built its world at module top level, so a half-set home printed a stack trace where the Rust client prints one line. Every Jest worker is a named home, which refuses the legacy socket override beside it, so a shell exporting it refused the whole suite. The socket directory's ownership check reads the uid as the runtime directory's name does. Three design docs named the override as the knob.\n\n* fix(home): a misstated home is refused where the world is built; the socket file takes a parsed name; the help and README name the home\n\nReview (second high): the one-line refusal lived in the CLI entry alone, so the demo, the gallery and the load gate printed a stack trace for the same input. The socket-file rule took any string though only main's name or a parsed name can reach it. The usage bench built three worlds per sampled store. The design doc's breaker line and the user-facing help, README and authoring doc now say what the code does.\n\n* test(home): finish the rebase over main's env-source removal\n\n* test(home): the tmux row names the isolated home's renderer, not main's\n\nMain's renderer-naming test landed asserting the literal main name, while this\nbranch makes the row carry the renderer's own name and runs isolated daemons\nunder a named home. The assertion now reads the name from the home the daemon\nruns under."
-        },
-        {
-          "sha": "76b4b51bfc884e6dfb8eb2d012321fcacee16ed1",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-06T06:10:27Z",
-          "message": "chore(release): set `package.json` to 1.194.1 [skip ci]\n\n## [1.194.1](https://github.com/promptctl/cc-candybar/compare/v1.194.0...v1.194.1) (2026-11-06)\n\n### Bug Fixes\n\n* **facts:** one transcript fold in flight per session; the gate places every built-in, can snapshot its heap, and is re-priced for it (candybar-gather-renderer-76bb.6pj.c0y) ([#622](https://github.com/promptctl/cc-candybar/issues/622)) ([0577540](https://github.com/promptctl/cc-candybar/commit/0577540acfe6b769c9a94c7e1e7ee9a4d0a0ee48))\n"
         }
       ]
     },

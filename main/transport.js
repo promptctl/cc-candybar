@@ -36339,10 +36339,10 @@ var inWalkOrder = (window2) => {
 var windowSize = (count, colours) => Math.max(2, Math.min(count, colours - 1));
 var WINDOWS = memoPerPalette();
 var drawnIn = (palette, hue, drawnAt) => (tone) => drawnColour(palette.get(shadeRole(hue, tone)), drawnAt).hex;
-function widen(palette, hue, from, taken, drawnAt) {
+function widen(palette, hue, from, taken2, drawnAt) {
   const drawn = drawnIn(palette, hue, drawnAt);
   return ladderFrom(from, palette.dark).find(
-    (rung) => !taken.includes(drawn(rung))
+    (rung) => !taken2.includes(drawn(rung))
   );
 }
 function ladderFrom(from, dark) {
@@ -36495,11 +36495,11 @@ function turnsHeld(palette, decor, dealt, drawnAt) {
   const pressed = drawnPress(palette, { decor, depth: 0 }, drawnAt);
   const apart = (at, off) => {
     const { hue } = line[at];
-    const taken = [drawn(at - 1), drawn(at + 1), ...off].filter(
+    const taken2 = [drawn(at - 1), drawn(at + 1), ...off].filter(
       (colour) => colour !== void 0
     );
     const window2 = windowAt(palette, hue, decor.shade, drawnAt);
-    const tone = window2.find((t2) => !taken.includes(drawnIn(palette, hue, drawnAt)(t2))) ?? widen(palette, hue, window2, taken, drawnAt);
+    const tone = window2.find((t2) => !taken2.includes(drawnIn(palette, hue, drawnAt)(t2))) ?? widen(palette, hue, window2, taken2, drawnAt);
     return tone === void 0 ? void 0 : { hue, shade: tone };
   };
   const moves = (at) => [[pressed], []].flatMap(
@@ -36568,10 +36568,10 @@ function pressedAt(palette, disclosure, drawnAt) {
       drawnPress(palette, up, drawnAt)
     ];
     const besideTrigger = depth === 0 ? [...variation.hues, ...keystone].flatMap(dealt) : besideBand({ decor, depth: depth - 1 });
-    const taken = [...dealt(hue), ...besideTrigger];
-    if (!taken.includes(drawnIn(palette, hue, drawnAt)(shade.activated)))
+    const taken2 = [...dealt(hue), ...besideTrigger];
+    if (!taken2.includes(drawnIn(palette, hue, drawnAt)(shade.activated)))
       return shade.activated;
-    return widen(palette, hue, [shade.activated], taken, drawnAt) ?? shade.activated;
+    return widen(palette, hue, [shade.activated], taken2, drawnAt) ?? shade.activated;
   });
 }
 var PRESSED = memoPerPalette();
@@ -36849,10 +36849,10 @@ function placementIds(tree) {
     (n) => n.kind === "segment" ? [placementId(n)] : []
   );
 }
-function freePlacementId(segment, taken) {
-  if (!taken.has(segment)) return segment;
+function freePlacementId(segment, taken2) {
+  if (!taken2.has(segment)) return segment;
   let n = 2;
-  while (taken.has(`${segment}-${n}`)) n++;
+  while (taken2.has(`${segment}-${n}`)) n++;
   return `${segment}-${n}`;
 }
 function mapOpens(node, f) {
@@ -37017,6 +37017,68 @@ init_globals();
 // src/config/loader/validate-core.ts
 init_globals();
 var import_node_path2 = __toESM(require_path_browserify(), 1);
+
+// src/utils/plain.ts
+init_globals();
+
+// site/shims/crypto.ts
+init_globals();
+var import_buffer3 = __toESM(require_buffer(), 1);
+function fnv(text4) {
+  let h = 2166136261;
+  for (let i = 0; i < text4.length; i++) h = Math.imul(h ^ text4.charCodeAt(i), 16777619) >>> 0;
+  return h.toString(16).padStart(8, "0").repeat(8);
+}
+function createHash(_alg) {
+  let acc = "";
+  const h = {
+    update(d) {
+      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
+      return h;
+    },
+    digest(_enc2) {
+      return fnv(acc);
+    }
+  };
+  return h;
+}
+function createHmac(_alg, key) {
+  let acc = import_buffer3.Buffer.from(key).toString("hex");
+  const h = {
+    update(d) {
+      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
+      return h;
+    },
+    digest() {
+      return import_buffer3.Buffer.from(fnv(acc), "hex");
+    }
+  };
+  return h;
+}
+function timingSafeEqual(a, b) {
+  if (a.length !== b.length) throw new RangeError("Input buffers must have the same byte length");
+  return a.every((byte, i) => byte === b[i]);
+}
+var randomUUID = () => globalThis.crypto.randomUUID();
+var randomBytes = (n) => globalThis.crypto.getRandomValues(new Uint8Array(n));
+var crypto_default = { createHash, createHmac, timingSafeEqual, randomUUID, randomBytes };
+
+// src/utils/plain.ts
+function isPlainObject(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function digestOf(value) {
+  return createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex");
+}
+function canonical(value) {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (typeof value === "object" && value !== null) {
+    return Object.fromEntries(
+      Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([k, v]) => [k, canonical(v)])
+    );
+  }
+  return value;
+}
 
 // src/config/loader/diagnostics.ts
 init_globals();
@@ -37705,9 +37767,6 @@ function optionalEnum(ctx, path43, raw, field, allowed) {
     return void 0;
   }
   return v;
-}
-function isPlainObject(v) {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 function describeType(v) {
   if (v === null) return "null";
@@ -50444,6 +50503,9 @@ var ABSENT2 = { kind: "absent" };
 function failed(reason, failedAt) {
   return { kind: "failed", reason, failedAt };
 }
+function failedWith(prior, reason) {
+  return prior.failure === reason ? prior : { ...prior, failure: reason };
+}
 function orElse(outcome, fallback) {
   return outcome?.kind === "ok" ? outcome.value : fallback;
 }
@@ -51797,48 +51859,6 @@ var Holds = class {
 // src/var-system/source-runs.ts
 init_globals();
 
-// site/shims/crypto.ts
-init_globals();
-var import_buffer3 = __toESM(require_buffer(), 1);
-function fnv(text4) {
-  let h = 2166136261;
-  for (let i = 0; i < text4.length; i++) h = Math.imul(h ^ text4.charCodeAt(i), 16777619) >>> 0;
-  return h.toString(16).padStart(8, "0").repeat(8);
-}
-function createHash(_alg) {
-  let acc = "";
-  const h = {
-    update(d) {
-      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
-      return h;
-    },
-    digest(_enc2) {
-      return fnv(acc);
-    }
-  };
-  return h;
-}
-function createHmac(_alg, key) {
-  let acc = import_buffer3.Buffer.from(key).toString("hex");
-  const h = {
-    update(d) {
-      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
-      return h;
-    },
-    digest() {
-      return import_buffer3.Buffer.from(fnv(acc), "hex");
-    }
-  };
-  return h;
-}
-function timingSafeEqual(a, b) {
-  if (a.length !== b.length) throw new RangeError("Input buffers must have the same byte length");
-  return a.every((byte, i) => byte === b[i]);
-}
-var randomUUID = () => globalThis.crypto.randomUUID();
-var randomBytes = (n) => globalThis.crypto.getRandomValues(new Uint8Array(n));
-var crypto_default = { createHash, createHmac, timingSafeEqual, randomUUID, randomBytes };
-
 // site/shims/fs-promises.ts
 init_globals();
 var import_memfs2 = __toESM(require_lib8(), 1);
@@ -53104,7 +53124,7 @@ function sourceEntries(root, dir, keep2 = isSourceEntry) {
     return [[rel, entryBytes(p2, st)]];
   });
 }
-function digestOf(entries) {
+function digestOf2(entries) {
   const h = crypto_default.createHash("sha256");
   for (const [rel, bytes] of entries) {
     h.update(rel).update("\0").update(bytes).update("\0");
@@ -53112,11 +53132,11 @@ function digestOf(entries) {
   return h.digest("hex");
 }
 function sourceDigest(srcDir) {
-  return digestOf(sourceEntries(srcDir, srcDir));
+  return digestOf2(sourceEntries(srcDir, srcDir));
 }
 var CRATE_SOURCE = ["Cargo.toml", "Cargo.lock", "src"];
 function crateDigest(crateDir) {
-  return digestOf(
+  return digestOf2(
     sourceEntries(
       crateDir,
       crateDir,
@@ -53126,21 +53146,6 @@ function crateDigest(crateDir) {
 }
 var SHORT_DIGEST_LENGTH = 7;
 var shortDigest = (digest2) => digest2.slice(0, SHORT_DIGEST_LENGTH);
-
-// src/utils/plain.ts
-init_globals();
-function digestOf2(value) {
-  return createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex");
-}
-function canonical(value) {
-  if (Array.isArray(value)) return value.map(canonical);
-  if (typeof value === "object" && value !== null) {
-    return Object.fromEntries(
-      Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([k, v]) => [k, canonical(v)])
-    );
-  }
-  return value;
-}
 
 // src/var-system/parse.ts
 init_globals();
@@ -53163,7 +53168,7 @@ var jsonParser = (text4) => {
 
 // src/var-system/source-runs.ts
 var SHELL_READ_TIMEOUT_MS = 1e4;
-var digestOf3 = (identity2) => digestOf2(identity2);
+var digestOf3 = (identity2) => digestOf(identity2);
 function keyHashOf(value) {
   return crypto_default.createHash("sha256").update(value).digest("hex");
 }
@@ -53772,7 +53777,7 @@ var SourceRegistry = class _SourceRegistry {
   // start cannot nest a declaration.
   hold(name, identity2) {
     this.identities.set(name, identity2);
-    const { result: taken } = this.holds.declare(
+    const { result: taken2 } = this.holds.declare(
       () => [...this.identities].map(([n, id2]) => {
         const lane = this.runs.declare(this.holds, id2);
         const prior = this.lanes.get(n);
@@ -53780,7 +53785,7 @@ var SourceRegistry = class _SourceRegistry {
       })
     );
     runInAction(() => {
-      for (const [n, lane] of taken) this.lanes.set(n, lane);
+      for (const [n, lane] of taken2) this.lanes.set(n, lane);
     });
   }
   // [LAW:one-type-per-behavior] One total projection of the parser arm onto
@@ -59807,7 +59812,7 @@ function listedPlugins(refs, from, scope, home) {
   );
 }
 function applyPlugins(definitions, ctx, base, validate) {
-  const taken = /* @__PURE__ */ new Map();
+  const taken2 = /* @__PURE__ */ new Map();
   return definitions.reduce(
     (layer, definition) => {
       const file = definition.path;
@@ -59838,14 +59843,14 @@ function applyPlugins(definitions, ctx, base, validate) {
           layer.config
         );
       }
-      const first2 = taken.get(ns);
+      const first2 = taken2.get(ns);
       if (first2 !== void 0) {
         return drop2(
           `plugin "${definition.name}" is already listed, from ${first2}`,
           layer.config
         );
       }
-      taken.set(ns, file);
+      taken2.set(ns, file);
       const under2 = withoutPlugin(layer.config, ns);
       const merged = attempt3(() => {
         const source = fs_default.readFileSync(file, "utf-8");
@@ -62059,7 +62064,7 @@ function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", a
     const own2 = new Set(
       bare.dropped.flatMap((d) => d.issues.map((i) => i.message))
     );
-    const { taken, refused: refused2 } = written2.cells.reduce(
+    const { taken: taken2, refused: refused2 } = written2.cells.reduce(
       (acc, cell3) => {
         try {
           judge([...acc.taken, cell3], []);
@@ -62081,7 +62086,7 @@ function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", a
       },
       { taken: [], refused: [] }
     );
-    return judge(taken, refused2);
+    return judge(taken2, refused2);
   }
 }
 function judgeRenderable({ raw, source }, filePath2, allowedPalettes, beneath, merged, presence2, filed, notices) {
@@ -64288,10 +64293,10 @@ function decodeLayoutOp(token) {
   return null;
 }
 function mintPlacement(segment, anchor, trees) {
-  const taken = new Set(
+  const taken2 = new Set(
     trees.map(placementIds).filter((held) => held.includes(anchor)).flat()
   );
-  const id2 = freePlacementId(segment, taken);
+  const id2 = freePlacementId(segment, taken2);
   return id2 === segment ? { seg: segment } : { seg: segment, id: id2 };
 }
 
@@ -64677,7 +64682,7 @@ function presetKeys(doc) {
   return declared?.kind === "object" ? declared.entries.map((e) => e.key) : [];
 }
 function freePresetName(doc, home) {
-  const taken = new Set(
+  const taken2 = new Set(
     [
       ...BUNDLED_PRESETS,
       ...presetKeys(doc),
@@ -64691,9 +64696,9 @@ function freePresetName(doc, home) {
     ].map(ident)
   );
   return Array.from(
-    { length: taken.size + 1 },
+    { length: taken2.size + 1 },
     (_, i) => `${SAVED_PRESET_PREFIX}${i + 1}`
-  ).find((candidate) => !taken.has(ident(candidate)));
+  ).find((candidate) => !taken2.has(ident(candidate)));
 }
 function writePreset(store, home, from, globals, picks, placements) {
   const before = readConfigText(home.path);
@@ -69203,7 +69208,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.194.1";
+var PACKAGE_VERSION = "1.195.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -76692,7 +76697,7 @@ function setUpRender(parts, arrived3, at, facts) {
     origin.target.path,
     req
   );
-  return setUpDraw(parts, hold2, req, hintsError, at, facts);
+  return setUpDraw(hold2, req, hintsError, at, facts);
 }
 function setUpFrame(parts, sessionId2, at, facts) {
   const { renderCache } = parts;
@@ -76710,26 +76715,12 @@ function setUpFrame(parts, sessionId2, at, facts) {
     hold2[Symbol.dispose]();
     throw e;
   }
-  return setUpDraw(parts, hold2, req, hintsError, at, facts);
+  return setUpDraw(hold2, req, hintsError, at, facts);
 }
-function setUpDraw(parts, hold2, req, hintsError, at, facts) {
-  const { payloadProviders } = parts;
+function setUpDraw(hold2, req, hintsError, at, facts) {
   try {
     const { entry, state, view } = hold2;
-    const { sessionId: sessionId2, hints } = req;
-    const effective = view.source.effective();
-    const payloadInputs = {
-      hookData: req.hookData,
-      deps: {
-        ...payloadProviders,
-        // The lanes the session's view declared: what this render reads of
-        // the daemon's shared entries.
-        lanes: view.lanes
-      },
-      cwd: req.cwd,
-      neededInputPaths: state.neededInputPaths(effective.preset),
-      hints
-    };
+    const { sessionId: sessionId2 } = req;
     return {
       req,
       at,
@@ -76739,7 +76730,6 @@ function setUpDraw(parts, hold2, req, hintsError, at, facts) {
       state,
       view,
       hintsError,
-      payloadInputs,
       [Symbol.dispose]: () => hold2[Symbol.dispose]()
     };
   } catch (e) {
@@ -76844,9 +76834,11 @@ function drawRender(parts, setup, drawing2) {
   noteFacts(facts, {
     prompts: String(metrics?.messageCount ?? "-"),
     nonPrompts: String(metrics?.nonPrompts ?? "-"),
+    // [LAW:one-source-of-truth] The closure the payload's git fact was read
+    // under is the turn's, beside the payload, not one resolved again here.
     pr: prFactOf(
       payload.git,
-      gitOptionsFromClosure(setup.payloadInputs.neededInputPaths).showPullRequest === true
+      gitOptionsFromClosure(view.source.closure()).showPullRequest === true
     ),
     feeds: feedsFact(projected.feeds)
   });
@@ -77055,17 +77047,14 @@ async function drawAnswer(parts, req, at, waitEndsAt, facts) {
       req,
       laneSwitches(setup.view.source.effective(), inTmux(req.hints.tmux))
     );
+    const settling = setup.view.settle(at);
     const waitFrom = clock.monotonic();
     const budget = waitEndsAt - waitFrom;
     noteFacts(facts, {
       deadline: `${req.deadline.kind}:${Math.round(budget)}ms`
     });
-    const refreshed = /* @__PURE__ */ new Map();
     const ended = await waitWithin(
-      (signal) => Promise.all([
-        settlePayload(setup.payloadInputs, at, refreshed),
-        setup.view.registry.inFlight(signal)
-      ]),
+      (signal) => Promise.all([settling.landed, setup.view.registry.inFlight(signal)]),
       budget,
       // [LAW:no-silent-failure] The answer is drawn; a wait that fails after
       // it is a bug, said against the session, never one that ends the daemon.
@@ -77079,7 +77068,7 @@ async function drawAnswer(parts, req, at, waitEndsAt, facts) {
     noteFacts(facts, {
       waited: `${Math.round(drawFrom - waitFrom)}ms`,
       ended,
-      refreshed: refreshedFact(refreshed)
+      refreshed: refreshedFact(settling.refreshed)
     });
     const { drawn, clickShown, pipeShown, delivered, lanes } = drawRender(
       parts,
@@ -82003,7 +81992,7 @@ function plugins(p2) {
 }
 function loadKey(inputs) {
   const { loaded, chain: chain2 } = inputs;
-  return digestOf2({
+  return digestOf({
     cwd: inputs.cwd,
     chain: {
       layers: chain2.layers,
@@ -82234,68 +82223,59 @@ function fallbackState(cwd2, repo2, deps) {
 }
 var DIRECTORY_SCOPE = /* @__PURE__ */ new Set(["directory"]);
 var VIEW_SCOPE = /* @__PURE__ */ new Set(["view"]);
-function openView(state, cwd2, facts, { sessionState, declare, source: sourceOf, changed, log }) {
+function openView(state, cwd2, facts, {
+  sessionState,
+  facts: factsSource,
+  source: sourceOf,
+  changed,
+  log
+}) {
   const { sessionId: sessionId2 } = facts;
   const registry = state.registry.view();
-  const holds2 = new Holds();
   declareDslVariables(state.config, registry, cwd2, VIEW_SCOPE);
   const presetNow = () => presetOf(state.config, (key) => sessionState.get(sessionId2, key));
-  const lanesFor = (facts2, preset) => {
-    try {
-      const reads = state.neededInputPaths(preset);
-      const {
-        result: { lanes: taken, faults },
-        acquired,
-        released
-      } = holds2.declare(() => declare(holds2, facts2, reads, state.sources));
-      for (const fault of faults) {
-        log(
-          "error",
-          `session view declaration threw sid=${JSON.stringify(sessionId2)} ${fault}`
-        );
-      }
-      if (acquired + released > 0) {
-        log(
-          "info",
-          `session view declared sid=${JSON.stringify(sessionId2)} acquired=${acquired} released=${released} held=${holds2.size}`
-        );
-      }
-      return taken;
-    } catch (e) {
-      log(
-        "error",
-        `session view declaration threw sid=${JSON.stringify(sessionId2)}: ${String(e)}`
-      );
-      return settledLanes(
-        failed(`view declaration threw: ${String(e)}`, "read"),
-        [...state.sources.keys()]
-      );
-    }
-  };
-  const declaration = (facts2, preset) => ({
-    facts: facts2,
-    preset,
-    lanes: lanesFor(facts2, preset)
+  const declarationOf = (preset) => ({
+    closure: state.neededInputPaths(preset),
+    sources: state.sources
   });
-  const declared = observable.box(declaration(facts, presetNow()), {
-    deep: false
-  });
+  const opening = presetNow();
+  let followed;
+  try {
+    followed = factsSource.follow(facts, declarationOf(opening));
+  } catch (e) {
+    registry.dispose();
+    throw e;
+  }
+  const declared = observable.box(
+    { facts, preset: opening },
+    { deep: false }
+  );
   const redeclare = (facts2, preset) => {
     const now2 = declared.get();
     if (facts2 === now2.facts && preset === now2.preset) return;
-    const next = declaration(facts2, preset);
-    runInAction(() => declared.set(next));
+    runInAction(() => {
+      followed.follow(facts2, declarationOf(preset));
+      declared.set({ facts: facts2, preset });
+    });
   };
   const stop2 = reaction(
     presetNow,
     (preset) => redeclare(declared.get().facts, preset),
-    { fireImmediately: true }
+    {
+      fireImmediately: true,
+      // [LAW:no-silent-failure] A follow that throws on a pick reaches only
+      // the console MobX prints to, which nobody reads in a detached daemon.
+      onError: (e) => log(
+        "error",
+        `session view follow threw on a pick sid=${JSON.stringify(sessionId2)}: ${String(e)}`
+      )
+    }
   );
   const sourceStops = [];
   const release3 = () => {
     stop2();
     for (const stopSource of sourceStops) stopSource();
-    holds2.close();
+    followed.dispose();
     return registry.dispose();
   };
   let source;
@@ -82305,6 +82285,7 @@ function openView(state, cwd2, facts, { sessionState, declare, source: sourceOf,
       state,
       store: registry.variableStore,
       declared: () => declared.get(),
+      followed,
       onDispose: (stopSource) => sourceStops.push(stopSource)
     });
   } catch (e) {
@@ -82334,11 +82315,10 @@ function openView(state, cwd2, facts, { sessionState, declare, source: sourceOf,
     state,
     store: registry.variableStore,
     registry,
-    holds: holds2,
     source,
     requested: (next) => redeclare(next, presetNow()),
     facts: () => declared.get().facts,
-    lanes: () => declared.get().lanes,
+    settle: (at) => followed.settle(at),
     lastRenderCellsBySegment: /* @__PURE__ */ new Map(),
     retire: stopChanged,
     dispose: () => {
@@ -82596,7 +82576,7 @@ var RenderCache = class {
     try {
       view = openView(state, entry.cwd, facts, {
         sessionState: this.deps.sessionState,
-        declare: this.deps.declare,
+        facts: this.deps.facts,
         source: this.deps.source,
         changed: (sid) => this.observers.onViewChanged?.(sid),
         log: this.log
@@ -83039,12 +83019,17 @@ var NavigationHistory = class {
   }
 };
 
-// src/daemon/session-source.ts
+// src/daemon/facts-source.ts
 init_globals();
 
 // src/daemon/facts-assembly.ts
 init_globals();
+
+// src/facts/session-facts.ts
+init_globals();
 var FACTS_VERSION = 1;
+
+// src/daemon/facts-assembly.ts
 var gathered = (on2, reading) => on2 ? reading : pendingOf("unread");
 var over = (reading, project) => reading.kind === "ok" ? ok(project(reading.value)) : reading;
 function prOf(git) {
@@ -83115,30 +83100,167 @@ function assembleFacts(prior, session, readings, update, at) {
   };
 }
 
-// src/daemon/session-source.ts
-var failedWith = (prior, reason) => prior.failure === reason ? prior : { ...prior, failure: reason };
+// src/daemon/facts-source.ts
 function stamped(prior, moved, at, session) {
   if (moved.kind === "failed") return failedWith(prior, moved.reason);
   try {
-    const document = assembleFacts(
-      prior.document,
+    const facts = assembleFacts(
+      prior.line.facts,
       session,
       moved.readings,
       moved.update,
       at
     );
-    return prior.failure === null && document === prior.document && moved.compose === prior.compose && moved.draw === prior.draw ? prior : {
-      document,
-      compose: moved.compose,
-      draw: moved.draw,
-      failure: null
-    };
+    const line = facts === prior.line.facts ? prior.line : { at, facts };
+    return line === prior.line && prior.failure === null ? prior : { line, failure: null };
   } catch (e) {
     return failedWith(prior, `stamping the facts document: ${String(e)}`);
   }
 }
+function inProcessFacts({
+  providers,
+  update
+}) {
+  const { clock, log } = providers;
+  return {
+    follow(facts, declaration) {
+      const session = facts.sessionId;
+      const holds2 = new Holds();
+      const sid = JSON.stringify(session);
+      const lanesFor = (facts2, { closure, sources }) => {
+        try {
+          const {
+            result: { lanes, faults },
+            acquired,
+            released
+          } = holds2.declare(
+            () => declareLanes(providers, holds2, facts2, closure, sources)
+          );
+          for (const fault of faults) {
+            log("error", `session view declaration threw sid=${sid} ${fault}`);
+          }
+          if (acquired + released > 0) {
+            log(
+              "info",
+              `session view declared sid=${sid} acquired=${acquired} released=${released} held=${holds2.size}`
+            );
+          }
+          return lanes;
+        } catch (e) {
+          log(
+            "error",
+            `session view declaration threw sid=${sid}: ${inspect(e)}`
+          );
+          return settledLanes(
+            failed(`view declaration threw: ${String(e)}`, "read"),
+            sourcesRead(closure, sources)
+          );
+        }
+      };
+      const declared = observable.box(
+        { facts, declaration, lanes: lanesFor(facts, declaration) },
+        { deep: false }
+      );
+      const inputs = computed(() => {
+        const { facts: facts2, declaration: declaration2 } = declared.get();
+        return {
+          hookData: facts2.hookData,
+          cwd: facts2.cwd,
+          hints: facts2.hints,
+          neededInputPaths: declaration2.closure,
+          // The lanes as declared now, read at each call: a settle in flight
+          // waits out the lanes a follow during it took, not the ones it
+          // started with.
+          deps: { ...providers, lanes: () => declared.get().lanes }
+        };
+      });
+      const readings = computed(
+        () => readingsOf(inputs.get(), declared.get().declaration.sources)
+      );
+      let box;
+      const stop2 = reaction(
+        () => {
+          try {
+            return { kind: "read", readings: readings.get(), update: update() };
+          } catch (e) {
+            return {
+              kind: "failed",
+              reason: `reading the owners: ${String(e)}`
+            };
+          }
+        },
+        (moved) => runInAction(() => {
+          const prior = box.get();
+          const next = stamped(prior, moved, instantAt(clock), session);
+          if (next.failure !== null && next !== prior) {
+            log("error", `session facts sid=${sid}: ${next.failure}`);
+          }
+          box.set(next);
+        }),
+        {
+          // The expression above cannot throw; the effect's catch is `stamped`.
+          onError: (e) => log("error", `session facts threw sid=${sid}: ${inspect(e)}`)
+        }
+      );
+      try {
+        const at = instantAt(clock);
+        box = observable.box(
+          {
+            line: {
+              at,
+              facts: assembleFacts(
+                void 0,
+                session,
+                readings.get(),
+                update(),
+                at
+              )
+            },
+            failure: null
+          },
+          { deep: false }
+        );
+      } catch (e) {
+        stop2();
+        holds2.close();
+        throw e;
+      }
+      return {
+        stamped: () => box.get().line,
+        failure: () => box.get().failure,
+        follow: (facts2, declaration2) => {
+          const lanes = lanesFor(facts2, declaration2);
+          runInAction(() => declared.set({ facts: facts2, declaration: declaration2, lanes }));
+        },
+        settle: (at) => {
+          const refreshed = /* @__PURE__ */ new Map();
+          return {
+            refreshed,
+            landed: settlePayload(inputs.get(), at, refreshed)
+          };
+        },
+        dispose: () => {
+          stop2();
+          holds2.close();
+        }
+      };
+    }
+  };
+}
+
+// src/daemon/session-source.ts
+init_globals();
+function taken(prior, moved) {
+  if (moved.kind === "failed") return failedWith(prior, moved.reason);
+  return prior.failure === moved.facts && moved.document === prior.document && moved.compose === prior.compose && moved.draw === prior.draw ? prior : {
+    document: moved.document,
+    compose: moved.compose,
+    draw: moved.draw,
+    failure: moved.facts
+  };
+}
 function sessionSource(deps) {
-  return ({ sessionId: sessionId2, state, store, declared, onDispose }) => {
+  return ({ sessionId: sessionId2, state, store, declared, followed, onDispose }) => {
     const pick2 = (key) => deps.sessionState.get(sessionId2, key);
     const effective = store.derive(
       "session.effective",
@@ -83149,34 +83271,15 @@ function sessionSource(deps) {
         (preset) => state.authoredRoots.has(preset)
       )
     );
-    const inputs = store.derive(
-      "session.inputs",
-      "computed",
-      () => {
-        const { facts, lanes, preset } = declared();
-        return {
-          hookData: facts.hookData,
-          cwd: facts.cwd,
-          hints: facts.hints,
-          neededInputPaths: state.neededInputPaths(preset),
-          deps: { ...deps.providers, lanes: () => lanes }
-        };
-      }
-    );
-    const readings = store.derive(
-      "session.readings",
-      "computed",
-      () => readingsOf(inputs.read(), state.sources)
-    );
     const compose = store.derive(
       "session.compose",
       "computed",
       () => {
-        const { hookData: hookData2, hints, neededInputPaths } = inputs.read();
+        const { facts, preset } = declared();
         return {
-          hookData: hookData2,
-          hints,
-          neededInputPaths,
+          hookData: facts.hookData,
+          hints: facts.hints,
+          neededInputPaths: state.neededInputPaths(preset),
           home: deps.providers.home
         };
       }
@@ -83194,19 +83297,12 @@ function sessionSource(deps) {
         back: deps.navigation(sessionId2, state.config)
       })
     );
-    const clock = deps.providers.clock;
     const turn = observable.box(
       {
-        document: assembleFacts(
-          void 0,
-          sessionId2,
-          readings.read(),
-          deps.update(),
-          instantAt(clock)
-        ),
+        document: followed.stamped().facts,
         compose: compose.read(),
         draw: draw2.read(),
-        failure: null
+        failure: followed.failure()
       },
       { deep: false }
     );
@@ -83216,31 +83312,31 @@ function sessionSource(deps) {
           try {
             return {
               kind: "read",
-              readings: readings.read(),
-              update: deps.update(),
+              document: followed.stamped().facts,
+              facts: followed.failure(),
               compose: compose.read(),
               draw: draw2.read()
             };
           } catch (e) {
             return {
               kind: "failed",
-              reason: `reading the owners: ${String(e)}`
+              reason: `reading the turn's inputs: ${String(e)}`
             };
           }
         },
         (moved) => runInAction(() => {
           const prior = turn.get();
-          const next = stamped(prior, moved, instantAt(clock), sessionId2);
-          if (next.failure !== null && next !== prior) {
+          const next = taken(prior, moved);
+          if (moved.kind === "failed" && next !== prior) {
             deps.providers.log(
               "error",
-              `session facts sid=${JSON.stringify(sessionId2)}: ${next.failure}`
+              `session turn sid=${JSON.stringify(sessionId2)}: ${next.failure}`
             );
           }
           turn.set(next);
         }),
         {
-          // The expression above cannot throw; the effect's catch is `stamped`.
+          // The expression above cannot throw; the effect's catch is `taken`.
           onError: (e) => deps.providers.log(
             "error",
             `session turn threw sid=${JSON.stringify(sessionId2)}: ${String(e)}`
@@ -83257,6 +83353,7 @@ function sessionSource(deps) {
       effective: () => turn.get().draw.effective,
       facts: () => turn.get().document,
       hints: () => turn.get().compose.hints,
+      closure: () => turn.get().compose.neededInputPaths,
       failure: () => turn.get().failure,
       selections: () => turn.get().draw.effective
     };
@@ -84341,15 +84438,15 @@ function relaunchArgs(argv2) {
         reason: `Claude Code was started with ${name}, which cc-candybar does not know how to carry to a restart`
       };
     }
-    const taken = eq2 !== -1 ? [] : rule.arity === "one" ? tokens.slice(i, i + 1) : rule.arity === "optional" ? tokens.slice(i, i + 1).filter((t2) => !isFlag(t2)) : rule.arity === "variadic" ? takeWhile(tokens.slice(i), (t2) => !isFlag(t2)) : [];
-    if (rule.arity === "one" && eq2 === -1 && taken.length === 0) {
+    const taken2 = eq2 !== -1 ? [] : rule.arity === "one" ? tokens.slice(i, i + 1) : rule.arity === "optional" ? tokens.slice(i, i + 1).filter((t2) => !isFlag(t2)) : rule.arity === "variadic" ? takeWhile(tokens.slice(i), (t2) => !isFlag(t2)) : [];
+    if (rule.arity === "one" && eq2 === -1 && taken2.length === 0) {
       return {
         kind: "refused",
         reason: `Claude Code was started with ${name} and no value after it`
       };
     }
-    i += taken.length;
-    if (rule.keep) kept.push(token, ...taken);
+    i += taken2.length;
+    if (rule.keep) kept.push(token, ...taken2);
   }
   return { kind: "args", args: kept };
 }
@@ -85304,15 +85401,18 @@ function createDaemon(inputs) {
       storage: managedStorage,
       signer: linkSigner2,
       gates,
-      declare: (holds2, facts, closure, sources) => declareLanes(payloadProviders, holds2, facts, closure, sources),
+      // [LAW:single-enforcer] Where every session's facts come from: the
+      // in-process arm over the daemon's own owners, which logs the refreshes
+      // it makes through the one ledger, so a view's payload logs none of them.
+      facts: inProcessFacts({
+        providers: payloadProviders,
+        update: () => updateFact.get()
+      }),
       // [LAW:single-enforcer] What every session's view draws from: its payload
-      // derived over its declaration, its picks and its histories' depths.
+      // derived over its document, its picks and its histories' depths.
       source: sessionSource({
-        // [LAW:single-enforcer] Every provider logs the refreshes it makes,
-        // through the one ledger, so a view's payload logs none of them.
         providers: payloadProviders,
         sessionState,
-        update: () => updateFact.get(),
         history: (sessionId2) => settingsHistory.depth(sessionId2),
         // Measured against the gate of the config the view draws with.
         navigation: (sessionId2, config2) => navigationHistory.depth(
