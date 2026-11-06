@@ -47,6 +47,7 @@ import { debug, setDebug } from "../utils/logger.js";
 import {
   loadDemo,
   playDemo,
+  playOf,
   readRecording,
   RecordingUnreadable,
   type DemoPlay,
@@ -102,7 +103,7 @@ const log: DaemonLogger = (level, message) =>
 
 // What the frames are drawn from beside the loaded config, and what to close
 // once they are drawn.
-type Arm = Pick<DemoPlay, "facts" | "clock" | "ticks" | "pace"> & {
+type Arm = Pick<DemoPlay, "facts" | "clock" | "steps" | "pace" | "home"> & {
   readonly world: World;
   readonly close: () => void;
 };
@@ -151,14 +152,23 @@ function liveArm(): Arm {
   // nothing has sampled.
   const updateFact = newUpdateFact();
   const request = { sessionId, hookData, cwd, hints };
-  const tick = (i: number) => ({ offsetMs: i * FRAME_INTERVAL_MS, request });
+  // Each request, then the draw of its answer once what it started landed.
+  const arrives = (i: number) =>
+    ({ kind: "request", offsetMs: i * FRAME_INTERVAL_MS, request }) as const;
+  const answered = (i: number) =>
+    ({ kind: "draw", requestOffsetMs: i * FRAME_INTERVAL_MS }) as const;
   return {
     world: machine,
     facts: inProcessFacts({ providers, update: () => updateFact.get() }),
     clock: machine.clock,
-    ticks: [
-      tick(0),
-      ...Array.from({ length: FRAMES - 1 }, (_, i) => tick(i + 1)),
+    home: machine.host.home,
+    steps: [
+      arrives(0),
+      answered(0),
+      ...Array.from({ length: FRAMES - 1 }, (_, i) => [
+        arrives(i + 1),
+        answered(i + 1),
+      ]).flat(),
     ],
     pace: (ms) => sleep(machine.clock, ms),
     // The providers own their timers and watchers; all of them are released
@@ -175,17 +185,20 @@ function liveArm(): Arm {
   };
 }
 
-// A recording's requests, drawn under a held clock started at its first
-// request, each at its offset: the documents are the recording's, so no
-// owner is built and nothing is read or spawned for them.
+// A recording's lines, played under a held clock started at its first
+// request: the documents and the home are the recording's, so no owner is
+// built and nothing is read or spawned for them.
 function recordingArm(path: string): Arm {
-  const { recording, startMs, ticks } = readRecording(path);
+  const recording = readRecording(path);
+  const facts = recordingFacts(recording);
+  const { startMs, steps } = playOf(recording, facts);
   const clock = heldClock(new Date(startMs));
   return {
     world: { ...machine, clock },
-    facts: recordingFacts(recording, clock),
+    facts,
     clock,
-    ticks,
+    home: recording.home,
+    steps,
     pace: async (ms) => clock.advance(ms),
     close: () => {},
   };
@@ -212,13 +225,12 @@ async function main(): Promise<void> {
           ? `  one faked status-line request, rendered by the daemon's own functions\n` +
             `  ${FRAMES} renders, one per status-line tick — watch the clock move:\n\n`
           : `  ${recording}, replayed by the daemon's own functions\n` +
-            `  ${arm.ticks.length} renders, one per request the session received:\n\n`),
+            `  ${arm.steps.filter((step) => step.kind === "draw").length} renders, one per answer the session was drawn:\n\n`),
     );
     await playDemo({
       ...arm,
       loaded,
       cwd,
-      home: machine.host.home,
       log,
       frame: (drawn) =>
         process.stdout.write(

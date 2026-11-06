@@ -73,7 +73,7 @@ export function parseRecordArgs(
 }
 
 // [LAW:dataflow-not-control-flow] The outcome → (streams, exit-code) fold.
-// [LAW:no-silent-failure] A recording no request arrived in replays nothing,
+// [LAW:no-silent-failure] A recording no request was answered in replays nothing,
 // so it is a failure the person running the command hears now, not one the
 // reader of the report finds later.
 export function recordPlan(
@@ -95,8 +95,8 @@ export function recordPlan(
     ? {
         stdout: "",
         stderr: daemonClosed
-          ? `record: ${path}: ${cut}, and no request had arrived, so there is nothing to replay. No file was left.\n`
-          : `record: ${path}: no request arrived in ${seconds}s, so there is nothing to replay: the session was idle, or its statusline is not drawn by this daemon. No file was left.\n`,
+          ? `record: ${path}: ${cut}, and no request had been answered, so there is nothing to replay. No file was left.\n`
+          : `record: ${path}: no request was answered in ${seconds}s, so there is nothing to replay: the session was idle, or its statusline is not drawn by this daemon. No file was left.\n`,
         code: 1,
       }
     : {

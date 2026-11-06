@@ -490,6 +490,7 @@ export function parseRecordSeconds(
 export interface Recorded {
   readonly path: string;
   readonly lines: number;
+  // The requests answered while it recorded: the frames a replay draws.
   readonly requests: number;
   readonly daemonClosed: boolean;
 }

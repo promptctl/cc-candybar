@@ -192,7 +192,7 @@ type FactsSource =
 
 `inprocess` is the first transport and stays forever: it is how today's single daemon runs after step 1 and how tests build a renderer over a real Gather with fake ports. The three are one interface, `Facts`, with `follow`, `unfollow`, `declare`, `key` and an `onFacts` subscription, so nothing above it knows which it has. [LAW:one-type-per-behavior]
 
-A **recording** is a file of lines `{ at: Instant, facts: SessionFacts }`, written by Gather when asked (`cc-candybar record <session> <path>`, or a renderer's `--record`), closed by the writer. The player replays each document when the handed clock reaches its `at`, relative to the first. A replay under a held clock is a replay at any speed. A recording names its `v`, and a player handed a recording with another `v` refuses it loudly.
+A **recording** is a file of lines, written by Gather when asked (`cc-candybar record <session> <path>`, or a renderer's `--record`), closed by the writer: a header naming its `v`, the session and the home its payloads were composed against, then documents `{ at: Instant, facts: SessionFacts }`, the requests the session was drawn by, and a line for each answer drawn, after the document it drew from. The player takes the lines in the file's order, because instants cannot order them: a document stamped in the millisecond after a draw belongs to the next draw, and a request's answer is drawn after its wait. A replay under a held clock is a replay at any speed. A player handed a recording with another `v` refuses it loudly.
 
 ## 15. Gather's process
 
