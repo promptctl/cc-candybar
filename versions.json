@@ -4,15 +4,22 @@
     {
       "version": "pr-652",
       "ref": "refs/pull/652/merge",
-      "sha": "575408605a57ea962804a27335a0a59358031748",
-      "timestamp": "2026-11-06T20:57:40.311Z",
+      "sha": "87b501b48929106b7916a22b9ea62741fb7ffaff",
+      "timestamp": "2026-11-06T20:58:42.564Z",
       "commits": [
         {
-          "sha": "575408605a57ea962804a27335a0a59358031748",
+          "sha": "87b501b48929106b7916a22b9ea62741fb7ffaff",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T20:56:44Z",
-          "message": "Merge 4467651310a186e3ba9fe05eb2607d786585d204 into d8b9a7ffe6cac5ba9249eb3428aa11eecd27c4e5\n"
+          "timestamp": "2026-11-06T20:57:49Z",
+          "message": "Merge 7f02d86e25ca71df4269c0330cfa2e6fe9a6e97c into d8b9a7ffe6cac5ba9249eb3428aa11eecd27c4e5\n"
+        },
+        {
+          "sha": "7f02d86e25ca71df4269c0330cfa2e6fe9a6e97c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:57:38-07:00",
+          "message": "test(spawner): the system realiser traps every signal a behaviour ignores, before any output (candybar-testing-ihvy.0hw)\n"
         },
         {
           "sha": "4467651310a186e3ba9fe05eb2607d786585d204",
