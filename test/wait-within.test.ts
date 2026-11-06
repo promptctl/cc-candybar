@@ -59,6 +59,38 @@ test("a wait ends when its time does, and not before", async () => {
   }
 });
 
+// A timer due at once still takes a turn of the loop, and under a backlog that
+// turn is every pending request's read and setup: the one failed render of the
+// hundred-session gate lost 54 ms there with a budget already below zero.
+test.each([0, -5])(
+  "a wait with %d ms left ends in the same turn, no timer armed, with its work started and aborted",
+  async (ms) => {
+    jest.useFakeTimers();
+    try {
+      let seen: AbortSignal | undefined;
+      let end: string | undefined;
+      void waitWithin(
+        (signal) => {
+          seen = signal;
+          return new Promise(() => {});
+        },
+        ms,
+        unexpected,
+        systemTimekeeper.after,
+      ).then((e) => {
+        end = e;
+      });
+      expect(jest.getTimerCount()).toBe(0);
+      // Microtasks only: nothing on the loop runs.
+      for (let i = 0; i < 8; i++) await Promise.resolve();
+      expect(end).toBe("deadline");
+      expect(seen?.aborted).toBe(true);
+    } finally {
+      jest.useRealTimers();
+    }
+  },
+);
+
 test("a rejection inside the time is the wait's", async () => {
   await expect(
     waitWithin(

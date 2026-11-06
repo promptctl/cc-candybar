@@ -121,6 +121,13 @@ export type WaitEnd = "answered" | "deadline";
 // nothing behind. What it does not, a run it started, goes on, and a failure
 // of it after the deadline is no one's answer: it goes to `late`, its owner's
 // report.
+//
+// A wait whose time is already gone (`ms` at or below zero) ends in this
+// turn, with no timer: a timer due at once still waits for the loop's next
+// timers phase, which under a backlog comes after every pending request has
+// been read and set up, tens of milliseconds a client with no budget left
+// does not have. The work still starts, so what it sets in motion lands for
+// the next answer, and it is aborted at once.
 export function waitWithin(
   work: (signal: AbortSignal) => Promise<unknown>,
   ms: number,
@@ -128,7 +135,7 @@ export function waitWithin(
   after: Timekeeper["after"],
 ): Promise<WaitEnd> {
   const wait = new AbortController();
-  const clear = after(Math.max(0, ms), () => wait.abort());
+  const clear = ms > 0 ? after(ms, () => wait.abort()) : () => {};
   const ended = new Promise<WaitEnd>((resolve, reject) => {
     wait.signal.addEventListener("abort", () => resolve("deadline"));
     void work(wait.signal).then(
@@ -137,6 +144,7 @@ export function waitWithin(
       // while it listens, its owner's after.
       (e: unknown) => (wait.signal.aborted ? late(e) : reject(e)),
     );
+    if (ms <= 0) wait.abort();
   });
   return ended.finally(() => {
     clear();
