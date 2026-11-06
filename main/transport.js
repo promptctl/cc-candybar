@@ -69510,7 +69510,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.208.0";
+var PACKAGE_VERSION = "1.208.1";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -72664,6 +72664,9 @@ function daemonGates() {
     ]
   });
 }
+
+// src/daemon/draw-view.ts
+init_globals();
 
 // src/dsl/render.ts
 init_globals();
@@ -76386,6 +76389,76 @@ function drawDsl(config2, compiled, store2, registry, projected, at, opts, obser
   }
 }
 
+// src/daemon/draw-view.ts
+function drawnLanes(source) {
+  return laneSwitches(source.effective(), source.payload().tmux !== void 0);
+}
+function drawView(view, handed, at, effects, idleSince, viewing, to, onRenderWarning) {
+  const { drawing: drawing2, feeds, diagnostics } = handed;
+  const { source } = view;
+  const effective = source.effective();
+  const width = source.payload().term.cols;
+  const drawn = drawDsl(
+    view.state.config,
+    view.state.compiled,
+    view.store,
+    view.registry,
+    {
+      diagnostics: diagnosticsProjection(diagnostics),
+      drawing: drawing2,
+      feeds,
+      today: todayOf(source.facts().builtins.today, at)
+    },
+    at,
+    // [LAW:one-source-of-truth] The options drawDsl draws with are the SAME
+    // `effective` struct the payload was built from, projected by the one
+    // `renderOptionsOf` every renderer shares.
+    renderOptionsOf(effective, width),
+    // [LAW:single-enforcer] The per-segment StripCell sink for the `debug
+    // segments` projection. Its identity stays stable for the view's
+    // lifetime; drawDsl clears + repopulates it in place.
+    { perSegmentSink: view.lastRenderCellsBySegment, onRenderWarning },
+    // [LAW:one-source-of-truth] The draw's own settings and the session's
+    // effect memory. The theme, style and effect are not among them: the
+    // view's slots settle those names (src/dsl/parts.ts), the same ones its
+    // payload's `.effective` fields read.
+    { ...effective, effects, idleSince }
+  );
+  const lanes = drawnLanes(source);
+  const geometry = {
+    width,
+    // A feed's one frame is shown by every lane switched on, so it pages
+    // within the shortest of their surfaces.
+    rows: viewerRowCap(
+      source.hints().termRows,
+      drawing2.by === "feed" ? LANE_NAMES.flatMap((lane) => {
+        const rows = LANES[lane].rows;
+        return lanes[lane] && rows !== null ? [rows] : [];
+      }) : []
+    ),
+    // [LAW:one-source-of-truth] What stands in the frame's place is drawn at
+    // the depth the frame is encoded at.
+    colorCompatibility: drawn.frame.depth
+  };
+  const position = viewedIndex(viewing, diagnostics);
+  return {
+    ...drawn,
+    body: position === null ? drawn.frame : standIn(
+      drawn.frame,
+      viewerRows(
+        diagnostics,
+        position,
+        to,
+        view.sessionId,
+        drawing2.by,
+        geometry
+      )
+    ),
+    viewing: position,
+    geometry
+  };
+}
+
 // src/daemon/frame-feed.ts
 init_globals();
 var FEED_PERIODS = {
@@ -77009,7 +77082,7 @@ function resolvePath2(obj, dotPath) {
 }
 
 // src/facts/recording.ts
-var RECORDING_VERSION = 5;
+var RECORDING_VERSION = 6;
 var LANES2 = new Set(REFRESH_LANES);
 function requestFields(request2) {
   return {
@@ -77026,7 +77099,9 @@ function formatLine(line) {
     home: line.home
   } : line.kind === "facts" ? { kind: line.kind, at: line.at, facts: line.facts } : line.kind === "draw" ? {
     kind: line.kind,
-    request: line.request,
+    at: line.at,
+    drawing: line.drawing,
+    feeds: line.feeds,
     state: { ...line.state, idleSince: line.state.idleSince ?? null },
     diagnostics: line.diagnostics
   } : line.kind === "turn" ? {
@@ -77080,6 +77155,20 @@ function sessionRecorder(views, log) {
     if (rec.turn?.view === view && rec.turn.held === held) return;
     rec.turn = { view, held };
     write(sessionId2, rec, { kind: "turn", held, ...view.source.turn() });
+  };
+  const writeDraw = (sessionId2, rec, at, { view, state, drawing: drawing2, feeds, diagnostics }) => {
+    const current = views.sessionView(sessionId2);
+    const draw2 = { at, drawing: drawing2, feeds, state, diagnostics };
+    const writes = [
+      () => writeTurn(sessionId2, rec, view),
+      () => write(sessionId2, rec, { kind: "facts", ...view.followed.stamped() }),
+      () => write(sessionId2, rec, { kind: "declared", request: view.facts() }),
+      () => write(sessionId2, rec, { kind: "draw", ...draw2 }),
+      ...current === null ? [] : [() => writeTurn(sessionId2, rec, current)]
+    ];
+    for (const next of writes) {
+      if (open2.get(sessionId2)?.has(rec)) next();
+    }
   };
   const attach = (sessionId2, rec) => {
     const view = views.sessionView(sessionId2);
@@ -77141,37 +77230,19 @@ function sessionRecorder(views, log) {
       }
       return { at: line.at, noted };
     },
-    // [LAW:one-source-of-truth] A replay draws from the last turn, the last
-    // document and the last declaration before the draw line, so those are
-    // the ones the draw read: each offered again here, and written when it is
-    // not the last this recording wrote. The view a request holds can be one
-    // the session moved away from during its wait, with a hold of its own, so
-    // its turn goes before the draw and the current view's after it: the
-    // lines that follow are the current view's. A follow that stamped past a
-    // held turn's document writes that document again too.
-    drew(sessionId2, { at: request2, noted }, { view, state, diagnostics }) {
-      const current = views.sessionView(sessionId2);
-      for (const rec of open2.get(sessionId2) ?? []) {
-        if (!noted.has(rec)) continue;
-        const writes = [
-          () => writeTurn(sessionId2, rec, view),
-          () => write(sessionId2, rec, {
-            kind: "facts",
-            ...view.followed.stamped()
-          }),
-          () => write(sessionId2, rec, { kind: "declared", request: view.facts() }),
-          () => write(sessionId2, rec, {
-            kind: "draw",
-            request: request2,
-            state,
-            diagnostics
-          }),
-          ...current === null ? [] : [() => writeTurn(sessionId2, rec, current)]
-        ];
-        for (const next of writes) {
-          if (open2.get(sessionId2)?.has(rec)) next();
-        }
-      }
+    drew(sessionId2, { at, noted }, read2) {
+      const recs = [...open2.get(sessionId2) ?? []].filter(
+        (rec) => noted.has(rec)
+      );
+      if (recs.length === 0) return;
+      const drawn = read2();
+      for (const rec of recs) writeDraw(sessionId2, rec, at, drawn);
+    },
+    fed(sessionId2, at, read2) {
+      const recs = [...open2.get(sessionId2) ?? []];
+      if (recs.length === 0) return;
+      const drawn = read2();
+      for (const rec of recs) writeDraw(sessionId2, rec, at, drawn);
     },
     close() {
       closed = true;
@@ -77208,13 +77279,19 @@ function settleRequest(recorder, view, at) {
   });
   return { ...view.settle(at), arrival };
 }
+var drawnFrom = (view, drawn) => ({
+  view,
+  state: { ...view.source.state(), idleSince: drawn.idleSince },
+  ...drawn.handed
+});
 function drawRequest(recorder, view, arrival, draw2) {
   const drawn = draw2();
-  recorder.drew(view.sessionId, arrival, {
-    view,
-    state: { ...view.source.state(), idleSince: drawn.idleSince },
-    diagnostics: drawn.diagnostics
-  });
+  recorder.drew(view.sessionId, arrival, () => drawnFrom(view, drawn));
+  return drawn;
+}
+function drawFeedFrame(recorder, view, at, draw2) {
+  const drawn = draw2();
+  recorder.fed(view.sessionId, at, () => drawnFrom(view, drawn));
   return drawn;
 }
 var RecordingFailed = class extends Error {
@@ -77234,7 +77311,7 @@ function recordToFile(recorder, clock, session, path46, seconds, left) {
       return;
     }
     let lines2 = 0;
-    let answers = 0;
+    const drawn = { request: 0, feed: 0 };
     let stop2 = () => {
     };
     const clearTimer = clock.after(seconds * 1e3, () => stop2());
@@ -77244,7 +77321,7 @@ function recordToFile(recorder, clock, session, path46, seconds, left) {
       write: (line) => {
         appendFileSync(fd, formatLine(line));
         lines2++;
-        if (line.kind === "draw") answers++;
+        if (line.kind === "draw") drawn[line.drawing.by]++;
       },
       end: (how) => {
         clearTimer();
@@ -77252,7 +77329,7 @@ function recordToFile(recorder, clock, session, path46, seconds, left) {
         let error = how.kind === "failed" ? how.error : null;
         try {
           closeSync(fd);
-          if (answers === 0) unlinkSync(path46);
+          if (drawn.request + drawn.feed === 0) unlinkSync(path46);
         } catch (e) {
           error ??= e;
         }
@@ -77260,7 +77337,8 @@ function recordToFile(recorder, clock, session, path46, seconds, left) {
           resolve({
             path: path46,
             lines: lines2,
-            answers,
+            answers: drawn.request,
+            frames: drawn.feed,
             daemonClosed: how.kind === "closed"
           });
         } else {
@@ -77303,10 +77381,11 @@ function renderFrame(parts, sessionId2, fps, at) {
     try {
       const setup = __using(_stack, setUpFrame(parts, sessionId2, at, facts));
       if (setup === null) return null;
-      const { drawn, evaluated: evaluated2, cellBreaks, delivered, lanes } = drawRender(
-        parts,
-        setup,
-        { by: "feed", fps }
+      const { drawn, evaluated: evaluated2, cellBreaks, delivered, lanes } = drawFeedFrame(
+        parts.recorder,
+        setup.view,
+        at,
+        () => drawRender(parts, setup, { by: "feed", fps })
       );
       const answer2 = RENDER_ANSWERS.ansi(drawn.body);
       const statusline = statuslineOf(
@@ -77494,13 +77573,11 @@ function drawRender(parts, setup, drawing2) {
   const payload = view.source.payload();
   const effective = view.source.effective();
   const failure = view.source.failure();
-  const lanes = laneSwitches(effective, payload.tmux !== void 0);
+  const lanes = drawnLanes(view.source);
   noteFacts(facts, {
     lanes: LANE_NAMES.filter((lane) => lanes[lane]).join(",") || "-"
   });
-  const hints = view.source.hints();
-  const width = payload.term.cols;
-  noteFacts(facts, { width: String(width) });
+  noteFacts(facts, { width: String(payload.term.cols) });
   const clickHolds = clickErrorsAt(sessionState, sessionId2, at, drawing2.by);
   const updates = updateWatch.notice({
     to: links2.to,
@@ -77569,11 +77646,10 @@ function drawRender(parts, setup, drawing2) {
     ].map((w) => ({ about: w.about, text: w.message, copy: w.message }))
   );
   const document = view.source.facts();
-  const projected = {
-    diagnostics: diagnosticsProjection(diagnostics),
+  const handed = {
     drawing: drawing2,
     feeds: frameFeeds.feedsOf(sessionId2, at),
-    today: todayOf(document.builtins.today, at)
+    diagnostics
   };
   const metrics = isPending(payload.metrics) ? void 0 : payload.metrics;
   noteFacts(facts, sourcesFactOf(document.sources));
@@ -77583,38 +77659,23 @@ function drawRender(parts, setup, drawing2) {
     prompts: String(metrics?.messageCount ?? "-"),
     nonPrompts: String(metrics?.nonPrompts ?? "-"),
     pr: prFactOf(payload.git),
-    feeds: feedsFact(projected.feeds)
+    feeds: feedsFact(handed.feeds)
   });
   const drawnWarnings = [];
-  const renderOpts = renderOptionsOf(effective, width);
   const effects = effectSessions.of(sessionId2);
-  const { frame: frame2, evaluated: evaluated2, cellBreaks, rules, idleSince } = menuIdle.drawn(
+  const { body, viewing, geometry, evaluated: evaluated2, cellBreaks, rules, idleSince } = menuIdle.drawn(
     sessionId2,
     at,
     effective.menuTimeout,
-    (idleSince2) => drawDsl(
-      state.config,
-      state.compiled,
-      view.store,
-      view.registry,
-      projected,
+    (idleSince2) => drawView(
+      view,
+      handed,
       at,
-      renderOpts,
-      // [LAW:single-enforcer] The per-segment StripCell sink for the
-      // `debug segments` projection. Its identity stays stable for the
-      // view's lifetime; drawDsl clears + repopulates it
-      // in place. Cells are cheap (already computed during the render);
-      // the per-segment ANSI serialization happens lazily inside the
-      // debug handler so normal renders pay no extra serializer cost.
-      {
-        perSegmentSink: view.lastRenderCellsBySegment,
-        onRenderWarning: (warning) => drawnWarnings.push(warning)
-      },
-      // [LAW:one-source-of-truth] The draw's own settings and the session's
-      // effect memory. The theme, style and effect are not among them: the
-      // view's slots settle those names (src/dsl/parts.ts), the same ones its
-      // payload's `.effective` fields read.
-      { ...effective, effects, idleSince: idleSince2 }
+      effects,
+      idleSince2,
+      sessionState.get(sessionId2, DIAGNOSTICS_VIEWING),
+      links2.to,
+      (warning) => drawnWarnings.push(warning)
     )
   );
   const keys2 = copyKeys(diagnostics);
@@ -77629,36 +77690,6 @@ function drawRender(parts, setup, drawing2) {
     drawing2.by,
     scope,
     drawnWarnings
-  );
-  const geometry = {
-    width,
-    // A feed's one frame is shown by every lane switched on, so it pages
-    // within the shortest of their surfaces.
-    rows: viewerRowCap(
-      hints.termRows,
-      drawing2.by === "feed" ? LANE_NAMES.flatMap((lane) => {
-        const rows = LANES[lane].rows;
-        return lanes[lane] && rows !== null ? [rows] : [];
-      }) : []
-    ),
-    // [LAW:one-source-of-truth] What stands in the frame's place is drawn at
-    // the depth the frame is encoded at.
-    colorCompatibility: frame2.depth
-  };
-  const viewing = viewedIndex(
-    sessionState.get(sessionId2, DIAGNOSTICS_VIEWING),
-    diagnostics
-  );
-  const body = viewing === null ? frame2 : standIn(
-    frame2,
-    viewerRows(
-      diagnostics,
-      viewing,
-      links2.to,
-      sessionId2,
-      drawing2.by,
-      geometry
-    )
   );
   const g = payloadProviders.gitProvider.getStats();
   const u = payloadProviders.usageStore.getStats();
@@ -77737,7 +77768,8 @@ function drawRender(parts, setup, drawing2) {
     pipeShown,
     delivered,
     lanes,
-    idleSince
+    idleSince,
+    handed
   };
 }
 function requestArrived(parts, req) {
@@ -77752,10 +77784,12 @@ function requestArrived(parts, req) {
   return laneSetups.noted(req.sessionId, lanes);
 }
 function drawForAnswer(parts, setup, arrival) {
-  return drawRequest(parts.recorder, setup.view, arrival, () => {
-    const drew = drawRender(parts, setup, ANSWERING);
-    return { ...drew, diagnostics: drew.drawn.diagnostics };
-  });
+  return drawRequest(
+    parts.recorder,
+    setup.view,
+    arrival,
+    () => drawRender(parts, setup, ANSWERING)
+  );
 }
 function laneSessionOf(req) {
   return {
