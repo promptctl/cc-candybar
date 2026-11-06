@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "37eb112c989fe03fdef3152c96c290f0cb09728f",
+      "timestamp": "2026-11-06T23:55:11.251Z",
+      "commits": [
+        {
+          "sha": "37eb112c989fe03fdef3152c96c290f0cb09728f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T16:54:19-07:00",
+          "message": "test(error-glyph): the pipeline test's daemon end writes the version gate's real VERSION_MISMATCH reply (candybar-testing-ihvy.fvw.b78) (#659)\n\n* test(error-glyph): the pipeline test's daemon end writes the version gate's real VERSION_MISMATCH reply (candybar-testing-ihvy.fvw.b78)\n\n* test(error-glyph): the version gate takes the daemon's version, so the pipeline test runs a real stale-client exchange with distinct versions (candybar-testing-ihvy.fvw.b78)\n\n* test(error-glyph): reuse the file's other-version fixture and scope the daemon end's claim to the gate (candybar-testing-ihvy.fvw.b78)"
+        }
+      ]
+    },
+    {
       "version": "pr-661",
       "ref": "refs/pull/661/merge",
       "sha": "80be5b22e13a165cdd19ba8fba73bb369710eb12",
@@ -41,64 +56,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T16:23:05-07:00",
           "message": "fix(testing): every budgeted wait in a test is cut to what its case has left, so a slow run fails by the wait's name (brandon-menus-sjhy.r62)\n\nA real-daemon case spent a pool slot wait (20 s), readiness (12 s) and its\nown waits inside one Jest timeout (30 s), each sized alone, so their sum\ncould pass it and Jest's anonymous timeout fired first. The test\nenvironment now keeps the running hook's or test's deadline, computed as\njest-circus arms its timer, and every budgeted wait (the pool, readiness,\nuntil, throughout, sendDaemonRequest) is bounded by the smaller of its own\nbudget and that time, less a margin derived from the longest step a wait\ntakes between deadline checks. The process tier's copies of the 30 s go.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-659",
-      "ref": "refs/pull/659/merge",
-      "sha": "600c84f3b3786130396b61ea9ed32cce5722ee1d",
-      "timestamp": "2026-11-06T23:48:14.786Z",
-      "commits": [
-        {
-          "sha": "600c84f3b3786130396b61ea9ed32cce5722ee1d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T23:47:17Z",
-          "message": "Merge 4714ed597559e0530dae64862696918ead6d9786 into 873a8e0e0be2d843b7d0b4c308831e2d20b5bde1\n"
-        },
-        {
-          "sha": "4714ed597559e0530dae64862696918ead6d9786",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T16:00:03-07:00",
-          "message": "test(error-glyph): reuse the file's other-version fixture and scope the daemon end's claim to the gate (candybar-testing-ihvy.fvw.b78)\n"
-        },
-        {
-          "sha": "7c0cc03e42dc76bb65dbd61a3a2b2a7914284395",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T15:58:21-07:00",
-          "message": "test(error-glyph): the version gate takes the daemon's version, so the pipeline test runs a real stale-client exchange with distinct versions (candybar-testing-ihvy.fvw.b78)\n"
-        },
-        {
-          "sha": "9054395689280a90b80526a9b6f86af4bf10f9d9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T15:54:57-07:00",
-          "message": "test(error-glyph): the pipeline test's daemon end writes the version gate's real VERSION_MISMATCH reply (candybar-testing-ihvy.fvw.b78)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "873a8e0e0be2d843b7d0b4c308831e2d20b5bde1",
-      "timestamp": "2026-11-06T23:47:50.420Z",
-      "commits": [
-        {
-          "sha": "873a8e0e0be2d843b7d0b4c308831e2d20b5bde1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T16:46:47-07:00",
-          "message": "fix(lanes): a restart refuses a Claude Code that now holds another session, instead of resuming the old one over it (candybar-gather-renderer-76bb.1dh.9ix) (#660)\n\n* fix(lanes): a restart refuses a pane that now runs another session, instead of resuming the old one over it (candybar-gather-renderer-76bb.1dh.9ix)\n\nA statusline restart resumes the session its setup was settled for. After\na `/clear` or `/resume` in the pane, Claude Code is the same process, so the\npid check before the kill passed and the line typed `--resume <old id>`\nover the live session.\n\nThe restart now reads whose session the pane runs (the newest request\nnaming the pane, among each session's latest) directly before SIGTERM,\nafter its last wait, and refuses naming that session when it is not the\none being restarted, or saying no held request names the pane.\n\nThat read is built once in the daemon and handed to the tmux status line\nand lane setup, over one `namesPane` predicate the pane-session reply\nuses too; the predicate was spelled inline twice before.\n\n* fix(lanes): a restart reads the session its Claude Code holds from the process's own record (candybar-gather-renderer-76bb.1dh.9ix)\n\nThe newest request naming the pane lags a /clear by the new session's\nfirst statusline tick, and any client run inside the pane names the pane\ntoo. Claude Code rewrites its per-process record in its configuration\ndirectory when the session changes, so the restart reads that, for the\npid it is about to kill, synchronously before the kill. A record that is\nmissing or unreadable refuses the restart and says why.\n\n* fix(lanes): the session record is found under the directory the process's own environment names, and a missing one names its remedy (candybar-gather-renderer-76bb.1dh.9ix)"
-        },
-        {
-          "sha": "d8a5b19a71575bb8d1069ee4caebfcb8133bb6a1",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-06T23:39:48Z",
-          "message": "chore(release): set `package.json` to 1.208.2 [skip ci]\n\n## [1.208.2](https://github.com/promptctl/cc-candybar/compare/v1.208.1...v1.208.2) (2026-11-06)\n\n### Bug Fixes\n\n* **facts:** a replay draws the lane feeds and diagnostics the live draw was handed, and the frames a lane drew (candybar-gather-renderer-76bb.6pj.0se) ([#649](https://github.com/promptctl/cc-candybar/issues/649)) ([86bb0ba](https://github.com/promptctl/cc-candybar/commit/86bb0ba47f70ca3b852845b916d66bb727486aae))\n"
         }
       ]
     },
