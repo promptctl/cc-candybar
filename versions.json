@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-654",
+      "ref": "refs/pull/654/merge",
+      "sha": "c9993b657c3c96d350d970436b982508fca0d142",
+      "timestamp": "2026-11-06T21:46:28.733Z",
+      "commits": [
+        {
+          "sha": "c9993b657c3c96d350d970436b982508fca0d142",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T21:45:30Z",
+          "message": "Merge b7ea1a1f0cb30f2a4b9a7a776cae1156c90605cf into 0357f4ada680aa4f6a80a0dd47cacc620c017e4b\n"
+        },
+        {
+          "sha": "b7ea1a1f0cb30f2a4b9a7a776cae1156c90605cf",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T14:45:17-07:00",
+          "message": "fix(test): the parent-watchdog case waits for the anchor's reap and the daemon's whole group, and proves the watchdog ended it (brandon-menus-sjhy.26f)\n"
+        },
+        {
+          "sha": "63b1e1aec9b9b8b7f1959a5e024d951868df0aaf",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T14:39:17-07:00",
+          "message": "fix(test): the parent-watchdog case waits for a serving daemon under the shared readiness budget, and for its exit by name (brandon-menus-sjhy.26f)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-655",
       "ref": "refs/pull/655/merge",
       "sha": "b3604007d4b69bed5c87a2bcad8e59a45e0be044",
@@ -20,28 +49,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T14:38:27-07:00",
           "message": "feat(dial): the client reaches its daemon through one dialer port, and no test hand-rolls a socket (candybar-testing-ihvy.5em)\n\nA Dialer port (src/dial/) with one adapter over a unix socket, an in-memory fake that listens and holds paths on a clock, and one contract both pass. The round trip, the frame stream and acquire's probe dial through the World's dialer; a dial's refusal is typed at the adapter, so interpretException reads no errno out of a message. Lint keeps net in the adapter and the daemon's listener, in src and in tests. The nine test files that stood up their own sockets listen on the fake; the kernel bind cases move to test/integration.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-654",
-      "ref": "refs/pull/654/merge",
-      "sha": "81d287257f2f8af165187e45593955cdfed9d7da",
-      "timestamp": "2026-11-06T21:40:28.530Z",
-      "commits": [
-        {
-          "sha": "81d287257f2f8af165187e45593955cdfed9d7da",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T14:39:35-07:00",
-          "message": "Merge 63b1e1aec9b9b8b7f1959a5e024d951868df0aaf into 4f8902896b866dd001944102be7ed0716f005520\n"
-        },
-        {
-          "sha": "63b1e1aec9b9b8b7f1959a5e024d951868df0aaf",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T14:39:17-07:00",
-          "message": "fix(test): the parent-watchdog case waits for a serving daemon under the shared readiness budget, and for its exit by name (brandon-menus-sjhy.26f)\n"
         }
       ]
     },
