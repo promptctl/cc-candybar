@@ -4,15 +4,22 @@
     {
       "version": "pr-630",
       "ref": "refs/pull/630/merge",
-      "sha": "05b7614cf633e4bc5e40d925df41e3e6f8e8a49d",
-      "timestamp": "2026-11-06T07:36:49.409Z",
+      "sha": "892ac6ec5cd0df32606a394441d37b1f0451450f",
+      "timestamp": "2026-11-06T07:38:51.186Z",
       "commits": [
         {
-          "sha": "05b7614cf633e4bc5e40d925df41e3e6f8e8a49d",
+          "sha": "892ac6ec5cd0df32606a394441d37b1f0451450f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T07:35:45Z",
-          "message": "Merge 93774255ae4695c6c5dd6dea250398ff8841cbf9 into c6103c1e8d45ea9db68f0c9a7411382a1db6be4e\n"
+          "timestamp": "2026-11-06T07:38:01Z",
+          "message": "Merge ce13d656547e794bc8c7c7178d8756f84abb410a into c6103c1e8d45ea9db68f0c9a7411382a1db6be4e\n"
+        },
+        {
+          "sha": "ce13d656547e794bc8c7c7178d8756f84abb410a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T00:37:43-07:00",
+          "message": "Revert \"probe: deliberate type error, to be reverted\"\n\nThis reverts commit 93774255ae4695c6c5dd6dea250398ff8841cbf9.\n"
         },
         {
           "sha": "93774255ae4695c6c5dd6dea250398ff8841cbf9",
