@@ -49,6 +49,11 @@ export const MAX_STATUS_ROWS = LANES.tmuxStatus.rows;
 export const PRIOR_OPTION = "@cc-candybar-status-prior";
 export const WROTE_OPTION = "@cc-candybar-status-wrote";
 export const BINDING_OPTION = "@cc-candybar-binding-prior";
+// The renderer drawing a session's row, by name, set with its layout and
+// unset with its restore (docs/design/gather-and-renderer.md, section 18): the
+// one MouseDown1Status binding expands it at the click, so a row no renderer
+// holds names none.
+export const RENDERER_OPTION = "@cc-candybar-renderer";
 const CLICK_KEY = ["-T", "root", "MouseDown1Status"] as const;
 const INDICES = Array.from({ length: MAX_STATUS_ROWS }, (_, i) => i);
 
@@ -265,6 +270,7 @@ export function installPlan(
   session: string,
   answers: readonly string[],
   owner: string,
+  name: string,
 ): Install {
   const [statusWordNow = "", ...rest] = answers;
   const own = ownOf(rest.slice(0, 2 + MAX_STATUS_ROWS));
@@ -298,6 +304,7 @@ export function installPlan(
     prior: laid,
     commands: [
       ["set-option", "-t", session, PRIOR_OPTION, JSON.stringify(laid)],
+      ["set-option", "-t", session, RENDERER_OPTION, name],
       ...arrayWrite(session, wroteFormats),
     ],
   };
@@ -351,6 +358,7 @@ export function restorePlan(
     ]),
     ["set-option", "-q", "-u", "-t", session, PRIOR_OPTION],
     ["set-option", "-q", "-u", "-t", session, WROTE_OPTION],
+    ["set-option", "-q", "-u", "-t", session, RENDERER_OPTION],
   );
   return { commands, kept };
 }
@@ -450,6 +458,8 @@ export interface TmuxStatusDeps {
   readonly handler: string;
   // This daemon's socket: what it writes into tmux is marked with it.
   readonly owner: string;
+  // This renderer's name, as the sessions it draws carry it in RENDERER_OPTION.
+  readonly name: string;
   readonly log: (level: "info" | "warn", msg: string) => void;
 }
 
@@ -851,7 +861,7 @@ export class TmuxStatusLines {
     // [LAW:no-ambient-temporal-coupling] A shutdown during the ask has
     // restored everything it knew of; a layout begun now would outlive it.
     if (answers === null || this.closed) return null;
-    const plan = installPlan(session, answers, this.deps.owner);
+    const plan = installPlan(session, answers, this.deps.owner, this.deps.name);
     if (plan.kind === "theirs") {
       this.leave(socket, server, session, plan.why);
       return null;
@@ -867,7 +877,7 @@ export class TmuxStatusLines {
     if (plan.kind === "lay-out") await this.write(socket, plan.commands);
     this.deps.log(
       "info",
-      `tmux-status: socket=${JSON.stringify(socket)} ${plan.kind === "ours" ? "took over" : "laid out"} session ${session} base=${plan.prior.base} own=${[plan.prior.status === null ? [] : ["status"], plan.prior.formats === null ? [] : ["status-format"]].flat().join(",") || "-"}`,
+      `tmux-status: socket=${JSON.stringify(socket)} ${plan.kind === "ours" ? "took over" : "laid out"} renderer=${this.deps.name} session ${session} base=${plan.prior.base} own=${[plan.prior.status === null ? [] : ["status"], plan.prior.formats === null ? [] : ["status-format"]].flat().join(",") || "-"}`,
     );
     return layout;
   }

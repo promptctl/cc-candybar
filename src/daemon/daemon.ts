@@ -442,6 +442,10 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       "url-handle",
     ].join(" "),
     owner: paths.socket,
+    // [LAW:one-source-of-truth] The main renderer's name (docs/design/
+    // gather-and-renderer.md, section 17), the one renderer until the home
+    // carries a name.
+    name: "main",
     log,
   });
   // Each subscribed session's frames, drawn from its latest render request

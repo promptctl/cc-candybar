@@ -5,6 +5,7 @@
 import {
   BINDING_OPTION,
   PRIOR_OPTION,
+  RENDERER_OPTION,
   TmuxStatusLines,
   rowFormat,
   rowOption,
@@ -29,7 +30,10 @@ function parseCommands(text: string): string[][] {
   const re = /"((?:[^"\\]|\\.)*)"|(;)|(\S+)/g;
   for (const [, quoted, semi, bare] of text.matchAll(re)) {
     if (semi !== undefined) commands.push([]);
-    else commands.at(-1)!.push(quoted !== undefined ? quoted.replace(/\\(.)/g, "$1") : bare!);
+    else
+      commands
+        .at(-1)!
+        .push(quoted !== undefined ? quoted.replace(/\\(.)/g, "$1") : bare!);
   }
   return commands;
 }
@@ -55,7 +59,11 @@ class FakeTmux implements TmuxStatusEdge {
     for (const id of ids) this.sessions.set(id, new Map());
   }
 
-  async run(socket: string, args: readonly string[], stdin?: string): Promise<TmuxRun> {
+  async run(
+    socket: string,
+    args: readonly string[],
+    stdin?: string,
+  ): Promise<TmuxRun> {
     if (this.gate !== null) await this.gate;
     return this.runSync(socket, args, stdin);
   }
@@ -64,7 +72,10 @@ class FakeTmux implements TmuxStatusEdge {
     const commands: string[][] = [[]];
     for (const arg of args)
       if (arg === ";") commands.push([]);
-      else commands.at(-1)!.push(arg.endsWith("\\;") ? `${arg.slice(0, -2)};` : arg);
+      else
+        commands
+          .at(-1)!
+          .push(arg.endsWith("\\;") ? `${arg.slice(0, -2)};` : arg);
     return this.list(commands, stdin);
   }
 
@@ -80,16 +91,25 @@ class FakeTmux implements TmuxStatusEdge {
 
   private one(command: readonly string[], stdin?: string): TmuxRun {
     const [name, ...rest] = command;
-    if (name === this.refuses) return { kind: "failed", reason: `fake tmux refused ${name}` };
-    const flags = new Set(rest.filter((a) => /^-[a-zA-Z]+$/.test(a)).flatMap((a) => [...a.slice(1)]));
+    if (name === this.refuses)
+      return { kind: "failed", reason: `fake tmux refused ${name}` };
+    const flags = new Set(
+      rest
+        .filter((a) => /^-[a-zA-Z]+$/.test(a))
+        .flatMap((a) => [...a.slice(1)]),
+    );
     const target = rest[rest.indexOf("-t") + 1];
     const words = rest.filter(
-      (a, i) => !/^-[a-zA-Z]+$/.test(a) && !["-t", "-T"].includes(rest[i - 1] ?? ""),
+      (a, i) =>
+        !/^-[a-zA-Z]+$/.test(a) && !["-t", "-T"].includes(rest[i - 1] ?? ""),
     );
-    const scope = flags.has("g") ? this.global : this.sessions.get(target ?? "");
+    const scope = flags.has("g")
+      ? this.global
+      : this.sessions.get(target ?? "");
     switch (name) {
       case "set-option": {
-        if (scope === undefined) return { kind: "failed", reason: `no session ${target}` };
+        if (scope === undefined)
+          return { kind: "failed", reason: `no session ${target}` };
         const [option, value] = words as [string, string?];
         if (flags.has("u")) {
           scope.delete(option);
@@ -99,10 +119,13 @@ class FakeTmux implements TmuxStatusEdge {
         return ok();
       }
       case "show-options": {
-        if (scope === undefined) return { kind: "failed", reason: `no session ${target}` };
+        if (scope === undefined)
+          return { kind: "failed", reason: `no session ${target}` };
         const [option] = words;
         if (option === undefined)
-          return ok([...scope].map(([k, v]) => `${k} ${JSON.stringify(v)}\n`).join(""));
+          return ok(
+            [...scope].map(([k, v]) => `${k} ${JSON.stringify(v)}\n`).join(""),
+          );
         const value = scope.get(option);
         return ok(value === undefined ? "" : `${value}\n`);
       }
@@ -135,7 +158,12 @@ class FakeTmux implements TmuxStatusEdge {
             // A table's listing pads the key column, as tmux's does.
             ...(this.binding === null
               ? []
-              : [this.binding.replace("MouseDown1Status ", `MouseDown1Status ${" ".repeat(this.pad)}`)]),
+              : [
+                  this.binding.replace(
+                    "MouseDown1Status ",
+                    `MouseDown1Status ${" ".repeat(this.pad)}`,
+                  ),
+                ]),
           ].join("\n") + "\n",
         );
       case "bind-key":
@@ -176,13 +204,17 @@ function harness(ids: readonly string[] = ["$1"]) {
     sessionInPane: (_socket, pane) => newest.get(pane) ?? null,
     handler: "cc-candybar url-handle",
     owner: OWNER,
+    name: "main",
     log: (_level, msg) => logs.push(msg),
   });
   const hold = (sessionId: string, pane: string): void => {
     newest.set(pane, sessionId);
     owner.observe(sessionId, { socket: SOCKET, pane, truecolor: null }, true);
   };
-  const answer = async (sessionOf: Record<string, string>, shownBy: Record<string, string>) => {
+  const answer = async (
+    sessionOf: Record<string, string>,
+    shownBy: Record<string, string>,
+  ) => {
     const view: StatusLines = {
       sessionOf: new Map(Object.entries(sessionOf)),
       shownBy: new Map(Object.entries(shownBy)),
@@ -197,7 +229,8 @@ function harness(ids: readonly string[] = ["$1"]) {
   return { tmux, owner, subs, unsubscribed, newest, logs, hold, answer, frame };
 }
 
-const session = (h: ReturnType<typeof harness>, id = "$1") => h.tmux.sessions.get(id)!;
+const session = (h: ReturnType<typeof harness>, id = "$1") =>
+  h.tmux.sessions.get(id)!;
 
 describe("TmuxStatusLines", () => {
   test("the shown pane's bar is drawn under the status line's own rows, its height following the bar's", async () => {
@@ -211,7 +244,12 @@ describe("TmuxStatusLines", () => {
     expect(s.get("status-format[4]")).toBe(rowFormat(3));
     expect(s.get(rowOption(0))).toContain("one");
     expect(s.get(rowOption(1))).toContain("two");
-    expect(JSON.parse(s.get(PRIOR_OPTION)!)).toMatchObject({ base: 1, status: null, formats: null });
+    expect(JSON.parse(s.get(PRIOR_OPTION)!)).toMatchObject({
+      base: 1,
+      status: null,
+      formats: null,
+    });
+    expect(s.get(RENDERER_OPTION)).toBe("main");
     expect(h.tmux.binding).toContain("tmux-status-click");
     expect(h.tmux.binding).toContain("switch-client -t =");
   });
@@ -247,7 +285,9 @@ describe("TmuxStatusLines", () => {
     expect(h.tmux.binding).toBe(DEFAULT_BINDING);
     expect(h.tmux.global.has(BINDING_OPTION)).toBe(false);
     expect(h.unsubscribed).toEqual(["s1"]);
-    expect(h.logs).toContain('tmux-status: released sid="s1" pane=%1 — pane gone');
+    expect(h.logs).toContain(
+      'tmux-status: released sid="s1" pane=%1 — pane gone',
+    );
   });
 
   test("the rows above the bar are copied into the session's array, and the array is unset whole on release", async () => {
@@ -268,13 +308,19 @@ describe("TmuxStatusLines", () => {
     await h.frame("s1", frameOf("bar"));
     session(h).set("status-format[3]", "theirs");
     session(h).set("status", "5");
-    h.owner.observe("s1", { socket: SOCKET, pane: "%1", truecolor: null }, false);
+    h.owner.observe(
+      "s1",
+      { socket: SOCKET, pane: "%1", truecolor: null },
+      false,
+    );
     await h.owner.settled();
     expect([...session(h)]).toEqual([
       ["status-format[3]", "theirs"],
       ["status", "5"],
     ]);
-    expect(h.logs.find((l) => l.includes("restored session"))).toContain("kept=status-format,status");
+    expect(h.logs.find((l) => l.includes("restored session"))).toContain(
+      "kept=status-format,status",
+    );
   });
 
   test("a pane another session now renders from is released", async () => {
@@ -288,11 +334,26 @@ describe("TmuxStatusLines", () => {
   test("what a daemon that died left behind is put back on the first answer from its server", async () => {
     const h = harness(["$1", "$2"]);
     const s = session(h, "$2");
-    const wrote = { 1: rowFormat(0), 2: rowFormat(1), 3: rowFormat(2), 4: rowFormat(3) };
-    s.set(PRIOR_OPTION, JSON.stringify({ owner: OWNER, base: 1, status: null, formats: { 2: "old" }, wrote }));
+    const wrote = {
+      1: rowFormat(0),
+      2: rowFormat(1),
+      3: rowFormat(2),
+      4: rowFormat(3),
+    };
+    s.set(
+      PRIOR_OPTION,
+      JSON.stringify({
+        owner: OWNER,
+        base: 1,
+        status: null,
+        formats: { 2: "old" },
+        wrote,
+      }),
+    );
     s.set("@cc-candybar-status-wrote", "2");
     s.set("status", "2");
-    for (const [i, value] of Object.entries(wrote)) s.set(`status-format[${i}]`, value);
+    for (const [i, value] of Object.entries(wrote))
+      s.set(`status-format[${i}]`, value);
     await h.answer({ "%9": "$2" }, {});
     expect([...s]).toEqual([["status-format[2]", "old"]]);
   });
@@ -304,8 +365,12 @@ describe("TmuxStatusLines", () => {
     h.tmux.binding = "bind-key -T root MouseDown1Status select-pane";
     await h.answer({ "%1": "$1" }, { $1: "%1" });
     await h.answer({}, {});
-    expect(h.logs.filter((l) => l.includes("bound again since"))).toHaveLength(1);
-    expect(h.tmux.binding).toBe("bind-key -T root MouseDown1Status select-pane");
+    expect(h.logs.filter((l) => l.includes("bound again since"))).toHaveLength(
+      1,
+    );
+    expect(h.tmux.binding).toBe(
+      "bind-key -T root MouseDown1Status select-pane",
+    );
   });
 
   test("a click resolves through the frame drawn now, and a range it no longer draws is refused", async () => {
@@ -327,7 +392,9 @@ describe("TmuxStatusLines", () => {
     await h.answer({ "%1": "$1", "%2": "$2" }, { $1: "%1", $2: "%2" });
     await h.frame("s1", frameOf("a"));
     await h.frame("s2", frameOf("b"));
-    h.owner.restoreAll((socket, args, stdin) => h.tmux.runSync(socket, args, stdin));
+    h.owner.restoreAll((socket, args, stdin) =>
+      h.tmux.runSync(socket, args, stdin),
+    );
     expect([...session(h, "$1")]).toEqual([]);
     expect([...session(h, "$2")]).toEqual([]);
     expect(h.tmux.binding).toBe(DEFAULT_BINDING);
@@ -344,7 +411,9 @@ describe("TmuxStatusLines", () => {
     // The draw's write is in tmux's hands when the shutdown restores.
     const drawing = h.frame("s1", frameOf("two\nthree"));
     await new Promise((resolve) => setImmediate(resolve));
-    h.owner.restoreAll((socket, args, stdin) => h.tmux.runSync(socket, args, stdin));
+    h.owner.restoreAll((socket, args, stdin) =>
+      h.tmux.runSync(socket, args, stdin),
+    );
     h.tmux.gate = null;
     release();
     await drawing;
@@ -367,7 +436,13 @@ describe("TmuxStatusLines", () => {
 
   test("a session another daemon laid out is left alone, and said once", async () => {
     const h = harness();
-    const theirs = JSON.stringify({ owner: "/tmp/elsewhere/socket", base: 1, status: null, formats: null, wrote: { 1: rowFormat(0) } });
+    const theirs = JSON.stringify({
+      owner: "/tmp/elsewhere/socket",
+      base: 1,
+      status: null,
+      formats: null,
+      wrote: { 1: rowFormat(0) },
+    });
     session(h).set(PRIOR_OPTION, theirs);
     session(h).set("status-format[1]", rowFormat(0));
     const before = [...session(h)];
@@ -377,7 +452,9 @@ describe("TmuxStatusLines", () => {
     await h.answer({ "%1": "$1" }, { $1: "%1" });
     expect([...session(h)]).toEqual(before);
     expect(h.subs.get("s1")!.drawing()).toBe(false);
-    expect(h.logs.filter((l) => l.includes("left as it is: the daemon at"))).toHaveLength(1);
+    expect(
+      h.logs.filter((l) => l.includes("left as it is: the daemon at")),
+    ).toHaveLength(1);
     await h.answer({}, {});
     expect([...session(h)]).toEqual(before);
   });
@@ -404,11 +481,20 @@ describe("TmuxStatusLines", () => {
 
   test("a binding a daemon on this socket left is bound again as this daemon, over what it first replaced", async () => {
     const h = harness();
-    h.tmux.binding = "bind-key -T root MouseDown1Status if-shell -F x run-shell -b old-node url-handle cc-candybar://tmux-status-click/y switch-client -t =";
-    h.tmux.global.set(BINDING_OPTION, JSON.stringify({ owner: OWNER, prior: { line: DEFAULT_BINDING, command: "switch-client -t =" } }));
+    h.tmux.binding =
+      "bind-key -T root MouseDown1Status if-shell -F x run-shell -b old-node url-handle cc-candybar://tmux-status-click/y switch-client -t =";
+    h.tmux.global.set(
+      BINDING_OPTION,
+      JSON.stringify({
+        owner: OWNER,
+        prior: { line: DEFAULT_BINDING, command: "switch-client -t =" },
+      }),
+    );
     h.hold("s1", "%1");
     await h.answer({ "%1": "$1" }, { $1: "%1" });
-    expect(h.tmux.binding).toContain("cc-candybar url-handle cc-candybar://tmux-status-click/");
+    expect(h.tmux.binding).toContain(
+      "cc-candybar url-handle cc-candybar://tmux-status-click/",
+    );
     expect(h.tmux.binding).not.toContain("old-node");
     expect(h.tmux.binding).toContain("switch-client -t =");
     await h.answer({}, {});
@@ -417,13 +503,18 @@ describe("TmuxStatusLines", () => {
 
   test("another daemon's binding is left alone", async () => {
     const h = harness();
-    const theirs = "bind-key -T root MouseDown1Status run-shell -b other url-handle cc-candybar://tmux-status-click/z";
+    const theirs =
+      "bind-key -T root MouseDown1Status run-shell -b other url-handle cc-candybar://tmux-status-click/z";
     h.tmux.binding = theirs;
     h.hold("s1", "%1");
     await h.answer({ "%1": "$1" }, { $1: "%1" });
     await h.answer({}, {});
     expect(h.tmux.binding).toBe(theirs);
-    expect(h.logs.some((l) => l.includes("another cc-candybar daemon's status-line clicks"))).toBe(true);
+    expect(
+      h.logs.some((l) =>
+        l.includes("another cc-candybar daemon's status-line clicks"),
+      ),
+    ).toBe(true);
   });
 
   test("a draw tmux refused is written again", async () => {
@@ -446,9 +537,14 @@ describe("TmuxStatusLines", () => {
     h.hold("s1", "%1");
     let release = (): void => {};
     h.tmux.gate = new Promise((resolve) => (release = resolve));
-    h.owner.answered(SOCKET, { sessionOf: new Map([["%1", "$1"]]), shownBy: new Map([["$1", "%1"]]) });
+    h.owner.answered(SOCKET, {
+      sessionOf: new Map([["%1", "$1"]]),
+      shownBy: new Map([["$1", "%1"]]),
+    });
     await new Promise((resolve) => setImmediate(resolve));
-    h.owner.restoreAll((socket, args, stdin) => h.tmux.runSync(socket, args, stdin));
+    h.owner.restoreAll((socket, args, stdin) =>
+      h.tmux.runSync(socket, args, stdin),
+    );
     h.tmux.gate = null;
     release();
     await h.owner.settled();
