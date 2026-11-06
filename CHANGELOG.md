@@ -1,3 +1,13 @@
+## [1.205.0](https://github.com/promptctl/cc-candybar/compare/v1.204.0...v1.205.0) (2026-11-06)
+
+### Features
+
+* **disk:** files and their watch events go through one filesystem port, first used by the watcher registry and the binary watch (candybar-testing-ihvy.y10) ([#637](https://github.com/promptctl/cc-candybar/issues/637)) ([b50d276](https://github.com/promptctl/cc-candybar/commit/b50d2769df4a08e2616f729d630653a07ec2c676))
+
+### Bug Fixes
+
+* **tmux:** the restore guard reads on tmux before 3.5, which has no #{!:} (candybar-gather-renderer-76bb.x07) ([#647](https://github.com/promptctl/cc-candybar/issues/647)) ([f67fa39](https://github.com/promptctl/cc-candybar/commit/f67fa39229a6df3d0d9927f73e74d59008342c7f))
+
 ## [1.204.0](https://github.com/promptctl/cc-candybar/compare/v1.203.0...v1.204.0) (2026-11-06)
 
 ### Features
