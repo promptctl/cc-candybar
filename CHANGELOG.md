@@ -1,3 +1,9 @@
+## [1.203.0](https://github.com/promptctl/cc-candybar/compare/v1.202.0...v1.203.0) (2026-11-06)
+
+### Features
+
+* **facts:** a session's shell and file sources run into its facts document, and a recording replays them with nothing read or spawned (candybar-gather-renderer-76bb.6pj.d8n) ([#641](https://github.com/promptctl/cc-candybar/issues/641)) ([9c90c3b](https://github.com/promptctl/cc-candybar/commit/9c90c3b99f998a33415660abd7f7cf035941219e))
+
 ## [1.202.0](https://github.com/promptctl/cc-candybar/compare/v1.201.1...v1.202.0) (2026-11-06)
 
 ### Features
