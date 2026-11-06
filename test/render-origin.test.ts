@@ -59,9 +59,19 @@ describe("the render origin record", () => {
     });
   });
 
-  test("an older record's file under the home's root is refused, naming it", () => {
+  test("an older record's file under the home's root is the home's file", () => {
+    expect(parseRenderOrigin(record({ configFile: `${ROOT}/config/config.json5` }), ROOT)).toEqual({
+      ...AT,
+      target: { source: "unknown", path: `${ROOT}/config/config.json5` },
+    });
+  });
+
+  test("a world path under the home's root is refused, naming it", () => {
     expect(() =>
-      parseRenderOrigin(record({ configFile: `${ROOT}/config/config.json5` }), ROOT),
+      parseRenderOrigin(
+        record({ configFile: { kind: "world", path: `${ROOT}/config/config.json5` } }),
+        ROOT,
+      ),
     ).toThrow(new BadVerbArgs(
       `render origin: stored world path ${ROOT}/config/config.json5 lies under the home's root ${ROOT}; a home's file is stored relative to it`,
     ));

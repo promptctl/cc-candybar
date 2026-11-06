@@ -829,9 +829,8 @@ function recordedTarget(
 
 // [LAW:parse-dont-validate] The one boundary that lifts the stored string
 // back into a RenderOrigin; a wrong shape is a loud BadVerbArgs, never a
-// guessed path. A file is a StoredPath resolved against the home's root; a
-// bare string is an older build's absolute path, read as a world path, so one
-// under the root is refused like any home file stored absolute.
+// guessed path. A file is a StoredPath resolved against the home's root
+// (stored-path.ts), which reads an older build's bare string too.
 export function parseRenderOrigin(raw: string, root: string): RenderOrigin {
   let parsed: unknown;
   try {
@@ -855,15 +854,7 @@ export function parseRenderOrigin(raw: string, root: string): RenderOrigin {
   }
   let file: string | null;
   try {
-    file =
-      configFile === null
-        ? null
-        : resolveStoredPath(
-            root,
-            typeof configFile === "string"
-              ? { kind: "world", path: configFile }
-              : configFile,
-          );
+    file = configFile === null ? null : resolveStoredPath(root, configFile);
   } catch (e) {
     if (!(e instanceof StoredPathRefused)) throw e;
     throw new BadVerbArgs(`render origin: ${e.message}`);

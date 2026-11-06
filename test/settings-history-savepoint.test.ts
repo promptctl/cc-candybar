@@ -335,6 +335,31 @@ describe("the savepoint survives a restart", () => {
     }
   });
 
+  test("an older build's history, which stored every file as a bare absolute path, loads with its steps and savepoint", () => {
+    const historyFile = path.join(dir, "history.json");
+    const change = (f: string) => ({ kind: "file", file: f, before: "v0", after: "v1" });
+    fs.writeFileSync(
+      historyFile,
+      JSON.stringify({
+        [SID]: {
+          past: [[change(file)], [change("/c.json5")]],
+          future: [],
+          savepoint: { at: 1, net: [change(file)], below: [] },
+        },
+      }),
+    );
+    const storage = fileHistoryStorage(historyFile, dir, (level, m) => {
+      throw new Error(`${level}: ${m}`);
+    });
+    expect(storage.load()).toEqual({
+      [SID]: {
+        past: [[change(file)], [change("/c.json5")]],
+        future: [],
+        savepoint: { at: 1, net: [change(file)], below: [] },
+      },
+    });
+  });
+
   test("a file under the root stored absolute is refused, naming the session, the step and the path", () => {
     const historyFile = path.join(dir, "history.json");
     fs.writeFileSync(

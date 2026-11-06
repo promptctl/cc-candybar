@@ -41,7 +41,21 @@ export class StoredPathRefused extends Error {}
 // is wrong. An absolute path under the root is refused rather than taken,
 // because a home's file has one spelling, and the absolute one names a root
 // the tree may no longer live at.
+//
+// A bare string is an older build's spelling, which had only the absolute one,
+// and is read as this build spells that path. Refusing it would cost every
+// upgrade its undo history and refuse the tree's own files while guarding
+// nothing: an older tree copied under another root names the original's root,
+// which no spelling rule can tell from a file of the world's.
 export function resolveStoredPath(root: string, raw: unknown): string {
+  if (typeof raw === "string") {
+    if (!path.isAbsolute(raw)) {
+      throw new StoredPathRefused(
+        `an older build's stored path ${JSON.stringify(raw)} is not absolute`,
+      );
+    }
+    return resolveStoredPath(root, storedPathOf(root, raw));
+  }
   if (raw === null || typeof raw !== "object") {
     throw new StoredPathRefused(
       `stored path is not an object: ${JSON.stringify(raw)}`,
