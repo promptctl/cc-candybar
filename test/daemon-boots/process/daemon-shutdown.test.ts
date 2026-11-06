@@ -101,9 +101,30 @@ describe("daemon shutdown contract", () => {
     }
   });
 
-  test("newer-client version mismatch: VERSION_MISMATCH is flushed before the daemon exits", async () => {
+  test("version mismatch: an older client leaves the daemon serving, and a newer client's VERSION_MISMATCH is flushed before it exits", async () => {
     const handle = await spawnDaemon();
     try {
+      // [LAW:types-are-the-program] The load-bearing half of the asymmetry: a
+      // stale client must not stop the daemon, because the respawned daemon is
+      // at the same version and the same client mismatches it again. One
+      // daemon carries both halves, since the process tier's starts only fall.
+      const stale = await sendDaemonRequest(
+        handle.home,
+        { v: PROTOCOL_VERSION - 1, kind: "stats" },
+        REPLY_BUDGET_MS,
+      );
+      expect(stale.ok).toBe(false);
+      if (!stale.ok) {
+        expect(stale.code).toBe("VERSION_MISMATCH");
+        expect(stale.daemonV).toBe(PROTOCOL_VERSION);
+      }
+      const serving = await sendDaemonRequest(
+        handle.home,
+        { v: PROTOCOL_VERSION, kind: "stats" },
+        REPLY_BUDGET_MS,
+      );
+      expect(serving.ok).toBe(true);
+
       // [LAW:no-ambient-temporal-coupling] The race this pins: a client at
       // v+1 (binary upgraded under the daemon) must receive the flushed
       // VERSION_MISMATCH diagnostic, never a dead socket — the client-side
@@ -121,33 +142,6 @@ describe("daemon shutdown contract", () => {
         expect(resp.daemonV).toBe(PROTOCOL_VERSION);
       }
       await expectExitWithinBudget(handle.child);
-    } finally {
-      handle.cleanup();
-    }
-  });
-
-  test("older-client version mismatch: VERSION_MISMATCH is answered and the daemon keeps serving", async () => {
-    const handle = await spawnDaemon();
-    try {
-      // [LAW:types-are-the-program] The load-bearing half of the asymmetry: a
-      // stale client must not stop the daemon, because the respawned daemon is
-      // at the same version and the same client mismatches it again.
-      const resp = await sendDaemonRequest(
-        handle.home,
-        { v: PROTOCOL_VERSION - 1, kind: "stats" },
-        REPLY_BUDGET_MS,
-      );
-      expect(resp.ok).toBe(false);
-      if (!resp.ok) {
-        expect(resp.code).toBe("VERSION_MISMATCH");
-        expect(resp.daemonV).toBe(PROTOCOL_VERSION);
-      }
-      const after = await sendDaemonRequest(
-        handle.home,
-        { v: PROTOCOL_VERSION, kind: "stats" },
-        REPLY_BUDGET_MS,
-      );
-      expect(after.ok).toBe(true);
     } finally {
       handle.cleanup();
     }
