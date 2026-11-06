@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-645",
+      "ref": "refs/pull/645/merge",
+      "sha": "2c1fe72c0e52d9f50fac3949c5edc3f4022e0086",
+      "timestamp": "2026-11-06T18:58:23.178Z",
+      "commits": [
+        {
+          "sha": "2c1fe72c0e52d9f50fac3949c5edc3f4022e0086",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T11:57:16-07:00",
+          "message": "Merge 13466b0087e505748133936c4597800cc53b1099 into 0af5d1f4ce463b0bebbbe6a4b6107d2943900c54\n"
+        },
+        {
+          "sha": "13466b0087e505748133936c4597800cc53b1099",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T11:56:58-07:00",
+          "message": "feat(band): a switched-off band lane holds no follower process (candybar-animation-wbxz.w33)\n\nThe band mod stops its follow child on the daemon's SWITCHED_OFF answer\ninstead of keeping it alive to re-ask every 5s, and turning band (A) off\nuninstalls the mod so sessions started afterwards never load it. An\nuninstall of a mod that is not installed is the state off asks for, so it\nis said rather than thrown.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-633",
       "ref": "refs/pull/633/merge",
       "sha": "bc260c643b1b44fd4a26d71f5a9e2605490df7bf",
