@@ -1,3 +1,9 @@
+## [1.198.0](https://github.com/promptctl/cc-candybar/compare/v1.197.0...v1.198.0) (2026-11-06)
+
+### Features
+
+* **home:** a stored path says whether it is the home's or the world's; a copied home undoes into its own config (candybar-gather-renderer-76bb.f00.n2j) ([#628](https://github.com/promptctl/cc-candybar/issues/628)) ([c6103c1](https://github.com/promptctl/cc-candybar/commit/c6103c1e8d45ea9db68f0c9a7411382a1db6be4e))
+
 ## [1.197.0](https://github.com/promptctl/cc-candybar/compare/v1.196.1...v1.197.0) (2026-11-06)
 
 ### Features
