@@ -79624,7 +79624,10 @@ var DISK_TTL_MS = 24 * 60 * 60 * 1e3;
 function livePricing(owner) {
   let loading = null;
   return {
-    table: () => owner.closing.aborted ? Promise.resolve(OFFLINE_PRICING_DATA) : loading ??= loadTable(owner)
+    table: () => owner.closing.aborted ? Promise.resolve(OFFLINE_PRICING_DATA) : loading ??= loadTable(owner).catch((e) => {
+      owner.log("error", `pricing load threw: ${String(e)}`);
+      return OFFLINE_PRICING_DATA;
+    })
   };
 }
 var diskPath = (cacheRoot) => import_node_path38.default.join(cacheRoot, "usage", "pricing.json");
