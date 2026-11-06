@@ -39,7 +39,7 @@ import { failed, type EffectOutcome } from "./effect-outcome.js";
 import type { SessionFacts } from "./session-env.js";
 import type { ClientHints } from "./protocol.js";
 import type { RenderOrigin } from "../config-hint.js";
-import type { TmuxHint } from "../tmux-hint.js";
+import { samePane, type TmuxHint } from "../tmux-hint.js";
 import {
   tmuxPaneOf,
   typeSlash,
@@ -205,9 +205,15 @@ export type LaneOutcome =
     };
 
 // What a step that acts in the session's pane came to: what it answered, or
-// why the session has no pane to act in when the step is reached.
+// why there is no pane to act in when the step is reached.
 export type InPane<T> =
   | { readonly kind: "held"; readonly value: T }
+  | { readonly kind: "refused"; readonly reason: string };
+
+// The session as its latest request reports it now, or why this daemon holds
+// no request of it.
+export type Latest =
+  | { readonly kind: "known"; readonly session: LaneSession }
   | { readonly kind: "refused"; readonly reason: string };
 
 // Run `work` in the order of what is typed into `tmux`'s pane
@@ -218,12 +224,12 @@ export type PaneOrder = <T>(
 ) => Promise<T>;
 
 // [LAW:no-ambient-temporal-coupling] A setup as it runs: the session as its
-// latest request reported it when the setup started, and the one way to type
-// into the session's pane. A step that types into it holds the pane's order,
-// so no slash is typed into the middle of it and two setups never type over
-// each other, and acts on the session as its latest request reports it when
-// the step is reached. The setup's other steps (the `claude` CLI calls) hold
-// no pane.
+// latest request reported it when the setup started, and the one way to act
+// in the session's pane. A step that types into it or splits it holds the
+// pane's order, so no slash is typed into the middle of it and two setups
+// never act over each other, and acts on the session as its latest request
+// reports it when the step is reached. The setup's other steps (the `claude`
+// CLI calls) hold no pane.
 export interface LaneRun {
   readonly session: LaneSession;
   readonly inPane: <T>(
@@ -235,28 +241,57 @@ export interface LaneRun {
 // request, read at the setup's start, at each pane step to find the pane
 // whose order it takes, and again once that order is held, which is what the
 // step acts on. A session that moved to another pane while the step waited
-// takes that pane's order in turn, once the first is let go: holding one
-// pane while waiting on another could wait in a circle.
-export function laneRun(read: () => LaneSession, order: PaneOrder): LaneRun {
-  const inPane: LaneRun["inPane"] = async (work) => {
-    const waited = tmuxPaneOf(read().hints.tmux);
-    if (waited.kind === "refused") return waited;
-    const held = await order(waited.hint, async () => {
-      const session = read();
-      const pane = tmuxPaneOf(session.hints.tmux);
-      if (pane.kind === "refused") return pane;
-      if (!samePane(pane.hint, waited.hint)) return MOVED;
-      return { kind: "held" as const, value: await work(session, pane.hint) };
-    });
-    return held === MOVED ? inPane(work) : held;
+// takes that pane's order in turn, once the first is let go, and says so
+// (`moved`): holding one pane while waiting on another could wait in a
+// circle.
+export function laneRun(
+  read: () => Latest,
+  order: PaneOrder,
+  moved: (from: TmuxHint, to: TmuxHint) => void,
+): LaneRun {
+  const first = read();
+  if (first.kind === "refused") throw new Error(first.reason);
+  const paneNow = ():
+    | {
+        readonly kind: "in";
+        readonly session: LaneSession;
+        readonly tmux: TmuxHint;
+      }
+    | { readonly kind: "refused"; readonly reason: string } => {
+    const latest = read();
+    if (latest.kind === "refused") return latest;
+    const pane = tmuxPaneOf(latest.session.hints.tmux);
+    return pane.kind === "refused"
+      ? pane
+      : { kind: "in", session: latest.session, tmux: pane.hint };
   };
-  return { session: read(), inPane };
+  const inPane: LaneRun["inPane"] = async (work) => {
+    const waited = paneNow();
+    if (waited.kind === "refused") return waited;
+    const held = await order(waited.tmux, async () => {
+      const now = paneNow();
+      if (now.kind !== "in" || !samePane(now.tmux, waited.tmux)) return now;
+      return {
+        kind: "held" as const,
+        value: await work(now.session, now.tmux),
+      };
+    });
+    if (held.kind !== "in") return held;
+    moved(waited.tmux, held.tmux);
+    return inPane(work);
+  };
+  return { session: first.session, inPane };
 }
 
-const MOVED = Symbol("moved to another pane");
-
-const samePane = (a: TmuxHint, b: TmuxHint): boolean =>
-  a.socket === b.socket && a.pane === b.pane;
+// A pane step's refusal said as the step's failure, or what the step answered.
+async function required<T>(
+  held: Promise<InPane<T>>,
+  refusal: (reason: string) => string,
+): Promise<T> {
+  const step = await held;
+  if (step.kind === "refused") throw new BadVerbArgs(refusal(step.reason));
+  return step.value;
+}
 
 type Plan = (
   run: LaneRun,
@@ -319,23 +354,18 @@ export const LANE_SETUP: Readonly<Record<Lane, { on: Plan; off: Plan }>> = {
         said: `restarting Claude Code in ${tmux.pane} under the attach launcher`,
         // The whole restart holds the pane: from the reads that judge it to
         // the attach, a line typed into the pane would land in the restart.
-        finished: run
-          .inPane((session, tmux) =>
+        finished: required(
+          run.inPane((session, tmux) =>
             restartUnderAttach(
               session,
               tmux,
               { node: host.node[0]!, launcher, preload: host.preload },
               edge,
             ),
-          )
-          .then((held) => {
-            if (held.kind === "refused") {
-              throw new Error(
-                `Claude Code was not restarted under the attach launcher: ${held.reason}`,
-              );
-            }
-            return held.value;
-          }),
+          ),
+          (reason) =>
+            `Claude Code was not restarted under the attach launcher: ${reason}`,
+        ),
       };
     },
     // Lane off, the attached statusline is refused frames and shows its
@@ -345,38 +375,45 @@ export const LANE_SETUP: Readonly<Record<Lane, { on: Plan; off: Plan }>> = {
         "nothing to stop: the attached statusline draws its command's output while the lane is off",
       ),
   },
-  // Splitting or closing a bar pane types nothing into the session's pane,
-  // so neither holds the pane's order.
+  // Splitting the session's pane resizes what a restart reads in it, so a
+  // split or close holds the pane's order too.
   pane: {
-    on: async ({ session }, host, edge) => {
-      const tmux = paneOf(session);
-      const open = await edge.barPanes(tmux);
-      if (open.length > 0) {
-        return done(
-          `bar pane ${open.join(", ")} already draws ${tmux.pane}'s bar`,
-        );
-      }
-      const opened = await edge.openBarPane(
-        tmux,
-        [...host.node, host.bundle, "bar-pane", tmux.pane],
-        homeEnv(host.home),
-      );
-      return done(`opened bar pane ${opened} under ${tmux.pane}`);
-    },
+    on: (run, host, edge) =>
+      required(
+        run.inPane(async (_session, tmux) => {
+          const open = await edge.barPanes(tmux);
+          if (open.length > 0) {
+            return done(
+              `bar pane ${open.join(", ")} already draws ${tmux.pane}'s bar`,
+            );
+          }
+          const opened = await edge.openBarPane(
+            tmux,
+            [...host.node, host.bundle, "bar-pane", tmux.pane],
+            homeEnv(host.home),
+          );
+          return done(`opened bar pane ${opened} under ${tmux.pane}`);
+        }),
+        (reason) => reason,
+      ),
     // Off is "no bar pane draws this session's bar", which a session with no
     // tmux pane already is.
-    off: async ({ session }, _host, edge) => {
-      const pane = tmuxPaneOf(session.hints.tmux);
+    off: async (run, _host, edge) => {
+      const pane = tmuxPaneOf(run.session.hints.tmux);
       if (pane.kind === "refused") {
         return done(`no bar pane to close: ${pane.reason}`);
       }
-      const tmux = pane.hint;
-      const open = await edge.barPanes(tmux);
-      for (const pane of open) await edge.closePane(tmux, pane);
-      return done(
-        open.length === 0
-          ? `no bar pane draws ${tmux.pane}'s bar`
-          : `closed bar pane ${open.join(", ")}`,
+      return required(
+        run.inPane(async (_session, tmux) => {
+          const open = await edge.barPanes(tmux);
+          for (const pane of open) await edge.closePane(tmux, pane);
+          return done(
+            open.length === 0
+              ? `no bar pane draws ${tmux.pane}'s bar`
+              : `closed bar pane ${open.join(", ")}`,
+          );
+        }),
+        (reason) => `no bar pane was closed: ${reason}`,
       );
     },
   },
@@ -816,7 +853,7 @@ export class LaneSetups {
 
   // [LAW:effects-at-boundaries] The performer's run of one setup, answering
   // how it ended: a part still underway once the plan answers is waited out,
-  // so the session's next effect starts after it.
+  // so the lane's next setup starts after it.
   async setup({
     sessionId,
     lane,
@@ -836,7 +873,15 @@ export class LaneSetups {
     let outcome: LaneOutcome;
     try {
       outcome = await LANE_SETUP[lane][on ? "on" : "off"](
-        laneRun(() => this.latestOf(sessionId), this.paneOrder),
+        laneRun(
+          () => this.latestOf(sessionId),
+          this.paneOrder,
+          (from, to) =>
+            this.deps.log(
+              "info",
+              `lane: ${lane} ${on ? "on" : "off"} — the session moved from ${from.pane} to ${to.pane} while its step waited for the pane, so it takes ${to.pane}'s order ${where}`,
+            ),
+        ),
         this.deps.host,
         this.deps.edge,
       );
@@ -864,15 +909,15 @@ export class LaneSetups {
 
   // [LAW:no-silent-failure] The session as its latest request reports it
   // now. One this daemon has stopped holding since the click (evicted with
-  // the least recently drawn) fails the setup, saying so.
-  private latestOf(sessionId: string): LaneSession {
+  // the least recently drawn) is refused, saying so.
+  private latestOf(sessionId: string): Latest {
     const session = this.deps.latest(sessionId);
-    if (session === null) {
-      throw new Error(
-        `this daemon no longer holds a request of session ${sessionId} — click again once its bar has drawn`,
-      );
-    }
-    return session;
+    return session === null
+      ? {
+          kind: "refused",
+          reason: `this daemon no longer holds a request of session ${sessionId}`,
+        }
+      : { kind: "known", session };
   }
 
   close(): void {

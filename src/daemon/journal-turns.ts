@@ -20,7 +20,7 @@
 // what its probes found.
 
 import type { Lane } from "../config/lanes.js";
-import type { TmuxHint } from "../tmux-hint.js";
+import { paneName, type TmuxHint } from "../tmux-hint.js";
 import { KeyedSerialQueue } from "../utils/keyed-serial-queue.js";
 import { DaemonClosing } from "./verb-error.js";
 
@@ -46,15 +46,14 @@ export type OrderingKey =
   | { readonly kind: "pane"; readonly tmux: TmuxHint }
   | { readonly kind: "lane"; readonly session: string; readonly lane: Lane };
 
-// A key as the queue holds it. A pane is named by its server's socket, since
-// pane ids are per server.
+// A key as the queue holds it.
 const QUEUED: {
   readonly [K in OrderingKey["kind"]]: (
     key: Extract<OrderingKey, { readonly kind: K }>,
   ) => readonly unknown[];
 } = {
   session: ({ session }) => ["session", session],
-  pane: ({ tmux }) => ["pane", tmux.socket, tmux.pane],
+  pane: ({ tmux }) => ["pane", paneName(tmux)],
   lane: ({ session, lane }) => ["lane", session, lane],
 };
 

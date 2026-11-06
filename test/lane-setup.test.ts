@@ -38,6 +38,7 @@ import {
 import { draftShown, turnRunning } from "../src/claude-input/prompt-screen";
 import { BadVerbArgs, DaemonClosing } from "../src/daemon/verb-error";
 import { JournalTurns } from "../src/daemon/journal-turns";
+import { performInOrder } from "../src/daemon/apply";
 import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { lastClickError } from "../src/daemon/click-error";
 import type { VerbContext } from "../src/daemon/verbs";
@@ -95,7 +96,12 @@ const session = (
 
 // A setup's run over `s` with nothing else in its pane: each pane step runs at
 // once, on `s`.
-const run = (s: LaneSession): LaneRun => laneRun(() => s, (_tmux, work) => work());
+const run = (s: LaneSession): LaneRun =>
+  laneRun(
+    () => ({ kind: "known", session: s }),
+    (_tmux, work) => work(),
+    () => {},
+  );
 
 // Every effect recorded, in the order it ran.
 function fakeEdge(over: Partial<LaneEdge> = {}): { edge: LaneEdge; did: string[] } {
@@ -885,33 +891,28 @@ describe("LaneSetups", () => {
         described.push(owner.noted(session.sessionId, switches));
       },
     };
-    // Hand what each event described to the performer, as its turn does once
-    // it is over: each in its lane's order, placed at once, and after the
-    // event's setups before it; and let the setups queued behind them run.
+    // Hand what each event described to the performer's order, as its turn
+    // does once it is over (src/daemon/apply.ts), and let the setups queued
+    // behind them run.
     const settle = async (): Promise<void> => {
       for (const effects of described.splice(0)) {
-        let before: Promise<void> = Promise.resolve();
-        for (const effect of effects) {
-          const after = before;
-          before = turns.performing(
-            { kind: "lane", session: effect.sessionId, lane: effect.lane },
-            async () => {
-              await after;
-              await owner.setup(effect).then(
-                (outcome) => void outcomes.push(outcome),
-                (e: unknown) => void refusals.push(e),
-              );
-            },
-          );
-        }
-        performing.push(before);
+        performing.push(
+          performInOrder(turns, { verb: "lane", session: SID }, effects, (effect) =>
+            owner.setup(effect).then(
+              (outcome) => void outcomes.push(outcome),
+              (e: unknown) => void refusals.push(e),
+            ),
+          ),
+        );
       }
       await new Promise((r) => setImmediate(r));
     };
     const close = (): void => owner.close();
     // A request of the session arrived since: its latest, as a setup reads it.
     const report = (session: LaneSession): void => void (latest = session);
-    return { setups, logs, settle, outcomes, refusals, performing, close, report, turns };
+    // The daemon stopped holding the session's request since.
+    const evict = (): void => void (latest = null);
+    return { setups, logs, settle, outcomes, refusals, performing, close, report, evict, turns };
   };
   const switches = (on: Partial<LaneSwitches>): LaneSwitches => ({
     band: false,
@@ -1113,7 +1114,7 @@ describe("LaneSetups", () => {
         },
       },
     });
-    const { setups, settle, report, performing, outcomes, turns } = owner(edge, { ...HOST, bundle });
+    const { setups, logs, settle, report, performing, outcomes, turns } = owner(edge, { ...HOST, bundle });
     const MOVED_TO: TmuxHint = { ...TMUX, pane: "%8" };
     const parked = (tmux: TmuxHint, line: string) => {
       let release!: () => void;
@@ -1139,6 +1140,46 @@ describe("LaneSetups", () => {
     await Promise.all(performing);
     expect(ran).toEqual(["line in %7", "after in %7", "line in %8", "/reload-plugins into %8"]);
     expect(outcomes).toEqual([expect.objectContaining({ kind: "ok" })]);
+    expect(logs).toContainEqual(expect.stringMatching(/band on — the session moved from %7 to %8 while its step waited for the pane/));
+  });
+
+  test("a band install whose session this daemon stopped holding before the reload says the mod is installed and what to type", async () => {
+    const { bundle } = checkout();
+    let installed!: () => void;
+    const { edge, did } = fakeEdge({
+      claude: (args) =>
+        args[1] === "install" ? new Promise<void>((r) => (installed = r)) : Promise.resolve(),
+    });
+    const { setups, settle, evict, performing, outcomes } = owner(edge, { ...HOST, bundle });
+    setups.clicked(SID, session(), switches({}), switches({ band: true }));
+    await settle();
+    evict();
+    installed();
+    await Promise.all(performing);
+    expect(did.filter((d) => d.startsWith("type"))).toEqual([]);
+    expect(outcomes).toEqual([
+      failed(
+        `lane: band on: the band mod is installed, but /reload-plugins was not typed: this daemon no longer holds a request of session ${SID} — or type /reload-plugins yourself`,
+      ),
+    ]);
+  });
+
+  // A split resizes the session's pane, which a restart's reads would see.
+  test("a bar pane opens in the order of the session's pane, after what was placed there before it", async () => {
+    const { edge, did } = fakeEdge();
+    const { setups, settle, performing, turns } = owner(edge);
+    let release!: () => void;
+    const parked = turns.performing({ kind: "pane", tmux: TMUX }, async () => {
+      await new Promise<void>((r) => (release = r));
+      did.push("line in %7");
+    });
+    setups.clicked(SID, session(), switches({}), switches({ pane: true }));
+    await settle();
+    expect(did).toEqual([]);
+    release();
+    await parked;
+    await Promise.all(performing);
+    expect(did).toEqual(["line in %7", expect.stringMatching(/^open under %7: /)]);
   });
 
   test("a pane step still queued when the daemon closes types nothing, and the setup fails as the close", async () => {

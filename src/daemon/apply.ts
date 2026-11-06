@@ -10,8 +10,8 @@
 //
 // [LAW:effects-at-boundaries] An arm answers its source and describes the
 // effects its turn asked for (src/daemon/effect.ts). The performer below runs
-// them once the arm has answered, in the order described, each behind the
-// earlier effects of its order, and applies each
+// them once the arm has answered, each behind its event's earlier effects
+// and the earlier effects of its order (`performInOrder`), and applies each
 // outcome as an effect-done event, whose arm is the one writer of what the
 // effect leaves: a doctor's report, or a failure on the bar. So a click's
 // reply never waits on a child process, no turn waits on one either, and no
@@ -42,7 +42,7 @@ import {
   type OutcomeOf,
 } from "./effect.js";
 import { failed, PERFORMED, type EffectOutcome } from "./effect-outcome.js";
-import type { OrderingKey } from "./journal-turns.js";
+import type { JournalTurns, OrderingKey } from "./journal-turns.js";
 import {
   SESSION_CLIENT_HINTS_KEY,
   SESSION_RENDER_ORIGIN_KEY,
@@ -576,75 +576,106 @@ async function perform<K extends Effect["kind"]>(
 }
 
 // [LAW:types-are-the-program] The order each kind of effect takes its place
-// in (src/daemon/journal-turns.ts), none missing. A typed line is ordered
-// with what else is typed into its pane, and a setup with its lane's other
-// setups, taking the pane's order itself for the steps that type into it
+// in (src/daemon/journal-turns.ts), none missing, and whether it takes a
+// pane's place only when a step of it reaches the pane. A typed line is
+// ordered with what else is typed into its pane, and a setup with its lane's
+// other setups, taking the pane's order itself for the steps that act in it
 // (src/daemon/lane-setup.ts). A launch, an update, a run and a doctor step
 // keep the order of their session's clicks as they committed: none acts on a
 // pane or a lane, so a copy waits on no restart, unless its own click's
 // earlier effects do.
 const ORDERING: {
-  readonly [K in Effect["kind"]]: (
-    effect: Extract<Effect, { readonly kind: K }>,
-    of: EffectOrigin,
-  ) => OrderingKey;
+  readonly [K in Effect["kind"]]: {
+    readonly key: (
+      effect: Extract<Effect, { readonly kind: K }>,
+      of: EffectOrigin,
+    ) => OrderingKey;
+    readonly paneWhenReached: boolean;
+  };
 } = {
-  launch: (_effect, { session }) => ({ kind: "session", session }),
-  "type-slash": ({ pane }) => ({ kind: "pane", tmux: pane }),
-  "apply-update": (_effect, { session }) => ({ kind: "session", session }),
-  run: (_effect, { session }) => ({ kind: "session", session }),
-  "lane-setup": ({ sessionId, lane }) => ({
-    kind: "lane",
-    session: sessionId,
-    lane,
-  }),
-  doctor: ({ session }) => ({ kind: "session", session }),
+  launch: {
+    key: (_effect, { session }) => ({ kind: "session", session }),
+    paneWhenReached: false,
+  },
+  "type-slash": {
+    key: ({ pane }) => ({ kind: "pane", tmux: pane }),
+    paneWhenReached: false,
+  },
+  "apply-update": {
+    key: (_effect, { session }) => ({ kind: "session", session }),
+    paneWhenReached: false,
+  },
+  run: {
+    key: (_effect, { session }) => ({ kind: "session", session }),
+    paneWhenReached: false,
+  },
+  "lane-setup": {
+    key: ({ sessionId, lane }) => ({ kind: "lane", session: sessionId, lane }),
+    paneWhenReached: true,
+  },
+  doctor: {
+    key: ({ session }) => ({ kind: "session", session }),
+    paneWhenReached: false,
+  },
 };
 
-function orderingOf<K extends Effect["kind"]>(
+function placeOf<K extends Effect["kind"]>(
   effect: Extract<Effect, { readonly kind: K }>,
   of: EffectOrigin,
 ): OrderingKey {
   const ordering: (typeof ORDERING)[K] = ORDERING[effect.kind];
-  return ordering(effect, of);
+  return ordering.key(effect, of);
 }
 
-// [LAW:effects-at-boundaries] After the turn, each effect in the order it was
-// described, as a `do` lists them, then the event's lane setups, and each
-// outcome back through Apply. [LAW:no-ambient-temporal-coupling] Every
-// effect takes its place in its order here, in the call that commits its
-// turn, so places follow the order turns committed; each then waits in its
-// place for its own event's effects before it. A setup's steps in a pane take
-// the pane's place only once they are reached (src/daemon/lane-setup.ts), so
-// a setup runs after every other effect of its event: one after it would
-// wait on it, while its pane step could wait behind a typed line that waits,
-// through another event's effects, on that one. No effect but a setup takes
-// a lane's place, so nothing a pane step waits on can wait on a setup. Never
-// rejects: an outcome is data.
+// [LAW:no-ambient-temporal-coupling][LAW:single-enforcer] The one place
+// effects take their places: each in its order, in the call that commits its
+// turn, so places follow the order turns committed, and each then waits in
+// its place for its own event's effects before it, so a `do` keeps the order
+// it lists. An effect that takes a pane's place only when a step reaches it
+// runs after every other effect of its event: one after it would wait on it,
+// while its pane step could wait behind a typed line that waits, through
+// another event's effects, on that one. Only such an effect takes a lane's
+// place, so nothing a pane step waits on can wait on one.
+export function performInOrder<E extends Effect>(
+  turns: Pick<JournalTurns, "performing">,
+  of: EffectOrigin,
+  described: readonly E[],
+  act: (effect: E) => Promise<void>,
+): Promise<void> {
+  const late = (effect: E): boolean => ORDERING[effect.kind].paneWhenReached;
+  const effects = [
+    ...described.filter((e) => !late(e)),
+    ...described.filter(late),
+  ];
+  let before: Promise<void> = NOTHING_PERFORMED;
+  for (const effect of effects) {
+    const after = before;
+    before = turns.performing(placeOf(effect, of), async () => {
+      await after;
+      await act(effect);
+    });
+  }
+  return before;
+}
+
+// [LAW:effects-at-boundaries] After the turn, each effect in its place, and
+// each outcome back through Apply. Never rejects: an outcome is data.
 function performAll(
   parts: ApplyParts,
   of: EffectOrigin,
   described: readonly Effect[],
 ): Promise<void> {
-  const effects = [
-    ...described.filter((e) => e.kind !== "lane-setup"),
-    ...described.filter((e) => e.kind === "lane-setup"),
-  ];
-  let before: Promise<void> = NOTHING_PERFORMED;
-  for (const effect of effects) {
-    const after = before;
-    before = parts.verbCtx.journalTurns.performing(
-      orderingOf(effect, of),
-      async () => {
-        await after;
-        const done = await perform(effect, parts);
-        await applyUnanswered(
-          { kind: "effect-done", of, done },
-          parts,
-          `${describeEffect(effect)} ${done.outcome.kind}${"said" in done.outcome ? `: ${done.outcome.said}` : ""}`,
-        );
-      },
-    );
-  }
-  return before;
+  return performInOrder(
+    parts.verbCtx.journalTurns,
+    of,
+    described,
+    async (effect) => {
+      const done = await perform(effect, parts);
+      await applyUnanswered(
+        { kind: "effect-done", of, done },
+        parts,
+        `${describeEffect(effect)} ${done.outcome.kind}${"said" in done.outcome ? `: ${done.outcome.said}` : ""}`,
+      );
+    },
+  );
 }

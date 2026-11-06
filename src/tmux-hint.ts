@@ -36,6 +36,16 @@ export interface TmuxHint {
   readonly truecolor: string | null;
 }
 
+// [LAW:one-source-of-truth] Which pane a hint names: its server's socket and
+// its id, since pane ids are per server.
+export const paneName = (tmux: Pick<TmuxHint, "socket" | "pane">): string =>
+  JSON.stringify([tmux.socket, tmux.pane]);
+
+export const samePane = (
+  a: Pick<TmuxHint, "socket" | "pane">,
+  b: Pick<TmuxHint, "socket" | "pane">,
+): boolean => paneName(a) === paneName(b);
+
 // [LAW:one-source-of-truth] Whether a request's client reported its session in
 // a tmux pane: a client too old to answer (absent) is read as not in tmux.
 export const inTmux = (tmux: TmuxHint | null | undefined): boolean =>
