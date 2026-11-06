@@ -18,7 +18,7 @@ import {
   VERB_COPY,
   VERB_DISPATCH,
   VERB_SET_STATE,
-  VERB_TMUX_STATUS_CLICK,
+  VERB_RANGE,
   VERB_UNDO,
   effectsUrl,
   encodeSegments,
@@ -362,7 +362,7 @@ describe("the click path", () => {
     const { ctx } = setup();
     const url = `cc-candybar://to/main/${VERB_UNDO}/${encodeSegments([SID])}`;
     const { send } = parts(ctx, url);
-    const { resp } = await send(VERB_TMUX_STATUS_CLICK, "ignored");
+    const { resp } = await send(VERB_RANGE, "ignored");
     expect(resp).toMatchObject({ ok: false, code: "BAD_REQUEST" });
   });
 

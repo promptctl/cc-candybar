@@ -11,7 +11,7 @@ describe("linkSigner", () => {
     expect(TEST_SIGNER.verifyBinding(`${socket}x`, mac)).toBe(false);
     expect(TEST_SIGNER.verifyBinding(socket, `${mac}0`)).toBe(false);
     const fields = {
-      sessionId: "tmux-status-click",
+      sessionId: "range",
       action: socket,
       declaration: "",
       evaluated: "",

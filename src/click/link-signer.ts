@@ -7,7 +7,7 @@
 // state directory's key file, a test's fixed bytes) is the caller's.
 
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { VERB_TMUX_STATUS_CLICK } from "./wire.js";
+import { VERB_RANGE } from "./wire.js";
 
 // HMAC-SHA256 takes a key of any length; the key file holds this many random
 // bytes.
@@ -54,7 +54,7 @@ const linkFields = (fields: SignedFields): readonly string[] => [
 ];
 
 const bindingFields = (socket: string): readonly string[] => [
-  VERB_TMUX_STATUS_CLICK,
+  VERB_RANGE,
   socket,
 ];
 

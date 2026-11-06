@@ -23,7 +23,7 @@ import {
   addressedLink,
   effectsUrl,
   VERB_SET_STATE,
-  VERB_TMUX_STATUS_CLICK,
+  VERB_RANGE,
 } from "../../../src/click/wire";
 import { sendDaemonRequest } from "../../helpers/daemon-wire";
 import { linkKeyFile, linkSignerFromKeyFile } from "../../../src/daemon/link-key";
@@ -191,7 +191,7 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
       linkKeyFile(daemon.paths.state),
     ).signBinding(socket);
     const at = [socket, mac, "7", range!].map(encodeURIComponent).join("/");
-    const statusClick = addressedLink(daemon.name, VERB_TMUX_STATUS_CLICK, at);
+    const statusClick = addressedLink(daemon.name, VERB_RANGE, at);
     // Refused until the status line has drawn its first frame, which runs
     // nothing; the first click it answers runs the link.
     let refusal = "";
@@ -207,7 +207,7 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
       logLines(env).filter(
         (l) =>
           / \[info\] click /.test(l) &&
-          l.includes(` verb=${VERB_TMUX_STATUS_CLICK} `),
+          l.includes(` verb=${VERB_RANGE} `),
       );
     await until(() => ran().length > 0, "the status-line click's event");
     const [event, ...more] = ran();
@@ -215,7 +215,7 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     expect(event).toContain(` link=${JSON.stringify(link)} `);
     // The binding's URL and the link its range marks both name this
     // renderer, under one key each, so neither reads as the other.
-    expect(event).toContain(` to=${daemon.name} verb=${VERB_TMUX_STATUS_CLICK} `);
+    expect(event).toContain(` to=${daemon.name} verb=${VERB_RANGE} `);
     expect(event).toContain(` linkTo=${daemon.name} linkVerb=dispatch sid=${sid} `);
     expect(event!.match(/ to=/g)).toHaveLength(1);
     expect(event).toContain(" outcome=ok");
