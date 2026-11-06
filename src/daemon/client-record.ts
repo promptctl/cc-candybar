@@ -73,7 +73,7 @@ export function parseRecordArgs(
 }
 
 // [LAW:dataflow-not-control-flow] The outcome → (streams, exit-code) fold.
-// [LAW:no-silent-failure] A recording no request arrived in replays nothing,
+// [LAW:no-silent-failure] A recording no request was answered in replays nothing,
 // so it is a failure the person running the command hears now, not one the
 // reader of the report finds later.
 export function recordPlan(
@@ -87,20 +87,20 @@ export function recordPlan(
       code: 1,
     };
   }
-  const { path, lines, requests, daemonClosed } = outcome.value;
+  const { path, lines, answers, daemonClosed } = outcome.value;
   // A span the daemon's close cut short is said, so a short file or an empty
   // one is never read as the session's own doing.
   const cut = `the daemon closed before ${seconds}s ran out`;
-  return requests === 0
+  return answers === 0
     ? {
         stdout: "",
         stderr: daemonClosed
-          ? `record: ${path}: ${cut}, and no request had arrived, so there is nothing to replay. No file was left.\n`
-          : `record: ${path}: no request arrived in ${seconds}s, so there is nothing to replay: the session was idle, or its statusline is not drawn by this daemon. No file was left.\n`,
+          ? `record: ${path}: ${cut}, and no request had been answered, so there is nothing to replay. No file was left.\n`
+          : `record: ${path}: no request was answered in ${seconds}s, so there is nothing to replay: the session was idle, or its statusline is not drawn by this daemon. No file was left.\n`,
         code: 1,
       }
     : {
-        stdout: `${path}: ${lines} lines, ${requests} requests\n`,
+        stdout: `${path}: ${lines} lines, ${answers} answers\n`,
         stderr: daemonClosed
           ? `record: ${cut}: the file holds what came before.\n`
           : "",

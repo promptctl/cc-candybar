@@ -21,7 +21,6 @@ import {
 import type { Fact } from "../facts/fact";
 import type { FactsLine, Recording } from "../facts/recording";
 import type { UpdateNotice } from "../facts/session-facts";
-import type { Timekeeper } from "../time";
 import { Holds } from "../utils/holds";
 import { instantAt, type Instant } from "../utils/instant";
 import { failed, failedWith } from "../utils/outcome";
@@ -348,41 +347,39 @@ export function inProcessFacts({
 
 // ─── The recording arm ───────────────────────────────────────────────────────
 
-// [LAW:effects-at-boundaries] Pure over a parsed recording and a Timekeeper,
-// never a path: the parser (src/facts/recording.ts) is the edge the text
-// crosses, and the one checker of what a recording is — one session's, in time
-// order, with a document to open on — so a follow knows the session it holds
-// and refuses another by name, and a line's offset from the first is its place
-// in the replay. A document's sequence counts one follow's stamps from 1, so a
-// sequence that starts again is the session followed again (a reload's
-// successor, the view an idle sweep retired opened by the next request), shown
-// at its instant as the live bar showed it. A
-// follow's line at any moment is the last whose offset from the first the
-// handed clock has reached, and each later line lands when the clock reaches
-// its offset, so under a held clock a replay runs at any speed.
+// [LAW:effects-at-boundaries] Pure over a parsed recording, never a path or a
+// clock: the parser (src/facts/recording.ts) is the edge the text crosses, and
+// the one checker of what a recording is — one session's, with a document to
+// open on — so a follow knows the session it holds and refuses another by
+// name. A document's sequence counts one follow's stamps from 1, so a sequence
+// that starts again is the session followed again (a reload's successor, the
+// view an idle sweep retired opened by the next request), shown where the
+// live bar showed it.
 //
-// [LAW:no-ambient-temporal-coupling] Where the replay stands is the clock's
-// position in the recording, not the instant of the follow: a view the cache
-// opens again mid-replay (a reload, a request after an idle sweep) shows what
-// the live bar showed at that instant, not the opening line again.
+// [LAW:one-source-of-truth] Where the replay stands is the line its walk has
+// reached, the one order the recording has: every follow's document is the
+// last one the walk reached, so a view the cache opens again mid-replay shows
+// what the live bar showed there, not the opening document again, and a
+// document stamped in the millisecond after a draw reaches the next draw, not
+// that one.
 //
 // [LAW:no-silent-failure] A follow of a session the recording does not hold
 // throws naming both: pending means not yet, and a recording never will, so an
-// all-pending document for it would be an answer-shaped void. So does a follow
-// before the recording's first line, where it has no document at all.
+// all-pending document for it would be an answer-shaped void.
 //
 // A recording starts nothing and waits on nothing, so a request's settling is
 // the empty record, landed; and a follow again changes nothing, because the
 // keys a request names chose nothing here.
-export function recordingFacts(
-  { session: held, facts: lines }: Pick<Recording, "session" | "facts">,
-  clock: Pick<Timekeeper, "after" | "now">,
-): Facts {
-  const at0 = lines[0].at;
-  // Whole milliseconds, as the clock reads them, so a line's offset and the
-  // clock's position in the recording are compared in one unit.
-  const msOf = (at: Instant): number => Math.round(at * 1000);
-  const offsetMs = (line: FactsLine): number => msOf(line.at) - msOf(at0);
+export interface RecordingFacts extends Facts {
+  // The walk reached `line`: every follow's document is it from here.
+  reach(line: FactsLine): void;
+}
+
+export function recordingFacts({
+  session: held,
+  opening,
+}: Pick<Recording, "session" | "opening">): RecordingFacts {
+  const reached = observable.box<FactsLine>(opening, { deep: false });
   return {
     follow(facts) {
       if (facts.sessionId !== held) {
@@ -390,30 +387,14 @@ export function recordingFacts(
           `this recording holds session ${JSON.stringify(held)}, not ${JSON.stringify(facts.sessionId)}`,
         );
       }
-      const elapsedMs = clock.now() - msOf(at0);
-      const reached = lines.filter((line) => offsetMs(line) <= elapsedMs);
-      if (reached.length === 0) {
-        throw new Error(
-          `this recording begins at ${at0}, and the clock reads ${instantAt(clock)}`,
-        );
-      }
-      const box = observable.box<FactsLine>(reached.at(-1)!, { deep: false });
-      const timers = lines
-        .filter((line) => offsetMs(line) > elapsedMs)
-        .map((line) =>
-          clock.after(offsetMs(line) - elapsedMs, () =>
-            runInAction(() => box.set(line)),
-          ),
-        );
       return {
-        stamped: () => box.get(),
+        stamped: () => reached.get(),
         failure: () => null,
         follow: () => {},
         settle: () => ({ refreshed: new Map(), landed: Promise.resolve() }),
-        dispose: () => {
-          for (const clear of timers) clear();
-        },
+        dispose: () => {},
       };
     },
+    reach: (line) => runInAction(() => reached.set(line)),
   };
 }

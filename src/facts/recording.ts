@@ -1,17 +1,20 @@
 // [LAW:parse-dont-validate] The one place a recording's text becomes a typed
 // recording. A recording is one session's stream as newline-delimited JSON
-// (docs/design/gather-and-renderer.md §14): a header naming the facts version
-// and the session, then the documents the session's view took and the
-// requests it was drawn by, each with its instant. The session's recorder
+// (docs/design/gather-and-renderer.md §14): a header naming its format's version,
+// the session and the home its payloads were composed against, then the
+// documents the session's view took, the requests it was drawn by and the
+// draws of their answers, each with its instant. The session's recorder
 // (src/daemon/session-recorder.ts) writes it and this unit reads it back.
 // Everything past this unit holds a `Recording` and asks nothing of its shape
 // again: a malformed or partial line throws naming its line number, as
 // `parseFact` does for a fact.
 //
-// Request lines are in the file because the hook's fields (model, cost,
-// context window) and the client's hints are not in the document, and a
-// replay without them cannot draw what the live bar drew. The facts arm reads
-// only the documents, so the seam stays facts-only.
+// Request lines and the home are in the file because the hook's fields
+// (model, cost, context window), the client's hints and whose home `~` names
+// are not in the document, and a replay without them cannot draw what the
+// live bar drew. Draw lines are there because an answer is drawn after its
+// request's wait, from what the view took during it. The facts arm reads only
+// the documents, so the seam stays facts-only.
 //
 // [LAW:one-way-deps] Pure over text and values: no file, no clock. Where the
 // text comes from is the caller's edge.
@@ -43,36 +46,79 @@ export interface FactsLine {
 }
 
 // One request a session's view was drawn by, and the instant it arrived at:
-// what a replay opens the view with and draws each later frame at.
+// what a replay declares the view with, and what its answer is drawn at.
 export interface RequestLine {
   readonly at: Instant;
   readonly request: ViewFacts;
 }
 
-// [LAW:types-are-the-program] A line of the file, by kind: the header first,
-// then documents and requests in the order the recorder took them.
-export type RecordingLine =
-  | { readonly kind: "recording"; readonly session: SessionId }
-  | ({ readonly kind: "facts" } & FactsLine)
-  | ({ readonly kind: "request" } & RequestLine);
-
-// [LAW:types-are-the-program] A recording as the parser proved it: one
-// session's, its documents and its requests each in time order, at least one
-// of each, and a document at or before the first request, so a replay has a
-// view to open and a document for every request it draws.
-export interface Recording {
-  readonly session: SessionId;
-  readonly facts: readonly [FactsLine, ...FactsLine[]];
-  readonly requests: readonly [RequestLine, ...RequestLine[]];
+// One answer drawn, once its request's wait was over, from the document the
+// line before it holds: the instant of the request it answers, which is the
+// instant it is drawn at.
+export interface DrawLine {
+  readonly request: Instant;
 }
 
-// A recording of another facts version: refused whole, never read field by
-// field against this build's document. The version is a value, so the edge
-// that names the file says which.
+// The request a draw's view was declared with, restated ahead of the draw
+// when it is not the last one the file declared: a request draws the view it
+// holds, which the session may have moved away from, so the view declared
+// with a later request is not the one it read. Not an arrival: nothing waits
+// for it and no draw answers it.
+export interface DeclaredLine {
+  readonly request: ViewFacts;
+}
+
+// [LAW:one-source-of-truth] What the session's view took and its request path
+// did, in the one order a replay follows: the file's. A document is the
+// view's from its line on, a request or a declaration declares the view, and
+// a draw draws it as it stands. Instants cannot order them: a document can be
+// stamped in the millisecond a draw read the one before it, and under a held
+// clock a request, what lands in its wait and its answer share one instant.
+export type ReplayLine =
+  | ({ readonly kind: "facts" } & FactsLine)
+  | ({ readonly kind: "request" } & RequestLine)
+  | ({ readonly kind: "declared" } & DeclaredLine)
+  | ({ readonly kind: "draw" } & DrawLine);
+
+// [LAW:types-are-the-program] A line of the file, by kind: the header first,
+// then the replay's lines in the order the recorder took them.
+export type RecordingLine =
+  | {
+      readonly kind: "recording";
+      readonly session: SessionId;
+      // The home the session's payloads were composed against: whose `~`.
+      readonly home: string;
+    }
+  | ReplayLine;
+
+// [LAW:types-are-the-program] A recording as the parser proved it: one
+// session's, the document its view opens on (the last before its first
+// request), then its lines from that request on, with at least one draw and
+// every draw answering a request before it not drawn already, so a replay
+// has a view to open and a frame to draw.
+export interface Recording {
+  readonly session: SessionId;
+  readonly home: string;
+  readonly opening: FactsLine;
+  readonly lines: readonly [
+    { readonly kind: "request" } & RequestLine,
+    ...ReplayLine[],
+  ];
+}
+
+// [LAW:one-source-of-truth] The recording's own format: its header and its
+// request, declared and draw lines, which are the renderer's request path and
+// not the facts protocol. The documents in it carry their own facts version,
+// which each document's parse refuses, so a change of either moves one number.
+export const RECORDING_VERSION = 2;
+
+// A recording of another format: refused whole, never read line by line
+// against this build's. The version is a value, so the edge that names the
+// file says which.
 export class RecordingVersionError extends Error {
   constructor(readonly v: unknown) {
     super(
-      `is a facts v${String(v)} recording; this build reads v${FACTS_VERSION}`,
+      `is a v${String(v)} recording; this build reads v${RECORDING_VERSION}`,
     );
     this.name = "RecordingVersionError";
   }
@@ -222,43 +268,73 @@ export function parseRecording(text: string): Recording {
   if (header.kind !== "recording") {
     throw new FactParseError("line 1", "is not a recording's header");
   }
-  // [LAW:no-silent-failure] Another version's documents are refused whole,
-  // before any of them is read against this build's shape.
-  if (header.v !== FACTS_VERSION) throw new RecordingVersionError(header.v);
+  // [LAW:no-silent-failure] Another format's lines are refused whole, before
+  // any of them is read against this build's.
+  if (header.v !== RECORDING_VERSION) throw new RecordingVersionError(header.v);
   const named = parseSessionId(header.session);
   if (!named.ok) throw new FactParseError("line 1", `session ${named.problem}`);
   const session = named.id;
-  const facts: FactsLine[] = [];
-  const requests: RequestLine[] = [];
-  // The line each kind was last seen on, so a line that steps back names it.
-  const lastOn = { facts: 0, request: 0 };
-  body.forEach((row, i) => {
-    const n = i + 2;
-    const where = `line ${n}`;
+  const { home } = header;
+  if (typeof home !== "string" || !isAbsolute(home)) {
+    throw new FactParseError(
+      "line 1",
+      "has no `home` that is an absolute path",
+    );
+  }
+  // The document the view holds as the walk reaches each line, and the lines
+  // from the first request on.
+  let opening: FactsLine | null = null;
+  const lines: ReplayLine[] = [];
+  // The requests not yet drawn, by instant: requests can share one.
+  const undrawn = new Map<Instant, number>();
+  let draws = 0;
+  for (const [i, row] of body.entries()) {
+    const where = `line ${i + 2}`;
     const json = objectOf(row, where);
     const { kind } = json;
-    if (kind !== "facts" && kind !== "request") {
-      throw new FactParseError(
-        where,
-        `is of kind ${JSON.stringify(kind)}, not "facts" or "request"`,
-      );
-    }
-    if (typeof json.at !== "number" || !Number.isFinite(json.at)) {
-      throw new FactParseError(where, "has no finite `at`");
-    }
-    const at = json.at as Instant;
-    const prior = kind === "facts" ? facts.at(-1) : requests.at(-1);
-    if (prior !== undefined && at < prior.at) {
-      throw new FactParseError(
-        where,
-        `(at ${at}) is before line ${lastOn[kind]} (at ${prior.at}): a recording's ${kind} lines are in time order`,
-      );
-    }
-    lastOn[kind] = n;
     if (kind === "request") {
-      requests.push({ at, request: parseRequest(json, where, session) });
-      return;
+      if (opening === null) {
+        throw new FactParseError(
+          where,
+          "is a request before any document: a recording opens on its view's document",
+        );
+      }
+      const at = parseInstant(json.at, where, "at");
+      lines.push({ kind, at, request: parseRequest(json, where, session) });
+      undrawn.set(at, (undrawn.get(at) ?? 0) + 1);
+      continue;
     }
+    if (kind === "declared") {
+      if (lines.length === 0) {
+        throw new FactParseError(
+          where,
+          "is a declaration before any request: only a draw restates one",
+        );
+      }
+      lines.push({ kind, request: parseRequest(json, where, session) });
+      continue;
+    }
+    if (kind === "draw") {
+      const request = parseInstant(json.request, where, "request");
+      const waiting = undrawn.get(request) ?? 0;
+      if (waiting === 0) {
+        throw new FactParseError(
+          where,
+          `draws the answer to a request at ${request}, and no request line before it arrived then that is not drawn already`,
+        );
+      }
+      undrawn.set(request, waiting - 1);
+      draws++;
+      lines.push({ kind, request });
+      continue;
+    }
+    if (kind !== "facts") {
+      throw new FactParseError(
+        where,
+        `is of kind ${JSON.stringify(kind)}, not "facts", "request", "declared" or "draw"`,
+      );
+    }
+    const at = parseInstant(json.at, where, "at");
     const document = parseSessionFacts(json.facts, `${where} facts`);
     if (document.session !== session) {
       throw new FactParseError(
@@ -266,47 +342,54 @@ export function parseRecording(text: string): Recording {
         `is session ${JSON.stringify(document.session)}'s document, and the recording is of ${JSON.stringify(session)}`,
       );
     }
-    facts.push({ at, facts: document });
-  });
-  const [first, ...rest] = facts;
-  if (first === undefined) {
+    // Before the first request a later document replaces the opening one: no
+    // draw can read the one it replaced.
+    if (lines.length === 0) opening = { at, facts: document };
+    else lines.push({ kind, at, facts: document });
+  }
+  if (opening === null) {
     throw new FactParseError("the recording", "holds no document");
   }
-  // A replay draws one frame per request, so a recording no request arrived
-  // in (an idle session's) replays nothing.
-  const [opening, ...later] = requests;
-  if (opening === undefined) {
+  // A replay draws one frame per answer, so a recording no answer was drawn
+  // in (an idle session's) replays nothing. Every draw answers a request
+  // before it, so the first line is a request.
+  const [first, ...later] = lines;
+  if (first?.kind !== "request" || draws === 0) {
     throw new FactParseError(
       "the recording",
-      "holds no request: none arrived while it was recorded",
+      "holds no answered request: none was answered while it was recorded",
     );
   }
-  if (opening.at < first.at) {
-    throw new FactParseError(
-      "the recording",
-      `has a request (at ${opening.at}) before its first document (at ${first.at})`,
-    );
+  return { session, home, opening, lines: [first, ...later] };
+}
+
+function parseInstant(json: unknown, where: string, field: string): Instant {
+  if (typeof json !== "number" || !Number.isFinite(json)) {
+    throw new FactParseError(where, `has no finite \`${field}\``);
   }
-  return {
-    session,
-    facts: [first, ...rest],
-    requests: [opening, ...later],
-  };
+  return json as Instant;
 }
 
 // A line as the recorder writes it: one JSON object, one newline.
 export function formatLine(line: RecordingLine): string {
   const json =
     line.kind === "recording"
-      ? { kind: line.kind, v: FACTS_VERSION, session: line.session }
+      ? {
+          kind: line.kind,
+          v: RECORDING_VERSION,
+          session: line.session,
+          home: line.home,
+        }
       : line.kind === "facts"
         ? { kind: line.kind, at: line.at, facts: line.facts }
-        : {
-            kind: line.kind,
-            at: line.at,
-            hookData: line.request.hookData,
-            cwd: line.request.cwd,
-            hints: line.request.hints,
-          };
+        : line.kind === "draw"
+          ? { kind: line.kind, request: line.request }
+          : {
+              kind: line.kind,
+              ...(line.kind === "request" && { at: line.at }),
+              hookData: line.request.hookData,
+              cwd: line.request.cwd,
+              hints: line.request.hints,
+            };
   return `${JSON.stringify(json)}\n`;
 }

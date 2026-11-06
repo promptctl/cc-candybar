@@ -28,6 +28,7 @@ import { resolveEffectiveGlobals } from "../config/effective-globals.js";
 import type { ValidatedConfig } from "../config/dsl-types.js";
 import type { ViewSource } from "../dsl/view-source.js";
 import type { SourceOf } from "./cache/render.js";
+import type { FactsLine } from "../facts/recording.js";
 import type { SessionFacts } from "../facts/session-facts.js";
 import {
   composePayload,
@@ -51,6 +52,11 @@ export interface SessionSource extends ViewSource {
   // The session's facts document (src/facts/session-facts.ts), as the view's
   // follow holds it.
   readonly facts: () => SessionFacts;
+  // The same document with the instant it was stamped at: the line a
+  // recording writes for the draw that read it.
+  readonly stamped: () => FactsLine;
+  // The home the turn's payload was composed against: whose `~` it names.
+  readonly home: () => string;
   // The client's hints the turn was composed from: what a draw takes of the
   // client beside the payload, so it never pairs a turn with a request it was
   // not composed from.
@@ -65,7 +71,7 @@ export interface SessionSource extends ViewSource {
 // [LAW:types-are-the-program] One turn: the document and everything the
 // payload is composed from beside it, taken together.
 interface Turn {
-  readonly document: SessionFacts;
+  readonly stamped: FactsLine;
   readonly compose: ComposeInputs;
   readonly draw: DrawInputs;
   readonly failure: string | null;
@@ -76,7 +82,7 @@ interface Turn {
 type TurnInputs =
   | {
       readonly kind: "read";
-      readonly document: SessionFacts;
+      readonly stamped: FactsLine;
       readonly facts: string | null;
       readonly compose: ComposeInputs;
       readonly draw: DrawInputs;
@@ -94,12 +100,12 @@ type TurnInputs =
 function taken(prior: Turn, moved: TurnInputs): Turn {
   if (moved.kind === "failed") return failedWith(prior, moved.reason);
   return prior.failure === moved.facts &&
-    moved.document === prior.document &&
+    moved.stamped === prior.stamped &&
     moved.compose === prior.compose &&
     moved.draw === prior.draw
     ? prior
     : {
-        document: moved.document,
+        stamped: moved.stamped,
         compose: moved.compose,
         draw: moved.draw,
         failure: moved.facts,
@@ -168,7 +174,7 @@ export function sessionSource(
     // throw in it is a failed open, which the view's opening releases.
     const turn = observable.box<Turn>(
       {
-        document: followed.stamped().facts,
+        stamped: followed.stamped(),
         compose: compose.read(),
         draw: draw.read(),
         failure: followed.failure(),
@@ -181,7 +187,7 @@ export function sessionSource(
           try {
             return {
               kind: "read",
-              document: followed.stamped().facts,
+              stamped: followed.stamped(),
               facts: followed.failure(),
               compose: compose.read(),
               draw: draw.read(),
@@ -221,13 +227,15 @@ export function sessionSource(
     // [LAW:dataflow-not-control-flow] The payload is derived from the turn on
     // every read: composition is pure, so a throw reaches the draw.
     const payload = store.derive("session.payload", "computed", () => {
-      const { document, compose: composed, draw: drawn } = turn.get();
-      return composePayload(document, composed, drawn);
+      const { stamped, compose: composed, draw: drawn } = turn.get();
+      return composePayload(stamped.facts, composed, drawn);
     });
     return {
       payload: () => payload.read(),
       effective: () => turn.get().draw.effective,
-      facts: () => turn.get().document,
+      facts: () => turn.get().stamped.facts,
+      stamped: () => turn.get().stamped,
+      home: () => turn.get().compose.home,
       hints: () => turn.get().compose.hints,
       failure: () => turn.get().failure,
       selections: () => turn.get().draw.effective,

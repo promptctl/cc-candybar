@@ -78,7 +78,7 @@ The dev loop this gives: open a worktree, start its renderer under its own home,
 
 Gather's facts stream for a session is a sequence of `facts` messages with timestamps. Writing that sequence to a file is a recording. A renderer's facts input is a union: `{ kind: "gather", address } | { kind: "recording", path, clock }`. The recording player replays the pushes against a clock the renderer is handed, so a replayed session draws exactly what the live one drew, at any speed, with no Gather, no disk and no network. [LAW:one-type-per-behavior]
 
-This one primitive pays for itself four times. It is the seam test from §1. It is the fixture for every draw test that today boots a daemon, which the layered test plan is trying to stop doing. It is how a bug on someone else's machine becomes reproducible: record ten seconds, attach the file. And it is the source the browser proposal's demo site and prototyping studio are built from (a renderer draws a recording offline into what the page replays), which is why it is here and not there. The recording is also what the facts protocol version guards: a recording names its `N`.
+This one primitive pays for itself four times. It is the seam test from §1. It is the fixture for every draw test that today boots a daemon, which the layered test plan is trying to stop doing. It is how a bug on someone else's machine becomes reproducible: record ten seconds, attach the file. And it is the source the browser proposal's demo site and prototyping studio are built from (a renderer draws a recording offline into what the page replays), which is why it is here and not there. A recording names its own format's version, and each document in it names the facts protocol's `N`, so a reader of another version of either refuses the file.
 
 ## 9. What stays, what moves, what goes
 
@@ -192,7 +192,7 @@ type FactsSource =
 
 `inprocess` is the first transport and stays forever: it is how today's single daemon runs after step 1 and how tests build a renderer over a real Gather with fake ports. The three are one interface, `Facts`, with `follow`, `unfollow`, `declare`, `key` and an `onFacts` subscription, so nothing above it knows which it has. [LAW:one-type-per-behavior]
 
-A **recording** is a file of lines `{ at: Instant, facts: SessionFacts }`, written by Gather when asked (`cc-candybar record <session> <path>`, or a renderer's `--record`), closed by the writer. The player replays each document when the handed clock reaches its `at`, relative to the first. A replay under a held clock is a replay at any speed. A recording names its `v`, and a player handed a recording with another `v` refuses it loudly.
+A **recording** is a file of lines, written by Gather when asked (`cc-candybar record <session> <path>`, or a renderer's `--record`), closed by the writer: a header naming its `v`, the session and the home its payloads were composed against, then documents `{ at: Instant, facts: SessionFacts }`, the requests the session was drawn by, and a line for each answer drawn, after the document it drew from. The player takes the lines in the file's order, because instants cannot order them: a document stamped in the millisecond after a draw belongs to the next draw, and a request's answer is drawn after its wait. A replay under a held clock is a replay at any speed. A player handed a recording with another `v` refuses it loudly.
 
 ## 15. Gather's process
 

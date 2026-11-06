@@ -89,7 +89,7 @@ import { waitWithin } from "../utils/reading.js";
 import { noteFacts, requestEvent, type RequestFacts } from "./request-event.js";
 
 import type { DaemonParts } from "./daemon-parts.js";
-import { settleRequest } from "./session-recorder.js";
+import { drawRequest, settleRequest } from "./session-recorder.js";
 
 // What a reply's sender records once the client holds a response carrying
 // nothing to record.
@@ -977,10 +977,11 @@ export async function drawAnswer(
     ended,
     refreshed: refreshedFact(settling.refreshed),
   });
-  const { drawn, answersClick, pipeShown, delivered, lanes } = drawRender(
-    parts,
-    setup,
-    ANSWERING,
+  const { drawn, answersClick, pipeShown, delivered, lanes } = drawRequest(
+    parts.recorder,
+    setup.view,
+    settling.arrival,
+    () => drawRender(parts, setup, ANSWERING),
   );
   const sessionId = req.sessionId;
   const elsewhere = handedOffTo(lanes, frameFeeds.following(sessionId));

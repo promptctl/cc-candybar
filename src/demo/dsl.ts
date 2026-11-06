@@ -14,7 +14,8 @@
 // path: which facts arm the view follows (the in-process arm over the
 // providers, or the recording's), which requests it is drawn by and when (one
 // faked hook event four times, or the recording's requests at their offsets),
-// and how the clock reaches each one (a sleep, or a held clock's advance).
+// and how each arrives (a sleep and the clock's reading, or a held clock's
+// advance and the recorded instant).
 // Rendering N frames over time is not branching: it lets the config's own
 // timed sources populate, as the daemon re-renders on each status-line tick.
 
@@ -22,6 +23,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 import { sleep } from "../time.js";
+import { instantAt } from "../utils/instant.js";
 import { detectClientHints } from "../client-hints.js";
 import {
   ConfigError,
@@ -45,8 +47,10 @@ import { ansiOf } from "../render/frame.js";
 import type { ClaudeHookData } from "../utils/claude.js";
 import { debug, setDebug } from "../utils/logger.js";
 import {
+  heldArrival,
   loadDemo,
   playDemo,
+  playOf,
   readRecording,
   RecordingUnreadable,
   type DemoPlay,
@@ -102,7 +106,7 @@ const log: DaemonLogger = (level, message) =>
 
 // What the frames are drawn from beside the loaded config, and what to close
 // once they are drawn.
-type Arm = Pick<DemoPlay, "facts" | "clock" | "ticks" | "pace"> & {
+type Arm = Pick<DemoPlay, "facts" | "clock" | "steps" | "arrive" | "home"> & {
   readonly world: World;
   readonly close: () => void;
 };
@@ -151,16 +155,32 @@ function liveArm(): Arm {
   // nothing has sampled.
   const updateFact = newUpdateFact();
   const request = { sessionId, hookData, cwd, hints };
-  const tick = (i: number) => ({ offsetMs: i * FRAME_INTERVAL_MS, request });
+  // Each request, then the draw of its answer once what it started landed.
+  const arrives = (i: number) =>
+    ({ kind: "request", offsetMs: i * FRAME_INTERVAL_MS, request }) as const;
+  const answered = (i: number) =>
+    ({ kind: "draw", requestOffsetMs: i * FRAME_INTERVAL_MS }) as const;
   return {
     world: machine,
     facts: inProcessFacts({ providers, update: () => updateFact.get() }),
     clock: machine.clock,
-    ticks: [
-      tick(0),
-      ...Array.from({ length: FRAMES - 1 }, (_, i) => tick(i + 1)),
+    home: machine.host.home,
+    steps: [
+      arrives(0),
+      answered(0),
+      ...Array.from({ length: FRAMES - 1 }, (_, i) => [
+        arrives(i + 1),
+        answered(i + 1),
+      ]).flat(),
     ],
-    pace: (ms) => sleep(machine.clock, ms),
+    // [LAW:no-ambient-temporal-coupling] A sleep until the request's offset,
+    // never for the gap since the last one, so a slow settle delays one frame
+    // and no frame after it; and the instant is the clock's reading, as the
+    // daemon reads a request's arrival.
+    arrive: async (atMs) => {
+      await sleep(machine.clock, Math.max(0, atMs - machine.clock.now()));
+      return instantAt(machine.clock);
+    },
     // The providers own their timers and watchers; all of them are released
     // so the process ends when the frames do.
     close: () => {
@@ -175,18 +195,21 @@ function liveArm(): Arm {
   };
 }
 
-// A recording's requests, drawn under a held clock started at its first
-// request, each at its offset: the documents are the recording's, so no
-// owner is built and nothing is read or spawned for them.
+// A recording's lines, played under a held clock started at its first
+// request: the documents and the home are the recording's, so no owner is
+// built and nothing is read or spawned for them.
 function recordingArm(path: string): Arm {
-  const { recording, startMs, ticks } = readRecording(path);
+  const recording = readRecording(path);
+  const facts = recordingFacts(recording);
+  const { startMs, steps } = playOf(recording, facts);
   const clock = heldClock(new Date(startMs));
   return {
     world: { ...machine, clock },
-    facts: recordingFacts(recording, clock),
+    facts,
     clock,
-    ticks,
-    pace: async (ms) => clock.advance(ms),
+    home: recording.home,
+    steps,
+    arrive: heldArrival(clock),
     close: () => {},
   };
 }
@@ -212,13 +235,12 @@ async function main(): Promise<void> {
           ? `  one faked status-line request, rendered by the daemon's own functions\n` +
             `  ${FRAMES} renders, one per status-line tick — watch the clock move:\n\n`
           : `  ${recording}, replayed by the daemon's own functions\n` +
-            `  ${arm.ticks.length} renders, one per request the session received:\n\n`),
+            `  ${arm.steps.filter((step) => step.kind === "draw").length} renders, one per answer the session was drawn:\n\n`),
     );
     await playDemo({
       ...arm,
       loaded,
       cwd,
-      home: machine.host.home,
       log,
       frame: (drawn) =>
         process.stdout.write(

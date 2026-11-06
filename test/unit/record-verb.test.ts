@@ -1,7 +1,7 @@
 // [LAW:parse-dont-validate] The record verb's two checkpoints: the daemon's
 // parse of a record request off the wire, and the CLI's parse of its
 // arguments, and the CLI's fold of the answer into what a person sees — a
-// recording no request arrived in is a failure said now.
+// recording no request was answered in is a failure said now.
 
 import {
   DEFAULT_RECORD_SECONDS,
@@ -104,7 +104,7 @@ describe("the record command", () => {
     });
   });
 
-  test("says what it wrote and exits 0, or exits 1 when no request arrived", () => {
+  test("says what it wrote and exits 0, or exits 1 when no request was answered", () => {
     expect(
       recordPlan(
         {
@@ -112,14 +112,14 @@ describe("the record command", () => {
           value: {
             path: "/w/bar.jsonl",
             lines: 9,
-            requests: 3,
+            answers: 3,
             daemonClosed: false,
           },
         },
         10,
       ),
     ).toEqual({
-      stdout: "/w/bar.jsonl: 9 lines, 3 requests\n",
+      stdout: "/w/bar.jsonl: 9 lines, 3 answers\n",
       stderr: "",
       code: 0,
     });
@@ -129,7 +129,7 @@ describe("the record command", () => {
         value: {
           path: "/w/bar.jsonl",
           lines: 2,
-          requests: 0,
+          answers: 0,
           daemonClosed: false,
         },
       },
@@ -138,7 +138,7 @@ describe("the record command", () => {
     expect(idle.code).toBe(1);
     expect(idle.stdout).toBe("");
     expect(idle.stderr).toMatch(
-      /^record: \/w\/bar\.jsonl: no request arrived in 10s, so there is nothing to replay: the session was idle/,
+      /^record: \/w\/bar\.jsonl: no request was answered in 10s, so there is nothing to replay: the session was idle/,
     );
   });
 
@@ -149,14 +149,14 @@ describe("the record command", () => {
         value: {
           path: "/w/bar.jsonl",
           lines: 9,
-          requests: 3,
+          answers: 3,
           daemonClosed: true,
         },
       },
       10,
     );
     expect(short).toMatchObject({
-      stdout: "/w/bar.jsonl: 9 lines, 3 requests\n",
+      stdout: "/w/bar.jsonl: 9 lines, 3 answers\n",
       code: 0,
     });
     expect(short.stderr).toBe(
@@ -168,7 +168,7 @@ describe("the record command", () => {
         value: {
           path: "/w/bar.jsonl",
           lines: 2,
-          requests: 0,
+          answers: 0,
           daemonClosed: true,
         },
       },
@@ -176,7 +176,7 @@ describe("the record command", () => {
     );
     expect(empty.code).toBe(1);
     expect(empty.stderr).toMatch(
-      /^record: \/w\/bar\.jsonl: the daemon closed before 10s ran out, and no request had arrived/,
+      /^record: \/w\/bar\.jsonl: the daemon closed before 10s ran out, and no request had been answered/,
     );
     expect(empty.stderr).not.toMatch(/idle/);
   });

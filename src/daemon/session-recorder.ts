@@ -1,7 +1,7 @@
 // A session's recording: its stream written out of the running daemon, line
 // by line, as a recording a renderer replays offline (src/facts/recording.ts,
-// docs/design/gather-and-renderer.md §14) — the documents its view takes and
-// the requests it is drawn by.
+// docs/design/gather-and-renderer.md §14) — the documents its view takes, the
+// requests it is drawn by and the draws of their answers.
 //
 // [LAW:one-source-of-truth] A recording follows the session's current view as
 // the render cache holds it, and keeps no record of views of its own: the
@@ -16,9 +16,12 @@ import { appendFileSync, closeSync, openSync, unlinkSync } from "node:fs";
 import { reaction } from "mobx";
 import {
   formatLine,
+  type FactsLine,
   type RecordingLine,
   type RequestLine,
 } from "../facts/recording.js";
+import type { SessionFacts } from "../facts/session-facts.js";
+import type { ViewFacts } from "./render-payload.js";
 import type { Timekeeper } from "../time.js";
 import type { Instant } from "../utils/instant.js";
 import type { DaemonLogger } from "../utils/logger.js";
@@ -26,10 +29,17 @@ import type { RenderCacheObservers, SessionView } from "./cache/render.js";
 import type { Settling } from "./facts-source.js";
 import type { Recorded } from "./protocol.js";
 import type { SessionId } from "./session-id.js";
+import type { SessionSource } from "./session-source.js";
 
-// What a recording reads of the cache: the session's current view.
+// What a recording reads of the cache: the session's current view, the
+// documents its follow stamps and the home its payloads are composed against.
+export interface RecordedView {
+  readonly followed: SessionView["followed"];
+  readonly source: Pick<SessionSource, "home">;
+}
+
 export interface SessionViews {
-  sessionView(sessionId: string): Pick<SessionView, "followed"> | null;
+  sessionView(sessionId: string): RecordedView | null;
 }
 
 // How a recording ended: by its stop, by the daemon closing before the stop
@@ -47,22 +57,46 @@ export interface RecordingSink {
 
 export interface SessionRecorder {
   // Starts recording the session into `sink`: the header, the current view's
-  // document, then each document and request as they come. Returns its stop.
+  // document, then each document, request and draw as they come. Returns its
+  // stop.
   // [LAW:no-silent-failure] A session the cache holds no view for is refused,
   // naming it: there is nothing of it here to record.
   record(session: SessionId, sink: RecordingSink): () => void;
   // The cache's say that the session's current view changed.
   moved(sessionId: string): void;
-  // A request arrived at the session's view (`settleRequest`).
-  arrived(sessionId: string, line: RequestLine): void;
+  // A request arrived at the session's view (`settleRequest`): the recordings
+  // that noted it, which its answer's draw is written to.
+  arrived(sessionId: string, line: RequestLine): Arrival;
+  // The answer to `arrival` was drawn from `read` (`drawRequest`).
+  drew(sessionId: string, arrival: Arrival, read: DrawnFrom): void;
   // Every open recording ends, and every later one is refused: the daemon
   // is closing.
   close(): void;
 }
 
+// A request as its recordings noted it: its instant, and the recordings its
+// request line went to. [LAW:types-are-the-program] Its draw is written only
+// to those, so a recording started during the request's wait never holds a
+// draw of a request it has no line for.
+export interface Arrival {
+  readonly at: Instant;
+  readonly noted: ReadonlySet<object>;
+}
+
+// What a draw read of the view it drew: its document, and the request it was
+// declared with.
+export interface DrawnFrom {
+  readonly document: FactsLine;
+  readonly declaration: ViewFacts;
+}
+
 interface Open {
   readonly sink: RecordingSink;
   detach: () => void;
+  // The last document and the last declaration this recording wrote: what a
+  // replay's view holds at the next line.
+  document: SessionFacts | null;
+  declaration: ViewFacts | null;
 }
 
 export function sessionRecorder(
@@ -87,6 +121,10 @@ export function sessionRecorder(
   const write = (sessionId: string, rec: Open, line: RecordingLine): void => {
     try {
       rec.sink.write(line);
+      if (line.kind === "facts") rec.document = line.facts;
+      if (line.kind === "request" || line.kind === "declared") {
+        rec.declaration = line.request;
+      }
     } catch (e) {
       log("error", `recording sid=${JSON.stringify(sessionId)}: ${inspect(e)}`);
       end(sessionId, rec, { kind: "failed", error: e });
@@ -117,15 +155,25 @@ export function sessionRecorder(
       if (closed) {
         throw new Error("the daemon is closing: it records nothing more");
       }
-      if (views.sessionView(session) === null) {
+      const view = views.sessionView(session);
+      if (view === null) {
         throw new Error(
           `no view of session ${JSON.stringify(session)} is open in this daemon: it has not drawn a bar here since the daemon started, or its view closed while it was idle`,
         );
       }
-      const rec: Open = { sink, detach: () => {} };
+      const rec: Open = {
+        sink,
+        detach: () => {},
+        document: null,
+        declaration: null,
+      };
       const recs = open.get(session) ?? new Set<Open>();
       open.set(session, recs.add(rec));
-      write(session, rec, { kind: "recording", session });
+      write(session, rec, {
+        kind: "recording",
+        session,
+        home: view.source.home(),
+      });
       if (recs.has(rec)) attach(session, rec);
       return () => end(session, rec, { kind: "stopped" });
     },
@@ -136,8 +184,34 @@ export function sessionRecorder(
       }
     },
     arrived(sessionId, line) {
+      const noted = new Set<Open>();
       for (const rec of open.get(sessionId) ?? []) {
         write(sessionId, rec, { kind: "request", ...line });
+        noted.add(rec);
+      }
+      return { at: line.at, noted };
+    },
+    // [LAW:one-source-of-truth] A replay draws from the last document and the
+    // last declaration before the draw line, so those are the ones the draw
+    // read: each written again here when it is not the last this recording
+    // wrote, as a request's held view the session moved away from has, and
+    // the current view at the draw after that.
+    drew(sessionId, { at: request, noted }, { document, declaration }) {
+      for (const rec of open.get(sessionId) ?? []) {
+        if (!noted.has(rec)) continue;
+        const lines: RecordingLine[] = [
+          ...(rec.document === document.facts
+            ? []
+            : [{ kind: "facts", ...document } as const]),
+          ...(rec.declaration === declaration
+            ? []
+            : [{ kind: "declared", request: declaration } as const]),
+          { kind: "draw", request },
+        ];
+        // A write that failed ended the recording: nothing more is offered.
+        for (const line of lines) {
+          if (open.get(sessionId)?.has(rec)) write(sessionId, rec, line);
+        }
       }
     },
     close() {
@@ -189,9 +263,33 @@ export function settleRequest(
   recorder: Pick<SessionRecorder, "arrived">,
   view: Pick<SessionView, "sessionId" | "facts" | "settle">,
   at: Instant,
-): Settling {
-  recorder.arrived(view.sessionId, { at, request: view.facts() });
-  return view.settle(at);
+): Settling & { readonly arrival: Arrival } {
+  const arrival = recorder.arrived(view.sessionId, {
+    at,
+    request: view.facts(),
+  });
+  return { ...view.settle(at), arrival };
+}
+
+// [LAW:single-enforcer] A request's answer, in the request path's one place
+// for it: drawn from the view the request holds, then noted with the document
+// and the declaration that draw read. The note is taken in the draw's own
+// turn, so nothing moves between the two, and only once the draw returned: an
+// answer that threw drew nothing a replay could draw.
+export function drawRequest<T>(
+  recorder: Pick<SessionRecorder, "drew">,
+  view: Pick<SessionView, "sessionId" | "facts"> & {
+    readonly source: Pick<SessionSource, "stamped">;
+  },
+  arrival: Arrival,
+  draw: () => T,
+): T {
+  const drawn = draw();
+  recorder.drew(view.sessionId, arrival, {
+    document: view.source.stamped(),
+    declaration: view.facts(),
+  });
+  return drawn;
 }
 
 // A recording that started and that a write or the close ended: the daemon
@@ -231,7 +329,8 @@ export function recordToFile(
       return;
     }
     let lines = 0;
-    let requests = 0;
+    // The answers drawn while it recorded: the frames a replay draws.
+    let answers = 0;
     let stop = (): void => {};
     const clearTimer = clock.after(seconds * 1000, () => stop());
     const leave = (): void => stop();
@@ -240,7 +339,7 @@ export function recordToFile(
       write: (line) => {
         appendFileSync(fd, formatLine(line));
         lines++;
-        if (line.kind === "request") requests++;
+        if (line.kind === "draw") answers++;
       },
       end: (how) => {
         clearTimer();
@@ -248,9 +347,9 @@ export function recordToFile(
         let error: unknown = how.kind === "failed" ? how.error : null;
         try {
           closeSync(fd);
-          // A recording no request arrived in is one the parser refuses, and
-          // it would refuse the same path to the next try: it is not kept.
-          if (requests === 0) unlinkSync(path);
+          // A recording no request was answered in is one the parser refuses,
+          // and it would refuse the same path to the next try: it is not kept.
+          if (answers === 0) unlinkSync(path);
         } catch (e) {
           error ??= e;
         }
@@ -258,7 +357,7 @@ export function recordToFile(
           resolve({
             path,
             lines,
-            requests,
+            answers,
             daemonClosed: how.kind === "closed",
           });
         } else {

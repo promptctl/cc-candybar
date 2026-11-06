@@ -72,10 +72,7 @@ describe("the in-process arm", () => {
 
   test("a follow takes the holds its declaration names, a follow at other keys releases the rest, and dispose releases all", () => {
     const { providers, held, released, lines } = owners();
-    const followed = arm(providers).follow(
-      viewFacts("/a"),
-      DECLARED,
-    );
+    const followed = arm(providers).follow(viewFacts("/a"), DECLARED);
     expect(held).toEqual(["/a"]);
     expect(followed.stamped().facts.builtins.git).toMatchObject({
       kind: "ok",
@@ -105,10 +102,7 @@ describe("the in-process arm", () => {
     ).gitProvider.declare = () => {
       throw new Error("resolver bug");
     };
-    const followed = arm(providers).follow(
-      viewFacts("/a"),
-      DECLARED,
-    );
+    const followed = arm(providers).follow(viewFacts("/a"), DECLARED);
     expect(held).toEqual([]);
     expect(followed.stamped().facts.builtins.git).toMatchObject({
       kind: "failed",
@@ -144,10 +138,7 @@ describe("the in-process arm", () => {
         throw new Error("hints bug");
       },
     });
-    const followed = arm(providers).follow(
-      { ...broken, hints },
-      DECLARED,
-    );
+    const followed = arm(providers).follow({ ...broken, hints }, DECLARED);
     expect(followed.stamped().facts.builtins.git).toMatchObject({
       kind: "failed",
       failedAt: "read",
@@ -217,60 +208,39 @@ describe("the recording arm", () => {
     },
   });
   const request = () => viewFacts("/a", "s1");
-  // The session's lines as the parser hands them over: one session's, in time
-  // order, with a document to open on (test/unit/facts-recording.test.ts).
-  const recording = (lines: readonly FactsLine[]) => {
-    const [first, ...rest] = lines;
-    if (first === undefined) throw new Error("a recording has a document");
-    return { session: SESSION, facts: [first, ...rest] as const };
-  };
+  // The session and the document it opens on, as the parser hands them over
+  // (test/unit/facts-recording.test.ts).
+  const recording = (opening: FactsLine) => ({ session: SESSION, opening });
 
-  test("each line is the document once the clock reaches its offset from the first, the last of several at one instant winning", () => {
-    const clock = heldClock(AT);
-    const lines = [
-      line(0, 1),
-      line(0, 2),
-      line(1.5, 3),
-      line(1.5, 4),
-      line(4, 5),
-    ];
-    const followed = recordingFacts(recording(lines), clock).follow(
-      request(),
-      DECLARED,
-    );
-    expect(followed.stamped()).toBe(lines[1]);
-    clock.advance(1000);
-    expect(followed.stamped()).toBe(lines[1]);
-    clock.advance(500);
-    expect(followed.stamped()).toBe(lines[3]);
-    clock.advance(10_000);
-    expect(followed.stamped()).toBe(lines[4]);
+  test("a follow's document is the opening one until the walk reaches another, then each line it reaches, whatever instants they carry", () => {
+    const lines = [line(0, 1), line(2, 2), line(2, 3), line(1, 1)] as const;
+    const facts = recordingFacts(recording(lines[0]));
+    const followed = facts.follow(request(), DECLARED);
+    expect(followed.stamped()).toBe(lines[0]);
+    // A document stamped at the instant of the one before it, and one of a
+    // view the session moved away from, stamped earlier: the walk's order is
+    // the recording's.
+    for (const reached of lines.slice(1)) {
+      facts.reach(reached);
+      expect(followed.stamped()).toBe(reached);
+    }
     expect(followed.failure()).toBeNull();
   });
 
-  test("a follow mid-recording opens on the line the clock has reached and arms only the lines after it; one before the first line throws", () => {
-    const clock = heldClock(AT);
-    const lines = [line(0, 1), line(2, 2), line(5, 3), line(9, 4)];
-    const facts = recordingFacts(recording(lines), clock);
-    clock.advance(6000);
-    const followed = facts.follow(request(), DECLARED);
-    expect(followed.stamped()).toBe(lines[2]);
-    expect(clock.pending()).toBe(1);
-    clock.advance(2999);
-    expect(followed.stamped()).toBe(lines[2]);
-    clock.advance(1);
-    expect(followed.stamped()).toBe(lines[3]);
-    // A second follow at the same instant is at the same place.
-    expect(facts.follow(request(), DECLARED).stamped()).toBe(lines[3]);
-    const early = heldClock(new Date(AT.getTime() - 1000));
-    expect(() =>
-      recordingFacts(recording(lines), early).follow(request(), DECLARED),
-    ).toThrow(/this recording begins at .*, and the clock reads/);
+  test("a follow taken mid-walk opens on the line reached, and every follow stands at the one place", () => {
+    const lines = [line(0, 1), line(2, 2), line(5, 3)] as const;
+    const facts = recordingFacts(recording(lines[0]));
+    const first = facts.follow(request(), DECLARED);
+    facts.reach(lines[1]);
+    const second = facts.follow(request(), DECLARED);
+    expect(second.stamped()).toBe(lines[1]);
+    facts.reach(lines[2]);
+    expect(first.stamped()).toBe(lines[2]);
+    expect(second.stamped()).toBe(lines[2]);
   });
 
   test("a request settles at once with nothing started, and a follow at other keys changes nothing", async () => {
-    const clock = heldClock(AT);
-    const followed = recordingFacts(recording([line(0, 1)]), clock).follow(
+    const followed = recordingFacts(recording(line(0, 1))).follow(
       request(),
       DECLARED,
     );
@@ -281,39 +251,12 @@ describe("the recording arm", () => {
     expect(followed.stamped().facts.seq).toBe(1);
   });
 
-  test("dispose clears the timers it armed", () => {
-    const clock = heldClock(AT);
-    const followed = recordingFacts(
-      recording([line(0, 1), line(2, 2)]),
-      clock,
-    ).follow(request(), DECLARED);
-    expect(clock.pending()).toBe(1);
-    followed.dispose();
-    expect(clock.pending()).toBe(0);
-  });
-
   test("a follow of a session the recording does not hold throws naming both", () => {
-    const clock = heldClock(AT);
     expect(() =>
-      recordingFacts(recording([line(0, 1)]), clock).follow(
+      recordingFacts(recording(line(0, 1))).follow(
         viewFacts("/a", "s2"),
         DECLARED,
       ),
     ).toThrow('this recording holds session "s1", not "s2"');
-  });
-
-  test("a session followed again (its sequence starting over) replays its reopening document at its instant", () => {
-    const clock = heldClock(AT);
-    const lines = [line(0, 1), line(1, 2), line(2, 1), line(3, 2)];
-    const followed = recordingFacts(recording(lines), clock).follow(
-      request(),
-      DECLARED,
-    );
-    clock.advance(1000);
-    expect(followed.stamped()).toBe(lines[1]);
-    clock.advance(1000);
-    expect(followed.stamped()).toBe(lines[2]);
-    clock.advance(1000);
-    expect(followed.stamped()).toBe(lines[3]);
   });
 });
