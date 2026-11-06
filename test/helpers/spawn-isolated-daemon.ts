@@ -32,6 +32,7 @@ import {
   homeOf,
   parseRendererName,
   socketFile,
+  type RendererName,
   type RendererHome,
 } from "../../src/daemon/home";
 import { logPath, socketPath, stateDir } from "../../src/daemon/paths";
@@ -48,9 +49,9 @@ export interface IsolatedDaemonEnv {
   removeTmpDirs(): void;
 }
 
-// [LAW:one-source-of-truth] Every prepared home is named alike: each has a
-// runtime directory of its own under its root, so names need only differ
-// within one, and none do.
+// [LAW:one-source-of-truth] A prepared home is named alike unless its case names
+// it: each has a runtime directory of its own under its root, so names need
+// only differ where two renderers meet elsewhere, as on one tmux server.
 const ISOLATED_NAME = parseRendererName("test");
 
 // The smaller of the two platform limits, so a path that passes here passes on
@@ -74,12 +75,12 @@ const MKDTEMP_SUFFIX = "XXXXXX";
 // is nothing on disk to leak when it throws. Checking after `mkdtempSync` would
 // mean a try/finally guarding a case that only exists because the check ran too
 // late [LAW:dataflow-not-control-flow].
-function requireSocketPathFits(tmpPrefix: string): void {
+function requireSocketPathFits(tmpPrefix: string, name: RendererName): void {
   const longest = path.join(
     os.tmpdir(),
     `${tmpPrefix}-${MKDTEMP_SUFFIX}`,
     RUNTIME_SUBDIR,
-    socketFile(ISOLATED_NAME),
+    socketFile(name),
   );
   if (Buffer.byteLength(longest) > SUN_PATH_MAX) {
     throw new Error(
@@ -99,8 +100,11 @@ const RUNTIME_SUBDIR = "run";
 // The env a daemon under a home of its own is given: the worker's, plus the
 // two variables that name the home and the one that keeps its socket under the
 // same temporary root, and nothing else about where it writes.
-export function prepareIsolatedDaemonEnv(tmpPrefix: string): IsolatedDaemonEnv {
-  requireSocketPathFits(tmpPrefix);
+export function prepareIsolatedDaemonEnv(
+  tmpPrefix: string,
+  name: RendererName = ISOLATED_NAME,
+): IsolatedDaemonEnv {
+  requireSocketPathFits(tmpPrefix, name);
   const root = fs.mkdtempSync(path.join(os.tmpdir(), `${tmpPrefix}-`));
   // Made here as the daemon would make it (uid==me, mode 0700), so a test can
   // bind a socket of its own in it, or loosen it to see the daemon refuse.
@@ -108,7 +112,7 @@ export function prepareIsolatedDaemonEnv(tmpPrefix: string): IsolatedDaemonEnv {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     [HOME_ENV]: path.join(root, HOME_SUBDIR),
-    [NAME_ENV]: ISOLATED_NAME,
+    [NAME_ENV]: name,
     [RUNTIME_DIR_ENV]: path.join(root, RUNTIME_SUBDIR),
   };
   const home = homeOf(hostOf(env));
@@ -181,7 +185,9 @@ export async function spawnDaemonWithEnv(
   if (readiness.phase !== "serving") {
     killTree();
     release();
-    throw new Error(readinessFailure(readiness, sockPath, env, await stderrTail));
+    throw new Error(
+      readinessFailure(readiness, sockPath, env, await stderrTail),
+    );
   }
 
   return {

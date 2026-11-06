@@ -13,12 +13,14 @@
 // still reads as the daemon left it: a value the user has set since is theirs.
 //
 // What the daemon wrote and what was there before live in tmux itself
-// (`@cc-candybar-status-prior`, `@cc-candybar-status-wrote`,
-// `@cc-candybar-binding-prior`), so a daemon that died without restoring
-// leaves them for the next one, which puts them back on its first answer from
-// that server. Each record names the daemon that wrote it — its socket — and
-// a daemon takes over only its own: one on another socket (a dev or test
-// daemon) on the same tmux server leaves what the other draws alone.
+// (`@cc-candybar-status-prior`, `@cc-candybar-status-wrote`), so a daemon that
+// died without restoring leaves them for the next one, which puts them back
+// on its first answer from that server. Each record names the daemon that
+// wrote it — its socket — and a daemon takes over only its own: one on another
+// socket (a dev or test daemon) on the same tmux server leaves what the other
+// draws alone. The click binding is no daemon's: every renderer binds the same
+// text, which carries the user's binding in itself
+// (src/tmux-status/click-binding.ts).
 //
 // [LAW:no-ambient-temporal-coupling] A tmux call costs ~20 ms of spawn
 // (measured, macOS), so while the daemon runs every call is asynchronous and
@@ -35,26 +37,28 @@ import type { TmuxRun } from "../proc/tmux.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import type { StatusLines } from "./pane-visibility.js";
 import type { Subscriber } from "./frame-feed.js";
-import {
-  addressedLink,
-  decodeSegments,
-  encodeSegments,
-  VERB_TMUX_STATUS_CLICK,
-} from "../click/wire.js";
+import { decodeSegments, VERB_RANGE } from "../click/wire.js";
 import type { LinkSigner } from "../click/link-signer.js";
 import type { TmuxStatusBar } from "../tmux-status/frames.js";
-import { RANGE_PREFIX } from "../tmux-status/link-ids.js";
+import {
+  boundOf,
+  CLICK_OPTION,
+  clickBinding,
+  HELD,
+  RENDERER_OPTION,
+  RESTORED,
+  restoreBinding,
+  sessionClick,
+} from "../tmux-status/click-binding.js";
+import { commandText, type CommandList } from "../tmux-status/tmux-words.js";
 
 export const MAX_STATUS_ROWS = LANES.tmuxStatus.rows;
 export const PRIOR_OPTION = "@cc-candybar-status-prior";
 export const WROTE_OPTION = "@cc-candybar-status-wrote";
-export const BINDING_OPTION = "@cc-candybar-binding-prior";
-// The renderer drawing a session's row, by name, for the click binding to
-// expand at the click (docs/design/gather-and-renderer.md, section 18). Set
-// when the daemon takes hold of the session and unset with its restore, so a
-// row no renderer holds names none.
-export const RENDERER_OPTION = "@cc-candybar-renderer";
-const CLICK_KEY = ["-T", "root", "MouseDown1Status"] as const;
+// The record of the binding's prior that builds before the constant binding
+// kept: unset when this build binds, so an upgrade leaves no copy to disagree
+// with the binding's own else-branch.
+export const OLDER_BINDING_RECORD = "@cc-candybar-binding-prior";
 const INDICES = Array.from({ length: MAX_STATUS_ROWS }, (_, i) => i);
 
 export const rowOption = (row: number): string => `@cc-candybar-row-${row}`;
@@ -123,18 +127,6 @@ function chain(commands: readonly Command[]): string[] {
     ...(i === 0 ? [] : [";"]),
     ...command,
   ]);
-}
-
-// A string tmux parses as one word of a command (tmux(1), PARSING SYNTAX):
-// double-quoted, with the three characters it escapes there escaped.
-export function tmuxQuoted(text: string): string {
-  return `"${text.replace(/[\\"$]/g, (c) => `\\${c}`)}"`;
-}
-
-// Commands as the text of one command list, for a command that takes one —
-// if-shell's, which tmux parses as it is (measured: not format-expanded).
-function commandText(commands: readonly Command[]): string {
-  return commands.map((c) => c.map(tmuxQuoted).join(" ")).join(" ; ");
 }
 
 // Reads run in one invocation, each answer told from the next by a line no
@@ -258,15 +250,20 @@ export function leftBehind(
       };
 }
 
-// [LAW:one-source-of-truth] Every layout this daemon holds names it, the one
-// it takes over included: a record a daemon left before the name existed
-// carries none, and the name a live row expands is this daemon's.
-const nameWrite = (session: string, name: string): Command => [
-  "set-option",
-  "-t",
-  session,
-  RENDERER_OPTION,
-  name,
+// What a session this renderer draws carries for the click binding: its name,
+// and the click its ranges run (src/tmux-status/click-binding.ts).
+export interface Marks {
+  readonly name: string;
+  readonly click: string;
+}
+
+// [LAW:one-source-of-truth] Every layout this daemon holds carries its marks,
+// the one it takes over included: a record a daemon left before the marks
+// existed carries none, and the click names the running code, which a
+// restart on another build or node changes.
+const marksWrite = (session: string, marks: Marks): Command[] => [
+  ["set-option", "-t", session, RENDERER_OPTION, marks.name],
+  ["set-option", "-t", session, CLICK_OPTION, marks.click],
 ];
 
 export type Install =
@@ -284,7 +281,7 @@ export function installPlan(
   session: string,
   answers: readonly string[],
   owner: string,
-  name: string,
+  marks: Marks,
 ): Install {
   const [statusWordNow = "", ...rest] = answers;
   const own = ownOf(rest.slice(0, 2 + MAX_STATUS_ROWS));
@@ -294,7 +291,7 @@ export function installPlan(
     const left = leftBehind(prior, wrote, owner);
     return left.kind === "theirs"
       ? left
-      : { ...left, commands: [nameWrite(session, name)] };
+      : { ...left, commands: marksWrite(session, marks) };
   }
   const base = statusRows(statusWordNow);
   const above: Record<number, string> = {};
@@ -323,7 +320,7 @@ export function installPlan(
     prior: laid,
     commands: [
       ["set-option", "-t", session, PRIOR_OPTION, JSON.stringify(laid)],
-      nameWrite(session, name),
+      ...marksWrite(session, marks),
       ...arrayWrite(session, wroteFormats),
     ],
   };
@@ -378,80 +375,9 @@ export function restorePlan(
     ["set-option", "-q", "-u", "-t", session, PRIOR_OPTION],
     ["set-option", "-q", "-u", "-t", session, WROTE_OPTION],
     ["set-option", "-q", "-u", "-t", session, RENDERER_OPTION],
+    ["set-option", "-q", "-u", "-t", session, CLICK_OPTION],
   );
   return { commands, kept };
-}
-
-// The command a root `MouseDown1Status` binding runs, as `list-keys` prints
-// the line binding it: a note and a repeat flag may sit before the table, and
-// a whole table's listing pads the key's column with spaces.
-const BOUND =
-  /^bind-key\s+(?:-r\s+)?(?:-N\s+(?:"(?:[^"\\]|\\.)*"|\S+)\s+)?-T\s+root\s+MouseDown1Status\s+(.+)$/m;
-// The root table (never empty, so `list-keys` of it answers).
-const ROOT_KEYS: Command[] = [["list-keys", "-T", "root"]];
-
-// The line binding MouseDown1Status in the root table, and what it runs.
-export interface Bound {
-  readonly line: string;
-  readonly command: string;
-}
-export function boundOf(listKeys: string): Bound | null {
-  const found = BOUND.exec(listKeys);
-  return found === null ? null : { line: found[0], command: found[1]! };
-}
-
-// [LAW:one-source-of-truth] The link a status-line click runs, addressed to
-// the renderer that binds it, as this module writes it into the binding and
-// reads it back in `linkAt`: the server's socket and the mac the renderer
-// signs it with, then the pane (its `%` stripped, which a URL would read as an
-// escape) and the range, which tmux expands, shell-quoted, before the shell
-// runs the line.
-const clickUrl = (name: RendererAddress, socket: string, mac: string): string =>
-  addressedLink(
-    name,
-    VERB_TMUX_STATUS_CLICK,
-    `${encodeSegments([socket, mac])}/#{s/%//:pane_id}/#{q:mouse_status_range}`,
-  );
-
-// A binding a cc-candybar daemon wrote — this one or any other, of any name
-// or of a build before names — told by the verb of the click it runs, which
-// `list-keys` prints as it was bound whatever the padding before it.
-const isClickBinding = (bound: Bound | null): boolean =>
-  bound?.command.includes(`/${VERB_TMUX_STATUS_CLICK}/`) ?? false;
-
-// What `@cc-candybar-binding-prior` holds: the daemon that bound the click,
-// and the binding it replaced.
-interface BindingRecord {
-  readonly owner: string;
-  readonly prior: Bound | null;
-}
-
-// [LAW:one-source-of-truth] Compare-and-restore, as for a layout: the binding
-// goes back to `prior` only while it is still a cc-candybar one.
-function bindingRestorePlan(
-  prior: Bound | null,
-  listKeys: string,
-): {
-  readonly steps: ReadonlyArray<{ command: Command; stdin?: string }>;
-  readonly said: string;
-} {
-  const forget = {
-    command: ["set-option", "-g", "-q", "-u", BINDING_OPTION],
-  };
-  if (!isClickBinding(boundOf(listKeys)))
-    return {
-      steps: [forget],
-      said: "left MouseDown1Status as it is: bound again since",
-    };
-  return {
-    steps: [
-      prior === null
-        ? { command: ["unbind-key", ...CLICK_KEY] }
-        : { command: ["source-file", "-"], stdin: `${prior.line}\n` },
-      forget,
-    ],
-    said: `restored MouseDown1Status to ${prior === null ? "unbound" : JSON.stringify(prior.line)}`,
-  };
 }
 
 export interface TmuxStatusEdge {
@@ -486,11 +412,11 @@ export interface TmuxStatusDeps {
   // This daemon's socket: what it writes into tmux is marked with it.
   readonly owner: string;
   // This renderer's name, as the sessions it draws carry it in RENDERER_OPTION
-  // and the click its binding runs is addressed to.
+  // and the click they carry is addressed to.
   readonly name: RendererAddress;
-  // [LAW:single-enforcer] The renderer's link signer: the binding carries its
-  // mac, and a click is honoured only with it, because any web page can open
-  // a `cc-candybar://` URL and a range id is a counter.
+  // [LAW:single-enforcer] The renderer's link signer: a session's click
+  // carries its mac, and a click is honoured only with it, because any web
+  // page can open a `cc-candybar://` URL and a range id is a counter.
   readonly signer: Pick<LinkSigner, "signBinding" | "verifyBinding">;
   readonly log: (level: "info" | "warn", msg: string) => void;
 }
@@ -511,14 +437,8 @@ interface Layout {
   status: number;
 }
 
-// [LAW:types-are-the-program] The server's click binding as the daemon knows
-// it: not its own; one a daemon on this socket left, to bind again as this
-// process; its own, with what it replaced; or left alone — another daemon's.
-type Binding =
-  | { readonly kind: "none" }
-  | { readonly kind: "adopted"; readonly prior: Bound | null }
-  | { readonly kind: "ours"; readonly prior: Bound | null }
-  | { readonly kind: "left"; readonly why: string };
+// The root table (never empty, so `list-keys` of it answers).
+const ROOT_KEYS: Command[] = [["list-keys", "-T", "root"]];
 
 interface Server {
   view: StatusLines | null;
@@ -527,7 +447,9 @@ interface Server {
   // Sessions laid out by something other than this daemon, and why, left
   // alone until no held pane is in them.
   readonly left: Map<string, string>;
-  binding: Binding;
+  // Whether this process has bound the server's click binding since it last
+  // held no layout there: it binds once a bound period and restores once.
+  bound: boolean;
   // [LAW:no-ambient-temporal-coupling] The reconcile running now, if any, and
   // whether something changed while it ran — one more runs after it, never a
   // second beside it.
@@ -667,18 +589,14 @@ export class TmuxStatusLines {
         this.writeSync(atExit, socket, plan.commands);
         this.saidRestored(socket, session, plan.kept);
       }
-      const binding = server.binding;
-      server.binding = { kind: "none" };
-      if (binding.kind === "ours" || binding.kind === "adopted") {
-        const answers = this.askSync(atExit, socket, ROOT_KEYS);
-        if (answers === null) continue;
-        this.writeBindingRestoreSync(
-          atExit,
-          socket,
-          binding.prior,
-          answers[0] ?? "",
-        );
-      }
+      if (!server.bound) continue;
+      server.bound = false;
+      const answers = this.askSync(atExit, socket, ROOT_KEYS);
+      if (answers === null) continue;
+      const restore = this.bindingRestore(socket, answers[0] ?? "");
+      if (restore === null) continue;
+      const run = this.counted(socket, atExit(socket, restore.command));
+      this.saidBindingRestore(socket, run, restore.user);
     }
   }
 
@@ -698,7 +616,7 @@ export class TmuxStatusLines {
     )
       return {
         kind: "refused",
-        reason: `tmux-status-click needs <socket>/<mac>/<pane>/<range>, got ${JSON.stringify(value)}`,
+        reason: `${VERB_RANGE} needs <socket>/<mac>/<pane>/<range>, got ${JSON.stringify(value)}`,
       };
     // [LAW:no-silent-failure] Refused, naming why: a click no binding of this
     // renderer's could have made runs nothing.
@@ -749,7 +667,7 @@ export class TmuxStatusLines {
       adopted: false,
       layouts: new Map(),
       left: new Map(),
-      binding: { kind: "none" },
+      bound: false,
       running: null,
       again: false,
       lastFailure: null,
@@ -849,7 +767,7 @@ export class TmuxStatusLines {
       `#{session_id}\t#{${PRIOR_OPTION}}\t#{${WROTE_OPTION}}`,
     ]);
     if (run.kind === "ok") {
-      const names: Command[] = [];
+      const marks: Command[] = [];
       for (const line of run.stdout.split("\n")) {
         const [session, prior, wrote = ""] = line.split("\t");
         if (session === undefined || prior === undefined || prior === "")
@@ -861,30 +779,29 @@ export class TmuxStatusLines {
             rows: [],
             status: found.status,
           });
-          names.push(nameWrite(session, this.deps.name));
+          marks.push(...marksWrite(session, this.marks(socket)));
         } else this.leave(socket, server, session, found.why);
       }
-      await this.write(socket, names);
+      await this.write(socket, marks);
     }
-    const answers = await this.ask(socket, [showGlobal(BINDING_OPTION)]);
-    const saved = answers?.[0] ?? "";
-    if (saved !== "") {
-      try {
-        const record = JSON.parse(saved) as BindingRecord;
-        if (record.owner === this.deps.owner)
-          server.binding = { kind: "adopted", prior: record.prior };
-      } catch (error) {
-        this.deps.log(
-          "warn",
-          `tmux-status: socket=${JSON.stringify(socket)} ${BINDING_OPTION} does not read (${String(error)}), left as it is`,
-        );
-      }
-    }
-    if (server.layouts.size > 0 || server.binding.kind === "adopted")
+    if (server.layouts.size > 0)
       this.deps.log(
         "info",
-        `tmux-status: socket=${JSON.stringify(socket)} took over layouts=${[...server.layouts.keys()].join(",") || "-"} binding=${server.binding.kind}`,
+        `tmux-status: socket=${JSON.stringify(socket)} took over layouts=${[...server.layouts.keys()].join(",")}`,
       );
+  }
+
+  // What this renderer's sessions on the server at `socket` carry.
+  private marks(socket: string): Marks {
+    return {
+      name: this.deps.name,
+      click: sessionClick(
+        this.deps.handler,
+        this.deps.name,
+        socket,
+        this.deps.signer.signBinding(socket),
+      ),
+    };
   }
 
   // A tmux session this daemon does not draw while what is laid out there is
@@ -911,7 +828,12 @@ export class TmuxStatusLines {
     // [LAW:no-ambient-temporal-coupling] A shutdown during the ask has
     // restored everything it knew of; a layout begun now would outlive it.
     if (answers === null || this.closed) return null;
-    const plan = installPlan(session, answers, this.deps.owner, this.deps.name);
+    const plan = installPlan(
+      session,
+      answers,
+      this.deps.owner,
+      this.marks(socket),
+    );
     if (plan.kind === "theirs") {
       this.leave(socket, server, session, plan.why);
       return null;
@@ -996,91 +918,83 @@ export class TmuxStatusLines {
     );
   }
 
-  // The server's click binding made this process's: bound over whatever the
-  // user had (or, for one a daemon on this socket left, over what IT
-  // replaced), with the record of what it replaced written in the same tmux
-  // call — so tmux never holds the binding without it. Another daemon's
-  // binding is left alone.
+  // The server's click binding bound over the user's own: the same text every
+  // renderer binds (src/tmux-status/click-binding.ts), so a server another
+  // renderer already bound is bound again to what it holds. The sessions this
+  // process draws carry their click before this runs, because the reconcile
+  // installs them first.
   private async installBinding(socket: string, server: Server): Promise<void> {
-    const binding = server.binding;
-    if (binding.kind === "ours" || binding.kind === "left") return;
+    if (server.bound) return;
     const answers = await this.ask(socket, ROOT_KEYS);
     // [LAW:no-ambient-temporal-coupling] As for a layout: nothing is bound
     // after the shutdown's restore.
     if (answers === null || this.closed) return;
-    const bound = boundOf(answers[0] ?? "");
-    if (binding.kind === "none" && isClickBinding(bound)) {
-      server.binding = {
-        kind: "left",
-        why: "another cc-candybar daemon's status-line clicks are bound to MouseDown1Status; left as it is, so this daemon's are off",
-      };
-      this.deps.log(
-        "warn",
-        `tmux-status: socket=${JSON.stringify(socket)} ${server.binding.why}`,
-      );
-      return;
-    }
-    // An adopted record holds while its binding is still bound; one the user
-    // replaced since is theirs, and what this bind replaces.
-    const prior =
-      binding.kind === "adopted" && isClickBinding(bound)
-        ? binding.prior
-        : bound;
-    const record: BindingRecord = { owner: this.deps.owner, prior };
+    const { user } = boundOf(answers[0] ?? "");
     // Known before it is written, so a shutdown while the write is in flight
     // still puts it back.
-    server.binding = { kind: "ours", prior };
+    server.bound = true;
     const took = await this.write(socket, [
-      [
-        "bind-key",
-        ...CLICK_KEY,
-        "if-shell",
-        "-F",
-        `#{m:${RANGE_PREFIX}*,#{mouse_status_range}}`,
-        `run-shell -b ${tmuxQuoted(`${this.deps.handler} ${clickUrl(this.deps.name, socket, this.deps.signer.signBinding(socket))}`)}`,
-        ...(prior === null ? [] : [prior.command]),
-      ],
-      ["set-option", "-g", BINDING_OPTION, JSON.stringify(record)],
+      clickBinding(user),
+      ["set-option", "-g", "-q", "-u", OLDER_BINDING_RECORD],
     ]);
     // A bind tmux refused leaves nothing to put back; the next reconcile
     // binds again.
     if (!took) {
-      server.binding = binding;
+      server.bound = false;
       return;
     }
     this.deps.log(
       "info",
-      `tmux-status: socket=${JSON.stringify(socket)} bound MouseDown1Status (was ${prior === null ? "unbound" : JSON.stringify(prior.line)})`,
+      `tmux-status: socket=${JSON.stringify(socket)} bound MouseDown1Status over ${spelled(user)}`,
     );
   }
 
+  // Once a bound period, as it ends: the user's binding put back, unless a
+  // session still names a renderer, which tmux decides in the writing call.
   private async restoreBinding(socket: string, server: Server): Promise<void> {
-    const binding = server.binding;
-    server.binding = { kind: "none" };
-    if (binding.kind !== "ours" && binding.kind !== "adopted") return;
+    if (!server.bound) return;
+    server.bound = false;
     const answers = await this.ask(socket, ROOT_KEYS);
     if (answers === null) return;
-    const plan = bindingRestorePlan(binding.prior, answers[0] ?? "");
-    for (const step of plan.steps)
-      await this.write(socket, [step.command], step.stdin);
-    this.deps.log(
-      "info",
-      `tmux-status: socket=${JSON.stringify(socket)} ${plan.said}`,
-    );
+    const restore = this.bindingRestore(socket, answers[0] ?? "");
+    if (restore === null) return;
+    const run = await this.run(socket, restore.command);
+    this.saidBindingRestore(socket, run, restore.user);
   }
 
-  private writeBindingRestoreSync(
-    atExit: TmuxAtExit,
+  // The call that puts the user's binding back, from the root table as it
+  // reads now, or null where the user has bound the key since: theirs stays.
+  private bindingRestore(
     socket: string,
-    prior: Bound | null,
     listKeys: string,
+  ): { readonly command: string[]; readonly user: CommandList | null } | null {
+    const bound = boundOf(listKeys);
+    if (!bound.ours) {
+      this.deps.log(
+        "info",
+        `tmux-status: socket=${JSON.stringify(socket)} left MouseDown1Status as it is: bound again since`,
+      );
+      return null;
+    }
+    return { command: restoreBinding(bound.user), user: bound.user };
+  }
+
+  // [LAW:nothing-unseen] Which way tmux went: the user's binding back, or held
+  // for a session that still names a renderer.
+  private saidBindingRestore(
+    socket: string,
+    run: TmuxRun,
+    user: CommandList | null,
   ): void {
-    const plan = bindingRestorePlan(prior, listKeys);
-    for (const step of plan.steps)
-      this.writeSync(atExit, socket, [step.command], step.stdin);
+    if (run.kind !== "ok") return;
+    const said = run.stdout.includes(RESTORED)
+      ? `restored MouseDown1Status to ${spelled(user)}`
+      : run.stdout.includes(HELD)
+        ? "left MouseDown1Status bound: a session still names a renderer"
+        : `MouseDown1Status restore said neither way: ${JSON.stringify(run.stdout)}`;
     this.deps.log(
       "info",
-      `tmux-status: socket=${JSON.stringify(socket)} ${plan.said}`,
+      `tmux-status: socket=${JSON.stringify(socket)} ${said}`,
     );
   }
 
@@ -1149,6 +1063,11 @@ export class TmuxStatusLines {
 
 // A status-line click's segments, or null when one is not percent-encoded:
 // a value it cannot read is refused like any other it cannot use.
+// The user's binding as a log line spells it: its command text, or what
+// stands where there is none.
+const spelled = (user: CommandList | null): string =>
+  user === null ? "unbound" : JSON.stringify(commandText(user));
+
 function segmentsOf(value: string): string[] | null {
   try {
     return decodeSegments(value);

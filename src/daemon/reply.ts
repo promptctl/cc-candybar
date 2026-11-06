@@ -51,7 +51,7 @@ import { floorOf } from "../config/globals-fields.js";
 import type { RichText } from "@promptctl/rich-js";
 import { LANE_NAMES, parseLane, type Lane } from "../config/lanes.js";
 import { isBarLink } from "../click/scheme.js";
-import { parseHandlerUrl, VERB_TMUX_STATUS_CLICK } from "../click/wire.js";
+import { parseHandlerUrl, VERB_RANGE } from "../click/wire.js";
 import { instantOf } from "../utils/instant.js";
 import { waitBudgetMs } from "./request-deadline.js";
 import {
@@ -886,7 +886,7 @@ async function handleClick(
   facts: RequestFacts,
   clientGone: () => boolean,
 ): Promise<RequestOutcome> {
-  if (verb === VERB_TMUX_STATUS_CLICK) {
+  if (verb === VERB_RANGE) {
     // [LAW:no-silent-failure] A link the bar draws never names this verb; one
     // that did would be a click that only ever clicks another.
     if (arrival.via === "tmux-status") {

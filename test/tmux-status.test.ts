@@ -3,16 +3,26 @@
 // alone because the user set it since.
 
 import {
-  BINDING_OPTION,
+  OLDER_BINDING_RECORD,
   PRIOR_OPTION,
-  RENDERER_OPTION,
   TmuxStatusLines,
   rowFormat,
   rowOption,
   tmuxArg,
   type TmuxStatusEdge,
 } from "../src/daemon/tmux-status";
+import {
+  boundOf,
+  CLICK_OPTION,
+  RENDERER_OPTION,
+} from "../src/tmux-status/click-binding";
+import { linkSigner, type LinkSigner } from "../src/click/link-signer";
 import type { Subscriber } from "../src/daemon/frame-feed";
+import {
+  MAIN_NAME,
+  parseRendererAddress,
+  type RendererAddress,
+} from "../src/daemon/home";
 import { laneEncoders, type LaneEncoder } from "../src/daemon/lane-frames";
 import type { StatusLines } from "../src/daemon/pane-visibility";
 import type { TmuxRun } from "../src/proc/tmux";
@@ -22,35 +32,68 @@ import { TEST_SIGNER } from "./helpers/link-signer";
 
 const SOCKET = "/tmp/tmux-test/default";
 // What the binding's URL carries for a click on `range` of pane `%<pane>`.
-const clickOn = (pane: string, range: string, mac = TEST_SIGNER.signBinding(SOCKET)) =>
-  [SOCKET, mac, pane, range].map(encodeURIComponent).join("/");
+const clickOn = (
+  pane: string,
+  range: string,
+  mac = TEST_SIGNER.signBinding(SOCKET),
+) => [SOCKET, mac, pane, range].map(encodeURIComponent).join("/");
 const OWNER = "/tmp/cc-candybar-test/socket";
 const ok = (stdout = ""): TmuxRun => ({ kind: "ok", stdout });
-const DEFAULT_BINDING = "bind-key -T root MouseDown1Status switch-client -t =";
+// The server's own MouseDown1Status command, as tmux prints it.
+const DEFAULT_COMMAND = "switch-client -t =";
+// A second renderer's key, so its macs are not the first one's.
+const OTHER_SIGNER = linkSigner(Buffer.alloc(32, 9));
 
-// The words of a command list as tmux parses a string of them: double-quoted
-// words with `\` escapes, `;` between commands.
+// The words of a command list as tmux parses a string of them: double- or
+// single-quoted words with `\` escapes, `;` between commands, and a bare `\;`
+// a `;` word left to the command, which a bind-key reads as its own list's
+// separator.
 function parseCommands(text: string): string[][] {
   const commands: string[][] = [[]];
-  const re = /"((?:[^"\\]|\\.)*)"|(;)|(\S+)/g;
-  for (const [, quoted, semi, bare] of text.matchAll(re)) {
+  const re = /"((?:[^"\\]|\\.)*)"|'([^']*)'|(;)|(\S+)/g;
+  for (const [, quoted, single, semi, bare] of text.matchAll(re)) {
     if (semi !== undefined) commands.push([]);
-    else commands.at(-1)!.push(quoted !== undefined ? quoted.replace(/\\(.)/g, "$1") : bare!);
+    else
+      commands
+        .at(-1)!
+        .push(
+          quoted !== undefined
+            ? quoted.replace(/\\(.)/g, "$1")
+            : (single ?? (bare === "\\;" ? ";" : bare!)),
+        );
   }
   return commands;
+}
+
+// A word as tmux prints it in a listing (its args_escape): bare where it
+// can be, else double-quoted with `\`, `"` and `$` escaped, or single-quoted.
+function printed(word: string): string {
+  if (word === "") return "''";
+  const escaped = word
+    .replace(/\\/g, "\\\\")
+    .replace(/\n/g, "\\n")
+    .replace(/\t/g, "\\t");
+  if (/[ #';${}%]/.test(word))
+    return `"${escaped.replace(/["$]/g, (c) => `\\${c}`)}"`;
+  if (/[ "]/.test(word)) return `'${escaped}'`;
+  return escaped;
 }
 
 // A tmux server as far as the owner asks it: session-level and global options,
 // each session's `status` falling back to the global one, an array option
 // unset whole by its bare name, the root table as `list-keys` prints it,
-// `if-shell -F` over an option, and `display-message -p` of plain text. While
-// `gate` is set, each invocation waits for it before it runs, as one in flight
-// would.
+// `if-shell -F` over a session's option or over whether any session sets one,
+// and `display-message -p` of plain text. While `gate` is set, each invocation
+// waits for it before it runs, as one in flight would.
 class FakeTmux implements TmuxStatusEdge {
   readonly sessions = new Map<string, Map<string, string>>();
   readonly global = new Map<string, string>([["status", "on"]]);
-  binding: string | null = DEFAULT_BINDING;
+  // The command MouseDown1Status runs, as `list-keys` prints it.
+  binding: string | null = DEFAULT_COMMAND;
   gate: Promise<void> | null = null;
+  // Run before each invocation, as another tmux client's command landing
+  // first would.
+  onRun: ((args: readonly string[]) => void) | null = null;
   // The spaces `list-keys` pads the key column with: the width of the
   // table's longest key, which any other root binding can change.
   pad = 10;
@@ -61,16 +104,24 @@ class FakeTmux implements TmuxStatusEdge {
     for (const id of ids) this.sessions.set(id, new Map());
   }
 
-  async run(socket: string, args: readonly string[], stdin?: string): Promise<TmuxRun> {
+  async run(
+    socket: string,
+    args: readonly string[],
+    stdin?: string,
+  ): Promise<TmuxRun> {
     if (this.gate !== null) await this.gate;
     return this.runSync(socket, args, stdin);
   }
 
   runSync(_socket: string, args: readonly string[], stdin?: string): TmuxRun {
+    this.onRun?.(args);
     const commands: string[][] = [[]];
     for (const arg of args)
       if (arg === ";") commands.push([]);
-      else commands.at(-1)!.push(arg.endsWith("\\;") ? `${arg.slice(0, -2)};` : arg);
+      else
+        commands
+          .at(-1)!
+          .push(arg.endsWith("\\;") ? `${arg.slice(0, -2)};` : arg);
     return this.list(commands, stdin);
   }
 
@@ -86,16 +137,25 @@ class FakeTmux implements TmuxStatusEdge {
 
   private one(command: readonly string[], stdin?: string): TmuxRun {
     const [name, ...rest] = command;
-    if (name === this.refuses) return { kind: "failed", reason: `fake tmux refused ${name}` };
-    const flags = new Set(rest.filter((a) => /^-[a-zA-Z]+$/.test(a)).flatMap((a) => [...a.slice(1)]));
+    if (name === this.refuses)
+      return { kind: "failed", reason: `fake tmux refused ${name}` };
+    const flags = new Set(
+      rest
+        .filter((a) => /^-[a-zA-Z]+$/.test(a))
+        .flatMap((a) => [...a.slice(1)]),
+    );
     const target = rest[rest.indexOf("-t") + 1];
     const words = rest.filter(
-      (a, i) => !/^-[a-zA-Z]+$/.test(a) && !["-t", "-T"].includes(rest[i - 1] ?? ""),
+      (a, i) =>
+        !/^-[a-zA-Z]+$/.test(a) && !["-t", "-T"].includes(rest[i - 1] ?? ""),
     );
-    const scope = flags.has("g") ? this.global : this.sessions.get(target ?? "");
+    const scope = flags.has("g")
+      ? this.global
+      : this.sessions.get(target ?? "");
     switch (name) {
       case "set-option": {
-        if (scope === undefined) return { kind: "failed", reason: `no session ${target}` };
+        if (scope === undefined)
+          return { kind: "failed", reason: `no session ${target}` };
         const [option, value] = words as [string, string?];
         if (flags.has("u")) {
           scope.delete(option);
@@ -105,10 +165,13 @@ class FakeTmux implements TmuxStatusEdge {
         return ok();
       }
       case "show-options": {
-        if (scope === undefined) return { kind: "failed", reason: `no session ${target}` };
+        if (scope === undefined)
+          return { kind: "failed", reason: `no session ${target}` };
         const [option] = words;
         if (option === undefined)
-          return ok([...scope].map(([k, v]) => `${k} ${JSON.stringify(v)}\n`).join(""));
+          return ok(
+            [...scope].map(([k, v]) => `${k} ${JSON.stringify(v)}\n`).join(""),
+          );
         const value = scope.get(option);
         return ok(value === undefined ? "" : `${value}\n`);
       }
@@ -119,11 +182,17 @@ class FakeTmux implements TmuxStatusEdge {
         return ok(`${session.get("status") ?? this.global.get("status")}\n`);
       }
       case "if-shell": {
-        const [condition, then] = words as [string, string];
-        const option = /^#\{(@[\w-]+)\}$/.exec(condition)![1]!;
-        return this.sessions.get(target ?? "")?.has(option)
-          ? this.list(parseCommands(then))
-          : ok();
+        const [condition, then, otherwise] = words as [string, string, string?];
+        const own = /^#\{(@[\w-]+)\}$/.exec(condition);
+        const none = /^#\{!:#\{S:#\{(@[\w-]+)\}\}\}$/.exec(condition);
+        const holds =
+          own !== null
+            ? (this.sessions.get(target ?? "")?.has(own[1]!) ?? false)
+            : ![...this.sessions.values()].some(
+                (s) => (s.get(none![1]!) ?? "") !== "",
+              );
+        const runs = holds ? then : otherwise;
+        return runs === undefined ? ok() : this.list(parseCommands(runs));
       }
       case "list-sessions":
         return ok(
@@ -141,18 +210,22 @@ class FakeTmux implements TmuxStatusEdge {
             // A table's listing pads the key column, as tmux's does.
             ...(this.binding === null
               ? []
-              : [this.binding.replace("MouseDown1Status ", `MouseDown1Status ${" ".repeat(this.pad)}`)]),
+              : [
+                  `bind-key -T root MouseDown1Status ${" ".repeat(this.pad)}${this.binding}`,
+                ]),
           ].join("\n") + "\n",
         );
       case "bind-key":
-        this.binding = `bind-key ${rest.join(" ")}`;
+        expect(rest.slice(0, 3)).toEqual(["-T", "root", "MouseDown1Status"]);
+        // A bind-key's `;` words separate the commands of its list, which
+        // tmux prints back between `\;`.
+        this.binding = rest
+          .slice(3)
+          .map((w) => (w === ";" ? "\\;" : printed(w)))
+          .join(" ");
         return ok();
       case "unbind-key":
         this.binding = null;
-        return ok();
-      case "source-file":
-        // tmux parses the line it reads, so the listing's padding goes.
-        this.binding = stdin!.trim().replace(/ +/g, " ");
         return ok();
       default:
         return { kind: "failed", reason: `fake tmux: ${name}` };
@@ -167,8 +240,17 @@ const frameOf = (text: string, link?: string) =>
       .map((line) => [{ text: line, ...(link !== undefined && { link }) }]),
   );
 
-function harness(ids: readonly string[] = ["$1"]) {
-  const tmux = new FakeTmux(ids);
+// One renderer over a fake server: its own, or one another harness drew on.
+interface Renderer {
+  readonly tmux?: FakeTmux;
+  readonly name?: RendererAddress;
+  readonly owner?: string;
+  readonly handler?: string;
+  readonly signer?: LinkSigner;
+}
+
+function harness(ids: readonly string[] = ["$1"], renderer: Renderer = {}) {
+  const tmux = renderer.tmux ?? new FakeTmux(ids);
   const subs = new Map<string, Subscriber<"tmuxStatus">>();
   // Each session's lane encoder, as its feed makes one (src/daemon/frame-feed.ts).
   const encoders = laneEncoders(countedIds());
@@ -183,17 +265,20 @@ function harness(ids: readonly string[] = ["$1"]) {
       return () => unsubscribed.push(sessionId);
     },
     sessionInPane: (_socket, pane) => newest.get(pane) ?? null,
-    handler: "cc-candybar url-handle",
-    owner: OWNER,
-    name: "main",
-    signer: TEST_SIGNER,
+    handler: renderer.handler ?? "cc-candybar url-handle",
+    owner: renderer.owner ?? OWNER,
+    name: renderer.name ?? MAIN_NAME,
+    signer: renderer.signer ?? TEST_SIGNER,
     log: (_level, msg) => logs.push(msg),
   });
   const hold = (sessionId: string, pane: string): void => {
     newest.set(pane, sessionId);
     owner.observe(sessionId, { socket: SOCKET, pane, truecolor: null }, true);
   };
-  const answer = async (sessionOf: Record<string, string>, shownBy: Record<string, string>) => {
+  const answer = async (
+    sessionOf: Record<string, string>,
+    shownBy: Record<string, string>,
+  ) => {
     const view: StatusLines = {
       sessionOf: new Map(Object.entries(sessionOf)),
       shownBy: new Map(Object.entries(shownBy)),
@@ -217,7 +302,15 @@ function harness(ids: readonly string[] = ["$1"]) {
   return { tmux, owner, subs, unsubscribed, newest, logs, hold, answer, frame };
 }
 
-const session = (h: ReturnType<typeof harness>, id = "$1") => h.tmux.sessions.get(id)!;
+const session = (h: ReturnType<typeof harness>, id = "$1") =>
+  h.tmux.sessions.get(id)!;
+
+// The server's binding as a renderer reads it from the root table.
+const listing = (tmux: FakeTmux) =>
+  (tmux.runSync(SOCKET, ["list-keys", "-T", "root"]) as { stdout: string })
+    .stdout;
+const userOf = (tmux: FakeTmux) => boundOf(listing(tmux)).user;
+const oursOn = (tmux: FakeTmux) => boundOf(listing(tmux)).ours;
 
 describe("TmuxStatusLines", () => {
   test("the shown pane's bar is drawn under the status line's own rows, its height following the bar's", async () => {
@@ -231,11 +324,22 @@ describe("TmuxStatusLines", () => {
     expect(s.get("status-format[4]")).toBe(rowFormat(3));
     expect(s.get(rowOption(0))).toContain("one");
     expect(s.get(rowOption(1))).toContain("two");
-    expect(JSON.parse(s.get(PRIOR_OPTION)!)).toMatchObject({ base: 1, status: null, formats: null });
+    expect(JSON.parse(s.get(PRIOR_OPTION)!)).toMatchObject({
+      base: 1,
+      status: null,
+      formats: null,
+    });
     expect(s.get(RENDERER_OPTION)).toBe("main");
-    // The click the binding runs is addressed to the renderer that bound it.
-    expect(h.tmux.binding).toContain("cc-candybar://to/main/tmux-status-click/");
-    expect(h.tmux.binding).toContain("switch-client -t =");
+    // The session carries the click its ranges run, addressed to the renderer
+    // that draws it; the binding reads it and runs the user's command besides.
+    const mac = TEST_SIGNER.signBinding(SOCKET);
+    expect(s.get(CLICK_OPTION)).toBe(
+      `cc-candybar url-handle cc-candybar://to/main/range/${encodeURIComponent(SOCKET)}/${mac}`,
+    );
+    expect(h.tmux.binding).toContain(
+      `#{${CLICK_OPTION}}/#{s/%//:pane_id}/#{q:mouse_status_range}`,
+    );
+    expect(userOf(h.tmux)).toEqual([["switch-client", "-t", "="]]);
   });
 
   // candybar-plugins-vf6g.qzx: a session outside tmux whose renderer is tmux
@@ -266,10 +370,12 @@ describe("TmuxStatusLines", () => {
     await h.frame("s1", frameOf("bar"));
     await h.answer({}, {});
     expect([...session(h)]).toEqual([["status-format[2]", "mine"]]);
-    expect(h.tmux.binding).toBe(DEFAULT_BINDING);
-    expect(h.tmux.global.has(BINDING_OPTION)).toBe(false);
+    expect(h.tmux.binding).toBe(DEFAULT_COMMAND);
+    expect(h.tmux.global.has(OLDER_BINDING_RECORD)).toBe(false);
     expect(h.unsubscribed).toEqual(["s1"]);
-    expect(h.logs).toContain('tmux-status: released sid="s1" pane=%1 — pane gone');
+    expect(h.logs).toContain(
+      'tmux-status: released sid="s1" pane=%1 — pane gone',
+    );
   });
 
   test("the rows above the bar are copied into the session's array, and the array is unset whole on release", async () => {
@@ -290,13 +396,19 @@ describe("TmuxStatusLines", () => {
     await h.frame("s1", frameOf("bar"));
     session(h).set("status-format[3]", "theirs");
     session(h).set("status", "5");
-    h.owner.observe("s1", { socket: SOCKET, pane: "%1", truecolor: null }, false);
+    h.owner.observe(
+      "s1",
+      { socket: SOCKET, pane: "%1", truecolor: null },
+      false,
+    );
     await h.owner.settled();
     expect([...session(h)]).toEqual([
       ["status-format[3]", "theirs"],
       ["status", "5"],
     ]);
-    expect(h.logs.find((l) => l.includes("restored session"))).toContain("kept=status-format,status");
+    expect(h.logs.find((l) => l.includes("restored session"))).toContain(
+      "kept=status-format,status",
+    );
   });
 
   test("a pane another session now renders from is released", async () => {
@@ -310,11 +422,26 @@ describe("TmuxStatusLines", () => {
   test("what a daemon that died left behind is put back on the first answer from its server", async () => {
     const h = harness(["$1", "$2"]);
     const s = session(h, "$2");
-    const wrote = { 1: rowFormat(0), 2: rowFormat(1), 3: rowFormat(2), 4: rowFormat(3) };
-    s.set(PRIOR_OPTION, JSON.stringify({ owner: OWNER, base: 1, status: null, formats: { 2: "old" }, wrote }));
+    const wrote = {
+      1: rowFormat(0),
+      2: rowFormat(1),
+      3: rowFormat(2),
+      4: rowFormat(3),
+    };
+    s.set(
+      PRIOR_OPTION,
+      JSON.stringify({
+        owner: OWNER,
+        base: 1,
+        status: null,
+        formats: { 2: "old" },
+        wrote,
+      }),
+    );
     s.set("@cc-candybar-status-wrote", "2");
     s.set("status", "2");
-    for (const [i, value] of Object.entries(wrote)) s.set(`status-format[${i}]`, value);
+    for (const [i, value] of Object.entries(wrote))
+      s.set(`status-format[${i}]`, value);
     await h.answer({ "%9": "$2" }, {});
     expect([...s]).toEqual([["status-format[2]", "old"]]);
   });
@@ -322,9 +449,24 @@ describe("TmuxStatusLines", () => {
   test("a session a dead daemon on this socket laid out names this daemon once taken over, and names none once released", async () => {
     const h = harness();
     const s = session(h);
-    const wrote = { 1: rowFormat(0), 2: rowFormat(1), 3: rowFormat(2), 4: rowFormat(3) };
-    s.set(PRIOR_OPTION, JSON.stringify({ owner: OWNER, base: 1, status: null, formats: null, wrote }));
-    for (const [i, value] of Object.entries(wrote)) s.set(`status-format[${i}]`, value);
+    const wrote = {
+      1: rowFormat(0),
+      2: rowFormat(1),
+      3: rowFormat(2),
+      4: rowFormat(3),
+    };
+    s.set(
+      PRIOR_OPTION,
+      JSON.stringify({
+        owner: OWNER,
+        base: 1,
+        status: null,
+        formats: null,
+        wrote,
+      }),
+    );
+    for (const [i, value] of Object.entries(wrote))
+      s.set(`status-format[${i}]`, value);
     h.hold("s1", "%1");
     await h.answer({ "%1": "$1" }, { $1: "%1" });
     expect(s.get(RENDERER_OPTION)).toBe("main");
@@ -335,24 +477,38 @@ describe("TmuxStatusLines", () => {
   test("a layout found on the session itself, when the server's listing is refused, names this daemon too", async () => {
     const h = harness();
     const s = session(h);
-    s.set(PRIOR_OPTION, JSON.stringify({ owner: OWNER, base: 1, status: null, formats: null, wrote: { 1: rowFormat(0) } }));
+    s.set(
+      PRIOR_OPTION,
+      JSON.stringify({
+        owner: OWNER,
+        base: 1,
+        status: null,
+        formats: null,
+        wrote: { 1: rowFormat(0) },
+      }),
+    );
     s.set("status-format[1]", rowFormat(0));
     h.tmux.refuses = "list-sessions";
     h.hold("s1", "%1");
     await h.answer({ "%1": "$1" }, { $1: "%1" });
     expect(s.get(RENDERER_OPTION)).toBe("main");
-    expect(h.logs.some((l) => l.includes("took over renderer=main session $1"))).toBe(true);
+    expect(
+      h.logs.some((l) => l.includes("took over renderer=main session $1")),
+    ).toBe(true);
   });
 
   test("a binding the user replaced is left alone, and said once", async () => {
     const h = harness();
     h.hold("s1", "%1");
     await h.answer({ "%1": "$1" }, { $1: "%1" });
-    h.tmux.binding = "bind-key -T root MouseDown1Status select-pane";
+    h.tmux.binding = "select-pane";
     await h.answer({ "%1": "$1" }, { $1: "%1" });
     await h.answer({}, {});
-    expect(h.logs.filter((l) => l.includes("bound again since"))).toHaveLength(1);
-    expect(h.tmux.binding).toBe("bind-key -T root MouseDown1Status select-pane");
+    await h.answer({}, {});
+    expect(h.logs.filter((l) => l.includes("bound again since"))).toHaveLength(
+      1,
+    );
+    expect(h.tmux.binding).toBe("select-pane");
   });
 
   test("a click resolves through the frame drawn now, and a range it no longer draws is refused", async () => {
@@ -374,8 +530,14 @@ describe("TmuxStatusLines", () => {
     const h = harness();
     h.hold("s1", "%1");
     await h.answer({ "%1": "$1" }, { $1: "%1" });
-    const before = await h.frame("s1", frameOf("x", "cc-candybar://to/main/copy/one"));
-    const after = await h.frame("s1", frameOf("x", "cc-candybar://to/main/copy/two"));
+    const before = await h.frame(
+      "s1",
+      frameOf("x", "cc-candybar://to/main/copy/one"),
+    );
+    const after = await h.frame(
+      "s1",
+      frameOf("x", "cc-candybar://to/main/copy/two"),
+    );
     const [old] = Object.keys(before.links);
     expect(Object.keys(after.links)).not.toContain(old);
     expect(h.owner.linkAt(clickOn("1", old!)).kind).toBe("refused");
@@ -390,13 +552,18 @@ describe("TmuxStatusLines", () => {
     const url = "cc-candybar://to/main/copy/hi";
     const [range] = Object.keys((await h.frame("s1", frameOf("x", url))).links);
     const mac = TEST_SIGNER.signBinding(SOCKET);
-    expect(h.tmux.binding).toContain(`/${mac}/`);
+    expect(session(h).get(CLICK_OPTION)).toMatch(new RegExp(`/${mac}$`));
     expect(h.owner.linkAt(clickOn("1", range!))).toEqual({ kind: "link", url });
     const forged = h.owner.linkAt(clickOn("1", range!, "0".repeat(64)));
-    expect(forged).toMatchObject({ kind: "refused", reason: expect.stringMatching(/mac/) });
+    expect(forged).toMatchObject({
+      kind: "refused",
+      reason: expect.stringMatching(/mac/),
+    });
     // A mac signed for another server is not this one's.
     const elsewhere = TEST_SIGNER.signBinding("/tmp/tmux-test/other");
-    expect(h.owner.linkAt(clickOn("1", range!, elsewhere)).kind).toBe("refused");
+    expect(h.owner.linkAt(clickOn("1", range!, elsewhere)).kind).toBe(
+      "refused",
+    );
     // Without its mac the click has a segment too few.
     const bare = [SOCKET, "1", range!].map(encodeURIComponent).join("/");
     expect(h.owner.linkAt(bare).kind).toBe("refused");
@@ -418,10 +585,12 @@ describe("TmuxStatusLines", () => {
     await h.answer({ "%1": "$1", "%2": "$2" }, { $1: "%1", $2: "%2" });
     await h.frame("s1", frameOf("a"));
     await h.frame("s2", frameOf("b"));
-    h.owner.restoreAll((socket, args, stdin) => h.tmux.runSync(socket, args, stdin));
+    h.owner.restoreAll((socket, args, stdin) =>
+      h.tmux.runSync(socket, args, stdin),
+    );
     expect([...session(h, "$1")]).toEqual([]);
     expect([...session(h, "$2")]).toEqual([]);
-    expect(h.tmux.binding).toBe(DEFAULT_BINDING);
+    expect(h.tmux.binding).toBe(DEFAULT_COMMAND);
     expect(h.owner.stats()).toMatchObject({ sessions: 0, layouts: 0 });
   });
 
@@ -435,7 +604,9 @@ describe("TmuxStatusLines", () => {
     // The draw's write is in tmux's hands when the shutdown restores.
     const drawing = h.frame("s1", frameOf("two\nthree"));
     await new Promise((resolve) => setImmediate(resolve));
-    h.owner.restoreAll((socket, args, stdin) => h.tmux.runSync(socket, args, stdin));
+    h.owner.restoreAll((socket, args, stdin) =>
+      h.tmux.runSync(socket, args, stdin),
+    );
     h.tmux.gate = null;
     release();
     await drawing;
@@ -458,7 +629,13 @@ describe("TmuxStatusLines", () => {
 
   test("a session another daemon laid out is left alone, and said once", async () => {
     const h = harness();
-    const theirs = JSON.stringify({ owner: "/tmp/elsewhere/socket", base: 1, status: null, formats: null, wrote: { 1: rowFormat(0) } });
+    const theirs = JSON.stringify({
+      owner: "/tmp/elsewhere/socket",
+      base: 1,
+      status: null,
+      formats: null,
+      wrote: { 1: rowFormat(0) },
+    });
     session(h).set(PRIOR_OPTION, theirs);
     session(h).set("status-format[1]", rowFormat(0));
     const before = [...session(h)];
@@ -468,7 +645,9 @@ describe("TmuxStatusLines", () => {
     await h.answer({ "%1": "$1" }, { $1: "%1" });
     expect([...session(h)]).toEqual(before);
     expect(h.subs.get("s1")!.drawing()).toBe(false);
-    expect(h.logs.filter((l) => l.includes("left as it is: the daemon at"))).toHaveLength(1);
+    expect(
+      h.logs.filter((l) => l.includes("left as it is: the daemon at")),
+    ).toHaveLength(1);
     await h.answer({}, {});
     expect([...session(h)]).toEqual(before);
   });
@@ -490,31 +669,174 @@ describe("TmuxStatusLines", () => {
     await h.answer({ "%1": "$1" }, { $1: "%1" });
     h.tmux.pad = 3;
     await h.answer({}, {});
-    expect(h.tmux.binding).toBe(DEFAULT_BINDING);
+    expect(h.tmux.binding).toBe(DEFAULT_COMMAND);
   });
 
-  test("a binding a daemon on this socket left, from a build before names, is bound again as this daemon, over what it first replaced", async () => {
-    const h = harness();
-    h.tmux.binding = "bind-key -T root MouseDown1Status if-shell -F x run-shell -b old-node url-handle cc-candybar://tmux-status-click/y switch-client -t =";
-    h.tmux.global.set(BINDING_OPTION, JSON.stringify({ owner: OWNER, prior: { line: DEFAULT_BINDING, command: "switch-client -t =" } }));
-    h.hold("s1", "%1");
-    await h.answer({ "%1": "$1" }, { $1: "%1" });
-    expect(h.tmux.binding).toContain("cc-candybar url-handle cc-candybar://to/main/tmux-status-click/");
-    expect(h.tmux.binding).not.toContain("old-node");
-    expect(h.tmux.binding).toContain("switch-client -t =");
-    await h.answer({}, {});
-    expect(h.tmux.binding).toBe(DEFAULT_BINDING);
+  // [LAW:one-source-of-truth] The binding names no renderer: what differs per
+  // renderer rides on the session it draws.
+  test("two renderers on one server bind the same text, and each session carries its own renderer's click", async () => {
+    const a = harness(["$1", "$2"]);
+    const b = harness([], {
+      tmux: a.tmux,
+      name: parseRendererAddress("dev"),
+      owner: "/tmp/dev.sock",
+      handler: "dev-node url-handle",
+      signer: OTHER_SIGNER,
+    });
+    a.hold("s1", "%1");
+    await a.answer({ "%1": "$1" }, { $1: "%1" });
+    const bound = a.tmux.binding;
+    b.hold("s2", "%2");
+    await b.answer({ "%2": "$2" }, { $2: "%2" });
+    expect(a.tmux.binding).toBe(bound);
+    expect(userOf(a.tmux)).toEqual([["switch-client", "-t", "="]]);
+    expect(session(a, "$1").get(CLICK_OPTION)).toBe(
+      `cc-candybar url-handle cc-candybar://to/main/range/${encodeURIComponent(SOCKET)}/${TEST_SIGNER.signBinding(SOCKET)}`,
+    );
+    expect(session(a, "$2").get(CLICK_OPTION)).toBe(
+      `dev-node url-handle cc-candybar://to/dev/range/${encodeURIComponent(SOCKET)}/${OTHER_SIGNER.signBinding(SOCKET)}`,
+    );
+    expect(session(a, "$2").get(RENDERER_OPTION)).toBe("dev");
   });
 
-  test("another daemon's binding is left alone", async () => {
+  test("the first renderer to release leaves the binding while another's session names it, and the last puts the user's back", async () => {
+    const a = harness(["$1", "$2"]);
+    const b = harness([], {
+      tmux: a.tmux,
+      name: parseRendererAddress("dev"),
+      owner: "/tmp/dev.sock",
+      signer: OTHER_SIGNER,
+    });
+    a.hold("s1", "%1");
+    await a.answer({ "%1": "$1" }, { $1: "%1" });
+    b.hold("s2", "%2");
+    await b.answer({ "%2": "$2" }, { $2: "%2" });
+    await a.answer({}, {});
+    expect(oursOn(a.tmux)).toBe(true);
+    expect(
+      a.logs.some((l) =>
+        l.includes(
+          "left MouseDown1Status bound: a session still names a renderer",
+        ),
+      ),
+    ).toBe(true);
+    await b.answer({}, {});
+    expect(a.tmux.binding).toBe(DEFAULT_COMMAND);
+    expect(
+      b.logs.some((l) =>
+        l.includes(
+          'restored MouseDown1Status to "\\"switch-client\\" \\"-t\\" \\"=\\""',
+        ),
+      ),
+    ).toBe(true);
+  });
+
+  // [LAW:no-ambient-temporal-coupling] tmux decides the restore in the call
+  // that writes it, so a renderer naming a session after the listing was read
+  // keeps its binding.
+  test("a restore racing another renderer's install keeps the binding", async () => {
+    const h = harness(["$1", "$2"]);
+    h.hold("s1", "%1");
+    await h.answer({ "%1": "$1" }, { $1: "%1" });
+    h.tmux.onRun = (args) => {
+      if (
+        args[0] === "if-shell" &&
+        args.includes(`display-message -p ccb:held`)
+      )
+        session(h, "$2").set(RENDERER_OPTION, "dev");
+    };
+    await h.answer({}, {});
+    expect(oursOn(h.tmux)).toBe(true);
+    expect(h.logs.some((l) => l.includes("left MouseDown1Status bound"))).toBe(
+      true,
+    );
+  });
+
+  // An older build's binding has this one's shape, with its own click and the
+  // user's command as its else-branch.
+  const older = (click: string, otherwise: string) =>
+    [
+      "if-shell",
+      "-F",
+      "#{m:ccb*,#{mouse_status_range}}",
+      `run-shell -b ${click}`,
+      otherwise,
+    ]
+      .map(printed)
+      .join(" ");
+
+  test.each([
+    ["before names", "old-node url-handle cc-candybar://tmux-status-click/y"],
+    [
+      "named, with the old verb",
+      "old-node url-handle cc-candybar://to/main/tmux-status-click/y",
+    ],
+  ])(
+    "a binding an older build left (%s) is bound over its own else-branch, and the user's command comes back at the end",
+    async (_form, click) => {
+      const h = harness();
+      h.tmux.binding = older(click, "select-pane \\; display-message hi");
+      h.tmux.global.set(
+        OLDER_BINDING_RECORD,
+        JSON.stringify({ owner: OWNER, prior: null }),
+      );
+      h.hold("s1", "%1");
+      await h.answer({ "%1": "$1" }, { $1: "%1" });
+      expect(h.tmux.binding).not.toContain("old-node");
+      expect(userOf(h.tmux)).toEqual([
+        ["select-pane"],
+        ["display-message", "hi"],
+      ]);
+      expect(h.tmux.global.has(OLDER_BINDING_RECORD)).toBe(false);
+      await h.answer({}, {});
+      expect(userOf(h.tmux)).toEqual([
+        ["select-pane"],
+        ["display-message", "hi"],
+      ]);
+      expect(oursOn(h.tmux)).toBe(false);
+    },
+  );
+
+  test("an older build bound over this one's binding is peeled to the user's command, bound and restored", async () => {
     const h = harness();
-    const theirs = "bind-key -T root MouseDown1Status run-shell -b other url-handle cc-candybar://to/dev-bar/tmux-status-click/z";
-    h.tmux.binding = theirs;
+    h.hold("s1", "%1");
+    await h.answer({ "%1": "$1" }, { $1: "%1" });
+    // An older renderer binds over this one: its else-branch is what it read.
+    h.tmux.binding = older(
+      "old-node url-handle cc-candybar://to/main/tmux-status-click/y",
+      h.tmux.binding!,
+    );
+    await h.answer({}, {});
+    expect(h.tmux.binding).toBe(DEFAULT_COMMAND);
+  });
+
+  test("a bound period ends once: a reconcile with nothing bound writes nothing", async () => {
+    const h = harness();
     h.hold("s1", "%1");
     await h.answer({ "%1": "$1" }, { $1: "%1" });
     await h.answer({}, {});
-    expect(h.tmux.binding).toBe(theirs);
-    expect(h.logs.some((l) => l.includes("another cc-candybar daemon's status-line clicks"))).toBe(true);
+    const writes = h.owner.stats().writes;
+    const restores = h.logs.filter((l) =>
+      l.includes("MouseDown1Status"),
+    ).length;
+    await h.answer({}, {});
+    await h.answer({}, {});
+    expect(h.owner.stats().writes).toBe(writes);
+    expect(h.logs.filter((l) => l.includes("MouseDown1Status")).length).toBe(
+      restores,
+    );
+  });
+
+  test("a shutdown's restore is held by the same guard while another session names a renderer", async () => {
+    const h = harness(["$1", "$2"]);
+    h.hold("s1", "%1");
+    await h.answer({ "%1": "$1" }, { $1: "%1" });
+    session(h, "$2").set(RENDERER_OPTION, "dev");
+    h.owner.restoreAll((socket, args, stdin) =>
+      h.tmux.runSync(socket, args, stdin),
+    );
+    expect(oursOn(h.tmux)).toBe(true);
+    session(h, "$2").delete(RENDERER_OPTION);
   });
 
   test("a draw tmux refused is written again", async () => {
@@ -537,15 +859,20 @@ describe("TmuxStatusLines", () => {
     h.hold("s1", "%1");
     let release = (): void => {};
     h.tmux.gate = new Promise((resolve) => (release = resolve));
-    h.owner.answered(SOCKET, { sessionOf: new Map([["%1", "$1"]]), shownBy: new Map([["$1", "%1"]]) });
+    h.owner.answered(SOCKET, {
+      sessionOf: new Map([["%1", "$1"]]),
+      shownBy: new Map([["$1", "%1"]]),
+    });
     await new Promise((resolve) => setImmediate(resolve));
-    h.owner.restoreAll((socket, args, stdin) => h.tmux.runSync(socket, args, stdin));
+    h.owner.restoreAll((socket, args, stdin) =>
+      h.tmux.runSync(socket, args, stdin),
+    );
     h.tmux.gate = null;
     release();
     await h.owner.settled();
     expect([...session(h)]).toEqual([]);
-    expect(h.tmux.binding).toBe(DEFAULT_BINDING);
-    expect(h.tmux.global.has(BINDING_OPTION)).toBe(false);
+    expect(h.tmux.binding).toBe(DEFAULT_COMMAND);
+    expect(h.tmux.global.has(OLDER_BINDING_RECORD)).toBe(false);
   });
 
   test("an unchanged frame writes nothing", async () => {

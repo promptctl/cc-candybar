@@ -192,12 +192,12 @@ export interface EvaluatedRun {
   readonly env: Readonly<Record<string, string>>;
 }
 
-// A click on one of the ranges the daemon draws in a tmux status line (lane
+// A click on one of the ranges a renderer draws in a tmux status line (lane
 // C, src/daemon/tmux-status.ts), as the server's MouseDown1Status binding
-// sends it. Args: `[socket, pane number, range]` — the daemon looks the range
-// up in the frame it drew there and runs the link it marks, so no link rides
-// the URL. Not a leaf verb: the link's own verb is the click's.
-export const VERB_TMUX_STATUS_CLICK = "tmux-status-click";
+// sends it. Args: `[socket, mac, pane number, range]` — the renderer looks the
+// range up in the frame it drew there and runs the link it marks, so no link
+// rides the URL. Not a leaf verb: the link's own verb is the click's.
+export const VERB_RANGE = "range";
 
 // [LAW:types-are-the-program] An effect to EMIT: a verb plus its raw (unencoded)
 // positional args. The wire owns all encoding — callers never percent-encode.
@@ -248,7 +248,7 @@ function saidCopy(text: string): string {
 // [LAW:one-source-of-truth] Every verb a click can fire, and what it does in
 // words, read off the args the click carries, so the text cannot say anything
 // the click does not do. A verb says a phrase per write. VERB_DISPATCH is the
-// list these ride in, and doctor-probe and tmux-status-click arrive as whole
+// list these ride in, and doctor-probe and range arrive as whole
 // URLs from outside a draw, so none of those three is ever an effect.
 const SAYS = {
   [VERB_SET_STATE]: ([, ...pairs]) =>
