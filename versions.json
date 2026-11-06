@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-652",
+      "ref": "refs/pull/652/merge",
+      "sha": "ea1a9990319b17478ad1de92a0232e895c607df4",
+      "timestamp": "2026-11-06T21:06:00.791Z",
+      "commits": [
+        {
+          "sha": "ea1a9990319b17478ad1de92a0232e895c607df4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T21:05:15Z",
+          "message": "Merge 57b028afc19b6c7a5e5231e7f0a69f163d58c6d1 into 242a73c2288bc60ae5b871e410be3d5c45b88c48\n"
+        },
+        {
+          "sha": "57b028afc19b6c7a5e5231e7f0a69f163d58c6d1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:57:38-07:00",
+          "message": "test(spawner): the system realiser traps every signal a behaviour ignores, before any output (candybar-testing-ihvy.0hw)\n"
+        },
+        {
+          "sha": "25462b029db0d227eefa5a29143d525fb9d08d84",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:56:34-07:00",
+          "message": "test(spawner): the contract states that a realised program writes nothing before its trap is set (candybar-testing-ihvy.0hw)\n"
+        },
+        {
+          "sha": "82a4e0fd7d825ef92ff0d0041a9d53c370bb0fee",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:54:27-07:00",
+          "message": "test(spawner): signal the trapping program only once it says its trap is set (candybar-testing-ihvy.0hw)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "242a73c2288bc60ae5b871e410be3d5c45b88c48",
@@ -56,42 +92,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T12:35:32-07:00",
           "message": "feat(apply): session state has one writer; a run and a lane setup are effects (candybar-gather-renderer-76bb.1dh.9kk)\n\nThe session store refuses a write made while no journal turn is held, in\nevery daemon. A turn is synchronous, so a write while one is held is that\nturn's own, and one check at the store's single write path is the whole\nenforcement. The test-only view that refused such writes, its adapter\nseam and the separate gauges field are gone.\n\nThe two writers left outside a turn now report through effect-done:\n\n- A `run` click supersedes its sources in its turn, so they read pending\n  from the click on, and describes the launch as a `run` effect. The\n  performer runs the program behind the session's earlier effects; the\n  run owner answers how it ended and no longer writes the bar.\n- A lane setup is a `lane-setup` effect, settled by the click or the\n  request that owes it and run by the performer. Its own per-session\n  queue and defer are replaced by the performer's per-session order.\n\nThe check command, the demo and the doctor's command line build their\nstore with a holder that always holds, since each is one synchronous run.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-652",
-      "ref": "refs/pull/652/merge",
-      "sha": "87b501b48929106b7916a22b9ea62741fb7ffaff",
-      "timestamp": "2026-11-06T20:58:42.564Z",
-      "commits": [
-        {
-          "sha": "87b501b48929106b7916a22b9ea62741fb7ffaff",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T20:57:49Z",
-          "message": "Merge 7f02d86e25ca71df4269c0330cfa2e6fe9a6e97c into d8b9a7ffe6cac5ba9249eb3428aa11eecd27c4e5\n"
-        },
-        {
-          "sha": "7f02d86e25ca71df4269c0330cfa2e6fe9a6e97c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:57:38-07:00",
-          "message": "test(spawner): the system realiser traps every signal a behaviour ignores, before any output (candybar-testing-ihvy.0hw)\n"
-        },
-        {
-          "sha": "4467651310a186e3ba9fe05eb2607d786585d204",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:56:34-07:00",
-          "message": "test(spawner): the contract states that a realised program writes nothing before its trap is set (candybar-testing-ihvy.0hw)\n"
-        },
-        {
-          "sha": "366b16af407b0a43035367321cf824c3ede22988",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:54:27-07:00",
-          "message": "test(spawner): signal the trapping program only once it says its trap is set (candybar-testing-ihvy.0hw)\n"
         }
       ]
     },
