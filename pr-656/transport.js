@@ -78173,7 +78173,7 @@ var ORDERING = {
     paneWhenReached: true
   },
   doctor: {
-    key: ({ session }) => ({ kind: "session", session }),
+    key: (_effect, { session }) => ({ kind: "session", session }),
     paneWhenReached: false
   }
 };
@@ -85607,16 +85607,16 @@ var ATTACH_PATIENCE_MS = 3e4;
 var RELOAD_PLUGINS = slashLine("/reload-plugins");
 function laneRun(read2, order2, moved) {
   const first2 = read2();
-  if (first2.kind === "refused") throw new Error(first2.reason);
+  if (first2.kind === "gone") throw new Error(first2.reason);
   const paneNow = () => {
     const latest = read2();
-    if (latest.kind === "refused") return latest;
+    if (latest.kind === "gone") return latest;
     const pane = tmuxPaneOf(latest.session.hints.tmux);
     return pane.kind === "refused" ? pane : { kind: "in", session: latest.session, tmux: pane.hint };
   };
   const inPane = async (work) => {
     const waited = paneNow();
-    if (waited.kind === "refused") return waited;
+    if (waited.kind !== "in") return waited;
     const held = await order2(waited.tmux, async () => {
       const now2 = paneNow();
       if (now2.kind !== "in" || !samePane(now2.tmux, waited.tmux)) return now2;
@@ -85631,9 +85631,8 @@ function laneRun(read2, order2, moved) {
   };
   return { session: first2.session, inPane };
 }
-async function required(held, refusal) {
-  const step4 = await held;
-  if (step4.kind === "refused") throw new BadVerbArgs(refusal(step4.reason));
+function required(step4, refusal) {
+  if (step4.kind !== "held") throw new BadVerbArgs(refusal(step4.reason));
   return step4.value;
 }
 var done = (said) => ({ kind: "done", said });
@@ -85684,16 +85683,18 @@ var LANE_SETUP = {
         said: `restarting Claude Code in ${tmux3.pane} under the attach launcher`,
         // The whole restart holds the pane: from the reads that judge it to
         // the attach, a line typed into the pane would land in the restart.
-        finished: required(
-          run3.inPane(
-            (session, tmux4) => restartUnderAttach(
-              session,
-              tmux4,
-              { node: host.node[0], launcher, preload: host.preload },
-              edge
-            )
-          ),
-          (reason) => `Claude Code was not restarted under the attach launcher: ${reason}`
+        finished: run3.inPane(
+          (session, tmux4) => restartUnderAttach(
+            session,
+            tmux4,
+            { node: host.node[0], launcher, preload: host.preload },
+            edge
+          )
+        ).then(
+          (step4) => required(
+            step4,
+            (reason) => `Claude Code was not restarted under the attach launcher: ${reason}`
+          )
         )
       };
     },
@@ -85706,8 +85707,8 @@ var LANE_SETUP = {
   // Splitting the session's pane resizes what a restart reads in it, so a
   // split or close holds the pane's order too.
   pane: {
-    on: (run3, host, edge) => required(
-      run3.inPane(async (_session, tmux3) => {
+    on: async (run3, host, edge) => required(
+      await run3.inPane(async (_session, tmux3) => {
         const open2 = await edge.barPanes(tmux3);
         if (open2.length > 0) {
           return done(
@@ -85721,25 +85722,21 @@ var LANE_SETUP = {
         );
         return done(`opened bar pane ${opened} under ${tmux3.pane}`);
       }),
-      (reason) => reason
+      (reason) => `no bar pane was opened: ${reason}`
     ),
     // Off is "no bar pane draws this session's bar", which a session with no
     // tmux pane already is.
     off: async (run3, _host, edge) => {
-      const pane = tmuxPaneOf(run3.session.hints.tmux);
-      if (pane.kind === "refused") {
-        return done(`no bar pane to close: ${pane.reason}`);
-      }
-      return required(
-        run3.inPane(async (_session, tmux3) => {
-          const open2 = await edge.barPanes(tmux3);
-          for (const pane2 of open2) await edge.closePane(tmux3, pane2);
-          return done(
-            open2.length === 0 ? `no bar pane draws ${tmux3.pane}'s bar` : `closed bar pane ${open2.join(", ")}`
-          );
-        }),
-        (reason) => `no bar pane was closed: ${reason}`
-      );
+      const step4 = await run3.inPane(async (_session, tmux3) => {
+        const open2 = await edge.barPanes(tmux3);
+        for (const pane of open2) await edge.closePane(tmux3, pane);
+        return done(
+          open2.length === 0 ? `no bar pane draws ${tmux3.pane}'s bar` : `closed bar pane ${open2.join(", ")}`
+        );
+      });
+      if (step4.kind === "refused")
+        return done(`no bar pane to close: ${step4.reason}`);
+      return required(step4, (reason) => reason);
     }
   },
   // The daemon draws the tmux status line itself, for every session whose
@@ -85767,7 +85764,7 @@ async function installBand(run3, checkout, edge) {
   const held = await run3.inPane(
     (_session, tmux3) => typeSlash(edge.claudeInput, tmux3, RELOAD_PLUGINS)
   );
-  const typed = held.kind === "held" ? held.value : held;
+  const typed = held.kind === "held" ? held.value : { kind: "refused", reason: held.reason };
   if (typed.kind === "refused") {
     throw new Error(
       `the band mod is installed, but /reload-plugins was not typed: ${typed.reason} \u2014 or type /reload-plugins yourself`
@@ -86038,7 +86035,7 @@ var LaneSetups = class {
   latestOf(sessionId2) {
     const session = this.deps.latest(sessionId2);
     return session === null ? {
-      kind: "refused",
+      kind: "gone",
       reason: `this daemon no longer holds a request of session ${sessionId2}`
     } : { kind: "known", session };
   }
@@ -86187,7 +86184,7 @@ var JournalTurns = class {
   // clicked. Effects on different keys wait on each other only through their
   // own event's order and through a setup's pane step, which waits in its
   // pane's order; keeping those waits acyclic is the performer's
-  // (src/daemon/apply.ts `performAll`). The order is the performer's, not the
+  // (src/daemon/apply.ts `performInOrder`). The order is the performer's, not the
   // turn's: the session's next click takes its turn while the last click's
   // effects still run, and no close refuses it, since an outcome after close
   // is said in the log.
