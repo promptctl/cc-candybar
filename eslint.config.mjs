@@ -34,17 +34,12 @@ const CLOCK_PROPERTIES = [
 ];
 // [LAW:single-enforcer] A signal sent to a pid or its group, or signal 0 asking
 // whether it is there, is read of the process table: src/proc/spawner.ts owns
-// it for a launch's groups and the ProcessProbe for a pid. The three files
+// it for a launch's groups and the ProcessProbe for a pid. The two files
 // below are exceptions, each owned by the ticket that gives its program a port;
 // the list may shrink and no other file joins it.
-//   src/utils/cache.ts       pricing's lock holder (candybar-testing-ihvy.89p)
 //   src/daemon/lane-edge.ts  SIGTERM to Claude Code (candybar-testing-ihvy.dcv)
 //   src/daemon/server.ts     the daemon's own SIGKILL (the Lifetime piece)
-const KILL_EXCEPTIONS = [
-  "src/utils/cache.ts",
-  "src/daemon/lane-edge.ts",
-  "src/daemon/server.ts",
-];
+const KILL_EXCEPTIONS = ["src/daemon/lane-edge.ts", "src/daemon/server.ts"];
 const KILL_OWNERS = [
   "src/proc/spawner.ts",
   "src/daemon/process-fingerprint.ts",
@@ -181,7 +176,8 @@ const OWNED_IMPORTS = {
   livePricing: {
     group: ["**/segments/pricing", "**/segments/pricing.js"],
     owners: ["src/daemon/production-adapters.ts", "src/demo/dsl.ts"],
-    message: "A daemon is handed its adapters (production-adapters.ts).",
+    message:
+      "Live pricing is built by a daemon's adapters (production-adapters.ts) or the demo's own process (demo/dsl.ts); take the one you are handed.",
   },
   linkSignerFromKeyFile: {
     group: ["**/link-key", "**/link-key.js"],

@@ -107,7 +107,7 @@ export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
       // writes through the ordering instrument (test/helpers/writes-in-turn.ts).
       sessionWrites: writesInTurn,
       // [LAW:effects-at-boundaries] A daemon under test prices by the bundled
-      // rates: it reaches no network, and its close leaves no load out.
+      // rates: it reaches no network, and leaves no load out at its close.
       pricing: () => offlinePricing(),
       bundle: bundleAt(path.join(paths.state, "checkout")),
       host: HOST,

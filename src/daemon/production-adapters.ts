@@ -49,7 +49,7 @@ export function productionAdapters(
         writeLogNow: () => daemonLog.writeNow(),
       }),
     fetch,
-    pricing: (cacheRoot) => livePricing({ cacheRoot, clock: machine }),
+    pricing: (own) => livePricing({ ...own, clock: machine }),
     stat: fs.statSync,
   };
 }

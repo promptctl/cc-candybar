@@ -29,7 +29,13 @@ jest.mock("node:https", () => ({
 
 const fetchPricing = () => fetchPricingData(new AbortController().signal);
 
-const entry = (name: string) => ({ name, input: 1, output: 2, cache_read: 3 });
+const entry = (name: string) => ({
+  name,
+  input: 1,
+  output: 2,
+  cache_read: 3,
+  cache_write_5m: 4,
+});
 
 const inTwoReads = (body: Buffer) => [
   body.subarray(0, body.length / 2),

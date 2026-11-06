@@ -129,15 +129,17 @@ function liveArm(): Arm {
     detectClientHints(machine.host, cwd, process.stdout),
   );
   const watchers = new WatcherRegistry({ clock: machine.clock, logger: log });
-  // Closed by the arm's close, with the providers it prices for.
-  const pricing = livePricing({
-    cacheRoot: cacheDir(machine.home),
-    clock: machine.clock,
-  });
+  // Ended by the arm's close, with the providers it prices for.
+  const pricingClosing = new AbortController();
   const providers = createPayloadProviders({
     launcher: machine.launcher,
     host: machine.host,
-    pricing,
+    pricing: livePricing({
+      cacheRoot: cacheDir(machine.home),
+      clock: machine.clock,
+      closing: pricingClosing.signal,
+      log,
+    }),
     watchers,
     // The demo holds no folder and watches nothing.
     fileEvents: NO_FILE_EVENTS,
@@ -162,7 +164,7 @@ function liveArm(): Arm {
     // The providers own their timers and watchers; all of them are released
     // so the process ends when the frames do.
     close: () => {
-      pricing.close();
+      pricingClosing.abort(new Error("the demo closed"));
       providers.gitProvider.close();
       providers.usageStore.close();
       providers.tmuxService.close();

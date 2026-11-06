@@ -166,8 +166,13 @@ export interface DaemonAdapters {
   // The registry the update notice asks which release is newest.
   readonly fetch: typeof fetch;
   // What prices a transcript entry that carries no cost, over the home's cache
-  // directory. The daemon closes it with itself.
-  readonly pricing: (cacheRoot: string) => Pricing;
+  // directory. It ends with the daemon's closing signal, so no step of the
+  // close has to remember it.
+  readonly pricing: (own: {
+    readonly cacheRoot: string;
+    readonly closing: AbortSignal;
+    readonly log: DaemonLogger;
+  }) => Pricing;
   // How the binary watch reads the bundle's mtime.
   readonly stat: BundleStat;
 }
@@ -377,7 +382,11 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     watchers: watcherRegistry,
     fileEvents,
   });
-  const pricing = inputs.pricing(cacheDir(home));
+  const pricing = inputs.pricing({
+    cacheRoot: cacheDir(home),
+    closing: closing.signal,
+    log,
+  });
   const payloadProviders = createPayloadProviders({
     launcher,
     host,
@@ -853,9 +862,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         // Before the sources and the storage its states hold.
         ["renderCache close", () => renderCache.close()],
         ["gitService close", () => gitService.close()],
-        // [LAW:no-ambient-temporal-coupling] Before the store: a fold waiting
-        // on the table's load lands on the bundled rates, not the network.
-        ["pricing close", () => pricing.close()],
         ["usageStore close", () => usageStore.close()],
         ["tmuxService close", () => tmuxService.close()],
         ["hostService close", () => hostService.close()],

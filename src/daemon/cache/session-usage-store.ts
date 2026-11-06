@@ -462,7 +462,7 @@ export class SessionUsageStore {
   private readonly staleAgeMs: number;
   // The machine the store reads: where transcripts live.
   private readonly host: Host;
-  // The home's cache directory, where the day's scan is folded.
+  // What prices an entry that carries no cost of its own.
   private readonly pricing: Pricing;
   private readonly log: DaemonLogger;
   private readonly renderTally: IngestTally = { hits: 0, misses: 0 };

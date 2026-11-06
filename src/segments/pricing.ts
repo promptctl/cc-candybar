@@ -1,7 +1,11 @@
 import { debug } from "../utils/logger";
 import { get } from "node:https";
 import { URL } from "node:url";
-import { CacheManager, type CacheClock } from "../utils/cache";
+import fs from "node:fs";
+import path from "node:path";
+import { randomUUID } from "node:crypto";
+import type { Timekeeper } from "../time";
+import type { DaemonLogger } from "../utils/logger";
 import type { PrunedRaw } from "../utils/claude.js";
 
 // Every model's rates, by model id.
@@ -140,17 +144,18 @@ const OFFLINE_PRICING_DATA: PriceTable = {
 
 // [LAW:effects-at-boundaries] What prices a transcript entry that carries no
 // cost of its own: the one table its owner loads. The daemon is handed one as
-// an adapter and closes it with itself, so a load in flight at the close ends
-// with the close, and a daemon under test is handed the bundled table and
+// an adapter over its own closing signal, so a load in flight at the close
+// ends with the close, and a daemon under test is handed the bundled table and
 // reaches no network.
 export interface Pricing {
+  // [LAW:no-silent-failure] Never rejects: a load that cannot reach a table
+  // prices by the bundled rates, and says why on the owner's log.
   table(): Promise<PriceTable>;
-  close(): void;
 }
 
 // The bundled rates, with no I/O.
 export function offlinePricing(): Pricing {
-  return { table: async () => OFFLINE_PRICING_DATA, close: () => {} };
+  return { table: async () => OFFLINE_PRICING_DATA };
 }
 
 const PRICING_URL = new URL(
@@ -158,57 +163,90 @@ const PRICING_URL = new URL(
 );
 const DISK_TTL_MS = 24 * 60 * 60 * 1000;
 
+interface LiveOwner {
+  // The home's cache directory, where the day's table is kept on disk.
+  readonly cacheRoot: string;
+  readonly clock: Pick<Timekeeper, "now">;
+  // [LAW:single-enforcer] The owner's one close: after it, no load starts and
+  // none writes.
+  readonly closing: AbortSignal;
+  readonly log: DaemonLogger;
+}
+
 // [LAW:single-enforcer] One load per owner, however many entries ask while it
 // is out: every un-costed entry of every fold awaits the same table, so a cold
 // cache costs one fetch and one disk write, not one per entry. The day's disk
-// cache is read first; a fetch that fails, or a close that ends it, prices by
+// copy is read first; a fetch that fails, or a close that ends it, prices by
 // the bundled rates.
-export function livePricing(opts: {
-  readonly cacheRoot: string;
-  readonly clock: CacheClock;
-}): Pricing {
-  const closing = new AbortController();
+export function livePricing(owner: LiveOwner): Pricing {
   let loading: Promise<PriceTable> | null = null;
   return {
-    table: () => (loading ??= loadTable(opts, closing.signal)),
-    close: () => closing.abort(new Error("pricing closed")),
+    table: () =>
+      owner.closing.aborted
+        ? Promise.resolve(OFFLINE_PRICING_DATA)
+        : (loading ??= loadTable(owner)),
   };
 }
 
-async function loadTable(
-  {
-    cacheRoot,
-    clock,
-  }: { readonly cacheRoot: string; readonly clock: CacheClock },
-  closing: AbortSignal,
-): Promise<PriceTable> {
-  const cached = (await CacheManager.getUsageCache(
-    cacheRoot,
-    clock,
-    "pricing",
-    clock.now() - DISK_TTL_MS,
-  )) as PriceTable | null;
-  if (cached) {
-    debug(
-      `[CACHE-HIT] Pricing disk cache: ${Object.keys(cached).length} models`,
-    );
-    return cached;
-  }
-  const fresh = closing.aborted ? null : await fetchPricingData(closing);
+const diskPath = (cacheRoot: string): string =>
+  path.join(cacheRoot, "usage", "pricing.json");
+
+async function loadTable(owner: LiveOwner): Promise<PriceTable> {
+  const cached = await readDisk(owner);
+  if (cached !== null) return cached;
+  const fresh = owner.closing.aborted
+    ? null
+    : await fetchPricingData(owner.closing);
   if (fresh === null) {
     debug(
       `[CACHE-FALLBACK] Using offline pricing data: ${Object.keys(OFFLINE_PRICING_DATA).length} models`,
     );
     return OFFLINE_PRICING_DATA;
   }
-  // A close ends the daemon's writes too: the next daemon fetches again.
-  if (!closing.aborted) {
-    await CacheManager.setUsageCache(cacheRoot, clock, "pricing", fresh);
-    debug(
-      `[CACHE-SET] Pricing disk cache stored: ${Object.keys(fresh).length} models`,
-    );
-  }
+  // A close ends the owner's writes too: the next daemon fetches again.
+  if (!owner.closing.aborted) await writeDisk(owner, fresh);
   return fresh;
+}
+
+// The day's copy, or null for none: a missing, stale, unreadable or malformed
+// file is a miss, and the table is fetched.
+async function readDisk(owner: LiveOwner): Promise<PriceTable | null> {
+  try {
+    const stored = JSON.parse(
+      await fs.promises.readFile(diskPath(owner.cacheRoot), "utf8"),
+    ) as { data?: unknown; timestamp?: unknown };
+    const fresh =
+      typeof stored.timestamp === "number" &&
+      stored.timestamp >= owner.clock.now() - DISK_TTL_MS;
+    return fresh && validatePricingData(stored.data) ? stored.data : null;
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ENOENT") {
+      owner.log("warn", `pricing disk cache unreadable: ${String(e)}`);
+    }
+    return null;
+  }
+}
+
+// [LAW:no-ambient-temporal-coupling] A renamed whole file is the only write a
+// reader can see, so no lock is held and no reader waits: two daemons writing
+// the day's table leave one of their two whole copies.
+async function writeDisk(owner: LiveOwner, table: PriceTable): Promise<void> {
+  const file = diskPath(owner.cacheRoot);
+  const staged = `${file}.${process.pid}.${randomUUID()}`;
+  try {
+    await fs.promises.mkdir(path.dirname(file), { recursive: true });
+    await fs.promises.writeFile(
+      staged,
+      JSON.stringify({ data: table, timestamp: owner.clock.now() }),
+      "utf8",
+    );
+    await fs.promises.rename(staged, file);
+  } catch (e) {
+    // The fetched table still prices: a copy that is not kept costs the next
+    // daemon a fetch.
+    owner.log("warn", `pricing disk cache not written: ${String(e)}`);
+    await fs.promises.rm(staged, { force: true }).catch(() => {});
+  }
 }
 
 // [LAW:no-ambient-temporal-coupling] `agent: false` gives the request a
@@ -315,10 +353,13 @@ function validatePricingData(data: unknown): data is PriceTable {
     if (!value || typeof value !== "object") return false;
     const pricing = value as Record<string, unknown>;
 
+    // Every rate the cost reads: a table missing one would price entries as
+    // NaN.
     if (
       typeof pricing.input !== "number" ||
       typeof pricing.output !== "number" ||
-      typeof pricing.cache_read !== "number"
+      typeof pricing.cache_read !== "number" ||
+      typeof pricing.cache_write_5m !== "number"
     ) {
       return false;
     }
