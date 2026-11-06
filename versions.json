@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-642",
+      "ref": "refs/pull/642/merge",
+      "sha": "0f5b843d7b88de2265e1582a7563b41d4afe1d46",
+      "timestamp": "2026-11-06T14:11:04.345Z",
+      "commits": [
+        {
+          "sha": "0f5b843d7b88de2265e1582a7563b41d4afe1d46",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T07:10:02-07:00",
+          "message": "Merge a0976c4182de9afc441ac80bd481dc2be27d53e0 into 6861a4a6e8abdea9bde9ed0653074ae3491eebf6\n"
+        },
+        {
+          "sha": "a0976c4182de9afc441ac80bd481dc2be27d53e0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T07:09:39-07:00",
+          "message": "feat(links): the one MouseDown1Status binding is constant text; each session carries its renderer's click (candybar-gather-renderer-76bb.b2l.5v7)\n\nEvery renderer on a tmux server now binds the same text, so no renderer owns\nthe binding and two renderers no longer fight over it. What differs per\nrenderer (its url-handle command under its home, its name, its binding mac)\nrides on the session it draws, as @cc-candybar-click beside\n@cc-candybar-renderer. The binding runs that option on a ccb range, shows a\ntmux message where a session carries no click, and runs the user's own\nbinding otherwise.\n\nThe user's binding lives only in the binding's else-branch, read back from\nlist-keys as a command list, so the @cc-candybar-binding-prior record goes\n(the bind unsets one an older build left). Ours is recognised by shape, and\nevery one of ours chained over the user's is peeled off. The restore is one\ntmux call that tmux guards on whether any session still names a renderer,\nand it runs once per bound period.\n\nThe status-line click verb is now `range`.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-641",
       "ref": "refs/pull/641/merge",
       "sha": "b4042c08dd39dd39a409d7d99adaee0817abaa83",
