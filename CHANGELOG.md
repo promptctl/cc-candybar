@@ -1,3 +1,13 @@
+## [1.194.0](https://github.com/promptctl/cc-candybar/compare/v1.193.0...v1.194.0) (2026-11-06)
+
+### ⚠ BREAKING CHANGES
+
+* **config:** remove the env source; a config that declares one fails at load (candybar-gather-renderer-76bb.f00.2fe) (#623)
+
+### Features
+
+* **config:** remove the env source; a config that declares one fails at load (candybar-gather-renderer-76bb.f00.2fe) ([#623](https://github.com/promptctl/cc-candybar/issues/623)) ([2e39515](https://github.com/promptctl/cc-candybar/commit/2e39515c37ff054e142819a3e4ee02f881e22940))
+
 ## [1.193.0](https://github.com/promptctl/cc-candybar/compare/v1.192.0...v1.193.0) (2026-11-06)
 
 ### Features
