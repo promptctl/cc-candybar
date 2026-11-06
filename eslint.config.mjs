@@ -116,6 +116,7 @@ const FS_READERS = [
   "src/daemon/fork-bomb-breaker.ts",
   "src/daemon/lane-edge.ts",
   "src/daemon/limits.ts",
+  "src/daemon/link-id-allocator.ts",
   "src/daemon/link-key.ts",
   "src/daemon/log.ts",
   "src/daemon/memory-report.ts",
