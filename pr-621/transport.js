@@ -22644,15 +22644,17 @@ var SETTINGS_REF = {
 var DIAGNOSTICS_VIEWING = `${SETTINGS_NS}diagnostics`;
 var DIAGNOSTICS_CLOSED = "0";
 
-// src/click/wire.ts
+// src/click/scheme.ts
+init_globals();
 var URL_SCHEME = "cc-candybar";
+
+// src/click/wire.ts
 var VERB_DISPATCH = "dispatch";
 var VERB_SET_STATE = "set-state";
 var VERB_STEP_STATE = "step-state";
 var VERB_COPY = "copy";
 var VERB_OPEN_VSCODE = "open-vscode";
 var VERB_TOOLBAR_TOGGLE = "toolbar-toggle";
-var VERB_LOAD_CONFIG = "load-config";
 var VERB_SET_CONFIG = "set-config";
 var VERB_STEP_CONFIG = "step-config";
 var VERB_SAVE = "save";
@@ -22704,7 +22706,6 @@ var SAYS = {
   [VERB_COPY]: ([text4]) => [`copy ${saidCopy(text4)}`],
   [VERB_OPEN_VSCODE]: ([target]) => [`open ${target} in vs code`],
   [VERB_TOOLBAR_TOGGLE]: () => ["toggle the toolbar"],
-  [VERB_LOAD_CONFIG]: ([, path42]) => [`load config ${path42}`],
   [VERB_SET_CONFIG]: ([, key, value]) => [`save ${key} as ${value}`],
   [VERB_STEP_CONFIG]: ([, key, by]) => [`save ${sayStep(key, by)}`],
   [VERB_SAVE]: () => ["save settings"],
@@ -23247,8 +23248,8 @@ function feed(input, text4) {
 }
 async function launchWaited(state, opts) {
   const { stats, clock } = state.scope;
-  const refused = admit(state, opts.category, opts.signal);
-  if (refused !== null) return refused;
+  const refused2 = admit(state, opts.category, opts.signal);
+  if (refused2 !== null) return refused2;
   const t0 = clock.monotonic();
   stats?.onStart(opts.category);
   return new Promise((resolve) => {
@@ -23420,8 +23421,8 @@ async function launchWaited(state, opts) {
 }
 function launchBlocking(state, opts) {
   const { stats, clock } = state.scope;
-  const refused = admit(state, opts.category);
-  if (refused !== null) return refused;
+  const refused2 = admit(state, opts.category);
+  if (refused2 !== null) return refused2;
   const t0 = clock.monotonic();
   stats?.onStart(opts.category);
   try {
@@ -23476,8 +23477,8 @@ function launchBlocking(state, opts) {
 }
 function launchOrphan(state, opts) {
   const { stats, clock } = state.scope;
-  const refused = admit(state, opts.category);
-  if (refused !== null) return refused;
+  const refused2 = admit(state, opts.category);
+  if (refused2 !== null) return refused2;
   const t0 = clock.monotonic();
   stats?.onStart(opts.category);
   const result = launchDetachedSyncInner(state, opts);
@@ -23524,9 +23525,9 @@ var formatJobEnd = (end) => end.kind === "exit" ? `exit ${end.code}` : "timeout"
 var JOB_SCRIPT = `out=$1 err=$2 status=$3; shift 3; read go || exit 0; "$@" >"$out" 2>"$err" </dev/null; echo "exit $?" >"$status.$$" && ln "$status.$$" "$status"; rm -f "$status.$$"`;
 function launchJob(state, opts, files) {
   const { stats, clock } = state.scope;
-  const refused = admit(state, opts.category);
-  if (refused !== null)
-    return { ok: false, reason: refused.reason, error: refused.error };
+  const refused2 = admit(state, opts.category);
+  if (refused2 !== null)
+    return { ok: false, reason: refused2.reason, error: refused2.error };
   const t0 = clock.monotonic();
   stats?.onStart(opts.category);
   let child;
@@ -39196,6 +39197,37 @@ function isValidDuration(s) {
 
 // src/config/loader/retired-variables.ts
 init_globals();
+
+// src/config-hint.ts
+init_globals();
+
+// src/utils/user-path.ts
+init_globals();
+var import_node_path2 = __toESM(require_path_browserify(), 1);
+function expandHome(p2, home) {
+  return p2 === "~" || p2.startsWith("~/") || p2.startsWith("~\\") ? home + p2.slice(1) : p2;
+}
+function resolveUserPath(base, p2, home) {
+  return import_node_path2.default.resolve(base, expandHome(p2, home));
+}
+function explicitConfigPath(base, p2, home) {
+  return typeof p2 === "string" && p2 !== "" ? resolveUserPath(base, p2, home) : void 0;
+}
+
+// src/config-hint.ts
+var CONFIG_ENV = "CC_CANDYBAR_CONFIG";
+function requestedConfigTarget(argument, environment) {
+  if (argument !== void 0) return { source: "argument", path: argument };
+  if (environment !== void 0) {
+    return { source: "environment", path: environment };
+  }
+  return { source: "search" };
+}
+function chainName(paths2, none2 = "bundled default (no config file loaded)") {
+  return paths2.join(" < ") || none2;
+}
+
+// src/config/loader/retired-variables.ts
 var RETIRED_VARIABLES = /* @__PURE__ */ new Map([
   // brandon-settings-coverage-g4p.lx2
   ["session.budget.amount", { segment: "session", setting: "budget" }],
@@ -39292,6 +39324,16 @@ function retiredGitKindMessage(raw) {
   }
   const note = field.note === void 0 ? "" : ` (${field.note})`;
   return `${head} read ${field.read} where it was read${note}, or declare ${json5Of(field.declare)} under a name of your own`;
+}
+var RETIRED_LINK_VERBS = /* @__PURE__ */ new Map([
+  [
+    "load-config",
+    `the load-config verb is removed \u2014 a session's config is the file its statusline command names with --config, else the file its shell names in $${CONFIG_ENV}; point the session there instead of linking to a path`
+  ]
+]);
+function retiredLinkVerbMessage(verb) {
+  const where = RETIRED_LINK_VERBS.get(verb);
+  return where === void 0 ? void 0 : `Template spells "${URL_SCHEME}://${verb}/\u2026", a URL no click runs: ${where}`;
 }
 
 // src/config/loader/variables.ts
@@ -46004,6 +46046,19 @@ function templateActionRefs(template, helpers) {
   }
   return [...refs.values()];
 }
+var LINK_VERB_RE = new RegExp(`^${URL_SCHEME}://([a-z][a-z0-9-]*)`);
+function templateLinkVerbs(template, helpers) {
+  const refs = /* @__PURE__ */ new Map();
+  for (const { code, via } of callGraph(template, helpers)) {
+    for (const s of code.matchAll(STRING_LITERAL_RE)) {
+      const verb = LINK_VERB_RE.exec(s[0].slice(1, -1))?.[1];
+      if (verb === void 0) continue;
+      const key = `${verb}\0${via ?? "\0"}`;
+      if (!refs.has(key)) refs.set(key, { verb, via });
+    }
+  }
+  return [...refs.values()];
+}
 var namesTaking = (min2) => Object.keys(NAME_ARGS).filter((keyword) => NAME_ARGS[keyword] >= min2).join("|");
 var COMPUTED_BINDING_RE = new RegExp(
   `(?<![\\w.$])(?:(?:${namesTaking(1)})\\s+|(?:${namesTaking(2)})\\s+""\\s+)(?=[^\\s"\`)|}])`
@@ -51674,7 +51729,7 @@ var { readFile, writeFile, stat, lstat, readdir, mkdir, rm, unlink, rename, open
 
 // src/daemon/cache/watchers.ts
 init_globals();
-var import_node_path4 = __toESM(require_path_browserify(), 1);
+var import_node_path5 = __toESM(require_path_browserify(), 1);
 
 // src/utils/logfmt.ts
 init_globals();
@@ -51683,10 +51738,10 @@ var valueOf = (value) => BARE.test(value) ? value : JSON.stringify(value);
 
 // src/utils/atomic-write.ts
 init_globals();
-var import_node_path2 = __toESM(require_path_browserify(), 1);
+var import_node_path3 = __toESM(require_path_browserify(), 1);
 function writeAtomic(at, text4, mode) {
   const file = resolvedTarget(at);
-  fs_default.mkdirSync(import_node_path2.default.dirname(file), { recursive: true });
+  fs_default.mkdirSync(import_node_path3.default.dirname(file), { recursive: true });
   const tmp = `${file}.tmp`;
   const fileMode = mode ?? fs_default.statSync(file, { throwIfNoEntry: false })?.mode;
   try {
@@ -51728,8 +51783,8 @@ function walkLinks(at) {
 function linkTarget(file) {
   try {
     if (!fs_default.lstatSync(file).isSymbolicLink()) return null;
-    return import_node_path2.default.resolve(
-      fs_default.realpathSync(import_node_path2.default.dirname(file)),
+    return import_node_path3.default.resolve(
+      fs_default.realpathSync(import_node_path3.default.dirname(file)),
       fs_default.readlinkSync(file)
     );
   } catch (e) {
@@ -51766,16 +51821,16 @@ var bindsFolder = (bound) => typeof bound !== "string" && "ino" in bound;
 
 // src/utils/watch-target.ts
 init_globals();
-var import_node_path3 = __toESM(require_path_browserify(), 1);
+var import_node_path4 = __toESM(require_path_browserify(), 1);
 function nearestWatchTarget(candidate) {
-  let name = import_node_path3.default.basename(candidate);
-  let dir = import_node_path3.default.dirname(candidate);
+  let name = import_node_path4.default.basename(candidate);
+  let dir = import_node_path4.default.dirname(candidate);
   for (; ; ) {
     const real = canonicalDirectory(dir);
     if (real !== null)
-      return { dir: real, name, leaf: dir === import_node_path3.default.dirname(candidate) };
-    name = import_node_path3.default.basename(dir);
-    dir = import_node_path3.default.dirname(dir);
+      return { dir: real, name, leaf: dir === import_node_path4.default.dirname(candidate) };
+    name = import_node_path4.default.basename(dir);
+    dir = import_node_path4.default.dirname(dir);
   }
 }
 function canonicalDirectory(p2) {
@@ -51847,7 +51902,7 @@ function folded(window2, next) {
   for (const p2 of next.paths) window2.paths.add(p2);
   return window2;
 }
-var namedOf = (dir, filename) => filename === null ? { kind: "unknown" } : { kind: "changed", paths: /* @__PURE__ */ new Set([import_node_path4.default.join(dir, filename)]) };
+var namedOf = (dir, filename) => filename === null ? { kind: "unknown" } : { kind: "changed", paths: /* @__PURE__ */ new Set([import_node_path5.default.join(dir, filename)]) };
 var failedOf = (d) => ({
   kind: "failed",
   reason: `${d.path}: ${d.reason}`
@@ -52061,7 +52116,7 @@ var WatcherRegistry = class {
   heard(dir, handle, changed) {
     const { state } = dir;
     if (!heldBy(state, handle)) return;
-    const moved = changed === import_node_path4.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== state.bound;
+    const moved = changed === import_node_path5.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== state.bound;
     for (const { slot, filter } of dir.listeners) {
       if (filter === null || changed === null || filter.has(changed) || moved)
         this.fire(slot, namedOf(dir.path, changed));
@@ -52161,7 +52216,7 @@ var WatcherRegistry = class {
 
 // src/daemon/cache/file-events.ts
 init_globals();
-var import_node_path5 = __toESM(require_path_browserify(), 1);
+var import_node_path6 = __toESM(require_path_browserify(), 1);
 var PROBE_EVERY_MS = 3e4;
 var STALL_AFTER = 2;
 var PROBE_FILE = "probe";
@@ -52337,7 +52392,7 @@ var FileEventDelivery = class {
     }
     try {
       await fs_default.promises.writeFile(
-        import_node_path5.default.join(inst.folder, PROBE_FILE),
+        import_node_path6.default.join(inst.folder, PROBE_FILE),
         String(at)
       );
     } catch (e) {
@@ -52916,18 +52971,18 @@ var Refreshes = class {
 
 // src/source-digest.ts
 init_globals();
-var import_node_path6 = __toESM(require_path_browserify(), 1);
+var import_node_path7 = __toESM(require_path_browserify(), 1);
 var isSourceEntry = (name) => !name.startsWith(".") && !name.endsWith("~");
 function entryBytes(p2, st) {
   return st.isSymbolicLink() ? import_buffer.Buffer.from(fs_default.readlinkSync(p2)) : fs_default.readFileSync(p2);
 }
 function sourceEntries(root, dir, keep2 = isSourceEntry) {
   return fs_default.readdirSync(dir).filter(keep2).sort().flatMap((name) => {
-    const p2 = import_node_path6.default.join(dir, name);
+    const p2 = import_node_path7.default.join(dir, name);
     const st = fs_default.lstatSync(p2, { throwIfNoEntry: false });
     if (st === void 0) return [];
     if (st.isDirectory()) return sourceEntries(root, p2);
-    const rel = import_node_path6.default.relative(root, p2).split(import_node_path6.default.sep).join("/");
+    const rel = import_node_path7.default.relative(root, p2).split(import_node_path7.default.sep).join("/");
     return [[rel, entryBytes(p2, st)]];
   });
 }
@@ -54755,35 +54810,6 @@ var TMUX_ENV = {
 };
 var inTmux = (tmux3) => tmux3 !== null && tmux3 !== void 0;
 
-// src/config-hint.ts
-init_globals();
-
-// src/utils/user-path.ts
-init_globals();
-var import_node_path7 = __toESM(require_path_browserify(), 1);
-function expandHome(p2, home) {
-  return p2 === "~" || p2.startsWith("~/") || p2.startsWith("~\\") ? home + p2.slice(1) : p2;
-}
-function resolveUserPath(base, p2, home) {
-  return import_node_path7.default.resolve(base, expandHome(p2, home));
-}
-function explicitConfigPath(base, p2, home) {
-  return typeof p2 === "string" && p2 !== "" ? resolveUserPath(base, p2, home) : void 0;
-}
-
-// src/config-hint.ts
-var CONFIG_ENV = "CC_CANDYBAR_CONFIG";
-function requestedConfigTarget(argument, environment) {
-  if (argument !== void 0) return { source: "argument", path: argument };
-  if (environment !== void 0) {
-    return { source: "environment", path: environment };
-  }
-  return { source: "search" };
-}
-function chainName(paths2, none2 = "bundled default (no config file loaded)") {
-  return paths2.join(" < ") || none2;
-}
-
 // src/render/strip.ts
 init_globals();
 
@@ -56564,7 +56590,6 @@ var UNUSED = {
 var NAMED_BY = {
   argument: "command argument",
   environment: `$${CONFIG_ENV}`,
-  pick: "load-config pick",
   unknown: "source unknown"
 };
 function judgedConfig({ target, layers }) {
@@ -60845,38 +60870,43 @@ function checkActionRefs(ctx, cfg, path42, template, line, helpers = cfg.helpers
   }
 }
 function checkTemplateRefs(ctx, declPath, template, scope, opts) {
-  for (const [ref, via] of templateReads(template, scope.helpers)) {
-    if (refResolves(ref, scope)) continue;
-    if (ref.startsWith(SETTINGS_SCOPE_PREFIX)) {
-      const through = via === null ? "" : ` through helper "${via}"`;
-      const setting = ref.slice(SETTINGS_SCOPE_PREFIX.length);
-      const message = opts?.segCtx === void 0 || opts.settings === void 0 ? `Template reads ".${ref}"${through}, but only a segment's own templates have settings \u2014 call it from a segment that declares "${setting}"` : `Template reads ".${ref}"${through}, but segment "${opts.segCtx}" has no setting "${setting}" (it has: ${Object.keys(opts.settings).join(", ")}) \u2014 declare it under segments.${opts.segCtx}.settings`;
-      ctx.issues.push({
-        path: declPath,
-        message,
-        line: opts?.line ?? findKeyLine(ctx.source, declPath.split("."))
-      });
-      continue;
-    }
+  const report2 = (message, via) => {
     if (via !== null) {
       checkHelperIssue(
         ctx,
         via,
-        `Template references unknown variable ".${ref}"${retiredReadHint(ref)}`,
+        message,
         helperKeyPath(
           via,
           opts?.segCtx === void 0 ? void 0 : { name: opts.segCtx, partials: opts.partials }
         )
       );
-      continue;
+      return;
     }
-    const namespaced = opts?.segCtx !== void 0 ? `${opts.segCtx}.${ref}` : void 0;
-    const hint = namespaced !== void 0 && refResolves(namespaced, scope) ? ` (segment-local vars are namespaced \u2014 write ".${namespaced}")` : retiredReadHint(ref);
     ctx.issues.push({
       path: declPath,
-      message: `Template references unknown variable ".${ref}"${hint}`,
+      message,
       line: opts?.line ?? findKeyLine(ctx.source, declPath.split("."))
     });
+  };
+  for (const [ref, via] of templateReads(template, scope.helpers)) {
+    if (refResolves(ref, scope)) continue;
+    if (ref.startsWith(SETTINGS_SCOPE_PREFIX)) {
+      const through = via === null ? "" : ` through helper "${via}"`;
+      const setting = ref.slice(SETTINGS_SCOPE_PREFIX.length);
+      report2(
+        opts?.segCtx === void 0 || opts.settings === void 0 ? `Template reads ".${ref}"${through}, but only a segment's own templates have settings \u2014 call it from a segment that declares "${setting}"` : `Template reads ".${ref}"${through}, but segment "${opts.segCtx}" has no setting "${setting}" (it has: ${Object.keys(opts.settings).join(", ")}) \u2014 declare it under segments.${opts.segCtx}.settings`,
+        null
+      );
+      continue;
+    }
+    const namespaced = opts?.segCtx !== void 0 && via === null ? `${opts.segCtx}.${ref}` : void 0;
+    const hint = namespaced !== void 0 && refResolves(namespaced, scope) ? ` (segment-local vars are namespaced \u2014 write ".${namespaced}")` : retiredReadHint(ref);
+    report2(`Template references unknown variable ".${ref}"${hint}`, via);
+  }
+  for (const { verb, via } of templateLinkVerbs(template, scope.helpers)) {
+    const retired = retiredLinkVerbMessage(verb);
+    if (retired !== void 0) report2(retired, via);
   }
 }
 function helperKeyPath(name, segment) {
@@ -61895,7 +61925,7 @@ function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", a
     beneath,
     presence2
   );
-  const judge = (cells, refused) => {
+  const judge = (cells, refused2) => {
     const inserted = placeInserts(
       authoredConfig.config,
       cells,
@@ -61909,7 +61939,7 @@ function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", a
       inserted.config,
       presence2,
       written2.dropped,
-      [...inserted.notices, ...refused]
+      [...inserted.notices, ...refused2]
     );
   };
   try {
@@ -61920,7 +61950,7 @@ function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", a
     const own2 = new Set(
       bare.dropped.flatMap((d) => d.issues.map((i) => i.message))
     );
-    const { taken, refused } = written2.cells.reduce(
+    const { taken, refused: refused2 } = written2.cells.reduce(
       (acc, cell3) => {
         try {
           judge([...acc.taken, cell3], []);
@@ -61942,7 +61972,7 @@ function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", a
       },
       { taken: [], refused: [] }
     );
-    return judge(taken, refused);
+    return judge(taken, refused2);
   }
 }
 function judgeRenderable({ raw, source }, filePath2, allowedPalettes, beneath, merged, presence2, filed, notices) {
@@ -64092,7 +64122,6 @@ function closingView(store, nestOf2, log) {
 init_globals();
 var SESSION_RENDER_ORIGIN_KEY = "render-origin";
 var SESSION_CLIENT_HINTS_KEY = "client-hints";
-var SESSION_CONFIG_OVERRIDE_KEY = "config-override";
 
 // src/daemon/config-file-store.ts
 init_globals();
@@ -65776,8 +65805,8 @@ function refusedHints(req, hints) {
     (k) => req[k] !== void 0 && hints[k] === void 0
   ).map((hint) => ({ hint, sent: req[hint] }));
 }
-function refusedHintsError(refused) {
-  return refused.length === 0 ? null : `Client hints refused: ${refused.map(({ hint, sent }) => `${hint}=${JSON.stringify(sent)}`).join(
+function refusedHintsError(refused2) {
+  return refused2.length === 0 ? null : `Client hints refused: ${refused2.map(({ hint, sent }) => `${hint}=${JSON.stringify(sent)}`).join(
     ", "
   )} \u2014 is the statusline client older than the daemon? Reinstall it (\`cc-candybar install\`, or \`just install-rust\` in a checkout).`;
 }
@@ -65788,9 +65817,9 @@ var REFUSAL_LINES = {
   "no-value": (arg) => `${arg} names no file \u2014 the bar renders with no ${arg}`,
   positional: (args) => `Unexpected arguments: ${args}`
 };
-function refusedArgsError(refused) {
+function refusedArgsError(refused2) {
   const lines2 = Object.keys(REFUSAL_LINES).flatMap((why2) => {
-    const args = refused.filter((r) => r.why === why2).map((r) => r.arg);
+    const args = refused2.filter((r) => r.why === why2).map((r) => r.arg);
     return args.length === 0 ? [] : [REFUSAL_LINES[why2](args.join(", "))];
   });
   return lines2.length === 0 ? null : lines2.join("\n");
@@ -69066,7 +69095,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.191.0";
+var PACKAGE_VERSION = "1.192.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -69324,12 +69353,12 @@ async function probeTmux(launcher, hint) {
   if (run3.kind === "failed") return { kind: "failed", reason: run3.reason };
   return parseTmuxClient(run3.stdout);
 }
-function productionEdge(launcher, loadConfig2, host) {
+function productionEdge(launcher, loadConfig, host) {
   return {
     probeTmux: (hint) => probeTmux(launcher, hint),
     remoteLogin: (pid2) => remoteLogin(launcher, pid2),
     fontInUse: (terminal, env2, glyphs) => fontInUse(launcher, terminal, env2, glyphs, host.home),
-    loadConfig: loadConfig2,
+    loadConfig,
     home: host.home,
     managedSettingsDir: host.env.CC_CANDYBAR_CLAUDE_MANAGED_DIR ?? claudeManagedSettingsDir(process_default.platform),
     install: productionInstallEdge,
@@ -70604,10 +70633,6 @@ function stepFrom(verb, key, params, declared) {
   }
   return clampTo(params, parseInt(declared, 10));
 }
-function sessionRenderOrigin(requested, state, sid) {
-  const pick2 = state.get(sid, SESSION_CONFIG_OVERRIDE_KEY);
-  return pick2 === null ? requested : { ...requested, target: { source: "pick", path: pick2 } };
-}
 function recordedTarget(source, configFile) {
   if (configFile === null) return { source: "search" };
   return source === "argument" || source === "environment" ? { source, path: configFile } : { source: "unknown", path: configFile };
@@ -70637,13 +70662,9 @@ function sessionOrigin(ctx, sid) {
   }
   return origin;
 }
-function requestedOrigin(ctx, sid) {
+function recordedOrigin(ctx, sid) {
   const raw = ctx.sessionState.get(sid, SESSION_RENDER_ORIGIN_KEY);
   return raw === null ? null : parseRenderOrigin(raw);
-}
-function recordedOrigin(ctx, sid) {
-  const requested = requestedOrigin(ctx, sid);
-  return requested === null ? null : sessionRenderOrigin(requested, ctx.sessionState, sid);
 }
 function reloadIfWritten(ctx, sid, step4) {
   const origin = recordedOrigin(ctx, sid);
@@ -70657,9 +70678,9 @@ function sessionConfig(ctx, sid) {
   return ctx.configFor(sessionOrigin(ctx, sid));
 }
 function laneMeter(ctx, sid) {
-  const requested = requestedOrigin(ctx, sid);
-  if (requested === null) return null;
-  const read2 = () => ctx.lanes.of(sessionRenderOrigin(requested, ctx.sessionState, sid), sid);
+  const origin = recordedOrigin(ctx, sid);
+  if (origin === null) return null;
+  const read2 = () => ctx.lanes.of(origin, sid);
   return { sessionId: sid, before: read2(), read: read2 };
 }
 function nestOf(ctx, sid) {
@@ -71322,38 +71343,8 @@ var repoConfig = async (value, ctx) => {
   );
   ctx.reloadConfig(sessionOrigin(ctx, sid));
 };
-var loadConfig = async (value, ctx) => {
-  const slash2 = value.indexOf("/");
-  if (slash2 === -1) {
-    throw new BadVerbArgs(
-      "load-config: expected <sessionId>/<path> (missing separator)"
-    );
-  }
-  const sid = requireSessionId(
-    decodeWire(() => decodeURIComponent(value.slice(0, slash2)))
-  );
-  const p2 = decodeWire(() => decodeURIComponent(value.slice(slash2 + 1))).trim();
-  if (p2 !== "") {
-    if (!p2.startsWith("/")) {
-      throw new BadVerbArgs(`load-config: path must be absolute, got "${p2}"`);
-    }
-    if (!/\.(json5?|json)$/.test(p2)) {
-      throw new BadVerbArgs(
-        `load-config: path must end with .json5 or .json, got "${p2}"`
-      );
-    }
-  }
-  if (p2 === "") {
-    ctx.sessionState.clear(sid, SESSION_CONFIG_OVERRIDE_KEY);
-    ctx.log("info", `load-config: override cleared (session=${sid})`);
-  } else {
-    ctx.sessionState.set(sid, SESSION_CONFIG_OVERRIDE_KEY, p2);
-    ctx.log("info", `load-config: ${p2} (session=${sid})`);
-  }
-};
 var LEAF_VERBS = /* @__PURE__ */ new Map([
   [VERB_COPY, inTurn(copy)],
-  [VERB_LOAD_CONFIG, inTurn(loadConfig)],
   [VERB_OPEN_VSCODE, inTurn(openVscode)],
   [VERB_SET_STATE, inTurn(setState)],
   [VERB_STEP_STATE, inTurn(stepState)],
@@ -71423,7 +71414,6 @@ var SESSION_FIRST_VERBS = /* @__PURE__ */ new Set([
   VERB_SLASH,
   VERB_RUN,
   VERB_REPO_CONFIG,
-  VERB_LOAD_CONFIG,
   VERB_COPY_DIAGNOSTIC
 ]);
 function clickSessionOf(verb, value) {
@@ -71441,7 +71431,9 @@ var hoisted = (verb, value, ctx) => ctx.journalTurns.gathering(() => verb.prepar
 );
 async function perform(verb, value, ctx, gathered2) {
   const step4 = gathered2 ?? await ctx.gather((full) => verb.prepare(value, full));
-  await step4(ctx);
+  const described = [];
+  await step4({ ...ctx, effect: (effect) => void described.push(effect) });
+  for (const effect of described) ctx.effect(effect);
 }
 async function headGather(rawValue, ctx) {
   const [head] = batchAdjacentWrites(parseEffects(rawValue));
@@ -71547,14 +71539,6 @@ async function journaled(sid, ctx, turn, handler) {
       failures.push(e);
     }
   }
-  if (live && sid !== null) {
-    try {
-      const origin = recordedOrigin(ctx, sid);
-      if (origin !== null) ctx.views.follow(sid, origin);
-    } catch (e) {
-      failures.push(e);
-    }
-  }
   if (live) ctx.described(effects);
   throwAll(failures);
 }
@@ -71591,7 +71575,7 @@ var VERBS = new Map([
   [VERB_DISPATCH, click(VERB_DISPATCH, headGather, foldEffects)],
   // After the leaves, so it replaces the click they built: a probe writes no
   // journal, so nothing may refuse it for a turn, and it describes nothing.
-  [VERB_DOCTOR_PROBE, (value, ctx) => doctorProbe(value, ctx)]
+  [VERB_DOCTOR_PROBE, doctorProbe]
 ]);
 var VERB_NAMES = Object.freeze([
   ...VERBS.keys()
@@ -71645,15 +71629,7 @@ function linksOf({ rows }) {
 }
 var isBarLink = (url) => url.startsWith(`${URL_SCHEME}://`);
 function decodeArgs(verb, value) {
-  if (SEGMENTED_VERBS.has(verb)) return decodeSegments(value);
-  const slash2 = value.indexOf("/");
-  if (verb === VERB_LOAD_CONFIG && slash2 !== -1) {
-    return [
-      decodeURIComponent(value.slice(0, slash2)),
-      decodeURIComponent(value.slice(slash2 + 1))
-    ];
-  }
-  return [decodeURIComponent(value)];
+  return SEGMENTED_VERBS.has(verb) ? decodeSegments(value) : [decodeURIComponent(value)];
 }
 function clickOf(url) {
   const link = parseHandlerUrl(url);
@@ -76571,12 +76547,12 @@ function requestFacts(req, at, facts) {
     at: at.toFixed(3)
   });
   const hints = req.hints;
-  const refused = refusedHints(req, hints);
-  const hintsError = refusedHintsError(refused);
+  const refused2 = refusedHints(req, hints);
+  const hintsError = refusedHintsError(refused2);
   noteFacts(facts, {
     termCols: String(hints.termCols ?? "?"),
     termRows: String(hints.termRows ?? "?"),
-    refused: refused.map((r) => r.hint).join(",") || "-",
+    refused: refused2.map((r) => r.hint).join(",") || "-",
     badArgs: req.refusedArgs.map((r) => `${r.arg}:${r.why}`).join(",") || "-",
     // Which program drew this bar (src/client-hint.ts); `unreported` for a
     // client too old to say.
@@ -76588,7 +76564,7 @@ function requestFacts(req, at, facts) {
   return hintsError;
 }
 function setUpRender(parts, arrived3, at, facts) {
-  const { sessionState, renderCache } = parts;
+  const { renderCache } = parts;
   const dir = arrived3.hookData.workspace?.current_dir ?? arrived3.cwd;
   const req = {
     ...arrived3,
@@ -76597,10 +76573,9 @@ function setUpRender(parts, arrived3, at, facts) {
       ...dir !== void 0 && import_node_path32.default.isAbsolute(dir) && { location: checkoutLocation(dir) }
     }
   };
-  const sessionId2 = req.sessionId;
   const hintsError = requestFacts(req, at, facts);
   noteFacts(facts, { encoding: req.encoding });
-  const origin = sessionRenderOrigin(req.requested, sessionState, sessionId2);
+  const origin = req.requested;
   const hold2 = renderCache.holdSession(
     origin.projectDir,
     origin.cwd,
@@ -76932,20 +76907,18 @@ async function answerRequest(parts, req, at, waitEndsAt, facts) {
 }
 function arrived2(parts, req, lanes) {
   const { laneSetups, tmuxStatusLines } = parts;
-  laneSetups.noted(laneSessionOf(parts, req), lanes);
+  laneSetups.noted(laneSessionOf(req), lanes);
   tmuxStatusLines.observe(
     req.hookData.session_id,
     req.hints.tmux,
     lanes.tmuxStatus
   );
 }
-function laneSessionOf(parts, req) {
-  const { sessionState } = parts;
-  const sessionId2 = req.hookData.session_id;
+function laneSessionOf(req) {
   return {
-    sessionId: sessionId2,
+    sessionId: req.hookData.session_id,
     hints: req.hints,
-    origin: sessionRenderOrigin(req.requested, sessionState, sessionId2),
+    origin: req.requested,
     transcript: req.hookData.transcript_path,
     answered: answeredOf(req.hookData)
   };
@@ -76955,7 +76928,7 @@ function laneClicked(parts, sessionId2, before, after) {
   const latest = frameFeeds.latest(sessionId2);
   laneSetups.clicked(
     sessionId2,
-    latest === null ? null : laneSessionOf(parts, latest),
+    latest === null ? null : laneSessionOf(latest),
     before,
     after
   );
@@ -77136,7 +77109,7 @@ async function apply(event, parts) {
   const applied2 = await arm2(event, parts);
   const of = originOf(event);
   const line = LINE[event.kind];
-  const said = line(event);
+  const said = line(event, applied2);
   if (said !== null) {
     parts.log(
       said.level,
@@ -77159,17 +77132,29 @@ async function apply(event, parts) {
   }
   return {
     answer: applied2.answer,
-    performed: performAll(parts, of, applied2.effects)
+    // An event that described nothing performs nothing, and takes no place in
+    // the session's order: the effect-done events of that order are applied
+    // from inside it, and a place they took there would settle only after the
+    // work they report on.
+    performed: applied2.effects.length === 0 ? NOTHING_PERFORMED : performAll(parts, of, applied2.effects)
   };
 }
-var APPLIED = { level: "info", facts: [] };
+var NOTHING_PERFORMED = Promise.resolve();
+var APPLIED = { level: "info", facts: [["outcome", "ok"]] };
+var refused = ({ error }) => ({
+  level: "info",
+  facts: [
+    ["outcome", "refused"],
+    ["said", error instanceof Error ? error.message : String(error)]
+  ]
+});
 var OUTCOME_LEVEL = {
   ok: "info",
   failed: "warn"
 };
 var LINE = {
   request: () => null,
-  click: () => APPLIED,
+  click: (_event, { answer: answer2 }) => answer2 === null ? APPLIED : refused(answer2),
   "menu-idle": () => APPLIED,
   "effect-done": ({ effect, outcome }) => ({
     level: OUTCOME_LEVEL[outcome.kind],
@@ -77216,18 +77201,20 @@ async function perform2(effect, parts) {
     return failed2(e instanceof Error ? e.message : String(e));
   }
 }
-async function performAll(parts, of, effects) {
-  for (const effect of effects) {
-    const outcome = await perform2(effect, parts);
-    try {
-      await apply({ kind: "effect-done", of, effect, outcome }, parts);
-    } catch (e) {
-      parts.log(
-        e instanceof DaemonClosing ? "info" : "error",
-        `apply: effect-done not applied (${describeEffect(effect)} ${outcome.kind}: ${outcome.said}): ${inspect(e)}`
-      );
+function performAll(parts, of, effects) {
+  return parts.verbCtx.journalTurns.performing(of.session, async () => {
+    for (const effect of effects) {
+      const outcome = await perform2(effect, parts);
+      try {
+        await apply({ kind: "effect-done", of, effect, outcome }, parts);
+      } catch (e) {
+        parts.log(
+          e instanceof DaemonClosing ? "info" : "error",
+          `apply: effect-done not applied (${describeEffect(effect)} ${outcome.kind}: ${outcome.said}): ${inspect(e)}`
+        );
+      }
     }
-  }
+  });
 }
 
 // src/daemon/render-checkpoint.ts
@@ -77336,7 +77323,7 @@ function parseRenderArgs(args, cwd2, home) {
   const config2 = (tokens ?? []).filter(
     (t2) => t2.kind === "option" && t2.name === "config"
   ).at(-1);
-  const refused = (tokens ?? []).flatMap((t2) => {
+  const refused2 = (tokens ?? []).flatMap((t2) => {
     switch (t2.kind) {
       case "option":
         return t2.name !== "config" ? [{ arg: t2.rawName, why: "unknown" }] : t2 === config2 && t2.value === void 0 ? [{ arg: t2.rawName, why: "no-value" }] : [];
@@ -77350,8 +77337,8 @@ function parseRenderArgs(args, cwd2, home) {
   return {
     configFile: explicitConfigPath(cwd2, config2?.value, home),
     // In argv order, each refusal once.
-    refusedArgs: refused.filter(
-      (r, i) => refused.findIndex((o) => o.arg === r.arg && o.why === r.why) === i
+    refusedArgs: refused2.filter(
+      (r, i) => refused2.findIndex((o) => o.arg === r.arg && o.why === r.why) === i
     )
   };
 }
@@ -78076,18 +78063,18 @@ function clickReply(outcome) {
 }
 async function statusLineClick(parts, value, facts, clientGone) {
   const { tmuxStatusLines } = parts;
-  const refused = (problem) => ({
+  const refused2 = (problem) => ({
     kind: "bad-request",
     problems: [problem]
   });
   const click3 = tmuxStatusLines.linkAt(value);
-  if (click3.kind === "refused") return refused(click3.reason);
+  if (click3.kind === "refused") return refused2(click3.reason);
   noteFacts(facts, { link: click3.url });
   if (click3.url.startsWith("cc-candybar://")) {
     const parsed2 = parseHandlerUrl(click3.url);
-    if (!parsed2.ok) return refused(parsed2.problem);
+    if (!parsed2.ok) return refused2(parsed2.problem);
     if (parsed2.verb === VERB_TMUX_STATUS_CLICK)
-      return refused("a status-line link names another status-line click");
+      return refused2("a status-line link names another status-line click");
     return handleClick(
       parts,
       parsed2.verb,
@@ -82260,10 +82247,9 @@ var RenderCache = class {
   // itself, not frames happening to read the view within each sweep.
   pins = /* @__PURE__ */ new Map();
   // [LAW:no-silent-failure] Each session whose view last failed to open, by
-  // the error and the request the opening was for, until a view opens for
-  // it: a frame draws that error, never the last bar it pushed, and a click
-  // that moves the origin retries by that request (`follow`). Written only by
-  // `opened`, which sets either this or the session's view, never both.
+  // the error, until a view opens for it: a frame draws that error, never the
+  // last bar it pushed. Written only by `opened`, which sets either this or
+  // the session's view, never both.
   openFailures = /* @__PURE__ */ new Map();
   // [LAW:one-source-of-truth] One compile per compile key, shared by every
   // state carrying that key, and dropped with the last of them (reclaim).
@@ -82432,36 +82418,9 @@ var RenderCache = class {
   openFailure(sessionId2) {
     return this.openFailures.get(sessionId2) ?? null;
   }
-  // [LAW:single-enforcer] A click that moved the session's origin — a
-  // load-config pick, or a history step restoring one — moves its view to the
-  // origin's entry, declared with the request the view draws by, as a
-  // request from there would (`journaled`, src/daemon/verbs/index.ts). A
-  // session whose last opening failed opens by the request that opening was
-  // for, so a pick that fixes it shows with no request after it. A session
-  // with neither has nothing to move: no feed draws it, and its next request
-  // opens one. A click that left the origin alone finds the view already on
-  // its entry and changes nothing, its use order included, so the latest
-  // rendered session stays the one that rendered.
-  follow(sessionId2, projectDir, cwd2, configFile) {
-    var _stack = [];
-    try {
-      const current = this.views.get(sessionId2);
-      const facts = current?.facts() ?? this.openFailures.get(sessionId2)?.facts;
-      if (facts === void 0) return;
-      const origin = this.entries.get(cacheKey(projectDir, cwd2, configFile));
-      if (current !== void 0 && origin?.state === current.state) return;
-      const held = __using(_stack, this.hold(projectDir, cwd2, configFile));
-      this.viewOf(held.entry, held.state, facts, "click");
-    } catch (_) {
-      var _error = _, _hasError = true;
-    } finally {
-      __callDispose(_stack, _error, _hasError);
-    }
-  }
   // [LAW:no-ambient-temporal-coupling] An open feed's pin on its session,
   // from the feed's open to its close (src/daemon/frame-feed.ts). Keyed by
-  // session, so it follows the view wherever a request, a reload or a click
-  // moves it.
+  // session, so it follows the view wherever a request or a reload moves it.
   pin(sessionId2) {
     this.pins.set(sessionId2, (this.pins.get(sessionId2) ?? 0) + 1);
     let released = false;
@@ -82510,7 +82469,7 @@ var RenderCache = class {
         log: this.log
       });
     } catch (error) {
-      this.openFailures.set(sessionId2, { error, facts });
+      this.openFailures.set(sessionId2, { error });
       throw error;
     }
     this.openFailures.delete(sessionId2);
@@ -84726,6 +84685,7 @@ var keyOf = (sessionId2, by) => `${by}\0${sessionId2}`;
 init_globals();
 var DAEMON_WIDE = "journals";
 var GATHERS = "gathers";
+var CLICKLESS = "clickless";
 var JournalTurns = class {
   constructor(deps) {
     this.deps = deps;
@@ -84734,6 +84694,7 @@ var JournalTurns = class {
   queue = new KeyedSerialQueue();
   sessions = new KeyedSerialQueue();
   gathers = new KeyedSerialQueue();
+  effects = new KeyedSerialQueue();
   open = true;
   inFlight = null;
   holder = null;
@@ -84802,6 +84763,16 @@ var JournalTurns = class {
     } finally {
       this.gathersInFlight--;
     }
+  }
+  // [LAW:no-ambient-temporal-coupling] A session's effects run one at a time,
+  // in the order their turns committed, after them: a performer that reads
+  // before it acts (the pane read before a slash is typed) sees what the
+  // session's earlier effects left, as it did when a launch held the turn.
+  // The order is the performer's, not the turn's: the session's next click
+  // takes its turn while the last click's effects still run, and no close
+  // refuses it, since an outcome after close is said in the log.
+  performing(session, work) {
+    return this.effects.run(session ?? CLICKLESS, work);
   }
   getStats() {
     const { holder, queued } = this;
@@ -85341,14 +85312,6 @@ function createDaemon(inputs) {
     lanes: {
       of: (origin, sessionId2) => lanesAt(parts, origin, sessionId2),
       clicked: (sessionId2, before, after) => laneClicked(parts, sessionId2, before, after)
-    },
-    views: {
-      follow: (sessionId2, origin) => renderCache.follow(
-        sessionId2,
-        origin.projectDir,
-        origin.cwd,
-        origin.target.path
-      )
     },
     diagnosticCopy: (sessionId2, by, key) => renderCache.drawnCopy(sessionId2, by, key)
   };
@@ -86256,8 +86219,8 @@ function productionLaneEdge(launcher, following, closing, clock, probe2) {
         timeoutMs: 2e4,
         category: "lane.process"
       });
-      const refused = !result.ok && result.reason === "non-zero" ? refusalOf2(result.stdout) : null;
-      if (refused !== null) return { ok: false, reason: refused };
+      const refused2 = !result.ok && result.reason === "non-zero" ? refusalOf2(result.stdout) : null;
+      if (refused2 !== null) return { ok: false, reason: refused2 };
       ran(`reading ${executable}'s module graph`, result);
       return { ok: true };
     },
@@ -86859,17 +86822,17 @@ async function click2(url, size) {
   const host = effects.filter((e) => HOST_VERBS.has(e.verb));
   if (host.length > 0) {
     const copiesOnly = effects.every((e) => e.verb === VERB_COPY);
-    const refused2 = copiesOnly ? await copy2(effects.map((e) => e.args.join("/")).join("\n")) : `not sent: on a real machine this ${host.map((e) => HOST_VERBS.get(e.verb)).join(", ")}`;
-    return { ...await render2(size), refused: refused2 };
+    const refused3 = copiesOnly ? await copy2(effects.map((e) => e.args.join("/")).join("\n")) : `not sent: on a real machine this ${host.map((e) => HOST_VERBS.get(e.verb)).join(", ")}`;
+    return { ...await render2(size), refused: refused3 };
   }
   const { verb, value } = clickOf(url);
-  let refused = null;
+  let refused2 = null;
   try {
     await daemon2({ v: PROTOCOL_VERSION, kind: "click", verb, value });
   } catch (e) {
-    refused = e instanceof Error ? e.message : String(e);
+    refused2 = e instanceof Error ? e.message : String(e);
   }
-  return { ...await render2(size), refused };
+  return { ...await render2(size), refused: refused2 };
 }
 var listeners = [];
 var notify = () => {

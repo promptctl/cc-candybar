@@ -2,6 +2,56 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-621",
+      "ref": "refs/pull/621/merge",
+      "sha": "553b5fa96406c469e6301eaeaab7e943181098fd",
+      "timestamp": "2026-11-06T04:27:34.557Z",
+      "commits": [
+        {
+          "sha": "553b5fa96406c469e6301eaeaab7e943181098fd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T04:26:38Z",
+          "message": "Merge f1362386456dd14ee16cfa837159658a8f08b794 into 72f2e1a2b5bd38d26643de974db14a16ce60000a\n"
+        },
+        {
+          "sha": "f1362386456dd14ee16cfa837159658a8f08b794",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T21:12:42-07:00",
+          "message": "fix(apply): a step's effects are its own until it returns; an event with no effects takes no place in the session's order (candybar-gather-renderer-76bb.1dh.g2l)\n\nReview, second high pass. The leaf runner holds a step's effects until the\nstep returns, so one that throws after describing describes nothing. An\nevent that described nothing performs nothing and takes no place in the\nsession's effect order, where the effect-done events of that order are\napplied from inside it.\n"
+        },
+        {
+          "sha": "503e97dc9ea6933d77cf7d14d50aa31112eda117",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T20:53:28-07:00",
+          "message": "fix(apply): a session's effects run in the order their turns committed; the click's apply line names its outcome (candybar-gather-renderer-76bb.1dh.g2l)\n\nReview, medium pass. Performers of one session run one at a time behind\neach other, so a performer that reads before it acts sees what the session's\nearlier effects left; another session's run beside them. A refused click's\napply line says outcome=refused with the refusal's words, where it read as\napplied. The probe's table entry is the function itself.\n"
+        },
+        {
+          "sha": "a6cc65227a12ad53d0d32035ee24c99aaf973405",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T20:34:51-07:00",
+          "message": "fix(apply): a refused dispatch still performs what its landed steps described; a failed effect's line is a warning; one event-line builder (candybar-gather-renderer-76bb.1dh.g2l)\n\nReview, high pass. The turn hands its described effects to the arm once it\nhas committed, and a click's refusal is the arm's answer as data, so the\nperformer runs a landed step's launch while the wire reads the refusal by its\nclass as before. The effect-done line's level follows the outcome. The\nlogfmt event line has one home. The e2e second apply-update reads the\nrefusal held on the bar, where it was the click's rejection.\n"
+        },
+        {
+          "sha": "27b6567872b3e93570f6a6f4ab4d696ebc6ab719",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T19:53:03-07:00",
+          "message": "test(apply): the apply-update case holds its own turns for the holder; doctor-menu reads the latest doctor line, since the apply line now follows every click (candybar-gather-renderer-76bb.1dh.g2l)\n"
+        },
+        {
+          "sha": "b16c9a25be45001dad712e914150b47826102a40",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T19:48:47-07:00",
+          "message": "feat(apply): a click's launches are effects, performed after its turn and reported as effect-done (candybar-gather-renderer-76bb.1dh.g2l)\n\nA handler describes what it asks of the world (a program, a line typed\ninto its pane, the update's act) as an Effect and awaits no child. The\narm table answers `{ answer, effects }`; `apply` performs the effects\nin order after the arm and puts each outcome back through the new\neffect-done arm, which holds a failed one for the session's bar in a\nturn of its own. One `apply` log line per click, menu-idle and\neffect-done event names the verb, the effects and the revision.\n\ntypeSlash takes a TmuxHint: the pane's absence is refused at the click,\nthe pane's own refusals are the effect's failure. A rate-limited click\nlaunch is a failed outcome shown in the bar, no longer a silent ack.\n\nTests: the click helper drives Apply and installs a store view that\nthrows on a write made with no turn held; cases that parked a pbcopy to\nhold the turn park a doctor gather instead.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-623",
       "ref": "refs/pull/623/merge",
       "sha": "92088954bcd023d7172e4017c3802048e26bd03a",
@@ -71,42 +121,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-06T03:05:11Z",
           "message": "chore(release): set `package.json` to 1.191.0 [skip ci]\n\n## [1.191.0](https://github.com/promptctl/cc-candybar/compare/v1.190.0...v1.191.0) (2026-11-06)\n\n### Features\n\n* **tmux-status:** the renderer names itself on every session whose row it draws (candybar-gather-renderer-76bb.b2l.rwj) ([#619](https://github.com/promptctl/cc-candybar/issues/619)) ([bfb8918](https://github.com/promptctl/cc-candybar/commit/bfb89187e23eda03a7d719a5fba64875b44a3355))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-621",
-      "ref": "refs/pull/621/merge",
-      "sha": "998aac5033a70f17eb79b73447d50bee361fe605",
-      "timestamp": "2026-11-06T03:36:33.843Z",
-      "commits": [
-        {
-          "sha": "998aac5033a70f17eb79b73447d50bee361fe605",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T03:35:03Z",
-          "message": "Merge 7975c9223b4445c932d46ebe38e6890b188f1bb8 into ef736330044ce69f7e59e3ef737437bd9b8164f0\n"
-        },
-        {
-          "sha": "7975c9223b4445c932d46ebe38e6890b188f1bb8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T20:34:51-07:00",
-          "message": "fix(apply): a refused dispatch still performs what its landed steps described; a failed effect's line is a warning; one event-line builder (candybar-gather-renderer-76bb.1dh.g2l)\n\nReview, high pass. The turn hands its described effects to the arm once it\nhas committed, and a click's refusal is the arm's answer as data, so the\nperformer runs a landed step's launch while the wire reads the refusal by its\nclass as before. The effect-done line's level follows the outcome. The\nlogfmt event line has one home. The e2e second apply-update reads the\nrefusal held on the bar, where it was the click's rejection.\n"
-        },
-        {
-          "sha": "e79bef2c026dd20b3b4f1c9b454e362c6c580a6c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T19:53:03-07:00",
-          "message": "test(apply): the apply-update case holds its own turns for the holder; doctor-menu reads the latest doctor line, since the apply line now follows every click (candybar-gather-renderer-76bb.1dh.g2l)\n"
-        },
-        {
-          "sha": "d2dc5053d2fd67af7e82b14ad09690459be8f5d6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T19:48:47-07:00",
-          "message": "feat(apply): a click's launches are effects, performed after its turn and reported as effect-done (candybar-gather-renderer-76bb.1dh.g2l)\n\nA handler describes what it asks of the world (a program, a line typed\ninto its pane, the update's act) as an Effect and awaits no child. The\narm table answers `{ answer, effects }`; `apply` performs the effects\nin order after the arm and puts each outcome back through the new\neffect-done arm, which holds a failed one for the session's bar in a\nturn of its own. One `apply` log line per click, menu-idle and\neffect-done event names the verb, the effects and the revision.\n\ntypeSlash takes a TmuxHint: the pane's absence is refused at the click,\nthe pane's own refusals are the effect's failure. A rate-limited click\nlaunch is a failed outcome shown in the bar, no longer a silent ack.\n\nTests: the click helper drives Apply and installs a store view that\nthrows on a write made with no turn held; cases that parked a pbcopy to\nhold the turn park a doctor gather instead.\n"
         }
       ]
     },
