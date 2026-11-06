@@ -78522,6 +78522,34 @@ function recording(parts, req) {
     )
   };
 }
+function versionGate(req, log) {
+  if (req.v === PROTOCOL_VERSION) return null;
+  if (req.v > PROTOCOL_VERSION) {
+    log(
+      "info",
+      `version mismatch: client=${req.v} > daemon=${PROTOCOL_VERSION}; binary likely upgraded \u2014 exiting after the response flushes`
+    );
+  } else {
+    log(
+      "info",
+      `version mismatch: client=${req.v} < daemon=${PROTOCOL_VERSION}; client is stale \u2014 staying up`
+    );
+  }
+  return {
+    kind: "reply",
+    resp: {
+      ok: false,
+      error: `protocol v${req.v} not supported (daemon at v${PROTOCOL_VERSION})`,
+      code: "VERSION_MISMATCH",
+      daemonV: PROTOCOL_VERSION
+    },
+    // [LAW:dataflow-not-control-flow] The asymmetry above is this value.
+    // Exit is sequenced on the response flush, so the client always sees
+    // the VERSION_MISMATCH diagnostic — never a dead socket.
+    exitAfterFlush: req.v > PROTOCOL_VERSION ? 0 : null,
+    delivered: NOTHING_DELIVERED
+  };
+}
 async function handleRequest(parts, inbound, timedOut, accepted, clientLeft) {
   if (inbound.kind === "url") {
     return replied(
@@ -78534,33 +78562,8 @@ async function handleRequest(parts, inbound, timedOut, accepted, clientLeft) {
   if (!req || typeof req !== "object" || typeof req.v !== "number") {
     return refuse3("BAD_REQUEST", "malformed request");
   }
-  if (req.v !== PROTOCOL_VERSION) {
-    if (req.v > PROTOCOL_VERSION) {
-      parts.log(
-        "info",
-        `version mismatch: client=${req.v} > daemon=${PROTOCOL_VERSION}; binary likely upgraded \u2014 exiting after the response flushes`
-      );
-    } else {
-      parts.log(
-        "info",
-        `version mismatch: client=${req.v} < daemon=${PROTOCOL_VERSION}; client is stale \u2014 staying up`
-      );
-    }
-    return {
-      kind: "reply",
-      resp: {
-        ok: false,
-        error: `protocol v${req.v} not supported (daemon at v${PROTOCOL_VERSION})`,
-        code: "VERSION_MISMATCH",
-        daemonV: PROTOCOL_VERSION
-      },
-      // [LAW:dataflow-not-control-flow] The asymmetry above is this value.
-      // Exit is sequenced on the response flush, so the client always sees
-      // the VERSION_MISMATCH diagnostic — never a dead socket.
-      exitAfterFlush: req.v > PROTOCOL_VERSION ? 0 : null,
-      delivered: NOTHING_DELIVERED
-    };
-  }
+  const mismatch = versionGate(req, parts.log);
+  if (mismatch !== null) return mismatch;
   if (req.kind === "subscribe") return subscription(req);
   if (req.kind === "record") return recording(parts, req);
   if (typeof req.kind !== "string" || !Object.hasOwn(REPLY_KINDS, req.kind))
