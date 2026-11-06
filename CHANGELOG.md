@@ -1,3 +1,9 @@
+## [1.208.0](https://github.com/promptctl/cc-candybar/compare/v1.207.0...v1.208.0) (2026-11-06)
+
+### Features
+
+* **apply:** an effect waits only behind what it acts on; a lane setup holds its pane only while it types (candybar-gather-renderer-76bb.1dh.y9b) ([#656](https://github.com/promptctl/cc-candybar/issues/656)) ([9ae5981](https://github.com/promptctl/cc-candybar/commit/9ae5981784de84f6d5b774905ad8039298f84bc9))
+
 ## [1.207.0](https://github.com/promptctl/cc-candybar/compare/v1.206.0...v1.207.0) (2026-11-06)
 
 ### Features
