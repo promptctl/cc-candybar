@@ -56055,6 +56055,10 @@ function readTailSync(path47, maxBytes) {
 
 // src/claude-settings.ts
 var CLAUDE_CONFIG_DIR_ENV = "CLAUDE_CONFIG_DIR";
+function detectClaudeConfigDir(env2, cwd2) {
+  const first2 = (env2[CLAUDE_CONFIG_DIR_ENV] ?? "").split(",")[0].trim();
+  return first2 === "" ? void 0 : import_node_path10.default.resolve(cwd2, first2);
+}
 function claudeConfigDir(detected, home) {
   return detected ?? import_node_path10.default.join(home, ".claude");
 }
@@ -69511,7 +69515,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.208.0";
+var PACKAGE_VERSION = "1.208.1";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -85818,7 +85822,10 @@ async function restartUnderAttach(session, tmux3, attach, edge) {
     program,
     args: [...place.args, ...carried.args, ...sessionArgs(start2)]
   });
-  const held = edge.heldSession(claude.pid, session.hints.claudeConfigDir);
+  const held = edge.heldSession(
+    claude.pid,
+    detectClaudeConfigDir(Object.fromEntries(started2), claude.cwd)
+  );
   if (held.kind === "unread") {
     throw new Error(
       `Claude Code in ${tmux3.pane} was left running: ${held.why}, so which session it runs is unknown`
@@ -87533,7 +87540,10 @@ function heldSessionIn(file) {
   try {
     text4 = fs_default.readFileSync(file, "utf8");
   } catch (e) {
-    return e.code === "ENOENT" ? { kind: "unread", why: `it keeps no session record at ${file}` } : { kind: "unread", why: e.message };
+    return e.code === "ENOENT" ? {
+      kind: "unread",
+      why: `it keeps no session record at ${file} (update Claude Code with \`claude update\`: recent releases keep one)`
+    } : { kind: "unread", why: e.message };
   }
   let record2;
   try {

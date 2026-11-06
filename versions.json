@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-660",
+      "ref": "refs/pull/660/merge",
+      "sha": "b8f7aa53f0dbdd81987788174285359fa5c36ed0",
+      "timestamp": "2026-11-06T23:26:48.941Z",
+      "commits": [
+        {
+          "sha": "b8f7aa53f0dbdd81987788174285359fa5c36ed0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T16:25:49-07:00",
+          "message": "Merge 82078268fd68db1173aecd20cc37dd857ec4a59a into 5bb40dbee6d8d25c54fff764ee0387a438043749\n"
+        },
+        {
+          "sha": "82078268fd68db1173aecd20cc37dd857ec4a59a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T16:21:53-07:00",
+          "message": "fix(lanes): the session record is found under the directory the process's own environment names, and a missing one names its remedy (candybar-gather-renderer-76bb.1dh.9ix)\n"
+        },
+        {
+          "sha": "105b33655f46204165b86c175bc3e11a0e48093a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T16:14:12-07:00",
+          "message": "fix(lanes): a restart reads the session its Claude Code holds from the process's own record (candybar-gather-renderer-76bb.1dh.9ix)\n\nThe newest request naming the pane lags a /clear by the new session's\nfirst statusline tick, and any client run inside the pane names the pane\ntoo. Claude Code rewrites its per-process record in its configuration\ndirectory when the session changes, so the restart reads that, for the\npid it is about to kill, synchronously before the kill. A record that is\nmissing or unreadable refuses the restart and says why.\n"
+        },
+        {
+          "sha": "5e3b0f97031b17df3247a0d6dcbb92e7317a95f8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T16:01:22-07:00",
+          "message": "fix(lanes): a restart refuses a pane that now runs another session, instead of resuming the old one over it (candybar-gather-renderer-76bb.1dh.9ix)\n\nA statusline restart resumes the session its setup was settled for. After\na `/clear` or `/resume` in the pane, Claude Code is the same process, so the\npid check before the kill passed and the line typed `--resume <old id>`\nover the live session.\n\nThe restart now reads whose session the pane runs (the newest request\nnaming the pane, among each session's latest) directly before SIGTERM,\nafter its last wait, and refuses naming that session when it is not the\none being restarted, or saying no held request names the pane.\n\nThat read is built once in the daemon and handed to the tmux status line\nand lane setup, over one `namesPane` predicate the pane-session reply\nuses too; the predicate was spelled inline twice before.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-661",
       "ref": "refs/pull/661/merge",
       "sha": "9b018e8f10e2ec342509feec61707f9ca29c03b3",
@@ -56,35 +92,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T12:51:37-07:00",
           "message": "fix(facts): a replay draws the lane feeds and diagnostics the live draw was handed, and the frames a lane drew (candybar-gather-renderer-76bb.6pj.0se)\n\nA replay drew every frame with every lane idle, no open viewer, and only\nthe request answers, so a recording of a session with a lane following or\nthe warnings viewer open replayed a bar the user never saw.\n\n- A draw line is one draw of the view, an answer or a lane's frame: it\n  carries the instant it was drawn at and what it was handed (who it drew\n  for, each lane's feed, the diagnostics list). A lane's frames write the\n  view's frame memory and the session's effect memory, so the recorder\n  notes each one, to every recording of the session, and the replay draws\n  them in the file's order at their exact instants. RECORDING_VERSION 6.\n- The daemon and the demo draw a view through one function (draw-view),\n  which derives every draw projection from what the draw was handed and\n  stands the open viewer in for the bar. The demo's own drawDsl call goes.\n- A recording that holds only lane frames is kept and replays; `record`\n  reports answers and lane frames.\n- The seam test's live side is the daemon's draw throughout, and a new case\n  replays a standing warning, a following lane, its toggles and the open\n  viewer, compared whole.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-660",
-      "ref": "refs/pull/660/merge",
-      "sha": "5a537b0f15555d8cc4b247008ebb5f879b079e17",
-      "timestamp": "2026-11-06T23:18:56.434Z",
-      "commits": [
-        {
-          "sha": "5a537b0f15555d8cc4b247008ebb5f879b079e17",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T16:17:57-07:00",
-          "message": "Merge 343be8f24a3dc45a668a0eb666e8f45c5fe12409 into d742dceaaf1d3f10894fce9f4bbe605089ba7a7d\n"
-        },
-        {
-          "sha": "343be8f24a3dc45a668a0eb666e8f45c5fe12409",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T16:14:12-07:00",
-          "message": "fix(lanes): a restart reads the session its Claude Code holds from the process's own record (candybar-gather-renderer-76bb.1dh.9ix)\n\nThe newest request naming the pane lags a /clear by the new session's\nfirst statusline tick, and any client run inside the pane names the pane\ntoo. Claude Code rewrites its per-process record in its configuration\ndirectory when the session changes, so the restart reads that, for the\npid it is about to kill, synchronously before the kill. A record that is\nmissing or unreadable refuses the restart and says why.\n"
-        },
-        {
-          "sha": "94cb6e6797bbb9e77cc7dc67e32e392659d54432",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T16:01:22-07:00",
-          "message": "fix(lanes): a restart refuses a pane that now runs another session, instead of resuming the old one over it (candybar-gather-renderer-76bb.1dh.9ix)\n\nA statusline restart resumes the session its setup was settled for. After\na `/clear` or `/resume` in the pane, Claude Code is the same process, so the\npid check before the kill passed and the line typed `--resume <old id>`\nover the live session.\n\nThe restart now reads whose session the pane runs (the newest request\nnaming the pane, among each session's latest) directly before SIGTERM,\nafter its last wait, and refuses naming that session when it is not the\none being restarted, or saying no held request names the pane.\n\nThat read is built once in the daemon and handed to the tmux status line\nand lane setup, over one `namesPane` predicate the pane-session reply\nuses too; the predicate was spelled inline twice before.\n"
         }
       ]
     },
