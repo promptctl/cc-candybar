@@ -76930,7 +76930,7 @@ function recordToFile(recorder, clock, session, path44, seconds, left) {
         let error = how.kind === "failed" ? how.error : null;
         try {
           closeSync(fd);
-          if (error === null && requests === 0) unlinkSync(path44);
+          if (requests === 0) unlinkSync(path44);
         } catch (e) {
           error ??= e;
         }

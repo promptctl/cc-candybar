@@ -4,15 +4,22 @@
     {
       "version": "pr-629",
       "ref": "refs/pull/629/merge",
-      "sha": "45023539833bee3a605db0d226d53f5a5e140ff1",
-      "timestamp": "2026-11-06T08:00:38.763Z",
+      "sha": "077d324edc8df47b565d07d91fe9693e0fa0ed47",
+      "timestamp": "2026-11-06T08:04:45.639Z",
       "commits": [
         {
-          "sha": "45023539833bee3a605db0d226d53f5a5e140ff1",
+          "sha": "077d324edc8df47b565d07d91fe9693e0fa0ed47",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T07:59:50Z",
-          "message": "Merge 2022086d9d4defa0e23ca48cc4ecbd6de0812032 into 6933237709e563a9f5c545898d2df59c76238cd3\n"
+          "timestamp": "2026-11-06T08:03:19Z",
+          "message": "Merge 55e3b06591862bd27ed71795687fa6786ef934cc into 6933237709e563a9f5c545898d2df59c76238cd3\n"
+        },
+        {
+          "sha": "55e3b06591862bd27ed71795687fa6786ef934cc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T01:03:03-07:00",
+          "message": "fix(facts): a recording with no request leaves no file however it ended (candybar-gather-renderer-76bb.6pj.qg5)\n"
         },
         {
           "sha": "2022086d9d4defa0e23ca48cc4ecbd6de0812032",
