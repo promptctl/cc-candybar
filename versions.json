@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-649",
+      "ref": "refs/pull/649/merge",
+      "sha": "0a2cae121f8af08a2cbcd5f9f20f04e38ab5fc40",
+      "timestamp": "2026-11-06T20:42:24.935Z",
+      "commits": [
+        {
+          "sha": "0a2cae121f8af08a2cbcd5f9f20f04e38ab5fc40",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T20:41:13Z",
+          "message": "Merge ec6ee11daea7e6c4d9b152c52fbaafd56e988bc4 into 25a3827641cb21d3ec9541e2f1e9f87ea4d9be07\n"
+        },
+        {
+          "sha": "ec6ee11daea7e6c4d9b152c52fbaafd56e988bc4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:14:09-07:00",
+          "message": "fix(draw): a frame's lanes are noted before its walk, so a frame that throws still says which lanes it drew for (candybar-gather-renderer-76bb.6pj.0se)\n"
+        },
+        {
+          "sha": "86b8fb300919d017483f3cd0fe916a0b1a9c0993",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:04:46-07:00",
+          "message": "refactor(draw): a view's draw returns the lane switches it drew under; two comments name lane frames (candybar-gather-renderer-76bb.6pj.0se)\n"
+        },
+        {
+          "sha": "103609bf5a3b2cbce2865396ff8c1367236c4d92",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T12:51:37-07:00",
+          "message": "fix(facts): a replay draws the lane feeds and diagnostics the live draw was handed, and the frames a lane drew (candybar-gather-renderer-76bb.6pj.0se)\n\nA replay drew every frame with every lane idle, no open viewer, and only\nthe request answers, so a recording of a session with a lane following or\nthe warnings viewer open replayed a bar the user never saw.\n\n- A draw line is one draw of the view, an answer or a lane's frame: it\n  carries the instant it was drawn at and what it was handed (who it drew\n  for, each lane's feed, the diagnostics list). A lane's frames write the\n  view's frame memory and the session's effect memory, so the recorder\n  notes each one, to every recording of the session, and the replay draws\n  them in the file's order at their exact instants. RECORDING_VERSION 6.\n- The daemon and the demo draw a view through one function (draw-view),\n  which derives every draw projection from what the draw was handed and\n  stands the open viewer in for the bar. The demo's own drawDsl call goes.\n- A recording that holds only lane frames is kept and replays; `record`\n  reports answers and lane frames.\n- The seam test's live side is the daemon's draw throughout, and a new case\n  replays a standing warning, a following lane, its toggles and the open\n  viewer, compared whole.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-650",
       "ref": "refs/pull/650/merge",
       "sha": "688c8c5d3787ff3f96eb199d9bde7f1408d45925",
@@ -149,42 +185,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T13:30:29-07:00",
           "message": "feat(disk): files and their watch events go through one filesystem port, first used by the watcher registry and the binary watch (candybar-testing-ihvy.y10) (#637)\n\n* feat(disk): files and their watch events go through one filesystem port, first used by the watcher registry and the binary watch (candybar-testing-ihvy.y10)\n\nA Filesystem port (src/disk/) with one adapter over fs, an in-memory fake whose writes emit the events a watch would on the clock, and one contract both pass. The watcher registry, its delivery owner, plugin storage, folder identity, the link walk and the binary watch read the disk through it; IdentityRead and BundleStat are gone. A lint rule bans fs outside the adapter, with an allowlist of the files still to move.\n\n* fix(disk): the fake moves, removes, writes through links and resolves `..` as the kernel does; repo-configs is made on the tree that watches it; the real disk is owned (candybar-testing-ihvy.y10)\n\n* fix(disk): the fake walks a new entry's parent, makes a `..` folder, refuses a move into itself and forgets a failed watch; path derivation takes a Filesystem (candybar-testing-ihvy.y10)\n\n* docs(claude): cost is judged by reading what the code does, never by loading the machine (candybar-testing-ihvy.y10)\n\n* chore(lint): the link id allocator still reads the disk directly (candybar-testing-ihvy.y10)"
-        }
-      ]
-    },
-    {
-      "version": "pr-649",
-      "ref": "refs/pull/649/merge",
-      "sha": "033bb5094ddc0cfefaa02547c5d0ab56de5f38ed",
-      "timestamp": "2026-11-06T20:20:58.777Z",
-      "commits": [
-        {
-          "sha": "033bb5094ddc0cfefaa02547c5d0ab56de5f38ed",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T20:20:01Z",
-          "message": "Merge 6f7e6ee283a590cd8f0d7e282ba65c50c00dc51f into e66660224cc8931a92a0d6bb87bbb0e2368f33a0\n"
-        },
-        {
-          "sha": "6f7e6ee283a590cd8f0d7e282ba65c50c00dc51f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:14:09-07:00",
-          "message": "fix(draw): a frame's lanes are noted before its walk, so a frame that throws still says which lanes it drew for (candybar-gather-renderer-76bb.6pj.0se)\n"
-        },
-        {
-          "sha": "c7b0061a5bc69e3e6e5e05979af7ef6862e80686",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:04:46-07:00",
-          "message": "refactor(draw): a view's draw returns the lane switches it drew under; two comments name lane frames (candybar-gather-renderer-76bb.6pj.0se)\n"
-        },
-        {
-          "sha": "3eac9b00174625215fc6865d4544ddcd141057f2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:51:37-07:00",
-          "message": "fix(facts): a replay draws the lane feeds and diagnostics the live draw was handed, and the frames a lane drew (candybar-gather-renderer-76bb.6pj.0se)\n\nA replay drew every frame with every lane idle, no open viewer, and only\nthe request answers, so a recording of a session with a lane following or\nthe warnings viewer open replayed a bar the user never saw.\n\n- A draw line is one draw of the view, an answer or a lane's frame: it\n  carries the instant it was drawn at and what it was handed (who it drew\n  for, each lane's feed, the diagnostics list). A lane's frames write the\n  view's frame memory and the session's effect memory, so the recorder\n  notes each one, to every recording of the session, and the replay draws\n  them in the file's order at their exact instants. RECORDING_VERSION 6.\n- The daemon and the demo draw a view through one function (draw-view),\n  which derives every draw projection from what the draw was handed and\n  stands the open viewer in for the bar. The demo's own drawDsl call goes.\n- A recording that holds only lane frames is kept and replays; `record`\n  reports answers and lane frames.\n- The seam test's live side is the daemon's draw throughout, and a new case\n  replays a standing warning, a following lane, its toggles and the open\n  viewer, compared whole.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
