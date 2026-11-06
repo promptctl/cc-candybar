@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-653",
+      "ref": "refs/pull/653/merge",
+      "sha": "349755dcb0fa01e01a3d775c04d2b87a7a361960",
+      "timestamp": "2026-11-06T21:08:43.437Z",
+      "commits": [
+        {
+          "sha": "349755dcb0fa01e01a3d775c04d2b87a7a361960",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T14:07:50-07:00",
+          "message": "Merge 33cc6dcb5d346f2d6b68208e577b7d2904f807f5 into 242a73c2288bc60ae5b871e410be3d5c45b88c48\n"
+        },
+        {
+          "sha": "33cc6dcb5d346f2d6b68208e577b7d2904f807f5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T14:07:41-07:00",
+          "message": "fix(test): the launch-group abort case reaches its window by what it observes, not a sleep (brandon-menus-sjhy.irc)\n\nThe case means one state: the child ended, its group is gone, and the launch\nhas not yet sampled the group. A 1300 ms sleep aimed at it, so a loaded\nmachine saw the launch's own sample land first and read ok:true.\n\nThe case now launches on a held clock, so the launch samples the group only\nwhen the case advances it. It waits, by condition, for the child's pidfile,\nfor the group's end, and for the launch to have seen the exit, then aborts\nand advances. The holder outside the group, which keeps the child's close\nfrom concluding first, lives until the case removes its directory, not for\n3 s of real time.\n\nThe launcher's owner moves into launcherOn(clock), shared by the beforeEach\nand this case.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-652",
       "ref": "refs/pull/652/merge",
       "sha": "ea1a9990319b17478ad1de92a0232e895c607df4",
