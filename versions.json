@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-630",
+      "ref": "refs/pull/630/merge",
+      "sha": "7a0ca0c1bf43fb70ce6e899d29e54006b6537bac",
+      "timestamp": "2026-11-06T07:49:36.018Z",
+      "commits": [
+        {
+          "sha": "7a0ca0c1bf43fb70ce6e899d29e54006b6537bac",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T00:48:28-07:00",
+          "message": "Merge 8cd44144254d99b7b5dfac3b3c011ecabf26e4b8 into fb1f9e3561dce957792b8bb02c28e81aaab80b29\n"
+        },
+        {
+          "sha": "8cd44144254d99b7b5dfac3b3c011ecabf26e4b8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T00:40:05-07:00",
+          "message": "fix(ci): a cancelled tier counts as not run for the trailing guards, and the ratchet comment says when it reports (candybar-testing-0x6u.dsu)\n"
+        },
+        {
+          "sha": "669d83cae1159913e45b3dc896924c873e12f37b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T00:37:43-07:00",
+          "message": "Revert \"probe: deliberate type error, to be reverted\"\n\nThis reverts commit 93774255ae4695c6c5dd6dea250398ff8841cbf9.\n"
+        },
+        {
+          "sha": "fc71f05c778d4d764287501038610c71904b4843",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T00:35:09-07:00",
+          "message": "probe: deliberate type error, to be reverted\n"
+        },
+        {
+          "sha": "27398d72c0211db1316519084e0f26745e3b90fc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T00:34:04-07:00",
+          "message": "fix(ci): a failed early step shows its own red step, not the three that restate it (candybar-testing-0x6u.dsu)\n\nThe ratchet, layer report and records upload run under always(), so a lint,\ntypecheck or worker-tier failure left them to throw 'no records'. Each now\nalso waits for the tiers whose records it reads.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-629",
       "ref": "refs/pull/629/merge",
       "sha": "8d8d41f9305d82fea1e0f089525da38eca966a78",
@@ -34,49 +77,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T00:10:49-07:00",
           "message": "feat(facts): record writes a session's stream out of the daemon, the demo replays the file frame by frame, and another facts version is refused (candybar-gather-renderer-76bb.6pj.qg5)\n\nA recording is a header, then documents and requests with their instants.\nThe session recorder follows the render cache's current view (one writer of\nthe cache's view map fires the observer), request lines are noted where the\nrequest path settles a view, and the file is created new and closed after\nN seconds or at daemon close. The wire verb is a held request the connection\nstarts only while its client waits. The demo splits into load and play, one\nview-and-print path, with --recording choosing the recording arm on a held\nclock (moved to src/). cc-candybar record exits 1 when no request arrived.\n\nTests run on the render-cache rig rather than an in-worker daemon, because\nthe boot ratchet only falls.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-630",
-      "ref": "refs/pull/630/merge",
-      "sha": "f11de859077a4747322d390d6f6250d398a1d1bb",
-      "timestamp": "2026-11-06T07:41:31.899Z",
-      "commits": [
-        {
-          "sha": "f11de859077a4747322d390d6f6250d398a1d1bb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T07:40:44Z",
-          "message": "Merge 82176da1ee157671698e6d686842ccdafa970124 into fb1f9e3561dce957792b8bb02c28e81aaab80b29\n"
-        },
-        {
-          "sha": "82176da1ee157671698e6d686842ccdafa970124",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T00:40:05-07:00",
-          "message": "fix(ci): a cancelled tier counts as not run for the trailing guards, and the ratchet comment says when it reports (candybar-testing-0x6u.dsu)\n"
-        },
-        {
-          "sha": "ce13d656547e794bc8c7c7178d8756f84abb410a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T00:37:43-07:00",
-          "message": "Revert \"probe: deliberate type error, to be reverted\"\n\nThis reverts commit 93774255ae4695c6c5dd6dea250398ff8841cbf9.\n"
-        },
-        {
-          "sha": "93774255ae4695c6c5dd6dea250398ff8841cbf9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T00:35:09-07:00",
-          "message": "probe: deliberate type error, to be reverted\n"
-        },
-        {
-          "sha": "454f7a7e656c37e2031270a4b5ab9955020a0989",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T00:34:04-07:00",
-          "message": "fix(ci): a failed early step shows its own red step, not the three that restate it (candybar-testing-0x6u.dsu)\n\nThe ratchet, layer report and records upload run under always(), so a lint,\ntypecheck or worker-tier failure left them to throw 'no records'. Each now\nalso waits for the tiers whose records it reads.\n"
         }
       ]
     },
