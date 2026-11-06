@@ -1,3 +1,9 @@
+## [1.197.0](https://github.com/promptctl/cc-candybar/compare/v1.196.1...v1.197.0) (2026-11-06)
+
+### Features
+
+* **apply:** a request takes its turn; its writes are one batch in the request arm, and the answered mark is an event (candybar-gather-renderer-76bb.1dh.1ql) ([#627](https://github.com/promptctl/cc-candybar/issues/627)) ([aaaac50](https://github.com/promptctl/cc-candybar/commit/aaaac5005ccf33de93f39158f1320619bed67657))
+
 ## [1.196.1](https://github.com/promptctl/cc-candybar/compare/v1.196.0...v1.196.1) (2026-11-06)
 
 ### Bug Fixes
