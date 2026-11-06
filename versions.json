@@ -2,6 +2,56 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-647",
+      "ref": "refs/pull/647/merge",
+      "sha": "51fe8d8c1ea094e8e8683f689e9ce8f6ce07ea68",
+      "timestamp": "2026-11-06T20:14:04.078Z",
+      "commits": [
+        {
+          "sha": "51fe8d8c1ea094e8e8683f689e9ce8f6ce07ea68",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T20:13:15Z",
+          "message": "Merge 423bfa11599308f888ef7029c95f1a052307ae0e into e66660224cc8931a92a0d6bb87bbb0e2368f33a0\n"
+        },
+        {
+          "sha": "423bfa11599308f888ef7029c95f1a052307ae0e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:13:11-07:00",
+          "message": "Merge branch 'main' into candybar-gather-renderer-76bb.x07"
+        },
+        {
+          "sha": "563e7104032a3375e735abda874e853aed95eec6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:01:23-07:00",
+          "message": "Merge branch 'main' into candybar-gather-renderer-76bb.x07"
+        },
+        {
+          "sha": "265c81f91b6376b3efad2072fdec86e32db0f376",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T12:54:05-07:00",
+          "message": "Merge branch 'main' into candybar-gather-renderer-76bb.x07"
+        },
+        {
+          "sha": "98ce2f24cad76fe5243f6d6fe3d516f4fbd45436",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T12:47:52-07:00",
+          "message": "fix(tmux): the restore guard's comment and the fake's guard check say one condition (candybar-gather-renderer-76bb.x07)\n"
+        },
+        {
+          "sha": "680c000e169cdb6506d3cddc021e55ae1184b1a4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T12:42:29-07:00",
+          "message": "fix(tmux): the restore guard reads on tmux before 3.5, which has no #{!:} (candybar-gather-renderer-76bb.x07)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "e66660224cc8931a92a0d6bb87bbb0e2368f33a0",
@@ -49,49 +99,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T12:51:37-07:00",
           "message": "fix(facts): a replay draws the lane feeds and diagnostics the live draw was handed, and the frames a lane drew (candybar-gather-renderer-76bb.6pj.0se)\n\nA replay drew every frame with every lane idle, no open viewer, and only\nthe request answers, so a recording of a session with a lane following or\nthe warnings viewer open replayed a bar the user never saw.\n\n- A draw line is one draw of the view, an answer or a lane's frame: it\n  carries the instant it was drawn at and what it was handed (who it drew\n  for, each lane's feed, the diagnostics list). A lane's frames write the\n  view's frame memory and the session's effect memory, so the recorder\n  notes each one, to every recording of the session, and the replay draws\n  them in the file's order at their exact instants. RECORDING_VERSION 6.\n- The daemon and the demo draw a view through one function (draw-view),\n  which derives every draw projection from what the draw was handed and\n  stands the open viewer in for the bar. The demo's own drawDsl call goes.\n- A recording that holds only lane frames is kept and replays; `record`\n  reports answers and lane frames.\n- The seam test's live side is the daemon's draw throughout, and a new case\n  replays a standing warning, a following lane, its toggles and the open\n  viewer, compared whole.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-647",
-      "ref": "refs/pull/647/merge",
-      "sha": "2bda02f51ee1004375a75ddf4daaffee6148f6d2",
-      "timestamp": "2026-11-06T20:02:28.434Z",
-      "commits": [
-        {
-          "sha": "2bda02f51ee1004375a75ddf4daaffee6148f6d2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T20:01:27Z",
-          "message": "Merge 563e7104032a3375e735abda874e853aed95eec6 into 1d331bc7612571c272bd1699765d216731683eca\n"
-        },
-        {
-          "sha": "563e7104032a3375e735abda874e853aed95eec6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:01:23-07:00",
-          "message": "Merge branch 'main' into candybar-gather-renderer-76bb.x07"
-        },
-        {
-          "sha": "265c81f91b6376b3efad2072fdec86e32db0f376",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:54:05-07:00",
-          "message": "Merge branch 'main' into candybar-gather-renderer-76bb.x07"
-        },
-        {
-          "sha": "98ce2f24cad76fe5243f6d6fe3d516f4fbd45436",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:47:52-07:00",
-          "message": "fix(tmux): the restore guard's comment and the fake's guard check say one condition (candybar-gather-renderer-76bb.x07)\n"
-        },
-        {
-          "sha": "680c000e169cdb6506d3cddc021e55ae1184b1a4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:42:29-07:00",
-          "message": "fix(tmux): the restore guard reads on tmux before 3.5, which has no #{!:} (candybar-gather-renderer-76bb.x07)\n"
         }
       ]
     },
