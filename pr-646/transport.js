@@ -65072,6 +65072,7 @@ var SessionState = class {
   // verb body validates that pairs is non-empty before calling, so
   // this is the public-API safety net rather than the hot path.
   setBatch(sessionId2, pairs2) {
+    this.held(sessionId2);
     if (pairs2.length === 0) return;
     this.commit(sessionId2, (session) => {
       if (pairs2.some(({ key, value }) => session.values.get(key) !== value))
@@ -65080,6 +65081,7 @@ var SessionState = class {
     });
   }
   clear(sessionId2, key) {
+    this.held(sessionId2);
     this.commit(sessionId2, (session) => {
       if (session.values.delete(key)) session.revision = ++this.head;
     });
@@ -65092,6 +65094,7 @@ var SessionState = class {
   // raised to it, so no later write mints a revision the store has held. A
   // session already at the revision holds its values: nothing moves.
   restore(sessionId2, values2, revision) {
+    this.held(sessionId2);
     if ((this.sessions.get(sessionId2)?.revision ?? 0) === revision) return;
     this.commit(sessionId2, (session) => {
       session.values.clear();
@@ -65104,14 +65107,12 @@ var SessionState = class {
   }
   // [LAW:single-enforcer] Every write lands here, in one action: the change,
   // the session's place, then the disk mirror and one notification, so
-  // observers never see a half-applied write. A write while no turn is held
-  // is refused before anything moves (`held`). An emptied session is a
+  // observers never see a half-applied write. An emptied session is a
   // non-state, dropped so it neither occupies a cap slot nor persists as a
   // `{ "sid": {} }` husk [LAW:one-source-of-truth]; a surviving one is
   // promoted, since every interaction is a recency signal, uniform with get()
   // [LAW:one-type-per-behavior].
   commit(sessionId2, write) {
-    this.held(sessionId2);
     runInAction(() => {
       const session = this.sessions.get(sessionId2) ?? {
         values: /* @__PURE__ */ new Map(),
@@ -65128,7 +65129,9 @@ var SessionState = class {
     });
   }
   // [LAW:single-enforcer][LAW:no-silent-failure] The one check that a write
-  // is a turn's: every write passes `commit`, which asks here.
+  // is a turn's: every public write asks here first, before it decides
+  // whether anything moves, so a write out of its turn is refused whatever it
+  // would have written.
   held(sessionId2) {
     if (this.turns.inTurn() === null) {
       throw new Error(
@@ -72174,7 +72177,8 @@ var Runs = class {
     );
     if (outcome === "timeout") this.timedOut++;
     if (result.ok) return PERFORMED;
-    if (outcome !== "timeout" && outcome !== "aborted") this.failed++;
+    if (outcome === "aborted") throw new DaemonClosing("run");
+    if (outcome !== "timeout") this.failed++;
     return failed2(`run ${run3.action}: ${failureText(result)}`);
   }
 };
@@ -84618,9 +84622,9 @@ function restoreBinding(user) {
   return [
     "if-shell",
     "-F",
-    `#{!:${NAMED}}`,
-    `${put} ; display-message -p ${RESTORED}`,
-    `display-message -p ${HELD}`
+    NAMED,
+    `display-message -p ${HELD}`,
+    `${put} ; display-message -p ${RESTORED}`
   ];
 }
 
@@ -85736,6 +85740,7 @@ var LaneSetups = class {
   deps;
   // Each session's owed lanes, least recently owed first.
   owed = /* @__PURE__ */ new Map();
+  closed = false;
   // A click of `sessionId` moved its switches from `before` to `after`: the
   // setups it settles. `session` is the session as its latest request
   // reported it, or null when this daemon holds none yet, which owes them.
@@ -85793,6 +85798,7 @@ var LaneSetups = class {
     on: on2,
     by
   }) {
+    if (this.closed) throw new DaemonClosing("lane setup");
     const where = `by=${by} (session=${session.sessionId})`;
     const ended = (error) => {
       const text4 = `lane: ${lane} ${on2 ? "on" : "off"}: ${error instanceof Error ? error.message : String(error)}`;
@@ -85818,6 +85824,9 @@ var LaneSetups = class {
       this.deps.log("info", `lane: ${lane} ${finished} ${where}`);
       return { kind: "ok", said: finished };
     }, ended);
+  }
+  close() {
+    this.closed = true;
   }
 };
 function settled3(session, owed, now2, byOf, log) {
@@ -86570,6 +86579,9 @@ function createDaemon(inputs) {
         // is in flight is terminated, whichever owner's work it was, and the
         // launcher's lifeline goes.
         ["launches abort", () => closing.abort(new Error("the daemon closed"))],
+        // A lane setup still queued behind the session's earlier effects is
+        // refused, as a queued run is (`runs close`).
+        ["laneSetups close", () => laneSetups.close()],
         ["frameFeeds close", () => frameFeeds.close()],
         ["linkIds close", () => linkIds.close()],
         ["menuIdle dispose", () => menuIdle.dispose()],
