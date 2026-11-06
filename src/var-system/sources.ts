@@ -53,8 +53,8 @@ import {
   type RunRefresh,
   type SourceIdentity,
   type SourceLane,
+  type SourceLanes,
   type SourceRead,
-  type SourceRuns,
 } from "./source-runs.js";
 
 // What a registry reads of the session store: a `state` variable's value, and
@@ -349,14 +349,15 @@ export class SourceRegistry {
   // Collects all cleanup callbacks (MobX reaction disposers) so dispose()
   // tears everything down in one call.
   private readonly cleanups: Array<() => void> = [];
-  // [LAW:single-enforcer] What this registry holds of the daemon's source
-  // runs (source-runs.ts): one hold per entry however many of its sources
-  // read it, declared again whenever any source's identity moves, so the
-  // entry a moved key names is held before the one it leaves is released. A
-  // view's payload holds the daemon's built-in entries through a Holds of
-  // its own (src/daemon/cache/render.ts): the two hold disjoint entries with
-  // the one lifetime, and merging them would make a view's declaration of
-  // its lanes re-declare its sources, and the reverse.
+  // [LAW:single-enforcer] What this registry holds through its port's
+  // `declare` (source-runs.ts, SourceLanes): one hold per identity however
+  // many of its sources read it, declared again whenever any source's
+  // identity moves, so the identity a moved key names is held before the one
+  // it leaves is released. Over a run owner the holds are its entries; over a
+  // session's facts arm they are this registry's declarations, and the arm
+  // holds the runs. Either way they are disjoint from the holds a view's
+  // follow takes of the built-ins, and merging them would make a view's
+  // declaration of its lanes re-declare its sources, and the reverse.
   private readonly holds = new Holds();
   // Each source's identity as its policy last named it. A policy over the
   // source's own values names none until they answer.
@@ -421,9 +422,10 @@ export class SourceRegistry {
   // share one MobX atom and one disk-persistence layer with the click verbs.
   // Omitted in tests that don't exercise state vars.
   constructor(
-    // [LAW:single-enforcer] The daemon's one owner of every declared source's
-    // runs, which this registry's `shell` and `file` sources hold entries of.
-    private readonly runs: SourceRuns,
+    // [LAW:locality-or-seam] Where this registry's `shell` and `file` sources
+    // get their lanes: a run owner of its own, or a session's facts arm, whose
+    // lanes read the session's document (source-runs.ts, SourceLanes).
+    private readonly runs: SourceLanes,
     private readonly store: VariableStore,
     private readonly defaultEmptyValue: VarValue = "",
     sessionState?: StateReads,
@@ -441,9 +443,13 @@ export class SourceRegistry {
   // reads is this home's one node, and its failure this home's one record. It
   // shares the daemon's session state, and is disposed on its
   // own: a session leaving the directory disposes nothing of it.
-  view(): SourceRegistry {
+  //
+  // Its `shell` and `file` sources get their lanes from `runs`: the facts arm
+  // its session follows, so what they read is what the session's document
+  // carries.
+  view(runs: SourceLanes): SourceRegistry {
     return new SourceRegistry(
-      this.runs,
+      runs,
       new VariableStore(this.store.clock, this.store),
       this.defaultEmptyValue,
       this.sessionState,
@@ -611,18 +617,24 @@ export class SourceRegistry {
   // every source's current identity, taken in one body so the entry a moved
   // identity names is held before the entry it leaves is released (Holds).
   // A source whose entry did not move keeps its lane, so its publish reaction
-  // is untouched; the lanes are set outside the body, where a publish they
-  // start cannot nest a declaration.
+  // is untouched; the lanes are set after the body, and the action holds the
+  // publishes they start to its end, so none nests a declaration.
+  //
+  // [LAW:no-ambient-temporal-coupling] The declaration and the lane swap are
+  // one action: a lane may answer from what its port holds declared (a facts
+  // arm reads a digest no longer declared as a failure), so no reaction may
+  // run between the old identity's release and the swap to the new lane, and
+  // the old value stands until the new run lands, whoever calls this.
   private hold(name: string, identity: SourceIdentity): void {
-    this.identities.set(name, identity);
-    const { result: taken } = this.holds.declare(() =>
-      [...this.identities].map(([n, id]) => {
-        const lane = this.runs.declare(this.holds, id);
-        const prior = this.lanes.get(n);
-        return [n, prior?.digest === lane.digest ? prior : lane] as const;
-      }),
-    );
     runInAction(() => {
+      this.identities.set(name, identity);
+      const { result: taken } = this.holds.declare(() =>
+        [...this.identities].map(([n, id]) => {
+          const lane = this.runs.declare(this.holds, id);
+          const prior = this.lanes.get(n);
+          return [n, prior?.digest === lane.digest ? prior : lane] as const;
+        }),
+      );
       for (const [n, lane] of taken) this.lanes.set(n, lane);
     });
   }

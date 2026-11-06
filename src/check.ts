@@ -312,6 +312,9 @@ function checkReadings(
     // [LAW:one-source-of-truth] One day's sums, which the draw projects to its
     // own day (`todayOf`) as the daemon's draw does.
     today: ok<TodayFacts>({ sums: oneDay(at, 12.5, 3_400_000), own: {} }),
+    // check's registry runs its own sources (`prepareConfig`), so its payload's
+    // document carries none.
+    runs: new Map(),
     faults: [],
   };
 }

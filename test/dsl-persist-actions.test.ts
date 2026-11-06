@@ -872,7 +872,6 @@ function makeCache(): {
       clock: systemTimekeeper,
       stateDir: stateDir(durable.home),
       locations: locations(durable.host, durable.home),
-      runs: new SourceRuns({ launcher: unscriptedLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       links: TEST_LINKS,
       gates: bareGates(),

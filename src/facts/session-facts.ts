@@ -24,9 +24,21 @@ import type { Fact } from "./fact";
 // payload a template reads is composed from these, the hook, the hints and the
 // renderer's own state.
 
-// What the declared `shell`, `file` and plugin sources read, by their ids.
+// What the declared plugin sources read, by their ids.
 export type SourceId = string;
 export type SourceValue = JsonValue;
+
+// [LAW:one-source-of-truth] A `shell` or `file` source's run, keyed by its
+// identity's digest (src/var-system/source-runs.ts): what it read, and why
+// its watch may be missing changes to its path, or `null` when it hears
+// every place the path can change or watches nothing. The fault crosses with
+// the reading because both are the run's, and the renderer draws the fault as
+// the variable's standing refresh warning.
+export type SourceDigest = string;
+export interface RunFact {
+  readonly reading: Fact<SourceValue>;
+  readonly fault: string | null;
+}
 
 // The tmux session the pane belongs to.
 export interface TmuxFacts {
@@ -66,7 +78,7 @@ export interface BuiltinFacts {
 
 // The shape of a facts document on the wire; a document of another version is
 // not this one.
-export const FACTS_VERSION = 1;
+export const FACTS_VERSION = 2;
 
 export interface SessionFacts {
   readonly v: number;
@@ -74,6 +86,9 @@ export interface SessionFacts {
   readonly seq: number;
   readonly builtins: BuiltinFacts;
   readonly sources: Readonly<Record<SourceId, Fact<SourceValue>>>;
+  // A run is read by a variable's node, never by a payload path, so it is a
+  // field apart from the plugin sources the payload projects.
+  readonly runs: Readonly<Record<SourceDigest, RunFact>>;
   readonly update: Fact<UpdateNotice>;
   readonly diagnostics: readonly FactsDiagnostic[];
 }

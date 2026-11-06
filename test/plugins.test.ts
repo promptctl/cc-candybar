@@ -1,4 +1,4 @@
-import { FACTS_NOTHING } from "./helpers/facts";
+import { FACTS_NOTHING, factsRunning } from "./helpers/facts";
 // [LAW:behavior-not-structure] A plugin, end to end, as the two programs that
 // meet it see it: `cc-candybar check` (the verdict an authoring agent reads)
 // and the loaded config's live variable store (what the daemon renders from).
@@ -591,7 +591,6 @@ test("the daemon's load records the plugins it merged and dropped", () => {
     clock: systemTimekeeper,
     stateDir: stateDir(homeOf(host)),
     locations: locations(host, homeOf(host)),
-    runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
     storage: NO_PLUGIN_STORAGE,
     links: TEST_LINKS,
     gates: bareGates(),
@@ -652,7 +651,6 @@ describe("a plugin's own variables", () => {
       clock: systemTimekeeper,
       stateDir: stateDir(homeOf(host)),
       locations: locations(host, homeOf(host)),
-      runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       links: TEST_LINKS,
       gates: bareGates(),
@@ -701,7 +699,6 @@ describe("a plugin's own variables", () => {
       clock: systemTimekeeper,
       stateDir: stateDir(homeOf(host)),
       locations: locations(host, homeOf(host)),
-      runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       links: TEST_LINKS,
       gates: bareGates(),
@@ -760,7 +757,6 @@ describe("a plugin's own variables", () => {
       clock: systemTimekeeper,
       stateDir: stateDir(homeOf(host)),
       locations: locations(host, homeOf(host)),
-      runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       links: TEST_LINKS,
       gates: bareGates(),
@@ -780,7 +776,6 @@ describe("a plugin's own variables", () => {
       clock: systemTimekeeper,
       stateDir: stateDir(homeOf(host)),
       locations: locations(host, homeOf(host)),
-      runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       links: TEST_LINKS,
       gates: bareGates(),
@@ -933,7 +928,6 @@ describe("an installed plugin", () => {
         clock: systemTimekeeper,
         stateDir: stateDir(homeOf(host)),
         locations: locations(host, homeOf(host)),
-        runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         links: TEST_LINKS,
         gates: bareGates(),
@@ -988,19 +982,20 @@ describe("an installed plugin", () => {
       },
       logger: () => {},
     });
+    // Each view's file source runs through its follow, in this owner.
+    const runs = new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper });
     const cache = new RenderCache(
       {
         clock: systemTimekeeper,
         stateDir: stateDir(homeOf(host)),
         locations: locations(host, homeOf(host)),
-        runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         links: TEST_LINKS,
         gates: bareGates(),
         sessionState: new SessionState(),
         watchers,
         source: SOURCES_NOTHING,
-        facts: FACTS_NOTHING,
+        facts: factsRunning(runs),
       },
       { budgetBytes: () => renderCacheBudget(memoryLimitBytes({})) },
     );
@@ -1026,7 +1021,7 @@ describe("an installed plugin", () => {
           using held = cache.holdSession(main, cwd, p, viewFacts(cwd, `s${i}`));
           const s = held.state;
           expect(s).toBe(states[i]);
-          expect(await s.registry.settled(5000)).toEqual([]);
+          expect(await held.view.registry.settled(5000)).toEqual([]);
           return textOf(
             drawPayload(
               s.config,
@@ -1051,6 +1046,7 @@ describe("an installed plugin", () => {
       expect(drawn[2]).toContain("#main-1");
     } finally {
       cache.close();
+      runs.close();
       watchers.closeAll();
     }
   });
@@ -1076,7 +1072,6 @@ describe("an installed plugin", () => {
         clock: systemTimekeeper,
         stateDir: stateDir(homeOf(host)),
         locations: locations(host, homeOf(host)),
-        runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         links: TEST_LINKS,
         gates: bareGates(),
@@ -1621,7 +1616,6 @@ describe("an installed plugin", () => {
       clock: systemTimekeeper,
       stateDir: stateDir(homeOf(host)),
       locations: locations(host, homeOf(host)),
-      runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       links: TEST_LINKS,
       gates: bareGates(),
@@ -1660,7 +1654,6 @@ describe("an installed plugin", () => {
         clock: systemTimekeeper,
         stateDir: stateDir(homeOf(host)),
         locations: locations(host, homeOf(host)),
-        runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         links: TEST_LINKS,
         gates: bareGates(),
@@ -1766,7 +1759,6 @@ describe("an installed plugin", () => {
       clock: systemTimekeeper,
       stateDir: stateDir(homeOf(host)),
       locations: locations(host, homeOf(host)),
-      runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       links: TEST_LINKS,
       gates: bareGates(),
@@ -1848,7 +1840,6 @@ describe("an installed plugin", () => {
       clock: systemTimekeeper,
       stateDir: stateDir(homeOf(host)),
       locations: locations(host, homeOf(host)),
-      runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       links: TEST_LINKS,
       gates: bareGates(),
@@ -2011,7 +2002,6 @@ describe("a repo's plugin beside an installed one of its name", () => {
       clock: systemTimekeeper,
       stateDir: stateDir(homeOf(host)),
       locations: locations(host, homeOf(host)),
-      runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       links: TEST_LINKS,
       gates: bareGates(),

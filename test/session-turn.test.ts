@@ -244,6 +244,7 @@ describe("the all-pending document", () => {
       sources: new Map(),
     },
     today: waiting,
+    runs: new Map(),
     faults: [],
   };
 

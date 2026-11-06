@@ -19,11 +19,24 @@ import {
   type IObservableValue,
 } from "mobx";
 import type { Fact } from "../facts/fact";
-import type { FactsLine, Recording } from "../facts/recording";
-import type { UpdateNotice } from "../facts/session-facts";
+import type { FactsLine, Recording, ReplayLine } from "../facts/recording";
+import type {
+  SessionFacts,
+  SourceDigest,
+  UpdateNotice,
+} from "../facts/session-facts";
 import { Holds } from "../utils/holds";
 import { instantAt, type Instant } from "../utils/instant";
-import { failed, failedWith } from "../utils/outcome";
+import { failed, failedWith, pendingOf, type Reading } from "../utils/outcome";
+import {
+  digestOf,
+  whereOf,
+  type SourceIdentity,
+  type SourceLane,
+  type SourceLanes,
+  type SourceRuns,
+} from "../var-system/source-runs";
+import type { JsonValue } from "../var-system/types";
 import { assembleFacts } from "./facts-assembly";
 import type { PayloadProviders } from "./payload-providers";
 import {
@@ -36,7 +49,9 @@ import {
   type PayloadInputs,
   type Readings,
   type Refreshed,
+  type RunReading,
   type ViewFacts,
+  unstamped,
 } from "./render-payload";
 import type { SessionId } from "./session-id";
 
@@ -81,8 +96,15 @@ export interface Followed extends FollowedFacts {
   // instant, so what is sampled at it (tok/s) and what is drawn at it read one
   // clock reading.
   settle(at: Instant): Settling;
+  // [LAW:locality-or-seam] Where the view's `shell` and `file` sources get
+  // their lanes (src/var-system/source-runs.ts, SourceLanes): each lane reads
+  // the follow's own document, so a view draws a run only through the facts
+  // seam. A declaration's hold is the caller's, and ends the arm's run of it
+  // when released; the run itself is the arm's.
+  readonly runs: SourceLanes;
   // The follow's holds, timers and reactions go. A view disposed without it
-  // leaks every hold its declaration took.
+  // leaks every hold its declaration took. A registry declaring through
+  // `runs` releases its declarations first (src/daemon/cache/render.ts).
   dispose(): void;
 }
 
@@ -100,6 +122,29 @@ export interface InProcessFactsDeps {
   // The daemon's one update fact, stamped by its watch
   // (src/daemon/update-notice.ts): every session's document carries it.
   readonly update: () => Fact<UpdateNotice>;
+  // [LAW:single-enforcer] The one owner of every `shell` and `file` source's
+  // runs: a run is one per identity, however many follows declare it.
+  readonly runs: SourceRuns;
+}
+
+// [LAW:no-silent-failure] A run's lane as a document answers it. A digest
+// the document lacks is answered by `missing`, the arm's own word on whether
+// the run is coming, never by a reaction's timing.
+function runLaneOver(
+  identity: SourceIdentity,
+  document: () => SessionFacts,
+  missing: (digest: SourceDigest) => Reading<never>,
+): SourceLane {
+  const digest = digestOf(identity);
+  const run = () => document().runs[digest];
+  return {
+    digest,
+    current: (): Reading<JsonValue> => {
+      const fact = run();
+      return fact === undefined ? missing(digest) : unstamped(fact.reading);
+    },
+    fault: () => run()?.fault ?? null,
+  };
 }
 
 // What a follow holds of its declaration: the request and the lanes that
@@ -186,12 +231,40 @@ function stamped(
 export function inProcessFacts({
   providers,
   update,
+  runs,
 }: InProcessFactsDeps): Facts {
   const { clock, log } = providers;
   return {
     follow(facts, declaration) {
       const session = facts.sessionId;
       const holds = new Holds();
+      // [LAW:single-enforcer] What the follow runs for the view's `shell` and
+      // `file` sources: the identities the view declared through `runs`
+      // (below), each added by its declaration's hold and taken out by its
+      // release, and the lanes of their runs, held in a Holds of the
+      // follow's own and so ended by its dispose. Apart from `holds`, which
+      // a request's re-declaration of the built-ins reconciles.
+      const declaredRuns = observable.map<SourceDigest, SourceIdentity>(
+        undefined,
+        { deep: false },
+      );
+      const runHolds = new Holds();
+      const runLanes = observable.map<SourceDigest, SourceLane>(undefined, {
+        deep: false,
+      });
+      // [LAW:no-ambient-temporal-coupling] Re-declared synchronously, in the
+      // turn a declaration is taken or released, so the run a moved key
+      // names is held before the one it leaves is released: the caller's
+      // Holds takes the new declaration before it releases the old.
+      const declareRuns = (): void => {
+        const { result } = runHolds.declare(() =>
+          [...declaredRuns].map(
+            ([digest, identity]) =>
+              [digest, runs.declare(runHolds, identity)] as const,
+          ),
+        );
+        runInAction(() => runLanes.replace(result));
+      };
       const sid = JSON.stringify(session);
       // [LAW:no-silent-failure] A declaration that throws is logged here,
       // where it runs — a reaction's tracked expression that throws reaches
@@ -260,8 +333,22 @@ export function inProcessFacts({
           deps: { ...providers, lanes: () => declared.get().lanes },
         };
       });
-      // What the session's owners hold now, read once per turn.
-      const readings = computed(() => readingsOf(inputs.get()));
+      // What the session's owners and the view's runs hold now, read once per
+      // turn. A run's value is what its parser made of text, so JSON.
+      const readings = computed(
+        (): Readings => ({
+          ...readingsOf(inputs.get()),
+          runs: new Map(
+            [...runLanes].map(([digest, lane]): [SourceDigest, RunReading] => [
+              digest,
+              {
+                reading: lane.current() as Reading<JsonValue>,
+                fault: lane.fault(),
+              },
+            ]),
+          ),
+        }),
+      );
       // [LAW:one-source-of-truth] The reaction is installed before the first
       // stamp, so the derivations above are observed from the follow's first
       // read: a computed nobody observes is recomputed on every read, and the
@@ -323,6 +410,32 @@ export function inProcessFacts({
         throw e;
       }
       return {
+        runs: {
+          declare: (callerHolds, identity) => {
+            const digest = digestOf(identity);
+            callerHolds.take(`facts.run:${digest}`, () => {
+              runInAction(() => declaredRuns.set(digest, identity));
+              declareRuns();
+              return () => {
+                runInAction(() => declaredRuns.delete(digest));
+                declareRuns();
+              };
+            });
+            // Declared, and not stamped yet: the follow's reaction stamps it
+            // at the end of the turn this declaration runs in.
+            return runLaneOver(
+              identity,
+              () => box.get().line.facts,
+              (missing) =>
+                declaredRuns.has(missing)
+                  ? pendingOf("unread")
+                  : failed(
+                      `the run of ${whereOf(identity.read)} is not declared by this view`,
+                      "read",
+                    ),
+            );
+          },
+        },
         stamped: () => box.get().line,
         failure: () => box.get().failure,
         follow: (facts, declaration) => {
@@ -338,6 +451,7 @@ export function inProcessFacts({
         },
         dispose: () => {
           stop();
+          runHolds.close();
           holds.close();
         },
       };
@@ -375,11 +489,34 @@ export interface RecordingFacts extends Facts {
   reach(line: FactsLine): void;
 }
 
+// [LAW:no-silent-failure] A run the reached document lacks is coming only if
+// a later document holds it: the walk will reach that one. Any other is a
+// failure naming the run (a config edited since the recording, a source added,
+// a recording across a save replayed against the file from before it), never
+// a pending that will not land.
 export function recordingFacts({
   session: held,
   opening,
-}: Pick<Recording, "session" | "opening">): RecordingFacts {
+  lines,
+}: Pick<Recording, "session" | "opening"> & {
+  readonly lines: readonly ReplayLine[];
+}): RecordingFacts {
+  const ahead = digestsAhead(opening, lines);
   const reached = observable.box<FactsLine>(opening, { deep: false });
+  const runs: SourceLanes = {
+    declare: (_holds, identity) =>
+      runLaneOver(
+        identity,
+        () => reached.get().facts,
+        (digest) =>
+          ahead.get(reached.get())!.has(digest)
+            ? pendingOf("unread")
+            : failed(
+                `this recording holds no run of ${whereOf(identity.read)} from here on`,
+                "read",
+              ),
+      ),
+  };
   return {
     follow(facts) {
       if (facts.sessionId !== held) {
@@ -388,6 +525,7 @@ export function recordingFacts({
         );
       }
       return {
+        runs,
         stamped: () => reached.get(),
         failure: () => null,
         follow: () => {},
@@ -395,6 +533,30 @@ export function recordingFacts({
         dispose: () => {},
       };
     },
-    reach: (line) => runInAction(() => reached.set(line)),
+    reach: (line) => {
+      // [LAW:no-silent-failure] The walk reaches the recording's own lines.
+      if (!ahead.has(line)) {
+        throw new Error(
+          "the walk reached a document this recording does not hold",
+        );
+      }
+      runInAction(() => reached.set(line));
+    },
   };
+}
+
+// Each document of a recording, the opening one included, by the digests of
+// the runs some document after it holds.
+function digestsAhead(
+  opening: FactsLine,
+  lines: readonly ReplayLine[],
+): ReadonlyMap<FactsLine, ReadonlySet<SourceDigest>> {
+  const documents = [opening, ...lines.filter((line) => line.kind === "facts")];
+  const ahead = new Map<FactsLine, ReadonlySet<SourceDigest>>();
+  let later = new Set<SourceDigest>();
+  for (const document of documents.reverse()) {
+    ahead.set(document, later);
+    later = new Set([...later, ...Object.keys(document.facts.runs)]);
+  }
+  return ahead;
 }

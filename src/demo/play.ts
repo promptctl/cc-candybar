@@ -57,9 +57,8 @@ import type { HeldClock } from "../held-clock.js";
 import type { Timekeeper } from "../time.js";
 import { instantOf, msOf, type Instant } from "../utils/instant.js";
 import type { DaemonLogger } from "../utils/logger.js";
-import { SourceRuns } from "../var-system/source-runs.js";
 
-// A config loaded for the demo, with what owns its runs and picks.
+// A config loaded for the demo, with what owns its picks.
 export interface DemoState extends Disposable {
   readonly state: DslRenderState;
   readonly sessionState: SessionState;
@@ -91,9 +90,6 @@ export function loadDemo({
   cwd,
   warn,
 }: DemoLoad): DemoState {
-  // [LAW:single-enforcer] The demo's own owner of its sources' runs, closed
-  // with the registry that holds them.
-  const runs = new SourceRuns({ launcher: world.launcher, clock: world.clock });
   // The session's store, which each draw's state restores before it draws.
   const sessionState = new SessionState();
   const locs = locations(world.host, world.home);
@@ -116,7 +112,6 @@ export function loadDemo({
     },
     {
       clock: world.clock,
-      runs,
       locations: locs,
       sessionState,
       storage: UNOWNED_STORAGE,
@@ -126,14 +121,10 @@ export function loadDemo({
     },
   );
   if (loaded.warning !== null) warn(loaded.warning);
-  if (loaded.state === null) {
-    runs.close();
-    throw loaded.cause;
-  }
+  if (loaded.state === null) throw loaded.cause;
   const { state } = loaded;
   const dispose = (): void => {
     state.registry.dispose();
-    runs.close();
   };
   // [LAW:no-silent-failure] The daemon draws past a placement of an
   // undeclared segment; the demo, like `check`, refuses it with the loader's

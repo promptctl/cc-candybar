@@ -374,8 +374,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     clock,
   });
   // [LAW:single-enforcer] The daemon's one owner of every declared source's
-  // runs: every config's `shell` and `file` sources hold entries of it, so
-  // one identity is one program however many sessions, directories or
+  // runs, which the facts arm runs every view's `shell` and `file` sources
+  // in, so one identity is one program however many sessions, directories or
   // configs declare it.
   const sourceRuns = new SourceRuns({
     launcher,
@@ -588,7 +588,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       new RenderCache<SessionSource, CheckedRenderRequest>(
         {
           clock,
-          runs: sourceRuns,
           stateDir: paths.state,
           locations: locs,
           sessionState,
@@ -603,6 +602,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
           facts: inProcessFacts({
             providers: payloadProviders,
             update: () => updateFact.get(),
+            runs: sourceRuns,
           }),
           // [LAW:single-enforcer] What every session's view draws from: its payload
           // derived over its document, its picks and its histories' depths.

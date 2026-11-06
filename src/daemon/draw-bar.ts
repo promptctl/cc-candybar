@@ -43,6 +43,7 @@ import {
 import {
   renderOptionsOf,
   prFactOf,
+  runsFactOf,
   sourcesFactOf,
   refreshedFact,
   todayOf,
@@ -596,6 +597,7 @@ export function drawRender(
   };
   const metrics = isPending(payload.metrics) ? undefined : payload.metrics;
   noteFacts(facts, sourcesFactOf(document.sources));
+  noteFacts(facts, runsFactOf(document.runs));
   // [LAW:nothing-unseen] The document this frame drew from, by its seq, so a
   // frame in a bug report traces to it.
   noteFacts(facts, {

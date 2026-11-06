@@ -28,6 +28,7 @@ import {
   FACTS_VERSION,
   type BuiltinFacts,
   type FactsDiagnostic,
+  type RunFact,
   type SessionFacts,
   type SourceValue,
   type UpdateNotice,
@@ -156,6 +157,20 @@ function parseDiagnostic(json: unknown, where: string): FactsDiagnostic {
   return { lane: json.lane as RefreshLane, reason: json.reason };
 }
 
+function parseRun(json: unknown, where: string): RunFact {
+  if (!isPlainObject(json)) throw new FactParseError(where, "is not an object");
+  if (json.fault !== null && typeof json.fault !== "string") {
+    throw new FactParseError(
+      where,
+      "has a fault that is neither text nor null",
+    );
+  }
+  return {
+    reading: parseFact(json.reading, `${where} reading`) as Fact<SourceValue>,
+    fault: json.fault,
+  };
+}
+
 // [LAW:types-are-the-program] A document off a wire or a recording, or a
 // throw naming where it is wrong. Each fact crosses `parseFact`; what a fact's
 // value is (a usage record, a git read) is the owner's shape carried as JSON,
@@ -196,6 +211,15 @@ export function parseSessionFacts(json: unknown, where: string): SessionFacts {
       parseFact(fact, `${where} sources.${name}`) as Fact<SourceValue>,
     ]),
   );
+  if (!isPlainObject(json.runs)) {
+    throw new FactParseError(where, "has no `runs`");
+  }
+  const runs = Object.fromEntries(
+    Object.entries(json.runs).map(([digest, run]) => [
+      digest,
+      parseRun(run, `${where} runs.${digest}`),
+    ]),
+  );
   if (!Array.isArray(json.diagnostics)) {
     throw new FactParseError(where, "has no `diagnostics`");
   }
@@ -205,6 +229,7 @@ export function parseSessionFacts(json: unknown, where: string): SessionFacts {
     seq: json.seq,
     builtins,
     sources,
+    runs,
     update: parseFact(json.update, `${where} update`) as Fact<UpdateNotice>,
     diagnostics: json.diagnostics.map((d, i) =>
       parseDiagnostic(d, `${where} diagnostics[${i}]`),
