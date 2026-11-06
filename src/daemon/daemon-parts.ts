@@ -29,6 +29,7 @@ import type { DaemonLogger } from "../utils/logger";
 import type { Launcher } from "../proc/launch";
 import type { EffectSessions } from "../render/effect.js";
 import type { RenderedLine } from "../dsl/node-registry.js";
+import type { StoredRoot } from "./foundations/stored-path";
 
 // [LAW:one-source-of-truth] What one daemon holds, built once by `createDaemon`
 // (src/daemon/daemon.ts) and read by the request handling, which keeps none of
@@ -36,6 +37,9 @@ import type { RenderedLine } from "../dsl/node-registry.js";
 export interface DaemonParts {
   // The user's home: the default Claude Code directory is under it.
   readonly home: string;
+  // The directory a stored home path is relative to (paths.ts storedRoot): a
+  // requested config file in the home is spelled from it.
+  readonly storedRoot: StoredRoot;
   // The temporary directory a click's handoff writes under.
   readonly tmp: string;
   readonly clock: Timekeeper;

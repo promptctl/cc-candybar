@@ -204,7 +204,7 @@ export interface DaemonContext {
   readonly stateDir: string;
   // The directory a stored home path is relative to (paths.ts storedRoot):
   // what the session's recorded origin is read back against.
-  readonly storedRoot: string;
+  readonly storedRoot: StoredRoot;
   // Where the user's config and installed plugins live: a click's write
   // resolves its home under them.
   readonly locations: Locations;
@@ -373,6 +373,7 @@ import { BadVerbArgs, DaemonClosing, decodeWire } from "../verb-error";
 import {
   StoredPathRefused,
   resolveStoredPath,
+  type StoredRoot,
 } from "../foundations/stored-path";
 import {
   parseSessionId,
@@ -831,7 +832,7 @@ function recordedTarget(
 // back into a RenderOrigin; a wrong shape is a loud BadVerbArgs, never a
 // guessed path. A file is a StoredPath resolved against the home's root
 // (stored-path.ts), which reads an older build's bare string too.
-export function parseRenderOrigin(raw: string, root: string): RenderOrigin {
+export function parseRenderOrigin(raw: string, root: StoredRoot): RenderOrigin {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);

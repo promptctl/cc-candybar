@@ -17,6 +17,7 @@ import {
   VERB_TOOLBAR_TOGGLE,
 } from "../src/click/wire";
 import { apply } from "../src/daemon/apply";
+import { encodeRenderOrigin } from "../src/daemon/foundations/render-origin";
 import type { RequestAnswer } from "../src/daemon/draw-bar";
 import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
 import { JournalTurns } from "../src/daemon/journal-turns";
@@ -28,7 +29,7 @@ import { DaemonClosing } from "../src/daemon/verb-error";
 import type { VerbContext } from "../src/daemon/verbs";
 import type { DoctorEdge } from "../src/doctor/edge";
 import { instantOf } from "../src/utils/instant";
-import { applyClick, recordRender, testVerbContext } from "./helpers/click";
+import { applyClick, recordRender, TEST_STORED_ROOT, testVerbContext } from "./helpers/click";
 import {
   emptyStores,
   HEALTHY_INSTALL_EDGE,
@@ -65,11 +66,13 @@ async function drain(): Promise<void> {
 
 // A render request past the checkpoint, as the arm reads it: its session,
 // its hints and the config inputs it named.
+const REQUESTED = { projectDir: DIR, cwd: DIR, target: { source: "search" } } as const;
 const request = (termCols: number): CheckedRenderRequest =>
   ({
     sessionId: sessionIdOf(SID),
     hints: { termCols },
-    requested: { projectDir: DIR, cwd: DIR, target: { source: "search" } },
+    requested: REQUESTED,
+    originRecord: encodeRenderOrigin(REQUESTED, TEST_STORED_ROOT),
   }) as unknown as CheckedRenderRequest;
 
 const toggle = { verb: VERB_TOOLBAR_TOGGLE, args: [SID] } as const;

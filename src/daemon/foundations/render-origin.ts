@@ -1,5 +1,5 @@
 import type { RequestedOrigin } from "../../config-hint";
-import { storedPathOf } from "./stored-path";
+import { storedPathOf, type StoredRoot } from "./stored-path";
 
 // The record is flat and additive, because session state sits at one
 // unversioned path that builds of either age read: an older build finds the
@@ -11,7 +11,7 @@ import { storedPathOf } from "./stored-path";
 // writes one it reads.
 export function encodeRenderOrigin(
   { projectDir, cwd, target }: RequestedOrigin,
-  root: string,
+  root: StoredRoot,
 ): string {
   return JSON.stringify({
     projectDir,

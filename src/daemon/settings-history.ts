@@ -35,9 +35,11 @@ import { BadVerbArgs } from "./verb-error";
 import { writeAtomic } from "../utils/atomic-write.js";
 import {
   StoredPathRefused,
+  oneReading,
   resolveStoredPath,
   storedPathOf,
   type StoredPath,
+  type StoredRoot,
 } from "./foundations/stored-path";
 
 // [LAW:types-are-the-program] What a change touched and the two states it
@@ -740,7 +742,7 @@ function mapFiles<A, B>(
 // the home's tree undoes into the copy's config.
 export function fileHistoryStorage(
   file: string,
-  root: string,
+  root: StoredRoot,
   logger: DaemonLogger,
 ): HistoryStorage {
   return {
@@ -776,6 +778,7 @@ export function fileHistoryStorage(
         );
         return {};
       }
+      const asked = oneReading(root);
       let resolved: Array<[string, SessionHistory]>;
       try {
         resolved = Object.entries(parsed as HistoryState<unknown>).map(
@@ -783,7 +786,7 @@ export function fileHistoryStorage(
             sid,
             mapFiles(history, (stored, where) => {
               try {
-                return resolveStoredPath(root, stored);
+                return resolveStoredPath(asked, stored);
               } catch (e) {
                 if (!(e instanceof StoredPathRefused)) throw e;
                 throw new StoredPathRefused(
@@ -814,10 +817,11 @@ export function fileHistoryStorage(
       return state;
     },
     save: (state) => {
+      const asked = oneReading(root);
       const stored: HistoryState<StoredPath> = Object.fromEntries(
         Object.entries(state).map(([sid, history]) => [
           sid,
-          mapFiles(history, (f) => storedPathOf(root, f)),
+          mapFiles(history, (f) => storedPathOf(asked, f)),
         ]),
       );
       try {

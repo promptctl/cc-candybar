@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Host } from "../host.js";
+import type { StoredRoot } from "./foundations/stored-path";
+import { onDiskDirectory } from "../utils/on-disk-path";
 import {
   HOME_CACHE_DIR,
   HOME_ENV,
@@ -57,8 +59,14 @@ export function configDir(home: RendererHome): string {
 // (stored-path.ts): a named home's root, which holds its whole tree; main's
 // config directory, the one place a file its clicks write lies. Main's XDG
 // tree has no root to move with, and its state and cache hold no stored path.
-export function storedRoot(home: RendererHome): string {
-  return home.kind === "main" ? configDir(home) : home.root;
+export function storedRoot(home: RendererHome): StoredRoot {
+  return storedRootAt(home.kind === "main" ? configDir(home) : home.root);
+}
+
+// [LAW:effects-at-boundaries] The disk's spelling is bound here, where every
+// stored root is made; nothing reads it until a stored path is decided.
+export function storedRootAt(dir: string): StoredRoot {
+  return { dir, onDisk: onDiskDirectory };
 }
 
 // [LAW:one-source-of-truth] The socket IS the renderer's identity on the wire:
@@ -277,7 +285,7 @@ export interface DaemonPaths {
   readonly log: string;
   readonly sessionState: string;
   readonly settingsHistory: string;
-  readonly storedRoot: string;
+  readonly storedRoot: StoredRoot;
   readonly watchProbe: string;
   readonly spawnBackoff: string;
 }

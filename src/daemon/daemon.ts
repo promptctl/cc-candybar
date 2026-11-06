@@ -766,6 +766,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
 
   const parts: DaemonParts = {
     home: host.home,
+    storedRoot: paths.storedRoot,
     tmp: host.tmp,
     launcher,
     log,

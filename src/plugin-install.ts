@@ -17,7 +17,7 @@ import { DEFINITION_FILE, pluginDefinition } from "./config/loader/plugins.js";
 import { locations } from "./daemon/paths.js";
 import type { World } from "./host.js";
 import { failureText, type OneShotLauncher } from "./proc/launch.js";
-import { canonicalDirectory } from "./utils/watch-target.js";
+import { canonicalDirectory } from "./utils/on-disk-path.js";
 import { resolveUserPath } from "./utils/user-path.js";
 
 // [LAW:types-are-the-program] What a source argument names, decided once.
