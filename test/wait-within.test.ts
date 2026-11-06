@@ -62,34 +62,62 @@ test("a wait ends when its time does, and not before", async () => {
 // A timer due at once still takes a turn of the loop, and under a backlog that
 // turn is every pending request's read and setup: the one failed render of the
 // hundred-session gate lost 54 ms there with a budget already below zero.
+// What a wait with no time left has ended as by the loop's next phase, and
+// whether it armed a timer.
+async function beforeTheLoopTurns(
+  work: (signal: AbortSignal) => Promise<unknown>,
+  ms: number,
+): Promise<{ end: string; timers: number }> {
+  let timers = 0;
+  let end = "still waiting";
+  void waitWithin(work, ms, unexpected, (wait, fn) => {
+    timers++;
+    return systemTimekeeper.after(wait, fn);
+  }).then(
+    (e) => {
+      end = e;
+    },
+    (e: unknown) => {
+      end = `rejected: ${(e as Error).message}`;
+    },
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+  return { end, timers };
+}
+
 test.each([0, -5])(
-  "a wait with %d ms left ends in the same turn, no timer armed, with its work started and aborted",
+  "a wait with %d ms left arms no timer and ends before the loop turns, its work aborted",
   async (ms) => {
-    jest.useFakeTimers();
-    try {
-      let seen: AbortSignal | undefined;
-      let end: string | undefined;
-      void waitWithin(
-        (signal) => {
-          seen = signal;
-          return new Promise(() => {});
-        },
-        ms,
-        unexpected,
-        systemTimekeeper.after,
-      ).then((e) => {
-        end = e;
-      });
-      expect(jest.getTimerCount()).toBe(0);
-      // Microtasks only: nothing on the loop runs.
-      for (let i = 0; i < 8; i++) await Promise.resolve();
-      expect(end).toBe("deadline");
-      expect(seen?.aborted).toBe(true);
-    } finally {
-      jest.useRealTimers();
-    }
+    let seen: AbortSignal | undefined;
+    const ended = await beforeTheLoopTurns((signal) => {
+      seen = signal;
+      return new Promise(() => {});
+    }, ms);
+    expect(ended).toEqual({ end: "deadline", timers: 0 });
+    expect(seen?.aborted).toBe(true);
   },
 );
+
+test("a wait with no time left answers when its work settles without the loop", async () => {
+  const settled = async () => {
+    for (let i = 0; i < 50; i++) await null;
+  };
+  expect(await beforeTheLoopTurns(settled, 0)).toEqual({
+    end: "answered",
+    timers: 0,
+  });
+});
+
+test("a wait with no time left fails as its own when its work rejects without the loop", async () => {
+  const broken = async () => {
+    await null;
+    throw new Error("bug");
+  };
+  expect(await beforeTheLoopTurns(broken, 0)).toEqual({
+    end: "rejected: bug",
+    timers: 0,
+  });
+});
 
 test("a rejection inside the time is the wait's", async () => {
   await expect(

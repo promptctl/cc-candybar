@@ -657,46 +657,56 @@ async function clickMenu(s: Session, started: number): Promise<void> {
   await redrawn(s, answered);
 }
 
-// Each session's latest render asked since `since`, as the daemon's render
-// events say it: whether it was answered inside its wait. One that ran to its
-// deadline drew a value still pending.
-function latestRenders(since: number): ReadonlyMap<string, boolean> {
-  const latest = new Map<string, boolean>();
+// How each session's latest render logged since `since` ended, as the daemon's
+// render events say it: its wait's end (`answered` inside it, `deadline` drawn
+// with a value still pending), or for one that never reached its wait, its
+// outcome.
+function latestRenders(since: number): ReadonlyMap<string, string> {
+  const latest = new Map<string, string>();
   for (const line of logLines(logPath(home))) {
     if (Date.parse(line.slice(0, 24)) < since) continue;
     const sid = / render sid=(\S+) /.exec(line)?.[1];
-    if (sid !== undefined) latest.set(sid, line.includes(" ended=answered "));
+    if (sid === undefined) continue;
+    const end = / ended=(\S+)/.exec(line) ?? / outcome=(\S+)/.exec(line);
+    // [LAW:no-silent-failure] Every request event states its outcome.
+    if (end === null) throw new Error(`render event with no outcome: ${line}`);
+    latest.set(sid, end[1]!);
   }
   return latest;
 }
 
 // How a settle ended: how long it took, whether every session settled, and
-// at the deadline, how many never rendered and how many last drew at their
-// deadlines.
+// for the sessions that did not, how their latest render ended.
 interface Settle {
   readonly ms: number;
   readonly settled: boolean;
-  readonly unanswered: number;
-  readonly atDeadline: number;
+  readonly unsettled: Record<string, number>;
 }
 
 // [LAW:one-source-of-truth][LAW:single-enforcer] The one wait for the daemon
-// to settle: until every session's latest render asked since `since` was
+// to settle: until every session's latest render logged since `since` was
 // answered inside its wait, read from the daemon's log, or the settle
 // deadline. Both points the steady phase must not inherit a backlog from
-// (the sessions' start, the collection) wait here.
+// (the sessions' start, the collection's end) wait here.
 async function settledSince(since: number): Promise<Settle> {
   let latest = latestRenders(since);
-  const settled = () => sessions.every((s) => latest.get(s.id) === true);
+  const settled = () => sessions.every((s) => latest.get(s.id) === "answered");
   while (!settled() && Date.now() - since < SETTLE_DEADLINE_MS) {
+    // [LAW:no-silent-failure] A dead daemon never settles; it is named, not
+    // waited out.
+    if (daemonExit !== null)
+      throw new Error(`daemon ${daemonExit} while settling`);
     await sleep(SETTLE_POLL_MS);
     latest = latestRenders(since);
   }
   return {
     ms: Date.now() - since,
     settled: settled(),
-    unanswered: sessions.filter((s) => !latest.has(s.id)).length,
-    atDeadline: sessions.filter((s) => latest.get(s.id) === false).length,
+    unsettled: tally(
+      sessions
+        .map((s) => latest.get(s.id) ?? "never rendered")
+        .filter((end) => end !== "answered"),
+    ),
   };
 }
 
@@ -854,19 +864,19 @@ async function run(): Promise<{
   const warm = await settledSince(Date.now());
   await warmMenu(sessions[0]!);
   // Before the steady phase, so no scored render waits on the collection.
-  const collectionStarted = Date.now();
   const heapBefore = await liveHeap();
   const snapshotBefore = await snapshotAt();
   // [LAW:no-ambient-temporal-coupling] The sessions tick on through the
   // collection, and the daemon drains what they queued once it ends, so a
   // render asked right after would wait behind that backlog and run out its
   // budget. The steady phase begins once the daemon has settled again, on
-  // renders asked since the collection began: one answered inside its wait
-  // had no backlog ahead of it, and the daemon serves faster than the
+  // renders logged since the collection ended (one answered before it says
+  // nothing of the backlog): one answered inside its wait had no backlog
+  // ahead of it, and the daemon serves faster than the
   // sessions ask, so from there the queue only shrinks. A session not settled
   // by the deadline is scored by the steady renders it fails, as the warm
   // phase scores one, never a run without a verdict.
-  const resume = await settledSince(collectionStarted);
+  const resume = await settledSince(Date.now());
 
   // [LAW:dataflow-not-control-flow] The feed is one session's subscriber,
   // opened only in the `on` world; its frames are counted over the steady
@@ -1016,7 +1026,7 @@ async function run(): Promise<{
       pass: warm.settled,
       detail: warm.settled
         ? `${SESSIONS} sessions settled in ${warm.ms} ms`
-        : `not settled by ${warm.ms} ms: ${warm.unanswered} sessions never rendered, ${warm.atDeadline} last drew at their deadlines`,
+        : `not settled by ${warm.ms} ms: the latest render of each unsettled session ended ${JSON.stringify(warm.unsettled)}`,
     },
     {
       name: "steady renders",
@@ -1137,8 +1147,8 @@ async function run(): Promise<{
     sessions: SESSIONS,
     steadySeconds: STEADY_MS / 1000,
     // The two settles, each capped at the settle deadline: from the sessions'
-    // start, and from the collection before the steady phase (at the cap, the
-    // backlog never drained).
+    // start, and from the end of the collection before the steady phase (at
+    // the cap, the backlog never drained).
     warmMs: warm.ms,
     resumeMs: resume.ms,
     warmRenders: tally(
@@ -1262,22 +1272,26 @@ async function daemonLog(since: number, until: number): Promise<Stamped[]> {
 }
 
 // What the daemon's log shows over one round trip [from, to]: the lines it
-// logged inside it, the longest silence between two consecutive lines over
-// the trip widened by a client's budget before it (a pause that began before
-// the request connected is still the pause it met), and how many renders
-// drew at their deadlines inside it.
+// logged inside it, the longest silence over the trip widened by a client's
+// budget before it (a pause that began before the request connected is still
+// the pause it met), and how many renders drew at their deadlines inside it.
+// The window's edges bound the silence, so a pause over its start, its end
+// or all of it reads as long as it held inside the window, never as zero.
 function daemonOver(
   logged: readonly Stamped[],
   from: number,
   to: number,
 ): { lines: number; longestSilenceMs: number; deadlineDraws: number } {
   const inside = logged.filter(({ at }) => at >= from && at <= to);
-  const around = logged.filter(
-    ({ at }) => at >= from - TOTAL_BUDGET_MS && at <= to,
-  );
+  const start = from - TOTAL_BUDGET_MS;
+  const marks = [
+    start,
+    ...logged.filter(({ at }) => at >= start && at <= to).map(({ at }) => at),
+    to,
+  ];
   let longest = 0;
-  for (let i = 1; i < around.length; i++)
-    longest = Math.max(longest, around[i]!.at - around[i - 1]!.at);
+  for (let i = 1; i < marks.length; i++)
+    longest = Math.max(longest, marks[i]! - marks[i - 1]!);
   return {
     lines: inside.length,
     longestSilenceMs: longest,
