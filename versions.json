@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-647",
+      "ref": "refs/pull/647/merge",
+      "sha": "d6cc26433e788ad896c724b71f8f8c8ef55a932e",
+      "timestamp": "2026-11-06T19:55:02.852Z",
+      "commits": [
+        {
+          "sha": "d6cc26433e788ad896c724b71f8f8c8ef55a932e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T12:54:09-07:00",
+          "message": "Merge 265c81f91b6376b3efad2072fdec86e32db0f376 into 2bb7660eaf484d4c41e6cdc671e6415f0cccc8fa\n"
+        },
+        {
+          "sha": "265c81f91b6376b3efad2072fdec86e32db0f376",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T12:54:05-07:00",
+          "message": "Merge branch 'main' into candybar-gather-renderer-76bb.x07"
+        },
+        {
+          "sha": "98ce2f24cad76fe5243f6d6fe3d516f4fbd45436",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T12:47:52-07:00",
+          "message": "fix(tmux): the restore guard's comment and the fake's guard check say one condition (candybar-gather-renderer-76bb.x07)\n"
+        },
+        {
+          "sha": "680c000e169cdb6506d3cddc021e55ae1184b1a4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T12:42:29-07:00",
+          "message": "fix(tmux): the restore guard reads on tmux before 3.5, which has no #{!:} (candybar-gather-renderer-76bb.x07)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-649",
       "ref": "refs/pull/649/merge",
       "sha": "2f931252d8ca2fcf2431ea85dbbd6e5d5d63c896",
@@ -42,35 +78,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T12:50:06-07:00",
           "message": "docs(menus): the settings-menu width script and its table go (brandon-menus-sjhy.bc0)\n\nThe table answered a design-time question, whether the proposed menu rows\nfit at 80 columns, and that menu is now built: the script's model of\nproposed rows measures what can simply be rendered. Fitting 80 columns is\nno invariant the menu keeps (the armed-reset row was 93 cells), and\nnothing ran the script, which is how it broke at import unnoticed.\nRepaired, it would be a second map of the menu that only a human redraws.\n\nThe autocompact drawing UI-ELEMENTS credited to the script is asserted in\ntest/autocompact.test.ts, so the doc points there.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-647",
-      "ref": "refs/pull/647/merge",
-      "sha": "49d702dbd411e2ac72942d35b697b3ab286adef3",
-      "timestamp": "2026-11-06T19:48:52.754Z",
-      "commits": [
-        {
-          "sha": "49d702dbd411e2ac72942d35b697b3ab286adef3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T19:48:04Z",
-          "message": "Merge 98ce2f24cad76fe5243f6d6fe3d516f4fbd45436 into 2bb7660eaf484d4c41e6cdc671e6415f0cccc8fa\n"
-        },
-        {
-          "sha": "98ce2f24cad76fe5243f6d6fe3d516f4fbd45436",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:47:52-07:00",
-          "message": "fix(tmux): the restore guard's comment and the fake's guard check say one condition (candybar-gather-renderer-76bb.x07)\n"
-        },
-        {
-          "sha": "680c000e169cdb6506d3cddc021e55ae1184b1a4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:42:29-07:00",
-          "message": "fix(tmux): the restore guard reads on tmux before 3.5, which has no #{!:} (candybar-gather-renderer-76bb.x07)\n"
         }
       ]
     },
