@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-650",
+      "ref": "refs/pull/650/merge",
+      "sha": "22e4c58239ded0942d2f9016aeecfca84c1bc566",
+      "timestamp": "2026-11-06T20:21:08.968Z",
+      "commits": [
+        {
+          "sha": "22e4c58239ded0942d2f9016aeecfca84c1bc566",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:20:08-07:00",
+          "message": "Merge 9a6499870a3a77075cf8511a23ecb862270dfd00 into e66660224cc8931a92a0d6bb87bbb0e2368f33a0\n"
+        },
+        {
+          "sha": "9a6499870a3a77075cf8511a23ecb862270dfd00",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:19:48-07:00",
+          "message": "fix(click): copy and open clicks name their session, so a menu's idle clock counts them (brandon-menus-sjhy.182)\n\nThe idle close counts a click as activity in the session the click names.\nCopy and open links carried only their text, so clicking ⎘ id or ↗ proj\nin a menu left the clock running and the menu closed under the user.\n\nBoth verbs now carry `[sessionId, argument]` and join the session-first\nand segmented sets, so the daemon reads their session at the one\ncheckpoint every click crosses. A copy whose pbcopy fails now shows on\nthe session's bar instead of only in the log.\n\nThey also take new wire names, `copy-text` and `open-in-vscode`. A\nsession id is nearly any slash-free string, so a link drawn when copy\ncarried only its text, read under the old name, would have its text\ntaken for a session. Under the new names an earlier link is an unknown\nverb that names no session, refused and logged. Keeping the earlier\nform working would be the second grammar the ticket rules out.\n\nThe page's copy path and the link words read the text from the second\nargument. The byte snapshots change only in those links and their OSC 8\nids.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-649",
       "ref": "refs/pull/649/merge",
       "sha": "033bb5094ddc0cfefaa02547c5d0ab56de5f38ed",
