@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-631",
+      "ref": "refs/pull/631/merge",
+      "sha": "d871d00e2d80e6264283330ffb91e78108d4f8e8",
+      "timestamp": "2026-11-06T08:19:46.420Z",
+      "commits": [
+        {
+          "sha": "d871d00e2d80e6264283330ffb91e78108d4f8e8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T08:18:31Z",
+          "message": "Merge 1bc1434d58fd8b8019dcda2edd3efedbfb7b8908 into 91002fc866ad04a5022b58207a9968824f6712bc\n"
+        },
+        {
+          "sha": "1bc1434d58fd8b8019dcda2edd3efedbfb7b8908",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T01:18:18-07:00",
+          "message": "fix(test): review of the leak fix — the dead baseline goes, a failed close no longer strands the rest, the close-all case closes in finally (candybar-testing-0x6u.6f3)\n"
+        },
+        {
+          "sha": "efe7d7bfc80a6871a7734eab7d15094cf00853e1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T01:12:58-07:00",
+          "message": "fix(test): the daemon close case counts only its own timers, and no file leaves a git provider open (candybar-testing-0x6u.6f3)\n\nThe close case read every timer the jest worker armed. A git provider an\nearlier file never closed keeps passing on its period, so its timers landed in\nwhichever file ran next and the case failed on CI order, not on the daemon:\nthe daemon builds no git state in this case, and a probe that leaks one\nprovider before it reproduces the CI stacks.\n\nThe case now counts resources made inside its own async work. The git-cache\nfile closes every provider it builds after each case (75 built, 33 closed by\nhand), and two watcher cases close in a finally.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-617",
       "ref": "refs/pull/617/merge",
       "sha": "eef735a9fd00913afb9eff4fb7e163adbce86e47",
@@ -62,28 +91,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-03T10:07:10-07:00",
           "message": "chore(facts): delete the wants closure (candybar-gather-renderer-76bb.6pj.xb3)\n\nThe facts document is total, so the question \"which fields does this config\nread\" has no caller with a reason. Every session now gathers every built-in:\ngit runs one constant option set (forge lookup included), every declared\nplugin source is held, and burn, block and autocompact's context cap are always\ncomposed. A view's declaration depends on the request alone, so a preset pick\nmoves no hold.\n\nDeleted: the wants function, the needed-prefix builders, the sources-read walk,\nthe closure parameter through declare/refresh/read/project, the PR reads gate,\nthe git options derived from the closure, `Gathered`, `declaredSources`, and the\nview's preset reaction. The doctor's data-needs walk stays and now owns its own\nper-segment path closure, since it answers what a config would read.\n\nThe bar is byte-identical; the payload golden gains the keys that were gated\n(block, burn, metrics, activity, tmux and the like on presets that did not read\nthem). Tests that asserted gating are deleted; the fold-edge cases they covered\n(partials, helpers handed a dict) move to the doctor's path closure.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-631",
-      "ref": "refs/pull/631/merge",
-      "sha": "3c1c4023da6437da6ff12c05583ea18d5885f0e4",
-      "timestamp": "2026-11-06T08:14:35.186Z",
-      "commits": [
-        {
-          "sha": "3c1c4023da6437da6ff12c05583ea18d5885f0e4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T01:13:26-07:00",
-          "message": "Merge efe7d7bfc80a6871a7734eab7d15094cf00853e1 into 91002fc866ad04a5022b58207a9968824f6712bc\n"
-        },
-        {
-          "sha": "efe7d7bfc80a6871a7734eab7d15094cf00853e1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T01:12:58-07:00",
-          "message": "fix(test): the daemon close case counts only its own timers, and no file leaves a git provider open (candybar-testing-0x6u.6f3)\n\nThe close case read every timer the jest worker armed. A git provider an\nearlier file never closed keeps passing on its period, so its timers landed in\nwhichever file ran next and the case failed on CI order, not on the daemon:\nthe daemon builds no git state in this case, and a probe that leaks one\nprovider before it reproduces the CI stacks.\n\nThe case now counts resources made inside its own async work. The git-cache\nfile closes every provider it builds after each case (75 built, 33 closed by\nhand), and two watcher cases close in a finally.\n"
         }
       ]
     },
