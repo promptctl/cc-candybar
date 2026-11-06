@@ -238,6 +238,10 @@ export interface LaneRun {
   readonly inPane: <T>(
     work: (session: LaneSession, tmux: TmuxHint) => Promise<T>,
   ) => Promise<InPane<T>>;
+  // The session a pane runs now, by the newest request naming it, or null
+  // when no request this daemon holds names it: what a `/clear` or
+  // `/resume` in the pane changes, though its Claude Code stays one process.
+  readonly sessionInPane: (where: TmuxHint) => string | null;
 }
 
 // [LAW:one-source-of-truth] A setup's run over `read`, the session's latest
@@ -249,6 +253,7 @@ export interface LaneRun {
 // circle.
 export function laneRun(
   read: () => Latest,
+  sessionInPane: LaneRun["sessionInPane"],
   order: PaneOrder,
   moved: (from: TmuxHint, to: TmuxHint) => void,
 ): LaneRun {
@@ -283,7 +288,7 @@ export function laneRun(
     moved(waited.tmux, held.tmux);
     return inPane(work);
   };
-  return { session: first.session, inPane };
+  return { session: first.session, inPane, sessionInPane };
 }
 
 // A pane step's refusal said as the step's failure, or what the step answered.
@@ -360,6 +365,7 @@ export const LANE_SETUP: Readonly<Record<Lane, { on: Plan; off: Plan }>> = {
               tmux,
               { node: host.node[0]!, launcher, preload: host.preload },
               edge,
+              run.sessionInPane,
             ),
           )
           .then((step) =>
@@ -503,6 +509,7 @@ async function restartUnderAttach(
   tmux: TmuxHint,
   attach: Attach,
   edge: LaneEdge,
+  sessionInPane: LaneRun["sessionInPane"],
 ): Promise<string> {
   const claude = await edge.paneClaude(tmux);
   if (claude.attached) {
@@ -589,6 +596,18 @@ async function restartUnderAttach(
   // start in a directory that is gone) and asks whether to keep it when it
   // does (the restart would wait on that dialog). SIGTERM leaves the
   // worktree as it is (measured on 2.1.289).
+  // [LAW:no-ambient-temporal-coupling] Whose session the pane runs is judged
+  // at the kill, after the last wait, so it reads every request received
+  // before the restart acts: a `/clear` or `/resume` keeps the pid the check
+  // above compared, and the line would resume this session over the live one.
+  const runs = sessionInPane(tmux);
+  if (runs !== session.sessionId) {
+    throw new Error(
+      runs === null
+        ? `no request this daemon holds names ${tmux.pane} any more, so Claude Code there was not restarted under the attach launcher as session ${session.sessionId}`
+        : `Claude Code in ${tmux.pane} now runs session ${runs}, not ${session.sessionId}, so it was not restarted under the attach launcher — turn ${LANES.statusline.label} off and on again from the bar in ${tmux.pane} to restart that one`,
+    );
+  }
   edge.terminate(claude.pid);
   if (!(await edge.exited(claude.pid, EXIT_PATIENCE_MS))) {
     throw new Error(
@@ -786,6 +805,7 @@ export class LaneSetups {
       // The session as its latest request reported it, or null when this
       // daemon holds none.
       readonly latest: (sessionId: string) => LaneSession | null;
+      readonly sessionInPane: LaneRun["sessionInPane"];
       readonly paneOrder: PaneOrder;
     },
   ) {}
@@ -877,6 +897,7 @@ export class LaneSetups {
       outcome = await LANE_SETUP[lane][on ? "on" : "off"](
         laneRun(
           () => this.latestOf(sessionId),
+          this.deps.sessionInPane,
           this.paneOrder,
           (from, to) =>
             this.deps.log(

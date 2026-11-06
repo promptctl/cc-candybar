@@ -315,8 +315,8 @@ export interface FeedStats {
   readonly pushed: number;
   // Subscriptions refused or ended because their lane was off.
   readonly refused: number;
-  // `newestWhere` lookups (a tmux bar pane asking whose bar its pane holds),
-  // and how many found a session.
+  // `newestWhere` lookups (whose session a tmux pane runs: a bar pane, the
+  // status line, a restart), and how many found a session.
   readonly lookups: number;
   readonly found: number;
 }

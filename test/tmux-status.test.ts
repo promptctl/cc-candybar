@@ -264,7 +264,7 @@ function harness(ids: readonly string[] = ["$1"], renderer: Renderer = {}) {
       subs.set(sessionId, sub);
       return () => unsubscribed.push(sessionId);
     },
-    sessionInPane: (_socket, pane) => newest.get(pane) ?? null,
+    sessionInPane: ({ pane }) => newest.get(pane) ?? null,
     handler: renderer.handler ?? "cc-candybar url-handle",
     owner: renderer.owner ?? OWNER,
     name: renderer.name ?? MAIN_NAME,

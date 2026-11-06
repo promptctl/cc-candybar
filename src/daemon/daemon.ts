@@ -91,6 +91,7 @@ import { RenderWarningRecords } from "./render-warnings.js";
 import { instantOf, type Instant } from "../utils/instant.js";
 import { JournalTurns } from "./journal-turns.js";
 import { MenuIdle } from "./menu-idle.js";
+import { namesPane, type TmuxHint } from "../tmux-hint.js";
 
 // How this daemon's node runs the bundle it was loaded from.
 export interface RunningBundle {
@@ -430,6 +431,11 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     log,
     clock,
   });
+  // [LAW:one-source-of-truth] The session a tmux pane runs: the newest request
+  // naming the pane, among each session's latest — a /clear or a new Claude
+  // Code in the pane takes it over. The status line and a restart both ask it.
+  const sessionInPane = (where: Pick<TmuxHint, "socket" | "pane">) =>
+    frameFeeds.newestWhere(({ hints: { tmux } }) => namesPane(tmux, where));
   // [LAW:single-enforcer] The one owner of what turning an animation lane on or
   // off takes (src/daemon/lane-setup.ts), told the switches each of a session's
   // clicks moved, and each request's arrival for the setups owed to it.
@@ -455,6 +461,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       const req = frameFeeds.latest(sessionId);
       return req === null ? null : laneSessionOf(req);
     },
+    sessionInPane,
     // A setup's steps in a pane take the order of what is typed into it, as a
     // slash click's typing does (src/daemon/apply.ts).
     paneOrder: (tmux, work) =>
@@ -468,14 +475,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         runTmuxAsync(launcher, { socket }, "tmux-status", args),
     },
     subscribe: (sessionId, sub) => frameFeeds.subscribe(sessionId, sub),
-    sessionInPane: (socket, pane) =>
-      frameFeeds.newestWhere(
-        ({ hints: { tmux } }) =>
-          tmux !== null &&
-          tmux !== undefined &&
-          tmux.socket === socket &&
-          tmux.pane === pane,
-      ),
+    sessionInPane,
     // Run by tmux under its server's environment, so the renderer's home is
     // stated whole on the command, every variable of it.
     handler: [
