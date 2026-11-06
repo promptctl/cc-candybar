@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-642",
+      "ref": "refs/pull/642/merge",
+      "sha": "849eff04d7cd44dbc5a5c0becc818e6fece36bdf",
+      "timestamp": "2026-11-06T14:38:10.248Z",
+      "commits": [
+        {
+          "sha": "849eff04d7cd44dbc5a5c0becc818e6fece36bdf",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T14:37:12Z",
+          "message": "Merge 0708368529a640a96e0b2aebf9d127cc5360bda3 into 9c90c3b99f998a33415660abd7f7cf035941219e\n"
+        },
+        {
+          "sha": "0708368529a640a96e0b2aebf9d127cc5360bda3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T07:36:01-07:00",
+          "message": "fix(links): the binding restore counts a session by whether it names a renderer at all; a taken-over daemon's binding is owed back (candybar-gather-renderer-76bb.b2l.5v7)\n\ntmux reads a renderer name such as `0` as false, so the restore's guard put\nthe user's binding back while renderer `0` still drew. It now tests for a\nname's presence.\n\nA daemon that takes over a dead one's layouts now owes that daemon's\nbinding a restore, even if it never binds itself. The server's binding\nstate is none, owed or bound.\n\nAn else-branch of no commands now reads as none. The doc says how a dead\nrenderer's click fails: tmux shows the failure over the pane.\n"
+        },
+        {
+          "sha": "b1a8f72e68f48e5744858c6faf9936e24c090d4c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T07:24:23-07:00",
+          "message": "fix(links): a tmux `{ … }` block is one word of the user's binding; the binding restore is a counted write (candybar-gather-renderer-76bb.b2l.5v7)\n\nA user MouseDown1Status written with command blocks was split at the `;`\ninside the braces, so the else-branch ran a broken command and the restore\nfailed with too many arguments. A word is now a string or a block, read and\nwritten back as tmux prints it, so the restored listing is the user's.\n\nThe binding restore goes through the write path and is counted in the\nwrite stat. The doc and the no-renderer message name the case that shows it:\na row an older build drew. A renderer that died leaves its click, which\nstarts its daemon again.\n"
+        },
+        {
+          "sha": "a0976c4182de9afc441ac80bd481dc2be27d53e0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T07:09:39-07:00",
+          "message": "feat(links): the one MouseDown1Status binding is constant text; each session carries its renderer's click (candybar-gather-renderer-76bb.b2l.5v7)\n\nEvery renderer on a tmux server now binds the same text, so no renderer owns\nthe binding and two renderers no longer fight over it. What differs per\nrenderer (its url-handle command under its home, its name, its binding mac)\nrides on the session it draws, as @cc-candybar-click beside\n@cc-candybar-renderer. The binding runs that option on a ccb range, shows a\ntmux message where a session carries no click, and runs the user's own\nbinding otherwise.\n\nThe user's binding lives only in the binding's else-branch, read back from\nlist-keys as a command list, so the @cc-candybar-binding-prior record goes\n(the bind unsets one an older build left). Ours is recognised by shape, and\nevery one of ours chained over the user's is peeled off. The restore is one\ntmux call that tmux guards on whether any session still names a renderer,\nand it runs once per bound period.\n\nThe status-line click verb is now `range`.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "9c90c3b99f998a33415660abd7f7cf035941219e",
@@ -20,35 +56,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-06T13:30:30Z",
           "message": "chore(release): set `package.json` to 1.202.0 [skip ci]\n\n## [1.202.0](https://github.com/promptctl/cc-candybar/compare/v1.201.1...v1.202.0) (2026-11-06)\n\n### Features\n\n* **links:** a tmux range id is ccb plus a base36 link id from a counter in the home's state; the URL digest goes (candybar-gather-renderer-76bb.b2l.e1n) ([#640](https://github.com/promptctl/cc-candybar/issues/640)) ([0e482bd](https://github.com/promptctl/cc-candybar/commit/0e482bd299f59cc7c9dfc947682469722309833d))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-642",
-      "ref": "refs/pull/642/merge",
-      "sha": "3d4b865ab4c952e487576b0dc83a447cf982c84e",
-      "timestamp": "2026-11-06T14:25:25.904Z",
-      "commits": [
-        {
-          "sha": "3d4b865ab4c952e487576b0dc83a447cf982c84e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T14:24:35Z",
-          "message": "Merge b1a8f72e68f48e5744858c6faf9936e24c090d4c into 6861a4a6e8abdea9bde9ed0653074ae3491eebf6\n"
-        },
-        {
-          "sha": "b1a8f72e68f48e5744858c6faf9936e24c090d4c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T07:24:23-07:00",
-          "message": "fix(links): a tmux `{ … }` block is one word of the user's binding; the binding restore is a counted write (candybar-gather-renderer-76bb.b2l.5v7)\n\nA user MouseDown1Status written with command blocks was split at the `;`\ninside the braces, so the else-branch ran a broken command and the restore\nfailed with too many arguments. A word is now a string or a block, read and\nwritten back as tmux prints it, so the restored listing is the user's.\n\nThe binding restore goes through the write path and is counted in the\nwrite stat. The doc and the no-renderer message name the case that shows it:\na row an older build drew. A renderer that died leaves its click, which\nstarts its daemon again.\n"
-        },
-        {
-          "sha": "a0976c4182de9afc441ac80bd481dc2be27d53e0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T07:09:39-07:00",
-          "message": "feat(links): the one MouseDown1Status binding is constant text; each session carries its renderer's click (candybar-gather-renderer-76bb.b2l.5v7)\n\nEvery renderer on a tmux server now binds the same text, so no renderer owns\nthe binding and two renderers no longer fight over it. What differs per\nrenderer (its url-handle command under its home, its name, its binding mac)\nrides on the session it draws, as @cc-candybar-click beside\n@cc-candybar-renderer. The binding runs that option on a ccb range, shows a\ntmux message where a session carries no click, and runs the user's own\nbinding otherwise.\n\nThe user's binding lives only in the binding's else-branch, read back from\nlist-keys as a command list, so the @cc-candybar-binding-prior record goes\n(the bind unsets one an older build left). Ours is recognised by shape, and\nevery one of ours chained over the user's is peeled off. The restore is one\ntmux call that tmux guards on whether any session still names a renderer,\nand it runs once per bound period.\n\nThe status-line click verb is now `range`.\n"
         }
       ]
     },
