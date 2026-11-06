@@ -69372,7 +69372,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.202.0";
+var PACKAGE_VERSION = "1.203.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -84288,7 +84288,7 @@ init_globals();
 // src/tmux-status/tmux-words.ts
 init_globals();
 function tmuxQuoted(text4) {
-  return `"${text4.replace(/[\\"$]/g, (c) => `\\${c}`)}"`;
+  return `"${text4.replace(/[\\"$~]/g, (c) => `\\${c}`)}"`;
 }
 function commandText(commands) {
   return commands.map((c) => c.map(wordText).join(" ")).join(" ; ");
@@ -84348,7 +84348,7 @@ function tmuxCommands(text4) {
     const commands = [[]];
     while (i < text4.length) {
       if (text4[i] === " ") i++;
-      else if (text4[i] === ";" || lonely(text4, i)) {
+      else if (text4[i] === ";" || !inBlock && lonely(text4, i)) {
         commands.push([]);
         i += text4[i] === ";" ? 1 : 2;
       } else if (inBlock && alone("}")) {
@@ -84386,7 +84386,7 @@ function clickBinding(user) {
     ...user === null ? [] : [commandText(user)]
   ];
 }
-var BOUND = /^bind-key\s+(?:-r\s+)?(?:-N\s+(?:"(?:[^"\\]|\\.)*"|\S+)\s+)?-T\s+root\s+MouseDown1Status\s+(.+)$/m;
+var LISTED = /^bind-key\s+(?:-r\s+)?(?:-N\s+(?:"(?:[^"\\]|\\.)*"|\S+)\s+)?-T\s+root\s+MouseDown1Status\s+(.+)$/m;
 function chained(list2) {
   const [only, ...more] = list2;
   if (only === void 0 || more.length > 0 || only[0] !== "if-shell")
@@ -84400,7 +84400,7 @@ function chained(list2) {
   return chain2.length > 0 ? chain2 : null;
 }
 function boundOf2(listKeys) {
-  const printed = BOUND.exec(listKeys)?.[1];
+  const printed = LISTED.exec(listKeys)?.[1];
   let user = printed === void 0 ? null : tmuxCommands(printed);
   const ours = user !== null && chained(user) !== void 0;
   while (user !== null) {
@@ -84410,14 +84410,24 @@ function boundOf2(listKeys) {
   }
   return { ours, user };
 }
+var BOUND = "ccb:bound";
 var RESTORED = "ccb:restored";
 var HELD = "ccb:held";
+var NAMED = `#{S:#{?#{!=:#{${RENDERER_OPTION}},},1,}}`;
+function bindClick(user) {
+  return [
+    "if-shell",
+    "-F",
+    NAMED,
+    `${commandText([clickBinding(user)])} ; display-message -p ${BOUND}`
+  ];
+}
 function restoreBinding(user) {
   const put = user === null ? `unbind-key ${CLICK_KEY.join(" ")}` : `bind-key ${CLICK_KEY.join(" ")} ${boundText(user)}`;
   return [
     "if-shell",
     "-F",
-    `#{!:#{S:#{?#{!=:#{${RENDERER_OPTION}},},1,}}}`,
+    `#{!:${NAMED}}`,
     `${put} ; display-message -p ${RESTORED}`,
     `display-message -p ${HELD}`
   ];
@@ -84997,17 +85007,16 @@ var TmuxStatusLines = class {
     if (answers === null || this.closed) return;
     const { user } = boundOf2(answers[0] ?? "");
     server.binding = "bound";
-    const took = (await this.write(socket, [
-      clickBinding(user),
+    const run3 = await this.write(socket, [
+      bindClick(user),
       ["set-option", "-g", "-q", "-u", OLDER_BINDING_RECORD]
-    ])).kind === "ok";
-    if (!took) {
-      server.binding = period;
-      return;
-    }
+    ]);
+    const took = run3.kind === "ok" && run3.stdout.includes(BOUND);
+    if (!took) server.binding = period;
+    const said = took ? `bound MouseDown1Status over ${spelled2(user)}` : run3.kind === "ok" ? "left MouseDown1Status unbound: no session names a renderer" : `MouseDown1Status not bound: ${run3.reason}`;
     this.deps.log(
       "info",
-      `tmux-status: socket=${JSON.stringify(socket)} bound MouseDown1Status over ${spelled2(user)}`
+      `tmux-status: socket=${JSON.stringify(socket)} ${said}`
     );
   }
   // Once a bound period, as it ends: the user's binding put back, unless a
@@ -85039,8 +85048,7 @@ var TmuxStatusLines = class {
   // [LAW:nothing-unseen] Which way tmux went: the user's binding back, or held
   // for a session that still names a renderer.
   saidBindingRestore(socket, run3, user) {
-    if (run3.kind !== "ok") return;
-    const said = run3.stdout.includes(RESTORED) ? `restored MouseDown1Status to ${spelled2(user)}` : run3.stdout.includes(HELD) ? "left MouseDown1Status bound: a session still names a renderer" : `MouseDown1Status restore said neither way: ${JSON.stringify(run3.stdout)}`;
+    const said = run3.kind !== "ok" ? `MouseDown1Status not restored: ${run3.reason}` : run3.stdout.includes(RESTORED) ? `restored MouseDown1Status to ${spelled2(user)}` : run3.stdout.includes(HELD) ? "left MouseDown1Status bound: a session still names a renderer" : `MouseDown1Status restore said neither way: ${JSON.stringify(run3.stdout)}`;
     this.deps.log(
       "info",
       `tmux-status: socket=${JSON.stringify(socket)} ${said}`
@@ -85063,8 +85071,8 @@ var TmuxStatusLines = class {
     server.lastFailure = run3.reason;
     return run3;
   }
-  async run(socket, args, stdin) {
-    return this.counted(socket, await this.deps.edge.run(socket, args, stdin));
+  async run(socket, args) {
+    return this.counted(socket, await this.deps.edge.run(socket, args));
   }
   async ask(socket, queries) {
     const run3 = await this.run(socket, readChain(queries));
@@ -85075,15 +85083,15 @@ var TmuxStatusLines = class {
     return run3.kind === "ok" ? answersOf(run3.stdout, queries.length) : null;
   }
   // What tmux said to the write: `ok` where it took it.
-  async write(socket, commands, stdin) {
+  async write(socket, commands) {
     if (commands.length === 0) return WROTE_NOTHING;
     this.writes++;
-    return this.run(socket, chain(commands), stdin);
+    return this.run(socket, chain(commands));
   }
-  writeSync(atExit, socket, commands, stdin) {
+  writeSync(atExit, socket, commands) {
     if (commands.length === 0) return WROTE_NOTHING;
     this.writes++;
-    return this.counted(socket, atExit(socket, chain(commands), stdin));
+    return this.counted(socket, atExit(socket, chain(commands)));
   }
 };
 var spelled2 = (user) => user === null ? "unbound" : JSON.stringify(commandText(user));
@@ -86127,7 +86135,7 @@ function createDaemon(inputs) {
   });
   const tmuxStatusLines = new TmuxStatusLines({
     edge: {
-      run: (socket, args, stdin) => runTmuxAsync(launcher, { socket }, "tmux-status", args, stdin)
+      run: (socket, args) => runTmuxAsync(launcher, { socket }, "tmux-status", args)
     },
     subscribe: (sessionId2, sub2) => frameFeeds.subscribe(sessionId2, sub2),
     sessionInPane: (socket, pane) => frameFeeds.newestWhere(
