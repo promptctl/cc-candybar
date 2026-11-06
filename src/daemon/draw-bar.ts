@@ -47,7 +47,7 @@ import {
   refreshedFact,
 } from "./render-payload.js";
 import { type SessionSource } from "./session-source.js";
-import { drawnLanes, drawView, type Handed } from "./draw-view.js";
+import { drawView, type Handed } from "./draw-view.js";
 import { isPending } from "../utils/outcome.js";
 import {
   laneSwitches,
@@ -489,11 +489,6 @@ export function drawRender(
   const payload = view.source.payload();
   const effective = view.source.effective();
   const failure = view.source.failure();
-  // Which animation lanes this session's settings switch on, as drawn.
-  const lanes = drawnLanes(view.source);
-  noteFacts(facts, {
-    lanes: LANE_NAMES.filter((lane) => lanes[lane]).join(",") || "-",
-  });
   noteFacts(facts, { width: String(payload.term.cols) });
   // [LAW:no-ambient-temporal-coupling] The click errors held for this
   // session, at this draw's instant and for whom it draws: each shown by every
@@ -632,19 +627,30 @@ export function drawRender(
   // [LAW:single-enforcer] The view's inputs read its source (`bindView`, at
   // its opening): the draw hands only its own instant's facts. What this
   // frame draws is what the session's close timer follows.
-  const { body, viewing, geometry, evaluated, cellBreaks, rules, idleSince } =
-    menuIdle.drawn(sessionId, at, effective.menuTimeout, (idleSince) =>
-      drawView(
-        view,
-        handed,
-        at,
-        effects,
-        idleSince,
-        sessionState.get(sessionId, DIAGNOSTICS_VIEWING),
-        links.to,
-        (warning) => drawnWarnings.push(warning),
-      ),
-    );
+  const {
+    body,
+    viewing,
+    geometry,
+    lanes,
+    evaluated,
+    cellBreaks,
+    rules,
+    idleSince,
+  } = menuIdle.drawn(sessionId, at, effective.menuTimeout, (idleSince) =>
+    drawView(
+      view,
+      handed,
+      at,
+      effects,
+      idleSince,
+      sessionState.get(sessionId, DIAGNOSTICS_VIEWING),
+      links.to,
+      (warning) => drawnWarnings.push(warning),
+    ),
+  );
+  noteFacts(facts, {
+    lanes: LANE_NAMES.filter((lane) => lanes[lane]).join(",") || "-",
+  });
   // [LAW:one-source-of-truth] What each copy click this frame mints copies,
   // read back when the click runs (the copy-diagnostic verb): the list this
   // renderer last delivered, never text carried in the link. Recorded when

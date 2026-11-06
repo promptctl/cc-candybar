@@ -232,7 +232,7 @@ function liveArm(): Arm {
 }
 
 // A recording's lines, played under a held clock started at its first
-// request: the documents and the home are the recording's, so no owner is
+// request or draw: the documents and the home are the recording's, so no owner is
 // built and nothing is read or spawned for them.
 function recordingArm(path: string): Arm {
   const recording = readRecording(path);

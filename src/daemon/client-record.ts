@@ -73,9 +73,9 @@ export function parseRecordArgs(
 }
 
 // [LAW:dataflow-not-control-flow] The outcome → (streams, exit-code) fold.
-// [LAW:no-silent-failure] A recording no request was answered in replays nothing,
-// so it is a failure the person running the command hears now, not one the
-// reader of the report finds later.
+// [LAW:no-silent-failure] A recording nothing was drawn in (no answer, no lane
+// frame) replays nothing, so it is a failure the person running the command
+// hears now, not one the reader of the report finds later.
 export function recordPlan(
   outcome: RoundTripOutcome<Recorded>,
   seconds: number,
