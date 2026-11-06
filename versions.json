@@ -4,15 +4,22 @@
     {
       "version": "pr-619",
       "ref": "refs/pull/619/merge",
-      "sha": "02a5115e13908fec7b21a0cdcc7627f9efef5d97",
-      "timestamp": "2026-11-06T02:45:16.362Z",
+      "sha": "558bf4d5c9b345f855f2a79de18d2aca6c34ebf7",
+      "timestamp": "2026-11-06T02:47:54.673Z",
       "commits": [
         {
-          "sha": "02a5115e13908fec7b21a0cdcc7627f9efef5d97",
+          "sha": "558bf4d5c9b345f855f2a79de18d2aca6c34ebf7",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T02:43:34Z",
-          "message": "Merge 76f73c84e816d03ec6ea45c86dcbfeaa7d61d667 into 6d2fd8d435350e75805014afa1b3568e1119b767\n"
+          "timestamp": "2026-11-06T02:47:05Z",
+          "message": "Merge 516012fea5165cdfc9bfcb455ee1f5f5ac88c7fd into 6d2fd8d435350e75805014afa1b3568e1119b767\n"
+        },
+        {
+          "sha": "516012fea5165cdfc9bfcb455ee1f5f5ac88c7fd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T19:46:54-07:00",
+          "message": "refactor(tmux-status): the taken-over install plan derives from the record it extends (candybar-gather-renderer-76bb.b2l.rwj)\n"
         },
         {
           "sha": "76f73c84e816d03ec6ea45c86dcbfeaa7d61d667",
