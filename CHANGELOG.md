@@ -1,3 +1,9 @@
+## [1.208.1](https://github.com/promptctl/cc-candybar/compare/v1.208.0...v1.208.1) (2026-11-06)
+
+### Bug Fixes
+
+* **click:** a leaf verb receives its click's session parsed, and a step naming another session is refused (brandon-menus-sjhy.vxi) ([#658](https://github.com/promptctl/cc-candybar/issues/658)) ([d742dce](https://github.com/promptctl/cc-candybar/commit/d742dceaaf1d3f10894fce9f4bbe605089ba7a7d))
+
 ## [1.208.0](https://github.com/promptctl/cc-candybar/compare/v1.207.0...v1.208.0) (2026-11-06)
 
 ### Features
