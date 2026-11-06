@@ -4,39 +4,39 @@
     {
       "version": "pr-627",
       "ref": "refs/pull/627/merge",
-      "sha": "2af66497f3c9a0b091e27f4358bf37081c06c2f3",
-      "timestamp": "2026-11-06T07:03:39.742Z",
+      "sha": "cf3c000aae8d9e7f15ae2d4dedee37ab66779c74",
+      "timestamp": "2026-11-06T07:08:34.001Z",
       "commits": [
         {
-          "sha": "2af66497f3c9a0b091e27f4358bf37081c06c2f3",
+          "sha": "cf3c000aae8d9e7f15ae2d4dedee37ab66779c74",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T07:00:14Z",
-          "message": "Merge df100508964af1998be01fa4cc959c99fddf5bbc into 92e444f3bcf390e07f4b9490d78c0f5223c635e5\n"
+          "timestamp": "2026-11-06T07:07:36Z",
+          "message": "Merge cfe31fd670ef085d14a3d2688c1af38bbfc4ba16 into 4e7a92522bd9b4d1a06e8b5973e3b937f7e400b7\n"
         },
         {
-          "sha": "df100508964af1998be01fa4cc959c99fddf5bbc",
+          "sha": "cfe31fd670ef085d14a3d2688c1af38bbfc4ba16",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-05T23:28:26-07:00",
           "message": "fix(apply): an answer asks for the click error's mark only until one has carried it; a render's throw is the daemon's unless the close refused it (candybar-gather-renderer-76bb.1dh.1ql)\n"
         },
         {
-          "sha": "053b7e798befa459767c0d2968f6bf7d0ef75b4b",
+          "sha": "0885f12a60f0e86a1a88fdc819efc76f4337ed22",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-05T23:14:44-07:00",
           "message": "fix(apply): the answered mark's line names its own verb; comments say what an in-turn gather lets a draw read (candybar-gather-renderer-76bb.1dh.1ql)\n"
         },
         {
-          "sha": "20208a242cc5506c0f9274364d7e13061450a4fd",
+          "sha": "3071586fffd431e1b6c20f9cbaddcfeb43743582",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-05T23:11:04-07:00",
           "message": "fix(apply): a render refused at its turn names its session and logs as the close; one rule says what an unanswered event's refusal is (candybar-gather-renderer-76bb.1dh.1ql)\n\n- The render edge notes the session first on the request's line, so a request\n  the close refused at its turn still names it; the draw no longer notes it.\n- A render's thrown error maps to its outcome as a click's does: the close is\n  `closing` at info, not `threw` at error.\n- The request arm reads the revision inside its own turn and notes its facts\n  straight onto the line.\n- The menu idle close says its refusal through the one rule the delivery edge\n  and the performer use.\n- The no-write test counts the store's persists, which an unfiltered batch\n  bumps without moving the revision; a new case pins the close refusing a\n  queued request.\n- The arm's comment states that an in-turn gather holds every request; the fix\n  that no turn awaits a launch is candybar-gather-renderer-76bb.1dh.c3l.\n"
         },
         {
-          "sha": "cbae968fdc2e5cbdf67e9bbbfa28fc0ef3fa9b67",
+          "sha": "c78f45b4e8ed9da05a1dd146483b7bb89013db1f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-05T22:37:33-07:00",
