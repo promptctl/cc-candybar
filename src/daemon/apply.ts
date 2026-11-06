@@ -3,8 +3,9 @@
 // union, and one table of arms is the only consumer. The table is keyed by
 // every kind the union has, so adding a source of change is a compile error
 // here until its arm exists, and no arm is a default. The journal's turn
-// (src/daemon/journal-turns.ts) is the queue its click, menu-idle and
-// effect-done arms write in.
+// (src/daemon/journal-turns.ts) is the queue every arm writes in: the request
+// records what its client said there and draws once the turn is over, so a
+// frame never reads the request's hints beside a click's writes half landed.
 //
 // [LAW:effects-at-boundaries] An arm answers its source and describes the
 // effects its turn asked for (src/daemon/effect.ts). The performer below runs
@@ -24,9 +25,13 @@ import { failureText, type Launcher } from "../proc/launch.js";
 import type { Monotonic } from "../time.js";
 import type { Instant } from "../utils/instant.js";
 import type { LogLevel } from "../utils/logger.js";
-import { holdClickError } from "./click-error.js";
+import {
+  answeredClickError,
+  holdClickError,
+  type ClickErrorRecord,
+} from "./click-error.js";
 import type { DaemonParts } from "./daemon-parts.js";
-import { answerRequest, type RequestAnswer } from "./draw-bar.js";
+import type { RequestAnswer } from "./draw-bar.js";
 import {
   describeEffect,
   failed,
@@ -35,10 +40,16 @@ import {
   type EffectOutcome,
   type LaunchSpec,
 } from "./effect.js";
-import type { ClickAsker } from "./journal-turns.js";
+import { encodeRenderOrigin } from "./foundations/render-origin.js";
+import {
+  SESSION_CLIENT_HINTS_KEY,
+  SESSION_RENDER_ORIGIN_KEY,
+} from "./foundations/session-keys.js";
+import type { ClickAsker, TurnAsker } from "./journal-turns.js";
 import type { MenuIdle } from "./menu-idle.js";
-import { eventLine, type RequestFacts } from "./request-event.js";
+import { eventLine, noteFacts, type RequestFacts } from "./request-event.js";
 import type { CheckedRenderRequest } from "./render-checkpoint.js";
+import type { SessionStateRW } from "./session-state.js";
 import { DaemonClosing } from "./verb-error.js";
 import {
   CLICK_PROGRAM_TIMEOUT_MS,
@@ -84,6 +95,13 @@ export type Event =
       readonly of: EffectOrigin;
       readonly effect: Effect;
       readonly outcome: EffectOutcome;
+    }
+  // A request's answer carrying `error`, the session's held click error,
+  // reached its client (src/daemon/reply.ts).
+  | {
+      readonly kind: "answered";
+      readonly session: string;
+      readonly error: ClickErrorRecord;
     };
 
 // [LAW:effects-at-boundaries] A click's refusal, as its answer: the failure
@@ -100,20 +118,23 @@ interface Answers {
   readonly click: ClickRefusal | null;
   readonly "menu-idle": void;
   readonly "effect-done": void;
+  readonly answered: void;
 }
 
-// [LAW:types-are-the-program] What each arm reads of the daemon: the request
-// draws with the whole of it; the others write through the verb context and
-// say what they did through the log, and the click brackets its session on
-// the idle clock. A test applies a click over exactly those and nothing more.
+// [LAW:types-are-the-program] What each arm reads of the daemon: every arm
+// writes through the verb context and says what it did through the log; the
+// request draws through the daemon's draw once its turn is over, and the
+// click brackets its session on the idle clock. A test applies an event over
+// exactly those and nothing more.
 export type ApplyParts = Pick<DaemonParts, "verbCtx" | "log">;
 interface ArmParts {
-  readonly request: DaemonParts;
+  readonly request: ApplyParts & Pick<DaemonParts, "draw">;
   readonly click: ApplyParts & {
     readonly menuIdle: Pick<MenuIdle, "clickArrived" | "clickSettled">;
   };
   readonly "menu-idle": ApplyParts;
   readonly "effect-done": ApplyParts;
+  readonly answered: ApplyParts;
 }
 
 // [LAW:types-are-the-program] The answers and the parts name exactly the
@@ -144,16 +165,45 @@ export type ApplyArms<E extends { readonly kind: string }> = {
 
 const NO_EFFECTS: readonly Effect[] = [];
 
+// How an arm with no client behind it asks for its turn: its wait is a fact
+// of its line, and nobody leaves.
+const turnWaits = (facts: RequestFacts): TurnAsker => ({
+  waited: (ms) => noteFacts(facts, { turnWait: `${ms}ms` }),
+  gone: () => false,
+});
+
 export const ARMS: ApplyArms<Event> = {
-  // [LAW:single-enforcer] exception: the request takes no turn yet, so its
-  // writes (the session's render origin and client hints) still land outside
-  // one. They join the turn with the request's own (the next story of this
-  // lane), now that a click's launches no longer hold it.
-  request: async ({ req, at, waitEndsAt, facts }, parts) => ({
-    answer: await answerRequest(parts, req, at, waitEndsAt, facts),
-    effects: NO_EFFECTS,
-    facts: [],
-  }),
+  // [LAW:single-enforcer] The request's writes take their turn as a click's
+  // do: what it said of its client and the config inputs it named land in one
+  // batch between the journal's begin and commit, and the draw begins once
+  // the turn is over, so it never reads the request's hints beside a click
+  // the turn was waiting on. The turn waits behind every turn, daemon-wide:
+  // a click's head gather runs ahead of its turn and delays no request, but a
+  // gather inside a turn (a doctor step after a dispatch's first, or one
+  // repeated for a config that changed) holds every session's request for as
+  // long as its probes run, each bounded by its launch timeout, and that wait
+  // is spent from the request's budget. The same gather is the one way a
+  // draw, this one or a feed's, reads a click half landed: a click that takes
+  // its turn while the draw waits on its sources has landed its first write
+  // and parked before its last. Its wait and the revision its own turn left
+  // go on the request's line, the render event, which is its record and opens
+  // with the session the edge noted.
+  request: async ({ req, at, waitEndsAt, facts }, { verbCtx, draw }) => {
+    const revision = await verbCtx.journalTurns.take(
+      "request",
+      turnWaits(facts),
+      async () => {
+        recordRequest(verbCtx.sessionState, req);
+        return verbCtx.sessionState.revision(req.sessionId);
+      },
+    );
+    noteFacts(facts, { revision: String(revision) });
+    return {
+      answer: await draw(req, at, waitEndsAt, facts),
+      effects: NO_EFFECTS,
+      facts: [],
+    };
+  },
   // [LAW:single-enforcer] The click's whole bracket on its menus' idle clock
   // is here, so the timer cannot close a menu under any click Apply carries.
   // The turn hands its effects over once it has committed (`described`), and
@@ -195,10 +245,7 @@ export const ARMS: ApplyArms<Event> = {
     const facts: RequestFacts = [];
     await verbCtx.journalTurns.take(
       "effect-done",
-      {
-        waited: (ms) => facts.push(["turnWait", `${ms}ms`]),
-        gone: () => false,
-      },
+      turnWaits(facts),
       async () => {
         if (outcome.kind === "failed" && of.session !== null) {
           holdClickError(
@@ -212,7 +259,46 @@ export const ARMS: ApplyArms<Event> = {
     );
     return { answer: undefined, effects: NO_EFFECTS, facts };
   },
+  // [LAW:single-enforcer] The one write after a request's answer went out: the
+  // click error it carried is marked answered (src/daemon/click-error.ts), in
+  // a turn as every write is, so no frame reads the mark beside a click's
+  // writes half landed.
+  answered: async ({ session, error }, { verbCtx }) => {
+    const facts: RequestFacts = [];
+    await verbCtx.journalTurns.take("answered", turnWaits(facts), async () =>
+      answeredClickError(verbCtx.sessionState, session, error),
+    );
+    return { answer: undefined, effects: NO_EFFECTS, facts };
+  },
 };
+
+// [LAW:effects-at-boundaries][LAW:one-source-of-truth] What a render request
+// said, recorded in its turn and never by a frame, which only draws. The STAMPED hints: a click arrives
+// with no hints of its own, so the doctor (verbs/index.ts) reads the facts of
+// this session's last request from here, re-parsed through the same
+// checkpoint. The client itself is not recorded: which client drew a
+// session's bar is RenderSightings' fact (src/daemon/render-sightings.ts),
+// held in memory, and two clients drawing one session would otherwise
+// rewrite this persisted record on every request. The config inputs the
+// request named, so a durable click on this session resolves the same chain
+// (verbs/index.ts sessionOrigin) and writes the file the next reload reads,
+// never a path re-derived from the daemon's own cwd. Compared before writing:
+// every write persists and fires the session's MobX atom, so an unchanged
+// request writes nothing and invalidates no state-driven computed.
+function recordRequest(state: SessionStateRW, req: CheckedRenderRequest): void {
+  const { client: _client, ...recorded } = req.hints;
+  const said = [
+    { key: SESSION_CLIENT_HINTS_KEY, value: JSON.stringify(recorded) },
+    {
+      key: SESSION_RENDER_ORIGIN_KEY,
+      value: encodeRenderOrigin(req.requested),
+    },
+  ];
+  state.setBatch(
+    req.sessionId,
+    said.filter(({ key, value }) => state.get(req.sessionId, key) !== value),
+  );
+}
 
 // [LAW:types-are-the-program] Generic over the kind, so the arm `ARMS[kind]`
 // picks, the parts it reads and the answer it gives are the ones `ApplyArms`
@@ -272,9 +358,11 @@ const NOTHING_PERFORMED: Promise<void> = Promise.resolve();
 // described, the revision the session's state stands at once the turn is
 // over, and on effect-done the effect and how it went. What each kind adds
 // of its own is here, and at what level: its outcome first, since a click
-// the turn refused is applied too, with its refusal for an outcome. The
-// request's line is the render line its edge writes (four of five lines in
-// a live log), until its turn gives it a revision.
+// the turn refused is applied too, with its refusal for an outcome.
+// [LAW:one-source-of-truth] The request's one line is the render event its
+// edge writes (four of five lines in a live log), which its arm puts the
+// turn's wait and revision on; a second line per request would be a second
+// record of one unit of work.
 interface ApplyLine {
   readonly level: LogLevel;
   readonly facts: RequestFacts;
@@ -303,6 +391,7 @@ const LINE: {
   request: () => null,
   click: (_event, { answer }) => (answer === null ? APPLIED : refused(answer)),
   "menu-idle": () => APPLIED,
+  answered: () => APPLIED,
   "effect-done": ({ effect, outcome }) => ({
     level: OUTCOME_LEVEL[outcome.kind],
     facts: [
@@ -323,7 +412,37 @@ const ORIGIN: {
   click: ({ verb, pending }) => ({ verb: verb.name, session: pending }),
   "menu-idle": ({ session }) => ({ verb: "menu-idle", session }),
   "effect-done": ({ of }) => of,
+  answered: ({ session }) => ({ verb: "answered", session }),
 };
+
+// [LAW:no-silent-failure][LAW:single-enforcer] What a source with no reply
+// to carry a rejection says of one: the delivery edge, the performer, the
+// menus' idle timer. At info when it is the daemon's close, since the bar it
+// would have reached is gone with the turns.
+export function sayUnapplied(
+  log: DaemonParts["log"],
+  kind: Event["kind"],
+  said: string,
+  error: unknown,
+): void {
+  log(
+    error instanceof DaemonClosing ? "info" : "error",
+    `apply: ${kind} not applied (${said}): ${inspect(error)}`,
+  );
+}
+
+// An event whose source has no reply to carry a rejection, applied, and a
+// refusal said in the log.
+export function applyUnanswered<K extends Event["kind"]>(
+  event: Extract<Event, { readonly kind: K }>,
+  parts: ArmParts[K],
+  said: string,
+): Promise<void> {
+  return apply(event, parts).then(
+    () => undefined,
+    (e: unknown) => sayUnapplied(parts.log, event.kind, said, e),
+  );
+}
 
 function originOf<K extends Event["kind"]>(
   event: Extract<Event, { readonly kind: K }>,
@@ -394,9 +513,7 @@ async function perform<K extends Effect["kind"]>(
 
 // [LAW:effects-at-boundaries] After the turn, each effect in the order it was
 // described, behind the session's earlier effects (`performing`), and each
-// outcome back through Apply. Never rejects: an outcome is data, and an
-// effect-done the daemon's close refused is said here, since the bar it would
-// have reached is gone with the turns.
+// outcome back through Apply. Never rejects: an outcome is data.
 function performAll(
   parts: ApplyParts,
   of: EffectOrigin,
@@ -405,14 +522,11 @@ function performAll(
   return parts.verbCtx.journalTurns.performing(of.session, async () => {
     for (const effect of effects) {
       const outcome = await perform(effect, parts);
-      try {
-        await apply({ kind: "effect-done", of, effect, outcome }, parts);
-      } catch (e) {
-        parts.log(
-          e instanceof DaemonClosing ? "info" : "error",
-          `apply: effect-done not applied (${describeEffect(effect)} ${outcome.kind}: ${outcome.said}): ${inspect(e)}`,
-        );
-      }
+      await applyUnanswered(
+        { kind: "effect-done", of, effect, outcome },
+        parts,
+        `${describeEffect(effect)} ${outcome.kind}: ${outcome.said}`,
+      );
     }
   });
 }

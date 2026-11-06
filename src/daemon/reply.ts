@@ -3,7 +3,7 @@
 import process from "node:process";
 import { inspect } from "node:util";
 import type { DaemonParts } from "./daemon-parts.js";
-import { apply } from "./apply.js";
+import { apply, applyUnanswered } from "./apply.js";
 import { NOTHING_DELIVERED, renderFailed } from "./draw-bar.js";
 import {
   checkRenderRequest,
@@ -43,7 +43,6 @@ import {
 import { floorOf } from "../config/globals-fields.js";
 import type { RichText } from "@promptctl/rich-js";
 import { LANE_NAMES, parseLane, type Lane } from "../config/lanes.js";
-import { answeredClickError } from "./click-error.js";
 import { parseHandlerUrl, VERB_TMUX_STATUS_CLICK } from "../click/wire.js";
 import { instantOf } from "../utils/instant.js";
 import { waitBudgetMs } from "./request-deadline.js";
@@ -223,7 +222,6 @@ export async function replyTo(
     effectSessions,
     menuIdle,
     journalTurns,
-    sessionState,
     tmuxStatusLines,
     watcherRegistry,
     limits,
@@ -281,9 +279,9 @@ export async function replyTo(
         menuIdle: menuIdle.getStats(),
         journalTurns: journalTurns.getStats(),
         sessionState: {
-          sessions: sessionState.size(),
-          observers: sessionState.observers(),
-          revision: sessionState.latestRevision(),
+          sessions: parts.sessionGauges.size(),
+          observers: parts.sessionGauges.observers(),
+          revision: parts.sessionGauges.latestRevision(),
         },
         frameFeeds: frameFeeds.getStats(),
         tmuxStatus: tmuxStatusLines.stats(),
@@ -345,6 +343,9 @@ export async function replyTo(
         order,
       );
     if (checked.ok) {
+      // [LAW:nothing-unseen] The session, first on the request's line once
+      // it passed the checkpoint, so a request refused at its turn names it.
+      noteFacts(facts, { sid: checked.req.sessionId });
       sighted(checked.req, "drawing");
       // [LAW:one-source-of-truth] A request past the checkpoint is the
       // session's data from now on; a followed session's next frame is drawn
@@ -379,21 +380,28 @@ export async function replyTo(
           },
           parts,
         ).then(
-          ({ answer: { resp, motion, clickShown, pipeShown, delivered } }) => {
+          ({
+            answer: { resp, motion, answersClick, pipeShown, delivered },
+          }) => {
             sighted(checked.req, motion);
             return {
               outcome: { kind: "ok" } as const,
               resp,
               // [LAW:single-enforcer] An answer carrying the click error or the
               // launcher's pipe event that reaches its client is the one that
-              // delivered it (src/utils/event-hold.ts).
+              // delivered it (src/utils/event-hold.ts). The click error's mark
+              // is a write, so it is an event the arm makes in a turn.
               delivered: () => {
                 delivered();
-                if (clickShown !== null)
-                  answeredClickError(
-                    sessionState,
-                    checked.req.sessionId,
-                    clickShown,
+                if (answersClick !== null)
+                  void applyUnanswered(
+                    {
+                      kind: "answered",
+                      session: checked.req.sessionId,
+                      error: answersClick,
+                    },
+                    parts,
+                    `sid=${checked.req.sessionId}`,
                   );
                 // Daemon-wide: one session's answer having shown the
                 // launcher's pipe event is what makes it not silent.
@@ -405,7 +413,7 @@ export async function replyTo(
           (error: unknown) => {
             sighted(checked.req, "failed");
             return {
-              outcome: { kind: "threw", error } as const,
+              outcome: daemonOutcome(error),
               resp: renderFailed(error),
               delivered: NOTHING_DELIVERED,
             };
@@ -712,12 +720,27 @@ async function clickRan(
   try {
     return await click();
   } catch (error) {
-    if (error instanceof BadVerbArgs)
-      return { kind: "bad-request", problems: [error.message] };
-    if (error instanceof DaemonClosing) return { kind: "closing", error };
-    if (error instanceof ClickAbandoned) return { kind: "abandoned", error };
-    return { kind: "threw", error };
+    return thrownOutcome(error);
   }
+}
+
+// What a click whose verb threw became: a refusal of its arguments is the
+// client's, and one whose client left is abandoned. Anything else is the
+// daemon's, as a render's is.
+function thrownOutcome(error: unknown): RequestOutcome {
+  if (error instanceof BadVerbArgs)
+    return { kind: "bad-request", problems: [error.message] };
+  if (error instanceof ClickAbandoned) return { kind: "abandoned", error };
+  return daemonOutcome(error);
+}
+
+// [LAW:single-enforcer] What a request's work that threw became, for a
+// render as for a click: the daemon's close refusing it is `closing`, and
+// anything else is the daemon's failure.
+function daemonOutcome(error: unknown): RequestOutcome {
+  return error instanceof DaemonClosing
+    ? { kind: "closing", error }
+    : { kind: "threw", error };
 }
 
 // [LAW:dataflow-not-control-flow] The dispatcher is a table lookup. The verb

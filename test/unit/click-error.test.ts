@@ -9,6 +9,7 @@ import {
   clickErrorAt,
   holdClickError,
   lastClickError,
+  toAnswer,
 } from "../../src/daemon/click-error";
 import { SessionState } from "../../src/daemon/session-state";
 import type { Instant } from "../../src/utils/instant";
@@ -85,4 +86,14 @@ test("a record an older daemon wrote with no answered mark is owed to the next r
     kind: "owed",
     error,
   });
+});
+
+test("an answer carries the shown error to be marked until one has, inside the hold and past it", () => {
+  const state = new SessionState();
+  holdClickError(state, SID, "set-state: refused", at(100));
+  expect(toAnswer(clickErrorAt(state, SID, at(101), "request"))).toEqual(error);
+  expect(toAnswer(clickErrorAt(state, SID, at(END + 600), "request"))).toEqual(error);
+  answeredClickError(state, SID, error);
+  expect(toAnswer(clickErrorAt(state, SID, at(101), "request"))).toBeNull();
+  expect(toAnswer(clickErrorAt(state, SID, at(END), "feed"))).toBeNull();
 });

@@ -91,6 +91,16 @@ export function clickErrorAt(
   return kind === "over" ? { kind } : { kind, error: last };
 }
 
+// [LAW:single-enforcer] The error an answer drawn over `hold` marks answered
+// once it reaches its client: the one shown that no answer has carried yet.
+// None once marked, so an answer inside the hold asks for no mark already
+// made.
+export function toAnswer(hold: ClickErrorHold): ClickErrorRecord | null {
+  return (hold.kind === "held" || hold.kind === "owed") && !hold.error.answered
+    ? hold.error
+    : null;
+}
+
 function recordOf(raw: string): ClickErrorRecord | null {
   let value: unknown;
   try {

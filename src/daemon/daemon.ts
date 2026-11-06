@@ -1,14 +1,19 @@
 // The daemon as a value: what it holds, built from its inputs, and its one close.
 
 import { Runs } from "./runs.js";
-import { inspect } from "node:util";
 import { cacheDir, daemonPaths, homeEnv, locations } from "./paths";
 import type { RendererHome } from "./home";
 import type { Host } from "../host";
 import type { DaemonLog } from "./log";
 import type { Inbound } from "./protocol";
 import type { DaemonParts } from "./daemon-parts.js";
-import { lanesAt, laneClicked, renderFrame, viewLanes } from "./draw-bar.js";
+import {
+  drawAnswer,
+  lanesAt,
+  laneClicked,
+  renderFrame,
+  viewLanes,
+} from "./draw-bar.js";
 import {
   handleRequest,
   replyTo,
@@ -17,7 +22,7 @@ import {
   type ReplyRequest,
 } from "./reply.js";
 import type { CheckedRenderRequest } from "./render-checkpoint.js";
-import type { SessionStorage } from "./session-state";
+import type { SessionStateRW, SessionStorage } from "./session-state";
 import type { HistoryStorage } from "./settings-history";
 import type {
   LaunchOwner,
@@ -50,7 +55,7 @@ import { makeLimits, type LimitsDeps } from "./limits";
 import { SessionState } from "./session-state";
 import { SettingsHistory } from "./settings-history";
 import { NavigationHistory } from "./navigation-history";
-import { apply } from "./apply.js";
+import { apply, sayUnapplied } from "./apply.js";
 import type { DoctorEdge, DoctorStores } from "../doctor/edge";
 import { ProbeArrivals } from "../doctor/handler-probe";
 import { RenderSightings } from "./render-sightings";
@@ -66,7 +71,6 @@ import {
 } from "./pane-visibility.js";
 import { runTmuxAsync } from "../proc/tmux.js";
 import type { TmuxAtExit } from "./tmux-status.js";
-import { DaemonClosing } from "./verb-error.js";
 import { TmuxStatusLines } from "./tmux-status.js";
 import { shellWord } from "../shell-word.js";
 import { reaction } from "mobx";
@@ -119,6 +123,15 @@ export interface DaemonAdapters {
   // writer. Built over the daemon's log: a write in flight at the close finishes
   // after it, and what it logs says so like any other line of the daemon's work.
   readonly storage: (log: DaemonLogger) => DaemonStorage;
+  // [LAW:single-enforcer] What the request and click paths write session state
+  // through: the store itself, or a view over it. The store refuses nothing
+  // of its own while owners outside Apply still write it (a run's ending, a
+  // lane's setup), so the test harness hands in the view that refuses a write
+  // made while no journal turn is held, and the daemon writes through it.
+  readonly sessionWrites: (
+    store: SessionStateRW,
+    turns: Pick<JournalTurns, "getStats">,
+  ) => SessionStateRW;
   // The doctor's stores, which this daemon files.
   readonly doctorStores: DoctorStores;
   // The doctor's reads of the machine, over the config load it is handed.
@@ -295,7 +308,13 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // Before every owner that arms a timer: storage that cannot be read refuses
   // the build with nothing running.
   const storage = inputs.storage(log);
-  const sessionState = new SessionState(storage.session);
+  const store = new SessionState(storage.session);
+  // [LAW:single-enforcer] The one queue every journal waits its turn in.
+  const journalTurns = new JournalTurns({
+    log,
+    monotonic: () => clock.monotonic(),
+  });
+  const sessionState = inputs.sessionWrites(store, journalTurns);
   const settingsHistory = new SettingsHistory(
     sessionState,
     log,
@@ -384,10 +403,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       await apply({ kind: "menu-idle", session, idle }, parts);
     },
     failed: (sessionId, error) =>
-      log(
-        error instanceof DaemonClosing ? "info" : "error",
-        `menu-idle: close failed (session=${sessionId}): ${inspect(error)}`,
-      ),
+      sayUnapplied(log, "menu-idle", `session=${sessionId}`, error),
   });
   // [LAW:single-enforcer] The one signer of every `run` link this daemon draws
   // and the one that verifies them on the click, over the state directory's key.
@@ -398,7 +414,10 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     supersede: (storage, sessionId) =>
       managedStorage.supersede(storage, sessionId),
     launch: launcher.launch,
-    state: sessionState,
+    // [LAW:single-enforcer] exception: a run's ending holds a click error
+    // outside any turn, so it writes the store and not the view; it becomes an
+    // effect-done in the next story of this lane.
+    state: store,
     log,
     now: instant,
     clock,
@@ -421,7 +440,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       home,
       preload: stableAttachPreload(bundle.path, host),
     },
-    state: sessionState,
+    // [LAW:single-enforcer] exception: as a run's ending, a lane setup's
+    // failure is held outside any turn, so it writes the store.
+    state: store,
     log,
     now: instant,
     defer: (run) => void clock.defer(run),
@@ -654,11 +675,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     log,
   });
 
-  // [LAW:single-enforcer] The one queue every journal waits its turn in.
-  const journalTurns = new JournalTurns({
-    log,
-    monotonic: () => clock.monotonic(),
-  });
   const verbCtx = {
     gates,
     sessionState,
@@ -741,6 +757,10 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     fileEvents,
     payloadProviders,
     sessionState,
+    sessionGauges: store,
+    rendererName: home.name,
+    draw: (req, at, waitEndsAt, facts) =>
+      drawAnswer(parts, req, at, waitEndsAt, facts),
     effectSessions,
     menuIdle,
     journalTurns,
@@ -824,7 +844,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         ["managedStorage close", () => managedStorage.close()],
         ["fileEvents close", () => fileEvents.close()],
         ["watcherRegistry close", () => watcherRegistry.closeAll()],
-        ["sessionState close", () => sessionState.close()],
+        ["sessionState close", () => store.close()],
       ];
       for (const [step, run] of teardown) {
         try {
