@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "3b85a8464e84d21d582e674567b70a353a6c3100",
+      "timestamp": "2026-11-06T21:13:45.784Z",
+      "commits": [
+        {
+          "sha": "3b85a8464e84d21d582e674567b70a353a6c3100",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T14:12:58-07:00",
+          "message": "test(spawner): signal the trapping program only once it says its trap is set (candybar-testing-ihvy.0hw) (#652)\n\n* test(spawner): signal the trapping program only once it says its trap is set (candybar-testing-ihvy.0hw)\n\n* test(spawner): the contract states that a realised program writes nothing before its trap is set (candybar-testing-ihvy.0hw)\n\n* test(spawner): the system realiser traps every signal a behaviour ignores, before any output (candybar-testing-ihvy.0hw)"
+        },
+        {
+          "sha": "8640ee7cc89cf9582c81417c6d7fe86b92085480",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-06T21:09:39Z",
+          "message": "chore(release): set `package.json` to 1.205.1 [skip ci]\n\n## [1.205.1](https://github.com/promptctl/cc-candybar/compare/v1.205.0...v1.205.1) (2026-11-06)\n\n### Bug Fixes\n\n* **click:** copy and open clicks name their session, so a menu's idle clock counts them (brandon-menus-sjhy.182) ([#650](https://github.com/promptctl/cc-candybar/issues/650)) ([242a73c](https://github.com/promptctl/cc-candybar/commit/242a73c2288bc60ae5b871e410be3d5c45b88c48))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-653",
       "ref": "refs/pull/653/merge",
       "sha": "349755dcb0fa01e01a3d775c04d2b87a7a361960",
@@ -20,57 +42,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T14:07:41-07:00",
           "message": "fix(test): the launch-group abort case reaches its window by what it observes, not a sleep (brandon-menus-sjhy.irc)\n\nThe case means one state: the child ended, its group is gone, and the launch\nhas not yet sampled the group. A 1300 ms sleep aimed at it, so a loaded\nmachine saw the launch's own sample land first and read ok:true.\n\nThe case now launches on a held clock, so the launch samples the group only\nwhen the case advances it. It waits, by condition, for the child's pidfile,\nfor the group's end, and for the launch to have seen the exit, then aborts\nand advances. The holder outside the group, which keeps the child's close\nfrom concluding first, lives until the case removes its directory, not for\n3 s of real time.\n\nThe launcher's owner moves into launcherOn(clock), shared by the beforeEach\nand this case.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-652",
-      "ref": "refs/pull/652/merge",
-      "sha": "ea1a9990319b17478ad1de92a0232e895c607df4",
-      "timestamp": "2026-11-06T21:06:00.791Z",
-      "commits": [
-        {
-          "sha": "ea1a9990319b17478ad1de92a0232e895c607df4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T21:05:15Z",
-          "message": "Merge 57b028afc19b6c7a5e5231e7f0a69f163d58c6d1 into 242a73c2288bc60ae5b871e410be3d5c45b88c48\n"
-        },
-        {
-          "sha": "57b028afc19b6c7a5e5231e7f0a69f163d58c6d1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:57:38-07:00",
-          "message": "test(spawner): the system realiser traps every signal a behaviour ignores, before any output (candybar-testing-ihvy.0hw)\n"
-        },
-        {
-          "sha": "25462b029db0d227eefa5a29143d525fb9d08d84",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:56:34-07:00",
-          "message": "test(spawner): the contract states that a realised program writes nothing before its trap is set (candybar-testing-ihvy.0hw)\n"
-        },
-        {
-          "sha": "82a4e0fd7d825ef92ff0d0041a9d53c370bb0fee",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:54:27-07:00",
-          "message": "test(spawner): signal the trapping program only once it says its trap is set (candybar-testing-ihvy.0hw)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "242a73c2288bc60ae5b871e410be3d5c45b88c48",
-      "timestamp": "2026-11-06T21:01:37.597Z",
-      "commits": [
-        {
-          "sha": "242a73c2288bc60ae5b871e410be3d5c45b88c48",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T14:00:44-07:00",
-          "message": "fix(click): copy and open clicks name their session, so a menu's idle clock counts them (brandon-menus-sjhy.182) (#650)\n\n* fix(click): copy and open clicks name their session, so a menu's idle clock counts them (brandon-menus-sjhy.182)\n\nThe idle close counts a click as activity in the session the click names.\nCopy and open links carried only their text, so clicking ⎘ id or ↗ proj\nin a menu left the clock running and the menu closed under the user.\n\nBoth verbs now carry `[sessionId, argument]` and join the session-first\nand segmented sets, so the daemon reads their session at the one\ncheckpoint every click crosses. A copy whose pbcopy fails now shows on\nthe session's bar instead of only in the log.\n\nThey also take new wire names, `copy-text` and `open-in-vscode`. A\nsession id is nearly any slash-free string, so a link drawn when copy\ncarried only its text, read under the old name, would have its text\ntaken for a session. Under the new names an earlier link is an unknown\nverb that names no session, refused and logged. Keeping the earlier\nform working would be the second grammar the ticket rules out.\n\nThe page's copy path and the link words read the text from the second\nargument. The byte snapshots change only in those links and their OSC 8\nids.\n\n* fix(click): a click's session is its first leaf effect's, and a retired verb reads as refused (brandon-menus-sjhy.182)\n\nThe session-first set had become a copy of the leaf table's keys; the\ntable is now the one place a verb's first segment is its session. The\nframe reader refuses a verb the daemon has not, as the daemon does, so\nan old copy link reads as refused. Stale verb names fixed in comments\nand docs; the failed copy test pins its warning again.\n\n* fix(click): the link reader names a retired verb before reading its value (brandon-menus-sjhy.182)\n\nThe reader refuses an unknown verb before decoding its value, as the\ndaemon does, so a retired copy link with a malformed escape reads as the\nverb it is. The decode test pins the single-argument codec again, and\nthe Effect comment says every leaf verb leads with its session."
         }
       ]
     },
