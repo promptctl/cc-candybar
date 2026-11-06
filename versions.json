@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-628",
+      "ref": "refs/pull/628/merge",
+      "sha": "e965d95b38d4cb265e5bcaf3358adff96bb97e65",
+      "timestamp": "2026-11-06T06:52:15.888Z",
+      "commits": [
+        {
+          "sha": "e965d95b38d4cb265e5bcaf3358adff96bb97e65",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T06:51:18Z",
+          "message": "Merge 5cf7644895cb8cedc9d2ab8aa3f357415ec695be into 1df488f24662b4c0e23f92afecd25c719debac6a\n"
+        },
+        {
+          "sha": "5cf7644895cb8cedc9d2ab8aa3f357415ec695be",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T23:51:06-07:00",
+          "message": "fix(home): a load answers only a refused stored path; the durable-config helper fails on a dropped history (candybar-gather-renderer-76bb.f00.n2j)\n"
+        },
+        {
+          "sha": "5312cc5053807422b9ac3454d85e0a3c395a6340",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T23:38:10-07:00",
+          "message": "feat(home): a stored path says whether it is the home's or the world's; a copied home undoes into its own config (candybar-gather-renderer-76bb.f00.n2j)\n\nA path a renderer stores is a StoredPath: a file under the home's root is the\nhome's, stored relative to it, and anything else is the world's, stored\nabsolute. Reading one back refuses an absolute path under the root, a home path\nthat climbs out, and a relative world path, naming it. The root is one\nderivation of the home on DaemonPaths: a named home's root, main's config\ndirectory.\n\nThe settings history's file changes and the render origin's configFile hold\nthe union on disk; in memory both stay resolved absolute paths. A history\nnaming a file its root refuses is dropped whole, with a warning naming the\nsession, the step and the path. The origin's configFile is the union itself or\nnull for a search, so an older build refuses the record loudly rather than\nreading a named file as a search, and the record heals on the next render. The\nclient hints record drops configEnv, which nothing reads back: the origin is\nthe one record of the config a request named.\n\nThe two-homes test widens: one home names its config file, no file under\neither root but the log names either root, and the first home's tree copied\nunder a third root undoes into the copy's config and leaves the original's\nbyte-equal.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-627",
       "ref": "refs/pull/627/merge",
       "sha": "1c152c37d89b09667438e4fc6cd8bd9c1f6abe34",
@@ -91,28 +120,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-05T22:33:39-07:00",
           "message": "fix(load-gate): the steady phase begins once the daemon has settled, a wait with no time left takes no loop turn, and a failed render names what the daemon's log shows over it (candybar-gather-renderer-76bb.6pj.09c)\n\nThe one failed render of run 42154313711 was not a GC pause: the daemon logged a line every 10-34 ms through the episode. It was a saturated loop while the speed lane was still landing for every session, 13 s into a steady phase that had begun before the daemon settled, and the failed request lost its last 54 ms to a 0 ms timer behind the poll phase. The gate now waits for every session's latest render to be answered inside its wait, at both points the steady phase must not inherit a backlog from; waitWithin with no time left aborts in the same turn; each steady failure carries the daemon's lines, longest silence and deadline draws over its round trip, and the facts carry the connect-to-wait spread.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-628",
-      "ref": "refs/pull/628/merge",
-      "sha": "021689cdb82b811cee25087d4f3dc97a23de8688",
-      "timestamp": "2026-11-06T06:43:55.393Z",
-      "commits": [
-        {
-          "sha": "021689cdb82b811cee25087d4f3dc97a23de8688",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T23:43:07-07:00",
-          "message": "Merge 5312cc5053807422b9ac3454d85e0a3c395a6340 into 1df488f24662b4c0e23f92afecd25c719debac6a\n"
-        },
-        {
-          "sha": "5312cc5053807422b9ac3454d85e0a3c395a6340",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T23:38:10-07:00",
-          "message": "feat(home): a stored path says whether it is the home's or the world's; a copied home undoes into its own config (candybar-gather-renderer-76bb.f00.n2j)\n\nA path a renderer stores is a StoredPath: a file under the home's root is the\nhome's, stored relative to it, and anything else is the world's, stored\nabsolute. Reading one back refuses an absolute path under the root, a home path\nthat climbs out, and a relative world path, naming it. The root is one\nderivation of the home on DaemonPaths: a named home's root, main's config\ndirectory.\n\nThe settings history's file changes and the render origin's configFile hold\nthe union on disk; in memory both stay resolved absolute paths. A history\nnaming a file its root refuses is dropped whole, with a warning naming the\nsession, the step and the path. The origin's configFile is the union itself or\nnull for a search, so an older build refuses the record loudly rather than\nreading a named file as a search, and the record heals on the next render. The\nclient hints record drops configEnv, which nothing reads back: the origin is\nthe one record of the config a request named.\n\nThe two-homes test widens: one home names its config file, no file under\neither root but the log names either root, and the first home's tree copied\nunder a third root undoes into the copy's config and leaves the original's\nbyte-equal.\n"
         }
       ]
     },

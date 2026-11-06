@@ -65022,18 +65022,24 @@ function storedPathOf(root, file) {
   const rel = underRoot(root, file);
   return rel === null ? { kind: "world", path: file } : { kind: "home", path: rel };
 }
+var StoredPathRefused = class extends Error {
+};
 function resolveStoredPath(root, raw) {
   if (raw === null || typeof raw !== "object") {
-    throw new Error(`stored path is not an object: ${JSON.stringify(raw)}`);
+    throw new StoredPathRefused(
+      `stored path is not an object: ${JSON.stringify(raw)}`
+    );
   }
   const { kind, path: p2 } = raw;
   if (typeof p2 !== "string") {
-    throw new Error(`stored path has no path: ${JSON.stringify(raw)}`);
+    throw new StoredPathRefused(
+      `stored path has no path: ${JSON.stringify(raw)}`
+    );
   }
   if (kind === "home") {
     const file = import_node_path17.default.join(root, p2);
     if (import_node_path17.default.isAbsolute(p2) || underRoot(root, file) !== p2) {
-      throw new Error(
+      throw new StoredPathRefused(
         `stored home path ${JSON.stringify(p2)} is not a plain path inside the home's root ${root}`
       );
     }
@@ -65041,16 +65047,18 @@ function resolveStoredPath(root, raw) {
   }
   if (kind === "world") {
     if (!import_node_path17.default.isAbsolute(p2)) {
-      throw new Error(`stored world path ${JSON.stringify(p2)} is not absolute`);
+      throw new StoredPathRefused(
+        `stored world path ${JSON.stringify(p2)} is not absolute`
+      );
     }
     if (underRoot(root, p2) !== null) {
-      throw new Error(
+      throw new StoredPathRefused(
         `stored world path ${p2} lies under the home's root ${root}; a home's file is stored relative to it`
       );
     }
     return p2;
   }
-  throw new Error(
+  throw new StoredPathRefused(
     `stored path has no kind of home or world: ${JSON.stringify(raw)}`
   );
 }
@@ -65522,7 +65530,8 @@ function fileHistoryStorage(file, root, logger) {
               try {
                 return resolveStoredPath(root, stored);
               } catch (e) {
-                throw new Error(
+                if (!(e instanceof StoredPathRefused)) throw e;
+                throw new StoredPathRefused(
                   `session ${sid}'s ${where}: ${e.message}`
                 );
               }
@@ -65530,10 +65539,8 @@ function fileHistoryStorage(file, root, logger) {
           ]
         );
       } catch (e) {
-        logger(
-          "warn",
-          `settings-history load: ${e.message}; starting empty`
-        );
+        if (!(e instanceof StoredPathRefused)) throw e;
+        logger("warn", `settings-history load: ${e.message}; starting empty`);
         return {};
       }
       const retired = /* @__PURE__ */ new Set();
@@ -70877,6 +70884,7 @@ function parseRenderOrigin(raw, root) {
       typeof configFile === "string" ? { kind: "world", path: configFile } : configFile
     );
   } catch (e) {
+    if (!(e instanceof StoredPathRefused)) throw e;
     throw new BadVerbArgs(`render origin: ${e.message}`);
   }
   return { projectDir, cwd: cwd2, target: recordedTarget(source, file) };
