@@ -84203,10 +84203,11 @@ function tmuxQuoted(text4) {
   return `"${text4.replace(/[\\"$]/g, (c) => `\\${c}`)}"`;
 }
 function commandText(commands) {
-  return commands.map((c) => c.map(tmuxQuoted).join(" ")).join(" ; ");
+  return commands.map((c) => c.map(wordText).join(" ")).join(" ; ");
 }
+var wordText = (word) => typeof word === "string" ? tmuxQuoted(word) : `{ ${commandText(word.block)} }`;
 function boundText(commands) {
-  return commands.map((c) => c.map(tmuxQuoted).join(" ")).join(" \\; ");
+  return commands.map((c) => c.map(wordText).join(" ")).join(" \\; ");
 }
 var C_ESCAPES = {
   n: "\n",
@@ -84220,18 +84221,9 @@ var C_ESCAPES = {
 };
 var lonely = (text4, i) => text4.startsWith("\\;", i) && (text4[i + 2] ?? " ") === " ";
 function tmuxCommands(text4) {
-  const commands = [[]];
   let i = 0;
-  while (i < text4.length) {
-    if (text4[i] === " ") {
-      i++;
-      continue;
-    }
-    if (text4[i] === ";" || lonely(text4, i)) {
-      commands.push([]);
-      i += text4[i] === ";" ? 1 : 2;
-      continue;
-    }
+  const alone = (brace) => text4[i] === brace && (text4[i + 1] ?? " ") === " ";
+  const word = () => {
     const bytes = [];
     const add2 = (s) => {
       bytes.push(...import_buffer.Buffer.from(s, "utf8"));
@@ -84262,9 +84254,26 @@ function tmuxCommands(text4) {
         i += char.length;
       }
     }
-    commands.at(-1).push(import_buffer.Buffer.from(bytes).toString("utf8"));
-  }
-  return commands.filter((c) => c.length > 0);
+    return import_buffer.Buffer.from(bytes).toString("utf8");
+  };
+  const list2 = (inBlock) => {
+    const commands = [[]];
+    while (i < text4.length) {
+      if (text4[i] === " ") i++;
+      else if (text4[i] === ";" || lonely(text4, i)) {
+        commands.push([]);
+        i += text4[i] === ";" ? 1 : 2;
+      } else if (inBlock && alone("}")) {
+        i++;
+        break;
+      } else if (alone("{")) {
+        i++;
+        commands.at(-1).push({ block: list2(true) });
+      } else commands.at(-1).push(word());
+    }
+    return commands.filter((c) => c.length > 0);
+  };
+  return list2(false);
 }
 
 // src/tmux-status/click-binding.ts
@@ -84274,7 +84283,7 @@ var CLICK_OPTION = "@cc-candybar-click";
 function sessionClick(handler, name, socket, mac) {
   return `${handler} ${addressedLink(name, VERB_RANGE, encodeSegments([socket, mac]))}`;
 }
-var NO_RENDERER = "cc-candybar: no renderer takes clicks on this row: the one that drew it is gone, or older than this binding";
+var NO_RENDERER = "cc-candybar: no renderer takes clicks on this row: the one that drew it is older than this binding";
 var OUR_RANGE = `#{m:${RANGE_PREFIX}*,#{mouse_status_range}}`;
 function clickBinding(user) {
   const run3 = `run-shell -b ${tmuxQuoted(`#{${CLICK_OPTION}}/#{s/%//:pane_id}/#{q:mouse_status_range}`)}`;
@@ -84295,10 +84304,12 @@ function chained(list2) {
   if (only === void 0 || more.length > 0 || only[0] !== "if-shell")
     return void 0;
   let operands = only.slice(1);
-  while (operands[0]?.startsWith("-")) operands = operands.slice(1);
+  while (typeof operands[0] === "string" && operands[0].startsWith("-"))
+    operands = operands.slice(1);
   if (operands[0] !== OUR_RANGE) return void 0;
   const otherwise = operands[2];
-  return otherwise === void 0 ? null : tmuxCommands(otherwise);
+  if (otherwise === void 0) return null;
+  return typeof otherwise === "string" ? tmuxCommands(otherwise) : otherwise.block;
 }
 function boundOf2(listKeys) {
   const printed = BOUND.exec(listKeys)?.[1];
@@ -84350,6 +84361,7 @@ function sameFormats(a, b) {
 function tmuxArg(value) {
   return value.endsWith(";") ? `${value.slice(0, -1)}\\;` : value;
 }
+var WROTE_NOTHING = { kind: "ok", stdout: "" };
 function chain(commands) {
   return commands.flatMap((command, i) => [
     ...i === 0 ? [] : [";"],
@@ -84620,7 +84632,7 @@ var TmuxStatusLines = class {
       if (answers === null) continue;
       const restore = this.bindingRestore(socket, answers[0] ?? "");
       if (restore === null) continue;
-      const run3 = this.counted(socket, atExit(socket, restore.command));
+      const run3 = this.writeSync(atExit, socket, [restore.command]);
       this.saidBindingRestore(socket, run3, restore.user);
     }
   }
@@ -84768,6 +84780,7 @@ var TmuxStatusLines = class {
       `#{session_id}	#{${PRIOR_OPTION}}	#{${WROTE_OPTION}}`
     ]);
     if (run3.kind === "ok") {
+      const ours = this.marks(socket);
       const marks = [];
       for (const line of run3.stdout.split("\n")) {
         const [session, prior, wrote = ""] = line.split("	");
@@ -84780,7 +84793,7 @@ var TmuxStatusLines = class {
             rows: [],
             status: found2.status
           });
-          marks.push(...marksWrite(session, this.marks(socket)));
+          marks.push(...marksWrite(session, ours));
         } else this.leave(socket, server, session, found2.why);
       }
       await this.write(socket, marks);
@@ -84852,7 +84865,7 @@ var TmuxStatusLines = class {
         ["set-option", "-t", session, WROTE_OPTION, word]
       );
     }
-    const took = commands.length === 0 || await this.write(socket, [
+    const took = commands.length === 0 || (await this.write(socket, [
       [
         "if-shell",
         "-F",
@@ -84861,7 +84874,7 @@ var TmuxStatusLines = class {
         `#{${PRIOR_OPTION}}`,
         commandText(commands)
       ]
-    ]);
+    ])).kind === "ok";
     if (!took) return;
     layout.rows = rows;
     layout.status = status;
@@ -84893,10 +84906,10 @@ var TmuxStatusLines = class {
     if (answers === null || this.closed) return;
     const { user } = boundOf2(answers[0] ?? "");
     server.bound = true;
-    const took = await this.write(socket, [
+    const took = (await this.write(socket, [
       clickBinding(user),
       ["set-option", "-g", "-q", "-u", OLDER_BINDING_RECORD]
-    ]);
+    ])).kind === "ok";
     if (!took) {
       server.bound = false;
       return;
@@ -84915,7 +84928,7 @@ var TmuxStatusLines = class {
     if (answers === null) return;
     const restore = this.bindingRestore(socket, answers[0] ?? "");
     if (restore === null) return;
-    const run3 = await this.run(socket, restore.command);
+    const run3 = await this.write(socket, [restore.command]);
     this.saidBindingRestore(socket, run3, restore.user);
   }
   // The call that puts the user's binding back, from the root table as it
@@ -84969,16 +84982,16 @@ var TmuxStatusLines = class {
     const run3 = this.counted(socket, atExit(socket, readChain(queries)));
     return run3.kind === "ok" ? answersOf(run3.stdout, queries.length) : null;
   }
-  // Whether tmux took the write.
+  // What tmux said to the write: `ok` where it took it.
   async write(socket, commands, stdin) {
-    if (commands.length === 0) return true;
+    if (commands.length === 0) return WROTE_NOTHING;
     this.writes++;
-    return (await this.run(socket, chain(commands), stdin)).kind === "ok";
+    return this.run(socket, chain(commands), stdin);
   }
   writeSync(atExit, socket, commands, stdin) {
-    if (commands.length === 0) return;
+    if (commands.length === 0) return WROTE_NOTHING;
     this.writes++;
-    this.counted(socket, atExit(socket, chain(commands), stdin));
+    return this.counted(socket, atExit(socket, chain(commands), stdin));
   }
 };
 var spelled2 = (user) => user === null ? "unbound" : JSON.stringify(commandText(user));
