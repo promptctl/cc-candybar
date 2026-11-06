@@ -4,15 +4,22 @@
     {
       "version": "pr-631",
       "ref": "refs/pull/631/merge",
-      "sha": "d871d00e2d80e6264283330ffb91e78108d4f8e8",
-      "timestamp": "2026-11-06T08:19:46.420Z",
+      "sha": "efc0e2c9600bd2b24515ae7b885fc0d64ab6d3e5",
+      "timestamp": "2026-11-06T08:21:07.185Z",
       "commits": [
         {
-          "sha": "d871d00e2d80e6264283330ffb91e78108d4f8e8",
+          "sha": "efc0e2c9600bd2b24515ae7b885fc0d64ab6d3e5",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T08:18:31Z",
-          "message": "Merge 1bc1434d58fd8b8019dcda2edd3efedbfb7b8908 into 91002fc866ad04a5022b58207a9968824f6712bc\n"
+          "timestamp": "2026-11-06T08:20:13Z",
+          "message": "Merge 8ea32ab48c50fdcd235b7e7c4f3b70cc13fc54ba into 91002fc866ad04a5022b58207a9968824f6712bc\n"
+        },
+        {
+          "sha": "8ea32ab48c50fdcd235b7e7c4f3b70cc13fc54ba",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T01:20:00-07:00",
+          "message": "fix(test): the close case proves the daemon's own work reached the leak record, and every close failure is reported (candybar-testing-0x6u.6f3)\n"
         },
         {
           "sha": "1bc1434d58fd8b8019dcda2edd3efedbfb7b8908",
