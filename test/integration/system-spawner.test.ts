@@ -9,6 +9,7 @@ const quoted = (s: string): string => `'${s.replace(/'/g, `'\\''`)}'`;
 // contract ends a hung one by that group.
 function script(b: Behaviour): string {
   const steps: string[] = [];
+  // The trap comes before any output, so output says the trap is set.
   if (b.ignores?.includes("SIGTERM")) steps.push("trap '' TERM");
   if (b.stdout) steps.push(`printf %s ${quoted(b.stdout)}`);
   if (b.stderr) steps.push(`printf %s ${quoted(b.stderr)} >&2`);

@@ -121,8 +121,9 @@ export function spawnerContract(name: string, make: () => Subject): void {
     });
 
     test("a program that ignores a signal outlives it, and the next one ends it", async () => {
-      const w = begin({ ...hung(), ignores: ["SIGTERM"] });
-      await subject!.settle(60);
+      // Its line says its trap is set; a signal sent before that would end it.
+      const w = begin({ ...hung(), ignores: ["SIGTERM"], stdout: "trapped" });
+      await until("its trap is set", () => w.stdout === "trapped");
       subject!.spawner.signalGroup(w.child.pid!, "SIGTERM");
       await subject!.settle(200);
       expect(w.exit).toBeNull();
