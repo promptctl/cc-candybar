@@ -370,7 +370,10 @@ const inTurn = (handler: VerbHandler): Verb => ({
 
 import type { ClickAsker, JournalTurn, JournalTurns } from "../journal-turns";
 import { BadVerbArgs, DaemonClosing, decodeWire } from "../verb-error";
-import { resolveStoredPath } from "../foundations/stored-path";
+import {
+  StoredPathRefused,
+  resolveStoredPath,
+} from "../foundations/stored-path";
 import {
   parseSessionId,
   type ParsedSessionId,
@@ -862,7 +865,8 @@ export function parseRenderOrigin(raw: string, root: string): RenderOrigin {
               : configFile,
           );
   } catch (e) {
-    throw new BadVerbArgs(`render origin: ${(e as Error).message}`);
+    if (!(e instanceof StoredPathRefused)) throw e;
+    throw new BadVerbArgs(`render origin: ${e.message}`);
   }
   return { projectDir, cwd, target: recordedTarget(source, file) };
 }

@@ -34,6 +34,7 @@ import { recordingView, type SessionStateRW } from "./session-state";
 import { BadVerbArgs } from "./verb-error";
 import { writeAtomic } from "../utils/atomic-write.js";
 import {
+  StoredPathRefused,
   resolveStoredPath,
   storedPathOf,
   type StoredPath,
@@ -784,18 +785,17 @@ export function fileHistoryStorage(
               try {
                 return resolveStoredPath(root, stored);
               } catch (e) {
-                throw new Error(
-                  `session ${sid}'s ${where}: ${(e as Error).message}`,
+                if (!(e instanceof StoredPathRefused)) throw e;
+                throw new StoredPathRefused(
+                  `session ${sid}'s ${where}: ${e.message}`,
                 );
               }
             }),
           ],
         );
       } catch (e) {
-        logger(
-          "warn",
-          `settings-history load: ${(e as Error).message}; starting empty`,
-        );
+        if (!(e instanceof StoredPathRefused)) throw e;
+        logger("warn", `settings-history load: ${e.message}; starting empty`);
         return {};
       }
       const retired = new Set<string>();

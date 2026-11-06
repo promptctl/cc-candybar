@@ -16,7 +16,12 @@
 import { requestedConfigTarget } from "../../src/config-hint";
 import { hostOf } from "./host";
 import type { Host } from "../../src/host";
-import { HOME_ENV, NAME_ENV, homeOf, type RendererHome } from "../../src/daemon/home";
+import {
+  HOME_ENV,
+  NAME_ENV,
+  homeOf,
+  type RendererHome,
+} from "../../src/daemon/home";
 import {
   mkdirSync,
   mkdtempSync,
@@ -78,7 +83,6 @@ export interface DurableConfig {
   dispose(): void;
 }
 
-
 export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
   const root = mkdtempSync(join(tmpdir(), prefix));
   const host = hostOf({
@@ -87,8 +91,16 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
     [NAME_ENV]: "durable",
   });
   const home = homeOf(host);
+  // Anything the storage logs is a history the daemon would drop or fail to
+  // keep, so it fails the test rather than reading as empty stacks.
   const historyStorage = (): HistoryStorage =>
-    fileHistoryStorage(settingsHistoryPath(home), storedRoot(home), () => {});
+    fileHistoryStorage(
+      settingsHistoryPath(home),
+      storedRoot(home),
+      (level, message) => {
+        throw new Error(`settings history ${level}: ${message}`);
+      },
+    );
   const configPath = join(configDir(home), "config.json5");
   mkdirSync(dirname(configPath), { recursive: true });
   const readOrNull = (file: string): string | null => {
@@ -119,20 +131,19 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
       { kind: "file", file, before, after },
     ],
     historyFor: (sessionState) =>
-      new SettingsHistory(
-        sessionState,
-        () => {},
-        historyStorage(),
-      ),
+      new SettingsHistory(sessionState, () => {}, historyStorage()),
     seedOrigin: (sessionState, sessionId, configFile) =>
       sessionState.set(
         sessionId,
         SESSION_RENDER_ORIGIN_KEY,
-        encodeRenderOrigin({
-          projectDir: root,
-          cwd: root,
-          target: requestedConfigTarget(configFile, undefined),
-        }, storedRoot(home)),
+        encodeRenderOrigin(
+          {
+            projectDir: root,
+            cwd: root,
+            target: requestedConfigTarget(configFile, undefined),
+          },
+          storedRoot(home),
+        ),
       ),
     dispose: () => {
       rmSync(root, { recursive: true, force: true });

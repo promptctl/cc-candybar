@@ -31,23 +31,32 @@ export function storedPathOf(root: string, file: string): StoredPath {
     : { kind: "home", path: rel };
 }
 
+// [LAW:no-silent-failure] A stored path its root refuses, as its own type, so a
+// store that answers a refusal (dropping a history, refusing a click) answers
+// that and nothing else: any other throw is a defect and stays one.
+export class StoredPathRefused extends Error {}
+
 // [LAW:parse-dont-validate] The one way a stored path is read back: the
-// absolute path it names under this root, or a throw naming what is wrong. An
-// absolute path under the root is refused rather than taken, because a home's
-// file has one spelling, and the absolute one names a root the tree may no
-// longer live at.
+// absolute path it names under this root, or a StoredPathRefused naming what
+// is wrong. An absolute path under the root is refused rather than taken,
+// because a home's file has one spelling, and the absolute one names a root
+// the tree may no longer live at.
 export function resolveStoredPath(root: string, raw: unknown): string {
   if (raw === null || typeof raw !== "object") {
-    throw new Error(`stored path is not an object: ${JSON.stringify(raw)}`);
+    throw new StoredPathRefused(
+      `stored path is not an object: ${JSON.stringify(raw)}`,
+    );
   }
   const { kind, path: p } = raw as Record<string, unknown>;
   if (typeof p !== "string") {
-    throw new Error(`stored path has no path: ${JSON.stringify(raw)}`);
+    throw new StoredPathRefused(
+      `stored path has no path: ${JSON.stringify(raw)}`,
+    );
   }
   if (kind === "home") {
     const file = path.join(root, p);
     if (path.isAbsolute(p) || underRoot(root, file) !== p) {
-      throw new Error(
+      throw new StoredPathRefused(
         `stored home path ${JSON.stringify(p)} is not a plain path inside the home's root ${root}`,
       );
     }
@@ -55,16 +64,18 @@ export function resolveStoredPath(root: string, raw: unknown): string {
   }
   if (kind === "world") {
     if (!path.isAbsolute(p)) {
-      throw new Error(`stored world path ${JSON.stringify(p)} is not absolute`);
+      throw new StoredPathRefused(
+        `stored world path ${JSON.stringify(p)} is not absolute`,
+      );
     }
     if (underRoot(root, p) !== null) {
-      throw new Error(
+      throw new StoredPathRefused(
         `stored world path ${p} lies under the home's root ${root}; a home's file is stored relative to it`,
       );
     }
     return p;
   }
-  throw new Error(
+  throw new StoredPathRefused(
     `stored path has no kind of home or world: ${JSON.stringify(raw)}`,
   );
 }
