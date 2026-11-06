@@ -127,12 +127,17 @@ export async function untilHeard(
     });
     return asked;
   };
+  // [LAW:no-ambient-temporal-coupling] The rounds end at one deadline, so a
+  // slow mutation or poll tick is spent from the wait, not added to it. The
+  // first round always runs: the mutation is applied at once.
   const wait = within(MAX_ROUNDS * RETRY_MS);
-  const rounds = Math.floor(wait.ms / RETRY_MS);
-  for (let round = 1; round <= rounds; round++) {
+  const deadline = Date.now() + wait.ms;
+  let rounds = 0;
+  do {
+    rounds++;
     await mutate();
     if (await holdsWithin(answer, RETRY_MS)) return;
-  }
+  } while (Date.now() < deadline);
   throw new Error(
     `${nameOf(what)} did not hold within ${wait.named}, after ${rounds} mutations ${RETRY_MS} ms apart`,
   );

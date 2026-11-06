@@ -26,6 +26,7 @@ import { effectsOf, type DecodedEffect } from "./click";
 import {
   endpointOf,
   sendDaemonRequest,
+  sendWithin,
   waitForExit,
   type DaemonTarget,
 } from "./daemon-wire";
@@ -118,7 +119,7 @@ async function renderAnswer(
     // (src/daemon/request-deadline.ts). A case's own deadline wins, and so
     // does the time the case has left.
     const wait = within(replyBudgetMs);
-    const resp = await sendDaemonRequest(
+    const resp = await sendWithin(
       target,
       {
         v: PROTOCOL_VERSION,
@@ -126,7 +127,7 @@ async function renderAnswer(
         deadline: now() + wait.ms,
         ...request,
       },
-      wait.ms,
+      wait,
     );
     if (!resp.ok) {
       if (resp.code === "TIMEOUT" && attempt < TIMEOUT_RETRY_BUDGET) continue;

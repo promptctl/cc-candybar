@@ -17,7 +17,7 @@ import { dialWithin, type Dialer } from "../../src/dial/dialer";
 import { systemDialer } from "../../src/dial/system-dialer";
 import type { Request, Response } from "../../src/daemon/protocol";
 import { systemTimekeeper } from "../../src/time";
-import { within } from "./case-time";
+import { within, type Wait } from "./case-time";
 
 const DEFAULT_REPLY_BUDGET_MS = 5000;
 
@@ -67,9 +67,17 @@ export function sendDaemonRequest(
   req: Record<string, unknown>,
   timeoutMs: number = DEFAULT_REPLY_BUDGET_MS,
 ): Promise<Response> {
-  // [LAW:no-silent-failure] A failure names the bound the request was sent
-  // under, so one cut short by its case says so.
-  const wait = within(timeoutMs);
+  return sendWithin(target, req, within(timeoutMs));
+}
+
+// A request sent under a bound already cut, for a caller that states the same
+// bound to the daemon as its deadline. [LAW:no-silent-failure] A failure names
+// the bound, so one cut short by its case says so.
+export function sendWithin(
+  target: DaemonTarget,
+  req: Record<string, unknown>,
+  wait: Wait,
+): Promise<Response> {
   return endpointOf(target)
     .send(req, wait.ms)
     .catch((e: unknown) => {

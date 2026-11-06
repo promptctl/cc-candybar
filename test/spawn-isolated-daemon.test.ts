@@ -22,7 +22,7 @@ import {
   readinessFailure,
   type ReadinessFailure,
 } from "./helpers/spawn-isolated-daemon";
-import type { Wait } from "./helpers/case-time";
+import { boundedBy, MARGIN_MS, type Wait } from "./helpers/case-time";
 
 const LOG_LINE = "2026-09-12T00:00:00.000Z [error] refusing to boot: nope";
 const STDERR_LINE = "Error: died before it had a log";
@@ -82,7 +82,7 @@ describe("readinessFailure — what the socket did, what our process did", () =>
   test("a boot cut short by its case names the case's time, not the budget", () => {
     const m = message(
       { phase: "booting", exit: null },
-      { ms: 4_210, named: "the 4210ms its case had left" },
+      boundedBy(12_000, 4_210 + MARGIN_MS),
     );
     expect(m).toContain("still running after the 4210ms its case had left");
   });

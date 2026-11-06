@@ -14,7 +14,7 @@ export interface Wait {
 // longest step is the pool's read of a slot owner's start time. A second on top
 // is for what a failure does before it throws: killing the daemon and reading
 // what it said.
-const MARGIN_MS = START_TIME_READ_BUDGET_MS + 1_000;
+export const MARGIN_MS = START_TIME_READ_BUDGET_MS + 1_000;
 
 // [LAW:parse-dont-validate] A budget is a finite number of milliseconds: an
 // infinite one would reach a timer, which fires at once on it.
@@ -24,7 +24,7 @@ export function boundedBy(budgetMs: number, leftMs: number): Wait {
   }
   const room = Math.max(0, leftMs - MARGIN_MS);
   return room < budgetMs
-    ? { ms: room, named: `the ${room}ms its case had left` }
+    ? { ms: room, named: `the ${room}ms its case had left, ${MARGIN_MS}ms short of Jest's timeout` }
     : { ms: budgetMs, named: `${budgetMs}ms` };
 }
 
@@ -42,12 +42,13 @@ export function within(budgetMs: number): Wait {
   return boundedBy(budgetMs, timeLeft());
 }
 
-// The rest of the running case, for a wait whose bound is the case itself.
-// [LAW:no-silent-failure] Outside a case there is no rest to wait out.
-export function restOfCase(): number {
+// The rest of the running case, for a wait whose bound is the case itself:
+// a bound, not the raw time left, so no wait built on it ends with Jest's
+// timeout. [LAW:no-silent-failure] Outside a case there is no rest to wait out.
+export function restOfCase(): Wait {
   const left = timeLeft();
   if (!Number.isFinite(left)) {
     throw new Error("restOfCase: no Jest case is running, so it has no time left to wait out");
   }
-  return left;
+  return boundedBy(left, left);
 }

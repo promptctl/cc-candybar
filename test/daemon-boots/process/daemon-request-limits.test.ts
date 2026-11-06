@@ -17,7 +17,7 @@ import {
 import { REQUEST_TIMEOUT_MS } from "../../../src/daemon/request-deadline";
 import { restOfCase } from "../../helpers/case-time";
 import { killAndWait, renderBody } from "../../helpers/daemon-e2e";
-import { sendDaemonRequest } from "../../helpers/daemon-wire";
+import { sendDaemonRequest, sendWithin } from "../../helpers/daemon-wire";
 import { field, landedEvents, only } from "../../helpers/request-event";
 import {
   prepareIsolatedDaemonEnv,
@@ -50,7 +50,7 @@ test("a render whose config read outlives the request timeout answers its client
     // backstop. The helper's default budget is for an answered request, so
     // the budget here is the rest of the case. The event's `took` below is
     // what says the render outlived the backstop.
-    const answered = sendDaemonRequest(
+    const answered = sendWithin(
       home,
       {
         v: PROTOCOL_VERSION,

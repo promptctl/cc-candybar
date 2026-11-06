@@ -2,7 +2,7 @@
 // left when that is less, less the room its named failure needs to land before
 // Jest's timeout.
 
-import { boundedBy } from "../helpers/case-time";
+import { boundedBy, MARGIN_MS } from "../helpers/case-time";
 import { caseClock } from "../helpers/case-clock.cjs";
 
 describe("boundedBy — a wait's budget or its case's time, whichever ends first", () => {
@@ -12,8 +12,8 @@ describe("boundedBy — a wait's budget or its case's time, whichever ends first
 
   test("a budget past the case's time is cut to what the case leaves before Jest's timeout", () => {
     const wait = boundedBy(20_000, 10_000);
-    expect(wait.ms).toBeLessThan(10_000);
-    expect(wait.named).toBe(`the ${wait.ms}ms its case had left`);
+    expect(wait.ms).toBe(10_000 - MARGIN_MS);
+    expect(wait.named).toBe(`the ${wait.ms}ms its case had left, ${MARGIN_MS}ms short of Jest's timeout`);
   });
 
   test("a case with no time left gives its wait none, so it fails at once by name", () => {
