@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "ff33713e3ee28648caa5b5c8c615a4187cdcc5ba",
+      "timestamp": "2026-11-06T22:53:46.373Z",
+      "commits": [
+        {
+          "sha": "ff33713e3ee28648caa5b5c8c615a4187cdcc5ba",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T15:52:44-07:00",
+          "message": "test(version): the mismatch asymmetry is asserted over the daemon's real reply (candybar-testing-ihvy.fvw.xka) (#657)\n\n* test(version): the mismatch asymmetry is asserted over the daemon's real reply, and the stand-in that copied it is gone (candybar-testing-ihvy.fvw.xka)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* test(version): the gate is its own function, so its test drives it with no cast and runs in the unit tier (candybar-testing-ihvy.fvw.xka)\n\nReview fixes: versionGate is pulled out of handleRequest as a pure function of\n(request, log); the cases assert the admit (null), the log line each branch\nwrites, and cite the respawn-spiral law; the three ClientOutcome cases that ran\nno product code are gone; the clock is a fixed instant.\n\n* test(version): a real daemon answers an older client and keeps serving (candybar-testing-ihvy.fvw.xka)\n\nMedium-review fixes: the stay-up half of the gate is pinned at the process\ntier beside the exit half, the gate's fixture is typed instead of cast, and\ndaemon-acquire's pointer names where each half is covered.\n\n* test(version): one daemon carries both halves of the mismatch asymmetry, under the process tier's start ceiling (candybar-testing-ihvy.fvw.xka)\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
+        }
+      ]
+    },
+    {
       "version": "pr-658",
       "ref": "refs/pull/658/merge",
       "sha": "78ab90213111497221c97d848dc626f0083812e8",
@@ -34,71 +49,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T15:24:15-07:00",
           "message": "fix(click): a leaf verb receives its click's session parsed, and a step naming another session is refused (brandon-menus-sjhy.vxi)\n\nEvery leaf handler now takes (sid: SessionId, args, ctx). One reader reads a\nleaf effect: its first segment through the one session-id checkpoint, and the\nencoded tail after it. It never throws, so a later step's malformed session is\nthat step's refusal, held on the bar. perform, the one runner every leaf\npasses through, refuses a step whose session fails the checkpoint or is not its\nclick's. So a dispatch can no longer act on one session and report to\nanother's bar, and a verb with no session cannot join the leaf table.\n\nperform hands each refused step to its verb's refusal owner. The run stats\ncount a run link refused at its session as they count one refused for its\narguments. The run handler's own catch is gone, so that count lives in one\nplace.\n\nEvery leaf verb's value is now segments, its session first, so the link\nreader decodes by the leaf table and the separate segmented-verbs list is\ndeleted. The per-handler session re-parse, the copy/open session reader and\nthe first-segment decode helper go too.\n\nA leaf click with an empty session segment now reads as a failed session, not\nas a click naming none, so its reply facts carry no sid.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-657",
-      "ref": "refs/pull/657/merge",
-      "sha": "e16cc7a6182ddfc30587599c5745d7156f440647",
-      "timestamp": "2026-11-06T22:47:51.778Z",
-      "commits": [
-        {
-          "sha": "e16cc7a6182ddfc30587599c5745d7156f440647",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T22:47:05Z",
-          "message": "Merge be848ff9a976525098e91460b45d67a8ed0675a3 into 9ae5981784de84f6d5b774905ad8039298f84bc9\n"
-        },
-        {
-          "sha": "be848ff9a976525098e91460b45d67a8ed0675a3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T15:33:32-07:00",
-          "message": "test(version): one daemon carries both halves of the mismatch asymmetry, under the process tier's start ceiling (candybar-testing-ihvy.fvw.xka)\n"
-        },
-        {
-          "sha": "73e43da15a4e441ca0ddb322d6bd623aab895e0e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T15:23:39-07:00",
-          "message": "test(version): a real daemon answers an older client and keeps serving (candybar-testing-ihvy.fvw.xka)\n\nMedium-review fixes: the stay-up half of the gate is pinned at the process\ntier beside the exit half, the gate's fixture is typed instead of cast, and\ndaemon-acquire's pointer names where each half is covered.\n"
-        },
-        {
-          "sha": "8fc3fcd295d0387897f4fa34954126b132900b2c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T15:20:45-07:00",
-          "message": "test(version): the gate is its own function, so its test drives it with no cast and runs in the unit tier (candybar-testing-ihvy.fvw.xka)\n\nReview fixes: versionGate is pulled out of handleRequest as a pure function of\n(request, log); the cases assert the admit (null), the log line each branch\nwrites, and cite the respawn-spiral law; the three ClientOutcome cases that ran\nno product code are gone; the clock is a fixed instant.\n"
-        },
-        {
-          "sha": "000d061aa077e6fb4cef507d281c215c8c3dcc87",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T15:14:59-07:00",
-          "message": "test(version): the mismatch asymmetry is asserted over the daemon's real reply, and the stand-in that copied it is gone (candybar-testing-ihvy.fvw.xka)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "9ae5981784de84f6d5b774905ad8039298f84bc9",
-      "timestamp": "2026-11-06T22:47:25.518Z",
-      "commits": [
-        {
-          "sha": "9ae5981784de84f6d5b774905ad8039298f84bc9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T15:46:21-07:00",
-          "message": "feat(apply): an effect waits only behind what it acts on; a lane setup holds its pane only while it types (candybar-gather-renderer-76bb.1dh.y9b) (#656)\n\n* feat(apply): an effect waits only behind what it acts on; a lane setup holds its pane only while it types (candybar-gather-renderer-76bb.1dh.y9b)\n\nThe performer's order is keyed by what an effect acts on, not by the\nsession: a typed line by its tmux pane, a lane setup by its session's lane,\nand a session's launches, runs, doctor steps and update by that session's\nclicks as they committed. Every effect takes its place when its turn's\neffects are handed over, and an event's effects still run in the order\ndescribed, so a `do` keeps its order and no later click jumps ahead.\n\nA setup's steps that type into the session's pane (the whole statusline\nrestart, the band's /reload-plugins) take the pane's order when they are\nreached, so a copy clicked during a band install is performed at once and a\nslash typed during a restart lands after it. The setup reads the session's\nlatest request as it runs instead of a copy taken at the click.\n\n* fix(apply): a pane step's refusal is data, a split holds the pane, and the order a step takes late is the effect table's (candybar-gather-renderer-76bb.1dh.y9b)\n\nAn evicted session's band install says the mod is installed and what to type;\na bar pane split or close takes the pane's order, since it resizes what a\nrestart reads; whether an effect takes a pane's place when reached is a field\nof the ordering table, which the one performer partitions on; a move between\npanes is logged; pane identity lives in tmux-hint; the lane-setup harness\ndrives the real performer.\n\n* fix(apply): a pane step tells a session gone from one outside tmux, so a bar pane close fails for the first (candybar-gather-renderer-76bb.1dh.y9b)\n\nThe doctor keeps its click's order by the origin, as every session key does;\npane on says what was not opened; the performer's and the order's comments\nname performInOrder and the setups-last exception to a do's order."
-        },
-        {
-          "sha": "3bd757912554568f0bf3b622640edbe789c7ba04",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-06T22:21:18Z",
-          "message": "chore(release): set `package.json` to 1.207.0 [skip ci]\n\n## [1.207.0](https://github.com/promptctl/cc-candybar/compare/v1.206.0...v1.207.0) (2026-11-06)\n\n### Features\n\n* **dial:** the client reaches its daemon through one dialer port, and no test hand-rolls a socket (candybar-testing-ihvy.5em) ([#655](https://github.com/promptctl/cc-candybar/issues/655)) ([466c05a](https://github.com/promptctl/cc-candybar/commit/466c05ac9e0e8203441238a3692bac06838e69a9))\n\n### Bug Fixes\n\n* **test:** the parent-watchdog case waits for a serving daemon under the shared readiness budget, and for its exit by name (brandon-menus-sjhy.26f) ([#654](https://github.com/promptctl/cc-candybar/issues/654)) ([0345c0f](https://github.com/promptctl/cc-candybar/commit/0345c0ff3dc537298327e838f5410e5b53301804))\n"
         }
       ]
     },
