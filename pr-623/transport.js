@@ -39325,9 +39325,25 @@ function retiredGitKindMessage(raw) {
   const note = field.note === void 0 ? "" : ` (${field.note})`;
   return `${head} read ${field.read} where it was read${note}, or declare ${json5Of(field.declare)} under a name of your own`;
 }
+var RETIRED_ENV_NAMES = new Map(
+  [
+    ["HOME", "home"],
+    ["USER", "host.user"],
+    ["LOGNAME", "host.user"],
+    ["HOSTNAME", "host.name"]
+  ].map(([name, path42]) => [
+    name,
+    { read: `.${path42}`, declare: { kind: "input", path: path42, default: "" } }
+  ])
+);
 function retiredEnvKindMessage(raw) {
   const read2 = typeof raw.name === "string" ? ` (this one read $${raw.name})` : "";
-  return `kind "env" is removed${read2}: the renderer's environment belongs to whichever shell spawned it, not to the session it draws for, so an env variable was never a session fact \u2014 drop this declaration; a value the payload lacks is read from a file by a "file" source or computed by a "shell" source`;
+  const head = `kind "env" is removed${read2}: the renderer's environment belongs to whichever shell spawned it, not to the session it draws for, so an env variable was never a session fact \u2014 drop this declaration`;
+  const field = typeof raw.name === "string" ? RETIRED_ENV_NAMES.get(raw.name) : void 0;
+  if (field === void 0) {
+    return `${head}; a value the payload lacks is read from a file by a "file" source or computed by a "shell" source, and not by echoing the variable there, since a "shell" source runs in the renderer too`;
+  }
+  return `${head} and read ${field.read} where it was read, or declare ${json5Of(field.declare)} under a name of your own`;
 }
 var RETIRED_LINK_VERBS = /* @__PURE__ */ new Map([
   [
