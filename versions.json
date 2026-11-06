@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-644",
+      "ref": "refs/pull/644/merge",
+      "sha": "6131fddf5a7a55d53b9214aa08a0a0beb0782b8c",
+      "timestamp": "2026-11-06T18:49:56.960Z",
+      "commits": [
+        {
+          "sha": "6131fddf5a7a55d53b9214aa08a0a0beb0782b8c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T11:49:06-07:00",
+          "message": "Merge 99e6c09a5cd435b41007097aec7517ac28d39720 into 0af5d1f4ce463b0bebbbe6a4b6107d2943900c54\n"
+        },
+        {
+          "sha": "99e6c09a5cd435b41007097aec7517ac28d39720",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T11:48:22-07:00",
+          "message": "feat(links): the doctor probe is minted by the minter as the probe link kind, and Launch Services is asked about the link it opened (candybar-gather-renderer-76bb.b2l.mxk)\n\nThe probe link is cc-candybar://to/<name>/probe/<nonce>, built by probeLink\nbeside effectsUrl, so the doctor no longer assembles a verb and a tail itself.\nThe verb is `probe`, as spec section 18 names it. The doctor's lost-link\ndiagnosis asks NSWorkspace which app opens that same link rather than a\nhand-spelled cc-candybar://probe.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "0af5d1f4ce463b0bebbbe6a4b6107d2943900c54",
