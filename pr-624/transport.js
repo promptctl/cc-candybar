@@ -23248,8 +23248,8 @@ function feed(input, text4) {
 }
 async function launchWaited(state, opts) {
   const { stats, clock } = state.scope;
-  const refused = admit(state, opts.category, opts.signal);
-  if (refused !== null) return refused;
+  const refused2 = admit(state, opts.category, opts.signal);
+  if (refused2 !== null) return refused2;
   const t0 = clock.monotonic();
   stats?.onStart(opts.category);
   return new Promise((resolve) => {
@@ -23421,8 +23421,8 @@ async function launchWaited(state, opts) {
 }
 function launchBlocking(state, opts) {
   const { stats, clock } = state.scope;
-  const refused = admit(state, opts.category);
-  if (refused !== null) return refused;
+  const refused2 = admit(state, opts.category);
+  if (refused2 !== null) return refused2;
   const t0 = clock.monotonic();
   stats?.onStart(opts.category);
   try {
@@ -23477,8 +23477,8 @@ function launchBlocking(state, opts) {
 }
 function launchOrphan(state, opts) {
   const { stats, clock } = state.scope;
-  const refused = admit(state, opts.category);
-  if (refused !== null) return refused;
+  const refused2 = admit(state, opts.category);
+  if (refused2 !== null) return refused2;
   const t0 = clock.monotonic();
   stats?.onStart(opts.category);
   const result = launchDetachedSyncInner(state, opts);
@@ -23525,9 +23525,9 @@ var formatJobEnd = (end) => end.kind === "exit" ? `exit ${end.code}` : "timeout"
 var JOB_SCRIPT = `out=$1 err=$2 status=$3; shift 3; read go || exit 0; "$@" >"$out" 2>"$err" </dev/null; echo "exit $?" >"$status.$$" && ln "$status.$$" "$status"; rm -f "$status.$$"`;
 function launchJob(state, opts, files) {
   const { stats, clock } = state.scope;
-  const refused = admit(state, opts.category);
-  if (refused !== null)
-    return { ok: false, reason: refused.reason, error: refused.error };
+  const refused2 = admit(state, opts.category);
+  if (refused2 !== null)
+    return { ok: false, reason: refused2.reason, error: refused2.error };
   const t0 = clock.monotonic();
   stats?.onStart(opts.category);
   let child;
@@ -57036,7 +57036,7 @@ var nerdFont = {
   probe: ({ nerdFont: facts, marks }) => {
     if (facts.kind === "none") return { ok: true };
     const sighting = glyphSighting(facts);
-    const failed2 = (reason) => marks.kind === "failed" && sighting !== void 0 ? {
+    const failed3 = (reason) => marks.kind === "failed" && sighting !== void 0 ? {
       ok: false,
       reason,
       more: [`the mark book could not be read: ${marks.reason}`]
@@ -57048,7 +57048,7 @@ var nerdFont = {
       case "drawn":
         return { ok: true };
       case "boxes":
-        return failed2(
+        return failed3(
           `${called} draws ${codePoints(facts.glyphs)} as boxes \u2014 set a Nerd Font as its font`
         );
       case null:
@@ -57056,41 +57056,41 @@ var nerdFont = {
     }
     switch (terminal.kind) {
       case "unreported":
-        return failed2(
+        return failed3(
           "the client reported no terminal \u2014 re-run `cc-candybar install` to stage a current client"
         );
       case "unasked":
-        return failed2(
+        return failed3(
           `tmux could not be asked which terminal is attached: ${terminal.reason}`
         );
       case "unknown":
       case "unnamed":
       case "unread":
-        return failed2(`the doctor cannot read ${called}'s font`);
+        return failed3(`the doctor cannot read ${called}'s font`);
       case "bundling": {
         const since = TERMINALS[terminal.name].glyphs.since;
         if (since === null) return { ok: true };
         const shipped = terminal.version === null ? null : releasedSince(terminal.version, since);
         if (shipped === true) return { ok: true };
         const label2 = terminalLabel(terminal.name);
-        return failed2(
+        return failed3(
           shipped === null ? `${label2} ships Nerd Font symbols since ${since}, and did not say which release this is` : `${called} ships no Nerd Font symbols (they came in ${since}) \u2014 update ${label2}, or set a Nerd Font as its font`
         );
       }
       case "configured": {
         if (terminal.font.kind === "failed") {
-          return failed2(
+          return failed3(
             `the doctor cannot read ${called}'s font: ${terminal.font.reason}`
           );
         }
         const { font, from, lacks } = terminal.font.value;
         if (lacks === null) {
-          return failed2(
+          return failed3(
             `${called} is set to ${font} (${from}), which is not installed \u2014 install it or set a Nerd Font`
           );
         }
         if (lacks.length === 0) return { ok: true };
-        return failed2(
+        return failed3(
           `${called} draws with ${font} (${from}), which has no ${codePoints(lacks)} \u2014 set a Nerd Font as its font`
         );
       }
@@ -61925,7 +61925,7 @@ function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", a
     beneath,
     presence2
   );
-  const judge = (cells, refused) => {
+  const judge = (cells, refused2) => {
     const inserted = placeInserts(
       authoredConfig.config,
       cells,
@@ -61939,7 +61939,7 @@ function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", a
       inserted.config,
       presence2,
       written2.dropped,
-      [...inserted.notices, ...refused]
+      [...inserted.notices, ...refused2]
     );
   };
   try {
@@ -61950,7 +61950,7 @@ function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", a
     const own2 = new Set(
       bare.dropped.flatMap((d) => d.issues.map((i) => i.message))
     );
-    const { taken: taken2, refused } = written2.cells.reduce(
+    const { taken: taken2, refused: refused2 } = written2.cells.reduce(
       (acc, cell3) => {
         try {
           judge([...acc.taken, cell3], []);
@@ -61972,7 +61972,7 @@ function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", a
       },
       { taken: [], refused: [] }
     );
-    return judge(taken2, refused);
+    return judge(taken2, refused2);
   }
 }
 function judgeRenderable({ raw, source }, filePath2, allowedPalettes, beneath, merged, presence2, filed, notices) {
@@ -65805,8 +65805,8 @@ function refusedHints(req, hints) {
     (k) => req[k] !== void 0 && hints[k] === void 0
   ).map((hint) => ({ hint, sent: req[hint] }));
 }
-function refusedHintsError(refused) {
-  return refused.length === 0 ? null : `Client hints refused: ${refused.map(({ hint, sent }) => `${hint}=${JSON.stringify(sent)}`).join(
+function refusedHintsError(refused2) {
+  return refused2.length === 0 ? null : `Client hints refused: ${refused2.map(({ hint, sent }) => `${hint}=${JSON.stringify(sent)}`).join(
     ", "
   )} \u2014 is the statusline client older than the daemon? Reinstall it (\`cc-candybar install\`, or \`just install-rust\` in a checkout).`;
 }
@@ -65817,9 +65817,9 @@ var REFUSAL_LINES = {
   "no-value": (arg) => `${arg} names no file \u2014 the bar renders with no ${arg}`,
   positional: (args) => `Unexpected arguments: ${args}`
 };
-function refusedArgsError(refused) {
+function refusedArgsError(refused2) {
   const lines2 = Object.keys(REFUSAL_LINES).flatMap((why2) => {
-    const args = refused.filter((r) => r.why === why2).map((r) => r.arg);
+    const args = refused2.filter((r) => r.why === why2).map((r) => r.arg);
     return args.length === 0 ? [] : [REFUSAL_LINES[why2](args.join(", "))];
   });
   return lines2.length === 0 ? null : lines2.join("\n");
@@ -70313,10 +70313,7 @@ function tmuxPaneOf(tmux3) {
   }
   return { kind: "pane", hint: tmux3 };
 }
-async function typeSlash(edge, hint, line) {
-  const pane = tmuxPaneOf(hint);
-  if (pane.kind === "refused") return pane;
-  const tmux3 = pane.hint;
+async function typeSlash(edge, tmux3, line) {
   const state = promptState(await edge.read(tmux3));
   if (state.kind !== "ready") {
     return { kind: "refused", reason: REFUSALS[state.kind] };
@@ -70420,14 +70417,6 @@ function clickFailed(r, what, log) {
   if (r.reason === "aborted") throw new DaemonClosing(what);
   throw new Error(`${what} failed (${failureText(r)})`);
 }
-async function clickLaunch(launcher, opts, what, log) {
-  const result = await launcher.launch({
-    ...opts,
-    timeoutMs: CLICK_PROGRAM_TIMEOUT_MS
-  });
-  if (result.ok) return;
-  clickFailed(result, what, log);
-}
 var HANDOFF_POLL_MS = 50;
 async function clickHandoff(launcher, opts, what, log, boundMs, tmp) {
   const dir = mkdtempSync(import_node_path30.default.join(tmp, "cc-candybar-handoff-"));
@@ -70493,16 +70482,16 @@ async function clickHandoff(launcher, opts, what, log, boundMs, tmp) {
   }
 }
 function pbcopy(text4, ctx) {
-  return ctx.launch(
-    {
-      bin: "/usr/bin/pbcopy",
-      stdinInput: text4,
-      category: "click.pbcopy"
-    },
+  launch(
+    ctx,
+    { bin: "/usr/bin/pbcopy", stdinInput: text4, category: "click.pbcopy" },
     "pbcopy"
   );
 }
-var copy = (value, ctx) => pbcopy(oneArg(value), ctx);
+function launch(ctx, spec, what) {
+  ctx.effect({ kind: "launch", spec, what });
+}
+var copy = async (value, ctx) => pbcopy(oneArg(value), ctx);
 var DRAWERS = /* @__PURE__ */ new Set([
   "request",
   "feed"
@@ -70522,9 +70511,10 @@ var copyDiagnostic = async (value, ctx) => {
     throw new BadVerbArgs(
       `that message is no longer listed in session ${sid}'s diagnostics \u2014 open \u26A0 again and copy from there`
     );
-  await pbcopy(text4, ctx);
+  pbcopy(text4, ctx);
 };
-var openVscode = (value, ctx) => ctx.launch(
+var openVscode = async (value, ctx) => launch(
+  ctx,
   {
     bin: "/usr/bin/open",
     args: ["-a", "Visual Studio Code", oneArg(value)],
@@ -71037,7 +71027,7 @@ var redo = async (value, ctx) => {
 };
 var applyUpdate = async (value, ctx) => {
   requireSessionId(oneArg(value));
-  await ctx.applyUpdate();
+  ctx.effect({ kind: "apply-update" });
 };
 function sessionHints(ctx, sid) {
   const raw = ctx.sessionState.get(sid, SESSION_CLIENT_HINTS_KEY);
@@ -71258,15 +71248,11 @@ var slash = async (value, ctx) => {
       `${JSON.stringify(line)} is not a command this config declares (it declares: ${[...new Set(declared.map((a) => a.slash))].join(", ") || "none"})`
     );
   }
-  const result = await ctx.typing(sessionHints(ctx, sid).tmux, action2.slash);
-  if (result.kind === "refused") {
-    ctx.log(
-      "warn",
-      `slash: ${line} refused \u2014 ${result.reason} (session=${sid})`
-    );
-    throw new BadVerbArgs(`${line} was not typed: ${result.reason}`);
+  const pane = tmuxPaneOf(sessionHints(ctx, sid).tmux);
+  if (pane.kind === "refused") {
+    throw new BadVerbArgs(`${line} was not typed: ${pane.reason}`);
   }
-  ctx.log("info", `slash: typed ${line} into ${result.pane} (session=${sid})`);
+  ctx.effect({ kind: "type-slash", pane: pane.hint, line: action2.slash });
 };
 function runOf2([sessionId2 = "", action2 = "", evaluated2 = "", mac = ""], ctx) {
   const sid = requireSessionId(sessionId2);
@@ -71445,7 +71431,9 @@ var hoisted = (verb, value, ctx) => ctx.journalTurns.gathering(() => verb.prepar
 );
 async function perform(verb, value, ctx, gathered2) {
   const step4 = gathered2 ?? await ctx.gather((full) => verb.prepare(value, full));
-  await step4(ctx);
+  const described = [];
+  await step4({ ...ctx, effect: (effect) => void described.push(effect) });
+  for (const effect of described) ctx.effect(effect);
 }
 async function headGather(rawValue, ctx) {
   const [head] = batchAdjacentWrites(parseEffects(rawValue));
@@ -71501,15 +71489,15 @@ async function journaled(sid, ctx, turn, handler) {
   const journal = ctx.history.begin();
   const navigation = ctx.navigation.begin(journal.sessionState);
   const commit3 = turn.holds(() => {
-    const failed2 = [];
+    const failed3 = [];
     for (const step4 of [navigation, journal]) {
       try {
         step4.commit();
       } catch (e) {
-        failed2.push(e);
+        failed3.push(e);
       }
     }
-    throwAll(failed2);
+    throwAll(failed3);
   });
   const failures = [];
   const closing = (store) => closingView(
@@ -71523,15 +71511,11 @@ async function journaled(sid, ctx, turn, handler) {
     journal,
     navigating: closing(navigation.sessionState)
   };
-  const launches = {
-    launch: (opts, what) => turn.landed(clickLaunch(ctx.launcher, opts, what, ctx.log)),
-    typing: (hint, line) => turn.landed(typeSlash(ctx.claudeInput, hint, line)),
-    applyUpdate: () => turn.landed(ctx.applyUpdate())
-  };
+  const effects = [];
   try {
     await handler({
       ...journaling,
-      ...launches,
+      effect: (effect) => void effects.push(effect),
       gather: (work) => turn.landed(work(journaling))
     });
   } catch (e) {
@@ -71555,6 +71539,7 @@ async function journaled(sid, ctx, turn, handler) {
       failures.push(e);
     }
   }
+  if (live) ctx.described(effects);
   throwAll(failures);
 }
 function click(verb, gather, handler) {
@@ -71589,14 +71574,15 @@ var VERBS = new Map([
   ),
   [VERB_DISPATCH, click(VERB_DISPATCH, headGather, foldEffects)],
   // After the leaves, so it replaces the click they built: a probe writes no
-  // journal, so nothing may refuse it for a turn.
+  // journal, so nothing may refuse it for a turn, and it describes nothing.
   [VERB_DOCTOR_PROBE, doctorProbe]
 ]);
 var VERB_NAMES = Object.freeze([
   ...VERBS.keys()
 ]);
 function clickVerb(name) {
-  return VERBS.get(name) ?? null;
+  const run3 = VERBS.get(name);
+  return run3 === void 0 ? null : { name, run: run3 };
 }
 function closeIdleMenus(sid, idle, ctx) {
   return ctx.journalTurns.take(
@@ -76440,11 +76426,9 @@ function requestEvent(kind, facts, outcome, tookMs) {
     ["outcome", outcome.kind],
     ...detailOf(outcome)
   ];
-  return {
-    level: LEVEL[outcome.kind],
-    line: `${kind}${fields2.map(([key, value]) => ` ${key}=${valueOf(value)}`).join("")}`
-  };
+  return { level: LEVEL[outcome.kind], line: eventLine(kind, fields2) };
 }
+var eventLine = (kind, fields2) => `${kind}${fields2.map(([key, value]) => ` ${key}=${valueOf(value)}`).join("")}`;
 
 // src/daemon/draw-bar.ts
 var NOTHING_DELIVERED = () => {
@@ -76502,11 +76486,11 @@ function renderFrame(parts, sessionId2, fps, at) {
       outcome,
       elapsedMs(clock, started2)
     );
-    const failed2 = renderFailed(error);
+    const failed3 = renderFailed(error);
     return {
-      bar: renderFailedFrame(failed2.error),
-      resp: failed2,
-      statusline: failed2,
+      bar: renderFailedFrame(failed3.error),
+      resp: failed3,
+      statusline: failed3,
       evaluated: 0,
       cellBreaks: 0,
       delivered: NOTHING_DELIVERED,
@@ -76563,12 +76547,12 @@ function requestFacts(req, at, facts) {
     at: at.toFixed(3)
   });
   const hints = req.hints;
-  const refused = refusedHints(req, hints);
-  const hintsError = refusedHintsError(refused);
+  const refused2 = refusedHints(req, hints);
+  const hintsError = refusedHintsError(refused2);
   noteFacts(facts, {
     termCols: String(hints.termCols ?? "?"),
     termRows: String(hints.termRows ?? "?"),
-    refused: refused.map((r) => r.hint).join(",") || "-",
+    refused: refused2.map((r) => r.hint).join(",") || "-",
     badArgs: req.refusedArgs.map((r) => `${r.arg}:${r.why}`).join(",") || "-",
     // Which program drew this bar (src/client-hint.ts); `unreported` for a
     // client too old to say.
@@ -76604,8 +76588,8 @@ function setUpFrame(parts, sessionId2, at, facts) {
   const { renderCache } = parts;
   const hold2 = renderCache.holdView(sessionId2);
   if (hold2 === null) {
-    const failed2 = renderCache.openFailure(sessionId2);
-    if (failed2 !== null) throw failed2.error;
+    const failed3 = renderCache.openFailure(sessionId2);
+    if (failed3 !== null) throw failed3.error;
     return null;
   }
   const req = hold2.view.facts();
@@ -77016,28 +77000,203 @@ init_process();
 
 // src/daemon/apply.ts
 init_globals();
+
+// src/daemon/effect.ts
+init_globals();
+var PERFORMED = { kind: "ok", said: "" };
+var failed2 = (said) => ({
+  kind: "failed",
+  said
+});
+var DESCRIBE = {
+  launch: ({ what }) => `launch:${what}`,
+  "type-slash": ({ line }) => `type-slash:${line}`,
+  "apply-update": () => "apply-update"
+};
+function describeEffect(effect) {
+  const describe4 = DESCRIBE[effect.kind];
+  return describe4(effect);
+}
+
+// src/daemon/apply.ts
+var NO_EFFECTS = [];
 var ARMS = {
   // [LAW:single-enforcer] exception: the request takes no turn yet, so its
   // writes (the session's render origin and client hints) still land outside
-  // one. A click holds the turn across its launches, and a render behind it
-  // would stall the bar; the writes join the turn once launches leave it as
-  // effects.
-  request: ({ req, at, waitEndsAt, facts }, parts) => answerRequest(parts, req, at, waitEndsAt, facts),
+  // one. They join the turn with the request's own (the next story of this
+  // lane), now that a click's launches no longer hold it.
+  request: async ({ req, at, waitEndsAt, facts }, parts) => ({
+    answer: await answerRequest(parts, req, at, waitEndsAt, facts),
+    effects: NO_EFFECTS,
+    facts: []
+  }),
   // [LAW:single-enforcer] The click's whole bracket on its menus' idle clock
   // is here, so the timer cannot close a menu under any click Apply carries.
+  // The turn hands its effects over once it has committed (`described`), and
+  // a refused step is answered beside them.
   click: async ({ verb, value, arrival, pending: pending2, asker }, { verbCtx, menuIdle }) => {
     if (pending2 !== null) menuIdle.clickArrived(pending2);
+    const effects = [];
+    let answer2 = null;
     try {
-      await verb(value, { ...verbCtx, arrival, asker });
+      await verb.run(value, {
+        ...verbCtx,
+        arrival,
+        asker,
+        described: (described) => void effects.push(...described)
+      });
+    } catch (error) {
+      answer2 = { error };
     } finally {
       if (pending2 !== null) menuIdle.clickSettled(pending2);
     }
+    return { answer: answer2, effects, facts: [] };
   },
-  "menu-idle": ({ session, idle }, { verbCtx }) => closeIdleMenus(session, idle, verbCtx)
+  "menu-idle": async ({ session, idle }, { verbCtx }) => {
+    const effects = [];
+    await closeIdleMenus(session, idle, {
+      ...verbCtx,
+      described: (described) => void effects.push(...described)
+    });
+    return { answer: void 0, effects, facts: [] };
+  },
+  // [LAW:single-enforcer] The one writer of what a failed effect leaves: the
+  // session's click error, held in a turn of its own as every write is, and
+  // shown as a failed dispatch's is (src/daemon/click-error.ts). A click that
+  // names no session has no bar; its apply line is the record.
+  "effect-done": async ({ of, outcome }, { verbCtx }) => {
+    const facts = [];
+    await verbCtx.journalTurns.take(
+      "effect-done",
+      {
+        waited: (ms) => facts.push(["turnWait", `${ms}ms`]),
+        gone: () => false
+      },
+      async () => {
+        if (outcome.kind === "failed" && of.session !== null) {
+          holdClickError(
+            verbCtx.sessionState,
+            of.session,
+            outcome.said,
+            verbCtx.now()
+          );
+        }
+      }
+    );
+    return { answer: void 0, effects: NO_EFFECTS, facts };
+  }
 };
-function apply(event, parts) {
+async function apply(event, parts) {
   const arm2 = ARMS[event.kind];
-  return arm2(event, parts);
+  const applied2 = await arm2(event, parts);
+  const of = originOf(event);
+  const line = LINE[event.kind];
+  const said = line(event, applied2);
+  if (said !== null) {
+    parts.log(
+      said.level,
+      eventLine("apply", [
+        ["kind", event.kind],
+        ["verb", of.verb],
+        ["sid", of.session ?? "-"],
+        ...said.facts,
+        ...applied2.facts,
+        [
+          "effects",
+          applied2.effects.map((e) => describeEffect(e)).join(",") || "-"
+        ],
+        [
+          "revision",
+          of.session === null ? "-" : String(parts.verbCtx.sessionState.revision(of.session))
+        ]
+      ])
+    );
+  }
+  return {
+    answer: applied2.answer,
+    // An event that described nothing performs nothing, and takes no place in
+    // the session's order: the effect-done events of that order are applied
+    // from inside it, and a place they took there would settle only after the
+    // work they report on.
+    performed: applied2.effects.length === 0 ? NOTHING_PERFORMED : performAll(parts, of, applied2.effects)
+  };
+}
+var NOTHING_PERFORMED = Promise.resolve();
+var APPLIED = { level: "info", facts: [["outcome", "ok"]] };
+var refused = ({ error }) => ({
+  level: "info",
+  facts: [
+    ["outcome", "refused"],
+    ["said", error instanceof Error ? error.message : String(error)]
+  ]
+});
+var OUTCOME_LEVEL = {
+  ok: "info",
+  failed: "warn"
+};
+var LINE = {
+  request: () => null,
+  click: (_event, { answer: answer2 }) => answer2 === null ? APPLIED : refused(answer2),
+  "menu-idle": () => APPLIED,
+  "effect-done": ({ effect, outcome }) => ({
+    level: OUTCOME_LEVEL[outcome.kind],
+    facts: [
+      ["effect", describeEffect(effect)],
+      ["outcome", outcome.kind],
+      ["said", outcome.said || "-"]
+    ]
+  })
+};
+var ORIGIN = {
+  request: ({ req }) => ({ verb: "request", session: req.sessionId }),
+  click: ({ verb, pending: pending2 }) => ({ verb: verb.name, session: pending2 }),
+  "menu-idle": ({ session }) => ({ verb: "menu-idle", session }),
+  "effect-done": ({ of }) => of
+};
+function originOf(event) {
+  const origin = ORIGIN[event.kind];
+  return origin(event);
+}
+var PERFORM = {
+  launch: ({ spec, what }, { verbCtx }) => clickLaunch(verbCtx.launcher, spec, what),
+  "type-slash": async ({ pane, line }, { verbCtx }) => {
+    const typed = await typeSlash(verbCtx.claudeInput, pane, line);
+    return typed.kind === "typed" ? { kind: "ok", said: `typed into ${typed.pane}` } : failed2(`${line} was not typed: ${typed.reason}`);
+  },
+  "apply-update": async (_effect, { verbCtx }) => {
+    await verbCtx.applyUpdate();
+    return PERFORMED;
+  }
+};
+async function clickLaunch(launcher, spec, what) {
+  const result = await launcher.launch({
+    ...spec,
+    timeoutMs: CLICK_PROGRAM_TIMEOUT_MS
+  });
+  return result.ok ? PERFORMED : failed2(`${what} failed (${failureText(result)})`);
+}
+async function perform2(effect, parts) {
+  const performer = PERFORM[effect.kind];
+  try {
+    return await performer(effect, parts);
+  } catch (e) {
+    return failed2(e instanceof Error ? e.message : String(e));
+  }
+}
+function performAll(parts, of, effects) {
+  return parts.verbCtx.journalTurns.performing(of.session, async () => {
+    for (const effect of effects) {
+      const outcome = await perform2(effect, parts);
+      try {
+        await apply({ kind: "effect-done", of, effect, outcome }, parts);
+      } catch (e) {
+        parts.log(
+          e instanceof DaemonClosing ? "info" : "error",
+          `apply: effect-done not applied (${describeEffect(effect)} ${outcome.kind}: ${outcome.said}): ${inspect(e)}`
+        );
+      }
+    }
+  });
 }
 
 // src/daemon/render-checkpoint.ts
@@ -77146,7 +77305,7 @@ function parseRenderArgs(args, cwd2, home) {
   const config2 = (tokens ?? []).filter(
     (t2) => t2.kind === "option" && t2.name === "config"
   ).at(-1);
-  const refused = (tokens ?? []).flatMap((t2) => {
+  const refused2 = (tokens ?? []).flatMap((t2) => {
     switch (t2.kind) {
       case "option":
         return t2.name !== "config" ? [{ arg: t2.rawName, why: "unknown" }] : t2 === config2 && t2.value === void 0 ? [{ arg: t2.rawName, why: "no-value" }] : [];
@@ -77160,8 +77319,8 @@ function parseRenderArgs(args, cwd2, home) {
   return {
     configFile: explicitConfigPath(cwd2, config2?.value, home),
     // In argv order, each refusal once.
-    refusedArgs: refused.filter(
-      (r, i) => refused.findIndex((o) => o.arg === r.arg && o.why === r.why) === i
+    refusedArgs: refused2.filter(
+      (r, i) => refused2.findIndex((o) => o.arg === r.arg && o.why === r.why) === i
     )
   };
 }
@@ -77596,7 +77755,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       },
       parts
     ).then(
-      ({ resp, motion, clickShown, pipeShown, delivered }) => {
+      ({ answer: { resp, motion, clickShown, pipeShown, delivered } }) => {
         sighted(checked.req, motion);
         return {
           outcome: { kind: "ok" },
@@ -77848,7 +78007,7 @@ async function handleClick(parts, verb, value, arrival, facts, clientGone) {
   const pending2 = session?.ok ? session.id : null;
   if (session === null) noteFacts(facts, { sid: "-" });
   else if (pending2 !== null) noteFacts(facts, { sid: pending2 });
-  await apply(
+  const { answer: answer2 } = await apply(
     {
       kind: "click",
       verb: resolved,
@@ -77864,6 +78023,7 @@ async function handleClick(parts, verb, value, arrival, facts, clientGone) {
     },
     parts
   );
+  if (answer2 !== null) throw answer2.error;
   return { kind: "ok" };
 }
 function clickReply(outcome) {
@@ -77885,18 +78045,18 @@ function clickReply(outcome) {
 }
 async function statusLineClick(parts, value, facts, clientGone) {
   const { tmuxStatusLines } = parts;
-  const refused = (problem) => ({
+  const refused2 = (problem) => ({
     kind: "bad-request",
     problems: [problem]
   });
   const click3 = tmuxStatusLines.linkAt(value);
-  if (click3.kind === "refused") return refused(click3.reason);
+  if (click3.kind === "refused") return refused2(click3.reason);
   noteFacts(facts, { link: click3.url });
   if (click3.url.startsWith("cc-candybar://")) {
     const parsed2 = parseHandlerUrl(click3.url);
-    if (!parsed2.ok) return refused(parsed2.problem);
+    if (!parsed2.ok) return refused2(parsed2.problem);
     if (parsed2.verb === VERB_TMUX_STATUS_CLICK)
-      return refused("a status-line link names another status-line click");
+      return refused2("a status-line link names another status-line click");
     return handleClick(
       parts,
       parsed2.verb,
@@ -84270,11 +84430,8 @@ async function installBand(session, checkout, edge) {
   };
   await edge.claude(["plugin", "marketplace", "add", checkout], facts);
   await edge.claude(["plugin", "install", BAND_PLUGIN], facts);
-  const typed = await typeSlash(
-    edge.claudeInput,
-    session.hints.tmux,
-    RELOAD_PLUGINS
-  );
+  const pane = tmuxPaneOf(session.hints.tmux);
+  const typed = pane.kind === "refused" ? pane : await typeSlash(edge.claudeInput, pane.hint, RELOAD_PLUGINS);
   if (typed.kind === "refused") {
     throw new Error(
       `the band mod is installed, but /reload-plugins was not typed: ${typed.reason} \u2014 or type /reload-plugins yourself`
@@ -84511,7 +84668,7 @@ var LaneSetups = class {
   // Resolves once the setup has finished, however it ended.
   async sync(session, lane, on2, by) {
     const where = `by=${by} (session=${session.sessionId})`;
-    const failed2 = (error) => {
+    const failed3 = (error) => {
       const text4 = `lane: ${lane} ${on2 ? "on" : "off"}: ${error instanceof Error ? error.message : String(error)}`;
       this.deps.log("warn", `${text4} ${where}`);
       holdClickError(this.deps.state, session.sessionId, text4, this.deps.now());
@@ -84524,7 +84681,7 @@ var LaneSetups = class {
         this.deps.edge
       );
     } catch (error) {
-      failed2(error);
+      failed3(error);
       return;
     }
     this.deps.log(
@@ -84534,7 +84691,7 @@ var LaneSetups = class {
     if (outcome.kind === "underway") {
       await outcome.finished.then(
         (finished) => this.deps.log("info", `lane: ${lane} ${finished} ${where}`),
-        failed2
+        failed3
       );
     }
   }
@@ -84604,6 +84761,7 @@ var keyOf = (sessionId2, by) => `${by}\0${sessionId2}`;
 init_globals();
 var DAEMON_WIDE = "journals";
 var GATHERS = "gathers";
+var CLICKLESS = "clickless";
 var JournalTurns = class {
   constructor(deps) {
     this.deps = deps;
@@ -84612,6 +84770,7 @@ var JournalTurns = class {
   queue = new KeyedSerialQueue();
   sessions = new KeyedSerialQueue();
   gathers = new KeyedSerialQueue();
+  effects = new KeyedSerialQueue();
   open = true;
   inFlight = null;
   holder = null;
@@ -84680,6 +84839,16 @@ var JournalTurns = class {
     } finally {
       this.gathersInFlight--;
     }
+  }
+  // [LAW:no-ambient-temporal-coupling] A session's effects run one at a time,
+  // in the order their turns committed, after them: a performer that reads
+  // before it acts (the pane read before a slash is typed) sees what the
+  // session's earlier effects left, as it did when a launch held the turn.
+  // The order is the performer's, not the turn's: the session's next click
+  // takes its turn while the last click's effects still run, and no close
+  // refuses it, since an outcome after close is said in the log.
+  performing(session, work) {
+    return this.effects.run(session ?? CLICKLESS, work);
   }
   getStats() {
     const { holder, queued } = this;
@@ -84950,7 +85119,9 @@ function createDaemon(inputs) {
   const menuIdle = new MenuIdle({
     clock,
     now: instant,
-    close: (session, idle) => apply({ kind: "menu-idle", session, idle }, parts),
+    close: async (session, idle) => {
+      await apply({ kind: "menu-idle", session, idle }, parts);
+    },
     failed: (sessionId2, error) => log(
       error instanceof DaemonClosing ? "info" : "error",
       `menu-idle: close failed (session=${sessionId2}): ${inspect(error)}`
@@ -85624,8 +85795,8 @@ init_globals();
 
 // src/daemon/process-fingerprint.ts
 init_globals();
-async function readStartTime(pid2, launch) {
-  const res = await launch({
+async function readStartTime(pid2, launch2) {
+  const res = await launch2({
     bin: "ps",
     args: ["-o", "lstart=", "-p", String(pid2)],
     category: "process-fingerprint",
@@ -86127,8 +86298,8 @@ function productionLaneEdge(launcher, following, closing, clock, probe2) {
         timeoutMs: 2e4,
         category: "lane.process"
       });
-      const refused = !result.ok && result.reason === "non-zero" ? refusalOf2(result.stdout) : null;
-      if (refused !== null) return { ok: false, reason: refused };
+      const refused2 = !result.ok && result.reason === "non-zero" ? refusalOf2(result.stdout) : null;
+      if (refused2 !== null) return { ok: false, reason: refused2 };
       ran(`reading ${executable}'s module graph`, result);
       return { ok: true };
     },
@@ -86730,17 +86901,17 @@ async function click2(url, size) {
   const host = effects.filter((e) => HOST_VERBS.has(e.verb));
   if (host.length > 0) {
     const copiesOnly = effects.every((e) => e.verb === VERB_COPY);
-    const refused2 = copiesOnly ? await copy2(effects.map((e) => e.args.join("/")).join("\n")) : `not sent: on a real machine this ${host.map((e) => HOST_VERBS.get(e.verb)).join(", ")}`;
-    return { ...await render2(size), refused: refused2 };
+    const refused3 = copiesOnly ? await copy2(effects.map((e) => e.args.join("/")).join("\n")) : `not sent: on a real machine this ${host.map((e) => HOST_VERBS.get(e.verb)).join(", ")}`;
+    return { ...await render2(size), refused: refused3 };
   }
   const { verb, value } = clickOf(url);
-  let refused = null;
+  let refused2 = null;
   try {
     await daemon2({ v: PROTOCOL_VERSION, kind: "click", verb, value });
   } catch (e) {
-    refused = e instanceof Error ? e.message : String(e);
+    refused2 = e instanceof Error ? e.message : String(e);
   }
-  return { ...await render2(size), refused };
+  return { ...await render2(size), refused: refused2 };
 }
 var listeners = [];
 var notify = () => {

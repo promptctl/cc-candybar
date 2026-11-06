@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-624",
+      "ref": "refs/pull/624/merge",
+      "sha": "9c4a7d3573544e9c4fb13c79d47f5f2f7af27613",
+      "timestamp": "2026-11-06T04:47:09.307Z",
+      "commits": [
+        {
+          "sha": "9c4a7d3573544e9c4fb13c79d47f5f2f7af27613",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T04:46:14Z",
+          "message": "Merge 790eaee5361e7c4929de237b2fb08150439bdd30 into 8bb9728f028615d94483db40d614a14926ef1468\n"
+        },
+        {
+          "sha": "790eaee5361e7c4929de237b2fb08150439bdd30",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T21:12:57-07:00",
+          "message": "feat(facts): a view follows its session through the Facts interface, with an in-process arm, a recording arm and the seam test (candybar-gather-renderer-76bb.6pj.go2)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-623",
       "ref": "refs/pull/623/merge",
       "sha": "e718e72d4029159706eaac3ddb486b99fb6e0c08",
@@ -56,28 +78,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-06T03:50:28Z",
           "message": "chore(release): set `package.json` to 1.192.0 [skip ci]\n\n## [1.192.0](https://github.com/promptctl/cc-candybar/compare/v1.191.0...v1.192.0) (2026-11-06)\n\n### ⚠ BREAKING CHANGES\n\n* **click:** the load-config click verb and the examples' config\nswitcher are removed; a config linking to the verb fails to load.\n\n* review(high): one report shape for a template's issues; the retired-URL check says what it reads; keep the flag-over-hint coverage\n\n- cross-ref: the three places that reported a template's issue at the helper\n  or the declaration collapse to one local report; the retired-verb loop is\n  one line of it.\n- The retired-verb check reads every string literal, not only a link\n  argument, so its comment and message say 'spells', not 'links to'.\n- scheme.ts states the real one-way-deps reason: the codec imports config\n  modules, so config must not import the codec.\n- Restore the e2e coverage that the deleted pick test carried along:\n  --config outranks the configEnv hint, and an empty flag is no flag.\n- Drop the stale load-config lines in the design docs and a render-cache\n  comment that still named a click as a view mover.\n\n* review(medium): drop the request facts an open failure kept for the removed follow; the design docs say load-config is gone\n\nThe open-failure entry carried the request facts so a click that moved\nthe origin could reopen by them; with the follow gone nothing reads\nthem, so the entry is the error alone. The home spec and the isolation\nsurvey no longer list load-config as work to do.\n\n* test: lower the daemon-boot ratchet to 201, the cases left after the load-config e2e blocks went\n\n### Features\n\n* **click:** remove the load-config verb (candybar-gather-renderer-76bb.f00.bju) ([#620](https://github.com/promptctl/cc-candybar/issues/620)) ([505a8e2](https://github.com/promptctl/cc-candybar/commit/505a8e2d94696c8ff2409af7041987247b684318))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-624",
-      "ref": "refs/pull/624/merge",
-      "sha": "a6c0b40a719cecb494204089e51b24e8a053b35c",
-      "timestamp": "2026-11-06T04:24:06.359Z",
-      "commits": [
-        {
-          "sha": "a6c0b40a719cecb494204089e51b24e8a053b35c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T04:23:17Z",
-          "message": "Merge 802d12523596d759a496eb9a1f5df28ead44f481 into 72f2e1a2b5bd38d26643de974db14a16ce60000a\n"
-        },
-        {
-          "sha": "802d12523596d759a496eb9a1f5df28ead44f481",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T21:12:57-07:00",
-          "message": "feat(facts): a view follows its session through the Facts interface, with an in-process arm, a recording arm and the seam test (candybar-gather-renderer-76bb.6pj.go2)\n"
         }
       ]
     },
