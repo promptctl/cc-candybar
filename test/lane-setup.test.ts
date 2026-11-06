@@ -1199,6 +1199,22 @@ describe("LaneSetups", () => {
     expect(outcomes).toEqual([failed(expect.stringMatching(/the daemon closed: lane setup refused/))]);
   });
 
+  // A session this daemon no longer knows may still have a bar pane open.
+  test("a bar pane close whose session this daemon stopped holding while it waited for the pane fails, and closes nothing", async () => {
+    const { edge, did } = fakeEdge({ barPanes: async () => ["%9"] });
+    const { setups, settle, evict, performing, outcomes, turns } = owner(edge);
+    let release!: () => void;
+    const parked = turns.performing({ kind: "pane", tmux: TMUX }, () => new Promise<void>((r) => (release = r)));
+    setups.clicked(SID, session(), switches({ pane: true }), switches({}));
+    await settle();
+    evict();
+    release();
+    await parked;
+    await Promise.all(performing);
+    expect(did).toEqual([]);
+    expect(outcomes).toEqual([failed(`lane: pane off: this daemon no longer holds a request of session ${SID}`)]);
+  });
+
   test("a switch turned off brings the lane down", async () => {
     const { edge, did } = fakeEdge({ barPanes: async () => ["%9"] });
     const { setups, settle } = owner(edge);

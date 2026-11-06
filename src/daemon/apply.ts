@@ -614,7 +614,7 @@ const ORDERING: {
     paneWhenReached: true,
   },
   doctor: {
-    key: ({ session }) => ({ kind: "session", session }),
+    key: (_effect, { session }) => ({ kind: "session", session }),
     paneWhenReached: false,
   },
 };
@@ -631,7 +631,7 @@ function placeOf<K extends Effect["kind"]>(
 // effects take their places: each in its order, in the call that commits its
 // turn, so places follow the order turns committed, and each then waits in
 // its place for its own event's effects before it, so a `do` keeps the order
-// it lists. An effect that takes a pane's place only when a step reaches it
+// it lists (no `do` member takes a pane's place late). An effect that takes a pane's place only when a step reaches it
 // runs after every other effect of its event: one after it would wait on it,
 // while its pane step could wait behind a typed line that waits, through
 // another event's effects, on that one. Only such an effect takes a lane's

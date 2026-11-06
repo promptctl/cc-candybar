@@ -117,7 +117,7 @@ export class JournalTurns {
   // clicked. Effects on different keys wait on each other only through their
   // own event's order and through a setup's pane step, which waits in its
   // pane's order; keeping those waits acyclic is the performer's
-  // (src/daemon/apply.ts `performAll`). The order is the performer's, not the
+  // (src/daemon/apply.ts `performInOrder`). The order is the performer's, not the
   // turn's: the session's next click takes its turn while the last click's
   // effects still run, and no close refuses it, since an outcome after close
   // is said in the log.
