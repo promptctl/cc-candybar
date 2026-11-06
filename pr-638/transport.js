@@ -22749,6 +22749,8 @@ function homeOf(host) {
 
 // src/click/wire.ts
 var LINK_TO = "to";
+var LINK_PREFIX = `${URL_SCHEME}://`;
+var ADDRESS = `${LINK_TO}/`;
 var VERB_DISPATCH = "dispatch";
 var VERB_SET_STATE = "set-state";
 var VERB_STEP_STATE = "step-state";
@@ -22853,7 +22855,7 @@ function effectsUrl(to, effects, says = clickDoes(effects)) {
   return addressedLink(to, VERB_DISPATCH, qs);
 }
 function addressedLink(to, verb, tail) {
-  return `${URL_SCHEME}://${LINK_TO}/${to}/${verb}/${tail}`;
+  return `${LINK_PREFIX}${ADDRESS}${to}/${verb}/${tail}`;
 }
 function parseEffects(rawValue) {
   return new S(rawValue).getAll("e").map(splitVerb);
@@ -22879,20 +22881,21 @@ function splitVerb(s) {
   return i === -1 ? { verb: s, value: "" } : { verb: s.slice(0, i), value: s.slice(i + 1) };
 }
 function parseHandlerUrl(rawUrl) {
-  const prefix = `${URL_SCHEME}://`;
-  if (!rawUrl.startsWith(prefix)) {
-    return { ok: false, problem: `expected a ${prefix} link, got: ${rawUrl}` };
+  if (!rawUrl.startsWith(LINK_PREFIX)) {
+    return {
+      ok: false,
+      problem: `expected a ${LINK_PREFIX} link, got: ${rawUrl}`
+    };
   }
-  const rest2 = rawUrl.slice(prefix.length);
-  const addressed = `${LINK_TO}/`;
-  if (!rest2.startsWith(addressed)) {
-    const form = rest2.includes("/") ? `the direct verb form ${prefix}<verb>/\u2026` : `the bare copy form ${prefix}<value>`;
+  const rest2 = rawUrl.slice(LINK_PREFIX.length);
+  if (!rest2.startsWith(ADDRESS)) {
+    const form = rest2.includes("/") ? `the direct verb form ${LINK_PREFIX}<verb>/\u2026` : `the bare copy form ${LINK_PREFIX}<value>`;
     return {
       ok: false,
       problem: `the link is in ${form}, which names no renderer: ${rawUrl}`
     };
   }
-  const named3 = rest2.slice(addressed.length);
+  const named3 = rest2.slice(ADDRESS.length);
   const slash2 = named3.indexOf("/");
   if (slash2 === -1) {
     return {
@@ -22911,9 +22914,8 @@ function parseHandlerUrl(rawUrl) {
 }
 function spellsUnaddressedLink(text4) {
   if (!isBarLink(text4)) return false;
-  const rest2 = text4.slice(`${URL_SCHEME}://`.length);
-  const addressed = `${LINK_TO}/`;
-  return !rest2.startsWith(addressed) && !addressed.startsWith(rest2);
+  const head = text4.slice(LINK_PREFIX.length).split("%")[0];
+  return !head.startsWith(ADDRESS) && !ADDRESS.startsWith(head);
 }
 function verbOf(rest2, to) {
   const slash2 = rest2.indexOf("/");
@@ -71865,29 +71867,25 @@ function linksOf({ rows }) {
 function decodeArgs(verb, value) {
   return SEGMENTED_VERBS.has(verb) ? decodeSegments(value) : [decodeURIComponent(value)];
 }
-function clickOf(url) {
+function drawnClickOf(url) {
   const link = parseHandlerUrl(url);
-  if (!link.ok) throw new Error(link.problem);
-  return { verb: link.verb, value: link.value };
-}
-function effectsOf(url) {
-  return effectsOfClick(clickOf(url));
-}
-function effectsOfClick({
-  verb,
-  value
-}) {
-  if (verb !== VERB_DISPATCH) return [{ verb, args: decodeArgs(verb, value) }];
-  return parseEffects(value).map((e) => ({
-    verb: e.verb,
-    args: decodeArgs(e.verb, e.value)
-  }));
+  if (!link.ok) return link;
+  const { verb, value } = link;
+  if (verb !== VERB_DISPATCH)
+    return { ok: true, effects: [{ verb, args: decodeArgs(verb, value) }] };
+  return {
+    ok: true,
+    effects: parseEffects(value).map((e) => ({
+      verb: e.verb,
+      args: decodeArgs(e.verb, e.value)
+    }))
+  };
 }
 function describeLink(link, sessionId2) {
   if (!isBarLink(link.url)) return `opens ${link.url}`;
-  const click3 = parseHandlerUrl(link.url);
+  const click3 = drawnClickOf(link.url);
   if (!click3.ok) return `refused: ${click3.problem}`;
-  return effectsOfClick(click3).map(
+  return click3.effects.map(
     ({ verb, args }) => [verb, ...args.map((a) => a === sessionId2 ? "<session>" : a)].join(" ")
   ).join(" ; ");
 }
@@ -87372,7 +87370,8 @@ function copy2(text4) {
   );
 }
 async function click2(url, size) {
-  const effects = effectsOf(url);
+  const drawn = drawnClickOf(url);
+  const effects = drawn.ok ? drawn.effects : [];
   const host = effects.filter((e) => HOST_VERBS.has(e.verb));
   if (host.length > 0) {
     const copiesOnly = effects.every((e) => e.verb === VERB_COPY);

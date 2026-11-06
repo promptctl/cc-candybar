@@ -4,15 +4,22 @@
     {
       "version": "pr-638",
       "ref": "refs/pull/638/merge",
-      "sha": "cd2f1069257c15e2b48c80bc68666e0d8e3e3064",
-      "timestamp": "2026-11-06T11:04:15.273Z",
+      "sha": "507dd3526916d8cb127ce0ea7d82dd9ca4fe1fee",
+      "timestamp": "2026-11-06T11:17:55.454Z",
       "commits": [
         {
-          "sha": "cd2f1069257c15e2b48c80bc68666e0d8e3e3064",
+          "sha": "507dd3526916d8cb127ce0ea7d82dd9ca4fe1fee",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T11:02:44Z",
-          "message": "Merge c9365a80f4b763ddda4a3d536a49d0c5520b657a into a9a0d05d97e08cc2b5a9facc01cb113d92d542fe\n"
+          "timestamp": "2026-11-06T11:16:58Z",
+          "message": "Merge ce89103d1ce44c9601e831104312f92a5b99ec68 into a9a0d05d97e08cc2b5a9facc01cb113d92d542fe\n"
+        },
+        {
+          "sha": "ce89103d1ce44c9601e831104312f92a5b99ec68",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T04:15:08-07:00",
+          "message": "fix(links): a drawn link the parse refuses reaches the daemon from the site and the harness, and a printf format's head ends at its first verb (candybar-gather-renderer-76bb.b2l.eul)\n\nA drawn link reads as one typed value, its effects or the parse's\nrefusal. The site and the drive-bar harness send a refused link to the\ndaemon, which refuses it with the reason, where they threw before;\neffectsOf keeps throwing for tests that read the renderer's own links,\nand the throwing click reader moves into the test helper that alone\nused it.\n\nA literal like \"cc-candybar://%s/copy/%s\" may have its address filled\nin at the draw, so the load check reads its head up to the first `%`.\nThe wire module spells the scheme prefix and the address opener once.\n"
         },
         {
           "sha": "c9365a80f4b763ddda4a3d536a49d0c5520b657a",
