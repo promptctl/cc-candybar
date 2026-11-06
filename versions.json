@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-617",
+      "ref": "refs/pull/617/merge",
+      "sha": "d0cb8cd2dcc8216cce23633f18967fa00868376a",
+      "timestamp": "2026-11-06T06:04:43.943Z",
+      "commits": [
+        {
+          "sha": "d0cb8cd2dcc8216cce23633f18967fa00868376a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T06:03:52Z",
+          "message": "Merge 7435e3513f93b98926bb95081684cdfba3caf11e into 0577540acfe6b769c9a94c7e1e7ee9a4d0a0ee48\n"
+        },
+        {
+          "sha": "7435e3513f93b98926bb95081684cdfba3caf11e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T10:16:04-07:00",
+          "message": "test(facts): name the doctor's closure tests for what they protect (candybar-gather-renderer-76bb.6pj.xb3)\n"
+        },
+        {
+          "sha": "af7f56968fa80d1b21aebb0230c5159807cf3a72",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T10:12:58-07:00",
+          "message": "fix(facts): the wait's comment names every session; the doctor's namespace-read test returns (candybar-gather-renderer-76bb.6pj.xb3)\n"
+        },
+        {
+          "sha": "8933d2fb5d2ea9f60835948c4b46d4e8d5083039",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T10:07:10-07:00",
+          "message": "chore(facts): delete the wants closure (candybar-gather-renderer-76bb.6pj.xb3)\n\nThe facts document is total, so the question \"which fields does this config\nread\" has no caller with a reason. Every session now gathers every built-in:\ngit runs one constant option set (forge lookup included), every declared\nplugin source is held, and burn, block and autocompact's context cap are always\ncomposed. A view's declaration depends on the request alone, so a preset pick\nmoves no hold.\n\nDeleted: the wants function, the needed-prefix builders, the sources-read walk,\nthe closure parameter through declare/refresh/read/project, the PR reads gate,\nthe git options derived from the closure, `Gathered`, `declaredSources`, and the\nview's preset reaction. The doctor's data-needs walk stays and now owns its own\nper-segment path closure, since it answers what a config would read.\n\nThe bar is byte-identical; the payload golden gains the keys that were gated\n(block, burn, metrics, activity, tmux and the like on presets that did not read\nthem). Tests that asserted gating are deleted; the fold-edge cases they covered\n(partials, helpers handed a dict) move to the doctor's path closure.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-625",
       "ref": "refs/pull/625/merge",
       "sha": "e4efb834e01a8afeaf3a62f8aafa58ef000134c9",
@@ -199,42 +235,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-05T22:37:33-07:00",
           "message": "feat(apply): a request takes its turn; its two writes are one batch in the request arm, and the answered mark is an event (candybar-gather-renderer-76bb.1dh.1ql)\n\nThe request arm records what the client said (client-hints, render-origin)\nas one setBatch inside a journal turn and draws once the turn is over, so a\nrequest that arrives while a click's turn is held draws the click whole,\nnever its first write beside the request's hints. The turn waits behind\nturns alone: a click's head gather holds none. The click error's answered\nmark, the one other request-path write, is an `answered` event whose arm\ntakes a turn; the delivery edge applies it as the performer applies\neffect-done, with a refusal said in the log.\n\nThe render line gains renderer=main, factsSeq, turnWait and revision; the\nrequest's apply line stays null, since the render event is its one record.\nThe daemon's draw is a port on the request arm's parts, so the arm is\ndriven below the daemon. The daemon's adapters gain `sessionWrites`: the\nproduction daemon writes the store, every daemon built in a worker writes\nthrough the write-outside-turn instrument. A run's ending and a lane\nsetup's failure still write the store outside a turn (the next story).\n\nTests: test/request-turn.test.ts races a request against a click whose\ndoctor gathers inside its turn under a held clock, and against one parked\nin its head gather; apply-effects covers the answered mark's turn. The\nboot ratchet forbids a new in-worker case, so the race lives at the root\nover Apply and the real journal turns.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-617",
-      "ref": "refs/pull/617/merge",
-      "sha": "be7d5fee6339ca732732c59384a5af6b7b9d0af8",
-      "timestamp": "2026-11-03T17:17:28.501Z",
-      "commits": [
-        {
-          "sha": "be7d5fee6339ca732732c59384a5af6b7b9d0af8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T17:16:16Z",
-          "message": "Merge 545a3d7b3b41660364607b0d245e64821498618c into 847071c25ae39f8f9af52d1ab5b46f3a54b872e1\n"
-        },
-        {
-          "sha": "545a3d7b3b41660364607b0d245e64821498618c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T10:16:04-07:00",
-          "message": "test(facts): name the doctor's closure tests for what they protect (candybar-gather-renderer-76bb.6pj.xb3)\n"
-        },
-        {
-          "sha": "bdd44b3d217645e24337c2704f05febc960f579f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T10:12:58-07:00",
-          "message": "fix(facts): the wait's comment names every session; the doctor's namespace-read test returns (candybar-gather-renderer-76bb.6pj.xb3)\n"
-        },
-        {
-          "sha": "d9bef5d7d9a1d752a1fb184065b026fc12da60d9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T10:07:10-07:00",
-          "message": "chore(facts): delete the wants closure (candybar-gather-renderer-76bb.6pj.xb3)\n\nThe facts document is total, so the question \"which fields does this config\nread\" has no caller with a reason. Every session now gathers every built-in:\ngit runs one constant option set (forge lookup included), every declared\nplugin source is held, and burn, block and autocompact's context cap are always\ncomposed. A view's declaration depends on the request alone, so a preset pick\nmoves no hold.\n\nDeleted: the wants function, the needed-prefix builders, the sources-read walk,\nthe closure parameter through declare/refresh/read/project, the PR reads gate,\nthe git options derived from the closure, `Gathered`, `declaredSources`, and the\nview's preset reaction. The doctor's data-needs walk stays and now owns its own\nper-segment path closure, since it answers what a config would read.\n\nThe bar is byte-identical; the payload golden gains the keys that were gated\n(block, burn, metrics, activity, tmux and the like on presets that did not read\nthem). Tests that asserted gating are deleted; the fold-edge cases they covered\n(partials, helpers handed a dict) move to the doctor's path closure.\n"
         }
       ]
     }

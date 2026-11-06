@@ -20321,10 +20321,10 @@ var require_primordials2 = __commonJS({
       getOwnPropertyDescriptor: ReflectGetOwnPropertyDescriptor,
       ownKeys: ReflectOwnKeys
     } = Reflect;
-    var { apply, bind, call } = Function.prototype;
+    var { apply: apply2, bind, call } = Function.prototype;
     var uncurryThis = bind.bind(call);
     primordials.uncurryThis = uncurryThis;
-    var applyBind = bind.bind(apply);
+    var applyBind = bind.bind(apply2);
     primordials.applyBind = applyBind;
     var varargsMethods = [
       // 'ArrayPrototypeConcat' is omitted, because it performs the spread
@@ -22644,15 +22644,17 @@ var SETTINGS_REF = {
 var DIAGNOSTICS_VIEWING = `${SETTINGS_NS}diagnostics`;
 var DIAGNOSTICS_CLOSED = "0";
 
-// src/click/wire.ts
+// src/click/scheme.ts
+init_globals();
 var URL_SCHEME = "cc-candybar";
+
+// src/click/wire.ts
 var VERB_DISPATCH = "dispatch";
 var VERB_SET_STATE = "set-state";
 var VERB_STEP_STATE = "step-state";
 var VERB_COPY = "copy";
 var VERB_OPEN_VSCODE = "open-vscode";
 var VERB_TOOLBAR_TOGGLE = "toolbar-toggle";
-var VERB_LOAD_CONFIG = "load-config";
 var VERB_SET_CONFIG = "set-config";
 var VERB_STEP_CONFIG = "step-config";
 var VERB_SAVE = "save";
@@ -22704,7 +22706,6 @@ var SAYS = {
   [VERB_COPY]: ([text4]) => [`copy ${saidCopy(text4)}`],
   [VERB_OPEN_VSCODE]: ([target]) => [`open ${target} in vs code`],
   [VERB_TOOLBAR_TOGGLE]: () => ["toggle the toolbar"],
-  [VERB_LOAD_CONFIG]: ([, path42]) => [`load config ${path42}`],
   [VERB_SET_CONFIG]: ([, key, value]) => [`save ${key} as ${value}`],
   [VERB_STEP_CONFIG]: ([, key, by]) => [`save ${sayStep(key, by)}`],
   [VERB_SAVE]: () => ["save settings"],
@@ -22867,6 +22868,9 @@ var inspect = (v) => {
 // src/time.ts
 init_globals();
 init_timers();
+function plusMs(from, ms) {
+  return from + ms;
+}
 function spanMs(from, to) {
   return Math.round(to - from);
 }
@@ -22984,6 +22988,44 @@ function checkRateLimit(lastStartAt, category, now2) {
 }
 function childEnv(scope, opts) {
   return { ...scope.inherited, ...opts.envOverlay };
+}
+function whyFailed(r) {
+  switch (r.reason) {
+    case "non-zero":
+      return `exited with code ${r.exitCode}`;
+    case "signal":
+      return `killed by ${r.signal ?? "a signal"}`;
+    // These are whole sentences: the launcher wrote them.
+    case "timeout":
+    case "output-limit":
+    case "rate-limited":
+    case "pipe-error":
+    case "spawn-error":
+      return r.error ?? r.reason;
+    default:
+      return r.error === void 0 ? r.reason : `${r.reason}: ${r.error}`;
+  }
+}
+var SAID_LINE_CHARS = 200;
+var clipped = (line) => {
+  const kept = [];
+  for (const ch of line) {
+    if (kept.length === SAID_LINE_CHARS) return `${kept.join("")}\u2026`;
+    kept.push(ch);
+  }
+  return line;
+};
+function saidBy(r, text4) {
+  if (r.reason === "output-limit" || r.reason === "pipe-error") return "";
+  const t2 = text4.trim();
+  const firstEnd = t2.search(/[\r\n]/);
+  if (firstEnd === -1) return clipped(t2);
+  const lastStart = Math.max(t2.lastIndexOf("\n"), t2.lastIndexOf("\r")) + 1;
+  return `${clipped(t2.slice(0, firstEnd).trim())} \u2026 ${clipped(t2.slice(lastStart).trim())}`;
+}
+function failureText(r, where = "") {
+  const said = saidBy(r, r.stderr);
+  return `${whyFailed(r)}${where}${said === "" ? "" : `: ${said}`}`;
 }
 var refusedAsAborted = ({ reason }) => ({
   ok: false,
@@ -23137,6 +23179,7 @@ function endLifeline(state) {
 }
 var MAX_CAPTURED_BYTES = 16 * 1024 * 1024;
 var OUTPUT_LIMIT_ERROR = `output exceeded ${MAX_CAPTURED_BYTES} bytes`;
+var timedOutError = (timeoutMs) => `timed out after ${timeoutMs / 1e3} s`;
 function capture(state, category, stream, ends) {
   const { stats } = state.scope;
   const decoder = new import_node_string_decoder.StringDecoder("utf8");
@@ -23205,8 +23248,8 @@ function feed(input, text4) {
 }
 async function launchWaited(state, opts) {
   const { stats, clock } = state.scope;
-  const refused = admit(state, opts.category, opts.signal);
-  if (refused !== null) return refused;
+  const refused2 = admit(state, opts.category, opts.signal);
+  if (refused2 !== null) return refused2;
   const t0 = clock.monotonic();
   stats?.onStart(opts.category);
   return new Promise((resolve) => {
@@ -23348,7 +23391,9 @@ async function launchWaited(state, opts) {
           ...output(),
           exitCode: code,
           signal: signal2,
-          ...terminated === "output-limit" ? { error: OUTPUT_LIMIT_ERROR } : terminated === "pipe-error" ? { error: `a pipe failed to read: ${pipeError}` } : {}
+          // [LAW:one-source-of-truth] The launcher enforced the bound, so it
+          // names it; callers never spell it from a constant of their own.
+          ...terminated === "timeout" ? { error: timedOutError(opts.timeoutMs ?? 0) } : terminated === "output-limit" ? { error: OUTPUT_LIMIT_ERROR } : terminated === "pipe-error" ? { error: `a pipe failed to read: ${pipeError}` } : {}
         });
         return;
       }
@@ -23376,8 +23421,8 @@ async function launchWaited(state, opts) {
 }
 function launchBlocking(state, opts) {
   const { stats, clock } = state.scope;
-  const refused = admit(state, opts.category);
-  if (refused !== null) return refused;
+  const refused2 = admit(state, opts.category);
+  if (refused2 !== null) return refused2;
   const t0 = clock.monotonic();
   stats?.onStart(opts.category);
   try {
@@ -23402,7 +23447,7 @@ function launchBlocking(state, opts) {
         stderr: stderr2,
         exitCode: null,
         signal: result.signal ?? null,
-        error: spawnErrorText(result.error, opts.cwd)
+        error: reason2 === "timeout" ? timedOutError(opts.timeoutMs ?? 0) : spawnErrorText(result.error, opts.cwd)
       };
     }
     if (result.status === 0) {
@@ -23432,8 +23477,8 @@ function launchBlocking(state, opts) {
 }
 function launchOrphan(state, opts) {
   const { stats, clock } = state.scope;
-  const refused = admit(state, opts.category);
-  if (refused !== null) return refused;
+  const refused2 = admit(state, opts.category);
+  if (refused2 !== null) return refused2;
   const t0 = clock.monotonic();
   stats?.onStart(opts.category);
   const result = launchDetachedSyncInner(state, opts);
@@ -23480,9 +23525,9 @@ var formatJobEnd = (end) => end.kind === "exit" ? `exit ${end.code}` : "timeout"
 var JOB_SCRIPT = `out=$1 err=$2 status=$3; shift 3; read go || exit 0; "$@" >"$out" 2>"$err" </dev/null; echo "exit $?" >"$status.$$" && ln "$status.$$" "$status"; rm -f "$status.$$"`;
 function launchJob(state, opts, files) {
   const { stats, clock } = state.scope;
-  const refused = admit(state, opts.category);
-  if (refused !== null)
-    return { ok: false, reason: refused.reason, error: refused.error };
+  const refused2 = admit(state, opts.category);
+  if (refused2 !== null)
+    return { ok: false, reason: refused2.reason, error: refused2.error };
   const t0 = clock.monotonic();
   stats?.onStart(opts.category);
   let child;
@@ -39152,6 +39197,37 @@ function isValidDuration(s) {
 
 // src/config/loader/retired-variables.ts
 init_globals();
+
+// src/config-hint.ts
+init_globals();
+
+// src/utils/user-path.ts
+init_globals();
+var import_node_path2 = __toESM(require_path_browserify(), 1);
+function expandHome(p2, home) {
+  return p2 === "~" || p2.startsWith("~/") || p2.startsWith("~\\") ? home + p2.slice(1) : p2;
+}
+function resolveUserPath(base, p2, home) {
+  return import_node_path2.default.resolve(base, expandHome(p2, home));
+}
+function explicitConfigPath(base, p2, home) {
+  return typeof p2 === "string" && p2 !== "" ? resolveUserPath(base, p2, home) : void 0;
+}
+
+// src/config-hint.ts
+var CONFIG_ENV = "CC_CANDYBAR_CONFIG";
+function requestedConfigTarget(argument, environment) {
+  if (argument !== void 0) return { source: "argument", path: argument };
+  if (environment !== void 0) {
+    return { source: "environment", path: environment };
+  }
+  return { source: "search" };
+}
+function chainName(paths2, none2 = "bundled default (no config file loaded)") {
+  return paths2.join(" < ") || none2;
+}
+
+// src/config/loader/retired-variables.ts
 var RETIRED_VARIABLES = /* @__PURE__ */ new Map([
   // brandon-settings-coverage-g4p.lx2
   ["session.budget.amount", { segment: "session", setting: "budget" }],
@@ -39248,6 +39324,36 @@ function retiredGitKindMessage(raw) {
   }
   const note = field.note === void 0 ? "" : ` (${field.note})`;
   return `${head} read ${field.read} where it was read${note}, or declare ${json5Of(field.declare)} under a name of your own`;
+}
+var RETIRED_ENV_NAMES = new Map(
+  [
+    ["HOME", "home"],
+    ["USER", "host.user"],
+    ["LOGNAME", "host.user"],
+    ["HOSTNAME", "host.name"]
+  ].map(([name, path42]) => [
+    name,
+    { read: `.${path42}`, declare: { kind: "input", path: path42, default: "" } }
+  ])
+);
+function retiredEnvKindMessage(raw) {
+  const read2 = typeof raw.name === "string" ? ` (this one read $${raw.name})` : "";
+  const head = `kind "env" is removed${read2}: the renderer's environment belongs to whichever shell spawned it, not to the session it draws for, so an env variable was never a session fact \u2014 drop this declaration`;
+  const field = typeof raw.name === "string" ? RETIRED_ENV_NAMES.get(raw.name) : void 0;
+  if (field === void 0) {
+    return `${head}; a value the payload lacks is read from a file by a "file" source or computed by a "shell" source, and not by echoing the variable there, since a "shell" source runs in the renderer too`;
+  }
+  return `${head} and read ${field.read} where it was read, or declare ${json5Of(field.declare)} under a name of your own`;
+}
+var RETIRED_LINK_VERBS = /* @__PURE__ */ new Map([
+  [
+    "load-config",
+    `the load-config verb is removed \u2014 a session's config is the file its statusline command names with --config, else the file its shell names in $${CONFIG_ENV}; point the session there instead of linking to a path`
+  ]
+]);
+function retiredLinkVerbMessage(verb) {
+  const where = RETIRED_LINK_VERBS.get(verb);
+  return where === void 0 ? void 0 : `Template spells "${URL_SCHEME}://${verb}/\u2026", a URL no click runs: ${where}`;
 }
 
 // src/config/loader/variables.ts
@@ -39410,10 +39516,6 @@ var INPUT_FIELDS = {
   type: optionalEnumSpec(["string", "number", "boolean"]),
   default: typedDefaultSpec()
 };
-var ENV_FIELDS = {
-  name: requireStringSpec(),
-  default: optionalStringSpec()
-};
 var FILE_FIELDS = {
   path: requireAbsolutePathSpec(),
   readMode: optionalEnumSpec(["whole", "first-line"]),
@@ -39475,14 +39577,13 @@ var VARIABLE_SCHEMA = {
     // is one field map like every other arm — `arm()` derives both `parse` and
     // `json` from INPUT_FIELDS, no hand-authored schema to keep in sync.
     input: arm("input", INPUT_FIELDS),
-    env: arm("env", ENV_FIELDS),
     file: arm("file", FILE_FIELDS),
     shell: arm("shell", SHELL_FIELDS),
     template: arm("template", TEMPLATE_FIELDS, TEMPLATE_VAR_REMOVED),
     time: arm("time", TIME_FIELDS, TIME_VAR_REMOVED),
     state: arm("state", STATE_FIELDS)
   },
-  retired: { git: retiredGitKindMessage }
+  retired: { git: retiredGitKindMessage, env: retiredEnvKindMessage }
 };
 function variableDeclJson() {
   return taggedUnionJson(VARIABLE_SCHEMA);
@@ -45550,11 +45651,11 @@ function checkMenuDecls(ctx, out) {
     }
   }
 }
-function identityIssue(apply) {
-  if (apply === "") {
+function identityIssue(apply2) {
+  if (apply2 === "") {
     return `with an empty apply-action name \u2014 an empty member aliases the absent-state sentinel ("") so the menu would render open before any click. Name the apply action`;
   }
-  if (menuMember(apply) === DISCLOSURE_CLOSED) {
+  if (menuMember(apply2) === DISCLOSURE_CLOSED) {
     return `whose apply action is named "${DISCLOSURE_CLOSED}", which collides with the menu's closed-state sentinel and leaves it unopenable. Rename the action`;
   }
   return void 0;
@@ -45587,11 +45688,11 @@ function synthesizePlacementMenus(config2, issues) {
         if (call.kind === "issue" || identityIssue(call.apply) !== void 0) {
           continue;
         }
-        const { apply, options } = call;
-        const member = menuMember(apply);
-        const stateKey = menuStateKey(id2, apply, options.key);
+        const { apply: apply2, options } = call;
+        const member = menuMember(apply2);
+        const stateKey = menuStateKey(id2, apply2, options.key);
         const pageKey = menuPageKey(stateKey);
-        const owner = options.key !== void 0 ? `key ${options.key}` : `ind ${id2} ${apply}`;
+        const owner = options.key !== void 0 ? `key ${options.key}` : `ind ${id2} ${apply2}`;
         const clashKey = [stateKey, pageKey].find((k) => {
           const prior2 = ownerBySynthKey.get(k);
           return prior2 !== void 0 && prior2 !== owner;
@@ -45611,7 +45712,7 @@ function synthesizePlacementMenus(config2, issues) {
         if (prior !== void 0 && prior !== claimant) {
           issue3(
             node.name,
-            `two {{ menu }} disclosures resolve to the same identity ("${identity2}") \u2014 ${options.key !== void 0 ? `menus sharing key "${options.key}" must have distinct apply actions` : `a segment cannot contain two menus over the same apply action "${apply}"`}.`
+            `two {{ menu }} disclosures resolve to the same identity ("${identity2}") \u2014 ${options.key !== void 0 ? `menus sharing key "${options.key}" must have distinct apply actions` : `a segment cannot contain two menus over the same apply action "${apply2}"`}.`
           );
           continue;
         }
@@ -45956,6 +46057,19 @@ function templateActionRefs(template, helpers) {
     for (const { name, site } of actionBindings(code)) {
       const key = `${name}\0${via ?? "\0"}`;
       if (!refs.has(key)) refs.set(key, { name, site, via });
+    }
+  }
+  return [...refs.values()];
+}
+var LINK_VERB_RE = new RegExp(`^${URL_SCHEME}://([a-z][a-z0-9-]*)`);
+function templateLinkVerbs(template, helpers) {
+  const refs = /* @__PURE__ */ new Map();
+  for (const { code, via } of callGraph(template, helpers)) {
+    for (const s of code.matchAll(STRING_LITERAL_RE)) {
+      const verb = LINK_VERB_RE.exec(s[0].slice(1, -1))?.[1];
+      if (verb === void 0) continue;
+      const key = `${verb}\0${via ?? "\0"}`;
+      if (!refs.has(key)) refs.set(key, { verb, via });
     }
   }
   return [...refs.values()];
@@ -51630,7 +51744,7 @@ var { readFile, writeFile, stat, lstat, readdir, mkdir, rm, unlink, rename, open
 
 // src/daemon/cache/watchers.ts
 init_globals();
-var import_node_path4 = __toESM(require_path_browserify(), 1);
+var import_node_path5 = __toESM(require_path_browserify(), 1);
 
 // src/utils/logfmt.ts
 init_globals();
@@ -51639,10 +51753,10 @@ var valueOf = (value) => BARE.test(value) ? value : JSON.stringify(value);
 
 // src/utils/atomic-write.ts
 init_globals();
-var import_node_path2 = __toESM(require_path_browserify(), 1);
+var import_node_path3 = __toESM(require_path_browserify(), 1);
 function writeAtomic(at, text4, mode) {
   const file = resolvedTarget(at);
-  fs_default.mkdirSync(import_node_path2.default.dirname(file), { recursive: true });
+  fs_default.mkdirSync(import_node_path3.default.dirname(file), { recursive: true });
   const tmp = `${file}.tmp`;
   const fileMode = mode ?? fs_default.statSync(file, { throwIfNoEntry: false })?.mode;
   try {
@@ -51684,8 +51798,8 @@ function walkLinks(at) {
 function linkTarget(file) {
   try {
     if (!fs_default.lstatSync(file).isSymbolicLink()) return null;
-    return import_node_path2.default.resolve(
-      fs_default.realpathSync(import_node_path2.default.dirname(file)),
+    return import_node_path3.default.resolve(
+      fs_default.realpathSync(import_node_path3.default.dirname(file)),
       fs_default.readlinkSync(file)
     );
   } catch (e) {
@@ -51722,16 +51836,16 @@ var bindsFolder = (bound) => typeof bound !== "string" && "ino" in bound;
 
 // src/utils/watch-target.ts
 init_globals();
-var import_node_path3 = __toESM(require_path_browserify(), 1);
+var import_node_path4 = __toESM(require_path_browserify(), 1);
 function nearestWatchTarget(candidate) {
-  let name = import_node_path3.default.basename(candidate);
-  let dir = import_node_path3.default.dirname(candidate);
+  let name = import_node_path4.default.basename(candidate);
+  let dir = import_node_path4.default.dirname(candidate);
   for (; ; ) {
     const real = canonicalDirectory(dir);
     if (real !== null)
-      return { dir: real, name, leaf: dir === import_node_path3.default.dirname(candidate) };
-    name = import_node_path3.default.basename(dir);
-    dir = import_node_path3.default.dirname(dir);
+      return { dir: real, name, leaf: dir === import_node_path4.default.dirname(candidate) };
+    name = import_node_path4.default.basename(dir);
+    dir = import_node_path4.default.dirname(dir);
   }
 }
 function canonicalDirectory(p2) {
@@ -51803,7 +51917,7 @@ function folded(window2, next) {
   for (const p2 of next.paths) window2.paths.add(p2);
   return window2;
 }
-var namedOf = (dir, filename) => filename === null ? { kind: "unknown" } : { kind: "changed", paths: /* @__PURE__ */ new Set([import_node_path4.default.join(dir, filename)]) };
+var namedOf = (dir, filename) => filename === null ? { kind: "unknown" } : { kind: "changed", paths: /* @__PURE__ */ new Set([import_node_path5.default.join(dir, filename)]) };
 var failedOf = (d) => ({
   kind: "failed",
   reason: `${d.path}: ${d.reason}`
@@ -52017,7 +52131,7 @@ var WatcherRegistry = class {
   heard(dir, handle, changed) {
     const { state } = dir;
     if (!heldBy(state, handle)) return;
-    const moved = changed === import_node_path4.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== state.bound;
+    const moved = changed === import_node_path5.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== state.bound;
     for (const { slot, filter } of dir.listeners) {
       if (filter === null || changed === null || filter.has(changed) || moved)
         this.fire(slot, namedOf(dir.path, changed));
@@ -52117,7 +52231,7 @@ var WatcherRegistry = class {
 
 // src/daemon/cache/file-events.ts
 init_globals();
-var import_node_path5 = __toESM(require_path_browserify(), 1);
+var import_node_path6 = __toESM(require_path_browserify(), 1);
 var PROBE_EVERY_MS = 3e4;
 var STALL_AFTER = 2;
 var PROBE_FILE = "probe";
@@ -52293,7 +52407,7 @@ var FileEventDelivery = class {
     }
     try {
       await fs_default.promises.writeFile(
-        import_node_path5.default.join(inst.folder, PROBE_FILE),
+        import_node_path6.default.join(inst.folder, PROBE_FILE),
         String(at)
       );
     } catch (e) {
@@ -52872,18 +52986,18 @@ var Refreshes = class {
 
 // src/source-digest.ts
 init_globals();
-var import_node_path6 = __toESM(require_path_browserify(), 1);
+var import_node_path7 = __toESM(require_path_browserify(), 1);
 var isSourceEntry = (name) => !name.startsWith(".") && !name.endsWith("~");
 function entryBytes(p2, st) {
   return st.isSymbolicLink() ? import_buffer.Buffer.from(fs_default.readlinkSync(p2)) : fs_default.readFileSync(p2);
 }
 function sourceEntries(root, dir, keep2 = isSourceEntry) {
   return fs_default.readdirSync(dir).filter(keep2).sort().flatMap((name) => {
-    const p2 = import_node_path6.default.join(dir, name);
+    const p2 = import_node_path7.default.join(dir, name);
     const st = fs_default.lstatSync(p2, { throwIfNoEntry: false });
     if (st === void 0) return [];
     if (st.isDirectory()) return sourceEntries(root, p2);
-    const rel = import_node_path6.default.relative(root, p2).split(import_node_path6.default.sep).join("/");
+    const rel = import_node_path7.default.relative(root, p2).split(import_node_path7.default.sep).join("/");
     return [[rel, entryBytes(p2, st)]];
   });
 }
@@ -52964,8 +53078,10 @@ function shellReader(launcher, command, cwd2, signal) {
         signal
       });
       if (r.ok) return ok(r.stdout);
-      const why2 = r.reason === "non-zero" ? `exited with code ${r.exitCode}` : r.reason === "timeout" ? `timed out after ${SHELL_READ_TIMEOUT_MS / 1e3} s` : [r.reason, r.error].filter((s) => s !== void 0).join(": ");
-      return failed(`shell "${command}" ${why2} in ${cwd2}`, "read");
+      return failed(
+        `shell "${command}" ${failureText(r, ` in ${cwd2}`)}`,
+        "read"
+      );
     }
   };
 }
@@ -53309,19 +53425,17 @@ var SourceRegistry = class _SourceRegistry {
   // sessionState lets the daemon inject its singleton so state-kind variables
   // share one MobX atom and one disk-persistence layer with the click verbs.
   // Omitted in tests that don't exercise state vars.
-  constructor(runs, store, defaultEmptyValue = "", sessionState, parent = null, env2 = {}) {
+  constructor(runs, store, defaultEmptyValue = "", sessionState, parent = null) {
     this.runs = runs;
     this.store = store;
     this.defaultEmptyValue = defaultEmptyValue;
     this.parent = parent;
-    this.env = env2;
     this.sessionState = sessionState;
   }
   runs;
   store;
   defaultEmptyValue;
   parent;
-  env;
   lastErrors = /* @__PURE__ */ new Map();
   // A cache policy that cannot fire is a STANDING fault, not a read's
   // outcome: a read that succeeds afterwards says nothing about whether the
@@ -53412,8 +53526,7 @@ var SourceRegistry = class _SourceRegistry {
       new VariableStore(this.store.clock, this.store),
       this.defaultEmptyValue,
       this.sessionState,
-      this,
-      this.env
+      this
     );
   }
   // [LAW:one-source-of-truth] The registry IS the owner of its store — every
@@ -53497,18 +53610,6 @@ var SourceRegistry = class _SourceRegistry {
         e instanceof Error ? e.message : String(e)
       );
     }
-  }
-  // env: resolved once at declaration from the registry's environment; box written once, never again.
-  // type is always 'string' — env vars are text by nature.
-  declareEnv(name, envVar, varDefault) {
-    const raw = this.env[envVar];
-    if (raw !== void 0) {
-      this.store.defineBox(name, "string", raw);
-      return;
-    }
-    const fallback = varDefault !== void 0 ? varDefault : typeof this.defaultEmptyValue === "string" ? this.defaultEmptyValue : "";
-    this.store.defineBox(name, "string", fallback);
-    this.recordError(name, `env var "${envVar}" is not set`);
   }
   // ─── Async source kinds ───────────────────────────────────────────────────
   // shell: spawn command in /bin/sh, its stdout is the text the parser sees.
@@ -54709,35 +54810,6 @@ var TMUX_ENV = {
 };
 var inTmux = (tmux3) => tmux3 !== null && tmux3 !== void 0;
 
-// src/config-hint.ts
-init_globals();
-
-// src/utils/user-path.ts
-init_globals();
-var import_node_path7 = __toESM(require_path_browserify(), 1);
-function expandHome(p2, home) {
-  return p2 === "~" || p2.startsWith("~/") || p2.startsWith("~\\") ? home + p2.slice(1) : p2;
-}
-function resolveUserPath(base, p2, home) {
-  return import_node_path7.default.resolve(base, expandHome(p2, home));
-}
-function explicitConfigPath(base, p2, home) {
-  return typeof p2 === "string" && p2 !== "" ? resolveUserPath(base, p2, home) : void 0;
-}
-
-// src/config-hint.ts
-var CONFIG_ENV = "CC_CANDYBAR_CONFIG";
-function requestedConfigTarget(argument, environment) {
-  if (argument !== void 0) return { source: "argument", path: argument };
-  if (environment !== void 0) {
-    return { source: "environment", path: environment };
-  }
-  return { source: "search" };
-}
-function chainName(paths2, none2 = "bundled default (no config file loaded)") {
-  return paths2.join(" < ") || none2;
-}
-
 // src/render/strip.ts
 init_globals();
 
@@ -55931,7 +56003,7 @@ function footprintCharge(pid2, run3) {
       return {
         kind: "stand-in",
         bytes: rss,
-        unread: `footprint ${result.reason}${result.error !== void 0 ? `: ${result.error}` : ""}${firstLine(result.stderr)}`
+        unread: `footprint ${failureText(result)}`
       };
     }
     const bytes = physFootprintOf(result.stdout);
@@ -55959,7 +56031,7 @@ function commandProbe(launcher, bin, args) {
       if (!result.ok) {
         return {
           kind: "unavailable",
-          reason: `${result.reason}${result.error !== void 0 ? `: ${result.error}` : ""}${firstLine(result.stderr)}`
+          reason: failureText(result)
         };
       }
       return result.stdout.trim().length > 0 ? { kind: "text", text: result.stdout } : { kind: "unavailable", reason: "exited 0 but printed nothing" };
@@ -55978,10 +56050,6 @@ function fileProbe(path42) {
       }
     }
   };
-}
-function firstLine(stderr2) {
-  const line = stderr2.split("\n").map((l) => l.trim()).find((l) => l.length > 0);
-  return line === void 0 ? "" : ` (${line})`;
 }
 
 // src/daemon/limits.ts
@@ -56522,7 +56590,6 @@ var UNUSED = {
 var NAMED_BY = {
   argument: "command argument",
   environment: `$${CONFIG_ENV}`,
-  pick: "load-config pick",
   unknown: "source unknown"
 };
 function judgedConfig({ target, layers }) {
@@ -56969,7 +57036,7 @@ var nerdFont = {
   probe: ({ nerdFont: facts, marks }) => {
     if (facts.kind === "none") return { ok: true };
     const sighting = glyphSighting(facts);
-    const failed2 = (reason) => marks.kind === "failed" && sighting !== void 0 ? {
+    const failed3 = (reason) => marks.kind === "failed" && sighting !== void 0 ? {
       ok: false,
       reason,
       more: [`the mark book could not be read: ${marks.reason}`]
@@ -56981,7 +57048,7 @@ var nerdFont = {
       case "drawn":
         return { ok: true };
       case "boxes":
-        return failed2(
+        return failed3(
           `${called} draws ${codePoints(facts.glyphs)} as boxes \u2014 set a Nerd Font as its font`
         );
       case null:
@@ -56989,41 +57056,41 @@ var nerdFont = {
     }
     switch (terminal.kind) {
       case "unreported":
-        return failed2(
+        return failed3(
           "the client reported no terminal \u2014 re-run `cc-candybar install` to stage a current client"
         );
       case "unasked":
-        return failed2(
+        return failed3(
           `tmux could not be asked which terminal is attached: ${terminal.reason}`
         );
       case "unknown":
       case "unnamed":
       case "unread":
-        return failed2(`the doctor cannot read ${called}'s font`);
+        return failed3(`the doctor cannot read ${called}'s font`);
       case "bundling": {
         const since = TERMINALS[terminal.name].glyphs.since;
         if (since === null) return { ok: true };
         const shipped = terminal.version === null ? null : releasedSince(terminal.version, since);
         if (shipped === true) return { ok: true };
         const label2 = terminalLabel(terminal.name);
-        return failed2(
+        return failed3(
           shipped === null ? `${label2} ships Nerd Font symbols since ${since}, and did not say which release this is` : `${called} ships no Nerd Font symbols (they came in ${since}) \u2014 update ${label2}, or set a Nerd Font as its font`
         );
       }
       case "configured": {
         if (terminal.font.kind === "failed") {
-          return failed2(
+          return failed3(
             `the doctor cannot read ${called}'s font: ${terminal.font.reason}`
           );
         }
         const { font, from, lacks } = terminal.font.value;
         if (lacks === null) {
-          return failed2(
+          return failed3(
             `${called} is set to ${font} (${from}), which is not installed \u2014 install it or set a Nerd Font`
           );
         }
         if (lacks.length === 0) return { ok: true };
-        return failed2(
+        return failed3(
           `${called} draws with ${font} (${from}), which has no ${codePoints(lacks)} \u2014 set a Nerd Font as its font`
         );
       }
@@ -60803,38 +60870,43 @@ function checkActionRefs(ctx, cfg, path42, template, line, helpers = cfg.helpers
   }
 }
 function checkTemplateRefs(ctx, declPath, template, scope, opts) {
-  for (const [ref, via] of templateReads(template, scope.helpers)) {
-    if (refResolves(ref, scope)) continue;
-    if (ref.startsWith(SETTINGS_SCOPE_PREFIX)) {
-      const through = via === null ? "" : ` through helper "${via}"`;
-      const setting = ref.slice(SETTINGS_SCOPE_PREFIX.length);
-      const message = opts?.segCtx === void 0 || opts.settings === void 0 ? `Template reads ".${ref}"${through}, but only a segment's own templates have settings \u2014 call it from a segment that declares "${setting}"` : `Template reads ".${ref}"${through}, but segment "${opts.segCtx}" has no setting "${setting}" (it has: ${Object.keys(opts.settings).join(", ")}) \u2014 declare it under segments.${opts.segCtx}.settings`;
-      ctx.issues.push({
-        path: declPath,
-        message,
-        line: opts?.line ?? findKeyLine(ctx.source, declPath.split("."))
-      });
-      continue;
-    }
+  const report2 = (message, via) => {
     if (via !== null) {
       checkHelperIssue(
         ctx,
         via,
-        `Template references unknown variable ".${ref}"${retiredReadHint(ref)}`,
+        message,
         helperKeyPath(
           via,
           opts?.segCtx === void 0 ? void 0 : { name: opts.segCtx, partials: opts.partials }
         )
       );
-      continue;
+      return;
     }
-    const namespaced = opts?.segCtx !== void 0 ? `${opts.segCtx}.${ref}` : void 0;
-    const hint = namespaced !== void 0 && refResolves(namespaced, scope) ? ` (segment-local vars are namespaced \u2014 write ".${namespaced}")` : retiredReadHint(ref);
     ctx.issues.push({
       path: declPath,
-      message: `Template references unknown variable ".${ref}"${hint}`,
+      message,
       line: opts?.line ?? findKeyLine(ctx.source, declPath.split("."))
     });
+  };
+  for (const [ref, via] of templateReads(template, scope.helpers)) {
+    if (refResolves(ref, scope)) continue;
+    if (ref.startsWith(SETTINGS_SCOPE_PREFIX)) {
+      const through = via === null ? "" : ` through helper "${via}"`;
+      const setting = ref.slice(SETTINGS_SCOPE_PREFIX.length);
+      report2(
+        opts?.segCtx === void 0 || opts.settings === void 0 ? `Template reads ".${ref}"${through}, but only a segment's own templates have settings \u2014 call it from a segment that declares "${setting}"` : `Template reads ".${ref}"${through}, but segment "${opts.segCtx}" has no setting "${setting}" (it has: ${Object.keys(opts.settings).join(", ")}) \u2014 declare it under segments.${opts.segCtx}.settings`,
+        null
+      );
+      continue;
+    }
+    const namespaced = opts?.segCtx !== void 0 && via === null ? `${opts.segCtx}.${ref}` : void 0;
+    const hint = namespaced !== void 0 && refResolves(namespaced, scope) ? ` (segment-local vars are namespaced \u2014 write ".${namespaced}")` : retiredReadHint(ref);
+    report2(`Template references unknown variable ".${ref}"${hint}`, via);
+  }
+  for (const { verb, via } of templateLinkVerbs(template, scope.helpers)) {
+    const retired = retiredLinkVerbMessage(verb);
+    if (retired !== void 0) report2(retired, via);
   }
 }
 function helperKeyPath(name, segment) {
@@ -61853,7 +61925,7 @@ function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", a
     beneath,
     presence2
   );
-  const judge = (cells, refused) => {
+  const judge = (cells, refused2) => {
     const inserted = placeInserts(
       authoredConfig.config,
       cells,
@@ -61867,7 +61939,7 @@ function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", a
       inserted.config,
       presence2,
       written2.dropped,
-      [...inserted.notices, ...refused]
+      [...inserted.notices, ...refused2]
     );
   };
   try {
@@ -61878,7 +61950,7 @@ function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", a
     const own2 = new Set(
       bare.dropped.flatMap((d) => d.issues.map((i) => i.message))
     );
-    const { taken, refused } = written2.cells.reduce(
+    const { taken, refused: refused2 } = written2.cells.reduce(
       (acc, cell3) => {
         try {
           judge([...acc.taken, cell3], []);
@@ -61900,7 +61972,7 @@ function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", a
       },
       { taken: [], refused: [] }
     );
-    return judge(taken, refused);
+    return judge(taken, refused2);
   }
 }
 function judgeRenderable({ raw, source }, filePath2, allowedPalettes, beneath, merged, presence2, filed, notices) {
@@ -62277,9 +62349,8 @@ var RAW_DEFAULT_DSL_CONFIG = {
     version: { kind: "input", path: "version", default: "" },
     // home flows through the augmented payload (projectPayload reads
     // HOME, falling back to USERPROFILE on Windows where HOME is often
-    // unset). Sourcing via `kind: "input"` rather than `kind: "env",
-    // name: "HOME"` makes the directory `~` collapse work on every
-    // platform without per-platform config edits.
+    // unset), so the directory `~` collapse works on every platform
+    // without per-platform config edits.
     home: { kind: "input", path: "home", default: "" },
     // The tmux session name of the pane this session's client reported flows
     // through the daemon's augmented payload (TmuxService asks at most once
@@ -62290,9 +62361,9 @@ var RAW_DEFAULT_DSL_CONFIG = {
     "tmux.session": { kind: "input", path: "tmux.session", default: "" },
     // Host identity — which machine this session is on, and whether the user
     // arrived over SSH. All three come through the augmented payload rather
-    // than `kind: "env"` / `kind: "shell"`, and that is not a style choice:
+    // than a `kind: "shell"` source, and that is not a style choice:
     //
-    //   • `host.ssh` CANNOT be an env var here. Variables are evaluated in the
+    //   • `host.ssh` is no fact of the daemon's. Variables are evaluated in the
     //     DAEMON, which is detached and serves every session for this user at
     //     once — its `SSH_*` env describes whichever shell happened to spawn
     //     it. The fact is captured by the live client and carried as a wire
@@ -64049,7 +64120,6 @@ function closingView(store, nestOf2, log) {
 init_globals();
 var SESSION_RENDER_ORIGIN_KEY = "render-origin";
 var SESSION_CLIENT_HINTS_KEY = "client-hints";
-var SESSION_CONFIG_OVERRIDE_KEY = "config-override";
 
 // src/daemon/config-file-store.ts
 init_globals();
@@ -65733,8 +65803,8 @@ function refusedHints(req, hints) {
     (k) => req[k] !== void 0 && hints[k] === void 0
   ).map((hint) => ({ hint, sent: req[hint] }));
 }
-function refusedHintsError(refused) {
-  return refused.length === 0 ? null : `Client hints refused: ${refused.map(({ hint, sent }) => `${hint}=${JSON.stringify(sent)}`).join(
+function refusedHintsError(refused2) {
+  return refused2.length === 0 ? null : `Client hints refused: ${refused2.map(({ hint, sent }) => `${hint}=${JSON.stringify(sent)}`).join(
     ", "
   )} \u2014 is the statusline client older than the daemon? Reinstall it (\`cc-candybar install\`, or \`just install-rust\` in a checkout).`;
 }
@@ -65745,9 +65815,9 @@ var REFUSAL_LINES = {
   "no-value": (arg) => `${arg} names no file \u2014 the bar renders with no ${arg}`,
   positional: (args) => `Unexpected arguments: ${args}`
 };
-function refusedArgsError(refused) {
+function refusedArgsError(refused2) {
   const lines2 = Object.keys(REFUSAL_LINES).flatMap((why2) => {
-    const args = refused.filter((r) => r.why === why2).map((r) => r.arg);
+    const args = refused2.filter((r) => r.why === why2).map((r) => r.arg);
     return args.length === 0 ? [] : [REFUSAL_LINES[why2](args.join(", "))];
   });
   return lines2.length === 0 ? null : lines2.join("\n");
@@ -65896,10 +65966,12 @@ function invocation(hint, category, args, stdinInput) {
 function tmuxRun(result, args) {
   if (result.ok) return { kind: "ok", stdout: result.stdout };
   if (result.reason === "rate-limited") {
-    return { kind: "rate-limited", reason: result.error ?? "rate-limited" };
+    return { kind: "rate-limited", reason: failureText(result) };
   }
-  const detail = result.error ?? [result.reason, result.stderr.trim()].filter((s) => s !== "").join(": ");
-  return { kind: "failed", reason: `tmux ${args[0]} failed (${detail})` };
+  return {
+    kind: "failed",
+    reason: `tmux ${args[0]} failed (${failureText(result)})`
+  };
 }
 async function runTmuxAsync(launcher, hint, category, args, stdinInput) {
   return tmuxRun(
@@ -65966,11 +66038,11 @@ function launchFailure(label2, result) {
   const detail = [
     result.reason,
     result.exitCode != null ? `exit ${result.exitCode}` : null,
-    result.error ?? firstLine2(result.stderr)
+    result.error ?? firstLine(result.stderr)
   ].filter(Boolean).join(", ");
   return `${label2}: ${detail}`;
 }
-function firstLine2(s) {
+function firstLine(s) {
   return s.trim().split("\n", 1)[0] ?? "";
 }
 function derived2(from, project) {
@@ -66090,7 +66162,7 @@ function classifyForgePr(label2, result, noPrPattern, parse3) {
   const detail = [
     result.reason,
     result.exitCode != null ? `exit ${result.exitCode}` : null,
-    result.error ?? firstLine2(result.stderr)
+    result.error ?? firstLine(result.stderr)
   ].filter(Boolean).join(", ");
   return failed(`${label2}: ${detail}`, "read");
 }
@@ -68662,7 +68734,7 @@ async function jxa(launcher, args) {
   });
   if (!run3.ok) {
     if (run3.reason === "rate-limited") throw new DoctorBusy("the font");
-    const detail = run3.error ?? `${run3.reason}: ${run3.stderr.trim()}`;
+    const detail = failureText(run3);
     return { kind: "failed", reason: `osascript failed (${detail})` };
   }
   let answer2;
@@ -68788,7 +68860,7 @@ async function fcCoverage(launcher, family, glyphs) {
   });
   if (!run3.ok) {
     if (run3.reason === "rate-limited") throw new DoctorBusy("the font");
-    const detail = run3.error ?? `${run3.reason}: ${run3.stderr.trim()}`;
+    const detail = failureText(run3);
     return { kind: "failed", reason: `fc-match failed (${detail})` };
   }
   return fcMatchCoverage(run3.stdout, glyphs);
@@ -68896,7 +68968,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.188.0";
+var PACKAGE_VERSION = "1.194.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -69086,7 +69158,7 @@ async function remoteLogin(launcher, pid2) {
   });
   if (!run3.ok) {
     if (run3.reason === "rate-limited") throw new DoctorBusy("the processes");
-    const detail = run3.error ?? `${run3.reason}: ${run3.stderr.trim()}`;
+    const detail = failureText(run3);
     return { kind: "failed", reason: `ps failed (${detail})` };
   }
   return descendsFromRemoteLogin(run3.stdout, pid2);
@@ -69137,7 +69209,7 @@ async function daemons(launcher) {
     envOverlay: { LC_ALL: "C", TZ: "UTC" }
   });
   if (!run3.ok) {
-    const detail = run3.error ?? `${run3.reason}: ${run3.stderr.trim()}`;
+    const detail = failureText(run3);
     return { kind: "failed", reason: `ps failed (${detail})` };
   }
   return { kind: "ok", value: daemonProcesses(run3.stdout, ownsEntry) };
@@ -69154,12 +69226,12 @@ async function probeTmux(launcher, hint) {
   if (run3.kind === "failed") return { kind: "failed", reason: run3.reason };
   return parseTmuxClient(run3.stdout);
 }
-function productionEdge(launcher, loadConfig2, host) {
+function productionEdge(launcher, loadConfig, host) {
   return {
     probeTmux: (hint) => probeTmux(launcher, hint),
     remoteLogin: (pid2) => remoteLogin(launcher, pid2),
     fontInUse: (terminal, env2, glyphs) => fontInUse(launcher, terminal, env2, glyphs, host.home),
-    loadConfig: loadConfig2,
+    loadConfig,
     home: host.home,
     managedSettingsDir: host.env.CC_CANDYBAR_CLAUDE_MANAGED_DIR ?? claudeManagedSettingsDir(process_default.platform),
     install: productionInstallEdge,
@@ -69250,7 +69322,7 @@ function forgeLoginOf(cli, host, nonZero, run3) {
   if (run3.ok) return login("ready");
   if (isMissingCommand(run3)) return login("missing");
   if (run3.reason === "non-zero" && nonZero === "logged-out") {
-    return login({ loggedOut: firstLine2(run3.stderr) });
+    return login({ loggedOut: firstLine(run3.stderr) });
   }
   return { kind: "failed", reason: launchFailure(cli, run3) };
 }
@@ -70114,10 +70186,7 @@ function tmuxPaneOf(tmux3) {
   }
   return { kind: "pane", hint: tmux3 };
 }
-async function typeSlash(edge, hint, line) {
-  const pane = tmuxPaneOf(hint);
-  if (pane.kind === "refused") return pane;
-  const tmux3 = pane.hint;
+async function typeSlash(edge, tmux3, line) {
   const state = promptState(await edge.read(tmux3));
   if (state.kind !== "ready") {
     return { kind: "refused", reason: REFUSALS[state.kind] };
@@ -70213,32 +70282,13 @@ function oneArg(value) {
   return decodeWire(() => decodeURIComponent(value));
 }
 var CLICK_PROGRAM_TIMEOUT_MS = 5e3;
-function clickFailed(end, category, what, log) {
-  if (end.reason === "rate-limited") {
-    log("warn", `${category} rate-limited: ${end.said}`);
+function clickFailed(r, what, log) {
+  if (r.reason === "rate-limited") {
+    log("warn", failureText(r));
     return;
   }
-  if (end.reason === "aborted") throw new DaemonClosing(what);
-  throw new Error(
-    `${what} failed (${end.reason}, exit ${end.exitCode ?? "null"})${end.said === "" ? "" : `: ${end.said}`}`
-  );
-}
-async function clickLaunch(launcher, opts, what, log) {
-  const result = await launcher.launch({
-    ...opts,
-    timeoutMs: CLICK_PROGRAM_TIMEOUT_MS
-  });
-  if (result.ok) return;
-  clickFailed(
-    {
-      reason: result.reason,
-      exitCode: result.exitCode,
-      said: result.error ?? result.stderr.trim()
-    },
-    opts.category,
-    what,
-    log
-  );
+  if (r.reason === "aborted") throw new DaemonClosing(what);
+  throw new Error(`${what} failed (${failureText(r)})`);
 }
 var HANDOFF_POLL_MS = 50;
 async function clickHandoff(launcher, opts, what, log, boundMs, tmp) {
@@ -70253,8 +70303,7 @@ async function clickHandoff(launcher, opts, what, log, boundMs, tmp) {
     const job = launcher.launchJobSync(opts, files);
     if (!job.ok) {
       clickFailed(
-        { reason: job.reason, exitCode: null, said: job.error },
-        opts.category,
+        { ...job, stdout: "", stderr: "", exitCode: null, signal: null },
         what,
         log
       );
@@ -70269,11 +70318,20 @@ async function clickHandoff(launcher, opts, what, log, boundMs, tmp) {
         if (end.kind === "exit" && end.code === 0) return;
         clickFailed(
           end.kind === "exit" ? {
+            ok: false,
             reason: "non-zero",
+            stdout: "",
+            stderr: readFileSync(files.stderr, "utf8"),
             exitCode: end.code,
-            said: readFileSync(files.stderr, "utf8").trim()
-          } : { reason: "timeout", exitCode: null, said: "" },
-          opts.category,
+            signal: null
+          } : {
+            ok: false,
+            reason: "timeout",
+            stdout: "",
+            stderr: "",
+            exitCode: null,
+            signal: null
+          },
           what,
           log
         );
@@ -70297,16 +70355,16 @@ async function clickHandoff(launcher, opts, what, log, boundMs, tmp) {
   }
 }
 function pbcopy(text4, ctx) {
-  return ctx.launch(
-    {
-      bin: "/usr/bin/pbcopy",
-      stdinInput: text4,
-      category: "click.pbcopy"
-    },
+  launch(
+    ctx,
+    { bin: "/usr/bin/pbcopy", stdinInput: text4, category: "click.pbcopy" },
     "pbcopy"
   );
 }
-var copy = (value, ctx) => pbcopy(oneArg(value), ctx);
+function launch(ctx, spec, what) {
+  ctx.effect({ kind: "launch", spec, what });
+}
+var copy = async (value, ctx) => pbcopy(oneArg(value), ctx);
 var DRAWERS = /* @__PURE__ */ new Set([
   "request",
   "feed"
@@ -70326,9 +70384,10 @@ var copyDiagnostic = async (value, ctx) => {
     throw new BadVerbArgs(
       `that message is no longer listed in session ${sid}'s diagnostics \u2014 open \u26A0 again and copy from there`
     );
-  await pbcopy(text4, ctx);
+  pbcopy(text4, ctx);
 };
-var openVscode = (value, ctx) => ctx.launch(
+var openVscode = async (value, ctx) => launch(
+  ctx,
   {
     bin: "/usr/bin/open",
     args: ["-a", "Visual Studio Code", oneArg(value)],
@@ -70447,10 +70506,6 @@ function stepFrom(verb, key, params, declared) {
   }
   return clampTo(params, parseInt(declared, 10));
 }
-function sessionRenderOrigin(requested, state, sid) {
-  const pick2 = state.get(sid, SESSION_CONFIG_OVERRIDE_KEY);
-  return pick2 === null ? requested : { ...requested, target: { source: "pick", path: pick2 } };
-}
 function recordedTarget(source, configFile) {
   if (configFile === null) return { source: "search" };
   return source === "argument" || source === "environment" ? { source, path: configFile } : { source: "unknown", path: configFile };
@@ -70480,13 +70535,9 @@ function sessionOrigin(ctx, sid) {
   }
   return origin;
 }
-function requestedOrigin(ctx, sid) {
+function recordedOrigin(ctx, sid) {
   const raw = ctx.sessionState.get(sid, SESSION_RENDER_ORIGIN_KEY);
   return raw === null ? null : parseRenderOrigin(raw);
-}
-function recordedOrigin(ctx, sid) {
-  const requested = requestedOrigin(ctx, sid);
-  return requested === null ? null : sessionRenderOrigin(requested, ctx.sessionState, sid);
 }
 function reloadIfWritten(ctx, sid, step4) {
   const origin = recordedOrigin(ctx, sid);
@@ -70500,9 +70551,9 @@ function sessionConfig(ctx, sid) {
   return ctx.configFor(sessionOrigin(ctx, sid));
 }
 function laneMeter(ctx, sid) {
-  const requested = requestedOrigin(ctx, sid);
-  if (requested === null) return null;
-  const read2 = () => ctx.lanes.of(sessionRenderOrigin(requested, ctx.sessionState, sid), sid);
+  const origin = recordedOrigin(ctx, sid);
+  if (origin === null) return null;
+  const read2 = () => ctx.lanes.of(origin, sid);
   return { sessionId: sid, before: read2(), read: read2 };
 }
 function nestOf(ctx, sid) {
@@ -70849,7 +70900,7 @@ var redo = async (value, ctx) => {
 };
 var applyUpdate = async (value, ctx) => {
   requireSessionId(oneArg(value));
-  await ctx.applyUpdate();
+  ctx.effect({ kind: "apply-update" });
 };
 function sessionHints(ctx, sid) {
   const raw = ctx.sessionState.get(sid, SESSION_CLIENT_HINTS_KEY);
@@ -71070,15 +71121,11 @@ var slash = async (value, ctx) => {
       `${JSON.stringify(line)} is not a command this config declares (it declares: ${[...new Set(declared.map((a) => a.slash))].join(", ") || "none"})`
     );
   }
-  const result = await ctx.typing(sessionHints(ctx, sid).tmux, action2.slash);
-  if (result.kind === "refused") {
-    ctx.log(
-      "warn",
-      `slash: ${line} refused \u2014 ${result.reason} (session=${sid})`
-    );
-    throw new BadVerbArgs(`${line} was not typed: ${result.reason}`);
+  const pane = tmuxPaneOf(sessionHints(ctx, sid).tmux);
+  if (pane.kind === "refused") {
+    throw new BadVerbArgs(`${line} was not typed: ${pane.reason}`);
   }
-  ctx.log("info", `slash: typed ${line} into ${result.pane} (session=${sid})`);
+  ctx.effect({ kind: "type-slash", pane: pane.hint, line: action2.slash });
 };
 function runOf2([sessionId2 = "", action2 = "", evaluated2 = "", mac = ""], ctx) {
   const sid = requireSessionId(sessionId2);
@@ -71169,38 +71216,8 @@ var repoConfig = async (value, ctx) => {
   );
   ctx.reloadConfig(sessionOrigin(ctx, sid));
 };
-var loadConfig = async (value, ctx) => {
-  const slash2 = value.indexOf("/");
-  if (slash2 === -1) {
-    throw new BadVerbArgs(
-      "load-config: expected <sessionId>/<path> (missing separator)"
-    );
-  }
-  const sid = requireSessionId(
-    decodeWire(() => decodeURIComponent(value.slice(0, slash2)))
-  );
-  const p2 = decodeWire(() => decodeURIComponent(value.slice(slash2 + 1))).trim();
-  if (p2 !== "") {
-    if (!p2.startsWith("/")) {
-      throw new BadVerbArgs(`load-config: path must be absolute, got "${p2}"`);
-    }
-    if (!/\.(json5?|json)$/.test(p2)) {
-      throw new BadVerbArgs(
-        `load-config: path must end with .json5 or .json, got "${p2}"`
-      );
-    }
-  }
-  if (p2 === "") {
-    ctx.sessionState.clear(sid, SESSION_CONFIG_OVERRIDE_KEY);
-    ctx.log("info", `load-config: override cleared (session=${sid})`);
-  } else {
-    ctx.sessionState.set(sid, SESSION_CONFIG_OVERRIDE_KEY, p2);
-    ctx.log("info", `load-config: ${p2} (session=${sid})`);
-  }
-};
 var LEAF_VERBS = /* @__PURE__ */ new Map([
   [VERB_COPY, inTurn(copy)],
-  [VERB_LOAD_CONFIG, inTurn(loadConfig)],
   [VERB_OPEN_VSCODE, inTurn(openVscode)],
   [VERB_SET_STATE, inTurn(setState)],
   [VERB_STEP_STATE, inTurn(stepState)],
@@ -71270,7 +71287,6 @@ var SESSION_FIRST_VERBS = /* @__PURE__ */ new Set([
   VERB_SLASH,
   VERB_RUN,
   VERB_REPO_CONFIG,
-  VERB_LOAD_CONFIG,
   VERB_COPY_DIAGNOSTIC
 ]);
 function clickSessionOf(verb, value) {
@@ -71288,7 +71304,9 @@ var hoisted = (verb, value, ctx) => ctx.journalTurns.gathering(() => verb.prepar
 );
 async function perform(verb, value, ctx, gathered) {
   const step4 = gathered ?? await ctx.gather((full) => verb.prepare(value, full));
-  await step4(ctx);
+  const described = [];
+  await step4({ ...ctx, effect: (effect) => void described.push(effect) });
+  for (const effect of described) ctx.effect(effect);
 }
 async function headGather(rawValue, ctx) {
   const [head] = batchAdjacentWrites(parseEffects(rawValue));
@@ -71344,15 +71362,15 @@ async function journaled(sid, ctx, turn, handler) {
   const journal = ctx.history.begin();
   const navigation = ctx.navigation.begin(journal.sessionState);
   const commit3 = turn.holds(() => {
-    const failed2 = [];
+    const failed3 = [];
     for (const step4 of [navigation, journal]) {
       try {
         step4.commit();
       } catch (e) {
-        failed2.push(e);
+        failed3.push(e);
       }
     }
-    throwAll(failed2);
+    throwAll(failed3);
   });
   const failures = [];
   const closing = (store) => closingView(
@@ -71366,15 +71384,11 @@ async function journaled(sid, ctx, turn, handler) {
     journal,
     navigating: closing(navigation.sessionState)
   };
-  const launches = {
-    launch: (opts, what) => turn.landed(clickLaunch(ctx.launcher, opts, what, ctx.log)),
-    typing: (hint, line) => turn.landed(typeSlash(ctx.claudeInput, hint, line)),
-    applyUpdate: () => turn.landed(ctx.applyUpdate())
-  };
+  const effects = [];
   try {
     await handler({
       ...journaling,
-      ...launches,
+      effect: (effect) => void effects.push(effect),
       gather: (work) => turn.landed(work(journaling))
     });
   } catch (e) {
@@ -71398,14 +71412,7 @@ async function journaled(sid, ctx, turn, handler) {
       failures.push(e);
     }
   }
-  if (live && sid !== null) {
-    try {
-      const origin = recordedOrigin(ctx, sid);
-      if (origin !== null) ctx.views.follow(sid, origin);
-    } catch (e) {
-      failures.push(e);
-    }
-  }
+  if (live) ctx.described(effects);
   throwAll(failures);
 }
 function click(verb, gather, handler) {
@@ -71415,12 +71422,7 @@ function click(verb, gather, handler) {
     return ctx.journalTurns.click(
       verb,
       sid,
-      {
-        placed: ctx.placeWaited,
-        waited: ctx.turnWaited,
-        gone: ctx.clientGone,
-        gathered: ctx.gatherTook
-      },
+      ctx.asker,
       () => gather(value, ctx),
       (gathered, turn) => journaled(sid, ctx, turn, async (c) => {
         try {
@@ -71445,12 +71447,16 @@ var VERBS = new Map([
   ),
   [VERB_DISPATCH, click(VERB_DISPATCH, headGather, foldEffects)],
   // After the leaves, so it replaces the click they built: a probe writes no
-  // journal, so nothing may refuse it for a turn.
+  // journal, so nothing may refuse it for a turn, and it describes nothing.
   [VERB_DOCTOR_PROBE, doctorProbe]
 ]);
 var VERB_NAMES = Object.freeze([
   ...VERBS.keys()
 ]);
+function clickVerb(name) {
+  const run3 = VERBS.get(name);
+  return run3 === void 0 ? null : { name, run: run3 };
+}
 function closeIdleMenus(sid, idle, ctx) {
   return ctx.journalTurns.take(
     "menu-idle",
@@ -71496,15 +71502,7 @@ function linksOf({ rows }) {
 }
 var isBarLink = (url) => url.startsWith(`${URL_SCHEME}://`);
 function decodeArgs(verb, value) {
-  if (SEGMENTED_VERBS.has(verb)) return decodeSegments(value);
-  const slash2 = value.indexOf("/");
-  if (verb === VERB_LOAD_CONFIG && slash2 !== -1) {
-    return [
-      decodeURIComponent(value.slice(0, slash2)),
-      decodeURIComponent(value.slice(slash2 + 1))
-    ];
-  }
-  return [decodeURIComponent(value)];
+  return SEGMENTED_VERBS.has(verb) ? decodeSegments(value) : [decodeURIComponent(value)];
 }
 function clickOf(url) {
   const link = parseHandlerUrl(url);
@@ -71564,11 +71562,6 @@ function outcomeOf(result) {
 function exitOf(result) {
   if (!result.ok && result.signal !== null) return result.signal;
   return result.exitCode === null ? "-" : String(result.exitCode);
-}
-function failureText(action2, outcome, result, timeoutMs) {
-  const stderr2 = outcome === "output-limit" || outcome === "pipe" ? "" : result.stderr.trim();
-  const reason = outcome === "timeout" ? `timed out after ${timeoutMs / 1e3} s` : outcome === "exit" ? `exited ${exitOf(result)}` : (result.ok ? "" : result.error) || "could not be started";
-  return `run ${action2}: ${stderr2 === "" ? reason : stderr2}`;
 }
 var Runs = class {
   deps;
@@ -71643,12 +71636,12 @@ var Runs = class {
       `run sid=${valueOf(run3.sessionId)} action=${valueOf(run3.action)} program=${valueOf(run3.argv[0])} outcome=${outcome} exit=${exitOf(result)} took=${took} refreshed=${run3.refreshes.map((r) => r.name).join(",") || "-"}`
     );
     if (outcome === "timeout") this.timedOut++;
-    if (outcome === "ok" || outcome === "aborted") return;
+    if (result.ok || outcome === "aborted") return;
     if (outcome !== "timeout") this.failed++;
     holdClickError(
       this.deps.state,
       run3.sessionId,
-      failureText(run3.action, outcome, result, this.timeoutMs),
+      `run ${run3.action}: ${failureText(result)}`,
       this.deps.now()
     );
   }
@@ -73238,15 +73231,15 @@ function requireOptionKind(runtime, name, helper) {
   }
   return action2;
 }
-function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint, closeStyle, steps2 = []) {
+function renderPicker(applyName, apply2, page2, close, paged, runtime, itemPaint, closeStyle, steps2 = []) {
   const declared = runtime.compiled.get(applyName);
   const store = renderBinding(runtime, "picker").store;
   const sessionId2 = readVar(store, "session.id");
-  const current = "stateVar" in apply ? readVar(store, apply.stateVar) : void 0;
+  const current = "stateVar" in apply2 ? readVar(store, apply2.stateVar) : void 0;
   const optionFace = (i, label2) => {
-    const option = apply.options[i];
+    const option = apply2.options[i];
     return itemPaint(
-      { index: i, count: apply.options.length },
+      { index: i, count: apply2.options.length },
       option,
       label2,
       option === current
@@ -73254,12 +73247,12 @@ function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint,
   };
   const available = !paged ? Infinity : close.kind === "led" ? ledRowBudget(runtime) : rowBudget(runtime);
   const navReserve = (close.kind === "led" ? 0 : cellWidth2(DISCLOSURE_GLYPH_CLOSE) + 1) + steps2.reduce((cols, step4) => cols + cellWidth2(step4.glyph) + 1, 0);
-  const catalogue = apply.library && {
-    groups: apply.library.groups,
-    entries: apply.options.map(apply.library.entry)
+  const catalogue = apply2.library && {
+    groups: apply2.library.groups,
+    entries: apply2.options.map(apply2.library.entry)
   };
-  const labelOf = apply.labelOf ?? ((option) => option);
-  const gridFaces = catalogue === void 0 ? apply.options.map((option, i) => optionFace(i, labelOf(option))) : [];
+  const labelOf = apply2.labelOf ?? ((option) => option);
+  const gridFaces = catalogue === void 0 ? apply2.options.map((option, i) => optionFace(i, labelOf(option))) : [];
   const pages = catalogue !== void 0 ? libraryLayout(catalogue.entries, catalogue.groups, paged) : gridPages(
     gridFaces.map((face) => face.cellLength),
     available,
@@ -73273,7 +73266,7 @@ function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint,
     )
   );
   const holding2 = pageHolding(
-    current === void 0 ? -1 : apply.options.indexOf(current)
+    current === void 0 ? -1 : apply2.options.indexOf(current)
   );
   const pageIdx = !Number.isInteger(rawPage) ? 0 : rawPage < 0 ? holding2 : Math.min(rawPage, pages.length - 1);
   const pageSections = pages[pageIdx] ?? [];
@@ -73291,7 +73284,7 @@ function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint,
     ...realize(declared, option, option, store, sessionId2, runtime.signer).effects,
     ...closeEffects
   ]);
-  const optionCell = (face, i) => linkOver(face, optionUrl(apply.options[i]));
+  const optionCell = (face, i) => linkOver(face, optionUrl(apply2.options[i]));
   const nav = close.kind === "led" ? [] : [
     linkFragment(
       DISCLOSURE_GLYPH_CLOSE,
@@ -73311,7 +73304,7 @@ function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint,
             args: [
               sessionId2,
               page2.key,
-              String(pageHolding(apply.options.indexOf(option)))
+              String(pageHolding(apply2.options.indexOf(option)))
             ]
           }
         ]),
@@ -73342,10 +73335,10 @@ function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint,
       lines2.push(assemble([new RichText(section.label, { style: bold })]));
     }
     const nameWidth = Math.max(
-      ...section.indices.map((i) => cellWidth2(labelOf(apply.options[i])))
+      ...section.indices.map((i) => cellWidth2(labelOf(apply2.options[i])))
     );
     for (const i of section.indices) {
-      const name = labelOf(apply.options[i]);
+      const name = labelOf(apply2.options[i]);
       const authored = catalogue.entries[i].description;
       const description = authored === void 0 ? void 0 : sanitizeText(authored);
       const gap = " ".repeat(nameWidth - cellWidth2(name) + 2);
@@ -73378,7 +73371,7 @@ function pickerFuncs(runtime, activeSegment) {
             `{{ picker "${applyName}" \u2026 }} sets both closeOnPick and inBody; a picker in a body is closed by the body's \u2715, so it has no close to fold into a pick`
           );
         }
-        const apply = requireOptionKind(runtime, applyName, "picker");
+        const apply2 = requireOptionKind(runtime, applyName, "picker");
         const active2 = requireActiveSegment(activeSegment, "{{ picker }}");
         if (active2.bg === void 0) {
           throw new Error(
@@ -73388,7 +73381,7 @@ function pickerFuncs(runtime, activeSegment) {
         const drawnAt = activeSegment.drawnAt();
         const draw2 = (ground) => renderPicker(
           applyName,
-          apply,
+          apply2,
           { key: page2.key, stateVar: page2.stateVar },
           inBody === true ? { kind: "led" } : {
             kind: "own",
@@ -73404,14 +73397,14 @@ function pickerFuncs(runtime, activeSegment) {
             active2,
             placedBy(void 0),
             renderLook(runtime, "{{ picker }}"),
-            apply.paletteOf,
+            apply2.paletteOf,
             drawnAt,
             ground
           ),
           closeOn(active2.palette, ground, drawnAt)
         );
         const band = bandFor(active2.palette, active2.disclosure, drawnAt);
-        const [, ...rows] = apply.library === void 0 ? [] : draw2(band.plane);
+        const [, ...rows] = apply2.library === void 0 ? [] : draw2(band.plane);
         if (rows.length === 0) return draw2(active2.bg)[0];
         active2.drops.push(...rows);
         return draw2(band.state)[0];
@@ -73432,23 +73425,23 @@ function ringAround(options, current) {
   const centre = Math.max(options.indexOf(current), 0);
   return (offset) => ((centre + offset) % count + count) % count;
 }
-function renderCarousel(applyName, apply, openName, label2, runtime) {
-  if (!("stateVar" in apply)) {
+function renderCarousel(applyName, apply2, openName, label2, runtime) {
+  if (!("stateVar" in apply2)) {
     throw new Error(
       `carousel references action "${applyName}", which inserts a segment and holds no current value to centre on \u2014 a carousel needs a { set, from } or { persist, from } action`
     );
   }
   const store = renderBinding(runtime, "carousel").store;
-  if (!store.has(apply.stateVar)) {
+  if (!store.has(apply2.stateVar)) {
     throw new Error(
-      `carousel references action "${applyName}", whose key "${apply.stateVar}" no variable reads back, so there is no current value to centre on \u2014 declare { kind: "state", key: "${apply.stateVar}" } among the variables`
+      `carousel references action "${applyName}", whose key "${apply2.stateVar}" no variable reads back, so there is no current value to centre on \u2014 declare { kind: "state", key: "${apply2.stateVar}" } among the variables`
     );
   }
   const declared = runtime.compiled.get(applyName);
   const sessionId2 = readVar(store, "session.id");
-  const { options } = apply;
+  const { options } = apply2;
   if (options.length === 0) return assemble([]);
-  const indexAt = ringAround(options, readVar(store, apply.stateVar));
+  const indexAt = ringAround(options, readVar(store, apply2.stateVar));
   const ring = (offset) => options[indexAt(offset)];
   const step4 = (offset) => effectsUrl(
     realize(
@@ -73468,7 +73461,7 @@ function renderCarousel(applyName, apply, openName, label2, runtime) {
       // when the domain is colour-valued.
       labelPaint(
         renderLook(runtime, "{{ carousel }}"),
-        apply.paletteOf,
+        apply2.paletteOf,
         ring(0),
         label2
       ),
@@ -73525,18 +73518,18 @@ init_globals();
 init_globals();
 var SWATCHES_RANDOM = "?";
 function requireSwatchable(runtime, applyName, helper) {
-  const apply = requireOptionKind(runtime, applyName, helper);
-  if (!("stateVar" in apply)) {
+  const apply2 = requireOptionKind(runtime, applyName, helper);
+  if (!("stateVar" in apply2)) {
     throw new Error(
       `${helper} references action "${applyName}", which inserts a segment and holds no current value \u2014 a ${helper} needs a { set, from } or { persist, from } action`
     );
   }
-  if (apply.paletteOf === void 0) {
+  if (apply2.paletteOf === void 0) {
     throw new Error(
       `${helper} references action "${applyName}", whose options are not colour-valued \u2014 a swatch draws the palette an option puts in force, as the "themes", "placementThemes" and "styles" domains do`
     );
   }
-  return apply;
+  return apply2;
 }
 function randomOther(seed, count, centre) {
   let h = Math.imul(seed ^ seed >>> 16, 73244475);
@@ -73545,14 +73538,14 @@ function randomOther(seed, count, centre) {
   return (centre + 1 + (h >>> 0) % Math.max(count - 1, 1)) % count;
 }
 function optionPalette(runtime, applyName, helper, chosen) {
-  const apply = requireSwatchable(runtime, applyName, helper);
-  const option = chosen ?? readVar(renderBinding(runtime, helper).store, apply.stateVar);
-  if (!apply.options.includes(option)) {
+  const apply2 = requireSwatchable(runtime, applyName, helper);
+  const option = chosen ?? readVar(renderBinding(runtime, helper).store, apply2.stateVar);
+  if (!apply2.options.includes(option)) {
     throw new Error(
       `${helper} "${applyName}": "${option}" is not one of its options, so it has no palette to draw`
     );
   }
-  return apply.paletteOf(option, renderLook(runtime, `{{ ${helper} }}`));
+  return apply2.paletteOf(option, renderLook(runtime, `{{ ${helper} }}`));
 }
 function swatchFuncs(runtime) {
   return {
@@ -73577,7 +73570,7 @@ function swatchesFuncs(runtime, activeSegment, clock) {
   return {
     swatches: {
       fn: (applyName, pageName) => {
-        const apply = requireSwatchable(runtime, applyName, "swatches");
+        const apply2 = requireSwatchable(runtime, applyName, "swatches");
         const page2 = requireKind(
           runtime,
           pageName,
@@ -73592,12 +73585,12 @@ function swatchesFuncs(runtime, activeSegment, clock) {
           );
         }
         const drawnAt = activeSegment.drawnAt();
-        const { options } = apply;
+        const { options } = apply2;
         const count = options.length;
         const steps2 = () => {
           const at = ringAround(
             options,
-            readVar(renderBinding(runtime, "swatches").store, apply.stateVar)
+            readVar(renderBinding(runtime, "swatches").store, apply2.stateVar)
           );
           return [
             { glyph: CAROUSEL_PREV, option: options[at(-1)] },
@@ -73610,7 +73603,7 @@ function swatchesFuncs(runtime, activeSegment, clock) {
         };
         const [line] = renderPicker(
           applyName,
-          apply,
+          apply2,
           { key: page2.key, stateVar: page2.stateVar },
           { kind: "led" },
           true,
@@ -73618,7 +73611,7 @@ function swatchesFuncs(runtime, activeSegment, clock) {
           swatchPaint(
             active2,
             renderLook(runtime, "{{ swatches }}"),
-            apply.paletteOf,
+            apply2.paletteOf,
             drawnAt,
             active2.bg
           ),
@@ -73820,10 +73813,10 @@ function renderMenu(applyName, displays, options, runtime) {
       placement.disclosure,
       drawnAt
     ).plane;
-    const apply = requireOptionKind(action2, applyName, "menu");
+    const apply2 = requireOptionKind(action2, applyName, "menu");
     return renderPicker(
       applyName,
-      apply,
+      apply2,
       { key: pageKey, stateVar: pageKey },
       {
         kind: "own",
@@ -73844,7 +73837,7 @@ function renderMenu(applyName, displays, options, runtime) {
         placement,
         options.distribution,
         renderLook(action2, "{{ menu }}"),
-        apply.paletteOf,
+        apply2.paletteOf,
         drawnAt,
         plane
       ),
@@ -74060,7 +74053,6 @@ var KIND_SCOPE = {
   template: "view",
   time: "view",
   literal: "directory",
-  env: "directory",
   dropped: "directory",
   // A plugin source is read per session: its reading is the session's own
   // file, which reaches the view through its payload.
@@ -75221,9 +75213,6 @@ function declareOne(registry, name, decl, cwd2, derivation) {
         derivation
       );
       break;
-    case "env":
-      registry.declareEnv(name, decl.name, decl.default);
-      break;
     case "file":
       registry.declareFile(name, decl.path, {
         readMode: decl.readMode,
@@ -76306,11 +76295,9 @@ function requestEvent(kind, facts, outcome, tookMs) {
     ["outcome", outcome.kind],
     ...detailOf(outcome)
   ];
-  return {
-    level: LEVEL[outcome.kind],
-    line: `${kind}${fields2.map(([key, value]) => ` ${key}=${valueOf(value)}`).join("")}`
-  };
+  return { level: LEVEL[outcome.kind], line: eventLine(kind, fields2) };
 }
+var eventLine = (kind, fields2) => `${kind}${fields2.map(([key, value]) => ` ${key}=${valueOf(value)}`).join("")}`;
 
 // src/daemon/draw-bar.ts
 var NOTHING_DELIVERED = () => {
@@ -76368,11 +76355,11 @@ function renderFrame(parts, sessionId2, fps, at) {
       outcome,
       elapsedMs(clock, started2)
     );
-    const failed2 = renderFailed(error);
+    const failed3 = renderFailed(error);
     return {
-      bar: renderFailedFrame(failed2.error),
-      resp: failed2,
-      statusline: failed2,
+      bar: renderFailedFrame(failed3.error),
+      resp: failed3,
+      statusline: failed3,
       evaluated: 0,
       cellBreaks: 0,
       delivered: NOTHING_DELIVERED,
@@ -76429,12 +76416,12 @@ function requestFacts(req, at, facts) {
     at: at.toFixed(3)
   });
   const hints = req.hints;
-  const refused = refusedHints(req, hints);
-  const hintsError = refusedHintsError(refused);
+  const refused2 = refusedHints(req, hints);
+  const hintsError = refusedHintsError(refused2);
   noteFacts(facts, {
     termCols: String(hints.termCols ?? "?"),
     termRows: String(hints.termRows ?? "?"),
-    refused: refused.map((r) => r.hint).join(",") || "-",
+    refused: refused2.map((r) => r.hint).join(",") || "-",
     badArgs: req.refusedArgs.map((r) => `${r.arg}:${r.why}`).join(",") || "-",
     // Which program drew this bar (src/client-hint.ts); `unreported` for a
     // client too old to say.
@@ -76446,7 +76433,7 @@ function requestFacts(req, at, facts) {
   return hintsError;
 }
 function setUpRender(parts, arrived3, at, facts) {
-  const { sessionState, renderCache } = parts;
+  const { renderCache } = parts;
   const dir = arrived3.hookData.workspace?.current_dir ?? arrived3.cwd;
   const req = {
     ...arrived3,
@@ -76455,10 +76442,9 @@ function setUpRender(parts, arrived3, at, facts) {
       ...dir !== void 0 && import_node_path32.default.isAbsolute(dir) && { location: checkoutLocation(dir) }
     }
   };
-  const sessionId2 = req.sessionId;
   const hintsError = requestFacts(req, at, facts);
   noteFacts(facts, { encoding: req.encoding });
-  const origin = sessionRenderOrigin(req.requested, sessionState, sessionId2);
+  const origin = req.requested;
   const hold2 = renderCache.holdSession(
     origin.projectDir,
     origin.cwd,
@@ -76471,8 +76457,8 @@ function setUpFrame(parts, sessionId2, at, facts) {
   const { renderCache } = parts;
   const hold2 = renderCache.holdView(sessionId2);
   if (hold2 === null) {
-    const failed2 = renderCache.openFailure(sessionId2);
-    if (failed2 !== null) throw failed2.error;
+    const failed3 = renderCache.openFailure(sessionId2);
+    if (failed3 !== null) throw failed3.error;
     return null;
   }
   const req = hold2.view.facts();
@@ -76785,20 +76771,18 @@ async function answerRequest(parts, req, at, waitEndsAt, facts) {
 }
 function arrived2(parts, req, lanes) {
   const { laneSetups, tmuxStatusLines } = parts;
-  laneSetups.noted(laneSessionOf(parts, req), lanes);
+  laneSetups.noted(laneSessionOf(req), lanes);
   tmuxStatusLines.observe(
     req.hookData.session_id,
     req.hints.tmux,
     lanes.tmuxStatus
   );
 }
-function laneSessionOf(parts, req) {
-  const { sessionState } = parts;
-  const sessionId2 = req.hookData.session_id;
+function laneSessionOf(req) {
   return {
-    sessionId: sessionId2,
+    sessionId: req.hookData.session_id,
     hints: req.hints,
-    origin: sessionRenderOrigin(req.requested, sessionState, sessionId2),
+    origin: req.requested,
     transcript: req.hookData.transcript_path,
     answered: answeredOf(req.hookData)
   };
@@ -76808,7 +76792,7 @@ function laneClicked(parts, sessionId2, before, after) {
   const latest = frameFeeds.latest(sessionId2);
   laneSetups.clicked(
     sessionId2,
-    latest === null ? null : laneSessionOf(parts, latest),
+    latest === null ? null : laneSessionOf(latest),
     before,
     after
   );
@@ -76895,6 +76879,207 @@ function statuslineOf(sessionId2, drawn, elsewhere) {
 // src/daemon/reply.ts
 init_globals();
 init_process();
+
+// src/daemon/apply.ts
+init_globals();
+
+// src/daemon/effect.ts
+init_globals();
+var PERFORMED = { kind: "ok", said: "" };
+var failed2 = (said) => ({
+  kind: "failed",
+  said
+});
+var DESCRIBE = {
+  launch: ({ what }) => `launch:${what}`,
+  "type-slash": ({ line }) => `type-slash:${line}`,
+  "apply-update": () => "apply-update"
+};
+function describeEffect(effect) {
+  const describe4 = DESCRIBE[effect.kind];
+  return describe4(effect);
+}
+
+// src/daemon/apply.ts
+var NO_EFFECTS = [];
+var ARMS = {
+  // [LAW:single-enforcer] exception: the request takes no turn yet, so its
+  // writes (the session's render origin and client hints) still land outside
+  // one. They join the turn with the request's own (the next story of this
+  // lane), now that a click's launches no longer hold it.
+  request: async ({ req, at, waitEndsAt, facts }, parts) => ({
+    answer: await answerRequest(parts, req, at, waitEndsAt, facts),
+    effects: NO_EFFECTS,
+    facts: []
+  }),
+  // [LAW:single-enforcer] The click's whole bracket on its menus' idle clock
+  // is here, so the timer cannot close a menu under any click Apply carries.
+  // The turn hands its effects over once it has committed (`described`), and
+  // a refused step is answered beside them.
+  click: async ({ verb, value, arrival, pending: pending2, asker }, { verbCtx, menuIdle }) => {
+    if (pending2 !== null) menuIdle.clickArrived(pending2);
+    const effects = [];
+    let answer2 = null;
+    try {
+      await verb.run(value, {
+        ...verbCtx,
+        arrival,
+        asker,
+        described: (described) => void effects.push(...described)
+      });
+    } catch (error) {
+      answer2 = { error };
+    } finally {
+      if (pending2 !== null) menuIdle.clickSettled(pending2);
+    }
+    return { answer: answer2, effects, facts: [] };
+  },
+  "menu-idle": async ({ session, idle }, { verbCtx }) => {
+    const effects = [];
+    await closeIdleMenus(session, idle, {
+      ...verbCtx,
+      described: (described) => void effects.push(...described)
+    });
+    return { answer: void 0, effects, facts: [] };
+  },
+  // [LAW:single-enforcer] The one writer of what a failed effect leaves: the
+  // session's click error, held in a turn of its own as every write is, and
+  // shown as a failed dispatch's is (src/daemon/click-error.ts). A click that
+  // names no session has no bar; its apply line is the record.
+  "effect-done": async ({ of, outcome }, { verbCtx }) => {
+    const facts = [];
+    await verbCtx.journalTurns.take(
+      "effect-done",
+      {
+        waited: (ms) => facts.push(["turnWait", `${ms}ms`]),
+        gone: () => false
+      },
+      async () => {
+        if (outcome.kind === "failed" && of.session !== null) {
+          holdClickError(
+            verbCtx.sessionState,
+            of.session,
+            outcome.said,
+            verbCtx.now()
+          );
+        }
+      }
+    );
+    return { answer: void 0, effects: NO_EFFECTS, facts };
+  }
+};
+async function apply(event, parts) {
+  const arm2 = ARMS[event.kind];
+  const applied2 = await arm2(event, parts);
+  const of = originOf(event);
+  const line = LINE[event.kind];
+  const said = line(event, applied2);
+  if (said !== null) {
+    parts.log(
+      said.level,
+      eventLine("apply", [
+        ["kind", event.kind],
+        ["verb", of.verb],
+        ["sid", of.session ?? "-"],
+        ...said.facts,
+        ...applied2.facts,
+        [
+          "effects",
+          applied2.effects.map((e) => describeEffect(e)).join(",") || "-"
+        ],
+        [
+          "revision",
+          of.session === null ? "-" : String(parts.verbCtx.sessionState.revision(of.session))
+        ]
+      ])
+    );
+  }
+  return {
+    answer: applied2.answer,
+    // An event that described nothing performs nothing, and takes no place in
+    // the session's order: the effect-done events of that order are applied
+    // from inside it, and a place they took there would settle only after the
+    // work they report on.
+    performed: applied2.effects.length === 0 ? NOTHING_PERFORMED : performAll(parts, of, applied2.effects)
+  };
+}
+var NOTHING_PERFORMED = Promise.resolve();
+var APPLIED = { level: "info", facts: [["outcome", "ok"]] };
+var refused = ({ error }) => ({
+  level: "info",
+  facts: [
+    ["outcome", "refused"],
+    ["said", error instanceof Error ? error.message : String(error)]
+  ]
+});
+var OUTCOME_LEVEL = {
+  ok: "info",
+  failed: "warn"
+};
+var LINE = {
+  request: () => null,
+  click: (_event, { answer: answer2 }) => answer2 === null ? APPLIED : refused(answer2),
+  "menu-idle": () => APPLIED,
+  "effect-done": ({ effect, outcome }) => ({
+    level: OUTCOME_LEVEL[outcome.kind],
+    facts: [
+      ["effect", describeEffect(effect)],
+      ["outcome", outcome.kind],
+      ["said", outcome.said || "-"]
+    ]
+  })
+};
+var ORIGIN = {
+  request: ({ req }) => ({ verb: "request", session: req.sessionId }),
+  click: ({ verb, pending: pending2 }) => ({ verb: verb.name, session: pending2 }),
+  "menu-idle": ({ session }) => ({ verb: "menu-idle", session }),
+  "effect-done": ({ of }) => of
+};
+function originOf(event) {
+  const origin = ORIGIN[event.kind];
+  return origin(event);
+}
+var PERFORM = {
+  launch: ({ spec, what }, { verbCtx }) => clickLaunch(verbCtx.launcher, spec, what),
+  "type-slash": async ({ pane, line }, { verbCtx }) => {
+    const typed = await typeSlash(verbCtx.claudeInput, pane, line);
+    return typed.kind === "typed" ? { kind: "ok", said: `typed into ${typed.pane}` } : failed2(`${line} was not typed: ${typed.reason}`);
+  },
+  "apply-update": async (_effect, { verbCtx }) => {
+    await verbCtx.applyUpdate();
+    return PERFORMED;
+  }
+};
+async function clickLaunch(launcher, spec, what) {
+  const result = await launcher.launch({
+    ...spec,
+    timeoutMs: CLICK_PROGRAM_TIMEOUT_MS
+  });
+  return result.ok ? PERFORMED : failed2(`${what} failed (${failureText(result)})`);
+}
+async function perform2(effect, parts) {
+  const performer = PERFORM[effect.kind];
+  try {
+    return await performer(effect, parts);
+  } catch (e) {
+    return failed2(e instanceof Error ? e.message : String(e));
+  }
+}
+function performAll(parts, of, effects) {
+  return parts.verbCtx.journalTurns.performing(of.session, async () => {
+    for (const effect of effects) {
+      const outcome = await perform2(effect, parts);
+      try {
+        await apply({ kind: "effect-done", of, effect, outcome }, parts);
+      } catch (e) {
+        parts.log(
+          e instanceof DaemonClosing ? "info" : "error",
+          `apply: effect-done not applied (${describeEffect(effect)} ${outcome.kind}: ${outcome.said}): ${inspect(e)}`
+        );
+      }
+    }
+  });
+}
 
 // src/daemon/render-checkpoint.ts
 init_globals();
@@ -77002,7 +77187,7 @@ function parseRenderArgs(args, cwd2, home) {
   const config2 = (tokens ?? []).filter(
     (t2) => t2.kind === "option" && t2.name === "config"
   ).at(-1);
-  const refused = (tokens ?? []).flatMap((t2) => {
+  const refused2 = (tokens ?? []).flatMap((t2) => {
     switch (t2.kind) {
       case "option":
         return t2.name !== "config" ? [{ arg: t2.rawName, why: "unknown" }] : t2 === config2 && t2.value === void 0 ? [{ arg: t2.rawName, why: "no-value" }] : [];
@@ -77016,8 +77201,8 @@ function parseRenderArgs(args, cwd2, home) {
   return {
     configFile: explicitConfigPath(cwd2, config2?.value, home),
     // In argv order, each refusal once.
-    refusedArgs: refused.filter(
-      (r, i) => refused.findIndex((o) => o.arg === r.arg && o.why === r.why) === i
+    refusedArgs: refused2.filter(
+      (r, i) => refused2.findIndex((o) => o.arg === r.arg && o.why === r.why) === i
     )
   };
 }
@@ -77433,20 +77618,26 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       sighted(checked.req, "drawing");
       frameFeeds.note(checked.req.sessionId, checked.req, order2);
     }
-    const rendered = !checked.ok ? refusedRender(checked.problems) : await answerRequest(
-      parts,
-      checked.req,
-      at,
-      // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
-      // fixed at its arrival: early enough before its client hangs up to
-      // draw (src/daemon/request-deadline.ts).
-      t0 + waitBudgetMs(checked.req.deadline, accepted, {
-        epochMs: started2.getTime(),
-        monoMs: t0
-      }),
-      facts
+    const rendered = !checked.ok ? refusedRender(checked.problems) : await apply(
+      {
+        kind: "request",
+        req: checked.req,
+        at,
+        // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
+        // fixed at its arrival: early enough before its client hangs up to
+        // draw (src/daemon/request-deadline.ts).
+        waitEndsAt: plusMs(
+          t0,
+          waitBudgetMs(checked.req.deadline, accepted, {
+            epochMs: started2.getTime(),
+            monoMs: t0
+          })
+        ),
+        facts
+      },
+      parts
     ).then(
-      ({ resp, motion, clickShown, pipeShown, delivered }) => {
+      ({ answer: { resp, motion, clickShown, pipeShown, delivered } }) => {
         sighted(checked.req, motion);
         return {
           outcome: { kind: "ok" },
@@ -77685,35 +77876,36 @@ var VERB_FACT = {
   "tmux-status": "linkVerb"
 };
 async function handleClick(parts, verb, value, arrival, facts, clientGone) {
-  const { menuIdle, verbCtx } = parts;
   if (verb === VERB_TMUX_STATUS_CLICK) {
     noteFacts(facts, { verb });
     return statusLineClick(parts, value, facts, clientGone);
   }
-  const handler = VERBS.get(verb);
-  if (!handler) {
+  const resolved = clickVerb(verb);
+  if (resolved === null) {
     return { kind: "bad-request", problems: [`unknown click verb: ${verb}`] };
   }
   noteFacts(facts, { [VERB_FACT[arrival.via]]: verb });
   const session = clickSessionOf(verb, value);
   const pending2 = session?.ok ? session.id : null;
   if (session === null) noteFacts(facts, { sid: "-" });
-  else if (pending2 !== null) {
-    noteFacts(facts, { sid: pending2 });
-    menuIdle.clickArrived(pending2);
-  }
-  try {
-    await handler(value, {
-      ...verbCtx,
+  else if (pending2 !== null) noteFacts(facts, { sid: pending2 });
+  const { answer: answer2 } = await apply(
+    {
+      kind: "click",
+      verb: resolved,
+      value,
       arrival,
-      placeWaited: (ms) => noteFacts(facts, { placeWait: `${ms}ms` }),
-      gatherTook: (ms) => noteFacts(facts, { gather: `${ms}ms` }),
-      turnWaited: (ms) => noteFacts(facts, { turnWait: `${ms}ms` }),
-      clientGone
-    });
-  } finally {
-    if (pending2 !== null) menuIdle.clickSettled(pending2);
-  }
+      pending: pending2,
+      asker: {
+        placed: (ms) => noteFacts(facts, { placeWait: `${ms}ms` }),
+        gathered: (ms) => noteFacts(facts, { gather: `${ms}ms` }),
+        waited: (ms) => noteFacts(facts, { turnWait: `${ms}ms` }),
+        gone: clientGone
+      }
+    },
+    parts
+  );
+  if (answer2 !== null) throw answer2.error;
   return { kind: "ok" };
 }
 function clickReply(outcome) {
@@ -77735,18 +77927,18 @@ function clickReply(outcome) {
 }
 async function statusLineClick(parts, value, facts, clientGone) {
   const { tmuxStatusLines } = parts;
-  const refused = (problem) => ({
+  const refused2 = (problem) => ({
     kind: "bad-request",
     problems: [problem]
   });
   const click3 = tmuxStatusLines.linkAt(value);
-  if (click3.kind === "refused") return refused(click3.reason);
+  if (click3.kind === "refused") return refused2(click3.reason);
   noteFacts(facts, { link: click3.url });
   if (click3.url.startsWith("cc-candybar://")) {
     const parsed2 = parseHandlerUrl(click3.url);
-    if (!parsed2.ok) return refused(parsed2.problem);
+    if (!parsed2.ok) return refused2(parsed2.problem);
     if (parsed2.verb === VERB_TMUX_STATUS_CLICK)
-      return refused("a status-line link names another status-line click");
+      return refused2("a status-line link names another status-line click");
     return handleClick(
       parts,
       parsed2.verb,
@@ -80289,6 +80481,20 @@ var TranscriptFold = class {
   // instance per projection per daemon. Observable, so a view's payload over
   // an answer is recomputed in the turn the answer is stored.
   sessions;
+  // [LAW:one-source-of-truth] One fold in flight per session: a request whose
+  // stamp misses while the session's fold is still out joins that fold rather
+  // than starting another over the same bytes. Keyed by the session alone,
+  // not by session and stamp as the usage store's request refresh is: the
+  // fold is an incremental cursor, so a request that saw a newer stamp takes
+  // the in-flight answer and the next request folds the appended tail, where
+  // a key per stamp would start a second fold of the same bytes for every
+  // append that lands mid-fold. The read gate bounds how many windows read at
+  // once, not how many folds are asked for, and a cold fold takes a gate slot
+  // once per window; with one fold per request, a population of cold sessions
+  // asks for folds faster than any can finish its windows, no fold lands, the
+  // fast path never engages, and every request keeps its refresh alive in the
+  // queue.
+  flight = new SingleFlight();
   // [LAW:effects-at-boundaries] The session's refresh: folds what was
   // appended since its last read, and stores what it answered.
   async read(sessionId2, transcriptPath) {
@@ -80296,13 +80502,21 @@ var TranscriptFold = class {
     const prior = held?.folded;
     const stamp2 = statStamp(transcriptPath);
     if (held?.folded && stamp2 !== "" && held.folded.cursor.stamp === stamp2) {
-      const { folded: folded3, answer: answer2 } = held;
-      if (answer2.kind === "ok" && answer2.value === folded3.value) {
+      const { folded: folded2, answer: answer2 } = held;
+      if (answer2.kind === "ok" && answer2.value === folded2.value) {
         this.sessions.touch(sessionId2);
         return answer2;
       }
-      return this.store(sessionId2, folded3, { kind: "ok", value: folded3.value });
+      return this.store(sessionId2, folded2, { kind: "ok", value: folded2.value });
     }
+    return this.flight.run(
+      sessionId2,
+      () => this.fold(sessionId2, transcriptPath, prior)
+    );
+  }
+  // The session's one fold of what was appended since `prior`, and the store
+  // of what it answered.
+  async fold(sessionId2, transcriptPath, prior) {
     const startedAt = this.clock.monotonic();
     const read2 = await foldAppended(
       transcriptPath,
@@ -81629,9 +81843,7 @@ function buildRenderState(load, deps) {
     deps.runs,
     store,
     config2.globals.default_empty_value ?? "",
-    deps.sessionState,
-    null,
-    deps.env
+    deps.sessionState
   );
   let registration;
   try {
@@ -81906,10 +82118,9 @@ var RenderCache = class {
   // itself, not frames happening to read the view within each sweep.
   pins = /* @__PURE__ */ new Map();
   // [LAW:no-silent-failure] Each session whose view last failed to open, by
-  // the error and the request the opening was for, until a view opens for
-  // it: a frame draws that error, never the last bar it pushed, and a click
-  // that moves the origin retries by that request (`follow`). Written only by
-  // `opened`, which sets either this or the session's view, never both.
+  // the error, until a view opens for it: a frame draws that error, never the
+  // last bar it pushed. Written only by `opened`, which sets either this or
+  // the session's view, never both.
   openFailures = /* @__PURE__ */ new Map();
   // [LAW:one-source-of-truth] One compile per compile key, shared by every
   // state carrying that key, and dropped with the last of them (reclaim).
@@ -82078,36 +82289,9 @@ var RenderCache = class {
   openFailure(sessionId2) {
     return this.openFailures.get(sessionId2) ?? null;
   }
-  // [LAW:single-enforcer] A click that moved the session's origin — a
-  // load-config pick, or a history step restoring one — moves its view to the
-  // origin's entry, declared with the request the view draws by, as a
-  // request from there would (`journaled`, src/daemon/verbs/index.ts). A
-  // session whose last opening failed opens by the request that opening was
-  // for, so a pick that fixes it shows with no request after it. A session
-  // with neither has nothing to move: no feed draws it, and its next request
-  // opens one. A click that left the origin alone finds the view already on
-  // its entry and changes nothing, its use order included, so the latest
-  // rendered session stays the one that rendered.
-  follow(sessionId2, projectDir, cwd2, configFile) {
-    var _stack = [];
-    try {
-      const current = this.views.get(sessionId2);
-      const facts = current?.facts() ?? this.openFailures.get(sessionId2)?.facts;
-      if (facts === void 0) return;
-      const origin = this.entries.get(cacheKey(projectDir, cwd2, configFile));
-      if (current !== void 0 && origin?.state === current.state) return;
-      const held = __using(_stack, this.hold(projectDir, cwd2, configFile));
-      this.viewOf(held.entry, held.state, facts, "click");
-    } catch (_) {
-      var _error = _, _hasError = true;
-    } finally {
-      __callDispose(_stack, _error, _hasError);
-    }
-  }
   // [LAW:no-ambient-temporal-coupling] An open feed's pin on its session,
   // from the feed's open to its close (src/daemon/frame-feed.ts). Keyed by
-  // session, so it follows the view wherever a request, a reload or a click
-  // moves it.
+  // session, so it follows the view wherever a request or a reload moves it.
   pin(sessionId2) {
     this.pins.set(sessionId2, (this.pins.get(sessionId2) ?? 0) + 1);
     let released = false;
@@ -82155,7 +82339,7 @@ var RenderCache = class {
         log: this.log
       });
     } catch (error) {
-      this.openFailures.set(sessionId2, { error, facts });
+      this.openFailures.set(sessionId2, { error });
       throw error;
     }
     this.openFailures.delete(sessionId2);
@@ -83054,6 +83238,7 @@ var MAX_STATUS_ROWS = LANES.tmuxStatus.rows;
 var PRIOR_OPTION = "@cc-candybar-status-prior";
 var WROTE_OPTION = "@cc-candybar-status-wrote";
 var BINDING_OPTION = "@cc-candybar-binding-prior";
+var RENDERER_OPTION = "@cc-candybar-renderer";
 var CLICK_KEY = ["-T", "root", "MouseDown1Status"];
 var INDICES = Array.from({ length: MAX_STATUS_ROWS }, (_, i) => i);
 var rowOption = (row2) => `@cc-candybar-row-${row2}`;
@@ -83169,12 +83354,22 @@ function leftBehind(prior, wrote, owner) {
     why: `the daemon at ${JSON.stringify(parsed2.owner)} draws it`
   };
 }
-function installPlan(session, answers, owner) {
+var nameWrite = (session, name) => [
+  "set-option",
+  "-t",
+  session,
+  RENDERER_OPTION,
+  name
+];
+function installPlan(session, answers, owner, name) {
   const [statusWordNow = "", ...rest2] = answers;
   const own2 = ownOf(rest2.slice(0, 2 + MAX_STATUS_ROWS));
   const globals = rest2.slice(2 + MAX_STATUS_ROWS, 2 + 2 * MAX_STATUS_ROWS);
   const [prior = "", wrote = ""] = rest2.slice(2 + 2 * MAX_STATUS_ROWS);
-  if (prior !== "") return leftBehind(prior, wrote, owner);
+  if (prior !== "") {
+    const left = leftBehind(prior, wrote, owner);
+    return left.kind === "theirs" ? left : { ...left, commands: [nameWrite(session, name)] };
+  }
   const base = statusRows(statusWordNow);
   const above = {};
   for (let i = 0; i < base; i++) {
@@ -83202,6 +83397,7 @@ function installPlan(session, answers, owner) {
     prior: laid,
     commands: [
       ["set-option", "-t", session, PRIOR_OPTION, JSON.stringify(laid)],
+      nameWrite(session, name),
       ...arrayWrite(session, wroteFormats)
     ]
   };
@@ -83240,7 +83436,8 @@ function restorePlan(session, prior, answers) {
       rowOption(i)
     ]),
     ["set-option", "-q", "-u", "-t", session, PRIOR_OPTION],
-    ["set-option", "-q", "-u", "-t", session, WROTE_OPTION]
+    ["set-option", "-q", "-u", "-t", session, WROTE_OPTION],
+    ["set-option", "-q", "-u", "-t", session, RENDERER_OPTION]
   );
   return { commands, kept };
 }
@@ -83512,19 +83709,22 @@ var TmuxStatusLines = class {
       `#{session_id}	#{${PRIOR_OPTION}}	#{${WROTE_OPTION}}`
     ]);
     if (run3.kind === "ok") {
+      const names = [];
       for (const line of run3.stdout.split("\n")) {
         const [session, prior, wrote = ""] = line.split("	");
         if (session === void 0 || prior === void 0 || prior === "")
           continue;
         const found2 = leftBehind(prior, wrote, this.deps.owner);
-        if (found2.kind === "ours")
+        if (found2.kind === "ours") {
           server.layouts.set(session, {
             prior: found2.prior,
             rows: [],
             status: found2.status
           });
-        else this.leave(socket, server, session, found2.why);
+          names.push(nameWrite(session, this.deps.name));
+        } else this.leave(socket, server, session, found2.why);
       }
+      await this.write(socket, names);
     }
     const answers = await this.ask(socket, [showGlobal(BINDING_OPTION)]);
     const saved = answers?.[0] ?? "";
@@ -83558,7 +83758,7 @@ var TmuxStatusLines = class {
   async install(socket, server, session) {
     const answers = await this.ask(socket, INSTALL_QUERIES(session));
     if (answers === null || this.closed) return null;
-    const plan = installPlan(session, answers, this.deps.owner);
+    const plan = installPlan(session, answers, this.deps.owner, this.deps.name);
     if (plan.kind === "theirs") {
       this.leave(socket, server, session, plan.why);
       return null;
@@ -83569,10 +83769,10 @@ var TmuxStatusLines = class {
       status: plan.kind === "ours" ? plan.status : plan.prior.base
     };
     server.layouts.set(session, layout);
-    if (plan.kind === "lay-out") await this.write(socket, plan.commands);
+    await this.write(socket, plan.commands);
     this.deps.log(
       "info",
-      `tmux-status: socket=${JSON.stringify(socket)} ${plan.kind === "ours" ? "took over" : "laid out"} session ${session} base=${plan.prior.base} own=${[plan.prior.status === null ? [] : ["status"], plan.prior.formats === null ? [] : ["status-format"]].flat().join(",") || "-"}`
+      `tmux-status: socket=${JSON.stringify(socket)} ${plan.kind === "ours" ? "took over" : "laid out"} renderer=${this.deps.name} session ${session} base=${plan.prior.base} own=${[plan.prior.status === null ? [] : ["status"], plan.prior.formats === null ? [] : ["status-format"]].flat().join(",") || "-"}`
     );
     return layout;
   }
@@ -84011,11 +84211,8 @@ async function installBand(session, checkout, edge) {
   };
   await edge.claude(["plugin", "marketplace", "add", checkout], facts);
   await edge.claude(["plugin", "install", BAND_PLUGIN], facts);
-  const typed = await typeSlash(
-    edge.claudeInput,
-    session.hints.tmux,
-    RELOAD_PLUGINS
-  );
+  const pane = tmuxPaneOf(session.hints.tmux);
+  const typed = pane.kind === "refused" ? pane : await typeSlash(edge.claudeInput, pane.hint, RELOAD_PLUGINS);
   if (typed.kind === "refused") {
     throw new Error(
       `the band mod is installed, but /reload-plugins was not typed: ${typed.reason} \u2014 or type /reload-plugins yourself`
@@ -84252,7 +84449,7 @@ var LaneSetups = class {
   // Resolves once the setup has finished, however it ended.
   async sync(session, lane, on2, by) {
     const where = `by=${by} (session=${session.sessionId})`;
-    const failed2 = (error) => {
+    const failed3 = (error) => {
       const text4 = `lane: ${lane} ${on2 ? "on" : "off"}: ${error instanceof Error ? error.message : String(error)}`;
       this.deps.log("warn", `${text4} ${where}`);
       holdClickError(this.deps.state, session.sessionId, text4, this.deps.now());
@@ -84265,7 +84462,7 @@ var LaneSetups = class {
         this.deps.edge
       );
     } catch (error) {
-      failed2(error);
+      failed3(error);
       return;
     }
     this.deps.log(
@@ -84275,7 +84472,7 @@ var LaneSetups = class {
     if (outcome.kind === "underway") {
       await outcome.finished.then(
         (finished) => this.deps.log("info", `lane: ${lane} ${finished} ${where}`),
-        failed2
+        failed3
       );
     }
   }
@@ -84345,6 +84542,7 @@ var keyOf = (sessionId2, by) => `${by}\0${sessionId2}`;
 init_globals();
 var DAEMON_WIDE = "journals";
 var GATHERS = "gathers";
+var CLICKLESS = "clickless";
 var JournalTurns = class {
   constructor(deps) {
     this.deps = deps;
@@ -84353,6 +84551,7 @@ var JournalTurns = class {
   queue = new KeyedSerialQueue();
   sessions = new KeyedSerialQueue();
   gathers = new KeyedSerialQueue();
+  effects = new KeyedSerialQueue();
   open = true;
   inFlight = null;
   holder = null;
@@ -84421,6 +84620,16 @@ var JournalTurns = class {
     } finally {
       this.gathersInFlight--;
     }
+  }
+  // [LAW:no-ambient-temporal-coupling] A session's effects run one at a time,
+  // in the order their turns committed, after them: a performer that reads
+  // before it acts (the pane read before a slash is typed) sees what the
+  // session's earlier effects left, as it did when a launch held the turn.
+  // The order is the performer's, not the turn's: the session's next click
+  // takes its turn while the last click's effects still run, and no close
+  // refuses it, since an outcome after close is said in the log.
+  performing(session, work) {
+    return this.effects.run(session ?? CLICKLESS, work);
   }
   getStats() {
     const { holder, queued } = this;
@@ -84691,7 +84900,9 @@ function createDaemon(inputs) {
   const menuIdle = new MenuIdle({
     clock,
     now: instant,
-    close: (sessionId2, idle) => closeIdleMenus(sessionId2, idle, verbCtx),
+    close: async (session, idle) => {
+      await apply({ kind: "menu-idle", session, idle }, parts);
+    },
     failed: (sessionId2, error) => log(
       error instanceof DaemonClosing ? "info" : "error",
       `menu-idle: close failed (session=${sessionId2}): ${inspect(error)}`
@@ -84740,6 +84951,10 @@ function createDaemon(inputs) {
       "url-handle"
     ].join(" "),
     owner: paths2.socket,
+    // [LAW:one-source-of-truth] The main renderer's name (docs/design/
+    // gather-and-renderer.md, section 17), the one renderer until the home
+    // carries a name.
+    name: "main",
     log
   });
   const frameFeeds = new FrameFeeds({
@@ -84803,7 +85018,6 @@ function createDaemon(inputs) {
       runs: sourceRuns,
       stateDir: paths2.state,
       locations: locs,
-      env: host.env,
       sessionState,
       watchers: watcherRegistry,
       log,
@@ -84954,14 +85168,6 @@ function createDaemon(inputs) {
     lanes: {
       of: (origin, sessionId2) => lanesAt(parts, origin, sessionId2),
       clicked: (sessionId2, before, after) => laneClicked(parts, sessionId2, before, after)
-    },
-    views: {
-      follow: (sessionId2, origin) => renderCache.follow(
-        sessionId2,
-        origin.projectDir,
-        origin.cwd,
-        origin.target.path
-      )
     },
     diagnosticCopy: (sessionId2, by, key) => renderCache.drawnCopy(sessionId2, by, key)
   };
@@ -85366,8 +85572,8 @@ init_globals();
 
 // src/daemon/process-fingerprint.ts
 init_globals();
-async function readStartTime(pid2, launch) {
-  const res = await launch({
+async function readStartTime(pid2, launch2) {
+  const res = await launch2({
     bin: "ps",
     args: ["-o", "lstart=", "-p", String(pid2)],
     category: "process-fingerprint",
@@ -85638,8 +85844,10 @@ async function tmux2(launcher, hint, args, stdinInput) {
 }
 function ran(what, result) {
   if (result.ok) return result.stdout;
-  const detail = result.error ?? [result.reason, result.stderr.trim(), result.stdout.trim()].filter((s) => s !== "").join(": ");
-  throw new Error(`${what} failed (${detail})`);
+  const told = saidBy(result, result.stdout);
+  throw new Error(
+    `${what} failed (${failureText(result)}${told === "" ? "" : `: ${told}`})`
+  );
 }
 function refusalOf2(stdout2) {
   try {
@@ -85867,8 +86075,8 @@ function productionLaneEdge(launcher, following, closing, clock, probe2) {
         timeoutMs: 2e4,
         category: "lane.process"
       });
-      const refused = !result.ok && result.reason === "non-zero" ? refusalOf2(result.stdout) : null;
-      if (refused !== null) return { ok: false, reason: refused };
+      const refused2 = !result.ok && result.reason === "non-zero" ? refusalOf2(result.stdout) : null;
+      if (refused2 !== null) return { ok: false, reason: refused2 };
       ran(`reading ${executable}'s module graph`, result);
       return { ok: true };
     },
@@ -86470,17 +86678,17 @@ async function click2(url, size) {
   const host = effects.filter((e) => HOST_VERBS.has(e.verb));
   if (host.length > 0) {
     const copiesOnly = effects.every((e) => e.verb === VERB_COPY);
-    const refused2 = copiesOnly ? await copy2(effects.map((e) => e.args.join("/")).join("\n")) : `not sent: on a real machine this ${host.map((e) => HOST_VERBS.get(e.verb)).join(", ")}`;
-    return { ...await render2(size), refused: refused2 };
+    const refused3 = copiesOnly ? await copy2(effects.map((e) => e.args.join("/")).join("\n")) : `not sent: on a real machine this ${host.map((e) => HOST_VERBS.get(e.verb)).join(", ")}`;
+    return { ...await render2(size), refused: refused3 };
   }
   const { verb, value } = clickOf(url);
-  let refused = null;
+  let refused2 = null;
   try {
     await daemon2({ v: PROTOCOL_VERSION, kind: "click", verb, value });
   } catch (e) {
-    refused = e instanceof Error ? e.message : String(e);
+    refused2 = e instanceof Error ? e.message : String(e);
   }
-  return { ...await render2(size), refused };
+  return { ...await render2(size), refused: refused2 };
 }
 var listeners = [];
 var notify = () => {
