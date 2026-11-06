@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-624",
+      "ref": "refs/pull/624/merge",
+      "sha": "a6c0b40a719cecb494204089e51b24e8a053b35c",
+      "timestamp": "2026-11-06T04:24:06.359Z",
+      "commits": [
+        {
+          "sha": "a6c0b40a719cecb494204089e51b24e8a053b35c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T04:23:17Z",
+          "message": "Merge 802d12523596d759a496eb9a1f5df28ead44f481 into 72f2e1a2b5bd38d26643de974db14a16ce60000a\n"
+        },
+        {
+          "sha": "802d12523596d759a496eb9a1f5df28ead44f481",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T21:12:57-07:00",
+          "message": "feat(facts): a view follows its session through the Facts interface, with an in-process arm, a recording arm and the seam test (candybar-gather-renderer-76bb.6pj.go2)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-623",
       "ref": "refs/pull/623/merge",
       "sha": "3151a9fedbe748d898389ee3b3bae8555d3d1bf1",
