@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-636",
+      "ref": "refs/pull/636/merge",
+      "sha": "9d7d3df1bef5afa2ae7ce3beb60b9a8eba36834a",
+      "timestamp": "2026-11-06T09:49:04.326Z",
+      "commits": [
+        {
+          "sha": "9d7d3df1bef5afa2ae7ce3beb60b9a8eba36834a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T09:48:07Z",
+          "message": "Merge 626824cbc766512dab103f2dde5dd1b6375868a5 into 52e519f362165f3c41349e0c094ad562c05278d7\n"
+        },
+        {
+          "sha": "626824cbc766512dab103f2dde5dd1b6375868a5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T02:38:17-07:00",
+          "message": "fix(facts): a recording has its own format version; a record counts its answers; one conversion of an instant back to ms (candybar-gather-renderer-76bb.6pj.rat)\n\nA recording's request, declared and draw lines are the renderer's request\npath, not the facts protocol, so the file's header names its own format\n(v2, refusing the shipped v1 by version) and the documents in it keep the\nfacts version each one's parse already refuses. Tying both to one number\nwould move Gather's versioned address for a renderer-only change.\n\nWhat a finished recording reports is the answers it drew, the frames a\nreplay draws, and the record verb prints them as answers.\n\nAn instant's clock milliseconds are rounded back in one place: a Date\ntruncates, and an instant read off a millisecond clock can land a hair\nbelow its reading.\n"
+        },
+        {
+          "sha": "f817ff6beb1fd2d8ac59e102c6552fdc20f42737",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T02:30:12-07:00",
+          "message": "fix(facts): a play draws each answer at the instant its arm says the request arrived; the recording's format is facts v2 (candybar-gather-renderer-76bb.6pj.rat)\n\nThe live demo drew at start + i×450ms while each settle spent real time\nbefore the next sleep, so its clock fell behind the machine's frame by\nframe. An arm now brings the clock to a request and says the instant it\narrived at: the live arm sleeps until the offset and reads its clock, as\nthe daemon reads an arrival; a held clock gives the recorded instant.\n\nThe recording's lines changed (a header home, draw and declared lines),\nand the facts protocol version is what guards a recording, so it is 2:\na 1.199 recording is refused by its version, not by a missing field.\n\nThe header's home is the turn's, the one the payload was composed\nagainst, and that home is a string at every caller. The parser's instant\nreader is parseInstant, beside the parser's other parse functions.\n"
+        },
+        {
+          "sha": "63c2ac714994d639f9403ff08db13895b9728c91",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T02:13:00-07:00",
+          "message": "fix(facts): a recording replays each frame from what its answer drew, in the file's order, with the recorded home (candybar-gather-renderer-76bb.6pj.rat)\n\nA live answer is drawn after its request's wait, from the view that request\nholds. The recording now writes a draw line when the answer is drawn, after\nthe document and the declaration that draw read (each restated when it is\nnot the last the recording wrote), and only to the recordings that saw the\nrequest arrive. The replay walks the file's lines in order: the recording\narm serves the last document reached and keeps no clock. The header carries\nthe home the payloads were composed against.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-632",
       "ref": "refs/pull/632/merge",
       "sha": "3a9163249bb9f617594a15ff59627384e4b6e777",
@@ -157,28 +193,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T01:19:30-07:00",
           "message": "feat(apply): no turn awaits a launch; a doctor step is an effect, and a held click error accumulates (candybar-gather-renderer-76bb.1dh.c3l)\n\nA turn is a synchronous call: its body cannot be async (Synchronous<T>), a\nrender request never waits behind another session's probes, and no draw can\nread a click half landed. A doctor step describes an effect; the performer\ngathers after the click's turn through a recording view, and the landing\nchecks the gather's read set and config in the turn that writes the report.\nLands yth: a click error held while the last is live joins it.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-636",
-      "ref": "refs/pull/636/merge",
-      "sha": "ff8de9c6c8b3f653f40b1bb02e7e7cc6a15d95a9",
-      "timestamp": "2026-11-06T09:15:43.227Z",
-      "commits": [
-        {
-          "sha": "ff8de9c6c8b3f653f40b1bb02e7e7cc6a15d95a9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T02:13:29-07:00",
-          "message": "Merge 18e1fdb3cc81ea0386105544504ebc5000830332 into 537c926e6cca1e7f2bed89f42058b490482fde86\n"
-        },
-        {
-          "sha": "18e1fdb3cc81ea0386105544504ebc5000830332",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T02:13:00-07:00",
-          "message": "fix(facts): a recording replays each frame from what its answer drew, in the file's order, with the recorded home (candybar-gather-renderer-76bb.6pj.rat)\n\nA live answer is drawn after its request's wait, from the view that request\nholds. The recording now writes a draw line when the answer is drawn, after\nthe document and the declaration that draw read (each restated when it is\nnot the last the recording wrote), and only to the recordings that saw the\nrequest arrive. The replay walks the file's lines in order: the recording\narm serves the last document reached and keeps no clock. The header carries\nthe home the payloads were composed against.\n"
         }
       ]
     }
