@@ -4,15 +4,22 @@
     {
       "version": "pr-640",
       "ref": "refs/pull/640/merge",
-      "sha": "94b079677382fd93faa94310255fa6aa73a54adc",
-      "timestamp": "2026-11-06T12:56:39.817Z",
+      "sha": "26ea72dd2dabc5cf6aebdeba4a1a7e50bf01ec04",
+      "timestamp": "2026-11-06T13:09:52.923Z",
       "commits": [
         {
-          "sha": "94b079677382fd93faa94310255fa6aa73a54adc",
+          "sha": "26ea72dd2dabc5cf6aebdeba4a1a7e50bf01ec04",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:55:40Z",
-          "message": "Merge e9132cb9e70bb3d1932d6e4b1463b0159df49827 into 92b37b434431196653866fb703390e57bf15d948\n"
+          "timestamp": "2026-11-06T13:09:01Z",
+          "message": "Merge b2758a3914f9f974f5ceace69ed3c60961c94007 into 92b37b434431196653866fb703390e57bf15d948\n"
+        },
+        {
+          "sha": "b2758a3914f9f974f5ceace69ed3c60961c94007",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T06:08:50-07:00",
+          "message": "fix(links): a status-row click carries the mac its binding was signed with, since a range id is a counter anyone can guess (candybar-gather-renderer-76bb.b2l.e1n)\n\nAny web page can open a cc-candybar:// URL, and a status-row click resolves\nto a signed link the row draws, so with counter ids a page could run any\naction on the row. The binding now carries the link key's mac over its\nserver's socket, and linkAt refuses a click without it before resolving\nthe range; a range resolves only to the frame's own entries. Spec section\n18 carries the mac in the binding. A closed allocator issues no id and\nwrites nothing, and a block that would pass the last count is a fault, not\na file its own reader refuses.\n"
         },
         {
           "sha": "e9132cb9e70bb3d1932d6e4b1463b0159df49827",

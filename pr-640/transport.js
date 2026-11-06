@@ -83969,6 +83969,8 @@ function laneEncoders(ids) {
 init_globals();
 var LINK_ID_BLOCK = 1024;
 var COUNT = /^\d{1,15}\n?$/;
+var LAST_COUNT = 10 ** 15 - 1;
+var REMEDY = "remove it and a new one is made, starting again from 0 (a click on a status row drawn before then may run a link drawn since)";
 function linkIdAllocator(deps) {
   const { file, clock, retryMs, log } = deps;
   let reserved = 0;
@@ -83981,9 +83983,14 @@ function linkIdAllocator(deps) {
   const reserve = () => {
     try {
       const base = Math.max(readCount(file), reserved);
-      writeAtomic(file, `${base + LINK_ID_BLOCK}
+      const end = base + LINK_ID_BLOCK;
+      if (end > LAST_COUNT)
+        throw new Error(
+          `${file} holds ${base}, too near the last count for another block: ${REMEDY}`
+        );
+      writeAtomic(file, `${end}
 `, 384);
-      reserved = base + LINK_ID_BLOCK;
+      reserved = end;
       reservations++;
       if (state.kind === "faulted")
         log("info", `link ids: ${file} reserved again`);
@@ -84003,7 +84010,7 @@ function linkIdAllocator(deps) {
   return {
     next() {
       if (state.kind === "ready" && state.next === reserved) state = reserve();
-      if (state.kind === "faulted") return null;
+      if (state.kind !== "ready") return null;
       minted++;
       return state.next++;
     },
@@ -84013,6 +84020,7 @@ function linkIdAllocator(deps) {
     stats: () => ({ minted, reused, evicted, reservations, faults }),
     close() {
       if (state.kind === "faulted") state.clear();
+      state = { kind: "closed" };
     }
   };
 }
@@ -84026,7 +84034,7 @@ function readCount(file) {
   }
   if (!COUNT.test(text4)) {
     throw new Error(
-      `${file} holds ${JSON.stringify(text4.slice(0, 40))}, not a count: remove it and a new one is made, starting again from 0 (a click on a status row drawn before then may run a link drawn since)`
+      `${file} holds ${JSON.stringify(text4.slice(0, 40))}, not a count: ${REMEDY}`
     );
   }
   return Number(text4.trim());
@@ -84398,10 +84406,10 @@ function boundOf2(listKeys) {
   const found2 = BOUND.exec(listKeys);
   return found2 === null ? null : { line: found2[0], command: found2[1] };
 }
-var clickUrl = (name, socket) => addressedLink(
+var clickUrl = (name, socket, mac) => addressedLink(
   name,
   VERB_TMUX_STATUS_CLICK,
-  `${encodeSegments([socket])}/#{s/%//:pane_id}/#{q:mouse_status_range}`
+  `${encodeSegments([socket, mac])}/#{s/%//:pane_id}/#{q:mouse_status_range}`
 );
 var isClickBinding = (bound) => bound?.command.includes(`/${VERB_TMUX_STATUS_CLICK}/`) ?? false;
 function bindingRestorePlan(prior, listKeys) {
@@ -84528,20 +84536,26 @@ var TmuxStatusLines = class {
     }
   }
   // A click on the range `<range>` of pane `%<n>` on the server `<socket>`
-  // (segments, as the binding's URL carries them): the link the frame the
-  // daemon drew there marks it with.
+  // (segments, as the binding's URL carries them, after the mac the binding
+  // was signed with): the link the frame the daemon drew there marks it with.
   linkAt(value) {
     const segments = segmentsOf2(value);
-    const [socket, pane, range, ...extra] = segments ?? [];
-    if (segments === null || socket === void 0 || pane === void 0 || range === void 0 || extra.length > 0)
+    const [socket, mac, pane, range, ...extra] = segments ?? [];
+    if (segments === null || socket === void 0 || mac === void 0 || pane === void 0 || range === void 0 || extra.length > 0)
       return {
         kind: "refused",
-        reason: `tmux-status-click needs <socket>/<pane>/<range>, got ${JSON.stringify(value)}`
+        reason: `tmux-status-click needs <socket>/<mac>/<pane>/<range>, got ${JSON.stringify(value)}`
+      };
+    if (!this.deps.signer.verifyBinding(socket, mac))
+      return {
+        kind: "refused",
+        reason: `a status-line click on ${JSON.stringify(socket)} whose mac is not this renderer's binding's`
       };
     const held = [...this.held.values()].find(
       (h) => h.socket === socket && h.pane === `%${pane}`
     );
-    const url = held?.frame?.links[range];
+    const links2 = held?.frame?.links;
+    const url = links2 !== void 0 && Object.hasOwn(links2, range) ? links2[range] : void 0;
     return url === void 0 ? {
       kind: "refused",
       reason: `pane %${pane}'s status line draws no link ${range} now`
@@ -84808,7 +84822,7 @@ var TmuxStatusLines = class {
         "if-shell",
         "-F",
         `#{m:${RANGE_PREFIX}*,#{mouse_status_range}}`,
-        `run-shell -b ${tmuxQuoted(`${this.deps.handler} ${clickUrl(this.deps.name, socket)}`)}`,
+        `run-shell -b ${tmuxQuoted(`${this.deps.handler} ${clickUrl(this.deps.name, socket, this.deps.signer.signBinding(socket))}`)}`,
         ...prior === null ? [] : [prior.command]
       ],
       ["set-option", "-g", BINDING_OPTION, JSON.stringify(record2)]
@@ -85943,6 +85957,7 @@ function createDaemon(inputs) {
     // gather-and-renderer.md, section 17): a click on a row this renderer
     // holds is resolved to this renderer's socket from the name alone.
     name: home.name,
+    signer: inputs.linkSigner,
     log
   });
   const linkIds = linkIdAllocator({
@@ -87128,26 +87143,30 @@ var import_node_path51 = __toESM(require_path_browserify(), 1);
 init_globals();
 var LINK_KEY_BYTES = 32;
 var MAC_SPELLING = /^[0-9a-f]{64}$/;
-function digest(key, fields2) {
-  return createHmac("sha256", key).update(
-    JSON.stringify([
-      fields2.sessionId,
-      fields2.action,
-      fields2.declaration,
-      fields2.evaluated
-    ])
-  ).digest();
+function digest(key, signed) {
+  return createHmac("sha256", key).update(JSON.stringify(signed)).digest();
 }
+var linkFields2 = (fields2) => [
+  fields2.sessionId,
+  fields2.action,
+  fields2.declaration,
+  fields2.evaluated
+];
+var bindingFields = (socket) => [
+  VERB_TMUX_STATUS_CLICK,
+  socket
+];
 function linkSigner(key) {
   if (key.length !== LINK_KEY_BYTES) {
     throw new Error(`a link key is ${LINK_KEY_BYTES} bytes, got ${key.length}`);
   }
+  const sign = (signed) => digest(key, signed).toString("hex");
+  const verify = (signed, mac) => MAC_SPELLING.test(mac) && timingSafeEqual(import_buffer.Buffer.from(mac, "hex"), digest(key, signed));
   return {
-    sign: (fields2) => digest(key, fields2).toString("hex"),
-    verify: (fields2, mac) => {
-      if (!MAC_SPELLING.test(mac)) return false;
-      return timingSafeEqual(import_buffer.Buffer.from(mac, "hex"), digest(key, fields2));
-    }
+    sign: (fields2) => sign(linkFields2(fields2)),
+    verify: (fields2, mac) => verify(linkFields2(fields2), mac),
+    signBinding: (socket) => sign(bindingFields(socket)),
+    verifyBinding: (socket, mac) => verify(bindingFields(socket), mac)
   };
 }
 
@@ -87160,7 +87179,9 @@ function linkSignerFromKeyFile(file) {
   const loaded = () => signer ??= readOrCreate(file);
   return {
     sign: (fields2) => loaded().sign(fields2),
-    verify: (fields2, mac) => loaded().verify(fields2, mac)
+    verify: (fields2, mac) => loaded().verify(fields2, mac),
+    signBinding: (socket) => loaded().signBinding(socket),
+    verifyBinding: (socket, mac) => loaded().verifyBinding(socket, mac)
   };
 }
 function readOrCreate(file) {
