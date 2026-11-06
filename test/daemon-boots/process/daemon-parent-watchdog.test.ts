@@ -3,6 +3,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { logLines } from "../../../src/daemon/log";
 import { PARENT_PID_ENV } from "../../../src/daemon/parent-watchdog";
 import { logPath } from "../../../src/daemon/paths";
+import { exitedAlready } from "../../helpers/daemon-wire";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
@@ -33,7 +34,7 @@ describe("daemon dies with its spawner (integration)", () => {
     for (const killTree of killTrees) killTree();
     killTrees.length = 0;
     for (const c of spawned) {
-      if (!exited(c)) {
+      if (exitedAlready(c) === null) {
         try {
           c.kill("SIGKILL");
         } catch {
@@ -60,19 +61,18 @@ describe("daemon dies with its spawner (integration)", () => {
     // round trip, under the one budget measured against a loaded machine's
     // boot. The answer comes after bind(), which runs strictly AFTER the
     // watchdog is armed — so a ready daemon has a live watchdog.
-    const { child: daemonChild, killTree } = await spawnDaemonWithEnv({
+    const { child: daemon, killTree } = await spawnDaemonWithEnv({
       ...env,
       // Anchor the daemon to the throwaway process, NOT this Jest worker, so
       // killing the anchor (and only the anchor) exercises the watchdog.
       [PARENT_PID_ENV]: String(anchorProc.pid),
     });
     killTrees.push(killTree);
-    const daemon = track(daemonChild);
 
     anchorProc.kill("SIGKILL");
     // Until this worker reaps it, the anchor is a zombie that still answers the
     // watchdog's kill(pid, 0); the daemon's budget starts once it is gone.
-    await until(() => exited(anchorProc), "the anchor's reap");
+    await until(() => exitedAlready(anchorProc) !== null, "the anchor's reap");
 
     // [LAW:no-ambient-temporal-coupling] The wait is on the daemon's own exit;
     // the budget bounds only a daemon that never exits. Its exit path compiles
@@ -80,10 +80,12 @@ describe("daemon dies with its spawner (integration)", () => {
     // generous ceiling. The tsx wrapper exits on its worker's close, so the
     // wrapper's exit is the worker's, and the worker is where the watchdog runs.
     await until(
-      () => exited(daemon),
+      () => exitedAlready(daemon) !== null,
       "the daemon's exit after its anchor was SIGKILLed",
       8_000,
     );
+    // shutdown(0) ran to its own exit, not the SIGKILL backstop (137 through tsx).
+    expect(exitedAlready(daemon)).toEqual({ code: 0, signal: null });
     // The watchdog, on this anchor's death and not some other, ended it.
     expect(logLines(logPath(home))).toContainEqual(
       expect.stringContaining(
@@ -92,6 +94,3 @@ describe("daemon dies with its spawner (integration)", () => {
     );
   });
 });
-
-const exited = (c: ChildProcess): boolean =>
-  c.exitCode !== null || c.signalCode !== null;
