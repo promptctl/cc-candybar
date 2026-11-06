@@ -9,3 +9,14 @@ import { violationsOf } from "../e2e-checks/workflow-daemons";
 test("no workflow step reaches a daemon", () => {
   expect(violationsOf(workflowsOnDisk(), repoOnDisk(), [])).toEqual([]);
 });
+
+// The control: on the real disk, a step running the benchmark is followed
+// through package.json and its imports to a daemon, so an empty answer above
+// is the walk finding nothing, not the walk reading nothing.
+test("a step that runs the benchmark reaches a daemon", () => {
+  const probe = {
+    name: "probe.yml",
+    text: "jobs:\n  probe:\n    runs-on: ubuntu-latest\n    steps:\n      - run: pnpm bench\n",
+  };
+  expect(violationsOf([probe], repoOnDisk(), []).map((v) => v.workflow)).toEqual(["probe.yml"]);
+});

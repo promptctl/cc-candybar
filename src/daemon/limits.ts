@@ -58,8 +58,7 @@ import type { Timekeeper } from "../time";
 // The default is set by the render cache: its share of the limit (render.ts)
 // must hold a hundred sessions, each drawing from its own checkout, at their
 // charges, which takes 832 MB (560 MB of charges plus the reserve, over the
-// near-limit fraction). The margin to 1024 is what lets a leak trip the
-// backstop while it is still a leak, before the share runs out. Below 832 the
+// near-limit fraction), and 1024 is the round limit above it. Below 832 the
 // cache cannot hold the directories being rendered from, every render misses,
 // and a miss's config load is longer than the client waits, so every render
 // fails rather than some.
