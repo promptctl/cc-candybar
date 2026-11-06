@@ -16,6 +16,8 @@ import {
   type DrawnFrom,
 } from "../../src/daemon/session-recorder";
 import { sessionIdOf } from "../../src/daemon/session-id";
+import type { Handed } from "../../src/daemon/draw-view";
+import { ANSWERING, UNFOLLOWED_FEEDS } from "../../src/config/lanes";
 import type { Instant } from "../../src/utils/instant";
 
 const SID = sessionIdOf("rec-session");
@@ -25,6 +27,18 @@ const state = { revision: 3 } as unknown as DrawState;
 
 // The clicks' state a turn was taken over: passed on whole.
 const clicks = { revision: 5 } as unknown as ClickState;
+
+// What an answer no lane follows is handed, and a lane's frame.
+const ANSWERED: Handed = {
+  drawing: ANSWERING,
+  feeds: UNFOLLOWED_FEEDS,
+  diagnostics: [],
+};
+const FED: Handed = {
+  drawing: { by: "feed", fps: 30 },
+  feeds: { ...UNFOLLOWED_FEEDS, pane: { subscribers: 1, fps: 30, shown: true } },
+  diagnostics: [],
+};
 
 // A view whose document, declaration and hold the test moves. The recorder
 // only passes them on, so each is a stand-in. Its turn is drawn from the
@@ -49,7 +63,11 @@ function view(name = "a") {
       }),
     },
     // What a draw of it reads.
-    drawn: (): DrawnFrom => ({ view: v, state, diagnostics: [] }),
+    drawn: (handed: Handed = ANSWERED): DrawnFrom => ({
+      view: v,
+      state,
+      ...handed,
+    }),
     declare: (next: string) => {
       declaration = { name: next } as unknown as SessionRequest;
     },
@@ -212,7 +230,7 @@ test("a draw of a held view the session moved away from carries that view's held
   // The view the first request holds is held, and its follow stamps on.
   first.hold(true);
   first.move(3);
-  recorder.drew(SID, a, first.drawn());
+  recorder.drew(SID, a, () => first.drawn());
   expect(shapeOf(lines.slice(1))).toEqual([
     "turn 1",
     "request",
@@ -252,7 +270,7 @@ test("a draw of a view the session moved away from is written between that view'
     request: first.facts(),
   });
   // A draw of what the recording last wrote: the draw line alone.
-  recorder.drew(SID, a, first.drawn());
+  recorder.drew(SID, a, () => first.drawn());
   // A second request moves the session to another view while the first's
   // still holds its own: the first is drawn from a document of that view the
   // recording never followed, and with its own declaration, which its turn
@@ -264,9 +282,9 @@ test("a draw of a view the session moved away from is written between that view'
     request: second.facts(),
   });
   first.move(3);
-  recorder.drew(SID, a, first.drawn());
+  recorder.drew(SID, a, () => first.drawn());
   // The next draw, from the view the session is on, whose turn came last.
-  recorder.drew(SID, b, second.drawn());
+  recorder.drew(SID, b, () => second.drawn());
   expect(shapeOf(lines.slice(1))).toEqual([
     "turn 1",
     "request",
@@ -278,12 +296,7 @@ test("a draw of a view the session moved away from is written between that view'
     "turn 1",
     "draw",
   ]);
-  expect(lines.at(-1)).toEqual({
-    kind: "draw",
-    request: AT,
-    state,
-    diagnostics: [],
-  });
+  expect(lines.at(-1)).toEqual({ kind: "draw", at: AT, state, ...ANSWERED });
 });
 
 test("a recording opens on its view's turn, and writes the turn again wherever its hold moves: the held turn as it begins, the turn taken as it ends", () => {
@@ -292,12 +305,12 @@ test("a recording opens on its view's turn, and writes the turn again wherever i
   const { lines, sink } = keepingSink();
   recorder.record(SID, sink);
   const a = recorder.arrived(SID, { at: AT, request: v.facts() });
-  recorder.drew(SID, a, v.drawn());
+  recorder.drew(SID, a, () => v.drawn());
   v.hold(true);
   // The follow stamps on past the held turn's document.
   v.move(2);
   const b = recorder.arrived(SID, { at: AT, request: v.facts() });
-  recorder.drew(SID, b, v.drawn());
+  recorder.drew(SID, b, () => v.drawn());
   v.hold(false);
   expect(shapeOf(lines.slice(1))).toEqual([
     "turn 1",
@@ -335,7 +348,7 @@ test("a draw whose first line fails to write ends the recording, and no draw lin
   failing = true;
   const other = view();
   other.move(4);
-  recorder.drew(SID, a, other.drawn());
+  recorder.drew(SID, a, () => other.drawn());
   expect(offered).toEqual(["recording", "turn", "request", "turn"]);
   expect(ended).toEqual([{ kind: "failed", error: new Error("EIO") }]);
 });
@@ -351,12 +364,12 @@ test("a recording started during a request's wait is written no draw of that req
   });
   const during = keepingSink();
   recorder.record(SID, during.sink);
-  recorder.drew(SID, waiting, v.drawn());
+  recorder.drew(SID, waiting, () => v.drawn());
   const next = recorder.arrived(SID, {
     at: AT,
     request: v.facts(),
   });
-  recorder.drew(SID, next, v.drawn());
+  recorder.drew(SID, next, () => v.drawn());
   const kinds = (lines: RecordingLine[]) => lines.map((line) => line.kind);
   expect(kinds(before.lines)).toEqual([
     "recording",
@@ -367,4 +380,40 @@ test("a recording started during a request's wait is written no draw of that req
     "draw",
   ]);
   expect(kinds(during.lines)).toEqual(["recording", "turn", "request", "draw"]);
+});
+
+test("a lane's frame is written to every recording of the session, one started during a request's wait among them, as an answer's lines are", () => {
+  const v = view();
+  const recorder = sessionRecorder({ sessionView: () => v }, () => {});
+  const before = keepingSink();
+  recorder.record(SID, before.sink);
+  const waiting = recorder.arrived(SID, { at: AT, request: v.facts() });
+  const during = keepingSink();
+  recorder.record(SID, during.sink);
+  // The follow stamps and the view is declared again before the lane draws.
+  v.move(2);
+  v.declare("b");
+  const framedAt = (AT + 0.0337) as Instant;
+  recorder.fed(SID, framedAt, () => v.drawn(FED));
+  recorder.drew(SID, waiting, () => v.drawn());
+  expect(shapeOf(before.lines.slice(1))).toEqual([
+    "turn 1",
+    "request",
+    "facts 2",
+    "declared b",
+    "draw",
+    "draw",
+  ]);
+  expect(shapeOf(during.lines.slice(1))).toEqual([
+    "turn 1",
+    "facts 2",
+    "declared b",
+    "draw",
+  ]);
+  expect(during.lines.at(-1)).toEqual({
+    kind: "draw",
+    at: framedAt,
+    state,
+    ...FED,
+  });
 });

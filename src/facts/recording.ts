@@ -3,9 +3,9 @@
 // (docs/design/gather-and-renderer.md §14): a header naming its format's version,
 // the session and the home its payloads were composed against, then the
 // turn the session's bar is drawn from, then the documents its view took, the
-// requests it was drawn by, the draws of their answers (each with its instant,
-// the session's draw state it read and the diagnostics it built) and the turn
-// again wherever its hold moved. The session's recorder
+// requests it was drawn by, the draws of their answers and of the frames a
+// lane's feed drew (each with its instant, the session's draw state it read
+// and what it was handed) and the turn again wherever its hold moved. The session's recorder
 // (src/daemon/session-recorder.ts) writes it and this unit reads it back.
 // Everything past this unit holds a `Recording` and asks nothing of its shape
 // again: a malformed or partial line throws naming its line number, as
@@ -15,7 +15,8 @@
 // (model, cost, context window), the client's hints and whose home `~` names
 // are not in the document, and a replay without them cannot draw what the
 // live bar drew. Draw lines are there because an answer is drawn after its
-// request's wait, from what the view took during it. A draw line carries what
+// request's wait, from what the view took during it, and because a lane's
+// frame is drawn between answers through the same view. A draw line carries what
 // the session's clicks and menus left for that draw, because a replay that
 // opened a session that never clicked would draw every pick absent and every
 // menu closed. A turn line is there because a turn whose inputs could not be
@@ -46,6 +47,15 @@ import { parseSessionId, type SessionId } from "../daemon/session-id";
 import { parseClientHints } from "../daemon/protocol";
 import type { ViewFacts } from "../daemon/render-payload";
 import { REFRESH_LANES, type RefreshLane } from "../daemon/refresh-faults";
+import type { Handed } from "../daemon/draw-view";
+import {
+  LANE_NAMES,
+  type Drawing,
+  type Lane,
+  type LaneFeed,
+  type LaneFeeds,
+  perLane,
+} from "../config/lanes";
 import type { HistoryDepth } from "../daemon/settings-history";
 import {
   diagnosticSpan,
@@ -94,14 +104,17 @@ export interface DrawState extends ClickState {
   readonly idleSince: Instant | undefined;
 }
 
-// One answer drawn, once its request's wait was over, from the document the
-// line before it holds: the instant of the request it answers, which is the
-// instant it is drawn at, the session's draw state it read, and the
-// diagnostics the draw built, which its door's indicator and its viewer read.
-export interface DrawLine {
-  readonly request: Instant;
+// [LAW:one-type-per-behavior] One frame drawn of the session's view, from the
+// document the line before it holds: a request's answer, once its wait was
+// over, at the instant its request arrived at, or a frame a lane's feed drew
+// between answers, at its own instant. Both write the view's frame memory and
+// the session's effect memory, so a replay draws both, in the file's order.
+// It carries the session's draw state it read and what it was handed: who it
+// drew for, what each lane's feed was doing, and the diagnostics list its
+// door's indicator and its viewer read.
+export interface DrawLine extends Handed {
+  readonly at: Instant;
   readonly state: DrawState;
-  readonly diagnostics: DiagnosticList;
 }
 
 // The turn a session's bar is drawn from (src/daemon/session-source.ts): its
@@ -157,7 +170,7 @@ export type RecordingLine =
 
 // [LAW:types-are-the-program] A recording as the parser proved it: one
 // session's, the turn its view opens on, then its lines, with at least one
-// draw and every draw answering a request before it not drawn already, so a
+// draw and every answer drawn for a request before it not drawn already, so a
 // replay has a view to open and a frame to draw.
 export interface Recording {
   readonly session: SessionId;
@@ -171,7 +184,7 @@ export interface Recording {
 // path and not the facts protocol. The documents in it carry their own facts
 // version, which each document's parse refuses, so a change of either moves
 // one number.
-export const RECORDING_VERSION = 5;
+export const RECORDING_VERSION = 6;
 
 // A recording of another format: refused whole, never read line by line
 // against this build's. The version is a value, so the edge that names the
@@ -433,6 +446,56 @@ function parseDiagnosticMessage(
   };
 }
 
+// Who a draw drew for: a request's answer, or a lane's feed with its ceiling.
+function parseDrawing(json: unknown, where: string): Drawing {
+  if (!isPlainObject(json)) {
+    throw new FactParseError(where, "has no `drawing` object");
+  }
+  if (json.by === "request") return { by: "request" };
+  if (json.by === "feed") {
+    return { by: "feed", fps: parseCount(json.fps, where, "drawing.fps") };
+  }
+  throw new FactParseError(
+    where,
+    "has no `drawing.by` that is request or feed",
+  );
+}
+
+// What each lane's feed was doing as a draw was handed it: one per lane this
+// build draws, and no other.
+function parseFeeds(json: unknown, where: string): LaneFeeds {
+  if (!isPlainObject(json)) {
+    throw new FactParseError(where, "has no `feeds` object");
+  }
+  const named = Object.keys(json);
+  const unknown = named.find((lane) => !LANE_NAMES.includes(lane as Lane));
+  if (unknown !== undefined) {
+    throw new FactParseError(
+      where,
+      `has a feed of lane ${JSON.stringify(unknown)}, which this build does not draw`,
+    );
+  }
+  const feed = (lane: Lane): LaneFeed => {
+    const field = `feeds.${lane}`;
+    const held = json[lane];
+    if (!isPlainObject(held)) {
+      throw new FactParseError(where, `has no \`${field}\` object`);
+    }
+    if (typeof held.shown !== "boolean") {
+      throw new FactParseError(
+        where,
+        `has no \`${field}.shown\` that is true or false`,
+      );
+    }
+    return {
+      subscribers: parseCount(held.subscribers, where, `${field}.subscribers`),
+      fps: parseCount(held.fps, where, `${field}.fps`),
+      shown: held.shown,
+    };
+  };
+  return perLane(feed);
+}
+
 function parseDiagnosticList(json: unknown, where: string): DiagnosticList {
   if (!Array.isArray(json)) {
     throw new FactParseError(where, "has no `diagnostics` list");
@@ -551,7 +614,6 @@ export function parseRecording(text: string): Recording {
   // The turn the view opens on, and the lines after it.
   let opening: TurnLine | null = null;
   const lines: ReplayLine[] = [];
-  let requested = false;
   // The requests not yet drawn, by instant: requests can share one.
   const undrawn = new Map<Instant, number>();
   let draws = 0;
@@ -606,35 +668,35 @@ export function parseRecording(text: string): Recording {
       const at = parseInstant(json.at, where, "at");
       lines.push({ kind, at, request: parseRequest(json, where, session) });
       undrawn.set(at, (undrawn.get(at) ?? 0) + 1);
-      requested = true;
       continue;
     }
     if (kind === "declared") {
-      if (!requested) {
-        throw new FactParseError(
-          where,
-          "is a declaration before any request: only a draw restates one",
-        );
-      }
       lines.push({ kind, request: parseRequest(json, where, session) });
       continue;
     }
     if (kind === "draw") {
-      const request = parseInstant(json.request, where, "request");
-      const waiting = undrawn.get(request) ?? 0;
-      if (waiting === 0) {
-        throw new FactParseError(
-          where,
-          `draws the answer to a request at ${request}, and no request line before it arrived then that is not drawn already`,
-        );
+      const at = parseInstant(json.at, where, "at");
+      const drawing = parseDrawing(json.drawing, where);
+      // [LAW:types-are-the-program] An answer is drawn for a request the file
+      // took before it; a lane's frame answers none.
+      if (drawing.by === "request") {
+        const waiting = undrawn.get(at) ?? 0;
+        if (waiting === 0) {
+          throw new FactParseError(
+            where,
+            `draws the answer to a request at ${at}, and no request line before it arrived then that is not drawn already`,
+          );
+        }
+        undrawn.set(at, waiting - 1);
       }
-      undrawn.set(request, waiting - 1);
       draws++;
       const state = parseDrawState(json.state, where);
       oneState(state, where);
       lines.push({
         kind,
-        request,
+        at,
+        drawing,
+        feeds: parseFeeds(json.feeds, where),
         state,
         diagnostics: parseDiagnosticList(json.diagnostics, where),
       });
@@ -654,12 +716,12 @@ export function parseRecording(text: string): Recording {
       "holds no turn: a recording opens on the turn its bar is drawn from",
     );
   }
-  // A replay draws one frame per answer, so a recording no answer was drawn
-  // in (an idle session's) replays nothing.
+  // A replay draws one frame per draw, so a recording nothing was drawn in (an
+  // idle session's, no lane following) replays nothing.
   if (draws === 0) {
     throw new FactParseError(
       "the recording",
-      "holds no answered request: none was answered while it was recorded",
+      "holds no draw: no request was answered and no lane drew a frame while it was recorded",
     );
   }
   return { session, home, opening, lines };
@@ -696,7 +758,9 @@ export function formatLine(line: RecordingLine): string {
         : line.kind === "draw"
           ? {
               kind: line.kind,
-              request: line.request,
+              at: line.at,
+              drawing: line.drawing,
+              feeds: line.feeds,
               state: { ...line.state, idleSince: line.state.idleSince ?? null },
               diagnostics: line.diagnostics,
             }

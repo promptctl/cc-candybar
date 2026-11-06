@@ -9,15 +9,18 @@
 // of their answers, and a recording's documents where the daemon took them),
 // whose home `~` names, the turn the view opens on and what the session's
 // clicks left for each draw (a recording's, or a session that never clicked),
-// the diagnostics each draw owes its reader (a recording's, or none), and how a
-// request arrives at its offset (a sleep on the machine's clock and its
-// reading, or a held clock's advance and the recorded instant). The path itself
-// never asks which.
+// what each draw was handed (a recording's, or a session no lane follows and
+// nothing warned of), when each draw is drawn (a recorded instant, or the
+// instant its request arrived at), and how a request arrives at its offset (a
+// sleep on the machine's clock and its reading, or a held clock's advance and
+// the recorded instant). The path itself never asks which.
 //
 // [LAW:single-enforcer] One faked hook event, or a recorded one, goes through
 // the functions the daemon runs for a real one — loadChain, openView over the
-// daemon's session source, the follow's settle, drawDsl. There is no
-// demo-only payload: a field the daemon's payload gains is in the demo's.
+// daemon's session source, the follow's settle, the daemon's draw of a view
+// (src/daemon/draw-view.ts). There is no demo-only payload or draw: a field
+// the daemon's payload gains is in the demo's, and an open viewer stands in
+// for the bar as the daemon's does.
 
 import { readFileSync } from "node:fs";
 import { observable, runInAction, type IObservableValue } from "mobx";
@@ -30,30 +33,25 @@ import {
   type SessionRequest,
   type TurnLine,
 } from "../facts/recording.js";
-import {
-  diagnosticsProjection,
-  type DiagnosticList,
-} from "../render/diagnostics.js";
 import type { RendererLinks } from "../click/renderer-links.js";
+import { DIAGNOSTICS_VIEWING } from "../config/door.js";
+import { drawView, type Handed } from "../daemon/draw-view.js";
+import type { RendererAddress } from "../daemon/home.js";
 import { daemonGates } from "../daemon/update-keys.js";
 import { locations } from "../daemon/paths.js";
 import { repoGateAt } from "../daemon/repo-configs.js";
 import { repoGateLines } from "../config/loader/repo-gate.js";
-import { UNFOLLOWED_FEEDS } from "../config/lanes.js";
 import { homeLayer, refuseDrops } from "../config/dsl-loader.js";
 import {
   loadChain,
   openView,
   UNOWNED_STORAGE,
   type DslRenderState,
-  type SessionView,
 } from "../daemon/cache/render.js";
 import type { Facts, RecordingFacts } from "../daemon/facts-source.js";
-import { renderOptionsOf, todayOf } from "../daemon/render-payload.js";
-import { sessionSource, type SessionSource } from "../daemon/session-source.js";
+import { sessionSource } from "../daemon/session-source.js";
 import { SessionState, SINGLE_RUN } from "../daemon/session-state.js";
 import { EMPTY_HISTORY_DEPTH } from "../daemon/settings-history.js";
-import { drawDsl } from "../dsl/render.js";
 import type { RenderedLine } from "../dsl/node-registry.js";
 import type { World } from "../host.js";
 import { SessionEffects } from "../render/effect.js";
@@ -203,10 +201,18 @@ export function restoreDraw(
   });
 }
 
+// When a draw is drawn: at a recorded instant, exactly as its line holds it (a
+// lane's frame is drawn between whole milliseconds), or at the instant the
+// request at an offset arrived at, which the live arm learns only as it
+// arrives.
+export type DrawnAt =
+  | { readonly instant: Instant }
+  | { readonly request: number };
+
 // One step of a play, from the clock's reading as it begins: a request
 // arrives at its offset; a declaration restates the request the next draw's
-// view was declared with; an answer is drawn at the offset of the request it
-// answers, from the session's state it read and with the diagnostics it owed;
+// view was declared with; a draw (an answer, or a lane's frame) is drawn at
+// its instant, from the session's state it read and with what it was handed;
 // a document becomes the arm's; a turn is taken over its line's inputs (the
 // clicks' state, the request, the document it reaches) and held or not.
 export type DemoStep =
@@ -218,9 +224,9 @@ export type DemoStep =
   | { readonly kind: "declared"; readonly request: SessionRequest }
   | {
       readonly kind: "draw";
-      readonly requestOffsetMs: number;
+      readonly at: DrawnAt;
       readonly state: DrawState;
-      readonly diagnostics: DiagnosticList;
+      readonly handed: Handed;
     }
   | { readonly kind: "document"; readonly reach: () => void }
   | {
@@ -236,9 +242,9 @@ export type DemoTurn = Pick<TurnLine, "request" | "state" | "held">;
 // A recording as the demo plays it: the instant its held clock starts at, in
 // whole milliseconds as the clock reads them, the turn the view opens on, and
 // its lines as steps, in the file's order, at their offsets from it. The clock
-// starts at the first request, not the opening turn: the document a recording
-// opens with is the one the bar was drawn from when it began, which can be
-// hours old.
+// starts at the first request or draw, not the opening turn: the document a
+// recording opens with is the one the bar was drawn from when it began, which
+// can be hours old.
 export interface RecordingPlay {
   readonly startMs: number;
   readonly opening: DemoTurn;
@@ -251,11 +257,13 @@ export function playOf(
   recording: Pick<Recording, "opening" | "lines">,
   arm: Pick<RecordingFacts, "reach">,
 ): RecordingPlay {
-  const first = recording.lines.find((line) => line.kind === "request");
-  // [LAW:no-silent-failure] The parser refuses a recording no request was
-  // answered in, so one with no request is this play's bug.
+  const first = recording.lines.find(
+    (line) => line.kind === "request" || line.kind === "draw",
+  );
+  // [LAW:no-silent-failure] The parser refuses a recording nothing was drawn
+  // in, so one with no draw is this play's bug.
   if (first === undefined) {
-    throw new Error("a recording with no request reached the play");
+    throw new Error("a recording with no draw reached the play");
   }
   const startMs = msOf(first.at);
   const step = (line: ReplayLine): DemoStep =>
@@ -270,9 +278,13 @@ export function playOf(
         : line.kind === "draw"
           ? {
               kind: line.kind,
-              requestOffsetMs: msOf(line.request) - startMs,
+              at: { instant: line.at },
               state: line.state,
-              diagnostics: line.diagnostics,
+              handed: {
+                drawing: line.drawing,
+                feeds: line.feeds,
+                diagnostics: line.diagnostics,
+              },
             }
           : line.kind === "turn"
             ? {
@@ -299,6 +311,8 @@ export interface DemoPlay {
   readonly opening: DemoTurn;
   readonly steps: RecordingPlay["steps"];
   readonly arrive: Arrive;
+  // The renderer the frames' links are minted for.
+  readonly to: RendererAddress;
   readonly frame: (frame: Frame) => void;
 }
 
@@ -317,45 +331,12 @@ export const heldArrival =
     return instantOf(new Date(atMs));
   };
 
-// One frame of a session's view at `at`, as the daemon draws a request's: the
-// draw's own projections, the diagnostics it owes its reader among them, the
-// options its view's turn resolved, and when the session's menus' idle period
-// began.
-export function drawDemoFrame(
-  view: SessionView<SessionSource>,
-  at: Instant,
-  effects: SessionEffects<RenderedLine>,
-  idleSince: Instant | undefined,
-  diagnostics: DiagnosticList,
-  warn: (message: string) => void,
-): Frame {
-  const effective = view.source.effective();
-  return drawDsl(
-    view.state.config,
-    view.state.compiled,
-    view.store,
-    view.registry,
-    {
-      drawing: { by: "request" },
-      feeds: UNFOLLOWED_FEEDS,
-      today: todayOf(view.source.facts().builtins.today, at),
-      diagnostics: diagnosticsProjection(diagnostics),
-    },
-    at,
-    // [LAW:one-source-of-truth] The width is the turn's, as the daemon's
-    // request draws it: `renderWidth` of its hints, carried as `term.cols`.
-    renderOptionsOf(effective, view.source.payload().term.cols),
-    { onRenderWarning: ({ message }) => warn(message) },
-    { ...effective, effects, idleSince },
-  ).frame;
-}
-
 // [LAW:no-ambient-temporal-coupling] The steps are taken in their order, which
 // is the order the daemon took them in: a request's clock is brought to its
 // offset, the view is declared with it and what its arrival starts of the
 // facts lands; a draw restores the session's state it read and draws the view
-// as it stands then, at the instant its request arrived at; a turn is taken
-// over its line's inputs and then held or not.
+// as it stands then, at its instant; a turn is taken over its line's inputs
+// and then held or not.
 export async function playDemo({
   loaded: { state, sessionState },
   facts,
@@ -365,12 +346,26 @@ export async function playDemo({
   opening,
   steps,
   arrive,
+  to,
   frame,
 }: DemoPlay): Promise<void> {
   const warn = (message: string): void => log("warn", message);
   const startMs = clock.now();
-  // Each request's instant, by its offset: what its answer is drawn at.
+  // Each request's instant, by its offset: what the live arm's answer to it is
+  // drawn at.
   const arrived = new Map<number, Instant>();
+  const answered = (offsetMs: number): Instant => {
+    const at = arrived.get(offsetMs);
+    // [LAW:no-silent-failure] The live arm draws only an answer to a request
+    // already taken; one that is not is this play's bug, never a frame at
+    // another instant.
+    if (at === undefined) {
+      throw new Error(
+        `a draw answers a request at +${offsetMs}ms, and none arrived then`,
+      );
+    }
+    return at;
+  };
   // [LAW:one-source-of-truth] The depths of the draw being drawn, set with the
   // store by each draw's restore. Compared by value, so a draw whose depths
   // held moves nothing the turn reads, as the daemon's depths do not.
@@ -451,25 +446,20 @@ export async function playDemo({
       } else if (step.kind === "declared") {
         declare(step.request);
       } else {
-        const at = arrived.get(step.requestOffsetMs);
-        // [LAW:no-silent-failure] Both arms draw only an answer to a request
-        // already taken (the parser refuses a file that does not); one that
-        // is not is this play's bug, never a frame at another instant.
-        if (at === undefined) {
-          throw new Error(
-            `a draw answers a request at +${step.requestOffsetMs}ms, and none arrived then`,
-          );
-        }
+        const at =
+          "instant" in step.at ? step.at.instant : answered(step.at.request);
         restoreDraw(sessionState, depths, view.sessionId, step.state);
         frame(
-          drawDemoFrame(
+          drawView(
             view,
+            step.handed,
             at,
             effects,
             step.state.idleSince,
-            step.diagnostics,
-            warn,
-          ),
+            sessionState.get(view.sessionId, DIAGNOSTICS_VIEWING),
+            to,
+            ({ message }) => warn(message),
+          ).body,
         );
       }
     }

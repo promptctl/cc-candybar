@@ -87,20 +87,20 @@ export function recordPlan(
       code: 1,
     };
   }
-  const { path, lines, answers, daemonClosed } = outcome.value;
+  const { path, lines, answers, frames, daemonClosed } = outcome.value;
   // A span the daemon's close cut short is said, so a short file or an empty
   // one is never read as the session's own doing.
   const cut = `the daemon closed before ${seconds}s ran out`;
-  return answers === 0
+  return answers + frames === 0
     ? {
         stdout: "",
         stderr: daemonClosed
-          ? `record: ${path}: ${cut}, and no request had been answered, so there is nothing to replay. No file was left.\n`
-          : `record: ${path}: no request was answered in ${seconds}s, so there is nothing to replay: the session was idle, or its statusline is not drawn by this daemon. No file was left.\n`,
+          ? `record: ${path}: ${cut}, and nothing had been drawn, so there is nothing to replay. No file was left.\n`
+          : `record: ${path}: no request was answered and no lane drew a frame in ${seconds}s, so there is nothing to replay: the session was idle, or its bar is not drawn by this daemon. No file was left.\n`,
         code: 1,
       }
     : {
-        stdout: `${path}: ${lines} lines, ${answers} answers\n`,
+        stdout: `${path}: ${lines} lines, ${answers} answers, ${frames} lane frames\n`,
         stderr: daemonClosed
           ? `record: ${cut}: the file holds what came before.\n`
           : "",
