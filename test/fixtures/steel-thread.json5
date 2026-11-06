@@ -2,14 +2,16 @@
 // Two segments (directory + sessionId) exercise:
 //   (a) the Joiner between two segments, and
 //   (b) per-segment palette switching via 3rq.2 (sessionId uses 'gruvbox').
-// Variables are declared as input/env kinds so the test drives them through
+// Variables are declared as input kinds so the test drives them through
 // registerDslConfig + a bound payload — no hand-seeded store.
 {
   globals: {},
   variables: {
     current_dir: { kind: 'input', path: 'workspace.current_dir', default: '' },
     project_dir: { kind: 'input', path: 'workspace.project_dir', default: '' },
-    home: { kind: 'input', path: 'home', default: '' },
+    // Pinned empty so the directory template's home-collapse branch is never
+    // taken, whatever machine runs the test: the snapshot stays one path.
+    home: { kind: 'literal', value: '' },
     'session.id': { kind: 'input', path: 'session_id', default: '' },
   },
   segments: {

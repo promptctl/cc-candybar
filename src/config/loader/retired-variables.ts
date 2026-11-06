@@ -168,14 +168,42 @@ export function retiredGitKindMessage(
 // [LAW:one-source-of-truth] The retired `kind: "env"`: one detached renderer
 // draws for every session of its user, so its environment is the shell that
 // spawned it, never the session's, and the value this kind read was no session
-// fact. Nothing replaces it one for one; `file` and `shell` are the expansion
-// points, and both reach their value from inside the renderer's home.
+// fact. The names it was declared for are payload facts the bundled default
+// already declares, so each carries the read and the declaration that give the
+// value, as the git fields do; `test/dsl-loader.test.ts` holds each to the
+// bundled default's. For any other name, `file` and `shell` are the expansion
+// points, and both reach their value from inside the renderer's home. A
+// `shell` source runs in the renderer too, so echoing the variable there would
+// read the same wrong environment; the message says so.
+export const RETIRED_ENV_NAMES: ReadonlyMap<string, RetiredGitField> = new Map<
+  string,
+  RetiredGitField
+>(
+  (
+    [
+      ["HOME", "home"],
+      ["USER", "host.user"],
+      ["LOGNAME", "host.user"],
+      ["HOSTNAME", "host.name"],
+    ] as const
+  ).map(([name, path]) => [
+    name,
+    { read: `.${path}`, declare: { kind: "input", path, default: "" } },
+  ]),
+);
+
 export function retiredEnvKindMessage(
   raw: Readonly<Record<string, unknown>>,
 ): string {
   const read =
     typeof raw.name === "string" ? ` (this one read $${raw.name})` : "";
-  return `kind "env" is removed${read}: the renderer's environment belongs to whichever shell spawned it, not to the session it draws for, so an env variable was never a session fact — drop this declaration; a value the payload lacks is read from a file by a "file" source or computed by a "shell" source`;
+  const head = `kind "env" is removed${read}: the renderer's environment belongs to whichever shell spawned it, not to the session it draws for, so an env variable was never a session fact — drop this declaration`;
+  const field =
+    typeof raw.name === "string" ? RETIRED_ENV_NAMES.get(raw.name) : undefined;
+  if (field === undefined) {
+    return `${head}; a value the payload lacks is read from a file by a "file" source or computed by a "shell" source, and not by echoing the variable there, since a "shell" source runs in the renderer too`;
+  }
+  return `${head} and read ${field.read} where it was read, or declare ${json5Of(field.declare)} under a name of your own`;
 }
 
 // [LAW:one-source-of-truth] The click verbs a hand-written URL literal can

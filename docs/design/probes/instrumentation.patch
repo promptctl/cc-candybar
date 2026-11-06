@@ -78,31 +78,28 @@ diff -ru --exclude=node_modules src/daemon/server.ts /tmp/ccb-probe/wt/src/daemo
 diff -ru --exclude=node_modules src/dsl/render.ts /tmp/ccb-probe/wt/src/dsl/render.ts
 --- src/dsl/render.ts	2026-10-30 23:11:42
 +++ /tmp/ccb-probe/wt/src/dsl/render.ts	2026-10-31 01:25:39
-@@ -319,10 +319,12 @@
+@@ -316,15 +316,17 @@
+       );
        break;
- 
-     case "env":
-+      if ((globalThis as any).__wireVars === true) return wireVar(registry, name, decl, derivation);
-       registry.declareEnv(name, decl.name, decl.default);
-       break;
- 
+
      case "file":
 +      if ((globalThis as any).__wireVars === true) return wireVar(registry, name, decl, derivation);
        registry.declareFile(name, decl.path, {
          readMode: decl.readMode,
          cache: toCachePolicy(decl.cache),
-@@ -331,6 +333,7 @@
+         parse: toSourceParse(decl.parse, decl.default),
+       });
        break;
- 
+
      case "shell":
 +      if ((globalThis as any).__wireVars === true) return wireVar(registry, name, decl, derivation);
        registry.declareShell(name, decl.command, {
          cwd,
          cache: toCachePolicy(decl.cache),
-@@ -362,6 +365,11 @@
+@@ -356,6 +358,11 @@
    }
  }
- 
+
 +function wireVar(registry: any, name: string, decl: any, derivation: any): void {
 +  if (decl.parse !== undefined && "json" in decl.parse) registry.declareSourceDocument(name);
 +  else registry.declareInput(name, name, "string", undefined, derivation);
@@ -111,14 +108,14 @@ diff -ru --exclude=node_modules src/dsl/render.ts /tmp/ccb-probe/wt/src/dsl/rend
  // ─── Helpers ─────────────────────────────────────────────────────────────────
  
  // [LAW:single-enforcer] Compile the config's shared helper templates into ONE
-@@ -587,7 +595,10 @@
+@@ -590,7 +597,10 @@
    // don't (e.g. configSwitcher) render normally.
    const loadWarnings: string[] = [];
    for (const [name, decl] of declaredVariables(config)) {
 -    if (!scopes.has(scopeOf.get(name)!)) continue;
 +    const carried =
 +      (globalThis as any).__wireVars === true &&
-+      (decl.kind === "shell" || decl.kind === "file" || decl.kind === "env");
++      (decl.kind === "shell" || decl.kind === "file");
 +    if (!scopes.has(carried ? "view" : scopeOf.get(name)!)) continue;
      try {
        declareOne(

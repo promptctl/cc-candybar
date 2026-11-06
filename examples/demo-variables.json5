@@ -1,6 +1,6 @@
 // cc-candybar: demo-variables.json5
 //
-// Demonstrates all 8 variable source kinds, all 5 cache policies,
+// Demonstrates every variable source kind, all 5 cache policies,
 // segment-local vars, custom helpers, dynamic bg expressions,
 // per-segment palette override, and width/justify/truncate controls.
 //
