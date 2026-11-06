@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-658",
+      "ref": "refs/pull/658/merge",
+      "sha": "b9c345c0b163212565430788f783f086f4c74bae",
+      "timestamp": "2026-11-06T22:28:42.479Z",
+      "commits": [
+        {
+          "sha": "b9c345c0b163212565430788f783f086f4c74bae",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T15:27:51-07:00",
+          "message": "Merge 7cd7353302793dbc160ac45aef26f55f93586232 into 3bd757912554568f0bf3b622640edbe789c7ba04\n"
+        },
+        {
+          "sha": "7cd7353302793dbc160ac45aef26f55f93586232",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T15:24:15-07:00",
+          "message": "fix(click): a leaf verb receives its click's session parsed, and a step naming another session is refused (brandon-menus-sjhy.vxi)\n\nEvery leaf handler now takes (sid: SessionId, args, ctx). One reader reads a\nleaf effect: its first segment through the one session-id checkpoint, and the\nencoded tail after it. It never throws, so a later step's malformed session is\nthat step's refusal, held on the bar. perform, the one runner every leaf\npasses through, refuses a step whose session fails the checkpoint or is not its\nclick's. So a dispatch can no longer act on one session and report to\nanother's bar, and a verb with no session cannot join the leaf table.\n\nperform hands each refused step to its verb's refusal owner. The run stats\ncount a run link refused at its session as they count one refused for its\narguments. The run handler's own catch is gone, so that count lives in one\nplace.\n\nEvery leaf verb's value is now segments, its session first, so the link\nreader decodes by the leaf table and the separate segmented-verbs list is\ndeleted. The per-handler session re-parse, the copy/open session reader and\nthe first-segment decode helper go too.\n\nA leaf click with an empty session segment now reads as a failed session, not\nas a click naming none, so its reply facts carry no sid.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-656",
       "ref": "refs/pull/656/merge",
       "sha": "01f7d11925d0d1079a91c30cd3d27034ce308679",
