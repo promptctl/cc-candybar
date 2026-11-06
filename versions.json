@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-647",
+      "ref": "refs/pull/647/merge",
+      "sha": "2bda02f51ee1004375a75ddf4daaffee6148f6d2",
+      "timestamp": "2026-11-06T20:02:28.434Z",
+      "commits": [
+        {
+          "sha": "2bda02f51ee1004375a75ddf4daaffee6148f6d2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T20:01:27Z",
+          "message": "Merge 563e7104032a3375e735abda874e853aed95eec6 into 1d331bc7612571c272bd1699765d216731683eca\n"
+        },
+        {
+          "sha": "563e7104032a3375e735abda874e853aed95eec6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:01:23-07:00",
+          "message": "Merge branch 'main' into candybar-gather-renderer-76bb.x07"
+        },
+        {
+          "sha": "265c81f91b6376b3efad2072fdec86e32db0f376",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T12:54:05-07:00",
+          "message": "Merge branch 'main' into candybar-gather-renderer-76bb.x07"
+        },
+        {
+          "sha": "98ce2f24cad76fe5243f6d6fe3d516f4fbd45436",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T12:47:52-07:00",
+          "message": "fix(tmux): the restore guard's comment and the fake's guard check say one condition (candybar-gather-renderer-76bb.x07)\n"
+        },
+        {
+          "sha": "680c000e169cdb6506d3cddc021e55ae1184b1a4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T12:42:29-07:00",
+          "message": "fix(tmux): the restore guard reads on tmux before 3.5, which has no #{!:} (candybar-gather-renderer-76bb.x07)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-646",
       "ref": "refs/pull/646/merge",
       "sha": "6e8899e475c858e145b3aef6275c84e0a71edb1f",
@@ -27,42 +70,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T12:35:32-07:00",
           "message": "feat(apply): session state has one writer; a run and a lane setup are effects (candybar-gather-renderer-76bb.1dh.9kk)\n\nThe session store refuses a write made while no journal turn is held, in\nevery daemon. A turn is synchronous, so a write while one is held is that\nturn's own, and one check at the store's single write path is the whole\nenforcement. The test-only view that refused such writes, its adapter\nseam and the separate gauges field are gone.\n\nThe two writers left outside a turn now report through effect-done:\n\n- A `run` click supersedes its sources in its turn, so they read pending\n  from the click on, and describes the launch as a `run` effect. The\n  performer runs the program behind the session's earlier effects; the\n  run owner answers how it ended and no longer writes the bar.\n- A lane setup is a `lane-setup` effect, settled by the click or the\n  request that owes it and run by the performer. Its own per-session\n  queue and defer are replaced by the performer's per-session order.\n\nThe check command, the demo and the doctor's command line build their\nstore with a holder that always holds, since each is one synchronous run.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-647",
-      "ref": "refs/pull/647/merge",
-      "sha": "d6cc26433e788ad896c724b71f8f8c8ef55a932e",
-      "timestamp": "2026-11-06T19:55:02.852Z",
-      "commits": [
-        {
-          "sha": "d6cc26433e788ad896c724b71f8f8c8ef55a932e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:54:09-07:00",
-          "message": "Merge 265c81f91b6376b3efad2072fdec86e32db0f376 into 2bb7660eaf484d4c41e6cdc671e6415f0cccc8fa\n"
-        },
-        {
-          "sha": "265c81f91b6376b3efad2072fdec86e32db0f376",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:54:05-07:00",
-          "message": "Merge branch 'main' into candybar-gather-renderer-76bb.x07"
-        },
-        {
-          "sha": "98ce2f24cad76fe5243f6d6fe3d516f4fbd45436",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:47:52-07:00",
-          "message": "fix(tmux): the restore guard's comment and the fake's guard check say one condition (candybar-gather-renderer-76bb.x07)\n"
-        },
-        {
-          "sha": "680c000e169cdb6506d3cddc021e55ae1184b1a4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:42:29-07:00",
-          "message": "fix(tmux): the restore guard reads on tmux before 3.5, which has no #{!:} (candybar-gather-renderer-76bb.x07)\n"
         }
       ]
     },
