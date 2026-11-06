@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-637",
+      "ref": "refs/pull/637/merge",
+      "sha": "eabf1886c0d0c44d082b190242789c17d111d3c3",
+      "timestamp": "2026-11-06T09:53:08.162Z",
+      "commits": [
+        {
+          "sha": "eabf1886c0d0c44d082b190242789c17d111d3c3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T09:52:20Z",
+          "message": "Merge f003bb9b1b10c913f30ba598412951635ea338e4 into 52e519f362165f3c41349e0c094ad562c05278d7\n"
+        },
+        {
+          "sha": "f003bb9b1b10c913f30ba598412951635ea338e4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T02:52:06-07:00",
+          "message": "fix(disk): the fake moves, removes, writes through links and resolves `..` as the kernel does; repo-configs is made on the tree that watches it; the real disk is owned (candybar-testing-ihvy.y10)\n"
+        },
+        {
+          "sha": "04a745483d3759d4ad7011f9110892ff63982371",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T02:36:44-07:00",
+          "message": "feat(disk): files and their watch events go through one filesystem port, first used by the watcher registry and the binary watch (candybar-testing-ihvy.y10)\n\nA Filesystem port (src/disk/) with one adapter over fs, an in-memory fake whose writes emit the events a watch would on the clock, and one contract both pass. The watcher registry, its delivery owner, plugin storage, folder identity, the link walk and the binary watch read the disk through it; IdentityRead and BundleStat are gone. A lint rule bans fs outside the adapter, with an allowlist of the files still to move.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-636",
       "ref": "refs/pull/636/merge",
       "sha": "aaef70e37ca8250b5c8740ce0995c4070a2af35f",
@@ -113,28 +142,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T02:12:37-07:00",
           "message": "fix(just): deploy builds the URL handler app on macOS, so install from a checkout finds it\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-637",
-      "ref": "refs/pull/637/merge",
-      "sha": "92c998a0d78d0f8799c543ecd7dfdf419928e6c1",
-      "timestamp": "2026-11-06T09:41:05.644Z",
-      "commits": [
-        {
-          "sha": "92c998a0d78d0f8799c543ecd7dfdf419928e6c1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T02:38:51-07:00",
-          "message": "Merge 04a745483d3759d4ad7011f9110892ff63982371 into 4d66c4136720948fa45456ed742e340dea015963\n"
-        },
-        {
-          "sha": "04a745483d3759d4ad7011f9110892ff63982371",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T02:36:44-07:00",
-          "message": "feat(disk): files and their watch events go through one filesystem port, first used by the watcher registry and the binary watch (candybar-testing-ihvy.y10)\n\nA Filesystem port (src/disk/) with one adapter over fs, an in-memory fake whose writes emit the events a watch would on the clock, and one contract both pass. The watcher registry, its delivery owner, plugin storage, folder identity, the link walk and the binary watch read the disk through it; IdentityRead and BundleStat are gone. A lint rule bans fs outside the adapter, with an allowlist of the files still to move.\n"
         }
       ]
     },

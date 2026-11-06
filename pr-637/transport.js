@@ -69317,7 +69317,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.199.1";
+var PACKAGE_VERSION = "1.199.2";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -69933,11 +69933,9 @@ function configDir(home) {
 function storedRoot(home) {
   return storedRootAt(home.kind === "main" ? configDir(home) : home.root);
 }
+var onSystemDisk = (at) => onDiskDirectory(systemFilesystem, at);
 function storedRootAt(dir) {
-  return {
-    dir,
-    onDisk: (at) => onDiskDirectory(systemFilesystem, at)
-  };
+  return { dir, onDisk: onSystemDisk };
 }
 function socketPath(home) {
   return home.kind === "main" && home.legacySocket !== null ? home.legacySocket : import_node_path30.default.join(home.runtime, socketFile(home.name));
@@ -82583,7 +82581,7 @@ var RenderCache = class {
     this.budgetBytes = opts.budgetBytes;
     this.maxEntries = opts.maxEntries ?? MAX_ENTRIES3;
     this.observers = opts.observers ?? {};
-    fs_default.mkdirSync(repoConfigsDir(deps.stateDir), { recursive: true });
+    deps.watchers.filesystem.mkdirSync(repoConfigsDir(deps.stateDir));
     const { dir, name } = nearestWatchTarget(
       deps.watchers.filesystem,
       repoConfigsPath(deps.stateDir)
