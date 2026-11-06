@@ -4,15 +4,22 @@
     {
       "version": "pr-624",
       "ref": "refs/pull/624/merge",
-      "sha": "c40800af8e149e78d46797b5e4a88946afea0cf5",
-      "timestamp": "2026-11-06T06:17:58.048Z",
+      "sha": "3f2985488941fdae24207ce4f7dda9a995465ec9",
+      "timestamp": "2026-11-06T06:21:01.227Z",
       "commits": [
         {
-          "sha": "c40800af8e149e78d46797b5e4a88946afea0cf5",
+          "sha": "3f2985488941fdae24207ce4f7dda9a995465ec9",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T06:17:04Z",
-          "message": "Merge 0d5614ed43a52c9976f12ef450a12fb184079d16 into a6c6adadc4b92f19bca48e7fe1eb518acde6e893\n"
+          "timestamp": "2026-11-06T06:20:02Z",
+          "message": "Merge 618918725adb758b89563f0b38cd90f8f1ba0015 into 5c5e716e41c8b9ccc7d36b48e3e1265315b579ba\n"
+        },
+        {
+          "sha": "618918725adb758b89563f0b38cd90f8f1ba0015",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T23:19:43-07:00",
+          "message": "fix(facts): a declaration that throws whole is answered on every lane, so the bar draws its warning (candybar-gather-renderer-76bb.6pj.go2)\n"
         },
         {
           "sha": "0d5614ed43a52c9976f12ef450a12fb184079d16",

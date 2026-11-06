@@ -67343,6 +67343,17 @@ async function refreshPayload(inputs, at, refreshed) {
 function sourcesRead(closure, sources) {
   return [...sources.keys()].filter((name) => closure.has(name));
 }
+function settledLanes(outcome, sources) {
+  const lane = settledLane(outcome);
+  return {
+    git: lane,
+    tmux: lane,
+    hostName: lane,
+    hostUser: lane,
+    today: lane,
+    sources: new Map(sources.map((name) => [name, lane]))
+  };
+}
 function gitAt({ cwd: cwd2, hookData: hookData2 }, closure) {
   return [
     cwd2 ?? hookData2.workspace?.current_dir,
@@ -69197,7 +69208,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.194.1";
+var PACKAGE_VERSION = "1.195.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -83117,33 +83128,37 @@ function inProcessFacts({
       const holds2 = new Holds();
       const sid = JSON.stringify(session);
       const lanesFor = (facts2, { closure, sources }) => {
-        const {
-          result: { lanes, faults },
-          acquired,
-          released
-        } = holds2.declare(
-          () => declareLanes(providers, holds2, facts2, closure, sources)
-        );
-        for (const fault of faults) {
-          log("error", `session view declaration threw sid=${sid} ${fault}`);
-        }
-        if (acquired + released > 0) {
+        try {
+          const {
+            result: { lanes, faults },
+            acquired,
+            released
+          } = holds2.declare(
+            () => declareLanes(providers, holds2, facts2, closure, sources)
+          );
+          for (const fault of faults) {
+            log("error", `session view declaration threw sid=${sid} ${fault}`);
+          }
+          if (acquired + released > 0) {
+            log(
+              "info",
+              `session view declared sid=${sid} acquired=${acquired} released=${released} held=${holds2.size}`
+            );
+          }
+          return lanes;
+        } catch (e) {
           log(
-            "info",
-            `session view declared sid=${sid} acquired=${acquired} released=${released} held=${holds2.size}`
+            "error",
+            `session view declaration threw sid=${sid}: ${inspect(e)}`
+          );
+          return settledLanes(
+            failed(`view declaration threw: ${String(e)}`, "read"),
+            sourcesRead(closure, sources)
           );
         }
-        return lanes;
       };
-      let opening;
-      try {
-        opening = lanesFor(facts, declaration);
-      } catch (e) {
-        holds2.close();
-        throw e;
-      }
       const declared = observable.box(
-        { facts, declaration, lanes: opening },
+        { facts, declaration, lanes: lanesFor(facts, declaration) },
         { deep: false }
       );
       const inputs = computed(() => {
