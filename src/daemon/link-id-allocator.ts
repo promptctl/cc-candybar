@@ -4,8 +4,7 @@
 // restarted renderer never reissues an id a stale row still carries.
 
 import fs from "node:fs";
-import path from "node:path";
-import { randomBytes } from "node:crypto";
+import { writeAtomic } from "../utils/atomic-write.js";
 import type { Timekeeper } from "../time.js";
 import type { LinkIdSource } from "../tmux-status/link-ids.js";
 
@@ -19,7 +18,8 @@ export const LINK_ID_BLOCK = 1024;
 const COUNT = /^\d{1,15}\n?$/;
 
 export interface LinkIdStats {
-  // Ids issued, and draws of a link that reused its id.
+  // Ids issued, and linked runs drawn under an id their link already held
+  // (a link split across styled runs counts each).
   readonly minted: number;
   readonly reused: number;
   // Ids a table dropped over its cap.
@@ -76,7 +76,9 @@ export function linkIdAllocator(deps: LinkIdAllocatorDeps): LinkIdAllocator {
   const reserve = (): State => {
     try {
       const base = Math.max(readCount(file), reserved);
-      writeCount(file, base + LINK_ID_BLOCK);
+      // [LAW:single-enforcer] Renamed over the count whole, so a reader sees
+      // the old count or the new one, and a crash leaves one of them.
+      writeAtomic(file, `${base + LINK_ID_BLOCK}\n`, 0o600);
       reserved = base + LINK_ID_BLOCK;
       reservations++;
       if (state.kind === "faulted")
@@ -133,19 +135,4 @@ function readCount(file: string): number {
     );
   }
   return Number(text.trim());
-}
-
-// [LAW:no-ambient-temporal-coupling] Written whole to a file of the writer's
-// own, then renamed over the count: a reader sees the old count or the new one,
-// never half of one, and a write that failed leaves nothing behind.
-function writeCount(file: string, count: number): void {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const written = `${file}.${process.pid}.${randomBytes(6).toString("hex")}`;
-  try {
-    fs.writeFileSync(written, `${count}\n`, { mode: 0o600, flag: "wx" });
-    fs.renameSync(written, file);
-  } catch (e) {
-    fs.rmSync(written, { force: true });
-    throw e;
-  }
 }

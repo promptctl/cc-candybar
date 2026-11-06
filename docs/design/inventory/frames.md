@@ -178,7 +178,6 @@ These are word matches across the 301 test files. `links(` is a heuristic, and t
 - `statusLineClick` in `src/daemon/server.ts`: hand-spelled `startsWith`.
 - `isBarLink` in `src/click/read.ts`.
 - `follow()` in `scripts/bar-web/index.html`: hand-spelled.
-- `rangeOf` in `src/tmux-status/frames.ts`: digests the whole URL, so the prefix changes range ids.
 - `wire.ts` documents that old direct URLs stay accepted, so the parser must take both forms.
 
 **Can one function own the prefix?** Yes, for every link the bar draws from effects. `linkFragment`, `linkOver` and `withLink` receive URL strings, so `effectsUrl` is the one mint.

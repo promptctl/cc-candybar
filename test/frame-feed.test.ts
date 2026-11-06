@@ -571,6 +571,29 @@ test("a lane is encoded once a frame however many follow it, so its subscribers,
   [first, second, late].forEach((close) => close());
 });
 
+test("a still bar drawn while the link-id counter was faulted gets its ranges at the next frame once ids can be issued, though its answers are unchanged", () => {
+  const { feeds, note, clock, ids } = harness({ motion: "still" });
+  note("s", "bar");
+  const seen: Array<Readonly<Record<string, string>>> = [];
+  ids.faulted = true;
+  const close = feeds.subscribe("s", {
+    lane: "tmuxStatus",
+    frame: (out) => void seen.push(out.value.links),
+    refused: () => {},
+    drawing: () => true,
+  });
+  clock.advance(20);
+  expect(seen).toEqual([{}]);
+  ids.faulted = false;
+  clock.advance(PERIODS.still);
+  expect(seen).toHaveLength(2);
+  expect(Object.values(seen[1]!)).toHaveLength(1);
+  // Drawn again with the ids it now holds, the row is not pushed again.
+  clock.advance(PERIODS.still);
+  expect(seen).toHaveLength(2);
+  close();
+});
+
 test("a frame that keeps failing the same way is logged once, and counted every time", () => {
   const { feeds, note, changes, log, clock } = harness({
     motion: "still",

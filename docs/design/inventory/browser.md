@@ -64,7 +64,7 @@ All paths are relative to `/Users/bmf/code/cc-candybar/.claude/worktrees/synthet
 
 **Compile-enforced tables (Record over `Lane`):**
 - `LANES` in `src/config/lanes.ts`
-- `LANE_FRAMES` in `src/daemon/lane-frames.ts`
+- `laneEncoders` in `src/daemon/lane-frames.ts`
 - `LANE_SETUP` in `src/daemon/lane-setup.ts`
 - `LANE_HELP` in `src/help-text.ts`
 
@@ -136,7 +136,7 @@ All paths are relative to `/Users/bmf/code/cc-candybar/.claude/worktrees/synthet
 
 - **`newestWins`** (`src/utils/newest-wins.ts`) takes any `Writable`, holds one pending chunk, and writes it on `drain`. It works on a raw socket and should work on `http.ServerResponse`. I did not test the latter.
 - **Dedupe and rates:** unchanged bytes are not pushed. A feed's ceiling is 30 fps while shown and 1 fps while not (`spacingOf`, `schedule`).
-- **Encoding cost:** `LANE_FRAMES[lane]` runs per subscriber in `stream` (`src/daemon/server.ts`), so a decoding encoder costs one pass per tab per frame.
+- **Encoding cost:** a feed encodes each lane once a frame (`push` in `src/daemon/frame-feed.ts`) and hands every subscriber of the lane that encoding, so a decoding encoder costs one pass per frame however many tabs follow.
 - **Visibility:** `deps.shown(req)` is `paneVisibility.shown(hints.tmux)`, a session-wide answer from a 1 s tmux poll that runs only while a feed exists.
 - **The gap:** if the tmux pane is hidden and the browser tab is visible, the page gets 1 fps. `drawing()` does not cover this, because it feeds `following` and so handoff.
 

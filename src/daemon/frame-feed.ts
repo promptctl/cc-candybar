@@ -759,9 +759,21 @@ export class FrameFeeds<Req> {
       resp: JSON.stringify(frame.resp),
       statusline: JSON.stringify(frame.statusline),
     };
+    // [LAW:single-enforcer] Each lane is encoded once a frame, whoever follows
+    // it: what its encoder mints for the frame is minted once.
+    const outs = [...feed.lanes].map(([lane, held]) => ({
+      held,
+      out: held.encode(frame.bar, answerOf(answers, lane)),
+    }));
+    // [LAW:one-source-of-truth] A frame is unchanged only when every lane
+    // encodes it as it did the last: an encoding reads what the answers do
+    // not (the tmux status line's ids, none while the counter is faulted), so
+    // a still bar whose row was drawn without ranges gets them back at its
+    // next frame.
     if (
       feed.last?.answers.resp === answers.resp &&
-      feed.last.answers.statusline === answers.statusline
+      feed.last.answers.statusline === answers.statusline &&
+      outs.every(({ held, out }) => held.out?.json === out.json)
     )
       return;
     feed.last = { bar: frame.bar, answers };
@@ -772,10 +784,7 @@ export class FrameFeeds<Req> {
     // same bytes, which are not pushed again, and the summary counts it.
     if (frame.failure !== null)
       this.deps.log(frame.failure.level, frame.failure.line);
-    // [LAW:single-enforcer] Each lane is encoded once a frame, whoever follows
-    // it: what its encoder mints for the frame is minted once.
-    for (const [lane, held] of feed.lanes) {
-      const out = held.encode(frame.bar, answerOf(answers, lane));
+    for (const { held, out } of outs) {
       if (held.out?.json !== out.json) noteSent(held.rate, at);
       held.out = out;
     }
