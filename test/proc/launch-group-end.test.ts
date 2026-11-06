@@ -11,8 +11,10 @@ import {
   type WarningChange,
 } from "../../src/proc/launch";
 import type { DrainEnd, LaunchStatsHandle } from "../../src/proc/stats-handle";
+import { systemSpawner } from "../../src/proc/spawner";
+import { heldClock } from "../../src/held-clock";
 import { until } from "../helpers/until";
-import { systemTimekeeper } from "../../src/time";
+import { systemTimekeeper, type Timekeeper } from "../../src/time";
 import { instantOf, type Instant } from "../../src/utils/instant";
 
 // What these cases launch leaves its process group with setsid, which only
@@ -37,33 +39,36 @@ let launcher: TestableLauncher;
 let heard: WarningChange[];
 let drainsOpened: LaunchCategory[];
 let drainsClosed: DrainClose[];
-beforeEach(() => {
-  ending = new AbortController();
-  drainsOpened = [];
-  drainsClosed = [];
-  drainRead = 0;
-  heard = [];
-  const stats: LaunchStatsHandle = {
-    onStart: () => {},
-    onEnd: () => {},
-    onRefused: () => {},
-    onDrainOpen: (category) => drainsOpened.push(category),
-    onDrainRead: (_category, bytes) => {
-      drainRead += bytes;
-    },
-    onDrainClose: (category, end) =>
-      drainsClosed.push({ category, bytes: drainRead, end }),
-    onPipeError: () => {},
-  };
-  launcher = systemLauncher(
+const stats: LaunchStatsHandle = {
+  onStart: () => {},
+  onEnd: () => {},
+  onRefused: () => {},
+  onDrainOpen: (category) => drainsOpened.push(category),
+  onDrainRead: (_category, bytes) => {
+    drainRead += bytes;
+  },
+  onDrainClose: (category, end) =>
+    drainsClosed.push({ category, bytes: drainRead, end }),
+  onPipeError: () => {},
+};
+// The case's owner, on whichever clock the case drives.
+const launcherOn = (clock: Timekeeper): TestableLauncher =>
+  systemLauncher(
     {
       inherited: process.env,
       signal: ending.signal,
       stats,
       observeWarnings: (change) => heard.push(change),
     },
-    systemTimekeeper,
+    clock,
   );
+beforeEach(() => {
+  ending = new AbortController();
+  drainsOpened = [];
+  drainsClosed = [];
+  drainRead = 0;
+  heard = [];
+  launcher = launcherOn(systemTimekeeper);
 });
 afterEach(() => ending.abort());
 
@@ -134,23 +139,47 @@ describe("a launch whose child ends with a descendant outside its group", () => 
     expect(r).toMatchObject({ ok: true, exitCode: 0 });
   });
 
+  // [LAW:no-ambient-temporal-coupling] The abort lands after the group's end and
+  // before the launch samples it: the launch's clock is held, so it samples only
+  // when the case advances it, and the case waits for each end it observes. The
+  // holder outside the group keeps the child's close from concluding first, so
+  // it lives until the case removes its directory, not for a span of real time;
+  // its minute's bound outlasts the case's own timeout, so a killed run leaves
+  // nothing polling.
   it("reports an abort once the child has ended, whatever the group did", async () => {
+    const clock = heldClock(new Date());
+    const held = launcherOn(clock);
+    const dir = mkdtempSync(join(tmpdir(), "launch-group-end-"));
+    const pidFile = join(dir, "group");
     const abort = new AbortController();
-    const running = launcher.launch({
-      category: "user-shell",
-      bin: "sh",
-      args: [
-        "-c",
-        'sleep 0.9 & python3 -c "$1"; exit 0',
-        "sh",
-        `${SET}${FORK_HOLDER}`,
-      ],
-      signal: abort.signal,
-    });
-    // After the member ends, before the next sample of the group.
-    await new Promise((end) => setTimeout(end, 1300));
-    abort.abort();
-    expect(await running).toMatchObject({ ok: false, reason: "aborted" });
+    try {
+      const running = held.launch({
+        category: "user-shell",
+        bin: "sh",
+        args: [
+          "-c",
+          'echo $$ > "$2"; sleep 0.1 & python3 -c "$1"; exit 0',
+          "sh",
+          `${SET}if os.fork()==0:\n  os.setsid()\n  bound=time.time()+60\n  while os.path.isdir(${JSON.stringify(dir)}) and time.time()<bound: time.sleep(0.05)\n  os._exit(0)\n`,
+          pidFile,
+        ],
+        signal: abort.signal,
+      });
+      const armed = clock.pending();
+      await until(
+        () => existsSync(pidFile) && readFileSync(pidFile, "utf8").endsWith("\n"),
+        "the child to name its group",
+      );
+      const group = Number(readFileSync(pidFile, "utf8"));
+      await until(() => systemSpawner.groupGone(group), "the child's group to end");
+      // The launch has seen the child exit: its sample of the group waits on the clock.
+      await until(() => clock.pending() > armed, "the launch to see its child exit");
+      abort.abort();
+      clock.advance(0);
+      expect(await running).toMatchObject({ ok: false, reason: "aborted" });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("reports a non-zero exit as one", async () => {
