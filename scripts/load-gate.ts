@@ -192,15 +192,15 @@ const INSPECTOR_CALL_MS = 30_000;
 const CLIMB_LIMIT_BYTES = 32 * 1024 * 1024;
 // What these sessions may be charged once V8 has collected: a fifth over the
 // daemon's base and each session's part, as measured at their peaks on CI
-// (~174 MB at 20 sessions, ~420 MB at 100) — ~506 MB at 100. Under load the
-// charge adds the garbage V8 lets the old generation hold before collecting,
-// which it sizes from measured GC and mutator speed: one build's peak lands in
-// either of two modes ~15 MB apart by the runner's timing, so a budget on it
-// judges the runner. The shipped limit is sized for the backstop, and judging
-// by it would pass a daemon nearly twice as heavy.
+// with every built-in placed (~186 MB at 20 sessions, ~514 MB at 100) — ~617
+// MB at 100. Under load the charge adds the garbage V8 lets the old generation
+// hold before collecting, which it sizes from measured GC and mutator speed:
+// one build's peak lands in either of two modes ~15 MB apart by the runner's
+// timing, so a budget on it judges the runner. The shipped limit is sized for
+// the backstop, and judging by it would pass a daemon nearly twice as heavy.
 // [LAW:one-source-of-truth] Derived from the sessions run, so the budget is
 // always these sessions'.
-const BUDGET_BYTES = 1.2 * (112 + 3.1 * SESSIONS) * 1024 * 1024;
+const BUDGET_BYTES = 1.2 * (104 + 4.1 * SESSIONS) * 1024 * 1024;
 const OID = "4f1c2a9e8b7d6c5a4f3e2d1c0b9a8f7e6d5c4b3a";
 
 // ─── The world ──────────────────────────────────────────────────────────────
