@@ -16,7 +16,12 @@ import type { RuntimeStats } from "./stats";
 import type { DaemonLogger } from "../utils/logger";
 import { validateHookData } from "../utils/schema-validator.js";
 import { rateLimitsSeen, type RateLimitsSeen } from "./render-sightings";
-import { homeSpelling, type StoredRoot } from "./foundations/stored-path";
+import {
+  homeSpelling,
+  oneReading,
+  type StoredRoot,
+} from "./foundations/stored-path";
+import { encodeRenderOrigin } from "./foundations/render-origin";
 import {
   parseClientDeadline,
   type ClientDeadline,
@@ -121,6 +126,8 @@ export type CheckedRenderRequest = Omit<
   readonly hints: ClientHints;
   readonly rateLimits: RateLimitsSeen;
   readonly requested: RequestedOrigin;
+  // `requested` as the session's state records it (render-origin.ts).
+  readonly originRecord: string;
   readonly refusedArgs: readonly RefusedArg[];
   readonly [CHECKED]: true;
 };
@@ -213,8 +220,19 @@ export function checkRenderRequest(
   // (stored-path.ts): the client's cwd is a realpath, so a `--config` it
   // resolves names the home's file through a spelling the home's root doesn't
   // have, and the recorded origin, the cache key and every write must share
-  // one for the stored path to read back as itself.
-  const requested = requestedConfigTarget(configFile, hints.configEnv);
+  // one for the stored path to read back as itself. [LAW:one-source-of-truth]
+  // One reading of the disk decides whose the file is for both the spelling
+  // and the record, so the two cannot disagree.
+  const asked = oneReading(storedRoot);
+  const target = requestedConfigTarget(configFile, hints.configEnv);
+  const requested: RequestedOrigin = {
+    projectDir: req.hookData.workspace.project_dir,
+    cwd: req.cwd,
+    target:
+      target.source === "search"
+        ? target
+        : { ...target, path: homeSpelling(asked, target.path) },
+  };
   return {
     ok: true,
     req: {
@@ -224,17 +242,8 @@ export function checkRenderRequest(
       sessionId: sessionId.id,
       hints,
       rateLimits: rateLimitsSeen(req.hookData),
-      requested: {
-        projectDir: req.hookData.workspace.project_dir,
-        cwd: req.cwd,
-        target:
-          requested.source === "search"
-            ? requested
-            : {
-                ...requested,
-                path: homeSpelling(storedRoot, requested.path),
-              },
-      },
+      requested,
+      originRecord: encodeRenderOrigin(requested, asked),
       refusedArgs,
     } as CheckedRenderRequest,
   };

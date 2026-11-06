@@ -35,6 +35,7 @@ import { BadVerbArgs } from "./verb-error";
 import { writeAtomic } from "../utils/atomic-write.js";
 import {
   StoredPathRefused,
+  oneReading,
   resolveStoredPath,
   storedPathOf,
   type StoredPath,
@@ -705,20 +706,6 @@ function withoutRetiredKeys(
   };
 }
 
-// `f` asked once per distinct argument, keyed by its JSON (a stored path is
-// an object, so identity would ask again for every copy of one).
-function once<A, B>(f: (a: A) => B): (a: A) => B {
-  const seen = new Map<string, B>();
-  return (a) => {
-    const key = JSON.stringify(a);
-    const hit = seen.get(key);
-    if (hit !== undefined) return hit;
-    const b = f(a);
-    seen.set(key, b);
-    return b;
-  };
-}
-
 // Every file change of a history with its file respelled, each told where in
 // the history it stands, so a refusal can name the step.
 function mapFiles<A, B>(
@@ -791,11 +778,7 @@ export function fileHistoryStorage(
         );
         return {};
       }
-      // A history names a few files many times, and reading one back can ask
-      // the disk (stored-path.ts), so each is read back once per load.
-      const resolve = once((stored: unknown) =>
-        resolveStoredPath(root, stored),
-      );
+      const asked = oneReading(root);
       let resolved: Array<[string, SessionHistory]>;
       try {
         resolved = Object.entries(parsed as HistoryState<unknown>).map(
@@ -803,7 +786,7 @@ export function fileHistoryStorage(
             sid,
             mapFiles(history, (stored, where) => {
               try {
-                return resolve(stored);
+                return resolveStoredPath(asked, stored);
               } catch (e) {
                 if (!(e instanceof StoredPathRefused)) throw e;
                 throw new StoredPathRefused(
@@ -834,12 +817,11 @@ export function fileHistoryStorage(
       return state;
     },
     save: (state) => {
-      // Each file stored once per save, as each is read back once per load.
-      const store = once((f: string) => storedPathOf(root, f));
+      const asked = oneReading(root);
       const stored: HistoryState<StoredPath> = Object.fromEntries(
         Object.entries(state).map(([sid, history]) => [
           sid,
-          mapFiles(history, store),
+          mapFiles(history, (f) => storedPathOf(asked, f)),
         ]),
       );
       try {

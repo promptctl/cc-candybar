@@ -1,12 +1,13 @@
 // A stored path says whose it is: a file under the home's root is stored
 // relative to it, anything else absolute, and reading one back refuses every
-// spelling that would not move with the home's tree. An older build's bare
-// absolute path is read as this build spells it. Whose a file is follows the
-// directories on its path, not its spelling: a root named through a link is
-// still the root. The disk's spelling is a map of links here.
+// spelling that would not move with the home's tree. A world path, or an
+// older build's bare absolute path, is read as this build spells it. Whose a
+// file is follows the directories on its path, not its spelling: a root named
+// through a link is still the root. The disk's spelling is a map of links here.
 
 import {
   homeSpelling,
+  oneReading,
   resolveStoredPath,
   storedPathOf,
   type StoredRoot,
@@ -114,11 +115,28 @@ describe("a stored path under a root named through a link", () => {
     expect(homeSpelling(root, "/real/other.json5")).toBe("/real/other.json5");
   });
 
-  test("a world path naming the home's file through the link's target is refused", () => {
-    expect(() => resolveStoredPath(root, { kind: "world", path: onDisk })).toThrow(/lies under the home's root/);
+  test("a world path naming the home's file through the link's target reads back as the home's", () => {
+    expect(resolveStoredPath(root, { kind: "world", path: onDisk })).toBe(asHome);
   });
 
   test("an older build's bare path through the link's target reads back as the home's", () => {
     expect(resolveStoredPath(root, onDisk)).toBe(asHome);
+  });
+});
+
+describe("one reading of the disk", () => {
+  test("asks each directory once however many decisions stand on it", () => {
+    const asked: string[] = [];
+    const root = oneReading({
+      dir: "/l/home",
+      onDisk: (d) => {
+        asked.push(d);
+        return d.replace(/^\/l(?=\/|$)/, "/real");
+      },
+    });
+    for (const file of ["/real/other.json5", "/real/other.json5", "/real/home/config.json5"]) {
+      storedPathOf(root, file);
+    }
+    expect(asked).toEqual(["/l/home", "/real", "/", "/real/home"]);
   });
 });

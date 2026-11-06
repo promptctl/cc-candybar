@@ -40,7 +40,6 @@ import {
   type EffectOutcome,
   type LaunchSpec,
 } from "./effect.js";
-import { encodeRenderOrigin } from "./foundations/render-origin.js";
 import {
   SESSION_CLIENT_HINTS_KEY,
   SESSION_RENDER_ORIGIN_KEY,
@@ -57,7 +56,6 @@ import {
   type ClickVerb,
   type IdleClose,
 } from "./verbs/index.js";
-import type { StoredRoot } from "./foundations/stored-path.js";
 
 // Whose effects these are: the verb that described them, and the session
 // whose bar a failure reaches (none for a click that names no session).
@@ -194,7 +192,7 @@ export const ARMS: ApplyArms<Event> = {
       "request",
       turnWaits(facts),
       async () => {
-        recordRequest(verbCtx.sessionState, req, verbCtx.storedRoot);
+        recordRequest(verbCtx.sessionState, req);
         return verbCtx.sessionState.revision(req.sessionId);
       },
     );
@@ -289,17 +287,13 @@ export const ARMS: ApplyArms<Event> = {
 // never a path re-derived from the daemon's own cwd. Compared before writing:
 // every write persists and fires the session's MobX atom, so an unchanged
 // request writes nothing and invalidates no state-driven computed.
-function recordRequest(
-  state: SessionStateRW,
-  req: CheckedRenderRequest,
-  storedRoot: StoredRoot,
-): void {
+function recordRequest(state: SessionStateRW, req: CheckedRenderRequest): void {
   const { client: _client, configEnv: _configEnv, ...recorded } = req.hints;
   const said = [
     { key: SESSION_CLIENT_HINTS_KEY, value: JSON.stringify(recorded) },
     {
       key: SESSION_RENDER_ORIGIN_KEY,
-      value: encodeRenderOrigin(req.requested, storedRoot),
+      value: req.originRecord,
     },
   ];
   state.setBatch(

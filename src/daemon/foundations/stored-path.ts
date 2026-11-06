@@ -20,6 +20,26 @@ export interface StoredRoot {
   readonly onDisk: (dir: string) => string;
 }
 
+// [LAW:one-source-of-truth] One operation's reading of the disk: each
+// directory is asked once, so every decision the operation makes (a request's
+// spelling and the origin it records, a history's many steps) stands on one
+// answer, and walks over shared ancestors read each once. It is made per
+// operation and dropped with it, because a link re-pointed after is the next
+// operation's to read.
+export function oneReading(root: StoredRoot): StoredRoot {
+  const read = new Map<string, string>();
+  return {
+    dir: root.dir,
+    onDisk: (dir) => {
+      const known = read.get(dir);
+      if (known !== undefined) return known;
+      const spelled = root.onDisk(dir);
+      read.set(dir, spelled);
+      return spelled;
+    },
+  };
+}
+
 // [LAW:one-source-of-truth] Whose a file is: the home's when a directory on
 // its path, as named, is the root directory, and then its path from there.
 // Directories are compared in their on-disk spelling, read now, so a file
@@ -73,15 +93,18 @@ export class StoredPathRefused extends Error {}
 
 // [LAW:parse-dont-validate] The one way a stored path is read back: the
 // absolute path it names under this root, or a StoredPathRefused naming what
-// is wrong. An absolute path under the root is refused rather than taken,
-// because a home's file has one spelling, and the absolute one names a root
-// the tree may no longer live at.
+// is wrong. A world path spelled under the root is refused rather than taken,
+// because no build writes one: a home's file has one spelling, and the
+// absolute one names a root the tree may no longer live at.
 //
-// A bare string is an older build's spelling, which had only the absolute one,
-// and is read as this build spells that path. Refusing it would cost every
-// upgrade its undo history and refuse the tree's own files while guarding
-// nothing: an older tree copied under another root names the original's root,
-// which no spelling rule can tell from a file of the world's.
+// Every other absolute path, a world path or an older build's bare string
+// (which had only the absolute spelling), is read as this build spells it.
+// Whose a file is is the disk's to say at the read: a world path that reaches
+// the home through a link (macOS's /tmp, or a link made since it was stored)
+// names the home's file, so it reads back as the home's. Refusing it would
+// drop a whole history over a link while guarding nothing: a tree copied under
+// another root names the original's root, which no spelling rule can tell
+// from a file of the world's.
 export function resolveStoredPath(root: StoredRoot, raw: unknown): string {
   if (typeof raw === "string") {
     if (!path.isAbsolute(raw)) {
@@ -89,7 +112,7 @@ export function resolveStoredPath(root: StoredRoot, raw: unknown): string {
         `an older build's stored path ${JSON.stringify(raw)} is not absolute`,
       );
     }
-    return resolveStoredPath(root, storedPathOf(root, raw));
+    return homeSpelling(root, raw);
   }
   if (raw === null || typeof raw !== "object") {
     throw new StoredPathRefused(
@@ -117,12 +140,12 @@ export function resolveStoredPath(root: StoredRoot, raw: unknown): string {
         `stored world path ${JSON.stringify(p)} is not absolute`,
       );
     }
-    if (homeRelative(root, p) !== null) {
+    if (underRoot(root.dir, p) !== null) {
       throw new StoredPathRefused(
         `stored world path ${p} lies under the home's root ${root.dir}; a home's file is stored relative to it`,
       );
     }
-    return p;
+    return homeSpelling(root, p);
   }
   throw new StoredPathRefused(
     `stored path has no kind of home or world: ${JSON.stringify(raw)}`,
