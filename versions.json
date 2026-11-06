@@ -2,32 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "308429c8f33e9cfe4e0983ab8f29bb1d25c3fe55",
-      "timestamp": "2026-11-06T19:25:39.792Z",
-      "commits": [
-        {
-          "sha": "308429c8f33e9cfe4e0983ab8f29bb1d25c3fe55",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:24:47-07:00",
-          "message": "fix(facts): a recording of a session whose turn failed replays the failed turn's frame (candybar-gather-renderer-76bb.6pj.i7w) (#643)\n\n* fix(facts): a recording of a session whose turn failed replays the failed turn's frame (candybar-gather-renderer-76bb.6pj.i7w)\n\nA turn whose inputs cannot be read holds the bar on the last turn taken, with the\nfailure as the ⚠ beside the settings door. A replay took every turn the live one\ncould not and drew the newer request and picks with no ⚠.\n\n- The turn holds the request and the store's state it was taken over, and its\n  failure is typed by cause; `held()` says when the bar is held.\n- A recording opens on the turn the bar is drawn from and writes it again\n  wherever the hold moves; the replay takes each turn line's turn and holds its\n  own over the same lines, by making its turn inputs fail.\n- A draw notes its follow's document and carries the diagnostics list the\n  daemon's draw built; the demo derives the indicator from it.\n- drawDsl's projections are typed: a view's draw hands all four, a fixed\n  payload hands its bound self.\n- RECORDING_VERSION 5.\n\n* fix(facts): a draw of a held view the session moved away from replays that view's held turn (candybar-gather-renderer-76bb.6pj.i7w)\n\nA hold is a view's and the replay holds one view, so a draw of a view the\nrecording is not on is written between that view's turn and the current\nview's. Without it, the replay reopened that view under the current view's\nhold: a fresh turn where the live bar was held, or a throw in the open.\n\nThe recorder keeps each reaction's disposer as `reaction` returns it, so a\nview entered and left in one batch is disposed before its first run and\nwrites nothing after the recording leaves it or ends.\n\nThe turn's failure reaches the draw typed, so the ⚠ names a held turn for\nwhat it is rather than as a document that could not be stamped.\n\n* refactor(facts): a recorded severity is read back as data, and a state-keyed source clicked before a recording replays (candybar-gather-renderer-76bb.6pj.i7w)\n\nA recording's severity is its level, glyph and colours as the draw wrote\nthem, so the hand-kept list of severities a recording could carry goes; the\nlevels are keyed by DiagnosticLevel, so a new level fails to compile until\nthe parser reads it. The turn and draw parsers spread the click state they\nparsed rather than copying its fields by name.\n\nA seam case pins a click on a state variable a source is keyed on, before\nthe recording starts: the turn is taken again when the new key's run lands,\nso the opening carries the click and the replay draws from that run."
-        }
-      ]
-    },
-    {
       "version": "pr-644",
       "ref": "refs/pull/644/merge",
-      "sha": "ee3cd166b7a9dd3f7eeee985cbb414bc6683132b",
-      "timestamp": "2026-11-06T19:25:30.772Z",
+      "sha": "64a810b61130baba2116987347e6e682b12e3dcb",
+      "timestamp": "2026-11-06T19:27:12.545Z",
       "commits": [
         {
-          "sha": "ee3cd166b7a9dd3f7eeee985cbb414bc6683132b",
+          "sha": "64a810b61130baba2116987347e6e682b12e3dcb",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T19:24:35Z",
-          "message": "Merge 75e039c8df19fba0cf2eb1c0a07612f97e100fbb into b3a94823776445b5ab510fe52ab4c622b2f80cff\n"
+          "timestamp": "2026-11-06T19:26:07Z",
+          "message": "Merge 61e69d61150d82d7eea72b55e0e0be7e2a8786c8 into 308429c8f33e9cfe4e0983ab8f29bb1d25c3fe55\n"
+        },
+        {
+          "sha": "61e69d61150d82d7eea72b55e0e0be7e2a8786c8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T12:25:55-07:00",
+          "message": "test(links): the tmux row case aims its window-list press after a's rows stand again (candybar-gather-renderer-76bb.b2l.mxk)\n\nBack on session a, its status is one line until its rows are drawn again,\nand the window list moves up when they land. The case aimed its press as soon\nas the window list showed, so on CI's runner the rows usually landed between\nthe aim and the press and the press hit a row instead: the case failed on\nnearly every CI run, main included. It now waits for a's rows as it already\ndid for b's.\n"
         },
         {
           "sha": "75e039c8df19fba0cf2eb1c0a07612f97e100fbb",
@@ -49,6 +41,21 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T11:48:22-07:00",
           "message": "feat(links): the doctor probe is minted by the minter as the probe link kind, and Launch Services is asked about the link it opened (candybar-gather-renderer-76bb.b2l.mxk)\n\nThe probe link is cc-candybar://to/<name>/probe/<nonce>, built by probeLink\nbeside effectsUrl, so the doctor no longer assembles a verb and a tail itself.\nThe verb is `probe`, as spec section 18 names it. The doctor's lost-link\ndiagnosis asks NSWorkspace which app opens that same link rather than a\nhand-spelled cc-candybar://probe.\n"
+        }
+      ]
+    },
+    {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "308429c8f33e9cfe4e0983ab8f29bb1d25c3fe55",
+      "timestamp": "2026-11-06T19:25:39.792Z",
+      "commits": [
+        {
+          "sha": "308429c8f33e9cfe4e0983ab8f29bb1d25c3fe55",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T12:24:47-07:00",
+          "message": "fix(facts): a recording of a session whose turn failed replays the failed turn's frame (candybar-gather-renderer-76bb.6pj.i7w) (#643)\n\n* fix(facts): a recording of a session whose turn failed replays the failed turn's frame (candybar-gather-renderer-76bb.6pj.i7w)\n\nA turn whose inputs cannot be read holds the bar on the last turn taken, with the\nfailure as the ⚠ beside the settings door. A replay took every turn the live one\ncould not and drew the newer request and picks with no ⚠.\n\n- The turn holds the request and the store's state it was taken over, and its\n  failure is typed by cause; `held()` says when the bar is held.\n- A recording opens on the turn the bar is drawn from and writes it again\n  wherever the hold moves; the replay takes each turn line's turn and holds its\n  own over the same lines, by making its turn inputs fail.\n- A draw notes its follow's document and carries the diagnostics list the\n  daemon's draw built; the demo derives the indicator from it.\n- drawDsl's projections are typed: a view's draw hands all four, a fixed\n  payload hands its bound self.\n- RECORDING_VERSION 5.\n\n* fix(facts): a draw of a held view the session moved away from replays that view's held turn (candybar-gather-renderer-76bb.6pj.i7w)\n\nA hold is a view's and the replay holds one view, so a draw of a view the\nrecording is not on is written between that view's turn and the current\nview's. Without it, the replay reopened that view under the current view's\nhold: a fresh turn where the live bar was held, or a throw in the open.\n\nThe recorder keeps each reaction's disposer as `reaction` returns it, so a\nview entered and left in one batch is disposed before its first run and\nwrites nothing after the recording leaves it or ends.\n\nThe turn's failure reaches the draw typed, so the ⚠ names a held turn for\nwhat it is rather than as a document that could not be stamped.\n\n* refactor(facts): a recorded severity is read back as data, and a state-keyed source clicked before a recording replays (candybar-gather-renderer-76bb.6pj.i7w)\n\nA recording's severity is its level, glyph and colours as the draw wrote\nthem, so the hand-kept list of severities a recording could carry goes; the\nlevels are keyed by DiagnosticLevel, so a new level fails to compile until\nthe parser reads it. The turn and draw parsers spread the click state they\nparsed rather than copying its fields by name.\n\nA seam case pins a click on a state variable a source is keyed on, before\nthe recording starts: the turn is taken again when the new key's run lands,\nso the opening carries the click and the replay draws from that run."
         }
       ]
     },
