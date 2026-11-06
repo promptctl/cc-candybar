@@ -4,39 +4,39 @@
     {
       "version": "pr-661",
       "ref": "refs/pull/661/merge",
-      "sha": "23e8cd32e02f33ceb3ee5a2ba36390bfaf2bf13f",
-      "timestamp": "2026-11-06T23:50:14.923Z",
+      "sha": "80be5b22e13a165cdd19ba8fba73bb369710eb12",
+      "timestamp": "2026-11-06T23:51:05.568Z",
       "commits": [
         {
-          "sha": "23e8cd32e02f33ceb3ee5a2ba36390bfaf2bf13f",
+          "sha": "80be5b22e13a165cdd19ba8fba73bb369710eb12",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T23:49:15Z",
-          "message": "Merge f2d16fc6255f3df5cf5b6084a03a3291f06801dc into 873a8e0e0be2d843b7d0b4c308831e2d20b5bde1\n"
+          "timestamp": "2026-11-06T23:50:13Z",
+          "message": "Merge 04937b963be31ac1f077a4395c13938d8c2fe5c5 into 873a8e0e0be2d843b7d0b4c308831e2d20b5bde1\n"
         },
         {
-          "sha": "f2d16fc6255f3df5cf5b6084a03a3291f06801dc",
+          "sha": "04937b963be31ac1f077a4395c13938d8c2fe5c5",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T16:49:05-07:00",
           "message": "fix(testing): a wait keeps its deadline on the case's clock, so faking the sandbox's clock freezes none (brandon-menus-sjhy.r62)\n\nFrom the second high review pass. untilHeard keeps its 48 rounds, ended\nearly only by the case; a bound says what set it, so a pool wait the case\ncut no longer blames the machine; render failures name their last bound.\n"
         },
         {
-          "sha": "e6f3ad12fb264b931ec6eda5ff6684b906fd8d9b",
+          "sha": "10a2d74c5fd2c5a85e150510f01d8e4a0990ddad",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T16:39:52-07:00",
           "message": "fix(testing): untilHeard ends at a deadline, the pool reads its case after its own start time, and the rest of a case is a bound (brandon-menus-sjhy.r62)\n\nFrom the medium review pass. A cut wait names the margin it keeps, and a\nrequest whose deadline the daemon is told is sent under that same bound.\n"
         },
         {
-          "sha": "f452031b1de9f0160e4bcfde4945003ba29c0718",
+          "sha": "6283fab84aa60419ad6037063896d06a3a0e82c5",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T16:32:15-07:00",
           "message": "fix(testing): a wait's sub-steps share its one deadline, and every request failure names its bound (brandon-menus-sjhy.r62)\n\nFrom the high review pass: the pool's start-time read and a request's\nconnect each spent time the wait had not charged; a cut render stated an\nuncut deadline to the daemon; untilHeard ran past its case; a test whose\nbefore-hook failed left its case's deadline set.\n"
         },
         {
-          "sha": "e9b9e31f221542d49b62134f4bb9f1af0335f81d",
+          "sha": "a99efd03029e616100c7bb4dcb8378a72a7d08e2",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T16:23:05-07:00",
