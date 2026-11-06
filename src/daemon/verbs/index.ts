@@ -1494,16 +1494,10 @@ function recordingReads(
       });
       return value;
     },
-    // The whole record read is one read, stamped as it was read.
-    values: (sid) => {
-      const values = store.values(sid);
-      reads.set(JSON.stringify([sid]), {
-        what: "every key",
-        value: JSON.stringify(values),
-        again: (state) => JSON.stringify(state.values(sid)),
-      });
-      return values;
-    },
+    // [LAW:no-silent-failure] A gather reads keys by name, so each is stamped
+    // as it is read: the whole record read as one would stamp every write the
+    // session takes during the probes, a resize's hints among them.
+    values: () => refused("read every key; a gather reads keys by name"),
     revision: (sid) => store.revision(sid),
     set: (_sid, key) => refused(`set ${key}`),
     setBatch: () => refused("wrote a batch"),
