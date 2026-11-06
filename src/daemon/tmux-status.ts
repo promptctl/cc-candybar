@@ -34,7 +34,7 @@
 import type { RendererAddress } from "./home.js";
 import { LANES } from "../config/lanes.js";
 import type { TmuxRun } from "../proc/tmux.js";
-import type { TmuxHint } from "../tmux-hint.js";
+import { samePane, type TmuxHint } from "../tmux-hint.js";
 import type { StatusLines } from "./pane-visibility.js";
 import type { Subscriber } from "./frame-feed.js";
 import { decodeSegments, VERB_RANGE } from "../click/wire.js";
@@ -501,12 +501,7 @@ export class TmuxStatusLines {
     if (this.closed) return;
     const held = this.held.get(sessionId);
     const where = on && tmux !== null && tmux !== undefined ? tmux : null;
-    if (
-      held !== undefined &&
-      (where === null ||
-        held.socket !== where.socket ||
-        held.pane !== where.pane)
-    )
+    if (held !== undefined && (where === null || !samePane(held, where)))
       this.release(held, "switched off or moved");
     if (where === null || this.held.has(sessionId)) return;
     const entry: Held = {

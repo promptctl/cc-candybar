@@ -28,7 +28,8 @@ import { sessionIdOf } from "../src/daemon/session-id";
 import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { DaemonClosing } from "../src/daemon/verb-error";
 import { PERFORMED } from "../src/daemon/effect-outcome";
-import type { LaneSession, LaneSetupEffect } from "../src/daemon/lane-setup";
+import type { LaneSetupEffect } from "../src/daemon/lane-setup";
+import type { Effect } from "../src/daemon/effect";
 import { doctorReportKeys } from "../src/doctor/report";
 import type { VerbContext } from "../src/daemon/verbs";
 import type { DoctorEdge } from "../src/doctor/edge";
@@ -265,19 +266,24 @@ describe("a request takes its turn", () => {
 });
 
 // [LAW:no-ambient-temporal-coupling] What a request's arrival settles is its
-// turn's: the lane setups its session's clicks owed join the session's order
-// as the turn ends, so a click made while the draw waits is performed after
-// them, and a draw that fails loses none.
+// turn's: the lane setups its session's clicks owed take their place in their
+// lane's order as the turn ends, so a click on that lane made while the draw
+// waits is performed after them, and a draw that fails loses none.
 describe("a request's arrival settles in its turn", () => {
   const setup = (on: boolean, by: LaneSetupEffect["by"]): LaneSetupEffect => ({
     kind: "lane-setup",
-    session: { sessionId: SID } as unknown as LaneSession,
+    sessionId: SID,
     lane: "statusline",
     on,
     by,
   });
 
-  function arrivalRig(draw: () => Promise<RequestAnswer>) {
+  function arrivalRig(
+    draw: () => Promise<RequestAnswer>,
+    arrives: readonly Effect[] = [setup(true, "owed")],
+    // What a setup waits on before it ends.
+    setupEnds: Promise<void> = Promise.resolve(),
+  ) {
     const clock = heldClock(START);
     const sessionState = new SessionState(SINGLE_RUN);
     recordRender(sessionState, SID, DIR);
@@ -285,7 +291,7 @@ describe("a request's arrival settles in its turn", () => {
     const performed: string[] = [];
     // The request settles the setup its session's earlier click owed; the
     // click after it moves the lane back.
-    let owed: readonly LaneSetupEffect[] = [setup(true, "owed")];
+    let owed: readonly Effect[] = arrives;
     const base = testVerbContext(sessionState, undefined, EMPTY_DEFAULT, undefined, turns);
     const ctx: VerbContext = {
       ...base,
@@ -298,10 +304,12 @@ describe("a request's arrival settles in its turn", () => {
         },
         clicked: () => [setup(false, "click")],
         setup: async ({ on, by }) => {
+          await setupEnds;
           performed.push(`${on ? "on" : "off"} by=${by}`);
           return PERFORMED;
         },
       },
+      applyUpdate: async () => void performed.push("update"),
     };
     const { arrival: _arrival, described: _described, ...verbCtx } = ctx;
     const facts: RequestFacts = [];
@@ -330,6 +338,25 @@ describe("a request's arrival settles in its turn", () => {
     sources.open();
     await answered;
     expect(r.performed).toEqual(["on by=owed", "off by=click"]);
+  });
+
+  // [LAW:no-ambient-temporal-coupling] A setup's step in a pane takes the
+  // pane's place only once it is reached, so whatever its event described
+  // after it would wait on it: an event's setups run after its other
+  // effects, in whatever order they were described.
+  test("an event's setups run after its other effects, though described first", async () => {
+    let release!: () => void;
+    const r = arrivalRig(
+      async () => ANSWER,
+      [setup(true, "owed"), { kind: "apply-update" }],
+      new Promise<void>((resolve) => (release = resolve)),
+    );
+    await r.render();
+    await drain();
+    expect(r.performed).toEqual(["update"]);
+    release();
+    await drain();
+    expect(r.performed).toEqual(["update", "on by=owed"]);
   });
 
   test("a draw that fails loses none of the setups its request settled", async () => {

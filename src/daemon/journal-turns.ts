@@ -19,6 +19,8 @@
 // gather whose place comes after it is refused too, since no turn would land
 // what its probes found.
 
+import type { Lane } from "../config/lanes.js";
+import { paneName, type TmuxHint } from "../tmux-hint.js";
 import { KeyedSerialQueue } from "../utils/keyed-serial-queue.js";
 import { DaemonClosing } from "./verb-error.js";
 
@@ -34,8 +36,33 @@ export interface JournalTurnStats {
 }
 
 const GATHERS = "gathers";
-// The order effects of clicks naming no session keep among themselves.
-const CLICKLESS = "clickless";
+
+// [LAW:no-ambient-temporal-coupling][LAW:types-are-the-program] The order an
+// effect takes its place in: one session's clicks as they committed (and
+// those of clicks naming none, among themselves), what is typed into one tmux
+// pane, or one lane of a session's setups.
+export type OrderingKey =
+  | { readonly kind: "session"; readonly session: string | null }
+  | { readonly kind: "pane"; readonly tmux: TmuxHint }
+  | { readonly kind: "lane"; readonly session: string; readonly lane: Lane };
+
+// A key as the queue holds it.
+const QUEUED: {
+  readonly [K in OrderingKey["kind"]]: (
+    key: Extract<OrderingKey, { readonly kind: K }>,
+  ) => readonly unknown[];
+} = {
+  session: ({ session }) => ["session", session],
+  pane: ({ tmux }) => ["pane", paneName(tmux)],
+  lane: ({ session, lane }) => ["lane", session, lane],
+};
+
+function queuedAs<K extends OrderingKey["kind"]>(
+  key: Extract<OrderingKey, { readonly kind: K }>,
+): string {
+  const queued: (typeof QUEUED)[K] = QUEUED[key.kind];
+  return JSON.stringify(queued(key));
+}
 
 export class JournalTurns {
   private readonly gathers = new KeyedSerialQueue<typeof GATHERS>();
@@ -82,16 +109,20 @@ export class JournalTurns {
     }
   }
 
-  // [LAW:no-ambient-temporal-coupling] A session's effects run one at a time,
-  // in the order their turns committed, after them: a performer that reads
-  // before it acts (the pane read before a slash is typed) sees what the
-  // session's earlier effects left, and two doctor clicks of one session reach
-  // their verdicts in the order they were clicked. The order is the
-  // performer's, not the turn's: the session's next click takes its turn while
-  // the last click's effects still run, and no close refuses it, since an
-  // outcome after close is said in the log.
-  performing<T>(session: string | null, work: () => Promise<T>): Promise<T> {
-    return this.effects.run(session ?? CLICKLESS, work);
+  // [LAW:no-ambient-temporal-coupling] The effects on one key run one at a
+  // time, in the order their places were taken, each after the last: a
+  // performer that reads before it acts (the pane read before a slash is
+  // typed) sees what the earlier effects on that thing left, and two doctor
+  // clicks of one session reach their verdicts in the order they were
+  // clicked. Effects on different keys wait on each other only through their
+  // own event's order and through a setup's pane step, which waits in its
+  // pane's order; keeping those waits acyclic is the performer's
+  // (src/daemon/apply.ts `performInOrder`). The order is the performer's, not the
+  // turn's: the session's next click takes its turn while the last click's
+  // effects still run, and no close refuses it, since an outcome after close
+  // is said in the log.
+  performing<T>(key: OrderingKey, work: () => Promise<T>): Promise<T> {
+    return this.effects.run(queuedAs(key), work);
   }
 
   getStats(): JournalTurnStats {

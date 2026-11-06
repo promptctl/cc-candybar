@@ -11,6 +11,7 @@ import {
   drawAnswer,
   lanesAt,
   laneClicked,
+  laneSessionOf,
   requestArrived,
   renderFrame,
   viewLanes,
@@ -448,6 +449,16 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       preload: stableAttachPreload(bundle.path, host),
     },
     log,
+    // [LAW:one-source-of-truth] The session a setup acts on is its latest
+    // request, the one a click reads too, read as the setup runs.
+    latest: (sessionId) => {
+      const req = frameFeeds.latest(sessionId);
+      return req === null ? null : laneSessionOf(req);
+    },
+    // A setup's steps in a pane take the order of what is typed into it, as a
+    // slash click's typing does (src/daemon/apply.ts).
+    paneOrder: (tmux, work) =>
+      journalTurns.performing({ kind: "pane", tmux }, work),
   });
   // [LAW:single-enforcer] The one writer of the tmux status line lane's tmux
   // state (src/daemon/tmux-status.ts).
