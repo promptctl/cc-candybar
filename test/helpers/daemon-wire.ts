@@ -8,11 +8,12 @@
 // copies.
 
 import type { ChildProcess } from "node:child_process";
-import net from "node:net";
 
 import type { RendererAddress, RendererHome } from "../../src/daemon/home";
 import { logPath, socketPath } from "../../src/daemon/paths";
 import { sendOne } from "../../src/daemon/protocol";
+import { dialWithin, type Dialer } from "../../src/dial/dialer";
+import { systemDialer } from "../../src/dial/system-dialer";
 import type { Request, Response } from "../../src/daemon/protocol";
 import { systemTimekeeper } from "../../src/time";
 
@@ -41,12 +42,17 @@ export type DaemonTarget = RendererHome | DaemonEndpoint;
 // [LAW:single-enforcer] The one place a target is read, so nothing that retries
 // or reads events knows which kind it was given.
 export function endpointOf(target: DaemonTarget): DaemonEndpoint {
-  if (!("kind" in target)) return target;
-  const sockPath = socketPath(target);
+  return "kind" in target ? homeEndpoint(target, systemDialer) : target;
+}
+
+// The daemon a home names, reached through `dialer`: the machine's for a real
+// one, or the fake a case's daemons listen on.
+export function homeEndpoint(home: RendererHome, dialer: Dialer): DaemonEndpoint {
+  const sockPath = socketPath(home);
   return {
-    send: (req, budgetMs) => overSocket(sockPath, req, budgetMs),
-    log: logPath(target),
-    name: target.name,
+    send: (req, budgetMs) => overDialer(dialer, sockPath, req, budgetMs),
+    log: logPath(home),
+    name: home.name,
     now: Date.now,
   };
 }
@@ -68,42 +74,28 @@ export function sendDaemonRequest(
 // instead of re-deriving is the fix, not patching the duplicate to match. `req`
 // is narrowed at this one boundary, mirroring how the daemon's own request
 // handler treats incoming JSON.
-function overSocket(
+async function overDialer(
+  dialer: Dialer,
   sockPath: string,
   req: Record<string, unknown>,
   timeoutMs: number,
 ): Promise<Response> {
-  return new Promise((resolve, reject) => {
-    const sock = net.connect(sockPath);
-    // [LAW:no-ambient-temporal-coupling] Covers the connect phase, which
-    // sendOne (entered only after "connect") does not budget for — a hung
-    // connect() would otherwise wait forever with neither "error" nor
-    // "connect" firing.
-    const connectTimer = setTimeout(() => {
-      sock.destroy();
-      reject(new Error(`connect did not complete within ${timeoutMs}ms`));
-    }, timeoutMs);
-    // [LAW:locality-or-seam] Owned and removed by this wrapper on the
-    // connect handoff below: `sendOne` removes only the listeners it added.
-    const onConnectError = (err: Error): void => {
-      clearTimeout(connectTimer);
-      reject(err);
-    };
-    sock.once("error", onConnectError);
-    sock.once("connect", () => {
-      clearTimeout(connectTimer);
-      sock.removeListener("error", onConnectError);
-      sendOne(
-        sock,
-        req as unknown as Request,
-        Date.now() + timeoutMs,
-        systemTimekeeper,
-      ).then(
-        resolve,
-        reject,
-      );
-    });
-  });
+  // [LAW:no-ambient-temporal-coupling] The connect has its own bound, which
+  // sendOne (entered only once connected) does not budget for.
+  const dialed = await dialWithin(dialer, sockPath, timeoutMs, systemTimekeeper);
+  if (!dialed.ok) {
+    throw new Error(
+      dialed.failure.cause === "timeout"
+        ? `connect did not complete within ${timeoutMs}ms`
+        : dialed.failure.message,
+    );
+  }
+  return sendOne(
+    dialed.conn,
+    req as unknown as Request,
+    Date.now() + timeoutMs,
+    systemTimekeeper,
+  );
 }
 
 export interface ExitResult {
@@ -143,15 +135,8 @@ export function exitedAlready(child: ChildProcess): ExitResult | null {
 // neither completes nor errors (bound, nobody accepting) is destroyed at its
 // own bound and answers false, so a poll that gives up on it leaves no live
 // handle behind.
-export function isConnectable(sockPath: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const sock = net.connect(sockPath);
-    sock.setTimeout(1_000, () => sock.destroy());
-    sock.once("connect", () => {
-      sock.destroy();
-      resolve(true);
-    });
-    sock.once("error", () => resolve(false));
-    sock.once("close", () => resolve(false));
-  });
+export async function isConnectable(sockPath: string): Promise<boolean> {
+  const dialed = await dialWithin(systemDialer, sockPath, 1_000, systemTimekeeper);
+  if (dialed.ok) dialed.conn.destroy();
+  return dialed.ok;
 }

@@ -16,6 +16,7 @@
 // that instant drew from. Every frame, live and replayed, is drawn by the
 // demo's one draw.
 
+import { dialerFake } from "../src/dial/dialer-fake";
 import { systemFilesystem } from "../src/disk/system-filesystem";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
@@ -639,7 +640,7 @@ async function replayFile(
     drawn.warn(`${level} ${message}`);
   // The load: the config and the plugin are read here, before the instruments.
   using loaded = loadDemo({
-    world: { host, home: homeOf(host), launcher: launcher.launcher, clock },
+    world: { host, home: homeOf(host), launcher: launcher.launcher, clock, dialer: dialerFake(clock) },
     stateDir: stateDir(homeOf(host)),
     links: TEST_LINKS,
     configPath: configFile,

@@ -12,8 +12,8 @@
 // caller-identity flag here — a new caller is a new argument set, not a new
 // branch.
 
-import net from "node:net";
 import type { Duplex } from "node:stream";
+import { dialWithin, type DialFailure } from "../dial/dialer";
 import type { World } from "../host";
 import { socketPath } from "./paths";
 import {
@@ -53,7 +53,7 @@ export type FailureOutcome = TransientOutcome | BusyOutcome | PermanentOutcome;
 
 export interface TransientOutcome {
   kind: "transient";
-  cause: "unreachable" | "io_error";
+  cause: DialFailure["cause"];
   message: string;
 }
 
@@ -99,17 +99,32 @@ export async function requestOutcome<T>(
   budgets: RoundTripBudgets,
   project: (resp: OkResponse) => T | undefined,
 ): Promise<RoundTripOutcome<T>> {
-  let sock: net.Socket;
-  try {
-    sock = await connectWithTimeout(
-      socketPath(world.home),
-      budgets.connectMs,
-      world.clock,
-    );
-  } catch (e) {
-    return interpretException(e);
-  }
-  return exchangeOutcome(sock, world.clock, request, budgets, project);
+  const dialed = await dialWithin(
+    world.dialer,
+    socketPath(world.home),
+    budgets.connectMs,
+    world.clock,
+  );
+  if (!dialed.ok) return dialFailureOutcome(dialed.failure);
+  return exchangeOutcome(dialed.conn, world.clock, request, budgets, project);
+}
+
+// [LAW:parse-dont-validate] A dial that found no daemon arrives typed: the
+// cause the dialer decided at the edge is the outcome's. A dead daemon never
+// times out: a missing socket file and an unbound one both refuse at once. So
+// a connect that ran out of time found a listener holding the socket, and is
+// busy. The one miss: a starved client whose timer beats that immediate refusal
+// reports a dead daemon busy, and the next tick kicks it.
+function dialFailureOutcome(
+  failure: DialFailure | { cause: "timeout" },
+): FailureOutcome {
+  return failure.cause === "timeout"
+    ? {
+        kind: "busy",
+        phase: "connect",
+        message: new ClientTimeoutError("connect").message,
+      }
+    : { kind: "transient", cause: failure.cause, message: failure.message };
 }
 
 // [LAW:locality-or-seam] The round trip over a connection already made, which
@@ -145,7 +160,7 @@ export async function exchangeOutcome<T>(
 
 // What a client of the daemon runs on: the machine it asks about, and the
 // clock its deadline is figured by.
-export type ClientWorld = Pick<World, "host" | "home" | "clock">;
+export type ClientWorld = Pick<World, "host" | "home" | "clock" | "dialer">;
 
 // [LAW:types-are-the-program] One place that turns a wire-level Response
 // into a typed Outcome. Every daemon client goes through this, so the
@@ -246,9 +261,10 @@ export function interpretResponse<T>(
   }
 }
 
-// Exceptions reaching this function come from three distinct classes:
-//   - Connect/IO failures — transient. A respawn has a real chance of
-//     recovering (daemon dead, socket vanished).
+// Exceptions reaching this function come from a connection already made, in
+// three distinct classes:
+//   - IO failures — transient. A respawn has a real chance of recovering
+//     (the daemon died mid-request).
 //   - Timeouts — busy: a live listener that ran out of time.
 //   - Protocol violations from sendOne's reject path — permanent. The
 //     daemon is alive but produced garbage (oversized frame, JSON parse
@@ -275,44 +291,15 @@ export function interpretException(e: unknown): FailureOutcome {
     return { kind: "permanent", cause: "malformed_response", message };
   }
   const message = e instanceof Error ? e.message : String(e);
-  // A dead daemon never times out: a missing socket file is ENOENT and an
-  // unbound one ECONNREFUSED, both immediate. So a client timeout means a
-  // listener holds the socket and has not answered in time. The one miss: a
-  // starved client whose timer beats that immediate error reports a dead
-  // daemon busy, and the next tick kicks it.
+  // A client timeout means a listener holds the socket and has not answered
+  // in time.
   if (e instanceof ClientTimeoutError) {
     return { kind: "busy", phase: e.phase, message };
   }
-  if (
-    message.includes("ECONNREFUSED") ||
-    message.includes("ENOENT") ||
-    message.includes("ENOTSOCK")
-  ) {
-    return { kind: "transient", cause: "unreachable", message };
-  }
+  // [LAW:parse-dont-validate] A connect's refusal was decided at the dialer,
+  // so what reaches here came over a connection a daemon accepted: the
+  // connection broke, and no message is read for a cause.
   return { kind: "transient", cause: "io_error", message };
-}
-
-function connectWithTimeout(
-  path: string,
-  timeoutMs: number,
-  clock: Pick<Timekeeper, "after">,
-): Promise<net.Socket> {
-  return new Promise((resolve, reject) => {
-    const sock = net.createConnection({ path });
-    const clearTimer = clock.after(timeoutMs, () => {
-      sock.destroy();
-      reject(new ClientTimeoutError("connect"));
-    });
-    sock.once("connect", () => {
-      clearTimer();
-      resolve(sock);
-    });
-    sock.once("error", (err) => {
-      clearTimer();
-      reject(err);
-    });
-  });
 }
 
 // [LAW:single-enforcer] One plain-text rendering of a failed outcome for

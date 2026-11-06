@@ -336,8 +336,7 @@ test("the CLI's probe reads its own link back from the daemon it was delivered t
   // socket is this daemon's.
   const daemon = startDaemon(env);
   try {
-    await daemon.listen(sockPath);
-    const cli = worldOf(hostOf(env));
+    const cli = { ...worldOf(hostOf(env)), dialer: daemon.dialer };
     const facts = await probeUrlHandler({
       ...productionHandlerProbeEdge(cli.launcher, cli),
       platform: "darwin",

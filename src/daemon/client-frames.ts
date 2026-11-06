@@ -3,7 +3,8 @@
 // ends. One stream is one connection; keeping a stream up across daemon
 // restarts is the caller's (src/frames-cli.ts).
 
-import net from "node:net";
+import type { Duplex } from "node:stream";
+import type { Dialer } from "../dial/dialer";
 import { PROTOCOL_VERSION, encodeFrame, makeFrameReader } from "./protocol";
 import type { Response, SubscribeRequest } from "./protocol";
 import type { Lane } from "../config/lanes";
@@ -39,6 +40,7 @@ export function isRefusal(resp: Response): resp is Refusal {
 // why it could not be drawn — handed to `onFrame` as the daemon sent it, and a
 // refusal ends the stream rather than reaching it. `onEnd` is called once.
 export function openFrameStream(
+  dialer: Dialer,
   sockPath: string,
   sessionId: string,
   lane: Lane,
@@ -46,32 +48,46 @@ export function openFrameStream(
   onEnd: (end: StreamEnd) => void,
 ): FrameStream {
   let end: StreamEnd | null = null;
+  let conn: Duplex | null = null;
+  const dialing = dialer.dial(sockPath);
   const finish = (why: StreamEnd): void => {
     if (end !== null) return;
     end = why;
-    sock.destroy();
+    // [LAW:dataflow-not-control-flow] A stream closed before its dial lands
+    // gives the dial up; one closed after closes its connection. Each is a
+    // no-op in the other case.
+    dialing.abandon();
+    conn?.destroy();
     onEnd(why);
   };
-  const sock = net.createConnection({ path: sockPath });
   const subscribe: SubscribeRequest = {
     v: PROTOCOL_VERSION,
     kind: "subscribe",
     sessionId,
     lane,
   };
-  sock.once("connect", () => sock.write(encodeFrame(subscribe)));
-  sock.on(
-    "data",
-    makeFrameReader(
-      (frame) => {
-        const resp = frame as Response;
-        if (isRefusal(resp)) finish({ kind: "refused", resp });
-        else onFrame(resp);
-      },
-      (error) => finish({ kind: "failed", error }),
-    ),
-  );
-  sock.on("error", (error) => finish({ kind: "failed", error }));
-  sock.on("close", () => finish({ kind: "closed-there" }));
+  void dialing.settled.then((dialed) => {
+    if (!dialed.ok) {
+      finish({ kind: "failed", error: new Error(dialed.failure.message) });
+      return;
+    }
+    // An abandoned dial never settles, so a stream still open holds this.
+    const sock = dialed.conn;
+    conn = sock;
+    sock.on(
+      "data",
+      makeFrameReader(
+        (frame) => {
+          const resp = frame as Response;
+          if (isRefusal(resp)) finish({ kind: "refused", resp });
+          else onFrame(resp);
+        },
+        (error) => finish({ kind: "failed", error }),
+      ),
+    );
+    sock.on("error", (error) => finish({ kind: "failed", error }));
+    sock.on("close", () => finish({ kind: "closed-there" }));
+    sock.write(encodeFrame(subscribe));
+  });
   return { close: () => finish({ kind: "closed-here" }) };
 }

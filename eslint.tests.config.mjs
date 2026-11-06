@@ -1,4 +1,5 @@
 import tsparser from "@typescript-eslint/parser";
+import { builtinRules } from "eslint/use-at-your-own-risk";
 
 // [LAW:effects-at-boundaries] [LAW:no-shared-mutable-globals] A test states the
 // machine it runs on by handing src a Host (test/helpers/host.ts `hostOf`), and
@@ -76,6 +77,19 @@ const REAL_LAUNCHER_EXCEPTIONS = [
 const REAL_LAUNCHER_MESSAGE =
   "Script the program on a fake launcher (test/helpers/fake-launcher.ts), or test the adapter under test/integration. [LAW:effects-at-boundaries]";
 
+// [LAW:effects-at-boundaries] [LAW:single-enforcer] A test of a client dials
+// the daemon a case stands up on a fake dialer (test/helpers/dial.ts), and
+// listens on no socket of its own. A real socket is the adapter tier's
+// (test/integration), and the tmux stub's gate, which tmux dials.
+const NET_OWNERS = ["test/integration/**", "test/helpers/tmux-stub.ts"];
+const NET_MESSAGE =
+  "Listen on a fake dialer (test/helpers/dial.ts), or test the socket under test/integration. [LAW:effects-at-boundaries]";
+const NET_MODULE = "/^(node:)?net$/";
+const NET_SYNTAX = [
+  `ImportDeclaration[source.value=${NET_MODULE}][importKind!='type']`,
+  `ImportExpression[source.value=${NET_MODULE}]`,
+].map((selector) => ({ selector, message: NET_MESSAGE }));
+
 export default [
   {
     files: ["test/**/*.{ts,mts}"],
@@ -117,5 +131,16 @@ export default [
         },
       ],
     },
+  },
+  // Its own rule name, so the env-write block's `no-restricted-syntax` is
+  // neither dropped nor repeated.
+  {
+    files: ["test/**/*.{ts,mts}"],
+    ignores: NET_OWNERS,
+    languageOptions: { parser: tsparser, ecmaVersion: "latest", sourceType: "module" },
+    plugins: {
+      dial: { rules: { "no-net": builtinRules.get("no-restricted-syntax") } },
+    },
+    rules: { "dial/no-net": ["error", ...NET_SYNTAX] },
   },
 ];

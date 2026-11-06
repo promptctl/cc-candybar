@@ -11,7 +11,6 @@
 // to B's socket and no other, and A, handed it anyway, refuses it.
 
 import fs from "node:fs";
-import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 
@@ -42,7 +41,8 @@ import { textOf } from "../../../src/render/frame";
 import { linkUrls } from "../../helpers/frame";
 import { effectsOf } from "../../helpers/click";
 import { click, configFlag, render } from "../../helpers/daemon-e2e";
-import { sendDaemonRequest } from "../../helpers/daemon-wire";
+import { homeEndpoint, sendDaemonRequest, type DaemonEndpoint } from "../../helpers/daemon-wire";
+import { fakeDialer } from "../../helpers/dial";
 import { until } from "../../helpers/until";
 import { hostOf } from "../../helpers/host";
 import { NO_TMUX_AT_EXIT, buildDaemon } from "../../helpers/in-worker-daemon";
@@ -71,7 +71,9 @@ interface Renderer {
   readonly home: RendererHome;
   readonly daemon: Daemon;
   readonly daemonLog: DaemonLog;
-  readonly server: net.Server;
+  // The renderer as a test reaches it: through the dialer both listen on.
+  readonly target: DaemonEndpoint;
+  readonly stopListening: () => void;
 }
 
 // Every file under `root` but the log, read whole. The log is the renderer's
@@ -117,17 +119,13 @@ test("two renderers under two homes leave no trace of each other or of their own
   const configOf = (home: RendererHome): string =>
     path.join(treeOf(home), HOME_CONFIG_DIR, "config.json5");
   const running: Renderer[] = [];
+  const dialer = fakeDialer();
   const start = async (home: RendererHome): Promise<Renderer> => {
     const { daemon, daemonLog } = buildDaemon({ home });
-    const server = net.createServer((sock) => handleConnection(daemon, sock));
-    await new Promise<void>((resolve, reject) => {
-      server.once("error", reject);
-      server.listen(socketPath(home), () => {
-        server.off("error", reject);
-        resolve();
-      });
-    });
-    const r = { home, daemon, daemonLog, server };
+    const stopListening = dialer.listen(socketPath(home), (sock) =>
+      handleConnection(daemon, sock),
+    );
+    const r = { home, daemon, daemonLog, target: homeEndpoint(home, dialer), stopListening };
     running.push(r);
     return r;
   };
@@ -135,7 +133,7 @@ test("two renderers under two homes leave no trace of each other or of their own
   const stop = async (r: Renderer): Promise<void> => {
     running.splice(running.indexOf(r), 1);
     await r.daemon.close(NO_TMUX_AT_EXIT);
-    await new Promise<void>((resolve) => r.server.close(() => resolve()));
+    r.stopListening();
     await r.daemonLog.drained();
     r.daemonLog.dispose();
   };
@@ -157,25 +155,25 @@ test("two renderers under two homes leave no trace of each other or of their own
       [a, configFlag(configOf(a.home))],
       [b, []],
     ] as const) {
-      const bar = await render(r.home, sidOf(r), projectDir, {}, [...args]);
+      const bar = await render(r.target, sidOf(r), projectDir, {}, [...args]);
       expect(textOf(bar)).toContain("[pad]");
       const url = linkUrls(bar).find((u) =>
         effectsOf(u).some((e) => e.verb === "persist" || e.verb === "set-config"),
       );
       if (url === undefined) throw new Error(`no persist link in:\n${textOf(bar)}`);
-      await click(r.home, url);
+      await click(r.target, url);
       expect(fs.readFileSync(configOf(r.home), "utf8")).toMatch(/padding:\s*4/);
     }
     // Every link B's bar draws names B: the bar closed, and with its settings
     // menu open, which draws its pickers, steppers and closes.
     const linksSid = "two-homes-links";
-    const closedBar = await render(b.home, linksSid, projectDir);
+    const closedBar = await render(b.target, linksSid, projectDir);
     const door = linkUrls(closedBar).find((u) =>
       effectsOf(u).some((e) => e.verb === "set-state" && e.args.includes("candybar.menu")),
     );
     if (door === undefined) throw new Error(`no settings door in:\n${textOf(closedBar)}`);
-    await click(b.home, door);
-    const drawn = [...linkUrls(closedBar), ...linkUrls(await render(b.home, linksSid, projectDir))].filter(isBarLink);
+    await click(b.target, door);
+    const drawn = [...linkUrls(closedBar), ...linkUrls(await render(b.target, linksSid, projectDir))].filter(isBarLink);
     expect(drawn.length).toBeGreaterThan(linkUrls(closedBar).length);
     const misnamed = drawn.filter((u) => {
       const parsed = parseHandlerUrl(u);
@@ -187,19 +185,21 @@ test("two renderers under two homes leave no trace of each other or of their own
     // no other.
     const sid = "two-homes-mark";
     const markOf = async (r: Renderer): Promise<string> =>
-      /mark=(\w+)/.exec(textOf(await render(r.home, sid, projectDir)))?.[1] ?? "";
+      /mark=(\w+)/.exec(textOf(await render(r.target, sid, projectDir)))?.[1] ?? "";
     const clickEvents = (r: Renderer): string[] =>
       logLines(logPath(r.home)).filter((l) => / click queued=/.test(l));
     // One link as the URL handler hands it over: one url frame, no answer
     // read, so the click's event is where it is seen.
     const forward = async (sock: string, url: string, r: Renderer): Promise<string> => {
       const before = clickEvents(r).length;
-      net.createConnection(sock).end(encodeFrame({ kind: URL_FRAME_KIND, urlV: URL_FRAME_VERSION, url }));
+      const dialed = await dialer.dial(sock).settled;
+      if (!dialed.ok) throw new Error(dialed.failure.message);
+      dialed.conn.end(encodeFrame({ kind: URL_FRAME_KIND, urlV: URL_FRAME_VERSION, url }));
       await until(() => clickEvents(r).length > before, `${r.home.name}'s event for the forwarded link`);
       return clickEvents(r).at(-1)!;
     };
     expect(await markOf(a)).toBe("unset");
-    const marked = linkUrls(await render(b.home, sid, projectDir)).find((u) =>
+    const marked = linkUrls(await render(b.target, sid, projectDir)).find((u) =>
       effectsOf(u).some((e) => e.verb === "set-state" && e.args.includes("mark")),
     );
     if (marked === undefined) throw new Error("no mark link in beta's bar");
@@ -222,7 +222,7 @@ test("two renderers under two homes leave no trace of each other or of their own
     expect(misdelivered).toContain(` to=${b.home.name} `);
     expect(misdelivered).toContain(" outcome=bad-request");
     const refusedBefore = clickEvents(a).length;
-    const relayed = await sendDaemonRequest(a.home, { v: PROTOCOL_VERSION, kind: "click", url: marked });
+    const relayed = await sendDaemonRequest(a.target, { v: PROTOCOL_VERSION, kind: "click", url: marked });
     expect(relayed).toMatchObject({ ok: false, code: "BAD_REQUEST" });
     expect(relayed.ok ? "" : relayed.error).toContain(`addressed to renderer "${b.home.name}"`);
     await until(() => clickEvents(a).length > refusedBefore, "alpha's event for the relayed link");
@@ -231,7 +231,7 @@ test("two renderers under two homes leave no trace of each other or of their own
 
     // A link that names no renderer runs nowhere: the renderer it reached
     // refuses it, naming its form.
-    const unnamed = await sendDaemonRequest(a.home, { v: PROTOCOL_VERSION, kind: "click", url: `cc-candybar://set-state/${sid}/mark/set` });
+    const unnamed = await sendDaemonRequest(a.target, { v: PROTOCOL_VERSION, kind: "click", url: `cc-candybar://set-state/${sid}/mark/set` });
     expect(unnamed).toMatchObject({ ok: false, code: "BAD_REQUEST" });
     expect(unnamed.ok ? "" : unnamed.error).toContain("the direct verb form");
     expect(await markOf(a)).toBe("unset");
@@ -264,7 +264,7 @@ test("two renderers under two homes leave no trace of each other or of their own
     const gammaHome = homeNamed("gamma");
     fs.cpSync(treeOf(a.home), treeOf(gammaHome), { recursive: true });
     const c = await start(gammaHome);
-    await click(c.home, effectsUrl(c.home.name, [{ verb: VERB_UNDO, args: [sidOf(a)] }]));
+    await click(c.target, effectsUrl(c.home.name, [{ verb: VERB_UNDO, args: [sidOf(a)] }]));
     expect(fs.readFileSync(configOf(c.home), "utf8")).toBe(CONFIG);
     expect(fs.readFileSync(configOf(a.home), "utf8")).toBe(alphaText);
   } finally {

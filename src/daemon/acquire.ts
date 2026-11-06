@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import net from "node:net";
+import { dialWithin, type Dialer } from "../dial/dialer";
 import path from "node:path";
 import type { World } from "../host";
 import type { RendererHome } from "./home";
@@ -74,11 +74,21 @@ export async function obtainDaemon(
   // [LAW:no-defensive-null-guards] obtainDaemon is typed Promise<ObtainResult>
   // — synchronous filesystem failures (read-only FS, permission denial) must
   // become typed failure outcomes, not throws that surprise the caller.
+  // [LAW:one-source-of-truth] Whether a daemon answers this home's socket,
+  // asked the one way every step below asks it.
+  const listening = (): Promise<boolean> =>
+    canConnect(
+      world.dialer,
+      socketPath(home),
+      settings.connectTimeoutMs,
+      clock,
+    );
+
   const setupErr = ensureStateDir(home);
   if (setupErr) return { kind: "failed", reason: setupErr };
 
   // Fast path: is a daemon already listening?
-  if (await canConnect(socketPath(home), settings.connectTimeoutMs, clock)) {
+  if (await listening()) {
     return { kind: "attached" };
   }
 
@@ -96,17 +106,15 @@ export async function obtainDaemon(
       try {
         // Re-check: another caller may have spawned a daemon between our
         // initial connect and our lock acquisition.
-        if (
-          await canConnect(socketPath(home), settings.connectTimeoutMs, clock)
-        ) {
+        if (await listening()) {
           return { kind: "attached" };
         }
         return await spawnAndWaitForReady(
           home,
           clock,
+          listening,
           spawnFn,
           settings.spawnReadyTimeoutMs,
-          settings.connectTimeoutMs,
           deadline,
           "",
         );
@@ -117,7 +125,7 @@ export async function obtainDaemon(
     // Lock contended. Another caller is in the spawn window — brief wait,
     // then re-check for the socket they're bringing up.
     await sleep(clock, 20);
-    if (await canConnect(socketPath(home), settings.connectTimeoutMs, clock)) {
+    if (await listening()) {
       return { kind: "attached" };
     }
     // [LAW:dataflow-not-control-flow] spawn.lock is an optimization; bind()
@@ -130,9 +138,9 @@ export async function obtainDaemon(
       return await spawnAndWaitForReady(
         home,
         clock,
+        listening,
         spawnFn,
         settings.spawnReadyTimeoutMs,
-        settings.connectTimeoutMs,
         deadline,
         " (lock-fallback)",
       );
@@ -147,9 +155,9 @@ export async function obtainDaemon(
 async function spawnAndWaitForReady(
   home: RendererHome,
   clock: Timekeeper,
+  listening: () => Promise<boolean>,
   spawnFn: () => boolean,
   spawnReadyTimeoutMs: number,
-  connectTimeoutMs: number,
   outerDeadline: number,
   reasonSuffix: string,
 ): Promise<ObtainResult> {
@@ -167,7 +175,7 @@ async function spawnAndWaitForReady(
     // [LAW:no-silent-failure] This failure's cause is the cooldown gate, not the
     // lock path we arrived through — so it does NOT inherit reasonSuffix (which
     // tags lock-held vs lock-fallback *spawn* provenance). We never spawned here.
-    return (await pollUntilReady(home, clock, connectTimeoutMs, readyDeadline))
+    return (await pollUntilReady(clock, listening, readyDeadline))
       ? { kind: "attached" }
       : {
           kind: "failed",
@@ -193,7 +201,7 @@ async function spawnAndWaitForReady(
       reason: `spawn returned false${reasonSuffix}`,
     };
   }
-  return (await pollUntilReady(home, clock, connectTimeoutMs, readyDeadline))
+  return (await pollUntilReady(clock, listening, readyDeadline))
     ? { kind: "started" }
     : {
         kind: "failed",
@@ -206,13 +214,12 @@ async function spawnAndWaitForReady(
 // both need "did a daemon come up in time", they differ only in how they label
 // the outcome.
 async function pollUntilReady(
-  home: RendererHome,
   clock: Timekeeper,
-  connectTimeoutMs: number,
+  listening: () => Promise<boolean>,
   readyDeadline: number,
 ): Promise<boolean> {
   while (clock.monotonic() < readyDeadline) {
-    if (await canConnect(socketPath(home), connectTimeoutMs, clock)) {
+    if (await listening()) {
       return true;
     }
     await sleep(clock, 20);
@@ -658,27 +665,17 @@ function ensureStateDir(home: RendererHome): string | null {
 
 // ─── Connect probe ──────────────────────────────────────────────────────────
 
-function canConnect(
+async function canConnect(
+  dialer: Dialer,
   sockPath: string,
   timeoutMs: number,
   clock: Timekeeper,
 ): Promise<boolean> {
-  return new Promise((resolve) => {
-    const sock = net.connect(sockPath);
-    let settled = false;
-    let clearTimer: (() => void) | null = null;
-    const done = (result: boolean): void => {
-      if (settled) return;
-      settled = true;
-      clearTimer?.();
-      sock.removeAllListeners();
-      sock.destroy();
-      resolve(result);
-    };
-    sock.once("connect", () => done(true));
-    sock.once("error", () => done(false));
-    clearTimer = clock.after(timeoutMs, () => done(false), { unref: true });
+  const dialed = await dialWithin(dialer, sockPath, timeoutMs, clock, {
+    unref: true,
   });
+  if (dialed.ok) dialed.conn.destroy();
+  return dialed.ok;
 }
 
 // ─── Default spawn implementation ───────────────────────────────────────────

@@ -3,7 +3,8 @@ import { HOME_ENV, NAME_ENV, RUNTIME_DIR_ENV, homeOf } from "../src/daemon/home"
 import fs from "node:fs";
 import { hostOf, worldOf } from "./helpers/host";
 import type { Host, World } from "../src/host";
-import net from "node:net";
+import type { DialerFake } from "../src/dial/dialer-fake";
+import { fakeDialer } from "./helpers/dial";
 import os from "node:os";
 import path from "node:path";
 
@@ -17,6 +18,8 @@ interface TempState {
   readonly stateDir: string;
   readonly host: Host;
   readonly world: World;
+  // The dialer the client under test dials, and a stand-in daemon listens on.
+  readonly dialer: DialerFake;
 }
 
 async function withTempState<T>(
@@ -32,11 +35,13 @@ async function withTempState<T>(
   // async/try-finally — not Promise.resolve(fn()).finally(...) — because a
   // synchronous throw from fn happens *before* Promise.resolve wraps it,
   // bypassing the finally and leaking temp dirs.
+  const dialer = fakeDialer();
   try {
     return await fn({
       stateDir: stateDir(homeOf(host)),
       host,
-      world: worldOf(host),
+      world: { ...worldOf(host), dialer },
+      dialer,
     });
   } finally {
     try {
@@ -45,21 +50,21 @@ async function withTempState<T>(
   }
 }
 
-async function startFakeDaemon(sockPath: string): Promise<net.Server> {
-  fs.mkdirSync(path.dirname(sockPath), { recursive: true });
-  return new Promise((resolve, reject) => {
-    const server = net.createServer((sock) => {
-      sock.end();
-    });
-    server.once("error", reject);
-    server.listen(sockPath, () => resolve(server));
-  });
+// A daemon stand-in at `sockPath`: it accepts each connection and hangs up,
+// which is all a probe for a listening daemon asks of it.
+interface FakeDaemon {
+  readonly stop: () => void;
 }
 
-function closeServer(server: net.Server): Promise<void> {
-  return new Promise((resolve) => {
-    server.close(() => resolve());
-  });
+async function startFakeDaemon(
+  dialer: DialerFake,
+  sockPath: string,
+): Promise<FakeDaemon> {
+  return { stop: dialer.listen(sockPath, (sock) => sock.end()) };
+}
+
+async function closeServer(server: FakeDaemon): Promise<void> {
+  server.stop();
 }
 
 // [LAW:behavior-not-structure] Pin the cooldown window arithmetic at its exact
@@ -252,12 +257,12 @@ describe("readBackoffStreak (parsing-strictness contract)", () => {
 
 describe("obtainDaemon (bind-based singleton)", () => {
   test("attaches when a daemon is already listening — no spawn", async () => {
-    await withTempState(async ({ stateDir, host, world }) => {
+    await withTempState(async ({ stateDir, host, world, dialer }) => {
       jest.resetModules();
       const { obtainDaemon } = await import("../src/daemon/acquire");
       const { socketPath } = await import("../src/daemon/paths");
 
-      const server = await startFakeDaemon(socketPath(homeOf(host)));
+      const server = await startFakeDaemon(dialer, socketPath(homeOf(host)));
       try {
         let spawned = 0;
         const result = await obtainDaemon(world, {
@@ -277,13 +282,13 @@ describe("obtainDaemon (bind-based singleton)", () => {
   });
 
   test("spawns exactly once across N concurrent callers", async () => {
-    await withTempState(async ({ host, world }) => {
+    await withTempState(async ({ host, world, dialer }) => {
       jest.resetModules();
       const { obtainDaemon } = await import("../src/daemon/acquire");
       const { socketPath } = await import("../src/daemon/paths");
 
       let spawnCount = 0;
-      let fakeServer: net.Server | null = null;
+      let fakeServer: FakeDaemon | null = null;
 
       const fakeSpawn = (): boolean => {
         spawnCount++;
@@ -291,7 +296,7 @@ describe("obtainDaemon (bind-based singleton)", () => {
         // bind() that the real daemon does on startup.
         setTimeout(() => {
           if (fakeServer) return;
-          startFakeDaemon(socketPath(homeOf(host)))
+          startFakeDaemon(dialer, socketPath(homeOf(host)))
             .then((s) => {
               fakeServer = s;
             })
@@ -326,7 +331,7 @@ describe("obtainDaemon (bind-based singleton)", () => {
   });
 
   test("reclaims a stale spawn.lock older than the staleness window", async () => {
-    await withTempState(async ({ host, world }) => {
+    await withTempState(async ({ host, world, dialer }) => {
       jest.resetModules();
       const { obtainDaemon } = await import("../src/daemon/acquire");
       const { spawnLockPath, stateDir } = await import("../src/daemon/paths");
@@ -342,11 +347,11 @@ describe("obtainDaemon (bind-based singleton)", () => {
       fs.utimesSync(spawnLockPath(homeOf(host)), oldTime, oldTime);
 
       let spawned = 0;
-      let server: net.Server | null = null;
+      let server: FakeDaemon | null = null;
       const { socketPath } = await import("../src/daemon/paths");
       const fakeSpawn = (): boolean => {
         spawned++;
-        startFakeDaemon(socketPath(homeOf(host))).then((s) => {
+        startFakeDaemon(dialer, socketPath(homeOf(host))).then((s) => {
           server = s;
         });
         return true;
@@ -367,7 +372,7 @@ describe("obtainDaemon (bind-based singleton)", () => {
   });
 
   test("falls back to spawning past lockFallbackMs when lock is stuck (availability)", async () => {
-    await withTempState(async ({ host, world }) => {
+    await withTempState(async ({ host, world, dialer }) => {
       jest.resetModules();
       const { obtainDaemon } = await import("../src/daemon/acquire");
       const { spawnLockPath, socketPath, stateDir } = await import(
@@ -385,12 +390,12 @@ describe("obtainDaemon (bind-based singleton)", () => {
       );
 
       let spawned = 0;
-      let server: net.Server | null = null;
+      let server: FakeDaemon | null = null;
       const result = await obtainDaemon(world, {
         spawn: () => {
           spawned++;
           // Simulate a daemon coming up.
-          startFakeDaemon(socketPath(homeOf(host)))
+          startFakeDaemon(dialer, socketPath(homeOf(host)))
             .then((s) => {
               server = s;
             })
@@ -541,7 +546,7 @@ describe("obtainDaemon (bind-based singleton)", () => {
   });
 
   test("on cooldown, attaches to the in-flight daemon without spawning", async () => {
-    await withTempState(async ({ host, world }) => {
+    await withTempState(async ({ host, world, dialer }) => {
       jest.resetModules();
       const { obtainDaemon } = await import("../src/daemon/acquire");
       const { spawnCooldownPath, socketPath, stateDir } = await import(
@@ -557,9 +562,9 @@ describe("obtainDaemon (bind-based singleton)", () => {
       // top level instead of exercising the cooldown-poll branch. Those two
       // checks are ~2 microtask ticks apart with no I/O between them (sub-ms), so
       // a 150ms appearance lands deterministically in the cooldown-poll phase.
-      let server: net.Server | null = null;
+      let server: FakeDaemon | null = null;
       setTimeout(() => {
-        startFakeDaemon(socketPath(homeOf(host)))
+        startFakeDaemon(dialer, socketPath(homeOf(host)))
           .then((s) => {
             server = s;
           })
@@ -625,7 +630,7 @@ describe("obtainDaemon (bind-based singleton)", () => {
   });
 
   test("future-mtime cooldown file on the async path allows the spawn (started)", async () => {
-    await withTempState(async ({ host, world }) => {
+    await withTempState(async ({ host, world, dialer }) => {
       jest.resetModules();
       const { obtainDaemon } = await import("../src/daemon/acquire");
       const { spawnCooldownPath, socketPath, stateDir } = await import(
@@ -644,11 +649,11 @@ describe("obtainDaemon (bind-based singleton)", () => {
         .mockImplementation(() => true);
       try {
         let spawned = 0;
-        let server: net.Server | null = null;
+        let server: FakeDaemon | null = null;
         const result = await obtainDaemon(world, {
           spawn: () => {
             spawned++;
-            startFakeDaemon(socketPath(homeOf(host)))
+            startFakeDaemon(dialer, socketPath(homeOf(host)))
               .then((s) => {
                 server = s;
               })
@@ -973,79 +978,6 @@ describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
         expect(warned).toMatch(/in the future/);
       } finally {
         stderrSpy.mockRestore();
-      }
-    });
-  });
-});
-
-describe("daemon startup (bind-based singleton)", () => {
-  // We don't boot the full daemon here (too much surface) — we verify the
-  // load-bearing bind() invariant directly: a second listener on the same
-  // socket path gets EADDRINUSE.
-
-  test("second bind on the same socket path receives EADDRINUSE", async () => {
-    await withTempState(async ({ host, world }) => {
-      jest.resetModules();
-      const { socketPath } = await import("../src/daemon/paths");
-      fs.mkdirSync(path.dirname(socketPath(homeOf(host))), { recursive: true });
-
-      const first = await startFakeDaemon(socketPath(homeOf(host)));
-      try {
-        const err: NodeJS.ErrnoException = await new Promise((resolve) => {
-          const second = net.createServer();
-          second.once("error", (e) => resolve(e as NodeJS.ErrnoException));
-          second.listen(socketPath(homeOf(host)));
-        });
-        expect(err.code).toBe("EADDRINUSE");
-      } finally {
-        await closeServer(first);
-      }
-    });
-  });
-
-  test("stale socket file: connect surfaces ENOTSOCK/ECONNREFUSED, unlink+rebind succeeds", async () => {
-    await withTempState(async ({ host, world }) => {
-      jest.resetModules();
-      const { socketPath } = await import("../src/daemon/paths");
-      fs.mkdirSync(path.dirname(socketPath(homeOf(host))), { recursive: true });
-
-      // Plant a stale socket file (just a plain file, no listener). This test
-      // pins the kernel MECHANICS the daemon's recovery relies on: a plain file
-      // at the socket path makes bind() fail EADDRINUSE and connect() fail
-      // ENOTSOCK/ECONNREFUSED. The daemon's actual arbitration no longer
-      // consults connect() at all (it reads the socket-derived pid lease — see
-      // daemon-socket-lease.test.ts); this only verifies the unlink+rebind
-      // recovery still binds a working socket.
-      fs.writeFileSync(socketPath(homeOf(host)), "");
-
-      const connectErr: NodeJS.ErrnoException = await new Promise(
-        (resolve) => {
-          const sock = net.connect(socketPath(homeOf(host)));
-          sock.once("connect", () => {
-            sock.destroy();
-            resolve(new Error("unexpected connect success") as NodeJS.ErrnoException);
-          });
-          sock.once("error", (e) => resolve(e as NodeJS.ErrnoException));
-        },
-      );
-      expect(["ENOTSOCK", "ECONNREFUSED", "ENOENT"]).toContain(connectErr.code);
-
-      // First bind attempt fails (EADDRINUSE).
-      await expect(
-        new Promise((_, reject) => {
-          const s = net.createServer();
-          s.once("error", reject);
-          s.listen(socketPath(homeOf(host)));
-        }),
-      ).rejects.toMatchObject({ code: "EADDRINUSE" });
-
-      // Unlink and rebind — this is what handleAddressInUse does.
-      fs.unlinkSync(socketPath(homeOf(host)));
-      const server = await startFakeDaemon(socketPath(homeOf(host)));
-      try {
-        expect(fs.existsSync(socketPath(homeOf(host)))).toBe(true);
-      } finally {
-        await closeServer(server);
       }
     });
   });
