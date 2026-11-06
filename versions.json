@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-646",
+      "ref": "refs/pull/646/merge",
+      "sha": "8e88938fee6fa010a8b221a81fec2c684e164b16",
+      "timestamp": "2026-11-06T19:40:26.546Z",
+      "commits": [
+        {
+          "sha": "8e88938fee6fa010a8b221a81fec2c684e164b16",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T12:39:30-07:00",
+          "message": "Merge 9c565b20d453cce0770d25cdaca8a2ca216235bc into 308429c8f33e9cfe4e0983ab8f29bb1d25c3fe55\n"
+        },
+        {
+          "sha": "9c565b20d453cce0770d25cdaca8a2ca216235bc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T12:35:32-07:00",
+          "message": "feat(apply): session state has one writer; a run and a lane setup are effects (candybar-gather-renderer-76bb.1dh.9kk)\n\nThe session store refuses a write made while no journal turn is held, in\nevery daemon. A turn is synchronous, so a write while one is held is that\nturn's own, and one check at the store's single write path is the whole\nenforcement. The test-only view that refused such writes, its adapter\nseam and the separate gauges field are gone.\n\nThe two writers left outside a turn now report through effect-done:\n\n- A `run` click supersedes its sources in its turn, so they read pending\n  from the click on, and describes the launch as a `run` effect. The\n  performer runs the program behind the session's earlier effects; the\n  run owner answers how it ended and no longer writes the bar.\n- A lane setup is a `lane-setup` effect, settled by the click or the\n  request that owes it and run by the performer. Its own per-session\n  queue and defer are replaced by the performer's per-session order.\n\nThe check command, the demo and the doctor's command line build their\nstore with a holder that always holds, since each is one synchronous run.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-644",
       "ref": "refs/pull/644/merge",
       "sha": "ccf1f816eae14bd5623f1a5782a50b9b540757fc",
