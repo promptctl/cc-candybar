@@ -1,233 +1,61 @@
-import type { Duplex } from "node:stream";
-import { heldClock } from "./helpers/held-clock";
-import { memoryConnection } from "../src/dial/dialer-fake";
-import {
-  PROTOCOL_VERSION,
-  encodeFrame,
-  makeFrameReader,
-} from "../src/daemon/protocol";
-import type { Response } from "../src/daemon/protocol";
-import { RENDER_BUDGETS, renderOutcomeOf } from "../src/daemon/client";
-import type { ClientOutcome } from "../src/daemon/client";
-import { exchangeOutcome } from "../src/daemon/client-transport";
+import { heldClock } from "../helpers/held-clock";
+import { memoryConnection } from "../../src/dial/dialer-fake";
+import { PROTOCOL_VERSION } from "../../src/daemon/protocol";
+import type { Response, StatsRequest } from "../../src/daemon/protocol";
+import { versionGate } from "../../src/daemon/reply";
+import type { HandledRequest } from "../../src/daemon/reply";
+import { RENDER_BUDGETS, renderOutcomeOf } from "../../src/daemon/client";
+import type { ClientOutcome } from "../../src/daemon/client";
+import { exchangeOutcome } from "../../src/daemon/client-transport";
 import type {
   PermanentOutcome,
   TransientOutcome,
-} from "../src/daemon/client-transport";
-import { planOutcome } from "../src/render/outcome-plan";
+} from "../../src/daemon/client-transport";
+import { planOutcome } from "../../src/render/outcome-plan";
 
-// [LAW:behavior-not-structure] These tests assert the contract — what a
-// version-mismatched client sees and how the daemon responds — not the
-// implementation. The shape of the daemon's handleRequest is free to change
-// as long as it preserves: (a) older client gets VERSION_MISMATCH with
-// daemonV present, (b) daemon does NOT initiate self-shutdown on older
-// clients, (c) the client's typed outcome carries clientV and daemonV.
+// [LAW:behavior-not-structure] The daemon's half of the contract is the
+// version gate's reply: an older client gets VERSION_MISMATCH with daemonV
+// and the daemon stays up; a newer client gets the same answer and the daemon
+// exits once it flushes; a client at this version is admitted. These drive
+// the real gate, and its log line is the operator's record of which it chose.
 
-// --- helper: minimal daemon-like server that mirrors handleRequest's
-// version-mismatch branch ---
-
-interface MismatchServer {
-  serve: (daemonEnd: Duplex) => void;
-  shutdownObserved: { triggered: boolean };
+function gate(v: number): { reply: HandledRequest | null; logged: string[] } {
+  const logged: string[] = [];
+  const req: StatsRequest = { v, kind: "stats" };
+  const reply = versionGate(req, (_level, msg) => logged.push(msg));
+  return { reply, logged };
 }
 
-function mismatchServer(daemonV: number): MismatchServer {
-  const shutdownObserved = { triggered: false };
-  const serve = (sock: Duplex): void => {
-    const reader = makeFrameReader(
-      (frame) => {
-        const req = frame as { v?: number; kind?: string };
-        if (typeof req.v !== "number") {
-          sock.write(
-            encodeFrame({
-              ok: false,
-              error: "malformed request",
-              code: "BAD_REQUEST",
-              daemonV,
-            }),
-          );
-          sock.end();
-          return;
-        }
-        if (req.v !== daemonV) {
-          // [LAW:types-are-the-program] Mirrors the daemon's version-mismatch
-          // asymmetry: only schedule shutdown when the client is *newer* —
-          // never when it is older (that path is the spiral-breaker).
-          if (req.v > daemonV) {
-            shutdownObserved.triggered = true;
-          }
-          sock.write(
-            encodeFrame({
-              ok: false,
-              error: `protocol v${req.v} not supported (daemon at v${daemonV})`,
-              code: "VERSION_MISMATCH",
-              daemonV,
-            }),
-          );
-          sock.end();
-          return;
-        }
-        sock.write(encodeFrame({ ok: true, output: "fake render\n" }));
-        sock.end();
-      },
-      () => {
-        /* parse error ignored — daemon side */
-      },
-    );
-    sock.on("data", reader);
-  };
-  return { serve, shutdownObserved };
-}
-
-// One request over an in-memory connection to `server`, and its one answer.
-function sendRequest(server: MismatchServer, req: unknown): Promise<Response> {
-  const { daemonEnd, client } = memoryConnection();
-  server.serve(daemonEnd);
-  return new Promise((resolve, reject) => {
-    client.on(
-      "data",
-      makeFrameReader(
-        (frame) => {
-          resolve(frame as Response);
-          client.end();
-        },
-        reject,
-      ),
-    );
-    client.on("error", reject);
-    client.write(encodeFrame(req));
-  });
-}
-
-describe("daemon version-mismatch trigger asymmetry (kz8.5 chunk 4)", () => {
-  test("older client receives VERSION_MISMATCH with daemonV; daemon does NOT trigger shutdown", async () => {
-    const daemonV = PROTOCOL_VERSION;
-    const server = mismatchServer(daemonV);
-    // Client claims an older protocol version (v=daemonV-1).
-    const resp = await sendRequest(server, {
-      v: daemonV - 1,
-      kind: "render",
+describe("daemon version-mismatch trigger asymmetry", () => {
+  test("an older client is answered VERSION_MISMATCH with daemonV, and the daemon stays up", () => {
+    const { reply, logged } = gate(PROTOCOL_VERSION - 1);
+    // [LAW:types-are-the-program] The load-bearing half: an older client must
+    // not stop the daemon, because the respawned daemon is at the same version
+    // and the same client mismatches it again — the respawn spiral.
+    expect(reply).toMatchObject({
+      kind: "reply",
+      resp: { ok: false, code: "VERSION_MISMATCH", daemonV: PROTOCOL_VERSION },
+      exitAfterFlush: null,
     });
-    expect(resp.ok).toBe(false);
-    if (!resp.ok) {
-      expect(resp.code).toBe("VERSION_MISMATCH");
-      expect(resp.daemonV).toBe(daemonV);
-    }
-    // [LAW:types-are-the-program] The load-bearing assertion: shutdown is
-    // NOT triggered when the client is stale. Triggering would respawn a
-    // daemon at the same version, which the same client would mismatch
-    // again — the 452-corpse spiral.
-    expect(server.shutdownObserved.triggered).toBe(false);
+    expect(logged).toEqual([
+      expect.stringContaining("client is stale — staying up"),
+    ]);
   });
 
-  test("newer client receives VERSION_MISMATCH AND daemon triggers shutdown", async () => {
-    const daemonV = PROTOCOL_VERSION;
-    const server = mismatchServer(daemonV);
-    // Client claims a newer protocol version — meaning the daemon binary
-    // is stale relative to the freshly-installed client. Restart helps.
-    const resp = await sendRequest(server, {
-      v: daemonV + 1,
-      kind: "render",
+  test("a newer client is answered VERSION_MISMATCH, and the daemon exits once it flushes", () => {
+    const { reply, logged } = gate(PROTOCOL_VERSION + 1);
+    expect(reply).toMatchObject({
+      kind: "reply",
+      resp: { ok: false, code: "VERSION_MISMATCH", daemonV: PROTOCOL_VERSION },
+      exitAfterFlush: 0,
     });
-    expect(resp.ok).toBe(false);
-    if (!resp.ok) {
-      expect(resp.code).toBe("VERSION_MISMATCH");
-      expect(resp.daemonV).toBe(daemonV);
-    }
-    expect(server.shutdownObserved.triggered).toBe(true);
+    expect(logged).toEqual([
+      expect.stringContaining("binary likely upgraded — exiting"),
+    ]);
   });
 
-  test("matching client sees Ok response, no mismatch path entered", async () => {
-    const daemonV = PROTOCOL_VERSION;
-    const server = mismatchServer(daemonV);
-    const resp = await sendRequest(server, {
-      v: daemonV,
-      kind: "render",
-    });
-    expect(resp.ok).toBe(true);
-    expect(server.shutdownObserved.triggered).toBe(false);
-  });
-});
-
-// --- client.ts interpretResponse() decoding ---
-//
-// [LAW:behavior-not-structure] The client's typed outcome is the contract.
-// We exercise it via renderOutcomeOf on wire answers. This
-// proves the wire→type translation matches the runtime: VERSION_MISMATCH
-// → `permanent`/`version_mismatch` carrying clientV and daemonV.
-
-describe("ClientOutcome typing (kz8.5 chunk 1)", () => {
-  function isPermanent(
-    o: ClientOutcome,
-  ): o is Extract<ClientOutcome, { kind: "permanent" }> {
-    return o.kind === "permanent";
-  }
-  function isTransient(
-    o: ClientOutcome,
-  ): o is Extract<ClientOutcome, { kind: "transient" }> {
-    return o.kind === "transient";
-  }
-  function isOk(o: ClientOutcome): o is { kind: "ok"; value: string } {
-    return o.kind === "ok";
-  }
-
-  test("type guards distinguish all three branches at compile time", () => {
-    const samples: ClientOutcome[] = [
-      { kind: "ok", value: "hello" },
-      { kind: "transient", cause: "unreachable", message: "ECONNREFUSED" },
-      {
-        kind: "permanent",
-        cause: "version_mismatch",
-        clientV: 3,
-        daemonV: 2,
-      },
-    ];
-    expect(samples.filter(isOk).length).toBe(1);
-    expect(samples.filter(isTransient).length).toBe(1);
-    expect(samples.filter(isPermanent).length).toBe(1);
-  });
-
-  test("VERSION_MISMATCH carries clientV and daemonV on the permanent variant", () => {
-    const sample: ClientOutcome = {
-      kind: "permanent",
-      cause: "version_mismatch",
-      clientV: 3,
-      daemonV: 4,
-    };
-    expect(isPermanent(sample)).toBe(true);
-    if (isPermanent(sample) && sample.cause === "version_mismatch") {
-      expect(sample.clientV).toBe(3);
-      expect(sample.daemonV).toBe(4);
-    }
-  });
-
-  test("transient causes are recoverable; permanent causes are not — discriminator-only check", () => {
-    // [LAW:types-are-the-program] The kick-vs-not decision lives in the
-    // variant. Callers must NEVER have to inspect message text or some
-    // sibling field to decide.
-    const kickWorthy = (o: ClientOutcome): boolean => o.kind === "transient";
-    expect(
-      kickWorthy({
-        kind: "transient",
-        cause: "unreachable",
-        message: "any",
-      }),
-    ).toBe(true);
-    expect(
-      kickWorthy({
-        kind: "permanent",
-        cause: "version_mismatch",
-        clientV: 3,
-        daemonV: 2,
-      }),
-    ).toBe(false);
-    expect(
-      kickWorthy({
-        kind: "permanent",
-        cause: "bad_request",
-        message: "any",
-      }),
-    ).toBe(false);
+  test("a matching client is admitted: no reply, nothing logged", () => {
+    expect(gate(PROTOCOL_VERSION)).toEqual({ reply: null, logged: [] });
   });
 });
 
@@ -371,7 +199,7 @@ describe("wire trust boundary: protocol-violation exceptions are permanent", () 
     });
     return exchangeOutcome(
       client,
-      heldClock(new Date()),
+      heldClock(new Date("2026-01-01T00:00:00Z")),
       (deadline) => ({
         kind: "render",
         hookData: {

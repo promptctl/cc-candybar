@@ -101,9 +101,30 @@ describe("daemon shutdown contract", () => {
     }
   });
 
-  test("newer-client version mismatch: VERSION_MISMATCH is flushed before the daemon exits", async () => {
+  test("version mismatch: an older client leaves the daemon serving, and a newer client's VERSION_MISMATCH is flushed before it exits", async () => {
     const handle = await spawnDaemon();
     try {
+      // [LAW:types-are-the-program] The load-bearing half of the asymmetry: a
+      // stale client must not stop the daemon, because the respawned daemon is
+      // at the same version and the same client mismatches it again. One
+      // daemon carries both halves, since the process tier's starts only fall.
+      const stale = await sendDaemonRequest(
+        handle.home,
+        { v: PROTOCOL_VERSION - 1, kind: "stats" },
+        REPLY_BUDGET_MS,
+      );
+      expect(stale.ok).toBe(false);
+      if (!stale.ok) {
+        expect(stale.code).toBe("VERSION_MISMATCH");
+        expect(stale.daemonV).toBe(PROTOCOL_VERSION);
+      }
+      const serving = await sendDaemonRequest(
+        handle.home,
+        { v: PROTOCOL_VERSION, kind: "stats" },
+        REPLY_BUDGET_MS,
+      );
+      expect(serving.ok).toBe(true);
+
       // [LAW:no-ambient-temporal-coupling] The race this pins: a client at
       // v+1 (binary upgraded under the daemon) must receive the flushed
       // VERSION_MISMATCH diagnostic, never a dead socket — the client-side
@@ -131,9 +152,8 @@ describe("daemon shutdown contract", () => {
   // file's debounce. So the close in that funnel is what keeps a click a recycled
   // daemon had not written yet, and only a real process has that funnel.
   test("a session write still inside its debounce lands before a signal ends the daemon", async () => {
-    const { env, home, sockPath, stateDir, removeTmpDirs } = prepareIsolatedDaemonEnv(
-      "cc-candybar-shutdown",
-    );
+    const { env, home, sockPath, stateDir, removeTmpDirs } =
+      prepareIsolatedDaemonEnv("cc-candybar-shutdown");
     const sessionId = "shutdown-write";
     let daemon: RunningDaemon | undefined;
     try {
@@ -147,7 +167,9 @@ describe("daemon shutdown contract", () => {
       );
       await killAndWait(daemon, "SIGTERM");
 
-      const saved = JSON.parse(readFileSync(sessionStatePath(homeOf(hostOf(env))), "utf8"));
+      const saved = JSON.parse(
+        readFileSync(sessionStatePath(homeOf(hostOf(env))), "utf8"),
+      );
       expect(saved[sessionId]).toMatchObject({ padding: "4" });
     } finally {
       daemon?.killTree();
