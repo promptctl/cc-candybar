@@ -154,8 +154,9 @@ export const VERB_DOCTOR_RUN = "doctor-run";
 export const VERB_DOCTOR_FIX = "doctor-fix";
 export const VERB_DOCTOR_MARK = "doctor-mark";
 // A link `cc-candybar doctor` opens to learn whether the URL handler delivers
-// it. Arg: the nonce the CLI will look for among the daemon's arrivals.
-export const VERB_DOCTOR_PROBE = "doctor-probe";
+// it, minted by probeLink. Arg: the nonce the CLI will look for among the
+// daemon's arrivals.
+export const VERB_PROBE = "probe";
 
 // [LAW:effects-at-boundaries] Type a slash command into the session's Claude
 // Code prompt through its tmux pane. Args: `[sessionId, line]` — the line must
@@ -248,7 +249,7 @@ function saidCopy(text: string): string {
 // [LAW:one-source-of-truth] Every verb a click can fire, and what it does in
 // words, read off the args the click carries, so the text cannot say anything
 // the click does not do. A verb says a phrase per write. VERB_DISPATCH is the
-// list these ride in, and doctor-probe and range arrive as whole
+// list these ride in, and probe and range arrive as whole
 // URLs from outside a draw, so none of those three is ever an effect.
 const SAYS = {
   [VERB_SET_STATE]: ([, ...pairs]) =>
@@ -353,6 +354,12 @@ export function effectsUrl(
   );
   const qs = [`does=${spell(says)}`, ...params].join("&");
   return addressedLink(to, VERB_DISPATCH, qs);
+}
+
+// The probe link `cc-candybar doctor` opens to learn whether a link reaches
+// the renderer it names: the nonce is the whole click.
+export function probeLink(to: RendererAddress, nonce: string): string {
+  return addressedLink(to, VERB_PROBE, encodeSegments([nonce]));
 }
 
 // [LAW:one-source-of-truth] The one spelling of a link's address: every

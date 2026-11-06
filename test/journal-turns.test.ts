@@ -19,7 +19,7 @@ import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys
 import { lastClickError } from "../src/daemon/click-error";
 import {
   VERB_COPY,
-  VERB_DOCTOR_PROBE,
+  VERB_PROBE,
   VERB_DOCTOR_RUN,
   VERB_SET_STATE,
   VERB_RANGE,
@@ -310,7 +310,7 @@ describe("the click path", () => {
     const { ctx } = setup();
     const { send } = parts(ctx);
     const nonce = "01234567-89ab-cdef-0123-456789abcdef";
-    await send(VERB_DOCTOR_PROBE, nonce, () => true);
+    await send(VERB_PROBE, nonce, () => true);
     expect(ctx.probes.list().map((p) => p.nonce)).toEqual([nonce]);
   });
 });

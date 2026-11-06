@@ -2,7 +2,7 @@
 // the check's verdict over every state a `cc-candybar://` link can end in, the
 // CLI's probe over a faked edge (what it opens, how long it waits, what it
 // diagnoses and when), and the daemon's side of the round trip (the
-// `doctor-probe` verb, who delivered a click). The URL handler is a forwarder
+// `probe` verb, who delivered a click). The URL handler is a forwarder
 // (candybar-daemon-health-ajx0.co4): a link it delivers proves it, and a link
 // `cc-candybar url-handle` delivered came through the retired applet.
 
@@ -24,7 +24,7 @@ import {
 } from "../src/doctor/handler-probe";
 import { clickArrived } from "../src/doctor/edge";
 import { type ClickArrival, type Delivery } from "../src/doctor/sightings";
-import { VERB_DOCTOR_PROBE, VERB_DOCTOR_RUN } from "../src/click/wire";
+import { VERB_DOCTOR_RUN, VERB_PROBE } from "../src/click/wire";
 import { BadVerbArgs, VERBS, type VerbContext } from "../src/daemon/verbs";
 import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
 import { SessionState } from "../src/daemon/session-state";
@@ -182,8 +182,8 @@ function fakeEdge(
       calls.push("pause");
       clock += 100;
     },
-    opener: () => {
-      calls.push("opener");
+    opener: (url) => {
+      calls.push(`opener ${url}`);
       return { kind: "ok", value: APP };
     },
     exists: (file) => {
@@ -227,7 +227,7 @@ describe("probeUrlHandler", () => {
     });
     expect(calls).toEqual([
       "daemon",
-      `open cc-candybar://to/dev-bar/${VERB_DOCTOR_PROBE}/${NONCE}`,
+      `open cc-candybar://to/dev-bar/probe/${NONCE}`,
       "pause",
       "daemon",
       "pause",
@@ -237,7 +237,7 @@ describe("probeUrlHandler", () => {
     ]);
   });
 
-  test("a link that never arrives is waited for, then the opener is diagnosed", async () => {
+  test("a link that never arrives is waited for, then the app that opens that link is diagnosed", async () => {
     const { edge, calls } = fakeEdge();
     expect(await probeUrlHandler(edge)).toEqual({
       kind: "lost",
@@ -246,7 +246,7 @@ describe("probeUrlHandler", () => {
     });
     expect(calls.filter((c) => c === "pause")).toHaveLength(50);
     expect(calls.slice(-2)).toEqual([
-      "opener",
+      `opener cc-candybar://to/main/probe/${NONCE}`,
       `exists ${APP}/Contents/MacOS/CCCandybarURLHandler`,
     ]);
   });
@@ -422,27 +422,23 @@ describe("the daemon's side of the round trip", () => {
 
   test("a probe link records its nonce and who delivered it", async () => {
     const d = daemon(link(FORWARDED));
-    await d.click(VERB_DOCTOR_PROBE, NONCE);
+    await d.click(VERB_PROBE, NONCE);
     expect(d.probes.list()).toEqual([{ nonce: NONCE, delivery: FORWARDED }]);
     expect(d.logs).toEqual([
-      `doctor-probe: arrived nonce=${NONCE} delivery=forwarder`,
+      `probe: arrived nonce=${NONCE} delivery=forwarder`,
     ]);
   });
 
   test("a probe the CLI delivered is recorded as such", async () => {
     const d = daemon(link(CLI));
-    await d.click(VERB_DOCTOR_PROBE, NONCE);
+    await d.click(VERB_PROBE, NONCE);
     expect(d.probes.list()).toEqual([{ nonce: NONCE, delivery: CLI }]);
-    expect(d.logs).toEqual([
-      `doctor-probe: arrived nonce=${NONCE} delivery=cli`,
-    ]);
+    expect(d.logs).toEqual([`probe: arrived nonce=${NONCE} delivery=cli`]);
   });
 
   test("a value that is not a probe nonce is refused and records nothing", async () => {
     const d = daemon(link(FORWARDED));
-    await expect(d.click(VERB_DOCTOR_PROBE, "../../etc")).rejects.toThrow(
-      BadVerbArgs,
-    );
+    await expect(d.click(VERB_PROBE, "../../etc")).rejects.toThrow(BadVerbArgs);
     expect(d.probes.list()).toEqual([]);
   });
 
@@ -512,9 +508,7 @@ describe("the daemon's side of the round trip", () => {
 
   test("a probe cannot arrive from the tmux status line", async () => {
     const d = daemon({ via: "tmux-status" });
-    await expect(d.click(VERB_DOCTOR_PROBE, NONCE)).rejects.toThrow(
-      BadVerbArgs,
-    );
+    await expect(d.click(VERB_PROBE, NONCE)).rejects.toThrow(BadVerbArgs);
     expect(d.probes.list()).toEqual([]);
   });
 
