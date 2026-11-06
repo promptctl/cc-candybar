@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "1ad208491233c500feb1dce4da7f3eb61a288b1d",
+      "timestamp": "2026-11-06T08:51:37.249Z",
+      "commits": [
+        {
+          "sha": "1ad208491233c500feb1dce4da7f3eb61a288b1d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T01:50:15-07:00",
+          "message": "fix(test): the daemon close case counts only its own timers, and no file leaves a git provider open (candybar-testing-0x6u.6f3) (#631)\n\n* fix(test): the daemon close case counts only its own timers, and no file leaves a git provider open (candybar-testing-0x6u.6f3)\n\nThe close case read every timer the jest worker armed. A git provider an\nearlier file never closed keeps passing on its period, so its timers landed in\nwhichever file ran next and the case failed on CI order, not on the daemon:\nthe daemon builds no git state in this case, and a probe that leaks one\nprovider before it reproduces the CI stacks.\n\nThe case now counts resources made inside its own async work. The git-cache\nfile closes every provider it builds after each case (75 built, 33 closed by\nhand), and two watcher cases close in a finally.\n\n* fix(test): review of the leak fix — the dead baseline goes, a failed close no longer strands the rest, the close-all case closes in finally (candybar-testing-0x6u.6f3)\n\n* fix(test): the close case proves the daemon's own work reached the leak record, and every close failure is reported (candybar-testing-0x6u.6f3)"
+        },
+        {
+          "sha": "a024ef4e373bc0a8440684b0123bbd2ba110ad7e",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-06T08:30:49Z",
+          "message": "chore(release): set `package.json` to 1.199.0 [skip ci]\n\n## [1.199.0](https://github.com/promptctl/cc-candybar/compare/v1.198.1...v1.199.0) (2026-11-06)\n\n### Features\n\n* **facts:** record a session out of the daemon, replay it in the demo, refuse another facts version (candybar-gather-renderer-76bb.6pj.qg5) ([#629](https://github.com/promptctl/cc-candybar/issues/629)) ([7877410](https://github.com/promptctl/cc-candybar/commit/787741095721977bdce8e6c628817b38188b4f97))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-633",
       "ref": "refs/pull/633/merge",
       "sha": "4e73f1e249fe5bd12e90796aee3f7cc550819bbe",
@@ -31,42 +53,6 @@
       ]
     },
     {
-      "version": "pr-631",
-      "ref": "refs/pull/631/merge",
-      "sha": "b67535858b2feb5cf7b8df11c9ef5cf218c2bfa1",
-      "timestamp": "2026-11-06T08:40:01.354Z",
-      "commits": [
-        {
-          "sha": "b67535858b2feb5cf7b8df11c9ef5cf218c2bfa1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T08:38:36Z",
-          "message": "Merge 6c8994ac727c78bafb1bdd8db7b78ec08e520a8e into a024ef4e373bc0a8440684b0123bbd2ba110ad7e\n"
-        },
-        {
-          "sha": "6c8994ac727c78bafb1bdd8db7b78ec08e520a8e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T01:20:00-07:00",
-          "message": "fix(test): the close case proves the daemon's own work reached the leak record, and every close failure is reported (candybar-testing-0x6u.6f3)\n"
-        },
-        {
-          "sha": "56e659068142becfbb1b9893bda566735005c894",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T01:18:18-07:00",
-          "message": "fix(test): review of the leak fix — the dead baseline goes, a failed close no longer strands the rest, the close-all case closes in finally (candybar-testing-0x6u.6f3)\n"
-        },
-        {
-          "sha": "14b9fbf4cd3da3be0e92c84c2f39d51d630f9209",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T01:12:58-07:00",
-          "message": "fix(test): the daemon close case counts only its own timers, and no file leaves a git provider open (candybar-testing-0x6u.6f3)\n\nThe close case read every timer the jest worker armed. A git provider an\nearlier file never closed keeps passing on its period, so its timers landed in\nwhichever file ran next and the case failed on CI order, not on the daemon:\nthe daemon builds no git state in this case, and a probe that leaks one\nprovider before it reproduces the CI stacks.\n\nThe case now counts resources made inside its own async work. The git-cache\nfile closes every provider it builds after each case (75 built, 33 closed by\nhand), and two watcher cases close in a finally.\n"
-        }
-      ]
-    },
-    {
       "version": "pr-634",
       "ref": "refs/pull/634/merge",
       "sha": "af041edd58b9ef719cba9a7b185d0524eb3100e4",
@@ -85,28 +71,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T01:28:40-07:00",
           "message": "fix(home): a home file named through a symlink is stored as the home's (candybar-gather-renderer-76bb.f00.lpl)\n\nWhose a stored path is now follows the directories on its path, compared in\ntheir on-disk spelling at the call, not its spelling: a client's cwd is a\nrealpath, so a --config under CC_CANDYBAR_HOME=/tmp/h arrived as\n/private/tmp/h/... and was stored as the world's, and a copied home undid\ninto the original's config. The render checkpoint respells a requested home\nfile from the root as given, so what is stored reads back as itself. The\ndisk's spelling is a port on the stored root, and the watcher and the\nspelling share one walk to the deepest existing directory.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "787741095721977bdce8e6c628817b38188b4f97",
-      "timestamp": "2026-11-06T08:23:00.648Z",
-      "commits": [
-        {
-          "sha": "787741095721977bdce8e6c628817b38188b4f97",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T01:21:51-07:00",
-          "message": "feat(facts): record a session out of the daemon, replay it in the demo, refuse another facts version (candybar-gather-renderer-76bb.6pj.qg5) (#629)\n\n* feat(facts): record writes a session's stream out of the daemon, the demo replays the file frame by frame, and another facts version is refused (candybar-gather-renderer-76bb.6pj.qg5)\n\nA recording is a header, then documents and requests with their instants.\nThe session recorder follows the render cache's current view (one writer of\nthe cache's view map fires the observer), request lines are noted where the\nrequest path settles a view, and the file is created new and closed after\nN seconds or at daemon close. The wire verb is a held request the connection\nstarts only while its client waits. The demo splits into load and play, one\nview-and-print path, with --recording choosing the recording arm on a held\nclock (moved to src/). cc-candybar record exits 1 when no request arrived.\n\nTests run on the render-cache rig rather than an in-worker daemon, because\nthe boot ratchet only falls.\n\n* fix(facts): a recording lets go of its view when a write ends it, stops when its client leaves, writes whole lines, and refuses a span no timer holds (candybar-gather-renderer-76bb.6pj.qg5)\n\nA failed first write ended the recording before its reaction's disposer\nwas the recording's, so the reaction outlived it. The client's hang-up now\naborts the held work; a close's error is the recording's; appendFileSync\nwrites the whole line; one parse of a recording's span serves CLI and\ndaemon and caps it at what setTimeout holds; a request line of another\nsession is refused; the README says the config's own sources still run.\n\n* fix(facts): a replay's clock starts at its first request, a recording no request arrived in leaves no file, a write-ended recording is the daemon's failure, and a recording follows a view entered inside a batch (candybar-gather-renderer-76bb.6pj.qg5)\n\nThe recorder's reaction fires immediately again and owns its disposer\nthrough the effect's own handle, so neither a failed first write nor a\nbatch loses a document. The README and help name the config a replay\nneeds, and say a config's own shell and file sources are not in a\nrecording (the cure is candybar-gather-renderer-76bb.6pj.d8n).\n\n* fix(facts): a recording the daemon's close cut short says so, a record request after the close is refused for it, the file is owner-only, and a held connection reads nothing more (candybar-gather-renderer-76bb.6pj.qg5)\n\n* fix(facts): a recording with no request leaves no file however it ended (candybar-gather-renderer-76bb.6pj.qg5)"
-        },
-        {
-          "sha": "91002fc866ad04a5022b58207a9968824f6712bc",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-06T08:08:41Z",
-          "message": "chore(release): set `package.json` to 1.198.1 [skip ci]\n\n## [1.198.1](https://github.com/promptctl/cc-candybar/compare/v1.198.0...v1.198.1) (2026-11-06)\n\n### Bug Fixes\n\n* **ci:** a failed early step shows its own red step, not the three that restate it (candybar-testing-0x6u.dsu) ([#630](https://github.com/promptctl/cc-candybar/issues/630)) ([6933237](https://github.com/promptctl/cc-candybar/commit/6933237709e563a9f5c545898d2df59c76238cd3))\n"
         }
       ]
     },
