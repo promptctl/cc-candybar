@@ -29,7 +29,7 @@ import {
   type Facts,
 } from "../src/daemon/facts-source";
 import { homeOf } from "../src/daemon/home";
-import { cacheDir, locations, stateDir } from "../src/daemon/paths";
+import { locations, stateDir } from "../src/daemon/paths";
 import { createPayloadProviders } from "../src/daemon/payload-providers";
 import { parseClientHints } from "../src/daemon/protocol";
 import type { ViewFacts } from "../src/daemon/render-payload";
@@ -72,6 +72,7 @@ import type { Timekeeper } from "../src/time";
 import { instantAt } from "../src/utils/instant";
 import type { DaemonLogger } from "../src/utils/logger";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
+import { offlinePricing } from "../src/segments/pricing";
 import { SourceRuns } from "../src/var-system/source-runs";
 import { fakeLauncher, turns } from "./helpers/fake-launcher";
 import { bareGates } from "./helpers/gates";
@@ -249,7 +250,7 @@ function rig(
     clock,
     launcher,
     host,
-    cacheDir: cacheDir(home),
+    pricing: offlinePricing(),
     watchers,
     fileEvents: NO_FILE_EVENTS,
     logger: log,
