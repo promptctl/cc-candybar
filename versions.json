@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-623",
+      "ref": "refs/pull/623/merge",
+      "sha": "8e824cbbe7f5610ed1c10f79bd9cf7fdb92a6e7c",
+      "timestamp": "2026-11-06T04:49:33.974Z",
+      "commits": [
+        {
+          "sha": "8e824cbbe7f5610ed1c10f79bd9cf7fdb92a6e7c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T04:48:39Z",
+          "message": "Merge 6d9c3304636b672083f02111828068bdc3fa5095 into 10305eb35f013dc45c9f71410d0f5ee7b9e708cf\n"
+        },
+        {
+          "sha": "6d9c3304636b672083f02111828068bdc3fa5095",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T21:35:55-07:00",
+          "message": "fix(docs): the probe script and its README drop the env probe; the demo keys node --version on the branch and says the key makes the run the session's own\n\nReview fixes (medium pass). The probe patch's blank context lines carry\ntheir space again, so git apply parses it; the scope header stops listing\nenv; the retired replacement record is named for what it is, not for git.\n"
+        },
+        {
+          "sha": "76c22747536d28a22201b69fb226d6f6a7746e02",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T21:23:51-07:00",
+          "message": "fix(config): the retired env message names the payload input for HOME, USER, LOGNAME and HOSTNAME, and rules out echoing the variable from a shell source\n\nReview fixes (high pass). The steel-thread fixture pins home as a literal\ninstead of an input the rig never feeds; the demo example's header stops\ncounting kinds; the probe patch's render.ts hunks drop the removed env arm;\nthe gap document says the env source is removed, present tense.\n"
+        },
+        {
+          "sha": "8bb74764f10ce8dd9a06f7ec129931c2efbf5627",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T21:06:43-07:00",
+          "message": "feat(config)!: remove the env source; a config that declares one fails at load, naming file and shell as the expansion points (candybar-gather-renderer-76bb.f00.2fe)\n\nOne detached renderer draws for every session of its user, so its\nenvironment is the shell that spawned it, never the session's: an env\nvariable was never a session fact. The kind, its loader arm, its field\nspec, its renderer dispatch, the registry's declaration and the\nenvironment threaded through the render cache for it all go. The loader\nrefuses `kind: \"env\"` through the retired-kind row the git kind already\nuses, naming the variable it read and the two sources that remain.\n\nThe demo, the demo-variables example, the steel-thread fixture and the\nprobes fixture read the user and home through the payload instead. The\ndebug-introspection test exercises its declare-time lastError through\nan input over a path the payload lacks, the only thing it used env for.\n\n[LAW:polishing-by-subtraction] [LAW:one-source-of-truth] [LAW:no-silent-failure]\n"
+        }
+      ]
+    },
+    {
       "version": "pr-624",
       "ref": "refs/pull/624/merge",
       "sha": "9c4a7d3573544e9c4fb13c79d47f5f2f7af27613",
@@ -20,42 +56,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-05T21:12:57-07:00",
           "message": "feat(facts): a view follows its session through the Facts interface, with an in-process arm, a recording arm and the seam test (candybar-gather-renderer-76bb.6pj.go2)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-623",
-      "ref": "refs/pull/623/merge",
-      "sha": "e718e72d4029159706eaac3ddb486b99fb6e0c08",
-      "timestamp": "2026-11-06T04:40:44.138Z",
-      "commits": [
-        {
-          "sha": "e718e72d4029159706eaac3ddb486b99fb6e0c08",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T04:37:14Z",
-          "message": "Merge 25e337affbb704778e56869771ae0bb05391d349 into 8bb9728f028615d94483db40d614a14926ef1468\n"
-        },
-        {
-          "sha": "25e337affbb704778e56869771ae0bb05391d349",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T21:35:55-07:00",
-          "message": "fix(docs): the probe script and its README drop the env probe; the demo keys node --version on the branch and says the key makes the run the session's own\n\nReview fixes (medium pass). The probe patch's blank context lines carry\ntheir space again, so git apply parses it; the scope header stops listing\nenv; the retired replacement record is named for what it is, not for git.\n"
-        },
-        {
-          "sha": "dbda021ae608a37a4133bb6790248ba384c5b3e0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T21:23:51-07:00",
-          "message": "fix(config): the retired env message names the payload input for HOME, USER, LOGNAME and HOSTNAME, and rules out echoing the variable from a shell source\n\nReview fixes (high pass). The steel-thread fixture pins home as a literal\ninstead of an input the rig never feeds; the demo example's header stops\ncounting kinds; the probe patch's render.ts hunks drop the removed env arm;\nthe gap document says the env source is removed, present tense.\n"
-        },
-        {
-          "sha": "74f7e5abdcdaf8cdf2e99bdfb39bdbf8e1fc604a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T21:06:43-07:00",
-          "message": "feat(config)!: remove the env source; a config that declares one fails at load, naming file and shell as the expansion points (candybar-gather-renderer-76bb.f00.2fe)\n\nOne detached renderer draws for every session of its user, so its\nenvironment is the shell that spawned it, never the session's: an env\nvariable was never a session fact. The kind, its loader arm, its field\nspec, its renderer dispatch, the registry's declaration and the\nenvironment threaded through the render cache for it all go. The loader\nrefuses `kind: \"env\"` through the retired-kind row the git kind already\nuses, naming the variable it read and the two sources that remain.\n\nThe demo, the demo-variables example, the steel-thread fixture and the\nprobes fixture read the user and home through the payload instead. The\ndebug-introspection test exercises its declare-time lastError through\nan input over a path the payload lacks, the only thing it used env for.\n\n[LAW:polishing-by-subtraction] [LAW:one-source-of-truth] [LAW:no-silent-failure]\n"
         }
       ]
     },
