@@ -211,7 +211,7 @@ const OWNED_IMPORTS = {
     message: "A daemon is handed its paths: take the value you are given.",
   },
   ...Object.fromEntries(
-    ["socketPath", "defaultSocketPath"].map((name) => [
+    ["socketPath", "handlerSocketPath"].map((name) => [
       name,
       {
         group: PATHS,

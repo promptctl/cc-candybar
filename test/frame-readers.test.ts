@@ -152,6 +152,12 @@ describe("describeLink", () => {
     );
   });
 
+  test("a drawn link whose value carries a malformed escape reads as its refusal", () => {
+    expect(
+      describeLink({ text: "x", url: "cc-candybar://to/main/copy/100%" }, "s"),
+    ).toMatch(/^refused: the link's value does not decode .*: cc-candybar:\/\/to\/main\/copy\/100%$/);
+  });
+
   test("an addressed link reads as its effects, and an outside link as opened", () => {
     expect(
       describeLink({ text: "x", url: "cc-candybar://to/main/copy/s" }, "s"),

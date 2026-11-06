@@ -68,21 +68,27 @@ export type DrawnClick =
 
 // [LAW:parse-dont-validate] A drawn link's click as the daemon splits it, its
 // ordered effects (a link whose verb is not dispatch is the one-effect case),
-// or the link parse's reason the daemon refuses it: a config can compute a
-// link at the draw that the parse refuses.
+// or the reason the daemon refuses it: a config can compute a link at the
+// draw that the parse refuses, or whose value carries a malformed escape.
 export function drawnClickOf(url: string): DrawnClick {
   const link = parseHandlerUrl(url);
   if (!link.ok) return link;
   const { verb, value } = link;
-  if (verb !== VERB_DISPATCH)
-    return { ok: true, effects: [{ verb, args: decodeArgs(verb, value) }] };
-  return {
-    ok: true,
-    effects: parseEffects(value).map((e) => ({
-      verb: e.verb,
-      args: decodeArgs(e.verb, e.value),
-    })),
-  };
+  try {
+    const effects =
+      verb === VERB_DISPATCH
+        ? parseEffects(value).map((e) => ({
+            verb: e.verb,
+            args: decodeArgs(e.verb, e.value),
+          }))
+        : [{ verb, args: decodeArgs(verb, value) }];
+    return { ok: true, effects };
+  } catch (error) {
+    return {
+      ok: false,
+      problem: `the link's value does not decode (${(error as Error).message}): ${url}`,
+    };
+  }
 }
 
 // [LAW:no-silent-failure] A drawn link's effects, for a reader holding links

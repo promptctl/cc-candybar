@@ -1730,7 +1730,7 @@ describe("loadDslConfig — cross-references", () => {
     expectIssue(linked, {
       path: "segments.a.template",
       message:
-        /^Template spells a link in a grammar older than names, which names no renderer: "cc-candybar:\/\/load-config\/%s\/"$/,
+        /^Template spells a link in a grammar older than names, which names no renderer: "cc-candybar:\/\/load-config\/%s\/"\. Bind an action instead \(\{\{ action "name" … \}\}\): its link names the renderer that draws it$/,
     });
     const viaHelper = `{ helpers: { h: '{{ link "cc-candybar://open-vscode/x/" "pick" }}' }, segments: { a: { template: '{{ template "h" . }}' } }, root: { h: ['a'] } }`;
     expectIssue(viaHelper, { path: "helpers.h", message: '"cc-candybar://open-vscode/x/"' });
@@ -1738,7 +1738,7 @@ describe("loadDslConfig — cross-references", () => {
     const head = `{ segments: { a: { template: '{{ link (printf "%s/%s/" "cc-candybar://load-config" .session.id) "pick" }}' } }, root: { h: ['a'] } }`;
     expectIssue(head, { path: "segments.a.template", message: '"cc-candybar://load-config"' });
     const bare = `{ segments: { a: { template: '{{ link "cc-candybar://hello" "copy" }}' } }, root: { h: ['a'] } }`;
-    expectIssue(bare, { path: "segments.a.template", message: /names no renderer: "cc-candybar:\/\/hello"$/ });
+    expectIssue(bare, { path: "segments.a.template", message: /names no renderer: "cc-candybar:\/\/hello"\./ });
   });
 
   // A literal that opens the address, or stops before it, can still be joined

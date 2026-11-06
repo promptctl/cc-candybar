@@ -1173,7 +1173,7 @@ function checkTemplateRefs(
     scope.helpers,
   )) {
     report(
-      `Template spells a link in a grammar older than names, which names no renderer: "${literal}"`,
+      `Template spells a link in a grammar older than names, which names no renderer: "${literal}". Bind an action instead ({{ action "name" … }}): its link names the renderer that draws it`,
       via,
     );
   }
