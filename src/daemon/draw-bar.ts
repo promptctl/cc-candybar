@@ -915,7 +915,7 @@ export function requestArrived(
     inTmux(req.hints.tmux),
   );
   tmuxStatusLines.observe(req.sessionId, req.hints.tmux, lanes.tmuxStatus);
-  return laneSetups.noted(laneSessionOf(req), lanes);
+  return laneSetups.noted(req.sessionId, lanes);
 }
 
 // [LAW:single-enforcer] A request's answer, drawn and noted for its
@@ -961,12 +961,7 @@ export function laneClicked(
   const latest = frameFeeds.latest(sessionId);
   if (latest !== null && before.tmuxStatus !== after.tmuxStatus)
     tmuxStatusLines.observe(sessionId, latest.hints.tmux, after.tmuxStatus);
-  return laneSetups.clicked(
-    sessionId,
-    latest === null ? null : laneSessionOf(latest),
-    before,
-    after,
-  );
+  return laneSetups.clicked(sessionId, before, after);
 }
 
 export async function drawAnswer(
