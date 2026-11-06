@@ -2,60 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-643",
-      "ref": "refs/pull/643/merge",
-      "sha": "e3a075d50593045a9f850a44da1aa34e83705458",
-      "timestamp": "2026-11-06T19:17:23.566Z",
-      "commits": [
-        {
-          "sha": "e3a075d50593045a9f850a44da1aa34e83705458",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:16:32-07:00",
-          "message": "Merge ef740c2dee16923df47481c7c907c6ea6ad1d4a4 into b3a94823776445b5ab510fe52ab4c622b2f80cff\n"
-        },
-        {
-          "sha": "ef740c2dee16923df47481c7c907c6ea6ad1d4a4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T11:57:33-07:00",
-          "message": "refactor(facts): a recorded severity is read back as data, and a state-keyed source clicked before a recording replays (candybar-gather-renderer-76bb.6pj.i7w)\n\nA recording's severity is its level, glyph and colours as the draw wrote\nthem, so the hand-kept list of severities a recording could carry goes; the\nlevels are keyed by DiagnosticLevel, so a new level fails to compile until\nthe parser reads it. The turn and draw parsers spread the click state they\nparsed rather than copying its fields by name.\n\nA seam case pins a click on a state variable a source is keyed on, before\nthe recording starts: the turn is taken again when the new key's run lands,\nso the opening carries the click and the replay draws from that run.\n"
-        },
-        {
-          "sha": "be5aefb1c12730d14addcbe8121b593a17ef1ad7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T08:36:16-07:00",
-          "message": "fix(facts): a draw of a held view the session moved away from replays that view's held turn (candybar-gather-renderer-76bb.6pj.i7w)\n\nA hold is a view's and the replay holds one view, so a draw of a view the\nrecording is not on is written between that view's turn and the current\nview's. Without it, the replay reopened that view under the current view's\nhold: a fresh turn where the live bar was held, or a throw in the open.\n\nThe recorder keeps each reaction's disposer as `reaction` returns it, so a\nview entered and left in one batch is disposed before its first run and\nwrites nothing after the recording leaves it or ends.\n\nThe turn's failure reaches the draw typed, so the ⚠ names a held turn for\nwhat it is rather than as a document that could not be stamped.\n"
-        },
-        {
-          "sha": "0f7d6a06435d33d86f47a2cb7e379a1a02c90889",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T08:16:25-07:00",
-          "message": "fix(facts): a recording of a session whose turn failed replays the failed turn's frame (candybar-gather-renderer-76bb.6pj.i7w)\n\nA turn whose inputs cannot be read holds the bar on the last turn taken, with the\nfailure as the ⚠ beside the settings door. A replay took every turn the live one\ncould not and drew the newer request and picks with no ⚠.\n\n- The turn holds the request and the store's state it was taken over, and its\n  failure is typed by cause; `held()` says when the bar is held.\n- A recording opens on the turn the bar is drawn from and writes it again\n  wherever the hold moves; the replay takes each turn line's turn and holds its\n  own over the same lines, by making its turn inputs fail.\n- A draw notes its follow's document and carries the diagnostics list the\n  daemon's draw built; the demo derives the indicator from it.\n- drawDsl's projections are typed: a view's draw hands all four, a fixed\n  payload hands its bound self.\n- RECORDING_VERSION 5.\n"
-        }
-      ]
-    },
-    {
       "version": "pr-644",
       "ref": "refs/pull/644/merge",
-      "sha": "53716ddf96a04af9fa9986e3b35d2d974a252c0c",
-      "timestamp": "2026-11-06T19:17:17.711Z",
+      "sha": "ee3cd166b7a9dd3f7eeee985cbb414bc6683132b",
+      "timestamp": "2026-11-06T19:25:30.772Z",
       "commits": [
         {
-          "sha": "53716ddf96a04af9fa9986e3b35d2d974a252c0c",
+          "sha": "ee3cd166b7a9dd3f7eeee985cbb414bc6683132b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T19:16:16Z",
-          "message": "Merge 5f4e472e75e90daf4888021ba0ef9497b04bb5bd into b3a94823776445b5ab510fe52ab4c622b2f80cff\n"
-        },
-        {
-          "sha": "5f4e472e75e90daf4888021ba0ef9497b04bb5bd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:16:04-07:00",
-          "message": "test(links): the tmux row case's user binding is one every tmux resolves (candybar-gather-renderer-76bb.b2l.mxk)\n\nThe case bound the user's MouseDown1Status to tmux 3.8's default,\n`switch-client -t =`. On the runner's tmux 3.4 that finds no mouse target for\na window-list press, so the list ends before the mark and the case fails on\nevery CI run, main included since the binding became constant text.\n`select-window -t =` resolves on both, and the case still proves the user's\nbinding runs and switches the window.\n"
+          "timestamp": "2026-11-06T19:24:35Z",
+          "message": "Merge 75e039c8df19fba0cf2eb1c0a07612f97e100fbb into b3a94823776445b5ab510fe52ab4c622b2f80cff\n"
         },
         {
           "sha": "75e039c8df19fba0cf2eb1c0a07612f97e100fbb",
