@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "5b7989a64a1f6bc3a423a4869e89dbf55505a6f4",
+      "timestamp": "2026-11-06T12:02:38.500Z",
+      "commits": [
+        {
+          "sha": "5b7989a64a1f6bc3a423a4869e89dbf55505a6f4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T05:01:46-07:00",
+          "message": "feat(links)!: one link grammar: a link that names no renderer is refused naming its form (candybar-gather-renderer-76bb.b2l.eul) (#638)\n\n* feat(links)!: one link grammar: a link that names no renderer is refused naming its form, at the click, in the URL handler and at load (candybar-gather-renderer-76bb.b2l.eul)\n\nThe parse reads cc-candybar://to/<name>/<verb>/<tail> alone; a direct\ncc-candybar://<verb>/… or a bare cc-candybar://<value> is refused, with a\nproblem naming the form, and `to` is no longer nullable, so the daemon's\nlink judgement loses its null-address exception. The URL handler refuses\nboth forms through its notification, with fixed text. A template literal\nin either form is a load error from the same parse; the retired-verb table\nit made dead is deleted.\n\nEvery producer builds its link through one addressed-link builder: the\ndispatch minter, the tmux status binding (recognised by its click verb, so\na binding from a build before names is still adopted), the doctor probe\n(now probing a named home through the socket its name selects) and the\nclick bench. The install test URL, itself a bare copy link, is removed.\n\n* fix(links): a template literal is refused at load only when no completion of it can name a renderer, quoted as written; a drawn link the daemon refuses reads as its refusal (candybar-gather-renderer-76bb.b2l.eul)\n\nThe load check read each literal as a whole link, with a `/` appended,\nso a literal that is only a link's head (`\"cc-candybar://to/main\"` joined\nto a computed tail, `\"cc-candybar://\"` in a hasPrefix) failed to load, and\na bare literal was named the direct verb form and quoted with a slash the\nauthor never wrote. A literal is now refused when it opens neither the\naddress nor a start of it, and the error quotes it as written.\n\ndescribeLink names a refused drawn link's refusal instead of throwing, so\na config that computes an old-grammar link at the draw no longer fails the\ndev viewers' whole frame.\n\n* fix(links): a drawn link the parse refuses reaches the daemon from the site and the harness, and a printf format's head ends at its first verb (candybar-gather-renderer-76bb.b2l.eul)\n\nA drawn link reads as one typed value, its effects or the parse's\nrefusal. The site and the drive-bar harness send a refused link to the\ndaemon, which refuses it with the reason, where they threw before;\neffectsOf keeps throwing for tests that read the renderer's own links,\nand the throwing click reader moves into the test helper that alone\nused it.\n\nA literal like \"cc-candybar://%s/copy/%s\" may have its address filled\nin at the draw, so the load check reads its head up to the first `%`.\nThe wire module spells the scheme prefix and the address opener once.\n\n* fix(links): a drawn link whose value does not decode reads as its refusal, the load error names the action as the remedy, and the socket import rule covers the renamed path (candybar-gather-renderer-76bb.b2l.eul)\n\ndrawnClickOf promised the daemon's refusal for every drawn link, but a\nmalformed escape in a parsed link still threw from the decode; it now\nreturns the refusal the daemon gives that click. The load error for an\nold-grammar literal says to bind an action, whose link names the\nrenderer that draws it. The eslint owner list for deriving a socket\nstill named the old function, so the renamed one was unrestricted. The\nclicks design doc and the UI elements doc say links have one form."
+        },
+        {
+          "sha": "a9a0d05d97e08cc2b5a9facc01cb113d92d542fe",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-06T10:56:28Z",
+          "message": "chore(release): set `package.json` to 1.200.1 [skip ci]\n\n## [1.200.1](https://github.com/promptctl/cc-candybar/compare/v1.200.0...v1.200.1) (2026-11-06)\n\n### Bug Fixes\n\n* **facts:** a recording replays each frame from what its answer drew, in the file's order, with the recorded home (candybar-gather-renderer-76bb.6pj.rat) ([#636](https://github.com/promptctl/cc-candybar/issues/636)) ([e96f9bd](https://github.com/promptctl/cc-candybar/commit/e96f9bdd556e0da087163fa792f7a69bdaeb5c5d))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-639",
       "ref": "refs/pull/639/merge",
       "sha": "852889018ebb2c54cd2b2406736c84c0575c3059",
@@ -34,78 +56,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T04:27:19-07:00",
           "message": "fix(facts): a recording replays a session's picks and open menus: each draw carries the state it read (candybar-gather-renderer-76bb.6pj.gs4)\n\nA recording carried the session's documents and requests but not what its\nclicks left, so a replay drew every pick absent, every menu closed, both\nhistories empty and no closing flash.\n\nEach draw line now carries the session's draw state: the store's values and\nrevision for the session, the settings history's and back history's depths,\nand when its menus' idle period began. The revision crosses as itself because\nframe memory keeps the last frame only while it holds; the idle instant is the\none the draw was handed, which the daemon's draw and the seam rig both read\nthrough one MenuIdle method that hands, draws and observes. The replay\nrestores each draw's state before drawing it. The recording format is v3.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-638",
-      "ref": "refs/pull/638/merge",
-      "sha": "34f6d583a5651d1636351778f5482eabdf704f31",
-      "timestamp": "2026-11-06T11:52:20.325Z",
-      "commits": [
-        {
-          "sha": "34f6d583a5651d1636351778f5482eabdf704f31",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T04:51:24-07:00",
-          "message": "Merge 2c2190a412b1a01b62d80b3b259bd0daac1d6f3a into a9a0d05d97e08cc2b5a9facc01cb113d92d542fe\n"
-        },
-        {
-          "sha": "2c2190a412b1a01b62d80b3b259bd0daac1d6f3a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T04:51:22-07:00",
-          "message": "Merge branch 'main' into candybar-gather-renderer-76bb.b2l.eul"
-        },
-        {
-          "sha": "26efd8a369a77a303f700f3d642d51e7d7ca71e6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T04:37:21-07:00",
-          "message": "fix(links): a drawn link whose value does not decode reads as its refusal, the load error names the action as the remedy, and the socket import rule covers the renamed path (candybar-gather-renderer-76bb.b2l.eul)\n\ndrawnClickOf promised the daemon's refusal for every drawn link, but a\nmalformed escape in a parsed link still threw from the decode; it now\nreturns the refusal the daemon gives that click. The load error for an\nold-grammar literal says to bind an action, whose link names the\nrenderer that draws it. The eslint owner list for deriving a socket\nstill named the old function, so the renamed one was unrestricted. The\nclicks design doc and the UI elements doc say links have one form.\n"
-        },
-        {
-          "sha": "ce89103d1ce44c9601e831104312f92a5b99ec68",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T04:15:08-07:00",
-          "message": "fix(links): a drawn link the parse refuses reaches the daemon from the site and the harness, and a printf format's head ends at its first verb (candybar-gather-renderer-76bb.b2l.eul)\n\nA drawn link reads as one typed value, its effects or the parse's\nrefusal. The site and the drive-bar harness send a refused link to the\ndaemon, which refuses it with the reason, where they threw before;\neffectsOf keeps throwing for tests that read the renderer's own links,\nand the throwing click reader moves into the test helper that alone\nused it.\n\nA literal like \"cc-candybar://%s/copy/%s\" may have its address filled\nin at the draw, so the load check reads its head up to the first `%`.\nThe wire module spells the scheme prefix and the address opener once.\n"
-        },
-        {
-          "sha": "c9365a80f4b763ddda4a3d536a49d0c5520b657a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T04:02:31-07:00",
-          "message": "fix(links): a template literal is refused at load only when no completion of it can name a renderer, quoted as written; a drawn link the daemon refuses reads as its refusal (candybar-gather-renderer-76bb.b2l.eul)\n\nThe load check read each literal as a whole link, with a `/` appended,\nso a literal that is only a link's head (`\"cc-candybar://to/main\"` joined\nto a computed tail, `\"cc-candybar://\"` in a hasPrefix) failed to load, and\na bare literal was named the direct verb form and quoted with a slash the\nauthor never wrote. A literal is now refused when it opens neither the\naddress nor a start of it, and the error quotes it as written.\n\ndescribeLink names a refused drawn link's refusal instead of throwing, so\na config that computes an old-grammar link at the draw no longer fails the\ndev viewers' whole frame.\n"
-        },
-        {
-          "sha": "a45c5d716feca904652a753b0a8b1f5831325bab",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T03:46:42-07:00",
-          "message": "feat(links)!: one link grammar: a link that names no renderer is refused naming its form, at the click, in the URL handler and at load (candybar-gather-renderer-76bb.b2l.eul)\n\nThe parse reads cc-candybar://to/<name>/<verb>/<tail> alone; a direct\ncc-candybar://<verb>/… or a bare cc-candybar://<value> is refused, with a\nproblem naming the form, and `to` is no longer nullable, so the daemon's\nlink judgement loses its null-address exception. The URL handler refuses\nboth forms through its notification, with fixed text. A template literal\nin either form is a load error from the same parse; the retired-verb table\nit made dead is deleted.\n\nEvery producer builds its link through one addressed-link builder: the\ndispatch minter, the tmux status binding (recognised by its click verb, so\na binding from a build before names is still adopted), the doctor probe\n(now probing a named home through the socket its name selects) and the\nclick bench. The install test URL, itself a bare copy link, is removed.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "e96f9bdd556e0da087163fa792f7a69bdaeb5c5d",
-      "timestamp": "2026-11-06T10:44:15.463Z",
-      "commits": [
-        {
-          "sha": "e96f9bdd556e0da087163fa792f7a69bdaeb5c5d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T03:43:08-07:00",
-          "message": "fix(facts): a recording replays each frame from what its answer drew, in the file's order, with the recorded home (candybar-gather-renderer-76bb.6pj.rat) (#636)\n\n* fix(facts): a recording replays each frame from what its answer drew, in the file's order, with the recorded home (candybar-gather-renderer-76bb.6pj.rat)\n\nA live answer is drawn after its request's wait, from the view that request\nholds. The recording now writes a draw line when the answer is drawn, after\nthe document and the declaration that draw read (each restated when it is\nnot the last the recording wrote), and only to the recordings that saw the\nrequest arrive. The replay walks the file's lines in order: the recording\narm serves the last document reached and keeps no clock. The header carries\nthe home the payloads were composed against.\n\n* fix(facts): a play draws each answer at the instant its arm says the request arrived; the recording's format is facts v2 (candybar-gather-renderer-76bb.6pj.rat)\n\nThe live demo drew at start + i×450ms while each settle spent real time\nbefore the next sleep, so its clock fell behind the machine's frame by\nframe. An arm now brings the clock to a request and says the instant it\narrived at: the live arm sleeps until the offset and reads its clock, as\nthe daemon reads an arrival; a held clock gives the recorded instant.\n\nThe recording's lines changed (a header home, draw and declared lines),\nand the facts protocol version is what guards a recording, so it is 2:\na 1.199 recording is refused by its version, not by a missing field.\n\nThe header's home is the turn's, the one the payload was composed\nagainst, and that home is a string at every caller. The parser's instant\nreader is parseInstant, beside the parser's other parse functions.\n\n* fix(facts): a recording has its own format version; a record counts its answers; one conversion of an instant back to ms (candybar-gather-renderer-76bb.6pj.rat)\n\nA recording's request, declared and draw lines are the renderer's request\npath, not the facts protocol, so the file's header names its own format\n(v2, refusing the shipped v1 by version) and the documents in it keep the\nfacts version each one's parse already refuses. Tying both to one number\nwould move Gather's versioned address for a renderer-only change.\n\nWhat a finished recording reports is the answers it drew, the frames a\nreplay draws, and the record verb prints them as answers.\n\nAn instant's clock milliseconds are rounded back in one place: a Date\ntruncates, and an instant read off a millisecond clock can land a hair\nbelow its reading."
-        },
-        {
-          "sha": "3c33c5be3daa31e7700684f97a79f2e90bcff262",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-06T10:21:55Z",
-          "message": "chore(release): set `package.json` to 1.200.0 [skip ci]\n\n## [1.200.0](https://github.com/promptctl/cc-candybar/compare/v1.199.2...v1.200.0) (2026-11-06)\n\n### Features\n\n* **links:** a click reaches the renderer that drew it, by name (candybar-gather-renderer-76bb.b2l.7q7) ([#632](https://github.com/promptctl/cc-candybar/issues/632)) ([b38ab23](https://github.com/promptctl/cc-candybar/commit/b38ab233e3dc44e6704d7461d5a952da81f5678d))\n\n### Bug Fixes\n\n* **just:** deploy builds the URL handler app on macOS, so install from a checkout finds it ([#635](https://github.com/promptctl/cc-candybar/issues/635)) ([21b794e](https://github.com/promptctl/cc-candybar/commit/21b794ed4cc04858233f9002c26af82023fcf86a))\n"
         }
       ]
     },

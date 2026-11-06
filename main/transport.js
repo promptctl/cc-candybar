@@ -22647,6 +22647,7 @@ var DIAGNOSTICS_CLOSED = "0";
 // src/click/scheme.ts
 init_globals();
 var URL_SCHEME = "cc-candybar";
+var isBarLink = (url) => url.startsWith(`${URL_SCHEME}://`);
 
 // src/daemon/home.ts
 init_globals();
@@ -22748,6 +22749,8 @@ function homeOf(host) {
 
 // src/click/wire.ts
 var LINK_TO = "to";
+var LINK_PREFIX = `${URL_SCHEME}://`;
+var ADDRESS = `${LINK_TO}/`;
 var VERB_DISPATCH = "dispatch";
 var VERB_SET_STATE = "set-state";
 var VERB_STEP_STATE = "step-state";
@@ -22849,7 +22852,10 @@ function effectsUrl(to, effects, says = clickDoes(effects)) {
     (e) => `e=${encodeURIComponent(`${e.verb}/${encodeSegments(e.args)}`)}`
   );
   const qs = [`does=${spell(says)}`, ...params].join("&");
-  return `${URL_SCHEME}://${LINK_TO}/${to}/${VERB_DISPATCH}/${qs}`;
+  return addressedLink(to, VERB_DISPATCH, qs);
+}
+function addressedLink(to, verb, tail) {
+  return `${LINK_PREFIX}${ADDRESS}${to}/${verb}/${tail}`;
 }
 function parseEffects(rawValue) {
   return new S(rawValue).getAll("e").map(splitVerb);
@@ -22875,16 +22881,21 @@ function splitVerb(s) {
   return i === -1 ? { verb: s, value: "" } : { verb: s.slice(0, i), value: s.slice(i + 1) };
 }
 function parseHandlerUrl(rawUrl) {
-  const prefix = `${URL_SCHEME}://`;
-  if (!rawUrl.startsWith(prefix)) {
-    return { ok: false, problem: `expected a ${prefix} link, got: ${rawUrl}` };
+  if (!rawUrl.startsWith(LINK_PREFIX)) {
+    return {
+      ok: false,
+      problem: `expected a ${LINK_PREFIX} link, got: ${rawUrl}`
+    };
   }
-  const rest2 = rawUrl.slice(prefix.length);
-  const addressed = `${LINK_TO}/`;
-  if (!rest2.startsWith(addressed)) {
-    return rest2.includes("/") ? verbOf(rest2, null) : { ok: true, to: null, verb: VERB_COPY, value: rest2 };
+  const rest2 = rawUrl.slice(LINK_PREFIX.length);
+  if (!rest2.startsWith(ADDRESS)) {
+    const form = rest2.includes("/") ? `the direct verb form ${LINK_PREFIX}<verb>/\u2026` : `the bare copy form ${LINK_PREFIX}<value>`;
+    return {
+      ok: false,
+      problem: `the link is in ${form}, which names no renderer: ${rawUrl}`
+    };
   }
-  const named3 = rest2.slice(addressed.length);
+  const named3 = rest2.slice(ADDRESS.length);
   const slash2 = named3.indexOf("/");
   if (slash2 === -1) {
     return {
@@ -22900,6 +22911,11 @@ function parseHandlerUrl(rawUrl) {
   } catch (error) {
     return { ok: false, problem: error.message };
   }
+}
+function spellsUnaddressedLink(text4) {
+  if (!isBarLink(text4)) return false;
+  const head = text4.slice(LINK_PREFIX.length).split("%")[0];
+  return !head.startsWith(ADDRESS) && !ADDRESS.startsWith(head);
 }
 function verbOf(rest2, to) {
   const slash2 = rest2.indexOf("/");
@@ -39394,37 +39410,6 @@ function isValidDuration(s) {
 
 // src/config/loader/retired-variables.ts
 init_globals();
-
-// src/config-hint.ts
-init_globals();
-
-// src/utils/user-path.ts
-init_globals();
-var import_node_path3 = __toESM(require_path_browserify(), 1);
-function expandHome(p2, home) {
-  return p2 === "~" || p2.startsWith("~/") || p2.startsWith("~\\") ? home + p2.slice(1) : p2;
-}
-function resolveUserPath(base, p2, home) {
-  return import_node_path3.default.resolve(base, expandHome(p2, home));
-}
-function explicitConfigPath(base, p2, home) {
-  return typeof p2 === "string" && p2 !== "" ? resolveUserPath(base, p2, home) : void 0;
-}
-
-// src/config-hint.ts
-var CONFIG_ENV = "CC_CANDYBAR_CONFIG";
-function requestedConfigTarget(argument, environment) {
-  if (argument !== void 0) return { source: "argument", path: argument };
-  if (environment !== void 0) {
-    return { source: "environment", path: environment };
-  }
-  return { source: "search" };
-}
-function chainName(paths2, none2 = "bundled default (no config file loaded)") {
-  return paths2.join(" < ") || none2;
-}
-
-// src/config/loader/retired-variables.ts
 var RETIRED_VARIABLES = /* @__PURE__ */ new Map([
   // brandon-settings-coverage-g4p.lx2
   ["session.budget.amount", { segment: "session", setting: "budget" }],
@@ -39541,16 +39526,6 @@ function retiredEnvKindMessage(raw) {
     return `${head}; a value the payload lacks is read from a file by a "file" source or computed by a "shell" source, and not by echoing the variable there, since a "shell" source runs in the renderer too`;
   }
   return `${head} and read ${field.read} where it was read, or declare ${json5Of(field.declare)} under a name of your own`;
-}
-var RETIRED_LINK_VERBS = /* @__PURE__ */ new Map([
-  [
-    "load-config",
-    `the load-config verb is removed \u2014 a session's config is the file its statusline command names with --config, else the file its shell names in $${CONFIG_ENV}; point the session there instead of linking to a path`
-  ]
-]);
-function retiredLinkVerbMessage(verb) {
-  const where = RETIRED_LINK_VERBS.get(verb);
-  return where === void 0 ? void 0 : `Template spells "${URL_SCHEME}://${verb}/\u2026", a URL no click runs: ${where}`;
 }
 
 // src/config/loader/variables.ts
@@ -46258,15 +46233,14 @@ function templateActionRefs(template, helpers) {
   }
   return [...refs.values()];
 }
-function templateLinkVerbs(template, helpers) {
+function templateUnaddressedLinks(template, helpers) {
   const refs = /* @__PURE__ */ new Map();
   for (const { code, via } of callGraph(template, helpers)) {
     for (const s of code.matchAll(STRING_LITERAL_RE)) {
-      const link = parseHandlerUrl(`${s[0].slice(1, -1)}/`);
-      if (!link.ok) continue;
-      const { verb } = link;
-      const key = `${verb}\0${via ?? "\0"}`;
-      if (!refs.has(key)) refs.set(key, { verb, via });
+      const literal = s[0].slice(1, -1);
+      if (!spellsUnaddressedLink(literal)) continue;
+      const key = `${literal}\0${via ?? "\0"}`;
+      if (!refs.has(key)) refs.set(key, { literal, via });
     }
   }
   return [...refs.values()];
@@ -51486,10 +51460,9 @@ function ccCandybarFuncs() {
       argTypes: ["value"],
       arity: { kind: "exact" }
     },
-    // [LAW:single-enforcer] One URL-encoding function for click-verb URL
-    // construction in templates. encodeURIComponent matches the legacy
-    // src/segments/renderer.ts toolbar/tray renderers, so DSL-emitted
-    // cc-candybar://verb/<value> URLs are byte-identical to legacy ones.
+    // [LAW:single-enforcer] One URL-encoding function for a URL a template
+    // builds: encodeURIComponent, the codec the click wire encodes its own
+    // segments with.
     // [LAW:types-are-the-program] Domain primitive surfaced by chunk-7/8
     // migration (vhi.3) — the proposal explicitly budgets "may add one or
     // two filters during migration." This is one of those.
@@ -51902,7 +51875,7 @@ var { readFile, writeFile, stat, lstat, readdir, mkdir, rm, unlink, rename, open
 
 // src/daemon/cache/watchers.ts
 init_globals();
-var import_node_path7 = __toESM(require_path_browserify(), 1);
+var import_node_path6 = __toESM(require_path_browserify(), 1);
 
 // src/utils/logfmt.ts
 init_globals();
@@ -51911,10 +51884,10 @@ var valueOf = (value) => BARE.test(value) ? value : JSON.stringify(value);
 
 // src/utils/atomic-write.ts
 init_globals();
-var import_node_path4 = __toESM(require_path_browserify(), 1);
+var import_node_path3 = __toESM(require_path_browserify(), 1);
 function writeAtomic(at, text4, mode) {
   const file = resolvedTarget(at);
-  fs_default.mkdirSync(import_node_path4.default.dirname(file), { recursive: true });
+  fs_default.mkdirSync(import_node_path3.default.dirname(file), { recursive: true });
   const tmp = `${file}.tmp`;
   const fileMode = mode ?? fs_default.statSync(file, { throwIfNoEntry: false })?.mode;
   try {
@@ -51956,8 +51929,8 @@ function walkLinks(at) {
 function linkTarget(file) {
   try {
     if (!fs_default.lstatSync(file).isSymbolicLink()) return null;
-    return import_node_path4.default.resolve(
-      fs_default.realpathSync(import_node_path4.default.dirname(file)),
+    return import_node_path3.default.resolve(
+      fs_default.realpathSync(import_node_path3.default.dirname(file)),
       fs_default.readlinkSync(file)
     );
   } catch (e) {
@@ -51994,7 +51967,7 @@ var bindsFolder = (bound) => typeof bound !== "string" && "ino" in bound;
 
 // src/utils/on-disk-path.ts
 init_globals();
-var import_node_path5 = __toESM(require_path_browserify(), 1);
+var import_node_path4 = __toESM(require_path_browserify(), 1);
 function canonicalDirectory(p2) {
   try {
     return fs_default.statSync(p2).isDirectory() ? fs_default.realpathSync.native(p2) : null;
@@ -52004,24 +51977,24 @@ function canonicalDirectory(p2) {
 }
 function existingAncestor(p2) {
   const real = canonicalDirectory(p2);
-  const parent = import_node_path5.default.dirname(p2);
+  const parent = import_node_path4.default.dirname(p2);
   if (real !== null || parent === p2) return { dir: real ?? p2, rest: [] };
   const above = existingAncestor(parent);
-  return { dir: above.dir, rest: [...above.rest, import_node_path5.default.basename(p2)] };
+  return { dir: above.dir, rest: [...above.rest, import_node_path4.default.basename(p2)] };
 }
 function onDiskDirectory(dir) {
   const { dir: real, rest: rest2 } = existingAncestor(dir);
-  return import_node_path5.default.join(real, ...rest2);
+  return import_node_path4.default.join(real, ...rest2);
 }
 
 // src/utils/watch-target.ts
 init_globals();
-var import_node_path6 = __toESM(require_path_browserify(), 1);
+var import_node_path5 = __toESM(require_path_browserify(), 1);
 function nearestWatchTarget(candidate) {
-  const { dir, rest: rest2 } = existingAncestor(import_node_path6.default.dirname(candidate));
+  const { dir, rest: rest2 } = existingAncestor(import_node_path5.default.dirname(candidate));
   return {
     dir,
-    name: rest2[0] ?? import_node_path6.default.basename(candidate),
+    name: rest2[0] ?? import_node_path5.default.basename(candidate),
     leaf: rest2.length === 0
   };
 }
@@ -52087,7 +52060,7 @@ function folded(window2, next) {
   for (const p2 of next.paths) window2.paths.add(p2);
   return window2;
 }
-var namedOf = (dir, filename) => filename === null ? { kind: "unknown" } : { kind: "changed", paths: /* @__PURE__ */ new Set([import_node_path7.default.join(dir, filename)]) };
+var namedOf = (dir, filename) => filename === null ? { kind: "unknown" } : { kind: "changed", paths: /* @__PURE__ */ new Set([import_node_path6.default.join(dir, filename)]) };
 var failedOf = (d) => ({
   kind: "failed",
   reason: `${d.path}: ${d.reason}`
@@ -52301,7 +52274,7 @@ var WatcherRegistry = class {
   heard(dir, handle, changed) {
     const { state } = dir;
     if (!heldBy(state, handle)) return;
-    const moved = changed === import_node_path7.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== state.bound;
+    const moved = changed === import_node_path6.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== state.bound;
     for (const { slot, filter } of dir.listeners) {
       if (filter === null || changed === null || filter.has(changed) || moved)
         this.fire(slot, namedOf(dir.path, changed));
@@ -52401,7 +52374,7 @@ var WatcherRegistry = class {
 
 // src/daemon/cache/file-events.ts
 init_globals();
-var import_node_path8 = __toESM(require_path_browserify(), 1);
+var import_node_path7 = __toESM(require_path_browserify(), 1);
 var PROBE_EVERY_MS = 3e4;
 var STALL_AFTER = 2;
 var PROBE_FILE = "probe";
@@ -52577,7 +52550,7 @@ var FileEventDelivery = class {
     }
     try {
       await fs_default.promises.writeFile(
-        import_node_path8.default.join(inst.folder, PROBE_FILE),
+        import_node_path7.default.join(inst.folder, PROBE_FILE),
         String(at)
       );
     } catch (e) {
@@ -53162,18 +53135,18 @@ var Refreshes = class {
 
 // src/source-digest.ts
 init_globals();
-var import_node_path9 = __toESM(require_path_browserify(), 1);
+var import_node_path8 = __toESM(require_path_browserify(), 1);
 var isSourceEntry = (name) => !name.startsWith(".") && !name.endsWith("~");
 function entryBytes(p2, st) {
   return st.isSymbolicLink() ? import_buffer.Buffer.from(fs_default.readlinkSync(p2)) : fs_default.readFileSync(p2);
 }
 function sourceEntries(root, dir, keep2 = isSourceEntry) {
   return fs_default.readdirSync(dir).filter(keep2).sort().flatMap((name) => {
-    const p2 = import_node_path9.default.join(dir, name);
+    const p2 = import_node_path8.default.join(dir, name);
     const st = fs_default.lstatSync(p2, { throwIfNoEntry: false });
     if (st === void 0) return [];
     if (st.isDirectory()) return sourceEntries(root, p2);
-    const rel = import_node_path9.default.relative(root, p2).split(import_node_path9.default.sep).join("/");
+    const rel = import_node_path8.default.relative(root, p2).split(import_node_path8.default.sep).join("/");
     return [[rel, entryBytes(p2, st)]];
   });
 }
@@ -54984,6 +54957,35 @@ var TMUX_ENV = {
   truecolor: "CLAUDE_CODE_TMUX_TRUECOLOR"
 };
 var inTmux = (tmux3) => tmux3 !== null && tmux3 !== void 0;
+
+// src/config-hint.ts
+init_globals();
+
+// src/utils/user-path.ts
+init_globals();
+var import_node_path9 = __toESM(require_path_browserify(), 1);
+function expandHome(p2, home) {
+  return p2 === "~" || p2.startsWith("~/") || p2.startsWith("~\\") ? home + p2.slice(1) : p2;
+}
+function resolveUserPath(base, p2, home) {
+  return import_node_path9.default.resolve(base, expandHome(p2, home));
+}
+function explicitConfigPath(base, p2, home) {
+  return typeof p2 === "string" && p2 !== "" ? resolveUserPath(base, p2, home) : void 0;
+}
+
+// src/config-hint.ts
+var CONFIG_ENV = "CC_CANDYBAR_CONFIG";
+function requestedConfigTarget(argument, environment) {
+  if (argument !== void 0) return { source: "argument", path: argument };
+  if (environment !== void 0) {
+    return { source: "environment", path: environment };
+  }
+  return { source: "search" };
+}
+function chainName(paths2, none2 = "bundled default (no config file loaded)") {
+  return paths2.join(" < ") || none2;
+}
 
 // src/render/strip.ts
 init_globals();
@@ -61079,9 +61081,14 @@ function checkTemplateRefs(ctx, declPath, template, scope, opts) {
     const hint = namespaced !== void 0 && refResolves(namespaced, scope) ? ` (segment-local vars are namespaced \u2014 write ".${namespaced}")` : retiredReadHint(ref);
     report2(`Template references unknown variable ".${ref}"${hint}`, via);
   }
-  for (const { verb, via } of templateLinkVerbs(template, scope.helpers)) {
-    const retired = retiredLinkVerbMessage(verb);
-    if (retired !== void 0) report2(retired, via);
+  for (const { literal, via } of templateUnaddressedLinks(
+    template,
+    scope.helpers
+  )) {
+    report2(
+      `Template spells a link in a grammar older than names, which names no renderer: "${literal}". Bind an action instead ({{ action "name" \u2026 }}): its link names the renderer that draws it`,
+      via
+    );
   }
 }
 function helperKeyPath(name, segment) {
@@ -69302,7 +69309,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.200.0";
+var PACKAGE_VERSION = "1.200.1";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -71857,26 +71864,31 @@ function linksOf({ rows }) {
     );
   });
 }
-var isBarLink = (url) => url.startsWith(`${URL_SCHEME}://`);
 function decodeArgs(verb, value) {
   return SEGMENTED_VERBS.has(verb) ? decodeSegments(value) : [decodeURIComponent(value)];
 }
-function clickOf(url) {
+function drawnClickOf(url) {
   const link = parseHandlerUrl(url);
-  if (!link.ok) throw new Error(link.problem);
-  return { verb: link.verb, value: link.value };
-}
-function effectsOf(url) {
-  const { verb, value } = clickOf(url);
-  if (verb !== VERB_DISPATCH) return [{ verb, args: decodeArgs(verb, value) }];
-  return parseEffects(value).map((e) => ({
-    verb: e.verb,
-    args: decodeArgs(e.verb, e.value)
-  }));
+  if (!link.ok) return link;
+  const { verb, value } = link;
+  try {
+    const effects = verb === VERB_DISPATCH ? parseEffects(value).map((e) => ({
+      verb: e.verb,
+      args: decodeArgs(e.verb, e.value)
+    })) : [{ verb, args: decodeArgs(verb, value) }];
+    return { ok: true, effects };
+  } catch (error) {
+    return {
+      ok: false,
+      problem: `the link's value does not decode (${error.message}): ${url}`
+    };
+  }
 }
 function describeLink(link, sessionId2) {
   if (!isBarLink(link.url)) return `opens ${link.url}`;
-  return effectsOf(link.url).map(
+  const click3 = drawnClickOf(link.url);
+  if (!click3.ok) return `refused: ${click3.problem}`;
+  return click3.effects.map(
     ({ verb, args }) => [verb, ...args.map((a) => a === sessionId2 ? "<session>" : a)].join(" ")
   ).join(" ; ");
 }
@@ -78600,9 +78612,9 @@ var VERB_FACT = {
 async function linkClick(parts, url, arrival, facts, clientGone) {
   const link = parseHandlerUrl(url);
   if (!link.ok) return { kind: "bad-request", problems: [link.problem] };
-  noteFacts(facts, { [TO_FACT[arrival.via]]: link.to ?? "-" });
+  noteFacts(facts, { [TO_FACT[arrival.via]]: link.to });
   const own2 = parts.links.to;
-  if (link.to !== null && link.to !== own2) {
+  if (link.to !== own2) {
     return {
       kind: "bad-request",
       problems: [
@@ -78677,7 +78689,7 @@ async function statusLineClick(parts, value, facts, clientGone) {
   const click3 = tmuxStatusLines.linkAt(value);
   if (click3.kind === "refused") return refused2(click3.reason);
   noteFacts(facts, { link: click3.url });
-  if (click3.url.startsWith("cc-candybar://")) {
+  if (isBarLink(click3.url)) {
     return linkClick(
       parts,
       click3.url,
@@ -84101,9 +84113,12 @@ function boundOf2(listKeys) {
   const found2 = BOUND.exec(listKeys);
   return found2 === null ? null : { line: found2[0], command: found2[1] };
 }
-var CLICK_URL = `cc-candybar://${VERB_TMUX_STATUS_CLICK}/`;
-var clickUrl = (socket) => `${CLICK_URL}${encodeSegments([socket])}/#{s/%//:pane_id}/#{q:mouse_status_range}`;
-var isClickBinding = (bound) => bound?.command.includes(CLICK_URL) ?? false;
+var clickUrl = (name, socket) => addressedLink(
+  name,
+  VERB_TMUX_STATUS_CLICK,
+  `${encodeSegments([socket])}/#{s/%//:pane_id}/#{q:mouse_status_range}`
+);
+var isClickBinding = (bound) => bound?.command.includes(`/${VERB_TMUX_STATUS_CLICK}/`) ?? false;
 function bindingRestorePlan(prior, listKeys) {
   const forget = {
     command: ["set-option", "-g", "-q", "-u", BINDING_OPTION]
@@ -84506,7 +84521,7 @@ var TmuxStatusLines = class {
         "if-shell",
         "-F",
         `#{m:${RANGE_PREFIX}*,#{mouse_status_range}}`,
-        `run-shell -b ${tmuxQuoted(`${this.deps.handler} ${clickUrl(socket)}`)}`,
+        `run-shell -b ${tmuxQuoted(`${this.deps.handler} ${clickUrl(this.deps.name, socket)}`)}`,
         ...prior === null ? [] : [prior.command]
       ],
       ["set-option", "-g", BINDING_OPTION, JSON.stringify(record2)]
@@ -87358,7 +87373,8 @@ function copy2(text4) {
   );
 }
 async function click2(url, size) {
-  const effects = effectsOf(url);
+  const drawn = drawnClickOf(url);
+  const effects = drawn.ok ? drawn.effects : [];
   const host = effects.filter((e) => HOST_VERBS.has(e.verb));
   if (host.length > 0) {
     const copiesOnly = effects.every((e) => e.verb === VERB_COPY);
