@@ -42,8 +42,9 @@ import { DISCLOSURE_CLOSED } from "../../../src/config/disclosure";
 import { SETTINGS_NS } from "../../../src/config/reserved-names";
 import {
   addressedLink,
-  VERB_DOCTOR_PROBE,
+  probeLink,
   VERB_DOCTOR_RUN,
+  VERB_PROBE,
 } from "../../../src/click/wire";
 import {
   PROTOCOL_VERSION,
@@ -192,7 +193,7 @@ test("the doctor's config row says what named the session's file", async () => {
 });
 
 // brandon-doctor-v62x.a1z: the daemon's half of `cc-candybar doctor`'s probe,
-// over the wire — a `doctor-probe` link as the URL handler forwards it (a
+// over the wire — a `probe` link as the URL handler forwards it (a
 // `url` frame, versioned by itself, no `v`) and as `url-handle` sends it (a
 // `click` request) are listed in the stats the CLI reads back with who
 // delivered them, and the doctor row of a session reads its own click's.
@@ -235,14 +236,14 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
     expect(
       await request({
         kind: "click",
-        url: addressedLink(daemon.name, VERB_DOCTOR_PROBE, nonce),
+        url: probeLink(daemon.name, nonce),
       }),
     ).toMatchObject({ ok: true });
     clicks += 1;
     const forwardedNonce = "223e4567-e89b-42d3-a456-426614174000";
     await forwarded({
       urlV: URL_FRAME_VERSION,
-      url: addressedLink(daemon.name, VERB_DOCTOR_PROBE, forwardedNonce),
+      url: probeLink(daemon.name, forwardedNonce),
     });
     expect((await statsOf(daemon.daemon)).handlerProbes).toMatchObject([
       { nonce, delivery: { kind: "cli" } },
@@ -256,7 +257,7 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
     await forwarded({ urlV: 1 });
     // A link in a grammar older than names (a stale forwarder still delivers
     // one) is refused naming its form, and runs nothing.
-    await forwarded({ urlV: 1, url: `cc-candybar://${VERB_DOCTOR_PROBE}/x` });
+    await forwarded({ urlV: 1, url: `cc-candybar://${VERB_PROBE}/x` });
     await forwarded({ urlV: 1, url: "cc-candybar://hello" });
     const events = await loggedLines(
       env,
@@ -264,10 +265,12 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
       (picked) => picked.length >= 7,
       "seven click events",
     );
-    expect(events[0]).toContain(` via=cli to=${daemon.name} verb=doctor-probe `);
+    expect(events[0]).toContain(
+      ` via=cli to=${daemon.name} verb=${VERB_PROBE} `,
+    );
     expect(events[0]).toContain(" outcome=ok");
     expect(events[1]).toContain(
-      ` via=forwarder urlV=1 to=${daemon.name} verb=doctor-probe `,
+      ` via=forwarder urlV=1 to=${daemon.name} verb=${VERB_PROBE} `,
     );
     expect(events[1]).toContain(" outcome=ok");
     expect(events[2]).toMatch(
@@ -280,7 +283,7 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
       / via=forwarder urlV=1 .* outcome=bad-request problems="the URL handler's frame carries no url string"/,
     );
     expect(events[5]).toMatch(
-      / via=forwarder urlV=1 .* outcome=bad-request problems="the link is in the direct verb form cc-candybar:\/\/<verb>\/…, which names no renderer: cc-candybar:\/\/doctor-probe\/x"/,
+      / via=forwarder urlV=1 .* outcome=bad-request problems="the link is in the direct verb form cc-candybar:\/\/<verb>\/…, which names no renderer: cc-candybar:\/\/probe\/x"/,
     );
     expect(events[6]).toMatch(
       / via=forwarder urlV=1 .* outcome=bad-request problems="the link is in the bare copy form cc-candybar:\/\/<value>, which names no renderer: cc-candybar:\/\/hello"/,

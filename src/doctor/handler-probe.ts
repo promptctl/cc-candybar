@@ -4,9 +4,10 @@
 // The bar never runs this — a doctor click there already came back through
 // the handler (edge.ts `clickArrived`). The CLI has no click, so it sends a
 // link of its own: Launch Services hands it to the handler app, which forwards
-// it to the daemon, where the `doctor-probe` verb lists it among the arrivals
+// it to the daemon, where the `probe` verb lists it among the arrivals
 // in its stats. A link that does not come back is then diagnosed: which app
-// Launch Services opens the scheme with, and whether it is the forwarder.
+// Launch Services opens that link with, whether it is the forwarder, and
+// whether the daemon is another build, which may not read the link at all.
 //
 // [LAW:effects-at-boundaries] Every effect is a member of `HandlerProbeEdge`;
 // `probeUrlHandler` is the sequence over them, and a test hands in its own.
@@ -14,10 +15,14 @@
 import { randomUUID } from "node:crypto";
 import { sleep, type Monotonic } from "../time.js";
 import fs from "node:fs";
-import { URL_SCHEME } from "../click/scheme.js";
-import { addressedLink, VERB_DOCTOR_PROBE } from "../click/wire.js";
+import { probeLink } from "../click/wire.js";
 import { describeFailure } from "../daemon/client-transport.js";
-import { fetchStats, shapeSkew } from "../daemon/client-stats.js";
+import {
+  fetchStats,
+  otherBuild,
+  shapeSkew,
+  type Builds,
+} from "../daemon/client-stats.js";
 import type { ClientWorld } from "../daemon/client-transport.js";
 import type { RendererAddress } from "../daemon/home.js";
 import { handlerSocketPath, socketPath } from "../daemon/paths.js";
@@ -61,9 +66,11 @@ export function parseProbeNonce(value: string): string | null {
   return NONCE.test(value) ? value : null;
 }
 
-// What the CLI needs of the running daemon: the probes that reached it.
+// What the CLI needs of the running daemon: the probes that reached it, and
+// whether it is this CLI's build.
 export interface DaemonView {
   readonly arrivals: readonly ProbeArrival[];
+  readonly otherBuild: Builds | null;
 }
 
 export interface HandlerProbeEdge {
@@ -81,8 +88,8 @@ export interface HandlerProbeEdge {
   readonly monotonic: () => Monotonic;
   // One poll interval.
   readonly pause: () => Promise<void>;
-  // The app Launch Services opens the scheme with; null when none claims it.
-  readonly opener: () => Asked<string | null>;
+  // The app Launch Services opens this URL with; null when none claims it.
+  readonly opener: (url: string) => Asked<string | null>;
   readonly exists: (file: string) => boolean;
 }
 
@@ -91,8 +98,11 @@ export interface HandlerProbeEdge {
 const WAIT_MS = 5000;
 const POLL_MS = 100;
 
-function handlerApp(edge: HandlerProbeEdge): Asked<HandlerApp | null> {
-  const opener = edge.opener();
+function handlerApp(
+  edge: HandlerProbeEdge,
+  url: string,
+): Asked<HandlerApp | null> {
+  const opener = edge.opener(url);
   if (opener.kind === "failed") return opener;
   if (opener.value === null) return ok(null);
   const app = opener.value;
@@ -144,11 +154,19 @@ export async function probeUrlHandler(
     };
   }
   const nonce = edge.nonce();
-  const unopened = edge.open(
-    addressedLink(edge.name, VERB_DOCTOR_PROBE, nonce),
-  );
+  const link = probeLink(edge.name, nonce);
+  const unopened = edge.open(link);
   const arrived = unopened === null ? await awaitArrival(edge, nonce) : null;
-  return arrived ?? { kind: "lost", unopened, opener: handlerApp(edge) };
+  // A lost link is diagnosed by the app Launch Services opens that link with,
+  // and by the build of the daemon it was sent to.
+  return (
+    arrived ?? {
+      kind: "lost",
+      unopened,
+      opener: handlerApp(edge, link),
+      otherBuild: daemon.value.otherBuild,
+    }
+  );
 }
 
 // ─── The production edge ─────────────────────────────────────────────────────
@@ -174,9 +192,9 @@ function run(
 
 // NSWorkspace's own answer to "which app opens this URL" — the lookup `open`
 // performs. Prints the app's path, or nothing when no app claims the scheme.
-const OPENER_SCRIPT =
+const openerScript = (url: string): string =>
   'ObjC.import("AppKit");' +
-  `var u = $.NSWorkspace.sharedWorkspace.URLForApplicationToOpenURL($.NSURL.URLWithString("${URL_SCHEME}://probe"));` +
+  `var u = $.NSWorkspace.sharedWorkspace.URLForApplicationToOpenURL($.NSURL.URLWithString(${JSON.stringify(url)}));` +
   'u.isNil() ? "" : u.path.js';
 
 async function daemonView(world: ClientWorld): Promise<Asked<DaemonView>> {
@@ -203,7 +221,7 @@ async function daemonView(world: ClientWorld): Promise<Asked<DaemonView>> {
     }
     arrivals.push(arrival);
   }
-  return ok({ arrivals });
+  return ok({ arrivals, otherBuild: otherBuild(outcome.value) });
 }
 
 export function parseArrival(raw: unknown): ProbeArrival | null {
@@ -237,12 +255,12 @@ export function productionHandlerProbeEdge(
       return opened.kind === "ok" ? null : opened.reason;
     },
     pause: () => sleep(clock, POLL_MS),
-    opener: () => {
+    opener: (url) => {
       const asked = run(
         launcher,
         "doctor.launch-services",
         "/usr/bin/osascript",
-        ["-l", "JavaScript", "-e", OPENER_SCRIPT],
+        ["-l", "JavaScript", "-e", openerScript(url)],
       );
       if (asked.kind === "failed") return asked;
       const app = asked.value.trim();

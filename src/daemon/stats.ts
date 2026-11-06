@@ -193,7 +193,7 @@ export interface StatsSnapshot {
     p99DurationMs: Record<string, number>;
   };
   nextRestartReason: string | null;
-  // The `doctor-probe` links that reached this daemon, newest last — what
+  // The `probe` links that reached this daemon, newest last — what
   // `cc-candybar doctor` reads to learn whether the link it opened arrived.
   handlerProbes: readonly ProbeArrival[];
   // Each session's latest client, as this daemon process saw its last render
