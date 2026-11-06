@@ -4,15 +4,22 @@
     {
       "version": "pr-635",
       "ref": "refs/pull/635/merge",
-      "sha": "61a1f1d7bdec6d1614fa94baf1f2c7ab214918a8",
-      "timestamp": "2026-11-06T09:16:46.255Z",
+      "sha": "3d1f7248735ad9e830b5b8ad50dff6c2ac527d9c",
+      "timestamp": "2026-11-06T09:18:30.519Z",
       "commits": [
         {
-          "sha": "61a1f1d7bdec6d1614fa94baf1f2c7ab214918a8",
+          "sha": "3d1f7248735ad9e830b5b8ad50dff6c2ac527d9c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T09:15:17Z",
-          "message": "Merge a575f170d29b9d0ede7f4f2d1713ba8f3b1c29e6 into 537c926e6cca1e7f2bed89f42058b490482fde86\n"
+          "timestamp": "2026-11-06T09:16:14Z",
+          "message": "Merge 9045738548fe12b4d161b514d53a738e4b3a762f into 537c926e6cca1e7f2bed89f42058b490482fde86\n"
+        },
+        {
+          "sha": "9045738548fe12b4d161b514d53a738e4b3a762f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T02:16:03-07:00",
+          "message": "docs(just): deploy stages the URL handler binary, not the app; the README owns the no-cargo path\n"
         },
         {
           "sha": "a575f170d29b9d0ede7f4f2d1713ba8f3b1c29e6",
