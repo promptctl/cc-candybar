@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-652",
+      "ref": "refs/pull/652/merge",
+      "sha": "cfd8ccd9b99b4f951691ea6fe628afbc82bdfbc8",
+      "timestamp": "2026-11-06T20:55:30.168Z",
+      "commits": [
+        {
+          "sha": "cfd8ccd9b99b4f951691ea6fe628afbc82bdfbc8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:54:38-07:00",
+          "message": "Merge 366b16af407b0a43035367321cf824c3ede22988 into d8b9a7ffe6cac5ba9249eb3428aa11eecd27c4e5\n"
+        },
+        {
+          "sha": "366b16af407b0a43035367321cf824c3ede22988",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:54:27-07:00",
+          "message": "test(spawner): signal the trapping program only once it says its trap is set (candybar-testing-ihvy.0hw)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-649",
       "ref": "refs/pull/649/merge",
       "sha": "84b7ac6b3de9a05ddb44b43b2458f78209797d4e",
