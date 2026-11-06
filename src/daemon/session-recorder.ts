@@ -250,7 +250,7 @@ export function recordToFile(
           closeSync(fd);
           // A recording no request arrived in is one the parser refuses, and
           // it would refuse the same path to the next try: it is not kept.
-          if (error === null && requests === 0) unlinkSync(path);
+          if (requests === 0) unlinkSync(path);
         } catch (e) {
           error ??= e;
         }

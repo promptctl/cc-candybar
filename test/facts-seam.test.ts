@@ -33,11 +33,13 @@ import { cacheDir, locations, stateDir } from "../src/daemon/paths";
 import { createPayloadProviders } from "../src/daemon/payload-providers";
 import { parseClientHints } from "../src/daemon/protocol";
 import type { ViewFacts } from "../src/daemon/render-payload";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf, type SessionId } from "../src/daemon/session-id";
 import {
   recordedCache,
+  RecordingFailed,
   recordToFile,
   settleRequest,
+  type RecordingSink,
   type SessionRecorder,
 } from "../src/daemon/session-recorder";
 import {
@@ -624,6 +626,22 @@ test("a recording no request arrived in leaves no file, so the same path records
     requests: 0,
     daemonClosed: false,
   });
+  expect(fs.existsSync(file)).toBe(false);
+});
+
+test("a recording a write ended before any request leaves no file either", async () => {
+  const s = liveSession();
+  const file = path.join(tempDir("ccb-seam-out-"), "failed.jsonl");
+  const failing = {
+    record: (session: SessionId, sink: RecordingSink) => {
+      sink.write({ kind: "recording", session });
+      sink.end({ kind: "failed", error: new Error("EIO") });
+      return () => {};
+    },
+  };
+  await expect(
+    recordToFile(failing, s.clock, sessionIdOf(SID), file, 1, stays()),
+  ).rejects.toThrow(RecordingFailed);
   expect(fs.existsSync(file)).toBe(false);
 });
 
