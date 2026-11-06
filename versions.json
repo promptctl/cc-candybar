@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-659",
+      "ref": "refs/pull/659/merge",
+      "sha": "600c84f3b3786130396b61ea9ed32cce5722ee1d",
+      "timestamp": "2026-11-06T23:48:14.786Z",
+      "commits": [
+        {
+          "sha": "600c84f3b3786130396b61ea9ed32cce5722ee1d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T23:47:17Z",
+          "message": "Merge 4714ed597559e0530dae64862696918ead6d9786 into 873a8e0e0be2d843b7d0b4c308831e2d20b5bde1\n"
+        },
+        {
+          "sha": "4714ed597559e0530dae64862696918ead6d9786",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T16:00:03-07:00",
+          "message": "test(error-glyph): reuse the file's other-version fixture and scope the daemon end's claim to the gate (candybar-testing-ihvy.fvw.b78)\n"
+        },
+        {
+          "sha": "7c0cc03e42dc76bb65dbd61a3a2b2a7914284395",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T15:58:21-07:00",
+          "message": "test(error-glyph): the version gate takes the daemon's version, so the pipeline test runs a real stale-client exchange with distinct versions (candybar-testing-ihvy.fvw.b78)\n"
+        },
+        {
+          "sha": "9054395689280a90b80526a9b6f86af4bf10f9d9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T15:54:57-07:00",
+          "message": "test(error-glyph): the pipeline test's daemon end writes the version gate's real VERSION_MISMATCH reply (candybar-testing-ihvy.fvw.b78)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "873a8e0e0be2d843b7d0b4c308831e2d20b5bde1",
@@ -56,42 +92,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T16:23:05-07:00",
           "message": "fix(testing): every budgeted wait in a test is cut to what its case has left, so a slow run fails by the wait's name (brandon-menus-sjhy.r62)\n\nA real-daemon case spent a pool slot wait (20 s), readiness (12 s) and its\nown waits inside one Jest timeout (30 s), each sized alone, so their sum\ncould pass it and Jest's anonymous timeout fired first. The test\nenvironment now keeps the running hook's or test's deadline, computed as\njest-circus arms its timer, and every budgeted wait (the pool, readiness,\nuntil, throughout, sendDaemonRequest) is bounded by the smaller of its own\nbudget and that time, less a margin derived from the longest step a wait\ntakes between deadline checks. The process tier's copies of the 30 s go.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-659",
-      "ref": "refs/pull/659/merge",
-      "sha": "f626a3b5d0f8f2bd1a9b45bb650c1b5fd0a102a2",
-      "timestamp": "2026-11-06T23:02:42.888Z",
-      "commits": [
-        {
-          "sha": "f626a3b5d0f8f2bd1a9b45bb650c1b5fd0a102a2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T23:01:44Z",
-          "message": "Merge e45c7423fe0cbd496ce318a181c5f74c0225e56c into dd57369650dd81be6b9ae79149e283f4a1bf42a9\n"
-        },
-        {
-          "sha": "e45c7423fe0cbd496ce318a181c5f74c0225e56c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T16:00:03-07:00",
-          "message": "test(error-glyph): reuse the file's other-version fixture and scope the daemon end's claim to the gate (candybar-testing-ihvy.fvw.b78)\n"
-        },
-        {
-          "sha": "7b226d32a5d050520a5fba12fad6a334eb3d3de8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T15:58:21-07:00",
-          "message": "test(error-glyph): the version gate takes the daemon's version, so the pipeline test runs a real stale-client exchange with distinct versions (candybar-testing-ihvy.fvw.b78)\n"
-        },
-        {
-          "sha": "56873614f3f25c04f5f9fdb6dec42c91f3577ceb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T15:54:57-07:00",
-          "message": "test(error-glyph): the pipeline test's daemon end writes the version gate's real VERSION_MISMATCH reply (candybar-testing-ihvy.fvw.b78)\n"
         }
       ]
     },
