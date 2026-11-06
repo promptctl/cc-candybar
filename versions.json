@@ -4,32 +4,32 @@
     {
       "version": "pr-631",
       "ref": "refs/pull/631/merge",
-      "sha": "4b3d79547cc66de68baedff7ebec0b16b15e537f",
-      "timestamp": "2026-11-06T08:32:20.775Z",
+      "sha": "b67535858b2feb5cf7b8df11c9ef5cf218c2bfa1",
+      "timestamp": "2026-11-06T08:40:01.354Z",
       "commits": [
         {
-          "sha": "4b3d79547cc66de68baedff7ebec0b16b15e537f",
+          "sha": "b67535858b2feb5cf7b8df11c9ef5cf218c2bfa1",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T08:30:10Z",
-          "message": "Merge c8c08245e6974defa85d51c598d8962f1a583d2e into 787741095721977bdce8e6c628817b38188b4f97\n"
+          "timestamp": "2026-11-06T08:38:36Z",
+          "message": "Merge 6c8994ac727c78bafb1bdd8db7b78ec08e520a8e into a024ef4e373bc0a8440684b0123bbd2ba110ad7e\n"
         },
         {
-          "sha": "c8c08245e6974defa85d51c598d8962f1a583d2e",
+          "sha": "6c8994ac727c78bafb1bdd8db7b78ec08e520a8e",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T01:20:00-07:00",
           "message": "fix(test): the close case proves the daemon's own work reached the leak record, and every close failure is reported (candybar-testing-0x6u.6f3)\n"
         },
         {
-          "sha": "34bd8c17850e50cb55756fe34ed972481453186b",
+          "sha": "56e659068142becfbb1b9893bda566735005c894",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T01:18:18-07:00",
           "message": "fix(test): review of the leak fix — the dead baseline goes, a failed close no longer strands the rest, the close-all case closes in finally (candybar-testing-0x6u.6f3)\n"
         },
         {
-          "sha": "db8e0e9c88ce69f470dba1598c6cde16bbc8c39d",
+          "sha": "14b9fbf4cd3da3be0e92c84c2f39d51d630f9209",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T01:12:58-07:00",
