@@ -1,3 +1,4 @@
+import { systemFilesystem } from "../src/disk/system-filesystem";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import { processLauncher } from "./helpers/host";
 import { reaction } from "mobx";
@@ -1996,8 +1997,7 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         dirWatchesOpened: 0,
         dirWatchesClosed: 0,
       };
-      const watchers = new WatcherRegistry({
-        clock: systemTimekeeper,
+      const watchers = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
         counters,
         logger: () => {},
       });
@@ -2194,8 +2194,7 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         const a = path.join(dir, "a");
         fs.writeFileSync(state, "v1");
         fs.symlinkSync(state, a);
-        const watchers = new WatcherRegistry({
-          clock: systemTimekeeper,
+        const watchers = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
           logger: () => {},
         });
         const store = new VariableStore(systemTimekeeper);

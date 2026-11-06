@@ -1,4 +1,4 @@
-import fs from "node:fs";
+import type { Filesystem } from "../disk/filesystem.js";
 
 // What tells one folder from another across a delete and a create: device and
 // inode name a folder that exists now, and birth time is there because ext4
@@ -13,13 +13,14 @@ export interface FolderIdentity {
   readonly ino: bigint;
   readonly birthtimeNs: bigint;
 }
-export type IdentityRead = (folder: string) => FolderIdentity | "gone";
-
 // [LAW:effects-at-boundaries] The disk's answer. A stat that fails for any
 // reason but a missing path throws: the folder cannot be judged.
-export const statIdentity: IdentityRead = (folder) => {
+export const statIdentity = (
+  filesystem: Filesystem,
+  folder: string,
+): FolderIdentity | "gone" => {
   try {
-    const st = fs.statSync(folder, { bigint: true });
+    const st = filesystem.statSync(folder);
     return { dev: st.dev, ino: st.ino, birthtimeNs: st.birthtimeNs };
   } catch (e) {
     const code = (e as NodeJS.ErrnoException).code;
@@ -47,9 +48,9 @@ export const identityKey = (identity: FolderIdentity | "gone"): string =>
 // `statIdentity`'s throw instead.
 export type Bound = FolderIdentity | "gone" | { readonly unreadable: string };
 
-export const boundOf = (folder: string): Bound => {
+export const boundOf = (filesystem: Filesystem, folder: string): Bound => {
   try {
-    return statIdentity(folder);
+    return statIdentity(filesystem, folder);
   } catch (e) {
     return { unreadable: (e as NodeJS.ErrnoException).code ?? String(e) };
   }

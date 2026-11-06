@@ -1,3 +1,4 @@
+import { systemFilesystem } from "../src/disk/system-filesystem";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -22,18 +23,18 @@ describe("folder identity as a watch's key", () => {
   });
 
   test("a directory's key is its identity, and nothing at the path is gone", () => {
-    expect(boundKey(boundOf(dir))).toBe(identityKey(statIdentity(dir)));
-    expect(boundKey(boundOf(path.join(dir, "missing")))).toBe("gone");
+    expect(boundKey(boundOf(systemFilesystem, dir))).toBe(identityKey(statIdentity(systemFilesystem, dir)));
+    expect(boundKey(boundOf(systemFilesystem, path.join(dir, "missing")))).toBe("gone");
   });
 
   test("a directory that cannot be stat'd is thrown to a judge and spelled to a key", () => {
     const loop = path.join(dir, "loop");
     fs.symlinkSync(loop, loop);
-    expect(() => statIdentity(loop)).toThrow(/ELOOP/);
-    expect(boundOf(loop)).toEqual({ unreadable: "ELOOP" });
-    expect(boundKey(boundOf(loop))).toBe("unreadable:ELOOP");
+    expect(() => statIdentity(systemFilesystem, loop)).toThrow(/ELOOP/);
+    expect(boundOf(systemFilesystem, loop)).toEqual({ unreadable: "ELOOP" });
+    expect(boundKey(boundOf(systemFilesystem, loop))).toBe("unreadable:ELOOP");
     fs.unlinkSync(loop);
     fs.mkdirSync(loop);
-    expect(boundKey(boundOf(loop))).toBe(identityKey(statIdentity(loop)));
+    expect(boundKey(boundOf(systemFilesystem, loop))).toBe(identityKey(statIdentity(systemFilesystem, loop)));
   });
 });

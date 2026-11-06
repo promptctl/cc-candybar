@@ -1,3 +1,4 @@
+import { systemFilesystem } from "../src/disk/system-filesystem";
 import { systemTimekeeper } from "../src/time";
 import fs from "node:fs";
 import { unscriptedLauncher } from "./helpers/fake-launcher";
@@ -1508,8 +1509,7 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
     };
     const logs: string[] = [];
     const logger = (_level: string, message: string) => logs.push(message);
-    const watchers = new WatcherRegistry({
-      clock: systemTimekeeper,
+    const watchers = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
       counters,
       logger,
     });

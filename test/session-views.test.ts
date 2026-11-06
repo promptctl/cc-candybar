@@ -1,3 +1,4 @@
+import { systemFilesystem } from "../src/disk/system-filesystem";
 import { FACTS_NOTHING, factsRunning } from "./helpers/facts";
 import { drawPayload } from "./helpers/draw-payload";
 import { HOST, locs, processLauncher, WORLD } from "./helpers/host";
@@ -56,8 +57,7 @@ function makeCache(
   launcher: Launcher = processLauncher,
 ) {
   const lines: string[] = [];
-  const watchers = new WatcherRegistry({
-    clock: systemTimekeeper,
+  const watchers = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
     counters: {
       watchersOpened: 0,
       watchersClosed: 0,

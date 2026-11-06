@@ -18,6 +18,7 @@ import { locations } from "./daemon/paths.js";
 import type { World } from "./host.js";
 import { failureText, type OneShotLauncher } from "./proc/launch.js";
 import { canonicalDirectory } from "./utils/on-disk-path.js";
+import { systemFilesystem } from "./disk/system-filesystem.js";
 import { resolveUserPath } from "./utils/user-path.js";
 
 // [LAW:types-are-the-program] What a source argument names, decided once.
@@ -299,7 +300,7 @@ export function runPlugin(argv: readonly string[], world: World): number {
     arg,
     process.cwd(),
     world.host.home,
-    (p) => canonicalDirectory(p) !== null,
+    (p) => canonicalDirectory(systemFilesystem, p) !== null,
   );
   if ("error" in source) {
     console.error(`plugin install: ${source.error}`);

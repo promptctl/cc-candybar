@@ -1,4 +1,5 @@
 import { MAIN_NAME } from "../src/daemon/home";
+import { systemFilesystem } from "../src/disk/system-filesystem";
 import { systemTimekeeper } from "../src/time";
 import fs from "node:fs";
 import os from "node:os";
@@ -13,7 +14,11 @@ import {
   type DeliveryNotice,
 } from "../src/daemon/cache/file-events";
 import { DEBOUNCE_MS, WatcherRegistry } from "../src/daemon/cache/watchers";
-import { statIdentity, type IdentityRead } from "../src/utils/folder-identity";
+import {
+  statIdentity,
+  type FolderIdentity,
+} from "../src/utils/folder-identity";
+import type { Filesystem } from "../src/disk/filesystem";
 import {
   WARNING_SEVERITY,
   collectDiagnostics,
@@ -58,7 +63,24 @@ const fakeClock = () =>
     ],
   });
 
-function rig(opts: { identityOf?: IdentityRead } = {}): Rig {
+// The disk, with the identity a folder reads as replaced by `identityOf`'s:
+// a folder made again, or one that cannot be read, without a second disk.
+// The registry and its owners read the one filesystem, so all of them see it.
+const identityBy =
+  (identityOf: (folder: string) => FolderIdentity | "gone"): Filesystem => ({
+    ...systemFilesystem,
+    statSync: (p) => {
+      const identity = identityOf(p);
+      if (identity === "gone")
+        throw Object.assign(
+          new Error(`ENOENT: no such file or directory, stat '${p}'`),
+          { code: "ENOENT", path: p },
+        );
+      return { ...systemFilesystem.statSync(p), ...identity };
+    },
+  });
+
+function rig(opts: { filesystem?: Filesystem } = {}): Rig {
   const root = fs.realpathSync(
     fs.mkdtempSync(path.join(os.tmpdir(), "file-events-")),
   );
@@ -67,9 +89,12 @@ function rig(opts: { identityOf?: IdentityRead } = {}): Rig {
   const logger = (level: string, msg: string) => lines.push(`${level} ${msg}`);
   const events = new FileEventDelivery({
     clock: systemTimekeeper,
-    watchers: new WatcherRegistry({ clock: systemTimekeeper, logger }),
+    watchers: new WatcherRegistry({
+      filesystem: opts.filesystem ?? systemFilesystem,
+      clock: systemTimekeeper,
+      logger,
+    }),
     logger,
-    identityOf: opts.identityOf,
   });
   owners.push(events);
   const notices: DeliveryNotice[] = [];
@@ -324,7 +349,7 @@ describe("FileEventDelivery", () => {
     test("a folder gone as it was made", async () => {
       fakeWatches();
       fakeClock();
-      const r = rig({ identityOf: () => "gone" });
+      const r = rig({ filesystem: identityBy(() => "gone") });
       r.events.start(r.folder);
       expect(r.events.delivery()).toMatchObject({
         kind: "unmeasured",
@@ -390,11 +415,11 @@ describe("FileEventDelivery", () => {
       fakeWatches();
       fakeClock();
       let refused = false;
-      const identityOf: IdentityRead = (folder) => {
+      const identityOf = (folder: string) => {
         if (refused) throw new Error("EACCES: permission denied");
-        return statIdentity(folder);
+        return statIdentity(systemFilesystem, folder);
       };
-      const r = rig({ identityOf });
+      const r = rig({ filesystem: identityBy(identityOf) });
       r.events.start(r.folder);
       await probes(r, 1);
       refused = true;
@@ -411,13 +436,13 @@ describe("FileEventDelivery", () => {
       fakeWatches();
       fakeClock();
       let replaced = false;
-      const identityOf: IdentityRead = (folder) => {
-        const real = statIdentity(folder);
+      const identityOf = (folder: string) => {
+        const real = statIdentity(systemFilesystem, folder);
         return real === "gone" || !replaced
           ? real
           : { ...real, birthtimeNs: real.birthtimeNs + 1n };
       };
-      const r = rig({ identityOf });
+      const r = rig({ filesystem: identityBy(identityOf) });
       r.events.start(r.folder);
       await probes(r, 1);
       replaced = true;

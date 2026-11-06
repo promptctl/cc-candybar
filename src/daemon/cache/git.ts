@@ -22,6 +22,8 @@ import {
   type WatchSpec,
 } from "./watchers";
 import { boundKey, boundOf } from "../../utils/folder-identity";
+import type { Filesystem } from "../../disk/filesystem";
+import { systemFilesystem } from "../../disk/system-filesystem";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../../time";
 import { TrailingEdge } from "../../utils/trailing-edge";
 import { Limiter } from "../../utils/limiter";
@@ -272,12 +274,17 @@ function optionsKey(options: GitOptions): string {
 // key. Every pass derives the spec again, so a recreated repo is heard within
 // one period, and a layout change at the same path (a clone replaced by a
 // worktree) is the same case.
-function watchSpec(root: string, gitDir: string, commonDir: string): WatchSpec {
+function watchSpec(
+  filesystem: Filesystem,
+  root: string,
+  gitDir: string,
+  commonDir: string,
+): WatchSpec {
   const dirs: DirTarget[] = [
     { path: gitDir, filenames: ["HEAD", "index"] },
     { path: path.join(commonDir, "refs", "heads"), recursive: true },
   ];
-  const bounds = dirs.map((d) => boundOf(d.path));
+  const bounds = dirs.map((d) => boundOf(filesystem, d.path));
   const named = dirs.map((d, i) => `${d.path}@${boundKey(bounds[i]!)}`);
   return {
     key: `git:${root}:${named.join("|")}`,
@@ -395,6 +402,7 @@ export class GitDataProvider {
       // Auto-constructed registry shares the same logger, so cache and watcher
       // events land together; with the default logger both stay quiet.
       this.watchers = new WatcherRegistry({
+        filesystem: systemFilesystem,
         clock: this.clock,
         logger: this.logger,
       });
@@ -584,6 +592,7 @@ export class GitDataProvider {
   ): { readonly watch: HeldWatch; readonly move: WatchMove } {
     const gitDir = this.inner.resolveGitDir(root);
     const spec = watchSpec(
+      this.watchers.filesystem,
       root,
       gitDir,
       this.inner.resolveCommonGitDir(gitDir),

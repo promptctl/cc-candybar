@@ -3,6 +3,7 @@ import path from "node:path";
 import type { Host } from "../host.js";
 import type { StoredRoot } from "./foundations/stored-path";
 import { onDiskDirectory } from "../utils/on-disk-path";
+import { systemFilesystem } from "../disk/system-filesystem";
 import {
   HOME_CACHE_DIR,
   HOME_ENV,
@@ -65,8 +66,10 @@ export function storedRoot(home: RendererHome): StoredRoot {
 
 // [LAW:effects-at-boundaries] The disk's spelling is bound here, where every
 // stored root is made; nothing reads it until a stored path is decided.
+// One binding, so every stored root carries the same spelling of the disk.
+const onSystemDisk = (at: string) => onDiskDirectory(systemFilesystem, at);
 export function storedRootAt(dir: string): StoredRoot {
-  return { dir, onDisk: onDiskDirectory };
+  return { dir, onDisk: onSystemDisk };
 }
 
 // [LAW:one-source-of-truth] The socket IS the renderer's identity on the wire:

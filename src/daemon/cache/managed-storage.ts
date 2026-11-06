@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import path from "node:path";
 import type { SessionId } from "../session-id";
 import { elapsedMs, type Timekeeper } from "../../time";
@@ -12,7 +11,6 @@ import {
   sameIdentity,
   statIdentity,
   type FolderIdentity,
-  type IdentityRead,
 } from "../../utils/folder-identity";
 import type { Holds, Release } from "../../utils/holds";
 import {
@@ -142,7 +140,6 @@ export class ManagedStorage {
   private lost = 0;
   private readonly watchers: WatcherRegistry;
   private readonly logger: DaemonLogger;
-  private readonly identityOf: IdentityRead;
   private readonly fileEvents: FileEvents;
   private readonly clock: Pick<
     Timekeeper,
@@ -157,12 +154,10 @@ export class ManagedStorage {
     // [LAW:effects-at-boundaries] The daemon's clock: the sweep period, the
     // age a file is judged against, and the source's timings.
     readonly clock: Pick<Timekeeper, "now" | "monotonic" | "after" | "every">;
-    readonly identityOf?: IdentityRead;
     readonly ledger?: RefreshLedger;
   }) {
     this.watchers = opts.watchers;
     this.logger = opts.logger;
-    this.identityOf = opts.identityOf ?? statIdentity;
     this.fileEvents = opts.fileEvents;
     this.clock = opts.clock;
     this.unsubscribe = opts.fileEvents.subscribe((notice) =>
@@ -200,8 +195,8 @@ export class ManagedStorage {
     let now: FolderIdentity | "gone" = "gone";
     known.unusable = null;
     try {
-      fs.mkdirSync(folder, { recursive: true });
-      now = this.identityOf(folder);
+      this.watchers.filesystem.mkdirSync(folder);
+      now = statIdentity(this.watchers.filesystem, folder);
     } catch (e) {
       known.unusable = `could not be created or read: ${(e as Error).message}`;
     }
@@ -287,7 +282,10 @@ export class ManagedStorage {
     }
     const unusable =
       key.generation === folder.generation ? folder.unusable : null;
-    const identity = unusable === null ? this.identityOf(key.folder) : "gone";
+    const identity =
+      unusable === null
+        ? statIdentity(this.watchers.filesystem, key.folder)
+        : "gone";
     if (key.generation === folder.generation) {
       folder.identity = identity === "gone" ? null : identity;
     }
@@ -374,7 +372,7 @@ export class ManagedStorage {
     const { key, folder } = watched;
     let now: FolderIdentity | "gone";
     try {
-      now = this.identityOf(key.folder);
+      now = statIdentity(this.watchers.filesystem, key.folder);
     } catch (e) {
       this.faulted(watched, "error", `stat failed: ${(e as Error).message}`);
       return;
@@ -466,7 +464,7 @@ export class ManagedStorage {
     const file = fileOf(f);
     let text: string;
     try {
-      text = await fs.promises.readFile(file, "utf8");
+      text = await this.watchers.filesystem.readFile(file);
     } catch (e) {
       const err = e as NodeJS.ErrnoException;
       return err.code === "ENOENT"
@@ -492,22 +490,20 @@ export class ManagedStorage {
     const event = () =>
       `plugin storage sweep folder=${valueOf(key.folder)} scanned=${scanned} removed=${removed} took=${elapsedMs(this.clock, startedAt)}ms`;
     try {
-      const entries = await fs.promises.readdir(key.folder, {
-        withFileTypes: true,
-      });
+      const entries = await this.watchers.filesystem.readdir(key.folder);
       for (const entry of entries) {
-        if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
+        if (entry.kind !== "file" || !entry.name.endsWith(".json")) continue;
         scanned++;
         const file = path.join(key.folder, entry.name);
         try {
-          const { mtimeMs } = await fs.promises.stat(file);
+          const { mtimeMs } = await this.watchers.filesystem.stat(file);
           const held = this.sessions.isHeld(
             (f) =>
               f.storage.folder === key.folder &&
               fileName(f.sessionId) === entry.name,
           );
           if (mtimeMs >= cutoff || held) continue;
-          await fs.promises.unlink(file);
+          await this.watchers.filesystem.unlink(file);
           removed++;
         } catch (e) {
           // Gone already: another generation's sweep of the folder got there

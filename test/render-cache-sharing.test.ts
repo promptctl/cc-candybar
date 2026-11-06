@@ -1,3 +1,4 @@
+import { systemFilesystem } from "../src/disk/system-filesystem";
 import { FACTS_NOTHING } from "./helpers/facts";
 import { drawPayload } from "./helpers/draw-payload";
 import { HOST, locs, WORLD } from "./helpers/host";
@@ -66,8 +67,7 @@ afterEach(() => {
 
 function makeCache(budgetBytes: number, maxEntries?: number) {
   const lines: string[] = [];
-  const watchers = new WatcherRegistry({
-    clock: systemTimekeeper,
+  const watchers = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
     counters: {
       watchersOpened: 0,
       watchersClosed: 0,

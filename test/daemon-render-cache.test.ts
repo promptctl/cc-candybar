@@ -1,3 +1,4 @@
+import { systemFilesystem } from "../src/disk/system-filesystem";
 import { FACTS_NOTHING, factsRunning } from "./helpers/facts";
 // [LAW:single-enforcer] Tests for the RenderCache invariants that bzh.2
 // changed: cache identity (projectDir+cwd, args ignored), last-known-good
@@ -108,8 +109,7 @@ function makeCache(
     dirWatchesOpened: 0,
     dirWatchesClosed: 0,
   };
-  const watchers = new WatcherRegistry({
-    clock: systemTimekeeper,
+  const watchers = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
     counters,
     logger: () => {},
   });
@@ -1414,8 +1414,7 @@ describe("RenderCache idle sweep", () => {
     jest.useFakeTimers();
     const { dir, cleanup } = mkConfigDir();
     let released = 0;
-    const watchers = new WatcherRegistry({
-      clock: systemTimekeeper,
+    const watchers = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
       logger: () => {},
     });
     const cache = new RenderCache(
@@ -1471,8 +1470,7 @@ describe("RenderCache idle sweep", () => {
   // is torn down by its one dispose, which releases what its renders held.
   test("a view's dispose releases its holds and refuses new ones", () => {
     const { dir, cleanup } = mkConfigDir();
-    const watchers = new WatcherRegistry({
-      clock: systemTimekeeper,
+    const watchers = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
       logger: () => {},
     });
     const cache = new RenderCache(
@@ -1523,8 +1521,7 @@ describe("RenderCache idle sweep", () => {
 
   test("a view follows what its declaration names: a request naming other keys follows again at once, and a preset moving follows nothing", () => {
     const { dir, cleanup } = mkConfigDir();
-    const watchers = new WatcherRegistry({
-      clock: systemTimekeeper,
+    const watchers = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
       logger: () => {},
     });
     const sessionState = new SessionState();
@@ -1616,8 +1613,7 @@ describe("RenderCache idle sweep", () => {
 // config moves its view (`follow`). Only an event opens a view.
 describe("RenderCache frames and pins", () => {
   function pinCache() {
-    const watchers = new WatcherRegistry({
-      clock: systemTimekeeper,
+    const watchers = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
       logger: () => {},
     });
     const logs: string[] = [];
@@ -1736,8 +1732,7 @@ describe("RenderCache frames and pins", () => {
   });
 
   test("a reload whose successor view fails to open leaves the session with no view and its error, which a frame does not reopen", () => {
-    const watchers = new WatcherRegistry({
-      clock: systemTimekeeper,
+    const watchers = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
       logger: () => {},
     });
     const logs: string[] = [];
@@ -1811,8 +1806,7 @@ describe("RenderCache frames and pins", () => {
   // A failure no open feed shows has no frame to draw it in, so a sweep
   // forgets it.
   test("an unpinned session's open failure is forgotten by the next sweep", () => {
-    const watchers = new WatcherRegistry({
-      clock: systemTimekeeper,
+    const watchers = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
       logger: () => {},
     });
     const { dir, cleanup } = mkConfigDir();

@@ -1,4 +1,5 @@
 import path from "node:path";
+import type { Filesystem } from "../disk/filesystem.js";
 import { existingAncestor } from "./on-disk-path";
 
 // [LAW:single-enforcer] The one rule for watching a path that may not exist
@@ -20,12 +21,15 @@ import { existingAncestor } from "./on-disk-path";
 // so a path through a symlink names one target whether or not its leaf
 // exists yet. `leaf` says the target is the candidate's own parent — the
 // watch has stopped descending.
-export function nearestWatchTarget(candidate: string): {
+export function nearestWatchTarget(
+  filesystem: Filesystem,
+  candidate: string,
+): {
   readonly dir: string;
   readonly name: string;
   readonly leaf: boolean;
 } {
-  const { dir, rest } = existingAncestor(path.dirname(candidate));
+  const { dir, rest } = existingAncestor(filesystem, path.dirname(candidate));
   return {
     dir,
     name: rest[0] ?? path.basename(candidate),

@@ -36,7 +36,8 @@ import type { Gates } from "./foundations/gates";
 import { makeUpdateWatch } from "./update-notice";
 import { newUpdateFact } from "./update-fact";
 import type { ProcessProbe } from "./process-fingerprint";
-import { makeBinaryWatch, type BundleStat } from "./binary-watch";
+import { makeBinaryWatch } from "./binary-watch";
+import type { Filesystem } from "../disk/filesystem";
 import { stableAttachPreload } from "../install/index.js";
 import { type RenderOrigin } from "../config-hint";
 import { createPayloadProviders } from "./payload-providers";
@@ -176,8 +177,8 @@ export interface DaemonAdapters {
     readonly closing: AbortSignal;
     readonly log: DaemonLogger;
   }) => Pricing;
-  // How the binary watch reads the bundle's mtime.
-  readonly stat: BundleStat;
+  // The disk the daemon's watches open on and the binary watch stats.
+  readonly filesystem: Filesystem;
 }
 
 // What a daemon takes from the process that runs it: where its files are, what
@@ -352,6 +353,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // Non-daemon consumers (var-system tests, future library use) take the
   // default debug-routed loggers and never write to daemon log files.
   const watcherRegistry = new WatcherRegistry({
+    filesystem: inputs.filesystem,
     clock,
     counters: stats,
     logger: log,
@@ -676,7 +678,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     clock,
     targets: bundle.targets,
     intervalMs: BIN_CHECK_INTERVAL_MS,
-    stat: inputs.stat,
+    filesystem: inputs.filesystem,
     // The update notice's act rewrites the bundle, and a restart in the middle
     // would start the next daemon from a half-written one: a restart waits for
     // it. A success samples again at once; after a failure the next tick does.

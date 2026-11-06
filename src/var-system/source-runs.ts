@@ -28,6 +28,8 @@ import crypto from "node:crypto";
 import { readFile as fsReadFile } from "node:fs/promises";
 import { observable, runInAction } from "mobx";
 import { failureText, type Launcher } from "../proc/launch";
+import { systemFilesystem } from "../disk/system-filesystem.js";
+import type { Filesystem } from "../disk/filesystem.js";
 import {
   WatcherRegistry,
   watchFault,
@@ -293,7 +295,7 @@ class PathWatches {
   }
 
   private arm(filePath: string): WatchEntry {
-    const watch = derived(filePath);
+    const watch = derived(this.watchers.filesystem, filePath);
     const entry: WatchEntry = {
       bound: {
         derived: watch,
@@ -310,7 +312,7 @@ class PathWatches {
   // Derive where the path can change, follow it, and say the watch's fault.
   // A new key acquires its watch, keeping every directory both keys name.
   private rederive(filePath: string, entry: WatchEntry): void {
-    const paths = derived(filePath);
+    const paths = derived(this.watchers.filesystem, filePath);
     const { watch } = this.watchers.follow(entry.bound.held, paths, (heard) =>
       this.heard(filePath, entry, heard),
     );
@@ -396,8 +398,8 @@ class PathWatches {
 
 // Where the path can change: every hop of its link chain by name, and the
 // path itself when it is a directory.
-const derived = (filePath: string): PathsWatch =>
-  watchTargetsOf({ named: [filePath], whole: [filePath] });
+const derived = (filesystem: Filesystem, filePath: string): PathsWatch =>
+  watchTargetsOf(filesystem, { named: [filePath], whole: [filePath] });
 
 // ─── SourceRuns ──────────────────────────────────────────────────────────────
 
@@ -487,7 +489,11 @@ export class SourceRuns implements SourceLanes {
     const logger = deps.logger ?? quietLogger;
     const ledger = deps.ledger ?? new RefreshLedger(logger);
     this.watchMgr = new PathWatches(
-      deps.watchers ?? new WatcherRegistry({ clock: deps.clock }),
+      deps.watchers ??
+        new WatcherRegistry({
+          filesystem: systemFilesystem,
+          clock: deps.clock,
+        }),
       deps.fileEvents ?? NO_FILE_EVENTS,
     );
     // [LAW:nothing-unseen] One record per read kind (spec section 21's source

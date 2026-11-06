@@ -19,6 +19,7 @@
 // Rendering N frames over time is not branching: it lets the config's own
 // timed sources populate, as the daemon re-renders on each status-line tick.
 
+import { systemFilesystem } from "../disk/system-filesystem.js";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
@@ -137,7 +138,11 @@ function liveArm(): Arm {
   const hints = parseClientHints(
     detectClientHints(machine.host, cwd, process.stdout),
   );
-  const watchers = new WatcherRegistry({ clock: machine.clock, logger: log });
+  const watchers = new WatcherRegistry({
+    filesystem: systemFilesystem,
+    clock: machine.clock,
+    logger: log,
+  });
   // Ended by the arm's close, with the providers it prices for.
   const pricingClosing = new AbortController();
   const providers = createPayloadProviders({

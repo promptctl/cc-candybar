@@ -1,3 +1,4 @@
+import { systemFilesystem } from "../src/disk/system-filesystem";
 import { factsRunning } from "./helpers/facts";
 // brandon-unfiled-3248.8ro6 §4e: a session's view says when what it draws
 // from moved, and a feed showing the session wakes on nothing else of its
@@ -64,8 +65,7 @@ function setUp() {
       }),
     );
   writeConfig("{{ .status }}");
-  const watchers = new WatcherRegistry({
-    clock: systemTimekeeper,
+  const watchers = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
     counters: {
       watchersOpened: 0,
       watchersClosed: 0,

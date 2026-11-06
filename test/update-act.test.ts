@@ -4,6 +4,7 @@ import { MAIN_NAME } from "../src/daemon/home";
 // files, so any daemon reads how it stands; one claim wins per bundle; and a
 // verdict, once written, is never overwritten.
 
+import { systemFilesystem } from "../src/disk/system-filesystem";
 import fs from "node:fs";
 import { processLauncher, processProbe } from "./helpers/host";
 import os from "node:os";
@@ -830,7 +831,7 @@ describe("the update watch: one turn at a time on the act files", () => {
     const binary = makeBinaryWatch({ clock: systemTimekeeper,
       targets: [target],
       intervalMs: 60_000,
-      stat: fs.statSync,
+      filesystem: systemFilesystem,
       held: () => h.watch.running(),
       exit: () => exits++,
       log: () => {},
@@ -864,7 +865,7 @@ describe("the update watch: one turn at a time on the act files", () => {
     const binary = makeBinaryWatch({ clock: systemTimekeeper,
       targets: [target],
       intervalMs: 60_000,
-      stat: fs.statSync,
+      filesystem: systemFilesystem,
       held: () => watch.running(),
       exit: () => exits++,
       log: () => {},
