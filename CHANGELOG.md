@@ -1,3 +1,15 @@
+## [1.204.0](https://github.com/promptctl/cc-candybar/compare/v1.203.0...v1.204.0) (2026-11-06)
+
+### Features
+
+* **apply:** no turn awaits a launch; a doctor step is an effect, and a held click error accumulates (candybar-gather-renderer-76bb.1dh.c3l) ([#633](https://github.com/promptctl/cc-candybar/issues/633)) ([b3a9482](https://github.com/promptctl/cc-candybar/commit/b3a94823776445b5ab510fe52ab4c622b2f80cff))
+* **links:** the doctor probe is minted by the minter as the probe link kind (candybar-gather-renderer-76bb.b2l.mxk) ([#644](https://github.com/promptctl/cc-candybar/issues/644)) ([2bb7660](https://github.com/promptctl/cc-candybar/commit/2bb7660eaf484d4c41e6cdc671e6415f0cccc8fa))
+* **links:** the one MouseDown1Status binding is constant text; each session carries its renderer's click (candybar-gather-renderer-76bb.b2l.5v7) ([#642](https://github.com/promptctl/cc-candybar/issues/642)) ([0af5d1f](https://github.com/promptctl/cc-candybar/commit/0af5d1f4ce463b0bebbbe6a4b6107d2943900c54))
+
+### Bug Fixes
+
+* **facts:** a recording of a session whose turn failed replays the failed turn's frame (candybar-gather-renderer-76bb.6pj.i7w) ([#643](https://github.com/promptctl/cc-candybar/issues/643)) ([308429c](https://github.com/promptctl/cc-candybar/commit/308429c8f33e9cfe4e0983ab8f29bb1d25c3fe55))
+
 ## [1.203.0](https://github.com/promptctl/cc-candybar/compare/v1.202.0...v1.203.0) (2026-11-06)
 
 ### Features
