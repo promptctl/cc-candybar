@@ -4,15 +4,22 @@
     {
       "version": "pr-624",
       "ref": "refs/pull/624/merge",
-      "sha": "61c4ca6cc201b7b7c84aa3812d25cdc2a3a67e1a",
-      "timestamp": "2026-11-06T05:45:52.073Z",
+      "sha": "b015ac6252150d9f4e6124c5b063a125deb64eda",
+      "timestamp": "2026-11-06T05:48:00.396Z",
       "commits": [
         {
-          "sha": "61c4ca6cc201b7b7c84aa3812d25cdc2a3a67e1a",
+          "sha": "b015ac6252150d9f4e6124c5b063a125deb64eda",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T05:43:20Z",
-          "message": "Merge ea02975fb06301f6e16169f5be8f29b7550e6bfa into 9b6790b0d73afbdd6c683accf7b693cffe16c89e\n"
+          "timestamp": "2026-11-06T05:46:50Z",
+          "message": "Merge ba5b080e1bc7350d385429e033a94eb7a0d56dff into 9b6790b0d73afbdd6c683accf7b693cffe16c89e\n"
+        },
+        {
+          "sha": "ba5b080e1bc7350d385429e033a94eb7a0d56dff",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T22:46:32-07:00",
+          "message": "fix(facts): a declaration that throws whole at the opening follow releases the holds it took (candybar-gather-renderer-76bb.6pj.go2)\n"
         },
         {
           "sha": "ea02975fb06301f6e16169f5be8f29b7550e6bfa",

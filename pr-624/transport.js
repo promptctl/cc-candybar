@@ -82993,8 +82993,15 @@ function inProcessFacts({
         }
         return lanes;
       };
+      let opening;
+      try {
+        opening = lanesFor(facts, declaration);
+      } catch (e) {
+        holds2.close();
+        throw e;
+      }
       const declared = observable.box(
-        { facts, declaration, lanes: lanesFor(facts, declaration) },
+        { facts, declaration, lanes: opening },
         { deep: false }
       );
       const inputs = computed(() => {
