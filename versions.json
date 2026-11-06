@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-650",
+      "ref": "refs/pull/650/merge",
+      "sha": "fe3e238d0615e087ee96f6c744c45e366133e797",
+      "timestamp": "2026-11-06T20:52:46.502Z",
+      "commits": [
+        {
+          "sha": "fe3e238d0615e087ee96f6c744c45e366133e797",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:51:59-07:00",
+          "message": "Merge 5ccd65e952c87401a4b6b45276ed89516e913812 into d8b9a7ffe6cac5ba9249eb3428aa11eecd27c4e5\n"
+        },
+        {
+          "sha": "5ccd65e952c87401a4b6b45276ed89516e913812",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:40:59-07:00",
+          "message": "fix(click): the link reader names a retired verb before reading its value (brandon-menus-sjhy.182)\n\nThe reader refuses an unknown verb before decoding its value, as the\ndaemon does, so a retired copy link with a malformed escape reads as the\nverb it is. The decode test pins the single-argument codec again, and\nthe Effect comment says every leaf verb leads with its session.\n"
+        },
+        {
+          "sha": "6d53106ff505f3515301347a264911ac8f86907c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:35:08-07:00",
+          "message": "fix(click): a click's session is its first leaf effect's, and a retired verb reads as refused (brandon-menus-sjhy.182)\n\nThe session-first set had become a copy of the leaf table's keys; the\ntable is now the one place a verb's first segment is its session. The\nframe reader refuses a verb the daemon has not, as the daemon does, so\nan old copy link reads as refused. Stale verb names fixed in comments\nand docs; the failed copy test pins its warning again.\n"
+        },
+        {
+          "sha": "28eb38a11c242e2a01ed723d916b070fd9768f17",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T13:19:48-07:00",
+          "message": "fix(click): copy and open clicks name their session, so a menu's idle clock counts them (brandon-menus-sjhy.182)\n\nThe idle close counts a click as activity in the session the click names.\nCopy and open links carried only their text, so clicking ⎘ id or ↗ proj\nin a menu left the clock running and the menu closed under the user.\n\nBoth verbs now carry `[sessionId, argument]` and join the session-first\nand segmented sets, so the daemon reads their session at the one\ncheckpoint every click crosses. A copy whose pbcopy fails now shows on\nthe session's bar instead of only in the log.\n\nThey also take new wire names, `copy-text` and `open-in-vscode`. A\nsession id is nearly any slash-free string, so a link drawn when copy\ncarried only its text, read under the old name, would have its text\ntaken for a session. Under the new names an earlier link is an unknown\nverb that names no session, refused and logged. Keeping the earlier\nform working would be the second grammar the ticket rules out.\n\nThe page's copy path and the link words read the text from the second\nargument. The byte snapshots change only in those links and their OSC 8\nids.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "d8b9a7ffe6cac5ba9249eb3428aa11eecd27c4e5",
@@ -20,42 +56,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-06T20:39:03Z",
           "message": "chore(release): set `package.json` to 1.205.0 [skip ci]\n\n## [1.205.0](https://github.com/promptctl/cc-candybar/compare/v1.204.0...v1.205.0) (2026-11-06)\n\n### Features\n\n* **disk:** files and their watch events go through one filesystem port, first used by the watcher registry and the binary watch (candybar-testing-ihvy.y10) ([#637](https://github.com/promptctl/cc-candybar/issues/637)) ([b50d276](https://github.com/promptctl/cc-candybar/commit/b50d2769df4a08e2616f729d630653a07ec2c676))\n\n### Bug Fixes\n\n* **tmux:** the restore guard reads on tmux before 3.5, which has no #{!:} (candybar-gather-renderer-76bb.x07) ([#647](https://github.com/promptctl/cc-candybar/issues/647)) ([f67fa39](https://github.com/promptctl/cc-candybar/commit/f67fa39229a6df3d0d9927f73e74d59008342c7f))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-650",
-      "ref": "refs/pull/650/merge",
-      "sha": "ce464cf42a42004c6f6ca2985f158ac9e6ed1040",
-      "timestamp": "2026-11-06T20:45:54.294Z",
-      "commits": [
-        {
-          "sha": "ce464cf42a42004c6f6ca2985f158ac9e6ed1040",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:45:04-07:00",
-          "message": "Merge 501348c07e347e574f26f1c861d5cda602a11716 into 25a3827641cb21d3ec9541e2f1e9f87ea4d9be07\n"
-        },
-        {
-          "sha": "501348c07e347e574f26f1c861d5cda602a11716",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:40:59-07:00",
-          "message": "fix(click): the link reader names a retired verb before reading its value (brandon-menus-sjhy.182)\n\nThe reader refuses an unknown verb before decoding its value, as the\ndaemon does, so a retired copy link with a malformed escape reads as the\nverb it is. The decode test pins the single-argument codec again, and\nthe Effect comment says every leaf verb leads with its session.\n"
-        },
-        {
-          "sha": "4de0f9a291d15b8f3f27c79945a9b85da6480924",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:35:08-07:00",
-          "message": "fix(click): a click's session is its first leaf effect's, and a retired verb reads as refused (brandon-menus-sjhy.182)\n\nThe session-first set had become a copy of the leaf table's keys; the\ntable is now the one place a verb's first segment is its session. The\nframe reader refuses a verb the daemon has not, as the daemon does, so\nan old copy link reads as refused. Stale verb names fixed in comments\nand docs; the failed copy test pins its warning again.\n"
-        },
-        {
-          "sha": "aee39474c3b91e437c4749258c94b45a7a735727",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:19:48-07:00",
-          "message": "fix(click): copy and open clicks name their session, so a menu's idle clock counts them (brandon-menus-sjhy.182)\n\nThe idle close counts a click as activity in the session the click names.\nCopy and open links carried only their text, so clicking ⎘ id or ↗ proj\nin a menu left the clock running and the menu closed under the user.\n\nBoth verbs now carry `[sessionId, argument]` and join the session-first\nand segmented sets, so the daemon reads their session at the one\ncheckpoint every click crosses. A copy whose pbcopy fails now shows on\nthe session's bar instead of only in the log.\n\nThey also take new wire names, `copy-text` and `open-in-vscode`. A\nsession id is nearly any slash-free string, so a link drawn when copy\ncarried only its text, read under the old name, would have its text\ntaken for a session. Under the new names an earlier link is an unknown\nverb that names no session, refused and logged. Keeping the earlier\nform working would be the second grammar the ticket rules out.\n\nThe page's copy path and the link words read the text from the second\nargument. The byte snapshots change only in those links and their OSC 8\nids.\n"
         }
       ]
     },
