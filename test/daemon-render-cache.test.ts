@@ -1,3 +1,5 @@
+import { FACTS_NOTHING } from "./helpers/facts";
+import type { FollowDeclaration } from "../src/daemon/facts-source";
 // [LAW:single-enforcer] Tests for the RenderCache invariants that bzh.2
 // changed: cache identity (projectDir+cwd, args ignored), last-known-good
 // preservation across failed reloads, candidate-dir watcher firing when a
@@ -31,7 +33,6 @@ import {
   type Hold,
   type RenderCacheObservers,
   type SessionView,
-  DECLARES_NOTHING,
   SOURCES_NOTHING,
   openView,
   ENTRY_BYTES,
@@ -129,7 +130,7 @@ function makeCache(
       watchers,
       log,
       source: SOURCES_NOTHING,
-      declare: DECLARES_NOTHING,
+      facts: FACTS_NOTHING,
     },
     {
       // Room for four entries over one compile: the fifth evicts the oldest.
@@ -1407,6 +1408,7 @@ describe("RenderCache idle sweep", () => {
   test("close disposes every state, releases its holds and leaves no timer", () => {
     jest.useFakeTimers();
     const { dir, cleanup } = mkConfigDir();
+    let released = 0;
     const watchers = new WatcherRegistry({
       clock: systemTimekeeper,
       logger: () => {},
@@ -1423,23 +1425,23 @@ describe("RenderCache idle sweep", () => {
         sessionState: new SessionState(),
         watchers,
         source: SOURCES_NOTHING,
-        declare: DECLARES_NOTHING,
+        // A follow whose dispose the test counts: what a view took of its
+        // facts source goes with the view.
+        facts: {
+          follow: (facts, declaration) => ({
+            ...FACTS_NOTHING.follow(facts, declaration),
+            dispose: () => {
+              released++;
+            },
+          }),
+        },
       },
       { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES },
     );
     try {
-      let released = 0;
-      {
-        using hold = cache.holdSession(
-          dir,
-          dir,
-          undefined,
-          viewFacts(dir, "s1"),
-        );
-        hold.view.holds.take("repo", () => () => {
-          released++;
-        });
-      }
+      cache.holdSession(dir, dir, undefined, viewFacts(dir, "s1"))[
+        Symbol.dispose
+      ]();
       // The sweep is armed, beside whatever the entry's sources arm.
       expect(jest.getTimerCount()).toBeGreaterThan(0);
       cache.close();
@@ -1481,11 +1483,12 @@ describe("RenderCache idle sweep", () => {
         sessionState: new SessionState(),
         watchers,
         source: SOURCES_NOTHING,
-        declare: DECLARES_NOTHING,
+        facts: FACTS_NOTHING,
       },
       { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES },
     );
     try {
+      let released = 0;
       const view = openView(
         cache.getOrCreate(dir, dir, undefined).state,
         dir,
@@ -1493,20 +1496,22 @@ describe("RenderCache idle sweep", () => {
         {
           sessionState: new SessionState(),
           source: SOURCES_NOTHING,
-          declare: DECLARES_NOTHING,
+          // The follow the view took of its facts source, whose dispose the
+          // test counts.
+          facts: {
+            follow: (facts, declaration) => ({
+              ...FACTS_NOTHING.follow(facts, declaration),
+              dispose: () => {
+                released++;
+              },
+            }),
+          },
           changed: () => {},
           log: () => {},
         },
       );
-      let released = 0;
-      view.holds.take("repo", () => () => {
-        released++;
-      });
       view.dispose();
       expect(released).toBe(1);
-      expect(() => view.holds.take("repo", () => () => {})).toThrow(
-        "hold taken after close: repo",
-      );
     } finally {
       cache.close();
       watchers.closeAll();
@@ -1514,23 +1519,24 @@ describe("RenderCache idle sweep", () => {
     }
   });
 
-  test("a view holds what its declaration takes: a request naming other keys, or the session's preset moving, declares again at once", () => {
+  test("a view follows what its declaration names: a request naming other keys, or the session's preset moving, follows again at once", () => {
     const { dir, cleanup } = mkConfigDir();
     const watchers = new WatcherRegistry({
       clock: systemTimekeeper,
       logger: () => {},
     });
     const sessionState = new SessionState();
-    // Each declaration takes one hold per key its request names and one per
-    // closure, so what it holds says which request and which preset it read.
+    // Each follow names the request's directory and the closure it was
+    // declared for, so the record says which request and which preset the
+    // view follows at. What a follow holds is the facts source's own
+    // (test/facts-source.test.ts).
     const closures: Array<ReadonlySet<string>> = [];
-    const declarations: string[] = [];
-    const released: string[] = [];
-    const take = (holds: Holds, key: string): void =>
-      holds.take(key, () => () => {
-        released.push(key);
-      });
-    const logs: string[] = [];
+    const follows: string[] = [];
+    let disposed = 0;
+    const noted = (facts: ViewFacts, { closure }: FollowDeclaration): void => {
+      if (!closures.includes(closure)) closures.push(closure);
+      follows.push(`${facts.cwd} closure:${closures.indexOf(closure)}`);
+    };
     const cache = new RenderCache(
       {
         clock: systemTimekeeper,
@@ -1542,15 +1548,18 @@ describe("RenderCache idle sweep", () => {
         gates: bareGates(),
         sessionState,
         watchers,
-        log: (_level, message) => logs.push(message),
         source: SOURCES_NOTHING,
-        declare: (holds, facts, closure, sources) => {
-          if (!closures.includes(closure)) closures.push(closure);
-          const preset = `closure:${closures.indexOf(closure)}`;
-          declarations.push(`${facts.cwd} ${preset}`);
-          take(holds, `repo:${facts.cwd}`);
-          take(holds, preset);
-          return DECLARES_NOTHING(holds, facts, closure, sources);
+        facts: {
+          follow: (facts, declaration) => {
+            noted(facts, declaration);
+            return {
+              ...FACTS_NOTHING.follow(facts, declaration),
+              follow: noted,
+              dispose: () => {
+                disposed++;
+              },
+            };
+          },
         },
       },
       { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES },
@@ -1574,54 +1583,37 @@ describe("RenderCache idle sweep", () => {
         using hold = cache.holdSession(dir, dir, undefined, a);
         return hold.view;
       })();
-      // A view opens declared, at the request it opens with.
-      expect(declarations).toEqual(["/a closure:0"]);
-      expect(view.holds.size).toBe(2);
-      // The same request — a frame drawn by it — declares nothing again.
+      // A view opens followed, at the request it opens with.
+      expect(follows).toEqual(["/a closure:0"]);
+      // The same request — a frame drawn by it — follows nothing again.
       view.requested(a);
-      expect(declarations).toHaveLength(1);
+      expect(follows).toHaveLength(1);
 
-      // A request naming another key: the one it no longer names goes now.
+      // A request naming another key follows again at once.
       view.requested(request("/b"));
-      expect(declarations).toEqual(["/a closure:0", "/b closure:0"]);
-      expect(released).toEqual(["repo:/a"]);
+      expect(follows).toEqual(["/a closure:0", "/b closure:0"]);
 
       // A pick of another session's, or of this one's that moves no preset,
-      // declares nothing.
+      // follows nothing.
       sessionState.set("s2", "preset", "compact");
       sessionState.set("s1", "theme", "nord");
-      expect(declarations).toHaveLength(2);
+      expect(follows).toHaveLength(2);
 
-      // The session's preset moving declares its closure, with no render.
+      // The session's preset moving follows at its closure, with no render.
       sessionState.set("s1", "preset", "compact");
-      expect(declarations).toEqual([
+      expect(follows).toEqual([
         "/a closure:0",
         "/b closure:0",
         "/b closure:1",
       ]);
-      expect(released).toEqual(["repo:/a", "closure:0"]);
-      expect(view.holds.size).toBe(2);
-      // Each declaration that moved a hold says so; the repeat of `a` and the
-      // picks that moved no preset wrote nothing.
-      expect(logs.filter((l) => l.startsWith("session view declared"))).toEqual(
-        [
-          'session view declared sid="s1" acquired=2 released=0 held=2',
-          'session view declared sid="s1" acquired=1 released=1 held=2',
-          'session view declared sid="s1" acquired=1 released=1 held=2',
-        ],
-      );
 
-      // Closing the view stops its declarations and releases what it held.
+      // Closing the view disposes its follow and stops following: a later
+      // pick reaches nothing.
       cache.releaseIdle();
       cache.releaseIdle();
-      expect(released).toEqual([
-        "repo:/a",
-        "closure:0",
-        "repo:/b",
-        "closure:1",
-      ]);
+      expect(disposed).toBe(1);
       sessionState.set("s1", "preset", "verbose");
-      expect(declarations).toHaveLength(3);
+      expect(follows).toHaveLength(3);
     } finally {
       cache.close();
       watchers.closeAll();
@@ -1654,7 +1646,7 @@ describe("RenderCache frames and pins", () => {
         watchers,
         log: (_level, line) => logs.push(line),
         source: SOURCES_NOTHING,
-        declare: DECLARES_NOTHING,
+        facts: FACTS_NOTHING,
       },
       // Room for four entries over one compile, and the view of one.
       { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES + VIEW_BYTES },
@@ -1776,7 +1768,7 @@ describe("RenderCache frames and pins", () => {
         sessionState: new SessionState(),
         watchers,
         log: (_level, line) => logs.push(line),
-        declare: DECLARES_NOTHING,
+        facts: FACTS_NOTHING,
         // The second view built over the entry, the reload's successor, fails.
         source: (view) => {
           if (++opens === 2) throw new Error("the successor broke");
@@ -1850,7 +1842,7 @@ describe("RenderCache frames and pins", () => {
         sessionState: new SessionState(),
         watchers,
         log: () => {},
-        declare: DECLARES_NOTHING,
+        facts: FACTS_NOTHING,
         source: () => {
           throw new Error("the view broke");
         },

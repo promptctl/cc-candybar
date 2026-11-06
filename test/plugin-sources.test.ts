@@ -27,11 +27,11 @@ import {
   type SessionView,
 } from "../src/daemon/cache/render";
 import {
-  declareLanes,
   projectSources,
   renderOptionsOf,
   sourcesFactOf,
 } from "../src/daemon/render-payload";
+import { inProcessFacts } from "../src/daemon/facts-source";
 import {
   sessionSource,
   type SessionSource,
@@ -181,12 +181,10 @@ function rig(): Rig {
       signer: TEST_SIGNER,
       gates: bareGates(),
       log,
-      declare: (holds, facts, closure, sources) =>
-        declareLanes(providers, holds, facts, closure, sources),
+      facts: inProcessFacts({ providers, update: () => updateFact.get() }),
       source: sessionSource({
         providers,
         sessionState,
-        update: () => updateFact.get(),
         history: () => EMPTY_HISTORY_DEPTH,
         navigation: () => 0,
       }),
@@ -254,7 +252,7 @@ async function answered(
   name = STATUS,
 ): Promise<void> {
   await until(
-    () => view.lanes().sources.get(name)?.current().kind !== "pending",
+    () => view.source.facts().sources[name]?.kind !== "pending",
     `${name}'s first read`,
   );
 }
@@ -612,7 +610,7 @@ describe("a session reads its source", () => {
     const r = rig();
     const view = viewOf(r, config(["mine", "plugins.p.gated"]));
     await answered(view);
-    expect(view.lanes().sources.get(STATUS)!.current()).toEqual(ABSENT);
+    expect(view.source.facts().sources[STATUS]).toMatchObject({ kind: "absent" });
     const before = draw(view);
     expect(before.errors).toEqual([]);
     expect(before.text).toContain("mine");
@@ -661,7 +659,7 @@ describe("a session reads its source", () => {
     );
     const view = viewOf(r, p);
     await answered(view);
-    expect(view.lanes().sources.has(STATUS)).toBe(true);
+    expect(view.source.facts().sources[STATUS]).toBeDefined();
     expect(r.providers.managedStorage.stats().held).toBe(1);
     const runs = (): number =>
       Number(/runs=(\d+)/.exec(draw(view).text)?.[1] ?? 0);
@@ -740,10 +738,12 @@ describe("the view declares the sources its preset reads", () => {
     );
     const view = viewOf(r, file);
     await answered(view);
-    expect([...view.lanes().sources.keys()]).toEqual([STATUS]);
+    expect(Object.keys(view.source.facts().sources)).toEqual([STATUS]);
     expect(r.providers.managedStorage.stats().held).toBe(1);
     r.sessionState.set("s1", "preset", "bare");
-    expect([...view.lanes().sources.keys()]).toEqual([]);
+    // The source stays a key of the document, the preset no longer reads it,
+    // so it is pending for want of a declaration.
+    expect(view.source.facts().sources[STATUS]).toEqual(pendingOf("unread"));
     expect(r.providers.managedStorage.stats().held).toBe(0);
     expect(draw(view).text).toContain("mine");
   });
@@ -751,7 +751,9 @@ describe("the view declares the sources its preset reads", () => {
   test("a config placing no segment that reads the source holds nothing", async () => {
     const r = rig();
     const view = viewOf(r, config(["mine"]));
-    expect(view.lanes().sources.size).toBe(0);
+    // The source is the config's, so the document carries its key; the preset
+    // reads nothing of it, so it is pending and nothing is held.
+    expect(view.source.facts().sources[STATUS]).toEqual(pendingOf("unread"));
     expect(r.providers.managedStorage.stats().held).toBe(0);
     // The state still holds its folder's watch: a source is the config's.
     expect(r.providers.managedStorage.stats().folders).toBe(1);

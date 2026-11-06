@@ -1,3 +1,4 @@
+import { FACTS_NOTHING } from "./helpers/facts";
 import { drawPayload } from "./helpers/draw-payload";
 import { HOST, locs, processLauncher, WORLD } from "./helpers/host";
 import { textOf } from "../src/render/frame";
@@ -7,12 +8,11 @@ import os from "node:os";
 import path from "node:path";
 import { runInAction } from "mobx";
 import {
-  DECLARES_NOTHING,
   SOURCES_NOTHING,
   RenderCache,
-  type Declare,
   type SessionView,
 } from "../src/daemon/cache/render";
+import type { Facts } from "../src/daemon/facts-source";
 import type { ViewFacts } from "../src/daemon/render-payload";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { SessionState } from "../src/daemon/session-state";
@@ -51,7 +51,7 @@ function makeCache(
   opts: {
     budgetBytes?: number;
     log?: (line: string) => void;
-    declare?: Declare;
+    facts?: Facts;
   } = {},
   launcher: Launcher = processLauncher,
 ) {
@@ -81,7 +81,7 @@ function makeCache(
       sessionState: new SessionState(),
       watchers,
       source: SOURCES_NOTHING,
-      declare: opts.declare ?? DECLARES_NOTHING,
+      facts: opts.facts ?? FACTS_NOTHING,
       log: (_level, line) => {
         opts.log?.(line);
         lines.push(line);
@@ -229,15 +229,17 @@ test("a move to another directory declares the new view before the old releases 
   let holders = 0;
   let dropsToZero = 0;
   const { cache } = makeCache({
-    declare: (holds, facts, closure, sources) => {
-      holds.take("repo", () => {
+    facts: {
+      follow: (facts, declaration) => {
         holders++;
-        return () => {
-          holders--;
-          if (holders === 0) dropsToZero++;
+        return {
+          ...FACTS_NOTHING.follow(facts, declaration),
+          dispose: () => {
+            holders--;
+            if (holders === 0) dropsToZero++;
+          },
         };
-      });
-      return DECLARES_NOTHING(holds, facts, closure, sources);
+      },
     },
   });
   cache
@@ -307,58 +309,69 @@ test("a reload keeps whether the session's view was read: a view idle before it 
 // [LAW:no-ambient-temporal-coupling] MobX holds a reaction created inside a
 // batch until the batch ends: a frame drawn from a feed's reaction, opening a
 // view, must still draw it declared.
-test("a view opened inside a MobX batch is declared before it is handed back", () => {
+// A facts source that records each request a view follows at: the opening
+// one, and each later one the view follows again.
+function followingFacts(followedAt: ViewFacts[]): Facts {
+  return {
+    follow: (facts, declaration) => {
+      followedAt.push(facts);
+      return {
+        ...FACTS_NOTHING.follow(facts, declaration),
+        follow: (next) => {
+          followedAt.push(next);
+        },
+      };
+    },
+  };
+}
+
+test("a view opened inside a MobX batch is followed before it is handed back", () => {
   configure(dir);
-  const { cache } = makeCache();
-  const answer = runInAction(() => {
-    using held = cache.holdSession(dir, dir, undefined, viewFacts(dir, "s-a"));
-    return held.view.lanes().git.current();
+  const followedAt: ViewFacts[] = [];
+  const { cache } = makeCache({ facts: followingFacts(followedAt) });
+  const request = viewFacts(dir, "s-a");
+  runInAction(() => {
+    using held = cache.holdSession(dir, dir, undefined, request);
+    // Followed before the batch ends: the view handed back draws this
+    // request's facts, not a follow the batch's end would make.
+    expect(followedAt).toEqual([request]);
+    expect(held.view).toBeDefined();
   });
-  // DECLARES_NOTHING's answer, not the view's want of one.
-  expect(answer).toEqual(ABSENT);
 });
 
-test("a kept view is declared with each request holdSession is given, inside a batch too", () => {
+test("a kept view follows each request holdSession is given, inside a batch too", () => {
   configure(dir);
-  const declaredFor: ViewFacts[] = [];
-  const { cache } = makeCache({
-    declare: (holds, facts, closure, sources) => {
-      declaredFor.push(facts);
-      return DECLARES_NOTHING(holds, facts, closure, sources);
-    },
-  });
+  const followedAt: ViewFacts[] = [];
+  const { cache } = makeCache({ facts: followingFacts(followedAt) });
   const first = viewFacts(dir, "s-a");
   cache.holdSession(dir, dir, undefined, first)[Symbol.dispose]();
   const next = viewFacts(dir, "s-a");
   runInAction(() => {
     using held = cache.holdSession(dir, dir, undefined, next);
-    // Declared before the batch ends: this request's lanes, not the last's.
-    expect(declaredFor).toEqual([first, next]);
-    // A frame's facts, the request already declared, declare nothing again.
+    // Followed before the batch ends: this request's keys, not the last's.
+    expect(followedAt).toEqual([first, next]);
+    // A frame's facts, the request already followed, follow nothing again.
     cache.holdSession(dir, dir, undefined, next)[Symbol.dispose]();
     expect(held.view).toBeDefined();
   });
-  expect(declaredFor).toHaveLength(2);
+  expect(followedAt).toHaveLength(2);
 });
 
-test("a view whose declaration throws answers that failure on its lanes", () => {
+// [LAW:no-silent-failure] A facts source that cannot follow fails the open,
+// which the cache reports; nothing the open took is left behind.
+test("a view whose facts source throws at the follow fails to open", () => {
   configure(dir);
-  const { cache, lines } = makeCache({
-    declare: () => {
-      throw new Error("closure exploded");
+  const { cache } = makeCache({
+    facts: {
+      follow: () => {
+        throw new Error("owners exploded");
+      },
     },
   });
-  using held = cache.holdSession(dir, dir, undefined, viewFacts(dir, "s-a"));
-  expect(held.view.lanes().git.current()).toEqual({
-    kind: "failed",
-    failedAt: "read",
-    reason: expect.stringContaining("closure exploded"),
-  });
-  expect(lines).toContainEqual(
-    expect.stringMatching(
-      /^session view declaration threw sid="s-a": .*closure exploded/,
-    ),
-  );
+  expect(() =>
+    cache.holdSession(dir, dir, undefined, viewFacts(dir, "s-a")),
+  ).toThrow("owners exploded");
+  expect(cache.stats.views).toBe(0);
 });
 
 test("a view held by a render in flight is disposed only when the render returns", () => {

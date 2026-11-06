@@ -1,3 +1,4 @@
+import { FACTS_NOTHING } from "./helpers/facts";
 // brandon-unfiled-3248.8ro6 §4e: a session's view says when what it draws
 // from moved, and a feed showing the session wakes on nothing else of its
 // data. It says so as it opens, and when a source it reads publishes a value
@@ -10,7 +11,6 @@ import { unscriptedLauncher } from "./helpers/fake-launcher";
 import os from "node:os";
 import path from "node:path";
 import {
-  DECLARES_NOTHING,
   SOURCES_NOTHING,
   RenderCache,
 } from "../src/daemon/cache/render";
@@ -92,7 +92,7 @@ function setUp() {
       sessionState: new SessionState(),
       watchers,
       source: SOURCES_NOTHING,
-      declare: DECLARES_NOTHING,
+      facts: FACTS_NOTHING,
     },
     {
       budgetBytes: () => Number.MAX_SAFE_INTEGER,

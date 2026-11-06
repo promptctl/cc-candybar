@@ -64,6 +64,10 @@ export interface BuiltinFacts {
   readonly hostUser: Fact<string>;
 }
 
+// The shape of a facts document on the wire; a document of another version is
+// not this one.
+export const FACTS_VERSION = 1;
+
 export interface SessionFacts {
   readonly v: number;
   readonly session: SessionId;
@@ -73,3 +77,28 @@ export interface SessionFacts {
   readonly update: Fact<UpdateNotice>;
   readonly diagnostics: readonly FactsDiagnostic[];
 }
+
+// [LAW:one-source-of-truth] Every built-in by name, once, for a walk over a
+// document: the parser reads it, and the type check beside it refuses a key
+// the list misses or invents.
+export const BUILTIN_FACTS = [
+  "session",
+  "today",
+  "speed",
+  "context",
+  "metrics",
+  "activity",
+  "cache",
+  "autocompact",
+  "git",
+  "pr",
+  "tmux",
+  "hostName",
+  "hostUser",
+] as const satisfies ReadonlyArray<keyof BuiltinFacts>;
+type MissingBuiltin = Exclude<
+  keyof BuiltinFacts,
+  (typeof BUILTIN_FACTS)[number]
+>;
+const everyBuiltinNamed: MissingBuiltin extends never ? true : never = true;
+void everyBuiltinNamed;

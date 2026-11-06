@@ -108,11 +108,9 @@ describe("a turn that cannot be stamped", () => {
     const logged: string[] = [];
     const changed: string[] = [];
     const rig = sessionRig(dir, cleanups, {
-      source: {
-        update: () => {
-          if (broken.get()) throw new Error("update watch exploded");
-          return pendingOf("unread");
-        },
+      update: () => {
+        if (broken.get()) throw new Error("update watch exploded");
+        return pendingOf("unread");
       },
       log: (level, message) => logged.push(`${level} ${message}`),
       observers: { onViewChanged: (sid) => changed.push(sid) },
@@ -138,18 +136,17 @@ describe("a turn that cannot be stamped", () => {
 });
 
 describe("a fault that persists", () => {
-  test("is one turn: a later move wakes nobody and logs nothing again", async () => {
+  test("is one fault: a later landing that fails the same way wakes nobody and logs nothing again", async () => {
     const broken = observable.box(false);
-    const depth = observable.box(0);
+    // What the facts source reads of the update: a landing is a move of it.
+    const landings = observable.box(0);
     const logged: string[] = [];
     const changed: string[] = [];
     const rig = sessionRig(dir, cleanups, {
-      source: {
-        history: () => ({ undo: depth.get(), redo: 0, sinceEdit: 0 }),
-        update: () => {
-          if (broken.get()) throw new Error("update watch exploded");
-          return pendingOf("unread");
-        },
+      update: () => {
+        landings.get();
+        if (broken.get()) throw new Error("update watch exploded");
+        return pendingOf("unread");
       },
       log: (level, message) => logged.push(`${level} ${message}`),
       observers: { onViewChanged: (sid) => changed.push(sid) },
@@ -161,7 +158,7 @@ describe("a fault that persists", () => {
     const lines = logged.length;
     const woken = changed.length;
 
-    runInAction(() => depth.set(1));
+    runInAction(() => landings.set(1));
     expect(view.source.failure()).toContain("update watch exploded");
     expect(view.source.payload()).toBe(payload);
     expect(logged.length).toBe(lines);
@@ -172,10 +169,8 @@ describe("a fault that persists", () => {
 describe("a view that fails to open", () => {
   test("is reported, and what it began is released: a later pick declares nothing", () => {
     const rig = sessionRig(dir, cleanups, {
-      source: {
-        update: () => {
-          throw new Error("no update fact");
-        },
+      update: () => {
+        throw new Error("no update fact");
       },
     });
     let declarations = 0;
@@ -206,8 +201,8 @@ describe("what wakes a view", () => {
     const rig = sessionRig(dir, cleanups, {
       source: {
         history: () => ({ undo: depth.get(), redo: 0, sinceEdit: 0 }),
-        update: () => update.get(),
       },
+      update: () => update.get(),
       observers: { onViewChanged: (sid) => changed.push(sid) },
     });
     const view = await openSettled(rig, dir, cleanups, null);
@@ -243,19 +238,7 @@ describe("what wakes a view", () => {
     const settled = changed.length;
     // The same request refreshes every lane again: each owner stores an equal
     // answer in a new object.
-    await settlePayload(
-      {
-        hookData: requestOf(dir).hookData,
-        deps: { ...rig.providers, lanes: view.lanes } as never,
-        cwd: PROJECT,
-        neededInputPaths: view.state.neededInputPaths(
-          view.source.effective().preset,
-        ),
-        hints: requestOf(dir).hints,
-      },
-      AT,
-      new Map(),
-    );
+    await view.settle(AT).landed;
     expect(view.source.facts()).toBe(document);
     expect(view.source.payload()).toBe(payload);
     expect(changed.length).toBe(settled);

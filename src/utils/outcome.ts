@@ -52,6 +52,17 @@ export function failed(reason: string, failedAt: FailedAt): Failed {
   return { kind: "failed", reason, failedAt };
 }
 
+// [LAW:one-source-of-truth] A value that fails for the reason it already
+// failed for is that value: a fault that persists must not mint a new value
+// per move, which would wake every holder and log again for a bar that has
+// not changed.
+export function failedWith<T extends { readonly failure: string | null }>(
+  prior: T,
+  reason: string,
+): T {
+  return prior.failure === reason ? prior : { ...prior, failure: reason };
+}
+
 // [LAW:dataflow-not-control-flow] Total fold for consumers that only need a
 // value-or-fallback view (e.g. var-system's typed projection). Both non-ok
 // arms collapse to the fallback; consumers that must distinguish absent from

@@ -49,11 +49,8 @@ import {
   gitOptionsFromClosure,
   prFactOf,
   sourcesFactOf,
-  settlePayload,
   refreshedFact,
-  type Refreshed,
   todayOf,
-  type PayloadInputs,
 } from "./render-payload.js";
 import { type SessionSource } from "./session-source.js";
 import { isPending } from "../utils/outcome.js";
@@ -252,10 +249,13 @@ export function lanesAt(
 }
 
 // What a render of a checked request draws with, resolved once and held for
-// the render: the state and the session's view of it, the globals it resolves
-// under the session's picks, and what its payload reads. Disposing it releases
-// the hold. `facts` is the render event's record, filled as each stage learns
-// its part.
+// the render: the state and the session's view of it, and the globals it
+// resolves under the session's picks. Disposing it releases the hold. `facts`
+// is the render event's record, filled as each stage learns its part.
+//
+// [LAW:types-are-the-program] No owner is here: what the request's arrival
+// starts of the facts is the view's follow's (`view.settle`), so nothing on
+// the request path can read one.
 interface RenderSetup extends Disposable {
   readonly req: CheckedRenderRequest;
   readonly at: Instant;
@@ -265,8 +265,6 @@ interface RenderSetup extends Disposable {
   readonly state: DslRenderState;
   readonly view: SessionView<SessionSource>;
   readonly hintsError: string | null;
-  // What the request's refresh and wait read (settlePayload).
-  readonly payloadInputs: PayloadInputs;
 }
 
 // What a render notes of the request it draws by, and the error message for
@@ -346,7 +344,7 @@ export function setUpRender(
     origin.target.path,
     req,
   );
-  return setUpDraw(parts, hold, req, hintsError, at, facts);
+  return setUpDraw(hold, req, hintsError, at, facts);
 }
 
 // [LAW:effects-at-boundaries] A frame's setup: the session's view as it finds
@@ -375,42 +373,25 @@ function setUpFrame(
     hold[Symbol.dispose]();
     throw e;
   }
-  return setUpDraw(parts, hold, req, hintsError, at, facts);
+  return setUpDraw(hold, req, hintsError, at, facts);
 }
 
 // The setup over a held view, which owns the hold from here: a throw before
 // it is returned releases it.
 function setUpDraw(
-  parts: DaemonParts,
   hold: SessionHold<SessionSource, CheckedRenderRequest>,
   req: CheckedRenderRequest,
   hintsError: string | null,
   at: Instant,
   facts: RequestFacts,
 ): RenderSetup {
-  const { payloadProviders } = parts;
   try {
     const { entry, state, view } = hold;
-    const { sessionId, hints } = req;
+    const { sessionId } = req;
     // [LAW:dataflow-not-control-flow] One composition every render: the
     // entry always holds a renderable state (the bundled default until a
     // config loads — src/daemon/cache/render.ts), so body = drawDsl(state)
     // and output = diagnostics + body, with no "did the config load" branch.
-    // The picks as the request arrived: what its refresh reads. The draw
-    // settles its own (drawRender).
-    const effective: EffectiveGlobals = view.source.effective();
-    const payloadInputs: PayloadInputs = {
-      hookData: req.hookData,
-      deps: {
-        ...payloadProviders,
-        // The lanes the session's view declared: what this render reads of
-        // the daemon's shared entries.
-        lanes: view.lanes,
-      },
-      cwd: req.cwd,
-      neededInputPaths: state.neededInputPaths(effective.preset),
-      hints,
-    };
     return {
       req,
       at,
@@ -420,7 +401,6 @@ function setUpDraw(
       state,
       view,
       hintsError,
-      payloadInputs,
       [Symbol.dispose]: () => hold[Symbol.dispose](),
     };
   } catch (e) {
@@ -606,10 +586,11 @@ export function drawRender(
   noteFacts(facts, {
     prompts: String(metrics?.messageCount ?? "-"),
     nonPrompts: String(metrics?.nonPrompts ?? "-"),
+    // [LAW:one-source-of-truth] The closure the payload's git fact was read
+    // under is the turn's, beside the payload, not one resolved again here.
     pr: prFactOf(
       payload.git,
-      gitOptionsFromClosure(setup.payloadInputs.neededInputPaths)
-        .showPullRequest === true,
+      gitOptionsFromClosure(view.source.closure()).showPullRequest === true,
     ),
     feeds: feedsFact(projected.feeds),
   });
@@ -978,6 +959,13 @@ async function drawAnswer(
   // directory's sources that answers a new key — a first value, or a key its
   // fields moved — until its client's deadline. What has not
   // answered by then draws as pending, and lands for the next frame.
+  //
+  // What the arrival starts of the facts is the view's follow's: its record
+  // of the lanes it started reads as far as they have landed at the deadline.
+  // [LAW:no-ambient-temporal-coupling] Started before the clock is read for
+  // the wait, so the synchronous part of each lane's start is setup, spent
+  // from the budget like the rest, and the timer still fires at waitEndsAt.
+  const settling = setup.view.settle(at);
   const waitFrom = clock.monotonic();
   // [LAW:one-source-of-truth] The event's figure and the wait's timer are one
   // reading. Setup has spent part of what the request arrived with, and below
@@ -986,13 +974,9 @@ async function drawAnswer(
   noteFacts(facts, {
     deadline: `${req.deadline.kind}:${Math.round(budget)}ms`,
   });
-  const refreshed: Refreshed = new Map();
   const ended = await waitWithin(
     (signal) =>
-      Promise.all([
-        settlePayload(setup.payloadInputs, at, refreshed),
-        setup.view.registry.inFlight(signal),
-      ]),
+      Promise.all([settling.landed, setup.view.registry.inFlight(signal)]),
     budget,
     // [LAW:no-silent-failure] The answer is drawn; a wait that fails after
     // it is a bug, said against the session, never one that ends the daemon.
@@ -1009,7 +993,7 @@ async function drawAnswer(
   noteFacts(facts, {
     waited: `${Math.round(drawFrom - waitFrom)}ms`,
     ended,
-    refreshed: refreshedFact(refreshed),
+    refreshed: refreshedFact(settling.refreshed),
   });
   const { drawn, clickShown, pipeShown, delivered, lanes } = drawRender(
     parts,

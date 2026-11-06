@@ -6,10 +6,6 @@ import type { RichText } from "@promptctl/rich-js";
 import { compareShallow, observable, reaction, runInAction } from "mobx";
 import {
   neededPrefixesByPreset,
-  settledLanes,
-  sourcesRead,
-  type Declaration,
-  type DeclaredLanes,
   type DeclaredSources,
   type ViewFacts,
 } from "../render-payload.js";
@@ -85,8 +81,15 @@ import { quietLogger, type DaemonLogger } from "../../utils/logger.js";
 import { valueOf } from "../../utils/logfmt.js";
 import type { Locations } from "../paths.js";
 import { digestOf, type Projection } from "../../utils/plain.js";
-import { Holds } from "../../utils/holds.js";
-import { ABSENT, failed, pendingOf } from "../../utils/outcome.js";
+import type {
+  Facts,
+  Followed,
+  FollowDeclaration,
+  FollowedFacts,
+  Settling,
+} from "../facts-source.js";
+import type { Instant } from "../../utils/instant.js";
+import { pendingOf } from "../../utils/outcome.js";
 import {
   pluginDataVar,
   type PluginDefinition,
@@ -179,10 +182,10 @@ export interface RenderDeps<S extends ViewSource = ViewSource> {
   signer: LinkSigner;
   // The gates a load builds against (StateDeps).
   gates: Gates;
-  // What a view declares of the daemon's shared entries
-  // (src/daemon/render-payload.ts `declareLanes`); a test reading no built-in
-  // source passes DECLARES_NOTHING.
-  declare: Declare;
+  // Where a view's facts come from (src/daemon/facts-source.ts): the daemon
+  // and the demo pass the in-process arm over their providers; a test reading
+  // no built-in passes the nothing-double in test/helpers/facts.ts.
+  facts: Facts;
   // What a view draws from (src/daemon/session-source.ts); a test drawing no
   // view's own payload passes SOURCES_NOTHING.
   source: SourceOf<S>;
@@ -1214,16 +1217,16 @@ export interface SessionView<
   readonly state: DslRenderState;
   readonly store: VariableStore;
   readonly registry: SourceRegistry;
-  readonly holds: Holds;
   // The request the view's renders draw by — the keys its declaration takes
   // its holds at. A render of the same request changes nothing.
   requested(facts: F): void;
   // The request the view draws by now: the one it opened with, or a later
   // one `requested` named.
   facts(): F;
-  // The lanes the view's latest declaration handed it: what its draws read
-  // of the daemon's shared entries.
-  lanes(): DeclaredLanes;
+  // What a request's arrival starts of the view's facts, and the wait for
+  // every declared lane not answered yet: the follow's
+  // (src/daemon/facts-source.ts), so the request path holds no owner.
+  settle(at: Instant): Settling;
   // What the view draws from: its payload and selections, bound to its
   // store's inputs and slots (`bindView`) when it opened.
   readonly source: S;
@@ -1238,45 +1241,24 @@ export interface SessionView<
   dispose(): number;
 }
 
-// What a view declares into its holds: every keyed entry `closure` reads, at
-// the keys `facts` name, and each of the config's `sources` it reads. Returns
-// the lanes it took, and what threw.
-export type Declare = (
-  holds: Holds,
-  facts: ViewFacts,
-  closure: ReadonlySet<string>,
-  sources: DeclaredSources,
-) => Declaration;
-
-export const DECLARES_NOTHING: Declare = (
-  _holds,
-  _facts,
-  closure,
-  sources,
-) => ({
-  lanes: settledLanes(ABSENT, sourcesRead(closure, sources)),
-  faults: [],
-});
-
 // [LAW:one-source-of-truth] What a view is declared for, as it stands: the
-// request its renders draw by, the preset its declaration resolved, and the
-// lanes that declaration handed it — one record, written whole by each
-// declaration, so a reader never joins one declaration's facts to another's
-// lanes.
+// request its renders draw by and the preset its declaration resolved — one
+// record, written whole by each declaration. What the declaration took is the
+// follow's (src/daemon/facts-source.ts), read through `followed`.
 export interface ViewDeclared<F extends ViewFacts = ViewFacts> {
   readonly facts: F;
   readonly preset: string;
-  readonly lanes: DeclaredLanes;
 }
 
 // What a view's source is built over: the session, the state it is a view of,
 // the view's own store (a source's kept derivations are released with it),
-// and its declaration, observable.
+// its declaration, observable, and the follow its facts come through.
 export interface SourcedView {
   readonly sessionId: SessionId;
   readonly state: DslRenderState;
   readonly store: VariableStore;
   readonly declared: () => ViewDeclared;
+  readonly followed: FollowedFacts;
   // [LAW:single-enforcer] The view's one teardown also stops what its source
   // runs outside the store (a reaction): a source hands its stop here, and
   // `dispose` calls each. A source with nothing to stop never calls it.
@@ -1298,11 +1280,11 @@ export const SOURCES_NOTHING: SourceOf<ViewSource> = ({ state }) =>
     ),
   );
 
-// What a view reads to keep its declaration current, what it draws from, and
-// whom it tells that what it draws from moved.
+// What a view reads to keep its declaration current, where its facts come
+// from, what it draws from, and whom it tells that what it draws from moved.
 export interface ViewDeclaring<S extends ViewSource = ViewSource> {
   readonly sessionState: SessionStateReader;
-  readonly declare: Declare;
+  readonly facts: Facts;
   readonly source: SourceOf<S>;
   readonly changed: (sessionId: string) => void;
   readonly log: DaemonLogger;
@@ -1312,112 +1294,103 @@ export interface ViewDeclaring<S extends ViewSource = ViewSource> {
 // registry opens a view registry, and the config's view-scoped variables are
 // declared into it, in `cwd` — the entry's, where its shells run.
 //
-// [LAW:no-ambient-temporal-coupling] Its holds are declared by one reaction,
-// over the request its renders draw by and the preset the session's picks
-// resolve to (brandon-unfiled-3248.8ro6, step 3): a request naming other keys,
-// or a click moving the preset, declares again in the turn it lands, so the
-// sources a preset newly places are read before any draw asks for them, and
-// those it stops placing are released at once.
+// [LAW:no-ambient-temporal-coupling] The view follows its session through the
+// facts source it is handed, declared over the request its renders draw by
+// and the preset the session's picks resolve to (brandon-unfiled-3248.8ro6,
+// step 3): a request naming other keys, or a click moving the preset, follows
+// again in the turn it lands, so the sources a preset newly places are read
+// before any draw asks for them, and those it stops placing are released at
+// once.
 //
 // [LAW:types-are-the-program] A view is never undeclared (step 4): it opens
-// with the request it is drawn for and declares in its opening turn, so its
-// lanes always hold its latest declaration's.
+// with the request it is drawn for and follows in its opening turn, so its
+// document is always its latest declaration's.
 export function openView<S extends ViewSource, F extends ViewFacts>(
   state: DslRenderState,
   cwd: string,
   facts: F,
-  { sessionState, declare, source: sourceOf, changed, log }: ViewDeclaring<S>,
+  {
+    sessionState,
+    facts: factsSource,
+    source: sourceOf,
+    changed,
+    log,
+  }: ViewDeclaring<S>,
 ): SessionView<S, F> {
   // [LAW:one-source-of-truth] The session is the one the request's checkpoint
   // parsed: a later request of the view's names the same one.
   const { sessionId } = facts;
   const registry = state.registry.view();
-  const holds = new Holds();
   // What fails to declare here failed in the load's probe (buildRenderState),
   // which reported it: a declaration reads only the config.
   declareDslVariables(state.config, registry, cwd, VIEW_SCOPE);
   const presetNow = () =>
     presetOf(state.config, (key) => sessionState.get(sessionId, key));
-  // [LAW:no-silent-failure] The closure is computed here, beside the
-  // declaration, where a throw is logged — a reaction's tracked expression
-  // that throws reaches only the console MobX prints to, which nobody reads in
-  // a detached daemon. A declaration that throws keeps the holds it had, and
-  // its lanes answer its failure, naming the cause.
-  const lanesFor = (facts: ViewFacts, preset: string): DeclaredLanes => {
-    try {
-      const reads = state.neededInputPaths(preset);
-      const {
-        result: { lanes: taken, faults },
-        acquired,
-        released,
-      } = holds.declare(() => declare(holds, facts, reads, state.sources));
-      for (const fault of faults) {
-        log(
-          "error",
-          `session view declaration threw sid=${JSON.stringify(sessionId)} ${fault}`,
-        );
-      }
-      // [LAW:verifiable-goals] A declaration that moved a hold — a preset
-      // click, a request naming another key — says so; one that kept what
-      // the view held, every other request's, writes nothing.
-      if (acquired + released > 0) {
-        log(
-          "info",
-          `session view declared sid=${JSON.stringify(sessionId)} acquired=${acquired} released=${released} held=${holds.size}`,
-        );
-      }
-      return taken;
-    } catch (e) {
-      log(
-        "error",
-        `session view declaration threw sid=${JSON.stringify(sessionId)}: ${String(e)}`,
-      );
-      return settledLanes(
-        failed(`view declaration threw: ${String(e)}`, "read"),
-        [...state.sources.keys()],
-      );
-    }
-  };
-  // [LAW:no-ambient-temporal-coupling] The opening declaration, and each
+  const declarationOf = (preset: string): FollowDeclaration => ({
+    closure: state.neededInputPaths(preset),
+    sources: state.sources,
+  });
+  // [LAW:no-ambient-temporal-coupling] The opening follow, and each
   // request's, runs in its own call, never as a reaction's run: MobX holds a
   // reaction inside a batch (a reaction's effect, an action) until the batch
   // ends, and a frame drawn in that batch would read a view declared for a
   // request it is not drawn for.
   //
   // [LAW:one-source-of-truth] The view's one record of what it is declared
-  // for, and the lanes that declaration handed it (ViewDeclared): observable,
-  // so the view's payload is derived again in the turn a declaration lands.
-  const declaration = (facts: F, preset: string): ViewDeclared<F> => ({
-    facts,
-    preset,
-    lanes: lanesFor(facts, preset),
-  });
-  const declared = observable.box(declaration(facts, presetNow()), {
-    deep: false,
-  });
+  // for (ViewDeclared): observable, so the view's payload is derived again in
+  // the turn a declaration lands.
+  const opening = presetNow();
+  // [LAW:no-silent-failure] A follow the source refuses fails the open, which
+  // the cache records and reports; the registry the open took goes first.
+  let followed: Followed;
+  try {
+    followed = factsSource.follow(facts, declarationOf(opening));
+  } catch (e) {
+    registry.dispose();
+    throw e;
+  }
+  const declared = observable.box<ViewDeclared<F>>(
+    { facts, preset: opening },
+    { deep: false },
+  );
   // [LAW:single-enforcer] A (request, preset) pair is declared once.
   const redeclare = (facts: F, preset: string): void => {
     const now = declared.get();
     if (facts === now.facts && preset === now.preset) return;
-    const next = declaration(facts, preset);
-    runInAction(() => declared.set(next));
+    // [LAW:one-source-of-truth] One turn: the follow's document under the new
+    // closure and the preset the source composes over land together, so no
+    // turn pairs one preset's document with another's closure.
+    runInAction(() => {
+      followed.follow(facts, declarationOf(preset));
+      declared.set({ facts, preset });
+    });
   };
   // The preset moves with the session's picks, which the reaction tracks: its
   // first run, whenever it comes, declares only a preset moved since.
   const stop = reaction(
     presetNow,
     (preset) => redeclare(declared.get().facts, preset),
-    { fireImmediately: true },
+    {
+      fireImmediately: true,
+      // [LAW:no-silent-failure] A follow that throws on a pick reaches only
+      // the console MobX prints to, which nobody reads in a detached daemon.
+      onError: (e) =>
+        log(
+          "error",
+          `session view follow threw on a pick sid=${JSON.stringify(sessionId)}: ${String(e)}`,
+        ),
+    },
   );
   // [LAW:single-enforcer] The view's inputs and slots read its source from
   // here on (src/dsl/parts.ts): no draw writes one.
   const sourceStops: Array<() => void> = [];
   // What the view took, released whole: by its disposal, and by an opening
-  // that fails after taking it.
+  // that fails after taking it. The follow's dispose releases every hold its
+  // declaration took.
   const release = () => {
     stop();
     for (const stopSource of sourceStops) stopSource();
-    holds.close();
+    followed.dispose();
     return registry.dispose();
   };
   // [LAW:no-silent-failure] A source that throws in its opening turn fails the
@@ -1430,6 +1403,7 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
       state,
       store: registry.variableStore,
       declared: () => declared.get(),
+      followed,
       onDispose: (stopSource) => sourceStops.push(stopSource),
     });
   } catch (e) {
@@ -1469,11 +1443,10 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
     state,
     store: registry.variableStore,
     registry,
-    holds,
     source,
     requested: (next) => redeclare(next, presetNow()),
     facts: () => declared.get().facts,
-    lanes: () => declared.get().lanes,
+    settle: (at) => followed.settle(at),
     lastRenderCellsBySegment: new Map<string, readonly RichText[]>(),
     retire: stopChanged,
     dispose: () => {
@@ -1834,7 +1807,7 @@ export class RenderCache<
     try {
       view = openView(state, entry.cwd, facts, {
         sessionState: this.deps.sessionState,
-        declare: this.deps.declare,
+        facts: this.deps.facts,
         source: this.deps.source,
         changed: (sid) => this.observers.onViewChanged?.(sid),
         log: this.log,

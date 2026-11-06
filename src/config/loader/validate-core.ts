@@ -7,6 +7,8 @@
 
 import { isAbsolute } from "node:path";
 
+import { isPlainObject } from "../../utils/plain";
+
 import {
   SOURCE_KINDS,
   type GroupSugarDecl,
@@ -156,9 +158,9 @@ export function isSourceKind(s: string): s is SourceKind {
   return (SOURCE_KINDS as readonly string[]).includes(s);
 }
 
-export function isPlainObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
+// [LAW:one-source-of-truth] The one JSON-object predicate (src/utils/plain.ts),
+// in the combinator vocabulary under its own name.
+export { isPlainObject };
 
 export function describeType(v: unknown): string {
   if (v === null) return "null";
