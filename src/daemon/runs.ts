@@ -1,9 +1,11 @@
 // [LAW:no-ambient-temporal-coupling] The one owner of every program a `run`
 // click starts, for the whole daemon: constructed with it, closed with it, and
-// closing aborts what is still running. A run outlives the click that started
-// it — the click is answered at once — so what it leaves behind (the sources
-// it made stale, a failure the bar must show) is this owner's to settle, never
-// the click's.
+// closing aborts what is still running. A run is an effect the click describes
+// (src/daemon/effect.ts): the click's turn supersedes the sources it
+// refreshes (`superseded`), and the performer launches the program after the
+// turn, behind the session's earlier effects (`run`). This owner resumes those
+// sources once the program has ended, and answers how it ended, which Apply
+// lands as the effect's outcome — a failure on the bar.
 
 import path from "node:path";
 import {
@@ -15,10 +17,9 @@ import type { SessionId } from "./session-id.js";
 import type { StorageKey } from "./cache/managed-storage.js";
 import type { Resume } from "../utils/keyed-source.js";
 import type { DaemonLogger } from "../utils/logger.js";
-import type { SessionStateRW } from "./session-state.js";
-import type { Instant } from "../utils/instant.js";
 import { elapsedMs, type Timekeeper } from "../time.js";
-import { holdClickError } from "./click-error.js";
+import { failed, PERFORMED, type EffectOutcome } from "./effect-outcome.js";
+import { DaemonClosing } from "./verb-error.js";
 import { valueOf } from "../utils/logfmt.js";
 
 // One timeout for every run: long enough for a program that reads a file and
@@ -47,6 +48,10 @@ export interface RunRequest {
   readonly refreshes: readonly RunRefresh[];
 }
 
+// [LAW:types-are-the-program] A run the click's turn superseded the sources
+// of, by which the performer's launch finds what to resume.
+export type RunId = number & { readonly __brand: "RunId" };
+
 // How a run ended. `aborted`: the owner closed under it.
 export type RunOutcome =
   | "ok"
@@ -72,11 +77,7 @@ export interface RunsDeps {
   // [LAW:one-source-of-truth] The storage owner's one supersede.
   readonly supersede: (storage: StorageKey, sessionId: SessionId) => Resume;
   readonly launch: Launcher["launch"];
-  // The daemon's session state, where a failed run's error is held for the
-  // session's bar — not a click's journal, which committed long before.
-  readonly state: SessionStateRW;
   readonly log: DaemonLogger;
-  readonly now: () => Instant;
   // [LAW:effects-at-boundaries] The daemon's clock, which times each run.
   readonly clock: Pick<Timekeeper, "monotonic">;
   readonly timeoutMs?: number;
@@ -116,6 +117,9 @@ export class Runs {
   private readonly deps: RunsDeps;
   private readonly timeoutMs: number;
   private readonly inFlight = new Set<AbortController>();
+  // Each superseded run's resumes, until its launch takes them.
+  private readonly held = new Map<RunId, readonly Resume[]>();
+  private minted = 0;
   private started = 0;
   private failed = 0;
   private timedOut = 0;
@@ -127,21 +131,35 @@ export class Runs {
     this.timeoutMs = deps.timeoutMs ?? RUN_TIMEOUT_MS;
   }
 
-  // Start one run and return at once. Every source it refreshes reads pending
-  // from now until the program has exited, and then is read fresh.
-  start(run: RunRequest): void {
-    if (this.closed) throw new Error("run owner used after close");
-    // [LAW:no-ambient-temporal-coupling] Superseded before the program
-    // starts, so no draw after the click shows the value from before it.
-    const resumes = run.refreshes.map((r) =>
-      this.deps.supersede(r.storage, run.sessionId),
+  // [LAW:no-ambient-temporal-coupling] In the click's turn: every source the
+  // run refreshes reads pending from now until its program has exited, so no
+  // draw after the click shows the value from before it, however long the
+  // launch waits behind the session's earlier effects.
+  superseded(run: RunRequest): RunId {
+    if (this.closed) throw new DaemonClosing("run");
+    const id = ++this.minted as RunId;
+    this.held.set(
+      id,
+      run.refreshes.map((r) => this.deps.supersede(r.storage, run.sessionId)),
     );
+    return id;
+  }
+
+  // The performer's launch of the run `id` superseded, answering how it
+  // ended; then every source it superseded is read fresh.
+  run(id: RunId, run: RunRequest): Promise<EffectOutcome> {
+    if (this.closed) throw new DaemonClosing("run");
+    const resumes = this.held.get(id);
+    if (resumes === undefined) {
+      throw new Error(`run ${id} (${run.action}) was never superseded`);
+    }
+    this.held.delete(id);
     const abort = new AbortController();
     this.inFlight.add(abort);
     this.started++;
     const [program, ...args] = run.argv;
     const startedAt = this.deps.clock.monotonic();
-    void this.deps
+    return this.deps
       .launch({
         // [LAW:types-are-the-program] A relative program path is the
         // declaring file's, as the directory it runs in is; a bare name is
@@ -185,27 +203,29 @@ export class Runs {
   }
 
   // Aborts every run in flight; each resumes its sources once its program is
-  // gone.
+  // gone. A run never launched resumes nothing: its sources close with the
+  // daemon.
   close(): void {
     this.closed = true;
+    this.held.clear();
     for (const abort of this.inFlight) abort.abort();
   }
 
-  private ended(run: RunRequest, result: LaunchResult, took: number): void {
+  private ended(
+    run: RunRequest,
+    result: LaunchResult,
+    took: number,
+  ): EffectOutcome {
     const outcome = outcomeOf(result);
     this.deps.log(
       outcome === "ok" || outcome === "aborted" ? "info" : "warn",
       `run sid=${valueOf(run.sessionId)} action=${valueOf(run.action)} program=${valueOf(run.argv[0])} outcome=${outcome} exit=${exitOf(result)} took=${took} refreshed=${run.refreshes.map((r) => r.name).join(",") || "-"}`,
     );
     if (outcome === "timeout") this.timedOut++;
-    // An aborted run is the daemon going down, not the program failing.
-    if (result.ok || outcome === "aborted") return;
-    if (outcome !== "timeout") this.failed++;
-    holdClickError(
-      this.deps.state,
-      run.sessionId,
-      `run ${run.action}: ${failureText(result)}`,
-      this.deps.now(),
-    );
+    if (result.ok) return PERFORMED;
+    // An aborted run is the daemon going down, not the program failing: not
+    // counted, and its outcome lands in no turn, since the turns closed first.
+    if (outcome !== "timeout" && outcome !== "aborted") this.failed++;
+    return failed(`run ${run.action}: ${failureText(result)}`);
   }
 }

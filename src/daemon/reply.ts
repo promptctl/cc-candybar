@@ -364,9 +364,9 @@ export async function replyTo(
         menuIdle: menuIdle.getStats(),
         journalTurns: journalTurns.getStats(),
         sessionState: {
-          sessions: parts.sessionGauges.size(),
-          observers: parts.sessionGauges.observers(),
-          revision: parts.sessionGauges.latestRevision(),
+          sessions: parts.sessionState.size(),
+          observers: parts.sessionState.observers(),
+          revision: parts.sessionState.latestRevision(),
         },
         frameFeeds: frameFeeds.getStats(),
         tmuxStatus: tmuxStatusLines.stats(),

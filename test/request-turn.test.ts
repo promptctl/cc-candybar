@@ -25,7 +25,7 @@ import { JournalTurns } from "../src/daemon/journal-turns";
 import type { CheckedRenderRequest } from "../src/daemon/render-checkpoint";
 import type { RequestFacts } from "../src/daemon/request-event";
 import { sessionIdOf } from "../src/daemon/session-id";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { DaemonClosing } from "../src/daemon/verb-error";
 import { doctorReportKeys } from "../src/doctor/report";
 import type { VerbContext } from "../src/daemon/verbs";
@@ -96,6 +96,7 @@ const ANSWER: RequestAnswer = {
   answersClick: [],
   pipeShown: null,
   delivered: () => {},
+  effects: [],
 };
 
 // The click path over a doctor edge whose process probe parks on a gate, and
@@ -106,7 +107,7 @@ function rig() {
   // How many times the store persisted: a write that changes nothing still
   // persists and fires the session's atom, which the revision does not show.
   const persisted = { saves: 0 };
-  const sessionState = new SessionState({
+  const sessionState = new SessionState(SINGLE_RUN, {
     load: () => ({}),
     save: () => void persisted.saves++,
     flush: () => {},

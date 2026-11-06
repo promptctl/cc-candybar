@@ -35,7 +35,7 @@ import {
   ignoring,
   shell,
 } from "../src/proc/spawner-fake";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { systemLauncher } from "../src/proc/system-launcher";
 import { MAX_CAPTURED_BYTES } from "../src/proc/launch";
 import { readPending } from "../src/var-system/types";
@@ -2809,7 +2809,7 @@ describe("SourceRegistry — state: read-through to SessionState", () => {
   // MobX dep graph is what bzh.7 + vhi.1 rely on for verb→render reactivity.
 
   function makeWithState() {
-    const sessionState = new SessionState();
+    const sessionState = new SessionState(SINGLE_RUN);
     const store = new VariableStore(systemTimekeeper);
     const registry = registryOver(store, "", sessionState);
     // session.id is the conventional source for "which session am I in" —

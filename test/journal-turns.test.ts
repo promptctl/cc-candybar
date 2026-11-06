@@ -12,7 +12,7 @@ import { MenuIdle } from "../src/daemon/menu-idle";
 import type { DaemonParts } from "../src/daemon/daemon-parts";
 import { replyTo } from "../src/daemon/reply";
 import { DaemonClosing } from "../src/daemon/verb-error";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { SettingsHistory } from "../src/daemon/settings-history";
 import { closeIdleMenus, VERBS, type VerbContext } from "../src/daemon/verbs";
 import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
@@ -64,7 +64,7 @@ const parkedEdge = (parked: Promise<unknown>): DoctorEdge =>
 // `rawHistory`: a history over the store itself, outside the write-in-turn
 // instrument, for a case whose navigation commit always throws.
 function setup({ rawHistory = false } = {}) {
-  const sessionState = new SessionState();
+  const sessionState = new SessionState(SINGLE_RUN);
   recordRender(sessionState, SID);
   sessionState.set(SID, SESSION_CLIENT_HINTS_KEY, "{}");
   const logged: string[] = [];

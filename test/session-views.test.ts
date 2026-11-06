@@ -16,7 +16,7 @@ import {
 import type { Facts } from "../src/daemon/facts-source";
 import type { ViewFacts } from "../src/daemon/render-payload";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { instantOf } from "../src/utils/instant";
 import { ABSENT } from "../src/utils/outcome";
 import { viewFacts } from "./helpers/view-facts";
@@ -80,7 +80,7 @@ function makeCache(
       storage: NO_PLUGIN_STORAGE,
       links: TEST_LINKS,
       gates: bareGates(),
-      sessionState: new SessionState(),
+      sessionState: new SessionState(SINGLE_RUN),
       watchers,
       source: SOURCES_NOTHING,
       facts: opts.facts ?? factsRunning(runs),

@@ -17,7 +17,7 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
@@ -99,7 +99,7 @@ async function bar(
     NO_CONFIG_FILE,
   );
 
-  const sessionState = new SessionState();
+  const sessionState = new SessionState(SINGLE_RUN);
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/tmp" });

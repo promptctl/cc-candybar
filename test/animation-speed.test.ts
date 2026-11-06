@@ -10,7 +10,7 @@ import { TEST_LINKS } from "./helpers/link-signer";
 import { DEFAULT_TERMINAL_THEME, RichText } from "@promptctl/rich-js";
 
 import { selectionFor } from "./helpers/selection";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
@@ -191,7 +191,7 @@ describe("a template's frames run at the session's animation speed; realtimeFram
     seconds: readonly number[],
   ): string => {
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState());
+    const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState(SINGLE_RUN));
     const compiled = registerDslConfig(CONFIG, registry, {
       links: TEST_LINKS,
       cwd: "/tmp",

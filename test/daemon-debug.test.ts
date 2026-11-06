@@ -14,7 +14,7 @@
 import { TEST_LINKS } from "./helpers/link-signer";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { feedInputs } from "./helpers/inputs";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { ownDeclNames } from "./helpers/ambient-chrome";
 import {
   PROTOCOL_VERSION,
@@ -90,7 +90,7 @@ function buildPopulatedState(): DaemonDslState {
   const registry = new SourceRegistry(unscriptedRuns(),
     store,
     "",
-    new SessionState(),
+    new SessionState(SINGLE_RUN),
   );
   const compiled = registerDslConfig(config, registry, {
     links: TEST_LINKS,

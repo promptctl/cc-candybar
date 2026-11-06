@@ -34,7 +34,7 @@ import {
   repoConfigsPath,
   repoQuestions,
 } from "../src/daemon/repo-configs";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { VERB_REPO_CONFIG } from "../src/click/wire";
 import { linkSigner } from "../src/click/link-signer";
 import { effectsOf } from "./helpers/click";
@@ -153,7 +153,7 @@ describe("the gate over a project's plugins", () => {
     const deps = {
       clock: systemTimekeeper,
       runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
-      sessionState: new SessionState(),
+      sessionState: new SessionState(SINGLE_RUN),
       storage: UNOWNED_STORAGE,
       links: { to: MAIN_NAME, signer: linkSigner(Buffer.alloc(32)) },
       gates: bareGates(),

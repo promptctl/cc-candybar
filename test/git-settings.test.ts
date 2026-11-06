@@ -11,7 +11,7 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { registerDslConfig } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { placementDraftKey } from "../src/config/edit-chrome";
 import { instantOf } from "../src/utils/instant";
@@ -62,7 +62,7 @@ function renderPair(
     new Set(listResolvablePaletteNames()),
     DEFAULT_DSL_CONFIG,
   );
-  const sessionState = new SessionState();
+  const sessionState = new SessionState(SINGLE_RUN);
   sessionState.set(SESSION, "git-detail", detail);
   for (const [key, value] of Object.entries(session)) {
     sessionState.set(SESSION, key, value);

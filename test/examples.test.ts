@@ -21,7 +21,7 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
@@ -61,7 +61,7 @@ describe("shipped examples load and render through the real cascade", () => {
       ALLOWED,
     );
 
-    const sessionState = new SessionState();
+    const sessionState = new SessionState(SINGLE_RUN);
     const store = new VariableStore(systemTimekeeper);
     // The draw below is the first one: every shell source is still reading, as
     // it is to the real launcher until a process answers.

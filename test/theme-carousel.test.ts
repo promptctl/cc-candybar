@@ -27,7 +27,7 @@ import { RichText as RichTextValue } from "@promptctl/rich-js";
 import type { Palette, RichText, TextStyle, ThemeKey } from "@promptctl/rich-js";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { PRESET_DELETE_GLYPH } from "../src/config/settings-menu";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { registerDslConfig } from "../src/dsl/render";
@@ -91,7 +91,7 @@ function rig(
     ALLOWED,
     DEFAULT_DSL_CONFIG,
   );
-  const sessionState = new SessionState();
+  const sessionState = new SessionState(SINGLE_RUN);
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/tmp" });

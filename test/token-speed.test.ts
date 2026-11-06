@@ -42,7 +42,7 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { registerDslConfig } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf } from "../src/utils/instant";
 import {
@@ -463,7 +463,7 @@ function renderSpeed(payload: Record<string, unknown>): Frame {
   const registry = new SourceRegistry(unscriptedRuns(),
     store,
     "",
-    new SessionState(),
+    new SessionState(SINGLE_RUN),
   );
   try {
     const compiled = registerDslConfig(cfg, registry, {

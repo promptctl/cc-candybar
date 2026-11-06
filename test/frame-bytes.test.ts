@@ -19,7 +19,7 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { laneEncoders } from "../src/daemon/lane-frames";
 import { countedIds } from "./helpers/link-ids";
 import { textOf, ansiOf, renderFailedFrame, type Frame } from "../src/render/frame";
@@ -88,7 +88,7 @@ function rig(
     new Set(listResolvablePaletteNames()),
     DEFAULT_DSL_CONFIG,
   );
-  const sessionState = new SessionState();
+  const sessionState = new SessionState(SINGLE_RUN);
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
   const compiled = registerDslConfig(config, registry, {

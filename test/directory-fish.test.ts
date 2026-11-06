@@ -19,7 +19,7 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { registerDslConfig } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { getThemePalette } from "@promptctl/rich-js";
 import { abbreviatePath } from "../src/utils/formatters";
 import { dropEditChrome } from "./helpers/narrow-to-segment";
@@ -82,7 +82,7 @@ function renderDirRaw(paths: DirPaths): Frame {
     root: dirOnlyRoot,
   };
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState());
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState(SINGLE_RUN));
   try {
     const compiled = registerDslConfig(parsed, registry, {
       links: TEST_LINKS,
@@ -234,7 +234,7 @@ describe("configurability seam: user template override restores full path", () =
       }),
     };
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState());
+    const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState(SINGLE_RUN));
     try {
       const compiled = registerDslConfig(overridden, registry, {
         links: TEST_LINKS,

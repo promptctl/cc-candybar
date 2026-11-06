@@ -68,7 +68,7 @@ import {
   loadFromDisk,
   UNOWNED_STORAGE,
 } from "../daemon/cache/render.js";
-import { SessionState } from "../daemon/session-state.js";
+import { SessionState, SINGLE_RUN } from "../daemon/session-state.js";
 import { claudeConfigDir } from "../claude-settings.js";
 import type {
   RateLimitsSeen,
@@ -108,7 +108,7 @@ export function loadConfigOnce(
   const deps = {
     clock,
     locations: locations(host, home),
-    sessionState: new SessionState(),
+    sessionState: new SessionState(SINGLE_RUN),
     storage: UNOWNED_STORAGE,
     links: {
       to: home.name,

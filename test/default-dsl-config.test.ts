@@ -36,7 +36,7 @@ import { parseAndValidate, validateConfig } from "./helpers/parse-and-validate";
 import { registerDslConfig } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import {
   getThemePalette,
   contrastRatio,
@@ -206,7 +206,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     const registry = new SourceRegistry(unscriptedRuns(),
       store,
       "",
-      new SessionState(),
+      new SessionState(SINGLE_RUN),
     );
     try {
       const compiled = registerDslConfig(parsed, registry, {
@@ -281,7 +281,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const registry = new SourceRegistry(unscriptedRuns(),
         store,
         "",
-        new SessionState(),
+        new SessionState(SINGLE_RUN),
       );
       const compiled = registerDslConfig(config, registry, {
         links: TEST_LINKS,
@@ -506,7 +506,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
   test("clicking a theme/style option changes theme.effective/style.effective on the next render", async () => {
     const SID = "theming-8uj-1";
     const parsed = parseAndValidate("<default>", SERIALIZED);
-    const sessionState = new SessionState();
+    const sessionState = new SessionState(SINGLE_RUN);
     const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
     const compiled = registerDslConfig(parsed, registry, { links: TEST_LINKS, cwd: "/tmp" });
@@ -643,7 +643,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const registry = new SourceRegistry(unscriptedRuns(),
         store,
         "",
-        new SessionState(),
+        new SessionState(SINGLE_RUN),
       );
       try {
         const compiled = registerDslConfig(parsed, registry, { links: TEST_LINKS, cwd: "/tmp" });
@@ -707,7 +707,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const registry = new SourceRegistry(unscriptedRuns(),
         store,
         "",
-        new SessionState(),
+        new SessionState(SINGLE_RUN),
       );
       try {
         const compiled = registerDslConfig(cfg, registry, { links: TEST_LINKS, cwd: "/tmp" });
@@ -765,7 +765,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const registry = new SourceRegistry(unscriptedRuns(),
         store,
         "",
-        new SessionState(),
+        new SessionState(SINGLE_RUN),
       );
       try {
         const compiled = registerDslConfig(cfg, registry, { links: TEST_LINKS, cwd: "/tmp" });
@@ -795,7 +795,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const registry = new SourceRegistry(unscriptedRuns(),
         store,
         "",
-        new SessionState(),
+        new SessionState(SINGLE_RUN),
       );
       try {
         const compiled = registerDslConfig(toolbarOnly, registry, {
@@ -920,7 +920,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const registry = new SourceRegistry(unscriptedRuns(),
         store,
         "",
-        new SessionState(),
+        new SessionState(SINGLE_RUN),
       );
       try {
         const compiled = registerDslConfig(dirOnly, registry, {
@@ -1049,7 +1049,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     // The form `gitaculous` shows is the session's `git-detail` state, so a
     // test picks one by writing it into the session the payload names.
     const detailState = (detail: "collapsed" | "expanded"): SessionState => {
-      const state = new SessionState();
+      const state = new SessionState(SINGLE_RUN);
       state.set(GIT_PAYLOAD.session_id, "git-detail", detail);
       return state;
     };
@@ -1060,7 +1060,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       theme?: string,
       git: Record<string, unknown> = GIT_PAYLOAD.git,
       variables: DslConfig["variables"] = {},
-      sessionState: SessionState = new SessionState(),
+      sessionState: SessionState = new SessionState(SINGLE_RUN),
     ): Frame {
       const parsed = parseAndValidate("<default>", SERIALIZED);
       const narrowed = narrowToSegment(parsed, segment);
@@ -1190,7 +1190,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     // through the same gate and verb table the daemon dispatches through.
     test("clicking the arrow expands, and clicking it again collapses", async () => {
       const parsed = parseAndValidate("<default>", SERIALIZED);
-      const state = new SessionState();
+      const state = new SessionState(SINGLE_RUN);
       recordRender(state, GIT_PAYLOAD.session_id);
       const ctx = testVerbContext(state, undefined, parsed);
       const arrow = (line: Frame) => {
@@ -1387,7 +1387,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const registry = new SourceRegistry(unscriptedRuns(),
         store,
         "",
-        new SessionState(),
+        new SessionState(SINGLE_RUN),
       );
       try {
         const compiled = registerDslConfig(metricsOnly, registry, {
@@ -1479,7 +1479,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         const registry = new SourceRegistry(unscriptedRuns(),
           store,
           "",
-          new SessionState(),
+          new SessionState(SINGLE_RUN),
         );
         try {
           const compiled = registerDslConfig(blockOnly, registry, {
@@ -1558,7 +1558,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const registry = new SourceRegistry(unscriptedRuns(),
         store,
         "",
-        new SessionState(),
+        new SessionState(SINGLE_RUN),
       );
       try {
         const compiled = registerDslConfig(sessionOnly, registry, {

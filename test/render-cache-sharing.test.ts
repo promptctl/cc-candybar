@@ -23,7 +23,7 @@ import {
   type SessionView,
 } from "../src/daemon/cache/render";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import {
   compileDslConfig,
   compileInputOf,
@@ -79,7 +79,7 @@ function makeCache(budgetBytes: number, maxEntries?: number) {
     logger: () => {},
   });
   cleanups.push(() => watchers.closeAll());
-  const sessionState = new SessionState();
+  const sessionState = new SessionState(SINGLE_RUN);
   const cache = new RenderCache(
     {
       clock: systemTimekeeper,
@@ -161,7 +161,7 @@ const drawAlone = (
   const registry = new SourceRegistry(unscriptedRuns(),
     store,
     "",
-    new SessionState(),
+    new SessionState(SINGLE_RUN),
   );
   declareDslVariables(config, registry, dir, EVERY_SCOPE);
   drawPayload(

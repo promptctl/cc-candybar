@@ -35,13 +35,29 @@ import {
 } from "../src/daemon/lane-edge";
 import { draftShown, turnRunning } from "../src/claude-input/prompt-screen";
 import { BadVerbArgs } from "../src/daemon/verb-error";
-import { SessionState } from "../src/daemon/session-state";
-import { holdClickError } from "../src/daemon/click-error";
-import { instantOf } from "../src/utils/instant";
-import type { Lane, LaneSwitches } from "../src/config/lanes";
+import { JournalTurns } from "../src/daemon/journal-turns";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
+import { lastClickError } from "../src/daemon/click-error";
+import type { VerbContext } from "../src/daemon/verbs";
+import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
+import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
+import { listResolvablePaletteNames } from "../src/themes/policy";
+import { parseAndValidate } from "./helpers/parse-and-validate";
+import { clickUrl, recordRender, testVerbContext } from "./helpers/click";
+import type { LaneSetupEffect } from "../src/daemon/effect";
+import { failed, type EffectOutcome } from "../src/daemon/effect-outcome";
+import { LANES, type Lane, type LaneSwitches } from "../src/config/lanes";
 import type { TmuxHint } from "../src/tmux-hint";
 
 const SID = "1f6e0c2a-0d0e-4a52-9d1b-2b0b0f0e0a11";
+// The bundled bar, whose settings menu declares every lane's switch.
+const BAR = parseAndValidate(
+  "<test>",
+  "{}",
+  new Set(listResolvablePaletteNames()),
+  DEFAULT_DSL_CONFIG,
+);
+
 const TMUX: TmuxHint = { socket: "/tmp/tmux-1/default", pane: "%7", truecolor: null };
 const READY_SCREEN = ["─".repeat(30), "❯ ", "─".repeat(30)];
 
@@ -814,24 +830,39 @@ describe("the production edge's readers", () => {
 
 describe("LaneSetups", () => {
   const owner = (edge: LaneEdge) => {
-    const state = new SessionState();
     const logs: string[] = [];
-    const deferred: (() => void)[] = [];
-    const setups = new LaneSetups({
+    const owner = new LaneSetups({
       edge,
       host: HOST,
-      state,
       log: (level, msg) => logs.push(`${level} ${msg}`),
-      now: () => instantOf(new Date(0)),
-      defer: (run) => void deferred.push(run),
     });
-    // Run what the clicks and requests deferred, as the daemon's next turn
-    // does, and the setups queued behind them.
+    // [LAW:effects-at-boundaries] What the clicks and requests settle is
+    // effects; the performer runs them after the event's turn, each session's
+    // one at a time in the order described (src/daemon/journal-turns.ts
+    // `performing`), and each outcome is what Apply lands.
+    const turns = new JournalTurns();
+    const described: LaneSetupEffect[] = [];
+    const outcomes: EffectOutcome[] = [];
+    const performing: Promise<void>[] = [];
+    const setups = {
+      clicked: (...args: Parameters<LaneSetups["clicked"]>) =>
+        void described.push(...owner.clicked(...args)),
+      noted: (...args: Parameters<LaneSetups["noted"]>) =>
+        void described.push(...owner.noted(...args)),
+    };
+    // Hand what was described to the performer, as the event's turn does
+    // once it is over, and let the setups queued behind them run.
     const settle = async (): Promise<void> => {
-      deferred.splice(0).forEach((run) => run());
+      for (const effect of described.splice(0)) {
+        performing.push(
+          turns.performing(effect.session.sessionId, async () => {
+            outcomes.push(await owner.setup(effect));
+          }),
+        );
+      }
       await new Promise((r) => setImmediate(r));
     };
-    return { setups, state, logs, settle };
+    return { setups, logs, settle, outcomes, performing };
   };
   const switches = (on: Partial<LaneSwitches>): LaneSwitches => ({
     band: false,
@@ -989,27 +1020,65 @@ describe("LaneSetups", () => {
     expect(did).toEqual(["close %9"]);
   });
 
-  const held = (text: string): string | null => {
-    const expected = new SessionState();
-    holdClickError(expected, SID, text, instantOf(new Date(0)));
-    return expected.get(SID, "click.error");
-  };
+  // What the failure's outcome says, as the log line said it without where.
+  const said = (line: string): string =>
+    line.replace(/^warn /, "").replace(` by=click (session=${SID})`, "");
 
-  test("a setup refused at once is logged and held on the bar like a click's failure", async () => {
+  // [LAW:single-enforcer] Through Apply, as the daemon runs a toggle: the
+  // click's turn settles the setup as an effect, the performer runs it after
+  // the turn, and the effect-done arm is the one writer of its failure.
+  test("a toggle's setup is performed after its click's turn, and its failure reaches the bar as its effect-done", async () => {
     const { edge, did } = fakeEdge();
-    const { setups, state, logs, settle } = owner(edge);
+    const owner = new LaneSetups({ edge, host: HOST, log: () => {} });
+    const sessionState = new SessionState(SINGLE_RUN);
+    recordRender(sessionState, SID);
+    const lines: string[] = [];
+    const base = testVerbContext(sessionState, undefined, BAR);
+    const ctx: VerbContext = {
+      ...base,
+      log: (level, msg) => lines.push(`${level} ${msg}`),
+      lanes: {
+        ...base.lanes,
+        // The session as its latest request reported it: outside tmux, where
+        // a pane lane has nowhere to open.
+        clicked: (sid, before, after) =>
+          owner.clicked(sid, session({ tmux: null }), before, after),
+        setup: (effect) => owner.setup(effect),
+      },
+    };
+    await clickUrl(
+      effectsUrl(MAIN_NAME, [
+        {
+          verb: VERB_SET_STATE,
+          args: [SID, LANES.pane.switch.setting, String(LANES.pane.switch.on)],
+        },
+      ]),
+      ctx,
+    );
+    expect(did).toEqual([]);
+    expect(lastClickError(sessionState, SID)?.text).toMatch(
+      /^lane: pane on: .*not running inside tmux/,
+    );
+    expect(lines).toContainEqual(
+      expect.stringMatching(
+        /^warn apply kind=effect-done verb=\S+ sid=\S+ effect=lane-setup:pane-on outcome=failed /,
+      ),
+    );
+  });
+
+  test("a setup refused at once is logged, and its outcome is the failure", async () => {
+    const { edge, did } = fakeEdge();
+    const { setups, logs, settle, outcomes } = owner(edge);
     setups.clicked(SID, session({ tmux: null }), switches({}), switches({ pane: true }));
     await settle();
     expect(did).toEqual([]);
     expect(logs).toEqual([
       expect.stringMatching(/^warn lane: pane on: .*not running inside tmux/),
     ]);
-    expect(state.get(SID, "click.error")).toBe(
-      held(logs[0]!.replace(/^warn /, "").replace(` by=click (session=${SID})`, "")),
-    );
+    expect(outcomes).toEqual([failed(said(logs[0]!))]);
   });
 
-  test("a restart that fails after the click is logged and held on the bar like a click's failure", async () => {
+  test("a restart that fails after the click is logged, and the setup's outcome is the failure", async () => {
     // The wait reports its outcome only once the click has returned.
     let gone!: (v: boolean) => void;
     let asked!: () => void;
@@ -1020,18 +1089,18 @@ describe("LaneSetups", () => {
         return new Promise((r) => (gone = r));
       },
     });
-    const { setups, state, logs, settle } = owner(edge);
+    const { setups, logs, settle, outcomes, performing } = owner(edge);
     setups.clicked(SID, session(), switches({}), switches({ statusline: true }));
     await settle();
     await waiting;
     expect(logs).toEqual([
       `info lane: statusline on — restarting Claude Code in %7 under the attach launcher by=click (session=${SID})`,
     ]);
+    // Underway: the setup's outcome waits for the restart's end.
+    expect(outcomes).toEqual([]);
     gone(false);
-    await new Promise((r) => setImmediate(r));
+    await Promise.all(performing);
     expect(logs.at(-1)).toMatch(/^warn lane: statusline on: Claude Code in %7 did not exit/);
-    expect(state.get(SID, "click.error")).toBe(
-      held(logs.at(-1)!.replace(/^warn /, "").replace(` by=click (session=${SID})`, "")),
-    );
+    expect(outcomes).toEqual([failed(said(logs.at(-1)!))]);
   });
 });

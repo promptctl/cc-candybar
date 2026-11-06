@@ -37,7 +37,7 @@ import {
   sessionSource,
   type SessionSource,
 } from "../src/daemon/session-source";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { newUpdateFact, type UpdateFact } from "../src/daemon/update-fact";
 import type { Update } from "../src/daemon/update-notice";
 import { restamp } from "../src/facts/fact";
@@ -169,7 +169,7 @@ function rig(): Rig {
     logger: log,
     ledger: new RefreshLedger(log),
   });
-  const sessionState = new SessionState();
+  const sessionState = new SessionState(SINGLE_RUN);
   const updateFact = newUpdateFact();
   const reloads = new ReloadSignal();
   const cache = new RenderCache<SessionSource, SessionRequest>(

@@ -35,10 +35,9 @@ import {
   type Lane,
   type LaneSwitches,
 } from "../config/lanes.js";
-import { holdClickError } from "./click-error.js";
+import type { LaneSetupEffect } from "./effect.js";
+import { failed, type EffectOutcome } from "./effect-outcome.js";
 import type { SessionFacts } from "./session-env.js";
-import type { SessionStateRW } from "./session-state.js";
-import type { Instant } from "../utils/instant.js";
 import type { ClientHints } from "./protocol.js";
 import type { RenderOrigin } from "../config-hint.js";
 import type { TmuxHint } from "../tmux-hint.js";
@@ -73,7 +72,6 @@ import type { LauncherNode } from "../attach-preload.js";
 import type { RendererHome } from "./home.js";
 import { homeEnv } from "./paths.js";
 import { BadVerbArgs } from "./verb-error.js";
-import { KeyedSerialQueue } from "../utils/keyed-serial-queue.js";
 
 // The band mod, as the checkout's marketplace (`.claude-plugin/
 // marketplace.json`) names it.
@@ -618,7 +616,7 @@ const MAX_SESSIONS_OWED = 1024;
 
 // What started a setup: the session's own click, or its first request after
 // a click this daemon could not set up then.
-type SetupCause = "click" | "owed";
+export type SetupCause = "click" | "owed";
 
 // The lanes a session's clicks moved and no setup has brought in line yet,
 // each by where its switch stood before the first of those clicks: what the
@@ -641,39 +639,36 @@ type Owed = Map<Lane, boolean>;
 // session's next click or request, whichever comes first. What is owed is
 // settled against the switches as that event finds them, so a lane whose
 // switch is back where it stood — toggled back, or moved back by another
-// session's save — owes nothing. One session's setups run one at a time,
-// each after the last has finished — two restarts of one pane would type over
-// each other. How each setup ends is logged, and a failure is held on the bar
-// as a click's failure is (src/daemon/click-error.ts).
+// session's save — owes nothing.
+//
+// [LAW:effects-at-boundaries] A setup is an effect (src/daemon/effect.ts):
+// the click or request that settles it describes it, and the performer runs
+// it after that event's turn (`setup`), behind the session's earlier effects,
+// so one session's setups run one at a time, each after the last has
+// finished — two restarts of one pane would type over each other. How each
+// setup ends is logged, and a failure is the effect's outcome, which Apply
+// holds on the bar as a click's failure is (src/daemon/click-error.ts).
 export class LaneSetups {
   // Each session's owed lanes, least recently owed first.
   private readonly owed = new Map<string, Owed>();
-  // [LAW:no-ambient-temporal-coupling] Each session's setups, one at a time.
-  private readonly setups = new KeyedSerialQueue<string>();
 
   constructor(
     private readonly deps: {
       readonly edge: LaneEdge;
       readonly host: LaneHost;
-      readonly state: SessionStateRW;
       readonly log: (level: "info" | "warn", msg: string) => void;
-      readonly now: () => Instant;
-      // [LAW:effects-at-boundaries] Runs a setup in the turn after the click
-      // or request that started it, so what that turn still does after
-      // `clicked` (the click's view follow) lands first.
-      readonly defer: (run: () => void) => void;
     },
   ) {}
 
-  // A click of `sessionId` moved its switches from `before` to `after`.
-  // `session` is the session as its latest request reported it, or null when
-  // this daemon holds none yet.
+  // A click of `sessionId` moved its switches from `before` to `after`: the
+  // setups it settles. `session` is the session as its latest request
+  // reported it, or null when this daemon holds none yet, which owes them.
   clicked(
     sessionId: string,
     session: LaneSession | null,
     before: LaneSwitches,
     after: LaneSwitches,
-  ): void {
+  ): readonly LaneSetupEffect[] {
     // [LAW:one-source-of-truth] The click's moves join what the session
     // already owes: a lane owed before keeps where it stood then.
     const moved = LANE_NAMES.filter((lane) => before[lane] !== after[lane]);
@@ -681,10 +676,8 @@ export class LaneSetups {
     for (const lane of moved) if (!owed.has(lane)) owed.set(lane, before[lane]);
     const byOf = (lane: Lane): SetupCause =>
       moved.includes(lane) ? "click" : "owed";
-    if (session !== null) {
-      this.settle(session, owed, after, byOf);
-      return;
-    }
+    if (session !== null)
+      return settled(session, owed, after, byOf, this.deps.log);
     for (const [lane, from] of owed)
       if (from === after[lane]) owed.delete(lane);
     // [LAW:nothing-unseen] What a click before the session's first request
@@ -710,12 +703,22 @@ export class LaneSetups {
         `lane: owed dropped sid=${JSON.stringify(oldest)} lanes=${[...lanes.keys()].join(",")}`,
       );
     }
+    return [];
   }
 
   // A request of `session` arrived, finding its switches at `switches`: the
-  // setups its clicks owe start now.
-  noted(session: LaneSession, switches: LaneSwitches): void {
-    this.settle(session, this.take(session.sessionId), switches, () => "owed");
+  // setups its clicks owe, settled now.
+  noted(
+    session: LaneSession,
+    switches: LaneSwitches,
+  ): readonly LaneSetupEffect[] {
+    return settled(
+      session,
+      this.take(session.sessionId),
+      switches,
+      () => "owed",
+      this.deps.log,
+    );
   }
 
   private take(sessionId: string): Owed {
@@ -724,52 +727,20 @@ export class LaneSetups {
     return owed;
   }
 
-  // [LAW:dataflow-not-control-flow] Each owed lane is brought to its switch
-  // `now`, unless the switch stands where the lane already is, and either
-  // way is said, under what started it: this click's move, or one owed from
-  // before.
-  private settle(
-    session: LaneSession,
-    owed: Owed,
-    now: LaneSwitches,
-    byOf: (lane: Lane) => SetupCause,
-  ): void {
-    for (const [lane, from] of owed) {
-      if (now[lane] !== from) this.start(session, lane, now[lane], byOf(lane));
-      else
-        this.deps.log(
-          "info",
-          `lane: ${lane} ${from ? "on" : "off"} — nothing owed: its switch is back where the lane is by=${byOf(lane)} (session=${session.sessionId})`,
-        );
-    }
-  }
-
-  private start(
-    session: LaneSession,
-    lane: Lane,
-    on: boolean,
-    by: SetupCause,
-  ): void {
-    this.deps.defer(
-      () =>
-        void this.setups.run(session.sessionId, () =>
-          this.sync(session, lane, on, by),
-        ),
-    );
-  }
-
-  // Resolves once the setup has finished, however it ended.
-  private async sync(
-    session: LaneSession,
-    lane: Lane,
-    on: boolean,
-    by: SetupCause,
-  ): Promise<void> {
+  // [LAW:effects-at-boundaries] The performer's run of one setup, answering
+  // how it ended: a part still underway once the plan answers is waited out,
+  // so the session's next effect starts after it.
+  async setup({
+    session,
+    lane,
+    on,
+    by,
+  }: LaneSetupEffect): Promise<EffectOutcome> {
     const where = `by=${by} (session=${session.sessionId})`;
-    const failed = (error: unknown): void => {
+    const ended = (error: unknown): EffectOutcome => {
       const text = `lane: ${lane} ${on ? "on" : "off"}: ${error instanceof Error ? error.message : String(error)}`;
       this.deps.log("warn", `${text} ${where}`);
-      holdClickError(this.deps.state, session.sessionId, text, this.deps.now());
+      return failed(text);
     };
     let outcome: LaneOutcome;
     try {
@@ -779,19 +750,45 @@ export class LaneSetups {
         this.deps.edge,
       );
     } catch (error) {
-      failed(error);
-      return;
+      return ended(error);
     }
     this.deps.log(
       "info",
       `lane: ${lane} ${on ? "on" : "off"} — ${outcome.said} ${where}`,
     );
-    if (outcome.kind === "underway") {
-      await outcome.finished.then(
-        (finished) =>
-          this.deps.log("info", `lane: ${lane} ${finished} ${where}`),
-        failed,
-      );
-    }
+    if (outcome.kind === "done") return { kind: "ok", said: outcome.said };
+    return outcome.finished.then((finished): EffectOutcome => {
+      this.deps.log("info", `lane: ${lane} ${finished} ${where}`);
+      return { kind: "ok", said: finished };
+    }, ended);
   }
+}
+
+// [LAW:dataflow-not-control-flow] Each owed lane is brought to its switch
+// `now`, unless the switch stands where the lane already is, and either way
+// is said, under what started it: this click's move, or one owed from before.
+function settled(
+  session: LaneSession,
+  owed: Owed,
+  now: LaneSwitches,
+  byOf: (lane: Lane) => SetupCause,
+  log: (level: "info", msg: string) => void,
+): readonly LaneSetupEffect[] {
+  const setups: LaneSetupEffect[] = [];
+  for (const [lane, from] of owed) {
+    if (now[lane] !== from)
+      setups.push({
+        kind: "lane-setup",
+        session,
+        lane,
+        on: now[lane],
+        by: byOf(lane),
+      });
+    else
+      log(
+        "info",
+        `lane: ${lane} ${from ? "on" : "off"} — nothing owed: its switch is back where the lane is by=${byOf(lane)} (session=${session.sessionId})`,
+      );
+  }
+  return setups;
 }

@@ -32,7 +32,6 @@ export function productionAdapters(
     daemonLog,
     launcher: (own) => systemLauncher(own, machine),
     storage: (log) => fileStorage(paths, log, machine),
-    sessionWrites: (store) => store,
     doctorStores: fileStores(paths.state),
     doctorEdge: productionEdge,
     claudeInput: productionClaudeInputEdge,

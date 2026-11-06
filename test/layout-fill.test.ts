@@ -41,7 +41,7 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
 
@@ -406,7 +406,7 @@ describe("a fill segment fills wherever the walk places it", () => {
     const registry = new SourceRegistry(unscriptedRuns(),
       store,
       "",
-      new SessionState(),
+      new SessionState(SINGLE_RUN),
     );
     const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/tmp" });
     const errors: string[] = [];

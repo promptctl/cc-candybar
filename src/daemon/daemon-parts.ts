@@ -56,16 +56,12 @@ export interface DaemonParts {
   readonly refreshLedger: RefreshLedger;
   readonly fileEvents: FileEventDelivery;
   readonly payloadProviders: PayloadProviders;
-  // [LAW:single-enforcer] What the request and click paths write session
-  // state through, and read it through: the store's view the daemon was
-  // built with, which under test refuses a write made while no journal turn
-  // is held (test/helpers/writes-in-turn.ts).
-  readonly sessionState: SessionStateRW;
-  // The store's gauges, for the stats reply.
-  readonly sessionGauges: Pick<
-    SessionState,
-    "size" | "observers" | "latestRevision"
-  >;
+  // [LAW:single-enforcer] The daemon's one store of session state, which
+  // refuses a write made while no journal turn is held: what the request and
+  // click paths read and write, and its gauges for the stats reply. Its
+  // close is the daemon's own.
+  readonly sessionState: SessionStateRW &
+    Pick<SessionState, "size" | "observers" | "latestRevision">;
   // [LAW:one-source-of-truth] This renderer's name, as every record of its
   // work and the tmux rows it draws carry it.
   readonly rendererName: string;

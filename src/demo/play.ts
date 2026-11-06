@@ -51,7 +51,7 @@ import {
 import type { Facts, RecordingFacts } from "../daemon/facts-source.js";
 import { renderOptionsOf, todayOf } from "../daemon/render-payload.js";
 import { sessionSource, type SessionSource } from "../daemon/session-source.js";
-import { SessionState } from "../daemon/session-state.js";
+import { SessionState, SINGLE_RUN } from "../daemon/session-state.js";
 import { EMPTY_HISTORY_DEPTH } from "../daemon/settings-history.js";
 import { drawDsl } from "../dsl/render.js";
 import type { RenderedLine } from "../dsl/node-registry.js";
@@ -96,7 +96,7 @@ export function loadDemo({
   warn,
 }: DemoLoad): DemoState {
   // The session's store, which each draw's state restores before it draws.
-  const sessionState = new SessionState();
+  const sessionState = new SessionState(SINGLE_RUN);
   const locs = locations(world.host, world.home);
   const repos = repoGateAt(stateDir, cwd);
   // [LAW:single-enforcer] The daemon's own load and settle: the advisories

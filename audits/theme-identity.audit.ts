@@ -41,7 +41,7 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { validateConfig } from "../test/helpers/parse-and-validate";
 import { unauthored } from "../src/config/dsl-loader";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { registerDslConfig } from "../src/dsl/render";
 import {
   SHADES,
@@ -130,7 +130,7 @@ const CALM = {
 // over between renders but the compiled config itself. One instant for every
 // render, so the renders differ only in the pick.
 const STORE = new VariableStore(systemTimekeeper);
-const REGISTRY = new SourceRegistry(unscriptedRuns(), STORE, "", new SessionState());
+const REGISTRY = new SourceRegistry(unscriptedRuns(), STORE, "", new SessionState(SINGLE_RUN));
 const COMPILED = registerDslConfig(CONFIG, REGISTRY, { links: TEST_LINKS, cwd: process.cwd() });
 const AT = instantOf(new Date());
 afterAll(() => REGISTRY.dispose());

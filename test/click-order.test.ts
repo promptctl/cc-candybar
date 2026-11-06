@@ -8,7 +8,7 @@ import { MAIN_NAME } from "../src/daemon/home";
 
 import { JournalTurns } from "../src/daemon/journal-turns";
 import { HOST, locs } from "./helpers/host";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { VERBS, type VerbContext, type VerbHandler } from "../src/daemon/verbs";
 import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
 import {
@@ -76,7 +76,7 @@ const edge = (over: Partial<DoctorEdge>): DoctorEdge =>
   }) as DoctorEdge;
 
 function setup(over: Partial<DoctorEdge> = {}) {
-  const sessionState = new SessionState();
+  const sessionState = new SessionState(SINGLE_RUN);
   const logged: string[] = [];
   const turns = new JournalTurns();
   for (const sid of [A, B]) {
@@ -251,7 +251,7 @@ describe("a gather is a snapshot of what it read", () => {
   test("a `do` of set-config then doctor judges the written config", async () => {
     const fixture = durableConfig();
     try {
-      const sessionState = new SessionState();
+      const sessionState = new SessionState(SINGLE_RUN);
       fixture.seedOrigin(sessionState, A);
       sessionState.set(A, SESSION_CLIENT_HINTS_KEY, "{}");
       const config = parseAndValidate(

@@ -33,7 +33,7 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { registerDslConfig } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf } from "../src/utils/instant";
 import { etaMinutes } from "../src/template-engine/funcs";
@@ -196,7 +196,7 @@ function renderBurnrate(
   // SessionState is required to declare it (matching every other
   // DEFAULT_DSL_CONFIG-based render helper) or it silently fails to declare
   // and burnrate's own `when` renders an unrelated ⚠ error cell.
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState());
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState(SINGLE_RUN));
   try {
     const compiled = registerDslConfig(cfg, registry, { links: TEST_LINKS, cwd: "/tmp" });
     return drawPayload(

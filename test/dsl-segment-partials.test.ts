@@ -11,7 +11,7 @@ import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { TEST_LINKS } from "./helpers/link-signer";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 
 import { validateConfig } from "./helpers/parse-and-validate";
 import {
@@ -62,7 +62,7 @@ function build(source: string, dflt: DslConfig = EMPTY_DEFAULT) {
   const registry = new SourceRegistry(unscriptedRuns(),
     store,
     "",
-    new SessionState(),
+    new SessionState(SINGLE_RUN),
   );
   const compiled = registerDslConfig(config, registry, {
     links: TEST_LINKS,

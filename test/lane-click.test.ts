@@ -4,7 +4,7 @@ import { MAIN_NAME } from "../src/daemon/home";
 // the click path itself (journaled, src/daemon/verbs/index.ts). No render,
 // frame or other session's write is measured, so none can start a setup.
 
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -29,7 +29,7 @@ interface Clicked {
 }
 
 function rig() {
-  const sessionState = new SessionState();
+  const sessionState = new SessionState(SINGLE_RUN);
   recordRender(sessionState, SID);
   const base = testVerbContext(sessionState, undefined, CONFIG);
   const clicked: Clicked[] = [];
@@ -37,8 +37,10 @@ function rig() {
     ...base,
     lanes: {
       ...base.lanes,
-      clicked: (sessionId, before, after) =>
-        clicked.push({ sessionId, before, after }),
+      clicked: (sessionId, before, after) => {
+        clicked.push({ sessionId, before, after });
+        return [];
+      },
     },
   };
   const toggle = async (sid: string, ...lanes: Lane[]): Promise<void> =>

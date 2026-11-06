@@ -5,7 +5,7 @@ import os from "node:os";
 import { PROTOCOL_VERSION, encodeFrame, makeFrameReader } from "../src/daemon/protocol";
 import type { Response } from "../src/daemon/protocol";
 import { socketPath } from "../src/daemon/paths";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { JournalTurns } from "../src/daemon/journal-turns";
 import { systemTimekeeper } from "../src/time";
 import { VERBS, VERB_NAMES, BadVerbArgs } from "../src/daemon/verbs";
@@ -20,18 +20,18 @@ import type { DslConfig } from "../src/config/dsl-types";
 
 describe("SessionState", () => {
   test("get returns null for unknown session/key", () => {
-    const state = new SessionState();
+    const state = new SessionState(SINGLE_RUN);
     expect(state.get("abc-123", "theme")).toBeNull();
   });
 
   test("set/get round-trips a value", () => {
-    const state = new SessionState();
+    const state = new SessionState(SINGLE_RUN);
     state.set("abc-123", "theme", "ocean");
     expect(state.get("abc-123", "theme")).toBe("ocean");
   });
 
   test("different sessions are independent", () => {
-    const state = new SessionState();
+    const state = new SessionState(SINGLE_RUN);
     state.set("session-a", "theme", "ocean");
     state.set("session-b", "theme", "ember");
     expect(state.get("session-a", "theme")).toBe("ocean");
@@ -39,33 +39,22 @@ describe("SessionState", () => {
   });
 
   test("clear removes a key", () => {
-    const state = new SessionState();
+    const state = new SessionState(SINGLE_RUN);
     state.set("abc-123", "theme", "ocean");
     state.clear("abc-123", "theme");
     expect(state.get("abc-123", "theme")).toBeNull();
   });
 
   test("multiple keys per session are independent", () => {
-    const state = new SessionState();
+    const state = new SessionState(SINGLE_RUN);
     state.set("abc-123", "theme", "ocean");
     state.set("abc-123", "style", "surface");
     expect(state.get("abc-123", "theme")).toBe("ocean");
     expect(state.get("abc-123", "style")).toBe("surface");
   });
 
-  test("prune removes sessions not in the active set", () => {
-    const state = new SessionState();
-    state.set("a", "theme", "ocean");
-    state.set("b", "theme", "ember");
-    state.set("c", "theme", "forest");
-    state.prune(new Set(["a", "c"]));
-    expect(state.get("a", "theme")).toBe("ocean");
-    expect(state.get("b", "theme")).toBeNull();
-    expect(state.get("c", "theme")).toBe("forest");
-  });
-
   test("toolbar-expanded key works for toggle semantics", () => {
-    const state = new SessionState();
+    const state = new SessionState(SINGLE_RUN);
     expect(state.get("s1", "toolbar-expanded")).toBeNull();
     state.set("s1", "toolbar-expanded", "1");
     expect(state.get("s1", "toolbar-expanded")).toBe("1");
@@ -128,7 +117,7 @@ describe("click protocol", () => {
     // throw a raw URIError — without reclassification it would surface as an
     // operational RENDER_FAILED. Pins the single-arg (toolbar-toggle) and multi-seg
     // (set-state) codecs at their shared decode boundary.
-    const ctx: VerbContext = testVerbContext(new SessionState());
+    const ctx: VerbContext = testVerbContext(new SessionState(SINGLE_RUN));
     for (const verb of [VERB_TOOLBAR_TOGGLE, "set-state"]) {
       const handler = VERBS.get(verb)!;
       expect(() => handler("%", ctx)).toThrow(BadVerbArgs);
@@ -151,7 +140,7 @@ describe("apply-update verb", () => {
     // whether a turn is held (src/daemon/verbs/index.ts), which this test reads.
     const turns = new JournalTurns();
     const ctx: VerbContext = {
-      ...testVerbContext(new SessionState(), undefined, undefined, undefined, turns),
+      ...testVerbContext(new SessionState(SINGLE_RUN), undefined, undefined, undefined, turns),
       applyUpdate: () => {
         holders.push(turns.inTurn());
         return acting;
@@ -169,7 +158,7 @@ describe("apply-update verb", () => {
   });
 
   test("an act refused is the effect's failure: held for the session's bar, with the act's own words", async () => {
-    const sessionState = new SessionState();
+    const sessionState = new SessionState(SINGLE_RUN);
     const ctx: VerbContext = {
       ...testVerbContext(sessionState),
       applyUpdate: async () => {
@@ -217,7 +206,7 @@ describe("toolbar toggle dataflow", () => {
   test("toggle via SessionState reflects in get without disk I/O", () => {
     // [LAW:one-source-of-truth] The SessionState is the daemon's in-memory
     // source of truth. No file reads needed.
-    const state = new SessionState();
+    const state = new SessionState(SINGLE_RUN);
     const sessionId = "toggle-test-session";
 
     // Initially not expanded.
@@ -252,7 +241,7 @@ describe("step-state handler", () => {
   });
   // A session rendering `config`, and its step click.
   function session(config: DslConfig) {
-    const sessionState = new SessionState();
+    const sessionState = new SessionState(SINGLE_RUN);
     recordRender(sessionState, "s1");
     const ctx: VerbContext = testVerbContext(sessionState, undefined, config);
     const step = VERBS.get(VERB_STEP_STATE)!;

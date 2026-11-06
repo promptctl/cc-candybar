@@ -137,6 +137,7 @@ import type { RendererLinks } from "../../click/renderer-links";
 import { recordAnswer, repoAnswerFields, repoConfigs } from "../repo-configs";
 import type { RepoAnswer } from "../../config/loader/repo-gate";
 import type { Runs, RunRequest } from "../runs";
+import type { LaneSetups } from "../lane-setup";
 import type { DeclaredSources } from "../render-payload";
 import { sessionEnv } from "../session-env";
 import { runDeclaration, type SlashAction } from "../../config/action";
@@ -271,8 +272,9 @@ export interface DaemonContext {
   // honoured only if it verifies under their key.
   readonly links: RendererLinks;
   // [LAW:no-ambient-temporal-coupling] The one owner of runs in flight: a
-  // `run` click hands its program over and is answered at once.
-  readonly runs: Pick<Runs, "start" | "refused">;
+  // `run` click supersedes its sources in its turn and describes the launch,
+  // which the performer hands back (`run`), and is answered at once.
+  readonly runs: Pick<Runs, "superseded" | "run" | "refused">;
   // [LAW:effects-at-boundaries] A session's animation-lane switches over the
   // config it renders with (`of`, looked up like `configFor`), and what
   // follows a click of that session (`clicked`): the click path measures
@@ -281,11 +283,14 @@ export interface DaemonContext {
   // (src/daemon/lane-setup.ts) and of the tmux status line.
   readonly lanes: {
     readonly of: (origin: RenderOrigin, sessionId: string) => LaneSwitches;
+    // The lane setups the click settles, as effects of its turn.
     readonly clicked: (
       sessionId: string,
       before: LaneSwitches,
       after: LaneSwitches,
-    ) => void;
+    ) => readonly Effect[];
+    // The performer's run of one setup (src/daemon/lane-setup.ts).
+    readonly setup: LaneSetups["setup"];
   };
   // What the diagnostic the frame renderer `by` last delivered for the
   // session listed under `key` copies; undefined when it lists none under it.
@@ -1950,7 +1955,7 @@ const run: VerbHandler = (value, ctx) => {
     }
     throw e;
   }
-  ctx.runs.start(request);
+  ctx.effect({ kind: "run", id: ctx.runs.superseded(request), run: request });
 };
 
 // ─── Repository configs (brandon-unfiled-3248.kezw) ─────────────────────────
@@ -2242,10 +2247,12 @@ function journaled<C extends DaemonContext>(
       // moved its lanes: for one that wrote nothing, what moved since its
       // measure is a watcher reload, and no move of its own.
       const after = lanes.read();
-      ctx.lanes.clicked(
-        lanes.sessionId,
-        journal.written() ? lanes.before : after,
-        after,
+      effects.push(
+        ...ctx.lanes.clicked(
+          lanes.sessionId,
+          journal.written() ? lanes.before : after,
+          after,
+        ),
       );
     } catch (e) {
       failures.push(e);

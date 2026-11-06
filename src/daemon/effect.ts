@@ -10,6 +10,10 @@ import type { DoctorEdge, gatherFacts } from "../doctor/edge.js";
 import type { ClickArrival } from "../doctor/sightings.js";
 import type { LaunchOpts } from "../proc/launch.js";
 import type { TmuxHint } from "../tmux-hint.js";
+import type { Lane } from "../config/lanes.js";
+import type { EffectOutcome } from "./effect-outcome.js";
+import type { LaneSession, SetupCause } from "./lane-setup.js";
+import type { RunId, RunRequest } from "./runs.js";
 import type { SessionStateReader } from "./session-state.js";
 
 // What a launch effect starts: the bound is the performer's, the same for
@@ -34,7 +38,24 @@ export type Effect =
   // The update watch's act (src/daemon/update-notice.ts), which decides for
   // itself what runs.
   | { readonly kind: "apply-update" }
+  // A `run` link's program, run by the daemon's one owner of runs
+  // (src/daemon/runs.ts) under its own bound, superseding the sources it
+  // refreshes until it ends.
+  | { readonly kind: "run"; readonly id: RunId; readonly run: RunRequest }
+  | LaneSetupEffect
   | DoctorEffect;
+
+// [LAW:one-source-of-truth] A lane brought to its switch for a session, as
+// the session's latest request reported it (src/daemon/lane-setup.ts): what a
+// click that moved the switch owes, or a request settles that a click before
+// it left owed (`by`).
+export interface LaneSetupEffect {
+  readonly kind: "lane-setup";
+  readonly session: LaneSession;
+  readonly lane: Lane;
+  readonly on: boolean;
+  readonly by: SetupCause;
+}
 
 // A doctor click's step (src/daemon/verbs/index.ts): its probes gathered after
 // the click's turn, and its answer landed with the outcome. `arrival` is how
@@ -72,15 +93,6 @@ export interface DoctorGathered {
   readonly stamp: DoctorStamp;
 }
 
-// How an effect went. `said` is the sentence a person reads: for a failure,
-// the whole of it (what failed, and why, in the edge's own words), and for a
-// success the fact worth keeping, if any (the pane typed into).
-export type EffectOutcome =
-  | { readonly kind: "ok"; readonly said: string }
-  | { readonly kind: "failed"; readonly said: string };
-
-export const PERFORMED: EffectOutcome = { kind: "ok", said: "" };
-
 // [LAW:types-are-the-program] What performing each kind of effect answers: an
 // act answers how it went, a doctor's gather the facts it gathered, which its
 // landing turns into how it went (src/daemon/apply.ts).
@@ -88,6 +100,8 @@ interface Outcomes {
   readonly launch: EffectOutcome;
   readonly "type-slash": EffectOutcome;
   readonly "apply-update": EffectOutcome;
+  readonly run: EffectOutcome;
+  readonly "lane-setup": EffectOutcome;
   readonly doctor:
     | Extract<EffectOutcome, { readonly kind: "failed" }>
     | { readonly kind: "gathered"; readonly gathered: DoctorGathered };
@@ -102,13 +116,6 @@ export type EffectDone = {
   };
 }[Effect["kind"]];
 
-export const failed = (
-  said: string,
-): Extract<EffectOutcome, { readonly kind: "failed" }> => ({
-  kind: "failed",
-  said,
-});
-
 // An effect as a log field names it.
 const DESCRIBE: {
   readonly [K in Effect["kind"]]: (
@@ -118,6 +125,8 @@ const DESCRIBE: {
   launch: ({ what }) => `launch:${what}`,
   "type-slash": ({ line }) => `type-slash:${line}`,
   "apply-update": () => "apply-update",
+  run: ({ run }) => `run:${run.action}`,
+  "lane-setup": ({ lane, on }) => `lane-setup:${lane}-${on ? "on" : "off"}`,
   doctor: ({ step }) => `doctor:${step.kind}`,
 };
 

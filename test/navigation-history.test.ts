@@ -3,7 +3,7 @@
 // settings pick in the same click stays with undo, and going back is not
 // itself a step.
 
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { VERBS, BadVerbArgs } from "../src/daemon/verbs";
 import { stateGate } from "./helpers/gates";
 import {
@@ -35,7 +35,7 @@ const configWithTabs = (...tabs: string[]): DslConfig => ({
 });
 
 function setup() {
-  const sessionState = new SessionState();
+  const sessionState = new SessionState(SINGLE_RUN);
   let config = configWithTabs("a", "b");
   recordRender(sessionState, "s1");
   const ctx = {
@@ -114,7 +114,7 @@ describe("back", () => {
   });
 
   test("a key one click writes twice goes back to its value before the click, unset included", () => {
-    const store = new SessionState();
+    const store = new SessionState(SINGLE_RUN);
     const history = new NavigationHistory();
     const journal = history.begin(store);
     journal.sessionState.set("s1", MENU, "open");

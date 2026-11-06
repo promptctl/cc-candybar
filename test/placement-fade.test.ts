@@ -16,7 +16,7 @@ import {
   resolveColorRef,
 } from "@promptctl/rich-js";
 
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { SettingsHistory } from "../src/daemon/settings-history";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -80,7 +80,7 @@ interface Frame {
 // shares one between entries whose configs compile alike.
 function renderer(
   cfg: ValidatedConfig,
-  session = new SessionState(),
+  session = new SessionState(SINGLE_RUN),
   compiled: CompiledConfig = compileDslConfig(compileInputOf(cfg), TEST_LINKS),
 ) {
   const store = new VariableStore(systemTimekeeper);
@@ -338,8 +338,8 @@ describe("nothing fades in where the frame is drawn from another source", () => 
     const again = config();
     expect(compileKey(compileInputOf(again))).toBe(compileKey(compileInputOf(loaded)));
     const shared = compileDslConfig(compileInputOf(loaded), TEST_LINKS);
-    const first = renderer(loaded, new SessionState(), shared);
-    const reloaded = renderer(again, new SessionState(), shared);
+    const first = renderer(loaded, new SessionState(SINGLE_RUN), shared);
+    const reloaded = renderer(again, new SessionState(SINGLE_RUN), shared);
     try {
       const fx = new SessionEffects<RenderedLine>("s");
       first.render({ shown: false, when: at(0) }, fx, { transitions: true });
@@ -455,7 +455,7 @@ describe("a render that throws leaves the last drawn frame to compare against", 
 
 describe("a session's state revision moves with every change to it, whoever writes it", () => {
   test("a write of a value it did not hold moves it; one it held does not", () => {
-    const state = new SessionState();
+    const state = new SessionState(SINGLE_RUN);
     expect(state.revision("s")).toBe(0);
     state.set("s", "theme", "nord");
     const set = state.revision("s");
@@ -471,7 +471,7 @@ describe("a session's state revision moves with every change to it, whoever writ
   });
 
   test("a clear of a key it held moves it; of one it did not, does not", () => {
-    const state = new SessionState();
+    const state = new SessionState(SINGLE_RUN);
     state.set("s", "theme", "nord");
     state.set("s", "style", "dim");
     const before = state.revision("s");
@@ -482,7 +482,7 @@ describe("a session's state revision moves with every change to it, whoever writ
   });
 
   test("another session's write leaves it alone; an emptied session reads 0, and never repeats a revision", () => {
-    const state = new SessionState();
+    const state = new SessionState(SINGLE_RUN);
     state.set("s", "theme", "nord");
     const mine = state.revision("s");
     state.set("t", "theme", "nord");
@@ -494,7 +494,7 @@ describe("a session's state revision moves with every change to it, whoever writ
   });
 
   test("the settings history's undo moves it, though it writes past the click's journal", () => {
-    const state = new SessionState();
+    const state = new SessionState(SINGLE_RUN);
     const history = new SettingsHistory(state, () => {});
     const journal = history.begin();
     journal.sessionState.set("s", "theme", "nord");

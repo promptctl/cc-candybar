@@ -27,7 +27,7 @@ import { type ClickArrival, type Delivery } from "../src/doctor/sightings";
 import { VERB_DISPATCH, VERB_DOCTOR_RUN, VERB_PROBE } from "../src/click/wire";
 import { BadVerbArgs, VERBS, type VerbContext } from "../src/daemon/verbs";
 import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { doctorReportKeys } from "../src/doctor/report";
 import { forwarderExecutable } from "../src/install/index";
 import { MAIN_NAME, parseRendererAddress } from "../src/daemon/home";
@@ -411,7 +411,7 @@ describe("the daemon's side of the round trip", () => {
   });
 
   function daemon(arrival: ClickArrival) {
-    const sessionState = new SessionState();
+    const sessionState = new SessionState(SINGLE_RUN);
     const probes = new ProbeArrivals();
     // The client the session's last render carried, as the daemon saw it.
     const clients = new RenderSightings();

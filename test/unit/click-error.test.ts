@@ -12,7 +12,7 @@ import {
   shownClickErrors,
   toAnswer,
 } from "../../src/daemon/click-error";
-import { SessionState } from "../../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../../src/daemon/session-state";
 import type { Instant } from "../../src/utils/instant";
 
 const SID = "s";
@@ -22,7 +22,7 @@ const error = { text: "set-state: refused", at: at(100), answered: false };
 const boom = (when: number) => ({ text: "dispatch: boom", at: at(when), answered: false });
 
 test("a click's error shows at every instant before its hold ends, and to no frame after", () => {
-  const state = new SessionState();
+  const state = new SessionState(SINGLE_RUN);
   holdClickError(state, SID, "set-state: refused", at(100));
   const held = [{ error, hold: "held" }];
   for (const render of ["feed", "request"] as const) {
@@ -34,7 +34,7 @@ test("a click's error shows at every instant before its hold ends, and to no fra
 });
 
 test("past the hold, a request is owed it until an answer has carried it", () => {
-  const state = new SessionState();
+  const state = new SessionState(SINGLE_RUN);
   holdClickError(state, SID, "set-state: refused", at(100));
   expect(clickErrorsAt(state, SID, at(END + 600), "request")).toEqual([{ error, hold: "owed" }]);
   answeredClickError(state, SID, [error]);
@@ -42,7 +42,7 @@ test("past the hold, a request is owed it until an answer has carried it", () =>
 });
 
 test("a second failure is a message of its own, each held from its own instant", () => {
-  const state = new SessionState();
+  const state = new SessionState(SINGLE_RUN);
   holdClickError(state, SID, "set-state: refused", at(100));
   holdClickError(state, SID, "dispatch: boom", at(102));
   expect(clickErrors(state, SID)).toEqual([error, boom(102)]);
@@ -56,7 +56,7 @@ test("a second failure is a message of its own, each held from its own instant",
 });
 
 test("a failure long after an older one still owed keeps it owed to a request and shows no feed the older", () => {
-  const state = new SessionState();
+  const state = new SessionState(SINGLE_RUN);
   holdClickError(state, SID, "set-state: refused", at(100));
   holdClickError(state, SID, "dispatch: boom", at(END + 600));
   expect(shownClickErrors(clickErrorsAt(state, SID, at(END + 601), "feed"))).toEqual([
@@ -69,7 +69,7 @@ test("a failure long after an older one still owed keeps it owed to a request an
 });
 
 test("a failure drops the records no render can still show", () => {
-  const state = new SessionState();
+  const state = new SessionState(SINGLE_RUN);
   holdClickError(state, SID, "set-state: refused", at(100));
   answeredClickError(state, SID, [error]);
   holdClickError(state, SID, "dispatch: boom", at(END + 600));
@@ -77,7 +77,7 @@ test("a failure drops the records no render can still show", () => {
 });
 
 test("reading a click's errors writes nothing, so a later render inside the hold still shows them", () => {
-  const state = new SessionState();
+  const state = new SessionState(SINGLE_RUN);
   holdClickError(state, SID, "dispatch: boom", at(100));
   const revision = state.revision(SID);
   clickErrorsAt(state, SID, at(END + 1), "request");
@@ -86,7 +86,7 @@ test("reading a click's errors writes nothing, so a later render inside the hold
 });
 
 test("an answer that marks nothing writes nothing", () => {
-  const state = new SessionState();
+  const state = new SessionState(SINGLE_RUN);
   holdClickError(state, SID, "dispatch: boom", at(100));
   const revision = state.revision(SID);
   // Another failure at the same instant: this one stays owed.
@@ -98,14 +98,14 @@ test("an answer that marks nothing writes nothing", () => {
 });
 
 test("a session with no click error, or bare text an older daemon wrote, holds none", () => {
-  const state = new SessionState();
+  const state = new SessionState(SINGLE_RUN);
   expect(clickErrorsAt(state, SID, at(100), "request")).toEqual([]);
   state.set(SID, "click.error", 'set-state: placement "block" refused');
   expect(clickErrorsAt(state, SID, at(100), "request")).toEqual([]);
 });
 
 test("the record keeps the fields a build that knows one failure reads, holding the newest there", () => {
-  const state = new SessionState();
+  const state = new SessionState(SINGLE_RUN);
   holdClickError(state, SID, "set-state: refused", at(100));
   holdClickError(state, SID, "dispatch: boom", at(102));
   const stored = JSON.parse(state.get(SID, "click.error")!) as Record<string, unknown>;
@@ -113,13 +113,13 @@ test("the record keeps the fields a build that knows one failure reads, holding 
 });
 
 test("a record an older daemon wrote, with no earlier failures and no answered mark, is owed to the next request", () => {
-  const state = new SessionState();
+  const state = new SessionState(SINGLE_RUN);
   state.set(SID, "click.error", JSON.stringify({ text: "set-state: refused", at: 100 }));
   expect(clickErrorsAt(state, SID, at(END + 600), "request")).toEqual([{ error, hold: "owed" }]);
 });
 
 test("an answer carries the shown errors to be marked until one has, inside the hold and past it", () => {
-  const state = new SessionState();
+  const state = new SessionState(SINGLE_RUN);
   holdClickError(state, SID, "set-state: refused", at(100));
   expect(toAnswer(clickErrorsAt(state, SID, at(101), "request"))).toEqual([error]);
   expect(toAnswer(clickErrorsAt(state, SID, at(END + 600), "request"))).toEqual([error]);

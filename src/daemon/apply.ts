@@ -35,14 +35,12 @@ import type { DaemonParts } from "./daemon-parts.js";
 import type { RequestAnswer } from "./draw-bar.js";
 import {
   describeEffect,
-  failed,
-  PERFORMED,
   type Effect,
   type EffectDone,
-  type EffectOutcome,
   type LaunchSpec,
   type OutcomeOf,
 } from "./effect.js";
+import { failed, PERFORMED, type EffectOutcome } from "./effect-outcome.js";
 import {
   SESSION_CLIENT_HINTS_KEY,
   SESSION_RENDER_ORIGIN_KEY,
@@ -180,11 +178,11 @@ export const ARMS: ApplyArms<Event> = {
       return verbCtx.sessionState.revision(req.sessionId);
     });
     noteFacts(facts, { revision: String(revision) });
-    return {
-      answer: await draw(req, at, waitEndsAt, facts),
-      effects: NO_EFFECTS,
-      facts: [],
-    };
+    const answer = await draw(req, at, waitEndsAt, facts);
+    // [LAW:effects-at-boundaries] What the request's arrival settled (the
+    // lane setups its session's clicks owed) is performed as a click's
+    // effects are, after the arm has answered.
+    return { answer, effects: answer.effects, facts: [] };
   },
   // The turn hands its effects over once it has committed (`described`), and
   // a refused step is answered beside them; a click whose client has left is
@@ -264,6 +262,8 @@ const LANDINGS: Landings = {
   launch: asIs,
   "type-slash": asIs,
   "apply-update": asIs,
+  run: asIs,
+  "lane-setup": asIs,
   doctor: ({ effect, outcome }, verbCtx) => {
     if (outcome.kind === "failed") return outcome;
     landDoctor(verbCtx, effect, outcome.gathered);
@@ -507,6 +507,8 @@ const PERFORM: Performers = {
     await verbCtx.applyUpdate();
     return PERFORMED;
   },
+  run: ({ id, run }, { verbCtx }) => verbCtx.runs.run(id, run),
+  "lane-setup": (effect, { verbCtx }) => verbCtx.lanes.setup(effect),
   // The doctor's probes, gathered after the click's turn, in no turn: its
   // step lands with the facts (`LANDINGS`).
   doctor: async (effect, { verbCtx }) => ({

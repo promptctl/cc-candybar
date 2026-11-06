@@ -56,6 +56,7 @@ import {
   type EffectiveGlobals,
 } from "../config/effective-globals.js";
 import { type PassageFrame } from "../render/effect.js";
+import type { Effect } from "./effect.js";
 import { feedsFact, type FeedFrame, type Refusal } from "./frame-feed.js";
 import {
   LANE_NAMES,
@@ -867,6 +868,9 @@ export interface RequestAnswer {
   pipeShown: PipeEvent | null;
   // Records what the answer's copy clicks copy, once it reached its client.
   delivered: () => void;
+  // What the request's arrival settled for the performer: the lane setups
+  // its session's clicks owed (`arrived`).
+  effects: readonly Effect[];
 }
 
 // [LAW:effects-at-boundaries] The daemon's draw of a request, as its arm
@@ -883,23 +887,23 @@ export type RequestDraw = (
 // [LAW:effects-at-boundaries] What a request's arrival starts beyond its
 // own answer, as its draw begins once its turn is over, by the lanes its
 // session's settings switch on then: the setups its session's clicks owe
-// (src/daemon/lane-setup.ts), and the tmux status line its switch and pane
-// hold (src/daemon/tmux-status.ts) — held again here after `answered`
-// released it, and by nothing between requests, so a status line another
-// session's save turned off is never re-taken from a remembered switch. No
-// draw starts either.
+// (src/daemon/lane-setup.ts), answered as effects its arm describes, and the
+// tmux status line its switch and pane hold (src/daemon/tmux-status.ts) —
+// held again here after `answered` released it, and by nothing between
+// requests, so a status line another session's save turned off is never
+// re-taken from a remembered switch. No draw starts either.
 function arrived(
   parts: DaemonParts,
   req: CheckedRenderRequest,
   lanes: LaneSwitches,
-): void {
+): readonly Effect[] {
   const { laneSetups, tmuxStatusLines } = parts;
-  laneSetups.noted(laneSessionOf(req), lanes);
   tmuxStatusLines.observe(
     req.hookData.session_id,
     req.hints.tmux,
     lanes.tmuxStatus,
   );
+  return laneSetups.noted(laneSessionOf(req), lanes);
 }
 
 // [LAW:single-enforcer] A request's answer, drawn and noted for its
@@ -940,17 +944,17 @@ export function laneClicked(
   sessionId: string,
   before: LaneSwitches,
   after: LaneSwitches,
-): void {
+): readonly Effect[] {
   const { frameFeeds, laneSetups, tmuxStatusLines } = parts;
   const latest = frameFeeds.latest(sessionId);
-  laneSetups.clicked(
+  if (latest !== null && before.tmuxStatus !== after.tmuxStatus)
+    tmuxStatusLines.observe(sessionId, latest.hints.tmux, after.tmuxStatus);
+  return laneSetups.clicked(
     sessionId,
     latest === null ? null : laneSessionOf(latest),
     before,
     after,
   );
-  if (latest !== null && before.tmuxStatus !== after.tmuxStatus)
-    tmuxStatusLines.observe(sessionId, latest.hints.tmux, after.tmuxStatus);
 }
 
 export async function drawAnswer(
@@ -962,7 +966,7 @@ export async function drawAnswer(
 ): Promise<RequestAnswer> {
   const { clock, frameFeeds, log } = parts;
   using setup = setUpRender(parts, req, at, facts);
-  arrived(
+  const effects = arrived(
     parts,
     req,
     laneSwitches(setup.view.source.effective(), inTmux(req.hints.tmux)),
@@ -1039,6 +1043,7 @@ export async function drawAnswer(
     answersClick,
     pipeShown,
     delivered,
+    effects,
   };
 }
 

@@ -36,7 +36,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, type RenderWarning } from "../src/dsl/render";
 import { bindRender, renderLook } from "../src/render/action";
 import { lastBinding } from "./helpers/render-binding";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { ConfigError } from "../src/config/dsl-loader";
 import type { RichText } from "@promptctl/rich-js";
 import { decideThemeName, resolveThemeSelection, THEME_FLOOR } from "../src/themes";
@@ -311,7 +311,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
     const registry = new SourceRegistry(unscriptedRuns(),
       store,
       "",
-      new SessionState(),
+      new SessionState(SINGLE_RUN),
     );
     try {
       const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: process.cwd() });
@@ -340,7 +340,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
     const registry = new SourceRegistry(unscriptedRuns(),
       store,
       "",
-      new SessionState(),
+      new SessionState(SINGLE_RUN),
     );
     try {
       const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: process.cwd() });
@@ -406,7 +406,7 @@ describe("globals.palette as an expression — loader", () => {
     const registry = new SourceRegistry(unscriptedRuns(),
       store,
       "",
-      new SessionState(),
+      new SessionState(SINGLE_RUN),
     );
     try {
       expect(() => registerDslConfig(config, registry, { links: TEST_LINKS, cwd: process.cwd() })).toThrow(
@@ -531,7 +531,7 @@ describe("a rule inside a preset's globals", () => {
   ): R => {
     const config = parseAndValidate("<theme-expr-preset>", source, ALLOWED);
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState());
+    const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState(SINGLE_RUN));
     try {
       return body(config, registry, store);
     } finally {

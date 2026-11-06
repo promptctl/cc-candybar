@@ -29,7 +29,7 @@ import { chmodSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import type { DslConfig } from "../src/config/dsl-types";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError } from "../src/config/dsl-loader";
 import { clickUrl, effectsOf } from "./helpers/click";
@@ -139,7 +139,7 @@ function undoBar(
   shared?: { sessionState: SessionState; history: SettingsHistory },
 ) {
   if (durable.text() === null) durable.write(src);
-  const sessionState = shared?.sessionState ?? new SessionState();
+  const sessionState = shared?.sessionState ?? new SessionState(SINGLE_RUN);
   const history = shared?.history ?? durable.historyFor(sessionState);
   durable.seedOrigin(sessionState, sessionId);
   const rig = buildRig({
@@ -386,7 +386,7 @@ describe("undo/redo click → the session's settings history", () => {
   // this session's earlier steps on that file unreachable — refused loudly,
   // never overwritten.
   test("another session's write to the same file is never undone from here, and makes this session's earlier file steps refuse", async () => {
-    const sessionState = new SessionState();
+    const sessionState = new SessionState(SINGLE_RUN);
     const history = durable.historyFor(sessionState);
     const a = undoBar(SRC, "a", { sessionState, history });
     const b = undoBar(SRC, "b", { sessionState, history });
@@ -459,7 +459,7 @@ describe("settings history: a step lands whole, and records only what landed", (
   });
 
   test("an undo whose file write fails puts back the session change it already made", () => {
-    const sessionState = new SessionState();
+    const sessionState = new SessionState(SINGLE_RUN);
     const history = durable.historyFor(sessionState);
     const file = durable.configPath;
     const journal = history.begin();
@@ -481,7 +481,7 @@ describe("settings history: a step lands whole, and records only what landed", (
   });
 
   test("a session write that throws records no step", () => {
-    const inner = new SessionState();
+    const inner = new SessionState(SINGLE_RUN);
     const throwing = {
       get: (sid: string, key: string) => inner.get(sid, key),
       set: () => {
@@ -518,7 +518,7 @@ describe("settings history: a step lands whole, and records only what landed", (
   });
 
   test("history is bounded by bytes: the session that changed least recently goes first", () => {
-    const history = new SettingsHistory(new SessionState(), () => {});
+    const history = new SettingsHistory(new SessionState(SINGLE_RUN), () => {});
     const big = (c: string): string => c.repeat(2 * 1024 * 1024);
     const step = (sid: string, file: string, from: string, to: string): void => {
       const journal = history.begin();
@@ -539,7 +539,7 @@ describe("settings history: a step lands whole, and records only what landed", (
 describe("settings history: the step and its record land together", () => {
   // A store whose save refuses while `refusing` is set.
   function refusingHistory() {
-    const sessionState = new SessionState();
+    const sessionState = new SessionState(SINGLE_RUN);
     const gate = { refusing: false };
     const history = new SettingsHistory(sessionState, () => {}, {
       load: () => ({}),

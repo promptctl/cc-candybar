@@ -17,7 +17,7 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { testVerbContext, effectsOf, clickUrl, TEST_STORED_ROOT } from "./helpers/click";
@@ -217,7 +217,7 @@ function runtime(tmux: TmuxHint | null) {
     ALLOWED,
     DEFAULT_DSL_CONFIG,
   );
-  const sessionState = new SessionState();
+  const sessionState = new SessionState(SINGLE_RUN);
   sessionState.set(
     "s1",
     SESSION_RENDER_ORIGIN_KEY,
@@ -361,7 +361,7 @@ function tray(tmux: TmuxHint | null, drawnIn: TmuxHint | null = tmux) {
     ALLOWED,
     DEFAULT_DSL_CONFIG,
   );
-  const sessionState = new SessionState();
+  const sessionState = new SessionState(SINGLE_RUN);
   sessionState.set(
     "s1",
     SESSION_RENDER_ORIGIN_KEY,

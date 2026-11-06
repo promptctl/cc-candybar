@@ -32,7 +32,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { childStep, type CompiledContainerNode, type CompiledNode } from "../src/dsl/node-registry";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DECOR } from "./helpers/decor";
 import { PRESET_FLOOR } from "../src/config/presets";
@@ -186,7 +186,7 @@ function build(src: string, withDefault = false) {
     ALLOWED,
     withDefault ? DEFAULT_DSL_CONFIG : undefined,
   );
-  const sessionState = new SessionState();
+  const sessionState = new SessionState(SINGLE_RUN);
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/tmp/proj" });
