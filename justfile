@@ -3,11 +3,10 @@ demo *args:
     pnpm demo "$@"
 
 # Full local deploy: build the bundle and stage the native render-path
-# binary, and on macOS the URL handler app `cc-candybar install` wraps. After
-# this, a statusline launcher pointing at the checkout renders HEAD. The URL
-# handler needs only swiftc, so it builds before the cargo step can fail. On a
-# machine without cargo, `pnpm install && pnpm build` builds a node-entry
-# deploy; on macOS, `cc-candybar install` also needs `just install-url-handler`.
+# binary, and on macOS the URL handler binary `cc-candybar install` wraps in
+# its app bundle. After this, a statusline launcher pointing at the checkout
+# renders HEAD. The URL handler needs only swiftc, so it builds before the
+# cargo step can fail.
 deploy:
     pnpm install
     pnpm build
