@@ -76895,8 +76895,15 @@ function resolvePath2(obj, dotPath) {
 }
 
 // src/facts/recording.ts
-var RECORDING_VERSION = 4;
+var RECORDING_VERSION = 5;
 var LANES2 = new Set(REFRESH_LANES);
+function requestFields(request2) {
+  return {
+    hookData: request2.hookData,
+    cwd: request2.cwd,
+    hints: request2.hints
+  };
+}
 function formatLine(line) {
   const json2 = line.kind === "recording" ? {
     kind: line.kind,
@@ -76906,13 +76913,19 @@ function formatLine(line) {
   } : line.kind === "facts" ? { kind: line.kind, at: line.at, facts: line.facts } : line.kind === "draw" ? {
     kind: line.kind,
     request: line.request,
-    state: { ...line.state, idleSince: line.state.idleSince ?? null }
+    state: { ...line.state, idleSince: line.state.idleSince ?? null },
+    diagnostics: line.diagnostics
+  } : line.kind === "turn" ? {
+    kind: line.kind,
+    held: line.held,
+    at: line.document.at,
+    facts: line.document.facts,
+    ...requestFields(line.request),
+    state: line.state
   } : {
     kind: line.kind,
     ...line.kind === "request" && { at: line.at },
-    hookData: line.request.hookData,
-    cwd: line.request.cwd,
-    hints: line.request.hints
+    ...requestFields(line.request)
   };
   return `${JSON.stringify(json2)}
 `;
@@ -76922,18 +76935,25 @@ function formatLine(line) {
 function sessionRecorder(views, log) {
   const open2 = /* @__PURE__ */ new Map();
   let closed = false;
+  const detach = (rec) => {
+    for (const dispose of rec.watching) dispose();
+    rec.watching.clear();
+  };
   const end = (sessionId2, rec, how) => {
     const recs = open2.get(sessionId2);
     if (recs === void 0 || !recs.delete(rec)) return;
     if (recs.size === 0) open2.delete(sessionId2);
-    rec.detach();
+    detach(rec);
     rec.sink.end(how);
   };
   const write = (sessionId2, rec, line) => {
+    if (line.kind === "facts" && line.facts === rec.document) return;
+    if (line.kind === "declared" && line.request === rec.declaration) return;
     try {
       rec.sink.write(line);
       if (line.kind === "facts") rec.document = line.facts;
-      if (line.kind === "request" || line.kind === "declared") {
+      if (line.kind === "turn") rec.document = line.document.facts;
+      if (line.kind === "request" || line.kind === "declared" || line.kind === "turn") {
         rec.declaration = line.request;
       }
     } catch (e) {
@@ -76941,16 +76961,28 @@ function sessionRecorder(views, log) {
       end(sessionId2, rec, { kind: "failed", error: e });
     }
   };
+  const writeTurn = (sessionId2, rec, view) => {
+    const held = view.source.held();
+    if (rec.turn?.view === view && rec.turn.held === held) return;
+    rec.turn = { view, held };
+    write(sessionId2, rec, { kind: "turn", held, ...view.source.turn() });
+  };
   const attach = (sessionId2, rec) => {
     const view = views.sessionView(sessionId2);
-    rec.detach = view === null ? () => {
-    } : reaction(
+    if (view === null) return;
+    const watch2 = (read2, effect) => {
+      if (!open2.get(sessionId2)?.has(rec)) return;
+      const dispose = reaction(read2, effect, { fireImmediately: true });
+      if (open2.get(sessionId2)?.has(rec)) rec.watching.add(dispose);
+      else dispose();
+    };
+    watch2(
+      () => view.source.held(),
+      () => writeTurn(sessionId2, rec, view)
+    );
+    watch2(
       () => view.followed.stamped(),
-      (line, _prior, self2) => {
-        rec.detach = () => self2.dispose();
-        write(sessionId2, rec, { kind: "facts", ...line });
-      },
-      { fireImmediately: true }
+      (line) => write(sessionId2, rec, { kind: "facts", ...line })
     );
   };
   return {
@@ -76966,10 +76998,10 @@ function sessionRecorder(views, log) {
       }
       const rec = {
         sink,
-        detach: () => {
-        },
+        watching: /* @__PURE__ */ new Set(),
         document: null,
-        declaration: null
+        declaration: null,
+        turn: null
       };
       const recs = open2.get(session) ?? /* @__PURE__ */ new Set();
       open2.set(session, recs.add(rec));
@@ -76983,7 +77015,7 @@ function sessionRecorder(views, log) {
     },
     moved(sessionId2) {
       for (const rec of open2.get(sessionId2) ?? []) {
-        rec.detach();
+        detach(rec);
         attach(sessionId2, rec);
       }
     },
@@ -76995,21 +77027,35 @@ function sessionRecorder(views, log) {
       }
       return { at: line.at, noted };
     },
-    // [LAW:one-source-of-truth] A replay draws from the last document and the
-    // last declaration before the draw line, so those are the ones the draw
-    // read: each written again here when it is not the last this recording
-    // wrote, as a request's held view the session moved away from has, and
-    // the current view at the draw after that.
-    drew(sessionId2, { at: request2, noted }, { document, declaration, state }) {
+    // [LAW:one-source-of-truth] A replay draws from the last turn, the last
+    // document and the last declaration before the draw line, so those are
+    // the ones the draw read: each offered again here, and written when it is
+    // not the last this recording wrote. The view a request holds can be one
+    // the session moved away from during its wait, with a hold of its own, so
+    // its turn goes before the draw and the current view's after it: the
+    // lines that follow are the current view's. A follow that stamped past a
+    // held turn's document writes that document again too.
+    drew(sessionId2, { at: request2, noted }, { view, state, diagnostics }) {
+      const current = views.sessionView(sessionId2);
       for (const rec of open2.get(sessionId2) ?? []) {
         if (!noted.has(rec)) continue;
-        const lines2 = [
-          ...rec.document === document.facts ? [] : [{ kind: "facts", ...document }],
-          ...rec.declaration === declaration ? [] : [{ kind: "declared", request: declaration }],
-          { kind: "draw", request: request2, state }
+        const writes = [
+          () => writeTurn(sessionId2, rec, view),
+          () => write(sessionId2, rec, {
+            kind: "facts",
+            ...view.followed.stamped()
+          }),
+          () => write(sessionId2, rec, { kind: "declared", request: view.facts() }),
+          () => write(sessionId2, rec, {
+            kind: "draw",
+            request: request2,
+            state,
+            diagnostics
+          }),
+          ...current === null ? [] : [() => writeTurn(sessionId2, rec, current)]
         ];
-        for (const line of lines2) {
-          if (open2.get(sessionId2)?.has(rec)) write(sessionId2, rec, line);
+        for (const next of writes) {
+          if (open2.get(sessionId2)?.has(rec)) next();
         }
       }
     },
@@ -77051,9 +77097,9 @@ function settleRequest(recorder, view, at) {
 function drawRequest(recorder, view, arrival, draw2) {
   const drawn = draw2();
   recorder.drew(view.sessionId, arrival, {
-    document: view.source.stamped(),
-    declaration: view.facts(),
-    state: { ...view.source.state(), idleSince: drawn.idleSince }
+    view,
+    state: { ...view.source.state(), idleSince: drawn.idleSince },
+    diagnostics: drawn.diagnostics
   });
   return drawn;
 }
@@ -77379,12 +77425,13 @@ function drawRender(parts, setup, drawing2) {
     ...launched,
     ...configWatch === null ? [] : [{ kind: "config-watch", message: configWatch }],
     ...entry.lastWarning === null ? [] : [{ kind: "load", message: entry.lastWarning }],
-    // [LAW:no-silent-failure] A turn that could not be stamped leaves the bar
-    // drawn from the last one that was, so the bar says it is behind.
+    // [LAW:no-silent-failure] A turn that could not be taken, or taken over a
+    // document that could not be stamped, leaves the bar drawn from older
+    // facts, so the bar says it is behind and why.
     ...failure === null ? [] : [
       {
         kind: "facts",
-        message: `the bar is drawn from the last facts that were read; the next could not be stamped: ${failure}`
+        message: failure.cause === "inputs" ? `the bar is held on the last turn taken: ${failure.reason}` : `the bar is drawn from the last facts that were read; the next could not be stamped: ${failure.reason}`
       }
     ]
   ];
@@ -77584,6 +77631,12 @@ function arrived2(parts, req, lanes) {
     lanes.tmuxStatus
   );
 }
+function drawForAnswer(parts, setup, arrival) {
+  return drawRequest(parts.recorder, setup.view, arrival, () => {
+    const drew = drawRender(parts, setup, ANSWERING);
+    return { ...drew, diagnostics: drew.drawn.diagnostics };
+  });
+}
 function laneSessionOf(req) {
   return {
     sessionId: req.hookData.session_id,
@@ -77638,11 +77691,10 @@ async function drawAnswer(parts, req, at, waitEndsAt, facts) {
       ended,
       refreshed: refreshedFact(settling.refreshed)
     });
-    const { drawn, answersClick, pipeShown, delivered, lanes } = drawRequest(
-      parts.recorder,
-      setup.view,
-      settling.arrival,
-      () => drawRender(parts, setup, ANSWERING)
+    const { drawn, answersClick, pipeShown, delivered, lanes } = drawForAnswer(
+      parts,
+      setup,
+      settling.arrival
     );
     const sessionId2 = req.sessionId;
     const elsewhere = handedOffTo(lanes, frameFeeds.following(sessionId2));
@@ -83763,13 +83815,22 @@ function inProcessFacts({
 
 // src/daemon/session-source.ts
 init_globals();
-function taken(prior, moved) {
-  if (moved.kind === "failed") return failedWith(prior, moved.reason);
-  return prior.failure === moved.facts && moved.stamped === prior.stamped && moved.compose === prior.compose && moved.draw === prior.draw ? prior : {
+function sameFailure(a, b) {
+  return a === b || a?.cause === b?.cause && a?.reason === b?.reason;
+}
+function taken(prior, moved, picks) {
+  if (moved.kind === "failed") {
+    const failure2 = { cause: "inputs", reason: moved.reason };
+    return sameFailure(prior.failure, failure2) ? prior : { ...prior, failure: failure2 };
+  }
+  const failure = moved.facts === null ? null : { cause: "facts", reason: moved.facts };
+  return sameFailure(prior.failure, failure) && moved.stamped === prior.stamped && moved.request === prior.request && moved.compose === prior.compose && moved.draw === prior.draw ? prior : {
     stamped: moved.stamped,
+    request: moved.request,
+    picks: picks(),
     compose: moved.compose,
     draw: moved.draw,
-    failure: moved.facts
+    failure
   };
 }
 function sessionSource(deps) {
@@ -83809,12 +83870,19 @@ function sessionSource(deps) {
         back: deps.navigation(sessionId2, state.config)
       })
     );
+    const picks = () => ({
+      values: deps.sessionState.values(sessionId2),
+      revision: deps.sessionState.revision(sessionId2)
+    });
+    const opening = followed.failure();
     const turn = observable.box(
       {
         stamped: followed.stamped(),
+        request: declared().facts,
+        picks: picks(),
         compose: compose.read(),
         draw: draw2.read(),
-        failure: followed.failure()
+        failure: opening === null ? null : { cause: "facts", reason: opening }
       },
       { deep: false }
     );
@@ -83826,6 +83894,7 @@ function sessionSource(deps) {
               kind: "read",
               stamped: followed.stamped(),
               facts: followed.failure(),
+              request: declared().facts,
               compose: compose.read(),
               draw: draw2.read()
             };
@@ -83838,11 +83907,11 @@ function sessionSource(deps) {
         },
         (moved) => runInAction(() => {
           const prior = turn.get();
-          const next = taken(prior, moved);
+          const next = taken(prior, moved, picks);
           if (moved.kind === "failed" && next !== prior) {
             deps.providers.log(
               "error",
-              `session turn sid=${JSON.stringify(sessionId2)}: ${next.failure}`
+              `session turn sid=${JSON.stringify(sessionId2)}: ${moved.reason}`
             );
           }
           turn.set(next);
@@ -83864,7 +83933,15 @@ function sessionSource(deps) {
       payload: () => payload.read(),
       effective: () => turn.get().draw.effective,
       facts: () => turn.get().stamped.facts,
-      stamped: () => turn.get().stamped,
+      turn: () => {
+        const { stamped: stamped2, request: request2, picks: turnPicks, draw: drawn } = turn.get();
+        return {
+          document: stamped2,
+          request: request2,
+          state: { ...turnPicks, history: drawn.history, back: drawn.back }
+        };
+      },
+      held: () => turn.get().failure?.cause === "inputs",
       home: () => turn.get().compose.home,
       hints: () => turn.get().compose.hints,
       failure: () => turn.get().failure,
