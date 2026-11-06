@@ -203,6 +203,11 @@ function doctorBar(
   };
 }
 
+// The latest doctor line: the apply line follows every click, so the
+// doctor's report is no longer the last line the rig logged.
+const lastDoctorLine = (rt: { readonly logs: readonly string[] }): string | undefined =>
+  rt.logs.findLast((line) => line.startsWith("doctor:"));
+
 describe("🍫 › 🧰 tools › 🩺 doctor", () => {
   test("the tools tab holds the doctor button and no report until it runs", async () => {
     const rt = doctorBar(HINT);
@@ -293,7 +298,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     rt.clients.see("s1", { ...renderSaid(healthyClient(), sessionAt()), termCols: 97 }, instantOf(new Date()), 1);
     await rt.openTools();
     await rt.clickVerb(VERB_DOCTOR_RUN);
-    expect(rt.logs.at(-1)).toMatch(/ termWidth=ok .* cols=97 widthOf=session /);
+    expect(lastDoctorLine(rt)).toMatch(/ termWidth=ok .* cols=97 widthOf=session /);
     expect(rt.render()).toContain("✓ terminal width");
   });
 
@@ -311,13 +316,13 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     const failed = rt.render();
     expect(failed).toContain("✗ daemon");
     expect(failed).toContain(`ran out of memory and restarted (2026-10-19T18-01-12-345Z-77) — post-mortem: ${report}`);
-    expect(rt.logs.at(-1)).toMatch(/ daemon=failed\(1\) .* daemons=1 others=- memory=phys_footprint:120\/512 postMortems=1\/1 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 chains=absent truecolorEnv=unset \(session=s1\)$/);
+    expect(lastDoctorLine(rt)).toMatch(/ daemon=failed\(1\) .* daemons=1 others=- memory=phys_footprint:120\/512 postMortems=1\/1 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 chains=absent truecolorEnv=unset \(session=s1\)$/);
     await rt.clickVerb(VERB_DOCTOR_FIX);
     expect(rt.logs).toContain(
       "doctor-fix: daemon → post-mortems-read through=2026-10-19T18-01-12-345Z-77 (session=s1)",
     );
     expect(rt.render()).toContain("✓ daemon");
-    expect(rt.logs.at(-1)).toMatch(/ daemon=ok .* postMortems=0\/1 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 chains=absent truecolorEnv=unset \(session=s1\)$/);
+    expect(lastDoctorLine(rt)).toMatch(/ daemon=ok .* postMortems=0\/1 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 chains=absent truecolorEnv=unset \(session=s1\)$/);
   });
 
   // brandon-doctor-v62x.tfb: the click judges the client that drew the bar
@@ -512,7 +517,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       expect(rt.logs).toContain(
         `doctor-mark: nerdFont drawn on iTerm2 with Menlo-Regular (iTerm2 profile "Default")|${BUNDLED_GLYPHS_NAMED} (session=s1)`,
       );
-      expect(rt.logs.at(-1)).toMatch(/nerdFont=ok .* mark=drawn tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native\/same\/- daemons=1 others=- memory=phys_footprint:120\/512 postMortems=0\/0 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 chains=absent truecolorEnv=unset \(session=s1\)$/);
+      expect(lastDoctorLine(rt)).toMatch(/nerdFont=ok .* mark=drawn tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native\/same\/- daemons=1 others=- memory=phys_footprint:120\/512 postMortems=0\/0 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 chains=absent truecolorEnv=unset \(session=s1\)$/);
     });
 
     test("marking ✗ keeps the row failed, says boxes, and leaves ✓ to mark later", async () => {

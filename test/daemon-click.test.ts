@@ -6,6 +6,8 @@ import { PROTOCOL_VERSION, encodeFrame, makeFrameReader } from "../src/daemon/pr
 import type { Response } from "../src/daemon/protocol";
 import { socketPath } from "../src/daemon/paths";
 import { SessionState } from "../src/daemon/session-state";
+import { JournalTurns } from "../src/daemon/journal-turns";
+import { systemTimekeeper } from "../src/time";
 import { VERBS, VERB_NAMES, BadVerbArgs } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
 import { encodeSegments, VERB_STEP_STATE, VERB_APPLY_UPDATE } from "../src/click/wire";
@@ -148,10 +150,16 @@ describe("apply-update verb", () => {
     const holders: Array<string | null> = [];
     let release = (): void => {};
     const acting = new Promise<void>((resolve) => (release = resolve));
+    // The test holds the turns itself: a verb's view of them has no stats
+    // (src/daemon/verbs/index.ts), and the holder is what this test reads.
+    const turns = new JournalTurns({
+      log: () => {},
+      monotonic: () => systemTimekeeper.monotonic(),
+    });
     const ctx: VerbContext = {
-      ...testVerbContext(new SessionState()),
+      ...testVerbContext(new SessionState(), undefined, undefined, undefined, turns),
       applyUpdate: () => {
-        holders.push(ctx.journalTurns.getStats().holder);
+        holders.push(turns.getStats().holder);
         return acting;
       },
     };
