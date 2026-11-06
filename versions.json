@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "2bb7660eaf484d4c41e6cdc671e6415f0cccc8fa",
+      "timestamp": "2026-11-06T19:46:54.730Z",
+      "commits": [
+        {
+          "sha": "2bb7660eaf484d4c41e6cdc671e6415f0cccc8fa",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T12:46:06-07:00",
+          "message": "feat(links): the doctor probe is minted by the minter as the probe link kind (candybar-gather-renderer-76bb.b2l.mxk) (#644)\n\n* feat(links): the doctor probe is minted by the minter as the probe link kind, and Launch Services is asked about the link it opened (candybar-gather-renderer-76bb.b2l.mxk)\n\nThe probe link is cc-candybar://to/<name>/probe/<nonce>, built by probeLink\nbeside effectsUrl, so the doctor no longer assembles a verb and a tail itself.\nThe verb is `probe`, as spec section 18 names it. The doctor's lost-link\ndiagnosis asks NSWorkspace which app opens that same link rather than a\nhand-spelled cc-candybar://probe.\n\n* fix(links): a probe is a link kind, never an effect; a link lost at another build's daemon says so (candybar-gather-renderer-76bb.b2l.mxk)\n\n- The probe leaves the leaf table, so a dispatch carrying it is refused as an\n  unknown effect verb, as the minter's comment says it is.\n- probeLink spells the nonce with encodeURIComponent, the codec the probe\n  verb's one-argument read reverses.\n- The lost verdict names a daemon of another build: a link this build mints\n  may be one it does not read, so a healthy handler is not blamed for it.\n- Comments that said the diagnosis asks about the scheme now say the link.\n\n* fix(doctor): a lost link's build row compares builds by value and shows only for a link that opened (candybar-gather-renderer-76bb.b2l.mxk)\n\n- otherBuild decides on the version and the full digest, not on the labels,\n  and hands the two labels back as data; the verdict owns the sentence.\n- A link that never opened was lost before any daemon saw it, so its verdict\n  carries no build row.\n\n* test(links): the tmux row case aims its window-list press after a's rows stand again (candybar-gather-renderer-76bb.b2l.mxk)\n\nBack on session a, its status is one line until its rows are drawn again,\nand the window list moves up when they land. The case aimed its press as soon\nas the window list showed, so on CI's runner the rows usually landed between\nthe aim and the press and the press hit a row instead: the case failed on\nnearly every CI run, main included. It now waits for a's rows as it already\ndid for b's."
+        }
+      ]
+    },
+    {
       "version": "pr-647",
       "ref": "refs/pull/647/merge",
       "sha": "c0a066a937b43d5fbb5d21fc5a817e9f2e2f9bea",
@@ -42,49 +57,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T12:35:32-07:00",
           "message": "feat(apply): session state has one writer; a run and a lane setup are effects (candybar-gather-renderer-76bb.1dh.9kk)\n\nThe session store refuses a write made while no journal turn is held, in\nevery daemon. A turn is synchronous, so a write while one is held is that\nturn's own, and one check at the store's single write path is the whole\nenforcement. The test-only view that refused such writes, its adapter\nseam and the separate gauges field are gone.\n\nThe two writers left outside a turn now report through effect-done:\n\n- A `run` click supersedes its sources in its turn, so they read pending\n  from the click on, and describes the launch as a `run` effect. The\n  performer runs the program behind the session's earlier effects; the\n  run owner answers how it ended and no longer writes the bar.\n- A lane setup is a `lane-setup` effect, settled by the click or the\n  request that owes it and run by the performer. Its own per-session\n  queue and defer are replaced by the performer's per-session order.\n\nThe check command, the demo and the doctor's command line build their\nstore with a holder that always holds, since each is one synchronous run.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-644",
-      "ref": "refs/pull/644/merge",
-      "sha": "ccf1f816eae14bd5623f1a5782a50b9b540757fc",
-      "timestamp": "2026-11-06T19:36:43.090Z",
-      "commits": [
-        {
-          "sha": "ccf1f816eae14bd5623f1a5782a50b9b540757fc",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T19:35:48Z",
-          "message": "Merge 6815e8b50131c16dfda41688afd73f27c61447af into 308429c8f33e9cfe4e0983ab8f29bb1d25c3fe55\n"
-        },
-        {
-          "sha": "6815e8b50131c16dfda41688afd73f27c61447af",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:25:55-07:00",
-          "message": "test(links): the tmux row case aims its window-list press after a's rows stand again (candybar-gather-renderer-76bb.b2l.mxk)\n\nBack on session a, its status is one line until its rows are drawn again,\nand the window list moves up when they land. The case aimed its press as soon\nas the window list showed, so on CI's runner the rows usually landed between\nthe aim and the press and the press hit a row instead: the case failed on\nnearly every CI run, main included. It now waits for a's rows as it already\ndid for b's.\n"
-        },
-        {
-          "sha": "e1d642bd6522fc380c14d28791a44c34b25a7765",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:02:30-07:00",
-          "message": "fix(doctor): a lost link's build row compares builds by value and shows only for a link that opened (candybar-gather-renderer-76bb.b2l.mxk)\n\n- otherBuild decides on the version and the full digest, not on the labels,\n  and hands the two labels back as data; the verdict owns the sentence.\n- A link that never opened was lost before any daemon saw it, so its verdict\n  carries no build row.\n"
-        },
-        {
-          "sha": "79b820766fa6924bd5ee2d4799aed43c91d4be02",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T11:58:01-07:00",
-          "message": "fix(links): a probe is a link kind, never an effect; a link lost at another build's daemon says so (candybar-gather-renderer-76bb.b2l.mxk)\n\n- The probe leaves the leaf table, so a dispatch carrying it is refused as an\n  unknown effect verb, as the minter's comment says it is.\n- probeLink spells the nonce with encodeURIComponent, the codec the probe\n  verb's one-argument read reverses.\n- The lost verdict names a daemon of another build: a link this build mints\n  may be one it does not read, so a healthy handler is not blamed for it.\n- Comments that said the diagnosis asks about the scheme now say the link.\n"
-        },
-        {
-          "sha": "31764f5d1f5650b143dd47a582fbf8523d263d6e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T11:48:22-07:00",
-          "message": "feat(links): the doctor probe is minted by the minter as the probe link kind, and Launch Services is asked about the link it opened (candybar-gather-renderer-76bb.b2l.mxk)\n\nThe probe link is cc-candybar://to/<name>/probe/<nonce>, built by probeLink\nbeside effectsUrl, so the doctor no longer assembles a verb and a tail itself.\nThe verb is `probe`, as spec section 18 names it. The doctor's lost-link\ndiagnosis asks NSWorkspace which app opens that same link rather than a\nhand-spelled cc-candybar://probe.\n"
         }
       ]
     },
@@ -135,21 +107,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T02:36:44-07:00",
           "message": "feat(disk): files and their watch events go through one filesystem port, first used by the watcher registry and the binary watch (candybar-testing-ihvy.y10)\n\nA Filesystem port (src/disk/) with one adapter over fs, an in-memory fake whose writes emit the events a watch would on the clock, and one contract both pass. The watcher registry, its delivery owner, plugin storage, folder identity, the link walk and the binary watch read the disk through it; IdentityRead and BundleStat are gone. A lint rule bans fs outside the adapter, with an allowlist of the files still to move.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "308429c8f33e9cfe4e0983ab8f29bb1d25c3fe55",
-      "timestamp": "2026-11-06T19:25:39.792Z",
-      "commits": [
-        {
-          "sha": "308429c8f33e9cfe4e0983ab8f29bb1d25c3fe55",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:24:47-07:00",
-          "message": "fix(facts): a recording of a session whose turn failed replays the failed turn's frame (candybar-gather-renderer-76bb.6pj.i7w) (#643)\n\n* fix(facts): a recording of a session whose turn failed replays the failed turn's frame (candybar-gather-renderer-76bb.6pj.i7w)\n\nA turn whose inputs cannot be read holds the bar on the last turn taken, with the\nfailure as the ⚠ beside the settings door. A replay took every turn the live one\ncould not and drew the newer request and picks with no ⚠.\n\n- The turn holds the request and the store's state it was taken over, and its\n  failure is typed by cause; `held()` says when the bar is held.\n- A recording opens on the turn the bar is drawn from and writes it again\n  wherever the hold moves; the replay takes each turn line's turn and holds its\n  own over the same lines, by making its turn inputs fail.\n- A draw notes its follow's document and carries the diagnostics list the\n  daemon's draw built; the demo derives the indicator from it.\n- drawDsl's projections are typed: a view's draw hands all four, a fixed\n  payload hands its bound self.\n- RECORDING_VERSION 5.\n\n* fix(facts): a draw of a held view the session moved away from replays that view's held turn (candybar-gather-renderer-76bb.6pj.i7w)\n\nA hold is a view's and the replay holds one view, so a draw of a view the\nrecording is not on is written between that view's turn and the current\nview's. Without it, the replay reopened that view under the current view's\nhold: a fresh turn where the live bar was held, or a throw in the open.\n\nThe recorder keeps each reaction's disposer as `reaction` returns it, so a\nview entered and left in one batch is disposed before its first run and\nwrites nothing after the recording leaves it or ends.\n\nThe turn's failure reaches the draw typed, so the ⚠ names a held turn for\nwhat it is rather than as a document that could not be stamped.\n\n* refactor(facts): a recorded severity is read back as data, and a state-keyed source clicked before a recording replays (candybar-gather-renderer-76bb.6pj.i7w)\n\nA recording's severity is its level, glyph and colours as the draw wrote\nthem, so the hand-kept list of severities a recording could carry goes; the\nlevels are keyed by DiagnosticLevel, so a new level fails to compile until\nthe parser reads it. The turn and draw parsers spread the click state they\nparsed rather than copying its fields by name.\n\nA seam case pins a click on a state variable a source is keyed on, before\nthe recording starts: the turn is taken again when the new key's run lands,\nso the opening carries the click and the replay draws from that run."
         }
       ]
     },

@@ -22773,7 +22773,7 @@ var VERB_APPLY_UPDATE = "apply-update";
 var VERB_DOCTOR_RUN = "doctor-run";
 var VERB_DOCTOR_FIX = "doctor-fix";
 var VERB_DOCTOR_MARK = "doctor-mark";
-var VERB_DOCTOR_PROBE = "doctor-probe";
+var VERB_PROBE = "probe";
 var VERB_SLASH = "slash";
 var VERB_RUN = "run";
 var VERB_REPO_CONFIG = "repo-config";
@@ -26304,8 +26304,8 @@ var Oklch = class {
     let hi = c;
     for (let i = 0; i < 24; i++) {
       const mid = (lo + hi) / 2;
-      const probe2 = this.toLinearRgb(l, mid, h);
-      if (inGamut(probe2.r, probe2.g, probe2.b))
+      const probe3 = this.toLinearRgb(l, mid, h);
+      if (inGamut(probe3.r, probe3.g, probe3.b))
         lo = mid;
       else
         hi = mid;
@@ -56165,13 +56165,13 @@ init_globals();
 var PROBE_TIMEOUT_MS = 5e3;
 async function memoryReport(probes) {
   const refusals = [];
-  for (const probe2 of probes) {
-    const outcome = await probe2.read();
+  for (const probe3 of probes) {
+    const outcome = await probe3.read();
     if (outcome.kind === "text") {
-      return `# memory report from: ${probe2.name}
+      return `# memory report from: ${probe3.name}
 ${outcome.text}`;
     }
-    refusals.push(`# ${probe2.name}: unavailable \u2014 ${outcome.reason}`);
+    refusals.push(`# ${probe3.name}: unavailable \u2014 ${outcome.reason}`);
   }
   return [
     "# memory report: no probe answered",
@@ -56864,6 +56864,11 @@ function handlerAppProblems(opener) {
     `${app} opens cc-candybar://, but it is not the forwarder app \`cc-candybar install\` builds \u2014 ${REINSTALL}`
   ];
 }
+function otherBuildProblems(builds) {
+  return builds === null ? [] : [
+    `the daemon (${builds.theirs}) is another build than this client (${builds.mine}), so it may not read the link this build sends`
+  ];
+}
 var urlHandler = {
   name: "urlHandler",
   label: "URL handler",
@@ -56880,14 +56885,19 @@ var urlHandler = {
           ok: false,
           // What is known: a click request brought it, which is what the
           // retired applet runs — and a hand-run `cc-candybar url-handle`,
-          // or the browser page. Which app Launch Services opens the scheme
+          // or the browser page. Which app Launch Services opens the link
           // with is the opener's row to say (handlerAppProblems).
           reason: `the link was delivered by a click request (\`cc-candybar url-handle\`), not the forwarder app \u2014 ${REINSTALL}`
         };
       case "lost":
         return problemsVerdict([
           ...handlerAppProblems(urlHandler2.opener),
-          urlHandler2.unopened === null ? "a cc-candybar:// link was opened and did not arrive at the daemon" : `a cc-candybar:// link could not be opened \u2014 ${urlHandler2.unopened}`
+          ...urlHandler2.unopened === null ? [
+            ...otherBuildProblems(urlHandler2.otherBuild),
+            "a cc-candybar:// link was opened and did not arrive at the daemon"
+          ] : [
+            `a cc-candybar:// link could not be opened \u2014 ${urlHandler2.unopened}`
+          ]
         ]);
     }
   }
@@ -69734,16 +69744,16 @@ async function forgeLogin(launcher, cwd2) {
   const forge = detectForge(url);
   if (forge === null) return { kind: "ok", value: null };
   const cli = FORGE_CLI[forge];
-  const probe2 = FORGE_PROBE[forge];
-  const host = probe2.loginHost(remoteHost(url));
+  const probe3 = FORGE_PROBE[forge];
+  const host = probe3.loginHost(remoteHost(url));
   const run3 = await launcher.launch({
     bin: cli,
-    args: [...probe2.args(host)],
+    args: [...probe3.args(host)],
     cwd: cwd2,
     timeoutMs: 2e3,
     category: "doctor.forge"
   });
-  return forgeLoginOf(cli, host, probe2.nonZero, run3);
+  return forgeLoginOf(cli, host, probe3.nonZero, run3);
 }
 function forgeLoginOf(cli, host, nonZero, run3) {
   const login = (status) => ({
@@ -70584,7 +70594,6 @@ var NONCE = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 function parseProbeNonce(value) {
   return NONCE.test(value) ? value : null;
 }
-var OPENER_SCRIPT = `ObjC.import("AppKit");var u = $.NSWorkspace.sharedWorkspace.URLForApplicationToOpenURL($.NSURL.URLWithString("${URL_SCHEME}://probe"));u.isNil() ? "" : u.path.js`;
 
 // src/claude-input/edge.ts
 init_globals();
@@ -71581,19 +71590,16 @@ function landStep(ctx, sid, step4, facts) {
 var doctorRun = (value, ctx) => {
   describeDoctor(ctx, requireSessionId(oneArg(value)), { kind: "run" });
 };
-var doctorProbe = (value, ctx) => {
+var probe2 = (value, ctx) => {
   const nonce = parseProbeNonce(oneArg(value));
   if (nonce === null) {
-    throw new BadVerbArgs("doctor-probe: the value is not a probe nonce");
+    throw new BadVerbArgs("probe: the value is not a probe nonce");
   }
   if (ctx.arrival.via !== "link")
-    throw new BadVerbArgs("doctor-probe: a probe arrives only as a link");
+    throw new BadVerbArgs("probe: a probe arrives only as a link");
   const { delivery } = ctx.arrival;
   ctx.probes.arrive({ nonce, delivery });
-  ctx.log(
-    "info",
-    `doctor-probe: arrived nonce=${nonce} delivery=${delivery.kind}`
-  );
+  ctx.log("info", `probe: arrived nonce=${nonce} delivery=${delivery.kind}`);
 };
 var doctorFix = (value, ctx) => {
   const [sessionId2 = "", checkName = ""] = decodeWire(
@@ -71754,7 +71760,6 @@ var LEAF_VERBS = /* @__PURE__ */ new Map([
   [VERB_DOCTOR_RUN, doctorRun],
   [VERB_DOCTOR_FIX, doctorFix],
   [VERB_DOCTOR_MARK, doctorMark],
-  [VERB_DOCTOR_PROBE, doctorProbe],
   [VERB_SLASH, slash],
   [VERB_RUN, run2],
   [VERB_REPO_CONFIG, repoConfig],
@@ -71930,9 +71935,10 @@ var VERBS = new Map([
     ]
   ),
   [VERB_DISPATCH, click(VERB_DISPATCH, foldEffects)],
-  // After the leaves, so it replaces the click they built: a probe writes no
-  // journal, so nothing may refuse it for a turn, and it describes nothing.
-  [VERB_DOCTOR_PROBE, doctorProbe]
+  // A link kind, never a leaf, so no dispatch can carry it as an effect: a
+  // probe writes no journal, so nothing may refuse it for a turn, and it
+  // describes nothing.
+  [VERB_PROBE, probe2]
 ]);
 var VERB_NAMES = Object.freeze([
   ...VERBS.keys()
@@ -79271,7 +79277,7 @@ function makeUpdateWatch(opts) {
     fact,
     clock,
     launcher,
-    probe: probe2,
+    probe: probe3,
     entryUrl,
     digest: digest2,
     actsDir: actsDir2,
@@ -79286,7 +79292,7 @@ function makeUpdateWatch(opts) {
   let build = pendingOf("unread");
   let release3 = pendingOf("unread");
   const readStart = async (pid2) => {
-    const read2 = await probe2.startTime(pid2);
+    const read2 = await probe3.startTime(pid2);
     if (closed) throw new DaemonClosing("apply-update");
     return read2;
   };
@@ -82601,9 +82607,9 @@ function buildRenderState(load, deps) {
       DIRECTORY_SCOPE
     );
     warnings.push(...registration.loadWarnings);
-    const probe2 = registry.view(UNREAD_RUNS);
-    warnings.push(...declareDslVariables(config2, probe2, cwd2, VIEW_SCOPE));
-    probe2.dispose();
+    const probe3 = registry.view(UNREAD_RUNS);
+    warnings.push(...declareDslVariables(config2, probe3, cwd2, VIEW_SCOPE));
+    probe3.dispose();
     deps.gates.state.gateFor(config2);
     deps.gates.config.gateFor(config2);
     for (const key of new Set(load.sources.values()))
@@ -86081,7 +86087,7 @@ function createDaemon(inputs) {
       frameFeeds.wakeWhere("data", () => true);
     }
   });
-  const probe2 = inputs.probe(launcher);
+  const probe3 = inputs.probe(launcher);
   const storage = inputs.storage(log);
   const store2 = new SessionState(storage.session);
   const journalTurns = new JournalTurns();
@@ -86171,7 +86177,7 @@ function createDaemon(inputs) {
       launcher,
       (sessionId2) => frameFeeds.following(sessionId2),
       closing.signal,
-      probe2
+      probe3
     ),
     // A bar pane runs this bundle under the node running it now, with the
     // flags it runs with (tsx's loader, under the test harness).
@@ -86365,7 +86371,7 @@ function createDaemon(inputs) {
     fact: updateFact,
     clock,
     launcher,
-    probe: probe2,
+    probe: probe3,
     entryUrl: bundle.entryUrl,
     digest: bundle.digest,
     // [LAW:one-source-of-truth] Keyed by the bundle the act rewrites, the one
@@ -87247,7 +87253,7 @@ async function paneClaude(launcher, hint) {
   };
 }
 var FOLLOW_POLL_MS = 200;
-function productionLaneEdge(launcher, following, closing, clock, probe2) {
+function productionLaneEdge(launcher, following, closing, clock, probe3) {
   const wait = (ms) => sleep(clock, ms, closing);
   return {
     claudeInput: productionClaudeInputEdge(launcher),
@@ -87369,7 +87375,7 @@ function productionLaneEdge(launcher, following, closing, clock, probe2) {
     },
     exited: async (pid2, withinMs) => {
       const until2 = clock.monotonic() + withinMs;
-      while (probe2.alive(pid2)) {
+      while (probe3.alive(pid2)) {
         if (clock.monotonic() > until2) return false;
         await wait(EXIT_POLL_MS);
       }
@@ -87478,7 +87484,7 @@ function productionAdapters(paths2, daemonLog, machine) {
     doctorEdge: productionEdge,
     claudeInput: productionClaudeInputEdge,
     probe: systemProbe,
-    laneEdge: (launcher, following, closing, probe2) => productionLaneEdge(launcher, following, closing, machine, probe2),
+    laneEdge: (launcher, following, closing, probe3) => productionLaneEdge(launcher, following, closing, machine, probe3),
     linkSigner: linkSignerFromKeyFile(linkKeyFile(paths2.state)),
     limits: ({ startedAtMs, exit: exit2, launcher, log }) => realLimitsDeps(startedAtMs, exit2, {
       launcher,
