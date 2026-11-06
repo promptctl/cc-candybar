@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-640",
+      "ref": "refs/pull/640/merge",
+      "sha": "a306e6712691308eaeeb86218c715b2cc4646ef7",
+      "timestamp": "2026-11-06T12:43:20.195Z",
+      "commits": [
+        {
+          "sha": "a306e6712691308eaeeb86218c715b2cc4646ef7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T05:42:19-07:00",
+          "message": "Merge e7320cf3c96ffd0d92397c31864da0674750011e into 92b37b434431196653866fb703390e57bf15d948\n"
+        },
+        {
+          "sha": "e7320cf3c96ffd0d92397c31864da0674750011e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T05:41:36-07:00",
+          "message": "feat(links): a tmux range id is ccb plus a base36 link id from a counter in the home's state, held per session and surface and minted once a frame; the URL digest goes (candybar-gather-renderer-76bb.b2l.e1n)\n\n- A feed encodes each lane once a frame through one encoder per (session,\n  lane), so the tmux row and `frames --lane tmuxStatus` share one minting.\n- The tmux lane's encoder holds an LRU table keyed by the link's URL (cap 256):\n  a redraw reuses its id, so an animating row mints nothing.\n- The home's counter reserves ids a block at a time (hi/lo), so a restarted\n  renderer starts past every id the last one issued.\n- A counter fault is every bar's warning; its retry is the allocator's own\n  timer, one attempt a still period, so it clears with nothing minting.\n- Stats gain linkIds { minted, reused, evicted, reservations, faults }.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "f62952f2c7273142b5ad4581bd6d5f05bd29044f",
