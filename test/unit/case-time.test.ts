@@ -66,10 +66,17 @@ describe("caseClock — the time a running hook or test has before Jest fails it
     }
   });
 
-  test("an event that starts and ends nothing leaves the case's time alone", () => {
+  test("a test whose before-hook failed, so its function never ran, leaves no case running once it is done", () => {
     const { clock } = at(0);
     clock.observe({ name: "test_fn_start", test: {} }, state);
     clock.observe({ name: "test_done" }, state);
+    expect(clock.left()).toBe(Infinity);
+  });
+
+  test("an event that starts and ends nothing leaves the case's time alone", () => {
+    const { clock } = at(0);
+    clock.observe({ name: "test_fn_start", test: {} }, state);
+    clock.observe({ name: "error_handled" }, state);
     expect(clock.left()).toBe(30_000);
   });
 });

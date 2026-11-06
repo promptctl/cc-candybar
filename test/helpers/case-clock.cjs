@@ -14,11 +14,14 @@
 const CASE_TIME_LEFT = Symbol.for("cc-candybar.caseTimeLeft");
 
 const STARTS = new Set(["hook_start", "test_fn_start"]);
+// A test whose before-hook failed starts its function and ends with neither
+// its success nor its failure, so its case ends only with the test.
 const ENDS = new Set([
   "hook_success",
   "hook_failure",
   "test_fn_success",
   "test_fn_failure",
+  "test_done",
 ]);
 
 /**

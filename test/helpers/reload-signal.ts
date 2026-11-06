@@ -4,6 +4,7 @@ import type {
   RenderCacheObservers,
 } from "../../src/daemon/cache/render";
 import { DEBOUNCE_MS } from "../../src/daemon/cache/watchers";
+import { within } from "./case-time";
 import { holdsWithin, nameOf, type Condition, type What } from "./until";
 
 // [LAW:no-ambient-temporal-coupling] A happens-after gate over RenderCache
@@ -86,14 +87,14 @@ export class ReloadSignal {
 // the first one could possibly have reloaded.
 export const RETRY_MS = 4 * DEBOUNCE_MS;
 // 48 fresh mutations: far above any delivery latency seen, and ~12 s at the
-// cadence above (a round is the cadence plus at most one poll tick), so two
-// waits in sequence still end below Jest's 30 s testTimeout and the failure
-// is this error, with the test's cleanup run.
+// cadence above (a round is the cadence plus at most one poll tick). What the
+// case has left bounds them too (test/helpers/case-time.ts), so a wait late in
+// its case fails by this error, with the test's cleanup run.
 const MAX_ROUNDS = 48;
 
 // [LAW:single-enforcer] THE retry-until-heard loop for a watch: `mutate` is
 // applied at once and then once per round until `heard` holds, or the wait
-// fails by name after MAX_ROUNDS rounds. Rounds refresh the mutation, not a
+// fails by name once its rounds run out. Rounds refresh the mutation, not a
 // probe still in flight.
 // [LAW:one-source-of-truth] The cadence and the chances are the constants
 // above, so every watch a test proves live gets the same budget. Only a
@@ -126,11 +127,13 @@ export async function untilHeard(
     });
     return asked;
   };
-  for (let round = 1; round <= MAX_ROUNDS; round++) {
+  const wait = within(MAX_ROUNDS * RETRY_MS);
+  const rounds = Math.floor(wait.ms / RETRY_MS);
+  for (let round = 1; round <= rounds; round++) {
     await mutate();
     if (await holdsWithin(answer, RETRY_MS)) return;
   }
   throw new Error(
-    `${nameOf(what)} did not hold after ${MAX_ROUNDS} mutations ${RETRY_MS} ms apart`,
+    `${nameOf(what)} did not hold within ${wait.named}, after ${rounds} mutations ${RETRY_MS} ms apart`,
   );
 }

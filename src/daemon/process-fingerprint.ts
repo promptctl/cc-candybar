@@ -55,12 +55,12 @@ export type StartTimeRead =
   | { kind: "start"; token: string }
   | { kind: "unavailable"; detail: string };
 
-// `launch` is the subprocess boundary, injected so the parse/branch logic is
-// exercised by input enumeration with a fake launcher while the real path runs
-// the real `ps`.
 // The longest one read of a start time may take.
 export const START_TIME_READ_BUDGET_MS = 2000;
 
+// `launch` is the subprocess boundary, injected so the parse/branch logic is
+// exercised by input enumeration with a fake launcher while the real path runs
+// the real `ps`.
 // [LAW:effects-at-boundaries][LAW:single-enforcer] The sole effect (spawning
 // `ps`) goes through the one subprocess enforcer, `launch`, off the loop: a
 // detached holder of its stdout cannot hold the daemon. The ONLY sound

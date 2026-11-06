@@ -156,11 +156,13 @@ export function createDaemonPool(dir: string, size: number): DaemonPool {
   }
 
   async function acquire(opts: AcquireOpts = {}): Promise<DaemonSlot> {
+    // [LAW:one-source-of-truth] The deadline is set when the case's time is
+    // read, so the read of this worker's own start time is spent from it too.
     const wait = within(opts.timeoutMs ?? DEFAULT_ACQUIRE_TIMEOUT_MS);
+    const deadline = Date.now() + wait.ms;
     const retryIntervalMs = opts.retryIntervalMs ?? DEFAULT_RETRY_INTERVAL_MS;
     const myPid = process.pid;
     const myStartTime = await readOwnStartTime(myPid, processProbe.startTime);
-    const deadline = Date.now() + wait.ms;
     // [LAW:no-silent-failure] Never spawn past the ceiling by falling back
     // silently — a full pool means the caller MUST fail loudly so the
     // regression (more concurrent real daemons than the asserted ceiling)

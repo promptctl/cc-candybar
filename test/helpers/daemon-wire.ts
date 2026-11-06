@@ -67,7 +67,17 @@ export function sendDaemonRequest(
   req: Record<string, unknown>,
   timeoutMs: number = DEFAULT_REPLY_BUDGET_MS,
 ): Promise<Response> {
-  return endpointOf(target).send(req, within(timeoutMs).ms);
+  // [LAW:no-silent-failure] A failure names the bound the request was sent
+  // under, so one cut short by its case says so.
+  const wait = within(timeoutMs);
+  return endpointOf(target)
+    .send(req, wait.ms)
+    .catch((e: unknown) => {
+      throw new Error(
+        `${String(req.kind)} request within ${wait.named} failed: ${e instanceof Error ? e.message : String(e)}`,
+        { cause: e },
+      );
+    });
 }
 
 // [LAW:one-source-of-truth] A thin connect-then-delegate wrapper around
@@ -85,8 +95,9 @@ async function overDialer(
   req: Record<string, unknown>,
   timeoutMs: number,
 ): Promise<Response> {
-  // [LAW:no-ambient-temporal-coupling] The connect has its own bound, which
-  // sendOne (entered only once connected) does not budget for.
+  // [LAW:no-ambient-temporal-coupling] The connect and the reply share one
+  // deadline: sendOne, entered only once connected, gets what the connect left.
+  const deadline = Date.now() + timeoutMs;
   const dialed = await dialWithin(
     dialer,
     sockPath,
@@ -103,7 +114,7 @@ async function overDialer(
   return sendOne(
     dialed.conn,
     req as unknown as Request,
-    Date.now() + timeoutMs,
+    deadline,
     systemTimekeeper,
   );
 }

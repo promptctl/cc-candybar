@@ -21,6 +21,7 @@ import {
 } from "../../src/daemon/protocol";
 import { textOf, parseFrame, type Frame } from "../../src/render/frame";
 import type { ClaudeHookData } from "../../src/utils/claude";
+import { within } from "./case-time";
 import { effectsOf, type DecodedEffect } from "./click";
 import {
   endpointOf,
@@ -114,16 +115,18 @@ async function renderAnswer(
     // [LAW:one-source-of-truth] The deadline it states is the one it waits
     // to: like a real client, it says when it will hang up, so the daemon's
     // wait for its refreshes ends by that or by its own backstop
-    // (src/daemon/request-deadline.ts). A case's own deadline wins.
+    // (src/daemon/request-deadline.ts). A case's own deadline wins, and so
+    // does the time the case has left.
+    const wait = within(replyBudgetMs);
     const resp = await sendDaemonRequest(
       target,
       {
         v: PROTOCOL_VERSION,
         kind: "render",
-        deadline: now() + replyBudgetMs,
+        deadline: now() + wait.ms,
         ...request,
       },
-      replyBudgetMs,
+      wait.ms,
     );
     if (!resp.ok) {
       if (resp.code === "TIMEOUT" && attempt < TIMEOUT_RETRY_BUDGET) continue;
