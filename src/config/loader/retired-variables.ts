@@ -86,15 +86,15 @@ export const RETIRED_INPUT_PATHS: ReadonlyMap<string, string> = new Map([
 // value it gave, typed as it was; `test/dsl-loader.test.ts` holds each input
 // declaration to the bundled default's (the loader cannot import it: the
 // default is built on the loader).
-interface RetiredGitField {
+interface RetiredField {
   readonly read: string;
   readonly declare: InputVarDecl | TemplateVarDecl;
   readonly note?: string;
 }
 
-export const RETIRED_GIT_FIELDS: ReadonlyMap<string, RetiredGitField> = new Map<
+export const RETIRED_GIT_FIELDS: ReadonlyMap<string, RetiredField> = new Map<
   string,
-  RetiredGitField
+  RetiredField
 >([
   [
     "branch",
@@ -123,7 +123,7 @@ export const RETIRED_GIT_FIELDS: ReadonlyMap<string, RetiredGitField> = new Map<
     },
   ],
   ...(["ahead", "behind", "stash"] as const).map(
-    (field): [string, RetiredGitField] => [
+    (field): [string, RetiredField] => [
       field,
       {
         read: `.git.${field}`,
@@ -139,7 +139,7 @@ export const RETIRED_GIT_FIELDS: ReadonlyMap<string, RetiredGitField> = new Map<
 ]);
 
 // A declaration as an author writes it in JSON5.
-function json5Of(decl: RetiredGitField["declare"]): string {
+function json5Of(decl: RetiredField["declare"]): string {
   const value = (v: unknown): string =>
     typeof v === "string" && v.includes('"') && !v.includes("'")
       ? `'${v}'`
@@ -175,9 +175,9 @@ export function retiredGitKindMessage(
 // points, and both reach their value from inside the renderer's home. A
 // `shell` source runs in the renderer too, so echoing the variable there would
 // read the same wrong environment; the message says so.
-export const RETIRED_ENV_NAMES: ReadonlyMap<string, RetiredGitField> = new Map<
+export const RETIRED_ENV_NAMES: ReadonlyMap<string, RetiredField> = new Map<
   string,
-  RetiredGitField
+  RetiredField
 >(
   (
     [

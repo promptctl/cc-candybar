@@ -138,13 +138,16 @@
       default: "?",
     },
 
-    // Node.js version. key cache: re-run whenever the directory changes
-    // (a version manager picks the node version per project).
+    // Node.js version. key cache: re-run whenever the branch changes (a
+    // branch may pin its own node version through .nvmrc). A shell source is
+    // run once per directory and shared by every session there, unless its
+    // key reads a session's value, as this one does: then each session runs
+    // its own, keyed by its own branch.
     "demo.nodeVer": {
       kind: "shell",
       command: "node --version 2>/dev/null",
       parse: { regex: "v?([0-9]+\\.[0-9]+)" },  // "major.minor" out of "v22.13.0"
-      cache: { key: "{{ .demo.cwd }}" },
+      cache: { key: "{{ .demo.git.branch }}" },
       default: "",
     },
 

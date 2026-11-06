@@ -81,7 +81,7 @@ diff -ru --exclude=node_modules src/dsl/render.ts /tmp/ccb-probe/wt/src/dsl/rend
 @@ -316,15 +316,17 @@
        );
        break;
-
+ 
      case "file":
 +      if ((globalThis as any).__wireVars === true) return wireVar(registry, name, decl, derivation);
        registry.declareFile(name, decl.path, {
@@ -90,7 +90,7 @@ diff -ru --exclude=node_modules src/dsl/render.ts /tmp/ccb-probe/wt/src/dsl/rend
          parse: toSourceParse(decl.parse, decl.default),
        });
        break;
-
+ 
      case "shell":
 +      if ((globalThis as any).__wireVars === true) return wireVar(registry, name, decl, derivation);
        registry.declareShell(name, decl.command, {
@@ -99,7 +99,7 @@ diff -ru --exclude=node_modules src/dsl/render.ts /tmp/ccb-probe/wt/src/dsl/rend
 @@ -356,6 +358,11 @@
    }
  }
-
+ 
 +function wireVar(registry: any, name: string, decl: any, derivation: any): void {
 +  if (decl.parse !== undefined && "json" in decl.parse) registry.declareSourceDocument(name);
 +  else registry.declareInput(name, name, "string", undefined, derivation);
