@@ -1,3 +1,9 @@
+## [1.199.0](https://github.com/promptctl/cc-candybar/compare/v1.198.1...v1.199.0) (2026-11-06)
+
+### Features
+
+* **facts:** record a session out of the daemon, replay it in the demo, refuse another facts version (candybar-gather-renderer-76bb.6pj.qg5) ([#629](https://github.com/promptctl/cc-candybar/issues/629)) ([7877410](https://github.com/promptctl/cc-candybar/commit/787741095721977bdce8e6c628817b38188b4f97))
+
 ## [1.198.1](https://github.com/promptctl/cc-candybar/compare/v1.198.0...v1.198.1) (2026-11-06)
 
 ### Bug Fixes
