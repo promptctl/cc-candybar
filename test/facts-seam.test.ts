@@ -52,11 +52,13 @@ import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import { newUpdateFact, type UpdateFact } from "../src/daemon/update-fact";
 import {
   drawDemoFrame,
+  heldArrival,
   loadDemo,
   playDemo,
   playOf,
   readRecording,
   RecordingUnreadable,
+  type Arrive,
 } from "../src/demo/play";
 import type { RenderedLine } from "../src/dsl/node-registry";
 import {
@@ -468,6 +470,7 @@ async function replayFile(
   file: string,
   cwd: string,
   configFile: string,
+  arriveOn: (clock: HeldClock) => Arrive = heldArrival,
 ): Promise<{
   frames: Frame[];
   reads: string[];
@@ -504,7 +507,7 @@ async function replayFile(
     log,
     clock,
     steps,
-    pace: async (ms) => clock.advance(ms),
+    arrive: arriveOn(clock),
     frame: (frame) => frames.push(frame),
   });
   const read = reads();
@@ -616,6 +619,55 @@ test("a recording made on a moving clock replays each frame from what its answer
   expect(replay.frames.map((f) => f.rows)).toEqual(
     liveFrames.map((f) => f.rows),
   );
+});
+
+test("a play draws each answer at the instant its arm says the request arrived at, not at the request's offset", async () => {
+  const s = liveSession();
+  await s.requestFrom(s.cwd, s.configFile);
+  const file = path.join(tempDir("ccb-seam-arrive-"), "bar.jsonl");
+  const recorded = recordToFile(
+    s.live.recorder,
+    s.clock,
+    sessionIdOf(SID),
+    file,
+    7,
+    stays(),
+  );
+  for (let i = 0; i < 2; i++) {
+    await s.after(1000);
+    await s.requestFrom(s.cwd, s.configFile);
+  }
+  await s.after(6000);
+  await recorded;
+  const clockConfig = path.join(tempDir("ccb-seam-clock-"), "config.json5");
+  fs.writeFileSync(
+    clockConfig,
+    `{ variables: { clock: { kind: "time", layout: "05" } },
+       segments: { s: { template: 's={{ .clock }}' } }, root: { h: ["s"] } }`,
+  );
+  // An arm whose requests each arrive 7s later than the one before, as a
+  // live demo's do when each settle outlasts the frame interval: the drawn
+  // clock is the arrival's, whatever the offset scheduled.
+  const late = (clock: HeldClock): Arrive => {
+    let lateMs = 0;
+    return async (atMs) => {
+      lateMs += 7000;
+      clock.advance(Math.max(0, atMs + lateMs - clock.now()));
+      return instantAt(clock);
+    };
+  };
+  const recording = readRecording(file);
+  const seconds = recording.lines
+    .flatMap((line) => (line.kind === "request" ? [line.at] : []))
+    .map(
+      (at, n) =>
+        `s=${String((Math.floor(at) + 7 * (n + 1)) % 60).padStart(2, "0")}`,
+    );
+  const replay = await replayFile(file, s.cwd, clockConfig, late);
+  expect(replay.said).toEqual([]);
+  expect(
+    replay.frames.map((frame) => /s=\d\d/.exec(textOf(frame))?.[0]),
+  ).toEqual(seconds);
 });
 
 test("a request answered after another moved the session to another directory replays from the view it held: its own document and declaration", async () => {

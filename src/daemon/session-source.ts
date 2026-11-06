@@ -55,7 +55,7 @@ export interface SessionSource extends ViewSource {
   // The same document with the instant it was stamped at: the line a
   // recording writes for the draw that read it.
   readonly stamped: () => FactsLine;
-  // The home every turn's payload is composed against: whose `~` it names.
+  // The home the turn's payload was composed against: whose `~` it names.
   readonly home: () => string;
   // The client's hints the turn was composed from: what a draw takes of the
   // client beside the payload, so it never pairs a turn with a request it was
@@ -235,7 +235,7 @@ export function sessionSource(
       effective: () => turn.get().draw.effective,
       facts: () => turn.get().stamped.facts,
       stamped: () => turn.get().stamped,
-      home: () => deps.providers.home,
+      home: () => turn.get().compose.home,
       hints: () => turn.get().compose.hints,
       failure: () => turn.get().failure,
       selections: () => turn.get().draw.effective,

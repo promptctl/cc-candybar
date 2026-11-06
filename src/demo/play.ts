@@ -7,9 +7,9 @@
 // main hands in: the facts arm (the in-process arm over owners, or a
 // recording's), the steps (requests at the offsets they arrive at, the draws
 // of their answers, and a recording's documents where the daemon took them),
-// whose home `~` names, and the pace that brings the clock to each offset (a
-// sleep on the machine's clock, or a held clock's advance). The path itself
-// never asks which.
+// whose home `~` names, and how a request arrives at its offset (a sleep on
+// the machine's clock and its reading, or a held clock's advance and the
+// recorded instant). The path itself never asks which.
 //
 // [LAW:single-enforcer] One faked hook event, or a recorded one, goes through
 // the functions the daemon runs for a real one — loadChain, openView over the
@@ -50,6 +50,7 @@ import type { RenderedLine } from "../dsl/node-registry.js";
 import type { World } from "../host.js";
 import { SessionEffects } from "../render/effect.js";
 import type { Frame } from "../render/frame.js";
+import type { HeldClock } from "../held-clock.js";
 import type { Timekeeper } from "../time.js";
 import { instantOf, type Instant } from "../utils/instant.js";
 import type { DaemonLogger } from "../utils/logger.js";
@@ -235,11 +236,24 @@ export interface DemoPlay {
   readonly clock: Timekeeper;
   // The steps, the first a request opening the view.
   readonly steps: RecordingPlay["steps"];
-  // Brings the clock forward by `ms`: each request arrives as it reaches the
-  // request's offset.
-  readonly pace: (ms: number) => Promise<void>;
+  readonly arrive: Arrive;
   readonly frame: (frame: Frame) => void;
 }
+
+// How a request arrives at `atMs`, as the clock reads it: the clock brought
+// there, and the instant the request is declared, settled and answered at.
+export type Arrive = (atMs: number) => Promise<Instant>;
+
+// [LAW:no-ambient-temporal-coupling] On a held clock the instant is the
+// recorded one, never the clock's: a request's instant is read before its turn
+// queues, so it can predate the step ahead of it, and the clock never runs
+// back.
+export const heldArrival =
+  (clock: HeldClock): Arrive =>
+  async (atMs) => {
+    clock.advance(Math.max(0, atMs - clock.now()));
+    return instantOf(new Date(atMs));
+  };
 
 // One frame of a session's view at `at`, as the daemon draws a request's: the
 // draw's own projections, and the options its view's turn resolved.
@@ -272,10 +286,8 @@ export function drawDemoFrame(
 // [LAW:no-ambient-temporal-coupling] The steps are taken in their order, which
 // is the order the daemon took them in: a request's clock is brought to its
 // offset, the view is declared with it and what its arrival starts of the
-// facts lands; a draw draws the view as it stands then, at its request's
-// instant. A request's instant is read before its turn queues, so it can
-// predate the step ahead of it: the clock never runs back, and the request is
-// still declared and drawn at its own instant.
+// facts lands; a draw draws the view as it stands then, at the instant its
+// request arrived at.
 export async function playDemo({
   loaded: { state, sessionState },
   cwd,
@@ -284,20 +296,14 @@ export async function playDemo({
   log,
   clock,
   steps,
-  pace,
+  arrive,
   frame,
 }: DemoPlay): Promise<void> {
   const warn = (message: string): void => log("warn", message);
   const [opening] = steps;
   const startMs = clock.now();
-  const instant = (offsetMs: number): Instant =>
-    instantOf(new Date(startMs + offsetMs));
-  let elapsed = 0;
-  const reach = async (offsetMs: number): Promise<void> => {
-    await pace(Math.max(0, offsetMs - elapsed));
-    elapsed = Math.max(elapsed, offsetMs);
-  };
-  await reach(opening.offsetMs);
+  // Each request's instant, by its offset: what its answer is drawn at.
+  const arrived = new Map<number, Instant>();
   // The session's view of the state, as the daemon opens one per session,
   // declared with the request the first frame draws by.
   const view = openView(state, cwd, opening.request, {
@@ -321,15 +327,23 @@ export async function playDemo({
       if (step.kind === "document") {
         step.reach();
       } else if (step.kind === "request") {
-        await reach(step.offsetMs);
+        const at = await arrive(startMs + step.offsetMs);
+        arrived.set(step.offsetMs, at);
         view.requested(step.request);
-        await view.settle(instant(step.offsetMs)).landed;
+        await view.settle(at).landed;
       } else if (step.kind === "declared") {
         view.requested(step.request);
       } else {
-        frame(
-          drawDemoFrame(view, instant(step.requestOffsetMs), effects, warn),
-        );
+        const at = arrived.get(step.requestOffsetMs);
+        // [LAW:no-silent-failure] Both arms draw only an answer to a request
+        // already taken (the parser refuses a file that does not); one that
+        // is not is this play's bug, never a frame at another instant.
+        if (at === undefined) {
+          throw new Error(
+            `a draw answers a request at +${step.requestOffsetMs}ms, and none arrived then`,
+          );
+        }
+        frame(drawDemoFrame(view, at, effects, warn));
       }
     }
   } finally {

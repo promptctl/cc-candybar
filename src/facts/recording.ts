@@ -293,7 +293,7 @@ export function parseRecording(text: string): Recording {
           "is a request before any document: a recording opens on its view's document",
         );
       }
-      const at = instantOf(json.at, where, "at");
+      const at = parseInstant(json.at, where, "at");
       lines.push({ kind, at, request: parseRequest(json, where, session) });
       undrawn.set(at, (undrawn.get(at) ?? 0) + 1);
       continue;
@@ -309,7 +309,7 @@ export function parseRecording(text: string): Recording {
       continue;
     }
     if (kind === "draw") {
-      const request = instantOf(json.request, where, "request");
+      const request = parseInstant(json.request, where, "request");
       const waiting = undrawn.get(request) ?? 0;
       if (waiting === 0) {
         throw new FactParseError(
@@ -328,7 +328,7 @@ export function parseRecording(text: string): Recording {
         `is of kind ${JSON.stringify(kind)}, not "facts", "request", "declared" or "draw"`,
       );
     }
-    const at = instantOf(json.at, where, "at");
+    const at = parseInstant(json.at, where, "at");
     const document = parseSessionFacts(json.facts, `${where} facts`);
     if (document.session !== session) {
       throw new FactParseError(
@@ -357,7 +357,7 @@ export function parseRecording(text: string): Recording {
   return { session, home, opening, lines: [first, ...later] };
 }
 
-function instantOf(json: unknown, where: string, field: string): Instant {
+function parseInstant(json: unknown, where: string, field: string): Instant {
   if (typeof json !== "number" || !Number.isFinite(json)) {
     throw new FactParseError(where, `has no finite \`${field}\``);
   }

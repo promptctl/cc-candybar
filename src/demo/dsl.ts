@@ -14,7 +14,8 @@
 // path: which facts arm the view follows (the in-process arm over the
 // providers, or the recording's), which requests it is drawn by and when (one
 // faked hook event four times, or the recording's requests at their offsets),
-// and how the clock reaches each one (a sleep, or a held clock's advance).
+// and how each arrives (a sleep and the clock's reading, or a held clock's
+// advance and the recorded instant).
 // Rendering N frames over time is not branching: it lets the config's own
 // timed sources populate, as the daemon re-renders on each status-line tick.
 
@@ -22,6 +23,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 import { sleep } from "../time.js";
+import { instantAt } from "../utils/instant.js";
 import { detectClientHints } from "../client-hints.js";
 import {
   ConfigError,
@@ -45,6 +47,7 @@ import { ansiOf } from "../render/frame.js";
 import type { ClaudeHookData } from "../utils/claude.js";
 import { debug, setDebug } from "../utils/logger.js";
 import {
+  heldArrival,
   loadDemo,
   playDemo,
   playOf,
@@ -103,7 +106,7 @@ const log: DaemonLogger = (level, message) =>
 
 // What the frames are drawn from beside the loaded config, and what to close
 // once they are drawn.
-type Arm = Pick<DemoPlay, "facts" | "clock" | "steps" | "pace" | "home"> & {
+type Arm = Pick<DemoPlay, "facts" | "clock" | "steps" | "arrive" | "home"> & {
   readonly world: World;
   readonly close: () => void;
 };
@@ -170,7 +173,14 @@ function liveArm(): Arm {
         answered(i + 1),
       ]).flat(),
     ],
-    pace: (ms) => sleep(machine.clock, ms),
+    // [LAW:no-ambient-temporal-coupling] A sleep until the request's offset,
+    // never for the gap since the last one, so a slow settle delays one frame
+    // and no frame after it; and the instant is the clock's reading, as the
+    // daemon reads a request's arrival.
+    arrive: async (atMs) => {
+      await sleep(machine.clock, Math.max(0, atMs - machine.clock.now()));
+      return instantAt(machine.clock);
+    },
     // The providers own their timers and watchers; all of them are released
     // so the process ends when the frames do.
     close: () => {
@@ -199,7 +209,7 @@ function recordingArm(path: string): Arm {
     clock,
     home: recording.home,
     steps,
-    pace: async (ms) => clock.advance(ms),
+    arrive: heldArrival(clock),
     close: () => {},
   };
 }

@@ -1157,7 +1157,7 @@ function firstPending(
 // What a payload is composed from besides the document: the hook's
 // instantaneous fields, the client's hints and the user's home.
 export type ComposeInputs = Pick<PayloadInputs, "hookData" | "hints"> & {
-  readonly home: string | undefined;
+  readonly home: string;
 };
 
 // [LAW:single-enforcer] The one place a fact's instant is dropped on the way to

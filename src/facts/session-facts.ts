@@ -64,9 +64,10 @@ export interface BuiltinFacts {
   readonly hostUser: Fact<string>;
 }
 
-// The shape of a facts document on the wire; a document of another version is
-// not this one.
-export const FACTS_VERSION = 1;
+// The facts protocol's version: the shape of a document on the wire and of a
+// recording of a session's stream (docs/design/gather-and-renderer.md §3,
+// §8). A document or a recording of another version is not this one.
+export const FACTS_VERSION = 2;
 
 export interface SessionFacts {
   readonly v: number;
