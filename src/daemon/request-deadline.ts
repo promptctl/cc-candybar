@@ -18,7 +18,9 @@ export const REQUEST_TIMEOUT_MS = 200;
 // What a request's wait leaves for its draw: the synchronous turn that reads
 // the view and turns it into the answer's bytes. A cold draw takes a few ms on an
 // idle machine, but the reserve is wall time, and a draw descheduled on a busy
-// one reads tens of ms with no more work in it. A reserve too small answers after its client has
+// one reads tens of ms with no more work in it. A user config whose effect
+// draws several times the idle figure is not covered, and on a busy machine it
+// can outrun the reserve. A reserve too small answers after its client has
 // hung up, and the bar goes blank, where one too large only draws more pending.
 export const DRAW_RESERVE_MS = 60;
 

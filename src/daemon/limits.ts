@@ -55,10 +55,9 @@ import type { Timekeeper } from "../time";
 // check-protocol name the constants, so renaming them for wording alone would
 // break that contract for no change in meaning.
 //
-// The default leaves a daemon serving a hundred sessions, each drawing from its
-// own checkout, well under the limit, so a leak trips the backstop while it is
-// still a leak. The render cache's share
-// of it holds those hundred (render.ts). Below that the cache cannot hold the
+// The default is set by the render cache: its share of the limit (render.ts)
+// must hold a hundred sessions, each drawing from its own checkout, at their
+// charges, and 1024 is the round limit above the 832 that takes. Below that the cache cannot hold the
 // directories being rendered from, every render misses, and a miss's config
 // load is longer than the client waits, so every render fails rather than some.
 export const RSS_LIMIT_ENV = "CC_CANDYBAR_RSS_LIMIT_MB";
